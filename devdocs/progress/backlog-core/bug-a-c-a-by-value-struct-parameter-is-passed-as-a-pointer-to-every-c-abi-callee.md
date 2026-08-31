@@ -177,11 +177,46 @@ with the psABI one"** on the C side, and extend it above 8 bytes on both. That
 is a larger and more deliberate change than the original filing implied, and it
 is why the estimate belongs in the ticket rather than in someone's head.
 
-**The one genuinely safe increment, if this gets done piecewise:** a record of
-<= 8 bytes occupies ONE slot under both schemes, so switching it from
-pointer-to-copy to by-value cannot shift any later argument. Above 8 bytes the
-slot count changes, which is exactly where the xtensa two-of-three corruption
-lives. If you split this, split it there.
+## THE OBVIOUS FIRST ATTEMPT, TRIED AND MEASURED — it does not work
+
+Do not repeat it. `cparser.inc:11107` changed from `True` to
+`RecSize(precid[i]) > 8`, so C's rule matches Pascal's at the 8-byte boundary.
+Self-host converged; binary `c93061a625bd`. Then, on x86-64:
+
+- **The CALLEE half becomes correct.** `take_p2` emits `lea -0x8(%rbp),%rax`
+  instead of `mov`, and an 8-byte struct handed over by a real gcc caller reads
+  back correctly: `take 307`, where the same link segfaulted before.
+- **The CALLER half breaks on every target.** A pxx caller still copies to a
+  temp and passes `&temp`, so a pxx callee now reads the POINTER's bits as the
+  struct's fields. Measured on a pxx-only C program that was correct before:
+
+  | | before | with the probe | gcc |
+  | --- | --- | --- | --- |
+  | x86-64 | `37 91` | `-587090340 91` | `37 91` |
+  | arm32 | `37 91` | `-981461088 91` | `37 91` |
+  | aarch64 | `37 91` | `-272680545 91` | `37 91` |
+  | riscv32 | `37 91` | `-623531480 91` | `37 91` |
+  | i386 | `37 91` | **compile error** | `37 91` |
+
+  A live address rendered as a decimal number — the same signature as
+  [[bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address]]. Reverted
+  with `git checkout --`; all five targets confirmed back at `37 91`.
+
+**And it corrects the "safe split" advice this ticket used to give.** That advice
+said a <= 8-byte record occupies ONE slot under both schemes, so switching it
+cannot shift a later argument. The claim is TRUE and it is NOT the safety
+property — nothing shifted above, and the values were still garbage. The binding
+constraint is that **the caller and the callee must agree about what the slot
+CONTAINS**, and the caller's half lives in shared IR lowering
+(`IRLowerCallArg`, `ir.inc:3250`), not in the per-parameter flag. So the pair
+moves together or not at all, and size is not a seam you can cut along.
+
+**i386 nuance, correcting an earlier note in this ticket.** i386 refuses by-value
+records in the *Pascal* convention (`ir_codegen.inc:1279`), but C structs compile
+and run correctly on i386 *today* — precisely BECAUSE the C frontend routes them
+through the by-ref ABI. The deliberate design is what makes i386 work at all, so
+"fix i386's prior gap first" is a real prerequisite and not an aside: on i386
+this change cannot even be attempted until by-value records exist there.
 
 **Why this was not started here:** partial aggregate classification is worse
 than none. The precedent is in this repo — a two-of-three xtensa state
