@@ -171,4 +171,4 @@ The div-zero work above is the template for it — same branch-patch idiom, same
 register-lifetime argument, same two-shapes-must-both-run rule.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit ff99d6b0d.
