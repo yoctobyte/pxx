@@ -58,7 +58,7 @@ STATUSES = [
     "backlog_new",
     # PER-LANE BACKLOGS (user, 2026-08-31: "we will split backlog into multiple
     # sections, typically by track number -- an N ticket goes to backlog-nilpy").
-    # 426 open tickets accumulated in EIGHT days; nobody can hold that, and a
+    # 467 tickets open (of 5035 ever filed); nobody can hold that, and a
     # `prio:` scalar could not rank it because it guesses at a two-axis question
     # (which language, which platform) with no stated goal behind either axis.
     # The goal is now written down -- devdocs/dev/the-goal-cross-cross.md -- and
@@ -501,7 +501,7 @@ class Ticket:
         declines to hand one over. Claiming one is claiming a campaign.
 
         Rating an umbrella is the ONE number a human still sets. Everything
-        below inherits, which is the whole point: 402 tickets each carrying a
+        below inherits, which is the whole point: 467 open tickets each carrying a
         hand-typed guess is what the umbrella scheme replaces (2026-08-31).
         """
         return (self.slug.startswith("umbrella-")

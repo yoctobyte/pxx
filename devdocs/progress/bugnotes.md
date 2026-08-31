@@ -9,7 +9,7 @@ uninteresting: it is accurate, it is recorded, and it is simply **unranked**
 until some real program reaches for it.
 
 Owner, 2026-08-31, on why this file exists: the backlog reached 400+ open
-tickets in eight days, *"half fair and accurate, but not related to primary
+tickets — 467 open of 5035 ever filed — *"half fair and accurate, but not related to primary
 development target."* Perf numbers, a float's last decimal, an FPC or gcc
 divergence, an observable no compiling program can reach. **The ticket system
 became its own flaw** — so the default moved: a note is the default, a ticket is

@@ -300,7 +300,9 @@ note that you did so."*
 
 **This RETIRES "document our bugs, as a goal in itself."** That directive was
 his and he has withdrawn it: *"this request has sortof got out of hand"* — it
-is where 426 open tickets in eight days came from. **The artifact is the FIX
+is where **5035 tickets ever filed, 467 still open** came from — measured
+2026-08-31, at a true birth rate of **70-128 new tickets a day**, spiking to
+**365 on 2026-08-30**. **The artifact is the FIX
 plus a note that you made it, not a report of a defect for somebody else to
 process.**
 
@@ -506,14 +508,19 @@ HAS TO WORK.
 `prio:` is one scalar guessing at a two-axis question (which language, which
 platform) with no stated goal behind either. It cannot weigh *"pxx compiles
 DOSBox"* against *"a float's last decimal disagrees with FPC"*, so it did not —
-and 426 tickets accumulated in **eight days**, most accurate and off-target.
+and **467 tickets are open out of 5035 ever filed** — measured 2026-08-31 —
+most of them accurate and off-target, arriving at 70-128 a day.
 
 The ranker already solves this and always did (`tools/progress.py`,
 `effective_prio`): **a ticket's effective priority is the max of its own `prio`
 and of everything it unblocks, transitively — you rate the goal, the chain
-follows.** The defect was never the algorithm. It was that **249 of 402 tickets
-had no dependency edge at all**, so every one of them fell back on a hand-typed
-guess.
+follows.** The defect was never the algorithm. It was that **425 of 467 open
+tickets — 91% — carry no dependency edge at all**, so every one of them falls
+back on a hand-typed guess. (An earlier draft of this line said "249 of 402".
+That was `grep -L 'blocked-by: []'`, which answers *"files not containing this
+literal string"* and so counts a ticket with NO such field as though it had an
+edge. The instrument did not error; it answered about something else, and the
+truth is worse than the number it gave.)
 
 **So an umbrella's `prio:` is the only number a human still sets.** Six numbers,
 not four hundred. Everything else inherits — and it works: `feature-c-corpus-
@@ -1105,8 +1112,8 @@ fix the doc, not the loop.
   `backlog-nilpy` (N), `backlog-tools` (T), `backlog-pascal` (P),
   `backlog-decide` (U), `backlog-libs` (B/E), `backlog-cfront` (C),
   `backlog-web` (W), `backlog-windows` (M), `backlog-docs` (D), `backlog-esp`
-  (S). Split 2026-08-31 because 426 open tickets had accumulated in **eight
-  days** and no human can hold that. They are **ranked exactly like the old
+  (S). Split 2026-08-31 because **467 tickets were open** and no human can hold
+  that. They are **ranked exactly like the old
   `backlog/`** — nothing changed about what competes with what; the win is that
   `ready --track N` reads one 96-ticket folder instead of filtering 426. File
   into the lane's folder, not into `backlog/` (which survives only for

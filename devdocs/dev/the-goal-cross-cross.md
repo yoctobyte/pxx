@@ -6,7 +6,8 @@ Owner, 2026-08-31, stated when the ticket system had become its own flaw:
 > dosbox for such target. And run a minimal system with compiler. **That** is a
 > goal. Cross-cross. Cross language cross platform. pxx.*
 
-This file exists because the backlog reached 400+ tickets in eight days, most of
+This file exists because the open backlog reached **467 tickets** (of 5035 ever
+filed, arriving at 70-128 a day — measured 2026-08-31), most of
 them **accurate and off-target** — a float's last decimal, an FPC divergence, a
 perf number — and nothing in the repo said what "on-target" meant. A `prio:`
 number could not carry it: it is one scalar guessing at a question with two axes
@@ -40,7 +41,7 @@ to stop regressions between proofs; they are not the goal and they never were.
 
 **A ticket earns its rank by naming the cell it blocks.** Not by someone
 estimating importance on a 0-100 scale, which is what produced a backlog where
-three quarters of the tickets have no dependency edge at all and are therefore
+**91% of open tickets — 425 of 467 — have no dependency edge at all** and are therefore
 ranked by a hand-typed guess.
 
 The ranker already implements this and has all along (`tools/progress.py`,
