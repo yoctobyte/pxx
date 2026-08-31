@@ -226,6 +226,41 @@ fifty where it has the one you are looking for**, and it is the same asymmetry a
 a positive control, pointed at a negative result. Full numbers and the control
 program: `bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts`.
 
+**Its positive-space mirror, and the more dangerous of the two — frankwasm's,
+`2b99d6c19`, `LOGBOOK.md:210`:**
+
+> **AN EXONERATING SHAPE IS ONLY EVIDENCE IF IT CONTAINS THE INGREDIENT.** Before
+> writing "X is unaffected" into a ticket, name what makes X affected and check
+> the probe has it — otherwise the row you add is the one that stops the next
+> agent looking.
+
+Measured: a shape table carried the row *"outer class NOT generic → ok"*,
+established honestly, on a probe with **no name collision** — when the collision
+was the entire mechanism. The probe could not have failed. The non-generic case
+was silently returning a decoy's answer (FPC 7, us 1) the whole time, and that
+row is what kept anyone from checking.
+
+**This form is worse than the absence form, for a reason about follow-up rather
+than about evidence.** An absence is conspicuous — it reads as *nothing here
+yet*, and invites another look. An exoneration reads as a **result**, and
+**nobody re-opens a cleared suspect**, so there is no natural trigger to
+re-check it ever. It is also the same animal as every instrument in the
+2026-08-30 ledger: it answered correctly, about a program with no collision.
+
+So the pair, and they are the same question asked at opposite signs:
+
+| your finding | ask |
+| --- | --- |
+| an **absence** | what else produces this absence? Put one of those in the probe. |
+| an **exoneration** | could this probe have failed at all? Name the ingredient and check it is present. |
+
+*(Attribution note: this rule reached me relayed, and I credited the relayer.
+The coordinator caught it and verified it back to frankwasm's logbook line —
+which is frankT's "a relay strips the authorship, and an authorless claim is
+unfalsifiable in a way the original was not", happening to the rule about
+unfalsifiable claims. Check the logbook before crediting a rule you received
+second-hand.)*
+
 **An unmeasured baseline in a control does not weaken a comparison — it inverts
 it.** A control asserting "green on all five targets" was written having checked
 one. Two later results would have read backwards: a real regression as
