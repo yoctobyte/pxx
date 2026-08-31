@@ -439,6 +439,61 @@ your idiom invites you to change it.
 **So: branch on `$?` being 1 versus 128. Never test an ancestry query with `!` or
 `||`. Do not redirect its stderr.**
 
+#### The family, because it is four operators and it caught three agents in four hours
+
+The coordinator saw all three instances (each was reported to it separately, and
+none of us saw more than our own). **`!`, `&&`/`||`, a pipe, and `2>/dev/null`
+each replace the exit status you asked for with a different one, and none of them
+says so.**
+
+| | the line | what `$?` became |
+| --- | --- | --- |
+| 1 | `git merge-base --is-ancestor A B 2>/dev/null && x \|\| y` | 1 and 128 down the same branch; the fatal text discarded |
+| 2 | `git show <sha>:<file> 2>&1 \| head -2 ; echo $?` | **0** — it is `head`'s. Found inside the command being used to measure instance 1 |
+| 3 | `$(sha256sum "$D/pinned" 2>/dev/null \| cut -c1-12 \|\| echo unknown)` | the pipeline's, i.e. `cut`'s — and `cut` succeeds on empty input, so `echo unknown` **could never run** |
+
+**The third is the one to lead with.** It is a guard that cannot fire, written
+**into the fix for a guard that could not fire**, by an agent an hour deep in
+exactly that topic. Its failure output would have been `binary sha256 ` with
+nothing after it — **a labelled blank, which reads as truncation rather than
+absence**, and so is strictly worse than the unlabelled hash it was replacing.
+Reading the line did not catch it. **Asserting the absent-binary arm caught it on
+the first run.** That is the positive-control rule paying out inside one hour,
+with the strongest control case available: maximal context, and it still took the
+assertion rather than the reading.
+
+**Practical form: branch on `$?` explicitly when the distinction matters, keep the
+query off a pipe, and never redirect the stream carrying the only diagnostic.**
+
+#### And why all three were long-lived: an instrument fails silently in whichever direction resembles CAUTION
+
+frankwasm's polarity note, generalised past the guard case above.
+
+| | stuck on | why nobody reported it |
+| --- | --- | --- |
+| the saturation check | PASS | let bad things through — found in hours, once someone looked |
+| `trackt health` off-host | DOWN | produced *more testing*, which reads as diligence |
+| a binary sha256 read as a commit | **ABSENT** | absence looks like the cautious answer |
+
+**A binary sha256 prefix NEVER resolves. That failure mode is structurally
+incapable of producing a false YES** — it can only ever produce certainty about a
+NO that was never tested. So there is no surprising confirmation to interrogate,
+and the answer arrives in the shape we are all trained to trust.
+
+**Nobody audits the direction it would be *safe* to be wrong in** — which is
+exactly why the accept-side control is the one nobody writes: writing it *feels
+like weakening the check*. The pattern to copy is
+`tools/twatch_cascade_qualifier_devtest.py` asserting that a bad which really
+touches `compiler/` gets **no** qualifier at all. Cite it as the pattern, not as
+one test.
+
+**The operational tell, and "verify the sha" is NOT it:** if twelve hex characters
+do not resolve, **ask what else in this repo is twelve hex characters** before
+concluding the object is missing. `sha256sum stable_linux_amd64/default/pinned`
+costs nothing and settles it. The reader who got this wrong *did* verify — against
+his own object store, which is precisely the one instrument that cannot separate
+the two cases.
+
 **And the free half, which lands on this table's own advice:** the row above
 recommends *"prefer an instrument with no orientation — `git show <sha>:file`"*.
 Measured on the same bogus sha:
