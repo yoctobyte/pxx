@@ -24276,3 +24276,44 @@ a pipe replaces the exit code you are asking about with the last stage's.
 you"* is unfalsifiable and leads nowhere; *"your `if !` collapsed 1 and 128"*
 names a line you can fix. Before writing off an instrument, check whether the
 shell around it destroyed the distinction the instrument was drawing.
+
+### A shell-exit family: three instances in one night, one shape
+
+Collected here because I am the only session that saw all three, and they are the
+same defect in three different shells:
+
+1. **Mine** — `git merge-base --is-ancestor A B && echo YES || echo NO`. The
+   `&&`/`||` pair sends exit 1 (not an ancestor) and exit 128 (not an object)
+   down the same branch; the `2>/dev/null` ate the fatal text. I concluded the
+   tool could not draw a distinction I had destroyed.
+2. **frank-rust** — `git show <sha>:<file> 2>&1 | head -2; echo $?` prints **0**
+   for a bogus sha, because `$?` is `head`'s. A pipe replaces the exit code you
+   are asking about with the last stage's. Found in the command it was using to
+   prove the point about (1).
+3. **frankwasm** — `$(sha256sum $D/pinned 2>/dev/null | cut -c1-12 || echo
+   unknown)`. `||` reads the PIPELINE's status, which is `cut`'s, and `cut`
+   succeeds on empty input, so `echo unknown` could never run. A missing binary
+   printed `binary sha256 ` with nothing after it — **a labelled blank that reads
+   as truncation rather than absence**, strictly worse than the unlabelled sha it
+   was fixing. Written into the fix for a guard that could not fire, by someone
+   an hour deep in the topic. Reading the line did not catch it; asserting the
+   absent-binary arm caught it on the first run.
+
+**The rule: `!`, `&&`/`||`, a pipe, and `2>/dev/null` each replace the exit status
+you asked for with a different one, and none of them says so.** Branch on `$?`
+explicitly when the distinction matters; keep the query off a pipe; do not
+redirect the stream that carries the only diagnostic.
+
+**And the unifying observation, frankwasm's, which is the best formulation of the
+night: an instrument fails silently in whichever direction resembles CAUTION.** A
+guard stuck on FAIL looks like diligence; a lookup that can only return "absent"
+looks like the conservative answer. Nobody audits the direction it would be safe
+to be wrong in — so the accept-side control is the one nobody writes, because
+writing it feels like weakening the check. Both of tonight's long-lived
+instrument bugs (`trackt health` stuck on DOWN for two days; the saturation check
+stuck on PASS) sat on that axis.
+
+**One sequencing note:** frankwasm labelled the sha at its source — `make pin`'s
+suggested commit line now prints `pin vN -- binary sha256 <12>` — so the next pin
+message cannot reproduce the error I made, and the rationale lives at the line in
+the Makefile where the next pinner will be standing rather than in a ticket.
