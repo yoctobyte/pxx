@@ -52,9 +52,36 @@ then reached CLAUDE.md and had to be corrected.
 5. **Is the per-lane split actually read?** Does anyone use `ready --track X`,
    or did agents keep pulling the global head?
 
-## The honest failure mode to watch for
+## Fleet size is a DIAL the owner turns — so do not measure volume
 
-**These rules could look successful while doing nothing**, because the fleet
-shrank from eleven to three the same day. Every count that measures *volume*
-falls for that reason alone. Prefer ratios — fixes per finding, notes per
-ticket — over totals.
+*"Fleet diminished because of tokens. I'm balancing that one"* (owner,
+2026-08-31). Agent count is a live token-budget control that will keep moving
+week to week. **Every absolute count — tickets filed, commits, notes — moves
+with it and measures nothing about the rules.**
+
+**Use per-100-commits rates.** Measured here, and the reason to trust them:
+
+| day | commits | new tickets | **tickets/100c** | logbook lines | **notes/100c** |
+| --- | --- | --- | --- | --- | --- |
+| 08-26 | 389 | 94 | 24.1 | 0 | 0.0 |
+| 08-27 | 431 | 98 | 22.7 | 0 | 0.0 |
+| 08-28 | 471 | 76 | 16.1 | 0 | 0.0 |
+| 08-29 | 726 | 142 | 19.5 | 0 | 0.0 |
+| 08-30 | 1831 | 401 | 21.9 | 61 | 3.3 |
+| 08-31 | 638 | *(unmeasurable)* | — | 96 | **15.0** |
+
+**Daily commits swung 4.7x (389 → 1831) while tickets/100c stayed inside
+16-24.** That is the property that makes it the right instrument: it is flat
+across exactly the variable being tuned. **Baseline: ~21 tickets per 100
+commits.**
+
+**The one number that should MOVE is the ratio between the two columns.** Notes
+went 0 → 3.3 → 15.0 per 100 commits as the logbook rule landed on 2026-08-30 and
+the fix-it-then-note-it rule on 08-31. If the rules work, notes/100c keeps
+climbing while tickets/100c falls below 16. If **both** fall, the fleet just got
+quieter and the rules did nothing.
+
+**08-31's ticket rate is deliberately marked unmeasurable:** the per-lane split
+moved 424 files, and `--diff-filter=A` counts every move as a birth. Next week's
+measurement is clean — use earliest-add-per-slug, and `git log --follow` for
+anything the split touched.
