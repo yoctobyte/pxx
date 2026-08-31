@@ -3,8 +3,8 @@ slug: bug-a-the-exception-shadow-chain-is-process-wide-so-two-threads-crash
 track: A
 prio: 70
 type: bug
-status: new
-owner: ""
+status: working
+owner: frankS
 blocked-by: []
 summary: "MEASURED: 18 of 22 two-threaded runs CRASH -- mostly SIGSEGV (139), sometimes exit 217 with an exception that escaped its own `try`. The single-threaded control is clean in 12 of 12 runs of the SAME BINARY, in the same process, moments earlier. `BSS_EXC_TOP` is the setjmp shadow-chain HEAD and is one process-wide slot, so two threads push and pop try-frames onto one chain and a raise longjmps into the other thread's dead frame. This is worse than the signal-slot race fixed in 47439504c: that produced wrong VALUES, this terminates the process. Allocation-free repro, so it is not the heap lock. Scope is large -- ~64 references to BSS_EXC_TOP across 14 files including all seven backends and coroutine_emit.inc -- so it is filed with the diagnosis banked, not microfixed."
 ---
