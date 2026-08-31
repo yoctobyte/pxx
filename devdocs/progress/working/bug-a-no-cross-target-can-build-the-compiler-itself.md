@@ -572,3 +572,48 @@ load, not the allocator's logic.
 
 Gate: `make compiler/pascal26` converged (`4f6b70995c3a`); `tools/gate.sh quick`
 GREEN; map emission verified on five targets with the `--no-map` control.
+
+#### The faulting statement is the free-list POP, so the corruption is older than the call (frankA, 2026-08-31)
+
+With 59c2d85d2's map I disassembled `PXXAlloc` in a fresh arm32 build
+(`4f6b70995c3a`, `--map`, `PXXAlloc` at `0x08056c10`, so the fault is `+0x290`
+as frankS resolved it). Decoded, `+0x1fc` through `+0x290` is exactly
+`builtinheap.pas:1104-1108`:
+
+```
++0x1fc  r9 = fp-68 ; r0 = [r9]        bin
++0x204  r0 <<= 3   ; + base           FreeBins is array of Int64 -> *8
++0x210  r0,r1 = [FreeBins+bin*8]      cur := FreeBins[bin]
++0x224  [fp-24] = r0,r1               (cur, a 64-bit local)
++0x240  64-bit compare of [fp-24] vs 0, beq away      if cur <> 0 then
++0x288  r0,r1 = [fp-24]
++0x290  ldr r0,[r0]   <== SIGSEGV     FreeBins[bin] := PWord(cur)^;   { pop }
++0x294  asr r1,r0,#31                 sign-extend: PWord = ^NativeInt, 4 bytes here
+```
+
+**So nothing is wrong with this call.** `cur` is a free-list head that passed
+`<> 0` and is not a readable address — the bin was already poisoned when
+`PXXAlloc` was entered. That answers frankS's "PXXAlloc is reached thousands of
+times before it faults, so what is different about this call": nothing is. It is
+the first pop of a corrupt bin, and the bins only fill after frees, which is also
+why it takes thousands of calls to arrive. **The hunt is the writer, not the
+allocator** — and not the arm32 lowering of that load, which decodes correctly
+(`PWord = ^NativeInt` is 4 bytes here, sign-extended into the `Int64` slot, which
+is right for an address below 2 GB).
+
+**A collision worth checking, stated as a hypothesis and not a finding.** The
+next-link is written at `PWord(addr)^`, i.e. at the block base — and
+`PXX_HDR_META = 0` (line 192), so the managed META/kind word is at *the same
+eight bytes*. A live free-list link and a stale meta write occupy one slot by
+design. My `r0 = 0x28` is 40, which is a plausible small header value and not a
+plausible address. **The objection to it, which I could not clear:** that
+aliasing is identical on x86-64, so it cannot by itself explain an arm32-only
+fault. Either it is benign (nothing writes META after free, as intended) and the
+real bug is a stale writer that only wins the race here, or the arm32 half is
+elsewhere. Catching the writer settles it; studying `PXXAlloc` will not.
+
+**One instrument warning, because it bit me.** I swept a `-dPXX_HEAP_DEBUG` build
+scoring pass/fail on "was the artifact produced", and that build is slow enough
+that the tool timeout killed runs mid-compile — a killed run produces no artifact
+and scores identically to a SIGSEGV. Those rows were not measurements and are not
+reported here. On this defect, score the bash SIGSEGV notice, not the artifact.
