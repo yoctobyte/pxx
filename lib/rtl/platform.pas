@@ -129,8 +129,15 @@ const
 
 { Set a signal to be ignored (SIG_IGN). This is the safe, restorer-free case —
   the kernel never invokes a handler, so no signal-return trampoline is needed.
-  Networking code ignores SIGPIPE so a closed peer yields an error, not death.
-  Returns 0 on success. No-op (0) on platforms without POSIX signals (ESP). }
+  Returns 0 on success. No-op (0) on platforms without POSIX signals (ESP).
+
+  This is NOT how a closed peer is survived. Networking code does not call this;
+  PalSend/PalSendToIpv4/PalSendToIpv6 pass MSG_NOSIGNAL instead, so a dead peer
+  yields EPIPE on that one call without changing process-wide signal disposition
+  — which would also silence SIGPIPE for pipes, where dying is the correct
+  behaviour for a program in a shell pipeline. This comment previously claimed
+  the signal-disposition mechanism as fact; it was never implemented, and every
+  send died: bug-b-fpsend-to-a-closed-peer-kills-the-process-msg-nosignal-is-never-passed. }
 function PalIgnoreSignal(sig: Integer): Integer;
 function PalMkdir(path: PChar; mode: Integer): Integer;
 function PalRmdir(path: PChar): Integer;

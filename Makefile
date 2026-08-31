@@ -18077,6 +18077,11 @@ lib-test: pxx-stable-check
 	tools/expect_same.sh lib_platform_net_udp "$$($(TESTTMP)/lib_platform_net_udp)" "$$(printf 'poll=ok\nrecv=ok\npeer=ok\necho=ok\nunsupported=-38')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_platform_net_sockopt.pas $(TESTTMP)/lib_platform_net_sockopt
 	tools/expect_same.sh lib_platform_net_sockopt "$$($(TESTTMP)/lib_platform_net_sockopt)" "$$(printf 'name=ok\naccept-peer=ok\nsockerr=ok\nunsupported=-38')"
+	# A send to a closed peer must return EPIPE, not kill us with SIGPIPE. The
+	# 'survived' line is the assertion: before the fix this binary died at the
+	# first send and printed NOTHING, so a missing line is the failure signal.
+	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_sock_closedpeer.pas $(TESTTMP)/lib_sock_closedpeer
+	tools/expect_same.sh lib_sock_closedpeer "$$($(TESTTMP)/lib_sock_closedpeer)" "$$(printf 'send=ok\nsendto=ok\nlive=ok\nsurvived')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_net.pas $(TESTTMP)/lib_net
 	tools/expect_same.sh lib_net "$$($(TESTTMP)/lib_net)" "$$(printf 'bound=ok\npeer=ok\ntcp=ok\nudp=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_net_timeout.pas $(TESTTMP)/lib_net_timeout
@@ -19188,7 +19193,7 @@ endif
 	# not cover them". awk dedupes rather than `sort -u`, which merges
 	# distinct identifiers under some locales.
 	@sk="$$(awk '!a[$$0]++' $(TESTTMP)/lib-test.skipped 2>/dev/null | tr '\n' ' ' | sed 's/ *$$//')"; \
-	 echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + mimic-xml-etree + mimic-collections-abc + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl + tls-loopback) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')$${sk:+ -- SKIPPED: $$sk (green here does NOT cover them)}"
+	 echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sockets-closedpeer + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + mimic-xml-etree + mimic-collections-abc + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl + tls-loopback) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')$${sk:+ -- SKIPPED: $$sk (green here does NOT cover them)}"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

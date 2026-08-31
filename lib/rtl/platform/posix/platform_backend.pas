@@ -120,6 +120,9 @@ implementation
 
 const
   PAL_PLATFORM_POSIX = 1;
+  { A send to a peer that has closed must return EPIPE, not kill the process
+    with SIGPIPE. Same value on every Linux arch. }
+  MSG_NOSIGNAL = $4000;
 
 {$ifdef CPUX86_64}
   SYS_read = 0; SYS_write = 1; SYS_close = 3; SYS_lseek = 8;
@@ -929,9 +932,17 @@ begin
   Result := __pxxrawsyscall(SYS_read, handle, Int64(buf), len, 0, 0, 0);
 end;
 
+{ sendto(2) with a nil destination rather than write(2): write has no flags
+  argument to carry MSG_NOSIGNAL, and without it a closed peer kills the process.
+  Safe because every caller of PalSend is a socket by contract -- fpSend, the
+  net/asyncnet/dns senders, and the C send() veneer in pxxcio. }
 function PalBackendSend(handle: Integer; buf: Pointer; len: Integer): Int64;
 begin
-  Result := __pxxrawsyscall(SYS_write, handle, Int64(buf), len, 0, 0, 0);
+{$ifdef CPU_I386}
+  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, MSG_NOSIGNAL, 0, 0);
+{$else}
+  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, MSG_NOSIGNAL, 0, 0);
+{$endif}
 end;
 
 function PalBackendShutdown(handle, how: Integer): Integer;
@@ -953,9 +964,9 @@ var sa: array[0..15] of Byte;
 begin
   FillSockAddrIpv4(@sa[0], hostAddr, port);
 {$ifdef CPU_I386}
-  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, 0, Int64(@sa[0]), 16);
+  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, MSG_NOSIGNAL, Int64(@sa[0]), 16);
 {$else}
-  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, 0, Int64(@sa[0]), 16);
+  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, MSG_NOSIGNAL, Int64(@sa[0]), 16);
 {$endif}
 end;
 
@@ -984,9 +995,9 @@ var sa: array[0..27] of Byte;
 begin
   FillSockAddrIpv6(@sa[0], addr, port, scopeId);
 {$ifdef CPU_I386}
-  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, 0, Int64(@sa[0]), 28);
+  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, MSG_NOSIGNAL, Int64(@sa[0]), 28);
 {$else}
-  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, 0, Int64(@sa[0]), 28);
+  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, MSG_NOSIGNAL, Int64(@sa[0]), 28);
 {$endif}
 end;
 
