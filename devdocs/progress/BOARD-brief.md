@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:6 unfinished:27 blocked:10 backlog:393 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2932 rejected:68`
+`working:5 unfinished:28 blocked:10 backlog:394 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2932 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -14,9 +14,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-threadsafe-heap-optimize` [A] — owner: frankA
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
-- `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — owner: frankS
 
-## unfinished (27) — parked mid-flight; re-claim, do not duplicate
+## unfinished (28) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -44,6 +43,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-rust-option-type` [R]
 - `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - `perf-a-cache-the-compiled-nilpy-runtime-unit-image` [A] — blocked-by: decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies
+- `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
 ## blocked (10) — has an unmet blocker; do not claim
@@ -59,7 +59,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 425, ranked
+## Ready — top 30 of 427, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -92,4 +92,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 
-_395 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_397 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
