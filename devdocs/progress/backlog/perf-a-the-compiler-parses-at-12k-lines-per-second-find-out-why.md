@@ -223,3 +223,45 @@ July and this box's load was not recorded (CLAUDE.md notes the watcher costs
 2-3x), so it may be entirely explained. **It is also 5.8x and nobody has
 checked.** Do not report this as a regression; do not dismiss it either.
 Re-measure both under known load before drawing anything from it.
+
+---
+
+## 2026-08-31, owner — the runtime is ALREADY optimal here; the cost is the call sites
+
+Owner proposed over-allocating on realloc (16-256 spare bytes) to cut
+reallocations. **Already implemented, in the stronger form**, and read out of
+the code rather than a ticket summary — `builtinheap.pas:4295`:
+
+```pascal
+want := newLen + PXX_HDR_SIZE + 1;
+if (oldData <> nil) and (newLen > oldLen) then want := want + want;   { geometric }
+```
+
+Why the implemented form is better, stated because the fixed-slack idea is
+intuitive and will be re-proposed: **a fixed 16-256 byte slack is still
+quadratic**, merely with a smaller constant — a 100 KB string built one
+character at a time with 256 bytes of headroom still performs ~400
+reallocations. Geometric doubling is amortised O(1), which is why the measured
+figure is 20,000 appends -> **16** allocations (log2, exactly).
+
+`feature-opt-bulk-copy-is-byte-at-a-time` (p65) is **done**, so the copy inside
+the realloc path is not byte-at-a-time either.
+
+### Therefore
+
+Both runtime-level fixes are in. The remaining `AppendChar` 17.5% is **not
+allocation and not copying**. It is the per-call cost of the in-place fast path
+multiplied by the call count: a procedure call, a `Length` load, a refcount
+test, an `APPENDABLE` flag test, a capacity test, a zero-fill, a length store, a
+NUL store and a meta store — **to move one byte**.
+
+**So the fix is at the ~400 call sites, not in the runtime.** `AppendRange(dst,
+src, first, last)` already exists and appends a span in one call. The archetype
+is a lexer scanning an identifier one character at a time while it already knows
+where the token started: note the end, append the range once. That is one
+`SetLength` and one copy per token instead of one full fast-path traversal per
+character.
+
+**Still gated on the same measurement.** This is the shape of the fix IF the 46%
+unresolved frames turn out to be under `AppendChar`. Attribute them first — this
+paragraph is a plan, not a finding.
