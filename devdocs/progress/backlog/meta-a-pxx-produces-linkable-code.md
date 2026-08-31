@@ -7,7 +7,7 @@ found: 2026-08-31
 found-by: frank-user, at the owner's direction
 owner: ""
 blocked-by: []
-summary: "Standing umbrella, priced ABOVE bug fixing by the owner 2026-08-31. pxx can CALL OUT (elfwriter emits DT_NEEDED/dynsym/GOT-indirect) and BE CALLED BACK (gtk3.pas:47 hands a handler to g_signal_connect_data and GTK calls into us, in production). It cannot BE LINKED INTO anything: no general relocatable object on x86-64/i386/arm32/aarch64 (--emit-obj is xtensa|riscv32 for general code, .asm-only on x86-64), and --shared is .asm-frontend only (compiler.pas:1238). So the ABI machinery exists and the ET_REL writer does not -- a narrower gap than 'we cannot link'. Beyond the capability itself this is the ONLY thing that makes the C-ABI convention externally checkable: link a pxx object against a gcc-built caller on i386 and decide-does-a-c-function-always-use-the-c-abi stops being an argument and becomes a measurement."
+summary: "Standing umbrella, priced ABOVE bug fixing by the owner 2026-08-31. FIRST CHILD DONE: the general x86-64 relocatable object writer landed 41045d7b4 (frankC) -- a gcc-built main now links a pxx object and calls into it, and clang and tcc link the same object; export surface is the C-convention routines, and a link needs -no-pie. What remains: i386/arm32/aarch64 object output (p70, and i386 is the one that MATTERS -- x86-64 never diverged, so it structurally cannot settle decide-does-a-c-function-always-use-the-c-abi; i386 can), position-independent x86-64 output, --shared for compiled sources (blocked on the same backend work, and -no-pie cannot rescue a .so), and a Pascal `library` unit (now worth LESS than it looked -- `cdecl` on a definition is already a working export spelling). pxx can now be linked into something; it still cannot be linked into everything."
 ---
 
 # Meta: pxx produces linkable code, not just programs
@@ -39,19 +39,26 @@ direction only.
 
 ## What is missing
 
-**Being linked into something else.**
+**Being linked into something else — now partly closed.** Updated 2026-08-31,
+after 41045d7b4; the original text is one paragraph down, because the diagnosis
+in it is what the fix was built on.
 
-- `--emit-obj` writes a general relocatable object for **xtensa and riscv32
-  only**. On x86-64 it accepts `.asm` sources alone (text + global labels +
-  extern calls); a Pascal/C/NilPy program is refused. i386, aarch64 and arm32
-  refuse outright.
-- `--shared` is `.asm`-frontend only — `compiler.pas:1238` says so in the option
-  handler itself. A Pascal `library` unit does not even parse
-  (`expected 'begin' before 'library'`).
+- `--emit-obj` writes a general relocatable object for **x86-64, xtensa and
+  riscv32**. On x86-64 the export surface is the C-convention routines and a
+  link needs `-no-pie`. **i386, aarch64 and arm32 still refuse** —
+  [[feature-a-object-output-for-i386-arm32-and-aarch64]], and i386 is the one
+  the C-ABI decision waits on.
+- `--shared` is still `.asm`-frontend only (`compiler.pas:1238`), and for a
+  reason the `.o` did not have to face: a `.so` is relocated at load, so the
+  absolute model `-no-pie` accepts cannot work there at all
+  ([[feature-a-shared-library-output-for-compiled-sources]]). A Pascal `library`
+  unit still does not parse (`expected 'begin' before 'library'`) —
+  [[feature-p-a-pascal-library-unit-does-not-parse]], and worth less than it
+  looked, since `cdecl` is now a working export spelling.
 
-The diagnosis is already banked in the child ticket and is sharper than "not
-implemented": there are **two object writers, dispatched by architecture, when
-the discriminator should be what the object has to carry.**
+**The original diagnosis, which is what the fix was built on:** there were **two
+object writers, dispatched by architecture, when the discriminator should be
+what the object has to carry.** That is now what `compiler.pas` asks.
 
 ## Why it is priced above bug fixing
 
@@ -70,18 +77,40 @@ the discriminator should be what the object has to carry.**
 
 ## Children
 
-- [[feature-a-a-general-x86-64-relocatable-object-writer]] — the writer. p80.
+- [[feature-a-a-general-x86-64-relocatable-object-writer]] — the writer.
+  **DONE, landed 41045d7b4** (frankC, 2026-08-31). A gcc-built `main` links a
+  pxx object and calls into it; clang and tcc agree on the same object.
 - [[bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64]] — the
   refusal message names a set excluding a working target. p25, cheap.
-- **Not yet filed, and deliberately so** — cross-target ET_REL
-  (i386/arm32/aarch64), `--shared` beyond the `.asm` frontend, and a Pascal
-  `library` unit. File them when the x86-64 writer's shape is known; filing
-  them now would guess at an interface that does not exist.
+- [[feature-a-object-output-for-i386-arm32-and-aarch64]] — p70, and **i386 is
+  the one that matters**: it is the target that can settle the C-ABI decision
+  below, which x86-64 structurally cannot.
+- [[feature-a-x86-64-object-output-is-position-dependent]] — p50. `-no-pie` is
+  the current contract; lifting it is backend work.
+- [[feature-a-shared-library-output-for-compiled-sources]] — p50, blocked on the
+  same backend work, and **`-no-pie` cannot rescue a `.so`**.
+- [[feature-p-a-pascal-library-unit-does-not-parse]] — p40, Track P, and worth
+  **less** than it looked before the writer landed: `cdecl` on a definition is
+  already a working export spelling, so `library`/`exports` is a second
+  declarative one. Compat, not capability.
+
+The last four were the "not yet filed, deliberately" set. They are filed now
+because the writer's shape is known, so each is written against a real interface
+rather than a guessed one — and two of them **changed shape** in the process:
+the `.so` turned out to be blocked on the backend rather than on a writer, and
+`library` lost most of its value to the export surface the writer already has.
 
 ## Unblocks
 
 [[decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it]]
 — deferred *on this*, with the trigger named there.
+
+**Still deferred after the x86-64 writer landed, and this is not a
+disappointment — it is the third bullet above, arriving on schedule.** x86-64
+never diverged, so an x86-64 object writer proves the machinery and settles
+nothing about the fork. The trigger is an **i386** object linked against a
+gcc-built i386 caller: [[feature-a-object-output-for-i386-arm32-and-aarch64]],
+priced p70 for exactly that reason.
 
 ## The gate this must not break
 

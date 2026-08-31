@@ -3005,9 +3005,16 @@ begin
     writeRela64(f, Fixups[i].CodePos, 2, 1, Fixups[i].DataOff);
   for i := 0 to GlobFixCount-1 do
     { A data-resident global (a typed const baked into .data) carries a BIASED
-      offset; SymOffIsData is the one decode point for all of them. Reading it
-      as a raw BSS offset is what the ELF32 sibling still does -- see
-      bug-a-elf32-rel-writer-ignores-the-data-sym-bias-on-globfix. }
+      offset; SymOffIsData is the one decode point for all of them.
+      UNREACHABLE TODAY, DELIBERATELY, AND NOT DEAD: the promotion that creates
+      such a global bails out under EmitObjMode (symtab.inc, `if EmitObjMode or
+      EmitSharedMode then Exit`) precisely because an object writer must name a
+      SECTION rather than patch an address, and no writer did. This arm is that
+      missing half for x86-64 -- so lifting the refusal here is a symtab
+      question, not a writer one. Do not "simplify" it away on the evidence
+      that no object reaches it; that evidence is the refusal, not the shape of
+      the data. (The ELF32 sibling still reads the offset raw, which is correct
+      only while that refusal stands.) }
     if SymOffIsData(GlobFix[i].BSSoff) then
       writeRela64(f, GlobFix[i].CodePos, 2, 11, SymOffDataPart(GlobFix[i].BSSoff))
     else

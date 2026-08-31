@@ -2,10 +2,10 @@
 track: A
 prio: 80
 type: feature
-status: working
+status: done
 found: 2026-08-30
 found-by: frank-optimize-b4
-summary: "RE-PRICED 30 -> 80 by the owner 2026-08-31: top priority, above further bug fixing. There is no general relocatable object writer for x86-64/i386/arm32/aarch64 -- --emit-obj writes general objects for xtensa|riscv32 only, on x86-64 it takes .asm sources alone, and --shared is .asm-frontend only (compiler.pas:1238). The diagnosis is neither of the two readings the bug ticket offered: there are TWO object writers and the dispatch picks between them by ARCHITECTURE when the discriminator should be what the object has to carry. The ABI machinery it needs already exists -- DT_NEEDED/dynsym/GOT-indirect in elfwriter.inc, working foreign callbacks via gtk3.pas:47, per-function call type in ProcCdecl -- so this is the ET_REL writer alone. Beyond the capability, it is what makes the C-ABI convention on the three divergent targets externally checkable at all. Umbrella: meta-a-pxx-produces-linkable-code. Do not break xtensa/riscv32 emit-obj: it is the only evidence any of this works."
+summary: "DONE, landed 41045d7b4. writeELFRelX64General writes the general ELF64/x86-64 object (procs as symbols, .data, .bss, every backend relocation kind) and --emit-obj now dispatches on what the object has to CARRY (AsmGlobalSymCount) rather than on architecture. MEASURED, not inferred: a gcc-built main links a pxx object and calls into it -- Pascal and C sources, int and double signatures, strings through the pxx heap, and pxx calling out to libm sqrt resolved by the system linker; clang and tcc link the same object and agree. External calls needed NO backend change: an x86-64 external call is already `call [abs32]` through a GOT slot in our OWN .data, so in an object it is two ordinary relocations and the LINKER fills the slot. Two decisions stated rather than defaulted: the export surface is the C-convention routines (ProcCdecl) and everything else is LOCAL, so an object cannot collide with its host over an RTL name; and the relocation model is ABSOLUTE, so a link needs -no-pie -- option (b) is filed separately as feature-a-x86-64-object-output-is-position-dependent. The program entry is deliberately NOT exported, so a linked-in object runs NO initialisation -- the test pins the VALUE that proves it. xtensa/riscv32 --emit-obj and the .asm writer are untouched and re-verified by hand."
 owner: frankC
 ---
 
@@ -159,3 +159,119 @@ time.
 ## Umbrella
 
 [[meta-a-pxx-produces-linkable-code]] — priced above bug fixing by the owner, 2026-08-31.
+
+## RESOLVED 2026-08-31, frankC — landed 41045d7b4
+
+### The one design question, answered before the code, as the ticket demanded
+
+**(a): absolute relocations, `-no-pie` documented.** `R_X86_64_64` for the
+8-byte data operands `EmitDataRef` emits, `R_X86_64_32S` for the 4-byte global
+displacements `EmitGlobRef` emits — every x86-64 site is a `[disp32]` SIB form,
+which the CPU sign-extends, so `32S` and not `32`.
+
+(b) — a rip-relative form under `--emit-obj` — was **not** bundled in, because
+`[rip+disp32]` and `[disp32]` are different ModRM encodings of different
+LENGTHS: switching form under a flag moves every subsequent code offset, branch
+fixup, proc body address and DWARF range. That is backend work with a real blast
+radius sitting behind a writer that is otherwise done, so it is
+[[feature-a-x86-64-object-output-is-position-dependent]] — which also prices an
+alternative this ticket did not consider: a GOT-style indirection for globals in
+object output only, needing no encoding change at all.
+
+The `-no-pie` boundary is not documentation alone. `test-emit-obj` asserts that
+a PIE link **fails**, so the day the model changes, something says so.
+
+### The thing that made this small, and the ticket did not foresee it
+
+**External calls needed no backend change.** The work list named four relocation
+kinds and did not mention calls; calls looked like the hard part, because the
+`.asm` writer reaches externals through `R_X86_64_PLT32` and the general backend
+emits no `call rel32` for them at all.
+
+It emits `call qword ptr [abs32]` through a GOT slot the compiler allocates in
+its **own `.data`** (`RegisterExternal`). In an object that is two ordinary
+relocations — the operand is `R_X86_64_32S` against `.data`, the 8-byte slot is
+`R_X86_64_64` against the extern's UND symbol — and the **linker** fills the
+slot. No PLT, no new emit mode, no rewriting of the call site. `@extern`
+(`EmitExternalProcAddr`) rides the same pair for free.
+
+Verified end to end rather than by inspection: a Pascal object calling `sqrt`
+from `libm.so.6`, linked by gcc, returns `pxx_hyp(3,4) = 5.0000`.
+
+### Two decisions the ticket did not raise, stated rather than defaulted
+
+**Export surface = the C-convention set (`ProcCdecl`)** — Pascal `cdecl`, and
+every function of a C translation unit — GLOBAL FUNC under its own name.
+Everything else defined, including the whole RTL pulled in with it, is LOCAL
+FUNC: a debugger sees it, the linker does not, so an object cannot collide with
+its host over a name like `WriteLn`. An internal-convention routine exported
+under its Pascal name would be *callable and wrong*, which is the failure worth
+designing against.
+
+Nothing exported means nothing linkable, and we refuse rather than write it —
+the same reasoning as the sibling bug: a file whose failure surfaces at someone
+else's link step with no cause attached.
+
+**The program entry is NOT exported.** It sets up globals, runs the body and
+exits, so a C caller invoking it would terminate the process rather than return.
+The consequence is real and is documented rather than hidden: **a pxx object
+linked into a foreign program runs no initialisation.** The regression test pins
+the VALUE that proves it — `emit_obj_addup(9)` returns 45, not 54, because `g`
+is still 0 — so it would notice if that ever silently changed. A presence check
+would not.
+
+Measured and worth knowing: string work through the pxx heap **does** survive
+this. A `cdecl` routine that builds an `AnsiString` and returns a `PChar` works
+from a gcc-built caller, because the arena is faulted in on demand rather than
+at startup.
+
+### The test rows would have stayed green for the wrong reason
+
+`test-emit-obj`'s x86-64 rows asserted the **refusal**, and `test_emit_obj.pas`
+has no `cdecl` definition — so the *new* "defines nothing linkable" guard fires
+on it and all four assertions still pass. Correct about something else, and it
+would have shipped a feature with no test at all.
+
+Rewritten to assert the object, the export surface (with the negative — `AddUp`
+must NOT be global), the external UND link names and the GOT-slot relocation,
+then the link and the **run** under a gcc-built `main`. Everything above that
+last row is byte inspection, which is exactly what let the old broken object
+pass as plausible.
+
+The refusal keeps a **positive control** of its own — `test_emit_obj_noexport.pas`,
+a case it must reject — because a guard that cannot fail is not a guard and it
+prints PASS.
+
+### A comment I nearly published that was false
+
+The first draft of the `SymOffIsData` arm cited a bug in the ELF32 sibling for
+reading the biased offset raw. **It is not a bug.** The promotion that creates a
+data-resident global bails out under `EmitObjMode` (`symtab.inc`, `if
+EmitObjMode or EmitSharedMode then Exit`), so no object reaches it on any
+target. The comment now says the true and more useful thing: that arm is the
+missing half the refusal names, so lifting it on x86-64 is a symtab question,
+not a writer one.
+
+### Verified
+
+- `make compiler/pascal26` — `converged after 1 round(s)`.
+- `tools/gate.sh quick` — GREEN, exit 0, 10/10 rows.
+- By hand, the gate this must not break: `.asm` frontend `--emit-obj`;
+  riscv32/xtensa `--emit-obj` for `test_emit_obj.pas` and `cxtensa_obj.c`;
+  xtensa windowed ABI. All green, including the `ext_aliased_link` negative.
+- Three independent linkers on one object — `gcc -no-pie`, `clang -no-pie`,
+  `tcc` — all print `45 pxx-emit-obj`. `ld.lld` is not installed on this box.
+- Exports survive DCE at `-O0/-O1/-O2/-O3` (checked, because an unreferenced
+  `cdecl` routine is exactly what a dead-code pass would remove).
+- `tools/doclinks.py`, `tools/docsnip.py`: 0 broken.
+
+### Docs
+
+`docs/reference/objects.md` (new), linked from the reference index and from the
+`--emit-obj` row of `docs/reference/cli.md`, whose old text — *"x86-64 emits
+objects for `.asm` sources only"* — was the true-then, false-now half of the
+pair the sibling bug named. The compiler's own ELF32 refusal message said the
+same thing and is fixed with it.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
