@@ -4,8 +4,9 @@ track: P
 prio: 65
 type: bug
 blocked-by: []
-summary: "`SizeOf(Extended)` answers 10 while a variable declared `Extended` occupies 8 and an array of four occupies 32. Same two-table split as [[bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets]], in the same function, left unfixed for the sibling type when Real was corrected. Self-inconsistent within our own compiler, so any stride or GetMem computed from SizeOf(Extended) is two bytes too long per element."
-status: backlog
+summary: "FIXED as a MERGE, not the one-line change filed. `SizeOf(Extended)` answered 10 against storage of 8 because SizeOf and the declaration path used two different tables. The audit this ticket asked for found EIGHT more names where the split was worse than a wrong width -- ValReal, TDateTime, Currency, Comp, LongBool, WordBool, ByteBool, OleVariant all declare a variable fine and were REJECTED by SizeOf(<name>) outright. BuiltinScalarTypeKind proved a strict superset with `extended` the only disagreement, so BuiltinTypeNameTk now delegates to it (one genuine extra: bare `string`). 0 self-inconsistent names of 37, measured both constructs vs fpc 3.2.2. CORRECTION: this ticket twice claimed :6417 was the only producer of tyExtended compiler-wide and that fixing it makes the kind dead -- FALSE, pyparser.inc:46419/:46441 still produce it, so retiring tyExtended is a question with Track N in it."
+status: done
+owner: frankwasm
 ---
 
 # `SizeOf(Extended)` disagrees with the storage `Extended` gets
@@ -168,3 +169,95 @@ was fixed as an ordinary bug.
 rather than assuming them. Note this also makes `tyExtended` genuinely dead
 (`:6417` is its only producer compiler-wide, measured 2026-08-30), which is the
 clean starting position if the cluster is ever revived.
+
+---
+
+## FIXED 2026-08-31 (frankwasm) — and the audit found eight more, so it is a MERGE
+
+Binary `cf1d5398838a` (self-host fixedpoint, `converged after 1 round(s)`).
+
+### The reported bug
+
+`SizeOf(Extended)` 10, `SizeOf(e)` 8. Fixed. All three numbers are now 8/8/32.
+
+### The audit this ticket asked for, and it was not a formality
+
+The Suggested fix said to check `valreal`, `tdatetime` and `currency` against
+`BuiltinScalarTypeKind` "rather than assuming them". Done, over all 37 builtin
+scalar names, both constructs, against fpc 3.2.2. **Eight names were not merely
+mis-sized — the `SizeOf` path REJECTED them outright:**
+
+```
+ValReal TDateTime Currency Comp LongBool WordBool ByteBool OleVariant
+    var v: <name>   -> compiles, correct width (8 8 8 8 4 2 1 16)
+    SizeOf(<name>)  -> "SizeOf: unknown type or variable"
+```
+
+So `var v: Currency` worked and `SizeOf(Currency)` did not compile. That is the
+same defect as the reported one, one notch further along: not two tables
+disagreeing about a width, two tables disagreeing about whether the type exists.
+
+### So the fix is the merge, not the one line
+
+`BuiltinScalarTypeKind` turned out to be a strict SUPERSET of the list
+`BuiltinTypeNameTk` kept, and `extended` was the ONLY name where the two
+disagreed — this list being the wrong one. Nothing to preserve and no name to
+lose, so `BuiltinTypeNameTk` now delegates to it and keeps exactly one genuine
+extra: bare `string` -> `BareStringKind` (the declaration site owns its own arm
+because it also sets `LastTypeStrCap`, and only side-effect-free names live in
+the shared table).
+
+**AFTER: 0 self-inconsistent names of 37**, measured. Nine names changed
+behaviour, all in the correcting direction: `Extended` 10 -> 8, and eight
+rejections -> correct widths.
+
+The one-line fix at `:6417` would have left the eight rejections in place and
+the two tables still two. Fourth fix on the same split, in the same function
+(`Real`, bare `string`, `Extended`, and now the eight) — which is
+`devdocs/dev/normalise-dont-special-case.md` collecting for the fourth time:
+*the second path is the one that stays broken.*
+
+### CORRECTION — `tyExtended` is NOT dead, and this ticket said it would be
+
+Both earlier notes state that `:6417` is *"the only site in the whole compiler
+that produces tyExtended"*, so fixing it makes the kind dead. **That is false,
+and it would have been acted on:** the ticket proposes deleting `tyExtended` on
+the strength of it.
+
+The Pascal frontend no longer produces it. `compiler/pyparser.inc` still does,
+twice, from a name and from a token:
+
+```
+pyparser.inc:46419   else if CaseEqual(tiName, 'extended') then tiTk := tyExtended;
+pyparser.inc:46441   tkExtended_T: tiTk := tyExtended;
+```
+
+`cparser.inc:134`/`:172` also yield `Ord(tyExtended)`, though only by
+propagating an operand that is already Extended, so those are consumers.
+
+The claim was checked against the Pascal frontend and stated about "the whole
+compiler" — the two are not the same scope, and the gap is a whole frontend.
+Whether `tyExtended` should exist is still a reasonable Track U question; it is
+now a question with **Track N in it**, and it cannot be settled from
+`compiler/pasparser_*.inc` alone.
+
+### Not this ticket, found by the same audit, filed separately
+
+`UnicodeChar` is `tyUCS4Char` (4 bytes) here and `WideChar` (2) in FPC. Both pxx
+columns AGREE, so it is not a two-table split — it is one table with a
+questionable entry, and it needs a decision rather than a correction. See
+[[bug-p-unicodechar-is-a-4-byte-code-point-and-fpc-makes-it-a-2-byte-code-unit]].
+
+`Variant`/`OleVariant` are 16 here against FPC's 24, and `string` is a managed
+handle against FPC's 256-byte shortstring. Both are deliberate representation
+choices, both self-consistent, neither is this.
+
+### Gate
+
+`make compiler/pascal26` (self-host fixedpoint), `tools/gate.sh quick` GREEN,
+and `test/test_sizeof_builtin_type_names.pas` wired into `test-core` — it checks
+both halves of every affected name and is a positive control: `pinned` REJECTS
+it, so it can fail.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

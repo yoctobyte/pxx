@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:28 blocked:10 backlog:396 backlog_new:24 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2924 rejected:68`
+`working:5 unfinished:28 blocked:10 backlog:396 backlog_new:24 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2925 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -76,7 +76,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
-- `[p 65] [P]` bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets
 - `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
 - `[p 65] [U]` decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it
 - `[p 65] [U]` decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0
@@ -91,5 +90,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - `[p 60] [N]` bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 - `[p 60] [N]` bug-n-a-local-named-after-its-own-def-aliases-the-function-result
+- `[p 60] [N]` bug-n-async-def-and-await-are-not-implemented
 
 _399 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

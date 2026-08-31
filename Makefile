@@ -7993,6 +7993,15 @@ test-core: $(COMPILER)
 	# exists to protect) must ALL still compile. fpc 3.2.2 agrees line for line.
 	./$(COMPILER) test/test_generic_constraint_accept_control.pas $(TESTTMP)/test_gconacc26
 	tools/expect_same.sh test_gconacc26 "$$($(TESTTMP)/test_gconacc26)" "accepted 3"
+	# SizeOf(<type name>) vs SizeOf(<variable of that type>) -- the same answer
+	# came from TWO tables and they drifted three times (Real, bare string,
+	# Extended). The audit with the third found EIGHT more names the declaration
+	# path accepted and SizeOf rejected outright: `var v: Currency` compiled and
+	# `SizeOf(Currency)` did not. BuiltinTypeNameTk now delegates to
+	# BuiltinScalarTypeKind, so there is one table. This pins SELF-CONSISTENCY,
+	# not FPC parity: Extended and ValReal alias Double here on purpose.
+	./$(COMPILER) test/test_sizeof_builtin_type_names.pas $(TESTTMP)/test_sizeof_names26
+	tools/expect_same.sh test_sizeof_names26 "$$($(TESTTMP)/test_sizeof_names26)" "$$(printf '8 8 8 8 4 2 1\nsplits 0')"
 	# SysUtils.OutOfMemoryError: FPC declares the PROCEDURE (sysutilh.inc:243) and
 	# real code calls it bare in grow paths -- rtl-generics does, five times. We had
 	# EOutOfMemory and not the routine. Asserts it raises the right class, not just

@@ -6470,38 +6470,37 @@ end;
   what the name means as a BUILTIN, not what the current scope binds it to. }
 function BuiltinTypeNameTk(const nm: AnsiString): TTypeKind;
 begin
-  Result := OrdinalNameToTk(nm);
+  { ONE table, at last. This used to be its own list -- OrdinalNameToTk plus a
+    hand-kept float/variant/pointer/string tail -- and it drifted from the
+    DECLARATION path three separate times before this: `Real` answered 8 for a
+    variable that occupied 4 (bug-a-sizeof-real-...), bare `string` answered 8
+    for a variable that occupied 4 on 32-bit targets (bug-p-sizeof-string-...),
+    and `Extended` answered 10 for a variable that occupies 8
+    (bug-p-sizeof-extended-...). Three fixes, one line each, on the same two-table
+    split -- which is the shape devdocs/dev/normalise-dont-special-case.md is
+    about: the second path is the one that stays broken.
+
+    MEASURED before this change, and the drift was worse than the reported bug:
+    the declaration path accepted EIGHT names this one rejected outright with
+    `SizeOf: unknown type or variable` -- ValReal, TDateTime, Currency, Comp,
+    LongBool, WordBool, ByteBool and OleVariant -- every one of which declares a
+    variable of the right width perfectly well. So `var v: Currency` worked and
+    `SizeOf(Currency)` did not compile.
+
+    BuiltinScalarTypeKind is a strict SUPERSET of what this list held, and the
+    only name where the two DISAGREED was `extended`, which was this list being
+    wrong. So there is nothing to preserve and no name to lose: delegate, and
+    keep only the one genuine extra below. }
+  Result := BuiltinScalarTypeKind(nm);
   if Result <> tyUnknown then Exit;
-  if CaseEqual(nm, 'single') then Result := tySingle
-  else if CaseEqual(nm, 'double') then Result := tyDouble
-  { `Real` is the target's NATIVE float depth, not an alias for Double: xtensa
-    and riscv32 have no hardware double, deliberately. This line used to say
-    tyDouble outright, and since SizeOf consults THIS table and declarations
-    consult BuiltinScalarTypeKind, `SizeOf(Real)` answered 8 on those targets
-    for a variable that occupied 4.
-    bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets }
-  else if CaseEqual(nm, 'real') then Result := RealTypeKind
-  else if CaseEqual(nm, 'extended') then Result := tyExtended
-  else if CaseEqual(nm, 'variant') then Result := tyVariant
-  else if CaseEqual(nm, 'pointer') or CaseEqual(nm, 'codepointer') then Result := tyPointer
-  { BareStringKind, not tyString: this table is what SizeOf consults, and the
-    declaration path consults BareStringKind, so hard-wiring it here made
-    `SizeOf(string)` answer 8 on i386/arm32/riscv32 for a variable that occupied
-    4 -- the identical shape as the `Real` arm above, and the arm immediately
-    below already consulted the define.
-    bug-p-sizeof-string-disagrees-with-the-storage-string-actually-gets }
-  else if CaseEqual(nm, 'string') then Result := BareStringKind
-  { the Ansi/Unicode/Wide string names are one model here -- bytes; which KIND
-    that is depends on the managed-string build, exactly as SizeOf's own table
-    had it }
-  else if CaseEqual(nm, 'ansistring') or CaseEqual(nm, 'unicodestring') or
-          CaseEqual(nm, 'widestring') then
-  begin
-    if PasDefineExists('PXX_MANAGED_STRING') then
-      Result := tyAnsiString
-    else
-      Result := tyString;
-  end
+
+  { The one name SizeOf accepts that BuiltinScalarTypeKind deliberately does not
+    carry: bare `string`. The declaration site keeps its own arm for it because
+    it also sets LastTypeStrCap, and the rule up there is that only
+    side-effect-free names live in the shared table. BareStringKind, not
+    tyString -- hard-wiring it is exactly what made SizeOf(string) answer 8 on
+    i386/arm32/riscv32 for a variable that occupied 4. }
+  if CaseEqual(nm, 'string') then Result := BareStringKind
   else Result := tyUnknown;
 end;
 
