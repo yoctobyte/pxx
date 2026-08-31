@@ -34,9 +34,29 @@ and without `--xtensa-soft-mulhigh` any numeric output SIGILLs.
 the hazard CLAUDE.md's *The name is not the thing* names explicitly. So this sweep
 cannot be located in the tree by anyone, and a row cannot be re-checked against the
 state that produced it. Print the binary sha AND the commit, labelled, or the sweep
-is unrepeatable. Note also that `pinned` (2026-08-29, older than this sweep) already
-passes `test_arm32_record_byval_wide` on xtensa, which the baseline cannot explain
-and which nobody can chase without a locatable sha.
+is unrepeatable.
+
+> **CORRECTION (frankC, 2026-08-31, within the hour of writing it).** The paragraph
+> above originally closed by reporting that `pinned` — *"2026-08-29, older than this
+> sweep"* — already passed this program on xtensa, and offered that as an unexplained
+> residual that nobody owned. **It was wrong, and wrong in the way this very section
+> is about.** `pinned` is not from 2026-08-29 and is not older than the sweep: it is
+> **v398, `992065f21f33`, written 2026-08-30 20:07**, and a5f5bd42f (06:02 the same
+> day) is an ancestor of its pin commit 4c4a5c125. The pinned compiler passes because
+> **it contains the fix**. There is no residual: the row was recorded correctly and was
+> then fixed, exactly as frankA and frank-coordinator said.
+>
+> The mechanism is the one CLAUDE.md already names and I walked into anyway: `pinned`
+> is a **13-byte symlink**, so `ls -l` prints the SYMLINK's date (Aug 29 21:19), not
+> the binary's. I read that as the binary's age and built a residual on it. `ls -lL`
+> or `sha256sum` answers correctly and costs nothing — and the sha is the better
+> answer, because it maps to a `chore(stable): pin vNNN` commit carrying the real date.
+> **A control is only a control once you know what it is a control FOR:** I ran pinned
+> twice, on two targets, as a deliberate check, and both runs were sound measurements
+> of a binary I had misdated by a day.
+>
+> Unchanged by this: `e866cc16d4fe` is still not a commit. If anything the correction
+> argues the point harder — it was cheap only because a5f5bd42f **is** locatable.
 
 ## The 21
 
