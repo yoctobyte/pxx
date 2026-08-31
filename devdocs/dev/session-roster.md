@@ -2213,6 +2213,46 @@ valuable review.
 **Evaluate: 2026-08-25.** This section is the charter for every coordinator session in
 between — it outlives any one context, so read it before the check log.
 
+> ## EVALUATED 2026-08-31 (owner) — the mandate is discharged
+>
+> Six days late, and the delay is itself part of the finding. The owner's verdict,
+> in full:
+>
+> > *"it worked fine. it took a significant overhead on tokens. and it appeared,
+> > that git merge solved 99% of issues."*
+>
+> **Three things follow, and the third is the one to carry forward.**
+>
+> **It worked.** The mandate is discharged successfully, not abandoned. Nothing
+> here is a criticism of the coordinator sessions that ran under it.
+>
+> **It was expensive**, in the one currency this fleet actually spends. That is
+> not a footnote: coordination overhead was measured independently on 2026-08-30
+> and the grant system and sole-A guard were both cut on the evidence
+> (`coordination-overhead-2026-08-30.md`). The owner's verdict and that
+> measurement agree, arrived at separately.
+>
+> **`git merge` solved 99% of it** — which retroactively explains WHY it was
+> expensive. Most of what coordination was protecting against, version control
+> already handled. The residual 1% is real and is what the role keeps: relay
+> between workers who cannot see each other, and sequencing the few things that
+> genuinely serialise (`make pin`, a staged build whose stage 2 needs stage 1
+> *pinned*). Everything the role shed — grants, check-ins, permission to touch a
+> file — was in the 99%.
+>
+> **Not renewed as a standing weekly mandate.** The role stands as described in
+> the opening section of this file, which was already rewritten on 2026-08-30 to
+> the three jobs that survive. There is no new evaluation date, because there is
+> no longer an experiment running: a mandate with a review date was the right
+> shape for an open question, and the question is answered.
+>
+> **The process lesson, since it cost six days of nobody knowing:** a date in a
+> document has no owner. Nothing fires on it, nothing scans for it, and the
+> people it binds are the least able to act on it. It surfaced only because an
+> agent triaging an unrelated ticket noticed, flagged it, and correctly refused
+> to extend a mandate on its own authority. **If a future charter carries a review
+> date, it needs a ticket that comes due — not a line of prose.**
+
 > **The evaluation date passed on 2026-08-25; it is now 2026-08-30 (frankD).**
 > By its own terms the charter covered the sessions *"in between"*, and there is
 > no longer a between. Nothing in this file records the evaluation happening, or
