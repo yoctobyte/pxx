@@ -3917,7 +3917,20 @@ compiler predating the fix — and the `Mapping` row would have sat still, readi
 *timing* — the fix and the pin happened in the same stretch of the afternoon, so the pin
 "obviously" had it. Ordering by recollection is not ordering. One command answers it:
 
-    git merge-base --is-ancestor <fix-sha> <pin-base-sha> && echo IN || echo NOT-IN
+    git fetch -q
+    git merge-base --is-ancestor <fix-sha> <pin-base-sha>
+    case $? in 0) echo IN ;; 1) echo NOT-IN ;; *) echo "BAD SHA — not a commit" ;; esac
+
+**CORRECTED 2026-08-31, and the original form above was live in this file for the
+whole session — flagged by frankT (`b1cad3e3d`), who correctly did NOT edit a
+prescribed command in someone else's document.** The `&& … || …` version collapses
+two different answers: a real non-ancestor exits **1**, a sha that is not a commit
+at all exits **128**, and both land in the `||` branch as `NOT-IN`. In a repo that
+produces ghost shas at ~100% by construction, a sha that never landed then reads as
+*"the fix is not in the pin"* — plausible, actionable and wrong. `2>/dev/null`, `!`
+and a pipe destroy the distinction the same way. **Branch on the numeric status, and
+`git fetch` first** — without it, `128` may only mean you have not fetched the
+commit yet (frankwasm, frankB).
 
 **Rules:**
 
