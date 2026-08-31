@@ -673,6 +673,31 @@ to a *search* rather than to a check, and it is the more useful generalisation:
 an empty result set is only evidence if the query has been shown capable of
 returning a non-empty one.
 
+**And the layer above that, measured 2026-08-31 (frankB): A CONTROL MUST ASSERT
+ITS OWN SETUP, NOT JUST ITS OUTCOME.** Sweeping `lib/**` for the nested-type
+miscompile's precondition, I got a clean "0 collisions", distrusted it, and wrote
+a decoy file with a known collision to prove the scanner could fire. The control
+came back **FAIL** — apparently vindicating the distrust. It was a false alarm:
+the scratchpad path I wrote the decoy to already existed as a *file*, not a
+directory, so the decoy was never written and the control scanned nothing.
+**Missing input scored as a result — shape 4, one level up, inside the very
+instrument built to catch shapes.**
+
+The scanner *was* also broken, for two unrelated reasons, so the FAIL was
+accidentally correct — which is the dangerous part: a control that fails for the
+wrong reason still points you somewhere, and being pointed somewhere true is what
+stops you asking why it failed. Had the scanner been sound, the same missing
+fixture would have read as "the scanner is broken", and the hunt would have gone
+into a working tool.
+
+**So a control needs two assertions, not one:** that its fixture exists and
+contains the ingredient (`ls` the file, or print the bytes the probe will read),
+and only then that the probe reacts to it. Cheapest form is to make the setup
+loud — create the fixture and read it back in the same command — because
+`mkdir -p` on an existing *file* and a heredoc into an unwritable path both fail
+in the direction that leaves you with no fixture and no error you will notice.
+Same family as frank-rust's "I edited it" versus "the edit landed".
+
 #### And why all three were long-lived: an instrument fails silently in whichever direction resembles CAUTION
 
 frankwasm's polarity note, generalised past the guard case above.
