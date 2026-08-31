@@ -6561,6 +6561,9 @@ test-core: $(COMPILER)
 	# external routine uncallable (closed) -- so the two rows below are one fix
 	# and neither alone would have shown it. Non-vacuous: `pinned` rejects 1 of
 	# 3 here and cannot compile the ok half at all.
+	# Since 2026-08-31 the three copies are ONE nested PersistParamRow, so these
+	# two files are also the collapse's regression guard: three paths asserted
+	# on the pointee here, and on the default and the rec id in the ok half.
 	# bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-so-a-class-argument-is-accepted
 	! ./$(COMPILER) test/test_param_row_external_forward_fail.pas $(TESTTMP)/test_prow26 > $(TESTTMP)/test_prow.log 2>&1
 	tools/expect_same.sh test_prow.log "$$(grep -c 'no overload of' $(TESTTMP)/test_prow.log)" "3"
@@ -6568,7 +6571,7 @@ test-core: $(COMPILER)
 	grep -q "no overload of fwd matches" $(TESTTMP)/test_prow.log
 	# ...and the half that RUNS: output verified against fpc 3.2.2.
 	./$(COMPILER) test/test_param_row_external_forward_ok.pas $(TESTTMP)/test_prowok26
-	tools/expect_same.sh test_prowok26 "$$($(TESTTMP)/test_prowok26)" "ok 5 42 8 15 TRUE 4 12 3"
+	tools/expect_same.sh test_prowok26 "$$($(TESTTMP)/test_prowok26)" "ok 5 42 8 15 TRUE 4 12 3 13 35"
 	# A class that is its own ancestor through a CHAIN is refused, and the
 	# refusal REPORTS rather than spinning. This hung the compiler forever with
 	# no output, no exit and no error: ~72 sites step UClsParent across five

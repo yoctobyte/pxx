@@ -1,0 +1,399 @@
+diff --git a/compiler/pasparser_proc.inc b/compiler/pasparser_proc.inc
+index 9a32f4a36..14c77e42b 100644
+--- a/compiler/pasparser_proc.inc
++++ b/compiler/pasparser_proc.inc
+@@ -603,6 +603,86 @@ var
+   extSym: AnsiString;
+   liftIdx, lcb: Integer;   { lambda-lift descriptor index / captured-param base }
+   hdrStartSOff: Integer;   { require-forward: this header's source position }
++
++  { THE DURABLE PARAM ROW -- the ONE write site. Read the canonical note where
++    the body path calls this (search: THE DURABLE PARAM ROW -- canonical note).
++
++    Was three hand-copied blocks: `external` (which then Exits), forward/
++    interface, and the body pass. Measured 2026-08-30 before they were
++    equalised, body wrote all ~20 columns, forward 14, `external` THREE, and
++    that one asymmetry produced three divergences from fpc 3.2.2 in BOTH
++    directions. Equalising them closed the defects and left the trap: a new
++    column reaches one copy and silently misses the other two, and the failure
++    is a value that is merely ABSENT, which fails open.
++
++    NESTED, and it has to be. The 21 staging arrays cannot become globals --
++    ParseSubroutine is RE-ENTRANT (pasparser_call.inc calls it from an
++    anonymous-method body), so a global staging set would be clobbered by an
++    inner routine parsed inside an outer one's parameter-to-persist window.
++    Checked, not assumed. And a top-level procedure taking them as `var` params
++    was rejected on purpose: 23 parameters, 15 of them the same `array of
++    Integer` type, so a transposed pair TYPE-CHECKS -- trading a silent missing
++    column for a silent wrong one. This shape was blocked until
++    feature-nested-routine-fixed-array-capture landed (2026-08-31); the arrays
++    are fixed-size locals and capturing one was refused outright. }
++  procedure PersistParamRow(procIdx, i: Integer);
++  var b: Integer;
++  begin
++    if (procIdx < 0) or (i < 0) or (i >= MAX_PROC_PARAMS) then Exit;
++    b := procIdx * MAX_PROC_PARAMS + i;
++    ProcParamIsConst[b] := pconst[i];
++    ProcParamExplicitByRef[b] := pbyref[i];
++    ProcParamUntyped[b] := puntyped[i];
++    { WRITE-ONLY-TRUE, and the reason is not an optimisation: a method or
++      forward BODY repeats the parameter list WITHOUT the defaults (FPC style
++      -- they live in the class or interface declaration), so a plain copy
++      would clear what the declaration recorded. RegisterProc initialises
++      False. }
++    if pdefault[i] then
++    begin
++      ProcParamHasDefault[b] := True;
++      ProcParamDefaultVal[b] := pdefaultval[i];
++      ProcParamDefaultIsStr[b] := pdefaultisstr[i];
++      ProcParamDefaultIsFloat[b] := pdefaultisfloat[i];
++      ProcParamDefaultIsSet[b] := pdefaultisset[i];
++      ProcParamDefaultSOff[b] := pdefaultsoff[i];
++      ProcParamDefaultSLen[b] := pdefaultslen[i];
++    end;
++    { Also write-only-nonzero: 0 is "not a dyn-array param", and the body pass
++      reaches here for every param. }
++    if pDynDepth[i] > 0 then ProcParamDynDepth[b] := pDynDepth[i];
++    ProcParamElemRowLen[b] := pElemRowLen[i];
++    ProcParamElemRowLo[b] := pElemRowLo[i];
++    ProcParamElemDynDepth[b] := pElemDynDepth[i];
++    if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
++      ProcParamRecId[b] := ptypesRec[i];
++    if ptypes[i] = tySet then
++      ProcParamSetEnumId[b] := ptypesSetEnum[i];
++    if ptypes[i] = tyAnsiString then
++      ProcParamStrElemTk[b] := ptypesStrElemTk[i];
++    if ptypes[i] = tyPointer then
++    begin
++      ProcParamPtrElemTk[b] := Ord(ptypesPtrElemTk[i]);
++      ProcParamPtrElemRec[b] := ptypesPtrElemRec[i];
++    end;
++    { The parameter's procedural signature on the PROC entry too, not only on
++      the parameter's symbol. A param symbol is a local: RegisterProc leaves
++      Params[].SymIdx = -1 and the symbol does not outlive the callee's scope,
++      so a CALLER lowering `Takes(fp)` has no way back to it. A PARALLEL ARRAY,
++      like ProcParamUntyped: TParam has no ProcSig field. Consumer:
++      IRProcVarAutoCall's call-argument sink (Delphi-mode bare-procvar
++      auto-call), which must pass `fp` untouched to a proc-typed parameter and
++      CALL it for any other.
++      bug-pascal-procvar-value-context-outside-assignment
++
++      This was the ONE column the body path wrote with no `procIdx >= 0` guard
++      at all -- every other write in that copy tested it, and this one indexed
++      ProcParamProcSig at -MAX_PROC_PARAMS + i whenever procIdx was -1. The
++      collapse retires that by construction: the guard is now at the top of
++      this procedure, where there is exactly one of it. }
++    ProcParamProcSig[b] := ptypesProcSig[i];
++  end;
++
+ begin
+   { pFixedLen/pFixedLo are only written on the named-array param branch; the
+     other branches leave stack garbage in the untouched slots, and the
+@@ -1293,7 +1373,9 @@ begin
+     begin
+       { MAX_PROC_PARAMS, not a smaller round number: the staging arrays and
+         TProc.Params are both 32 wide, so 32 is the real bound and the literal
+-        16 refused half the space that exists. }
++        16 refused half the space that exists. It bit immediately: this file's
++        own PersistParamRow captures 21 arrays, and the first build after that
++        collapse died here rather than on any array bound. }
+       if nparams >= MAX_PROC_PARAMS then Error('nested routine: too many params after capture');
+       pnames[nparams] := '__nestself';
+       ptypes[nparams] := tyClass;
+@@ -1399,16 +1481,11 @@ begin
+     begin
+       Procs[procIdx].Params[i].IsArray := parr[i];
+       Procs[procIdx].Params[i].IsRef := pbyref[i];
+-      { THE DURABLE PARAM ROW. Read the canonical note at the body path's copy
+-        (search: THE DURABLE PARAM ROW -- canonical note) before editing any of
+-        the three copies; a column added to one of them and not the others is
+-        exactly the defect this block was widened to fix.
+-
+-        This path wrote THREE of the ~20 columns and then Exits, ~750 lines
+-        before the body pass that fills the rest -- and an `external` routine
+-        has NO body pass, so the omissions were permanent rather than late.
+-        Measured 2026-08-30, two defects in OPPOSITE directions from the one
+-        omission set:
++      { THE DURABLE PARAM ROW, copy 1 of 3 -> now ONE call. This path wrote
++        THREE of the ~20 columns and then Exits, ~750 lines before the body
++        pass that fills the rest -- and an `external` routine has NO body pass,
++        so the omissions were permanent rather than late. Measured 2026-08-30,
++        two defects in OPPOSITE directions from that one omission set:
+ 
+           procedure g(p: PInteger); external 'c' name 'abs';  g(someObject);
+             was ACCEPTED, and called libc with an object pointer. FPC rejects
+@@ -1420,38 +1497,7 @@ begin
+             it. HasDefault was never written, so the same omission failed
+             CLOSED. Counting the missing columns mattered more than fixing the
+             one that was filed. }
+-      if i < MAX_PROC_PARAMS then
+-      begin
+-        ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := pconst[i];
+-        ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i] := pbyref[i];
+-        ProcParamUntyped[procIdx * MAX_PROC_PARAMS + i] := puntyped[i];
+-        if pdefault[i] then
+-        begin
+-          ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := True;
+-          ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
+-          ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := pdefaultisstr[i];
+-          ProcParamDefaultIsFloat[procIdx * MAX_PROC_PARAMS + i] := pdefaultisfloat[i];
+-          ProcParamDefaultIsSet[procIdx * MAX_PROC_PARAMS + i] := pdefaultisset[i];
+-          ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := pdefaultsoff[i];
+-          ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := pdefaultslen[i];
+-        end;
+-        if pDynDepth[i] > 0 then ProcParamDynDepth[procIdx * MAX_PROC_PARAMS + i] := pDynDepth[i];
+-        ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + i] := pElemRowLen[i];
+-        ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + i] := pElemRowLo[i];
+-        ProcParamElemDynDepth[procIdx * MAX_PROC_PARAMS + i] := pElemDynDepth[i];
+-        if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
+-          ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
+-        if ptypes[i] = tySet then
+-          ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
+-        if ptypes[i] = tyAnsiString then
+-          ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
+-        if ptypes[i] = tyPointer then
+-        begin
+-          ProcParamPtrElemTk[procIdx * MAX_PROC_PARAMS + i] := Ord(ptypesPtrElemTk[i]);
+-          ProcParamPtrElemRec[procIdx * MAX_PROC_PARAMS + i] := ptypesPtrElemRec[i];
+-        end;
+-        ProcParamProcSig[procIdx * MAX_PROC_PARAMS + i] := ptypesProcSig[i];
+-      end;
++      PersistParamRow(procIdx, i);
+     end;
+     Procs[procIdx].BodyAddr := -1;
+     ProcExternal[procIdx] := True;
+@@ -1748,63 +1794,27 @@ begin
+         begin
+           Procs[procIdx].Params[i].IsArray := parr[i];
+           Procs[procIdx].Params[i].IsRef := pbyref[i];
+-          { THE DURABLE PARAM ROW (copy 2 of 3 -- canonical note is at the body
+-            path's copy; search that phrase). Persist the param metadata the
+-            call-site lowering reads, so a call made BEFORE the body is parsed
+-            (e.g. a lifted nested routine, whose definition is deferred to top
+-            level) lowers identically to one after. Without ProcParamDynDepth a
+-            `var dyn-array` arg passes the handle value instead of &slot →
+-            SetLength corrupts memory. }
+-          if i < MAX_PROC_PARAMS then
+-          begin
+-            if pDynDepth[i] > 0 then ProcParamDynDepth[procIdx * MAX_PROC_PARAMS + i] := pDynDepth[i];
+-            ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := pconst[i];
+-            ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i] := pbyref[i];
+-            ProcParamUntyped[procIdx * MAX_PROC_PARAMS + i] := puntyped[i];
+-            { Write-only-TRUE, adopted from the body path's copy, which carries
+-              the reason: a method or forward BODY repeats the parameter list
+-              WITHOUT the defaults (FPC style -- they live in the class or
+-              interface declaration), and a plain copy clears what the
+-              declaration recorded. This path copied plainly. }
+-            if pdefault[i] then
+-            begin
+-              ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := True;
+-              ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
+-              ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := pdefaultisstr[i];
+-              ProcParamDefaultIsFloat[procIdx * MAX_PROC_PARAMS + i] := pdefaultisfloat[i];
+-              ProcParamDefaultIsSet[procIdx * MAX_PROC_PARAMS + i] := pdefaultisset[i];
+-              ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := pdefaultsoff[i];
+-              ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := pdefaultslen[i];
+-            end;
+-            ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + i] := pElemRowLen[i];
+-            ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + i] := pElemRowLo[i];
+-            ProcParamElemDynDepth[procIdx * MAX_PROC_PARAMS + i] := pElemDynDepth[i];
+-            if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
+-              ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
+-            if ptypes[i] = tySet then
+-              ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
+-            if ptypes[i] = tyAnsiString then
+-              ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
+-            { The six columns this path did NOT write, the pointee among them.
+-              The ticket predicted this path was benign "because the body fills
+-              it in later" -- measured FALSE on 2026-08-30, because "later" is
+-              after any caller parsed in between:
+-
+-                procedure g(p: PInteger); forward;
+-                procedure caller; begin g(someObject); end;   { parsed FIRST }
+-                procedure g(p: PInteger); begin end;
+-
+-              compiled clean; FPC rejects it at the call. A forward declaration
+-              exists precisely so that something may be parsed between it and
+-              the body, so "the body fills it in later" is the one assumption
+-              this path may not make. }
+-            if ptypes[i] = tyPointer then
+-            begin
+-              ProcParamPtrElemTk[procIdx * MAX_PROC_PARAMS + i] := Ord(ptypesPtrElemTk[i]);
+-              ProcParamPtrElemRec[procIdx * MAX_PROC_PARAMS + i] := ptypesPtrElemRec[i];
+-            end;
+-            ProcParamProcSig[procIdx * MAX_PROC_PARAMS + i] := ptypesProcSig[i];
+-          end;
++          { THE DURABLE PARAM ROW, copy 2 of 3 -> now ONE call. Persist the
++            param metadata the call-site lowering reads, so a call made BEFORE
++            the body is parsed (e.g. a lifted nested routine, whose definition
++            is deferred to top level) lowers identically to one after. Without
++            ProcParamDynDepth a `var dyn-array` arg passes the handle value
++            instead of &slot -> SetLength corrupts memory.
++
++            This path wrote 14 of the ~20 columns, the pointee among the six it
++            missed. The ticket predicted that was benign "because the body
++            fills it in later" -- measured FALSE on 2026-08-30, because "later"
++            is after any caller parsed in between:
++
++              procedure g(p: PInteger); forward;
++              procedure caller; begin g(someObject); end;   { parsed FIRST }
++              procedure g(p: PInteger); begin end;
++
++            compiled clean; FPC rejects it at the call. A forward declaration
++            exists precisely so that something may be parsed between it and the
++            body, so "the body fills it in later" is the one assumption this
++            path may not make. }
++          PersistParamRow(procIdx, i);
+         end;
+       end
+       else if declOverload then
+@@ -2081,51 +2091,44 @@ begin
+       if parr[i] then SymElemEnumId[idx] := ptypesEnum[i]
+       else SymEnumId[idx] := ptypesEnum[i];
+     end;
+-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := pconst[i];
+-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i] := pbyref[i];
+-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamUntyped[procIdx * MAX_PROC_PARAMS + i] := puntyped[i];
+-    { THE DURABLE PARAM ROW -- canonical note. The two other copies point here.
++    { THE DURABLE PARAM ROW -- canonical note. ONE write site now; the other
++      two call sites point here.
+ 
+       Why the ProcParam* columns exist: a param SYMBOL is a local and its slot
+       is RECYCLED across procs, so a CALLER doing overload matching or argument
+-      coercion cannot read a parameter's shape back off the symbol. It would not
+-      even read a stale value -- it reads whatever the next scope allocated
++      coercion cannot read a parameter's shape back off the symbol. It would
++      not even read a stale value -- it reads whatever the next scope allocated
+       there, and for the pointer column that is tyUnknown, the untyped-pointer
+       sentinel, so the narrowing guard fails OPEN. defs.inc:2685 records the
+       original reasoning at length.
+ 
+-      Why there are THREE copies and why that is the actual defect:
++      Why there used to be THREE copies and why that was the actual defect:
+       ParseSubroutine registers params on three paths -- `external` (which then
+       Exits), forward/interface, and this body pass where the param symbols are
+       allocated. Each hand-copied its own overlapping-but-different subset.
+-      Measured 2026-08-30, BEFORE this widening: body wrote all ~20 columns,
+-      forward wrote 14, `external` wrote THREE. Three measured divergences from
+-      fpc 3.2.2 came out of that one asymmetry, in BOTH directions -- an
+-      external pointer param accepting a class (fails open), a forward pointer
+-      param accepting a class at a call parsed in between (fails open), and an
+-      external default argument being refused (fails closed). Counting the
+-      missing columns mattered more than fixing the one that was filed.
+-
+-      All three copies are now complete, which closes the defects. The
+-      duplication itself is NOT closed: collapsing them into one nested
+-      PersistParamRow is written and blocked -- ParseSubroutine's ~21 staging
+-      arrays are fixed-size locals and the compiler refuses "capture of
+-      fixed-size array in a nested routine", while ParseSubroutine is
+-      re-entrant (pasparser_call.inc:272 calls it from an anonymous-method
+-      body) so they cannot become globals either. Both filed. UNTIL THAT LANDS:
+-      a column added here MUST be added to the other two copies. Search for
+-      "THE DURABLE PARAM ROW" to find them.
+-
+-      Write-only-true: a method/forward body that repeats params WITHOUT the
+-      defaults (FPC style — defaults live in the class/interface decl) must not
+-      clear the decl's ProcParamHasDefault. RegisterProc initializes False. }
+-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := True;
+-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultVal[procIdx * MAX_PROC_PARAMS + i] := pdefaultval[i];
+-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultIsStr[procIdx * MAX_PROC_PARAMS + i] := pdefaultisstr[i];
+-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultIsFloat[procIdx * MAX_PROC_PARAMS + i] := pdefaultisfloat[i];
+-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultIsSet[procIdx * MAX_PROC_PARAMS + i] := pdefaultisset[i];
+-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultSOff[procIdx * MAX_PROC_PARAMS + i] := pdefaultsoff[i];
+-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) and pdefault[i] then ProcParamDefaultSLen[procIdx * MAX_PROC_PARAMS + i] := pdefaultslen[i];
++      Measured 2026-08-30, BEFORE they were equalised: body wrote all ~20
++      columns, forward wrote 14, `external` wrote THREE. Three measured
++      divergences from fpc 3.2.2 came out of that one asymmetry, in BOTH
++      directions -- an external pointer param accepting a class (fails open), a
++      forward pointer param accepting a class at a call parsed in between
++      (fails open), and an external default argument being refused (fails
++      closed). Counting the missing columns mattered more than fixing the one
++      that was filed.
++
++      Equalising them closed the defects and left the trap; collapsing them
++      removes it, because a column added to PersistParamRow now reaches every
++      registration path BY CONSTRUCTION rather than by three people
++      remembering. Written 2026-08-30 and blocked until
++      feature-nested-routine-fixed-array-capture landed the next day -- see the
++      procedure's own note for why it must be nested and why the two obvious
++      alternatives are worse.
++
++      Called FIRST in this loop body, before any of the symbol work below,
++      for one concrete reason: the `p.ptrparam` probe prints `durable=` and
++      must see this parameter's value rather than the recycled slot's previous
++      occupant. Nothing in the loop mutates a staging array, so there is no
++      ordering constraint pulling the other way. }
++    PersistParamRow(procIdx, i);
+     if pDynDepth[i] > 0 then
+     begin
+       { Named dynamic-array type param: a real dynamic array, NOT an open-array
+@@ -2134,7 +2137,6 @@ begin
+         call-site lowering + the IsRef read-deref). }
+       Syms[idx].ArrLen := -1;
+       SymDynDepth[idx] := pDynDepth[i];
+-      if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamDynDepth[procIdx * MAX_PROC_PARAMS + i] := pDynDepth[i];
+     end;
+     if pNDims[i] >= 2 then
+     begin
+@@ -2168,16 +2170,6 @@ begin
+       slots holding dyn handles. AllocParam cleared it, and param slots are
+       reused across procs, so ALWAYS write (0 clears). }
+     SymElemDynDepth[idx] := pElemDynDepth[i];
+-    if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then
+-    begin
+-      ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + i] := pElemRowLen[i];
+-      ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + i] := pElemRowLo[i];
+-      ProcParamElemDynDepth[procIdx * MAX_PROC_PARAMS + i] := pElemDynDepth[i];
+-      if ptypes[i] = tySet then
+-        ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
+-      if ptypes[i] = tyAnsiString then
+-        ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
+-    end;
+     { The SYMBOL needs the width too, for a different reader than the durable
+       column above: that one answers a CALLER, this answers the callee's own
+       body, where ASTStrElemTkOf resolves a string parameter through its
+@@ -2248,9 +2240,6 @@ begin
+     else if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
+     begin
+       Syms[idx].RecName := ptypesRec[i];
+-      { Persist the param's rec id: param sym slots are reused across procs, so
+-        overload matching / call-arg coercion cannot read it back from the sym. }
+-      if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
+       { Records larger than a qword are passed by reference. A CORBA interface is
+         a fat pointer ({IMT, instance}); on 64-bit that is 16 bytes (already >8),
+         but on 32-bit targets it is only 8 bytes — force by-ref there too so the
+@@ -2293,17 +2282,6 @@ begin
+       SetSymPointerType(idx, ptypesPtrElemTk[i], ptypesPtrElemRec[i],
+                         ptypesPtrDepth[i], ptypesPtrBaseTk[i],
+                         ptypesPtrBaseRec[i]);
+-      { Persist the param's POINTEE, for the same reason the rec id below is
+-        persisted and stated in the same words: param sym slots are reused
+-        across procs, so a caller's overload matching cannot read it back from
+-        the sym. It does not read a stale value -- it reads whatever the next
+-        scope allocated there, which for this field is tyUnknown, the
+-        untyped-pointer sentinel, so the narrowing guard fails OPEN. }
+-      if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then
+-      begin
+-        ProcParamPtrElemTk[procIdx * MAX_PROC_PARAMS + i] := Ord(ptypesPtrElemTk[i]);
+-        ProcParamPtrElemRec[procIdx * MAX_PROC_PARAMS + i] := ptypesPtrElemRec[i];
+-      end;
+       if PxxDbgEnabled('p.ptrparam') then
+         writeln('PXXDBG p.ptrparam REG proc=', Procs[procIdx].Name,
+                 ' i=', i, ' sym=', idx,
+@@ -2328,16 +2306,6 @@ begin
+       { method-pointer param ({Code,Data} record, `of object` type): callable —
+         Compare(a, b) inside the body must see the signature (fgl QuickSort) }
+       SymProcSig[idx] := ptypesProcSig[i];
+-    { Record the parameter's procedural signature on the PROC entry too, not only
+-      on the parameter's symbol. A param symbol is a local: RegisterProc leaves
+-      Params[].SymIdx = -1 and the symbol itself does not outlive the callee's
+-      scope, so a CALLER lowering `Takes(fp)` has no way back to it.
+-      A PARALLEL ARRAY, like ProcParamUntyped: TParam has no ProcSig field.
+-      Consumer: IRProcVarAutoCall's call-argument sink (Delphi-mode
+-      bare-procvar auto-call), which must pass `fp` untouched to a proc-typed
+-      parameter and CALL it for any other.
+-      bug-pascal-procvar-value-context-outside-assignment }
+-    ProcParamProcSig[procIdx * MAX_PROC_PARAMS + i] := ptypesProcSig[i];
+ 
+     { feature-a-typeref-migrate-consumers: this per-param body has several
+       independent mutation points above (ArrLen/SymDynDepth, ElemType/

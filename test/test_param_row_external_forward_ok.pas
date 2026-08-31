@@ -22,7 +22,19 @@
   a set's enum id, a managed-string element width, a proc signature, and a
   `var` dynamic array — whose missing ProcParamDynDepth passes the handle VALUE
   instead of &slot, which is how SetLength corrupts memory rather than erroring.
-  bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-so-a-class-argument-is-accepted }
+  bug-a-an-external-routines-pointer-param-pointee-is-never-recorded-so-a-class-argument-is-accepted
+
+  The last two rows (bodyDef, bodyRec) are the BODY path's arm of the default
+  and rec-id columns, added when the three copies were collapsed into one
+  nested PersistParamRow. The pointee column already proves all three paths in
+  the sibling FAIL test; these make a second and third column three-for-three,
+  which is what "one write site" has to mean if it means anything.
+
+  They are a REGRESSION guard, not a demonstration: the body path already wrote
+  both columns before the collapse, so these rows must pass on the pre-collapse
+  compiler too. Measured rather than reasoned — a compiler built at the commit
+  before the collapse prints this file's line identically. (`pinned` cannot
+  compile this file at all and never could; it is the wrong control here.) }
 program test_param_row_external_forward_ok;
 {$mode objfpc}{$H+}
 type
@@ -47,6 +59,11 @@ procedure fwdDyn(var a: TInts); forward;
 
 function Double_(x: Integer): Integer; begin Double_ := x * 2; end;
 
+{ BODY path, declared and defined before the caller: the default and the rec id
+  again, on the third registration path }
+function bodyDef(a: Integer; b: Integer = 11): Integer; begin bodyDef := a + b; end;
+function bodyRec(const r: TRec): Integer; begin bodyRec := r.N * 7; end;
+
 procedure caller;
 var i: Integer; r: TRec; a: TInts; s: AnsiString;
 begin
@@ -61,7 +78,9 @@ begin
     fwdSet([oA, oC]), ' ',
     fwdStr(s), ' ',
     fwdCb(@Double_, 6), ' ',
-    Length(a));
+    Length(a), ' ',
+    bodyDef(2), ' ',
+    bodyRec(r));
 end;
 
 function fwdPtr(p: PInteger): Integer; begin fwdPtr := p^ + 1; end;
