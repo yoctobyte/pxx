@@ -14965,6 +14965,16 @@ test-xtensa: $(COMPILER)
 	# it printed zeros. Adding the arm then exposed a genuine bug in
 	# PalBackendMmapAnon -- xtensa's MAP_ANONYMOUS is $800, not $20 -- which is
 	# why this row is worth having rather than being a formality.
+	# Inline asm behind the CPU defines. Was a divergence only because the SOURCE
+	# had no CPUXTENSA arm -- no branch taken, so it printed 0 against the
+	# oracle's 42. The arm is exercised under BOTH ABIs below, since a8 is
+	# reserved by EmitAsmXtensa for a variable operand's address and the
+	# register choice is the one thing Call0 and windowed could disagree on.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_asm_ifdef_multiarch.pas $(TESTTMP)/test_xtensa_asmifdef
+	./$(COMPILER) test/test_asm_ifdef_multiarch.pas $(TESTTMP)/test_xtensa_asmifdef_x64
+	tools/expect_same.sh xtensa/test_asm_ifdef_multiarch "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_asmifdef)" "$$($(TESTTMP)/test_xtensa_asmifdef_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed test/test_asm_ifdef_multiarch.pas $(TESTTMP)/test_xtensa_asmifdef_w
+	tools/expect_same.sh xtensa/test_asm_ifdef_multiarch_w "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_asmifdef_w)" "$$($(TESTTMP)/test_xtensa_asmifdef_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_syscall.pas $(TESTTMP)/test_xtensa_syscall
 	./$(COMPILER) test/test_cross_syscall.pas $(TESTTMP)/test_xtensa_syscall_x64
 	tools/expect_same.sh xtensa/test_cross_syscall "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_syscall)" "$$($(TESTTMP)/test_xtensa_syscall_x64)"

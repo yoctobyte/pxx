@@ -101,3 +101,11 @@ decoded as `MAP_PRIVATE|MAP_ANONYMOUS` and maps; `$22` is decoded as
 `MAP_PRIVATE|0x20` — `0x20` is not a named flag on this target — and returns
 EBADF, mapping fd `-1`. That is qemu's own flag decoder naming the bit,
 independent of `builtinheap.pas:971`'s comment, which had been the only source.
+
+**Scope of that measurement (frankS):** qemu's decoder is qemu's, not the
+kernel's — but for this claim qemu *is* the right authority rather than a weaker
+one, because hosted xtensa runs under qemu-user, so it is the execution target
+for the profile where `PalBackendMmapAnon` and the thread-stack mmap actually
+run. Read it as **measured under qemu-xtensa 10.2.1, the execution target for
+the hosted profile** — not as a claim about silicon. The bare/ESP profile never
+reaches mmap, so nothing there depends on it.
