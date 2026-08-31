@@ -11861,6 +11861,35 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_alloca_expression_stack: qemu-i386 absent, i386 arm NOT verified ==="; \
 	fi
+	# {$Q+} left ON at `end.` -- the ordinary way to write it. This used to FAIL
+	# TO COMPILE on arm32 and riscv32: the switch is a lexer global with one reset
+	# per compilation, so it leaked out of the user's source into the compiler's
+	# own ambient runtime units, and softfloat (pulled BEFORE builtinheap, and
+	# only on those two targets) emitted overflow checks calling a PXXOverflow
+	# that did not exist yet. The error blamed "builtinheap not loaded", which is
+	# a red herring -- `uses sysutils` loads it and the error is unchanged,
+	# because the problem is ORDER, not absence.
+	# The test discriminates: against the pre-fix binary c4a89282faa6 the arm32
+	# and riscv32 rows CFAIL and the i386/aarch64 rows pass, so those two are
+	# controls rather than evidence. Do NOT add a {$Q-} before `end.` in the
+	# .pas -- that is exactly what made the OLD compiler pass, and it would turn
+	# this row into one that cannot fail.
+	# XTENSA IS DELIBERATELY ABSENT: it compiles this and silently WRAPS, because
+	# it has no overflow-check emitter at all -- it is the one backend missing
+	# from the PXXOverflow grep. That is a separate missing feature, not this
+	# leak: bug-a-xtensa-has-no-q-plus-overflow-check-emitter-so-it-wraps-silently
+	# bug-a-q-plus-overflow-checking-has-no-runtime-helper-on-arm32-and-riscv32
+	./$(COMPILER) test/test_qplus_survives_ambient_units.pas $(TESTTMP)/qplus_amb26
+	tools/expect_same.sh qplus_amb26 "$$($(TESTTMP)/qplus_amb26 2>&1)" "$$(cat test/test_qplus_survives_ambient_units.expected)"
+	@for tgt in aarch64 riscv32 arm32 i386; do \
+	  case $$tgt in aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; arm32) q=qemu-arm;; i386) q=qemu-i386;; esac; \
+	  if command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$tgt test/test_qplus_survives_ambient_units.pas $(TESTTMP)/qplus_amb_$$tgt >/dev/null || { echo "test_qplus_survives_ambient_units $$tgt compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh $$tgt/qplus_amb "$$(tools/run_target.sh $$tgt $(TESTTMP)/qplus_amb_$$tgt 2>&1)" "$$(cat test/test_qplus_survives_ambient_units.expected)" || exit 1; \
+	  else \
+	    echo "=== test_qplus_survives_ambient_units: $$q absent, $$tgt arm NOT verified ==="; \
+	  fi; \
+	done
 	# `in` with a 64-bit test value, on every backend that has one. TWO shapes,
 	# and they take different paths, which is the whole reason this row exists:
 	# an all-CONSTANT set literal never becomes a set at all (the parser emits

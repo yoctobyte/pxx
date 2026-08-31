@@ -4069,7 +4069,7 @@ var
   ScopedEnumsVal : Boolean;  { current {$SCOPEDENUMS} lexer state }
   QChecksVal : Boolean;      { current {$Q±} / {$OVERFLOWCHECKS} lexer state (default off) }
   RChecksVal : Boolean;      { current {$R±} / {$RANGECHECKS} lexer state (default off) }
-  IChecksVal : Boolean;      { current {$I±} / {$IOCHECKS} lexer state (default off — pxx-lax; FPC defaults ON, flip pending the user) }
+  IChecksVal : Boolean;      { current {$I±} / {$IOCHECKS} lexer state. DEFAULT ON — PasInitDefines sets it True, per the user's dialect call of 2026-07-15 (feature-pascal-io-checks-i-plus). This line said "default off — flip pending the user" until 2026-09-01; the flip had already happened and only the comment still described the old state. Checked against PasInitDefines, which is the reset that decides it. }
   StmtRChecks : Boolean;     { {$R} state AT THE CURRENT STATEMENT'S FIRST TOKEN — a directive between the RHS and the statement end must NOT govern that assign (FPC semantics, trange4.pp: `x:=y {$R+} end`). Set on ParseStatementAST entry; AllocNode(AN_ASSIGN) reads it. }
   StmtIChecks : Boolean;     { {$I} state at the current statement's first token (same anchor rule as StmtRChecks) }
   { {$NILCHECKS ON/OFF} — TRI-state on purpose (NILCHK_DEFAULT/_ON/_OFF), unlike

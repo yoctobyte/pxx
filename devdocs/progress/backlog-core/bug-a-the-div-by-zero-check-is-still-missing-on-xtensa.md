@@ -69,3 +69,21 @@ the pattern; each is shaped like its backend's `EmitOvfCheck*` twin.
 producing `ALL OK` under xtensa on hardware or a working emulator, plus a
 `--no-div-check` row showing the opt-out restores today's behaviour, plus the
 existing `test_soc_xt26` / `test_soc_s326` bare-profile builds staying green.
+
+---
+
+**A sibling arrived 2026-09-01 — take them together.**
+[[bug-a-xtensa-has-no-q-plus-overflow-check-emitter-so-it-wraps-silently]] is
+this ticket's exact shape one switch over: xtensa is the only backend with no
+`{$Q+}` overflow-check emitter either, so `{$Q+}` compiles clean there and
+silently wraps where the other five raise Runtime error 215. All four reasons
+this ticket gives for xtensa being a different job rather than a sixth copy of
+the edit — no bare-profile run, 8-bit branch displacements, the windowed ABI
+rotating the register window on a call, two divide shapes — apply to that one
+too, and whoever pays that cost should collect both checks for it.
+
+One thing the sibling has that this ticket does not: a **working oracle today**.
+`{$Q+}` can be measured on HOSTED xtensa under `qemu-xtensa --platform=posix`,
+which is how the wrap was caught. So the emitter can be developed and verified
+against a running program first, and the bare-profile question narrowed to
+delivery rather than correctness.

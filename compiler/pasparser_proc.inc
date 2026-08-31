@@ -3455,11 +3455,49 @@ procedure ParseUsesUnitAmbient(const name: AnsiString);
   builtin/builtinheap ambient. Nested loads are NOT ambient — a unit this one
   pulls in through its own `uses` is an ordinary edge. }
 var saved: Boolean;
+    savQ, savR, savStmtR, savI, savStmtI: Boolean;
+    savN, savStmtN: Integer;
 begin
   saved := UsesInjected;
+  { A COMPILER-INJECTED runtime unit compiles under the COMPILER's default
+    switches, never under whatever the user's source happened to leave on.
+    These are lexer globals with exactly one reset (PasInitDefines, once per
+    compilation), so before this they simply carried the user's last {$Q±} /
+    {$R±} / {$I±} / {$NILCHECKS} state straight into builtin/*.pas.
+
+    That is not a tidiness point, it produced a hard compile failure. A program
+    ending with {$Q+} still on made softfloat.pas compile WITH overflow checks,
+    and softfloat is pulled BEFORE builtinheap (pasparser_prog.inc), so the
+    checks it emitted called a PXXOverflow that did not exist yet:
+
+      pascal26:86: error: {$Q+}: PXXOverflow runtime helper not found
+        in: ./compiler/builtin/softfloat.pas
+
+    -- on arm32 and riscv32, the two targets that pull softfloat. The message
+    blames "builtinheap not loaded" and that is a red herring: `uses sysutils`
+    loads it and the error is unchanged, because the problem is ORDER, not
+    absence. Moving {$Q-} above `end.` in the user program made both targets
+    compile and trap correctly, which is what identified this.
+
+    Reset to the DEFAULTS as a block rather than switch by switch: the rule is
+    "a unit the program never asked for is not governed by the program's
+    switches", and stating it once is what keeps the next switch from
+    re-opening it. {$R+} leaks identically today and merely happens not to
+    fail, which is the version of this bug nobody would have found.
+    bug-a-q-plus-overflow-checking-has-no-runtime-helper-on-arm32-and-riscv32 }
+  savQ := QChecksVal; savR := RChecksVal; savStmtR := StmtRChecks;
+  savI := IChecksVal; savStmtI := StmtIChecks;
+  savN := NChecksVal; savStmtN := StmtNChecks;
+  QChecksVal := False;
+  RChecksVal := False; StmtRChecks := False;
+  IChecksVal := True;  StmtIChecks := False;
+  NChecksVal := NILCHK_DEFAULT; StmtNChecks := NILCHK_DEFAULT;
   UsesInjected := True;
   ParseUsesUnit(name);
   UsesInjected := saved;
+  QChecksVal := savQ; RChecksVal := savR; StmtRChecks := savStmtR;
+  IChecksVal := savI; StmtIChecks := savStmtI;
+  NChecksVal := savN; StmtNChecks := savStmtN;
 end;
 
 procedure ResolveToolchainDirs(var cdir, bdir, rtldir, lcldir, asmdir: AnsiString);
