@@ -4,7 +4,7 @@ prio: 60
 type: perf
 blocked-by: []
 created: 2026-08-31
-summary: "The compiler processes its own 235,854 lines in 19.7s and pylib+pyeval's 25,551 lines in 2.2s — ~12,000 lines/sec in both cases, so this is a uniform throughput figure and not a per-frontend problem. Find out where that time goes. Broad payoff (every frontend, every compile, every agent's mandatory 12s loop, and the 719 NilPy jobs per full tier) with no new mechanism and no new failure class — which is why this REPLACES the rejected unit-image cache."
+summary: "ANSWERED and partly fixed. Profiled: the managed-string + heap runtime is ~47% of a self-compile (PXXStrFromLit 17%, PXXAlloc 10%, PXXFree 8.6%, refcount thunks 8.6%) — resolved through the compiler's own .map file, not DWARF. GetTokenStr built every token string a char at a time and was 17 of the 18 AppendChar samples; fixed in 4b3d34f74 for 13.8% off a self-compile. Top remaining item split out as perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass. Still open: the FPC oracle comparison, and the July-3.4s vs today-21.7s discrepancy."
 status: working
 owner: frankB
 ---
@@ -301,3 +301,113 @@ Five constraints, and the first is the one that will bite:
    conversion that is not obviously equivalent gets skipped and noted, not
    guessed — a subtly different token string is a wrong VALUE surfacing far from
    its cause.
+
+
+---
+
+## 2026-08-31, frankB — the ranked list this ticket asked for, and a 13.8% win
+
+Assigned as a cluster by the owner via frank-user-a2. Two profiles, both gdb,
+both `-g -O2` self-compiles of `compiler.pas`, 70 samples each.
+
+### First: the AppendChar census was pointing at the wrong function
+
+Profile 1, binary `436c178ddcb9`, attributing **AppendChar's CALLERS** rather
+than counting call sites:
+
+```
+18/70 samples have AppendChar on the stack
+17 of those 18 come from ONE site — GetTokenStr, ast_syminfer.inc:181
+```
+
+Not `cpreproc.inc` (72 sites) or `pyparser.inc` (53). Those counts are a census
+of the SOURCE, and **`cpreproc.inc` is the C preprocessor — it does not execute
+at all in a Pascal self-compile.** Converting its 72 sites would have measured
+as exactly zero. This is constraint 1 of the owner directive doing its job on
+the ordering that accompanied it.
+
+`GetTokenStr` built a token's text one `AppendChar` per character out of the
+contiguous `TokChars` pool. `lexer.inc`'s `GetTokenStrFromRaw` is the **same
+function already written correctly** — one `SetLength`, one fill — with a
+comment saying it was changed because char-at-a-time was O(n²) per token. Its
+twin was missed. The arm left slow was the one every parser goes through:
+`GetTokenStr` is how token text is read at 570+ call sites across all
+frontends, `pyparser.inc` alone calling it 314 times.
+
+Fixed in `4b3d34f74`, two lines, delegating to the existing function.
+
+| | runs (s) | min |
+| --- | --- | ---: |
+| base `101c9a7ea8b0` | 22.081 22.270 21.650 21.984 21.837 | **21.650** |
+| mod `a5ca167411d8` | 18.999 18.996 18.673 19.245 20.193 | **18.673** |
+
+**13.8% faster**, min-of-5 interleaved A/B/A/B, load 6.46 → 6.17. The worst
+modified run beats the best baseline run, which is what makes it robust to the
+box carrying ten other agents. Both binaries then compiled `compiler.pas` and
+the two outputs are **byte-identical** (`cmp`) — behaviour unchanged.
+
+### Second: where the time actually goes
+
+Profile 2, binary `c6cf4c33684a`, taken after that fix. **The `??` frames are
+resolved** — not by DWARF, but through **the compiler's own `.map` file**,
+which `pinned` writes beside every binary. This ticket's method note says
+`.symtab` is empty and `nm`-based tooling reports nothing; that is true and it
+led everyone to gdb. The map was there the whole time and resolves every
+runtime frame by nearest preceding symbol.
+
+Frame #0 — what is actually executing:
+
+| | samples | share |
+| --- | ---: | ---: |
+| `PXXStrFromLit` + its thunk | 12 | **17.1%** |
+| `PXXAlloc` | 7 | 10.0% |
+| `PXXFree` | 6 | 8.6% |
+| inline string refcount inc/dec thunks | 6 | 8.6% |
+| `PXXHdrSetMeta`, `PXXDynArrayRelease` | 2 | 2.9% |
+| **— managed-string + heap runtime** | **33** | **47%** |
+| `GetTokenStrFromRaw` | 5 | 7.1% |
+| `AppendChar` / `AppendRange` / `AppendString` | 6 | 8.6% |
+| compiler proper (parser, lexer, IR, emit, all sites ≤2) | 16 | 23% |
+
+**So the ticket's open question is answered, and the answer is the second
+option: not a quarter, roughly half.** The 46% unresolved in the first profile
+was hypothesised to be "the managed-string runtime under `AppendChar`". Half
+right, and the wrong half is the actionable one — it IS the managed-string
+runtime, but the bulk of it is **not** under `AppendChar`. It is under string
+**literal materialisation** and **refcounting**, which need a different fix.
+
+Two guards on those numbers. 70 samples is small: treat each row as ±5%, and
+the ordering as the finding rather than the digits. And nearest-preceding-symbol
+resolution attributes a gap to the previous symbol — the 8 samples that
+resolved to `_start` sat in a 1117-byte unnamed gap, so I disassembled it
+rather than reporting it: `0x400109` is a register-save thunk calling
+`PXXStrFromLit`, `0x400129` is string incref (`incq -0x10(%rax)`), `0x400137`
+is decref falling into `PXXFree`. None of it is `_start`.
+
+### What is now the top item, and it is filed
+
+[[perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass]]
+— `objdump` counts **11,329** `movabs len / movabs ptr / call PXXStrFromLit`
+sites in the `-O2` compiler binary, even though `EmitStaticLitHandle` exists to
+make a literal an address and **is** active at `-O2`.
+
+### Remaining AppendChar work is measured as NOT worth a campaign
+
+After the `GetTokenStr` fix, `Append*` is 6/70 samples spread over **six
+different call sites at one sample each** — `elfwriter.inc`'s
+`ExpandPasMacros`/`ExpandIncludes`/`IncEmitLineMarker` and one in `LexOne`.
+There is no second concentration. Converting the remaining ~390 census sites is
+not supported by any measurement, and the O-charter's promise gate ("delivered
+value, measured") is the reason to say so rather than grind through them. The
+elfwriter expander loops are still a legitimate small batch — genuine
+per-character loops that already know their span — but they are worth about
+6-7% collectively, not individually.
+
+### Still open, unchanged, and NOT claimed
+
+- **The FPC oracle.** "Is ~12k lines/s bad" is still unmeasured.
+- **The 3.406s (July) vs ~21.7s (today) discrepancy.** Not re-measured here,
+  so not reported as a regression and not dismissed. Note only that today's
+  baseline was taken at load ~6.5 with ten agents on the box.
+- `asmenc.inc` has **42** `AppendChar` sites — more than `elfwriter.inc`'s 38 —
+  and was missing from the density ordering. Never measured; may be cold.

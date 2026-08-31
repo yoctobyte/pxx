@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:28 blocked:10 backlog:400 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2950 rejected:71`
+`working:4 unfinished:28 blocked:10 backlog:402 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:140 done:2950 rejected:71`
 
 ## Held now (working/ — do not touch these files)
 
@@ -58,7 +58,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 433, ranked
+## Ready — top 30 of 435, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
@@ -69,6 +69,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [C]` regression-lib-test-crtl-reachability-6
 - `[p 70] [T]` regression-optdiff-shard4-12
+- `[p 70] [T]` regression-test-core-test-rust-module-items
 - `[p 70] [T]` regression-test-core-test-setlen-in-parallel-for-body-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard0-6-4
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
@@ -85,10 +86,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
+- `[p 65] [A]` perf-o-string-literals-still-allocate-at-11329-call-sites-despite-the-static-handle-pass
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [A]` bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer
-- `[p 60] [A]` bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier
-- `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 
-_403 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_405 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

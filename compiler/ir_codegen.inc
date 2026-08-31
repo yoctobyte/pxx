@@ -3766,11 +3766,13 @@ end;
   arm loads zero and the NilPy arm loads the real zero-length block — the same
   split the runtime makes, made here instead.
 
-  Behind -O3 for now. The REPRESENTATION is emitted unconditionally (the header
-  costs 24 bytes per literal either way, and a pool that changed shape with the
-  optimisation level would be two layouts to keep sound); only its USE is
-  gated, so -O2 keeps calling the runtime and stays the proven default until
-  this has been through a full gate.
+  At -O2 AND ABOVE, on both backends, since 440c822e6 promoted it from -O3.
+  This paragraph said "behind -O3 for now ... -O2 keeps calling the runtime"
+  for as long as that was false; the gate below is `OptLevel < 2`, so the pass
+  fires at the DEFAULT level and only -O0/-O1 still call the runtime. The
+  REPRESENTATION is emitted unconditionally either way (the header costs 24
+  bytes per literal, and a pool that changed shape with the optimisation level
+  would be two layouts to keep sound); only its USE is gated.
   bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython }
 function EmitStaticLitHandle(node: Integer): Boolean;
 var si: Integer;
