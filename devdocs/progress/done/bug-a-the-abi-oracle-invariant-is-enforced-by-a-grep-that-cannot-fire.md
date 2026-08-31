@@ -8,7 +8,7 @@ status: done
 found: 2026-08-28
 found-by: frankwasm (hit it in the wasm backend), generalised and verified by frank-coordinator
 owner: frank-rust
-summary: "DONE 2026-08-31. The invariant is now enforced by `tools/abi_oracle_lint.py`, which detects the SHAPE (an ABI-carrying Syms[] field combined with a type-kind test, for a parameter, across line breaks) rather than the spelling `IsRef or`, and which carries 8 asserted self-controls including one proving its routine-scoped exemption cannot leak past the next routine header. abi.inc's dead clause is replaced and now points at the tool. NOTE the grep had got WORSE than the ticket recorded: by 2026-08-31 it matched 1 line, a COMMENT quoting the rule — a reviewer gets a hit, opens it, finds prose, concludes clean. Audit: 78 raw hits -> 22 (parameter questions only) -> 6 (after exempting EmitParamSpillsForTarget, which asks slot WIDTH, a question the oracle does not answer) -> 1. Five sites are real, stated divergence, marked `abi-divergence:` — four depend on InLValueWrite, which the oracle's symIdx-only signature cannot see, and one sits INSIDE the oracle's own then-branch. The remaining 1 is a genuine disagreement, escalated as bug-a-aarch64-setlength-on-a-frozen-string-param-diverges-from-the-abi-oracle. The linter deliberately still exits 1, so it is NOT wired into a gate: a green baseline here would be the false zero this ticket exists to complain about."
+summary: "DONE 2026-08-31. The invariant is now enforced by `tools/abi_oracle_lint.py`, which detects the SHAPE (an ABI-carrying Syms[] field combined with a type-kind test, for a parameter, across line breaks) rather than the spelling `IsRef or`, and which carries 8 asserted self-controls including one proving its routine-scoped exemption cannot leak past the next routine header. abi.inc's dead clause is replaced and now points at the tool. NOTE the grep had got WORSE than the ticket recorded: by 2026-08-31 it matched 1 line, a COMMENT quoting the rule — a reviewer gets a hit, opens it, finds prose, concludes clean. Audit: 78 raw hits -> 22 (parameter questions only) -> 6 (after exempting EmitParamSpillsForTarget, which asks slot WIDTH, a question the oracle does not answer) -> 1. CORRECTED 2026-08-31 by frankS (9c7bdb51a): of the five sites I marked, only THREE were right. Two (riscv32/xtensa `skParam and IsRef and not IsArray and TypeKind <> tyAnsiString`) had no InLValueWrite in them at all and were a strict SUBSET of the oracle's catch-all — a hand-rolled partial copy, silenced by a marker written for their neighbour. Deleted, not re-marked. The three that stand: two InLValueWrite arms the oracle's symIdx-only signature cannot see, and one nested inside the oracle's own then-branch. The remaining 1 is a genuine disagreement, escalated as bug-a-aarch64-setlength-on-a-frozen-string-param-diverges-from-the-abi-oracle. The linter deliberately still exits 1, so it is NOT wired into a gate: a green baseline here would be the false zero this ticket exists to complain about."
 ---
 
 ## The fact
@@ -279,3 +279,58 @@ recorded that as the stale check passing. It was caught by asserting the
 mutation had actually changed the file before trusting the result. **A control
 needs its own control when the control is a mutation**: "I edited it" and "the
 edit landed" are two claims, and only the second one is worth anything.
+
+---
+
+## CORRECTION 2026-08-31 — two of my five markers were wrong (frankS, `9c7bdb51a`)
+
+I marked five sites `abi-divergence:`. **Three were right. Two were not, and the
+way they were wrong is this ticket's own disease committed inside the fix for
+it.**
+
+The bad pair (riscv32 `:1685`, xtensa `:1670`):
+
+```pascal
+else if (Syms[si].Kind = skParam) and Syms[si].IsRef and
+        not Syms[si].IsArray and (Syms[si].TypeKind <> tyAnsiString) then
+```
+
+**No `InLValueWrite` in it** — so the justification I wrote does not apply. And
+`ABIParamSlotHoldsValueAddr` returns True on `skParam and IsRef` in its **first
+clause**, so this is a strict *subset* of the catch-all two lines below,
+reaching an identical single-word load. A hand-rolled partial copy of the
+oracle: exactly what the linter is for.
+
+**The linter was right. The marker made it wrong.** I wrote one justification,
+read one arm, and applied it to its neighbour in the same pass because the two
+were adjacent — *a name standing in for the thing it names*, which is the defect
+this ticket exists to fix.
+
+### Why this is an argument about markers, not about my care
+
+A `{ abi-divergence: }` marker asserts **"this is not a finding"** and then can
+never fail again. Nothing re-checks it; the only detector is a human re-reading
+the arm, which is what the review grep already proved does not happen. So a
+wrong marker is *permanently* wrong and silent — the dead-grep failure mode,
+reintroduced one layer up, by the fix.
+
+The baseline added in `78e80830c` is the alternative and this pair is the case
+for it: an entry says **"this IS a finding, it is that one, here is its
+ticket"**, and an entry matching nothing is an **error**. It cannot outlive its
+cause. **Prefer a baseline entry to a marker wherever the site is genuinely
+open**; reserve markers for the cases where the question is provably outside the
+oracle's signature, and expect to be checked.
+
+### frankS's measurement, which is the part I skipped
+
+They deleted both arms and confirmed byte-identical output — then, because
+*"byte-identical from a chain nothing reaches is not a measurement"*, ran the
+inverse: disabled the `ABIParamSlotHoldsValueAddr` arm, kept the deleted one,
+and got `x=5, a2=0` then a segfault on the Double. **That** is what makes the
+identical result evidence rather than an absence. I annotated on a reading and
+measured nothing in either direction.
+
+New coverage came with it (`test_cross_var_param_scalar_kinds.pas`): var-param
+forwarding was covered only by `test_esp_varparam.pas`, which needs real ESP
+hardware, so the hosted path had none — which is how a redundant arm sat in
+front of the shared predicate with nothing objecting.
