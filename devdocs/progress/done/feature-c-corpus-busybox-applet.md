@@ -402,4 +402,4 @@ lean on.
   the frontend hoist covers what programs reach, not what the IR permits.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 4c7a9e57d.
