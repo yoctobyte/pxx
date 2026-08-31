@@ -3724,6 +3724,40 @@ def pin_observable(clone, shas):
     return out
 
 
+def bad_qualifier(reg, repo):
+    """The terse `--status` suffix saying what `bad=` MEANS, or "".
+
+    `--status` is the path a human actually runs, so the qualifiers that decide
+    whether `bad` is a LEAD or merely the tested UPPER BOUND belong here and not
+    only in the stub ticket's range note. Terse on purpose: the full sentences
+    live in range_note(); this is the flag that stops someone opening the commit.
+
+    DERIVED, not read from the stamp. `--status` is a READER, and a reader that
+    waits for a writer-side field is inert until the daemon happens to run its
+    idle repair -- which is the difference between a human seeing the qualifier
+    tonight and seeing it whenever the repo next goes quiet. One git call per
+    entry.
+
+    Applies to CASCADE entries too, and that is the point: the cascade line is
+    the loudest one this command prints, so withholding the caveat from it
+    inverts the asymmetry -- the alarming line was the one with no defusing
+    sentence.
+    """
+    bad_untestable = reg.get("bad_untestable")
+    try:
+        bad_untestable = not needs_test(repo, reg["bad"])
+    except Exception:           # noqa: BLE001 - a sha we cannot read
+        pass                    #   just falls back to the stamp
+    if bad_untestable:
+        return (" — bad touches NO buildable file: it is the tested upper "
+                "bound, not a lead")
+    if reg.get("pin_axis"):
+        return " — pin-built: compiler/ commits cannot be causal"
+    if reg.get("first_seen"):
+        return " — job's FIRST-ever run; no earlier pass exists"
+    return ""
+
+
 def range_note(reg):
     """The Range section of a stub ticket — and it must not promise a bisect.
 
@@ -7548,41 +7582,25 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                   % (len(regs), st["host"], INDEX_REL))
             continue
         for r in regs[:STATUS_REG_CAP]:
+            # COMPUTED FOR BOTH LINE KINDS. It used to hang off the regression
+            # branch only, which put the defusing qualifier on the calm line and
+            # withheld it from the alarming one: "30 of 30 swept job(s) still
+            # red" is the loudest thing --status prints, and on 2026-08-31 two
+            # separate agents read it as a fleet emergency and went to chase a
+            # sha that turned out to be the watcher's own tstate publish commit.
+            # The regression lines directly above it carried the sentence that
+            # would have stopped them.
+            why = bad_qualifier(r, repo)
             if r.get("cascade"):
                 # STILL RED of SWEPT, never the swept count alone: the entry
                 # outlives the jobs that recovered, so the sweep's size is the
                 # wrong number to hand somebody about to go fix things.
                 nred, nswept = cascade_still_red(r, st)
                 print("tstate:   open CASCADE: %d of %d swept job(s) still "
-                      "red, bad=%s (%d in range)"
+                      "red, bad=%s (%d in range)%s"
                       % (nred, nswept, r["bad"][:12],
-                         len(r.get("range", []))))
+                         len(r.get("range", [])), why))
             else:
-                # `--status` is the path a human actually runs, so the two
-                # qualifiers that decide what "bad=" MEANS belong here and not
-                # only in the stub ticket's range note. Terse on purpose: the
-                # full sentences live in range_note(), this is the flag that
-                # stops someone opening the commit.
-                # DERIVED here, not read from the stamp. `--status` is a
-                # READER, and a reader that waits for a writer-side field is
-                # inert until the daemon happens to run its idle repair -- for
-                # the two regressions on the board right now, that is the
-                # difference between a human seeing the qualifier tonight and
-                # seeing it whenever the repo next goes quiet. The stamp is for
-                # the published report; this is one git call per regression.
-                bad_untestable = r.get("bad_untestable")
-                try:
-                    bad_untestable = not needs_test(repo, r["bad"])
-                except Exception:       # noqa: BLE001 - a sha we cannot read
-                    pass                #   just falls back to the stamp
-                why = ""
-                if bad_untestable:
-                    why = " — bad touches NO buildable file: it is the tested"\
-                          " upper bound, not a lead"
-                elif r.get("pin_axis"):
-                    why = " — pin-built: compiler/ commits cannot be causal"
-                elif r.get("first_seen"):
-                    why = " — job's FIRST-ever run; no earlier pass exists"
                 print("tstate:   open regression: %s bad=%s (%d in range)%s"
                       % (r["job"], r["bad"][:12], len(r.get("range", [])), why))
         if len(regs) > STATUS_REG_CAP:
