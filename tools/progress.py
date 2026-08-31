@@ -48,14 +48,43 @@ STATUSES = [
     "unfinished",
     "blocked",
     "backlog",
-    # Everything filed from 2026-08-24 onward (user: "any new tickets filed are
-    # fair game, just they go into backlog_new"). RANKED exactly like backlog/ —
-    # the split is a FILING convenience, not a parking lot: sorting is by DATE
-    # (list the folder) instead of by a judgement call at filing time, because
-    # backlog/ had grown to where "gross compiler issue" and "cosmetic nitpick"
-    # were indistinguishable and both were called `bug-`. Contrast float/ and
-    # experimental/, which are loaded but deliberately NOT ranked.
+    # Superseded 2026-08-31 by the per-lane split below; kept in the list so any
+    # straggler is still loaded and ranked. backlog_new/ was the 2026-08-24
+    # attempt at the same problem and it did not work, for a reason worth
+    # keeping: it was RANKED EXACTLY LIKE backlog/, so it changed where a ticket
+    # sat without changing what it competed with. The volume problem survived
+    # untouched. A split only helps if it narrows what any one reader has to
+    # hold at once.
     "backlog_new",
+    # PER-LANE BACKLOGS (user, 2026-08-31: "we will split backlog into multiple
+    # sections, typically by track number -- an N ticket goes to backlog-nilpy").
+    # 426 open tickets accumulated in EIGHT days; nobody can hold that, and a
+    # `prio:` scalar could not rank it because it guesses at a two-axis question
+    # (which language, which platform) with no stated goal behind either axis.
+    # The goal is now written down -- devdocs/dev/the-goal-cross-cross.md -- and
+    # a ticket earns rank by naming the cell of it that it blocks, not by an
+    # importance estimate.
+    #
+    # These are RANKED exactly like backlog/. The win is not ranking, it is that
+    # `ready --track N` now reads one 96-ticket folder instead of filtering 426.
+    # Bugs vs features stay on the `bug-`/`feature-` slug prefix rather than
+    # becoming subdirectories: the loader globs "*.md" one level deep and
+    # `find_ticket` looks up "*/<slug>.md", so physical subdirs would need
+    # surgery on the same paths claim/resolve walk. Not worth it for a
+    # distinction the filename already carries.
+    "backlog-core",
+    "backlog-nilpy",
+    "backlog-tools",
+    "backlog-pascal",
+    "backlog-decide",
+    "backlog-libs",
+    "backlog-cfront",
+    "backlog-web",
+    "backlog-windows",
+    "backlog-docs",
+    "backlog-esp",
+    "backlog-rust",
+    "backlog-zig",
     "experimental",
     "rainy-day",
     # Track F parks here. Listed so the folder is LOADED (board, check, blocker
@@ -867,7 +896,9 @@ class Board:
     # work abandoned, and BOARD-brief.md already tells agents to re-claim it.
     # Leaving it out hid 23 tickets from every dispatch, including the repo's
     # highest prio (88, an N segfault) and the html5lib ladder at 65.
-    RANKED_STATUSES = ("backlog", "backlog_new", "unfinished", "urgent")
+    RANKED_STATUSES = ("backlog", "backlog_new", "unfinished", "urgent") + tuple(
+        st for st in STATUSES if st.startswith("backlog-")
+    )
 
     def ready_tickets(self, track_filter: str = "") -> list[Ticket]:
         done = self.resolved_slugs        # done/ OR decided/ satisfies a blocker
