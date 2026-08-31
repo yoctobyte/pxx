@@ -23,9 +23,20 @@ The first differential sweep xtensa has ever had. Of the 142 sources
 run, and produce the wrong answer.** This ticket is the 21.
 
 Sweep conditions: `--target=xtensa --platform=posix --xtensa-soft-mulhigh`,
-Call0, `qemu-xtensa` 10.2.1, compiler at `e866cc16d4fe`. Both flags are
+Call0, `qemu-xtensa` 10.2.1, compiler at `e866cc16d4fe`.
+Both flags are
 load-bearing: without `--platform=posix` syscalls lower to `PAL_ERR_UNSUPPORTED`,
 and without `--xtensa-soft-mulhigh` any numeric output SIGILLs.
+
+**`e866cc16d4fe` is NOT a commit** (frankC, 2026-08-31): `git cat-file -t` calls it
+*not a valid object name*, and it is not an ancestor of origin/master. It is a
+**binary sha256 prefix** — the same twelve-hex shape a build line prints — which is
+the hazard CLAUDE.md's *The name is not the thing* names explicitly. So this sweep
+cannot be located in the tree by anyone, and a row cannot be re-checked against the
+state that produced it. Print the binary sha AND the commit, labelled, or the sweep
+is unrepeatable. Note also that `pinned` (2026-08-29, older than this sweep) already
+passes `test_arm32_record_byval_wide` on xtensa, which the baseline cannot explain
+and which nobody can chase without a locatable sha.
 
 ## The 21
 
@@ -44,7 +55,7 @@ and without `--xtensa-soft-mulhigh` any numeric output SIGILLs.
 
 | program | xtensa | x86-64 |
 | --- | --- | --- |
-| `test_arm32_record_byval_wide` | `1 0` | `1 2` |
+| ~~`test_arm32_record_byval_wide`~~ | **FIXED** — matches the oracle on every line since a5f5bd42f (2026-08-30, frankS, [[bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address]]). Re-measured 2026-08-31 by frankC under this ticket's own sweep conditions | `1 2` |
 | `test_array_of_const_types` | `vt0: 42` | `vt0: 42` |
 | `test_asm_ifdef_multiarch` | `0` | `42` |
 | `test_cross_aggregate_stackargs` | `qemu: uncaught target signal 7 (Bus error) - c` | `3 7 5` |
@@ -242,7 +253,7 @@ practice and is NOT the subject of any of this — see the windowed ticket.
 | `test_cross_float` | ` 3.500000000E+00` vs ` 3.5000000000000000E+000` — exponent digit count and mantissa width | **Track F** (float FORMATTING is F by the 2026-08-19 ruling) — needs a ticket in `float/` |
 | `test_cross_trunc_round_saturate` | `Trunc(1e30)` gives `2147483647`, not `9223372036854775807` | **NOT F — needs a bug ticket.** xtensa's `-203/-204` arm calls the **32-bit** `__pxx_d2i` kernel and sign-extends, so Trunc/Round→Int64 is structurally 32-bit. The subject is the conversion mechanism, not float accuracy; rank the mechanism, never the datatype |
 | ~~`test_shortstring_trunc`~~ | **FIXED, and my classification of it was wrong.** Not memory corruption — nothing was clobbered. `b` printed `BBBB` with `Length` 4 and the neighbour was intact; `b = 'BBBB'` compared buffer ADDRESSES because the equality guard was gated on `tyAnsiString` only | [[bug-a-a-shortstring-write-on-xtensa-corrupts-a-neighbouring-variable]] — slug kept, premise corrected at the top |
-| `test_arm32_record_byval_wide` | `1 7 222 2` and `134730463` where the oracle says `1 7 8 2` and `8` | **needs a bug ticket.** A live address rendered as a decimal number — the exact signature of the `var string` param bug fixed earlier tonight, now on **by-value wide records** |
+| ~~`test_arm32_record_byval_wide`~~ | `1 7 222 2` and `134730463` where the oracle says `1 7 8 2` and `8` | **FIXED, and it DID get its ticket** — [[bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address]], resolved the same day in a5f5bd42f, four spots not the three filed. Re-measured 2026-08-31 (frankC): xtensa now prints `1 7 8 2` and `8`, byte-identical to the x86-64 oracle on all nine lines, under this ticket's own `--platform=posix --xtensa-soft-mulhigh` conditions |
 | `test_cross_syscall` | `0 0 -1` vs `1 1 12345` | needs a ticket; pre-dates the syscall-table work (it was already DIFF in every earlier sweep) |
 | `test_rtti` | `InstanceSize: 80` vs `64` | `test-xtensa`'s row filters `InstanceSize:`/pointer lines, as i386/arm32/aarch64 do, so this is excluded there by the same convention — but 80-vs-64 is a real layout difference and deserves its own look |
 | `test_asm_ifdef_multiarch` | `0` vs `42` | inline asm under `{$ifdef}` per arch; needs a ticket |
@@ -254,7 +265,13 @@ wrong**: `shortstring_trunc`'s `b-CLOBBERED` was not a clobber at all. I took
 the test's own failure message as a diagnosis and repeated it in three places
 before anyone had looked at the mechanism. A guard row that names a cause it
 does not verify propagates that cause into every summary that quotes it. The
-remaining untriaged one is `record_byval_wide`'s address-as-number.
+remaining untriaged one is `record_byval_wide`'s address-as-number. **That is no longer
+true** — it was triaged and fixed the same day as
+[[bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address]] (a5f5bd42f), and
+both of this program's rows above are struck through. The sentence outlived its fix
+by a day and sent frankC to measure arm32, because the program's NAME says arm32 and
+the failing column was xtensa (caught by frank-coordinator). Nothing else in the 21
+was re-measured — treat every other row as of the original sweep, not of today.
 
 ## The 21 that do not compile — seven categories, all named
 
