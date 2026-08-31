@@ -459,3 +459,54 @@ hardware separates the two.
 Note the host `gdb` here is 17.1 with **no `arm` architecture** and there is no
 `gdb-multiarch`, so `qemu-arm -g` has nothing to talk to — installing one needs
 the owner. Failing that, bisect the arm32 backend against the one-line repro.
+
+#### The gdb blocker is not a blocker — qemu-user writes a guest core, and it carries the registers (frankA, 2026-08-31)
+
+7ae9c048e ends on "host gdb is 17.1 with no arm and there is no gdb-multiarch,
+so `qemu-arm -g` has nothing to talk to". Same box here, same gdb, and it turns
+out not to matter: **`qemu-arm`'s "core dumped" is a real ARM ELF core**, written
+into the cwd as `qemu_<prog>_<date>_<pid>.core` whenever `ulimit -c` allows it,
+and its `PT_NOTE` carries `NT_PRSTATUS` — the full guest register set. No
+debugger is involved in reading it; `readelf` plus 20 lines of struct-unpacking
+does it. (`ulimit -c unlimited` in a subshell; the cores are ~376 MB because the
+256 MB arena is dumped, so delete them.)
+
+**The faulting instruction, from the core rather than from reasoning.** Two
+binaries, built from the same tree — `pc-arm32` (`pc=0x08056ea0`) and a `-g`
+build (`pc=0x08056064`) — and both give the same three-instruction shape:
+
+```
+  e59f9000   ldr  r9, [pc]        ; r9 = -24 (literal, next word)
+  e08b9009   add  r9, fp, r9      ; r9 = fp - 24, a local slot
+  e5990000   ldr  r0, [r9]        ; r0 = first word of that local  -> 0x28
+  e5991004   ldr  r1, [r9, #4]    ; r1 = second word               -> 0
+  e5900000   ldr  r0, [r0]        ; <== SIGSEGV, dereferencing 40
+  e1a01fc0   asr  r1, r0, #31     ; sign-extend the loaded Int32 to 64
+```
+
+So it is a **pointer local at `fp-24` holding the small integer 40**, then
+dereferenced to read an Int32 and widen it. A wrong *value* in a slot, not a wild
+store into unmapped memory — and `r0 = 0x28` in both builds, which is the kind of
+agreement a layout accident does not usually produce.
+
+**Two things this rules on directly.**
+
+`sp = 0x407f9de8` — **29 208 bytes below the top of the 8 MB stack**, i.e. a
+shallow frame. That is the same conclusion as the `-s 268435456` control above,
+reached by a second route: the guest is nowhere near the end of its stack.
+
+**The fault is not in `compiler.pas`'s own code.** Every `DW_TAG_subprogram` in
+the `-g` build starts at or above `0x080aadc0`; both the PC and the LR
+(`0x0805753c`) are *below* the first one. The first ~405 KB of the image is the
+builtin/RTL prelude, which carries no DWARF, and that is where this lands. It
+cannot be narrowed further by this route — `--emit-obj` would give the symbol
+names but refuses: *"i386, arm32 and aarch64 have no object writer"*.
+
+**Recipe, for whoever does take it:**
+
+```sh
+printf 'program e;\nbegin\nend.\n' > h.pas
+( ulimit -c unlimited; qemu-arm <arm32-pascal26> --target=aarch64 h.pas o1 )
+# then read NT_PRSTATUS out of qemu_*.core: pr_reg is at offset 72,
+# 18 words, r15/pc is word 15.
+```
