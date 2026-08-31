@@ -11824,9 +11824,10 @@ test-core: $(COMPILER)
 	  echo "=== c_alloca_expression_stack: qemu-riscv32 absent, riscv32 arm NOT verified ==="; \
 	fi
 	# arm32 landed the same way: RELOCATION only, no saved-sp delta, because its
-	# AAPCS32 outgoing block is all relative and parks no pointer. i386 is the
-	# only backend still refusing IR_ALLOCA, and the only one that will need the
-	# delta. feature-a-port-alloca-to-i386-arm32-and-riscv32
+	# AAPCS32 outgoing block is all relative and parks no pointer. i386 followed
+	# and was the only one that needed the delta, which COMPLETED the port -- all
+	# five backends carry IR_ALLOCA now, so nothing is still refusing it.
+	# feature-a-port-alloca-to-i386-arm32-and-riscv32
 	@if command -v qemu-arm >/dev/null 2>&1; then \
 	  ./$(COMPILER) --target=arm32 test/c_alloca_expression_stack.c $(TESTTMP)/c_alloca_expr_a32 >/dev/null || { echo "c_alloca_expression_stack arm32 compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh arm32/c_alloca_expr_a32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_alloca_expr_a32)" "$$(printf '1 aaaa 1\n2 bbbb\n3 cccc\n4 dddd 32\n5 1\n6 p q r 1 1\n7 eeee\n8 ffff gggg 1\n9 101\n10 4\n11 31 37\n12 6\n13 ABCD 5\n14 42\n15 1\n16 1\n17 1 2 3 4 5 6 1 8')" || exit 1; \
@@ -11847,6 +11848,42 @@ test-core: $(COMPILER)
 	  tools/expect_same.sh i386/c_vla_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/c_vla_i386)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24')" || exit 1; \
 	else \
 	  echo "=== c_alloca_expression_stack: qemu-i386 absent, i386 arm NOT verified ==="; \
+	fi
+	# `in` with a 64-bit test value, on every backend that has one. TWO shapes,
+	# and they take different paths, which is the whole reason this row exists:
+	# an all-CONSTANT set literal never becomes a set at all (the parser emits
+	# SPECIAL_IN and the backend compares inline), while a set VARIABLE lowers to
+	# an ordinary IR_BINOP tkIn. Both were broken on all four 32-bit backends and
+	# they broke DIFFERENTLY -- the literal shape silently answered TRUE for
+	# 2^32+1 because every compare was 32 bits wide, and the variable shape
+	# failed to COMPILE, because a 64-bit left operand routed `in` into the
+	# 64-bit ARITHMETIC emitter, which has no tkIn arm. x86-64 and aarch64 were
+	# right already: their compare is REX.W / 64-bit.
+	# The Char, Integer and in-range rows are the CONTROLS -- a fix that makes
+	# the 2^32+1 rows FALSE by breaking ordinary membership has traded one defect
+	# for another.
+	# NOTE: FPC 3.2.2 TRUNCATES and so answers TRUE on 7 of these 21 rows. The
+	# expected file is pxx's own x86-64/aarch64 answer, and the divergence is
+	# deliberate and filed as decide-does-in-truncate-an-out-of-range-element-
+	# or-answer-false. What is NOT open to a ruling is that all six targets must
+	# answer alike, which is what this row enforces.
+	# bug-a-set-membership-truncates-the-test-value-on-32-bit-backends
+	./$(COMPILER) test/test_set_in_64bit_element.pas $(TESTTMP)/set_in_6426
+	tools/expect_same.sh set_in_6426 "$$($(TESTTMP)/set_in_6426)" "$$(cat test/test_set_in_64bit_element.expected)"
+	@for tgt in aarch64 riscv32 arm32 i386; do \
+	  case $$tgt in aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; arm32) q=qemu-arm;; i386) q=qemu-i386;; esac; \
+	  if command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$tgt test/test_set_in_64bit_element.pas $(TESTTMP)/set_in_64_$$tgt >/dev/null || { echo "test_set_in_64bit_element $$tgt compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh $$tgt/set_in_64 "$$(tools/run_target.sh $$tgt $(TESTTMP)/set_in_64_$$tgt)" "$$(cat test/test_set_in_64bit_element.expected)" || exit 1; \
+	  else \
+	    echo "=== test_set_in_64bit_element: $$q absent, $$tgt arm NOT verified ==="; \
+	  fi; \
+	done
+	@if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_set_in_64bit_element.pas $(TESTTMP)/set_in_64_xt >/dev/null || { echo "test_set_in_64bit_element xtensa compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh xtensa/set_in_64 "$$(qemu-xtensa $(TESTTMP)/set_in_64_xt)" "$$(cat test/test_set_in_64bit_element.expected)" || exit 1; \
+	else \
+	  echo "=== test_set_in_64bit_element: qemu-xtensa absent, xtensa arm NOT verified ==="; \
 	fi
 	# `extern T name[];` in a header + `T name[] = {...};` in the .c -- the
 	# ordinary way C shares a table. The declarator is an INCOMPLETE array type,

@@ -2344,9 +2344,17 @@ begin
 
         { 64-bit (Int64/UInt64) ops use the dedicated a0:a1 path. A comparison
           carries a Boolean result tk, so key off the operands too. }
-        if Is64BitRISCV32(IntToTypeKind(IRTk[node])) or
-           Is64BitRISCV32(IntToTypeKind(IRTk[left])) or
-           Is64BitRISCV32(IntToTypeKind(IRTk[right])) then
+        { `in` is NOT 64-bit arithmetic: its result is Boolean and its right
+          operand is a SET ADDRESS. Routing it here on a 64-bit LEFT operand
+          reached the 64-bit emitter, which has no tkIn arm and raised
+          "64-bit binop operator not yet supported" -- `q in s` with an Int64 q
+          failed to COMPILE on all four 32-bit backends. Handled below instead,
+          where the element is narrowed safely first.
+          bug-a-set-membership-truncates-the-test-value-on-32-bit-backends }
+        if (op <> Ord(tkIn)) and
+           (Is64BitRISCV32(IntToTypeKind(IRTk[node])) or
+            Is64BitRISCV32(IntToTypeKind(IRTk[left])) or
+            Is64BitRISCV32(IntToTypeKind(IRTk[right]))) then
         begin
           EmitBinop64RISCV32(left, right, op,
             not TypeBinop64Unsigned(op, IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])),
@@ -2359,6 +2367,15 @@ begin
           Error('target riscv32: frozen tyString concat unsupported; only literal+literal folds (combine nested string literals)');
 
         IREmitNodeRISCV32(left);
+        { 64-bit element into `in`: a set holds only 0..255, so any nonzero high
+          word -- $FFFFFFFF for a negative included -- is out of range. Saturate
+          to 256 and let the EXISTING unsigned in-range test decide it. Before
+          the spill: a1 is the high word and the right operand overwrites it. }
+        if (op = Ord(tkIn)) and Is64BitRISCV32(IntToTypeKind(IRTk[left])) then
+        begin
+          rv32_beq(reg_a1, reg_zero, 8);        { high = 0 -> keep the value }
+          rv32_addi(reg_a0, reg_zero, 256);     { else saturate out of range }
+        end;
         rv32_addi(reg_sp, reg_sp, -4);
         rv32_sw(reg_a0, reg_sp, 0);
 
@@ -2866,7 +2883,19 @@ begin
               rule, each backend's own idiom — which is what normalising a
               construct across targets is supposed to look like. }
             argNode := IRB[node];             { arg1 = the test value (IR_ARG) }
-            IREmitNodeRISCV32(IRA[argNode]);  { a0 = test value }
+            IREmitNodeRISCV32(IRA[argNode]);  { a0 = test value (a0:a1 if 64-bit) }
+            { A 64-bit element against 32-bit constants -- see the i386 and arm32
+              arms. A value that does not FIT in a signed 32-bit int cannot equal
+              any of them, so compute that flag once and AND it into the result.
+              Parked on the stack because a2..a5 are all live in the item loop. }
+            if Is64BitRISCV32(IntToTypeKind(IRTk[IRA[argNode]])) then
+            begin
+              rv32_srai(reg_a4, reg_a0, 31);    { a4 = sign-extension of lo }
+              rv32_xor(reg_a4, reg_a4, reg_a1); { 0 iff it matches the high word }
+              rv32_sltiu(reg_a4, reg_a4, 1);    { a4 = representable }
+              rv32_addi(reg_sp, reg_sp, -4);
+              rv32_sw(reg_a4, reg_sp, 0);
+            end;
             rv32_addi(reg_a2, reg_a0, 0);     { a2 = x }
             rv32_addi(reg_a3, reg_zero, 0);   { a3 = membership accumulator }
             argNode := IRB[argNode];          { first set item }
@@ -2901,6 +2930,12 @@ begin
               argNode := IRB[argNode];
             end;
             rv32_addi(reg_a0, reg_a3, 0);     { a0 = result }
+            if Is64BitRISCV32(IntToTypeKind(IRTk[IRA[IRB[node]]])) then
+            begin
+              rv32_lw(reg_a4, reg_sp, 0);
+              rv32_addi(reg_sp, reg_sp, 4);
+              rv32_and(reg_a0, reg_a0, reg_a4);
+            end;
             Exit;
           end;
           { The SysOpen/SysRead/SysWrite/SysClose/SysFchmod family. rv32 linux is

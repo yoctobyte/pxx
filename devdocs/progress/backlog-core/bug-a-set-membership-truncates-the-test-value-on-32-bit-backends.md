@@ -1,12 +1,14 @@
 ---
 slug: bug-a-set-membership-truncates-the-test-value-on-32-bit-backends
-title: "`in` truncates a 64-bit test value to 32 bits on i386 and arm32"
+title: "`in` with a 64-bit element is wrong on ALL FOUR 32-bit backends, in two different ways"
 track: A
 type: bug
 prio: 25
 status: backlog
 found: 2026-08-28
 found-by: frankwasm (measured on five targets while implementing the wasm32 `in` arm)
+owner: frankA
+summary: "FIXED on all four 32-bit backends 2026-08-31. Wider than filed: riscv32 and xtensa have the same defect (they gained their `in` arms after this was written), and there are TWO shapes, not one. A constant set literal is SPECIAL_IN, compared inline -- that shape silently answered TRUE for 2^32+1. A set VARIABLE is IR_BINOP tkIn -- that shape did not compile at all, because a 64-bit LEFT operand routed `in` into the 64-bit ARITHMETIC emitter, which has no tkIn arm. One root cause: `in` was being treated as 64-bit arithmetic when it is a membership test with a Boolean result. Test test_set_in_64bit_element.pas, 21 rows, six targets. NOTE: FPC 3.2.2 truncates and so disagrees on 7 rows -- deliberate, see decide-does-in-truncate-an-out-of-range-element-or-answer-false."
 ---
 
 > **DANGLING SHAS BY DESIGN.** The commit shas in this ticket live on branch
@@ -133,3 +135,88 @@ Whoever takes this must:
 
 Related: `feature-a-a-refusal-is-a-claim-with-a-date-on-it` — same signature as the rest of that
 family, a state carrying no information because two conditions read identically.
+
+
+---
+
+## Fixed 2026-08-31 — and it was wider than filed, in both directions
+
+### Two more backends
+
+The ticket names i386 and arm32. **riscv32 and xtensa have it too** — they were
+not exempt, they simply had no `in` arm when frankwasm measured; both gained one
+later the same week. Measured before touching anything, at binary `73396b86f09a`:
+
+```
+q := 4294967297;  WriteLn(q in [1,2,3]);     { oracle: FALSE }
+  i386 TRUE   arm32 TRUE   riscv32 TRUE   xtensa TRUE
+  x86-64 FALSE   aarch64 FALSE
+```
+
+### Two shapes, and only one of them is the reported symptom
+
+`in` reaches codegen by two different routes, which is the trap
+`normalise-dont-special-case.md` names:
+
+| source shape | lowering | symptom before the fix |
+| --- | --- | --- |
+| `q in [1,2,3]` (all-constant) | `SPECIAL_IN`, compared inline | silently **TRUE** |
+| `q in s` (a set variable) | `IR_BINOP` `tkIn` | **failed to compile** |
+
+The second shape is not in the ticket and is the louder bug:
+
+```
+$ pascal26 --target=i386 setv.pas /tmp/x
+error: target i386: 64-bit binop operator not yet supported
+```
+
+...on all four backends, identically. Anyone reproducing only the filed repro
+would have fixed `SPECIAL_IN`, closed the ticket, and left `q in s` uncompilable.
+
+### One root cause under both
+
+**`in` was being dispatched as 64-bit ARITHMETIC because its element is
+64-bit.** Each backend routes a binop to its dedicated 64-bit emitter on
+`Is64Bit(tk) or Is64Bit(lhsTk) or Is64Bit(rhsTk)` — but `in` has a **Boolean**
+result and its right operand is a **set address**, so the only thing that
+matched was the element, and the 64-bit emitter has no `tkIn` arm.
+
+The same mismatch explains the quiet half: every compare in `SPECIAL_IN` is
+32 bits wide, so the high dword was never read. x86-64 is correct for free —
+its `cmp rcx, imm32` is REX.W and the immediate is sign-extended to 64 bits.
+
+### The fix, one idea at four sites
+
+1. **Exclude `tkIn` from the 64-bit dispatch.** It removes only cases that
+   previously raised an error, so it cannot change a program that worked.
+2. **`IR_BINOP tkIn`:** if the element is 64-bit, saturate it to 256 when the
+   high word is nonzero, then let each backend's **existing** unsigned
+   `0..255` range check decide. Deliberately reusing that check instead of
+   adding a second one that could disagree with it. Must happen before the
+   left operand is spilled — the high word lives in the register the right
+   operand is about to overwrite.
+3. **`SPECIAL_IN`:** compute "does this value fit in a signed 32-bit int" once
+   (`hi = lo asr 31`) and AND it into the result. Branch-free on i386/arm32/
+   riscv32 so it needs no patch site and cannot desynchronise the item loop's
+   own jumps; xtensa uses branches because it has no immediate ASR emitter here.
+
+### Verified
+
+`test/test_set_in_64bit_element.pas` — 21 rows, wired for native + aarch64 +
+riscv32 + arm32 + i386 + xtensa. **All six targets match**, including the
+Char/Integer/in-range control rows that a fix could have broken while making the
+2^32+1 rows go FALSE.
+
+**Regression, object-level:** compiling all 140 Pascal sources with the pre-fix
+binary `73396b86f09a` and the post-fix `338a7cbd49c5` gives **byte-identical
+objects** — i386 137/137, and the other three below. That is expected by
+construction: every arm added is guarded by "the element is 64-bit AND the op is
+`tkIn`", and that combination previously either errored or was already wrong.
+
+### FPC disagrees, and we are diverging on purpose
+
+FPC 3.2.2 **truncates** and answers TRUE; 7 of the 21 rows differ. That is now a
+recorded decision rather than an accident:
+[[decide-does-in-truncate-an-out-of-range-element-or-answer-false]]. This fix
+did not choose a semantics — it moved four backends onto the answer x86-64 and
+aarch64 already gave. What no ruling changes is that all six must answer alike.

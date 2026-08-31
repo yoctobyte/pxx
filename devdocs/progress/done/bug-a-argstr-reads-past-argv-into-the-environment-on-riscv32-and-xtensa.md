@@ -5,7 +5,9 @@ prio: 45
 type: bug
 found: 2026-08-30
 found-by: frankS
-owner: unassigned
+owner: frankA
+summary: "DUPLICATE, already fixed. `48c89fab5` (2026-08-31 01:57) bound the argv index against argc on ALL FIVE cross backends and wired test/test_paramstr_out_of_range.pas; it was filed under the sibling slug bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets, so this one was never resolved. Verified by running, not by reading the code."
+status: done
 ---
 
 # ArgStr reads past argv into the environment on riscv32 and xtensa
@@ -80,3 +82,39 @@ filed the same night for the identical shape one layer down.
 NO arguments against the x86-64 oracle on riscv32 and xtensa (both ABIs) — that
 is the case the existing Makefile rows miss, because they all pass `alpha beta`
 and stay in range. Add a no-argument row while fixing it.
+
+
+---
+
+## Resolved 2026-08-31 as a DUPLICATE — verified by running
+
+The fix landed under the sibling ticket
+[[bug-a-argv-to-frozen-string-is-unchecked-on-four-untested-targets]] as
+`48c89fab5` *"bound the argv index against argc on all five cross backends"*
+(confirmed an ancestor of `origin/master`, not a ghost). It touched
+`ir_codegen386.inc`, `_aarch64`, `_arm32`, `_riscv32` and `_xtensa`, and wired
+`test/test_paramstr_out_of_range.pas`. This slug was simply never closed.
+
+**Checked by executing it, since "the code has a check" is not the same claim as
+"the check fires".** Binary `73396b86f09a`:
+
+```
+                riscv32          xtensa           x86-64 (oracle)
+no args         1..4 -> len=0    1..4 -> len=0    1..4 -> len=0
+AA BB           1=AA 2=BB        1=AA 2=BB        1=AA 2=BB
+                3,4 -> len=0     3,4 -> len=0     3,4 -> len=0
+```
+
+The second row is the **positive control**: with arguments present the in-range
+indices return real values while the out-of-range ones return `''`, so the bound
+is discriminating rather than an unconditional empty string. All three targets
+agree.
+
+**Note for whoever reads the group:** the neighbouring
+`bug-a-q-plus-overflow-checking-...` is NOT also fixed, though a careless probe
+says it is — `test/test_a64_leafsym_binops.pas`, the source its repro names, no
+longer triggers `{$Q+}`, so it compiles clean on arm32 and riscv32 and looks
+green. A real overflow still fails to compile there. Verified 2026-08-31.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.

@@ -1,0 +1,21 @@
+lit  2^32+1 : FALSE
+var  2^32+1 : FALSE
+lit -2^32+1 : FALSE
+var -2^32+1 : FALSE
+lit  u2^32+1: FALSE
+var  u2^32+1: FALSE
+lit       1 : TRUE
+var       1 : TRUE
+var       3 : TRUE
+var       0 : FALSE
+lit     300 : FALSE
+var     300 : FALSE
+var      -1 : FALSE
+lit range 5 : TRUE
+lit range +: FALSE
+lit range20 : FALSE
+int       2 : TRUE
+int     300 : FALSE
+int var   2 : TRUE
+char      e : TRUE
+char      E : FALSE

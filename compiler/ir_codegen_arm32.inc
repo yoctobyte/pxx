@@ -2185,7 +2185,15 @@ begin
 
         { 64-bit (Int64/UInt64) ops use the dedicated r0:r1 path. A comparison
           carries a Boolean result tk, so key off the operands too. }
-        if Is64BitArm32(tk) or Is64BitArm32(lhsTk) or Is64BitArm32(rhsTk) then
+        { `in` is NOT 64-bit arithmetic: its result is Boolean and its right
+          operand is a SET ADDRESS. Routing it here on a 64-bit LEFT operand
+          reached the 64-bit emitter, which has no tkIn arm and raised
+          "64-bit binop operator not yet supported" -- `q in s` with an Int64 q
+          failed to COMPILE on all four 32-bit backends. Handled below instead,
+          where the element is narrowed safely first.
+          bug-a-set-membership-truncates-the-test-value-on-32-bit-backends }
+        if (op <> Ord(tkIn)) and
+           (Is64BitArm32(tk) or Is64BitArm32(lhsTk) or Is64BitArm32(rhsTk)) then
         begin
           EmitBinop64Arm32(left, right, op,
             not TypeBinop64Unsigned(op, lhsTk, rhsTk),
@@ -2209,6 +2217,16 @@ begin
                 TypeKindSpelling(lhsTk) + ', ' + TypeKindSpelling(rhsTk) + ')' +
                 CurProcNoteForError);
         IREmitNodeArm32(left);
+        { 64-bit element into `in`: a set holds only 0..255, so any nonzero high
+          word -- $FFFFFFFF for a negative included -- is out of range. Saturate
+          to 256 and let the EXISTING unsigned `cmp r0,#255 / bhi` decide, rather
+          than adding a second range check that could disagree with the first.
+          Before the push: the high word is r1 and the right operand clobbers it. }
+        if (op = Ord(tkIn)) and Is64BitArm32(lhsTk) then
+        begin
+          EmitI32($E3510000);                { cmp r1, #0 }
+          EmitI32($13A00C01);                { movne r0, #256 }
+        end;
         EmitI32($E92D0001); { push {r0} }
         IREmitNodeArm32(right);
         EmitI32($E1A01000); { mov r1, r0 }
@@ -2691,7 +2709,23 @@ begin
               (IR_BLOCK, lo in IRA, hi in IRB). Accumulate membership in r4 using
               conditional execution — no shared true-label jump table needed. }
             argNode := IRB[node];          { arg1 = the test value (IR_ARG) }
-            IREmitNodeArm32(IRA[argNode]);  { r0 = test value }
+            IREmitNodeArm32(IRA[argNode]);  { r0 = test value (r0:r1 if 64-bit) }
+            { A 64-bit element against 32-bit constants. x86-64 compares with a
+              REX.W `cmp` against a sign-extended imm32 and is right for free;
+              every cmp below is 32 bits, so the high word went unread and
+              `q in [1,2,3]` answered TRUE for q = 2^32+1. A value that does not
+              FIT in a signed 32-bit int cannot equal any of the constants, so
+              compute that once and AND it in at the end. Parked on the stack,
+              not in a register: r2 and r4 are both live inside the item loop.
+              Must precede the `mov r1, r0` below, which overwrites the high word. }
+            if Is64BitArm32(IntToTypeKind(IRTk[IRA[argNode]])) then
+            begin
+              EmitI32($E1A02FC0);          { mov r2, r0, asr #31 (sign-extend lo) }
+              EmitI32($E1520001);          { cmp r2, r1 }
+              EmitI32($03A02001);          { moveq r2, #1  (representable) }
+              EmitI32($13A02000);          { movne r2, #0 }
+              EmitI32($E92D0004);          { push {r2} }
+            end;
             EmitI32($E1A01000);            { mov r1, r0 (test value) }
             EmitI32($E3A04000);            { mov r4, #0 (result accumulator) }
             argNode := IRB[argNode];       { first set item }
@@ -2722,6 +2756,11 @@ begin
               argNode := IRB[argNode];
             end;
             EmitI32($E1A00004);            { mov r0, r4 (result) }
+            if Is64BitArm32(IntToTypeKind(IRTk[IRA[IRB[node]]])) then
+            begin
+              EmitI32($E8BD0004);          { pop {r2} (the fits flag) }
+              EmitI32($E0000002);          { and r0, r0, r2 }
+            end;
             Exit;
           end
           else if j = Ord(tkSysOpen) then

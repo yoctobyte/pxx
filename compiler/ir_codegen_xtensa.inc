@@ -2322,9 +2322,17 @@ begin
 
         { 64-bit (Int64/UInt64) ops use the dedicated a2:a3 path. A comparison
           carries a Boolean result tk, so key off the operands too. }
-        if Is64BitXtensa(IntToTypeKind(IRTk[node])) or
-           Is64BitXtensa(IntToTypeKind(IRTk[left])) or
-           Is64BitXtensa(IntToTypeKind(IRTk[right])) then
+        { `in` is NOT 64-bit arithmetic: its result is Boolean and its right
+          operand is a SET ADDRESS. Routing it here on a 64-bit LEFT operand
+          reached the 64-bit emitter, which has no tkIn arm and raised
+          "64-bit binop operator not yet supported" -- `q in s` with an Int64 q
+          failed to COMPILE on all four 32-bit backends. Handled below instead,
+          where the element is narrowed safely first.
+          bug-a-set-membership-truncates-the-test-value-on-32-bit-backends }
+        if (op <> Ord(tkIn)) and
+           (Is64BitXtensa(IntToTypeKind(IRTk[node])) or
+            Is64BitXtensa(IntToTypeKind(IRTk[left])) or
+            Is64BitXtensa(IntToTypeKind(IRTk[right]))) then
         begin
           EmitBinop64Xtensa(left, right, op,
             not ((IntToTypeKind(IRTk[left]) = tyUInt64) or (IntToTypeKind(IRTk[right]) = tyUInt64)));
@@ -2335,6 +2343,16 @@ begin
           Error('target xtensa: frozen tyString concat unsupported; only literal+literal folds (combine nested string literals)');
 
         IREmitNodeXtensa(left);
+        { 64-bit element into `in`: a set holds only 0..255, so any nonzero high
+          word -- $FFFFFFFF for a negative included -- is out of range. Saturate
+          to 256 and let the EXISTING `bgeu` range test decide it. Before the
+          push: a3 is the high word and the right operand overwrites it. 256 is
+          well inside movi's 12-bit field, so no literal pool is needed. }
+        if (op = Ord(tkIn)) and Is64BitXtensa(IntToTypeKind(IRTk[left])) then
+          EmitAsmXtensa(['movi a9, 0',
+                         'beq a3, a9, .inrange',
+                         'movi a2, 256',
+                         '.inrange:']);
         XtensaPushA2;
         IREmitNodeXtensa(right);
         xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
@@ -2756,7 +2774,29 @@ begin
               a15 (the frame pointer under Call0): a3 holds the test value, a4
               the accumulator, a5 the item constant, a6 a per-range temp. }
             argNode := IRB[node];             { arg1 = the test value (IR_ARG) }
-            IREmitNodeXtensa(IRA[argNode]);   { a2 = test value }
+            IREmitNodeXtensa(IRA[argNode]);   { a2 = test value (a2:a3 if 64-bit) }
+            { A 64-bit element against 32-bit constants -- see the i386, arm32
+              and riscv32 arms. x86-64 compares with a REX.W `cmp` against a
+              sign-extended imm32 and is right for free; every compare below is
+              32 bits, so the high word went unread and `q in [1,2,3]` answered
+              TRUE for q = 2^32+1. A value that does not FIT in a signed 32-bit
+              int cannot equal any of the constants, so compute that flag once
+              and AND it in at the end.
+
+              Held in a9 rather than spilled: a3..a6 are all live in the item
+              loop, and nothing between here and the end is a CALL, so no window
+              rotates under it. The sign-extension is branches, not a shift --
+              xtensa has no immediate arithmetic-shift-right emitter here, and
+              `bge` is signed. -1 and 0 both fit movi's 12-bit field. }
+            if Is64BitXtensa(IntToTypeKind(IRTk[IRA[argNode]])) then
+              EmitAsmXtensa(['movi a9, 0',
+                             'bge a2, a9, .nonneg',   { lo >= 0 -> expect high 0 }
+                             'movi a9, -1',           { lo <  0 -> expect high -1 }
+                             '.nonneg:',
+                             'movi a10, 0',
+                             'bne a3, a9, .nofit',
+                             'movi a10, 1',           { a10 = representable }
+                             '.nofit:']);
             EmitAsmXtensa(['mov a3, a2', 'movi a4, 0']);
             argNode := IRB[argNode];          { first set item }
             while argNode <> -1 do
@@ -2787,6 +2827,8 @@ begin
               argNode := IRB[argNode];
             end;
             xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);
+            if Is64BitXtensa(IntToTypeKind(IRTk[IRA[IRB[node]]])) then
+              EmitAsmXtensa(['and a2, a2, a10']);
             Exit;
           end;
           if procIdx = -Ord(tkArgCount) then

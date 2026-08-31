@@ -2712,7 +2712,14 @@ begin
 
         { 64-bit (Int64/UInt64) integer ops use the dedicated edx:eax path.
           A comparison carries a Boolean result tk, so key off the operands. }
-        if Is64Bit386(tk) or Is64Bit386(lhsTk) or Is64Bit386(rhsTk) then
+        { `in` is NOT 64-bit arithmetic. Its result is Boolean and its right
+          operand is a SET ADDRESS, so routing it here on the strength of a
+          64-bit LEFT operand reached EmitBinop64_386, which has no tkIn arm and
+          raised "64-bit binop operator not yet supported" -- `q in s` with an
+          Int64 q failed to COMPILE on all four 32-bit backends. It is handled
+          below, where the element is narrowed safely first. }
+        if (op <> Ord(tkIn)) and
+           (Is64Bit386(tk) or Is64Bit386(lhsTk) or Is64Bit386(rhsTk)) then
         begin
           EmitBinop64_386(left, right, op,
             not TypeBinop64Unsigned(op, lhsTk, rhsTk),
@@ -2738,6 +2745,19 @@ begin
                 TypeKindSpelling(lhsTk) + ', ' + TypeKindSpelling(rhsTk) + ')' +
                 CurProcNoteForError);
         IREmitNode386(left);
+        { A 64-bit element reaching `in`: the membership test below is 32-bit
+          and a set holds only 0..255, so any nonzero high dword -- including
+          $FFFFFFFF for a negative value -- puts the element out of range.
+          Saturate to 256 so the EXISTING unsigned `cmp eax,255 / ja` decides
+          it, rather than adding a second range check that could disagree with
+          the first. Must happen HERE, before the push: the high dword lives in
+          edx and emitting the right operand clobbers it. }
+        if (op = Ord(tkIn)) and Is64Bit386(lhsTk) then
+        begin
+          EmitB($85); EmitB($D2);                    { test edx, edx }
+          EmitB($74); EmitB($05);                    { jz +5 (over the mov) }
+          EmitB($B8); EmitI32(256);                  { mov eax, 256 }
+        end;
         EmitB($50);                                  { push eax }
         IREmitNode386(right);
         EmitB($89); EmitB($C1);                      { mov ecx, eax }
@@ -3203,8 +3223,28 @@ begin
             { x in [items]: items are constant single values or [lo..hi] ranges
               (IR_BLOCK, lo in IRA, hi in IRB). Accumulate membership in edx. }
             argNode := IRB[node];          { arg1 = test value }
-            IREmitNode386(IRA[argNode]);   { eax = test value }
+            IREmitNode386(IRA[argNode]);   { eax = test value (edx:eax if 64-bit) }
             EmitB($89); EmitB($C1);        { mov ecx, eax }
+            { A 64-bit element compared against 32-bit constants. x86-64 gets
+              this right for free -- its `cmp rcx, imm32` is REX.W and the
+              immediate is sign-extended to 64 bits, so 2^32+1 does not equal 1.
+              Here every cmp below is 32 bits wide, so the high dword is simply
+              not consulted and `q in [1,2,3]` answered TRUE for q = 2^32+1.
+
+              A value that does not FIT in a signed 32-bit int cannot equal any
+              of the Integer constants, so compute that once as a flag and AND
+              it into the result. Branch-free on purpose: it needs no patch
+              site and so cannot desynchronise the item loop's own jumps.
+              bug-a-set-membership-truncates-the-test-value-on-32-bit-backends }
+            if Is64Bit386(IntToTypeKind(IRTk[IRA[argNode]])) then
+            begin
+              EmitB($89); EmitB($C8);                { mov eax, ecx }
+              EmitB($C1); EmitB($F8); EmitB($1F);    { sar eax, 31 (sign-extend lo) }
+              EmitB($39); EmitB($D0);                { cmp eax, edx }
+              EmitB($0F); EmitB($94); EmitB($C0);    { sete al  (1 = representable) }
+              EmitB($0F); EmitB($B6); EmitB($C0);    { movzx eax, al }
+              EmitB($50);                            { push eax (the fits flag) }
+            end;
             EmitB($31); EmitB($D2);        { xor edx, edx (result) }
             argNode := IRB[argNode];       { first set item }
             while argNode <> -1 do
@@ -3233,6 +3273,11 @@ begin
               argNode := IRB[argNode];
             end;
             EmitB($89); EmitB($D0);        { mov eax, edx }
+            if Is64Bit386(IntToTypeKind(IRTk[IRA[IRB[node]]])) then
+            begin
+              EmitB($59);                            { pop ecx (the fits flag) }
+              EmitB($21); EmitB($C8);                { and eax, ecx }
+            end;
             Exit;
           end
           else if j = Ord(tkSysOpen) then
