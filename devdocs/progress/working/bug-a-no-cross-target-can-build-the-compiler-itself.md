@@ -6,7 +6,7 @@ type: bug
 status: working
 owner: frankS
 blocked-by: []
-summary: "PARTLY FIXED; re-measured 2026-08-31 by frankA at fixedpoint 7dd26baa7a80 and it was STALE: both causes it named as remaining are fixed. ALL SEVEN targets now BUILD the compiler -- i386, aarch64, arm32, riscv32, wasm32, native x86_64, and xtensa with `--platform=posix --xtensa-long-calls`. The two blockers this ticket was left waiting on are both in `done/` (riscv32 `jal` reach, xtensa >32 KB frame), so neither of the two remaining causes it named is a cause any more. ONE defect remains and it is the FOURTH one, the one this ticket found last: the arm32 cross-built compiler builds and is then MEMORY-CORRUPT, keyed on the length of the OUTPUT PATH (frankS, 2026-08-31): clean at <=95 characters, four bogus `undefined variable (PXX_KIND_LEGACY)` errors against correct source at 96, clean again at 207, SIGSEGV at 247+, non-monotonic in the target axis too, with a native control clean at every length. `Segfaults on hello.pas` understates it -- the wrong-answer face blames the user's code and the repro needs no compiler build, only a long enough output path. Meanwhile the i386, aarch64 and riscv32 cross-built compilers each run and emit a binary FOR THEIR OWN ARCHITECTURE that runs and prints -- but only when told `--target=<self>`, because the compiled-in default target is x86_64 whatever the host arch is. Two open sub-questions, neither measured: the i386 cross-built compiler faults ~30s into rebuilding the COMPILER (small programs are fine), and the xtensa binary cannot be exercised on this host -- qemu-xtensa carries no ESP32 core and SIGILLs on every model it does have, which is a HOST limit and not a measured defect. Under the default platform xtensa refuses `compiler.pas` at ParamStr by design (an ESP image has no argv), which is a target contract, not this bug. The title is false as written and was false when filed: wasm32 built all along."
+summary: "PARTLY FIXED; re-measured 2026-08-31 by frankA at fixedpoint 7dd26baa7a80 and it was STALE: both causes it named as remaining are fixed. ALL SEVEN targets now BUILD the compiler -- i386, aarch64, arm32, riscv32, wasm32, native x86_64, and xtensa with `--platform=posix --xtensa-long-calls`. The two blockers this ticket was left waiting on are both in `done/` (riscv32 `jal` reach, xtensa >32 KB frame), so neither of the two remaining causes it named is a cause any more. ONE defect remains and it is the FOURTH one, the one this ticket found last: the arm32 cross-built compiler builds and is then MEMORY-CORRUPT, keyed on the INITIAL STACK LAYOUT (frankS, 2026-08-31) -- output path length, source text and the size of the ENVIRONMENT are three knobs on one thing, and the environment alone flips it with argv, source and cwd all held fixed: clean at <=95 characters, four bogus `undefined variable (PXX_KIND_LEGACY)` errors against correct source at 96, clean again at 207, SIGSEGV at 247+, non-monotonic in the target axis too, with a native control clean at every length. `Segfaults on hello.pas` understates it -- the wrong-answer face blames the user's code and the repro needs no compiler build, only a long enough output path. Meanwhile the i386, aarch64 and riscv32 cross-built compilers each run and emit a binary FOR THEIR OWN ARCHITECTURE that runs and prints -- but only when told `--target=<self>`, because the compiled-in default target is x86_64 whatever the host arch is. Two open sub-questions, neither measured: the i386 cross-built compiler faults ~30s into rebuilding the COMPILER (small programs are fine), and the xtensa binary cannot be exercised on this host -- qemu-xtensa carries no ESP32 core and SIGILLs on every model it does have, which is a HOST limit and not a measured defect. Under the default platform xtensa refuses `compiler.pas` at ParamStr by design (an ESP image has no argv), which is a target contract, not this bug. The title is false as written and was false when filed: wasm32 built all along."
 ---
 
 # No cross target can build the compiler itself
@@ -305,3 +305,56 @@ iteration costs one `qemu-arm` invocation. It also retires the
 Controls, same argv, same empty program: the **native** compiler builds all five
 targets clean, and the **i386**-hosted cross compiler builds x86_64/i386/aarch64
 clean. The fault is specific to the arm32-hosted binary.
+
+## Addendum (frankS, 2026-08-31): the axis under all of them is the INITIAL STACK LAYOUT — the ENVIRONMENT alone flips it
+
+franka-d5's reduction is right and its inference needs one correction. Same
+minimal source (`program e; begin end.`), same argv (`h.pas` in, `o1` out), same
+cwd, my arm32 compiler at fixedpoint `eff141f03d41`:
+
+| target | franka-d5 (7dd26baa7a80) | frankS (eff141f03d41) |
+| --- | --- | --- |
+| x86_64 / i386 / aarch64 / arm32 / riscv32 / xtensa / wasm32 | SEGV on all seven | SEGV on x86_64, arm32, xtensa, wasm32; **OK on i386, aarch64, riscv32** |
+
+Deterministic in three consecutive rounds here. So **"all seven" is not a
+property of the bug** — it is that binary's layout, and the two of us were
+running different compilers in different shells.
+
+**What actually moves it: the environment.** Everything held fixed — same
+binary, same source, same argv, same cwd — varying only the length of one
+exported variable:
+
+| `PXXPAD` bytes | 0 | 10 | 100 | 400 | 1000 | 3000 |
+| --- | --- | --- | --- | --- | --- | --- |
+| result | OK | OK | SEGV | rc=1 | SEGV | OK |
+
+That is the same non-monotonic signature as the output-path sweep, from a knob
+that touches **nothing but where the kernel puts the initial stack**. It
+subsumes both earlier axes: argv length, source text and env size are three ways
+to move one thing. It also explains the table above without anyone being wrong,
+and it retires a trap — `tools/run_target.sh` is `exec qemu-arm "$bin" "$@"` but
+may export `QEMU_LD_PREFIX` first, so **running through the harness and running
+`qemu-arm` directly are different experiments**, and I measured them disagreeing
+on the same binary and argv.
+
+### Two negative controls, both narrowing
+
+- **Not the argv path.** An arm32 `WriteLn(ParamStr(i))` program, cross-built
+  native and run under the same env sweep, is correct at every pad — including
+  the pads that kill the compiler. So this is not the family of
+  [[bug-a-argstr-reads-past-argv-into-the-environment-on-riscv32-and-xtensa]].
+- **Not "100 MB BSS in a 32-bit address space".** An arm32 program with a
+  ~100 MB BSS array, touching both ends, is correct at every pad. The obvious
+  suspect for the i386 half of this ticket does not explain the arm32 half.
+
+So it is specific to the large arm32 binary, sensitive to initial stack
+placement, and neither of the two cheapest theories survives. The next step is a
+gdb session on the qemu-arm process at a pad that faults, or a bisect over the
+arm32 backend — not another sweep. Repro, one line:
+
+```sh
+printf 'program e; begin end.\n' > h.pas
+env PXXPAD=$(head -c 100 /dev/zero | tr '\0' x) qemu-arm <arm32-pascal26> --target=x86_64 h.pas o1
+```
+
+Gate: no code changed; ticket text only. Nobody is on the bisect.
