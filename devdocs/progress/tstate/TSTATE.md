@@ -4,7 +4,7 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `5e20003be66a` | 2026-08-31T02:40:43Z | RED (native) | 110.2s | `bebac33366f5` RED |
+| seven | `4449e9fe8a09` | 2026-08-31T02:43:59Z | RED (native) | 107.5s | `bebac33366f5` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -43,37 +43,3 @@
 - **test-pascal-conformance#shard5/6** — tools/run_pascal_conformance.sh (seven): bad `f6303d410d78`, last good `90501813d990`, 1 commit(s) in range
 - **test-asm#src:compiler/compiler.pas** — compiler/compiler.pas (seven): bad `44ec32358394`, last good `c6c3c9d2bb26`, 1 commit(s) in range
 - **test-asm#src:test/hello.pas** — test/hello.pas (seven): bad `44ec32358394`, last good `c6c3c9d2bb26`, 1 commit(s) in range
-- **CASCADE 30 jobs** (seven): bad `afc0da53c859`, last good `bebac33366f5`, 1 commit(s) in range
-  <details><summary>jobs</summary>
-
-  - `test-core#src:examples/tk/shadow_format_except.npy`
-  - `test-core#src:test/fpcv.pas@2`
-  - `test-core#src:test/test_exceptobject_intrinsic.pas`
-  - `test-core#src:test/test_fpc_compat_batch2.pas`
-  - `test-core#src:test/test_interface_arc_exc.pas`
-  - `test-core#src:test/test_managed_exception_cleanup.pas`
-  - `test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy`
-  - `test-core#src:test/test_nilpy_augmented_assign_class_field.npy`
-  - `test-core#src:test/test_nilpy_augmented_dunder_subscript.npy`
-  - `test-core#src:test/test_nilpy_dunder_on_self_reaches_the_override.npy`
-  - `test-core#src:test/test_nilpy_float_methods_variant.npy`
-  - `test-core#src:test/test_nilpy_getitem_iteration_protocol.npy`
-  - `test-core#src:test/test_nilpy_iter_next_cursor.npy`
-  - `test-core#src:test/test_nilpy_missing_module_attr_is_attributeerror.npy`
-  - `test-core#src:test/test_nilpy_pyexception_bare_vs_qualified.npy`
-  - `test-core#src:test/test_nilpy_rtl_exception_surface.npy`
-  - `test-core#src:test/test_nilpy_setitem_through_a_variant_receiver.npy`
-  - `test-core#src:test/test_nilpy_star_forward.npy`
-  - `test-core#src:test/test_nilpy_subclass_a_builtin_type.npy`
-  - `test-core#src:test/test_nilpy_subscript_store_on_a_call_result.npy`
-  - `test-core#src:test/test_nilpy_try_else.npy`
-  - `test-core#src:test/test_nilpy_tuple_eq_round_enum.npy`
-  - `test-core#src:test/test_rtl_fpc_compat_helpers.pas`
-  - `test-core#src:test/test_uses_order_pylib_exception_a.pas`
-  - `test-core#src:test/test_uses_order_pylib_exception_b.pas`
-  - `test-core#src:test/test_variant_comparison_coerces_a_stringy_operand.pas`
-  - `test-core#src:test/test_variant_conversion_failure_is_catchable.pas`
-  - `test-core#src:test/test_variant_div_by_zero_raises.pas`
-  - `test-core#src:test/test_variant_string_to_boolean.pas`
-  - `test-smoke#src:test/quick_canary_nilpy.npy`
-  </details>
