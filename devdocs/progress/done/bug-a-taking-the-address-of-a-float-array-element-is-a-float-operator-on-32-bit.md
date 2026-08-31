@@ -216,4 +216,4 @@ correctness one. Changing it would alter a working path with no measured
 benefit; noting it here rather than folding it in silently.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit b3a6cddc0.
