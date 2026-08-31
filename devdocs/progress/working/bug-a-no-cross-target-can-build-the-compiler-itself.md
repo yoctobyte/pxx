@@ -1095,3 +1095,43 @@ such rather than as "the fix did not work".
 
 Gate: `make compiler/pascal26` converged (`36bb71e851a3`); both sweeps above; no
 code changed in this addendum.
+
+### The residual, named: an unchecked `mmap` failure — not corruption
+
+Guest core from the arm32-hosted `compiler.pas` build (`qemu-arm` writes one
+under `ulimit -c`; the system gdb has no arm target and installing one needs
+sudo, which is not worth a human's attention for this):
+
+```
+pc = 0x0805783c = PXXAlloc+0xc2c      instruction:  STR r1, [r0]
+r0 = 0xfffffff4  = -12
+r7 = 0xc0        = 192 = mmap2, arm32 EABI
+```
+
+`-12` is `-ENOMEM`, and 192 is the number in
+`__pxxrawsyscall(192, 0, len, 3, 34, -1, 0)` at `builtinheap.pas:946`. The
+disassembly corroborates the registers rather than merely agreeing with them:
+`r0` is loaded from a local at `[fp-40]` and immediately written through.
+
+And the allocator says so itself, at `builtinheap.pas:977` — *"every caller
+reaches this through PXXAlloc, which does NOT check the result (deliberately --
+on a hosted target a failed mmap returns a negative errno and the next access
+faults), so the returned value IS the base of the heap."* That is a documented
+design choice, not an oversight, and it is why an out-of-memory condition
+arrives as a SIGSEGV at the first write instead of a diagnostic.
+
+**Confidence, labelled.** The `-12` and the faulting instruction are read
+directly from the core. Attributing that `-12` to *this* `mmap2` rests on `r7`
+still holding 192 inside the same function — corroboration, not proof. A
+`qemu -strace` census of the guest's `mmap2` calls is running to settle it.
+
+**The open question is whether the exhaustion is legitimate.** `HEAP_ARENA` is a
+**256 MiB** mmap chunk, and the native x86-64 build of the same source peaks at
+**549 MB RSS** — a 32-bit build's structures are smaller, not larger, so a 4 GB
+space running out looks more like arena granularity or waste than a real
+ceiling. If the census shows only a handful of arenas before the failure, this
+is a real 32-bit limit and belongs in a target-contract note; if it shows many,
+there is a second defect here.
+
+Either way it is **not** this ticket's write-after-free, and it should be split
+out rather than extending this ticket further.
