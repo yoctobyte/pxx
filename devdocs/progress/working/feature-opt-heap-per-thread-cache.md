@@ -1,13 +1,14 @@
 ---
 prio: 48
 track: A
+owner: frankA
 ---
 
 # Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial
 
 - **Type:** feature/perf — **Track O** (optimization; file-ownership + gate
   **Track A** — `compiler/builtin/builtinheap.pas`, `ir_codegen.inc`).
-- **Status:** backlog — filed 2026-07-20.
+- **Status:** working
 - **Found by:** Track E, writing `examples/parallel/pow.pas`
   ([[feature-demo-parallel-hashing-pow]]). T owns the tool, E owns the demo —
   the compiler/runtime gap is filed here, in the owning lane.

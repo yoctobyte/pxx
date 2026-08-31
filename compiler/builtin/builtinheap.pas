@@ -676,6 +676,14 @@ const
     the RARE big blocks only. 64 bins x one word = 512 bytes of BSS, which the
     ESP static-arena build can afford too. }
   HEAP_BIN_MAX   = 512;                     { largest size with its own bin }
+  { Span at which `rep stosb` starts beating the word loop in PXXMemZero. Swept
+    on x86-64 (see the note there); a wrong value costs throughput, never
+    correctness -- both arms zero the same bytes. }
+  MEMZERO_REP_MIN = 64;
+  { Span below which PXXAlloc's bin path zeroes INLINE rather than calling
+    PXXMemZero. Not a rival implementation -- purely the call boundary; above it
+    PXXMemZero decides everything. Swept on x86-64. }
+  ALLOC_INLINE_ZERO_MAX = 64;
   HEAP_BIN_COUNT = HEAP_BIN_MAX div 8;      { 64: classes 8,16,...,512 }
   { -dPXX_HEAP_DEBUG only: how many freed blocks are held out of the free list
     before one is really reused. Big enough that a dangling read almost always
@@ -1101,14 +1109,28 @@ begin
 {$ifdef PXX_ALLOC_CENSUS}
       CensusReuse := CensusReuse + 1;
 {$endif}
-      i := 0;
-      while i < size do
+      { Two arms, and the split is a CALL boundary, not a second zeroing
+        algorithm: PXXMemZero owns the policy (it picks word loop vs `rep
+        stosb` at MEMZERO_REP_MIN), and this arm exists only because a call to
+        it costs more than the whole job for a span of one or two words. The
+        loop that used to stand here unconditionally was the real defect --
+        it never reached `rep stosb` at ANY size, so the reuse path paid a
+        per-byte price that grew without bound. Measured, 3M allocs:
+        call-always is 0.91x at 8 bytes and 0.92x at 32 (a real regression,
+        old faster in 9 of 9 interleaved rounds) but 1.75x at 256 and 4.53x
+        at 2048. }
+      if size <= ALLOC_INLINE_ZERO_MAX then
       begin
-        PWord(cur + i)^ := 0;
-        i := i + SizeOf(NativeInt);        { PWord writes one machine word: 8 on
-                                             64-bit, 4 on 32-bit — must match the
-                                             step or half the span is skipped }
-      end;
+        i := 0;
+        while i < size do
+        begin
+          PWord(cur + i)^ := 0;
+          i := i + SizeOf(NativeInt);        { PWord writes one machine word: 8 on
+                                               64-bit, 4 on 32-bit — must match the
+                                               step or half the span is skipped }
+        end;
+      end
+      else PXXMemZero(Pointer(cur), size);
       Result := Pointer(cur);
 {$ifdef PXX_TS_SOFTLOCK}
       PXXHeapSpin := 0;
@@ -1134,12 +1156,15 @@ begin
 {$ifdef PXX_ALLOC_CENSUS}
         CensusList := CensusList + 1;
 {$endif}
-        i := 0;
-        while i < size do
-        begin
-          PWord(cur + i)^ := 0;
-          i := i + SizeOf(NativeInt);
-        end;
+        { PXXMemZero, not a hand-rolled word loop. The loop that used to be here
+          (and in the bin path above) is the SECOND spelling of a primitive this
+          unit already exports: PXXMemZero is `rep stosb` on x86-64 and falls
+          back to the same word/byte pair everywhere else, so the loop bought
+          nothing and cost the reuse path its whole per-byte budget. Measured:
+          the pxx/FPC ratio on `b := nil; SetLength(b, N)` grew with N --
+          1.32x at 32 bytes, 2.29x at 256, 4.62x at 2048 -- which is the
+          signature of a per-BYTE cost, not per-call overhead. }
+        PXXMemZero(Pointer(cur), size);
         Result := Pointer(cur);
 {$ifdef PXX_TS_SOFTLOCK}
         PXXHeapSpin := 0;
@@ -3770,8 +3795,19 @@ var d, i, w: Int64;
 begin
   d := Int64(dst);
 {$ifdef CPUX86_64}
-  bmR := __pxxblockfill(d, n, 0);   { rep stosb; a count <= 0 writes nothing }
-  Exit;
+  { `rep stosb` pays a fixed microcode startup of tens of cycles before it moves
+    a byte, so a SHORT span never earns it back -- the word loop below beats it
+    outright until the span is long enough to amortise the start. Measured on
+    `b := nil; SetLength(b, N)`, 3M iterations, rep-always against this
+    threshold: 8B 0.88x, 32B 0.91x (i.e. rep-always was SLOWER), 256B 1.69x,
+    2048B 4.59x. The dispatch lives HERE, in the one routine, rather than in
+    each caller -- PXXAlloc's reuse paths used to hand-roll their own word loop
+    for exactly this reason and thereby missed the large-span win entirely. }
+  if n > MEMZERO_REP_MIN then
+  begin
+    bmR := __pxxblockfill(d, n, 0);   { rep stosb; a count <= 0 writes nothing }
+    Exit;
+  end;
 {$endif}
   i := 0;
   w := SizeOf(NativeInt);

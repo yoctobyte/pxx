@@ -11880,6 +11880,12 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_nested_dynarray_alias26 "$$($(TESTTMP)/test_nested_dynarray_alias26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_nested_fixed_array_capture.pas $(TESTTMP)/test_nested_fixed_array_capture26
 	tools/expect_same.sh test_nested_fixed_array_capture26 "$$($(TESTTMP)/test_nested_fixed_array_capture26)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	# PXXAlloc's zero-on-reuse contract, one instance size per arm of its size
+	# dispatch (inline word loop / PXXMemZero / large first-fit list). The
+	# obvious dynamic-array spelling of this test CANNOT FAIL -- SetLength
+	# zeroes the span itself -- so it uses class instances; see the file header.
+	./$(COMPILER) test/test_heap_zero_on_reuse.pas $(TESTTMP)/test_heap_zero_on_reuse26
+	tools/expect_same.sh test_heap_zero_on_reuse26 "$$($(TESTTMP)/test_heap_zero_on_reuse26)" "HEAP ZERO ON REUSE OK dirty=0"
 	# How many captures a lifted nested routine may carry: the guard was a
 	# literal 16 while the staging arrays and TProc.Params are both
 	# MAX_PROC_PARAMS = 32 wide. 20 scalar captures and 20 fixed-array captures;
@@ -13101,6 +13107,12 @@ test-i386: $(COMPILER)
 	# feature needs a cross row and not only its native one.
 	./$(COMPILER) --target=i386 test/test_nested_fixed_array_capture.pas $(TESTTMP)/test_i386_nfacap
 	tools/expect_same.sh i386/test_i386_nfacap "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_nfacap)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	# The allocator's zero-on-reuse contract is target-independent, and one arm
+	# of its dispatch (ALLOC_INLINE_ZERO_MAX) is too -- only MEMZERO_REP_MIN's
+	# `rep stosb` is x86-64-only. A native-only row would leave the shared arm
+	# unmeasured everywhere it is not x86-64.
+	./$(COMPILER) --target=i386 test/test_heap_zero_on_reuse.pas $(TESTTMP)/test_i386_heapzero
+	tools/expect_same.sh i386/test_i386_heapzero "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_heapzero)" "HEAP ZERO ON REUSE OK dirty=0"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
 	# were x86-64-only gaps, so every target must print the same line
 	./$(COMPILER) --target=i386 test/test_variant_class_cross.pas $(TESTTMP)/test_i386_varcls

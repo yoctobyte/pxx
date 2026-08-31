@@ -5,12 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:11 backlog:391 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2938 rejected:68`
+`working:6 unfinished:27 blocked:11 backlog:390 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2938 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-no-cross-target-can-build-the-compiler-itself` [A] — owner: frankS
 - `feature-c-corpus-busybox-applet` [C] — owner: frankC
+- `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-threadsafe-heap-optimize` [A] — owner: frankA
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
@@ -59,7 +60,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 422, ranked
+## Ready — top 30 of 421, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -92,4 +93,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value
 - `[p 60] [N]` bug-n-os-environ-and-os-sep-are-not-values
 
-_392 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_391 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
