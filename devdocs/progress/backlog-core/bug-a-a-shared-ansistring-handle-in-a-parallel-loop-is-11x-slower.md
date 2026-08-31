@@ -1,5 +1,5 @@
 ---
-summary: "MEASURED: copying one SHARED AnsiString handle in a `parallel for` body, with ZERO allocation in the loop, runs 0.08-0.09x of serial on 12 workers -- three times worse than the heap-spinlock cliff it is usually confused with. Every worker retains/releases the same refcount word, so one cache line is bounced across all cores. A per-thread heap free-list cache CANNOT fix this: there is no allocation. The unshared control (each worker owning its strings) shows the same mechanism costing essentially nothing, so this is about SHARING, not about refcounting."
+summary: "HALF FIXED 2026-08-31, and the half that remains is the ticket now. Row B's `shared` is a string LITERAL, so at -O2 it is a static pool block — and both x86-64 refcount blobs acquired the global heap spinlock BEFORE testing nil or the saturation guard, so twelve workers serialised on one lock word to discover they had nothing to do. Hoisting both tests above EmitAcquireHeapLock (threadsafe-only; the DEFAULT build is byte-identical, verified by comparing emitted output including compiler.pas) takes row B from 1.07s to 0.04s against a 0.03s serial control — the 11x inversion is gone and parallel is now at parity with serial. BUT the same loop with a RUNTIME-BUILT shared string (rc=1, unfoldable) is UNCHANGED: 1.08s before, 1.19s after. So what was fixed is shared STATIC LITERAL handles; shared HEAP handles still contend on the heap spinlock itself, which is feature-opt-heap-per-thread-cache territory and is what this ticket should now track. Refcount integrity verified on both paths (rc=1 before and after 400k parallel copies)."
 type: bug
 prio: 45
 track: A
@@ -128,3 +128,88 @@ same word. It needs rel32 patch sites (the jumps now span the whole TTAS lock
 body, which can exceed a rel8 displacement) and it lands in threadsafe-only
 code that `--tier quick` barely exercises, so it wants its own change and its
 own measurement rather than riding along.
+
+
+---
+
+## 2026-08-31 (frankB), second pass — the lock order, and the scope limit it exposed
+
+Binary `0540b390d6be`, `gate.sh quick` GREEN (read from the log, not the exit code).
+
+### The change
+
+Both blobs now decide **nil** and **saturated-static** *before*
+`EmitAcquireHeapLock`, so a retain or release that will do nothing never touches
+the lock:
+
+```
+  test rax, rax
+  jz  done_unlocked          <- never took the lock
+  cmp qword [rax-16], MSTR_STATIC_RC
+  jae done_unlocked          <- ditto
+  <acquire lock>
+  lock dec qword [rax-16]
+  jne done_locked            <- MUST land before the release
+  ...free...
+done_locked:   <release lock>
+done_unlocked: ret
+```
+
+The two landing sites are the whole correctness of it, and they are verified in
+the disassembly: `je`/`jae` go to `0x400270` (the `ret`), `jne` goes to
+`0x400265` (the lock release). Collapsing them onto one label would either
+release a lock never taken or leak one.
+
+Reading `[rax-16]` outside the lock is sound for the one thing it decides, and
+it is the argument `PXXStrIncRef` already makes for its own lock-free read of
+that same word: a saturated block's count is immutable, and a real block cannot
+reach 2^30, so the comparison cannot change its answer underneath us. A real
+block takes the lock and decrements under it exactly as before.
+
+**Threadsafe-only, deliberately.** The retain blob's pre-check duplicates tests
+`EmitAnsiStrRetainLocked` must keep for its other callers, so it buys something
+only when there is a lock to skip. Ungated it measured a possible ~1.5%
+self-compile regression against a ~1.2% noise floor — not resolvable, and not
+worth carrying to find out. Gated, the default build is **byte-identical**:
+programs compiled before and after match byte for byte, `compiler.pas` included.
+
+### Measured (12 workers, 4M iterations, interleaved, min of 3)
+
+| shared handle is… | orig | + guard | + hoist | serial control |
+| --- | ---: | ---: | ---: | ---: |
+| **a string literal** (row B as written) | 1.07s | 0.84s | **0.04s** | 0.03s |
+| **a runtime-built string** (rc=1) | 1.08s | 1.27s | **1.19s** | — |
+
+**Row B is fixed and the general claim is not.** The literal case goes from
+"the fastest serial row and the slowest parallel one" to parity with serial. The
+heap case is untouched, which is exactly what the mechanism predicts: the guard
+cannot fire on a block whose count is 1, so those workers still queue on the
+spinlock.
+
+That boundary was nearly missed, and how is worth keeping. A first attempt at
+the heap case used `shared := shared + ''` and showed a 25x win — but that is a
+SELF-append, which takes the in-place path and leaves the static handle in
+place. `'lit' + 'lit'` const-folds to a new static literal and does the same.
+Only a runtime loop building the string actually yields `rc=1`, and then the win
+disappears entirely. **Two of the three obvious ways to "force a heap block"
+silently do not**, and each produced a confident, wrong, favourable number.
+
+### Near-miss worth recording
+
+`EmitAnsiStrRetainLocked` has **two callers besides the blob** — SetLength's
+element-retain loops, which reach it with `mov rax, [rdi]`: an array element,
+nil for an unset AnsiString and a static block for one holding a literal.
+Stripping its tests in favour of the blob's hoisted copy puts
+`inc qword [rax-16]` on a nil pointer in ordinary SetLength code. Caught by
+grepping the callers before building, then confirmed by building the stripped
+version deliberately — it **segfaults the self-host fixedpoint**, so the
+mandatory step does catch this class. Regression shape kept: a dynamic array of
+strings with both nil and literal elements, grown, shrunk and churned, both modes.
+
+### What this ticket should track now
+
+Shared **heap** handles. A per-thread heap cache still cannot fix it — there is
+still no allocation — so the residual is the spinlock's own design: the
+`lock xchg` on one global word in `EmitAcquireHeapLock`, taken by every retain
+and release of a non-static block. That is [[feature-opt-heap-per-thread-cache]]
+and [[feature-threadsafe-heap-optimize]] territory.

@@ -150,16 +150,25 @@ begin
 end;
 
 procedure EmitAnsiStrRetainLocked;
-{ rax = managed-string data pointer. Preserve rax. Caller holds the heap lock
-  when threading is enabled.
+{ rax = managed-string data pointer, possibly nil. Preserve rax. Caller holds
+  the heap lock when threading is enabled.
 
-  The MSTR_STATIC_RC guard is the same one PXXStrIncRef carries, and it is here
-  for the same reason: a static literal block must never be WRITTEN, not merely
-  never freed, because a store dirties a page shared with code (1600x under
-  qemu) and defeats ever placing the literal pool in a non-writable segment.
-  It must move together with the one in the release blob below and with
-  builtinheap.pas's pair — suppressing one direction only is what lets a static
-  block's count drift. }
+  The MSTR_STATIC_RC guard is the same one PXXStrIncRef carries: a static
+  literal block must never be WRITTEN, not merely never freed, because a store
+  dirties a page shared with code (1600x under qemu) and defeats ever placing
+  the literal pool in a non-writable segment. It must move together with the
+  guard in the release blob and with builtinheap.pas's pair — suppressing one
+  direction only is what lets a static block's count drift.
+
+  BOTH TESTS STAY HERE even though AnsiStrRetainAddr now makes the same two
+  decisions before taking the lock. They are not redundant: this procedure has
+  two OTHER callers (the SetLength element-retain loops), and both reach it with
+  `mov rax, [rdi]` — an array element, which is nil for an unset AnsiString and
+  a saturated static block for an element holding a literal. Stripping the tests
+  in favour of the blob's copy would put an `inc qword [rax-16]` on a nil
+  pointer in ordinary SetLength code. On the blob's own path the second test is
+  a compare and a predicted branch, and only on the path that already paid for
+  the lock. }
 begin
   EmitAsmX64([
     'test rax, rax',
@@ -3228,14 +3237,51 @@ end;
 procedure EmitAnsiStringRuntime;
 var pNilUnique, pNilUnique2, pDone, pDone2,
     pConcatNil, pConcatDone, pFail, pLfDone: Integer;
-    pRelNil, pRelLive, pRelStatic, pAsciiSkip: Integer;
+    pRelNil, pRelLive, pRelStatic, pRetNil, pRetStatic, pAsciiSkip: Integer;
 begin
   EmitAnsiStrFromLiteral;
 
+  { Retain blob. The nil test and the MSTR_STATIC_RC guard are decided BEFORE
+    the heap lock is acquired, because neither of them needs it and both of
+    them end in doing nothing.
+
+    That ordering is the whole point rather than a tidy-up. Under --threadsafe
+    EmitAcquireHeapLock is a `lock xchg` on ONE global word, so twelve workers
+    copying the same shared literal handle serialise on that word even though
+    every one of them is about to discover it has nothing to do. Measured on
+    bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower.
+
+    Reading [rax-16] outside the lock is sound for the ONE thing it decides,
+    and this is the same argument PXXStrIncRef already makes for its own
+    lock-free read of the same word: a saturated block's count is immutable, and
+    a real block cannot reach 2^30, so the comparison cannot change its answer
+    under us. A real block then takes the lock and does the increment under it
+    exactly as before. }
   AnsiStrRetainAddr := CodeLen;
+  { ONLY under --threadsafe, and that condition is doing real work rather than
+    being cautious. The tests below duplicate the ones inside
+    EmitAnsiStrRetainLocked — which has to keep its own copy for its two
+    SetLength callers — so they buy something only when there is a lock to be
+    skipped. With ThreadSafeMode off, EmitAcquireHeapLock emits nothing, the
+    duplicate would be pure cost on the default build, and emitting it anyway
+    measured as a possible ~1.5% self-compile regression against a ~1.2% noise
+    floor: not resolvable, and not worth carrying to find out. Gated, the
+    DEFAULT build is byte-identical to before this change. }
+  if ThreadSafeMode then
+  begin
+    EmitAsmX64(['test rax, rax']);
+    EmitB($74); pRetNil := CodeLen; EmitB(0);     { jz done — lock never taken }
+    EmitAsmX64(['cmp qword [rax-16], %', MSTR_STATIC_RC]);
+    EmitB($73); pRetStatic := CodeLen; EmitB(0);  { jae done — ditto }
+  end;
   EmitAcquireHeapLock;
   EmitAnsiStrRetainLocked;
   EmitReleaseHeapLock;
+  if ThreadSafeMode then
+  begin
+    PatchRel8(pRetNil);
+    PatchRel8(pRetStatic);
+  end;
   EmitB($C3);                                     { ret }
 
   { Release blob: the FAST path (nil, or a refcount that stays above zero) does
@@ -3251,16 +3297,24 @@ begin
     did not restore either), and EmitHeapFreeLocked already preserves rsi/rdi/
     rcx/rdx/r8-r11 around the call itself. Both lock helpers preserve rax, so
     the lock still spans the whole body exactly as before. }
+  { Nil and saturated-static are decided BEFORE the lock, for the reason given
+    on the retain blob above: neither needs it, both end in doing nothing, and
+    taking a global `lock xchg` to discover that is what made a shared literal
+    handle 11x slower under `parallel for`.
+
+    NOTE THE TWO DIFFERENT LANDING SITES BELOW. `pRelNil` and `pRelStatic` never
+    acquired the lock, so they must jump PAST EmitReleaseHeapLock; `pRelLive`
+    is inside the critical section and must jump to just BEFORE it. Collapsing
+    them onto one label would either release a lock never taken or leak one. }
   AnsiStrReleaseAddr := CodeLen;
-  EmitAcquireHeapLock;
   EmitAsmX64(['test rax, rax']);
-  EmitB($74); pRelNil := CodeLen; EmitB(0);       { jz done }
+  EmitB($74); pRelNil := CodeLen; EmitB(0);       { jz done_unlocked }
   { Saturated static literal: no write, and no free to consider. Same guard as
     PXXStrDecRef, which every OTHER backend reaches and this blob used to
-    bypass — see the retain blob above for why the WRITE is what matters. The
-    compare reads a line the decrement was about to dirty anyway. }
+    bypass — see the retain blob above for why the WRITE is what matters. }
   EmitAsmX64(['cmp qword [rax-16], %', MSTR_STATIC_RC]);
-  EmitB($73); pRelStatic := CodeLen; EmitB(0);    { jae done }
+  EmitB($73); pRelStatic := CodeLen; EmitB(0);    { jae done_unlocked }
+  EmitAcquireHeapLock;
   if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
   else EmitAsmX64(['dec qword [rax-16]']);
   EmitB($75); pRelLive := CodeLen; EmitB(0);      { jnz done }
@@ -3270,10 +3324,10 @@ begin
   EmitAsmX64(['sub rax, %', 24]);
   EmitHeapFreeLocked;
   EmitAsmX64(['pop rax']);
-  PatchRel8(pRelNil);
-  PatchRel8(pRelStatic);
-  PatchRel8(pRelLive);
+  PatchRel8(pRelLive);                            { still HOLDING the lock }
   EmitReleaseHeapLock;
+  PatchRel8(pRelNil);                             { never took it }
+  PatchRel8(pRelStatic);                          { never took it }
   EmitB($C3);                                     { ret }
 
   { Object retain/release blobs (feature-nilpy-object-reclamation): thin
