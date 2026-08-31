@@ -3,12 +3,13 @@ slug: bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymo
 track: A
 prio: 45
 type: bug
-status: working
+status: done
 found: 2026-08-31
 found-by: frankA
 owner: frankB
 blocked-by: []
-summary: "PXXAlloc does not check the mmap return -- deliberately, per builtinheap.pas:977 -- so when an arena request fails the -ENOMEM becomes the heap base and the next write faults. An out-of-memory condition therefore arrives as an anonymous SIGSEGV with no diagnostic, which is how it cost two sessions. Guest core: pc in PXXAlloc, `STR r1,[r0]` with r0 = 0xfffffff4 = -12 = -ENOMEM. THE APPETITE HALF OF THIS TICKET IS NO LONGER OPEN and this was renamed for it: the 15-arenas-vs-4 divergence is bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic, and it is not arm32-specific -- frankS reproduced the identical 15-arena failure NATIVELY on i386, with no emulator present. What remains here is only the unchecked return, which stays a real defect after that fix because any future OOM will still arrive as a SIGSEGV."
+summary: "FIXED 2026-09-01. PXXAlloc now checks HeapMmap's return and reports instead of faulting: measured contrast on the same program under the same 200 MB cap, pinned 992065f21f33 gives Segmentation fault / exit 139 / no output, f23f141f997d gives 'pxx: out of memory (heap arena mmap failed)' / exit 203. A DELIBERATE REVERSAL of the decision stated at HeapMmap's terminal arm, and narrower than it: that rationale is about targets with no page protection, not a hosted one with a real errno. The subtlety is that the test is the ERRNO RANGE, never the sign -- i386 zero-extends a high address and sign-extends only [-4095,-1], while arm32 sign-extends unconditionally, so p < 0 would report OOM for a good mapping on the very target this was measured on. The APPETITE half was already split out to bug-o-the-in-place-string-append-is-x86-64-only."
+
 ---
 
 # The arm32-hosted compiler wants 4x the arenas, then dies unchecked at ENOMEM
@@ -109,3 +110,82 @@ Host and target were separated by control: an x86-64 host building for
 `--target=i386` and `--target=arm32` completes normally (20.6M allocs, 1.72 GB,
 4 arenas), so the target is not the variable — the backend that compiled the
 *running* compiler is.
+
+
+---
+
+## 2026-09-01 — fixed
+
+`HeapPtr := HeapMmap(arena)` is now followed by
+`if HeapMmapFailed(HeapPtr) then PXXHeapExhausted;`. Three things were less
+obvious than "one compare".
+
+**1. The test is the errno RANGE, not the sign.** The kernel reserves
+[-4095,-1] for `-errno`, but the 32-bit backends widen a syscall return to
+Int64 by two different conventions:
+
+| backend | errno range | a high address (bit31 set) |
+| --- | --- | --- |
+| i386 (`ir_codegen386.inc`) | sign-extends NEGATIVE | zero-extends POSITIVE |
+| arm32 (`ir_codegen_arm32.inc`, `mov r1, r0, asr #31`) | sign-extends NEGATIVE | **sign-extends NEGATIVE** |
+
+So `p < 0` — the obvious form, and the one arm32's own comment implies is
+correct — would report out-of-memory for a perfectly good mapping at or above
+`$80000000`, which is ordinary in the 3.5 GB space this ticket measured. The
+range test is right under both conventions, because a sign-extended high address
+lands far BELOW -4095. **Do not "simplify" it to a sign test.**
+
+`p = 0` is the other failure and is not hosted-specific: the wasm/bare arena is
+handed out once and `HeapMmap` returns 0 after, and 0 is the value the terminal
+arm's own comment names as the one that fails silently where there is no page
+protection.
+
+**2. The reporter must not allocate.** It runs when the allocator has just
+failed, so `writeln` — which builds a string — would re-enter `PXXAlloc`. It
+writes a byte at a time through `PXXSysWrite`, exactly as `PXXDbgFlush`'s
+reporter does and for the same reason. `Halt(203)` is FPC's heap-overflow
+runtime error, so a caller reading `ExitCode` sees FPC's number rather than a
+pxx invention.
+
+**3. It is a REVERSAL, not a bug fix, and the original decision keeps its
+scope.** `HeapMmap`'s terminal-arm comment justifies not checking with "on a
+hosted target a failed mmap returns a negative errno and the next access
+faults". That reasoning is about targets with NO page protection, where 0 is the
+value that fails silently — the wasm32-heap-at-address-zero case. It does not
+apply to a hosted target that has a real errno to report. The `Result := -1`
+arm is unchanged; it now reaches a message instead of a fault.
+
+### Measured
+
+Same source, same 200 MB `ulimit -v` — below the 256 MB `HEAP_ARENA`, so the
+FIRST request is refused and the failure is deterministic rather than dependent
+on what the box happens to have free:
+
+| compiler | result |
+| --- | --- |
+| pinned `992065f21f33` | `Segmentation fault (core dumped)`, exit **139**, no output |
+| `f23f141f997d` | `pxx: out of memory (heap arena mmap failed)`, exit **203** |
+
+Unconstrained, the same program still allocates a gigabyte and exits 0, so the
+check costs nothing on the success path.
+
+### Regression test
+
+`test/test_heap_oom_reports.pas`, wired in the Makefile beside the other
+`ulimit` tests. It asserts the exit code AND the message: either alone would
+pass for the wrong reason — a segfault a shell happened to report as 203, or a
+message printed on a path that then carried on. Its positive control is its own
+history rather than an assertion: the pinned compiler demonstrably fails it,
+measured above.
+
+`gate.sh quick` GREEN.
+
+### Who owns "then what?"
+
+Nothing here, and that is deliberate. The arena APPETITE — why a 32-bit
+self-build wanted 15 arenas — is
+[[bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic]],
+which already carries the open obligation: whoever lands the append fix re-runs
+the 32-bit self-build and reports the arena count. This ticket never claimed
+that half. What changes is that if the count does NOT drop, the next person sees
+a message instead of a core file.

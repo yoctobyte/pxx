@@ -80,11 +80,11 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | umbrella-compile-and-run-dosbox | C | 90 | umbrella | GOAL, not a unit of work. The flagship real-program proof: a large real C/C++ codebase that either builds and runs or does not, with no partial credit to award ourselves. Owner named it first when stating the goal. Attach whatever the ATTEMPT breaks on -- do not pre-populate this from the backlog by guessing. | feature-c-corpus-busybox-multi-applet |
 | umbrella-cross-target-codegen-is-correct | A | 80 | umbrella | GOAL, not a unit of work. The owner's ranking: 'cross platform has way prio above look-if-I-do-this-on-platform-that-it-would-break-z'. A program that compiles right on one target and wrong on another is the defect this umbrella exists for; a hypothetical about an untried platform is not. Measured target clusters: xtensa 11, riscv 8, arm32 5, i386. | bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs, feature-a-port-alloca-to-i386-arm32-and-riscv32 |
-| umbrella-managed-memory-is-correct | A | 75 | umbrella | GOAL, not a unit of work. The owner named memory management as ranking above float-bit and parity work. This is the axis a real program hits hardest and where a wrong answer is silent: a leak, a double free, a refcount that disagrees with itself. Correctness is the case here -- the perf profile is deliberately NOT the argument. | bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, feature-a-reentrant-heap-lock-and-per-thread-arenas |
+| umbrella-managed-memory-is-correct | A | 75 | umbrella | GOAL, not a unit of work. The owner named memory management as ranking above float-bit and parity work. This is the axis a real program hits hardest and where a wrong answer is silent: a leak, a double free, a refcount that disagrees with itself. Correctness is the case here -- the perf profile is deliberately NOT the argument. | bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower, bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-string-release-has-two-implementations-that-already-disagree, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, feature-a-reentrant-heap-lock-and-per-thread-arenas |
 | umbrella-pxx-hosted-beyond-linux | A | 85 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 70 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (139)
+## backlog-core (138)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -119,7 +119,6 @@ _none_
 | bug-a-proc-map-emits-static-addresses-for-a-dynamic-build | A | 30 | bug | --proc-map computes every address as LOAD_ADDR + CODE_OFFSET + BodyAddr, using the STATIC code offset unconditionally. A dynamic build (-dPXX_LIBC_HEAP, --shared) sits at DYNAMIC_CODE_OFFSET, so every PROC line is 0x70 low -- a constant shift over all routines. Measured on the pinned binary. It does not fail; tools/vgsym.py resolves the shifted address to the PRECEDING routine, so the symbolized stack is wrong rather than absent. compiler.pas's own comment already states the limitation; nothing enforces it. | — |
 | bug-a-promocore-is-not-the-only-place-that-knows-the-promo-slot-layout | A | 25 | bug | ir.inc:9399 says a promotable-int store's two paths 'both go through promocore.pas, the only place that knows the layout'. x86-64's hand-emitted variant-release blob in ir_codegen.inc reads the payload as a literal [rax+8] at three sites, so it knows the layout too. The values agree today so nothing is broken — but this is the same arm, the same shape and the same file as instance #4 of the audit, where an x86-64 hand-emitted twin of a 'single choke point' silently diverged for two months. | — |
 | bug-a-pxx-home-is-advertised-but-not-honoured | A | 35 | bug | `--where` advertises PXX_HOME as tier 2, overriding the exe-dir defaults, but setting it changes nothing: units still resolve from compiler/../lib/rtl, and even REMOVING a unit from the PXX_HOME tree does not produce 'unit not found'. Found while trying to test a compiler hypothesis against a modified copy of the RTL instead of editing Track B's files. | — |
-| bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv | A | 45→75 | bug | PXXAlloc does not check the mmap return -- deliberately, per builtinheap.pas:977 -- so when an arena request fails the -ENOMEM becomes the heap base and the next write faults. An out-of-memory condition therefore arrives as an anonymous SIGSEGV with no diagnostic, which is how it cost two sessions. Guest core: pc in PXXAlloc, `STR r1,[r0]` with r0 = 0xfffffff4 = -12 = -ENOMEM. THE APPETITE HALF OF THIS TICKET IS NO LONGER OPEN and this was renamed for it: the 15-arenas-vs-4 divergence is bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic, and it is not arm32-specific -- frankS reproduced the identical 15-arena failure NATIVELY on i386, with no emulator present. What remains here is only the unchecked return, which stays a real defect after that fix because any future OOM will still arrive as a SIGSEGV. | — |
 | bug-a-pxxcoswitch-and-pxxclone-are-missing-on-riscv32 | A | 25 | bug | `__pxxcoswitch(@a, @b)` compiles for x86-64 and arm32 and gives `pascal26: error: target riscv32: unsupported node in IR codegen: coswitch` on riscv32; `__pxxclone` has the same missing arm. Compile-time error, not a wrong answer. Found while auditing what else riscv32 lacked after adding IR_RTTI_REG/IR_RESOURCES — the other four absent node kinds are all unreachable on riscv32, these two are not. | — |
 | bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body | A | 30 | bug |  | — |
 | bug-a-q-plus-overflow-checking-has-no-runtime-helper-on-arm32-and-riscv32 | A | 45 | bug | `{$Q+}` (overflow checking) fails to COMPILE for arm32 and riscv32 -- `{$Q+}: PXXOverflow runtime helper not found (builtinheap not loaded)`, raised from builtin/softfloat.pas. x86-64 and aarch64 build the same source. Split out of the aarch64 aggregate-result ticket, where it was recorded as an unrelated second finding so it would not be re-discovered as new. | — |
@@ -824,9 +823,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2966)
+## done (2967)
 
-2966 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2967 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (71)
 
@@ -912,7 +911,6 @@ _none_
 - [p 80] [A] meta-a-pxx-produces-linkable-code
 - [p 80] [A] umbrella-cross-target-codegen-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 75] [A] bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa (unblocks 1)
-- [p 75] [A] bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv (unblocks 1)
 - [p 75] [A] bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree (unblocks 1)
 - [p 75] [A+O] feature-a-reentrant-heap-lock-and-per-thread-arenas (unblocks 1)
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
@@ -1349,7 +1347,6 @@ _none_
 - **1** — bug-a-emitzeroframeslot-has-no-wasm32-arm
 - **1** — bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults
 - **1** — bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa
-- **1** — bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - **1** — bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption

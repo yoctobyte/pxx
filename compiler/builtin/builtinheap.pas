@@ -1101,6 +1101,74 @@ procedure PXXCensusReport; forward;
 procedure PXXCensusBig(size: NativeInt); forward;
 {$endif}
 {$endif}
+
+{ ---- out of memory, reported rather than faulted ----
+
+  A DELIBERATE REVERSAL of the decision stated at HeapMmap's terminal arm, and
+  it is narrower than that decision was. The comment there says PXXAlloc "does
+  NOT check the result (deliberately -- on a hosted target a failed mmap returns
+  a negative errno and the next access faults), so the returned value IS the
+  base of the heap". That rationale is about targets with NO PAGE PROTECTION,
+  where 0 is the value that fails silently -- which is how wasm32 shipped a heap
+  at address zero. It does not apply to a hosted target that has a real errno to
+  report, and there the cost was two sessions spent on an anonymous SIGSEGV:
+  pc in PXXAlloc, `STR r1,[r0]`, r0 = 0xfffffff4 = -12 = -ENOMEM, no diagnostic.
+  The terminal `Result := -1` arm keeps its meaning; it now reaches a message
+  instead of a fault. }
+
+function PXXSysWrite(fd, buf, count: NativeInt): Int64; forward;
+
+function HeapMmapFailed(p: Int64): Boolean;
+{ TEST THE ERRNO RANGE, NEVER THE SIGN, and this is the whole subtlety of the
+  fix. The kernel reserves [-4095,-1] for -errno and no successful call may
+  land there, but the 32-bit backends widen a syscall return to Int64 by two
+  DIFFERENT conventions:
+
+    i386   (ir_codegen386.inc)      errno range sign-extends NEGATIVE; every
+                                    other value, INCLUDING a high address with
+                                    bit31 set, zero-extends POSITIVE.
+    arm32  (ir_codegen_arm32.inc)   `mov r1, r0, asr #31` -- unconditional
+                                    sign-extend, so an address >= $80000000
+                                    also arrives NEGATIVE.
+
+  So `p < 0` would report out-of-memory for a perfectly good mapping on arm32 --
+  the exact target this bug was measured on, in the exact 3.5 GB address space
+  where high mappings are ordinary. The range test is correct under both
+  conventions, because a sign-extended high address is far BELOW -4095.
+
+  Zero is the other failure and it is not hosted-specific: the wasm/bare arena
+  is handed out once and HeapMmap returns 0 afterwards, and 0 is the value the
+  terminal arm's comment calls out as the one that fails silently where there is
+  no page protection. }
+begin
+  HeapMmapFailed := (p = 0) or ((p < 0) and (p >= -4095));
+end;
+
+const
+  OOM_MSG = 'pxx: out of memory (heap arena mmap failed)';
+
+procedure PXXHeapExhausted;
+{ Never returns. Writes BYTE AT A TIME through the raw syscall, exactly as
+  PXXDbgFlush's reporter does, because the one thing this path must not do is
+  allocate: it runs when the allocator has just failed, so `writeln` -- which
+  builds a string -- would re-enter PXXAlloc. Any spinlock still held is moot,
+  the process is ending.
+
+  203 is FPC's heap-overflow runtime error, so a caller testing ExitCode sees
+  the code it would see from FPC rather than a pxx invention. }
+var i: Integer; b: Byte; r: Int64;
+begin
+  r := 0;
+  for i := 1 to Length(OOM_MSG) do
+  begin
+    b := Byte(OOM_MSG[i]);
+    r := PXXSysWrite(2, Int64(@b), 1);
+  end;
+  b := 10;
+  r := PXXSysWrite(2, Int64(@b), 1);
+  Halt(203);
+end;
+
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
   cur, prev, base, need, arena, i: Int64;
@@ -1238,6 +1306,9 @@ begin
     arena := need;
     if arena < HEAP_ARENA then arena := HEAP_ARENA;
     HeapPtr := HeapMmap(arena);
+    { The check the ticket is about. Without it the -errno BECOMES the heap base
+      and the `PWord(base)^ := size` below faults on it. }
+    if HeapMmapFailed(HeapPtr) then PXXHeapExhausted;
     HeapEnd := HeapPtr + arena;
 {$ifdef PXX_ALLOC_CENSUS}
     CensusArenas := CensusArenas + 1;
