@@ -3,7 +3,7 @@ track: T
 prio: 40
 type: bug
 blocked-by: []
-summary: "CLAUDE.md gates the widen-your-gate exception on `twatch.py --status` exit 1 OR `trackt.py health` DOWN, as if they were two ways to ask one question. They are not: --status reads PUBLISHED tstate (was work swept recently) and health checks for a RUNNING PROCESS (is anything sweeping now). Measured 2026-08-29 during a watcher handover, they returned UP/exit-0 and DOWN simultaneously. Joined by `or`, the disagreement silently resolves to `down`, so every agent widens its gate by ~10 minutes per fix during any handover — the exact cost the rule exists to avoid."
+summary: "CLAUDE.md gates the widen-your-gate exception on `twatch.py --status` exit 1 OR `trackt.py health` DOWN, as if they were two ways to ask one question. They are not: --status reads PUBLISHED tstate (was work swept recently) and health checks for a RUNNING PROCESS (is anything sweeping now). Joined by `or`, the disagreement resolves silently to `down`. NO LONGER TRANSIENT: since Track T moved to `seven` (2026-08-29, recorded at the bottom of this ticket), `health` on plexus is STRUCTURALLY INCAPABLE of returning UP -- `daemon_pid` scans the LOCAL /proc and `is_daemon` requires a local argv of `<python> .../twatch.py --clone <clone>`, which a watcher on another host can never satisfy. Re-measured 2026-08-31 with T demonstrably sweeping (report 7.5 min old): `--status` exit 0, `health` DOWN. So the documented exception is now PERMANENTLY ARMED for every dev agent, not open during handovers. Priority 40 reflects the transient reading."
 ---
 
 # The two watcher-health instruments answer different questions, and the rule `or`s them
@@ -121,3 +121,66 @@ The fix is unchanged and does not need my presence: the two instruments should
 report as a pair — freshness AND liveness, both named — rather than being
 `or`ed into one boolean where the disagreement resolves silently to `down`.
 Left takeable in `backlog/`, unclaimed.
+
+## Re-measured 2026-08-31 by frankA (Track A): the disagreement is now PERMANENT, not a handover window
+
+I hit this from the other end — chasing a parked ticket whose resume condition
+was "the next full sweep on seven answers this" — and read `health`'s DOWN as
+proof Track T had stopped. It has not. **Track T was sweeping the whole time**,
+and I was ~1 command from relaying a fleet-wide false alarm.
+
+The artefact settles it, and it is the instrument neither command is:
+
+```
+now                        2026-08-31T02:31:11Z
+newest report              20260831T022353Z-bebac33-seven.md   (7.5 min old)
+last 5 tstate commits      04:23 / 04:21 / 04:12 / 04:09 / 03:59 local, all "tstate(seven)"
+                           full and native tiers alternating
+
+tools/twatch.py --status   exit 0          <- correct
+tools/trackt.py health     DOWN            <- and it CANNOT say anything else
+```
+
+### Why this is structural, not a window
+
+`trackt.py:130-133` falls back to `for p in os.listdir("/proc")`, and
+`is_daemon` requires `argv[1].endswith("twatch.py")` **and** `clone in argv` —
+read from `/proc/<pid>/cmdline` on **this** box. Track T runs on `seven`. A
+process on another host has no entry in plexus's process table, so the check
+cannot match, ever.
+
+Verified it is not merely mis-invoked: `health` returns DOWN both with no
+argument and with `--clone /home/neo/trackt-watch` (the watcher clone that still
+exists here). The only local process is `twatch_web.py`, the web face, which
+`is_daemon` correctly rejects — `"twatch_web.py".endswith("twatch.py")` is False.
+
+Checked and NOT a hazard, so nobody re-derives it: `WATCH_REL` is
+`.testmgr/watch.json`, which is **not** published to the repo (the published
+files are `devdocs/progress/tstate/*.json`). So `health` never reads a *remote*
+pid and tests it against the *local* process table. That failure mode does not
+exist here.
+
+### What changes
+
+The body above says the two disagree "*precisely* during a planned handover" and
+prices it as "an hour of wall-clock across the fleet" per handover. On the
+current topology that is an **understatement of kind, not of degree**: there is
+no window, because the condition never closes. Every agent on plexus who types
+the command CLAUDE.md names gets DOWN, today, and is licensed by CLAUDE.md to
+run `testmgr --tier full` — the exact widening the hook and the whole gating
+section exist to prevent.
+
+**The cause is already written at the bottom of this ticket.** The
+"Reassigned to `seven`" note records the move that makes the check permanently
+false, and the diagnosis sits eighty lines above it; nobody joined the two. That
+is the ticket's own subject matter — a reading true of what the instrument
+measured and false of the question asked — reappearing as two true sections of
+one page that were never read against each other.
+
+**So prio 40 is priced for the transient reading and is now too low** — T's call,
+not mine. The one-line doc fix (drop the `or` clause, keep `--status` as the
+proof) is already recommended above and needs no new analysis; what is new is
+that it is not a tidy-up.
+
+*Track T's tool — `tools/trackt.py` NOT edited. Measurement added only.*
+
