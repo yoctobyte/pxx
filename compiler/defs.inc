@@ -632,7 +632,7 @@ const
   TLS_BLOCK_SIZE   = 128;
   { THE slot map. Every runtime user of the block takes its index from here --
     an ad-hoc offset is how two consumers end up sharing a slot, which is a
-    silent wrong VALUE, not a crash. Slots 4..15 are unclaimed. }
+    silent wrong VALUE, not a crash. Slots 8..15 are unclaimed. }
   TLS_SLOT_SELF    = 0;   { the block's own address; what __pxxTlsBase reads }
   { The I/O lock's cached owner tid, plus the STACK BOUNDS that say whether this
     block is REALLY the reading thread's. Both halves are needed and neither is
@@ -659,7 +659,32 @@ const
   TLS_SLOT_TID      = 1;  { the owning thread's tid, cached once per thread }
   TLS_SLOT_STACK_LO = 2;  { low bound of the owner's stack, inclusive }
   TLS_SLOT_STACK_HI = 3;  { high bound, exclusive -- WRITTEN LAST, 0 = unset }
-  TLS_SLOT_FIRST_FREE = 4;
+  { The four fields the signal dispatch stub parks for a handler to read back --
+    si_code, si_addr, the ucontext*, and the signal number. Per-thread because
+    the handler runs on whichever thread the kernel picked, and two threads in
+    the stub at once used to clobber each other: MEASURED at 75875 wrong answers
+    in 400000 deliveries against ZERO single-threaded, on the same binary
+    (bug-a-the-parked-signal-slots-are-process-wide-and-race-across-threads).
+
+    IN THE SAME ORDER as EnsureSignalBss allocates BSS_SIG_CODE/_ADDR/_CTX/_NUM,
+    and that is load-bearing, not tidiness: both the writer and the readers
+    address these as base + a byte offset within the group, so ONE accessor
+    picks the base (TLS block or process-wide BSS) and every site downstream is
+    identical in both modes. EnsureSignalBss asserts the BSS four are contiguous
+    in this order, because the day they are not, the offsets silently address
+    the wrong fields.
+
+    NOT validated against the stack bounds above, and the reason is worth
+    keeping: a SA_ONSTACK handler runs with rsp on the sigaltstack, i.e. outside
+    its own thread's bounds, so a bounds check would answer "not my block" on
+    every single delivery, agree with itself, and quietly restore the
+    process-wide behaviour it was added to fix. The writer and the reader here
+    are the same thread with the same base, so they always agree without one. }
+  TLS_SLOT_SIG_CODE = 4;
+  TLS_SLOT_SIG_ADDR = 5;
+  TLS_SLOT_SIG_CTX  = 6;
+  TLS_SLOT_SIG_NUM  = 7;
+  TLS_SLOT_FIRST_FREE = 8;
 
   AN_GUIDCONST     = 100; { an INTERFACE type name used as a VALUE -- which in Pascal means
                            exactly one thing, its GUID: `g := IHello`, `Supports(o, IHello, f)`.

@@ -4014,6 +4014,14 @@ test-threads: $(COMPILER)
 	# cross-thread read that raced and passed under its own control.
 	./$(COMPILER) --threadsafe test/test_signal_threads.pas $(TESTTMP)/test_signal_threads26
 	tools/expect_same.sh test_signal_threads26 "$$($(TESTTMP)/test_signal_threads26)" "$$(printf 'inherited-block=TRUE\npending-while-blocked=TRUE\nhits-before-unblock=0\nran-on-worker=TRUE\nran-on-main=FALSE\nsignum-from-worker=10\ntotal-hits=1')"
+	# ...and that __pxxSigNum answers about THIS thread's signal under CONTENDED
+	# delivery, which the row above cannot see: it takes one signal. The parked
+	# fields were process-wide BSS and two threads in the dispatch stub clobbered
+	# each other -- 75875 wrong answers in 400000 deliveries. Phase 1 of the same
+	# binary is the single-threaded control that makes that number mean anything.
+	# ~1.4s.
+	./$(COMPILER) --threadsafe test/test_signal_num_threads_race.pas $(TESTTMP)/test_signal_num_threads_race26
+	tools/expect_same.sh test_signal_num_threads_race26 "$$($(TESTTMP)/test_signal_num_threads_race26)" "$$(printf 'single-thread-mismatch=0\nsingle-thread-hits=TRUE\nboth-threads-took-signals=TRUE\ntwo-thread-mismatch=0')"
 	./$(COMPILER) --threadsafe test/test_palthread.pas $(TESTTMP)/test_palthread26
 	tools/expect_same.sh test_palthread26 "$$($(TESTTMP)/test_palthread26)" "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nPALTHREAD OK')"
 	./$(COMPILER) --threadsafe test/test_atomic_counter.pas $(TESTTMP)/test_atomic_counter26

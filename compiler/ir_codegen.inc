@@ -502,6 +502,73 @@ begin
   EmitAsmX64(['pop rdx', 'add rdx, %', targetOff - CodeLen]);
 end;
 
+function SigFieldsInTls: Boolean;
+{ Do the dispatch stub's four parked fields live in the CALLING THREAD's TLS
+  block rather than in one process-wide BSS group?
+
+  They must, whenever there is a block to put them in: the handler runs on
+  whichever thread the kernel picked, and two threads in the stub at once
+  overwrite each other's parked values -- 75875 wrong answers in 400000
+  deliveries, against ZERO on the same binary with the second thread never
+  started (bug-a-the-parked-signal-slots-are-process-wide-and-race-across-threads).
+
+  The condition is by TARGET and by TlsMainInstalled, NOT by --threadsafe.
+  EmitTlsMainInstall is x86-64-only and cloned threads get their block from the
+  x86-64 clone stub, so on the other hosted targets there is nothing to read;
+  and with --emit-obj/--shared nothing installed a base, where `mov rax, gs:[0]`
+  does not return 0, it FAULTS. Both are decided at emission, so no runtime
+  branch exists anywhere downstream.
+
+  THE LIMIT, stated because it is invisible from the code: a thread that
+  INHERITED its block -- glibc pthread_create, a callback from a C library --
+  shares it with its creator and still races. Strictly better than process-wide,
+  never worse, and not complete. Threads pxx created have their own. }
+begin
+  SigFieldsInTls := TlsMainInstalled and (TargetArch = TARGET_X86_64);
+end;
+
+function IsParkedSigField(bssSlot: Integer): Boolean;
+{ Is this one of the four fields the signal dispatch stub parks? Asked by the
+  IR_EXC_STORE reader, which serves those four AND the two exception slots --
+  and the exception slots stay process-wide (they are a separate defect if they
+  are one at all, not this ticket's). Guarded on SigBssAllocated because before
+  that call all four are 0, and so is BSS_EXC_OBJ. }
+begin
+  IsParkedSigField := SigBssAllocated and
+    ((bssSlot = BSS_SIG_CODE) or (bssSlot = BSS_SIG_ADDR) or
+     (bssSlot = BSS_SIG_CTX) or (bssSlot = BSS_SIG_NUM));
+end;
+
+procedure EmitSigGroupBaseX64(useR8: Boolean);
+{ rax (or r8) := the address of the four parked signal fields for THIS thread.
+
+  The one decision site. Every writer and reader downstream addresses the fields
+  as base + (BSS_SIG_x - BSS_SIG_CODE), which is why EnsureSignalBss allocates
+  them contiguously in the same order as the TLS slots and asserts it: one
+  offset expression, correct in both modes, so the mode is invisible to the
+  three sites that use it. Clobbers only the destination.
+
+  rax and r8 are the only destinations, and that is not laziness -- r8 is for
+  the sites that need the base to SURVIVE a load (the dispatch stub writes four
+  fields, the --fpc-mem-errors stub reads one, branches, then reads another),
+  rax for the single-load site where clobbering anything else would be a bug. }
+begin
+  if SigFieldsInTls then
+  begin
+    { mov <dst>, gs:[0] -- the self-pointer convention IR_TLSBASE reads. }
+    EmitB($65);
+    if useR8 then EmitB($4C) else EmitB($48);
+    EmitB($8B); EmitB($04); EmitB($25); EmitI32(0);   { modrm reg = dst and 7 = 0 for both }
+    if useR8 then EmitAsmX64(['add r8, %', 8 * TLS_SLOT_SIG_CODE])
+    else EmitAsmX64(['add rax, %', 8 * TLS_SLOT_SIG_CODE]);
+  end
+  else
+  begin
+    if useR8 then EmitAsmX64(['mov r8, @glob', BSS_SIG_CODE])
+    else EmitAsmX64(['mov rax, @glob', BSS_SIG_CODE]);
+  end;
+end;
+
 procedure EmitSignalRuntime;
 { Default-on signal support, x86-64 Linux (feature-signal-handlers, first
   slice; --no-signals opts out). Three stubs + a 64-slot hook table in BSS:
@@ -560,23 +627,28 @@ begin
     rsi may be nil in principle (a handler installed without SA_SIGINFO by other
     means); the null check costs two bytes and turns a would-be handler-time
     SIGSEGV into a zeroed slot. }
+  { r8 = where THIS THREAD's four fields live. The stores below are then
+    identical whether that is the TLS block or the process-wide group, which is
+    the whole point of allocating the two in the same order. r8 is free here:
+    the kernel enters a handler with only edi/rsi/rdx meaningful. }
+  EmitSigGroupBaseX64(True);
   EmitAsmX64([
     'mov eax, edi',                                   { the signal number... }
-    'mov [@glob], rax', BSS_SIG_NUM,                  { ...zero-extended; valid for every }
-    'mov [@glob], rdx', BSS_SIG_CTX,                  { signal, unlike si_code/si_addr }
+    'mov [r8+%], rax', BSS_SIG_NUM - BSS_SIG_CODE,    { ...zero-extended; valid for every }
+    'mov [r8+%], rdx', BSS_SIG_CTX - BSS_SIG_CODE,    { signal, unlike si_code/si_addr }
     'test rsi, rsi',
     'jz .nosi',
     'mov eax, [rsi+8]',                               { si_code (32-bit, zero-extended) }
     'shl rax, %', 32,                                 { ...sign-extend it: the mini-assembler }
     'sar rax, %', 32,                                 { has no movsxd, and shl/sar is exact }
-    'mov [@glob], rax', BSS_SIG_CODE,
+    'mov [r8+%], rax', 0,                             { BSS_SIG_CODE is the group's first field }
     'mov rax, [rsi+16]',                              { si_addr }
-    'mov [@glob], rax', BSS_SIG_ADDR,
+    'mov [r8+%], rax', BSS_SIG_ADDR - BSS_SIG_CODE,
     'jmp .go',
     '.nosi:',
     'xor eax, eax',
-    'mov [@glob], rax', BSS_SIG_CODE,
-    'mov [@glob], rax', BSS_SIG_ADDR,
+    'mov [r8+%], rax', 0,
+    'mov [r8+%], rax', BSS_SIG_ADDR - BSS_SIG_CODE,
     '.go:'
   ]);
   EmitAsmX64([
@@ -809,6 +881,16 @@ begin
     "x86-64 is still its only target" is a fact with an expiry date, and the
     comment saying so was true when written and wrong by the time it mattered. }
   BSS_SIG_NUM     := BSSSize; Inc(BSSSize, 8);
+  { THE FOUR MUST STAY CONTIGUOUS, IN THIS ORDER. Every writer and reader
+    addresses them as a group base plus (BSS_SIG_x - BSS_SIG_CODE), so that one
+    offset expression is correct whether the base is this group or the matching
+    TLS slots (TLS_SLOT_SIG_CODE..._NUM). Insert an allocation between them and
+    the offsets silently address the wrong field -- no error, a wrong VALUE, in
+    a handler. Cheap to assert, so asserted. }
+  if (BSS_SIG_ADDR - BSS_SIG_CODE <> 8) or (BSS_SIG_CTX - BSS_SIG_CODE <> 16) or
+     (BSS_SIG_NUM - BSS_SIG_CODE <> 24) then
+    Error('compiler error: the four parked signal fields must be allocated ' +
+          'contiguously as CODE, ADDR, CTX, NUM -- see TLS_SLOT_SIG_CODE');
   { The signal ALT STACK and its stack_t descriptor. Allocated HERE, for every
     target, rather than inside x86-64's EmitSignalRuntime where they used to
     live — which is the exact bug the rest of this function exists to prevent:
@@ -2491,8 +2573,13 @@ begin
   mx := 'Runtime error 255 (SIGFPE with an si_code this runtime does not know)' + Chr(10);
   s3 := InternStr(m3); s4 := InternStr(m4); s5 := InternStr(m5); s7 := InternStr(m7);
   s1 := InternStr(m1); s2 := InternStr(m2); s6 := InternStr(m6); sx := InternStr(mx);
+  { r8 = this thread's parked fields (TLS block or the process-wide group), so
+    the si_code this stub decodes belongs to the fault THIS thread took. r8 is
+    free through the whole stub and survives the write syscalls below, which
+    clobber only rcx and r11. }
+  EmitSigGroupBaseX64(True);
   EmitAsmX64([
-    'mov rax, [@glob]', BSS_SIG_CODE,
+    'mov rax, [r8+%]', 0,                   { BSS_SIG_CODE = the group's first field }
     'cmp rax, %', 3,                        { FPE_FLTDIV }
     'jne .n3',
     'mov rsi, @data', Strs[s3].Offset + 8,
@@ -2600,15 +2687,19 @@ begin
   mBus := 'Runtime error 216 (bus error: misaligned or invalid memory access)' + Chr(10);
   sMap := InternStr(mMap); sAcc := InternStr(mAcc);
   sSeg := InternStr(mSeg); sBus := InternStr(mBus);
+  { r8 = this thread's parked fields; see EmitFpcFloatErrStub. This stub reads
+    TWO of them with a branch in between, which is exactly why the base lives in
+    a register that survives the load rather than being re-fetched. }
+  EmitSigGroupBaseX64(True);
   EmitAsmX64([
-    'mov rax, [@glob]', BSS_SIG_NUM,
+    'mov rax, [r8+%]', BSS_SIG_NUM - BSS_SIG_CODE,
     'cmp rax, %', 7,                        { SIGBUS }
     'jne .segv',
     'mov rsi, @data', Strs[sBus].Offset + 8,
     'mov rdx, %', Strs[sBus].Len,
     'jmp .print',
     '.segv:',
-    'mov rax, [@glob]', BSS_SIG_CODE,
+    'mov rax, [r8+%]', 0,                   { BSS_SIG_CODE }
     'cmp rax, %', 1,                        { SEGV_MAPERR }
     'jne .n1',
     'mov rsi, @data', Strs[sMap].Offset + 8,
@@ -10013,7 +10104,18 @@ begin
 
     IR_EXC_STORE:
       begin
-        EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(IRExcStoreSlot(node));
+        { The four signal fields are per-thread when there is a block to hold
+          them; the two exception slots are not, and stay a plain absolute load.
+          Both arms leave the value in rax and clobber nothing else. }
+        if SigFieldsInTls and IsParkedSigField(IRExcStoreSlot(node)) then
+        begin
+          EmitSigGroupBaseX64(False);
+          EmitAsmX64(['mov rax, [rax+%]', IRExcStoreSlot(node) - BSS_SIG_CODE]);
+        end
+        else
+        begin
+          EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(IRExcStoreSlot(node));
+        end;
         EmitStoreVar(IRA[node]);
       end;
 
