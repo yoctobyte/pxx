@@ -141,4 +141,4 @@ separately as
 xtensa is at parity with its closest sibling, which was the bar.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit d3da3b447.
