@@ -2167,19 +2167,46 @@ begin
           is sp-relative, so an odd `alloca(1)` would take the whole body down
           at the next spill rather than at the alloca.
 
-          The same fixed-offset-from-sp exposure x86-64 has applies here --
-          expression temps are `str x0,[sp,#-16]!` / `ldr x0,[sp],#16` pairs and
-          a lowered sp moves what the load reads. The frontend's invariant is
-          what holds it: an IR_ALLOCA must not be reachable from inside a call's
-          argument evaluation (cparser.inc, CHoistAllocaArgs). See the IR_ALLOCA
-          note in ir_codegen.inc and
-          bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer. }
+          Unwinding was never the exposure, though. Expression temps are
+          `str x0,[sp,#-16]!` / `ldr x0,[sp],#16` pairs, so a value pushed
+          before an alloca and popped after read the alloca'd hole -- the same
+          defect x86-64 had, and NOT confined to argument lists, which is all
+          cparser.inc's CHoistAllocaArgs covers. So the hole is now carved at
+          the bottom of the FIXED FRAME and the live region between sp and the
+          alloca base is relocated down to make room, exactly as on x86-64.
+          Full model, including what it deliberately does not cover, in the
+          block comment above EmitSaveCallerRspX64 in ir_codegen.inc.
+          bug-a-alloca-inside-a-call-argument-list-corrupts-the-restored-stack-pointer }
         IREmitNodeAarch64(IRA[node]);
         EmitI32($91003C00);   { add x0, x0, #15 }
         EmitI32($D344FC00);   { lsr x0, x0, #4  }
         EmitI32($D37CEC00);   { lsl x0, x0, #4  -> size rounded up to 16 }
+        if A64AllocaBaseOff = 0 then
+          Error('compiler error: IR_ALLOCA reached with no alloca base slot; '
+              + 'IREmitMachineCodeAarch64''s body-entry scan did not see this node');
         EmitI32($CB2063FF);   { sub sp, sp, x0 }
-        EmitI32($910003E0);   { mov x0, sp }
+        EmitLoadImmA64(9, A64AllocaBaseOff);
+        EmitI32($8B0903A9);   { add x9, x29, x9   (&base) }
+        EmitI32($F940012A);   { ldr x10, [x9]     (old base) }
+        EmitI32($CB00014A);   { sub x10, x10, x0  (base -= size) }
+        EmitI32($F900012A);   { str x10, [x9] }
+        EmitI32($910003EB);   { mov x11, sp       (dst cursor) }
+        EmitI32($8B2063EC);   { add x12, sp, x0   (src cursor = the old sp) }
+        { x9 is free again from here -- it is this backend's transient scratch,
+          never live across a subexpression, which is what lets the copy borrow
+          it. x10..x12 are the same class; the residents live in x19..x24 and
+          the value model keeps everything else on the stack, so nothing here
+          needs saving and aarch64's lack of a red zone costs nothing.
+          Fixed-size loop, so both displacements are constants rather than
+          patches: b.hs skips 6 instructions forward, b goes 6 back. }
+        EmitI32($EB0A017F);   { .L1: cmp x11, x10 }
+        EmitI32($540000C2);   { b.hs .L2  (+6 instructions) }
+        EmitI32($F9400189);   { ldr x9, [x12] }
+        EmitI32($F9000169);   { str x9, [x11] }
+        EmitI32($9100216B);   { add x11, x11, #8 }
+        EmitI32($9100218C);   { add x12, x12, #8 }
+        EmitI32($17FFFFFA);   { b .L1     (-6 instructions) }
+        EmitI32($AA0A03E0);   { .L2: mov x0, x10  (the hole = the new base) }
       end;
 
     IR_MULHI:
@@ -4638,6 +4665,30 @@ begin
   for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
+
+  { The ALLOCA BASE slot -- the aarch64 half of the x86-64 model documented
+    above EmitSaveCallerRspX64 in ir_codegen.inc. Reserved only for a body that
+    contains an IR_ALLOCA and written HERE, the one place sp is provably the
+    bottom of the fixed frame: the prologue has run (`mov x29, sp` then the
+    patched `sub sp, sp, #frame`), nothing is pushed, and no alloca has fired.
+
+    aarch64 needs only this half. Its call sequence pushes each argument as a
+    16-byte temp, reads them back at fixed offsets from sp, and drops the lot
+    with `add sp, sp, #imm` -- all RELATIVE, so relocating the region preserves
+    every one of them and there is no absolute sp anywhere for an alloca to
+    invalidate. That is why there is no aarch64 counterpart to the x86-64
+    saved-rsp delta. }
+  A64AllocaBaseOff := 0;
+  for i := 0 to IRCount - 1 do
+    if (IRKind[i] = IR_ALLOCA) and (A64AllocaBaseOff = 0) then
+    begin
+      FrameSize := AlignTo(FrameSize + 8, 8);
+      A64AllocaBaseOff := -FrameSize;
+      EmitLoadImmA64(9, A64AllocaBaseOff);
+      EmitI32($8B0903A9);    { add x9, x29, x9  (&base) }
+      EmitI32($910003EA);    { mov x10, sp }
+      EmitI32($F900012A);    { str x10, [x9] }
+    end;
 
   { Nil-init hidden owning locals synthesised for materialised managed-string
     arguments (and the TVarRec array temp behind `array of const`). They are
