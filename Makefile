@@ -11823,6 +11823,18 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_alloca_expression_stack: qemu-riscv32 absent, riscv32 arm NOT verified ==="; \
 	fi
+	# arm32 landed the same way: RELOCATION only, no saved-sp delta, because its
+	# AAPCS32 outgoing block is all relative and parks no pointer. i386 is the
+	# only backend still refusing IR_ALLOCA, and the only one that will need the
+	# delta. feature-a-port-alloca-to-i386-arm32-and-riscv32
+	@if command -v qemu-arm >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=arm32 test/c_alloca_expression_stack.c $(TESTTMP)/c_alloca_expr_a32 >/dev/null || { echo "c_alloca_expression_stack arm32 compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh arm32/c_alloca_expr_a32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_alloca_expr_a32)" "$$(printf '1 aaaa 1\n2 bbbb\n3 cccc\n4 dddd 32\n5 1\n6 p q r 1 1\n7 eeee\n8 ffff gggg 1\n9 101\n10 4\n11 31 37\n12 6\n13 ABCD 5\n14 42\n15 1\n16 1\n17 1 2 3 4 5 6 1 8')" || exit 1; \
+	  ./$(COMPILER) --target=arm32 test/c_vla.c $(TESTTMP)/c_vla_a32 >/dev/null || { echo "c_vla arm32 compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh arm32/c_vla_a32 "$$(tools/run_target.sh arm32 $(TESTTMP)/c_vla_a32)" "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24')" || exit 1; \
+	else \
+	  echo "=== c_alloca_expression_stack: qemu-arm absent, arm32 arm NOT verified ==="; \
+	fi
 	# `extern T name[];` in a header + `T name[] = {...};` in the .c -- the
 	# ordinary way C shares a table. The declarator is an INCOMPLETE array type,
 	# so the declaration reserved ONE element and fixed the symbol's offset

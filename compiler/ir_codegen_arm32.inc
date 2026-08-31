@@ -1421,6 +1421,55 @@ begin
       { get_frame: fp (r11) is the frame pointer (push {fp,lr}; mov fp, sp). }
       EmitI32($E1A0000B); { mov r0, fp }
 
+    IR_ALLOCA:
+      begin
+        { Dynamic stack allocation. Same model as x86-64, aarch64 and riscv32,
+          stated in full in the block comment above EmitSaveCallerRspX64 in
+          ir_codegen.inc: one frame word holds where the expression stack
+          STARTS, an alloca lowers sp by the 16-rounded size, relocates
+          everything between sp and that base down by the same amount, and
+          returns the gap that opens under the base.
+
+          The relocation is what makes this correct mid-expression: arm32's
+          temps are `push {rN}` / `pop {rN}` pairs, so a value pushed before an
+          alloca and popped after would otherwise read the alloca'd hole.
+
+          NO saved-sp delta, like aarch64 and riscv32 and unlike i386: the
+          AAPCS32 outgoing block is all relative (sub sp,#blk / add sp,#blk-16)
+          and parks no pointer, so there is no absolute sp for an alloca to
+          invalidate. Rounding to 16 also keeps the 8-byte sp alignment AAPCS32
+          requires at a public interface.
+          feature-a-port-alloca-to-i386-arm32-and-riscv32 }
+        IREmitNodeArm32(IRA[node]);
+        EmitI32($E280000F);   { add r0, r0, #15 }
+        EmitI32($E3C0000F);   { bic r0, r0, #15  -> size rounded up to 16 }
+        if Arm32AllocaBaseOff = 0 then
+          Error('compiler error: IR_ALLOCA reached with no alloca base slot; '
+              + 'IREmitMachineCodeArm32''s body-entry scan did not see this node');
+        EmitI32($E04DD000);   { sub sp, sp, r0 }
+        EmitLoadImmArm32(9, Arm32AllocaBaseOff);
+        EmitI32($E08B9009);   { add r9, fp, r9   (&base) }
+        EmitI32($E5991000);   { ldr r1, [r9]     (old base) }
+        EmitI32($E0411000);   { sub r1, r1, r0   (base -= size) }
+        EmitI32($E5891000);   { str r1, [r9] }
+        EmitI32($E1A0200D);   { mov r2, sp       (dst cursor) }
+        EmitI32($E08D3000);   { add r3, sp, r0   (src cursor = the old sp) }
+        { r1..r3 and r9 are free here: the operand was just evaluated into r0
+          and this backend's value model keeps everything else on the stack, so
+          nothing needs saving. r9 is the established address scratch.
+          Fixed-size loop, so the displacements are constants rather than
+          patches -- ARM branch offsets are (target - (pc + 8)) / 4, so bhs
+          skips +4 words forward and b goes -8 words back. }
+        EmitI32($E1520001);   { .L1: cmp r2, r1 }
+        EmitI32($2A000004);   { bhs .L2 }
+        EmitI32($E5939000);   { ldr r9, [r3] }
+        EmitI32($E5829000);   { str r9, [r2] }
+        EmitI32($E2822004);   { add r2, r2, #4 }
+        EmitI32($E2833004);   { add r3, r3, #4 }
+        EmitI32($EAFFFFF8);   { b .L1 }
+        EmitI32($E1A00001);   { .L2: mov r0, r1  (the hole = the new base) }
+      end;
+
     IR_LOAD_SYM:
       begin
         si := IRA[node];
@@ -4449,6 +4498,23 @@ begin
   for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
+
+  { Carve this body's alloca base slot and record where the expression stack
+    starts. One word, only when the body actually contains an IR_ALLOCA, so a
+    body without one is byte-identical to before. FrameSize is still mutable
+    here and the prologue reads it afterwards -- the same hook the aarch64 and
+    riscv32 arms use. Locals sit at NEGATIVE offsets from fp on every target
+    (ast_syminfer sets Offset := -FrameSize). }
+  Arm32AllocaBaseOff := 0;
+  for i := 0 to IRCount - 1 do
+    if (IRKind[i] = IR_ALLOCA) and (Arm32AllocaBaseOff = 0) then
+    begin
+      FrameSize := AlignTo(FrameSize + 4, 4);
+      Arm32AllocaBaseOff := -FrameSize;
+      EmitLoadImmArm32(9, Arm32AllocaBaseOff);
+      EmitI32($E08B9009);   { add r9, fp, r9 }
+      EmitI32($E589D000);   { str sp, [r9] }
+    end;
 
   { Nil-init hidden owning locals synthesised for materialised managed-string
     arguments. They are created during this body's IR lowering, after the
