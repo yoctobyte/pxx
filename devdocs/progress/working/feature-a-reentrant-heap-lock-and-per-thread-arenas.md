@@ -3,9 +3,9 @@ track: A+O
 prio: 45
 type: feature
 blocked-by: []
-summary: "PROMISE MEASURED 2026-09-01, and the blocker is SCOPE, not a missing primitive. Promise: 2M GetMem/FreeMem pairs, total fixed, split across N workers (flat = perfect scaling) goes 0.14s at 1 worker to 0.39s at 12 — 2.8x WORSE, i.e. adding threads makes fixed allocator work slower. A null with the identical loop and per-iteration call but no heap traffic is flat at <=0.01s at every worker count, so dispatch is under 3% and the degradation is entirely the global heap lock. Measured at f23f141f997d, AFTER the refcount path went lock-free (274a9da6c), so it is allocator contention and nothing else. NO ACCESSOR PREREQUISITE — an earlier version of this summary claimed one and was wrong. `__pxxTlsBase` (pasparser_expr.inc, AN_TLSBASE, IR_TLSBASE) is Pascal-reachable today, verified compiling and running inside parallel workers, and four TLS slots are free (TLS_SLOT_FIRST_FREE=12 of 16) where an arena needs two. THE REAL CONSTRAINT IS THE TARGET SET: `__pxxTlsBase` is x86-64-only while --threadsafe covers x86-64/i386/aarch64/arm32, so per-thread arenas built on it are an x86-64-only optimisation and the other three stay on the global lock. ONE ALLOCATOR (settled 2026-09-01): builtinheap.pas is the only one, its three PXXAlloc bodies are mutually exclusive PROFILES, and the native one already carries a {$ifdef PXX_TS_SOFTLOCK} arm — so arenas are a second capability arm in an existing function, an ordinary Track A change with NO fork and no decide-* needed. Scope to agree before starting, not a blocker. The reentrancy half stays parked by the owner 2026-08-21; do not re-litigate it."
-status: backlog
-owner: unassigned
+summary: "PROMISE MEASURED 2026-09-01, and the blocker is SCOPE, not a missing primitive. Promise: 2M GetMem/FreeMem pairs, total fixed, split across N workers (flat = perfect scaling) goes 0.14s at 1 worker to 0.39s at 12 — 2.8x WORSE, i.e. adding threads makes fixed allocator work slower. A null with the identical loop and per-iteration call but no heap traffic is flat at <=0.01s at every worker count, so dispatch is under 3% and the degradation is entirely the global heap lock. Measured at f23f141f997d, AFTER the refcount path went lock-free (274a9da6c), so it is allocator contention and nothing else. WRONG MECHANISM IN THE TITLE, measured 2026-09-01: PXX_ALLOC_CENSUS on the very benchmark above reports bump=3 arenas=1 against ~2,000,000 reuse, so the workload is ~100% size-class BIN traffic and per-thread ARENAS would move 3 allocations out of 2M. The promise attaches to a per-thread BIN MAGAZINE. Ruled out cache-line true-sharing on FreeBins by giving each worker its own size class: it degrades the same (0.17->0.57s at 12), so the lock is the mechanism. Confirmed at source: the lock is emitted by the COMPILER around the call (ir_codegen.inc:8948 tkGetMem, :9059 tkFreeMem), not taken inside PXXAlloc. DESIGN: put the lock-free fast path in the EMITTER at those two sites, never inside PXXAlloc -- PXXAlloc is called by managed string/dynarray sites that already hold the lock, so an internal lock would need the REENTRANCY the owner parked; the emitter route keeps reentrancy parked and unneeded. NO ACCESSOR PREREQUISITE — an earlier version of this summary claimed one and was wrong. `__pxxTlsBase` (pasparser_expr.inc, AN_TLSBASE, IR_TLSBASE) is Pascal-reachable today, verified compiling and running inside parallel workers, and four TLS slots are free (TLS_SLOT_FIRST_FREE=12 of 16) where an arena needs two. THE REAL CONSTRAINT IS THE TARGET SET: `__pxxTlsBase` is x86-64-only while --threadsafe covers x86-64/i386/aarch64/arm32, so per-thread arenas built on it are an x86-64-only optimisation and the other three stay on the global lock. ONE ALLOCATOR (settled 2026-09-01): builtinheap.pas is the only one, its three PXXAlloc bodies are mutually exclusive PROFILES, and the native one already carries a {$ifdef PXX_TS_SOFTLOCK} arm — so arenas are a second capability arm in an existing function, an ordinary Track A change with NO fork and no decide-* needed. Scope to agree before starting, not a blocker. The reentrancy half stays parked by the owner 2026-08-21; do not re-litigate it."
+status: working
+owner: frankB
 ---
 
 # Reentrant heap lock, and the per-thread arenas it was really for
@@ -222,6 +222,114 @@ source sites by
 survives in the one document the compile-time Error points every reader at. Left
 in place as a session record with a dated note appended there rather than
 rewritten.
+
+### MEASURED 2026-09-01: this ticket names the WRONG MECHANISM
+
+**Per-thread ARENAS would not move the benchmark that establishes this ticket's
+promise. Not by a little — by three allocations out of two million.** Anyone who
+implements what the title says will deliver nothing and the numbers above will
+be unchanged. This section is the correction; the slug stays because it is cited.
+
+**The census, not an argument.** `-dPXX_ALLOC_CENSUS` on the exact `allocscale`
+benchmark whose 2.8x is quoted in the summary:
+
+    allocs=1955451  reuse=1955448  list=0  bump=3  arenas=1
+    sizes 32:2 64:1955449
+
+**`bump=3`, `arenas=1`, reuse ~100%.** The workload is a `GetMem`/`FreeMem` pair
+in a loop, so after the first iteration every allocation is a size-class bin pop
+and every free is a bin push. `HeapPtr`/`HeapEnd` — the state per-thread arenas
+would privatise — are touched three times in the whole run. **The promise is
+attached to the bins, not the arenas.**
+
+### Which contention: the lock, not the bin data — separated by experiment
+
+With ~100% bin traffic, "the degradation is entirely the global heap lock" (this
+summary's own claim) had a live competitor: **true sharing of `FreeBins[7]`**,
+one hot cache line ping-ponging between workers. Both predict the same 2.8x, so
+the claim was asserted rather than shown.
+
+Separated with `binsplit.pas` — same benchmark, but `pdChunked` gives worker *w*
+a contiguous `i` range, so `size := 64 + 8 * (i div CHUNK)` gives **each worker
+its own size class and therefore its own bin**. Same lock, different cache lines.
+Interleaved min-of-3, compiler `c4a89282faa6`:
+
+| workers | shared bin | distinct bins |
+| --- | --- | --- |
+| 1 | 0.14s | 0.17s |
+| 2 | 0.22s | 0.23s |
+| 4 | 0.33s | 0.34s |
+| 12 | 0.45s | 0.57s |
+
+**Distinct bins degrade as much as the shared one.** Cache-line sharing is not
+the mechanism; the lock is. The summary's claim survives a test that could have
+refuted it, which is the only reason it is now worth anything.
+
+### The serialiser, confirmed at its source
+
+Not inferred from the architecture — read. `compiler/ir_codegen.inc:8948`:
+
+```pascal
+else if procIdx = -Ord(tkGetMem) then
+begin
+  { GetMem or class instantiation. Evaluate size -> rax, then Alloc. }
+  EmitAcquireHeapLock;
+```
+
+and the same at `:9059` for `tkFreeMem`. **On x86-64 the heap lock is emitted by
+the COMPILER around the whole allocator call; it is not taken inside
+`PXXAlloc`.** (`{$ifdef PXX_TS_SOFTLOCK}` inside `PXXAlloc` is the i386/aarch64
+arm, where the locks live in Pascal — it is not compiled on x86-64.) So the
+entire bin fast path runs under a global lock that a thread-local pop would not
+need at all.
+
+### The design consequence: do NOT push the lock into PXXAlloc
+
+The obvious move — lock-free fast path inside `PXXAlloc`, take the lock on the
+slow path — **deadlocks, and it deadlocks into the half the owner parked.**
+`PXXAlloc` is also called from the managed string/dynarray emitters
+(`ir_codegen.inc:194, 505, 525, 536, 557, 3411, 3515, 3539, 3560, 3579, ...`)
+which already hold the lock across the call. A lock taken inside `PXXAlloc`
+would be re-acquired by a holder, and the lock is not reentrant — which is
+precisely why this ticket is *named* "reentrant heap lock **and** per-thread
+arenas". The two halves are coupled in that direction, and the reentrancy half
+is parked by the owner (2026-08-21, not to be re-litigated).
+
+**The route that avoids the coupling entirely: put the fast path in the EMITTER,
+not in `PXXAlloc`.** At the two sites above and nowhere else, emit inline:
+
+1. read `__pxxTlsBase` (an existing intrinsic, x86-64-only — see above);
+2. if the per-thread bin for this size class is non-empty, pop it, zero it, done
+   — **no lock, no call**;
+3. on miss, fall through to exactly today's code: `EmitAcquireHeapLock` + call
+   `PXXAlloc`.
+
+`FreeMem` mirrors it: push to the thread-local bin when the size header is
+`<= HEAP_BIN_MAX`, else lock and call `Free`. Nothing else changes; every
+managed-string site keeps today's lock and today's ordering, and `PXXAlloc`
+itself is untouched, so no path can re-enter the lock. **Reentrancy stays
+parked and stops being a prerequisite.**
+
+Storage fits the four free TLS slots: **one** slot for a pointer to a
+per-thread `array[0..HEAP_BIN_COUNT-1] of Int64` (`HEAP_BIN_MAX = 512` → 64 bins
+→ 512 bytes, allocated once on first use through the normal locked path), and
+optionally two more for a private bump region later. `TLS_SLOT_FIRST_FREE = 12`
+of 16.
+
+### What is NOT settled, and belongs to whoever implements it
+
+- **Thread-exit drain.** Blocks parked in a dead thread's bins are unreachable
+  to everyone else. Bounded (≤ 64 blocks × the sizes that thread freed) but it
+  is a real retention and needs a flush at thread teardown or an explicit
+  statement that it is accepted.
+- **Zero-init contract.** The inline pop must zero the payload, because
+  `PXXAlloc` guarantees zeroed memory on both of its paths and callers rely on
+  it (managed headers, dynarray slots). The emitter arm must reproduce that
+  guarantee, not assume it.
+- **`-dPXX_HEAP_DEBUG` / `PXX_ALLOC_CENSUS` interaction** — both instrument
+  `PXXAlloc`, which the fast path now bypasses, so a census would silently stop
+  counting most allocations. A guard that cannot see the traffic prints a
+  plausible small number rather than failing.
 
 ### ONE ALLOCATOR, settled 2026-09-01 — so there is no fork and no `decide-*`
 
