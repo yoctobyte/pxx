@@ -71,6 +71,24 @@ animal. **A guard earning its keep on a case its author did not have in mind is 
 better argument for keeping it than the one it was written for** (frank-rust, who
 is the one it caught).
 
+**And the mirror, which is the stronger half, because it is prose failing under
+maximal diligence rather than a guard succeeding by luck.** The
+`--is-ancestor && echo IN || echo NOT-IN` idiom above was corrected on
+2026-08-31, relayed to several agents, and written into three memory files and
+four messages over several hours. It never reached
+`devdocs/dev/session-roster.md:3920` -- **the one artifact that prescribes the
+command a successor actually runs** -- and the departing coordinator named that
+very row as the thing it most wanted a successor to read, while it was still
+wrong. Its own verdict, and it is the sentence to keep:
+
+> **A correction that has not reached the executable form is not a correction; it
+> is a belief I happened to hold.**
+
+Nobody was careless. The correction was propagated *more* diligently than most,
+through every channel except the one that executes. So when you fix an
+understanding, the question is not who has been told -- it is **what runs**, and
+whether the fix is in it.
+
 So the ranking the deletion criterion implies, worst to best: a rule you can only
 agree with; a rule you can point at an artifact; **a guard that fires at the
 point of use without being recalled.** Prefer the third. When a section here is
