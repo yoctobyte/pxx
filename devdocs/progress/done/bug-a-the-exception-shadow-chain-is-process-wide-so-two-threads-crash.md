@@ -283,4 +283,4 @@ this was fixed. It is fixed on the only target that can create a thread, so
 there is nothing to refuse.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit fc510bbf6.
