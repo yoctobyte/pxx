@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `633e73a31ad6` | 2026-08-31T12:32:59Z | GREEN (slow) | 202.6s | `633e73a31ad6` RED |
+| seven | `83de185a7e5e` | 2026-08-31T12:44:42Z | RED (native) | 111.7s | `633e73a31ad6` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `633e73a31ad6` on seven, 2026-08-31T12:29:26Z (3m ago).**
+**Newest full tier in the fleet: `633e73a31ad6` on seven, 2026-08-31T12:29:26Z (15m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `633e73a31ad6` | RED | 3m | — (newest) |
+| seven | `633e73a31ad6` | RED | 15m | — (newest) |
 | plexus | `27424c927b65` | RED | 1d2h | 1d2h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -54,3 +54,4 @@ Reading a staler host's map for a cross-target job answers a question about an O
   </details>
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (seven): bad `aac20e75ed1f`, last good `17fd5566a65e`, 1 commit(s) in range
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +37 (seven): bad `351c10608aae`, last good `d28b77ce5d88`, 2 commit(s) in range
+- **test-core#src:test/test_setlen_in_parallel_for_body.pas** — test/test_setlen_in_parallel_for_body.pas tools/expect_same.sh (seven): bad `83de185a7e5e`, last good `633e73a31ad6`, 1 commit(s) in range
