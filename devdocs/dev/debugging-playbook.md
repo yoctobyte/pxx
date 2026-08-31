@@ -362,6 +362,8 @@ reader checks whether the instrument worked, and it did.
 | is Track T down? | is the watcher daemon in **this box's** process table? (T runs on `seven`; no other host can match) | **DOWN, with total confidence** — the only answer it could reach |
 | was my commit in the tree Track T tested? | is the TESTED sha an ancestor of MY FIX? (the question backwards — `merge-base --is-ancestor A B` is not symmetric) | **NO** — it was there; I "corrected" a peer's correct attribution |
 | which commits are in this range? | which commits are reachable from `origin/master` **OR** from the range? (a stray ref beside a range is a **union**, not a restriction) | **40 commits, 5 touching code** — the range holds **4**, and **1**. Produced while auditing someone else's ancestry arithmetic |
+| is the pinned sha a ghost? | is `992065f21f33` a **git object**? (it is the first 12 of the pinned binary's **sha256** — `pin.log` puts the 64-hex binary hash in the middle and the 40-hex GIT sha last) | *"Not a valid object name"* — read as a pre-rebase ghost in the pin ledger. **Third instance of this exact confusion**; nothing was lost |
+| does the pin predate my fix? | `--is-ancestor A B` where B is not an object at all — it cannot distinguish **"not an ancestor"** from **"not a commit"**, and returns a bare exit code for both | the RIGHT answer, reached by accident |
 | is this `new_red: []` vacuous? | here is `new_red: []`. (`parent_tested` lives in the REPORT front-matter and is **absent from the ndjson row** — not empty, *not present*) | correct about the field, silent about its scope, and **no sign that the question cannot be answered from here** |
 | did my edit land? | did `git commit` succeed? (the script before it printed a traceback and exited nonzero; a shell newline is `;`, not `&&`) | **a commit whose SUBJECT announces a playbook row, whose DIFF touches only the logbook** |
 | is this NilPy class leaking its fields? | is the field walker correct? (it was — `PXXObjFinalizeHook` was **nil**, so the walker was never reached; the hook's nine install sites are all pylib CONTAINER constructors) | three probes in a row "confirmed" a bug in the FINALIZER. The tell was that adding an unrelated `dummy = [1]` made the same program flat |
@@ -390,6 +392,23 @@ crediting itself with someone else's paragraph.
 
 The cheap guard is `&&` between an edit and its commit, and `git show --stat`
 before you believe your own subject line.
+
+**The pin-ledger pair is worth a recipe, because it has now caught three
+people** and CLAUDE.md already lists two of them. A `pin.log` line is:
+
+```
+<ts>  pinned v398  <64-hex BINARY sha256>  (was <12-hex prev binary>)  <40-hex GIT sha>
+```
+
+**The git sha is LAST. Count the hex: 40 is a commit, 64 is a binary.** Twelve
+characters of either look identical and both are plausibly a commit prefix.
+`tools/trackt.py`'s `read_pin_log` gets this right and says why — *"the GIT sha
+is last in both, so key off that rather than a field index"* — so the tooling is
+not exposed; the exposure is entirely in reading the pin **commit's subject
+line**, which is hand-written and puts the binary hash where a reader expects a
+commit. Verify with `sha256sum stable_linux_amd64/default/pinned` before
+concluding anything, and note that `--is-ancestor` will not tell you: a
+malformed argument and a false answer leave through the same exit code.
 
 **And the last row is the one to carry into any archive question: two artifacts
 of the same run disagreed about what could be known from them.** The report's
