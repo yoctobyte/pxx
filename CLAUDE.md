@@ -237,6 +237,16 @@ needs a **positive control**: a case it must reject, asserted. The same applies
 to any "proof-grade" flag — a flag that cannot come out false is the same animal.
 And a **gate that cannot pass** is not a gate either.
 
+**A positive control is not enough on its own — a guard must also be AIMED and
+READ.** Assert that the thing under test actually RAN before you compare its
+output (a comparison whose inputs were never proven to exist cannot fail), and
+**branch on the assert — a precondition you do not branch on is a comment**
+(`&&` between shell stages, not `;`). The two checks are INDEPENDENT: a `cmp`
+harness with a must-differ row passes its positive control on every row that
+compiled, and still reports `DIFFERS` for the rows where nothing was built.
+Four instances in 24h, worked: debugging-playbook.md, "Assert the PRECONDITION,
+not just the comparison".
+
 ## Debugging — measure, do not reason
 
 **The expensive bugs here do not crash; they produce a plausible wrong value far
