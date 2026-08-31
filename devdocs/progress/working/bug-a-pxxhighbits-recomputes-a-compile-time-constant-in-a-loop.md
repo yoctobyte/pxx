@@ -3,8 +3,8 @@ track: A
 prio: 50
 type: bug
 blocked-by: []
-status: new
-owner: ""
+status: working
+owner: frankS
 found: 2026-08-30
 found-by: frank-optimize, profiling bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 summary: "PXXHighBits builds the constant $8080808080808080 with an eight-iteration shift/or loop, and is called once per machine word of every string ASCII scan. A gdb-sampled profile of uforth put 5.1% of the program's ENTIRE runtime inside it — the fifth-hottest routine in a 134-routine profile, spent recomputing a value the compiler could fold."

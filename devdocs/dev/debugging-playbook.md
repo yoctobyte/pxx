@@ -3639,3 +3639,56 @@ changes what a miss MEANS while changing nothing about what it DOES.
 Same family as the two sections above and named the same way: *the instrument
 answered honestly about the wrong question.* Here it would have answered
 honestly about the wrong stack.
+
+## A census is only as good as its KEY — and the only way to check the key is to run the census where the answer is known
+
+Two censuses, 2026-08-31, both taken before touching anything, both printing a
+reassuring number, both wrong in a different way. Together they say what the
+guard actually is.
+
+**Mine (frankS) was indexed on the right key and I stopped reading it.** Moving
+the exception chain head to per-thread TLS, I listed every file mentioning
+`BSS_EXC_*` first. `compiler/symtab.inc: 1` was in that list. I then worked from
+the subset I had decided were "the x86-64 sites", converted those, and never went
+back to check the list was exhausted. `symtab.inc`'s
+`EmitLeaveExceptionFrameX64` kept storing to process-wide BSS while every read
+came from `gs:`. Pascal `try/except` passed — its path goes through the
+converted copy — and **every NilPy `try` segfaulted**, 30 jobs red.
+
+**frankA's was indexed on the wrong key and had a clean bill of health.** He
+censused names defined in *both* `ir_codegen.inc` and `symtab.inc`, looking for
+exactly this class of duplicate: ten hits, all `forward;` declarations, no
+duplicate bodies. Then — and this is the whole lesson — he ran it against
+`e0a818429^`, the tree where my duplicate is known to exist. **It did not find
+`EmitLeaveExceptionFrameX64`.** It could not: that routine is defined only in
+`symtab.inc`, and `ir_codegen.inc` emitted the same three instructions *inline*
+under no shared name. A name-based census is structurally incapable of seeing
+duplication that has no name, and it would have printed the same reassuring zero
+on the night the bug shipped.
+
+**So the rule is not "keep consulting your census". It is: a census indexed on
+the wrong key is the failure, and it feels exactly like completeness.** Mine
+listed the right file and I under-used it; his was answering a question nobody
+asked. Neither errored. Both answered.
+
+**The key that works here is the SLOT, not the name** — the thing the code
+touches, not the identifier it touches it through. frankA's, after the name
+census failed its control:
+
+```
+BSS_SIG_NUM — 8 files, 14 mentions, writers exactly 5:
+  ir_codegen386 / arm32 / aarch64 / riscv32   one stub each (plain BSS)
+  ir_codegen.inc                              the x86-64 pair
+read side: exception_emit.inc:27  `if TargetArch <> TARGET_X86_64 then Exit`
+```
+
+That is a falsifiable property — *no arm exists where a read comes from `gs:`
+while a store goes to BSS* — rather than a file list, and it is the shape of the
+bug stated so a census can answer it.
+
+**And the control is free, so there is no excuse for skipping it.** Run the
+census against a commit where the defect is known to be present; if it does not
+find it, the key is wrong. This is the positive-control rule (a guard that
+cannot fail is not a guard, and it prints PASS) applied to a *search* rather
+than to a test — and a search is where it is easiest to forget, because a
+search's output is a list and a list looks like evidence.
