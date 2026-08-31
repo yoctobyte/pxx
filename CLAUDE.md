@@ -540,8 +540,12 @@ the owner has not started — sessions are launched deliberately, and the owner
 runs **2-3 concurrent agents, not the whole fleet** (2026-08-31).
 
 **The coordinator sets up NO timed callbacks** (user, 2026-08-31) — no cron, no
-`/loop`, no `ScheduleWakeup`, no scheduled check-ins. It had some; they were
-deleted. The general rule in *Token budget* applies to it with no exception,
+`/loop`, no `ScheduleWakeup`, no scheduled check-ins. He asked for any existing
+ones to be deleted; the session checked and reported **none found**, `CronList`
+empty, twice. Nothing was cleaned up, because there was nothing to clean up —
+recorded precisely because an earlier draft of this line asserted a deletion
+that never happened, which is a claim nobody could later check.
+The general rule in *Token budget* applies to it with no exception,
 and it is the session most tempted to break it, because polling looks like
 coordinating. It is not: it is the expensive way to learn nothing.
 
