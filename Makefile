@@ -8000,6 +8000,12 @@ test-core: $(COMPILER)
 	# `SizeOf(Currency)` did not. BuiltinTypeNameTk now delegates to
 	# BuiltinScalarTypeKind, so there is one table. This pins SELF-CONSISTENCY,
 	# not FPC parity: Extended and ValReal alias Double here on purpose.
+	# Its complement is test_sizeof_user_name_shadows_builtin.pas (~line 11431),
+	# which pins that a USER declaration BEATS the builtin table. Deliberately a
+	# SEPARATE file and not mergeable: the names here must mean the builtins, and
+	# there they are taken by user declarations, so SizeOf(LongBool) is 4 here
+	# and 1 there and both are right. Together they are the pair; ce4d9004c had
+	# only this half and shipped a wrong-answer regression.
 	./$(COMPILER) test/test_sizeof_builtin_type_names.pas $(TESTTMP)/test_sizeof_names26
 	tools/expect_same.sh test_sizeof_names26 "$$($(TESTTMP)/test_sizeof_names26)" "$$(printf '8 8 8 8 4 2 1\nsplits 0')"
 	# SysUtils.OutOfMemoryError: FPC declares the PROCEDURE (sysutilh.inc:243) and

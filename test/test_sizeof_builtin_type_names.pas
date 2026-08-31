@@ -12,6 +12,21 @@
   variable form, which must print the same number. A regression re-splitting the
   tables shows up as a differing pair, not as a crash.
 
+  ITS COMPLEMENT IS test/test_sizeof_user_name_shadows_builtin.pas (frank-rust),
+  and the two MUST stay separate files -- this is not tidiness, it is a
+  correctness constraint. Every name below has to MEAN the builtin for these
+  rows to say anything; that file declares user types and variables wearing
+  those same names, so the two sets of expectations are mutually exclusive by
+  construction. Merging them would silently turn control rows here into
+  assertions about the user's declarations: `SizeOf(LongBool)` is 4 here and 1
+  there, and BOTH are correct.
+
+  Read together they are the pair that matters. This file pins that the builtin
+  table answers; that one pins that a USER declaration BEATS it. ce4d9004c had
+  the first and not the second, and shipped a wrong-answer regression -- a
+  control drawn only from the population a change is about cannot detect a
+  change to that population's edge.
+
   Widths are pxx's own and several differ from FPC deliberately -- Extended and
   ValReal alias Double on every target (feature-extended-alias-or-reject), and
   Variant/OleVariant use pxx's representation. That is not what this test is
