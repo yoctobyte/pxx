@@ -5,10 +5,10 @@ track: A
 prio: 40
 type: bug
 blocked-by: []
-status: open
+status: done
 owner: ""
 created: 2026-08-28
-summary: "`function F(a: Int64): Integer; begin F := a; end` returns the full 64-bit value: F(4294967299) prints 4294967299 where FPC prints 3. The same assignment to a variable, to a var parameter, or through a cast all narrow correctly. One arm of a double case, and the broken arm is the one with no diagnostic — the caller reads a value the declared result type cannot hold."
+summary: "FIXED 2026-08-31 (191af3440). It was the -O2 INLINER, not the assignment: every arm of the assignment narrows correctly, and inline_expand.inc shape 1 (`Result := E`) retains E and DROPS the assignment the narrowing lived in. Shape 3 — any body with a second statement — allocates a typed Result temp and was always right, which is why `ViaLocal` looked like a working other arm; it is a different inline SHAPE, not a different assignment arm. Narrowing cases now go to shape 3. Far wider than the repro: `function AddOne(a: Integer): Integer; begin AddOne := a + 1; end` returned 2147483648 for MaxInt, so every Integer function whose body is one arithmetic expression was unwrapped at -O2. Zero measured code-size cost."
 ---
 
 # Repro
@@ -115,3 +115,59 @@ implicit was forced to state one.
 
 Track A's to run, and deliberately not filed as a third ticket — the point is
 that these two are examples of a search, not a list.
+
+---
+
+## 2026-08-31 — FIXED (191af3440), and it was the INLINER, not the assignment (frankC)
+
+The repro is right and every number in it is right. The cause is not: **every
+arm of the assignment narrows correctly.** The -O2 inliner discards the store
+the narrowing lives in.
+
+Four measurements, each of which moved the suspect:
+
+| | result |
+| --- | --- |
+| `-O0` / `-O1` | **correct** — so it is an optimisation, not the lowering |
+| i386 / arm32 / riscv32 | **correct** — 64-bit codegen only |
+| the OUT-OF-LINE body, disassembled | **correct**: `mov %eax,-0xc(%rbp)` then `movslq` |
+| direct call vs the same call through a **procvar** | direct wrong, indirect **right** |
+
+The last one names it: a procvar call cannot be inlined. Register pressure in
+the caller changes nothing, which rules out the residency pass — the first place
+I looked, and the assembly of the standalone body is what sent me there wrongly.
+
+**`inline_expand.inc`, shape 1.** For a body that is exactly `Result := E` it
+retains `E` and drops the assignment (`i := CloneToInlineRegion(rhs, procIdx)`),
+so `IRInlineExpand` yields the bare expression with no store. Shape 3 — any body
+with a second statement — allocates `resSym := AllocVar('', Procs[cpi].RetType)`
+and stores through it, which is exactly why `ViaLocal` looked like a working
+"other arm": it is not a different arm of the assignment, it is a different
+inline shape. Shape 2a (the ternary) was never affected.
+
+Fixed by handing the narrowing cases to shape 3 rather than teaching shape 1 to
+narrow: the store is the mechanism that is already right, and a second one is
+the path that stays broken.
+
+### The blast radius is much larger than this ticket's repro
+
+`function AddOne(a: Integer): Integer; begin AddOne := a + 1; end` returned
+**2147483648** for `MaxInt` at -O2. FPC and pxx's own -O0 both say
+-2147483648. Integer arithmetic promotes to 64 bits, so *every* Integer-returning
+function whose body is a single arithmetic expression was returning an unwrapped
+value — one of the commonest shapes in Pascal, and one this ticket's Int64
+parameter made look exotic.
+
+### Cost
+
+Zero, measured: identical code size for both example programs and for
+`compiler.pas`'s own self-host. Widening and same-width bodies still take shape
+1, asserted by rows 7-9 of `test/test_inline_result_narrows.pas` so that a
+future guard cannot pass by quietly disabling the optimisation.
+
+Verified on x86-64, i386, arm32, aarch64 and riscv32 at -O0..-O3, matching
+fpc 3.2.2 on all nine rows. Positive control: the pre-fix compiler gets the
+first six wrong at -O2 and the last three right.
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
