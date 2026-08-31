@@ -1607,8 +1607,45 @@ begin
   end;
 end;
 
+procedure ConstraintError(const msg: AnsiString);
+{ A constraint diagnostic, reported at the right LINE whether it fires during
+  the parse or during the end-of-section drain. While draining, the parser sits
+  at the token that closed the type section, which can be hundreds of lines from
+  the specialization the message is about -- and a diagnostic that names the
+  wrong line is worse than one with no line at all, because it sends the reader
+  somewhere real. PendConCurLine is >0 only inside DrainPendingConstraints. }
+begin
+  if PendConCurLine > 0 then
+    ErrorAt(PendConCurLine, msg)
+  else
+    Error(msg);
+end;
+
+procedure RecordPendingConstraint(ti, k: Integer; const specArg: AnsiString);
+{ Park one (template, parameter, argument) triple for re-checking when the type
+  section closes. The name is copied into TokChars rather than held as an
+  AnsiString, matching PendingSpec*'s reason: a frozen AnsiString array of this
+  width costs real BSS in the compiler's own image. }
+var i: Integer;
+begin
+  if PendConCount >= MAX_PENDING_CONSTRAINTS then
+    Error('too many deferred generic constraint checks (MAX_PENDING_CONSTRAINTS)');
+  PendConTi[PendConCount]   := ti;
+  PendConK[PendConCount]    := k;
+  PendConOff[PendConCount]  := TokCharLen;
+  PendConLen[PendConCount]  := Length(specArg);
+  PendConLine[PendConCount] := CurTok.Line;
+  for i := 1 to Length(specArg) do
+  begin
+    if TokCharLen >= STRING_CAP then Error('token char buffer overflow');
+    TokChars[TokCharLen] := specArg[i];
+    Inc(TokCharLen);
+  end;
+  Inc(PendConCount);
+end;
+
 procedure CheckTemplateConstraint(ti, k: Integer; const specArg: AnsiString;
-                                  specArgKind: TTokenKind);
+                                  specArgKind: TTokenKind; final: Boolean);
 { Check one specialization argument against the constraint recorded for
   parameter k of template ti. Errors name the constraint that was violated --
   the point of the exercise is a diagnostic about the CONSTRAINT, not about
@@ -1683,20 +1720,38 @@ begin
     `T: class`, both previously accepted. }
   if argCi < 0 then
   begin
+    { NOT FINAL: the type section is still open, so this name may still be
+      DECLARED below us -- including a user type that shadows a builtin scalar
+      name, which is legal and which fpc 3.2.2 accepts. Judging here rejects it.
+      Record and re-ask at the section's end, where FindUClass sees everything.
+
+      This is not a refinement, it is the fix for a FALSE REJECTION this
+      function shipped with on 2026-08-31: `type LongInt = class end;` declared
+      after the template, then `TNeedsClass<LongInt>`, was refused as "a value
+      type" because the builtin table answered for a name the user had taken.
+      DelphiRewriteGenericUses puts the specialization AHEAD of anything below
+      the template, so "declared later" is the common case, not the exotic one. }
+    if not final then
+    begin
+      RecordPendingConstraint(ti, k, specArg);
+      Exit;
+    end;
+
     if BuiltinTypeNameTk(specArg) <> tyUnknown then
       what := 'a value type'
     else if CaseEqual(specArg, 'tclass') then
       what := 'a class reference'
     else
-      Exit;   { merely not declared YET -- see the note above }
+      Exit;   { not declared anywhere, and not a builtin -- stays lax }
 
     if (flags and TPC_CLASS) <> 0 then
-      Error(pfx + 'is constrained to `class`, but ' + specArg + ' is ' + what);
+      ConstraintError(pfx + 'is constrained to `class`, but ' + specArg +
+                      ' is ' + what);
     if (flags and TPC_CTOR) <> 0 then
-      Error(pfx + 'is constrained to `constructor`, but ' + specArg + ' is ' +
-            what + ' and only a class can have one');
+      ConstraintError(pfx + 'is constrained to `constructor`, but ' + specArg +
+                      ' is ' + what + ' and only a class can have one');
     if nT > 0 then
-      Error(pfx + 'is constrained to ' +
+      ConstraintError(pfx + 'is constrained to ' +
             GetTokenStrFromRaw(TPConTypeOff[base * MAX_TPC_TYPES],
                                TPConTypeLen[base * MAX_TPC_TYPES]) +
             ', but ' + specArg + ' is ' + what);
@@ -1781,6 +1836,32 @@ begin
               ' is not ' + conName + ' or a descendant of it');
     end;
   end;
+end;
+
+procedure DrainPendingConstraints;
+{ Re-ask every constraint whose argument did not resolve mid-parse, now that the
+  type section has closed and FindUClass can see everything declared in it.
+  Called unconditionally -- an empty list costs one comparison, and making the
+  call conditional on a counter is how the sibling flush came to be unreachable
+  for the common case.
+
+  `final` is True here, so an argument that STILL does not resolve is judged
+  rather than skipped: at this point "not in the class table" no longer means
+  "not yet". That is what makes `TTest1<LongInt>` a rejection while
+  `TNeedsClass<LongInt>` with a user `LongInt = class` below the template stays
+  an acceptance -- the same name, and the only thing separating them is whether
+  we asked before or after the section closed. }
+var i: Integer;
+begin
+  for i := 0 to PendConCount - 1 do
+  begin
+    PendConCurLine := PendConLine[i];
+    CheckTemplateConstraint(PendConTi[i], PendConK[i],
+                            GetTokenStrFromRaw(PendConOff[i], PendConLen[i]),
+                            tkIdent, True);
+  end;
+  PendConCurLine := 0;
+  PendConCount := 0;
 end;
 
 procedure ParseGenericTemplate;
@@ -2806,7 +2887,7 @@ begin
     `TFoo<TBar>` is rewritten into a `specialize` alias by
     DelphiRewriteGenericUses and arrives back through this function. }
   for i := 0 to nc - 1 do
-    CheckTemplateConstraint(ti, i, cNames[i], cKinds[i]);
+    CheckTemplateConstraint(ti, i, cNames[i], cKinds[i], False);
 
   { The substitution set is established HERE, before anything is registered,
     because the prerequisite scan below decides whether this declaration gets

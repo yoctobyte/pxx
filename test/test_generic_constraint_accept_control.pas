@@ -19,6 +19,22 @@
                              name is not in the class table when the check runs.
                              It is also the shape the guard's own comment cites.
 
+    TNeedsClass<LongInt>     where the program declares `LongInt = class`. THE
+                             ARM SAMPLED FROM OUTSIDE THE OLD BOUNDARY, and the
+                             only one that could have caught the shape of
+                             ce4d9004c: the change made a builtin NAME settle a
+                             question, so the case that matters is a user type
+                             wearing a builtin's name. FindUClass runs before
+                             the builtin arm, so this is accepted and must stay
+                             accepted. Added 2026-08-31 after the sibling change
+                             to BuiltinTypeNameTk regressed on exactly this
+                             shape -- there, SizeOf consulted the builtin table
+                             FIRST and a user `type Currency = record` answered
+                             8 instead of 12. Same widening, opposite ordering,
+                             and only one of the two was safe. A control drawn
+                             entirely from the population a change is ABOUT
+                             cannot detect a change to that population's EDGE.
+
   A fourth arm, `TNeedsClass<TLater>` over a class declared later with no
   forward, was written and REMOVED: fpc 3.2.2 rejects it outright ("Identifier
   not found"). We accept it, which is the allowed direction and not a defect,
@@ -40,9 +56,14 @@ type
 
   TFwd = class;
 
-  TOkBuiltinUnconstrained = TUnconstrained<LongInt>;
+  { shadows the builtin scalar name deliberately -- see the note above }
+  LongInt = class
+  end;
+
+  TOkBuiltinUnconstrained = TUnconstrained<Integer>;
   TOkPlain                = TNeedsClass<TPlain>;
   TOkForward              = TNeedsClass<TFwd>;
+  TOkShadowedBuiltin      = TNeedsClass<LongInt>;
 
   TFwd = class
   end;
@@ -51,10 +72,12 @@ var
   a: TOkBuiltinUnconstrained;
   b: TOkPlain;
   c: TOkForward;
+  d: TOkShadowedBuiltin;
 begin
   a := TOkBuiltinUnconstrained.Create;
   b := TOkPlain.Create;
   c := TOkForward.Create;
-  Writeln('accepted 3');
-  a.Free; b.Free; c.Free;
+  d := TOkShadowedBuiltin.Create;
+  Writeln('accepted 4');
+  a.Free; b.Free; c.Free; d.Free;
 end.

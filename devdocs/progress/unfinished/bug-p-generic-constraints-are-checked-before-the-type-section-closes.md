@@ -6,7 +6,7 @@ type: bug
 blocked-by: []
 status: unfinished
 created: 2026-08-30
-summary: "HALF DONE. Constraint checking runs inside ParseSpecialization, where 'not a class' and 'not declared yet' are the same observation, so unresolvable arguments are skipped. FIXED for names that are SETTLED rather than not-yet-known -- a builtin scalar and the metaclass `TClass` are answered outside the symbol table and cannot become classes later, so a `class`/`constructor`/named-type constraint now refuses them: tgenconstraint4 and 5 flip to correctly-rejected, corpus 35/40 -> 37/40, no valid program newly rejected (before/after measured on two binaries). STILL OPEN: constraints against a FORWARD-declared class (tgenconstraint38, 39). And THE PRESCRIBED FIX BELOW IS WRONG for them -- fpc 3.2.2 checks AT the specialization point, not at end of section: it rejects tgenconstraint39 even though the forward TTest does descend from the constraint by the time the section closes. Deferring the check would ACCEPT 39 and diverge. See the 2026-08-31 note."
+summary: "HALF DONE. Constraint checking ran inside ParseSpecialization, where 'not a class' and 'not declared yet' are the same observation. FIXED: a builtin scalar name and the metaclass TClass are refused by a class/constructor/named-type constraint -- tgenconstraint4 and 5 flip to correctly-rejected, corpus 35/40 -> 37/40. That first landed WITHOUT the deferral and shipped a FALSE REJECTION (a user `LongInt = class` declared below the template was refused, fpc accepts); the check is now DEFERRED to type-section close (RecordPendingConstraint / DrainPendingConstraints, unconditional call), which fixes it and changes nothing else -- 37/40 before and after. STILL OPEN: a FORWARD-declared class as argument (tgenconstraint38, 39). Note the fix section BELOW the frontmatter is WRONG for those and is marked so: fpc checks a forward stub AT the specialization point, so a general defer-everything would ACCEPT 39. That is a design question, not a placement one."
 owner: frankwasm
 ---
 
@@ -235,3 +235,72 @@ ancestor chain.
 `FlushPendingClassSpecializations`'s guarded call site in `pasparser_decl.inc`
 is untouched. Nothing here needed it, and given the above it should not be
 widened on this ticket's authority.
+
+---
+
+## 2026-08-31, LATER (frankwasm) — the deferral WAS needed, and I found that out by regressing
+
+Binary `65be5936fe9a`. This corrects the note above it in the same file.
+
+**The earlier note said the settled-name fix "needed no deferral at all". That
+was wrong, and the way it was wrong is the point.** A builtin name is settled
+against *the builtin table*. It is not settled against *the program*, because a
+user may declare a type with that name — and `DelphiRewriteGenericUses` inserts
+the specialization alias immediately after the TEMPLATE, so anything declared
+below the template is invisible when the check runs. Measured:
+
+```pascal
+type
+  TNeedsClass<T: class> = class end;
+  LongInt = class end;              { the user takes a builtin's name }
+  TOk = TNeedsClass<LongInt>;       { fpc 3.2.2: ACCEPTS }
+```
+
+Shipped behaviour at `19bb32f31`: **rejected**, "LongInt is a value type". A
+false rejection — the one direction that ticket's own note claimed it had
+avoided, and the claim was checked against a 40-file corpus in which the case
+does not occur.
+
+### How it was found, because the method transfers and the diff did not
+
+Not by review and not by the corpus. A sibling change of mine the same night
+(`ce4d9004c`, `BuiltinTypeNameTk`) regressed in the *same family* — a builtin
+stealing a user's name — and frank-rust measured it. Applying that shape to this
+change as a deliberate probe produced the failing case on the first try.
+
+The rule it came from, which frank-coordinator banked from that incident:
+**a control sampled from inside the OLD boundary cannot detect that you moved
+the boundary.** The accept-side control here had four arms and every one of them
+used ordinary user classes — drawn from the population the change was *about*,
+when the change was to which NAMES the checker will answer for. The missing arm
+was the only one that mattered.
+
+### The fix
+
+Defer: `RecordPendingConstraint` parks (template, parameter, argument, line)
+whenever the argument does not resolve; `DrainPendingConstraints` re-asks at
+`TypeSectionDepth = 0` with `final = True`, where FindUClass sees the whole
+section. Name stored as a TokChars offset, not an AnsiString, matching
+`PendingSpec*`'s BSS reasoning. Deferred errors report through
+`ConstraintError`, which uses `ErrorAt` with the RECORDED line — the parser is
+at the section's closing token by then, which can be hundreds of lines away, and
+a diagnostic naming the wrong line is worse than one naming none.
+
+The drain call is **unconditional**. Its neighbour `FlushPendingClassSpecializations`
+is guarded by `PendingSpecCount > 0`, which is what this ticket originally
+complained about; an empty list costs one comparison.
+
+### It does NOT resurrect the design this ticket originally prescribed
+
+The correction above still stands: fpc checks a FORWARD STUB at the
+specialization point, so `tgenconstraint39` must be rejected there and a
+general "defer everything" would accept it. That case never reaches the pending
+list — a forward stub has `argCi >= 0` and takes the `UClsForward` exit before
+it. **Measured: 37/40 both before and after this change, with the same three
+disagreements (37 pre-existing, 38 and 39 the forward-stub pair).** The deferral
+buys the shadowing fix and changes nothing else.
+
+### Still open, unchanged
+
+`tgenconstraint38`/`39`: a forward stub as a specialization argument. Still a
+design question — is that an error in its own right? — not a placement one.

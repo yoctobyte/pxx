@@ -7992,7 +7992,7 @@ test-core: $(COMPILER)
 	# a class declared earlier in the section (the shape the not-declared-yet exit
 	# exists to protect) must ALL still compile. fpc 3.2.2 agrees line for line.
 	./$(COMPILER) test/test_generic_constraint_accept_control.pas $(TESTTMP)/test_gconacc26
-	tools/expect_same.sh test_gconacc26 "$$($(TESTTMP)/test_gconacc26)" "accepted 3"
+	tools/expect_same.sh test_gconacc26 "$$($(TESTTMP)/test_gconacc26)" "accepted 4"
 	# SizeOf(<type name>) vs SizeOf(<variable of that type>) -- the same answer
 	# came from TWO tables and they drifted three times (Real, bare string,
 	# Extended). The audit with the third found EIGHT more names the declaration

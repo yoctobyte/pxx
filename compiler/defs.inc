@@ -1947,6 +1947,7 @@ const
                                limit check cannot report it, since it only fires
                                at the cap. }
   MAX_PENDING_SPECS = 256;
+  MAX_PENDING_CONSTRAINTS = 256;   { deferred generic-constraint checks; see PendCon* }
   MAX_SPECIALIZATIONS = 256;
   MAX_GENERIC_FUNCS = 128;
   MAX_PENDING_GFSPECS = 256;
@@ -2158,6 +2159,22 @@ var
     indices into Specializations[] (which already holds the names/types) to
     avoid large frozen-AnsiString arrays in the compiler's own BSS. Flushed by
     ParseTypeSection. }
+  { Generic constraint checks whose ARGUMENT did not resolve when the
+    specialization was parsed, re-asked once the type section closes. A name
+    that is not in the class table mid-parse is ambiguous between "not a class"
+    and "not declared yet" -- and DelphiRewriteGenericUses makes the second case
+    the COMMON one, because it inserts the alias immediately after the TEMPLATE,
+    ahead of everything declared below it. Judging there rejects ordinary code;
+    judging at the section's end does not, because by then every type in the
+    section exists. Name stored as an offset into TokChars, not an AnsiString,
+    for the same BSS reason as PendingSpec* above. }
+  PendConTi        : array[0..MAX_PENDING_CONSTRAINTS-1] of Integer;
+  PendConK         : array[0..MAX_PENDING_CONSTRAINTS-1] of Integer;
+  PendConOff       : array[0..MAX_PENDING_CONSTRAINTS-1] of Integer;
+  PendConLen       : array[0..MAX_PENDING_CONSTRAINTS-1] of Integer;
+  PendConLine      : array[0..MAX_PENDING_CONSTRAINTS-1] of Integer;
+  PendConCount     : Integer;
+  PendConCurLine   : Integer;   { >0 only while draining: the line a deferred constraint error belongs to, since the parser is nowhere near it }
   PendingSpecTi    : array[0..MAX_PENDING_SPECS-1] of Integer;
   PendingSpecIdx   : array[0..MAX_PENDING_SPECS-1] of Integer;
   PendingSpecCount : Integer;

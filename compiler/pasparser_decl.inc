@@ -6355,6 +6355,13 @@ begin
     FlushPendingClassSpecializations;
     Next;
   end;
+  { Deferred generic-constraint checks, at the one point where every type in the
+    section exists. UNCONDITIONAL on purpose: the neighbour above is guarded by
+    `PendingSpecCount > 0`, and a guard like that is exactly how a drain becomes
+    unreachable for the common case. An empty list is one comparison.
+    bug-p-generic-constraints-are-checked-before-the-type-section-closes }
+  if TypeSectionDepth = 0 then
+    DrainPendingConstraints;
   ResolvePendingPointerAliases;
 end;
 
