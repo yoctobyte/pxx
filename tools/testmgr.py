@@ -3566,6 +3566,27 @@ class Manager:
                     self.running.remove(job)
                     done.append(job)
             elif now - job.t0 > self.effective_timeout(job):
+                # THE BOX'S LOAD AT THE MOMENT OF THE KILL, because the report
+                # otherwise cannot distinguish "the tree got slower" from "the
+                # box was busy". Co-tenancy detection above only sees another
+                # TESTMGR: a plain `make`, an agent's build, a toolchain install
+                # are all invisible to it, so a timeout under that load is
+                # published as a bare RED with no caveat and reads as a
+                # regression. Measured on seven 2026-08-31: test-aarch64#132
+                # timed out at 240.4s against a 2.0s learned duration during an
+                # unrelated `make`, and passes 3/3 standalone on the same box at
+                # the same core count.
+                #
+                # Recorded, NOT acted on. Load is evidence about the box, not
+                # proof this job was the victim, and auto-retrying on it would
+                # convert a visible red into an invisible flake -- the direction
+                # this file keeps refusing to go. track-t.md already says a
+                # harness that is part of the contention cannot MEASURE it; it
+                # can still write down what the box was doing.
+                try:
+                    job.loadavg = os.getloadavg()[0]
+                except OSError:
+                    job.loadavg = None
                 self.kill_group(job)
                 job.proc.wait()
                 if self._retriable(job):
@@ -5740,6 +5761,12 @@ def main():
         # that overran a 90s budget by a hair from one that is genuinely stuck.
         if j.status == "timeout" and j.timeout:
             note += "  budget was %.0fs" % j.timeout
+            la = getattr(j, "loadavg", None)
+            if la is not None:
+                note += ("  load %.1f on %d cores%s"
+                         % (la, mgr.nproc,
+                            " — CO-TENANT LOAD, triage the box before the tree"
+                            if la > mgr.nproc * 1.5 else ""))
             # ...and what we already knew it needed. A budget alone reads as a
             # hang; budget-beside-expectation is what distinguishes "stuck" from
             # "this job has been growing for weeks". lib-test#src:test/crtl_exp2.c
