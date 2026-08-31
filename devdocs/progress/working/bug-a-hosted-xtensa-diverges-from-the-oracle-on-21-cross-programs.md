@@ -350,6 +350,25 @@ handling — which is exactly why it needs reconciling rather than reporting.
 x86-64 oracle will rediscover them; that is a property of the comparison, not of
 xtensa.
 
+## A trap this ticket sets for its own readers: the filename names a target
+
+Raised by the coordinator after it fired. `test_arm32_record_byval_wide` is a
+row in an **xtensa vs x86-64** table — `arm32` is only in the program's
+FILENAME. A peer disclaiming authorship of the fix measured it carefully on
+arm32, aarch64, riscv32 and x86-64, with a pinned-compiler control, all green,
+and concluded the row had never been red. None of those is the column the row
+is about, and their own output contains `1 7 8 2`, which is the *oracle* value
+this ticket records.
+
+**It is fixed on the column it is about, and here is that measurement:**
+`--target=xtensa --platform=posix --xtensa-soft-mulhigh`, run under
+`qemu-xtensa`, byte-identical to the x86-64 build; independently, its row in the
+xtensa-only sweep is `MATCH`. Nobody claimed it — something else in the ABI work
+of 2026-08-30 took it out.
+
+**So name the target in any row you add here**, because every program in this
+table is named for something other than the target it is being run on.
+
 ## Fixed: Trunc/Round to Int64 saturated at 2^31 — and it was two targets
 
 xtensa's `-203/-204` arm called the 32-bit `__pxx_d2i`/`__pxx_s2i` and
