@@ -1954,7 +1954,7 @@ begin
         { compiled as the main program, so __name__ is always "__main__". }
         Next;
         node := AllocNode(AN_STR_LIT);
-        ASTSOffset[node] := PyStoredName('__main__'); ASTSLen[node] := 8;
+        ASTSOffset[node] := StoredName('__main__'); ASTSLen[node] := 8;
         ASTTk[node] := Ord(tyString);
         CurASTNode := node; LastExprTk := tyString;
         Exit;
@@ -1982,7 +1982,7 @@ begin
             Error('Nil Python: pylib (pysys_module_file) not loaded');
           valNode := AllocNode(AN_STR_LIT);
           ASTSOffset[valNode] :=
-            PyStoredName(LowerCase(Strs[CurrentUnitIdx].Text) + '.py');
+            StoredName(LowerCase(Strs[CurrentUnitIdx].Text) + '.py');
           ASTSLen[valNode] := Length(Strs[CurrentUnitIdx].Text) + 3;
           ASTTk[valNode] := Ord(tyString);
           argSeq := AllocNode(AN_ARG);
@@ -2569,7 +2569,7 @@ begin
             if IntToTypeKind(ASTTk[atRecv]) = tyVariant then ASTLeft[argSeq] := atRecv
             else ASTLeft[argSeq] := PyMakeObjPtr(atRecv);
             argSeq2 := AllocNode(AN_STR_LIT);
-            ASTSOffset[argSeq2] := PyStoredName(atName); ASTSLen[argSeq2] := Length(atName);
+            ASTSOffset[argSeq2] := StoredName(atName); ASTSLen[argSeq2] := Length(atName);
             ASTTk[argSeq2] := Ord(tyString);
             argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := argSeq2; ASTRight[argSeq3] := -1;
             ASTRight[argSeq] := argSeq3;
@@ -2618,7 +2618,7 @@ begin
           if IntToTypeKind(ASTTk[atRecv]) = tyVariant then ASTLeft[argSeq] := atRecv
           else ASTLeft[argSeq] := PyMakeObjPtr(atRecv);
           argSeq2 := AllocNode(AN_STR_LIT);
-          ASTSOffset[argSeq2] := PyStoredName(atName); ASTSLen[argSeq2] := Length(atName);
+          ASTSOffset[argSeq2] := StoredName(atName); ASTSLen[argSeq2] := Length(atName);
           ASTTk[argSeq2] := Ord(tyString);
           argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := argSeq2; ASTRight[argSeq3] := -1;
           ASTRight[argSeq] := argSeq3;
@@ -2648,7 +2648,7 @@ begin
           { the field exists: an ordinary field read }
           node := AllocNode(AN_FIELD);
           ASTLeft[node] := atRecv;
-          ASTSOffset[node] := PyStoredName(atName);
+          ASTSOffset[node] := StoredName(atName);
           ASTSLen[node] := Length(atName);
           ASTTk[node] := UFldTk[atFld];
           CurASTNode := node;
@@ -2704,7 +2704,7 @@ begin
             `o.name = v` write the same slot rather than two }
           node := AllocNode(AN_FIELD);
           ASTLeft[node] := atRecv;
-          ASTSOffset[node] := PyStoredName(atName);
+          ASTSOffset[node] := StoredName(atName);
           ASTSLen[node] := Length(atName);
           ASTTk[node] := UFldTk[atFld];
           argSeq := AllocNode(AN_ASSIGN);

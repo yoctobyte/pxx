@@ -2302,7 +2302,7 @@ begin
   procIdx := FindProc('pyoptional_missing');
   if procIdx < 0 then Error('Nil Python: pylib (pyoptional_missing) not loaded');
   litNode := AllocNode(AN_STR_LIT);
-  ASTSOffset[litNode] := PyStoredName(what);
+  ASTSOffset[litNode] := StoredName(what);
   ASTSLen[litNode] := Length(what);
   ASTTk[litNode] := Ord(tyString);
   argNode := AllocNode(AN_ARG);
@@ -2336,7 +2336,7 @@ var procIdx, a1, a2, l1, l2: Integer;
   function StrArg(const t: AnsiString): Integer;
   begin
     Result := AllocNode(AN_STR_LIT);
-    ASTSOffset[Result] := PyStoredName(t);
+    ASTSOffset[Result] := StoredName(t);
     ASTSLen[Result] := Length(t);
     ASTTk[Result] := Ord(tyString);
   end;
@@ -4623,7 +4623,7 @@ begin
   if lo = 'str' then
   begin
     CurASTNode := AllocNode(AN_STR_LIT);
-    ASTSOffset[CurASTNode] := PyStoredName('');
+    ASTSOffset[CurASTNode] := StoredName('');
     ASTSLen[CurASTNode] := 0;
     { tyString, matching what an ordinary `""` literal carries. tyAnsiString
       here — the type `str` the CALL is inferred as — made `str() == ""`
@@ -6129,18 +6129,6 @@ begin
   Result := res;
 end;
 
-function PyStoredName(const s: AnsiString): Integer;
-var i: Integer;
-begin
-  Result := TokCharLen;
-  for i := 1 to Length(s) do
-  begin
-    if TokCharLen >= STRING_CAP then Error('token char buffer overflow');
-    TokChars[TokCharLen] := s[i];
-    Inc(TokCharLen);
-  end;
-end;
-
 function PyRawName(off, len: Integer): AnsiString;
 var i: Integer; s: AnsiString;
 begin
@@ -6307,7 +6295,7 @@ begin
   procIdx := FindProc('pyclsattr_inst_get');
   if procIdx < 0 then Exit;
   nameNode := AllocNode(AN_STR_LIT);
-  ASTSOffset[nameNode] := PyStoredName(fname);
+  ASTSOffset[nameNode] := StoredName(fname);
   ASTSLen[nameNode] := Length(fname);
   ASTTk[nameNode] := Ord(tyString);
   a0 := AllocNode(AN_ARG); ASTLeft[a0] := PyMakeObjPtr(baseNode);
@@ -6394,7 +6382,7 @@ begin
   if boxIdx < 0 then Error('Nil Python: pylib (pyvar_box) not loaded');
 
   nameN := AllocNode(AN_STR_LIT);
-  ASTSOffset[nameN] := PyStoredName(fname);
+  ASTSOffset[nameN] := StoredName(fname);
   ASTSLen[nameN] := Length(fname);
   ASTTk[nameN] := Ord(tyString);
   a0 := AllocNode(AN_ARG); ASTLeft[a0] := PyMakeObjPtr(baseNode);
@@ -7526,7 +7514,7 @@ end;
 function PyExcFoldLit(const t: AnsiString): Integer;
 begin
   Result := AllocNode(AN_STR_LIT);
-  ASTSOffset[Result] := PyStoredName(t);
+  ASTSOffset[Result] := StoredName(t);
   ASTSLen[Result] := Length(t);
   ASTTk[Result] := Ord(tyString);
 end;
@@ -7689,7 +7677,7 @@ begin
       if (kwFld < 0) and (kwCtorMi >= 0) and (ProcPyKwIdx[kwCtorPi] >= 0) then
       begin
         kwKeyNode := AllocNode(AN_STR_LIT);
-        ASTSOffset[kwKeyNode] := PyStoredName(kwName);
+        ASTSOffset[kwKeyNode] := StoredName(kwName);
         ASTSLen[kwKeyNode] := Length(kwName);
         ASTTk[kwKeyNode] := Ord(tyString);
         Next; Next;                        { the name and the '=' }
@@ -8325,7 +8313,7 @@ begin
   if ProcPyKwIdx[mpi] >= 0 then
   begin
     i := AllocNode(AN_STR_LIT);
-    ASTSOffset[i] := PyStoredName(nm);
+    ASTSOffset[i] := StoredName(nm);
     ASTSLen[i] := Length(nm);
     ASTTk[i] := Ord(tyString);
     PyKwArgIndex := -(i + 1);
@@ -8799,7 +8787,7 @@ begin
             + 'use an f-string');
     newFmt := PyFormatRenumber(PyRawName(ASTSOffset[baseNode], ASTSLen[baseNode]),
                                kwNames, kwCount, nPos);
-    ASTSOffset[baseNode] := PyStoredName(newFmt);
+    ASTSOffset[baseNode] := StoredName(newFmt);
     ASTSLen[baseNode] := Length(newFmt);
   end;
   Result := PyStrMethodFinish(mname, argNode, lastArg, i);
@@ -9818,12 +9806,12 @@ begin
   { pyclosure_src_new(params, src) }
   argA := AllocNode(AN_ARG);
   argB := AllocNode(AN_STR_LIT);
-  ASTSOffset[argB] := PyStoredName(params); ASTSLen[argB] := Length(params);
+  ASTSOffset[argB] := StoredName(params); ASTSLen[argB] := Length(params);
   ASTTk[argB] := Ord(tyString);
   ASTLeft[argA] := argB;
   argB := AllocNode(AN_ARG);
   node := AllocNode(AN_STR_LIT);
-  ASTSOffset[node] := PyStoredName(src); ASTSLen[node] := Length(src);
+  ASTSOffset[node] := StoredName(src); ASTSLen[node] := Length(src);
   ASTTk[node] := Ord(tyString);
   ASTLeft[argB] := node;
   ASTRight[argA] := argB;
@@ -9877,7 +9865,7 @@ begin
       ASTLeft[argA] := node;                       { the closure obj so far }
       argB := AllocNode(AN_ARG);
       capNode := AllocNode(AN_STR_LIT);
-      ASTSOffset[capNode] := PyStoredName(GetTokenStr(i));
+      ASTSOffset[capNode] := StoredName(GetTokenStr(i));
       ASTSLen[capNode] := Length(GetTokenStr(i));
       ASTTk[capNode] := Ord(tyString);
       ASTLeft[argB] := capNode;
@@ -9896,7 +9884,7 @@ begin
     ASTLeft[argA] := node;
     argB := AllocNode(AN_ARG);
     capNode := AllocNode(AN_STR_LIT);
-    ASTSOffset[capNode] := PyStoredName(dcNames[i]);
+    ASTSOffset[capNode] := StoredName(dcNames[i]);
     ASTSLen[capNode] := Length(dcNames[i]);
     ASTTk[capNode] := Ord(tyString);
     ASTLeft[argB] := capNode;
@@ -10476,7 +10464,7 @@ begin
     procIdx := FindProc('pydynattr_get');
   if procIdx < 0 then Error('Nil Python: pylib (pydynattr_get/_v) not loaded');
   nameNode := AllocNode(AN_STR_LIT);
-  ASTSOffset[nameNode] := PyStoredName(fname);
+  ASTSOffset[nameNode] := StoredName(fname);
   ASTSLen[nameNode] := Length(fname);
   ASTTk[nameNode] := Ord(tyString);
   a0 := AllocNode(AN_ARG);
@@ -10507,7 +10495,7 @@ begin
     procIdx := FindProc('pydynattr_set');
   if procIdx < 0 then Error('Nil Python: pylib (pydynattr_set/_v) not loaded');
   nameNode := AllocNode(AN_STR_LIT);
-  ASTSOffset[nameNode] := PyStoredName(fname);
+  ASTSOffset[nameNode] := StoredName(fname);
   ASTSLen[nameNode] := Length(fname);
   ASTTk[nameNode] := Ord(tyString);
   a0 := AllocNode(AN_ARG);
@@ -10587,7 +10575,7 @@ begin
     ASTRight[clsNode] := 0;
     ASTTk[clsNode] := Ord(tyPointer);
     nameNode := AllocNode(AN_STR_LIT);
-    ASTSOffset[nameNode] := PyStoredName(nm);
+    ASTSOffset[nameNode] := StoredName(nm);
     ASTSLen[nameNode] := Length(nm);
     ASTTk[nameNode] := Ord(tyString);
     addrNode := AllocNode(AN_ADDR);
@@ -11053,12 +11041,12 @@ begin
   if procIdx < 0 then Exit;
   a0 := AllocNode(AN_ARG);
   lit := AllocNode(AN_STR_LIT);
-  ASTSOffset[lit] := PyStoredName(kind); ASTSLen[lit] := Length(kind);
+  ASTSOffset[lit] := StoredName(kind); ASTSLen[lit] := Length(kind);
   ASTTk[lit] := Ord(tyString);
   ASTLeft[a0] := lit;
   a1 := AllocNode(AN_ARG);
   lit := AllocNode(AN_STR_LIT);
-  ASTSOffset[lit] := PyStoredName(PyRawName(UClsNOff[ci], UClsNLen[ci]));
+  ASTSOffset[lit] := StoredName(PyRawName(UClsNOff[ci], UClsNLen[ci]));
   ASTSLen[lit] := UClsNLen[ci];
   ASTTk[lit] := Ord(tyString);
   ASTLeft[a1] := lit; ASTRight[a1] := -1;
@@ -11090,7 +11078,7 @@ begin
   if procIdx < 0 then Exit;
   a0 := AllocNode(AN_ARG);
   lit := AllocNode(AN_STR_LIT);
-  ASTSOffset[lit] := PyStoredName(PyRawName(UClsNOff[ci], UClsNLen[ci]));
+  ASTSOffset[lit] := StoredName(PyRawName(UClsNOff[ci], UClsNLen[ci]));
   ASTSLen[lit] := UClsNLen[ci];
   ASTTk[lit] := Ord(tyString);
   ASTLeft[a0] := lit; ASTRight[a0] := -1;
@@ -11120,14 +11108,14 @@ begin
   lit := AllocNode(AN_STR_LIT);
   if ci >= 0 then
   begin
-    ASTSOffset[lit] := PyStoredName(PyRawName(UClsNOff[ci], UClsNLen[ci]));
+    ASTSOffset[lit] := StoredName(PyRawName(UClsNOff[ci], UClsNLen[ci]));
     ASTSLen[lit] := UClsNLen[ci];
   end
   else
   begin
     { no class in hand (a variant receiver): the runtime prints the message
       without a name rather than inventing one }
-    ASTSOffset[lit] := PyStoredName('');
+    ASTSOffset[lit] := StoredName('');
     ASTSLen[lit] := 0;
   end;
   ASTTk[lit] := Ord(tyString);
@@ -12008,12 +11996,12 @@ begin
     Result := AllocNode(AN_STR_LIT);
     if nm = 'sep' then
     begin
-      ASTSOffset[Result] := PyStoredName('/');
+      ASTSOffset[Result] := StoredName('/');
       ASTSLen[Result] := 1;
     end
     else
     begin
-      ASTSOffset[Result] := PyStoredName(#10);
+      ASTSOffset[Result] := StoredName(#10);
       ASTSLen[Result] := 1;
     end;
     ASTTk[Result] := Ord(tyString);
@@ -12040,7 +12028,7 @@ begin
       constant string is the whole of what is needed. When pxx targets Windows
       this has to follow the TARGET, not the host. }
     Result := AllocNode(AN_STR_LIT);
-    ASTSOffset[Result] := PyStoredName('linux');
+    ASTSOffset[Result] := StoredName('linux');
     ASTSLen[Result] := 5;
     ASTTk[Result] := Ord(tyString);
     LastExprTk := tyString;
@@ -12919,7 +12907,7 @@ begin
   ASTTk[castNode]   := Ord(tyClass);
   Result := AllocNode(AN_FIELD);
   ASTLeft[Result] := castNode;
-  ASTSOffset[Result] := PyStoredName(fname);
+  ASTSOffset[Result] := StoredName(fname);
   ASTSLen[Result] := Length(fname);
   ASTTk[Result] := UFldTk[fi];
 end;
@@ -13518,7 +13506,7 @@ begin
       calleeNm := GetTokenStr(TokPos - 2)
     else
       calleeNm := '';
-    ASTSOffset[nmLit] := PyStoredName(calleeNm);
+    ASTSOffset[nmLit] := StoredName(calleeNm);
     ASTSLen[nmLit] := Length(calleeNm);
     ASTTk[nmLit] := Ord(tyString);
     ASTLeft[nmArg] := nmLit;
@@ -13584,7 +13572,7 @@ begin
         kwValsSym := PyNewContainerTemp('TPyList', 'dynkwv');
       end;
       kwLit := AllocNode(AN_STR_LIT);
-      ASTSOffset[kwLit] := PyStoredName(kwName);
+      ASTSOffset[kwLit] := StoredName(kwName);
       ASTSLen[kwLit] := Length(kwName);
       ASTTk[kwLit] := Ord(tyString);
       PyContainerCall1(kwNamesSym, 'TPyList', 'append', kwLit, -1);
@@ -13863,7 +13851,7 @@ begin
   ASTTk[castNode]   := Ord(tyClass);
   fieldNode := AllocNode(AN_FIELD);
   ASTLeft[fieldNode] := castNode;
-  ASTSOffset[fieldNode] := PyStoredName(fname);
+  ASTSOffset[fieldNode] := StoredName(fname);
   ASTSLen[fieldNode] := Length(fname);
   ASTTk[fieldNode] := fldTk;
 
@@ -15824,7 +15812,7 @@ begin
     i := FindProc('pydynattr_no_method');
     if i < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
     smNameArg := AllocNode(AN_STR_LIT);
-    ASTSOffset[smNameArg] := PyStoredName(mname);
+    ASTSOffset[smNameArg] := StoredName(mname);
     ASTSLen[smNameArg] := Length(mname);
     ASTTk[smNameArg] := Ord(tyString);
     smArg2 := AllocNode(AN_ARG); ASTLeft[smArg2] := smNameArg; ASTRight[smArg2] := -1;
@@ -15913,7 +15901,7 @@ begin
     i := FindProc('pydynattr_no_method');
     if i < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
     smNameArg := AllocNode(AN_STR_LIT);
-    ASTSOffset[smNameArg] := PyStoredName(mname);
+    ASTSOffset[smNameArg] := StoredName(mname);
     ASTSLen[smNameArg] := Length(mname);
     ASTTk[smNameArg] := Ord(tyString);
     smArg2 := AllocNode(AN_ARG); ASTLeft[smArg2] := smNameArg; ASTRight[smArg2] := -1;
@@ -16414,7 +16402,7 @@ begin
   i := FindProc('pydynattr_no_method');
   if i < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
   vtNameArg := AllocNode(AN_STR_LIT);
-  ASTSOffset[vtNameArg] := PyStoredName(mname);
+  ASTSOffset[vtNameArg] := StoredName(mname);
   ASTSLen[vtNameArg] := Length(mname);
   ASTTk[vtNameArg] := Ord(tyString);
   vtArg2 := AllocNode(AN_ARG); ASTLeft[vtArg2] := vtNameArg; ASTRight[vtArg2] := -1;
@@ -16583,7 +16571,7 @@ begin
       k := FindProc('pydynattr_no_method');
       if k < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
       smNameArg := AllocNode(AN_STR_LIT);
-      ASTSOffset[smNameArg] := PyStoredName(mname);
+      ASTSOffset[smNameArg] := StoredName(mname);
       ASTSLen[smNameArg] := Length(mname);
       ASTTk[smNameArg] := Ord(tyString);
       smArg2 := AllocNode(AN_ARG); ASTLeft[smArg2] := smNameArg; ASTRight[smArg2] := -1;
@@ -17010,7 +16998,7 @@ begin
     k := FindProc('pydynattr_no_method');
     if k < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
     flNotNode := AllocNode(AN_STR_LIT);
-    ASTSOffset[flNotNode] := PyStoredName(mname);
+    ASTSOffset[flNotNode] := StoredName(mname);
     ASTSLen[flNotNode] := Length(mname);
     ASTTk[flNotNode] := Ord(tyString);
     flArg2 := AllocNode(AN_ARG); ASTLeft[flArg2] := flNotNode; ASTRight[flArg2] := -1;
@@ -17045,7 +17033,7 @@ begin
     k := FindProc('pydynattr_no_method');
     if k < 0 then Error('Nil Python: pylib (pydynattr_no_method) not loaded');
     smNameArg := AllocNode(AN_STR_LIT);
-    ASTSOffset[smNameArg] := PyStoredName(mname);
+    ASTSOffset[smNameArg] := StoredName(mname);
     ASTSLen[smNameArg] := Length(mname);
     ASTTk[smNameArg] := Ord(tyString);
     smArg2 := AllocNode(AN_ARG); ASTLeft[smArg2] := smNameArg; ASTRight[smArg2] := -1;
@@ -17536,7 +17524,7 @@ begin
       Next;                              { the '=' }
       ParseArgExpr;
       kwLit := AllocNode(AN_STR_LIT);
-      ASTSOffset[kwLit] := PyStoredName(kwName);
+      ASTSOffset[kwLit] := StoredName(kwName);
       ASTSLen[kwLit] := Length(kwName);
       ASTTk[kwLit] := Ord(tyString);
       if dctSym < 0 then dctSym := PyNewContainerTemp('TPyDict', 'fwdkw');
@@ -17724,7 +17712,7 @@ begin
     if dictSym >= 0 then
     begin
       nameNode := AllocNode(AN_STR_LIT);
-      ASTSOffset[nameNode] := PyStoredName(Procs[procIdx].Params[k].Name);
+      ASTSOffset[nameNode] := StoredName(Procs[procIdx].Params[k].Name);
       ASTSLen[nameNode] := Length(Procs[procIdx].Params[k].Name);
       ASTTk[nameNode] := Ord(tyString);
       a2 := AllocNode(AN_ARG);
@@ -17758,7 +17746,7 @@ begin
       ASTTk[ASTLeft[a3]] := Ord(tyInteger);
       ASTRight[a2] := a3;
       nameNode := AllocNode(AN_STR_LIT);
-      ASTSOffset[nameNode] := PyStoredName(Procs[procIdx].Params[k].Name);
+      ASTSOffset[nameNode] := StoredName(Procs[procIdx].Params[k].Name);
       ASTSLen[nameNode] := Length(Procs[procIdx].Params[k].Name);
       ASTTk[nameNode] := Ord(tyString);
       argNode := AllocNode(AN_ARG);
@@ -18134,12 +18122,12 @@ begin
           ASTTk[ASTLeft[rbA2]] := Ord(tyInteger);
           rbA3 := AllocNode(AN_ARG);
           ASTLeft[rbA3] := AllocNode(AN_STR_LIT);
-          ASTSOffset[ASTLeft[rbA3]] := PyStoredName(Procs[mpi].Name);
+          ASTSOffset[ASTLeft[rbA3]] := StoredName(Procs[mpi].Name);
           ASTSLen[ASTLeft[rbA3]] := Length(Procs[mpi].Name);
           ASTTk[ASTLeft[rbA3]] := Ord(tyString);
           rbA4 := AllocNode(AN_ARG);
           ASTLeft[rbA4] := AllocNode(AN_STR_LIT);
-          ASTSOffset[ASTLeft[rbA4]] := PyStoredName(rbNames);
+          ASTSOffset[ASTLeft[rbA4]] := StoredName(rbNames);
           ASTSLen[ASTLeft[rbA4]] := Length(rbNames);
           ASTTk[ASTLeft[rbA4]] := Ord(tyString);
           ASTRight[rbA4] := -1;
@@ -18828,7 +18816,7 @@ begin
     Next;                    { the name }
     Next;                    { the '=' }
     keyNode := AllocNode(AN_STR_LIT);
-    ASTSOffset[keyNode] := PyStoredName(nm);
+    ASTSOffset[keyNode] := StoredName(nm);
     ASTSLen[keyNode] := Length(nm);
     ASTTk[keyNode] := Ord(tyString);
     if PyBareNoneHere then
@@ -19345,7 +19333,7 @@ begin
   begin
     fieldNode := AllocNode(AN_FIELD);
     ASTLeft[fieldNode] := node;
-    ASTSOffset[fieldNode] := PyStoredName('msg');
+    ASTSOffset[fieldNode] := StoredName('msg');
     ASTSLen[fieldNode] := 3;
     ASTTk[fieldNode] := Ord(tyAnsiString);
     PyClassStrNode := fieldNode;
@@ -19592,7 +19580,7 @@ begin
         if haveSep and (Length(sepText) > 1) then
         begin
           sepLit := AllocNode(AN_STR_LIT);
-          ASTSOffset[sepLit] := PyStoredName(sepText);
+          ASTSOffset[sepLit] := StoredName(sepText);
           ASTSLen[sepLit] := Length(sepText);
           ASTTk[sepLit] := Ord(tyString);
         end
@@ -19643,7 +19631,7 @@ begin
       begin
         Next;
         noneLit := AllocNode(AN_STR_LIT);
-        ASTSOffset[noneLit] := PyStoredName('None');
+        ASTSOffset[noneLit] := StoredName('None');
         ASTSLen[noneLit] := 4;
         ASTTk[noneLit] := Ord(tyString);
         CurASTNode := noneLit;
@@ -19753,7 +19741,7 @@ begin
     if endText <> '' then
     begin
       endLit := AllocNode(AN_STR_LIT);
-      ASTSOffset[endLit] := PyStoredName(endText);
+      ASTSOffset[endLit] := StoredName(endText);
       ASTSLen[endLit] := Length(endText);
       ASTTk[endLit] := Ord(tyString);
       argNode := AllocNode(AN_ARG);
@@ -19936,7 +19924,7 @@ begin
   Result := FindUClass('Exception');
   if Result < 0 then
   begin
-    k := PyStoredName('Exception');
+    k := StoredName('Exception');
     AddUClass(k, 9);
     Result := FindUClass('Exception');
   end;
@@ -20925,7 +20913,7 @@ begin
     if (Tokens[k].Kind = tkIdent) and (Tokens[k].SLen = Length(oldName)) and
        (GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen) = oldName) then
     begin
-      if newOff < 0 then newOff := PyStoredName(newName);
+      if newOff < 0 then newOff := StoredName(newName);
       Tokens[k].SOffset := newOff;
       Tokens[k].SLen := Length(newName);
     end;
@@ -21322,7 +21310,7 @@ begin
       if capSym >= 0 then
       begin
         identNode := AllocNode(AN_STR_LIT);
-        ASTSOffset[identNode] := PyStoredName(Procs[procIdx].Params[i].Name);
+        ASTSOffset[identNode] := StoredName(Procs[procIdx].Params[i].Name);
         ASTSLen[identNode] := Length(Procs[procIdx].Params[i].Name);
         ASTTk[identNode] := Ord(tyString);
         argSeq := AllocNode(AN_ARG);
@@ -25582,7 +25570,7 @@ begin
   procIdx := FindProc('pyvar_callable_ptr');
   if procIdx < 0 then Exit;
   nameNode := AllocNode(AN_STR_LIT);
-  ASTSOffset[nameNode] := PyStoredName(what);
+  ASTSOffset[nameNode] := StoredName(what);
   ASTSLen[nameNode] := Length(what);
   ASTTk[nameNode] := Ord(tyString);
   a0 := AllocNode(AN_ARG); ASTLeft[a0] := node;
@@ -25765,7 +25753,7 @@ begin
   end;
   node := AllocNode(AN_FIELD);
   ASTLeft[node] := baseNode;
-  ASTSOffset[node] := PyStoredName(rfld);
+  ASTSOffset[node] := StoredName(rfld);
   ASTSLen[node] := Length(rfld);
   ASTTk[node] := UFldTk[fi];
   ASTRight[node] := UFldRec_[fi];
@@ -25820,7 +25808,7 @@ begin
     end;
     lhs := AllocNode(AN_FIELD);
     ASTLeft[lhs] := PyMakeIdent(symIdx);
-    ASTSOffset[lhs] := PyStoredName(fld);
+    ASTSOffset[lhs] := StoredName(fld);
     ASTSLen[lhs] := Length(fld);
     ASTTk[lhs] := UFldTk[fi];
   end;
@@ -26951,7 +26939,7 @@ begin
       Expect(tkRParen, ')');
       lhsNode := AllocNode(AN_FIELD);
       ASTLeft[lhsNode] := PyMakeIdent(symIdx);
-      ASTSOffset[lhsNode] := PyStoredName('msg');
+      ASTSOffset[lhsNode] := StoredName('msg');
       ASTSLen[lhsNode] := 3;
       ASTTk[lhsNode] := Ord(tyAnsiString);
       node := AllocNode(AN_ASSIGN);
@@ -33894,7 +33882,7 @@ begin
           field scan below, which is the only thing the pre-pass wants }
       else if isCtor then
       begin
-        k := PyStoredName('create');
+        k := StoredName('create');
         AddUMeth(ci, k, 6, procIdx);
         { mark it a real constructor, like the Pascal declaration does — the
           metaclass and ctor-overload paths test UMthIsCtor, not the name }
@@ -33906,7 +33894,7 @@ begin
           RegisterProc just made; AddUMeth otherwise keys on the raw source
           token, leaving the method called `base` while the property looks for
           `__prop_get_base`. }
-        AddUMeth(ci, PyStoredName(name), Length(name), procIdx);
+        AddUMeth(ci, StoredName(name), Length(name), procIdx);
         { The PROPERTY is registered HERE, in the pre-pass, and not when the
           decorated def is later parsed: a method defined EARLIER in the class
           may already use `self.base`, and it is parsed before the accessor's
@@ -33916,19 +33904,19 @@ begin
           pri := FindUProp(ci, origName);
           if pri < 0 then
           begin
-            pri := AddUProperty(ci, PyStoredName(origName), Length(origName),
+            pri := AddUProperty(ci, StoredName(origName), Length(origName),
                                 Ord(mRet), mRetRec);
             UPropPub[pri] := 1;
           end;
           if PyPropAccessorPrefixAt(methodStart) = '__prop_set_' then
           begin
-            UPropWriteMOff[pri] := PyStoredName(name);
+            UPropWriteMOff[pri] := StoredName(name);
             UPropWriteMLen[pri] := Length(name);
           end
           else
           begin
             { the getter defines the property's TYPE }
-            UPropReadMOff[pri] := PyStoredName(name);
+            UPropReadMOff[pri] := StoredName(name);
             UPropReadMLen[pri] := Length(name);
             UPropTk[pri] := Ord(mRet);
             UPropRec[pri] := mRetRec;
@@ -34124,7 +34112,7 @@ begin
     name := 'create';
     for k := 1 to Length(name) do AppendChar(fullName, name[k]);
     procIdx := RegisterProc(fullName, False, tyInteger, nparams, pnames, ptypes);
-    k := PyStoredName('create');
+    k := StoredName('create');
     AddUMeth(ci, k, 6, procIdx);
     { CPython's @dataclass also generates __eq__, comparing the declared fields
       — `P(1) == P(1)` is True there and was False here, an identity compare
@@ -34141,7 +34129,7 @@ begin
       name := '__eq__';
       for k := 1 to Length(name) do AppendChar(fullName, name[k]);
       procIdx := RegisterProc(fullName, True, tyBoolean, 2, pnames, ptypes);
-      k := PyStoredName('__eq__');
+      k := StoredName('__eq__');
       AddUMeth(ci, k, 6, procIdx);
       PyDcEqProc[ci] := procIdx;
     end;
@@ -34160,7 +34148,7 @@ begin
       name := '__repr__';
       for k := 1 to Length(name) do AppendChar(fullName, name[k]);
       procIdx := RegisterProc(fullName, True, tyAnsiString, 1, pnames, ptypes);
-      k := PyStoredName(name);
+      k := StoredName(name);
       { Length(name), NOT a literal: AddUMeth's third argument is the name
         LENGTH, and copying the neighbouring __eq__ registration's literal 6
         registered this method as `__repr` — which compiles, emits a correct
@@ -34183,7 +34171,7 @@ begin
         AppendChar(fullName, '.');
         for k := 1 to Length(name) do AppendChar(fullName, name[k]);
         procIdx := RegisterProc(fullName, True, tyBoolean, 2, pnames, ptypes);
-        AddUMeth(ci, PyStoredName(name), Length(name), procIdx);
+        AddUMeth(ci, StoredName(name), Length(name), procIdx);
         PyDcCmpProc[ci * 4 + dcCmp] := procIdx;
       end;
   end;
@@ -34953,7 +34941,7 @@ begin
   procIdx := RegisterProc(fullName, True, Procs[iterPi].RetType, 1, pnames, ptypes);
   ProcRetRecId[procIdx] := ProcRetRecId[iterPi];
   ProcParamRecId[procIdx * MAX_PROC_PARAMS] := REC_UCLASS_BASE + ci;
-  AddUMeth(ci, PyStoredName(nm), Length(nm), procIdx);
+  AddUMeth(ci, StoredName(nm), Length(nm), procIdx);
   UMthVirSlot[UMthCount - 1] := -1;
 
   savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
@@ -36786,7 +36774,7 @@ begin
             if (aliasCi >= 0) and (impAlias = impReal) then
               { nothing to do }
             else if aliasCi >= 0 then
-              RegisterUClassAlias(PyStoredName(impAlias), Length(impAlias), aliasCi)
+              RegisterUClassAlias(StoredName(impAlias), Length(impAlias), aliasCi)
             else if PyImpAliasCount < 64 then
             begin
               { FindSym, not PyProgSym: the name belongs to the EXPORTING unit
@@ -43820,7 +43808,7 @@ begin
         { compiled as the main program, so __name__ is always "__main__". }
         Next;
         node := AllocNode(AN_STR_LIT);
-        ASTSOffset[node] := PyStoredName('__main__'); ASTSLen[node] := 8;
+        ASTSOffset[node] := StoredName('__main__'); ASTSLen[node] := 8;
         ASTTk[node] := Ord(tyString);
         CurASTNode := node; LastExprTk := tyString;
         Exit;
@@ -43848,7 +43836,7 @@ begin
             Error('Nil Python: pylib (pysys_module_file) not loaded');
           valNode := AllocNode(AN_STR_LIT);
           ASTSOffset[valNode] :=
-            PyStoredName(LowerCase(Strs[CurrentUnitIdx].Text) + '.py');
+            StoredName(LowerCase(Strs[CurrentUnitIdx].Text) + '.py');
           ASTSLen[valNode] := Length(Strs[CurrentUnitIdx].Text) + 3;
           ASTTk[valNode] := Ord(tyString);
           argSeq := AllocNode(AN_ARG);
@@ -44435,7 +44423,7 @@ begin
             if IntToTypeKind(ASTTk[atRecv]) = tyVariant then ASTLeft[argSeq] := atRecv
             else ASTLeft[argSeq] := PyMakeObjPtr(atRecv);
             argSeq2 := AllocNode(AN_STR_LIT);
-            ASTSOffset[argSeq2] := PyStoredName(atName); ASTSLen[argSeq2] := Length(atName);
+            ASTSOffset[argSeq2] := StoredName(atName); ASTSLen[argSeq2] := Length(atName);
             ASTTk[argSeq2] := Ord(tyString);
             argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := argSeq2; ASTRight[argSeq3] := -1;
             ASTRight[argSeq] := argSeq3;
@@ -44484,7 +44472,7 @@ begin
           if IntToTypeKind(ASTTk[atRecv]) = tyVariant then ASTLeft[argSeq] := atRecv
           else ASTLeft[argSeq] := PyMakeObjPtr(atRecv);
           argSeq2 := AllocNode(AN_STR_LIT);
-          ASTSOffset[argSeq2] := PyStoredName(atName); ASTSLen[argSeq2] := Length(atName);
+          ASTSOffset[argSeq2] := StoredName(atName); ASTSLen[argSeq2] := Length(atName);
           ASTTk[argSeq2] := Ord(tyString);
           argSeq3 := AllocNode(AN_ARG); ASTLeft[argSeq3] := argSeq2; ASTRight[argSeq3] := -1;
           ASTRight[argSeq] := argSeq3;
@@ -44514,7 +44502,7 @@ begin
           { the field exists: an ordinary field read }
           node := AllocNode(AN_FIELD);
           ASTLeft[node] := atRecv;
-          ASTSOffset[node] := PyStoredName(atName);
+          ASTSOffset[node] := StoredName(atName);
           ASTSLen[node] := Length(atName);
           ASTTk[node] := UFldTk[atFld];
           CurASTNode := node;
@@ -44570,7 +44558,7 @@ begin
             `o.name = v` write the same slot rather than two }
           node := AllocNode(AN_FIELD);
           ASTLeft[node] := atRecv;
-          ASTSOffset[node] := PyStoredName(atName);
+          ASTSOffset[node] := StoredName(atName);
           ASTSLen[node] := Length(atName);
           ASTTk[node] := UFldTk[atFld];
           argSeq := AllocNode(AN_ASSIGN);

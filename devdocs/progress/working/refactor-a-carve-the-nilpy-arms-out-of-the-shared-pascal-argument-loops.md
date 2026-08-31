@@ -6,7 +6,7 @@ type: refactor
 status: working
 owner: frankA
 blocked-by: []
-summary: "The last 279 NilPy references in the shared Pascal parser, over 134 distinct Py* symbols, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every one of the 279 sits BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, overload promotion by keyword), which the expression hook never sees. Five routines carry 191 of them. Progress is measurable in one command and the target is zero: `fpc -dPXX_NO_NILPY` currently reports 279 unresolved sites."
+summary: "The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command and the target is zero: `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 272 now, after StoredName moved to util.inc and closed the compilers only frontend-to-frontend dependency (cparser.inc -> pyparser.inc)."
 ---
 
 # Carve the NilPy arms out of the shared Pascal *argument* loops
@@ -89,11 +89,29 @@ that error recurs: [[the-name-is-not-the-thing]].
 Land each step green; the metric goes down monotonically and never needs a
 judgement call about whether the step "counted".
 
-## Gate
+## Gate — and the bar this ticket first stated was WRONG
 
-`make compiler/pascal26` (byte-identical is the bar — the default build must not
-move, and the previous carve steps met it), plus the NilPy suite via Track T. A
-step that changes the default binary is a behaviour change and is not this
+`make compiler/pascal26` plus the NilPy suite via Track T.
+
+**Do NOT gate on the compiler binary being byte-identical to the previous one.**
+This ticket said that in its first draft and it is not achievable for a MOVE:
+relocating a function between `.inc` files changes the order procedures are
+emitted in, so the binary differs while nothing about its behaviour does. That is
+also why `make compiler/pascal26`'s "byte-identical self-host fixedpoint" is not
+the same claim — it says the compiler reproduces *itself*, not that it equals
+yesterday's build.
+
+**The bar that IS right for a move, and it is stronger:** build the compiler from
+the sources before the move and from the sources after, then compile a batch of
+programs with both and compare the EMITTED binaries. Measured for the
+`StoredName` step: nine programs identical, zero differing, including
+`compiler/compiler.pas` itself and the C and NilPy sites the moved function is
+called from. And the sharpest form of it falls out for free — the *before*
+compiler, run over the *after* sources, produces exactly the after compiler
+(`d6ab8200480a`), while the two compilers themselves differ. Semantic content
+unchanged; only the source moved.
+
+A step that changes an emitted program is a behaviour change and is not this
 ticket.
 
 ## Related
@@ -101,3 +119,49 @@ ticket.
 - [[feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets]] — the parent, parked behind this
 - `devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md` — share the AST and the IR, duplicate the parser
 - `devdocs/dev/root-cause-over-microfix.md` — the argument for carving instead of stubbing, made in the parent
+
+
+## Step 1a DONE 2026-08-31 — `PyStoredName` → `util.inc`'s `StoredName`
+
+The C→NilPy edge and six Pascal→NilPy sites, closed by a move rather than a
+guard, because the function was never NilPy's: it appends a string to the shared
+`TokChars` pool and returns its offset, which every frontend that mints a
+synthetic token needs. `cparser.inc`'s own comment had already worked this out —
+*"a generic ... helper (despite its name/home in pyparser.inc)"* — and left it
+where it was. **A note is not a fix**, and this is the exact shape of
+[[the-name-is-not-the-thing]]: the `Py` prefix answered "whose is this?"
+correctly for 70 of its 78 callers.
+
+Named `StoredName` deliberately, not something new:
+`refactor-a-seven-frontends-borrow-rust-parser-helpers` (p22) already owns the
+identical `RStoredName` and already prescribes *"move and reword, drop the R"* —
+so this lands on the name that ticket's plan implies, and its fold now has one
+target instead of two. **Three copies of this exact body remain**, differing only
+in an overflow message: `TokCharsAppend` (`pasparser_class.inc`), `RStoredName`
+(`rparser.inc` — which tells an Erlang or Zig program that IT is Rust) and
+`BStoreChars` (`bparser.inc`). Deliberately NOT folded here: that is the other
+ticket's work, and folding them changes three error strings, which would have
+cost the output-equivalence proof above for no gain to this ticket.
+
+**279 → 272.**
+
+### And the next site is a different KIND, which is the thing to notice
+
+`pasparser_name.inc:280` is `if isNilPy and NameHasUpper(name) and
+PyIsClassTypeExact(name) then Exit;` — one line, and it is NOT a miscategorised
+helper. It is a piece of Python's own name-resolution semantics sitting in the
+shared resolver. Moving it is meaningless; guarding it is the 191-wrapper answer
+the parent ticket rejected. It wants a **neutral hook the frontend answers**, and
+the same is true of the argument loops.
+
+So the 272 are at least three species and only one of them is a move:
+
+1. **a shared helper wearing a frontend's prefix** — `StoredName`. Move it. Done.
+2. **a semantic predicate** — `PyIsClassTypeExact` and friends. One neutral hook
+   per CONCEPT, defaulting to the Pascal answer, overridden by the frontend.
+3. **a parsing responsibility** — the argument loops, 259 of the 272. One NilPy
+   argument-list parser, called once.
+
+Anyone planning this as one mechanical sweep will get species 1's answer and
+apply it to species 2 and 3, which is how the 176 stubs the parent rejected get
+written by accident.

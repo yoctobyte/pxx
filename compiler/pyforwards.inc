@@ -168,7 +168,6 @@ function PyIsFloatMethodBaseTk(tk: TTypeKind; const nm: AnsiString): Boolean; fo
 function PyIsIntFloatSharedMethodName(const nm: AnsiString): Boolean; forward; { is_integer / as_integer_ratio / conjugate }
 function PyParseFromBytes: Integer; forward; { Nil Python int.from_bytes(...) intrinsic (pyparser.inc) }
 function PyIsFromBytesAhead: Boolean; forward; { Nil Python: at `int.from_bytes(`? (pyparser.inc) }
-function PyStoredName(const s: AnsiString): Integer; forward; { Nil Python: intern a name into TokChars (pyparser.inc) }
 function PyAttrFieldIdx(recvNode: Integer; const attr: AnsiString): Integer; forward; { Nil Python hasattr/getattr field lookup (pyparser.inc) }
 function PyMakeDynAttrSetByExpr(recvNode, nameNode, valNode: Integer): Integer; forward; { Nil Python setattr with a computed name (pyparser.inc) }
 { getattr(o, "p") where p is a PROPERTY — the read `o.p` builds (pyparser.inc) }

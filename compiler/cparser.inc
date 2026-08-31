@@ -1997,7 +1997,7 @@ begin
               into the shared token-char pool" helper (despite its name/home
               in pyparser.inc) — reused here rather than duplicating it. }
             node := AllocNode(AN_STR_LIT);
-            ASTSOffset[node] := PyStoredName(Procs[CurProc].Name);
+            ASTSOffset[node] := StoredName(Procs[CurProc].Name);
             ASTSLen[node] := Length(Procs[CurProc].Name);
             ASTTk[node] := Ord(tyString);
           end

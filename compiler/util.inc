@@ -183,3 +183,33 @@ function Low32(v: Int64): Int32;
 begin
   Result := Int32(v and $FFFFFFFF);
 end;
+
+{ Append a string to the shared TokChars pool and return its offset.
+
+  Every frontend that mints a SYNTHETIC identifier or string token needs this,
+  because TokChars is the one pool the AST's SOffset/SLen pairs point into. It
+  lived in pyparser.inc as `PyStoredName` until 2026-08-31, which is why
+  cparser.inc:2000 (`__func__`) and six sites in pasparser_expr.inc called into
+  the NilPy frontend for it -- the single frontend-to-frontend dependency in the
+  compiler, and it reads as impossible right up until someone trips on it. The
+  comment at the C site had already noticed and said so in prose: "a generic
+  ... helper (despite its name/home in pyparser.inc)". A note is not a fix.
+
+  THREE MORE COPIES OF THIS EXACT BODY REMAIN, differing only in their overflow
+  message: TokCharsAppend (pasparser_class.inc), RStoredName (rparser.inc, and
+  it tells an Erlang or Zig program that IT is Rust) and BStoreChars
+  (bparser.inc). Folding them is refactor-a-seven-frontends-borrow-rust-parser-
+  helpers, which already owns that work and already prescribes this name -- so
+  this is deliberately the move and not the fold, and the fold has one target
+  instead of two. }
+function StoredName(const s: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := TokCharLen;
+  for i := 1 to Length(s) do
+  begin
+    if TokCharLen >= STRING_CAP then Error('token char buffer overflow');
+    TokChars[TokCharLen] := s[i];
+    Inc(TokCharLen);
+  end;
+end;
