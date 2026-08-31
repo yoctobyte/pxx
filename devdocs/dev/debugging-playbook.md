@@ -4,6 +4,30 @@ Start here. The individual tools are documented in
 `devdocs/dev/debug-switches.md` (runtime + compiler switches) and
 `devdocs/dev/dwarf.md` (gdb). This page is only the decision.
 
+## What this file has actually caught, which is less than its length suggests
+
+**Prefer building the guard that FAILS over writing the rule that describes the
+failure** (frank-coordinator, 2026-08-31). This page grew by roughly a dozen
+sections in a few hours on 2026-08-30/31, and the honest audit is that **none of
+them caught anything prospectively.** Every real catch that night came from one
+of three places: a positive control that fired, an artifact someone opened, or a
+second agent measuring the same thing independently. Not once did someone
+recognise a named shape here in time to avoid the cost.
+
+The sharpest instance is *the signal fires, it is just not about what you think*
+-- three separate occurrences in one night (a saturation check scoring 0.000, a
+`trackt health` structurally stuck, `tgenconstraint38` flipping green under a
+wrong fix). **All three were caught by different means and none by noticing the
+pattern**, even by people who had just written the pattern down.
+
+So read this file as a **diagnosis aid for a bug you already have**, not as a
+prophylactic. When a section here suggests a guard, the section is the cheap part
+and the guard is the deliverable -- and a rule that has never been the proximate
+cause of a catch is a candidate for deletion, not for elaboration. The failure
+mode of a playbook is that writing one *feels* like fixing something, which is
+the same confusion as writing a plan and testing a plan (see *The `## The fix`
+section is trusted MORE than the summary*).
+
 ## The rule this is built on
 
 **The expensive bugs in this project do not crash. They produce a plausible
