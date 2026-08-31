@@ -612,6 +612,62 @@ your idiom invites you to change it.
 **So: branch on `$?` being 1 versus 128. Never test an ancestry query with `!` or
 `||`. Do not redirect its stderr.**
 
+### A CORRECTED instrument is not a VERIFIED one — the grep that returned two different confident zeros
+
+**2026-09-01, frankB, three greps in one evening on `compiler/builtin/builtinheap.pas`,
+a file I was actively reading on screen.** This is the strongest form of the
+section above, because the *repair* to the first failure was itself broken and
+printed the same clean answer.
+
+1. `grep -rn "TLS_SLOT" compiler/builtin/ lib/rtl/` → nothing. True, and I
+   published it as *"TLS is not reachable from the allocator"*. `TLS_SLOT` is
+   the name of the slot **constant**; the accessor is `__pxxTlsBase`. The grep
+   proved *nothing uses TLS here* — a different statement, and the only one it
+   could have proved. It shipped a false prerequisite into a ticket summary, a
+   source comment and the logbook.
+2. `grep -n "IFDEF\|IFNDEF" builtinheap.pas` → **0**. The directives are
+   lowercase `{$ifdef}`. I concluded the file had no conditional compilation and
+   therefore that four same-signature `PXXAlloc` definitions were somehow all
+   live — a conclusion that should have been impossible and that I explained to
+   myself instead of rechecking.
+3. `grep -ci "{\$ifdef\|{\$ifndef" builtinheap.pas` → **0 again**, on text I
+   had just read on screen two commands earlier. The real count is **226**.
+
+**The point is not that grep is unreliable.** Each call did what it was told.
+The point is the shape of step 3: I had *already been burned* by step 2, I
+diagnosed the cause (case), I fixed it — and the fix was independently broken,
+returned the identical answer, and confirmed the same wrong belief. A fix that
+reproduces the symptom's *output* looks like a confirmation of the diagnosis.
+
+**What broke the chain was a positive control, and nothing else would have.**
+Rereading the file would have shown the directives but not told me my scan was
+lying; reasoning would have produced another explanation. The control was one
+line — assert a literal string I had seen on screen is findable, *before*
+trusting any count from the same scanner:
+
+```python
+ctl = '{$ifdef PXX_ESP_IDF}'          # read off the screen, known present
+assert ctl in s, "scan cannot see text I read on screen"
+```
+
+It failed instantly, which is the whole value: it converts *"the answer is
+zero"* into *"the scanner is broken"*, and those are indistinguishable from the
+output alone.
+
+**Rule: an empty result is evidence only after the query has returned a
+non-empty one.** Same rule frankT and frankwasm reached from the dead-fallback
+sweep ("a scan needs a positive control just as a check does"), arrived at
+independently from the opposite direction — they had a scan that could not find
+a defect, this is a scan that could not find *anything*. And the extension this
+instance adds: **apply the control to the corrected instrument too.** The
+second scanner has no more standing than the first; it has only had a story
+attached to it.
+
+Cheap forms, in order of preference: grep for a string you have physically seen;
+run the query against a file you know contains a hit; invert it (`grep -c ''`
+for a line count) and sanity-check the magnitude. A 244KB source file with zero
+conditional directives is a magnitude that should have failed a glance.
+
 ## Assert the PRECONDITION, not just the comparison
 
 The section above says what goes wrong. This is the form of the fix, and it
