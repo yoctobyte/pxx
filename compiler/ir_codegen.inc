@@ -130,13 +130,21 @@ begin
 end;
 
 procedure EmitDynArrayRetainLocked;
-{ rax = dynamic-array data pointer. Preserve rax. Caller holds the heap lock
-  when threading is enabled. }
+{ rax = dynamic-array data pointer. Preserve rax.
+
+  The increment is ATOMIC under --threadsafe and the name is now half a lie: a
+  caller may hold the heap lock, but the retain BLOB no longer takes it, so this
+  can run concurrently with an unlocked `lock inc` on the same word. A plain
+  `inc` racing an atomic one loses updates in the direction that FREES a live
+  block. See the retain blob for the full argument. }
+var incOp: AnsiString;
 begin
+  if ThreadSafeMode then incOp := 'lock inc qword [rax-16]'
+  else incOp := 'inc qword [rax-16]';
   EmitAsmX64([
     'test rax, rax',
     'jz .done',
-    'inc qword [rax-16]',
+    incOp,
   '.done:'
   ]);
 end;
@@ -169,13 +177,21 @@ procedure EmitAnsiStrRetainLocked;
   pointer in ordinary SetLength code. On the blob's own path the second test is
   a compare and a predicted branch, and only on the path that already paid for
   the lock. }
+var incOp: AnsiString;
 begin
+  { ATOMIC under --threadsafe. The retain blob no longer holds the heap lock
+    while incrementing, so this procedure's two SetLength callers -- which DO
+    hold it -- would otherwise be doing a plain read-modify-write against a
+    concurrent `lock inc` on the same word. The lost update is the dangerous
+    direction: an increment that vanishes frees a block someone still holds. }
+  if ThreadSafeMode then incOp := 'lock inc qword [rax-16]'
+  else incOp := 'inc qword [rax-16]';
   EmitAsmX64([
     'test rax, rax',
     'jz .done',
     'cmp qword [rax-16], %', MSTR_STATIC_RC,
     'jae .done',
-    'inc qword [rax-16]',
+    incOp,
   '.done:'
   ]);
 end;
@@ -3269,19 +3285,39 @@ begin
     DEFAULT build is byte-identical to before this change. }
   if ThreadSafeMode then
   begin
+    { NO HEAP LOCK ON THIS PATH AT ALL. A retain never frees and never touches
+      allocator state -- it is one read-modify-write on one word -- so `lock
+      inc` is the whole of what it needs, and taking a GLOBAL spinlock to
+      perform an operation the CPU already makes atomic is what serialised
+      twelve workers behind one lock word.
+
+      Hoisting the nil/static tests above the lock fixed the shared-LITERAL
+      case because those blocks exit before the acquire; a shared HEAP handle
+      has nothing to exit on and still queued. That is the residual this
+      removes (bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower).
+
+      WHAT THE LOCK WAS ACTUALLY BUYING, checked rather than assumed: only
+      mutual exclusion between refcount writers, because it never covered the
+      refcount READERS. PXXStrUnique's COW decision (`rc := PWord(oldHandle -
+      16)^; if rc <= 1`, builtinheap.pas:3371) is a plain unlocked load, and
+      HeapLockedCallProcIdx1 -- the one call site that acquires this spinlock on
+      a runtime routine's behalf -- names PXXClassFinalizeManaged and nothing
+      else. So the lock was not serialising rc against COW before this change
+      and does not stop doing so after it. Every writer becoming atomic is
+      therefore a strict improvement over a lock that half the participants
+      never took. }
     EmitAsmX64(['test rax, rax']);
-    EmitB($74); pRetNil := CodeLen; EmitB(0);     { jz done — lock never taken }
+    EmitB($74); pRetNil := CodeLen; EmitB(0);     { jz done }
     EmitAsmX64(['cmp qword [rax-16], %', MSTR_STATIC_RC]);
-    EmitB($73); pRetStatic := CodeLen; EmitB(0);  { jae done — ditto }
-  end;
-  EmitAcquireHeapLock;
-  EmitAnsiStrRetainLocked;
-  EmitReleaseHeapLock;
-  if ThreadSafeMode then
-  begin
+    EmitB($73); pRetStatic := CodeLen; EmitB(0);  { jae done }
+    EmitAsmX64(['lock inc qword [rax-16]']);
     PatchRel8(pRetNil);
     PatchRel8(pRetStatic);
-  end;
+  end
+  else
+    { Unchanged, and byte-identical: with ThreadSafeMode off both lock helpers
+      emitted nothing, so the old three-call sequence WAS this one call. }
+    EmitAnsiStrRetainLocked;
   EmitB($C3);                                     { ret }
 
   { Release blob: the FAST path (nil, or a refcount that stays above zero) does
@@ -3314,20 +3350,36 @@ begin
     bypass — see the retain blob above for why the WRITE is what matters. }
   EmitAsmX64(['cmp qword [rax-16], %', MSTR_STATIC_RC]);
   EmitB($73); pRelStatic := CodeLen; EmitB(0);    { jae done_unlocked }
-  EmitAcquireHeapLock;
+  { THE DECREMENT RUNS UNLOCKED. It is already a `lock dec` under
+    --threadsafe, so the spinlock was serialising an operation the CPU had
+    made atomic -- pure contention for every release that does NOT free, which
+    is every release but the last. The lock now covers only the free, which is
+    the only part that touches allocator state.
+
+    Safe because rc reaching zero means this thread holds the LAST reference:
+    no other thread can be inside a retain or a release of this block, so
+    nothing can resurrect it between the decrement and the acquire. That is the
+    ordinary atomic-refcount discipline, and it is why the acquire can sit
+    after the branch rather than before it.
+
+    This also collapses the three landing sites the old shape needed. Every
+    exit below is now OUTSIDE the critical section, so nil, saturated-static
+    and still-live all jump to the same place, and the note that used to warn
+    about releasing a lock never taken no longer has a case to describe. }
   if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
   else EmitAsmX64(['dec qword [rax-16]']);
-  EmitB($75); pRelLive := CodeLen; EmitB(0);      { jnz done }
+  EmitB($75); pRelLive := CodeLen; EmitB(0);      { jnz done — lock never taken }
+  EmitAcquireHeapLock;
   { the refcount is at [rax-16] but the BLOCK BASE is 24 back — the kind word
     sits below the refcount (devdocs/dev/managed-block-header.md). }
   EmitAsmX64(['push rax']);
   EmitAsmX64(['sub rax, %', 24]);
   EmitHeapFreeLocked;
   EmitAsmX64(['pop rax']);
-  PatchRel8(pRelLive);                            { still HOLDING the lock }
   EmitReleaseHeapLock;
   PatchRel8(pRelNil);                             { never took it }
   PatchRel8(pRelStatic);                          { never took it }
+  PatchRel8(pRelLive);                            { never took it either, now }
   EmitB($C3);                                     { ret }
 
   { Object retain/release blobs (feature-nilpy-object-reclamation): thin

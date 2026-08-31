@@ -84,7 +84,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 85 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 70 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (139)
+## backlog-core (138)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -96,7 +96,6 @@ _none_
 | bug-a-a-cloned-thread-has-no-sigaltstack-so-its-stack-overflow-is-unhandleable | A | 45 | bug | MEASURED: a stack overflow on the MAIN thread runs the SIGSEGV handler and exits 7; the same overflow on a cloned worker exits 139 with the handler never entered. Same binary, one argument apart. sigaltstack(2) is PER-THREAD and is registered only by SetSignalHandler, which the main thread calls -- a cloned thread's alt stack reads sp=0 flags=SS_DISABLE size=0, so SA_ONSTACK has nowhere to put the frame and the kernel kills the process. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
-| bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower | A+O | 45 | bug | HALF FIXED 2026-08-31, and the half that remains is the ticket now. Row B's `shared` is a string LITERAL, so at -O2 it is a static pool block — and both x86-64 refcount blobs acquired the global heap spinlock BEFORE testing nil or the saturation guard, so twelve workers serialised on one lock word to discover they had nothing to do. Hoisting both tests above EmitAcquireHeapLock (threadsafe-only; the DEFAULT build is byte-identical, verified by comparing emitted output including compiler.pas) takes row B from 1.07s to 0.04s against a 0.03s serial control — the 11x inversion is gone and parallel is now at parity with serial. BUT the same loop with a RUNTIME-BUILT shared string (rc=1, unfoldable) is UNCHANGED: 1.08s before, 1.19s after. So what was fixed is shared STATIC LITERAL handles; shared HEAP handles still contend on the heap spinlock itself, which is feature-opt-heap-per-thread-cache territory and is what this ticket should now track. Refcount integrity verified on both paths (rc=1 before and after 400k parallel copies). | — |
 | bug-a-a-static-array-of-managed-field-records-loses-its-length-as-an-open-array-argument | A | 45 | bug | A static array whose element is a record WITH A MANAGED FIELD, passed to an open-array param, arrives with no length header: High(items) is -1 (FPC: 1) and the callee's loop silently never runs. Both ir.inc copy-in paths exclude managed-field records by an explicit `not (tyRecord and RecordHasManagedFields)` guard, and the fall-through passes a bare address rather than refusing. Plain-record elements work; `const` and `var` both fail; pre-existing on pinned. | — |
 | bug-a-a-static-array-of-promo-ints-releases-only-element-zero | A | 45 | bug | EmitManagedLocalCleanup's promo-int arm calls PXXPromoClear on the slot ADDRESS with no IsArray test, so a `array[0..N] of promoint64` local releases element 0 and leaks the heap-tier payload of elements 1..N. Exactly bug-a-local-static-array-of-string-never-released-at-scope-exit, one type over: that ticket's own comment says the scalar arm 'released element 0 ONLY -- the other N leaked, silently and linearly'. The INIT half of this same missing IsArray is fixed; this is the release half. | — |
 | bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data | A | 35 | bug | The sibling of bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data, which fixed the SCALAR array case only. A typed const whose element or type is a RECORD is still BSS plus generated stores: measured at 116 bytes of code per 16-byte record — the same ~29 bytes per field the original ticket measured — while an Integer array of identical total size costs zero code and lands in .data. Found by the wasm32 lane, where it is not a size issue but a correctness one: the emitted stores are top-level chunks, and a target whose startup does not run reads zeros. | — |
@@ -824,9 +823,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2965)
+## done (2966)
 
-2965 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2966 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (71)
 
@@ -1032,7 +1031,6 @@ _none_
 - [p 45] [A] bug-a-2d-array-row-as-a-const-array-param-still-segfaults
 - [p 45] [A] bug-a-a-c-headers-variadic-tail-is-dropped-on-import
 - [p 45] [A] bug-a-a-cloned-thread-has-no-sigaltstack-so-its-stack-overflow-is-unhandleable
-- [p 45] [A+O] bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower
 - [p 45] [A] bug-a-a-static-array-of-managed-field-records-loses-its-length-as-an-open-array-argument
 - [p 45] [A] bug-a-a-static-array-of-promo-ints-releases-only-element-zero
 - [p 45] [A] bug-a-q-plus-overflow-checking-has-no-runtime-helper-on-arm32-and-riscv32
