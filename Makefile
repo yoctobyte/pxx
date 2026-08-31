@@ -4751,14 +4751,31 @@ test-asm: $(COMPILER)
 	  tools/expect_same.sh test_asm_so26_dlopen "$$($(TESTTMP)/test_asm_so26_dlopen $(TESTTMP)/test_asm_so26.so)" "hello from shared lib" && \
 	  echo "test-asm: .so dlopen/dlsym round-trip (incl. extern-call GOT) ok" || { echo "test-asm: .so dlopen round-trip FAILED"; exit 1; }; \
 	else echo "test-asm: gcc not installed; .so dlopen check skipped"; fi
+	# A BARE `grep -q` PRINTS NOTHING WHEN IT FAILS, and these five checks were
+	# all bare. Measured 2026-08-31: both of these jobs had been red for days
+	# with a captured output of two `ok:` lines and nothing else, so three
+	# agents in one night looked at the report, saw only successes, and could
+	# not tell what had failed -- the same defect frankS had just fixed in
+	# tools/run_sqlite_thread_test.sh (a timeout and a wrong answer printing the
+	# same line). The ASSERTIONS below are unchanged; only their silence is.
+	# Each now names what it looked for and shows the offending line, which is
+	# the only channel a tstate report has.
 	./$(COMPILER) -S test/hello.pas $(TESTTMP)/test_asm_dis_hello26
-	test -f $(TESTTMP)/test_asm_dis_hello26.s
-	grep -q "^    call " $(TESTTMP)/test_asm_dis_hello26.s
-	grep -q "^    ret$$" $(TESTTMP)/test_asm_dis_hello26.s
-	! grep -q "^    db " $(TESTTMP)/test_asm_dis_hello26.s
+	test -f $(TESTTMP)/test_asm_dis_hello26.s \
+	  || { echo "test-asm: -S produced no .s for hello.pas"; exit 1; }
+	grep -q "^    call " $(TESTTMP)/test_asm_dis_hello26.s \
+	  || { echo "test-asm: hello.pas disassembly has no '    call ' line -- the decoder emitted no call"; exit 1; }
+	grep -q "^    ret$$" $(TESTTMP)/test_asm_dis_hello26.s \
+	  || { echo "test-asm: hello.pas disassembly has no '    ret' line"; exit 1; }
+	! grep -q "^    db " $(TESTTMP)/test_asm_dis_hello26.s \
+	  || { echo "test-asm: hello.pas disassembly has UNDECODED bytes -- every byte should decode to a mnemonic:"; \
+	       grep -n "^    db " $(TESTTMP)/test_asm_dis_hello26.s | head -5 | sed 's/^/  /'; exit 1; }
 	./$(COMPILER) -S compiler/compiler.pas $(TESTTMP)/test_asm_dis_self26
-	test -f $(TESTTMP)/test_asm_dis_self26.s
-	! grep -q "^    db " $(TESTTMP)/test_asm_dis_self26.s
+	test -f $(TESTTMP)/test_asm_dis_self26.s \
+	  || { echo "test-asm: -S produced no .s for compiler.pas"; exit 1; }
+	! grep -q "^    db " $(TESTTMP)/test_asm_dis_self26.s \
+	  || { echo "test-asm: compiler.pas disassembly has UNDECODED bytes:"; \
+	       grep -n "^    db " $(TESTTMP)/test_asm_dis_self26.s | head -5 | sed 's/^/  /'; exit 1; }
 
 test-core: $(COMPILER)
 	# hasattr through an UNTYPED PARAMETER -- duck typing's load-bearing

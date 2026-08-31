@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:6 unfinished:29 blocked:10 backlog:398 backlog_new:24 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2915 rejected:68`
+`working:6 unfinished:29 blocked:10 backlog:399 backlog_new:24 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2915 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -61,7 +61,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 432, ranked
+## Ready — top 30 of 433, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -94,4 +94,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [U]` decide-does-nilpy-random-seed-itself-at-import (unblocks 1)
 - `[p 60] [U]` decide-nilpy-runtime-tax-serialise-the-image-or-defer-the-bodies (unblocks 1)
 
-_402 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_403 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
