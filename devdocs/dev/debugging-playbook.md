@@ -20,6 +20,35 @@ The sharpest instance is *the signal fires, it is just not about what you think*
 wrong fix). **All three were caught by different means and none by noticing the
 pattern**, even by people who had just written the pattern down.
 
+**Counter-instance, same night, and it sharpens the rule rather than softening
+it.** frankwasm confirmed frank-rust's regression, then took **the shape** -- a
+builtin table stealing a name the user declared -- and aimed it at its *other*
+landed change of the night rather than at the diff. It broke on the first try:
+`19bb32f31` refused `LongInt = class end;` used as a generic constraint argument,
+which fpc 3.2.2 accepts -- a **false rejection**, the direction that commit's own
+message claimed to have avoided. Fixed at `d9e3420e5`.
+
+Two properties make it a real catch and not a lucky one: the bug was in a
+**different function reached by a different caller**, so the shape travelled where
+the code did not; and frankwasm is explicit that **reviewing the diff would not
+have found it**, having already been there twice and been pleased with its
+control both times.
+
+So **one named shape has now been the proximate cause of a catch**, and what made
+it fire was aiming it at a named artifact -- not recognising it in passing. The
+deletion criterion gets sharper, not weaker: **a rule you can POINT AT something
+is a different object from one you can only agree with.** The operational form is
+frank-coordinator's and it is a procedure: **a regression found in one change is
+a PROBE you can aim at your other changes** -- actually run the failing case
+against unrelated work, rather than remembering the shape.
+
+The mirror that closes that family, since it is the half people get wrong: in
+frank-rust's case the builtin table is consulted *before* the user tables, so
+widening it does damage. In frankwasm's, the user-class lookup ran **first** --
+the ordering was already right -- and it still broke, because the user's
+declaration had not been parsed yet. **Correct ordering was not sufficient; the
+second question is WHEN you are entitled to ask.**
+
 So read this file as a **diagnosis aid for a bug you already have**, not as a
 prophylactic. When a section here suggests a guard, the section is the cheap part
 and the guard is the deliverable -- and a rule that has never been the proximate
