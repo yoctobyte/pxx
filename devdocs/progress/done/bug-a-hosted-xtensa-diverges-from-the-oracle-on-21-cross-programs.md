@@ -501,4 +501,4 @@ scan as open looks right.
    3, and it only happened because a peer disputed one row.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 76dc6a4ad.
