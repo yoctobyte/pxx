@@ -1283,6 +1283,13 @@ const
     "only decrefs were reported" is a measurement rather than the shape of the
     instrument. }
   DBG_M9 = 'pxx-heap: RETAIN of a FREED string 0x';
+  { Kinds 10/11: the dynamic-array half of the same protocol. PXXDynArrayIncRef
+    and PXXDynArrayReleaseDepth decrement/increment the SAME [handle-16] slot
+    as the string routines and carried NO poison check and no static-floor
+    guard, which left them the only unguarded writer of a managed refcount
+    once the string and object paths were both instrumented and both silent. }
+  DBG_M10 = 'pxx-heap: RELEASE of a FREED dynarray 0x';
+  DBG_M11 = 'pxx-heap: RETAIN of a FREED dynarray 0x';
   DBG_M5 = '  size=0x';
   DBG_M6 = ' off=0x';
   DBG_M7 = ' val=0x';
@@ -1315,6 +1322,12 @@ begin
   else if kind = 9 then
     for i := 1 to Length(DBG_M9) do
     begin b := Byte(DBG_M9[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 10 then
+    for i := 1 to Length(DBG_M10) do
+    begin b := Byte(DBG_M10[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 11 then
+    for i := 1 to Length(DBG_M11) do
+    begin b := Byte(DBG_M11[i]); r := PXXSysWrite(2, Int64(@b), 1); end
   else
     for i := 1 to Length(DBG_M4) do
     begin b := Byte(DBG_M4[i]); r := PXXSysWrite(2, Int64(@b), 1); end;
@@ -1352,7 +1365,7 @@ begin
     it is the field that JOINS them to the write-after-free rows above, which
     is the tie that was missing between a report naming a handle and a report
     naming a victim. Free to obtain -- the caller is already at the block. }
-  if (kind = 8) or (kind = 9) then
+  if (kind = 8) or (kind = 9) or (kind = 10) or (kind = 11) then
   begin
     PXXDbgPutConst(5); PXXDbgPutHex(HeapDbgSize, 8);
   end;
@@ -3346,6 +3359,18 @@ var rcAddr: Int64;
 begin
   if p = nil then Exit;
   rcAddr := PXXHdrRC(p);
+{$ifdef PXX_HEAP_DEBUG}
+  { Same stale-handle check as PXXStrDecRef's. RAW arithmetic for the size word:
+    PXXHdrBase Halt(204)s on a poisoned kind byte, which is this input exactly. }
+  if PXXDbgIsPoisonWord(PWord(rcAddr)^) then
+  begin
+    HeapDbgPend := 11;
+    HeapDbgAddr := Int64(p);
+    HeapDbgSize := PWord(Int64(p) - PXX_HDR_SIZE - 8)^;
+    PXXDbgFlush;
+    Exit;
+  end;
+{$endif}
 {$ifdef PXX_TS_SOFTLOCK}
   tsIgnore := __pxxatomic_add(Pointer(rcAddr), 1);
 {$else}
@@ -3362,6 +3387,18 @@ var
 begin
   if arrData = nil then Exit;
   rcAddr := PXXHdrRC(arrData);            { refcount — NOT the block base }
+{$ifdef PXX_HEAP_DEBUG}
+  { Same stale-handle check as PXXStrDecRef's. RAW arithmetic for the size word:
+    PXXHdrBase Halt(204)s on a poisoned kind byte, which is this input exactly. }
+  if PXXDbgIsPoisonWord(PWord(rcAddr)^) then
+  begin
+    HeapDbgPend := 10;
+    HeapDbgAddr := Int64(arrData);
+    HeapDbgSize := PWord(Int64(arrData) - PXX_HDR_SIZE - 8)^;
+    PXXDbgFlush;
+    Exit;
+  end;
+{$endif}
 {$ifdef PXX_TS_SOFTLOCK}
   rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;   { returns the OLD value }
 {$else}
