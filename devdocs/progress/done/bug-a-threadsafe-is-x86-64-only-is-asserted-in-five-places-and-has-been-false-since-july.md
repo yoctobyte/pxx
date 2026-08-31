@@ -254,4 +254,4 @@ file can take it in seconds.
 `lexer.inc` — A/P shared), plus the xtensa near-miss which is correct in effect.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 4eb58366c.

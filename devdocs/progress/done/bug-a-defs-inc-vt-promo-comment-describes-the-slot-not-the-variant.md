@@ -85,4 +85,4 @@ The comment on each `VT_PROMO_*` line describes what a *variant* payload holds,
 and disagrees with no site in `pylib.pas`.
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 4eb58366c.
