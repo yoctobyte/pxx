@@ -121,4 +121,4 @@ Not done here — that is B's file and B's gate.
 
 
 ## Log
-- 2026-08-31 — resolved, commit PENDING-COMMIT.
+- 2026-08-31 — resolved, commit 6bc2d8c5c.
