@@ -321,7 +321,7 @@ _none_
 | feature-demo-portable-userland | E | 35 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 68 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | bug-nilpy-render-backend-py-compile-does-not-terminate |
 | feature-dns-esp-wire-nameservers-from-lwip | B+S | 15 | feature | Half 2 of the feature-dns-esp-backend split: where dns_wire gets its nameservers on ESP. Only matters for the explicit opt-in case -- someone who wants PXX's own resolver instead of lwIP's -- because the default route now goes through lwIP's getaddrinfo and never reads a nameserver list. dns_getserver is in liblwip.a for it; its ip_addr_t return wants a small C shim rather than hand-computed offsets. | — |
-| feature-dynamic-include-paths-config | A | 55 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
+| feature-dynamic-include-paths-config | A | 55 | feature | Get host paths out of the compiler and into config. FOUR slices landed: -I/-Fu search roots (2026-06-20), pxx.cfg tier 3 (2026-08-21), the /usr/include fallback as a discovered TABLE (2026-08-26), and per-directory library manifests -- pxxlib.cfg supplying define/undef/mode to units under one tree and nothing else (2026-08-31), which was the load-bearing one and is what makes PasApplyMimicDefines's NEVER-during-a-self-build landmine structural. STILL OPEN: tools/pxx-scan, dynamic soname mapping, and incpath/unitpath inside a manifest. | — |
 | feature-embed-dwscript-rtti | P | 40 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching |
 | feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
@@ -738,9 +738,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2905)
+## done (2906)
 
-2905 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2906 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (68)
 

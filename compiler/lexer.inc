@@ -824,6 +824,140 @@ begin
   end;
 end;
 
+{ ===== pxxlib.cfg — the per-library manifest (defs.inc has the design note) ==== }
+
+function PxxLibFindManifest(const dir: AnsiString): AnsiString;
+{ Nearest pxxlib.cfg at or above `dir` (which is '/'-terminated, or '' for a
+  path with no directory part). '' when there is none.
+
+  The walk stops at the last component that still contains a '/', so a relative
+  unit path like lib/rtl/ probes lib/rtl/ and lib/ and then STOPS — it never
+  probes the current working directory. That is deliberate: a manifest is a
+  property of where the SOURCE lives, and a pxxlib.cfg sitting in whatever
+  directory pxx happens to be invoked from is not an ancestor of anything.
+
+  Cached on `dir`, because the miss is the common case and every unit asks. }
+var d, cand, body: AnsiString; i, lastSlash: Integer;
+begin
+  PxxLibFindManifest := '';
+  if Length(dir) = 0 then Exit;
+  for i := 0 to PxxLibCacheCount - 1 do
+    if PxxLibCacheDir[i] = dir then
+    begin
+      PxxLibFindManifest := PxxLibCacheMan[i];
+      Exit;
+    end;
+  d := dir;
+  while Length(d) > 0 do
+  begin
+    cand := d + 'pxxlib.cfg';
+    if PxxReadSmallFile(cand, body) then
+    begin
+      PxxLibFindManifest := cand;
+      d := '';
+    end
+    else
+    begin
+      if d = '/' then d := ''
+      else
+      begin
+        { drop the trailing '/', then the last component }
+        d := Copy(d, 1, Length(d) - 1);
+        lastSlash := 0;
+        for i := 1 to Length(d) do
+          if d[i] = '/' then lastSlash := i;
+        if lastSlash = 0 then d := '' else d := Copy(d, 1, lastSlash);
+      end;
+    end;
+  end;
+  if PxxLibCacheCount < MAX_PXXLIB_CACHE then
+  begin
+    PxxLibCacheDir[PxxLibCacheCount] := dir;
+    PxxLibCacheMan[PxxLibCacheCount] := PxxLibFindManifest;
+    Inc(PxxLibCacheCount);
+  end;
+end;
+
+procedure PxxLibApplyLine(const mpath, line: AnsiString; lineNo: Integer);
+{ `directive argument`, '#' or ';' comments to end of line. Same shape as
+  PxxCfgApplyLine, and deliberately NOT shared with it: that one appends a '/'
+  to every argument because every argument it takes is a directory, and these
+  arguments are NAMES. Unknown directives warn and continue, for the same reason
+  as there — a manifest is read by a binary its author did not build. }
+var i, n: Integer; word_, arg: AnsiString;
+begin
+  n := Length(line);
+  i := 1;
+  while (i <= n) and ((line[i] = ' ') or (line[i] = Chr(9))) do Inc(i);
+  if (i > n) or (line[i] = '#') or (line[i] = ';') then Exit;
+  word_ := '';
+  while (i <= n) and (line[i] <> ' ') and (line[i] <> Chr(9)) do
+  begin
+    word_ := word_ + line[i];
+    Inc(i);
+  end;
+  while (i <= n) and ((line[i] = ' ') or (line[i] = Chr(9))) do Inc(i);
+  arg := '';
+  while (i <= n) and (line[i] <> '#') and (line[i] <> ';') do
+  begin
+    arg := arg + line[i];
+    Inc(i);
+  end;
+  while (Length(arg) > 0) and ((arg[Length(arg)] = ' ') or (arg[Length(arg)] = Chr(9))) do
+    arg := Copy(arg, 1, Length(arg) - 1);
+  if Length(arg) = 0 then
+  begin
+    WriteLn(mpath, ':', lineNo, ': warning: `', word_, '` needs an argument — ignored');
+    Exit;
+  end;
+  if word_ = 'define' then
+    PasDefine(arg)
+  else if word_ = 'undef' then
+    { PasUndefine refuses to undefine PXX, which is what stops a manifest from
+      making a library believe it is being compiled by something else. }
+    PasUndefine(arg)
+  else if word_ = 'mode' then
+  begin
+    { Exactly what {$mode} does in source, and for the same reason NestedComments
+      moves with it: one line in the directive handler sets both, so scoping one
+      and not the other leaks half a directive. The unit's OWN {$mode}, lexed
+      after this, still overrides. }
+    DelphiMode := CaseEqual(arg, 'delphi');
+    NestedComments := not DelphiMode;
+  end
+  else
+    WriteLn(mpath, ':', lineNo, ': warning: unknown directive `', word_,
+            '` — this pxx knows define/undef/mode');
+end;
+
+procedure PxxLibApply(const dir: AnsiString);
+{ Apply the nearest-ancestor manifest of `dir`, if there is one. Called once per
+  unit, immediately after the caller has snapshotted the define table and the
+  dialect flags and immediately before that unit is lexed — so the caller's
+  existing per-unit restore undoes the manifest along with everything the unit's
+  own directives did, and nothing new has to be unwound. }
+var mpath, body, line: AnsiString; i, n, lineNo: Integer;
+begin
+  mpath := PxxLibFindManifest(dir);
+  if Length(mpath) = 0 then Exit;
+  if not PxxReadSmallFile(mpath, body) then Exit;
+  n := Length(body);
+  line := '';
+  lineNo := 1;
+  for i := 1 to n do
+  begin
+    if body[i] = Chr(10) then
+    begin
+      PxxLibApplyLine(mpath, line, lineNo);
+      line := '';
+      Inc(lineNo);
+    end
+    else if body[i] <> Chr(13) then
+      line := line + body[i];
+  end;
+  if Length(line) > 0 then PxxLibApplyLine(mpath, line, lineNo);
+end;
+
 function PasOptionTail(const value: AnsiString; first: Integer): AnsiString;
 var i: Integer;
 begin

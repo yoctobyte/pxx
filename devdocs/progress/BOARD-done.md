@@ -2713,6 +2713,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-float-pow-oracle | T | 70 | regression | regression: test-core#src:test/test_nilpy_float_pow_oracle.npy red at c9706630b486 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-forward-module-global | T | 70 | regression | regression: test-core#src:test/test_nilpy_forward_module_global.npy red at dbf783346025 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-from-import-as-rename | N | 70 | regression | regression: test-core#src:test/test_nilpy_from_import_as_rename.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-html-tempfile-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_html_tempfile.npy red at ef59aaf72b5d (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-html-tempfile | T | 70 | regression | regression: test-core#src:test/test_nilpy_html_tempfile.npy red at 106a63cabbca (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-infer-return | N | 70 | regression | regression: test-core#src:test/test_nilpy_infer_return.npy red at dc798834ba33 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-json-module | N | 70 | regression | regression: test-core#src:test/test_nilpy_json_module.npy red at a28bc3993a0e (auto-filed by twatch) | — |

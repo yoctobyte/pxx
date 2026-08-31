@@ -1,12 +1,18 @@
 ---
+track: A
 prio: 55
+type: feature
+blocked-by: []
+summary: "Get host paths out of the compiler and into config. FOUR slices landed: -I/-Fu search roots (2026-06-20), pxx.cfg tier 3 (2026-08-21), the /usr/include fallback as a discovered TABLE (2026-08-26), and per-directory library manifests -- pxxlib.cfg supplying define/undef/mode to units under one tree and nothing else (2026-08-31), which was the load-bearing one and is what makes PasApplyMimicDefines's NEVER-during-a-self-build landmine structural. STILL OPEN: tools/pxx-scan, dynamic soname mapping, and incpath/unitpath inside a manifest."
+status: backlog
+owner: frankS
 ---
 
 # Dynamic Include Paths, Configuration Files, and System Scanner
 
 - **Type:** feature
-- **Status:** backlog (config-FILE slice 2026-08-21, host-fallback table 2026-08-26; manifests + scanner open)
-- **Owner:** —
+- **Status:** working
+- **Owner:** frankS
 - **Opened:** 2026-06-14 (from ESP-IDF auto-import analysis)
 
 ## Motivation
@@ -249,3 +255,68 @@ root exists by construction, so that assertion fires exactly when a hardcoded
 version comes back. Each new row was verified to FAIL with its bug re-introduced
 (gcc-13 literal injected, rebuilt, row went red, reverted), because a row that
 cannot fail is not coverage.
+
+
+---
+
+## 2026-08-31 — per-directory manifests landed; this was the load-bearing slice
+
+`pxxlib.cfg` in a library root now supplies `define` / `undef` / `mode` to every
+unit under that tree and to nothing else.
+
+**The primitive the design called for already existed.** The 2026-06-19 design
+specified a stackable define scope keyed to the unit being compiled, and costed
+it as the expensive third of the work. `ParseUsesUnitBody` has had exactly that
+since `bug-pascal-defines-leak-across-units` — a full snapshot of
+Active/HasValue/Value + Count/CharLen before a unit is lexed, restored after it
+is parsed — and `CaseSensitiveMode`, `NestedComments`, `DelphiMode` and
+`PyExprMode` are saved beside it for the same reason. So the manifest needed no
+new unwind path at all: **apply it immediately after those saves and the
+existing restore already covers it.** That is the whole reason it goes in there
+and not at the search-path tier, and it is why this slice is small.
+
+What was actually written: a nearest-ancestor walk with a per-directory cache
+(`PxxLibFindManifest`), a line parser modelled on `PxxCfgApplyLine` but
+deliberately not shared with it (that one appends `/` to every argument because
+all of its arguments are directories; these are names), and one call site.
+
+**The walk stops before the current working directory.** `lib/rtl/` probes
+`lib/rtl/` and `lib/` and stops — a `pxxlib.cfg` in whatever directory `pxx`
+happens to be invoked from is not an ancestor of anything, and letting it act
+like one would be a global define switch wearing a scoped name.
+
+### What is asserted, and the control
+
+`test/test_libmanifest.pas` (in `test-core`) has three populations and **the two
+negative ones are the test** — a manifest that leaked would pass a check of the
+first line alone:
+
+| | sees |
+| --- | --- |
+| unit under `test/libmanifest/` (one directory BELOW the manifest) | the manifest's define, and has LOST a `-dPROGDEF` the command line gave the build |
+| a sibling library with no manifest | neither |
+| the program itself | its own `-d`, and has never heard of the manifest's define |
+
+The `mode` half is asserted through an observable rather than a flag: the
+library unit contains `f := Double_` with no `@`, which compiles **only** under
+`{$mode delphi}`. With the manifest moved aside the unit does not compile at all
+(`error: undefined variable (Double_)`), verified — so the row can fail, and it
+fails loudly rather than by one changed word.
+
+The manifest carries an unknown directive on purpose and the row greps for the
+warning: a manifest is read by a binary its author did not build, so a newer file
+must still work on an older `pxx` — but not in silence.
+
+### Deliberately not in this slice
+
+`incpath` / `unitpath` inside a manifest. Those need the search-path lists
+push/popped too, which is a second unwind path with no existing owner, and the
+justification this slice rests on (the `PasApplyMimicDefines` self-build
+landmine) is about defines and mode, not paths. They fall into the
+unknown-directive warning today, which names the set this `pxx` knows.
+
+### Still open
+
+- `tools/pxx-scan` (probe host / IDF trees, emit a config).
+- Dynamic system-library soname mapping (`uses sqlite3` -> `libsqlite3.so.0`).
+- `incpath` / `unitpath` in a manifest, per above.

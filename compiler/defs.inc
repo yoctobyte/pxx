@@ -210,6 +210,7 @@ const
   MAX_CPREP_CHARS = 8388608;  { 8 MB }
   MAX_C_INCLUDE_DIRS = 64;    { user `-I` C include search roots }
   MAX_C_SYS_INCLUDE_DIRS = 64; { host system `<>` fallback roots — the tier-4 table BuildCSysIncludeDirs fills (feature-dynamic-include-paths-config). Was sixteen copy-pasted blocks in cpreproc.inc, two of them naming a hardcoded gcc/clang VERSION that had already gone stale. }
+  MAX_PXXLIB_CACHE   = 64;   { directories remembered by the pxxlib.cfg walk }
   MAX_PAS_UNIT_DIRS  = 64;    { user `-Fu`/`-I` Pascal unit search roots }
   MAX_DIRENT         = 4096;  { entries one PxxListDir scan reports; lib/rtl is 109 }
   { The compiler's own GENERATION number, tracking the pinned-stable line. ONE
@@ -5107,6 +5108,35 @@ var
   PxxCfgUnitCount : Integer;
   PxxCfgIncPaths  : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
   PxxCfgIncCount  : Integer;
+
+{ ===== pxxlib.cfg — the PER-LIBRARY manifest ==============================
+
+  A build profile that applies ONLY to units under one directory tree: defines,
+  undefs and dialect mode for a third-party library, without CLI flags at every
+  invocation and without editing the library's source.
+
+  The scope follows the unit BEING COMPILED (its own directory), never the
+  caller, which is what makes cross-`uses` clean by construction: a library unit
+  and our own code each compile under their own directory's manifest, and
+  sibling libraries never see each other's defines.
+
+  **This is a safety mechanism before it is a convenience.** `PasApplyMimicDefines`
+  (lexer.inc) carries the rule "NEVER call during a self-build — the compiler's
+  own {$ifdef FPC} means real FPC, not PXX", a landmine enforced by remembering.
+  A manifest under external/synapse/** cannot reach compiler/**, so the hazard
+  stops being REACHABLE rather than stopping being stepped on.
+
+  Nearest ancestor wins, and the walk stops before the current working directory:
+  a relative unit path resolves upward through its own components and no further,
+  so a stray pxxlib.cfg in whatever directory pxx happens to be invoked from
+  cannot silently redefine somebody's build.
+
+  The cache is keyed on the directory ASKED ABOUT, not on the manifest found —
+  the miss is the common case (every RTL unit, every user unit) and it is the one
+  worth not re-walking. }
+  PxxLibCacheDir  : array[0..MAX_PXXLIB_CACHE-1] of AnsiString;
+  PxxLibCacheMan  : array[0..MAX_PXXLIB_CACHE-1] of AnsiString;  { '' = no manifest above it }
+  PxxLibCacheCount: Integer;
 
 { PXXDBG=help. Deliberately does NOT enumerate the topics: a list duplicated in
   source drifts from the real probes, and a drifted list is worse than none.

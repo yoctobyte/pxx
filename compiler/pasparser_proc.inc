@@ -4735,6 +4735,21 @@ begin
       savedPasDefineValue[pdi] := PasDefineValue[pdi];
     end;
 
+    { …and the per-library MANIFEST goes on top of that snapshot: the nearest
+      pxxlib.cfg at or above this unit's own directory supplies its defines,
+      undefs and dialect mode (defs.inc has the design note). It needs no
+      restore of its own — the save above and the mode saves further up already
+      cover everything it can touch, which is the whole reason it is applied
+      HERE and not at the search-path tier.
+
+      Scoped to the unit's own directory rather than the caller's, so a library
+      unit and our own code each compile under their own profile and sibling
+      libraries never see each other's defines. That is also what makes the
+      PasApplyMimicDefines landmine ("NEVER call during a self-build") structural
+      rather than remembered: a manifest under a library tree cannot reach
+      compiler/**. feature-dynamic-include-paths-config }
+    PxxLibApply(GetFilePath(path));
+
     { The unit names itself, so its own line markers are right and a diagnostic
       inside it can say which file it is in. This passed '' until 2026-08-21, to
       keep the unit out of the DWARF line table (the RTL would swamp it) — that

@@ -9154,6 +9154,20 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_unitpath_posix26 "$$($(TESTTMP)/test_unitpath_posix26)" "posix"
 	./$(COMPILER) -Futest/unitpath/esp test/test_unitpath.pas $(TESTTMP)/test_unitpath_esp26
 	tools/expect_same.sh test_unitpath_esp26 "$$($(TESTTMP)/test_unitpath_esp26)" "esp"
+	# Per-directory library manifests (pxxlib.cfg): a build profile scoped to one
+	# library's own tree. The two NEGATIVE lines are the test -- a manifest that
+	# leaked would pass a check of the first line alone. The library sees its
+	# manifest and has LOST a -d define the command line gave the build; the
+	# sibling library next door sees neither; the program still has its own.
+	# `delphi-ok` is the mode half: `f := Double_` with no @ compiles in that unit
+	# ONLY because the manifest said `mode delphi`, and with the manifest moved
+	# aside the unit does not compile at all -- verified, so this row can fail.
+	# The manifest also carries an unknown directive on purpose: it must warn and
+	# let the compile continue, because a manifest is read by a binary its author
+	# did not build. feature-dynamic-include-paths-config
+	./$(COMPILER) -dPROGDEF -Futest/libmanifest/inner -Futest/libmanifest_sibling test/test_libmanifest.pas $(TESTTMP)/test_libmanifest26 >$(TESTTMP)/test_libmanifest.warn 2>&1
+	grep -q "unknown directive .notadirective" $(TESTTMP)/test_libmanifest.warn
+	tools/expect_same.sh test_libmanifest26 "$$($(TESTTMP)/test_libmanifest26)" "$$(printf 'lib: manifest no-progdef delphi-ok\nsib: NO-manifest progdef\nprog: NO-manifest progdef')"
 	# A `uses` binds a Pascal UNIT, whatever a C include root contains. `-I<dir>`
 	# adds a root for BOTH `#include` and `uses`, and the search took a `.h`
 	# from a root before ever reaching the RTL dir -- so `-Ilib/crtl/include`
