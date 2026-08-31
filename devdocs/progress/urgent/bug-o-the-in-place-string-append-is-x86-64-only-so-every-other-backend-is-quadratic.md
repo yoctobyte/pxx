@@ -1,14 +1,14 @@
 ---
 slug: bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic
 track: A
-prio: 85
+prio: 92
 type: bug
 status: urgent
 found: 2026-08-31
 found-by: frankA
 owner: ""
 blocked-by: []
-summary: "`s := s + x` is O(n) on x86-64 and O(n^2) on EVERY other backend. 20000 one-char appends cost 10 allocations on x86-64 and 19780 on i386, arm32, aarch64 and riscv32 alike -- one whole-string copy per append. The runtime half (PXXStrAppend, with its documented `want := need * 2` doubling) is target-independent and correct; the recogniser IRIsSelfStrAppend and its emitter EmitAnsiStrAppendToSym are hand-emitted x86-64 machine code in ir_codegen.inc, so no other backend ever calls it -- measured directly, zero grow events on i386. NOT a 32-bit bug: aarch64 is 64-bit and equally quadratic. It is FATAL on 32-bit only because the address space runs out first, which is the whole of bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv -- that ticket's unexplained appetite is this."
+summary: "PARTLY FIXED 2026-08-31. TWO defects of one shape -- an optimisation living only in the x86-64 emitter with every other backend routed to a correct-but-quadratic shared path -- and the one this title names was NOT the one that mattered. (a) FIXED, runtime, all targets: PXXStrSetLen always reallocated and copied, so `SetLength(s, Length(s)+1)` copied the whole string per call; AppendChar in lexer.inc does exactly that per character, making the compiler's OWN string building O(n^2) everywhere but x86-64, which has an inline resize. It now grows in place when sole-owner and APPENDABLE with capacity, and over-allocates 2x only when an existing string grows. (b) PARTLY FIXED: `s := s + x` had IRIsSelfStrAppend and its emitter in ir_codegen.inc and nowhere else; the recogniser is now forwarded in compiler.pas and i386 and arm32 call it through new runtime wrappers PXXStrAppendStr/Char -- aarch64, riscv32 and xtensa STILL take the concat path and are still O(n^2) for that idiom. ACCEPTANCE: the i386-hosted compiler now builds compiler.pas natively (rc=0) and reaches a byte-identical self-host fixedpoint, which it has never done; arenas 13-then-SIGSEGV -> 4, matching x86-64 exactly. NOT a 32-bit bug: aarch64 is 64-bit and was equally quadratic. On ESP it is functional rather than performance (frankS)."
 ---
 
 # The in-place string append is x86-64 only, so every other backend is quadratic
@@ -76,7 +76,60 @@ Host and target were separated by control: an **x86-64 host** building for
 4 arenas). The target is not the variable — the backend that compiled the
 *running compiler* is.
 
-## Fix direction (not yet done)
+## On ESP this is functional, not performance (frankS, 2026-08-31)
+
+"Quadratic" reads as an -O ticket and on xtensa it is not one. Track S's primary
+target is an S2/S3 with a few hundred KB of RAM; the arena IS the address space.
+A 20000-character string built by append churns 4.4 GB and peaks at 13 arenas of
+256 MiB on a hosted target -- on an ESP image the same program cannot start.
+That is most ESP programs that log or format anything.
+
+It also independently confirms the fix direction: lowering the recogniser into
+the shared IR and emitting an ordinary call means xtensa and riscv32 get this
+without anyone hand-encoding an append fast path into the two instruction sets
+that already carry the most open codegen tickets.
+
+## 2026-08-31 — what it actually was, and what is left
+
+**I got the cause wrong first, and the ticket's own named residual is what
+caught it.** I fixed the append recogniser for i386 alone, re-ran the self-build,
+and it died with the allocation profile *unchanged* (19780 allocs, 4.47 GB, 13
+arenas). So the compiler's 4.4 GB was never the append path.
+
+Attribution, measured: I tagged PXXAlloc by runtime entry point. **1629 of the
+1641 large allocations, carrying 5.06 GB, came from `PXXStrSetLen`** -- not
+concat, not append. `AppendChar` in `lexer.inc` is `SetLength(dst, len + 1)`
+followed by a single character store, and `PXXStrSetLen` allocated a fresh block
+and copied the whole string every time. Its own header names the hole: the cross
+backends route there *"instead of the x86-64 inline resize"*.
+
+(That tag instrument was **sticky** -- it recorded the most recently ENTERED
+helper rather than the innermost, and it misattributed the same sizes to
+different helpers on the two hosts. It is removed rather than committed; I am
+recording that it misled me before it helped.)
+
+The fix is in the runtime, so it lands on every backend at once: grow in place
+when the block is sole-owner and APPENDABLE with spare capacity, on the same
+terms `PXXStrAppend` already uses, and over-allocate 2x only when an EXISTING
+string grows -- a first `SetLength` or a shrink still allocates exactly.
+
+| idiom, 20000 iterations | x86_64 | i386 | arm32 | aarch64 | riscv32 |
+| --- | --- | --- | --- | --- | --- |
+| `SetLength(s, n+1)` | 16 | 12 | 12 | 10 | 12 |
+| `s := s + 'x'` | 10 | 10 | 16 | **19780** | **19780** |
+
+Semantics checked as well as cost: grow, shrink, regrow-with-zero-fill, and
+shrink of a static literal, all correct on both hosts.
+
+### Still open
+
+`s := s + x` on **aarch64, riscv32 and xtensa**. Each needs the ~20-line arm
+i386 and arm32 now have: call `IRIsSelfStrAppend`, then emit a 2-argument call
+to `PXXStrAppendStr`/`PXXStrAppendChar` with the slot address. No new runtime
+work -- the wrappers exist and are target-independent. **xtensa is the one that
+matters most** (frankS, above): there this idiom is functional, not merely slow.
+
+## Fix direction for what remains
 
 `devdocs/dev/ir-as-substrate.md` says push generality down. The recogniser is
 pure IR-shape analysis with nothing x86-64 about it, and `PXXStrAppend` is an

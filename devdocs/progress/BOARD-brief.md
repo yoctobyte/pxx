@@ -63,7 +63,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 433, ranked
 
-- `[p 85] [A]` bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic
+- `[p 92] [A]` bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
 - `[p 75] [P]` feature-pascal-corpus-expansion

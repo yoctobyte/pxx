@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic | A | 85 | bug | `s := s + x` is O(n) on x86-64 and O(n^2) on EVERY other backend. 20000 one-char appends cost 10 allocations on x86-64 and 19780 on i386, arm32, aarch64 and riscv32 alike -- one whole-string copy per append. The runtime half (PXXStrAppend, with its documented `want := need * 2` doubling) is target-independent and correct; the recogniser IRIsSelfStrAppend and its emitter EmitAnsiStrAppendToSym are hand-emitted x86-64 machine code in ir_codegen.inc, so no other backend ever calls it -- measured directly, zero grow events on i386. NOT a 32-bit bug: aarch64 is 64-bit and equally quadratic. It is FATAL on 32-bit only because the address space runs out first, which is the whole of bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv -- that ticket's unexplained appetite is this. | — |
+| bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic | A | 92 | bug | PARTLY FIXED 2026-08-31. TWO defects of one shape -- an optimisation living only in the x86-64 emitter with every other backend routed to a correct-but-quadratic shared path -- and the one this title names was NOT the one that mattered. (a) FIXED, runtime, all targets: PXXStrSetLen always reallocated and copied, so `SetLength(s, Length(s)+1)` copied the whole string per call; AppendChar in lexer.inc does exactly that per character, making the compiler's OWN string building O(n^2) everywhere but x86-64, which has an inline resize. It now grows in place when sole-owner and APPENDABLE with capacity, and over-allocates 2x only when an existing string grows. (b) PARTLY FIXED: `s := s + x` had IRIsSelfStrAppend and its emitter in ir_codegen.inc and nowhere else; the recogniser is now forwarded in compiler.pas and i386 and arm32 call it through new runtime wrappers PXXStrAppendStr/Char -- aarch64, riscv32 and xtensa STILL take the concat path and are still O(n^2) for that idiom. ACCEPTANCE: the i386-hosted compiler now builds compiler.pas natively (rc=0) and reaches a byte-identical self-host fixedpoint, which it has never done; arenas 13-then-SIGSEGV -> 4, matching x86-64 exactly. NOT a 32-bit bug: aarch64 is 64-bit and was equally quadratic. On ESP it is functional rather than performance (frankS). | — |
 
 ## working (3)
 
@@ -829,7 +829,7 @@ lives in git, not in a timestamp._
 
 ## Ready (no unmet blocker)
 
-- [urgent p 85] [A] bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic
+- [urgent p 92] [A] bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 80] [A] meta-a-pxx-produces-linkable-code
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
