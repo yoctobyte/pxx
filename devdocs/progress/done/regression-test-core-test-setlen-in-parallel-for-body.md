@@ -40,3 +40,6 @@ expect_same: MISMATCH [test_setlen_parfor26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-31 — auto-closed by the seven watcher: `test-core#src:test/test_setlen_in_parallel_for_body.pas` passes at d28b77ce5d88 (tier full); it was red at d28b77ce5d88. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
