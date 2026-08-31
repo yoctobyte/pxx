@@ -256,3 +256,86 @@ ticket parked, and it does not age.
 
 **Re-priced: unchanged.** Diagnosis is banked; this needs an owner and a design
 pass, not a re-read.
+
+## 2026-08-31 — design pass on step 1 (frankA). Still parked; the obstacle now has a name.
+
+Re-measured before adding anything, because the counts below are what the plan
+is sized from and they are ten days old.
+
+### The count moved, and it moves in the wrong direction
+
+| | 2026-08-21 | 2026-08-31 |
+| --- | --- | --- |
+| `EmitAcquireHeapLock` in `ir_codegen.inc` | 19 | **24** |
+| `symtab.inc` | "plus symtab.inc" | 2 |
+
+**+5 in ten days, while parked.** Nobody added them wrongly — the lock is the
+correct thing to take at each — but the population this design change has to
+convert is growing on its own, which is an argument for doing it sooner rather
+than a reason to re-price it.
+
+`ir_codegen386.inc` also has 2 call sites the table above never mentioned.
+Checked before counting them: `EmitAcquireHeapLock386` is an **empty procedure**,
+a deliberate structural mirror (i386 takes the lock inside `PXXAlloc` under
+`PXX_TS_SOFTLOCK`). So they are not five more critical sections — but they ARE
+the "two mechanisms for one concept" this ticket already flags, and any split
+has to land in both shapes or the smell gets worse.
+
+### Where the 24 actually are
+
+| enclosing routine | sites | role |
+| --- | --- | --- |
+| `IREmitNode` | 8 | the pure alloc/free sites — what a magazine can bypass |
+| `EmitAnsiStringRuntime` | 6 | mixed |
+| `EmitDynArrayRetain` / `ReleaseForNode` / `ReleaseForSym` / `Unique` | 4 | refcount critical sections |
+| `EmitAnsiStrFromLiteral` | 1 | alloc |
+
+So the two roles really are separable at 9 of the 24 sites, which is the good
+news and is what the plan assumed.
+
+### THE OBSTACLE THE PLAN DOES NOT NAME: one site needs BOTH locks
+
+`EmitDynArrayUnique` (`ir_codegen.inc:462`) wraps a call to
+`PXXDynArrayUnique`, and that routine — read, `builtinheap.pas:3681` — does
+this inside the one critical section:
+
+```pascal
+  refCountPtr := PWord(Int64(arrData) - 16);
+  rc := refCountPtr^;                              { REFCOUNT role }
+  if rc <= 1 then begin Result := arrData; Exit; end;
+  ...
+  newBlock := PXXAlloc(PXX_HDR_SIZE + len * elSize, 8);   { ALLOCATOR role }
+```
+
+It reads a refcount and then allocates, and the correctness of the whole thing
+depends on no one else changing that refcount in between. **Splitting the lock
+in two does not split this site**; it turns it into a two-lock critical section
+with an ordering rule, which is a deadlock surface where there is currently
+none.
+
+And it is not an edge case — this is the **copy-on-write path**, i.e. every
+write to a shared dynamic array.
+
+### What that does to step 1
+
+Step 1 as written ("separate the two roles") is still right, but it is not a
+classification exercise: it needs an answer for the sites that legitimately span
+both, and the honest options are
+
+- **a defined lock order** (allocator lock always inner), with `PXXDynArrayUnique`
+  restructured to take them itself rather than being wrapped from codegen; or
+- **make the refcount check optimistic** — read `rc`, allocate under the
+  allocator lock only, then re-validate `rc` before the swap and retry on
+  change. No refcount lock at all on this path, at the cost of a rare redundant
+  copy.
+
+The second is smaller and removes a lock rather than adding an ordering rule,
+which is the direction `normalise-dont-special-case.md` points. It is also a
+correctness argument that needs writing down carefully before any code, because
+"re-validate and retry" is exactly the shape that looks obviously right and has
+an ABA problem hiding in it.
+
+**Still parked, deliberately.** This is the design pass the 2026-08-21 note asked
+for, not the implementation: the implementation is a Track A change across 26
+call sites under the self-host gate, and a half-applied one is the specific
+failure CLAUDE.md warns about for this lane. Nothing here is applied.
