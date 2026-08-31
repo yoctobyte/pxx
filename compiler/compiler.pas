@@ -529,8 +529,10 @@ begin
 {$endif}
 
   WriteLn('Tier order: -Fu/-I  >  PXX_HOME/PXX_LIBPATH  >  pxx.cfg  >  exe-dir defaults.');
-  WriteLn('pxx.cfg knows home/unitpath/incpath; per-library define/mode manifests are');
-  WriteLn('not implemented yet (feature-dynamic-include-paths-config).');
+  WriteLn('pxx.cfg knows home/unitpath/incpath. Defines and dialect mode are NOT a tier:');
+  WriteLn('they come from a pxxlib.cfg in a library root (define/undef/mode), applying to');
+  WriteLn('units under that tree only, and so cannot be listed here - the answer depends');
+  WriteLn('on which unit is being compiled, not on this command line.');
   WriteLn('Note: -Fu / -I given BEFORE --where on this command line are listed;');
   WriteLn('ones given after it are not, because --where answers where it is read.');
 end;
