@@ -3,7 +3,7 @@ track: U
 prio: 45
 type: decide
 blocked-by: []
-summary: "MOOT 2026-08-31, not ruled on its merits. The owner is retiring fuzzing: 'i think we can stop fuzzing in general. i think we found all that csmith is able to discover by now. so that makes the hook question irrelevant.' The hook existed to stop agents pattern-killing each other's csmith batches; with no batches there is nothing to protect. Layers 1 and 3 stay landed and keep their value (docs no longer teach pkill -9 -f, tools/whokilled.sh still answers what killed a job). Worth recording that the hook was never evidence-backed either: pattern-pkill was NEVER OBSERVED -- kernel OOM and systemd-oomd were excluded, and peer SIGKILL survived as the hypothesis precisely because it leaves no trace. SCOPE NOT SETTLED: the reasoning is csmith-specific; whether it extends to the Pascal source mutator is separate, and it must NOT be read as retiring the differential probes, which are oracles rather than fuzzers."
+summary: "MOOT 2026-08-31, not ruled on its merits. The owner is retiring fuzzing: 'i think we can stop fuzzing in general. i think we found all that csmith is able to discover by now. so that makes the hook question irrelevant.' The hook existed to stop agents pattern-killing each other's csmith batches; with no batches there is nothing to protect. Layers 1 and 3 stay landed and keep their value (docs no longer teach pkill -9 -f, tools/whokilled.sh still answers what killed a job). Worth recording that the hook was never evidence-backed either: pattern-pkill was NEVER OBSERVED -- kernel OOM and systemd-oomd were excluded, and peer SIGKILL survived as the hypothesis precisely because it leaves no trace. SCOPE SETTLED same day: csmith AND pasmith both stop -- 'we can stop fuzzing for now, our backlog big enough already. yet keep the oracle tooling, obviously.' Generators stop, ORACLES STAY (pydiff.py, gcc_diff_probe.sh, fpc_diff_probe.sh). Stopped for BACKLOG CAPACITY, not because the tools are bad -- restartable."
 ---
 
 # Should a hook refuse unscoped pattern kills?
@@ -122,6 +122,21 @@ discover"*). Three things could be meant and only the first is clearly covered:
    instrument this repo's debugging discipline rests on. Nothing here touches
    them.
 
-Get a one-word scope answer before decommissioning anything.
+**ANSWERED the same day.** Owner: *"same applies to pasmith. we can stop fuzzing
+for now, our backlog big enough already. yet keep the oracle tooling,
+obviously."*
+
+- **(1) csmith and (2) pasmith: STOP.** Both generators.
+- **(3) the differential probes: KEEP.** Explicitly and obviously.
+
+**The stated reason is capacity, not quality** — *"our backlog big enough
+already"*. That matters for how this is carried out: the generators are being
+paused because their findings outrun the queue, not because they were wrong. So
+**pause them, do not delete them.** Leave `csmith_fuzz.py`, the pasmith tooling
+and their run tags in the tree; stop scheduling batches. The word is "for now".
+
+The distinction to hold on to: a **generator** invents programs, a **probe**
+compares our answer to a reference on a program someone wrote. The backlog
+argument applies to the first and never to the second.
 
 *Closed 2026-08-31 as moot by the owner's retirement of the activity.*
