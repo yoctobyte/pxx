@@ -49,6 +49,26 @@ the ordering was already right -- and it still broke, because the user's
 declaration had not been parsed yet. **Correct ordering was not sufficient; the
 second question is WHEN you are entitled to ask.**
 
+**And the cleanest evidence for the opening rule is not in this file at all,
+which is the point.** `tools/gate.sh:113` prints, beside a failing self-host
+check: *"compiler/pascal26 is OLDER than the last commit touching compiler/ --
+that is a STALE BINARY, not a miscompile."* Written 2026-08-13 (`87be2d98b`). On
+2026-08-31 it fired on frank-rust, who had pulled a sibling's `compiler/**` and
+re-gated without rebuilding, and who was one command from reporting a miscompile
+on master -- CLAUDE.md's case 3, and the one member of that family that fails
+**loudly and wrongly**, so the false accusation arrives fully evidenced.
+
+It caught someone in a different lane, two weeks later, **who had never read
+it**. That is the property prose cannot have: a playbook rule must be recalled at
+the moment it applies, and the moment it applies is exactly when you are
+convinced of something else. A line printed beside the failing output does not
+need to be remembered.
+
+So the ranking the deletion criterion implies, worst to best: a rule you can only
+agree with; a rule you can point at an artifact; **a guard that fires at the
+point of use without being recalled.** Prefer the third. When a section here is
+worth keeping, the question to ask of it is *what would print this?*
+
 So read this file as a **diagnosis aid for a bug you already have**, not as a
 prophylactic. When a section here suggests a guard, the section is the cheap part
 and the guard is the deliverable -- and a rule that has never been the proximate
