@@ -3,13 +3,13 @@ track: A
 prio: 55
 type: feature
 blocked-by: []
-owner: claude-acp
+owner: frankA
 ---
 
 # Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface
 
 - **Type:** feature (runtime / PAL) — Track A
-- **Status:** unfinished — items 1 (SA_SIGINFO/ucontext) and 3 (sigaltstack) DONE; item 4's compiler half done (__pxxSigNum), its RTL half is Track B. Items 2 (--threadsafe) and 5 (SIGPIPE) remain, plus parking the signal number on the other four targets.
+- **Status:** working
 - **Opened:** 2026-07-16, split out of [[feature-signal-handlers]] once the base
   slice (libc-free `rt_sigaction` handler install + `SetSignalHandler`) shipped
   and pinned on all five hosted targets (x86-64 b336, aarch64 b370,
