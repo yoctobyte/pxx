@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:11 backlog:398 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:128 done:2940 rejected:68`
+`working:5 unfinished:27 blocked:11 backlog:398 backlog_new:23 experimental:20 rainy-day:44 float:23 done-followup:3 decided:129 done:2940 rejected:68`
 
 ## Held now (working/ — do not touch these files)
 
@@ -81,7 +81,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
 - `[p 65] [U]` decide-does-a-c-function-always-use-the-c-abi-or-only-when-a-pascal-program-uses-it
-- `[p 65] [U]` decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0
+- `[p 65] [A]` feature-a-fold-the-consensus-dead-branch-core-at-every-level
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
