@@ -3,7 +3,7 @@ track: U
 prio: 55
 type: decide
 blocked-by: []
-summary: "The FreeBSD port needs a bootable FreeBSD kernel and plexus has none — qemu-user is installed, qemu-system is not, and no VM image exists anywhere on the box. Installing a system emulator and fetching a multi-GB OS image is a change to the owner's workstation, so it is the owner's call. One-line answer unblocks feature-t-freebsd-image-and-runner and, behind it, feature-port-freebsd-native."
+summary: "APPROVED 2026-08-31 by the owner: install qemu-system and pull a FreeBSD image on plexus. 'this box is dedicated to development. i think we have plenty disk space left. so yes, we can pull a BSD image.' Verified at ruling time: plexus root filesystem 156G, 84G available (44% used), so a multi-GB image is comfortable. This unblocks the FreeBSD port work that had no bootable kernel to test against. Fleet context recorded the same day and NOT part of this approval: borg is being repaired this week, and seven is moving off-site to a work location because it is too noisy for the house -- so plexus is the box to build this on, not seven."
 ---
 
 # May Track T install `qemu-system` and a FreeBSD image on plexus?
@@ -73,3 +73,36 @@ real outcome nobody has chosen.
 
 Nothing is broken and nothing regresses while this waits. It is ranked to be
 *reached*, not to interrupt.
+
+---
+
+# APPROVED 2026-08-31 — install qemu-system, pull a FreeBSD image
+
+Owner: *"yes this box is dedicated to development. i think we have plenty disk
+space left. so yes, we can pull a BSD image."*
+
+**Verified at ruling time rather than assumed:** plexus root filesystem is 156G
+with **84G available** (44% used). A multi-GB OS image is comfortable.
+
+This was the owner's call for the reasons the ticket gives — it costs disk, it
+pulls a multi-GB image over the network, and installing a system emulator
+changes the box for every lane. All three are his to spend.
+
+## Build it on plexus, and this is now load-bearing
+
+Two fleet facts the owner stated the same day, recorded here because they decide
+*where* this goes and are recorded nowhere else:
+
+- **borg** is being repaired this week.
+- **seven** is moving off-site to a work location — it is too noisy to keep
+  running at home.
+
+So plexus is the host for the FreeBSD VM, not seven. Anything built assuming
+seven stays reachable at home should be re-checked against that.
+
+## Not approved here
+
+Nothing about *what* the FreeBSD port must then pass. This clears the blocker —
+that the port had no bootable kernel to test against — and no more.
+
+*Approved 2026-08-31 by the owner; disk verified by frank-user.*
