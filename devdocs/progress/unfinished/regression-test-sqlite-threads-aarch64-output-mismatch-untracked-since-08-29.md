@@ -6,7 +6,7 @@ type: regression
 status: unfinished
 owner: frankS
 blocked-by: []
-summary: "NOT REPRODUCIBLE ON PLEXUS: PASSES 4/4 at HEAD with the amalgamation copied in, 37s of a 120s budget (62s under a 12-way CPU load). The report cannot say why it fails on seven, because `FAIL (output mismatch)` was ALSO what a TIMEOUT printed -- measured: `timeout 5` gives rc=124, empty output, and that branch. The runner now separates the two and prints the actual output; the next full sweep on seven answers this. Track T question inside: the sibling qemu runners stretch their inner budget by TESTMGR_LOAD_SCALE and this one does not."
+summary: "ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) | partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here."
 ---
 
 # `test-sqlite-threads-aarch64` red since 2026-08-29, and untracked
@@ -165,3 +165,88 @@ size it — or `output mismatch, exit N` **with the actual three lines**, which
 localises a wrong answer to `shared`, `perthread` or `all` and makes it a Track
 A bug with a place to start. Parked in `unfinished/` until then rather than
 closed, because nothing here has established a cause.
+
+## ANSWERED — the resume condition fired, 2026-08-31 (frankA, Track A)
+
+The ticket said *"the next full sweep on seven answers this"*. It has, and the
+answer is unambiguous. Nothing was watching that prose trigger, so this was
+picked up by hand off the Track A queue.
+
+```
+report   devdocs/progress/tstate/reports/20260831T023403Z-bebac33-seven.md
+sha      bebac33366f5   tier full   host seven   verdict RED   wall 592.5s
+
+test-sqlite-threads: FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00)
+partial output: []
+```
+
+`bebac33366f5` is a descendant of the runner fix `fc5762a2f`
+(`git merge-base --is-ancestor` — checked, and it is the *only* post-fix full
+tier so far; the other post-fix report is tier `native`, which does not run this
+job).
+
+**So there is no aarch64 miscompile.** The job builds a 6.9 MB binary and then
+runs out of clock. Every earlier report reading `FAIL aarch64 (output mismatch)`
+was the old runner printing one line for two different events — exactly what
+`fc5762a2f` was written to separate, working as intended on its first
+full-tier outing.
+
+### Cause: the load factor, which is this ticket's own Track T question
+
+Confirmed by contrast rather than by reading one file:
+
+| runner | budget |
+| --- | --- |
+| `run_c_conformance.sh` | `TESTMGR_TIME_SCALE` **and** `TESTMGR_LOAD_SCALE` |
+| `run_fgl_corpus.sh` | `t=20*s*l`, both |
+| `run_pascal_conformance.sh` | both |
+| **`run_sqlite_thread_test.sh`** | **`TIME_SCALE` only** — `run_to=120` hardcoded at :32, scaled at :63 |
+
+**A correction worth recording, because the wrong version is the obvious read:**
+`SCALE` is *not* merely printed. Line 63 —
+`run_to="${CSTT_RUN_TIMEOUT:-$(scaled "$run_to")}"` — really does apply it. I
+had it as "read into a variable and only used in the message" and that is false.
+What is missing is specifically `TESTMGR_LOAD_SCALE`, the live concurrency
+factor (`cap/cores`) that testmgr exports and that the siblings multiply in.
+
+On seven the time scale was **1.00**, so nothing stretched: seven is not slow,
+it is *busy*. The budget stayed at 120s while a 592-second full tier ran around
+it. Against frankS's plexus numbers — 37s idle, 62s under a 12-way load — a
+120s ceiling under sweep concurrency is simply too tight, and the failure is a
+load artifact rather than a defect in anything the job tests.
+
+`run_c_conformance.sh:55-60` already documents this exact failure for its own
+shards, naming `regression-testmgr-conformance-shard-timeout-under-load` "and
+dups". This is another dup, in the one qemu runner that never got the fix.
+
+### Handed to Track T — tool not edited
+
+The change is one line and mirrors three siblings, but the *size* of the budget
+is a claim about sweep economics (a longer inner timeout slows every full tier),
+and that is T's to price, not Track A's. `tools/run_sqlite_thread_test.sh` is
+**not edited here**.
+
+Suggested shape, T's call:
+
+```sh
+scaled() { awk -v t="$1" -v s="$SCALE" -v l="${TESTMGR_LOAD_SCALE:-1}" \
+  'BEGIN { v=t*s*l; printf "%d", (v < t ? t : v) }'; }
+```
+
+which keeps the existing floor and leaves `CSTT_RUN_TIMEOUT` as the override.
+
+### What this does NOT clear, so it is not closed on my say-so
+
+The job has been red since **2026-08-29**, and the load-scale gap explains a
+timeout *under concurrency*. Whether every red in that stretch was the same
+timeout is not established — the old runner could not tell the two apart, which
+is the whole reason this ticket exists, so the earlier reports cannot be
+re-read to answer it. **The next full sweep after the runner gains the load
+factor is what confirms it**, and that is a real trigger this time: if it still
+times out with the budget stretched, the timeout is genuine and there IS
+something to chase.
+
+**And the tracking gap in the body above is untouched by any of this** — the job
+went red for two days with no auto-filed ticket. That half is still open and is
+still worth T's glance.
+
