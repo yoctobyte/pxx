@@ -667,11 +667,21 @@ Before writing a conclusion into a ticket, check it against a second source.
 Every wrong root cause in this repo's history was a plausible story nobody
 diffed against an oracle.
 
-## "You are the coordinator" → read `devdocs/dev/session-roster.md`
+## "You are the coordinator" → read ONE SECTION of `devdocs/dev/session-roster.md`
+
+**Read only `## IF YOU WERE JUST MADE COORDINATOR, THIS IS THE WHOLE JOB` —
+the first ~6.8KB. Do NOT read the file.** It is **1.53 MB (~384k tokens)** and
+**99.6% of it is dated session history** the job does not need: one 2026-08-28
+section alone is 149KB. Reading it whole spends ~38% of a 1M context window to
+learn what the first 6.8KB says, and the section title says so itself.
+
+This is the same fix `BOARD.md` already has (agents read the 6KB
+`BOARD-brief.md`, not the 344KB board); the roster simply never got it. Measured
+2026-08-31 while the owner was balancing the fleet against its token budget.
 
 The user runs several agents at once and may assign one the **coordinator** role.
-That assignment is complete on its own: the roster's opening section is the whole
-job. **No more, no less** (user, 2026-08-17).
+That assignment is complete on its own: that section is the whole job. **No more,
+no less** (user, 2026-08-17).
 
 **THE COORDINATOR NO LONGER DISTRIBUTES WORK** (user, 2026-08-31). Dispatch is
 cut. Its **sole** job is now **topic-collision avoidance**:
