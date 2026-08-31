@@ -2,10 +2,10 @@
 track: A
 prio: 55
 type: bug
-status: open
+status: done
 found: 2026-08-31
 found-by: frankT
-summary: "test-asm#src:test/hello.pas and test-asm#src:compiler/compiler.pas have been red on seven for days with NO visible failure -- their captured output is two `ok:` lines. Cause found 2026-08-31: the failing step is the bare `! grep -q '^    db '` assertion, which prints nothing. Both disassemblies contain EXACTLY ONE undecoded byte, `db 65`, at line 305 of BOTH files. CAUSE FOUND (frankS + frank-rust + frank-coordinator, not me): `db` is printed via DisHexByte, so 65 is HEX -- **0x65 is the `gs` SEGMENT PREFIX**, emitted by frankS's TLS work (057056400), and `compiler/asmdisasm_x64.inc:328` accepts only $66/$F2/$F3 as legacy prefixes, so it falls through to the `db` fallback and trips the negative grep. **The compiler emits CORRECT code; the disassembler cannot read the byte back.** frankA has reproduced it and taken the fix. I ORIGINALLY WROTE 65 AS DECIMAL (0x41 = REX.B) and built a hypothesis on it -- wrong, corrected below, and the file's own second line said the fallback is `db 0xNN`. The silent assertion that hid all of this for days is fixed separately (T, 6b5b37c0a)."
+summary: "FIXED by frankA in `bffd0b77d`, verified at fixedpoint `7a691b6d8a58`: both disassemblies now have ZERO `db` lines and read `mov r8, gs:[0x00000000]` at line 305. test-asm#src:test/hello.pas and test-asm#src:compiler/compiler.pas had been red on seven for days with NO visible failure -- the failing step was the bare `! grep -q '^    db '` assertion, which prints nothing (fixed separately, T, `6b5b37c0a`). Cause: `db` is printed via DisHexByte, so 65 is HEX -- **0x65 is the `gs` SEGMENT PREFIX**, emitted by the TLS work (057056400), and `compiler/asmdisasm_x64.inc:328` accepted only $66/$F2/$F3 as legacy prefixes. **The compiler emitted CORRECT code; the disassembler could not read the byte back** -- and read it back WRONG, decoding the orphaned mov as absolute, i.e. asserting a process-wide access where the binary has a per-thread one. The value was ORIGINALLY READ AS DECIMAL (0x41 = REX.B), which supports a coherent and entirely different suspect; that error and the recovery are recorded in the body."
 ---
 
 # One undecoded byte fails both `test-asm` disassembly jobs
@@ -116,3 +116,68 @@ correctly for 30 of 30 — and **was structurally unable to see these two**, whi
 he said out loud rather than rounding up to "all 30 pass". Had he claimed the
 stronger thing, the same evidence would have carried a claim that covered these
 two jobs and was false about them.
+
+## Resolved — fix by frankA (`bffd0b77d`), verified by frank-rust at fixedpoint `7a691b6d8a58`
+
+frankA did not know this ticket existed (they reported "the two reds were never
+ticketed"), so the bookkeeping is mine and the fix is entirely theirs.
+
+`compiler/asmdisasm_x64.inc` now decodes segment overrides through a prefix
+**loop** rather than a second `if`, because a segment override and an SSE prefix
+may legally appear in either order and assuming today's emission order is how
+this recurs. `DisSegPfx` is file-scoped (`DisParseModRM` has 30 call sites) and
+resets at the top of `DisOneReal` beside `legacyPfx`, so it cannot leak between
+instructions.
+
+```
+before:  db 65 / mov r8, [0x00000000]
+after:   mov r8, gs:[0x00000000]
+```
+
+### Verified, with the control
+
+- `test/hello.pas` → 12696 lines, **0** `db` lines; `compiler/compiler.pas` →
+  1958805 lines, **0**. Both now read `mov r8, gs:[0x00000000]` at line 305 —
+  the exact line the undecoded byte sat on.
+- **Positive control asserted**, because a `grep -c` of zero is also what an
+  empty or wrong file returns: appending one `db 0x99` line makes the assertion
+  fire, and removing it makes it clean again. The check can fail, so its pass
+  means something.
+- frankA's own control was better and free: `test_asm_sse_packed` and
+  `test_asm_avx` still emit 75 and 77 `db` lines — genuinely unsupported
+  VEX/packed forms that MUST keep falling back. A prefix loop written too
+  permissively would have swallowed those and reported a clean sweep while
+  hiding real unknowns.
+- Codegen proven unchanged rather than argued: `hello.pas` compiled by the
+  pre-fix and post-fix compilers gives a byte-identical ELF (`313aa08c06500585`),
+  and `WriteDisassemblyX64` has exactly one call site, on the `-S` path.
+
+### The `$64` decision, recorded because it is deliberately untestable
+
+fs (`$64`) is handled too, and **cannot be reached today**: all four `EmitB($64)`
+sites are ModRM/SIB bytes, not prefixes (`mul dword [esp+4]` in
+`ir_codegen386.inc`; `mov rsp, [rsp+8]` twice in `symtab.inc`). frankA measured
+that rather than assuming it, kept the arm because fs and gs are one decode rule
+and a `$65`-only fix leaves the twin broken the day something emits it, and
+labelled it as an untestable whitelist entry instead of letting it pass as
+covered. `$2E/$36/$3E/$26` and `$67` were deliberately left out — the same
+argument does not reach them and nothing emits them.
+
+### Why this ticket was nearly wrong, and the transferable bit
+
+The `65` was first read as **decimal** (0x41 = REX.B), which supports a coherent
+and completely different story: a spurious REX prefix escaping the code
+generator. Real suspect: a *missing* prefix in the disassembler. `db` is printed
+via `DisHexByte`, so the value is hex, and the file's own second line says the
+fallback is `db 0xNN`.
+
+The disassembly was not merely incomplete, it was **wrong in the direction that
+matters**: with the prefix orphaned into a `db`, the `mov` behind it decoded as
+absolute — asserting a process-wide access where the binary has a per-thread
+one. Anyone reading `-S` to check the TLS work would have seen the opposite of
+what shipped.
+
+The silent assertion that hid this for days is fixed separately (T, `6b5b37c0a`).
+
+## Log
+- 2026-08-31 — resolved, commit PENDING-COMMIT.
