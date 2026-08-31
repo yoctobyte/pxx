@@ -16417,10 +16417,11 @@ test-c-float-const-cross: $(COMPILER)
 
 .PHONY: test-c-abi-cross
 test-c-abi-cross: $(COMPILER)
-	@overall=0; \
+	@overall=0; ran=0; want=0; \
 	exp="$$(printf 'dbl_first 10.00\nint_first 10.00\nthree_ints 123\ntwo_dbl 17.50\nflt 10.00\nmix4 1234.00\neight 204\npairsum 17.50')"; \
 	iexp="$$(printf 'dbl_first 1000\nint_first 1000\nthree_ints 123\ntwo_dbl 1750\nflt 1000\ndbl_arg_int_ret 1000\nmix4 123400\neight 204\npairsum 1750')"; \
 	for t in aarch64 arm32 riscv32 i386; do \
+	  want=$$((want+1)); \
 	  if [ "$$t" != "i386" ] && ! command -v qemu-$$t >/dev/null 2>&1 && \
 	     ! { [ "$$t" = "arm32" ] && command -v qemu-arm >/dev/null 2>&1; }; then \
 	    echo "test-c-abi-cross: SKIP $$t (qemu absent)"; continue; \
@@ -16445,7 +16446,11 @@ test-c-abi-cross: $(COMPILER)
 	    if [ "$$igot" = "$$iexp" ]; then echo "test-c-abi-cross: PASS $$t (intra-C)"; \
 	    else echo "test-c-abi-cross: INTRA-C FAIL $$t"; printf '%s\n' "$$igot" | sed 's/^/    /'; overall=1; fi; \
 	  fi; \
+	  ran=$$((ran+1)); \
 	done; \
+	echo "test-c-abi-cross: $$ran of $$want targets measured"; \
+	test "$$ran" = "$$want" || [ -n "$$PXX_ALLOW_SKIPPED_TARGETS" ] || \
+	  { echo "test-c-abi-cross: RED -- $$want targets were asked for and only $$ran ran, so this run did not measure what its name says. Install the missing qemu, or set PXX_ALLOW_SKIPPED_TARGETS=1 to accept a partial run deliberately."; exit 1; }; \
 	test "$$overall" = "0" || { echo "test-c-abi-cross: RED"; exit 1; }
 
 # THE ONE ROW WITH AN OUTSIDE OPINION. Every other subject in this family is
@@ -16465,8 +16470,9 @@ test-c-abi-cross: $(COMPILER)
 .PHONY: test-c-abi-glibc-oracle
 test-c-abi-glibc-oracle: $(COMPILER)
 	@exp="$$(printf 'ints 11 22 33 44 55 66\nmixed 7 2.50 9\nwide 1 1.50 2 2.50 3')"; \
-	overall=0; \
+	overall=0; ran=0; want=0; \
 	for t in arm32 i386; do \
+	  want=$$((want+1)); \
 	  if [ "$$t" != "i386" ] && ! command -v qemu-$$t >/dev/null 2>&1 && \
 	     ! { [ "$$t" = "arm32" ] && command -v qemu-arm >/dev/null 2>&1; }; then \
 	    echo "test-c-abi-glibc-oracle: SKIP $$t (qemu absent)"; continue; \
@@ -16477,7 +16483,11 @@ test-c-abi-glibc-oracle: $(COMPILER)
 	  got="$$(tools/run_target.sh $$t $(TESTTMP)/c_abi_oracle_$$t 2>&1)"; \
 	  if [ "$$got" = "$$exp" ]; then echo "test-c-abi-glibc-oracle: PASS $$t"; \
 	  else echo "test-c-abi-glibc-oracle: FAIL $$t (pxx disagrees with glibc)"; printf '%s\n' "$$got" | sed 's/^/    /'; overall=1; fi; \
+	  ran=$$((ran+1)); \
 	done; \
+	echo "test-c-abi-glibc-oracle: $$ran of $$want targets measured"; \
+	test "$$ran" = "$$want" || [ -n "$$PXX_ALLOW_SKIPPED_TARGETS" ] || \
+	  { echo "test-c-abi-glibc-oracle: RED -- $$want targets were asked for and only $$ran ran, so this run did not measure what its name says. Install the missing qemu, or set PXX_ALLOW_SKIPPED_TARGETS=1 to accept a partial run deliberately."; exit 1; }; \
 	test "$$overall" = "0" || { echo "test-c-abi-glibc-oracle: RED"; exit 1; }
 
 test-c-conformance-aarch64: $(COMPILER)

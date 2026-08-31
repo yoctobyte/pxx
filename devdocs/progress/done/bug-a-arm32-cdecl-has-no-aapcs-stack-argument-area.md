@@ -2,7 +2,9 @@
 track: A
 prio: 45
 type: bug
-status: open
+status: done
+owner: frankC
+summary: "RESOLVED 2026-08-31 (commit fc9c8ade2, in the C-ABI group with [[bug-c-a-c-function-s-calling-convention-depends-on-the-target]]). arm32 now implements the AAPCS32 stack argument area on BOTH sides of the call: the caller builds an 8-byte-aligned outgoing block, loads only the first four words into r0-r3 and leaves the rest in ASCENDING stack order; the callee prologue reads word k>=4 from [fp + 8 + (k-4)*4] instead of refusing pnWords > 4. The direct, indirect and hidden-destination (r12) call arms were all rewritten; va_arg gained a per-target alignment argument because AAPCS32 8-byte-aligns a double on the overflow area and the shared cross32 helper did not. Verified against gcc: 12-argument mixed int/double and 10-double signatures match armel gcc exactly, and test-c-abi-glibc-oracle links a pxx arm32 object against the sysroot glibc. Gates: test-c-abi-cross green on four targets and three subjects, gate.sh quick green, self-host fixedpoint converged."
 found: 2026-08-30
 found-by: claude-A
 ---
@@ -181,3 +183,5 @@ that backend emits no dynamic segment, so it cannot reach a shared glibc at all.
 (bridge, pure-C control, intra-C) including the two new wide shapes;
 `make test-c-abi-glibc-oracle` PASS; `tools/gate.sh quick` GREEN; self-host
 fixedpoint converged.
+
+- 2026-08-31 — resolved, commit fc9c8ade2.

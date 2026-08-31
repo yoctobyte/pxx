@@ -483,3 +483,5 @@ does not compile for aarch64 at all. That is
 [[bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds]],
 whose summary said *"nothing reaches it today"* — false, and corrected there.
 aarch64 is now the only target that refuses a stack-argument C signature.
+
+- 2026-08-31 — resolved, commit eb22cc325 (the flip); the backend halves it required landed first as fc9c8ade2.
