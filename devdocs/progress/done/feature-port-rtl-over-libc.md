@@ -8,8 +8,14 @@ prio: 55
 # RTL-over-libc — the portability force multiplier
 
 - **Type:** feature (Track A — RTL lowering / codegen / linking). Portability campaign.
-- **Status:** done
-  acceptance instrument landed, no compiler changes made. See the dated note below.
+- **Status:** done — the LOWERING landed (`3a0ed43fb`): `--rtl-libc` routes
+  compiler-generated kernel entries through a thunk calling libc's `syscall()`,
+  measured 75 raw kernel-entry instructions down to 1 on `test/hello.pas`.
+  (This line previously read "acceptance instrument landed, no compiler changes
+  made", which was true of the 2026-08-17 park and was left standing after the
+  code landed. It sent a reader sizing `feature-port-openbsd-libc` to conclude
+  the lowering did not exist. The remainder is split out as
+  `feature-rtl-libc-frontend-sites-and-thread-errno`.)
 - **Owner:** frankA
 - **Opened:** 2026-07-17, from the OS-portability mapping session. Full analysis in
   [`devdocs/dev/portability-axes.md`](../../dev/portability-axes.md).

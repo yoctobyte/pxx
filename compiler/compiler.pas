@@ -794,6 +794,10 @@ begin
   WriteLn('  -I<dir>               add a C include search root');
   WriteLn('  -d<NAME> -u<NAME>     define / undefine a conditional symbol');
   WriteLn('  -Mobjfpc              FPC objfpc mode by default');
+  WriteLn('  --rtl-libc            reach the kernel through libc syscall(3) rather');
+  WriteLn('                        than the raw instruction (x86-64, opt-in). For');
+  WriteLn('                        hosts that forbid raw syscalls outside libc;');
+  WriteLn('                        rt_sigreturn and clone''s child stub stay raw.');
   WriteLn('  --emit-obj            emit a relocatable .o instead of an executable');
   WriteLn('                        general objects: --target=xtensa|riscv32 only.');
   WriteLn('                        on x86-64 only .asm sources (text + global');
