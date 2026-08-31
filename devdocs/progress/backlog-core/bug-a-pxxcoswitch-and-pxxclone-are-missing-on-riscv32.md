@@ -61,3 +61,43 @@ copied.
 
 Low priority: both are low-level builtins with no in-tree riscv32 caller. The
 failure is loud and at compile time.
+
+---
+
+## `palthread.pas` landmine — read this before you lift the `__pxxclone` guard
+
+Found by frank-coordinator grepping for the sibling of the `PalBackendMmapAnon`
+`MAP_ANONYMOUS` fix (`97e96fc1b`); scope corrected by frankS; the flag value
+below is measured by frankA rather than cited.
+
+**Not a bug today.** `lib/rtl/palthread.pas` defines `MAP_ANON_PRIV = $22` at
+`:84`, used at `:161` to mmap every thread stack. That constant sits **outside**
+the arch split, which starts at `:87`, while the syscall numbers sit **inside**
+it — and both xtensa and riscv32 fall to the `{$else}` at `:120`, where
+`SYS_mmap = -1` and the `__pxxclone` compile-error fires first. So nothing is
+silently wrong right now.
+
+**It becomes wrong the moment this ticket lands**, because lifting the guard
+removes the thing that is currently saving it.
+
+**The two targets are NOT symmetric — this is the part to get right:**
+
+| | `SYS_mmap` | `MAP_PRIVATE\|MAP_ANONYMOUS` |
+| --- | --- | --- |
+| riscv32 | **222** (generic ABI), placeholder is `-1` | **`$22` = 34 — already correct**, same as x86-64/i386/aarch64/arm |
+| xtensa | **80** (its own numbering; generic 222 is `Unknown syscall 222`) | **`$802` = 2050** — the sole outlier |
+
+So: **when moving `MAP_ANON_PRIV` inside the arch split, xtensa takes `$802` and
+every other arch takes `$22`** (frankS's wording, and the reason for it is that
+a note grouping the two targets invites someone to "fix" riscv32's already-correct
+`$22` to `$802` and reproduce the EBADF that `97e96fc1b` just removed).
+riscv32 needs the syscall block only; xtensa needs the syscall block **and** the
+flags constant.
+
+**`$800` is MEASURED, not read off a table or taken from a comment.** Under
+`qemu-xtensa -strace`, mmap2 with flags `$800` alone is decoded by qemu as
+`MAP_ANONYMOUS` and returns EINVAL (no `MAP_PRIVATE`/`MAP_SHARED`); `$802` is
+decoded as `MAP_PRIVATE|MAP_ANONYMOUS` and maps; `$22` is decoded as
+`MAP_PRIVATE|0x20` — `0x20` is not a named flag on this target — and returns
+EBADF, mapping fd `-1`. That is qemu's own flag decoder naming the bit,
+independent of `builtinheap.pas:971`'s comment, which had been the only source.
