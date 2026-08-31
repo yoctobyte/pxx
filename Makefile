@@ -9796,6 +9796,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_shift_literal_width26 "$$($(TESTTMP)/test_shift_literal_width26)" "$$(printf '1099511627776\n1099511627776\n9223372036854775804\n9223372036854775804\n1099511627776\n4611686018427387904\n3298534883328\n72057594037927935')"
 	./$(COMPILER) test/test_shr_const_fold_typing.pas $(TESTTMP)/test_shr_const_fold_typing26
 	tools/expect_same.sh test_shr_const_fold_typing26 "$$($(TESTTMP)/test_shr_const_fold_typing26)" "$$(printf 'FFFFFFF0\nFFFFFE00\nFFFFFFF0\n-17\n-513\n-17')"
+	./$(COMPILER) test/test_inline_result_narrows.pas $(TESTTMP)/test_inline_result_narrows26
+	tools/expect_same.sh test_inline_result_narrows26 "$$($(TESTTMP)/test_inline_result_narrows26)" "$$(printf '3\n3\n3\n3\n-2147483648\n-294967296\n-5\n8589934598\n200')"
 	./$(COMPILER) test/test_stderr_fd.pas $(TESTTMP)/test_stderr_fd26
 	tools/expect_same.sh test_stderr_fd26.1 "$$($(TESTTMP)/test_stderr_fd26 2>/dev/null)" "$$(printf 'out1\nout2')"
 	tools/expect_same.sh test_stderr_fd26.2 "$$($(TESTTMP)/test_stderr_fd26 2>&1 1>/dev/null)" "$$(printf 'e1 n=42 i=  7 b=TRUE')"

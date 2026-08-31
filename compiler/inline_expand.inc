@@ -485,6 +485,27 @@ begin
     lhs := ASTLeft[stmt];
     rhs := ASTRight[stmt];
     if (lhs < 0) or (ASTKind[lhs] <> AN_IDENT) or (ASTIVal[lhs] <> retSym) then Exit;
+    { A NARROWING assignment cannot use this shape, because this shape RETAINS
+      THE RHS AND DROPS THE ASSIGNMENT: it stores nothing, and the narrowing to
+      the declared result type lived in that store. `function F(a: Int64):
+      Integer; begin F := a; end` returned the full 64 bits at -O2 —
+      F(4294967299) printed 4294967299 where FPC prints 3 — while the SAME
+      function with any second statement was right, because that is shape 3,
+      which allocates a properly typed Result temp and stores through it. So
+      hand the narrowing cases to shape 3 rather than teaching this one to
+      narrow: the store is the mechanism that already narrows correctly, and a
+      second one would be the path that stays broken
+      (devdocs/dev/normalise-dont-special-case.md).
+      The cost is a temp store+load for these calls, which is exactly what
+      correctness requires — the out-of-line body emits the same two.
+      bug-a-function-result-assignment-does-not-narrow-to-the-result-type }
+    if TypeIsOrdinal(Syms[retSym].TypeKind) and
+       TypeIsOrdinal(IntToTypeKind(ASTTk[rhs])) and
+       (TypeSize(Syms[retSym].TypeKind) < TypeSize(IntToTypeKind(ASTTk[rhs]))) then
+    begin
+      TryRetainInlineStmtBody(procIdx, bodyNode, retSym);
+      Exit;
+    end;
     if not InlineExprSimple(rhs, procIdx, False, retSym, False) then Exit;
     startNext := InlineASTNext;
     if InlineASTNext + 48 >= INLINE_AST_RESERVE then Exit;    { budget guard }
