@@ -24211,3 +24211,68 @@ And frankA's correction to my framing, which I accept: it left CLAUDE.md alone
 and the instrument implementing it was broken — opposite fixes. "Don't edit the
 owner's file" would have produced the same action for the wrong reason, and would
 have been wrong had the doc itself been at fault.
+
+### CORRECTION — the pin ledger is fine; I made the catalogued error myself
+
+The entry above claims `992065f21f33` is a pre-rebase ghost in the pin ledger.
+**That is wrong.** frankT and frankwasm caught it independently within minutes,
+and it verifies in one command:
+
+    $ sha256sum stable_linux_amd64/default/pinned
+    992065f21f333a2c35a566c0f9fcc99016f5c4f8a4c06aaa8764f613bd74d5bb
+
+It is the first twelve hex of the pinned **binary's SHA256**, exact across all 64,
+and it is the pin subject's own convention: `pin v<N> -- <binary sha256 prefix>`.
+The pin's **git** sha is the LAST field of the `pin.log` line — `c8e132a02b92`,
+08-30 19:31 — and it resolves fine. Nothing was rebased away, nothing is lost,
+and `trackt.py`'s `read_pin_log` already keys off the last field with a comment
+saying why. **There was never a durability bug in the pin record.**
+
+So this is the **third recorded instance of a binary sha256 prefix read as a
+commit** — CLAUDE.md lists the first two — and I produced it hours after quoting
+those two at other agents. The counting rule is the fix: **40 hex is a commit, 64
+is a binary, and twelve of either are indistinguishable.** The free tell, from
+frankwasm: if twelve hex characters do not resolve, ask what ELSE in this repo is
+twelve hex before concluding the object is missing.
+
+**Why the wrong version was the more dangerous one, and this is the part to keep.**
+"A pre-rebase ghost sits in the ledger that records which tree is blessed" reads
+as a durability bug in the pin mechanism, and someone would have gone looking for
+a fix to something working exactly as designed. The true version is smaller and
+older. **The alarming diagnosis travels further than the mundane one**, which is
+the second time tonight I reached for the more interesting story.
+
+**And frankwasm's polarity note, which explains why this survives careful people:
+a binary sha NEVER resolves, so it can only ever produce a NEGATIVE.** It cannot
+mislead you into a false YES — only into certainty about a NO you never tested.
+The failure mode has no false-confirmation arm at all, so the habit of
+double-checking surprising confirmations does not fire.
+
+### CORRECTION — `--is-ancestor` distinguishes them; my IDIOM did not
+
+The entry above also claims `--is-ancestor` cannot tell "not an ancestor" from
+"not an object". **Wrong, and frank-rust measured it** (`e3ec779df`):
+
+    real commit, not an ancestor   exit 1     silent
+    not an object at all           exit 128   fatal: Not a valid object name
+
+I wrote `git merge-base --is-ancestor "$s" 4c4a5c125 && echo YES || echo NO`. The
+`&&`/`||` pair sends 1 and 128 down the same branch and the `2>/dev/null` on the
+first attempt ate the fatal text. **I destroyed the distinction and then blamed
+git for not drawing it.** Correct rule: branch on `$?` being 1 versus 128, never
+test an ancestry query with `!` or `||`, do not redirect its stderr.
+
+The cost of the wrong version is measured: I relayed it to frankT as a finding,
+and it landed it as a playbook doctrine row (`35351e33f`) before frank-rust's
+measurement reached me. Forty minutes from accident to doctrine, with nobody
+behaving badly at any step. Asked frankT to pull it.
+
+frank-rust's second half, found in the command it used to prove the first:
+`git show <sha>:<file> 2>&1 | head -2; echo $?` prints **0** for a bogus sha,
+because `$?` is `head`'s. So "prefer the artifact" needs **"and let it speak"** —
+a pipe replaces the exit code you are asking about with the last stage's.
+
+**The general rule, and it is the one I keep failing:** *"the tool cannot tell
+you"* is unfalsifiable and leads nowhere; *"your `if !` collapsed 1 and 128"*
+names a line you can fix. Before writing off an instrument, check whether the
+shell around it destroyed the distinction the instrument was drawing.
