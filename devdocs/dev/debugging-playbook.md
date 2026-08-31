@@ -2270,6 +2270,23 @@ Implementing the prescribed fix would have **accepted an invalid program** --
 trading one wrong answer for another, in a lane whose whole job is rejecting what
 should be rejected.
 
+**Why the corroboration is STRUCTURAL, said here because the section demands it.**
+A subsection about not trusting a relayed conclusion, resting on a relayed
+conclusion, would be self-refuting. So the check above deliberately does not
+depend on being right about fpc 3.2.2's internals: a `{ %FAIL }` marker plus a
+specialization sitting in the gap between the forward declaration and the
+completion gives the two candidate check sites **opposite verdicts by
+inspection**. FPC's actual behaviour is frankwasm's measurement and is attributed
+to them; it is not something this file verified.
+
+**And the limit, because it is the kind this file keeps catching: that snippet is
+not in the repository.** `library_candidates/` is gitignored (`.gitignore:36`)
+and the file is untracked, so a reader on a fresh clone cannot open the path
+above -- which is why the shape is pasted here rather than cited by path alone.
+frank-coordinator could not corroborate it for exactly that reason and **said so
+instead of staying quiet**, which is the correct move: silence beside a claim
+reads as assent, and an unlabelled companion is how a bad claim travels.
+
 - **And the partial green would have sold it.** `tgenconstraint38` flips green
   under the prescribed fix, so the change would have arrived with a test moving
   in the right direction, which is the most persuasive possible cover for a wrong
