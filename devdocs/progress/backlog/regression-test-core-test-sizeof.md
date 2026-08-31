@@ -41,3 +41,70 @@ expect_same: MISMATCH [test_sizeof26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+## TRIAGE 2026-08-31, host `seven` — NOT A REGRESSION. A stale expectation.
+
+**Do not bisect this and do not revert anything.** The range is right, the
+commit in it is correct, and the defect is in the test's recorded expectation.
+
+`ce4d9004c` ("fix(P): SizeOf and declarations share ONE builtin type table")
+resolved `done/bug-p-sizeof-extended-disagrees-with-the-storage-extended-gets`
+[P p65]. It changed `SizeOf(Extended)` from **10 to 8 deliberately**, and its own
+message says so: *"`SizeOf(Extended)` answered 10 against storage of 8."*
+`Makefile:11428` still expects `10`. Nothing updated it.
+
+This is track-t.md's fourth bisect case, the one the watcher explicitly cannot
+decide: *a correct commit that is not a fault — a feature retired a recorded
+divergence and its expectation was left behind.*
+
+### Measured, not read
+
+Compiler rebuilt at HEAD `8284f7376` (sha256 `ee45a08cbc7f`, self-host
+fixedpoint converged), running the test's own invocation:
+
+```
+actual   1 1 2 2 4 4 4 4 8 8 8 8 8 8 8 1 1 4 8 8  8 16 2 4 1 8 8
+expected 1 1 2 2 4 4 4 4 8 8 8 8 8 8 8 1 1 4 8 8 10 16 2 4 1 8 8
+                                                  ^ position 21 = SizeOf(Extended)
+```
+
+**Exactly one of twenty-seven values differs**, which is itself the evidence that
+this is a single retired expectation and not a table-merge that went wide.
+
+### Why 8 is the right answer here, checked against storage rather than against FPC
+
+```
+pxx      SizeOf(Extended)=8    SizeOf(record x,y: Extended)=16
+fpc 3.2.2 SizeOf(Extended)=10  SizeOf(record x,y: Extended)=32
+```
+
+pxx really does store an `Extended` in 8 bytes — two of them occupy 16 — so
+`SizeOf` is now *internally consistent*, which is the property the parent ticket
+was about. The old `10` was agreeing with FPC while misdescribing our own
+layout, and a `SizeOf` that disagrees with the storage it describes is the worse
+of the two errors.
+
+### The fix
+
+`Makefile:11428`, one character, in the `expect_same.sh test_sizeof26`
+expectation: `...\n8\n8\n10\n16\n...` → `...\n8\n8\n8\n16\n...`
+
+Left to Track P rather than done here: T owns the tool, never the bug, and this
+is a P test expectation retired by a P commit. It is a one-character change with
+the measurement above behind it.
+
+### A separate finding this surfaced, which is NOT this ticket
+
+**pxx's `Extended` is 8 bytes; FPC's is 10 (and pads to 16 in a record).** That
+divergence is real, reachable by any compiling program that takes `SizeOf` or
+lays out a record, and it is **not recorded in
+`devdocs/dev/pascal-dialect-divergences.md`** — I checked. Under the compat
+ceiling it is not a bug to chase (we are not emulating FPC's every behaviour),
+but "not a bug" and "not written down" are different things, and this one is
+invisible: code asking for extended precision silently gets a Double. Worth a
+line in the divergences doc; Track P's call, not filed as a bug.
+
+*Triaged by the Track T agent on `seven` under the provenance rule — my box's
+watcher auto-filed the stub, so the triage is mine; the fix is the lane's.*
