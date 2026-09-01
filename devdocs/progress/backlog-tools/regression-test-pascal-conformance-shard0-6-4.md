@@ -260,3 +260,21 @@ skiplist change was needed.
   number, excerpt drawn from an unrelated token stream. Filed separately as
   `bug-p-error-context-near-quotes-an-unrelated-token-stream` — it is not part
   of this regression and folding it in would have buried it.
+
+### Addendum 2026-09-01 — the "still open" item above is closed
+
+The `tgeneric50.pp` specialization-alias arm recorded above as still open **was
+fixed the same evening** and `tgeneric50.pp` now compiles clean under a
+`srchash MATCH` binary. Two consequences:
+
+- The `pxx.skip` entry for `tgeneric50.pp` is now **stale**, not half-right as
+  stated above. Folded into `chore-t-pxx-skip-generic-entries-are-stale`, which
+  found it is one of 11 stale generic entries rather than a one-off.
+- The `near:` defect's original repro went with it. Re-based on a live 10-line
+  pair in `bug-p-error-context-near-quotes-an-unrelated-token-stream`; the
+  defect reproduces, the old evidence does not.
+
+Left as a caution for anyone reading this ticket cold: every generic-related
+observation in it was written while that area was changing hourly. Re-verify
+before acting, and under a compiler whose `srchash` matches the tree — a
+failure under a mismatched binary proves nothing.
