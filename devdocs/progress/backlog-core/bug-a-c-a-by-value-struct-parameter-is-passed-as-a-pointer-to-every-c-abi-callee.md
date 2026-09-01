@@ -437,14 +437,23 @@ oracle took over its meaning.
 - **`ABIA64CdeclArgSlot`'s fixed 8-byte NSAA advance** and its three readers,
   for aarch64 -- unchanged, and now the only target where an aggregate
   argument is still a pointer by construction rather than by classification.
-- **The INDIRECT cdecl arm still classifies inline** (`ir_codegen.inc`, the
-  `IR_CALL_IND` SysV arm): it keeps its own `intIdx < 6` / `sseIdx < 8` walk and
-  one slot per argument. So calling a struct-taking C function THROUGH A
-  FUNCTION POINTER is still marshalled as a pointer on x86-64. The mixed-link
-  subject does not contain that shape, which is why the gate is green with this
-  outstanding -- **that is a gap in the gate, not a passing grade**, and it is
-  the next thing to close.
+- ~~The INDIRECT cdecl arm~~ **CLOSED in `4205cb3e6`.** Two function-pointer
+  rows were added to the subject and confirmed RED before the fix; the gate now
+  passes 15 rows for x86_64. It needed a second piece: a `$cfnptr` signature is
+  registered by `RegisterProc` and is CALLER-ONLY -- no body, no param sym, and
+  no declaration for the prototype fixup to correct -- so the record ids and the
+  by-value decision are threaded at the registration itself.
 - `ABIParamSlotIsPointer` still answers True for every `tyRecord`. It is no
   longer consulted for a register-classified C parameter (`ParamValueSize`
   answers first), so it is stale rather than wrong -- but it is exactly the
   kind of predicate the next reader will believe.
+
+**And the gate itself grew a hole while nobody was looking**, which is worth
+recording next to the fix rather than in a commit message: the acceptance
+criterion this ticket names went GREEN for x86_64 while a whole call shape was
+still wrong, because the subject contained no indirect call. Every visible
+instrument agreed — gate PASS, fixedpoint held, the earlier regression fixed.
+The only thing between that and a false claim in this file was
+`normalise-dont-special-case`'s instruction to grep for the sibling arm, which
+was followed as ritual and not as suspicion. **Read a PASS as being about the
+shapes the subject contains, never about the change you made.**
