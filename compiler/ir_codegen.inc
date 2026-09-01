@@ -8233,7 +8233,16 @@ begin
               end;
             end;
         else
-          Error('Unsupported operator in IR codegen');
+          { NAME THE OPERATOR. This message used to say only "Unsupported
+            operator", and the node's source line is whatever the frontend
+            attributed -- in a Rust unity build that was `pub struct Board`,
+            three items past the actual `b >> i`. A reader with a wrong line
+            and no operator reasonably concluded it was not a shift at all, and
+            wrote that dismissal into the ticket. The ordinal is enough to
+            settle it in one grep of defs.inc's TTokenKind.
+            regression-test-core-test-rust-module-items }
+          Error('Unsupported operator in IR codegen: token kind ordinal '
+              + IRVerifyIntStr(Ord(op)));
         end;
         end;
         end;

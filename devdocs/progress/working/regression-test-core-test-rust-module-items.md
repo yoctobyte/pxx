@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: T
+status: working
+owner: frankA
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 16 of 5 is `./compiler/pascal26 /tmp/rust_unity.rs /tmp/test_rust_unity26`. The job's own `src` (`test/test_rust_module_items.rs`, 3 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.

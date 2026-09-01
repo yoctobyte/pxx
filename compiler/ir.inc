@@ -511,6 +511,25 @@ begin
         if (op < 0) or ((op > Ord(tkShl)) and (op <> Ord(tkXor)) and
                         (op <> Ord(tkShr)) and (op <> Ord(tkShrLogical))) then
           Error('invalid operator token kind in binop');
+        { ...and the one value the range test above CANNOT reject, named
+          explicitly because it is the exact residue of the rename. Every
+          frontend that still spells logical shr the old way builds a node the
+          verifier waves through (Ord(tkIdent) is 1) and every backend then
+          refuses with a generic message pointing at whatever source line the
+          node happens to carry. That cost a session: the refusal surfaced on
+          `pub struct Board` in a Rust unity build and was reasonably
+          diagnosed as NOT a shift, because nothing in the message said which
+          operator it was.
+
+          A verifier that admits a value for a reason unrelated to the value
+          being valid is not verifying it. This is a POSITIVE control on the
+          rename: it fails the moment a frontend regresses to the old
+          spelling, which is precisely what rparser did for a day.
+          bug-a-shr-reaches-the-ir-spelled-as-tkident /
+          regression-test-core-test-rust-module-items }
+        if op = Ord(tkIdent) then
+          Error('binop operator is Ord(tkIdent) — a frontend still spells '
+              + 'logical shift-right the pre-tkShrLogical way (314481dd7)');
       end;
 
       IR_CALL:

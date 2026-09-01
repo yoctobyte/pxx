@@ -7313,6 +7313,18 @@ test-core: $(COMPILER)
 	# `side_effect` is the guard on the other side -- an if-STATEMENT that merely
 	# happens to be last in its body must stay a statement. acc is hand-computed:
 	# sum over k of dr*(k+1) with df = 1 for k<4 else 2, dr = -df for even k = 6.
+	# Rust `>>` SIGNEDNESS. No Rust test exercised `>>` at all until 2026-09-01,
+	# which is why the tkIdent -> tkShrLogical rename (314481dd7) could update 25
+	# sites and miss rparser's three: its acceptance was byte-identity of emitted
+	# output on seven targets at -O0..-O4, and a frontend that is not in the
+	# corpus emits no bytes to compare. Every unsigned `>>` in a Rust program
+	# then died on `Unsupported operator in IR codegen`, attributed to whichever
+	# item followed the shift. The UNSIGNED rows are the ones that discriminate:
+	# a regression to arithmetic reads -4 where u64 must read
+	# 9223372036854775804 and u32 must read 2147483644. Oracles by hand.
+	# bug-a-shr-reaches-the-ir-spelled-as-tkident
+	./$(COMPILER) test/test_rust_shift_signedness.rs $(TESTTMP)/test_rust_shrsign26
+	tools/expect_same.sh test_rust_shrsign26 "$$($(TESTTMP)/test_rust_shrsign26)" "$$(printf 'u64 9223372036854775804 9223372036854775804\ni64 -4 -4\n32 2147483644 -4\nu8 100\nusize 9223372036854775804\nshreq 9223372036854775804 -4\nshl 32')"
 	./$(COMPILER) test/test_rust_if_expr.rs $(TESTTMP)/test_rust_ifexpr26
 	tools/expect_same.sh test_rust_ifexpr26 "$$($(TESTTMP)/test_rust_ifexpr26)" "$$(printf 'pick 1 -1\nsign 1 -1 0\nmask 9223372036854775808 1\nguard 7 25\nacc 6\narg 10\nnest 100\npos\nneg')"
 	# Rust MODULE-LEVEL ITEMS (feature-rust-corpus-chess stage 0/3): what a real

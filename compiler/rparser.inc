@@ -2261,11 +2261,21 @@ begin
   begin
     opTk := CurTok.Kind; Next;
     right := RParseAdd;
-    { Rust >> is arithmetic on signed, logical on unsigned — the same
-      split cparser encodes: tkShr = arithmetic-sar sentinel, tkIdent =
-      the logical-shr sentinel Pascal's own shr uses. }
+    { Rust >> is arithmetic on signed, logical on unsigned — the same split
+      cparser encodes: tkShr = the arithmetic-sar sentinel, tkShrLogical = the
+      logical one.
+
+      This said tkIdent until 2026-09-01, and it was RIGHT when written
+      (2026-07-08): Pascal spells `shr` as a plain identifier, so Ord(tkIdent)
+      was the IR's logical-shr spelling everywhere. The rename to tkShrLogical
+      (314481dd7, 2026-08-31) updated 25 sites across cparser, pasparser,
+      pyparser and all seven backends -- and missed these three in rparser, so
+      every unsigned `>>` in a Rust program reached codegen carrying an operator
+      no backend handles and died on `Unsupported operator in IR codegen`.
+      bug-a-shr-reaches-the-ir-spelled-as-tkident /
+      regression-test-core-test-rust-module-items }
     if (opTk = tkShr) and not TypeSigned(IntToTypeKind(ASTTk[left])) then
-      opTk := tkIdent;
+      opTk := tkShrLogical;
     node := RBinOp(opTk, left, right, IntToTypeKind(ASTTk[left]));
     left := node;
   end;
@@ -4289,7 +4299,7 @@ begin
         if TypeSigned(Syms[symIdx].TypeKind) then
           rhsNode := RBinOp(tkShr, RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind)
         else
-          rhsNode := RBinOp(tkIdent, RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
+          rhsNode := RBinOp(tkShrLogical, RMakeIdent(symIdx), rhsNode, Syms[symIdx].TypeKind);
       else ;
     end;
     lhsNode := RMakeIdent(symIdx);
@@ -4427,12 +4437,12 @@ begin
         tkXorEq:   rhsNode := RBinOp(tkXor,   Result, rhsNode, IntToTypeKind(ASTTk[Result]));
         tkShlEq:   rhsNode := RBinOp(tkShl,   Result, rhsNode, IntToTypeKind(ASTTk[Result]));
         tkShrEq:
-          { unsigned `>>=` is a LOGICAL shift; the plain-identifier path above
-            spells that tkIdent, so spell it the same way here. }
+          { unsigned `>>=` is a LOGICAL shift; RParseShift spells that
+            tkShrLogical, so spell it the same way here. }
           if TypeSigned(IntToTypeKind(ASTTk[Result])) then
             rhsNode := RBinOp(tkShr, Result, rhsNode, IntToTypeKind(ASTTk[Result]))
           else
-            rhsNode := RBinOp(tkIdent, Result, rhsNode, IntToTypeKind(ASTTk[Result]));
+            rhsNode := RBinOp(tkShrLogical, Result, rhsNode, IntToTypeKind(ASTTk[Result]));
         else ;
       end;
     end;
