@@ -4937,6 +4937,53 @@ The tell: I wrote *"either it is reachable and ... or it is not and ..."*. A
 two-branch enumeration built from a one-token delta is a claim that the token
 is the only thing in play. Write the repro instead; it took two lines.
 
+## A probe needs a control for DELIVERY, not only for behaviour
+
+Named 2026-09-01 (frankB and frankT, from opposite ends of the same hour). It is
+the missing half of *"a guard that cannot fail is not a guard, and it prints
+PASS"*: that rule makes you prove the guard can REJECT. This one makes you prove
+the guard was REACHED.
+
+The two are independent and the second is the one that gets skipped, because a
+probe you just watched work on your own command feels delivered.
+
+**The case.** `PXXDBG=a.derefwalk` counts two fallbacks in the compiler's deref
+walk. It had a proper positive control: `:noarms` disables the typed arms so the
+counters MUST fire, and they did — 11383 of 11383. So the instrument was proven
+able to come out nonzero. It was run over `testmgr --tier quick`, reported zero,
+and the gate was GREEN. That reads as a clean widening.
+
+It measured nothing. `testmgr` launches every job through an environment
+ALLOWLIST. `ENV_ALLOW_PREFIXES` keeps the `PXX_` family; the variable is
+`PXXDBG` — no underscore, so it is `PXXD` and matches nothing — and it was
+dropped before any job started. The comment on the allowlist reads *"PXX_ /
+TESTMGR_ are ours"*, which is TRUE, and is exactly what makes the exclusion
+unreadable: the family is named, the member is not in it, and every reader
+supplies the membership.
+
+**The control that catches it.** Run the same suite with the probe armed in a
+mode where hits are CERTAIN — here, arms disabled. If that run is also silent,
+the probe never arrived; if it is loud, a zero in the real column means
+something. Concretely: 20 of 58 job logs carried probe output under the control,
+and that number is what makes the real column's zero readable. Without it the
+zero and a never-delivered probe are the same bytes.
+
+Then read the answer from where the JOBS write, not from where the RUNNER writes.
+The first grep here searched the gate's own log directory and found nothing —
+true, and about the wrong directory.
+
+**Why this generalises past env allowlists.** Anything between you and the
+measured process can drop the arming without erroring: a sanitised environment, a
+container, a cached job that never re-ran, a wrapper that execs with a fixed env,
+a stale binary that predates the probe. **None of them error. All of them report
+a clean zero.** So the question is never "did the probe find anything" but
+"**would this probe have found something if there were something to find, HERE,
+in this run**" — and the only way to answer it is to make there be something.
+
+Cheapest form: give every probe a mode that is guaranteed loud, and run it once
+against the same harness before believing any quiet result from that harness.
+A probe verified only on your own command line is verified for your command line.
+
 ## A CARRIER can be one column AHEAD of every reader, and nothing looks missing
 
 Named 2026-09-01 (frankB), as the mirror of frankA's *"the instrument is
