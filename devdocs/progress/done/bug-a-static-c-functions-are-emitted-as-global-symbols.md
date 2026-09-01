@@ -85,3 +85,7 @@ writer that localised everything would pass.
 - `tools/gate.sh quick` GREEN with the FPC seed canary concurrent.
 - `tools/busybox_diff.sh --separate` **GREEN**: 82 objects, a real link with no
   `-Wl,-z,muldefs`, byte-identical to the gcc oracle over 154 cases.
+
+## Log
+
+- 2026-09-01 frankD — fixed and closed, commit 9e7c4cf8c.

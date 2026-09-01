@@ -142,3 +142,7 @@ Against the four completion bullets above:
 gone, and the smoke test would never have told anyone. `--list`, `echo` and
 `ash` arithmetic were all correct through both bugs. Only the 154-case
 differential moved.
+
+## Log
+
+- 2026-09-01 frankD — fixed and closed, commit 9e7c4cf8c.

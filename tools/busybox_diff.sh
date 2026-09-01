@@ -722,10 +722,62 @@ run_cases() {   # $1 = runner, $2 = install dir
 
 RC=0
 
-# ---- oracle: gcc on the same unity ------------------------------------------
+make_wrappers() {
+  # One wrapper .c per translation unit, each carrying the SAME preamble the
+  # unity's preamble supplies -- busybox's real build force-includes
+  # include/autoconf.h (Makefile.flags) and pxx has no -include, so this is
+  # what `gcc -include include/autoconf.h` does, spelled as source.
+  #
+  # BUILT ONCE AND SHARED BY BOTH SIDES. Now that the oracle also compiles
+  # separately, pxx and gcc must be handed the SAME translation units, or the
+  # comparison is between two different programs rather than two compilers.
+  sed -n '1,/^#include "libbb\/appletlib.c"$/p' "$CATUNITY" | sed '$d' > "$WORK/preamble.h"
+  grep -q '^#include "include/autoconf.h"$' "$WORK/preamble.h" \
+    || die "the unity preamble no longer includes autoconf.h -- every ENABLE_* would be undeclared and every applet would compile itself out"
+  # The unity's own include list, so this compiles EXACTLY the translation
+  # units the unity does. appletlib is added back: separate compilation has no
+  # ordering constraint to work around, which is half the point of this mode.
+  { printf '#include "libbb/appletlib.c"\n'; cat "$WORK/includes.txt"; } | while read -r inc; do
+      printf '%s\n' "$inc" | sed 's|^#include "||; s|"$||'
+    done > "$WORK/tulist.txt"
+  [ -s "$WORK/tulist.txt" ] || die "the translation-unit list is empty -- there is nothing to compile separately"
+  rm -rf "$WORK/wrap"; mkdir -p "$WORK/wrap"
+  while read -r src; do
+    tag="$(printf '%s' "$src" | tr / _ | sed 's/\.c$//')"
+    { cat "$WORK/preamble.h"; printf '#include "%s"\n' "$src"; } > "$WORK/wrap/$tag.c"
+  done < "$WORK/tulist.txt"
+}
+
 command -v gcc >/dev/null 2>&1 || die "gcc is the oracle and is not installed"
-( cd "$BB" && gcc -w -O2 -D_GNU_SOURCE -DBB_VER="\"$BBVER\"" $INC -o "$WORK/oracle_gcc" "$UNITY" ) \
-  || die "gcc could NOT build the unity -- no oracle, so no result"
+
+if [ "$SEPARATE" -eq 1 ]; then
+  # ---- oracle: gcc, ALSO SEPARATELY ------------------------------------------
+  # THE UNITY CANNOT BE THIS MODE'S ORACLE PAST ABOUT 26 APPLETS, and the reason
+  # is gcc's rather than pxx's: busybox's `struct globals` pattern is one
+  # namespace claim per applet, so a wide unity does not compile for ANYONE.
+  # Keeping a unity oracle would therefore cap separate compilation at the
+  # unity's ceiling -- the exact ceiling this mode exists to remove. Both sides
+  # now build the same wrappers the same way and only the compiler differs,
+  # which is what the comparison was always about.
+  make_wrappers
+  rm -rf "$WORK/objg"; mkdir -p "$WORK/objg"
+  while read -r src; do
+    tag="$(printf '%s' "$src" | tr / _ | sed 's/\.c$//')"
+    ( cd "$BB" && gcc -w -O2 -D_GNU_SOURCE -DBB_VER="\"$BBVER\"" $INC \
+        -c "$WORK/wrap/$tag.c" -o "$WORK/objg/$tag.o" ) >> "$WORK/oracle_sep.log" 2>&1 \
+      || die "gcc could NOT compile $src separately -- no oracle, so no result. See $WORK/oracle_sep.log"
+  done < "$WORK/tulist.txt"
+  ngobj=$(ls "$WORK/objg"/*.o 2>/dev/null | wc -l)
+  [ "$ngobj" -gt 1 ] || die "the gcc oracle produced $ngobj object(s) -- nothing here that a unity build would not also prove"
+  gcc -o "$WORK/oracle_gcc" "$WORK/objg"/*.o >> "$WORK/oracle_sep.log" 2>&1 \
+    || die "the gcc oracle's $ngobj objects did not link -- see $WORK/oracle_sep.log"
+  ORACLE_KIND="gcc separate build, $ngobj objects ("
+else
+  # ---- oracle: gcc on the same unity ----------------------------------------
+  ( cd "$BB" && gcc -w -O2 -D_GNU_SOURCE -DBB_VER="\"$BBVER\"" $INC -o "$WORK/oracle_gcc" "$UNITY" ) \
+    || die "gcc could NOT build the unity -- no oracle, so no result"
+  ORACLE_KIND="gcc unity build ("
+fi
 install_bin "$WORK/g" "$WORK/oracle_gcc"
 run_cases "" "$WORK/g" > "$WORK/oracle_gcc.out" 2>&1
 NCASES="$(count_cases "$WORK/oracle_gcc.out")"
@@ -733,7 +785,7 @@ NCASES="$(count_cases "$WORK/oracle_gcc.out")"
 # against: cmp of two empty transcripts is GREEN and means nothing. The count
 # is load-bearing, so it is asserted rather than merely printed.
 [ "$NCASES" -gt 0 ] || die "the oracle transcript holds no cases -- a byte-identical result over nothing is not a result"
-printf '  ORACLE  gcc unity build (%d cases)\n' "$NCASES"
+printf '  ORACLE  %s%d cases)\n' "$ORACLE_KIND" "$NCASES"
 
 # ---- second oracle: upstream's own separately-linked binary -----------------
 UPSTREAM=""
@@ -759,9 +811,9 @@ if [ -n "$UPSTREAM" ]; then
   grep -q '^BusyBox vX (X) multi-call binary\.$' "$WORK/oracle_gcc.norm" \
     || die "the banner normaliser matched nothing -- either the banner format changed or these transcripts never print it, and in both cases this comparison is not the one it claims to be"
   if cmp -s "$WORK/oracle_gcc.norm" "$WORK/oracle_upstream.norm"; then
-    printf '  ORACLE  %s agrees with the gcc unity\n' "$(basename "$UPSTREAM")"
+    printf '  ORACLE  %s agrees with the gcc build\n' "$(basename "$UPSTREAM")"
   else
-    printf '  FAIL    the two ORACLES disagree -- the unity is not equivalent to a real link\n'
+    printf '  FAIL    the two ORACLES disagree -- our gcc build is not equivalent to upstream'"'"'s\n'
     diff -a "$WORK/oracle_gcc.norm" "$WORK/oracle_upstream.norm" | head -20
     RC=1
   fi
@@ -780,25 +832,10 @@ for t in $TARGETS; do
       printf '  note    %-8s skipped: --emit-obj has no object writer for this target\n' "$t"
       continue
     fi
-    # One object per TU. Each gets the SAME preamble the unity's preamble
-    # supplies, because busybox's real build force-includes include/autoconf.h
-    # (Makefile.flags) and pxx has no -include -- so this is what
-    # `gcc -include include/autoconf.h` does, spelled as source, not a dodge.
-    sed -n '1,/^#include "libbb\/appletlib.c"$/p' "$CATUNITY" | sed '$d' > "$WORK/preamble.h"
-    grep -q '^#include "include/autoconf.h"$' "$WORK/preamble.h" \
-      || die "the unity preamble no longer includes autoconf.h -- every ENABLE_* would be undeclared and every applet would compile itself out"
-    rm -rf "$WORK/obj" "$WORK/wrap"; mkdir -p "$WORK/obj" "$WORK/wrap"
+    rm -rf "$WORK/obj"; mkdir -p "$WORK/obj"
     nobj=0; objfail=0
-    # The unity's own include list, so this compiles EXACTLY the translation
-    # units the unity does and the two builds stay comparable. appletlib is
-    # added back: separate compilation has no ordering constraint to work
-    # around, which is half the point of this mode.
-    { printf '#include "libbb/appletlib.c"\n'; cat "$WORK/includes.txt"; } | while read -r inc; do
-        printf '%s\n' "$inc" | sed 's|^#include "||; s|"$||'
-      done > "$WORK/tulist.txt"
     while read -r src; do
       tag="$(printf '%s' "$src" | tr / _ | sed 's/\.c$//')"
-      { cat "$WORK/preamble.h"; printf '#include "%s"\n' "$src"; } > "$WORK/wrap/$tag.c"
       if ( cd "$BB" && "$COMPILER" --emit-obj $INC "$WORK/wrap/$tag.c" "$WORK/obj/$tag.o" ) \
            >> "$WORK/build_$t.log" 2>&1; then
         nobj=$((nobj+1))
