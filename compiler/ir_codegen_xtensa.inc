@@ -4187,8 +4187,15 @@ begin
         { @proc -> a2 = the routine's absolute code address, via an inline
           L32R literal patched to entry+BodyAddr by the ELF writer (same
           fixup as riscv32's auipc+literal shape). }
+        { An EXTERNAL has no BodyAddr to patch, so it takes the shared
+          external-address path instead -- the same literal the external CALL
+          uses, relocated against the UND symbol.
+          bug-a-the-address-of-an-external-routine-is-refused-on-i386-and-xtensa }
         if ProcExternal[IRA[node]] then
-          Error('@ on external routine not supported; wrap it in a local routine');
+        begin
+          EmitExternalProcAddr(IRA[node]);
+          Exit;
+        end;
         XtensaEmitLitHeader;
         if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
         ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;

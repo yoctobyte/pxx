@@ -13083,6 +13083,28 @@ begin
     EmitI32(0);                       { literal: resolved fn addr (patched) }
     rv32_lw(reg_a0, reg_a0, 8);       { a0 = [auipc_pc + 8] = fn addr }
   end
+  else if TargetArch = TARGET_XTENSA then
+  begin
+    { The SAME inline literal the xtensa external CALL uses, loaded instead of
+      called -- the shape riscv32 uses one arm up. The ELF32 writer turns every
+      DynCall entry into an R_XTENSA_32 against the external's UND symbol, so
+      the literal is the address and nothing here has to know it.
+
+      This was refused for a year on the grounds that xtensa "has no DynCall/GOT
+      external path at all". It has no GOT; it does have DynCall, and an
+      ordinary `extern` CALL already emits exactly one such relocation. The
+      claim was about the wrong half of the mechanism -- an address in a
+      literal is what xtensa does for a call, so taking the address is the call
+      path minus the call.
+      bug-a-the-address-of-an-external-routine-is-refused-on-i386-and-xtensa }
+    if DynCallCount >= MAX_CALLFIX then Error('external call fixup overflow');
+    XtensaEmitLitHeader;
+    DynCallCodePos[DynCallCount] := CodeLen;
+    DynCallExtIdx[DynCallCount] := extIdx;
+    Inc(DynCallCount);
+    EmitI32(0);                       { literal: resolved fn addr (relocated) }
+    xtensa_l32r(reg_xtensa_a2, $FFFF);
+  end
   else
     Error('@ on external routine not supported on this target');
 end;

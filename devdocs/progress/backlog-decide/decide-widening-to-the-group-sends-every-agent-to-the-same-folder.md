@@ -49,12 +49,36 @@ the same order.
    neither of us used it, because we were sweeping rather than holding a ticket.
    A claim on the FOLDER has no spelling today.
 
+## A THIRD mechanism, and it is the one that explains the ranking
+
+frankC, 2026-09-01 (`5dd554964`, ticket
+`bug-t-the-watcher-auto-close-copies-a-ticket-into-done-instead-of-moving-it`):
+the Track T watcher's auto-close WRITES the `done/` copy and does not remove the
+`backlog/` one. Nothing errors. So `ready`/`next` keep offering closed work **at
+its filed priority**, and a stale row outranks live work indefinitely.
+
+That changes the diagnosis. This is not only "nobody re-verifies the folder" —
+the one thing that DOES re-verify cannot finish the close. Census: 3 duplicates,
+all from `2ade3f11b`, none elsewhere. It is also, concretely, why `next --track
+A` handed an already-fixed ticket to two agents as the top entry point tonight.
+
+It strengthens option 2 rather than competing with it: T already does the job
+and already closed three of these; fixing the move means option 2 is mostly
+built.
+
 ## Recommendation
 
 (1) and (2) together, and they are complementary rather than alternatives: the
 rule change stops the collision tonight and the T job is what actually gets the
 sweep done. (3) is a bigger change to what `claim` means and I would not start
-there.
+there. The duplicate-row bug above is a prerequisite for (2) and is already
+filed and owned.
+
+On (1)'s wording, frankC's is better than mine and I have adopted it: the rule
+should say **widen along the CAUSE**. "A status folder is not a subsystem" names
+one instance; "a folder shares a filing mechanism rather than a cause" names the
+property, and the same property is what makes a shared bisect anchor useless as
+a grouping key — same anchor, at least three causes, measured.
 
 ## Evidence
 

@@ -19167,6 +19167,36 @@ test-emit-obj: $(COMPILER)
 	@printf 'program eimp;\nvar Shared: Integer; external;\nfunction f: Integer; begin f := Shared; end;\nbegin end.\n' > $(TESTTMP)/espx_imp.pas
 	@! ./$(COMPILER) -Fulib/rtl --emit-obj --target=riscv32 --platform=esp $(TESTTMP)/espx_imp.pas $(TESTTMP)/espx_imp.o >$(TESTTMP)/espx_imp.err 2>&1 || { echo "test-emit-obj: an imported variable was ACCEPTED for an ESP object -- it reads zero"; exit 1; }
 	@grep -q 'imported variable' $(TESTTMP)/espx_imp.err || { echo "test-emit-obj: the ESP import build failed for some OTHER reason, so the row above proves nothing"; head -3 $(TESTTMP)/espx_imp.err; exit 1; }
+	# 4b-nonies. THE ADDRESS OF AN EXTERNAL ROUTINE, on every target that has an
+	#    external model at all. xtensa refused it outright -- "@ on external
+	#    routine not supported; wrap it in a local routine" -- on the recorded
+	#    grounds that it has no DynCall/GOT external path. It has no GOT; it does
+	#    have DynCall, and an ordinary `extern` CALL already emits exactly one
+	#    R_XTENSA_32 against the UND symbol. An address in a literal is what
+	#    xtensa does for a call, so taking the address is the call path minus the
+	#    call, and the fix is the riscv32 arm with xtensa's literal shape.
+	#
+	#    THE CONTROL IS THE COUNT, NOT THE COMPILE. A row asserting only that the
+	#    fixture builds passes on a backend that emitted no reference at all, so
+	#    the fixture carries BOTH shapes and a call-only variant is generated
+	#    from it: taking the address must cost exactly two more relocations
+	#    naming the external than calling it does.
+	rm -f $(TESTTMP)/exa_*.o
+	@sed -e 's/^int call_it.*$$//' test/c_obj_extern_addr.c > $(TESTTMP)/exa_callonly.c
+	@for t in "--target=riscv32 --platform=esp" "--target=xtensa --platform=esp"; do \
+	  ./$(COMPILER) --emit-obj $$t test/c_obj_extern_addr.c $(TESTTMP)/exa_both.o >/dev/null || { echo "test-emit-obj: [$$t] REFUSES the address of an external routine"; exit 1; }; \
+	  ./$(COMPILER) --emit-obj $$t $(TESTTMP)/exa_callonly.c $(TESTTMP)/exa_call.o >/dev/null || { echo "test-emit-obj: [$$t] failed to build the call-only control"; exit 1; }; \
+	  b=$$(readelf -rW $(TESTTMP)/exa_both.o | grep -ci gcc_thing); \
+	  c=$$(readelf -rW $(TESTTMP)/exa_call.o | grep -ci gcc_thing); \
+	  [ "$$c" -ge 1 ] || { echo "test-emit-obj: [$$t] the call-only control names gcc_thing in $$c relocations -- it emits no external reference at all, so the difference below is meaningless"; exit 1; }; \
+	  [ "$$b" = "$$(($$c + 2))" ] || { echo "test-emit-obj: [$$t] taking an external's address adds $$(($$b - $$c)) relocations, not 2 (call-only $$c, both $$b)"; exit 1; }; \
+	 done; echo "test-emit-obj: @external emits its address literal on riscv32 and xtensa, two relocations more than a bare call"
+	#    NOT RUN, and the reason is worth a line rather than a silent gap: an
+	#    xtensa EXECUTABLE refuses external dynamic symbols outright (no dynamic
+	#    segment), and the C frontend has no xtensa entry stub, so there is no
+	#    way to execute an @external on this target from here. The object's
+	#    relocation structure is what can be checked, and it now matches riscv32's
+	#    already-accepted arm row for row.
 	# 4c. A SHARED LIBRARY FROM A COMPILED SOURCE -- the other half of the same
 	#    backend work (feature-a-shared-library-output-for-compiled-sources).
 	#    --shared used to describe .asm-frontend output only: the writer built
