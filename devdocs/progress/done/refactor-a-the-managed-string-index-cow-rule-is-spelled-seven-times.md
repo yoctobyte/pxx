@@ -140,4 +140,4 @@ This closes the "guarded nowhere" complaint for THIS predicate only. The sibling
 are the same family and are untouched.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit ad5559ff0.
