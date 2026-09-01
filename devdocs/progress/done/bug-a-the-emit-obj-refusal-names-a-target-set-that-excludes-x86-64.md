@@ -52,4 +52,4 @@ sites say so.**
 `make compiler/pascal26` plus the six rows above, run. Do not widen.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit df79e6f9b.
