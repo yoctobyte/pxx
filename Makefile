@@ -14010,6 +14010,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_exception_typed26 "$$($(TESTTMP)/test_exception_typed26)" "$$(printf '41\n42\n43\n44\n45')"
 	./$(COMPILER) test/test_virtual_call_runs_once.pas $(TESTTMP)/test_virtual_call_runs_once26
 	tools/expect_same.sh test_virtual_call_runs_once26 "$$($(TESTTMP)/test_virtual_call_runs_once26)" "VIRTUAL CALL RUNS ONCE OK"
+	./$(COMPILER) test/test_dynarray_var_param.pas $(TESTTMP)/test_dynarray_var_param26
+	tools/expect_same.sh test_dynarray_var_param26 "$$($(TESTTMP)/test_dynarray_var_param26)" "DYNARRAY VAR PARAM OK"
 	./$(COMPILER) test/test_except_derived_caught_by_base.pas $(TESTTMP)/test_except_derived_caught_by_base26
 	tools/expect_same.sh test_except_derived_caught_by_base26 "$$($(TESTTMP)/test_except_derived_caught_by_base26)" "$$(printf 'caught1:derived\ncaught2:grandchild\ncaught3:exact\ncaught4-specific:specific\ncaught5:sibling\ndone')"
 	./$(COMPILER) test/test_empty_class_shorthand.pas $(TESTTMP)/test_empty_class_shorthand26
@@ -14889,6 +14891,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_virtual_call_runs_once "$$(tools/run_target.sh i386 $(TESTTMP)/vcro_i386)" "VIRTUAL CALL RUNS ONCE OK"
 	./$(COMPILER) --target=i386 test/test_dynarray_result.pas $(TESTTMP)/dynres_i386
 	tools/expect_same.sh i386/test_dynarray_result "$$(tools/run_target.sh i386 $(TESTTMP)/dynres_i386)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) --target=i386 test/test_dynarray_var_param.pas $(TESTTMP)/dvp_i386
+	tools/expect_same.sh i386/test_dynarray_var_param "$$(tools/run_target.sh i386 $(TESTTMP)/dvp_i386)" "DYNARRAY VAR PARAM OK"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -15559,6 +15563,8 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_virtual_call_runs_once "$$(tools/run_target.sh aarch64 $(TESTTMP)/vcro_a64)" "VIRTUAL CALL RUNS ONCE OK"
 	./$(COMPILER) --target=aarch64 test/test_dynarray_result.pas $(TESTTMP)/dynres_a64
 	tools/expect_same.sh aarch64/test_dynarray_result "$$(tools/run_target.sh aarch64 $(TESTTMP)/dynres_a64)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) --target=aarch64 test/test_dynarray_var_param.pas $(TESTTMP)/dvp_a64
+	tools/expect_same.sh aarch64/test_dynarray_var_param "$$(tools/run_target.sh aarch64 $(TESTTMP)/dvp_a64)" "DYNARRAY VAR PARAM OK"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -16283,6 +16289,17 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/test_virtual_call_runs_once "$$(tools/run_target.sh riscv32 $(TESTTMP)/vcro_rv32)" "VIRTUAL CALL RUNS ONCE OK"
 	./$(COMPILER) --target=riscv32 --platform=posix test/test_dynarray_result.pas $(TESTTMP)/dynres_rv32
 	tools/expect_same.sh riscv32/test_dynarray_result "$$(tools/run_target.sh riscv32 $(TESTTMP)/dynres_rv32)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	# A DYNAMIC ARRAY AS A `var` PARAMETER. riscv32 and xtensa read one deref
+	# short: a by-ref slot holds &caller_slot and both loaded once, then used
+	# the caller's SLOT as the data pointer. A READ bug first -- Length(a) and
+	# a[1] returned 0 with no crash -- and a VALUE or CONST param was correct
+	# everywhere, so any test written with those modes passes on the broken
+	# backends. Writing through it stored into the caller's stack and left the
+	# caller's array alone; satdemo and fm both died on a later read, nowhere
+	# near the store. Found by running examples/ across five backends.
+	# bug-a-riscv32-and-xtensa-read-a-var-dynamic-array-param-one-deref-short
+	./$(COMPILER) --target=riscv32 --platform=posix test/test_dynarray_var_param.pas $(TESTTMP)/dvp_rv32
+	tools/expect_same.sh riscv32/test_dynarray_var_param "$$(tools/run_target.sh riscv32 $(TESTTMP)/dvp_rv32)" "DYNARRAY VAR PARAM OK"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -17325,6 +17342,8 @@ test-xtensa: $(COMPILER)
 	# Found by compiling examples/ across backends, not by reading the backlog.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_result.pas $(TESTTMP)/dynres_xt
 	tools/expect_same.sh xtensa/test_dynarray_result "$$(tools/run_target.sh xtensa $(TESTTMP)/dynres_xt)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_var_param.pas $(TESTTMP)/dvp_xt
+	tools/expect_same.sh xtensa/test_dynarray_var_param "$$(tools/run_target.sh xtensa $(TESTTMP)/dvp_xt)" "DYNARRAY VAR PARAM OK"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -17898,6 +17917,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_virtual_call_runs_once "$$(tools/run_target.sh arm32 $(TESTTMP)/vcro_a32)" "VIRTUAL CALL RUNS ONCE OK"
 	./$(COMPILER) --target=arm32 --platform=posix test/test_dynarray_result.pas $(TESTTMP)/dynres_a32
 	tools/expect_same.sh arm32/test_dynarray_result "$$(tools/run_target.sh arm32 $(TESTTMP)/dynres_a32)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) --target=arm32 --platform=posix test/test_dynarray_var_param.pas $(TESTTMP)/dvp_a32
+	tools/expect_same.sh arm32/test_dynarray_var_param "$$(tools/run_target.sh arm32 $(TESTTMP)/dvp_a32)" "DYNARRAY VAR PARAM OK"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The

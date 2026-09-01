@@ -1843,7 +1843,32 @@ begin
           (No COW / by-ref open arrays yet.) }
         if (Syms[si].IsArray and (Syms[si].ArrLen = -1)) or
            ((Syms[si].Kind = skParam) and Syms[si].IsArray and not Syms[si].IsRef) then
-          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0)
+        begin
+          xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
+        { BY-REF (var/out) DYNAMIC-ARRAY PARAM: the frame slot holds
+          &caller_slot, so the load above lands on the CALLER'S SLOT and not on
+          the data pointer. One more deref. arm32 has carried both loads since
+          it was written ("load it (needed either way -- SetLength wants to
+          publish through it, Length/indexing want to deref it once more)");
+          riscv32 and xtensa each had one.
+
+          MEASURED 2026-09-02, and it is a READ bug before it is a write bug:
+          `procedure P(var a: TIntArray)` reading `Length(a)` returned 0 and
+          `a[1]` returned 0 on riscv32 and xtensa, where x86-64, i386, arm32 and
+          aarch64 all return 4 and 99. Value and const params were correct on
+          every target, which is what kept it hidden -- those slots really do
+          hold the handle.
+
+          Writing was worse than wrong: `a[3] := 21` through a var param stored
+          through the caller's SLOT ADDRESS as if it were the data pointer, so
+          it wrote into the caller's stack and the caller's own array was left
+          untouched. examples/sat/satdemo.pas died on the next read (SIGSEGV on
+          riscv32, SIGBUS on xtensa) and examples/fm the same way.
+          bug-a-riscv32-and-xtensa-read-a-var-dynamic-array-param-one-deref-short }
+          if (Syms[si].Kind = skParam) and Syms[si].IsRef and
+             Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
+        end
         { Scalar managed string: read position loads the handle; write position
           keeps the slot address for the store to publish a new handle. }
         { abi-divergence: this arm depends on InLValueWrite, and
