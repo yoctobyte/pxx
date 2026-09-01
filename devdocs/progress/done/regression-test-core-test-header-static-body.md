@@ -39,3 +39,19 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-01 — auto-closed by the seven watcher: `test-core#src:test/test_header_static_body.pas` passes at 963c289544a2 (tier native); it was red at f9e495823dce. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
+## VERIFIED FIXED 2026-09-01 (frankC) — no longer reproduces at HEAD
+
+Second pass of the 12-regression sweep. This row was RED on my FIRST pass a few
+minutes earlier, at `2d9878ac8`; it is GREEN at `df509ad5c`, compiler `4fa89436ffe7`
+(pin-derived rebuild, `converged after 1 round(s)`). GREEN twice.
+
+**Cause NOT bisected and not claimed.** `f5708eb77` ("a static defined in a
+used header keeps its body — scoped by provenance") and its earlier revert
+`ade0ce525` both touch this test's subject and are the obvious candidates, but
+I did not bisect and will not cite one as the fix.
+
+**The sweep verdict had a shelf life of about twenty minutes**, which is worth
+recording on its own: three of the six rows I had just written up as "still
+live" were fixed by other sessions while the sweep was running. A regression
+table in a fleet this active is a measurement with a timestamp, not a standing
+fact — re-run before acting on one, including one of mine.

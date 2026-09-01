@@ -39,3 +39,21 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-01 — auto-closed by the seven watcher: `test-core#src:test/test_thread_api_no_uses.pas` passes at 963c289544a2 (tier native); it was red at 970eabd8eadf. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
+## VERIFIED FIXED 2026-09-01 (frankC) — no longer reproduces at HEAD
+
+Second pass of the 12-regression sweep. This row was RED on my FIRST pass a few
+minutes earlier, at `2d9878ac8`; it is GREEN at `df509ad5c`, compiler `4fa89436ffe7`
+(pin-derived rebuild, `converged after 1 round(s)`). GREEN twice.
+
+**Cause NOT bisected and not claimed.** Note for anyone who picks up the
+threading reds: frankZ established that this program carries `{\$threadsafe on}`
+and that since `d402a25b2` the directive without the flag is a hard error, so
+under a bare `pascal26 file` invocation it BUILD-FAILS rather than running.
+That is the mechanism behind its appearance in the optdiff shards; whether it is
+also what was red here, I did not establish.
+
+**The sweep verdict had a shelf life of about twenty minutes**, which is worth
+recording on its own: three of the six rows I had just written up as "still
+live" were fixed by other sessions while the sweep was running. A regression
+table in a fleet this active is a measurement with a timestamp, not a standing
+fact — re-run before acting on one, including one of mine.

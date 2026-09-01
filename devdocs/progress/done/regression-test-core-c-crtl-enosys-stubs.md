@@ -67,3 +67,23 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-01 — auto-closed by the seven watcher: `test-core#src:test/c_crtl_enosys_stubs.c` passes at 963c289544a2 (tier native); it was red at 3f73ad2f6a08. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
+## VERIFIED FIXED 2026-09-01 (frankC) — no longer reproduces at HEAD
+
+Second pass of the 12-regression sweep. This row was RED on my FIRST pass a few
+minutes earlier, at `2d9878ac8`; it is GREEN at `df509ad5c`, compiler `4fa89436ffe7`
+(pin-derived rebuild, `converged after 1 round(s)`). GREEN twice.
+
+**Cause identified:** `8000f8640`, which changed BOTH halves — it deleted the
+fork/vfork rows from `test/c_crtl_enosys_stubs.c` and updated the Makefile's
+expected string to match. The test asserted fork/vfork are ENOSYS stubs;
+`e2ba5a1e1` had made them real (the PAL had fork all along under the
+misleading name `PalVfork`), so the test was asserting the OLD BUG. Its
+failure was not a simple mismatch either: fork() succeeding meant the CHILD ran
+the remaining rows too, so two processes interleaved and no row after it could
+be read — 26 output lines against 7 expected.
+
+**The sweep verdict had a shelf life of about twenty minutes**, which is worth
+recording on its own: three of the six rows I had just written up as "still
+live" were fixed by other sessions while the sweep was running. A regression
+table in a fleet this active is a measurement with a timestamp, not a standing
+fact — re-run before acting on one, including one of mine.
