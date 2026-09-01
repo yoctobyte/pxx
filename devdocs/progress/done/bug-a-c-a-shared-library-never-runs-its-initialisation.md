@@ -91,7 +91,7 @@ string state needs the same treatment before a library call is safe at all.
 Both are the obvious next questions and neither was tested.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 05dfbb88b.
 
 
 ## Resolved
