@@ -209,6 +209,68 @@ begin
     Result := Procs[CurProc].RetSymIdx;
 end;
 
+{ The fixed N-D subscript TAIL, in both spellings: `[i, j]` and `[i][j]`.
+
+  Call it with `base` = the node being indexed and the FIRST subscript already
+  parsed into CurASTNode. On a fixed N-D array it consumes the remaining
+  subscripts AND the closing bracket(s) and returns the flattened index node;
+  otherwise it consumes NOTHING, returns -1, and the caller closes its own
+  bracket exactly as before. `isNDOut` reports what NodeArrNDInfo said, because
+  two callers need it afterwards for the partial-row (single subscript) case.
+
+  EXTRACTED, not copied. ParseLValueAST was the only one of the three suffix
+  walks that had this; ParseClassRecordSelectors and ApplyCallResultPtrSuffix
+  each parsed ONE expression and demanded `]`. So on a pointer spelled as a cast
+  or a call result, `TP(raw)^[i, j]` did not PARSE ("expected ']' before ','")
+  while the identical construct on a plain identifier compiled and ran, and
+  `TP(raw)^[i][j]` built a NESTED index over a flat N-D array and silently read
+  the wrong element -- 1.50 0.00 where every other spelling said 1.50 6.00.
+  A third copy here would have been the defect, not the fix:
+  refactor-a-collapse-nodeptrelem-into-the-deref-walk records that the copies
+  stamp different subsets of the tags and accept different subsets of the
+  grammar; this is the same root wearing a third face, the copies ASKING
+  different questions. NodeArrNDInfo could answer for all three spellings
+  already -- nobody was asking it.
+
+  bug-a-a-comma-indexed-multi-dim-subscript-is-not-parsed-through-a-cast-or-call-result }
+function ParseNDSubscriptTail(base: Integer; var isNDOut: Boolean): Integer;
+var nIdx: Integer;
+begin
+  ParseNDSubscriptTail := -1;
+  isNDOut := NodeArrNDInfo(base);
+  if not isNDOut then Exit;
+  if CurTok.Kind = tkComma then
+  begin
+    NDIdxNode[0] := CurASTNode; nIdx := 1;
+    while Eat(tkComma) do
+    begin
+      if nIdx >= NDInfoNDims then Error('too many subscripts for array');
+      ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
+    end;
+    if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
+    ParseNDSubscriptTail := BuildFlatNDIndex(nIdx);
+    Expect(tkRBrack, ']');
+  end
+  { `[i][j]` -- the bounds check on TokPos is not in the ParseLValueAST original
+    this was lifted from; it is added because the two new callers can sit at a
+    different distance from EOF, and reading one past the last token to decide a
+    lookahead is exactly the kind of thing that answers rather than faulting. }
+  else if (CurTok.Kind = tkRBrack) and (TokPos < TokCount) and
+          (Tokens[TokPos].Kind = tkLBrack) then
+  begin
+    NDIdxNode[0] := CurASTNode; nIdx := 1;
+    Expect(tkRBrack, ']');
+    while (CurTok.Kind = tkLBrack) and (nIdx < NDInfoNDims) do
+    begin
+      Expect(tkLBrack, '[');
+      ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
+      Expect(tkRBrack, ']');
+    end;
+    if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
+    ParseNDSubscriptTail := BuildFlatNDIndex(nIdx);
+  end;
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
@@ -223,6 +285,7 @@ var
   baseNode, baseRec, fIdx, aliasIdx: Integer;
   remDepth, ptrBaseTk, ptrBaseRec: Integer;
   isND: Boolean; nIdx: Integer; alreadyResolved: Boolean; mcFin: Boolean;
+  ndFlat: Integer;   { flattened N-D subscript from ParseNDSubscriptTail, or -1 }
   tk: TTypeKind;
   fieldName: AnsiString;
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
@@ -1412,32 +1475,9 @@ begin
         flattened 1-D index: m[i0,i1,..]/r.m[..] (commas) and m[i0][i1]..
         (consecutive brackets). Handled here so no bogus intermediate m[i0] is
         built. NodeArrNDInfo fills NDInfo* (dims) for the base. }
-      isND := NodeArrNDInfo(node);
-      if isND and (CurTok.Kind = tkComma) then
-      begin
-        NDIdxNode[0] := CurASTNode; nIdx := 1;
-        while Eat(tkComma) do
-        begin
-          if nIdx >= NDInfoNDims then Error('too many subscripts for array');
-          ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
-        end;
-        if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
-        ASTRight[indexNode] := BuildFlatNDIndex(nIdx);
-        Expect(tkRBrack, ']');
-      end
-      else if isND and (CurTok.Kind = tkRBrack) and (Tokens[TokPos].Kind = tkLBrack) then
-      begin
-        NDIdxNode[0] := CurASTNode; nIdx := 1;
-        Expect(tkRBrack, ']');
-        while (CurTok.Kind = tkLBrack) and (nIdx < NDInfoNDims) do
-        begin
-          Expect(tkLBrack, '[');
-          ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
-          Expect(tkRBrack, ']');
-        end;
-        if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
-        ASTRight[indexNode] := BuildFlatNDIndex(nIdx);
-      end
+      ndFlat := ParseNDSubscriptTail(node, isND);
+      if ndFlat >= 0 then
+        ASTRight[indexNode] := ndFlat
       else if CurTok.Kind = tkComma then
       begin
         { Comma sugar m[i,j,..] == m[i][j].. for jagged / dynamic arrays: build
@@ -4006,6 +4046,7 @@ var crBlob, crNode: Integer;   { class-reference ops on a chained value }
 var dfCi, dfPri, dfMmi, dfMpi, dfI, dfSelf, dfIdxHead, dfIdxTail: Integer;   { default property on a chained value }
     dfName: AnsiString;
 var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
+    ndFlat: Integer; ndIsND: Boolean;   { fixed N-D subscript tail — ParseNDSubscriptTail }
     ci, mmi, mpi, callN, selfArg, lastA, aSeq, aNode, aIdx, mai: Integer;
     pri, i, w, margIdx: Integer; isAssign: Boolean;
     cvIdx: Integer;
@@ -4540,8 +4581,17 @@ begin
       sub := AllocNode(AN_INDEX);
       ASTLeft[sub] := node;
       ParseExpr;
-      ASTRight[sub] := CurASTNode;
-      Expect(tkRBrack, ']');
+      ndFlat := ParseNDSubscriptTail(node, ndIsND);
+      if ndFlat >= 0 then
+        ASTRight[sub] := ndFlat
+      else
+      begin
+        { A single subscript on a fixed N-D array names a whole ROW; scale it to
+          that row's first-element flat index, exactly as ParseLValueAST does. }
+        if ndIsND then ASTRight[sub] := BuildPartialNDRowIndex(CurASTNode)
+        else ASTRight[sub] := CurASTNode;
+        Expect(tkRBrack, ']');
+      end;
       { `TP(raw)^[i] := ...` -- indexing a DEREF whose pointee is an ARRAY. The
         alias row deliberately records the ARRAY'S ELEMENT as the pointee kind
         (pasparser_decl.inc's `PArr = ^TArr` arm, so that `p^[i]` yields it), so
@@ -4748,7 +4798,7 @@ end;
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer);
 var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok, tmpN: Integer; fieldName: AnsiString;
     mcCi, mmi, mpi, mcallNode: Integer; mcFin: Boolean;
-    arrAi, tmpSym, ndD, nIdx: Integer; isND: Boolean;
+    arrAi, tmpSym, ndD, nIdx, ndFlat: Integer; isND, ndIsND: Boolean;
     remDepth, ptrBaseTk, ptrBaseRec: Integer;
 begin
   tk := Procs[procIdx].RetType;
@@ -4831,8 +4881,17 @@ begin
         sub := AllocNode(AN_INDEX);
         ASTLeft[sub] := node;
         ParseExpr;
-        ASTRight[sub] := CurASTNode;
-        Expect(tkRBrack, ']');
+        ndFlat := ParseNDSubscriptTail(node, ndIsND);
+        if ndFlat >= 0 then
+          ASTRight[sub] := ndFlat
+        else
+        begin
+          { A single subscript on a fixed N-D array names a whole ROW; scale it to
+            that row's first-element flat index, exactly as ParseLValueAST does. }
+          if ndIsND then ASTRight[sub] := BuildPartialNDRowIndex(CurASTNode)
+          else ASTRight[sub] := CurASTNode;
+          Expect(tkRBrack, ']');
+        end;
         tk := IntToTypeKind(elemTk); recId := elemRec;
         { `f()[i]` spends a level exactly as `f()^` does -- indexing a `^PChar`
           result yields a PChar, not another `^PChar`. }
