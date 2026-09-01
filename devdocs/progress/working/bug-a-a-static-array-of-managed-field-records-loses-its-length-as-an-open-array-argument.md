@@ -4,8 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "A static array whose element is a record WITH A MANAGED FIELD, passed to an open-array param, arrives with no length header: High(items) is -1 (FPC: 1) and the callee's loop silently never runs. Both ir.inc copy-in paths exclude managed-field records by an explicit `not (tyRecord and RecordHasManagedFields)` guard, and the fall-through passes a bare address rather than refusing. Plain-record elements work; `const` and `var` both fail; pre-existing on pinned."
-status: new
-owner: frankS
+status: working
+owner: frankA
 ---
 
 # A static array of managed-field records loses its length as an open-array argument

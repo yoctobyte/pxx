@@ -1,7 +1,7 @@
 ---
 slug: bug-a-managed-locals-leak-at-ORDINARY-scope-exit-on-wasm32-and-a-variant-local-traps
 track: A
-prio: 55
+prio: 25
 type: bug
 status: open
 found: 2026-09-01
@@ -108,7 +108,17 @@ What has changed is the *input to the ranking*: the adjacent ticket's p25 rests
 on an unwind being rare, and the argument was sound. These are ordinary-path
 defects and one of them is a crash, so whoever ranks this should do it on the
 table above rather than by inheriting p25 from the neighbouring slug. Priority
-set to 55 on that basis and it is a proposal, not a finding.
+was set to 55 on that basis as a proposal, not a finding.
+
+**Corrected to 25 the same day.** The decision I filed this under as "open" had
+already been ruled: `e9d1b7850`, *"linux only for now — demote the wasm and BSD
+umbrellas"*, which caps wasm work at 25 regardless of a defect's severity. The
+ruling is about the PLATFORM, not about how bad an individual bug is: wasm32 is
+not a current target, so a crash on it blocks nothing, and 25 is the honest
+number **for now**. `b2d3eb61a` records the shape this ticket should sit in —
+**demoted is not forgotten**: correct, open, parked, and read the moment wasm
+comes back. The table above is unaffected; a measurement does not change when
+the ranking does.
 
 ## An accuracy note on a resolved ticket
 
