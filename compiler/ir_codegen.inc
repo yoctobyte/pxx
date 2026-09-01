@@ -818,7 +818,7 @@ procedure EmitIoLockStubs;
   x86 total-store-order gives the store-release /
   cmpxchg-acquire semantics for free. Clobbers rax/rcx/rsi/r11 — called only at
   statement boundaries, where no evaluation registers are live. }
-var spinStart, d: Integer;
+var spinStart, ioLockJePatch, ioUnlockJnzPatch: Integer;
 begin
   IOLockAddr := CodeLen;
   { ---- the owner tid, from TLS when the block is provably ours ----
@@ -864,33 +864,43 @@ begin
       'syscall',
       'mov rsi, rax'
     ]);
-  EmitAsmX64([
-    'cmp [@glob], rsi', BSS_IO_OWNER,
-    'je +19'                           { already ours -> depth bump (over the 19-byte spin block) }
-  ]);
+  EmitAsmX64(['cmp [@glob], rsi', BSS_IO_OWNER]);
+  { `je` over the whole spin block, PATCHED rather than hand-counted. It was
+    'je +19' with an assertion that the block is exactly 19 bytes, and that
+    assertion fired the moment EmitGlobRef started emitting rip-relative
+    operands: the cmpxchg below loses its SIB byte, so the block is 18. A
+    hand-counted displacement over a block containing a global reference is a
+    length assumption about the ENCODER, and this one was at least honest
+    enough to assert -- the sibling in EmitIoUnlock was not. }
+  EmitB($74); ioLockJePatch := CodeLen; EmitB(0);
   spinStart := CodeLen;
   EmitAsmX64(['xor eax, eax', 'mov rcx, rsi']);
   { lock cmpxchg [BSS_IO_OWNER], rcx — expect 0 (free), take with our tid.
     Raw bytes: no cmpxchg in the text-assembler table yet. }
   EmitB($F0); EmitB($48); EmitB($0F); EmitB($B1); EmitB($0C); EmitB($25); EmitGlobRef(BSS_IO_OWNER);
   EmitAsmX64(['je +2']);               { got it -> depth bump }
-  d := spinStart - (CodeLen + 2);
-  EmitB($EB); EmitB(d and $FF);        { jmp back to the spin retry }
-  if CodeLen - spinStart <> 19 then
-    Error('compiler error: I/O lock spin block must be exactly 19 bytes (je +19 above)');
+  EmitB($EB); EmitRel8(spinStart);     { jmp back to the spin retry }
+  PatchRel8(ioLockJePatch);            { ...and now the forward je knows the size }
   EmitAsmX64([
     'inc qword [@glob]', BSS_IO_DEPTH,
     'ret'
   ]);
 
   IOUnlockAddr := CodeLen;
+  EmitAsmX64(['dec qword [@glob]', BSS_IO_DEPTH]);
+  { Was 'jnz +10' over a clear hand-counted as 10 bytes: `xor ecx, ecx` (2) plus
+    an absolute-operand store (8). The store is 7 bytes once EmitGlobRef emits
+    the rip-relative form, so +10 would have landed one byte PAST the `ret`,
+    inside whatever follows. Nothing asserted it -- the spin block above at
+    least had a size check, this had a comment. Patched, so the question does
+    not arise again. }
+  EmitB($75); ioUnlockJnzPatch := CodeLen; EmitB(0);
   EmitAsmX64([
-    'dec qword [@glob]', BSS_IO_DEPTH,
-    'jnz +10',                         { still nested: keep ownership (over the 10-byte clear) }
     'xor ecx, ecx',
-    'mov [@glob], rcx', BSS_IO_OWNER,  { release: plain store is a release on x86 }
-    'ret'
+    'mov [@glob], rcx', BSS_IO_OWNER   { release: plain store is a release on x86 }
   ]);
+  PatchRel8(ioUnlockJnzPatch);
+  EmitAsmX64(['ret']);
 end;
 
 procedure EnsureSignalBss;

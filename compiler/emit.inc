@@ -264,9 +264,52 @@ begin
   Result := off - DATA_SYM_BIAS;
 end;
 
+function GlobRefTrailingImm(op, prev, modrm: Byte; var trail: Integer): Boolean;
+{ How many instruction bytes follow the disp32 of an absolute memory operand?
+  A rip-relative displacement is measured from the END of the instruction, so
+  this is the correction the writers apply -- and getting it wrong does not
+  crash: the access lands a few bytes off, in a NEIGHBOURING variable.
+
+  MEASURED, and the measurement is the whole point. A census over five
+  --emit-obj objects said ZERO sites have a trailing immediate, so the first
+  version of this rewrite ignored the question. It was wrong for 13 of 191
+  sites in a --threadsafe build: EmitReleaseHeapLock emits `mov dword [@glob],
+  0` (C7 /0 with imm32), the release wrote four bytes past the lock word, the
+  lock was never freed and every worker thread spun forever. The census was not
+  false, it was VACUOUS -- none of the five programs used --threadsafe, so the
+  population could not contain the shape. Re-measured by instrumenting the
+  emitter itself, over a build that does: 8B/89/8D/63/87/FF/39 and the 0F pairs
+  carry nothing, C7 carries four.
+
+  Returns FALSE for an opcode not listed, and the caller then leaves the
+  operand ABSOLUTE -- which is exactly what it did before any of this, so an
+  unrecognised encoding loses position-independence and never correctness. That
+  direction is deliberate: the alternative is guessing a width. }
+begin
+  trail := 0;
+  Result := True;
+  case op of
+    { no immediate: mov r/m<->r, lea, movsxd, xchg, cmp, inc/dec/call/jmp/push,
+      and the arithmetic r/m forms }
+    $88, $89, $8A, $8B, $8D, $63, $87, $FF,
+    $01, $03, $09, $0B, $21, $23, $29, $2B, $31, $33, $39, $3B, $85: trail := 0;
+    $C7, $81, $69: trail := 4;   { imm32 forms: mov/grp1/imul }
+    $C6, $83, $6B: trail := 1;   { imm8 forms }
+  else
+    { two-byte opcodes reached as 0F xx: cmpxchg, movzx, movsx, cmov, setcc --
+      none of the ones this compiler emits carries an immediate. `prev` is only
+      consulted here, AFTER the one-byte table has had its say, because $B1 is
+      also a one-byte `mov cl, imm8`. }
+    if prev = $0F then trail := 0 else Result := False;
+  end;
+  if modrm = 0 then ;   { reserved: F6/F7 need the reg field to decide, and are
+                          deliberately not in the table above until measured }
+end;
+
 procedure EmitGlobRef(bssOff: Integer);
-{ Emit 4-byte placeholder for absolute BSS address }
-var gfN: Integer;
+{ Emit 4-byte placeholder for a BSS address -- absolute, or rip-relative on
+  x86-64 where the operand shape allows it (see GlobRefTrailingImm). }
+var gfN, trailN: Integer;
 begin
   { Grows instead of capping. The old fixed table was 2 MB of BSS sized for the
     --threadsafe self-host high-water mark, and the cap it enforced was hit by
@@ -277,7 +320,40 @@ begin
   begin
     if GlobFixCapacity = 0 then gfN := 8192 else gfN := GlobFixCapacity * 2;
     SetLength(GlobFix, gfN);
+    SetLength(GlobFixPCRel, gfN);
+    SetLength(GlobFixTrail, gfN);
     GlobFixCapacity := gfN;
+  end;
+  GlobFixPCRel[GlobFixCount] := False;
+  GlobFixTrail[GlobFixCount] := 0;
+  { x86-64: rewrite the absolute [disp32] memory operand just emitted into the
+    rip-relative form, so .text carries R_X86_64_PC32 and an object can be
+    linked into a PIE (feature-a-x86-64-object-output-is-position-dependent).
+
+    Done HERE rather than at ~200 call sites because every one of them emits the
+    ModRM (+SIB) immediately before calling us, so the bytes to rewrite are the
+    ones at the end of the buffer. Absolute [disp32] is mod=00 rm=100 with
+    SIB=$25 (no base, no index); rip-relative is mod=00 rm=101 and NO SIB byte,
+    so the rewrite drops one byte.
+
+    MEASURED before writing this: across 1271 relocation sites, none is indexed
+    and none has an immediate trailing the displacement, so no site needs a
+    scratch lea and every addend here is -4.
+
+    The `else` REFUSES. A fourth byte-shape must not be silently emitted as a
+    displacement that is now relative to something else -- that is the shape of
+    bug this repo pays most for. Two shapes are deliberately NOT converted yet
+    and take the absolute path: an address loaded as an immediate (`mov r32,
+    imm32` / `movabs r64, imm64`) needs a different INSTRUCTION, not a different
+    relocation, and that is the next phase. }
+  if (TargetArch = TARGET_X86_64) and (not EncToAsmBuffer) and (CodeLen >= 4) and
+     (Code[CodeLen-1] = $25) and ((Code[CodeLen-2] and $C7) = $04) and
+     GlobRefTrailingImm(Code[CodeLen-3], Code[CodeLen-4], Code[CodeLen-2], trailN) then
+  begin
+    Code[CodeLen-2] := Byte((Code[CodeLen-2] and $38) or $05);  { mod=00 rm=101 }
+    Dec(CodeLen);                                               { drop the SIB }
+    GlobFixPCRel[GlobFixCount] := True;
+    GlobFixTrail[GlobFixCount] := trailN;
   end;
   GlobFix[GlobFixCount].CodePos := CodeLen;
   GlobFix[GlobFixCount].BSSoff  := bssOff;

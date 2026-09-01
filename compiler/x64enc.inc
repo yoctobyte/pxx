@@ -7,8 +7,9 @@ const
   rR8  = 8; rR9  = 9; rR10 = 10; rR11 = 11;
   rR12 = 12; rR13 = 13; rR14 = 14; rR15 = 15;
 
-var
-  EncToAsmBuffer: Boolean = False;
+{ EncToAsmBuffer moved to defs.inc: emit.inc is included BEFORE this file and
+  EmitGlobRef must know whether the ModRM/SIB bytes it is about to rewrite went
+  into Code or into AsmBytes. }
 
 { Defined in asmenc.inc (included later); forward-declared here so
   EncModRMAbs can defer a global-var operand fixup to IR_ASM codegen-replay

@@ -2583,6 +2583,17 @@ var
   FixCount : Integer;
 
   GlobFix  : array of TGlobFix;
+  { Parallel to GlobFix: is entry i a rip-relative displacement rather than an
+    absolute address? Parallel rather than a third field on TGlobFix because
+    TGlobFix is a BOOTSTRAP record -- REC_TGLOBFIX, whose field count, names,
+    offsets and total size are hardcoded in symtab.inc and asserted by
+    CheckBuiltinRecSize -- so a field here would have to be added twice, in the
+    Pascal declaration and in the compiler's description of its own layout, and
+    the two arms would have to agree for the FPC seed and for pxx alike. }
+  GlobFixPCRel : array of Boolean;
+  { Bytes of the instruction that FOLLOW the 4-byte displacement -- an immediate
+    on a C7/81/83 form. The rip-relative correction is -(4 + this). }
+  GlobFixTrail : array of Integer;
   GlobFixCount : Integer;
   GlobFixCapacity : Integer;
 
@@ -3862,6 +3873,11 @@ var
   { Emit a relocatable ET_REL .o instead of a linked ET_EXEC image
     (--emit-obj, or inferred from a .o output name). esp32 targets only. }
   EmitObjMode : Boolean;
+  { True while the x86-64 encoder is writing into AsmBytes (inline asm) rather
+    than into Code. EmitGlobRef's rip-relative peephole must not look back at
+    Code[CodeLen-1] then -- the ModRM/SIB it would be rewriting is not there.
+    Lives here rather than in x64enc.inc because emit.inc is included first. }
+  EncToAsmBuffer : Boolean;
   EmitSharedMode : Boolean;   { .asm frontend --shared: x86-64 ET_DYN .so output }
   EmitAsmTextMode : Boolean;  { -S: also write <outFile>.s, a best-effort x86-64
                                  disassembly of whatever codegen just produced

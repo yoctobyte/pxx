@@ -1809,7 +1809,15 @@ begin
       addr := dataBase + SymOffDataPart(GlobFix[i].BSSoff)
     else
       addr := bssBase + GlobFix[i].BSSoff;
-    Patch32(GlobFix[i].CodePos, addr);
+    { PCRel: EmitGlobRef rewrote the operand to [rip+disp32], so the field holds
+      the distance from the address AFTER it (rip at execution) to the target,
+      not the target. }
+    if GlobFixPCRel[i] then
+      Patch32(GlobFix[i].CodePos,
+              addr - (LOAD_ADDR + codeOffset + GlobFix[i].CodePos + 4
+                      + GlobFixTrail[i]))
+    else
+      Patch32(GlobFix[i].CodePos, addr);
   end;
   if ExternalCount > 0 then
   begin
@@ -1987,7 +1995,15 @@ begin
       addr := dataBase + SymOffDataPart(GlobFix[i].BSSoff)
     else
       addr := bssBase + GlobFix[i].BSSoff;
-    Patch32(GlobFix[i].CodePos, addr);
+    { PCRel: EmitGlobRef rewrote the operand to [rip+disp32], so the field holds
+      the distance from the address AFTER it (rip at execution) to the target,
+      not the target. }
+    if GlobFixPCRel[i] then
+      Patch32(GlobFix[i].CodePos,
+              addr - (LOAD_ADDR + codeOffset + GlobFix[i].CodePos + 4
+                      + GlobFixTrail[i]))
+    else
+      Patch32(GlobFix[i].CodePos, addr);
   end;
   if ExternalCount > 0 then
   begin
@@ -2221,7 +2237,18 @@ begin
       addr := dataBase + SymOffDataPart(GlobFix[i].BSSoff)
     else
       addr := bssBase + GlobFix[i].BSSoff;
-    Patch32(GlobFix[i].CodePos, addr);
+    { PCRel is never set on this path today -- EmitGlobRef's rewrite is guarded
+      on TARGET_X86_64 and this writer serves i386 and arm32. Kept identical to
+      the two 64-bit loops on purpose: three copies of one decision that differ
+      is the shape that let a record-field elSize sit wrong for 2.5 months
+      (eb3b51755). If a 32-bit PC-relative form is ever added, this loop is
+      already the same shape and does not need finding. }
+    if GlobFixPCRel[i] then
+      Patch32(GlobFix[i].CodePos,
+              addr - (LOAD_ADDR + codeOffset + GlobFix[i].CodePos + 4
+                      + GlobFixTrail[i]))
+    else
+      Patch32(GlobFix[i].CodePos, addr);
   end;
 
   { @proc: 32-bit absolute code address (i386 `mov eax,imm32` / arm32 literal
@@ -3071,7 +3098,20 @@ begin
       that no object reaches it; that evidence is the refusal, not the shape of
       the data. (The ELF32 sibling still reads the offset raw, which is correct
       only while that refusal stands.) }
-    if SymOffIsData(GlobFix[i].BSSoff) then
+    { rtype 11 = R_X86_64_32S (absolute), 2 = R_X86_64_PC32. A PC32 addend is
+      relative to the address AFTER the field, so it carries the -4; measured
+      across 1271 sites, no site on this path has bytes trailing the field, so
+      the correction is -4 everywhere and never -8. }
+    if GlobFixPCRel[i] then
+    begin
+      if SymOffIsData(GlobFix[i].BSSoff) then
+        writeRela64(f, GlobFix[i].CodePos, 2, 2,
+                    SymOffDataPart(GlobFix[i].BSSoff) - 4 - GlobFixTrail[i])
+      else
+        writeRela64(f, GlobFix[i].CodePos, 3, 2,
+                    GlobFix[i].BSSoff - 4 - GlobFixTrail[i]);
+    end
+    else if SymOffIsData(GlobFix[i].BSSoff) then
       writeRela64(f, GlobFix[i].CodePos, 2, 11, SymOffDataPart(GlobFix[i].BSSoff))
     else
       writeRela64(f, GlobFix[i].CodePos, 3, 11, GlobFix[i].BSSoff);

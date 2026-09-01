@@ -10,6 +10,11 @@ uses SysUtils;
 
 var
   Code: array[0..65535] of Byte;
+  { Mocked because the declaration lives in defs.inc, which this harness does
+    not include -- EmitGlobRef needs it to know whether the ModRM/SIB bytes it
+    is about to rewrite went into Code or into AsmBytes. See
+    tools/standalone_inc_harnesses.sh for why this file has to carry it. }
+  EncToAsmBuffer: Boolean = False;
   CodeLen: Integer = 0;
   Fixups: array[0..1023] of record CodePos, DataOff: Integer; end;
   FixCount: Integer = 0;

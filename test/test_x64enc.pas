@@ -7,6 +7,11 @@ var
   MockBuffer: array[0..1023] of Byte;
   MockLen: Integer = 0;
   LastGlobRef: Integer = -1;
+  { Mocked because the declaration lives in defs.inc, which this harness does
+    not include -- EmitGlobRef needs it to know whether the ModRM/SIB bytes it
+    is about to rewrite went into Code or into AsmBytes. See
+    tools/standalone_inc_harnesses.sh for why this file has to carry it. }
+  EncToAsmBuffer: Boolean = False;
 
 procedure EmitB(b: Byte);
 begin

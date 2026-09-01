@@ -5285,6 +5285,18 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== test-core: qemu-user not present, skipping cross N-D sub-array param ==="; \
 	fi
+	# feature-a-x86-64-object-output-is-position-dependent
+	# The heap lock's release is `mov dword [@glob], 0` -- C7 /0, whose imm32
+	# TRAILS the displacement. A rip-relative displacement is measured from the
+	# END of the instruction, so a rewrite that assumes the field ends it writes
+	# four bytes past the lock word: the lock is never freed and the next acquire
+	# spins forever. Single-threaded on purpose -- the defect needs a SECOND
+	# acquire, not a second thread, so this costs under a second where the
+	# threading tests that also catch it cost minutes.
+	# CONTROL RUN, NOT ASSUMED: with GlobRefTrailingImm answering 0 for $$C7 this
+	# program hangs (timeout), and passes with it answering 4.
+	./$(COMPILER) --threadsafe test/test_threadsafe_heap_lock_release.pas $(TESTTMP)/test_tshlr26
+	tools/expect_same.sh test_tshlr26 "$$($(TESTTMP)/test_tshlr26)" "THREADSAFE HEAP LOCK OK"
 	# bug-a-taking-the-address-of-a-float-array-element-is-a-float-operator-on-32-bit
 	# An IR_INDEX node's IRTk names the type AT the address, so `@V[0]` over an
 	# array of Double dispatched an ADDRESS computation into the float lowering.
