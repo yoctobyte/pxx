@@ -165,4 +165,4 @@ is the row carrying the aliasing claim. A future reader trimming "redundant"
 rows would otherwise keep the weak one.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: befca0866.
