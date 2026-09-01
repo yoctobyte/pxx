@@ -73,4 +73,4 @@ flaky. Dropping `compiler/` commits from a `$(PXX_STABLE)` job's bisect range is
 sound, but the fallback then assumes the residue is environmental. `lib/` and
 `test/` remain in range and are exactly where such a job's real regressions
 live; the advice should name them before it says "flakiness".
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 876675b0f.
