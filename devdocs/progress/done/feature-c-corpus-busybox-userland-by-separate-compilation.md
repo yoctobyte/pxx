@@ -4,23 +4,25 @@ title: "A busybox userland built busybox's own way: one object per translation u
 track: C
 prio: 70
 type: feature
-status: backlog
+status: done
 created: 2026-09-01
 found-by: frankD
-owner: ""
-blocked-by: [bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link]
-summary: "Rung 2's successor. The unity build tops out at twelve applets for reasons that are not pxx's -- three busybox files assume they own their namespace and gcc rejects the unity too. Separate compilation removes all of them and is busybox's OWN model: measured 2026-09-01, all 41 TUs compile to objects and link into a working multiplexer. It is NOT correct yet: crtl state is object-local, so errno and optind split per object and the binary diverges from the gcc oracle while still linking and running. Blocked on the crtl linkage ticket; `tools/busybox_diff.sh --separate` is the harness and already exists."
+owner: frankD
+blocked-by: []
+summary: "MET 2026-09-01 on x86-64. `tools/busybox_diff.sh --separate` builds the 26-applet userland as busybox builds it -- 82 translation units, 82 objects, ONE REAL LINK with no -Wl,-z,muldefs -- and the result is byte-identical to the gcc oracle over 154 cases. That is this ticket's own gate: match the unity before exceeding it. Cost two fixes found by attempting it, both filed and closed: crtl was defined globally in every object (frankA), and `static` on a C FUNCTION was ignored by the object writer so every TU exported libbb.h's private helpers (bug-a-static-c-functions-are-emitted-as-global-symbols). aarch64 stays OUT until --emit-obj has an object writer for it; GROWING the applet set past 26 is rung 3's business, not this ticket's."
 ---
 
 # Busybox the way busybox builds
 
-[[feature-c-corpus-busybox-multi-applet]] is done and reached **twelve
-applets, 114 cases, byte-identical to gcc on x86-64 and aarch64**. It got there
-on a UNITY build, and the unity is the wrong long-run model.
+[[feature-c-corpus-busybox-multi-applet]] is done. It resolved at twelve
+applets; the unity has since been pushed to **twenty-six applets, 82
+translation units, 154 cases, byte-identical to gcc on x86-64 and aarch64**.
+It got there on a UNITY build, and the unity is still the wrong long-run model.
 
 ## Why the unity cannot be the answer
 
-Not capacity — it holds twelve fine. Three busybox files assume they own their
+Not capacity — twenty-six is a lot more than the twelve this section was
+written about, and the argument did not depend on the number. Three busybox files assume they own their
 namespace, and **gcc rejects the unity too**, so none of this is a pxx defect:
 
 | file | what it claims | who it breaks |
@@ -104,3 +106,39 @@ differential caught it.
    ([[feature-a-object-output-for-arm32-and-aarch64]]). x86-64 only for now,
    and say so rather than letting `--separate` look like the stronger claim on
    both axes at once.
+
+## MET 2026-09-01 — x86-64
+
+```
+busybox-diff: applets=cat echo ash mkdir rm cp mv pwd wc head sleep printf sort
+              chmod ln sync env tr cut basename dirname readlink true false seq
+              md5sum   translation units=82
+  ORACLE  gcc unity build (154 cases)
+  ORACLE  busybox agrees with the gcc unity
+  note    x86_64   82 objects linked separately (27765544 bytes)
+  PASS    x86_64   byte-identical to the gcc oracle over 154 cases
+  note    aarch64  skipped: --emit-obj has no object writer for this target
+busybox-diff: GREEN
+```
+
+compiler `816f18f7784d`. `-Wl,-z,muldefs` is **gone** from the harness rather
+than merely unneeded — the flag was the thing hiding the second bug.
+
+Against the four completion bullets above:
+
+1. The blocker landed (frankA) and `-z muldefs` came out. That exposed the
+   SECOND link failure, which the flag had been suppressing all along:
+   `multiple definition of bb_ascii_isalnum / bb_strtoi32 / is_tty_secure /
+   new_tls_state` — `static` functions in `include/libbb.h`, emitted GLOBAL.
+   Filed and fixed as
+   [[bug-a-static-c-functions-are-emitted-as-global-symbols]].
+2. `--separate` is GREEN against the oracle on the **twenty-six** applets the
+   unity does, not the twelve this ticket was written against. Gate met.
+3. Growing the applet set is rung 3's.
+4. aarch64 unchanged: out until
+   [[feature-a-object-output-for-arm32-and-aarch64]].
+
+**Worth keeping:** the errno/optind divergence this ticket was mostly about is
+gone, and the smoke test would never have told anyone. `--list`, `echo` and
+`ash` arithmetic were all correct through both bugs. Only the 154-case
+differential moved.

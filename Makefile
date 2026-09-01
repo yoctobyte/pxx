@@ -19069,6 +19069,38 @@ test-emit-obj: $(COMPILER)
 	  tools/expect_same.sh rtst_shared_runtime "$$($(TESTTMP)/rtst_pxx)" "$$($(TESTTMP)/rtst_gcc)" || exit 1; \
 	  echo "test-emit-obj: two objects share one heap, one errno and one optind, matching gcc"; \
 	else echo "gcc not installed; two-object runtime-state check skipped"; fi
+	# 4b-novies. `static' ON A FUNCTION IS INTERNAL LINKAGE, so the symbol is
+	#    LOCAL. Every C-convention proc came out GLOBAL, and busybox's libbb.h
+	#    defines bb_ascii_isalnum, bb_strtoi32, is_tty_secure, new_tls_state and
+	#    more as `static ALWAYS_INLINE' -- included by every translation unit, so
+	#    the 82-object userland link died on `multiple definition' before it
+	#    reached anything the program wrote. The DATA side has read SymCStaticLink
+	#    since the linkage work landed; functions were the arm that never got the
+	#    sibling.
+	#
+	#    LINKING IS NOT THE DISCRIMINATOR. Weakening these instead of localising
+	#    them also links, and is wrong -- the linker keeps ONE body and both
+	#    translation units call it. So the two sources define the same two static
+	#    names with DIFFERENT bodies and the OUTPUT says which happened: `a 11 /
+	#    b 2200' under internal linkage, and both rows collapse onto one body
+	#    under a weak fix. gcc building the same two sources is the oracle.
+	rm -f $(TESTTMP)/stl_*.o $(TESTTMP)/stl_pxx $(TESTTMP)/stl_gcc
+	./$(COMPILER) --emit-obj test/c_obj_static_link_a.c $(TESTTMP)/stl_a.o
+	./$(COMPILER) --emit-obj test/c_obj_static_link_b.c $(TESTTMP)/stl_b.o
+	#    AIM CHECK, both directions. Asserting only that shared_helper is LOCAL
+	#    would pass on a writer that localised EVERYTHING and exported nothing,
+	#    so a_probe must come out GLOBAL in the same object.
+	@n=$$(readelf -sW $(TESTTMP)/stl_a.o | awk '$$4=="FUNC" && $$5=="LOCAL" && $$8=="shared_helper"' | wc -l); \
+	 [ "$$n" -eq 1 ] || { echo "test-emit-obj: shared_helper is not a LOCAL FUNC in stl_a.o -- static did not reach the symbol table"; exit 1; }; \
+	 n=$$(readelf -sW $(TESTTMP)/stl_a.o | awk '$$4=="FUNC" && $$5=="GLOBAL" && $$8=="a_probe"' | wc -l); \
+	 [ "$$n" -eq 1 ] || { echo "test-emit-obj: a_probe is not a GLOBAL FUNC in stl_a.o -- the object exports nothing, so the LOCAL check above cannot fail"; exit 1; }; \
+	 echo "test-emit-obj: static functions are LOCAL and non-static ones are still GLOBAL"
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc $(TESTTMP)/stl_a.o $(TESTTMP)/stl_b.o -o $(TESTTMP)/stl_pxx || { echo "test-emit-obj: two objects sharing static names FAILED to link"; exit 1; }; \
+	  gcc test/c_obj_static_link_a.c test/c_obj_static_link_b.c -o $(TESTTMP)/stl_gcc || { echo "test-emit-obj: the gcc oracle FAILED to build"; exit 1; }; \
+	  tools/expect_same.sh stl_static_link "$$($(TESTTMP)/stl_pxx)" "$$($(TESTTMP)/stl_gcc)" || exit 1; \
+	  echo "test-emit-obj: each translation unit calls its OWN static, matching gcc"; \
+	else echo "gcc not installed; two-object static-linkage check skipped"; fi
 	# 4b-octies. THE ESP OBJECT EXPORTS WHAT THE PROGRAMMER MARKED, not just
 	#    app_main. writeELF32Rel emitted exactly ONE global symbol -- app_main --
 	#    with every proc LOCAL FUNC and no data symbol planned at all, so a

@@ -2932,6 +2932,7 @@ var
   CurBlockId: Integer;
   ProcExternal : array of Boolean;
   ProcObjRuntimeCopy : array of Boolean;   { this proc's BODY came from lib/crtl -- see SymObjRuntimeCopy }
+  ProcCStaticLink : array of Boolean;   { C `static` on a FUNCTION: internal linkage, so a LOCAL symbol, never exported -- the proc-side twin of SymCStaticLink }
   ProcCModule : array of Integer;   { the C .c MODULE whose text defined this proc's body (KeyStrs[] index, -1 = the main source / not C). Two definitions from different modules are not a same-TU duplicate -- see CModRange* below. bug-c-static-functions-in-different-crtl-modules-collide }
   ProcCaseSensitive : array of Boolean; { match this proc name case-sensitively (C imports, or Pascal in case-sensitive mode) }
   ProcLibrary  : array of Integer; { Strs[] entry for DT_NEEDED name }

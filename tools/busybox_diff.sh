@@ -812,9 +812,16 @@ for t in $TARGETS; do
     # cases, so the count is asserted rather than printed.
     nobj=$(ls "$WORK/obj"/*.o 2>/dev/null | wc -l)
     [ "$nobj" -gt 1 ] || die "separate mode produced $nobj object(s) -- there is nothing here that a unity build would not also prove"
-    if ! gcc -Wl,-z,muldefs -o "$out" "$WORK/obj"/*.o >> "$WORK/build_$t.log" 2>&1; then
+    if ! gcc -o "$out" "$WORK/obj"/*.o >> "$WORK/build_$t.log" 2>&1; then
       printf '  FAIL    %-8s %d objects did not link\n' "$t" "$nobj"
+      # Two failure modes, not one. Grepping only for `undefined reference'
+      # printed NOTHING for a link that died on multiple definitions -- the
+      # exact failure -Wl,-z,muldefs used to hide -- so the report said the
+      # link failed and refused to say why. A diagnostic that is silent on
+      # half its population is the half you are about to spend an hour on.
       grep -oE "undefined reference to \`[^']*'" "$WORK/build_$t.log" | sort -u | head -10
+      grep -oE "multiple definition of \`[^']*'" "$WORK/build_$t.log" | sort -u | head -10
+      grep -E "^[^ ].*: (error|fatal)" "$WORK/build_$t.log" | sort -u | head -5
       RC=1; continue
     fi
     printf '  note    %-8s %d objects linked separately (%d bytes)\n' "$t" "$nobj" "$(stat -c%s "$out")"

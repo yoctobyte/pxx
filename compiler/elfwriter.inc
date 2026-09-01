@@ -2929,9 +2929,26 @@ function ObjProcIsExported(procIdx: Integer): Boolean;
 { Does this routine belong in the object's link-visible surface? Only if its
   NAME and its CONVENTION both mean something outside this compilation, which
   is exactly the C-convention set. An internal-convention routine exported
-  under its Pascal name would be callable and wrong. }
+  under its Pascal name would be callable and wrong.
+
+  `static` REMOVES a C function from that surface, and it is not an
+  optimisation: C 6.2.2p3 gives it internal linkage, so the name means nothing
+  outside this translation unit and two objects that both define it are not in
+  conflict. Emitted GLOBAL, they are -- busybox puts `static ALWAYS_INLINE`
+  helpers in libbb.h (bb_ascii_isalnum, bb_strtoi32, is_tty_secure,
+  new_tls_state, ...), every translation unit that includes it defined them,
+  and the 82-object link died on `multiple definition of' before reaching
+  anything else. Nothing here needs a new symbol group: a defined-but-not-
+  exported proc already lands in the LOCAL block ahead of firstGlobal, which
+  is where every non-cdecl Pascal routine has always gone.
+
+  The DATA side has said this since the linkage work landed (ObjDataIsLocal
+  reads SymCStaticLink) -- functions were the arm that never got the sibling.
+  Measured: for `static int helper(int)` in a shared header, gcc emits `t' and
+  we emitted `T'.
+  bug-a-static-c-functions-are-emitted-as-global-symbols }
 begin
-  Result := ProcCdecl[procIdx];
+  Result := ProcCdecl[procIdx] and (not ProcCStaticLink[procIdx]);
 end;
 
 function ObjProcBind(procIdx: Integer): Byte;

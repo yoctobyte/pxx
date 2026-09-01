@@ -11068,6 +11068,7 @@ var
   isFunc: Boolean;
   nparams, procIdx, i, j, idx, patchPos, sz, gli: Integer;
   hdrStaticBody: Boolean;   { bodied `static` in a header-import surface }
+  procSawStatic: Boolean;   { `static` on THIS definition: internal linkage }
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
   sysvN, sysvC0, sysvC1: Integer; { PXXDBG=a.sysvcls readout only }
@@ -11124,6 +11125,14 @@ begin
   hdrStaticBody := CHeaderMode and (not CProgramMode) and
                    (CModuleOfTok(TokPos - 1) < 0) and
                    CDeclSawStatic(TokPos - 1);
+  { `static` on a function is INTERNAL LINKAGE, and it has to be read here for
+    the same reason hdrStaticBody does -- ParseCDeclType is about to move
+    TokPos past the type token that CDeclSawStatic scans backwards from.
+    hdrStaticBody is a narrower question (a bodied static reached through a
+    header import) and cannot stand in for this one: it is False for the
+    ordinary case, a static defined in a .c the user named.
+    bug-a-static-c-functions-are-emitted-as-global-symbols }
+  procSawStatic := CDeclSawStatic(TokPos - 1);
   { Default DT_NEEDED soname for an external with no explicit library: math
     functions are in libm.so.6 on glibc, everything else in libc.so.6. }
   extLib := 'libc.so.6';
@@ -11722,6 +11731,13 @@ begin
     same predicate the data side already asks, so the two cannot drift.
     bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link }
   ProcObjRuntimeCopy[procIdx] := CDeclIsFromCrtl(TokPos - 1);
+  { Recorded at the DEFINITION, beside the module attribution, because that is
+    the declaration whose linkage the object writer emits. Only ever set, never
+    cleared: C 6.2.2p5 says a later declaration with no storage-class specifier
+    inherits the internal linkage of an earlier `static` one, so a plain
+    redeclaration must not turn the symbol global again.
+    bug-a-static-c-functions-are-emitted-as-global-symbols }
+  if procSawStatic then ProcCStaticLink[procIdx] := True;
   Procs[procIdx].BodyAddr := CodeLen;
   
   { Save scope }
