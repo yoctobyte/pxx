@@ -2,7 +2,7 @@
 type: bug
 track: A
 prio: 5
-summary: two exception shapes still leak their object after 620989250 — raising a NEW exception from inside a handler leaks the original (live=2001/1000 trips) and a bare `raise;` re-raise leaks (937); both are acknowledged as gaps in that commit's own comments but were never measured
+summary: raising a NEW exception from inside a handler still leaks the original (live=1997/1000 trips, re-measured 2026-09-01) — the bare `raise;` re-raise half of this ticket is now CLEAN (937 -> 3) and is no longer part of it
 tags: [memory-leak, exceptions, raise]
 blocked-by: decide-does-raise-of-an-existing-object-transfer-ownership
 ---
@@ -66,3 +66,26 @@ retain/release pairing failure as `9cb079528`.
     { caller: try Inner(i); except on e2: Exception do Take(e2.Message); end; }
 
 and the bare form, `except raise; end;` in Inner.
+
+## 2026-09-01 — re-measured: the re-raise half is fixed, the escape half is not
+
+Both rows re-run on binary `18ffb4b033d1`, same 1000-trip shapes as the table
+above, `Exception.Create` in every arm:
+
+    shape                                          live    allocs
+    raise inside a handler (original escapes)       1997     9755   STILL LEAKS
+    bare `raise;` re-raise, caught outside             3     4809   CLEAN
+    plain caught `on E: Exception do`                  3     4809   clean
+
+So the ticket is now ONE shape, and the summary above says so. The re-raise row
+also reads clean on a binary predating today's four flush-boundary fixes
+(`b788c5865`-era), so **it was not fixed by them and I did not bisect which
+commit closed it** — the window is everything after the binary this ticket's
+original table was taken on (`42507851cdde`, a BINARY sha, which names no
+commit), and `d402a25b2` is the only exception-lowering change in it. Whoever
+picks this up should confirm that rather than inherit it.
+
+Nothing here touches the remaining shape: `raise` of a NEW exception from inside
+a handler still drops the original on the floor, still ~2 blocks per trip (the
+object plus its message string), and is still blocked on
+`decide-does-raise-of-an-existing-object-transfer-ownership`.
