@@ -31,6 +31,14 @@ import twatch  # noqa: E402
 # Files allowed to touch tstate by filesystem path, and WHY. Adding a name here
 # is a deliberate act; the point of the list is that it is short and argued.
 ALLOWED = {
+    "twatch_detail_slot_devtest.py":
+        "builds a SYNTHETIC tstate under a tmp dir and globs it back "
+        "(os.path.join(tmp, tw.TSTATE_REL, ...) at :69 and :90). The guard "
+        "exists to stop tools reading the LIVE tstate by path instead of "
+        "going through materialize_tstate()/states_at(); a fixture the test "
+        "just wrote in its own tmp dir is not that, and routing it through "
+        "the helper would make it read the real one instead of the fixture. "
+        "Arrived with 9b0b1d3e5 on 2026-09-01.",
     "twatch.py":
         "the WRITER — it publishes tstate, and owns states_at/materialize_tstate",
     "twatch_web.py":

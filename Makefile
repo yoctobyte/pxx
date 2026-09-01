@@ -13820,6 +13820,8 @@ test-core: $(COMPILER)
 	# Rows 1, 2 and 4 are the controls that must not move (the span an integer
 	# and a byte are scaled by, and an index over a plain variable).
 	# refactor-a-two-predicates-answer-what-a-caret-yields
+	./$(COMPILER) $(PXXFLAGS) test/test_index_through_record_pointer_cast.pas $(TESTTMP)/test_index_rec_ptr_cast26
+	$(TESTTMP)/test_index_rec_ptr_cast26 | diff -u test/test_index_through_record_pointer_cast.expected -
 	./$(COMPILER) $(PXXFLAGS) test/test_deref_shape_through_arith_and_nonident_base.pas $(TESTTMP)/test_deref_shape_arith26
 	$(TESTTMP)/test_deref_shape_arith26 | diff -u test/test_deref_shape_through_arith_and_nonident_base.expected -
 	# ...and the two spellings the rows above cannot reach. A DYNAMIC 2-D index
