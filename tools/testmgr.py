@@ -5475,6 +5475,25 @@ def reexec_scoped(cpu_props=()):
         print("testmgr: scope failed, running unscoped", flush=True)
 
 
+class _RejectRepeat(argparse.Action):
+    """Fail on a repeated flag instead of silently keeping the last value.
+
+    A last-wins flag does not error and does not warn -- it produces a correct
+    answer to a question nobody asked, and the run's own `jobs=N` line is the
+    only place the discrepancy shows. That makes it the same family as a gate's
+    wrapper exit code: honest, and about something else.
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        if getattr(namespace, self.dest, None) is not None:
+            parser.error(
+                f"{option_string} given more than once. It takes a single "
+                f"value; repeating it would silently keep only the last. "
+                f"Use one glob that matches what you want, or run the tool "
+                f"once per job.")
+        setattr(namespace, self.dest, values)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--tier", choices=sorted(TIERS))
@@ -5510,11 +5529,22 @@ def main():
                     help="global wall-clock budget, seconds (default 3600, "
                          "scaled up when --max-cores throttles the run)")
     ap.add_argument("--list", action="store_true", help="print job table and exit")
-    ap.add_argument("--job", metavar="GLOB",
+    # REJECT a repeated --job rather than silently taking the last. Plain
+    # argparse discards every earlier value before any testmgr code runs, so
+    # `--job a --job b --job c` ran ONE job and reported `jobs=1 ... 1/1 pass
+    # GREEN` -- a completely honest verdict about a job the caller had not asked
+    # about alone, which reads exactly like three passing. Diagnosed by frankT
+    # (who named the fix: reject, do not take the last); hit independently by
+    # frankB hours later while wiring five per-arch jobs, which is what this
+    # costs when it is not enforced. Appending is deliberately NOT offered here:
+    # that would invent multi-job semantics the selector does not have. Ask for
+    # a glob, or run the tool once per job.
+    ap.add_argument("--job", metavar="GLOB", action=_RejectRepeat,
                     help="run only jobs whose name matches (fnmatch), or "
                          "'src:<path>' to select by SOURCE FILE — stable across "
                          "renumbering, unlike target#NN; lets a watcher bisect "
-                         "one failing job in isolation")
+                         "one failing job in isolation. May be given ONCE: a "
+                         "repeat is an error, never a silent last-wins")
     ap.add_argument("--report-json", metavar="PATH",
                     help="write machine-readable per-job results (twatch)")
     ap.add_argument("--resume", metavar="PATH",

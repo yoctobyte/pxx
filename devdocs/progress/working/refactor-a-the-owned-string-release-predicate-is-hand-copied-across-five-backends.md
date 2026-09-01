@@ -3,8 +3,8 @@ track: A
 prio: 45
 type: refactor
 blocked-by: []
-status: new
-owner: ""
+status: working
+owner: frankB
 found: 2026-08-30
 found-by: frank-optimize, closing out bug-a-a-string-function-result-in-a-comparison-leaks-on-x86-64
 summary: "IRNodeOwnsManagedStr — 'does this node hand over a +1 reference the consumer must release' — is asked at ~25 hand-written call sites across five backend files. The repo has now been wrong at BOTH ends of that matrix: the predicate was missing from four cross backends (concat) and separately missing from x86-64 (comparison). Each half was found by a heap measurement, months apart, and neither by a test. x86-64 now routes its five comparison sites through one shared helper; the four cross backends still hand-write it 6-7 times each."
