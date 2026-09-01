@@ -541,6 +541,7 @@ reader checks whether the instrument worked, and it did.
 | did the stale-handle check fire? | is the report's MESSAGE STRING present in the compiled image? (that proves it was compiled in, never that it can speak — the check fetched a size through `PXXHdrBase`, which under the same debug flag `Halt(204)`s on a poisoned kind byte, so it died one statement before `PXXDbgFlush`) | **silent on every target that calls the routine**, read as "the string path is innocent". The tell was the EXIT CODE: 204 is a deliberate diagnosis, not a crash, so the check had fired |
 | do these two backends emit the same calls? | do they, after a name whitelist built for a *different* code path drops every call I am asking about? | every row **"same"**, vacuously — and the rewrite's aarch64 half then read ELF64 program-header fields at the wrong offsets and reported **nothing at all**, a second dead instrument wearing the first one's conclusion |
 | which frame called this? | which symbol most closely PRECEDES this stack word? (a spilled descriptor constant is not a return address) | a confident `__pxx_run_finalizers+0x179cc` — a **data pointer**, and the offset was the tell: no function is 0x179cc long |
+| is `tools-devtest#00` red in all five recent full runs? | is it in the reports' **new**-red lists? (a standing red is by construction absent from a NEW-findings report) | **"2 of 6"**, read as a refutation — `still_red` in the ndjson says **5 of 5**. The same near-empty grep is what a job red in NONE of them produces |
 
 **The two git rows are the cleanest instances in the table and the only ones
 that need nothing to be wrong.** No stale tree, no missing file, no unfetched
@@ -705,6 +706,59 @@ The same shape appears in `SetPtrElemArrayInfo`'s own header, which warns that
 "a missing field reads as a confident 0 rather than an error" about the CARRIER
 copies. It is equally true of the READER, and the reader is the half nobody
 audits: a carrier that is never printed cannot be noticed to be missing.
+
+
+## An instrument can be ANTI-CORRELATED with the truth of the question
+
+The section above collects instruments that answer about something else. This is
+a sharper member of the family, and worth separating because the usual guard
+makes it *worse*: **the more true the claim is, the more emphatically this
+instrument denies it.**
+
+Asked to verify "`tools-devtest#00` is red in all five recent full runs on
+seven", the obvious move is to grep the tstate reports:
+
+```sh
+ls -t devdocs/progress/tstate/reports/*seven* | head -6 \
+  | while read r; do grep -c 'tools-devtest#00' "$r"; done   # 2 of 6 -> "refuted"
+```
+
+**Those reports list NEW reds.** A job that is red *every* run is, by
+construction, new in none of them — so it appears only in the runs where it
+happened to flip. A job red in **all five** and a job red in **none** both
+produce a near-empty grep. The instrument cannot distinguish the hypothesis from
+its negation, and its output moves the *wrong way*: perfect permanence reads as
+perfect innocence. The field that answers it is `still_red` in
+`tstate/runs-seven.ndjson`, where the count is **5 of 5**.
+
+**Why the standard guard misfires here.** "Check for errors" fails (it ran),
+"add a positive control" is not enough on its own (a control that is red
+intermittently passes, because intermittent reds DO appear in new-red lists),
+and re-running it reproduces the same wrong answer. The guard that works is
+**ask what POPULATION the instrument is scoped to before reading its silence** —
+`new_red` is scoped to transitions, not to states.
+
+**The cost when it goes unread:** this exact grep was used to decide a run had
+been "loaded", by noting that `tools-devtest#00` had timed out "in the good run
+too". It times out when the box is quiet. A standing red cannot be evidence that
+a particular run was slow, so a triage rested on a support that was never there.
+
+**Same trip, same file, second instance — a missing key scores as a pass.**
+Reading those run rows with guessed field names (`failures` / `failed` / `red`,
+none of which exist) printed **`reds=0`** for a run carrying four red rows: the
+key was absent, the default was empty, and empty formats as clean. **Print the
+schema before trusting a count off it.** The real fields are `new_red`,
+`still_red`, `skip_holes`, `wall`, `verdict`, `timed_out`, `unreached`.
+
+```sh
+# not: guess the key. instead:
+python3 -c "import json,sys; print(sorted(json.loads(open(sys.argv[1]).readlines()[-1]).keys()))" \
+  devdocs/progress/tstate/runs-seven.ndjson
+```
+
+The generalisation across both: **a new-findings report, `grep -L`, an absent
+commit trailer and a missing dict key all report emptiness for two different
+reasons and label neither.** Ask which of the two you are holding.
 
 
 ## Assert the PRECONDITION, not just the comparison
