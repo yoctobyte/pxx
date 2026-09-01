@@ -4,11 +4,11 @@ track: U
 prio: 30
 type: decide
 blocked-by: []
-status: backlog
+status: decided
 found: 2026-08-31
 found-by: frankA
 owner: unassigned
-summary: "`q in [1,2,3]` with q = 2^32+1: FPC 3.2.2 answers TRUE (it truncates the element), pxx answers FALSE (out of range is not a member). Both are now SELF-CONSISTENT -- the six-target disagreement is fixed and this is no longer a bug -- so this is purely which semantics we want. Recommendation: keep FALSE. Nothing is blocked on the answer."
+summary: "RULED 2026-09-01 (owner): option 1, KEEP FALSE. No code change — the current behaviour is the ruled one. The ruling came with a redefinition of the compat ceiling now in CLAUDE.md: on-par is on par with the LANGUAGE, not with FPC on inputs that are a presumed programmer error. ORIGINAL: `q in [1,2,3]` with q = 2^32+1: FPC 3.2.2 answers TRUE (it truncates the element), pxx answers FALSE (out of range is not a member). Both are now SELF-CONSISTENT -- the six-target disagreement is fixed and this is no longer a bug -- so this is purely which semantics we want. Recommendation: keep FALSE. Nothing is blocked on the answer."
 ---
 
 # Does `in` truncate an out-of-range element, or answer FALSE?
@@ -69,3 +69,39 @@ would settle this, and I have none either way.
 **If you rule for option 2**, the expectations in
 `test/test_set_in_64bit_element.pas` move WITH the x86-64 backend, never
 separately; the Makefile row and the test header both say so.
+
+## RULED 2026-09-01 — option 1, keep FALSE
+
+The owner: *"this sounds to me like it depends on the type of q. and i also
+think this means we should no longer try to be strictly on par with FPC, and
+redefine that. on-par is on par with the language. not with weird edge cases
+where the programmer actually made a presumed error."*
+
+**No code change.** FALSE is what x86-64 and aarch64 already do and what the
+four 32-bit backends were moved onto; the ruling ratifies the status quo, and
+`test/test_set_in_64bit_element.pas` keeps its current expectations. The
+seven-row divergence from FPC 3.2.2 stands as a recorded, ruled difference.
+
+**"It depends on the type of q" is the load-bearing half**, and it is sharper
+than the options as filed. The case only ARISES when q's static type is wider
+than the set's base type — a `Byte` tested against `set of Byte` can never be
+out of range. So the situation is reachable only where the programmer chose a
+type that cannot fit the domain being tested, which is the presumed error, not
+an intent to test the low 8 bits. FPC's truncation answers a question nobody
+asked; FALSE leaves the mistake where the author can see it.
+
+**The general rule this produced** is now in CLAUDE.md under *"ON PAR WITH THE
+LANGUAGE, NOT WITH FPC"*. It moves the ceiling: previously a divergence was
+`rejected/` only if **no compiling program could reach it**, and this one is
+reachable, so it would have been filed as compat and ranked. Now a divergence on
+an input only a mistake produces is `rejected/` too. Compat is for code someone
+MEANT to write.
+
+**Not ruled, and deliberately left open:** whether a static type wider than the
+set's base type deserves a HINT. It would make the mistake visible, which is
+what the new rule prefers — but CLAUDE.md holds that a differing diagnostic is
+deferred, and this ruling does not override that. Anyone who wants it files it
+as its own small ticket with the evidence.
+
+## Log
+- 2026-09-01 — decided, commit PENDING-COMMIT.

@@ -29,6 +29,18 @@ diagnostic is **deferred**. An observable no compiling program can reach is
 **`rejected/`, never a low prio** — parking it at 10 keeps it in the ranker
 forever at zero value.
 
+**ON PAR WITH THE LANGUAGE, NOT WITH FPC** (owner, 2026-09-01): *"on-par is on
+par with the language. not with weird edge cases where the programmer actually
+made a presumed error."* So the ceiling is not "no compiling program can reach
+it" — a program can reach it and still have no claim on us. **Ask what the
+source MEANT, not what FPC returned.** Where an input is only produced by a
+mistake — a value outside the type it is being tested against, a construct whose
+two readings differ only when the program is already wrong — FPC's answer is
+**not a specification and matching it is not a goal.** Diverging there is
+`rejected/`, not compat. Compat is for a divergence on code someone MEANT to
+write. Evidence that settles it is real source that wants the behaviour;
+absent that, prefer the answer that leaves the mistake visible.
+
 ## Umbrellas — the goal is the ranking
 
 An **umbrella** is a GOAL: a real program that must work. `backlog-umbrella/`,
