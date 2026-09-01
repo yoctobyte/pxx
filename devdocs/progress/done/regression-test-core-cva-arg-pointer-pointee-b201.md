@@ -87,4 +87,4 @@ keeps every narrow parameter in rdx/rcx/r8/r9 -- and the first version of that
 control was not one, since `(long w, char a, ...)` put `a` in sil and failed
 alongside the positive row. Both directions were asserted against a
 deliberately re-broken compiler.
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit a583d8647.
