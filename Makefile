@@ -17607,15 +17607,15 @@ test-emit-obj: $(COMPILER)
 	@printf 'int captured;\nvoid ext_notify(int v) { captured = v; }\nvoid ext_aliased_link(int v) { (void)v; }\nextern int emit_obj_addup(int);\nextern const char *emit_obj_tag(void);\n#include <stdio.h>\nint main(void){ printf("%%d %%s\\n", emit_obj_addup(9), emit_obj_tag()); return 0; }\n' > $(TESTTMP)/test_emit_obj_x64_caller.c
 	@if command -v gcc >/dev/null 2>&1; then \
 	  gcc -no-pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64.o -o $(TESTTMP)/test_emit_obj_x64_exe || { echo "test-emit-obj: x86-64 .o FAILED to link with gcc -no-pie"; exit 1; }; \
-	  tools/expect_same.sh test_emit_obj_x64_exe "$$($(TESTTMP)/test_emit_obj_x64_exe)" "45 pxx-emit-obj" || exit 1; \
+	  tools/expect_same.sh test_emit_obj_x64_exe "$$($(TESTTMP)/test_emit_obj_x64_exe)" "done99 pxx-emit-obj" || exit 1; \
 	  echo "test-emit-obj: x86-64 .o links+runs under a gcc-built main ok"; \
 	  gcc -pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64.o -o $(TESTTMP)/test_emit_obj_x64_pie || { echo "test-emit-obj: PIE link FAILED -- x86-64 objects are position-independent since feature-a-x86-64-object-output-is-position-dependent; an absolute relocation back in .text is the cause"; exit 1; }; \
 	  readelf -hW $(TESTTMP)/test_emit_obj_x64_pie | grep -q 'Type:.*DYN' || { echo "test-emit-obj: -pie produced a non-DYN executable; the PIE assertion below would be vacuous"; exit 1; }; \
-	  tools/expect_same.sh test_emit_obj_x64_pie "$$($(TESTTMP)/test_emit_obj_x64_pie)" "45 pxx-emit-obj" || exit 1; \
+	  tools/expect_same.sh test_emit_obj_x64_pie "$$($(TESTTMP)/test_emit_obj_x64_pie)" "done99 pxx-emit-obj" || exit 1; \
 	  echo "test-emit-obj: x86-64 .o links+runs as a PIE too"; \
 	  if command -v clang >/dev/null 2>&1; then \
 	    clang -fPIE -pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64.o -o $(TESTTMP)/test_emit_obj_x64_clang || { echo "test-emit-obj: clang PIE link FAILED"; exit 1; }; \
-	    tools/expect_same.sh test_emit_obj_x64_clang "$$($(TESTTMP)/test_emit_obj_x64_clang)" "45 pxx-emit-obj" || exit 1; \
+	    tools/expect_same.sh test_emit_obj_x64_clang "$$($(TESTTMP)/test_emit_obj_x64_clang)" "done99 pxx-emit-obj" || exit 1; \
 	    echo "test-emit-obj: x86-64 .o links+runs under clang -pie (second linker)"; \
 	  else echo "clang not installed; second-linker PIE check skipped"; fi; \
 	else echo "gcc not installed; x86-64 .o link check skipped"; fi
@@ -17648,11 +17648,12 @@ test-emit-obj: $(COMPILER)
 	#    .text + offset, so a missing R_X86_64_64 leaves a null pointer that the
 	#    C runtime calls.
 	readelf -rW $(TESTTMP)/test_emit_obj_cinit.o | grep -qE 'R_X86_64_64 .*\.text'
-	#    NEGATIVE CONTROL, and it is why the three greps above mean anything: an
-	#    object with no pre-main state must NOT grow these sections. Without this
-	#    a writer that emitted .init_array unconditionally would pass every row
-	#    above. The Pascal object built earlier in this target is that case.
-	! readelf -SW $(TESTTMP)/test_emit_obj_x64.o | grep -qE 'INIT_ARRAY|FINI_ARRAY'
+	#    The Pascal object gets them too, as of the decision below -- it used to
+	#    be this row's negative control, and it stopped being one when a Pascal
+	#    program body became library initialisation like --shared's already was.
+	#    Asserted positively rather than deleted, because "the Pascal frontend
+	#    also emits the thunk" is now a property worth a row.
+	readelf -SW $(TESTTMP)/test_emit_obj_x64.o | grep -qE 'INIT_ARRAY'
 	#    THE SECOND NEGATIVE CONTROL, which is the one that is not vacuous. The
 	#    Pascal row above passes for a reason unrelated to the guard being
 	#    tested: the Pascal frontend emits no thunk at all, so it would pass even
@@ -17791,7 +17792,14 @@ test-emit-obj: $(COMPILER)
 	! readelf -sW $(TESTTMP)/test_emit_obj_386.o | grep -q 'GLOBAL DEFAULT    1 AddUp'
 	readelf -sW $(TESTTMP)/test_emit_obj_386.o | grep -q 'UND ext_aliased_link'
 	! readelf -sW $(TESTTMP)/test_emit_obj_386.o | grep -q 'ext_alias_decl'
-	# The SAME caller and the SAME expected output as the x86-64 row above.
+	# The same caller as the x86-64 row, and DELIBERATELY NOT the same expected
+	# output any more. x86-64 objects now run their initialisers from
+	# .init_array, so that row expects `done99`; only writeELFRelX64General
+	# emits .init_array, so an i386 object still never runs its body and still
+	# answers 45. The divergence is a gap, not a design: this row is the one
+	# that will change when i386 gets the same treatment, and it is written
+	# down here rather than left as a puzzling constant.
+	# bug-a-an-i386-emit-obj-object-still-never-runs-its-initialisers
 	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
 	  gcc -m32 -no-pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_386.o -o $(TESTTMP)/test_emit_obj_386_exe || { echo "test-emit-obj: i386 .o FAILED to link with gcc -m32 -no-pie"; exit 1; }; \
 	  tools/expect_same.sh test_emit_obj_386_exe "$$($(TESTTMP)/test_emit_obj_386_exe)" "45 pxx-emit-obj" || exit 1; \

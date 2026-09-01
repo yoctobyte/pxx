@@ -35,11 +35,29 @@ end;
   reach: a .bss global (R_X86_64_32S vs .bss), a string literal (R_X86_64_64
   vs .data) and an intra-object call.
 
-  `g` is DELIBERATELY read here. A foreign program that links this object does
-  NOT run the Pascal main body, so g is 0 at every call from C and
-  emit_obj_addup(9) is 45, not 45+9. That is the property being pinned: the
-  test would still pass if initialisation silently started running, but the
-  VALUE says which world we are in.
+  `g` is DELIBERATELY read here, and what it pins CHANGED on 2026-09-01. It used
+  to say: a foreign program does NOT run the Pascal main body, so g is 0 and
+  emit_obj_addup(9) is 45. It now says the opposite -- the body runs from
+  .init_array, so g is 54 and emit_obj_addup(9) is 99, and stdout carries the
+  body's own `done` ahead of the host's line.
+
+  THE OLD COMMENT WAS DESCRIBING A DEFECT, NOT A DESIGN. It was written in
+  41045d7b4, the commit that introduced this object writer, at a time when
+  nothing ran an object's initialisers because the mechanism did not exist. That
+  made "the body does not run" a true statement about the output and a false one
+  about the intent: --shared already ran unit init AND the program body (the
+  test-shared row says so in its own name), so the two library-shaped outputs
+  disagreed about the same source construct, and only one of them had a reason.
+
+  The tripwire itself was right and did its job. It said the test "would still
+  pass if initialisation SILENTLY started running, but the VALUE says which
+  world we are in" -- a guard against unnoticed drift, not a prohibition. It
+  fired, the change was made deliberately and argued in a decision ticket, and
+  this comment is the other half of that: a tripwire that is retired quietly is
+  worse than no tripwire at all.
+
+  So the VALUE still says which world we are in. It just names the other one.
+  decide-a-should-a-pascal-program-compiled-to-an-object-run-its-main-body-when-a-foreign-program-loads-it
   feature-a-a-general-x86-64-relocatable-object-writer }
 function emit_obj_addup(n: Integer): Integer; cdecl;
 begin

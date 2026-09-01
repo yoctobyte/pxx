@@ -584,7 +584,7 @@ end;
   since a library that terminates the host process at unload is worse than one
   that leaks.
   bug-a-c-a-shared-library-never-runs-its-initialisation }
-procedure EmitSharedInitFiniThunks;
+procedure EmitInitFiniThunks;
 var callSite: Integer;
 begin
   { The program body falls into here. Return to the loader instead of exiting. }
@@ -1713,8 +1713,23 @@ begin
     the build that has no builtinheap, where PXXExitProcess does not exist.
     The runner's run-once guard makes whichever path arrives first the only
     one. feature-pascal-exitcode-finalization-halt }
-  if EmitSharedMode then
-    EmitSharedInitFiniThunks
+  { A LIBRARY-SHAPED OUTPUT TAKES THE LIBRARY TERMINAL, and an object is one.
+
+    The `else` arm ends the program body with PXXExitProcess. That is right for
+    a program and catastrophic for an object whose body is CALLED from
+    .init_array: loading the host would terminate it during initialisation. The
+    thunk emitter puts a `ret` where the body falls off instead -- the same
+    discipline --shared already needed, for the same reason.
+
+    TARGET-GATED, and this is not optional: EmitSharedThunkPrologue emits raw
+    x86-64 pushes. --shared is x86-64-only so the call site never needed a
+    guard; --emit-obj also accepts i386, xtensa and riscv32, and without this
+    gate those objects get x86-64 bytes spliced into them. Only
+    writeELFRelX64General emits .init_array today, so the other targets would
+    additionally carry a thunk nothing can reach.
+    bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers }
+  if EmitSharedMode or (EmitObjMode and (TargetArch = TARGET_X86_64)) then
+    EmitInitFiniThunks
   else
   begin
     exitPi := FindProc('PXXExitProcess');

@@ -2,12 +2,12 @@
 track: A+C
 prio: 55
 type: bug
-blocked-by: [decide-a-should-a-pascal-program-compiled-to-an-object-run-its-main-body-when-a-foreign-program-loads-it]
-status: working
+blocked-by: []
+status: done
 owner: frankA
 created: 2026-09-01
 found-by: frankA (while fixing bug-a-c-a-shared-library-never-runs-its-initialisation; frankC found the shared-library half)
-summary: "THE C HALF IS FIXED (41b08f2bf, c1bb99ec2); the Pascal arm is blocked on a decision. A pxx --emit-obj object never ran its file-scope initialisers in a foreign program, because they rode pxx's own entry stub and a gcc program has none. Fixed for C via .init_array/.fini_array in writeELFRelX64General plus the existing init thunk under a widened condition: shared_c_from_data() NULL -> pxx-c-data and shared_c_envcount() -1 -> 73 under `gcc host.c lib.o`. PASCAL IS MEASURED BROKEN AND DELIBERATELY NOT FIXED: a Pascal object's globals read 0 from a gcc host, and the obvious widening fixes that while flipping a property test/test_emit_obj.pas pins on purpose (it reads `g` so emit_obj_addup(9) is 45, not 45+9, and says so in a comment) -- because a Pascal program emits global inits, unit inits and the main body contiguously at offset 0, so `call offset 0` cannot run the first two without the third. That fork is decide-a-should-a-pascal-program-compiled-to-an-object-run-its-main-body-when-a-foreign-program-loads-it."
+summary: "FIXED for x86-64, both frontends. A pxx --emit-obj object never ran its file-scope initialisers in a foreign program, because they rode pxx's own entry stub and a gcc program has none. Fixed via .init_array/.fini_array in writeELFRelX64General plus the init thunk from the .so fix: C measured shared_c_from_data() NULL -> pxx-c-data and shared_c_envcount() -1 -> 73; Pascal measured flag=0/msg= -> flag=4242/msg=pxx-pascal-init, both under `gcc host.c lib.o`. The Pascal arm needed a decision first because a program body is not obviously an initialiser -- resolved as A (it is, and --shared already treated it that way) in decide-a-should-a-pascal-program-compiled-to-an-object-run-its-main-body-when-a-foreign-program-loads-it. i386/xtensa/riscv32 still do not, tracked as bug-a-an-i386-emit-obj-object-still-never-runs-its-initialisers."
 ---
 
 # An --emit-obj object linked into a non-pxx program runs no initialisers
@@ -113,3 +113,31 @@ Pascal program emits `CompilePendingGlobalInits`, then the unit init sections,
 then the program body — contiguous, no `ret` between them, all at offset 0. The
 first two should run in a foreign host; the third is a different question. They
 share a code offset by accident of emission order, not by design.
+
+---
+
+## Pascal arm resolved 2026-09-01 — decided A, landed
+
+The decision came back A: an object runs the program body, because `--shared`
+already did and the two library-shaped outputs had no reason to disagree about
+the same source. Full argument in the decision ticket; the short version is that
+the comment I had read as pinning a design was written in `41045d7b4` describing
+behaviour that existed only because the mechanism did not, and `library foo;`
+does not parse, so `program` is the only spelling a user has.
+
+    pinit.pas --emit-obj, gcc host   flag=0 msg=  ->  flag=4242 msg=pxx-pascal-init
+
+**The target gate is the part to not lose.** `EmitSharedThunkPrologue` emits raw
+x86-64 pushes; `--shared` is x86-64-only so its call site never needed a guard,
+but `--emit-obj` also accepts i386, xtensa and riscv32. My first attempt widened
+the Pascal terminal ungated and would have spliced x86-64 bytes into those
+objects. It passed unnoticed because `make` stops at the first mismatched row
+and never reached the i386 one — the x86-64 expectation failed first and masked
+it. Anyone widening the gate must widen the emitter first.
+
+`test/test_emit_obj.pas`'s tripwire comment is rewritten rather than deleted: it
+now pins the opposite property and says why it changed, because a tripwire
+retired quietly is worse than none.
+
+## Log
+- 2026-09-01 — resolved, commit PENDING-COMMIT.
