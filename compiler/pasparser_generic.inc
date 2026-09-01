@@ -1201,8 +1201,26 @@ begin
          DGenIdentIs(k, 'initialization') or DGenIdentIs(k, 'finalization') then
         Exit;
       { `X = procedure(...)` is a procedural TYPE and stays in the section; a
-        bare `procedure`/`function` at depth 0 is a heading and ends it. }
-      if ((Tokens[k].Kind = tkProcedure) or (Tokens[k].Kind = tkFunction)) and
+        bare `procedure`/`function` at depth 0 is a heading and ends it.
+
+        `constructor` and `destructor` are headings too, and they were missing.
+        They are SOFT keywords -- tkIdent, not a token kind -- so they did not
+        read as absent the way a missing tkConstructor would have; there is no
+        tkConstructor in this file to grep for and notice. The walk therefore
+        ran straight past `constructor TFoo<T>.Create;`, through its body, and
+        anchored the minted alias somewhere after it, so `var F: TFoo<Integer>`
+        answered `unknown type: TFoo$Integer`. A template whose out-of-line
+        method was a `procedure` was unaffected, which is what made it look
+        like a specialization bug rather than a list with two of its four
+        entries. There is no `X = constructor` form, so the tkEq guard cannot
+        matter for these two; it is applied anyway so all four read alike and a
+        fifth entry inherits the right shape.
+        Regression from b613b5fcf, bisected: GOOD at b613b5fcf^ (binary
+        8cb1778e7539), BAD at b613b5fcf (binary 5175d0569e42), both forced to
+        recompute rather than accept a stamp.
+        bug-p-an-out-of-line-generic-constructor-breaks-specialization }
+      if ((Tokens[k].Kind = tkProcedure) or (Tokens[k].Kind = tkFunction) or
+          DGenIdentIs(k, 'constructor') or DGenIdentIs(k, 'destructor')) and
          ((k = 0) or (Tokens[k-1].Kind <> tkEq)) then
         Exit;
       if Tokens[k].Kind = tkSemicolon then DGenDeclAnchor := k + 1;
