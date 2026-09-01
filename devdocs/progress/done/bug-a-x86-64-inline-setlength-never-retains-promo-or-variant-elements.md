@@ -417,4 +417,4 @@ all because that backend has no variant IR arms — different backend, identical
 epistemic status.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 35e4e7c78.
