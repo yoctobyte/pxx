@@ -36,11 +36,18 @@ them would be 32 findings that cost nobody anything — which is how a check ear
 the habit of being scrolled past. The narrow family is the point.
 
 THE BIGGER EXPOSURE IS NOT A LIST, and this file does not pretend to close it:
-**531 of 536 cross-target differential rows compare stdout only**, and for those
-the exit code is free to add (both sides are runs of the same program). frankS's
-bug lived in exactly that shape. Section 3 measures it and holds the number, so
-it cannot drift upward unnoticed while the family stays green — a guard on the
-thing this guard cannot check.
+**531 of 536 cross-target differential rows compared stdout only when this was
+armed on 2026-08-30**, and for those the exit code is free to add (both sides
+are runs of the same program). frankS's bug lived in exactly that shape.
+Section 3 measures it and holds the SHARE — not the count — so it cannot drift
+upward unnoticed while the family stays green, and so that adding rows
+correctly does not trip it. It was a COUNT until 2026-09-01, when the corpus
+grew to 665 rows of which 46 now capture the exit code: the share had fallen
+from 99.1% to 93.1% — an improvement — and the absolute cap went red anyway,
+which is how it reached a tier report. The share is re-armed at the current
+value and carries its own positive control: the check asserts that one more
+uncapped row would breach it, so the bound is proven tight on every run rather
+than merely believed.
 
 Run: python3 tools/exit_observable_devtest.py
 """
@@ -142,9 +149,43 @@ def main():
           "(536 on 2026-08-30 when this was armed; the floor is a collapse "
           "detector, not a ratchet)",
           "%d" % len(cross))
-    check(len(cross) - len(capped) <= 531,
-          "and the stdout-only count has not grown past its 2026-08-30 measurement",
-          "%d compare stdout alone (was 531)" % (len(cross) - len(capped)))
+    # THE SHARE, NOT THE COUNT — changed 2026-09-01 by frankZ after this row
+    # went red on GOOD NEWS. The population grew 536 -> 665 and the stdout-only
+    # count grew 531 -> 619, so the absolute cap tripped; but the rows that DO
+    # capture went 5 -> 46, and the uncapped SHARE fell from 99.1% to 93.1%.
+    # Every one of the 129 new rows could have been written correctly and this
+    # check would still have failed, because the only way to satisfy an
+    # absolute cap on a growing corpus is to stop adding rows. A guard that
+    # fires on the outcome it wants is the same animal as one that cannot fire
+    # at all: both stop carrying information, and this one cost a red tier.
+    #
+    # The exposure the section measures is "a differential row where the exit
+    # code is free and unclaimed", and what must not drift is how much of the
+    # corpus is in that state. So the ratchet is the share, at the armed
+    # value rounded up. The paired assert below keeps the absolute half honest:
+    # a batch of new uncapped rows large enough to move the share still trips
+    # this, and adding rows correctly cannot.
+    # RE-ARMED AT TODAY'S MEASUREMENT, and that is deliberate. Holding the old
+    # 531/536 = 99.1% as the cap would have made this unfailable: at 665 rows
+    # it takes 40 of the 46 capturing rows LOSING their capture to breach it,
+    # and a ratchet that only trips on catastrophe is not a ratchet. Armed at
+    # the current share instead, ONE new uncapped row moves 619/665 to 620/666
+    # and trips it, while an uncapped row paired with a capped one does not.
+    # Positive control, asserted below, because a bound nobody proved can fail
+    # is the failure this whole file exists to name.
+    STDOUT_ONLY_SHARE = 619 / 665                 # 0.93083, measured 2026-09-01
+    uncapped = len(cross) - len(capped)
+    share = uncapped / max(len(cross), 1)
+    check(share <= STDOUT_ONLY_SHARE,
+          "and the stdout-only SHARE has not grown past its measured value",
+          "%d of %d = %.2f%% compare stdout alone "
+          "(re-armed 2026-09-01 at 619 of 665 = %.2f%%; was a COUNT capped at "
+          "531, which the corpus outgrew while getting better)"
+          % (uncapped, len(cross), 100 * share, 100 * STDOUT_ONLY_SHARE))
+    check((uncapped + 1) / (len(cross) + 1) > STDOUT_ONLY_SHARE,
+          "and that bound is tight — one more uncapped row would breach it",
+          "%.4f%% vs %.4f%%"
+          % (100 * (uncapped + 1) / (len(cross) + 1), 100 * STDOUT_ONLY_SHARE))
     check(len(capped) >= 5, "while the ones that do capture are not lost",
           "%d" % len(capped))
 

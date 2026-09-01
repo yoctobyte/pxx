@@ -14,7 +14,10 @@ summary: "`--dce` produces a broken binary for ANY program that starts a thread:
 # `--dce` miscompiles every threaded program, and `-O3` turns it on
 
 Measured 2026-09-01 by frankZ at commit `130b9a3e9`, binary
-`59699dc0833f8110` (`converged after 1 round(s)`).
+`59699dc0833f8110`, and **re-verified after a sync moved the compiler** at
+commit `db706c2da`, binary `69eeb1efd71e2125` (`converged after 1 round(s)`,
+stamp deleted first): `-O0 --dce` 139, `-O0` 0, `-O3` 124, `-O3 --no-dce` 0.
+Two binaries, same answer.
 
 ## The repro is nine lines and two flags
 

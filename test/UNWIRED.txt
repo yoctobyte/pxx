@@ -111,3 +111,18 @@ test/wasm/  parked:feature-target-wasm the wasm backend and its slice tests are 
 # control nobody can find is a control nobody can re-run.
 test/test_heapdbg_control_stale_string.pas  positive control for PXXStrDecRef's stale-handle check (kind 8); needs -dPXX_HEAP_DEBUG -dPLANTDEC and a non-x86-64 target, so nothing runs it directly
 test/test_heapdbg_control_stale_dynarray.pas  positive control for the dynarray stale-handle checks (kinds 10/11) and the implausible-size branch; needs -dPXX_HEAP_DEBUG -dPLANTDYN or -dPLANTDYN2, so nothing runs it directly
+
+# --- probes for work that has NOT landed; wiring them would gate on a feature
+# --- that does not exist yet, which is a red row that says nothing new ---
+# MEASURED 2026-09-01 before exempting, rather than inferred from the ticket:
+# built both files with --emit-obj and linked them. `take_pair` (a struct BY
+# VALUE as a PARAMETER, step 1) prints the right answer -- that half landed.
+# `make_pair` (a struct RETURNED by value, step 2) SEGFAULTS. The identical
+# pair built entirely with gcc prints `take 307` / `make 4 9`, so the source is
+# right and the gap is ours. Step 2 is enumerated in
+# devdocs/progress/done/bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee.md
+# and rests on the still-open bug-a-a-record-parameters-type-is-not-resolved-
+# when-its-slot-is-sized. Wire this pair the day step 2 lands -- it is already
+# the acceptance test for it.
+test/c_abi_struct_byval_main.c  probe for step 2 of the C by-value struct ABI (a struct RETURNED by value), which has not landed: measured 2026-09-01, take_pair is correct and make_pair segfaults. Blocked on bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized; wire it when step 2 lands
+test/c_abi_struct_byval_pxx.c  the pxx-compiled half of the pair above; same reason

@@ -47,9 +47,21 @@ reproduces it *with* `--threadsafe` passed correctly.
 ## The fix
 
 In `cflags_for()` (or a sibling `flags_for()`), add `--threadsafe` for any
-source that greps `{$threadsafe`. It is the same shape as the existing
+source that carries the directive. It is the same shape as the existing
 `CFLAGS_C` arm and the same reason: the Makefile already builds these programs
 that way, and optdiff was the one caller that did not.
+
+**Match it CASE-INSENSITIVELY.** Ten test sources carry the directive and
+**three spell it `{$THREADSAFE ON}`** (`test_threadsafe_layout_rtti`,
+`test_threadsafe_heap_lock_release`, `test_threadsafe_io_lock_foreign`). A
+case-sensitive grep finds seven, silently leaves those three build-failing,
+and reinstates a smaller version of the exact blind spot this ticket is about.
+Measured 2026-09-01: a case-sensitive sweep of my own reported 5 sources where
+there are 10.
+
+The Makefile side of the same defect is already fixed
+(`test_thread_api_no_uses`, the only recipe in the whole file that compiled a
+directive-carrying source without the flag — swept case-insensitively).
 
 Also worth a positive control the pass currently lacks: assert that the count
 of BUILD-FAIL skips does not GROW between runs. This defect was invisible

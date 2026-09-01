@@ -7460,7 +7460,20 @@ test-core: $(COMPILER)
 	# is invisible to every Pascal row (they never reach it) and shows up only as a
 	# wrong path under an unrelated C error. Assert the module row by SHAPE
 	# (lib/crtl/src/*.c) rather than by which crtl module happens to define memchr.
-	@printf '#define memchr(a,b,c) = ;\n#include <string.h>\nint main(void) { char b[4]; return (int)strlen(b); }\n' > $(TESTTMP)/cdiag_mod.c
+	#
+	# THE POISON MUST BE A RESERVED NAME, and that is the whole of what changed
+	# here. This row used to poison `memchr`, and f9e495823 made crtl a separate
+	# TU on purpose: an ORDINARY identifier the program redefines is now the
+	# PROGRAM's and is hidden from crtl's own sources, so the poison stopped
+	# reaching string.c, nothing errored, no module was named, and the row went
+	# red. That is the row working -- a provocation that stops provoking makes
+	# this FAIL, never silently pass, because the grep has nothing to match.
+	# The reserved namespace (leading _, plus NDEBUG) is the channel a program
+	# configures the implementation through and deliberately still reaches crtl,
+	# so that is what a module-scoped diagnostic has to be provoked with now.
+	# Verified in both directions: __pxx_lc, __pxx_errbuf and __strsignal_buf all
+	# error inside lib/crtl/src/string.c, and the old memchr form compiles clean.
+	@printf '#define __pxx_lc ) ) )\n#include <string.h>\nint main(void) { char b[4]; return (int)strlen(b); }\n' > $(TESTTMP)/cdiag_mod.c
 	@out=$$(./$(COMPILER) $(TESTTMP)/cdiag_mod.c $(TESTTMP)/cdiag_mod26 2>&1); \
 	 echo "$$out" | grep -q '^  in: .*lib/crtl/src/.*\.c$$' \
 	  || { echo 'cdiag_module: FAIL - an error inside a pulled crtl module must name that module'; echo "$$out"; exit 1; }; \
@@ -10629,7 +10642,13 @@ test-core: $(COMPILER)
 	# in System: BeginThread / WaitForThreadTerminate / CloseThread / TThreadID
 	# with no uses line. palthreadobj is pulled on demand from a token scan (the
 	# `math` mechanism), gated on threadsafe. Matches FPC 3.2.2 row for row.
-	./$(COMPILER) test/test_thread_api_no_uses.pas $(TESTTMP)/test_thread_api_no_uses26
+	# --threadsafe, because the SOURCE says {$threadsafe on} and d402a25b2 made
+	# the directive-without-the-flag a hard error: the lock-implementation
+	# defines are applied before lexing, so the directive alone would build an
+	# RTL that disagrees with the codegen. This was the ONLY recipe in this
+	# file compiling a directive-carrying source without the flag -- swept,
+	# case-insensitively, because three of the ten spell it {$THREADSAFE ON}.
+	./$(COMPILER) --threadsafe test/test_thread_api_no_uses.pas $(TESTTMP)/test_thread_api_no_uses26
 	tools/expect_same.sh test_thread_api_no_uses26 "$$($(TESTTMP)/test_thread_api_no_uses26)" "$$(printf 'a 42\nb 15\nc ok\nd 8')"
 	./$(COMPILER) test/test_numeric_goto_labels.pas $(TESTTMP)/test_numeric_goto26
 	tools/expect_same.sh test_numeric_goto26 "$$($(TESTTMP)/test_numeric_goto26)" "$$(printf 'a 1\nb case-one\nc 10\nd 5\ne done\nOK')"
@@ -12260,8 +12279,13 @@ test-core: $(COMPILER)
 	# $(COMPILER), not $(PXX_STABLE): the fix is IN the compiler, so the pin
 	# cannot see it -- under the pin rows 2,3,5 print 8 (that is the control).
 	# feature-c-corpus-busybox-multi-applet
-	./$(COMPILER) test/csizeof_deref.c $(TESTTMP)/c_szderef26
-	tools/expect_same.sh c_szderef26 "$$($(TESTTMP)/c_szderef26)" "$$(printf '1 16 16\n2 16 16\n3 16 16\n4 40 40\n5 40 40\n6 8 8\n7 8 8\n8 8 8')"
+	# csizeof_deref26, NOT c_szderef26: that name was already taken by
+	# test/c_sizeof_deref_ptr_to_array.c above, and two rules writing one path
+	# means the loser's assertion runs the WINNER's program -- a row that cannot
+	# fail for its own reason. Caught by tools/npy_cross_target_expectation
+	# _devtest.py's binary-name-collision guard, which is exactly what it is for.
+	./$(COMPILER) test/csizeof_deref.c $(TESTTMP)/csizeof_deref26
+	tools/expect_same.sh csizeof_deref26 "$$($(TESTTMP)/csizeof_deref26)" "$$(printf '1 16 16\n2 16 16\n3 16 16\n4 40 40\n5 40 40\n6 8 8\n7 8 8\n8 8 8')"
 	# A `**' declarator that is not FIRST in its declaration lost its pointee
 	# record, so `(*b)->n = v' wrote at OFFSET 0 -- into `next', not `n'.
 	# POSITION decided it: row 7's `struct nl *m1, **m2;' broke only m2, so a
@@ -12397,11 +12421,16 @@ test-core: $(COMPILER)
 	# The crtl calls with NO PAL syscall behind them. Each must fail -1/ENOSYS
 	# and never report a success it did not perform -- a silent success here
 	# would make a privilege drop or a chroot look done when nothing happened.
-	# NOT a glibc differential: glibc's fork() succeeds. The oracle is our
-	# documented divergence, so delete a row the day the PAL grows that call.
+	# The oracle is our documented divergence, so delete a row the day the PAL
+	# grows that call. fork and vfork WERE deleted, 2026-09-01: e2ba5a1e1 wired
+	# both to a PAL fork that had been there all along under the name PalVfork,
+	# and test/cfork.c now covers them positively against a gcc oracle. Note
+	# what the stale row did -- fork() succeeding meant the CHILD ran every
+	# later row too, so the output interleaved two processes and the whole
+	# assertion became unreadable rather than merely wrong by one line.
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_crtl_enosys_stubs.c $(TESTTMP)/c_crtl_enosys26
-	tools/expect_same.sh c_crtl_enosys26 "$$($(TESTTMP)/c_crtl_enosys26)" "$$(printf 'fork: -1 1\nvfork: -1 1\nchroot: -1 1\nsetuid: -1 1\nsetgid: -1 1\nseteuid: -1 1\nsetegid: -1 1')"
+	tools/expect_same.sh c_crtl_enosys26 "$$($(TESTTMP)/c_crtl_enosys26)" "$$(printf 'chroot: -1 1\nsetuid: -1 1\nsetgid: -1 1\nseteuid: -1 1\nsetegid: -1 1')"
 	# crtl's termios, over the general PalIoctl bridge -- REAL, not stubs, and
 	# exercisable without a terminal (under the harness fd 0 is a pipe). The
 	# cfmakeraw bits, the ENOTTY path and the c_cc subscripts all match a
