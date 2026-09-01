@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 owner: frankB
 created: 2026-08-30
-summary: "After the deref-shape widening, NodePtrElem in pasparser_lval.inc is reached from exactly two places, both inside ResolveDerefShape itself: the final else and the tyUnknown backstop added by bfb7b4c59. Measured with a counter and an arms-disabled control, neither fallback fires on any shape tried, including the compiler's own 436 deref-walk calls -- the new arms take those hits one for one. Not deleted on that: the population is six files, and NodePtrElem's False return is what both fallbacks branch on."
+summary: "MEASURED 2026-09-01 (frankB), decision now rests on one wider run. PXXDBG=a.derefwalk (probe c4affa68e) counts both NodePtrElem fallbacks and ships its own positive control (:noarms disables the ten typed arms, and the counters then fire). Over 35 files -- the 30 generated derefshape rows plus the deref-shape, cast-deref-siblings, record-cast and N-D-subarray tests -- 11400 calls reach the walk and NEITHER fallback fires; compiler.pas adds 447 more, also zero. The backstop does not fire even on test_cast_deref_chain_siblings, the regression it was added for. The behavioural A/B settles the DIRECTION: with the arms disabled NodePtrElem answers 11356 of 11383 calls and derefshape goes 30/30 -> 27/30, so NodePtrElem is strictly poorer per shape and can never BE the walk. NOT deleted: a 35-file zero is still a search, not a grammar argument. The remaining ask is one full-tier run with PXXDBG=a.derefwalk:* set, which is a Track T job and now costs one env var; the fallbacks print the node KIND when they fire, so a nonzero arrives diagnosed."
 ---
 
 # What is left of the two-predicates ticket
@@ -114,3 +114,65 @@ Track A: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick`, plus
 `test/test_deref_shape_through_arith_and_nonident_base.pas` and the three cast
 /deref tests the parent ticket pins. The failure mode here is a wrong VALUE, not
 a red, so a counter-instrumented full-tier A/B is worth more than any local run.
+
+## 2026-09-01 (frankB): measured at scale, with a control that ships
+
+The previous entry said the counter measurement was *"not enough to delete on"*
+because the population was six files and *"'I could not construct a case'
+describes a search, not the grammar"*. Both still true. What changed is that the
+search is now much larger, the instrument is permanent, and — the part that was
+missing — **it has a positive control that anyone can run in one command.**
+
+`PXXDBG=a.derefwalk:*` is the real column. `PXXDBG=a.derefwalk:noarms` makes
+`DwDispatchKind` answer a kind no arm tests for, so every node falls past the ten
+typed arms and the counters MUST fire. A zero in the real column means something
+only beside that.
+
+| | calls | `else` | `else-ans` | `backstop` |
+| --- | --- | --- | --- | --- |
+| 35 files, arms live | 11400 | **0** | 0 | **0** |
+| 35 files, arms disabled (control) | 11383 | 11383 | 11356 | 0 |
+| `compiler.pas`, arms live | 447 | **0** | 0 | **0** |
+
+The 35 are the 30 generated `derefshape` rows (now write AND read face),
+`test_deref_shape_*`, `test_cast_deref_chain_siblings`, the new
+`test_index_through_record_pointer_cast`, and frankA's `test_nd_subarray_as_param`.
+
+**The backstop does not fire on `test_cast_deref_chain_siblings` — the regression
+it was added for.** An arm claims that shape now. That is the single most
+interesting number here and it is the one most worth a second source.
+
+### The behavioural A/B, which is worth more than the counts
+
+A count cannot see the direction this ticket actually has to choose, because the
+two walks disagree by ANSWER, not by whether they answer. So: run the population
+with the arms disabled and look at the OUTPUT.
+
+NodePtrElem answers 11356 of 11383 calls — it declines almost nothing — and
+`derefshape` goes from **30/30 to 27/30**: `ds_nested_fixdbl`, `ds_nested_md2`
+and `ds_cast_ptrelem` turn silently wrong (`0.00 6.00` where `6.00 6.00` belongs,
+and an 8-byte read where a 4-byte element belongs).
+
+So `NodePtrElem` is not a candidate to BE the walk, and the collapse can only run
+one way: the arms are the answer, and the question is only whether the two
+fallbacks under them are reachable at all. **It also means a fallback that DOES
+fire somewhere unmeasured is not obviously better than the `tyInteger` default it
+guards** — it is the poorer walk answering, which is a different argument from
+"the fallback is a safety net".
+
+### What is still missing, stated as a job rather than a caveat
+
+One full-tier run with `PXXDBG=a.derefwalk:*` in the environment. That is Track
+T's tier, not mine, and it now costs one env var and a `grep`. Both fallbacks
+print `kind=<n>` when they fire, so a nonzero comes back diagnosed instead of
+starting a second investigation.
+
+If that run is also zero, delete both fallbacks and `NodePtrElem` with it — it
+has no external callers (`15ec54d7a` moved the last one) and nothing else would
+reach it. If it is nonzero, the printed kinds name the arms to add, and the
+fallbacks stay until they are added.
+
+**Not deleting on my own population.** A generated product over two axes plus the
+compiler is a good search and is still a search; this file has already recorded
+one wrong root cause that came from reasoning where a measurement was available,
+and "I could not construct a case" is exactly that shape one level up.

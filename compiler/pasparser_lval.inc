@@ -5737,6 +5737,13 @@ begin
         tk := tyInteger;
         recName := REC_NONE;
         DwElseHits := DwElseHits + 1;
+        { The KIND, not just the count. A bare tally tells whoever runs this
+          over a wider population that something fell through; it does not tell
+          them WHAT, and the next step after a nonzero is always "which shape".
+          Printing it here makes a Track-T-scale run self-diagnosing instead of
+          the first step of a second investigation. }
+        if PxxDbgArg('a.derefwalk') <> '' then
+          WriteLn('PXXDBG a.derefwalk ELSE kind=', ASTKind[node], ' depth=', depth);
         if not NodePtrElem(node, tk, recName, 0) then
         begin
           tk := tyInteger;
@@ -5763,6 +5770,8 @@ begin
       if tk = tyUnknown then
       begin
         DwBackHits := DwBackHits + 1;
+        if PxxDbgArg('a.derefwalk') <> '' then
+          WriteLn('PXXDBG a.derefwalk BACKSTOP kind=', ASTKind[node], ' depth=', depth);
         if not NodePtrElem(node, tk, recName, 0) then
         begin
           tk := tyUnknown;
