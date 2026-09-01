@@ -94,7 +94,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (139)
+## backlog-core (140)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -156,6 +156,7 @@ _none_
 | bug-a-xtensa-windowed-refuses-ir-raise-because-unwind-needs-the-windows-spilled | A+S | 45 | bug | Under the xtensa windowed ABI, IR_RAISE and the unwind path refuse. The cause is a RUNTIME gap, not a prologue gap: a longjmp-style unwind must spill the register windows first and bare-metal has no handler for that. Filed to keep it OUT of the four-target cdecl prologue change, which would appear to fix it and would not. | — |
 | bug-c-a-pointer-to-a-typedefd-array-segfaults-while-the-direct-spelling-works | C | 45 | bug | In C, `typedef double TA[4]; TA *p = &a; (*p)[i] = v;` compiles clean and SEGFAULTS, while the identical program written `double (*p)[4] = &a;` is correct and matches gcc. Same declaration, two spellings, one of them loses the pointee's array shape. PRE-EXISTING, not a regression: reproduced on the Aug-27 pinned binary (stable_linux_amd64/default/pinned) as well as on tip. Found while fixing bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier, which is the same defect one frontend over -- there the carrier existed for a plain identifier and not for a field/call/element; here it is written for the direct declarator and not for the typedef'd one. | — |
 | bug-c-generic-selection-loses-an-array-elements-pointer-target-and-its-constness | A | 35 | bug | _Generic over an array controlling expression now decays correctly for scalar, record and multi-dim elements (measured equal to gcc), but two element shapes still select the wrong association: `int *p[2]` answers `default` where gcc answers `int **`, and `const int ci[2]` answers `int *` where gcc answers `const int *`. Both need a carrier the array symbol does not have — the element's POINTER TARGET and the element's CONSTNESS — so neither is fixable at the descriptor site. Two rows of a seven-row gcc differential; the other five match. | — |
+| bug-c-string-h-declares-strsignal-but-signal-c-defines-it | C | 40 | bug | crtl's `<string.h>` declares `strsignal()` while the definition lives in `signal.c`. A program that includes only `<string.h>` gets the declaration and NOT the definition, so the symbol resolves from the host C library instead of crtl — silently, with no diagnostic. Caught by `tools/crtl_reachability.py`, which has been red on seven since 2026-09-01T17:40Z. Introduced by `3e77e3f1f`, which added the declaration where glibc puts it and the definition beside the signal code. | — |
 | bug-p-a-builtin-call-result-cannot-be-indexed-inside-parentheses | P | 40 | bug | `(IntToStr(i)[1] = '1')` is rejected as \"expected ')' before '['\" while the identical expression without the parentheses compiles and runs. The `[` suffix is missing from the BUILTIN-call arm of the parenthesised expression path only: a USER function's result indexes fine in every position tested, and `Copy(s,1,3)[1]` works because Copy has its own node. ParamStr, IntToStr, UpperCase, Trim and Concat all reject. FPC 3.2.2 accepts. Found while adding an argument guard to compiler.pas, where `(ParamStr(i+1)[1] = '-')` had to become a local variable to compile. | — |
 | bug-s-xtensa-has-no-ir-set-signal-arm-riscv32-does | A+S | 35 | bug | `ir_codegen_xtensa.inc` has no IR_SET_SIGNAL case, so any program installing a signal handler dies with `unsupported node in IR codegen: unknown`. riscv32 has the arm; xtensa is the only hosted backend without it. The op is also one of the seven IROpName does not name, which is why the message says `unknown` instead of naming it. | — |
 | bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing | A+T | 45 | bug | 2461 Makefile assertions are a bare `test \"$$(...)\" = \"...\"`, which prints NOTHING when it fails. job_reason() is the log tail by deliberate design, so for those jobs the reason it records is whatever the recipe printed just before — and for the 480 cross-target ones that is two compile summaries with different code sizes, which reads exactly like a codegen divergence. It misled a Track T session for hours. The repo already uses `diff -u` in 362 places; the good pattern exists and is not reached. Fix edits Makefile, which is Track A's file-lane. | — |
@@ -340,7 +341,7 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 
-## backlog-tools (71)
+## backlog-tools (72)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -376,6 +377,7 @@ _none_
 | chore-t-a-standing-collector-cannot-say-so-to-the-ranker | T | 30 | chore | A ticket that is a DESTINATION for findings rather than a task — a standing collector — has no way to say so, so it ranks like work forever. feature-crtl-implement-libc-assumptions said in prose since 2026-07-20 that it has no done state and should not sit in the ready queue; it sat at the head of Track B's queue at p45 for five weeks and was dispatched to an agent as work on 2026-08-28. progress.py reads status and prio, not prose. | — |
 | chore-t-a-wikilink-to-a-ticket-that-does-not-exist-is-never-detected | T | 30 | chore | 52 distinct ticket-convention [[wikilinks]] across devdocs/progress resolve to no ticket (71 references; 13 cited by live, non-done tickets). Some are renames leaving a dead trail; some appear never to have been filed, which is work hidden behind a link that looks like a citation. Nothing checks. | — |
 | chore-t-board-html-render-is-13s-of-every-ticket-move | T | 40 | chore | tools/progress.sh board-md takes 18.7s, of which ~87% is BOARD.html — a 26MB render every lane pays on every ticket move. Hoisting six re.sub pattern literals out of the inline() hot loop is measured at 18.66s -> 12.99s with byte-identical output. Not landed: progress.py is shared tooling, not Track T's. | — |
+| chore-t-fpc-conformance-noise-skews-priority | T | 50 | chore | FPC-testsuite conformance failures auto-file into Track T's backlog at prio 70 by FALLBACK lane, because the failing recipe names `tools/run_pascal_conformance.sh` and no owner. The suite is a gap-measuring corpus — 170 entries in pxx.skip, failing is its expected state for unimplemented features — so an FPC gap now outranks real work in T's queue, and because the shards run in `full` they also enter the pin-shadow's blocking set. Owner direction 2026-09-01: FPC compliance is lower priority and running FPC's tests skews priorities. Needs an owner pick between four options; two are cheap. | — |
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 20 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
 | chore-t-lint-fall-open-target-chains-without-the-false-positives | T | 30 | chore | A per-target {$ifdef CPU_x} run with no terminal arm is the shape behind bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open (5 instances, fixed). Sweeping the tree finds 21 more such runs — and 5 of 5 inspected are NOT defects: they are const tables (an armless target gets an undefined-identifier COMPILE ERROR, i.e. fail-closed) or function bodies with a pre-chain initialiser that is deliberate and documented. A naive lint would have filed 21 phantom tickets, two of them into Track A. The ticket is the three distinctions, not the grep. | — |
 | chore-t-make-every-cross-target-row-assert-the-exit-code | T | 45 | chore | 536 cross-target differential rows compare stdout only; 5 capture the exit code. Both operands are runs of the same program, so the exit code is free to add — but run_target.sh returns the EMULATOR's status and signal deaths do not encode identically under qemu-user and a native shell, so a blanket rollout can manufacture diffs on exactly the rows most worth checking. Wants a piloted rollout, one arch at a time, verified against Track T's matrix. | — |
@@ -408,7 +410,7 @@ _none_
 | regression-cascade-fc01c8094434 | T | 70 | regression | regression CASCADE: 38 jobs newly red in 5dbcc861e..fc01c8094 (87 commits) — auto-filed by twatch | — |
 | regression-optdiff-shard4-12 | T | 70 | regression | regression: optdiff#shard4/12 at d74c7fbe9ffe in step 1/1, `tools/optdiff.sh --shard 4/12` (auto-filed by twatch) | — |
 | regression-test-core-test-setlen-in-parallel-for-body-2 | T | 70 | regression | regression: test-core#src:test/test_setlen_in_parallel_for_body.pas at 456361785e34 in step 2/2, `tools/expect_same.sh test_setlen_parfor26 "$(/tmp/test_s` (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard0-6-4 | T | 70 | regression | regression: test-pascal-conformance#shard0/6 at aac20e75ed1f in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 libr` (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard0-6-4 | P | 45 | regression | regression: test-pascal-conformance#shard0/6 at aac20e75ed1f in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 libr` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard1-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard1/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard2-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard3-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 red at 27424c927b65 (auto-filed by twatch) | — |
@@ -948,7 +950,6 @@ _none_
 - [p 70] [T] regression-test-core-test-rtl-fpc-compat-helpers-2
 - [p 70] [T] regression-test-core-test-setlen-in-parallel-for-body-2
 - [p 70] [P] regression-test-core-test-thread-api-no-uses [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [T] regression-test-pascal-conformance-shard0-6-4
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard3-6-2
@@ -1055,6 +1056,7 @@ _none_
 - [p 50] [T] bug-t-a-testtmp-binary-name-is-shared-by-two-tests-and-by-two-targets
 - [p 50] [T] bug-t-csmith-batch-records-do-not-state-which-o-levels-they-compared
 - [p 50] [T] bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure
+- [p 50] [T] chore-t-fpc-conformance-noise-skews-priority
 - [p 50] [U] decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
@@ -1122,6 +1124,7 @@ _none_
 - [p 45] [N] refactor-n-two-import-handlers-are-twins
 - [p 45] [P] refactor-p-the-field-declaration-parser-exists-twice
 - [p 45] [P] refactor-p-the-overload-probe-cannot-see-the-argument-match-channels
+- [p 45] [P] regression-test-pascal-conformance-shard0-6-4
 - [p 45] [T] task-t-a-corpus-tree-absence-should-be-counted-not-just-echoed
 - [p 45] [T] task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass
 - [p 42] [P] feature-pascal-builtin-tobject-class
@@ -1138,6 +1141,7 @@ _none_
 - [p 40] [A] bug-a-two-deref-walk-guards-send-a-resolvable-shape-to-the-fallback
 - [p 40] [A] bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage
 - [p 40] [C] bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size
+- [p 40] [C] bug-c-string-h-declares-strsignal-but-signal-c-defines-it
 - [p 40] [N] bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict
 - [p 40] [N] bug-n-from-package-import-submodule-binds-the-parent-package
 - [p 40] [N] bug-n-the-dunder-subscript-arm-is-duplicated-verbatim-in-two-lvalue-parsers
