@@ -12027,6 +12027,21 @@ test-core: $(COMPILER)
 	# since disabling that would also make rows 1-3 pass. Found building
 	# busybox's fnmatch [:class:] table, not by triage.
 	# feature-c-corpus-busybox-multi-applet
+	# crtl's own implementation must not be preprocessed in the PROGRAM's macro
+	# environment -- a libc shipped as source is still a separate TU, and a real
+	# toolchain's is immune only because it is already compiled. busybox's
+	# include/libbb.h poisons the whole ctype family
+	# (`#define isprint(a) isprint_is_ambiguous_dont_use(a)`) and that reached
+	# lib/crtl/src/fnmatch.c's OWN isprint call. Order is the bug: the impl is
+	# auto-pulled when its header is included, so poisoning AFTER the include is
+	# harmless and poisoning before it is not. Row 4 pins what the first fix
+	# broke -- feature-test macros must still reach the shared headers, or
+	# <string.h>'s guarded forward to <strings.h> is skipped permanently and
+	# strncasecmp goes undeclared in the PROGRAM, two steps away.
+	# No gcc oracle: gcc's libc cannot have this property. See the file header.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/c_crtl_impl_ignores_program_macros.c $(TESTTMP)/c_crtlmacros26
+	tools/expect_same.sh c_crtlmacros26 "$$($(TESTTMP)/c_crtlmacros26)" "$$(printf 'print 1\ndigit 1 0\nmine 12345\nfeaturetest 1')"
 	./$(COMPILER) test/c_struct_fnptr_member_local.c $(TESTTMP)/c_structfnptr26
 	tools/expect_same.sh c_structfnptr26 "$$($(TESTTMP)/c_structfnptr26)" "$$(printf '1 11\n2 a 11 b 20\n3 c 20\n4 11\n5 11 20')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
@@ -21109,6 +21124,46 @@ endif
 	  echo 'cchown: identical to gcc'; \
 	fi; \
 	else echo 'cchown: SKIP (no gcc)'; echo cchown >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cchown) >/dev/null; fi
+	# times(2) + sysconf(_SC_CLK_TCK) -- crtl had neither, so ash's `times'
+	# builtin (shell/ash.c:14189) did not compile. The VALUES are CPU times and
+	# are not reproducible, so what is compared is the ABI and the invariants:
+	# sizeof(clock_t), sizeof(struct tms) and the member OFFSETS -- ash reads
+	# that struct by byte offset through a clock_t pointer, so a clock_t wider
+	# than the member reads two fields as one. crtl had clock_t as `long long',
+	# right on x86-64/aarch64 and wrong on every 32-bit target.
+	# feature-c-corpus-busybox-multi-applet
+	$(PXX_STABLE) test/ctimes.c $(TESTTMP)/ctimes
+	@if command -v gcc >/dev/null 2>&1; then \
+	  if ! gcc -w -o $(TESTTMP)/ctimes_gcc test/ctimes.c 2> $(TESTTMP)/ctimes_oracle.err; then \
+	    echo "SKIP: ctimes (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/ctimes_oracle.err))"; echo ctimes >> $(TESTTMP)/lib-test.skipped; \
+	    (cd $(TESTTMP) && $(TESTTMP)/ctimes) >/dev/null; \
+	  else \
+	  (cd $(TESTTMP) && $(TESTTMP)/ctimes_gcc) > $(TESTTMP)/ctimes_gcc.txt 2>&1; \
+	  (cd $(TESTTMP) && $(TESTTMP)/ctimes) > $(TESTTMP)/ctimes_pxx.txt 2>&1; \
+	  diff $(TESTTMP)/ctimes_gcc.txt $(TESTTMP)/ctimes_pxx.txt || \
+	    { echo 'FAIL: ctimes differs from gcc'; exit 1; }; \
+	  echo 'ctimes: identical to gcc'; \
+	fi; \
+	else echo 'ctimes: SKIP (no gcc)'; echo ctimes >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/ctimes) >/dev/null; fi
+	# uname(2) -- crtl had no sys/utsname.h, a hard error when cross compiling,
+	# so busybox's libbb/kernel_version.c did not compile. CONTENTS are host
+	# facts and are deliberately NOT compared (nodename and release differ per
+	# machine and per boot); the ABI is: six 65-byte fields back to back, 390
+	# bytes, no padding, filled by the KERNEL.
+	# feature-c-corpus-busybox-multi-applet
+	$(PXX_STABLE) test/cuname.c $(TESTTMP)/cuname
+	@if command -v gcc >/dev/null 2>&1; then \
+	  if ! gcc -w -o $(TESTTMP)/cuname_gcc test/cuname.c 2> $(TESTTMP)/cuname_oracle.err; then \
+	    echo "SKIP: cuname (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cuname_oracle.err))"; echo cuname >> $(TESTTMP)/lib-test.skipped; \
+	    (cd $(TESTTMP) && $(TESTTMP)/cuname) >/dev/null; \
+	  else \
+	  (cd $(TESTTMP) && $(TESTTMP)/cuname_gcc) > $(TESTTMP)/cuname_gcc.txt 2>&1; \
+	  (cd $(TESTTMP) && $(TESTTMP)/cuname) > $(TESTTMP)/cuname_pxx.txt 2>&1; \
+	  diff $(TESTTMP)/cuname_gcc.txt $(TESTTMP)/cuname_pxx.txt || \
+	    { echo 'FAIL: cuname differs from gcc'; exit 1; }; \
+	  echo 'cuname: identical to gcc'; \
+	fi; \
+	else echo 'cuname: SKIP (no gcc)'; echo cuname >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cuname) >/dev/null; fi
 	# fnmatch -- crtl had NO fnmatch.h at all, which is a hard error when cross
 	# compiling (no host header to fall back on), so busybox's ash could not be
 	# built for aarch64 at all. Compared against glibc over a MATRIX of flags

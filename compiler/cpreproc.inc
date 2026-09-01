@@ -212,6 +212,40 @@ begin
   CPMHashHead[bucket] := mi;
 end;
 
+{ Is macro `mi` still visible while a crtl impl is being preprocessed?
+
+  Hiding the program's macros wholesale was WRONG in one specific way, and it
+  showed up as busybox failing on strncasecmp two steps later. FEATURE-TEST
+  macros are not the program's private business -- they select which API surface
+  the SHARED headers expose. crtl's <string.h> forwards to <strings.h> only
+  `#if defined(_GNU_SOURCE) || ...`, exactly as glibc gates it. Hide _GNU_SOURCE
+  from a crtl impl pull and, if that pull is what first reaches <string.h>, the
+  header's include guard makes the narrower decision PERMANENT -- the program's
+  own later `#include <string.h>` expands to nothing and strncasecmp is
+  undeclared in the PROGRAM. Order-dependent, and invisible until some crtl
+  module happens to include the header first.
+
+  The rule: a name in the IMPLEMENTATION'S RESERVED NAMESPACE (leading `_`)
+  stays visible, because that namespace is precisely the channel through which a
+  program configures the implementation. An ordinary identifier is the program's
+  own and is hidden -- busybox's `#define isprint(a) isprint_is_ambiguous_dont_use(a)`
+  is the case this all exists for. NDEBUG is the one conventional configuration
+  macro that is not underscore-prefixed, so it is named explicitly. }
+function CPMacroVisibleInCrtl(mi: Integer): Boolean;
+begin
+  CPMacroVisibleInCrtl := True;
+  if CPMNameLen[mi] <= 0 then Exit;
+  if CPrepChars[CPMNameOff[mi]] = '_' then Exit;
+  if (CPMNameLen[mi] = 6) and
+     (CPrepChars[CPMNameOff[mi]    ] = 'N') and
+     (CPrepChars[CPMNameOff[mi] + 1] = 'D') and
+     (CPrepChars[CPMNameOff[mi] + 2] = 'E') and
+     (CPrepChars[CPMNameOff[mi] + 3] = 'B') and
+     (CPrepChars[CPMNameOff[mi] + 4] = 'U') and
+     (CPrepChars[CPMNameOff[mi] + 5] = 'G') then Exit;
+  CPMacroVisibleInCrtl := False;
+end;
+
 function CPFindMacro(const src: AnsiString; a, b: Integer): Integer;
 var i: Integer;
 begin
@@ -219,10 +253,14 @@ begin
   i := CPMHashHead[CPHashRangeSrc(src, a, b)];
   while i >= 0 do
   begin
-    if CPPoolEquals(CPMNameOff[i], CPMNameLen[i], src, a, b) then
+    if ((CPMHideHi <= CPMHideLo) or (i < CPMHideLo) or (i >= CPMHideHi) or
+        CPMacroVisibleInCrtl(i)) and
+       CPPoolEquals(CPMNameOff[i], CPMNameLen[i], src, a, b) then
     begin
       Result := i;    { newest-first chain → first live match wins; a tombstoned
-                        entry (NameLen=-1) fails the length check and is skipped }
+                        entry (NameLen=-1) fails the length check and is skipped.
+                        Entries inside CPMHideLo..CPMHideHi are the user
+                        program's and are invisible while a crtl impl is pulled. }
       Exit;
     end;
     i := CPMHashNext[i];
@@ -236,7 +274,9 @@ begin
   i := CPMHashHead[CPHashRangePool(off, len)];
   while i >= 0 do
   begin
-    if CPPoolNameEquals(CPMNameOff[i], CPMNameLen[i], off, len) then
+    if ((CPMHideHi <= CPMHideLo) or (i < CPMHideLo) or (i >= CPMHideHi) or
+        CPMacroVisibleInCrtl(i)) and
+       CPPoolNameEquals(CPMNameOff[i], CPMNameLen[i], off, len) then
     begin
       Result := i;
       Exit;
@@ -2457,6 +2497,7 @@ end;
   empty) and finds the impl already pulled, so there is no recursion. }
 procedure CPAutoPullCrtlImpl(depth: Integer; const hdrPath: AnsiString);
 var src, srcDir, hdrName: AnsiString;
+    savedLo, savedHi: Integer;
 begin
   if CPCrtlHeaderName(hdrPath, hdrName) and CHeaderUsesSystemLib(hdrName) then Exit;
   if not CPCrtlSrcOf(hdrPath, src) then Exit;
@@ -2467,7 +2508,20 @@ begin
   CPMarkCrtlSrcPulled(src);
   if DebugTrace then writeln('C preprocessor: auto-pull crtl impl ', src);
   srcDir := GetFilePath(src);
+  { Preprocess the impl WITHOUT the program's macros. Only the outermost pull
+    sets the window: a crtl impl includes crtl headers which auto-pull further
+    impls, and those nested pulls must keep hiding the same range rather than
+    also hiding the macros the outer impl has legitimately defined. }
+  savedLo := CPMHideLo;
+  savedHi := CPMHideHi;
+  if CPMHideHi <= CPMHideLo then
+  begin
+    CPMHideLo := CPMUserBase;
+    CPMHideHi := CPMCount;
+  end;
   CPProcessInclude(depth, srcDir);
+  CPMHideLo := savedLo;
+  CPMHideHi := savedHi;
 end;
 
 { Does the `#include` operand spanning line[a..e] name a PASCAL UNIT, i.e. end
@@ -2993,6 +3047,7 @@ begin
   CPrepOutLen := 0;
   CPrepCharLen := 0;
   CPMCount := 0;
+  CPMUserBase := 0; CPMHideLo := -1; CPMHideHi := -1;
   for i := 0 to CPREP_MACRO_HASH_SIZE - 1 do CPMHashHead[i] := -1;
   CPPCount := 0;
   CPCondCount := 0;
@@ -3099,6 +3154,10 @@ begin
     an explicit undefine beats any define of the same name. `-D<name>` with no
     `=` defaults the value to `1` (cpp convention). }
   CPApplyCmdlineDefines;
+  { Everything defined from here up belongs to the PROGRAM, not to the
+    toolchain. Command-line -D stay visible to crtl (they are the closest thing
+    to a build configuration); the program's own #define do not. }
+  CPMUserBase := CPMCount;
   CPPathAtDepth[0] := DbgSrcName;      { -g: the translation unit itself }
   CPOutLine := 1;
   CPMarkFile := -1; CPMarkLine := 0; CPMarkOutLine := 1;

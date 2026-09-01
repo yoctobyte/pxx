@@ -77,6 +77,8 @@ function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
 function PalBackendChown(path: PChar; owner, group: Integer): Integer;
 function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
+function PalBackendUname(buf: Pointer): Integer;
+function PalBackendTimes(buf: Pointer): Int64;
 function PalBackendTruncate(path: PChar; length: Int64): Integer;
 function PalBackendMknod(path: PChar; mode: Integer; dev: Int64): Integer;
 function PalBackendUmask(mask: Integer): Integer;
@@ -858,6 +860,20 @@ begin
 end;
 
 function PalBackendTruncate(path: PChar; length: Int64): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ WASI has no process CPU accounting. Refused rather than answering zeros,
+  which a shell would print as a plausible "0m0.000s". }
+function PalBackendTimes(buf: Pointer): Int64;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ WASI deliberately does not expose host identity. Refused rather than
+  inventing a sysname. }
+function PalBackendUname(buf: Pointer): Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

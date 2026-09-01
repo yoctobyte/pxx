@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 created: 2026-08-31
 owner: frankD
-summary: "Rung 2 of feature-busybox-kiosk-selfhosting-target. FIRST BAR MET 2026-09-01 (2789f87a7): a two-applet busybox (cat+echo+the multiplexer, NUM_APPLETS 2, dispatch table compiled IN) built by pxx is byte-identical to gcc over 28 cases on x86-64 AND aarch64 and agrees with upstream's separately-linked binary; argv[0], `busybox <applet>`, --list, --help, unknown applet and bare busybox all covered. Cost ONE compiler fix: a constant left operand of && / || survived every -O level including -O3 (88ef1232f). Harness is now tools/busybox_diff.sh --applets. STILL OPEN: `ash` (fork/exec/wait, the process model) and the TU surface -- 28 of libbb's ~145, so getpwnam/statfs/getrlimit/getmntent are still untouched."
+summary: "Rung 2 of feature-busybox-kiosk-selfhosting-target. FIRST BAR MET 2026-09-01 (2789f87a7): a two-applet busybox byte-identical to gcc over 28 cases on x86-64 AND aarch64, agreeing with upstream's separately-linked binary. SECOND BAR (ash) IN PROGRESS: the 41-TU ash unity now gets all the way to getpwnam, having named and CLOSED eight defects on the way -- a C frontend parse bug (struct-typed local with a fn-pointer member), crtl's entire missing shell surface (fnmatch, full signal set + NSIG, strsignal, _SC_CLK_TCK, times, uname), a clock_t that was `long long` where glibc has `long` (right on 64-bit, silently wrong on every 32-bit target, and ash reads struct tms by byte offset through it), and crtl'''s own implementation being preprocessed in the PROGRAM'''s macro environment. NEXT: pwd.h/getpwnam. KNOWN CEILING: the unity cannot host ash and coreutils/test.c together in either order, so the `[` builtin needs separate compilation -- bug-a-an-object-neither-exports-nor-imports-data-symbols."
 ---
 
 # busybox rung 2 — more than one applet, then `ash`
@@ -183,3 +183,113 @@ is the only reason anything looked at i386 argument passing at all. Wired to
   shell: it forks, execs and waits, and it is far past the size where a unity
   build is available as a workaround. Whoever takes it should expect to need
   the data-symbol work first, rather than discovering it a second time.
+
+
+## 2026-09-01 — bar 2 (ash): eight defects, named by attempting, not by triage
+
+The instruction was to attempt the target and let each failure name a ticket.
+That is what happened; none of these came from reading the backlog, and the
+ORDER is the finding, because the first one hid the rest.
+
+**Where it stands.** `tools/busybox_diff.sh --applets "cat echo ash"` configures
+a 41-TU ash unity, gcc builds it, the gcc unity agrees with upstream's
+separately-linked binary over 62 cases, and pxx now compiles through everything
+below and stops at `getpwnam`. Not green yet. What is listed as fixed is fixed
+and tested; what is listed as a ceiling is measured.
+
+### Compiler (Track C, landed)
+
+1. **A local whose type is a struct with a function-pointer member did not
+   parse.** `ParseCDeclType` records an inline fn-pointer declarator's name in
+   `CTypeFnPtrName`; a struct BODY containing `int (*f)(int)` sets it from the
+   MEMBER declarator and leaves it set. `ParseCGlobalVarDecl` has guarded
+   against exactly that with `baseTk = tyPointer` for a while, with a comment
+   naming the shape. `ParseCLocalDeclAST` never got it. Boundary measured before
+   fixing: named struct works, anonymous fails, array or not — so the trigger is
+   the leftover global, not the anonymity. `test/c_struct_fnptr_member_local.c`
+   pins both arms. Found by fnmatch's `[:class:]` table.
+
+2. **crtl's own implementation was preprocessed in the PROGRAM's macro
+   environment.** busybox's `libbb.h` poisons the whole ctype family and
+   `#define isprint(a) isprint_is_ambiguous_dont_use(a)` reached
+   `lib/crtl/src/fnmatch.c`'s own `isprint`. Eight lines reproduce it; gcc
+   compiles it and pxx did not. A libc shipped as SOURCE is still a separate
+   translation unit — gcc's is immune only because it is already compiled, so
+   this hazard is structural to pxx and invisible until a program redefines a
+   name crtl uses.
+
+   **The first fix hid too much, and that is the part worth reading.** Hiding
+   `_GNU_SOURCE` made crtl's `<string.h>` skip its guarded forward to
+   `<strings.h>`; the header is include-guarded, so the narrower decision became
+   PERMANENT and the program's own later include expanded to nothing —
+   `strncasecmp` undeclared in the PROGRAM, two files from the change, as a
+   missing function rather than as a macro problem. Rule now: the
+   implementation's RESERVED namespace (leading `_`, plus `NDEBUG`) stays
+   visible, because that namespace is the channel a program configures the
+   implementation through; ordinary identifiers are the program's and are hidden.
+
+### crtl (Track C, landed)
+
+3. **No `fnmatch.h` at all** — a HARD error when cross-compiling, so ash could
+   not be built for aarch64; on x86-64 it silently resolved from `/usr/include`.
+   Compared against glibc over a flag MATRIX, not a list, because `FNM_PATHNAME`
+   and `FNM_PERIOD` interact. Two defects it caught that reasoning did not: a
+   trailing backslash is POSIX-undefined and glibc never matches it, and
+   `FNM_CASEFOLD` folds literals and ranges but NOT `[:class:]`.
+4. **`signal.h` had 11 signals** — full asm-generic set plus `NSIG`, which a
+   shell sizes its trap table with.
+5. **`strsignal`** — glibc's exact strings, because a shell PRINTS them.
+6. **`_SC_CLK_TCK`** — a shell divides by it, so a wrong value is a plausible
+   wrong number rather than a failure.
+7. **`times(2)`** and **`uname(2)`** through the five PAL layers.
+8. **`clock_t` was `long long` where glibc has `long`.** The one to remember:
+   same width on x86-64 and aarch64, different on i386, arm32, riscv32 and
+   xtensa. `struct tms` is filled by the KERNEL and ash reads it as
+   `*(clock_t *)((char *)&buf + offset)` — by byte offset, through clock_t — so
+   a too-wide clock_t reads two fields as one, silently, on every 32-bit target.
+   Right where we test, wrong everywhere else. Sizes AND offsets now asserted.
+
+### The ceiling, measured — this is the part that is not mine to fix
+
+**The unity build cannot host `ash` and `coreutils/test.c` together, in EITHER
+order.** Both reach their globals through the same macro pattern over ordinary
+identifiers — ash 43 of them, test.c 6 — and they collide both ways:
+
+```
+test.c first : ./coreutils/test.c:441 #define args (S.args)
+               breaks ash.c:12025  `union node *args, **app;'
+ash.c  first : ./shell/ash.c:495    #define arg0 (G_misc.arg0)
+               breaks test.c:897
+```
+
+No include order satisfies both, so `ASH_TEST` is off and the shell cases use
+`case $((expr)) in` instead of `[`. This is the first thing rung 2 wants that
+**separate compilation is REQUIRED for rather than merely tidier** — a second
+argument for [[bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong]],
+reached from the frontend end while that ticket is worked from the writer end.
+`shell/ash.c` must also come LAST in the unity for the same underlying reason
+(its macros leak forward into `coreutils/echo.c`'s local `eflag`), which is
+handled and asserted, but ordering cannot save the pair above.
+
+### Harness defects fixed on the way — all one family
+
+Three, and each was a cheap question that was correct about something else:
+
+- **"Already configured?" asked only the applet COUNT.** A tree with the right
+  applets and every ash feature OFF was accepted and the reconfigure skipped —
+  every `$((arith))` case would have been a syntax error in BOTH builds and the
+  run GREEN over a shell that cannot do arithmetic. One list now drives the
+  configure and the check, including what is deliberately off, because
+  `ASH_TEST=y` is exactly as wrong as `FEATURE_SH_MATH=n`.
+- **The banner carries `AUTOCONF_TIMESTAMP`**, stamped at CONFIGURE time, and
+  busybox does not rebuild the world when only that moves. Measured:
+  `autoconf.h` 19:09:43, busybox relinked 19:09:53, `libbb/messages.o` still
+  18:59:14 carrying the OLDER banner. Pinned in the unity, normalised in the
+  upstream cross-check only, with a control that the normaliser fired.
+  **Bar 1 passing this check was luck** — it matched only because both builds
+  happened to share an `autoconf.h` vintage.
+- **`shell/ash.c` must be ordered last**, as above.
+
+### Next
+
+`pwd.h` / `getpwnam` (ash's `~user` expansion). Then re-run and find the next one.

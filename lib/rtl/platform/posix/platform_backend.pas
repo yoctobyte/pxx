@@ -45,6 +45,8 @@ function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
 function PalBackendChown(path: PChar; owner, group: Integer): Integer;
 function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
+function PalBackendUname(buf: Pointer): Integer;
+function PalBackendTimes(buf: Pointer): Int64;
 function PalBackendTruncate(path: PChar; length: Int64): Integer;
 function PalBackendMknod(path: PChar; mode: Integer; dev: Int64): Integer;
 function PalBackendUmask(mask: Integer): Integer;
@@ -142,7 +144,7 @@ const
   SYS_mmap = 9; SYS_munmap = 11; SYS_mprotect = 10; SYS_fchmod = 91; SYS_getpid = 39; SYS_nanosleep = 35; SYS_utimensat = 280;
   SYS_fchmodat = 268; SYS_fchownat = 260; SYS_umask = 95;
   SYS_getcwd = 79; SYS_rt_sigaction = 13;
-  SYS_truncate = 76; SYS_mknodat = 259;
+  SYS_truncate = 76; SYS_mknodat = 259; SYS_times = 100; SYS_uname = 63;
   SYS_ftruncate = 77; SYS_faccessat = 269; SYS_geteuid = 107; SYS_fchown = 93; SYS_readlinkat = 267;
   SYS_getuid = 102; SYS_getgid = 104; SYS_getegid = 108; SYS_getppid = 110;
   SYS_exit = 60;
@@ -163,7 +165,7 @@ const
   SYS_mmap = 192; SYS_munmap = 91; SYS_mprotect = 125; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 320;
   SYS_fchmodat = 306; SYS_fchownat = 298; SYS_umask = 60;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
-  SYS_truncate = 92; SYS_mknodat = 297;
+  SYS_truncate = 92; SYS_mknodat = 297; SYS_times = 43; SYS_uname = 122;
   SYS_ftruncate = 93; SYS_faccessat = 307; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 305;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
   SYS_exit = 1;
@@ -182,7 +184,7 @@ const
   SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_fchmodat = 53; SYS_fchownat = 54; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
-  SYS_truncate = 45; SYS_mknodat = 33;
+  SYS_truncate = 45; SYS_mknodat = 33; SYS_times = 153; SYS_uname = 160;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
   SYS_exit = 93;
@@ -201,7 +203,7 @@ const
   SYS_mmap = 192; SYS_munmap = 91; SYS_mprotect = 125; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 348;
   SYS_fchmodat = 333; SYS_fchownat = 325; SYS_umask = 60;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
-  SYS_truncate = 92; SYS_mknodat = 324;
+  SYS_truncate = 92; SYS_mknodat = 324; SYS_times = 43; SYS_uname = 122;
   SYS_ftruncate = 93; SYS_faccessat = 334; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 332;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
   SYS_exit = 1;
@@ -240,7 +242,7 @@ const
   SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_fchmodat = 53; SYS_fchownat = 54; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
-  SYS_truncate = 45; SYS_mknodat = 33;
+  SYS_truncate = 45; SYS_mknodat = 33; SYS_times = 153; SYS_uname = 160;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
   SYS_exit = 93;
@@ -733,6 +735,55 @@ end;
 function PalBackendMknod(path: PChar; mode: Integer; dev: Int64): Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_mknodat, -100, Int64(path), mode, dev, 0, 0));
+end;
+
+{ times(2): fills a `struct tms` -- FOUR kernel clock_t, which are target-word
+  `long`, NOT long long -- and RETURNS ticks since an arbitrary point in the
+  past rather than 0-on-success. So a caller cannot test this for `= 0`; the
+  error case is the usual negative errno and every other value is data.
+
+  The struct is shared with the kernel, so its member width is an ABI fact, not
+  a choice. busybox's ash reads it as `*(clock_t *)((char *)&buf + offset)` --
+  by BYTE OFFSET, cast through clock_t -- so a clock_t wider than the member
+  silently reads two fields as one on any 32-bit target. crtl's clock_t is
+  `long` for exactly this reason (lib/crtl/include/time.h).
+
+  SYS_times numbers: x86-64 100 and i386 43 read off the host's
+  asm/unistd_{64,32}.h; aarch64 and riscv32 both 153 from asm-generic/unistd.h,
+  which the riscv32 block above already documents itself as following; arm32 43
+  from the legacy table it shares with i386 -- consistent with every other
+  legacy entry here (truncate 92, fchown 207, getuid 199, exit 1 all match).
+  XTENSA REFUSES rather than guessing: its table is bespoke, and every xtensa
+  number in this file was MEASURED under `qemu-xtensa -strace` one syscall per
+  process, precisely because a plausible-looking wrong number is a syscall that
+  quietly does something else. Measure it the same way before filling it in. }
+function PalBackendTimes(buf: Pointer): Int64;
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := __pxxrawsyscall(SYS_times, Int64(buf), 0, 0, 0, 0, 0);
+{$endif}
+end;
+
+{ uname(2). Fills a `struct utsname`: SIX fixed 65-byte char arrays back to
+  back, 390 bytes total, no padding -- measured against glibc (offsets
+  0,65,130,195,260,325). That is the kernel's `new_utsname` and the layout is
+  an ABI fact.
+
+  Numbers: x86-64 63 and i386 122 read off the host's asm/unistd_{64,32}.h
+  individually (a combined grep printed them in an order that did not match the
+  file order, which is exactly the kind of thing worth re-reading rather than
+  squinting at); aarch64 and riscv32 160 from asm-generic/unistd.h; arm32 122
+  from the legacy table it shares with i386. XTENSA REFUSES -- same reason as
+  PalBackendTimes above: its table is bespoke and measured, never inferred. }
+function PalBackendUname(buf: Pointer): Integer;
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_uname, Int64(buf), 0, 0, 0, 0, 0));
+{$endif}
 end;
 
 { umask always succeeds and returns the PREVIOUS mask — it has no error case,

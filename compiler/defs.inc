@@ -4285,6 +4285,18 @@ var
   CPMFunction   : array[0..MAX_CPREP_MACROS-1] of Boolean;
   CPMVariadic   : array[0..MAX_CPREP_MACROS-1] of Boolean;   { `...` / __VA_ARGS__ }
   CPMCount      : Integer;
+  { crtl's OWN implementation must not be preprocessed in the user program's
+    macro environment. A libc shipped as source is still a separate translation
+    unit, and a real toolchain's libc is immune by construction because it is
+    already compiled. Measured: busybox poisons the whole ctype family in
+    include/libbb.h (`#define isprint(a) isprint_is_ambiguous_dont_use(a)`), and
+    that macro reached lib/crtl/src/fnmatch.c's own isprint call.
+    CPMUserBase is the macro count after the command-line -D are applied; every
+    entry from there up is the program's. CPMHideLo/Hi is the half-open range
+    lookup skips while a crtl impl is being pulled -- see CPAutoPullCrtlImpl. }
+  CPMUserBase   : Integer;
+  CPMHideLo     : Integer;
+  CPMHideHi     : Integer;
   { Macro-name hash index: without it CPFindMacro linear-scanned all CPMCount
     entries per lookup, so preprocessing a header that defines thousands of macros
     (GTK/glib) and expands ~1M identifiers was O(identifiers * macros). Chain is

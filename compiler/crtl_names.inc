@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  397 functions across 28 headers. }
+  399 functions across 30 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -117,12 +117,12 @@ begin
     't': Result :=
       ' tan:math.h tanf:math.h tanh:math.h tcdrain:termios.h tcflow:termios.h tcflush:termios.h ' +
       ' tcgetattr:termios.h tcsendbreak:termios.h tcsetattr:termios.h timegm:time.h ' +
-      ' tmpfile:stdio.h tmpnam:stdio.h tolower:ctype.h toupper:ctype.h towlower:wchar.h ' +
-      ' towupper:wchar.h trunc:math.h truncate:unistd.h truncf:math.h ttyname:unistd.h ' +
-      ' ttyname_r:unistd.h ';
+      ' times:sys/times.h tmpfile:stdio.h tmpnam:stdio.h tolower:ctype.h toupper:ctype.h ' +
+      ' towlower:wchar.h towupper:wchar.h trunc:math.h truncate:unistd.h truncf:math.h ' +
+      ' ttyname:unistd.h ttyname_r:unistd.h ';
     'u': Result :=
-      ' umask:sys/stat.h ungetc:stdio.h unlink:unistd.h unsetenv:stdlib.h usleep:unistd.h ' +
-      ' utimes:sys/time.h ';
+      ' umask:sys/stat.h uname:sys/utsname.h ungetc:stdio.h unlink:unistd.h unsetenv:stdlib.h ' +
+      ' usleep:unistd.h utimes:sys/time.h ';
     'v': Result :=
       ' vasprintf:stdio.h vfork:unistd.h vfprintf:stdio.h vprintf:stdio.h vsnprintf:stdio.h ' +
       ' vsprintf:stdio.h vsscanf:stdio.h ';

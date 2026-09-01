@@ -115,6 +115,8 @@ function __pxx_fchmod(fd, mode: Integer): Integer;
 function __pxx_chmod(path: PChar; mode: Integer): Integer;
 function __pxx_chown(path: PChar; owner, group: Integer): Integer;
 function __pxx_lchown(path: PChar; owner, group: Integer): Integer;
+function __pxx_uname(buf: Pointer): Integer;
+function __pxx_times(buf: Pointer): Int64;
 function __pxx_truncate(path: PChar; length: Int64): Integer;
 function __pxx_mknod(path: PChar; mode: Integer; dev: Int64): Integer;
 function __pxx_umask(mask: Integer): Integer;
@@ -542,6 +544,16 @@ end;
 function __pxx_truncate(path: PChar; length: Int64): Integer;
 begin
   Result := PalTruncate(path, length);
+end;
+
+function __pxx_times(buf: Pointer): Int64;
+begin
+  Result := PalTimes(buf);
+end;
+
+function __pxx_uname(buf: Pointer): Integer;
+begin
+  Result := PalUname(buf);
 end;
 
 function __pxx_mknod(path: PChar; mode: Integer; dev: Int64): Integer;
