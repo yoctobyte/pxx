@@ -2,10 +2,10 @@
 track: A
 prio: 60
 type: bug
-status: open
+status: working
 found: 2026-08-31
 found-by: frankA
-owner: ""
+owner: frankA
 blocked-by: []
 summary: "`p^[i]` is correct only when p is a plain local/global IDENTIFIER. Name the same pointer any other way and it breaks, four ways, all measured against FPC 3.2.2 on the same source: a pointer-to-array held in a RECORD FIELD gives silent wrong values for a fixed pointee (0.00 where FPC says 1.50, rc=0) and SEGFAULTS for a dynamic one; a FUNCTION RESULT (`GetP^[i]`) HANGS; and an ARRAY ELEMENT holding the pointer (`ap[0]^[i]`) segfaults. Cause is structural and already written down: DerefPtrArraySym is documented as narrow -- 'AN_DEREF over a plain identifier whose SymPtrElemArrLen > 0' -- and it is the predicate the whole family routes through, so every non-identifier spelling falls out of the array path and lands on whichever arm the element kind collides with. NOT the fixed/dynamic axis that bug-a-a-pointer-to-a-dynamic-array-indexes-with-a-4-byte-stride fixed: the record-field case is wrong for a FIXED pointee too, and all four faces reproduce identically on the compiler before that fix (5c3a2ab5324d)."
 ---
