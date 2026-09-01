@@ -112,6 +112,32 @@ begin
         tk := IntToTypeKind(ASTTk[node]);
         AssignSideKind := True;
       end;
+    AN_BINOP:
+      { An EXPRESSION RESULT. The literal arm above types `c := 'ab'` and the
+        ident arm types `c := s`, but a CONCAT was neither, so `c := s + 'x'`
+        and `c := 'a' + Chr(98)` returned False here and the whole check
+        short-circuited -- looking, as before, exactly like a check that fired
+        and passed. Both compiled and printed garbage: a string handle's low
+        byte read as a Char. Through a nested dynamic-array FIELD, where the
+        element mis-types as AnsiString, the same accepted write went through a
+        bogus slot and SIGSEGV'd.
+
+        This is the THIRD arm this function has needed for one reason. Its own
+        header records the second (bug-p-a-string-assigned-to-a-record-ARRAY-
+        ELEMENT-is-not-type-checked, five of six lvalue shapes unchecked), and
+        the shape does not change: a side this function cannot type is a side
+        the rule never sees, and the failure is silent in the safe direction.
+
+        Reading ASTTk, which the parser already resolved for the node, for the
+        same reason the element/field/deref arm gives: a second derivation would
+        be a second answer. tyUnknown stays False -- an unresolved expression is
+        not evidence of anything, and AssignKindsIncompatible would wave it
+        through regardless. Numeric pairs are unaffected: that rule returns
+        False for every int/float combination, so `d := i * 2` is untouched. }
+      begin
+        tk := IntToTypeKind(ASTTk[node]);
+        AssignSideKind := (tk <> tyUnknown);
+      end;
     AN_INDEX, AN_FIELD, AN_DEREF:
       { An ELEMENT, a FIELD, a DEREF. The identifier arm above is the only one
         this function had, so the AN_ASSIGN type check never RAN for any of

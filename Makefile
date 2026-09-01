@@ -6724,6 +6724,23 @@ test-core: $(COMPILER)
 	# record rule would refuse without the bail. Output verified against fpc.
 	./$(COMPILER) test/test_assign_lvalue_shapes_ok.pas $(TESTTMP)/test_lvok26
 	tools/expect_same.sh test_lvok26 "$$($(TESTTMP)/test_lvok26)" "lvok 16 a sh sh z 1 TRUE 7"
+	# ...and the same check must reach an EXPRESSION RESULT. AssignSideKind
+	# typed a literal and an identifier and, after the row above, an element, a
+	# field and a deref -- but not a BINOP, so `c := s + 'x'` short-circuited the
+	# `and` chain and was never checked at all. It compiled to a byte move of a
+	# string HANDLE's low byte into a Char; through a nested dynamic-array field
+	# it SIGSEGV'd. Third arm this function has needed for one reason, so the
+	# count is the assertion here too -- fpc 3.2.2 flags the same six LINES, not
+	# merely the same number of them.
+	! ./$(COMPILER) test/test_assign_expr_result_fail.pas $(TESTTMP)/test_asgexpr26 > $(TESTTMP)/test_asgexpr.log 2>&1
+	tools/expect_same.sh test_asgexpr.log "$$(grep -c 'incompatible types' $(TESTTMP)/test_asgexpr.log)" "6"
+	grep -q "cannot assign AnsiString to Char" $(TESTTMP)/test_asgexpr.log
+	grep -q "cannot assign Boolean to AnsiString" $(TESTTMP)/test_asgexpr.log
+	# ...and its accept half, which RUNS. `d := i * 2` is the row that matters:
+	# widening what the check refuses widened what it can WRONGLY refuse, and a
+	# numeric BINOP is now a shape the rule can see. Output verified against fpc.
+	./$(COMPILER) test/test_assign_expr_result_ok.pas $(TESTTMP)/test_asgexprok26
+	tools/expect_same.sh test_asgexprok26 "$$($(TESTTMP)/test_asgexprok26)" "6.0 4 ax q TRUE"
 	# A routine's declared parameter shape must survive to the CALLER on every
 	# registration path, not just the one with a body. ParseSubroutine registers
 	# params THREE ways -- `external` (then Exits), forward/interface, and the
