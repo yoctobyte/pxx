@@ -43,6 +43,58 @@ conflict only because the appends landed on adjacent lines. `tools/progress.sh
 check` now reports `DUP-FACE-NUMBER`. On a collision, **renumber the later entry
 and fix its citations; never delete either** — they are different findings.
 
+## STEP ONE IS DONE, 2026-09-01 (frankA), AND IT CHANGES THE DESIGN
+
+This ticket said the staleness was UNMEASURED and must be measured before
+anything is built on it. Measured now, and the answer is that **the ~15-line
+check must not be built as specified.**
+
+Population, from `compiler/*.pas` + `compiler/*.inc` (3572 `Error`/`Halt`/
+`writeln(StdErr` sites): **22 refusal messages cite a ticket slug. 18 of them
+cite a slug that is in `done/`.** So the check would fire, and fire a lot — the
+baseline is not empty, which is what this ticket asked to find out.
+
+**All 18 are correct refusals.** Every cited ticket was opened and read. The
+citation means *"the ticket that documents this limit"*, not *"the ticket that
+would remove it"*:
+
+- six are `only the x86-64 target is supported by the skeleton
+  (feature-esoteric-<lang>)` — the skeleton ticket is done and the limit is its
+  declared scope;
+- `feature-inline-loop-var-rio` is done and its own status line says the
+  remaining shapes are *"explicitly out of scope (own clear error)"* — the four
+  refusals citing it ARE that clear error;
+- `feature-cross-virtual-indirect-hidden-dest` is done and ends *"riscv32 /
+  xtensa keep their guards — bare-metal, no OOP dispatch exercised"*, which is
+  exactly the two backends whose refusals cite it.
+
+So the proposed check scores **18 false positives and 0 true positives**. A
+check that flags everything carries the same amount of information as one that
+can never fire, which is the family this ticket belongs to.
+
+**And it would not have caught the nine that motivated it.** Those said *"needs
+the heap, Phase 6"* — a phase, not a slug — so the slug rule could never have
+matched them. (They are fixed: frankwasm rewrote them 2026-08-28, and a grep
+for `Error(... Phase <n>` across `compiler/**` now returns **zero** sites. The
+population the tool was for no longer exists.)
+
+**What the measurement actually says.** The information the check needs is not
+in the spelling and cannot be recovered from it: "cited because it blocks this"
+and "cited because it describes this" are the same token today. Any tool built
+on the current spelling is guessing. That leaves two real options, and choosing
+between them is a convention decision rather than a coding one:
+
+1. a distinguishing spelling on new refusals only (e.g. the blocker citation
+   gets a marker the documentary one does not), after which the check is
+   trivial — and would today have a population of ZERO, so it needs a positive
+   control before it is believed;
+2. the **mechanical expiry** already described at the bottom of this file, which
+   needs no convention and tells the person whose change invalidated the note
+   rather than whoever next runs a tool.
+
+The measurement does not pick between them. It does close the question the
+ticket opened: **do not build the 15-line checker.**
+
 ## The observation
 
 Measuring a string-heavy program for the wasm backend, frankwasm found **9 refusals reading
