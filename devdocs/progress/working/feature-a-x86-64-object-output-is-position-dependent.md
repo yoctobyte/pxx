@@ -2,10 +2,10 @@
 track: A
 prio: 50
 type: feature
-status: backlog
+status: working
 found: 2026-08-31
 found-by: frankC
-owner: ""
+owner: frankA
 blocked-by: []
 summary: "A pxx x86-64 .o needs `-no-pie` to link, and modern toolchains default to PIE, so `gcc main.c mylib.o` fails with `relocation R_X86_64_32S against .bss can not be used when making a PIE object`. The cause is the BACKEND, not the writer: EmitDataRef emits an 8-byte absolute operand and EmitGlobRef a 4-byte sign-extended absolute displacement, so an object carries R_X86_64_64/R_X86_64_32S. The fix is a rip-relative global-reference form under --emit-obj (R_X86_64_PC32), which changes instruction ENCODINGS and therefore lengths -- deliberately not bundled into feature-a-a-general-x86-64-relocatable-object-writer, which landed the writer at 41045d7b4. Nothing is broken: -no-pie links and runs today under gcc, clang and tcc, and is documented in docs/reference/objects.md. Raise this when someone must link a pxx object into a PIE they do not control."
 ---

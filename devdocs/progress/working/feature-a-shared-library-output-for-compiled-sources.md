@@ -2,10 +2,10 @@
 track: A
 prio: 50
 type: feature
-status: backlog
+status: working
 found: 2026-08-31
 found-by: frankC
-owner: ""
+owner: frankA
 blocked-by: []
 summary: "--shared writes an x86-64 ET_DYN for .asm sources only (compiler.pas says so in the option handler). A .so is harder than the .o that landed at 41045d7b4 and for one reason: writeELFSharedX64 needs ZERO R_X86_64_RELATIVE relocations because the .asm frontend has no absolute-address operand form AT ALL, while the general backend's EmitDataRef/EmitGlobRef are exactly that. So a compiled-source .so is blocked on the same backend work as feature-a-x86-64-object-output-is-position-dependent, not on writer work -- and unlike the .o, -no-pie cannot rescue it: a shared library IS relocated at load. Do that ticket first; this one is small afterwards."
 ---
