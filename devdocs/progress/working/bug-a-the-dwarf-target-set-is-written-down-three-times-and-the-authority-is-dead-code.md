@@ -2,10 +2,11 @@
 track: A
 prio: 30
 type: bug
-status: open
+status: working
 found: 2026-08-30
 found-by: frank-optimize-b4
 summary: "DbgArchSupported states the DWARF Tier-1 target set correctly and is NEVER CALLED. The live gate is duplicated across three doDebug assignments in two ELF writers, and three comments said x86-64 only. Comments fixed; the duplication and the dead authority are not. Measured: -g emits debug sections on all four targets."
+owner: frankA
 ---
 
 # The DWARF target set is written down three times, and the only correct statement is dead code

@@ -1481,6 +1481,9 @@ const
     registration lands ahead of the codegen so the wasm branch adds only new
     files and never merges a shared one until it emits. }
   TARGET_WASM32  = 6;
+  { The highest registered target id, so a loop over "every target" is written
+    once and grows with the list rather than beside it. }
+  TARGET_LAST    = TARGET_WASM32;
   XTENSA_ABI_CALL0    = 0;
   XTENSA_ABI_WINDOWED = 1;
   { Platform / OS axis — independent of the CPU axis above. posix = hosted
@@ -5364,6 +5367,44 @@ begin
   else
     TargetArchName := '<unknown target>';
   end;
+end;
+
+function TargetHasObjectWriter(arch: Integer): Boolean;
+{ The ONE statement of which targets `--emit-obj` can write an object for.
+  compiler.pas's dispatch tests THIS, and the refusal text is built from it by
+  EmitObjTargetList, so a diagnostic naming a target set cannot drift from the
+  set the dispatch enforces.
+
+  It drifted twice in two days when the two were written separately: the
+  message said "only xtensa/riscv32" while x86-64 had had a writer for hours
+  (bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64), was
+  hand-corrected to name x86-64 -- and was false again the same day, because
+  i386 got writeELFRel386General while the sentence still said "i386, arm32 and
+  aarch64 have no object writer". Measured, not read: `--emit-obj --target=i386`
+  exits 0 and writes an object while that message claims it cannot.
+
+  Adding a writer means changing this function, and the diagnostic follows. }
+begin
+  TargetHasObjectWriter :=
+    (arch = TARGET_X86_64) or (arch = TARGET_I386) or
+    (arch = TARGET_XTENSA) or (arch = TARGET_RISCV32);
+end;
+
+function EmitObjTargetList: AnsiString;
+{ The supported set, spelled the way `--target=` accepts it, ENUMERATED through
+  TargetHasObjectWriter rather than written out beside it. A hand-written list
+  is a second statement of the set and is the one that goes stale. }
+var
+  a: Integer;
+begin
+  EmitObjTargetList := '';
+  for a := 0 to TARGET_LAST do
+    if TargetHasObjectWriter(a) then
+    begin
+      if EmitObjTargetList <> '' then
+        EmitObjTargetList := EmitObjTargetList + ', ';
+      EmitObjTargetList := EmitObjTargetList + TargetArchName(a);
+    end;
 end;
 
 function TargetDisplayName: AnsiString;

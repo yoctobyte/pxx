@@ -17204,6 +17204,19 @@ test-emit-obj: $(COMPILER)
 	#    and a .bss of nonzero size are asserted BY SIZE, because the defect
 	#    this rule exists for produced an object that had the section names
 	#    and nothing in them.
+	# 0. EVERY STATEMENT OF THE SUPPORTED TARGET SET AGREES WITH THE DISPATCH.
+	#    Runs first because it is the cheapest row here and it is the one that
+	#    catches a class the rows below cannot: they assert that the targets
+	#    they name work, and say nothing about what the compiler TELLS a user
+	#    about the targets they do not name. The set was written down four
+	#    times and three were wrong at once -- the refusal said "only
+	#    xtensa/riscv32" after x86-64 got a general writer, was hand-corrected
+	#    and was false again the same day when i386 got one, and --help said
+	#    xtensa/riscv32 through both corrections. The check hardcodes no list:
+	#    it compares behaviour against the compiler's own words, so it stays
+	#    true when a writer is added rather than needing a fifth edit.
+	#    bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64
+	tools/emit_obj_target_set_check.sh ./$(COMPILER) $(TESTTMP)/emit_obj_target_set
 	rm -f $(TESTTMP)/test_emit_obj_x64.o
 	./$(COMPILER) -Fulib/rtl --emit-obj test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_x64.o
 	readelf -h $(TESTTMP)/test_emit_obj_x64.o | grep -q 'REL (Relocatable file)'

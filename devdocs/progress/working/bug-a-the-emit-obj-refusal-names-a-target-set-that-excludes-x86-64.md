@@ -4,8 +4,8 @@ prio: 25
 type: bug
 blocked-by: []
 summary: "`--emit-obj` on i386/aarch64/arm32 refuses with `only xtensa/riscv32 targets` -- but x86-64 supports it and is the target most users are on. The message names a set that excludes a working target, so a reader who trusts the diagnostic over the docs concludes the feature is ESP-only."
-status: backlog
-owner: unassigned
+status: working
+owner: frankA
 ---
 
 # The `--emit-obj` refusal names a target set that excludes x86-64

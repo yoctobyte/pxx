@@ -810,9 +810,15 @@ begin
   WriteLn('                        hosts that forbid raw syscalls outside libc;');
   WriteLn('                        rt_sigreturn and clone''s child stub stay raw.');
   WriteLn('  --emit-obj            emit a relocatable .o instead of an executable');
-  WriteLn('                        general objects: --target=xtensa|riscv32 only.');
-  WriteLn('                        on x86-64 only .asm sources (text + global');
-  WriteLn('                        labels + extern calls); anything else is refused');
+  { DERIVED, not transcribed. This line said "general objects:
+    --target=xtensa|riscv32 only. on x86-64 only .asm sources" for months after
+    x86-64 got a general writer and i386 got one after that -- a THIRD copy of
+    the target set, stale in the place a user looks first, and still stale after
+    the refusal message beside it had been hand-corrected. One copy of a set is
+    maintained; three are not.
+    bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64 }
+  WriteLn('                        general objects: ' + EmitObjTargetList);
+  WriteLn('                        (.asm sources: x86-64 only)');
   WriteLn('  --shared              emit a shared library');
   WriteLn('  --threadsafe          lock the heap and the I/O paths');
   WriteLn;
@@ -2308,6 +2314,16 @@ begin
       Picking by TargetArch is what sent every Pascal/C/NilPy program on the
       DEFAULT target into a writer that could describe none of it.
       feature-a-a-general-x86-64-relocatable-object-writer }
+    { Refuse HERE, where the predicate the dispatch below tests also names the
+      set the user is told about. The refusal used to live inside writeELF32Rel,
+      the writer everything unrecognised fell through to -- so an unsupported
+      target was told about an "ELF32 object writer" even when it has no ELF at
+      all (`--emit-obj --target=wasm32`, measured), and the sentence listing the
+      set was maintained by hand and went stale twice.
+      bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64 }
+    if not TargetHasObjectWriter(TargetArch) then
+      Error('--emit-obj: no object writer for --target=' +
+            TargetArchName(TargetArch) + '; supported: ' + EmitObjTargetList);
     if TargetArch = TARGET_X86_64 then
     begin
       if AsmGlobalSymCount > 0 then

@@ -2632,16 +2632,20 @@ var
   f: Integer;
 {$endif}
 begin
-  { Name the WHOLE truth, not this writer's half of it. This message said
-    "only xtensa/riscv32" while x86-64 had a writer of its own, so the
-    diagnostic and the docs were both wrong about the same flag in opposite
-    directions -- the docs said "any target", this said three fewer than there
-    are, and the truth was in neither.
+  { An INTERNAL invariant, not the user-facing refusal. Naming the whole
+    supported set from in here is what went stale twice: this writer serves two
+    targets and cannot see who else has a writer, so every sentence it wrote
+    about the others was a copy that nothing updated. The set now lives in
+    TargetHasObjectWriter and the refusal is at compiler.pas's dispatch, which
+    is the code that reads the predicate.
+
+    Kept rather than deleted because it is reachable: it fires the moment a new
+    dispatch route sends an unrelated target here, which is exactly the change
+    that would otherwise emit a silently wrong ELF32 object.
     bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64 }
   if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
-    Error('--emit-obj: this ELF32 object writer serves --target=xtensa and '
-        + '--target=riscv32; x86-64 has its own writers (general, and one for '
-        + '.asm sources); i386, arm32 and aarch64 have no object writer');
+    Error('internal: writeELF32Rel serves --target=xtensa and --target=riscv32 '
+        + 'only, but was dispatched for --target=' + TargetArchName(TargetArch));
   { Programs with `iram;` procedures need the two-text-section writer, which also
     handles @proc (ProcAddrFix) relocs — dispatch BEFORE the guard below. }
   for i := 0 to ProcCount-1 do
