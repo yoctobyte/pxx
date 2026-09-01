@@ -84,4 +84,4 @@ on x86-64 and i386. A symbol that exists but is referenced section-relative
 would still read a private copy and print `20 20`.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 3d5a36e79.
