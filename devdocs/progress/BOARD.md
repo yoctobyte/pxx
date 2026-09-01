@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-managed-locals-leak-at-ORDINARY-scope-exit-on-wasm32-and-a-variant-local-traps | A | 25 | bug | FIXED for the leaks (74e33af46); the Variant row moved to its own ticket because it was never a leak. wasm32's scope-exit release carried a HAND-WRITTEN list of managed kinds -- scalar AnsiString and dynamic array -- while the zero-init pass three lines below it asked ManagedLocalZeroBytes, the shared table. Measured against x86-64 with -dPXX_ALLOC_CENSUS, allocation counts identical on both sides so only the frees differed: COM interface local gone=0 of 50 -> 50, record with managed fields live=543 -> 3, static array of AnsiString live=871 -> 4, all now matching x86-64. The arms are copied from the riscv32 arm of EmitManagedLocalCleanupForTarget in its order and with its predicates, because the set of managed kinds is a SHARED fact and a seventh backend restating it is how six agree and one does not. Guarded by test/wasm/check_scopeexit.sh, which makes the leak PRINT -- the object counts its own destructions -- because a leak is invisible to the native-vs-wasm diff that is every other wasm check's primary assertion; verified to fail against the previous backend at gone=0, exit 1. THE VARIANT ROW IS NOT FIXED AND IS NOT THIS TICKET: `v := 42` traps because IR_VAR_STORE, IR_VAR_BINOP and IR_VAR_BOX have NO wasm32 arms at all, diagnosed from the compiler's own broken-body report (`main$0 - statement IR op 43`) and confirmed on a program-body Variant where scope-exit release cannot be involved -> bug-a-wasm32-has-no-variant-ir-arms-so-any-variant-assignment-traps. The PXXVarClear arm added here is written and UNVERIFIED for that reason; do not read its presence as coverage. | — |
 | feature-c-corpus-busybox-multi-applet | C | 70→90 | feature | Rung 2 of feature-busybox-kiosk-selfhosting-target. FIRST BAR MET 2026-09-01 (2789f87a7): a two-applet busybox (cat+echo+the multiplexer, NUM_APPLETS 2, dispatch table compiled IN) built by pxx is byte-identical to gcc over 28 cases on x86-64 AND aarch64 and agrees with upstream's separately-linked binary; argv[0], `busybox <applet>`, --list, --help, unknown applet and bare busybox all covered. Cost ONE compiler fix: a constant left operand of && / \|\| survived every -O level including -O3 (88ef1232f). Harness is now tools/busybox_diff.sh --applets. STILL OPEN: `ash` (fork/exec/wait, the process model) and the TU surface -- 28 of libbb's ~145, so getpwnam/statfs/getrlimit/getmntent are still untouched. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
@@ -830,9 +829,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3007)
+## done (3008)
 
-3007 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3008 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 

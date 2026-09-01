@@ -3,7 +3,7 @@ slug: bug-a-managed-locals-leak-at-ORDINARY-scope-exit-on-wasm32-and-a-variant-l
 track: A
 prio: 25
 type: bug
-status: working
+status: done
 found: 2026-09-01
 found-by: frankA
 blocked-by: []
@@ -156,3 +156,6 @@ had tailed two lines past it.
 And the PXXVarClear arm I added is a live example of face 242's cousin: written,
 committed, green, and **never executed on this target**, because nothing can
 construct its input. It is flagged in both tickets rather than counted.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
