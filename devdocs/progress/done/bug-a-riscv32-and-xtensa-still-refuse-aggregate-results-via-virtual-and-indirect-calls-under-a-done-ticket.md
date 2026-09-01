@@ -194,4 +194,4 @@ often the right answer for a target — xtensa's 33 deliberate PAL refusals, or
 `ParamStr` above. Those cite no slug and never appear.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b88a74311.
