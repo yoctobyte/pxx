@@ -38,11 +38,11 @@ qemu-user. Every existing corpus proves one layer. This proves they compose.
    `IR_ALLOCA` port; see the resolved ticket.
 2. **busybox multi-applet + `ash`** — the shell half.
    `feature-c-corpus-busybox-multi-applet` [C]. **FIRST BAR MET 2026-09-01**
-   (`41526aab4`): cat+echo+the multiplexer, `NUM_APPLETS 2` with the dispatch
+   (`2789f87a7`): cat+echo+the multiplexer, `NUM_APPLETS 2` with the dispatch
    table compiled IN, byte-identical to gcc over 28 cases on x86-64 and
    aarch64, argv[0] and `busybox <applet>` both. Cost one compiler fix — a
    constant left operand of `&&`/`||` survived every `-O` level including
-   `-O3` (`f859fedab`). `ash` and the TU surface (28 of ~145) are still open,
+   `-O3` (`88ef1232f`). `ash` and the TU surface (28 of ~145) are still open,
    which is why the rung is not resolved. `feature-eliah-shell` is
    `done/` and is our own shell, a separate artifact; this rung is busybox's.
    Rung 1 says explicitly what it does NOT establish: `cat` reaches 25 of

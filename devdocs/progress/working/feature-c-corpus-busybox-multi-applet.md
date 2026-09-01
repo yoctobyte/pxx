@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 created: 2026-08-31
 owner: frankD
-summary: "Rung 2 of feature-busybox-kiosk-selfhosting-target. FIRST BAR MET 2026-09-01 (41526aab4): a two-applet busybox (cat+echo+the multiplexer, NUM_APPLETS 2, dispatch table compiled IN) built by pxx is byte-identical to gcc over 28 cases on x86-64 AND aarch64 and agrees with upstream's separately-linked binary; argv[0], `busybox <applet>`, --list, --help, unknown applet and bare busybox all covered. Cost ONE compiler fix: a constant left operand of && / || survived every -O level including -O3 (f859fedab). Harness is now tools/busybox_diff.sh --applets. STILL OPEN: `ash` (fork/exec/wait, the process model) and the TU surface -- 28 of libbb's ~145, so getpwnam/statfs/getrlimit/getmntent are still untouched."
+summary: "Rung 2 of feature-busybox-kiosk-selfhosting-target. FIRST BAR MET 2026-09-01 (2789f87a7): a two-applet busybox (cat+echo+the multiplexer, NUM_APPLETS 2, dispatch table compiled IN) built by pxx is byte-identical to gcc over 28 cases on x86-64 AND aarch64 and agrees with upstream's separately-linked binary; argv[0], `busybox <applet>`, --list, --help, unknown applet and bare busybox all covered. Cost ONE compiler fix: a constant left operand of && / || survived every -O level including -O3 (88ef1232f). Harness is now tools/busybox_diff.sh --applets. STILL OPEN: `ash` (fork/exec/wait, the process model) and the TU surface -- 28 of libbb's ~145, so getpwnam/statfs/getrlimit/getmntent are still untouched."
 ---
 
 # busybox rung 2 — more than one applet, then `ash`
@@ -61,8 +61,10 @@ because the second oracle disagreed.
 
 ## Progress 2026-09-01 (frankD) — first bar MET
 
-Compiler `b4ffb6c0caf4`, commits `f859fedab` (the fix) and `41526aab4` (the
-harness). Reproduce with `tools/busybox_diff.sh`; rung 1 with
+Compiler BINARY sha256 `b4ffb6c0caf4…` (the self-host fixedpoint stamp, not a
+commit), from commits `88ef1232f` (the fix) and `2789f87a7` (the harness) —
+both read off `git log origin/master` after the push, so they are not the
+pre-rebase ids the commit messages themselves cite. Reproduce with `tools/busybox_diff.sh`; rung 1 with
 `tools/busybox_diff.sh --applets cat`, re-run GREEN.
 
 ```

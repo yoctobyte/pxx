@@ -8,7 +8,7 @@ blocked-by: []
 found: 2026-08-31
 found-by: frank-user
 owner: ""
-summary: "Implements the ruling in decided/decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0. What REMAINS is the DEAD-ARM PRUNE at -O0: fold statements after a return, and drop the arm of an if whose condition is already a constant, because gcc, clang and tcc all do and tcc has no optimizer, so this is LOWERING. The SHORT-CIRCUIT half is DONE (f859fedab, 2026-09-01) and it was worse than this file said: `0 && f()` folded at NO level, -O3 included, not just at -O0. HARD CONSTRAINT, measured: prune only when unreachable AND the address does not escape; a dead arm holding a label whose address is taken is kept by all three at every level, and an if-only test will not catch getting this wrong. Both frontends: the Pascal arm is measured open, `if False and (F=0)` keeps its dead call at -O2. Also adds -OO for the true source-1:1 build, as a NAMED FLAG not a level."
+summary: "Implements the ruling in decided/decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0. What REMAINS is the DEAD-ARM PRUNE at -O0: fold statements after a return, and drop the arm of an if whose condition is already a constant, because gcc, clang and tcc all do and tcc has no optimizer, so this is LOWERING. The SHORT-CIRCUIT half is DONE (88ef1232f, 2026-09-01) and it was worse than this file said: `0 && f()` folded at NO level, -O3 included, not just at -O0. HARD CONSTRAINT, measured: prune only when unreachable AND the address does not escape; a dead arm holding a label whose address is taken is kept by all three at every level, and an if-only test will not catch getting this wrong. Both frontends: the Pascal arm is measured open, `if False and (F=0)` keeps its dead call at -O2. Also adds -OO for the true source-1:1 build, as a NAMED FLAG not a level."
 ---
 
 # Fold the consensus dead-branch core at every level
@@ -35,7 +35,7 @@ reader who took the two lines above at face value would have concluded the
 default build was safe and moved on; that is exactly what the summary rule
 exists to stop.
 
-**That half is now DONE** — `f859fedab`, folded in the C frontend at the three
+**That half is now DONE** — `88ef1232f`, folded in the C frontend at the three
 sites a chain needs (`CMakeBinop`'s `&&`/`||`, `CMakeTruthy`, unary `!`), with
 `test/c_short_circuit_const_folds.c`. The two lines above are true again.
 
