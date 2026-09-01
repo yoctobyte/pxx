@@ -13176,3 +13176,70 @@ hour; they are the four structurally distinct ways a check can be present,
 green-looking, and inert. **The path from *a check exists* to *a check changed
 someone's mind* has exactly four links, and the whole family is one broken link
 each.**
+
+## 241 — DELETING ONE CONJUNCT LAUNDERS THE ONES YOU LEAVE BEHIND
+
+Narrowing a guard is normally read as evidence *against* the guard. It is also,
+silently, a moment where every **remaining** conjunct acquires an implied
+endorsement it was never given — and if you write a comment at that moment, the
+endorsement becomes explicit and citable without anything having been tested.
+
+Measured, 2026-09-01 (frankA), in `compiler/ir.inc`. The static-array →
+open-array copy-in was gated by
+
+```pascal
+if oaEligible and (caElemTk <> tyAnsiString) and
+   not ((caElemTk = tyRecord) and RecordHasManagedFields(caElemRec)) then
+```
+
+`79ef4cf61` (2026-07-22) deleted `(caElemTk <> tyAnsiString)`, having established
+that the **wholesale** copy-in/copy-out moves managed payloads correctly:
+ownership transfers as a set, so nothing is ever released field-wise across the
+boundary. That is a general fact about the mechanism, not a fact about strings.
+The same commit added, six lines below the sentence stating it:
+
+> Records with managed FIELDS stay excluded (a field-wise release in the callee
+> would need the copy-out to be field-aware).
+
+Those two statements cannot both be true. The refuting evidence was not merely
+adjacent — it was **a sibling conjunct of the same `and` chain, removed in the
+same diff, by the same author, in the same minute.**
+
+The consequence ran for six weeks. An excluded argument was not refused; it fell
+through to the generic path as a bare address with no `[len:8]` header, so the
+callee's `High()` answered `-1` and its loop silently never ran — and above
+`MAX_OPEN_ARRAY_STACK_TEMP`, segfaulted. Removing both exclusions makes every
+distinguishing arm byte-identical to the fpc oracle on six targets, including
+the exact case the comment named (a callee copying an element into a local, i.e.
+a field-wise release). `d9a8fa192`.
+
+**Why it survives review.** A narrowing diff reads as a *correction*, so the
+reviewer's question is "is the deletion safe?" — never "does the reason for the
+deletion also apply to what stayed?". And the two halves do not look like one
+subject: `tyAnsiString` and `tyRecord + managed fields` read as two different
+types, when the mechanism does not distinguish them at all. Face 113's rule
+("the name is not the thing") in a new place: the boolean's *shape* named two
+subjects where its *semantics* had one.
+
+**This is not staleness, and that matters.** Faces about expired refusals
+(this ticket's own subject) assume the reason was once true and the world moved.
+Here nothing moved. The justification was **false when written**, and written
+precisely because that region of code was under active, competent attention —
+the comment exists *because* the author was thinking about it. So "was this
+recently touched by someone who understood it?" is not a filter; it is mildly
+inverted.
+
+**The cheap check, and it is genuinely cheap.** When a diff deletes a conjunct
+from a boolean guard, read the remaining conjuncts and ask whether the argument
+that justified the deletion also covers them. One question, at the one moment
+the answer is already in your head. Grep form for an audit:
+`git log -p -S'<the guard>' -- <file>` and look for a diff where the guard got
+*shorter*.
+
+**And a corollary about where to look next.** A guard that has been narrowed
+once is a better place to hunt than an untouched one, which reverses the usual
+prior. In this file the narrowing left a two-arm defect that also matches
+`normalise-dont-special-case.md`: the arm that was fixed got a regression test
+(`test_const_open_array_managed`), and its existence is part of why nobody
+revisited the arm that was not. **A test pinning one arm of a double case
+reports as coverage of the concept.**
