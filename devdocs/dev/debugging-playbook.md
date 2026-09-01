@@ -4937,6 +4937,40 @@ The tell: I wrote *"either it is reachable and ... or it is not and ..."*. A
 two-branch enumeration built from a one-token delta is a claim that the token
 is the only thing in play. Write the repro instead; it took two lines.
 
+## A long measurement needs a FROZEN tree — the window is longer than the rule reads
+
+Named 2026-09-01 (frankB), after voiding two consecutive full tiers.
+
+CLAUDE.md: *"Rebuild after any sync touching `compiler/**` before you measure."*
+That reads as advice about a BINARY you are about to run, and it is easy to obey
+completely and still lose the measurement — because a full tier is itself a
+fifteen-minute measurement, and the tree must hold still for all of it.
+
+Two runs lost, two different mechanisms, both mine:
+
+- **rebuilding mid-run.** testmgr says so itself (`compiler/pascal26 changed
+  during this run — jobs ran against the snapshot, results stand`), and the
+  "results stand" is about the JOBS, not about the stamp checks.
+- **`git pull --rebase` mid-run.** Every
+  `tools/compiler_srchash.sh compiler/.pascal26.fixedpoint` job failed across
+  seven job groups. The stamp was written for the sources the tier started with;
+  the tree moved. Seven job groups RED, none of it real, and the failure text
+  names a hash script rather than anything you changed — so it reads as a
+  regression in whatever you just landed.
+
+**The tell**: a RED whose failing jobs are dominated by stamp/hash/self-compile
+checks rather than by behaviour. Those are the jobs that compare the tree to
+something recorded earlier, so they are exactly the ones a moving tree breaks.
+
+**The discipline**: before a long run, `git status --porcelain` clean and say
+out loud that you are frozen; during it, no pull, no commit, no rebuild. If a
+peer pushes meanwhile, that is fine — you pick it up afterwards, and telling them
+you are holding still is cheaper than re-running fifteen minutes.
+
+This is the same family as everything else in this section: **the instrument's
+own preconditions have a duration, not just a moment.** A precondition you check
+once at the start is not a precondition you have held.
+
 ## A FALLBACK can be a downgrade, not a net — measure which before you keep it
 
 Named 2026-09-01 (frankB, at frankA's suggestion). A fallback reads as a safety

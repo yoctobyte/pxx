@@ -229,3 +229,42 @@ and the variable is `PXXD`); and a population too small to contain the case
 (fixed by the full tier). **Every one of them printed a clean zero under a green
 gate.** The zeros were only worth reading once each had a control that made it
 possible for them not to be zero.
+
+## 2026-09-01 (frankB): verified on a quiescent full tier
+
+Three full tiers were run. **The first two verdicts were void and neither RED was
+real** — worth recording, because the failure was mine and it is not the one the
+rules warn about:
+
+- run 1: I rebuilt the compiler mid-run while fixing an unrelated RED. testmgr
+  flagged the swap itself (`compiler/pascal26 changed during this run`).
+- run 2: I ran `git pull --rebase` mid-run and picked up two `compiler/**`
+  commits. Every `tools/compiler_srchash.sh compiler/.pascal26.fixedpoint` job
+  failed — seven job groups — because the stamp was written for the sources the
+  tier started with and the tree moved underneath it.
+
+CLAUDE.md says to rebuild after any sync touching `compiler/**` *before you
+measure*. I had only ever read that as being about a binary I was about to run.
+**A full tier is a fifteen-minute measurement, and the tree must not move for the
+whole of it.**
+
+Run 3, quiescent tree, binary `f121f3de4811`, nothing pulled or committed during
+it:
+
+- **one** failure, `test-xtensa#122` — a forward CALL0/CALL8 range overflow
+  building an xtensa image. Not mine, by three independent sources: it failed in
+  the PRE-deletion tier too, it is already filed as
+  [[feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image]], and seven
+  has reported it across several shas tonight.
+- the fallback census is **identical to the pre-deletion run**: else 939,
+  backstop 220, and the same four kinds (AN_PTR_CAST 940, AN_IDENT 218, one
+  AN_FIELD, one AN_CALL). The deletion changed nothing about which nodes reach
+  those lines, which is exactly what "the caller restored the same default when
+  it declined" predicts.
+
+**One honest caveat on the instrument, since this file is about not trusting
+zeros.** After the deletion the `-ans` columns can only read 0 — there is no call
+left to answer — so they are no longer evidence of anything and a run that shows
+them is not confirming the deletion. The `-ans` evidence is entirely the
+PRE-deletion tier. What the post-deletion run confirms is the hit counts and the
+kinds, which are live numbers, and the absence of a new failure.
