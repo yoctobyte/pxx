@@ -156,3 +156,33 @@ scan that reads nothing.
 
 `exit_observable_devtest.py` stays red, so `tools-devtest#00` stays red until
 the Makefile rows land. That is one red job, not two, and it has its own ticket.
+
+## Dated 2026-09-01: a window, and it has NEVER been green on seven
+
+| | |
+| --- | --- |
+| red since | **2026-08-29T16:51:31Z**, at `154d1aa3f` |
+| consecutive reds | **208**, with **zero** transitions in the whole archive |
+| window | `e417731e9007..154d1aa3fba6` — **18 commits** |
+
+Verified from `runs-seven.ndjson` (keys `date`/`sha`, seven only, sorted). This
+is not a flapping job: across 208 runs it has never once come back green, so
+**any green you see locally is a difference in how you ran it, not a fix.**
+
+**The window is small enough to bisect directly** and that is the recommended
+next step — the same method settled `exception_threads_race` tonight (frankB:
+0/20 fail at `620989250^`, 20/20 at `620989250`).
+
+**But look at what is in it.** The code half is largely a Rust topic-branch
+merge series — `feat(rust): Option<T> as a monomorphized generic enum`,
+`merge: master@4213b4b76 into the rust topic branch`, `Merge remote-tracking
+branch 'origin/master' into rust`, and 5 merge commits in 18. A bisect across
+merge commits does not behave like a bisect across a linear history, so use
+`--first-parent` or expect to land on a merge that touches everything.
+
+Raised separately with the owner: CLAUDE.md says **all tracks work on `master`,
+no topic branches**, and Track R is marked experimental (X). Whether R has an
+exception is his call, not this ticket's — noted here only because it is the
+shape of the window and it changes how you bisect it.
+
+Credit: frank-coordinator for the window and the method.

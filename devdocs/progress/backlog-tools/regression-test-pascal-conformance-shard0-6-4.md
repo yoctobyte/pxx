@@ -64,3 +64,27 @@ test-pascal-conformance: FAILURES: tgeneric32.pp(compile) tgeneric49.pp(compile)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Dated 2026-09-01: a window, and this one genuinely flaps
+
+| | |
+| --- | --- |
+| current red since | **2026-08-31T05:36:03Z**, at `aac20e75e` |
+| consecutive reds since then | **115** |
+| window for the last transition | `17fd5566a65e..aac20e75ed1f` |
+| earlier transitions | `b94f51901` FIXED · `f6303d410` RED · `719bef10e` FIXED, all 08-30 |
+
+Verified from `runs-seven.ndjson`. **4 transitions, not one clean regression** —
+treat the 08-31 window as the LAST transition, not the origin of the problem.
+A bisect that assumes a single introducing commit will land on noise.
+
+**Corrections to the numbers this was first reported with** (frank-coordinator's
+relay, since they will otherwise get quoted): the date and sha are exactly
+right; the counts are not. It is **4** transitions and **115** consecutive reds
+on seven, not 6 and 176. The larger figures come from reading across both hosts'
+archives as one sequence — `runs-plexus` and `runs-seven` are separate files
+recording separate runs.
+
+This job is **full-tier only** (every row mentioning it is `tier: full`), which
+is why the archive's adjacent rows are misleading for it — see the new section
+in `devdocs/dev/track-t.md`.

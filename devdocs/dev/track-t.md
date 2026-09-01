@@ -28,6 +28,29 @@ regress any target. Track T makes testing a PERMANENT BACKGROUND PROCESS:
 | `tools/twatch_web.py` | optional read-only Flask UI (spawned by `trackt`): live run, history from `tstate/runs-<host>.ndjson`, regression frequency, report browser. Loopback-only by default. |
 | `devdocs/progress/tstate/` | published state: `<host>.json` (rolling state), `runs-<host>.ndjson` (uncapped run archive), `reports/*.md` (only when something CHANGED or RED), `TSTATE.md` (index). |
 
+### Reading `runs-<host>.ndjson` — the adjacent row is NOT the baseline
+
+Measured 2026-09-01, after two separate readers got a wrong answer from it.
+
+**The diff is not against the previous LINE.** Tiers interleave — on seven the
+archive holds 435 `native`, 217 `full`, 39 `slow`, 13 `opt` — and a job that
+runs in one tier only appears in a fraction of the rows. `pascal-conformance`
+is **full-tier only**. So the row above a given row is usually a run that never
+executed that job, and **a reader comparing consecutive lines by hand will
+invent transitions that the diff never reported.** Compare a job against its own
+previous run *of a tier that runs it*.
+
+The diff itself is trustworthy. frank-coordinator tested the tidy theory that
+tier alternation manufactures `new_red` events and found **0 spurious `fixed`
+across 178 native-after-full transitions** — the tool compares against the right
+baseline; the naive hand-read does not.
+
+**The keys are `date` and `sha`** — not `ts`/`commit`, which this session
+guessed twice and which parse as `None` rather than raising. And the file is
+**per host**: concatenating `runs-plexus` with `runs-seven` and sorting on a key
+that does not exist leaves you with file order, which produced a confident and
+entirely fictional "6 transitions" here before the keys were checked.
+
 Config lives in `<clone>/twatch.conf` (JSON; `trackt config` edits it —
 tier/fast_tier/interval/debounce/no_bisect/autoticket/web/web_port;
 interval/autoticket/no_bisect apply to a running daemon, the rest on restart).
