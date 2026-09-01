@@ -351,7 +351,7 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 
-## backlog-tools (75)
+## backlog-tools (76)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -413,6 +413,7 @@ _none_
 | feature-t-nilpy-cpython-differential-fuzzer | T | 45 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-pasmith-rung-selftest | T | 30 | feature | A fuzz rung that has only ever been SILENT is indistinguishable from one that does not work. Proposes a --selftest that proves each rung's fold actually observes its construct, by MUTATING the generated program rather than by rebuilding an old compiler — cheaper, needs no checkout, and applies to rungs that were never written against a specific fix. | — |
 | feature-t-record-host-cpu-features-in-tstate | T | 20 | feature | tstate records host, sha, tier, wall and compiler_sha256 — nothing about the machine. So 'can we emit FMA?' could not be answered from the repo and needed an ssh into plexus. Record CPU model and the x86-64 feature level per host, once, in the host json. | — |
+| feature-t-track-the-rel8-displacement-budget-so-a-tight-jump-is-visible-before-it-breaks | T | 40 | feature | A standing row that compiles a fixed program set with PXXDBG=a.rel8max and alerts when the slack to the +-128 one-byte-jump limit falls below 16. Measured 2026-09-01: the max displacement exercised across self-host plus the whole quick tier is 101, i.e. 27 bytes of headroom, and it is emitted by the --threadsafe lock path -- the region Tracks A and O are actively growing. It is program-INDEPENDENT (54 plain / 101 threadsafe on every Pascal and C source tried), so the number is a property of the runtime/prologue emitters, not of a test corpus. This measures BUDGET only; frankA's cd4af7824 is the sibling class it cannot see. | — |
 | feature-t-uforth-bench-on-the-watcher-idle-phase | T | 25 | feature | tools/uforth_bench.py is standalone + a make target, so uforth rows only exist when a human types it. Hang it off the watcher's idle bench phase so rows land per-sha automatically — which is also the only way to get the quiet-box baseline the harness has never had, and the instrument for the open slow-creep question. | — |
 | feature-t-uforth-bench-restore-the-elfhash-outlier | T | 15 | feature | blocktest-elfhash SKIPs in the uforth bench: blocktest.fth needs uforth's block-word preamble (FIRST-TEST-BLOCK / LIMIT-TEST-BLOCK / [?IF]) that tester.fr alone does not supply. It is the tracked ~100x-slow outlier, so while it skips the harness has no visibility on the worst case. | — |
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
@@ -1210,6 +1211,7 @@ _none_
 - [p 40] [T] feature-t-a-layout-oracle-dimension-the-checksum-is-blind-to-offsets
 - [p 40] [T] feature-t-audit-tests-that-pass-with-the-implementation-removed
 - [p 40] [T] feature-t-check-flags-a-lane-blocker-that-has-no-in-edges
+- [p 40] [T] feature-t-track-the-rel8-displacement-budget-so-a-tight-jump-is-visible-before-it-breaks
 - [p 40] [W] feature-web-machine-readable-project-metadata
 - [p 40] [A] feature-writeln-as-library
 - [p 40] [T] idea-t-watch-the-closest-call-approach-not-the-image-size [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
