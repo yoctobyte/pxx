@@ -194,4 +194,4 @@ than fixed here, because it is a hot shared path and this fix is already
 measured and controlled.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c560ccc55.
