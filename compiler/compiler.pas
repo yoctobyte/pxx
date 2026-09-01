@@ -171,16 +171,6 @@ procedure BuildCSysIncludeDirs; forward;    { the host `<>` fallback table — c
 {$include pasparser_decl.inc}
 {$include pasparser_proc.inc}
 {$include pasparser_prog.inc}
-{$include ir.inc}
-{ Track C's C-EXCLUSIVE lowering, carved out of ir.inc (slice 1 of
-  refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed).
-  AFTER ir.inc, not before: cir.inc calls IRLowerAST, which ir.inc already
-  forward-declares -- putting cir.inc first would need a second forward for it
-  and that is a duplicate the FPC seed rejects. So ir.inc carries five forwards
-  for what it calls the other way. }
-{$include cir.inc}
-function GetOrAllocNodeDynDesc(node: Integer): Integer; forward;
-function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 { "is this a call to user code", the shared core of the three ownership
   questions below. Forwarded for the same reason they are: the cross backends
   are included BEFORE ir_codegen.inc, and their thirteen inline dyn-array
@@ -191,8 +181,22 @@ function IRNodeOwnsFreshCallResult(n: Integer): Boolean; forward;
   ownership, body in ir_codegen.inc. Forwarded here because the cross backends
   are included BEFORE it and each had hand-rolled a narrower copy that listed
   IR_BINOP only, so every `'lit' + F(x)` leaked F's result on all four targets
-  (bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target). }
+  (bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target).
+
+  MOVED above ir.inc 2026-09-01: IRParkManagedStr needs the same predicate to
+  decide whether a value needs parking at all, and a SECOND forward is a
+  duplicate the FPC seed rejects. One declaration, earlier. }
 function IRNodeOwnsManagedStr(n: Integer): Boolean; forward;
+{$include ir.inc}
+{ Track C's C-EXCLUSIVE lowering, carved out of ir.inc (slice 1 of
+  refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed).
+  AFTER ir.inc, not before: cir.inc calls IRLowerAST, which ir.inc already
+  forward-declares -- putting cir.inc first would need a second forward for it
+  and that is a duplicate the FPC seed rejects. So ir.inc carries five forwards
+  for what it calls the other way. }
+{$include cir.inc}
+function GetOrAllocNodeDynDesc(node: Integer): Integer; forward;
+function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 { The object twin, forwarded for the same reason and with a sharper version of
   the same history: aarch64's variant-store object arm retained unconditionally
   and i386's did too, so a construction was double-retained on all three

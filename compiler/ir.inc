@@ -2649,7 +2649,7 @@ begin
 end;
 
 function IRAppendCall(procIdx, firstArg, classIdx, tk: Integer): Integer;
-var scratchSym, scratchAddr, savedRecId: Integer;
+var scratchSym, scratchAddr, savedRecId: Integer; intfA0, intfA1: Integer;
 begin
   if ABIRetViaHiddenDestProc(procIdx) then
   begin
@@ -2685,31 +2685,60 @@ begin
       this is the temp and not the call. FPC's heaptrc says 0 unfreed for the
       same program.
 
-      Released end-of-statement on the queue the by-value argument temp already
-      uses, which is where FPC puts it, and NOT retained on the way in: the
-      value arrives owning one reference, so the temp MOVES it. That is what
-      keeps `g := MkIntf(i)` correct rather than over-released — the assignment
-      retains for g, this releases the factory's, and the net is the one
-      reference g holds.
+      Released BEFORE THE NEXT CALL OVERWRITES THE SLOT, not at the end of the
+      statement, and NOT retained on the way in: the value arrives owning one
+      reference, so the temp MOVES it. That is what keeps `g := MkIntf(i)`
+      correct rather than over-released — the assignment retains for g, this
+      releases the factory's, and the net is the one reference g holds.
+
+      THE END-OF-STATEMENT QUEUE WAS WRONG, and its comment claimed the opposite
+      ("which is where FPC puts it"). FPC keeps a FUNCTION RESULT temp to the
+      routine's scope exit; only the by-value ARGUMENT temps die at the statement
+      boundary. test_interface_byval_param_no_leak asserts exactly that, and its
+      header says the expectation was checked by running the file under FPC
+      3.2.2 rather than reasoned about — so `f := nil` destroyed the object one
+      statement early and the row read 1 where FPC says 0. The queue is the
+      argument temps' and this is not one of them.
+
+      What the queue was really buying was the LOOP: the callee writes the sret
+      buffer raw, so the same sym on the next trip overwrote a live reference
+      with no release. That is bought here instead, the same way the variant
+      hidden-dest arm below buys it — clear the slot's PREVIOUS occupant before
+      the call fills it. Bounded in a loop, still held after the statement, and
+      the last one released by the ordinary machinery: the ARC scope-exit arm
+      already visits every COM-interface skLocal, and the main-body backstop
+      below covers the skGlobal case that has no scope exit.
 
       Nil-init matters here for the same reason the managed-record arm above
-      gives: the slot is allocated mid-body, and IRFlushPostCallIntf's release
-      would otherwise dispatch on stack garbage on a branch the call never took.
-      bug-a-an-interface-returned-by-a-function-leaks-unless-it-is-assigned }
+      gives: the slot is allocated mid-body, so the FIRST release would
+      otherwise dispatch on stack garbage.
+      bug-a-an-interface-returned-by-a-function-leaks-unless-it-is-assigned
+      bug-a-an-interface-function-result-temp-is-released-a-statement-too-early }
     if (Procs[procIdx].RetType = tyRecord) and
        (ProcRetRecId[procIdx] >= REC_UCLASS_BASE) and
        UClsIsInterface[ProcRetRecId[procIdx] - REC_UCLASS_BASE] and
        UClsIsComInterface[ProcRetRecId[procIdx] - REC_UCLASS_BASE] then
     begin
       SymIsHiddenArgTemp[scratchSym] := True;
-      if PostCallIntfCount > High(PostCallIntfSym) then
-        Error('too many pending interface-result temps');
-      PostCallIntfSym[PostCallIntfCount] := scratchSym;
-      PostCallIntfRec[PostCallIntfCount] := REC_NONE;
-      Inc(PostCallIntfCount);
-      { the same main-body backstop the argument temp keeps: a call site whose
-        statement never flushes has no scope exit either, and the flush nils the
-        slot so this can only ever release what the flush did not. }
+      savedRecId := FindProc('PXXIntfRelease');
+      if savedRecId >= 0 then
+      begin
+        intfA0 := IRAppend(IR_ARG,
+                    IRAppend(IR_LEA, scratchSym, -1, -1, 0, Ord(tyPointer)),
+                    -1, -1, 0, Ord(tyPointer));
+        intfA1 := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1,
+                    ProcRetRecId[procIdx] - REC_UCLASS_BASE, Ord(tyNativeInt)),
+                    -1, -1, 0, Ord(tyNativeInt));
+        IRB[intfA0] := intfA1;
+        IRIVal[IRAppendCall(savedRecId, intfA0, -1, Ord(tyNativeInt))] := 1;
+        IRAppend(IR_STORE_MEM,
+          IRAppend(IR_LEA, scratchSym, -1, -1, 0, Ord(tyPointer)),
+          IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+          -1, 0, Ord(tyPointer));
+      end;
+      { the same main-body backstop the argument temp keeps — and now it is the
+        only thing that releases the LAST occupant in the main body, which has
+        no scope exit of its own. }
       if Syms[scratchSym].Kind = skGlobal then
       begin
         if MainBodyIntfTempCount > High(MainBodyIntfTempSym) then
@@ -3468,10 +3497,30 @@ function IRParkManagedStr(val: Integer): Integer;
   So every fix goes at the seam that CREATES or CONSUMES the value, and asks
   nothing about shape.
 
-  UNCONDITIONAL IS SAFE because IR_STORE_SYM already discriminates: it MOVES a
-  fresh call result and RETAINS anything else (IRNodeOwnsFreshCallResult). A
-  value that already had an owner gains a balanced retain/release rather than a
-  second free, which is why every named-local control row stays put.
+  ONLY AN UNOWNED VALUE IS PARKED, and the correction is worth stating because
+  the first version of this function parked unconditionally and said so.
+
+  The old reasoning: IR_STORE_SYM already discriminates -- it MOVES a fresh call
+  result and RETAINS anything else (IRNodeOwnsFreshCallResult) -- so an
+  already-owned value gains a "balanced" retain/release rather than a second
+  free. The safety conclusion was right; the word BALANCED was not. The release
+  is parked at the ENCLOSING SCOPE's exit, and the main program body's scope
+  exit is PROGRAM exit. So `p := Pointer(s)` on an owned string added +1 per
+  SITE that was never given back while main ran: frankZ measured 2/3/4/5 across
+  three casts where FPC holds at 1, and it turned test_threadsafe_refcount_
+  lockfree red because that test reads the count THROUGH the very cast.
+  Bounded and not a use-after-free -- +1 per site, not per iteration, payload
+  intact -- but an owned string that cannot be freed for the life of the
+  program, and every refcount assertion in the corpus reading one too many.
+  bug-a-pointer-cast-of-an-owned-string-retains-it-for-the-rest-of-the-program
+
+  So ask the ONE predicate that already answers this question. A value that owns
+  its +1 (a fresh call result, a concat) has no owner but this park and MUST be
+  parked; a value loaded out of a symbol is owned by that symbol, whose own
+  scope already keeps the payload alive for at least as long as the raw pointer
+  is valid, and needs nothing. This is NOT the AST shape test the header above
+  rejects: it asks the lowered IR node what it produces, not what the source
+  looked like, which is exactly the distinction the six bugs turned on.
 
   The lifetime created is SCOPE EXIT. For the pointer seams that is strictly
   LONGER than FPC's guarantee for a temporary (end of statement), so no program
@@ -3480,6 +3529,8 @@ function IRParkManagedStr(val: Integer): Integer;
   where both dangle (a PChar of a temporary RETURNED out of its function). }
 var pmSym: Integer;
 begin
+  IRParkManagedStr := val;
+  if not IRNodeOwnsManagedStr(val) then Exit;
   pmSym := AllocVar('', tyAnsiString);
   SymIsHiddenArgTemp[pmSym] := True;
   IRAppend(IR_STORE_SYM, pmSym, val, -1, 0, Ord(tyAnsiString));
@@ -3507,6 +3558,12 @@ function IRParkManagedDyn(val, argAST: Integer): Integer;
   dyn-array-typed node already reads tyPointer -- which is precisely why the
   string park could not see these.
 
+  AND unchanged when the value is ALREADY OWNED, for the reason spelled out in
+  IRParkManagedStr: the park's release lands at the enclosing scope's exit, so
+  on an owned array in the main body it is held until the program ends. Only a
+  value that owns its own +1 -- a fresh call result -- has no owner but this
+  park. Same predicate, same distinction, same ticket.
+
   LastTypeRecId is a global the declaration path uses to hand AllocDynArray the
   element's record id; saved and restored here for the same reason IRAppendCall
   does it around its hidden aggregate-result temp. }
@@ -3514,6 +3571,7 @@ var pdSym, pdSaved, pdDepth: Integer;
 begin
   IRParkManagedDyn := val;
   if argAST < 0 then Exit;
+  if not IRNodeOwnsFreshCallResult(val) then Exit;
   pdDepth := NodeDynDepth(argAST);
   if pdDepth <= 0 then Exit;
   pdSaved := LastTypeRecId;

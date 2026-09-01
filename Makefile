@@ -6714,6 +6714,26 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_discarded_managed_result_leaks.pas $(TESTTMP)/test_dmr26
 	tools/expect_same.sh test_dmr26 "$$($(TESTTMP)/test_dmr26 2>/dev/null | tail -1)" "ok sink=692 guard=s7"
 	tools/assert_no_leak.sh discarded_managed_result 50 $(TESTTMP)/test_dmr26
+	@# A pointer cast of an ALREADY-OWNED string must not retain it. The park
+	@# that gives an UNOWNED managed value an owner used to fire unconditionally,
+	@# on the reasoning that a value which already had one gains a "balanced"
+	@# retain/release. Safe, and BALANCED was the wrong word: the release lands
+	@# at the enclosing scope's exit, and the main body's scope exit is PROGRAM
+	@# exit. Each Pointer(s) SITE added +1 never given back while main ran —
+	@# 2/3/4/5 across three casts where FPC holds at 1.
+	@#
+	@# Found by frankZ from the other end: test_threadsafe_refcount_lockfree
+	@# reads the count THROUGH the very cast that was retaining, so exactly its
+	@# three rc=1 rows failed and the saturation rows passed. Four reds traced to
+	@# this campaign and this row is the one that reproduces the cause in six
+	@# lines. FPC 3.2.2 agrees row for row.
+	@#
+	@# The OTHER direction — the park must still happen where the value is
+	@# unowned — is the three seam-leak rows above, which still bound at 50. Both
+	@# directions are needed: a guard that only checks one of them passes when
+	@# the park is deleted outright.
+	./$(COMPILER) test/test_pointer_cast_owned_string_refcount.pas $(TESTTMP)/test_pcrc26
+	tools/expect_same.sh test_pcrc26 "$$($(TESTTMP)/test_pcrc26 | tail -1)" "POINTERCASTRC OK"
 	@# A `case` arm's managed temp is finalized IN THE ARM, not after the merge --
 	@# the sibling AN_IF has had since bug-a-managed-temps-for-an-untaken-branch-
 	@# are-still-init-and-finalized. COST, not corruption: 20M calls of a case
