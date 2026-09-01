@@ -4937,6 +4937,59 @@ The tell: I wrote *"either it is reachable and ... or it is not and ..."*. A
 two-branch enumeration built from a one-token delta is a claim that the token
 is the only thing in play. Write the repro instead; it took two lines.
 
+## NAME OR PIN YOUR INPUT — an inferred input is a lossy view of the real one
+
+Named 2026-09-01 (frankT and frankB). frankT's statement of it:
+
+> An instrument that infers its own input answers about a DERIVED view of it, and
+> the derivation is lossy in a direction the instrument cannot see.
+
+Three instances in two days, three different tools, one shape:
+
+| instrument | inferred its input from | what the derivation could not see |
+| --- | --- | --- |
+| `stale_binary_hint` | binary mtime vs commit history | an UNCOMMITTED edit — so the output was independent of the condition it reported on |
+| `testmgr --job` | argparse's parsed value | a repeated flag, discarded before any code runs — `1/1 pass` was a truthful report of a truncated request |
+| `testmgr`'s source tree | "the sources I test are the sources I started with" | a `pull`/`commit` mid-run — seven job groups of REDs naming a hash script rather than anything the author changed |
+
+**In each case the fix reaches for a source UPSTREAM of the lossy step**: name the
+sources that produced the binary; compare against `sys.argv`, which predates
+argparse's truncation; read the tree identity at both ends and say when it moved.
+
+This is *"An instrument that reports a RESULT should report its DENOMINATOR"*
+(frankS, 2026-08-31) generalised from COUNTS to INPUTS — the denominator must
+trace to a statement of intent that upstream truncation cannot reach, and so must
+any input an instrument reports on.
+
+**Why it is hard to see in review.** The `testmgr` case hid *because the adjacent
+problem was solved so well*: the run snapshots its compiler precisely so a
+mid-run rebuild is harmless, and a reader who knows the run owns the bytes it
+tested assumes it owns the sources too. A neighbouring guarantee reads as
+coverage.
+
+### And the recursion: a quiet CONTROL is not a quiet subject
+
+Building the tree-moved warning, the first three end-to-end controls did not
+fire, and the branch was nearly filed as broken. It was not: the detector had
+already been proven in isolation and the block proven to run — the appends were
+simply landing outside a short tier's window. **The negative result was about the
+CONTROL's timing, not about the thing under test.**
+
+That is the delivery-control rule (above) applying to the delivery control
+itself, and it is the failure that survives knowing the rule. What settled it was
+a temporary print of both compared values — not a theory about the branch, and
+not a fourth attempt at the same test hoping for a different answer.
+
+So: **before concluding a guard cannot fire, prove your attempt to make it fire
+actually reached it.** A control that never ran and a subject that never fired
+produce the same silence, and one of them is your own harness.
+
+**A last one on reading diffs**, from the review of that same change: `git show |
+grep '^+'` renders two call sites adjacent that are 242 lines apart in the file,
+which would make a start/end comparison a guard that cannot fire. The filter
+answers *"which lines did I ask for"* and is read as *"what is in the file"*.
+Check positions in the file, not in the filtered view.
+
 ## A long measurement needs a FROZEN tree — the window is longer than the rule reads
 
 Named 2026-09-01 (frankB), after voiding two consecutive full tiers.
