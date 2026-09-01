@@ -2,6 +2,7 @@
 track: A+C
 prio: 60
 type: bug
+blocked-by: [bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized]
 status: open
 found: 2026-08-31
 found-by: frankC
@@ -289,3 +290,28 @@ now a change in the classification loop and nowhere else.**
    aarch64 and moves with its three readers.
 
 **Not to be re-derived from the `isRef` flag, which is a symptom.**
+
+## A PREREQUISITE THIS TICKET DID NOT NAME (2026-09-01, frankC)
+
+`blocked-by` wired above, and it is not paperwork: **step 2 cannot be correct
+until `bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized`
+is fixed.**
+
+`AllocParam` sizes a by-value record parameter's frame slot through
+`ParamValueSize`, which reads `Syms[idx].RecName` -- and that is `REC_NONE` for
+**41 of the 52** record parameters in `compiler.pas`, so `RecSize` returns its
+8-byte fallback. That ticket correctly records this as NOT a miscompile today:
+every answer the function could give later is <= the 8 it reserves, so the slot
+is over-allocated and never under-read.
+
+**Step 2 inverts that argument.** A register-classified aggregate needs a slot
+of `RecSize` -- up to 16 bytes -- and the callee spill writes the second
+eightbyte at `Syms[idx].Offset + 8`. With the 8-byte fallback that write lands
+outside the parameter's slot, in the neighbouring one. Over-allocation becomes
+under-allocation the moment the convention changes, silently, and it would be
+one of those the fixedpoint cannot see: `compiler.pas` is Pascal, not C.
+
+This is the same shape as frankA's NSAA note recorded above -- a quantity that
+is right today BECAUSE of the current convention and becomes wrong on the first
+commit that changes it. Two now, in one ticket, from two people, found the same
+way: by asking what a present-tense fact depends on.

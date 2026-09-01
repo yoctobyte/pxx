@@ -97,3 +97,20 @@ the sizing should have consulted.
   on the four cross targets — the existing coverage is one width
 - self-host fixedpoint, which is itself a strong control here: `compiler.pas`
   has 52 record parameters and its own frame layout would move
+
+## THIS STOPS BEING COSMETIC UNDER THE BY-VALUE STRUCT ABI WORK (2026-09-01, frankC)
+
+The summary's "not a miscompile, what it costs is that the rule cannot be
+reasoned about" is true of the CURRENT convention and only of it. The safety
+argument is that every answer the function could give later is `<=` the 8 bytes
+it reserves, so the slot is over-allocated.
+
+`bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee`
+step 2 makes a by-value record's slot hold the RECORD, up to 16 bytes, with the
+callee spill storing the second eightbyte at `Offset + 8`. Then the 8-byte
+fallback UNDER-allocates and that store lands in the neighbouring slot. The
+inequality flips.
+
+So this is now `blocked-by`-wired as a prerequisite of a p60 ticket and its
+effective_prio follows. Nothing about the fix changes; what changes is that
+"over-allocated by up to four bytes and never under-read" has a shelf life.

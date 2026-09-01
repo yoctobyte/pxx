@@ -55,7 +55,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 429, ranked
+## Ready — top 30 of 428, ranked
 
 - `[p 90] [C]` feature-c-corpus-busybox-multi-applet (unblocks 1)
 - `[p 85] [U]` decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual (unblocks 2)
@@ -88,4 +88,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 
-_399 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_398 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
