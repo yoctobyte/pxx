@@ -310,6 +310,34 @@ else
   echo "  SKIP  this push wires the tests it adds (no origin/$GATE_BRANCH ref)"
 fi
 
+# The .inc files with TWO including configurations: compiler.pas, and a
+# standalone oracle harness that MOCKS the defs.inc environment. A new reference
+# from one of these into defs.inc compiles in the compiler and breaks the
+# harness, and NEITHER per-fix gate can see it -- the fixedpoint proves the
+# compiler reproduces ITSELF, not that a file it reads is still readable by
+# anything else. Twice in eleven days, different symbols each time
+# (InlineAsmLineHoleN 2026-08-21, DwBackHits 2026-09-01, the second caught by
+# seven 7 commits after it landed).
+#
+# CONDITIONAL, in the same shape as the FPC seed canary: it costs ~6s and only
+# a diff touching one of these files can cause the defect, so a gate that ran it
+# unconditionally would be paying it on every fix to catch a class reachable
+# from seven files. Both the uncommitted diff and the unpushed range are checked
+# -- CLAUDE.md's rule that quick's canary only fires on an UNCOMMITTED tree is a
+# footgun worth not copying.
+INC_TWO_CONFIGS='compiler/asmtext.*\.inc|compiler/x64enc\.inc|compiler/rv32enc\.inc|compiler/rel8\.inc'
+inc_harness_touched() {
+  git diff --name-only HEAD 2>/dev/null | grep -qE "$INC_TWO_CONFIGS" && return 0
+  if git rev-parse --verify -q "origin/$GATE_BRANCH" >/dev/null 2>&1; then
+    git diff --name-only "origin/$GATE_BRANCH..HEAD" 2>/dev/null       | grep -qE "$INC_TWO_CONFIGS" && return 0
+  fi
+  return 1
+}
+if [ -x tools/standalone_inc_harnesses.sh ] && inc_harness_touched; then
+  step "standalone .inc harnesses compile" "$LOGDIR/inc-harness.log" \
+       tools/standalone_inc_harnesses.sh || RC=1
+fi
+
 case "$MODE" in
   quick|full)
     # QUICK = the native confirm CLAUDE.md actually prescribes: testmgr --tier
