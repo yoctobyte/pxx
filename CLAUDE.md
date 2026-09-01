@@ -388,7 +388,12 @@ checkout first: `git -C ~/<name> reflog --format='%h %gs' | grep '^<sha> commit'
 names the tree that CREATED it. Plain reflog membership does NOT discriminate —
 every pull walks a sha through every checkout's HEAD — so match on the `commit`
 entry, not on presence. Verified 2026-09-02: seven of eight shas in one arc,
-one checkout, one id. Do not fall back
+one checkout, one id. **And it answers WHERE a commit was authored, not WHO
+authored it** (frankD's caveat, the same day): a cherry-pick, a rebase that
+re-creates commits, or one session applying another's patch all put the wrong
+tree's reflog behind the sha. **The EIGHTH sha not resolving is the instrument
+telling you it has a failure mode** — read that as the tell, not as noise.
+Corroborate with the id before acting on a single sha. Do not fall back
 to attributing by timing and topic: that produced the false alarm above, and it
 produced a second one the same night, hours later, by this rule's own author.
 
