@@ -324,7 +324,7 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 
-## backlog-tools (69)
+## backlog-tools (68)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -389,7 +389,6 @@ _none_
 | refactor-t-the-automated-pin-stages-the-stable-tree-by-a-hardcoded-path | T | 20 | refactor | NOT a present fault -- verified correct today. The automated pin path in tools/testmgr.py stages the stable tree with `git add -u <root>` plus an explicit `git add <root>/default/builtin`. The second call is what saves it, and it saves it by NAMING the one directory that has ever needed saving. `git add -u` stages tracked files only, so any FUTURE directory added under the stable root is silently left untracked in the pin commit, exactly as builtin/ was before that line existed. Correct by hardcoded path rather than by rule. | — |
 | regression-cascade-fc01c8094434 | T | 70 | regression | regression CASCADE: 38 jobs newly red in 5dbcc861e..fc01c8094 (87 commits) — auto-filed by twatch | — |
 | regression-optdiff-shard4-12 | T | 70 | regression | regression: optdiff#shard4/12 at d74c7fbe9ffe in step 1/1, `tools/optdiff.sh --shard 4/12` (auto-filed by twatch) | — |
-| regression-test-core-test-rust-module-items | T | 70 | regression | regression: test-core#src:test/test_rust_module_items.rs at 99af5f3270cf in step 16/5, `./compiler/pascal26 /tmp/rust_unity.rs /tmp/test_rust_un` (auto-filed by twatch) | — |
 | regression-test-core-test-setlen-in-parallel-for-body-2 | T | 70 | regression | regression: test-core#src:test/test_setlen_in_parallel_for_body.pas at 456361785e34 in step 2/2, `tools/expect_same.sh test_setlen_parfor26 "$(/tmp/test_s` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard0-6-4 | T | 70 | regression | regression: test-pascal-conformance#shard0/6 at aac20e75ed1f in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 libr` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard1-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard1/6 red at 27424c927b65 (auto-filed by twatch) | — |
@@ -819,9 +818,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2973)
+## done (2974)
 
-2973 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2974 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -919,7 +918,6 @@ _none_
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [C] regression-lib-test-crtl-reachability-6 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-optdiff-shard4-12
-- [p 70] [T] regression-test-core-test-rust-module-items
 - [p 70] [T] regression-test-core-test-setlen-in-parallel-for-body-2
 - [p 70] [T] regression-test-pascal-conformance-shard0-6-4
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2

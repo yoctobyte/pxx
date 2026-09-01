@@ -2808,6 +2808,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-relpath-uses | T | 70 | regression | regression: test-core#src:test/test_relpath_uses.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-rtl-fpc-compat-helpers | P | 70 | regression | regression: test-core#src:test/test_rtl_fpc_compat_helpers.pas red at 6d68643f9799 (auto-filed by twatch) | — |
 | regression-test-core-test-rtti | P | 70 | regression | regression: test-core#src:test/test_rtti.pas red at 392ea5d94545 (auto-filed by twatch) | — |
+| regression-test-core-test-rust-module-items | T | 70 | regression | regression: test-core#src:test/test_rust_module_items.rs at 99af5f3270cf in step 16/5, `./compiler/pascal26 /tmp/rust_unity.rs /tmp/test_rust_un` (auto-filed by twatch) | — |
 | regression-test-core-test-set-literal-element-types | P | 70 | regression | regression: test-core#src:test/test_set_literal_element_types.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-set-runtime | P | 70 | regression | regression: test-core#src:test/test_set_runtime.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-setlen-in-parallel-for-body | T | 70 | regression | first-ever red: test-core#src:test/test_setlen_in_parallel_for_body.pas at d28b77ce5d88 in step 2/2, `tools/expect_same.sh test_setlen_parfor26 "$(/tmp/test_s` (auto-filed by twatch) | — |
