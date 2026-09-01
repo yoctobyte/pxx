@@ -152,4 +152,4 @@ numbers above: it was filed as "a class of body you cannot write", and it is
 really "a class of body that compiles and quietly returns a short answer".
 
 ## Log
-- 2026-09-02 — resolved, commit PENDING-COMMIT.
+- 2026-09-02 — resolved, commit 4c94d248d.
