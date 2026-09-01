@@ -44,6 +44,40 @@ begin
     FieldIsComInterface := True;
 end;
 
+function FieldSlotIsWalkable(fi: Integer): Boolean;
+{ Is this field a Variant/promo SLOT the record walk can stride over -- i.e. a
+  scalar, or a FIXED-length array of them?
+
+  A DYNAMIC array is excluded because it is already a member by another route:
+  FieldIsManaged says True for it, the chain gives it kind 2, and its element
+  kind comes from ManagedElemKind via the dyn descriptor. Counting it here as
+  well would describe one field twice.
+
+  A FIXED array needs nothing new. The mKind chain already lands it on the
+  matching scalar arm, and arrCount beside it carries the length -- exactly how
+  a fixed array of AnsiString has always been walked ("arrCount carries its
+  length and the walk strides by pointer size", in the chain's own comment).
+  Kinds 5 and 7 stride by 16 and by typeRef respectively, so the same applies.
+
+  This was scalar-only until it was measured, and the gap was the biggest of the
+  family -- 1000 trips, `record ARR; s: AnsiString`, live blocks:
+
+    array[0..3] of Variant, plain local          3799 -> 6
+    array[0..3] of PromoInt, plain local         3860 -> 8
+    array[0..3] of Variant, in a dyn array      11398 -> 9
+    array[0..3] of PromoInt, in a dyn array     11110 -> 12
+
+  THE ARRAY AS ITS OWN LOCAL WAS ALWAYS CLEAN, and so was the record when the
+  array was its ONLY member -- so both obvious probes report success. It takes a
+  SECOND managed member, which is what makes the record managed and switches its
+  finalization from direct field-by-field scope exit to the descriptor walk. The
+  walk then omits whatever it cannot describe. Becoming managed LOSES coverage
+  for an undescribed member, which is the opposite direction from the gate bug
+  in RecordHasManagedFieldsDepth2 and the reason this survived it. }
+begin
+  FieldSlotIsWalkable := not (UFldIsArray[fi] and (UFldArrLen[fi] = -1));
+end;
+
 function RecordDescMember(fi: Integer): Boolean;
 { RECORD-descriptor member predicate: the string/dynarray/nested-record members
   PXXRecordRetain/Release walk under the heap lock, PLUS COM interface members
@@ -65,20 +99,24 @@ begin
       live=7357 before, and the variants were the survivors -- the string member
       was walked and freed, the variant member was not in the descriptor at all.
 
-      SCOPE: this reaches a record that is ALREADY managed by virtue of some
-      other member. `record v: Variant; end` alone stays broken (live=7708),
-      because RecordHasManagedFields does not count a variant, so the record is
-      never managed, ManagedElemKind answers 0 for the element and no walk is
-      emitted for this descriptor to serve. Closing that one is the broad change
-      and has its own ticket. }
-    ((UFldTk[fi] = Ord(tyVariant)) and not UFldIsArray[fi]) or
+      SCOPE, AS OF a544cab70: this used to reach only a record that was
+      ALREADY managed by virtue of some other member, and `record v: Variant;
+      end` alone stayed broken at live=7708 because RecordHasManagedFields did
+      not count a variant. That gate now counts one, so the record is managed,
+      ManagedElemKind answers for the element, and a walk exists for this
+      descriptor to serve. The old wording is corrected rather than deleted
+      because the two halves are separable and a reader needs to know which one
+      they are looking at: this predicate decides who is DESCRIBED, the gate
+      decides whether anything is WALKED, and describing a member is useless
+      until the record is walked at all. }
+    ((UFldTk[fi] = Ord(tyVariant)) and FieldSlotIsWalkable(fi)) or
     { ...and a PROMOTABLE INT member (kind 7), whose heap tier owns an
       AnsiString payload exactly as a variant's does. Same reasoning as the
       variant arm above and the same containment: RecordDescMember, never
-      FieldIsManaged. Scalar only for now, matching the variant arm -- a
-      `array[0..N] of PromoInt` MEMBER is not covered and is measured in the
-      ticket. }
-    (TypeIsPromoInt(IntToTypeKind(UFldTk[fi])) and not UFldIsArray[fi]);
+      FieldIsManaged. A FIXED `array[0..N] of PromoInt` MEMBER is covered too,
+      via FieldSlotIsWalkable -- it was the largest leak of the family and its
+      measurements are in that function's header. }
+    (TypeIsPromoInt(IntToTypeKind(UFldTk[fi])) and FieldSlotIsWalkable(fi));
 end;
 
 function ClassFieldNeedsFinal(fi: Integer): Boolean;
@@ -91,11 +129,11 @@ function ClassFieldNeedsFinal(fi: Integer): Boolean;
   a much broader change than destroy-time finalize. }
 begin
   ClassFieldNeedsFinal := FieldIsManaged(fi) or FieldIsComInterface(fi) or
-    ((UFldTk[fi] = Ord(tyVariant)) and not UFldIsArray[fi]) or
+    ((UFldTk[fi] = Ord(tyVariant)) and FieldSlotIsWalkable(fi)) or
     { A promo field's heap tier owns an AnsiString payload, so a class holding
       one must release it on finalize for the same reason it releases a variant
       (kind 7). }
-    (TypeIsPromoInt(IntToTypeKind(UFldTk[fi])) and not UFldIsArray[fi]) or
+    (TypeIsPromoInt(IntToTypeKind(UFldTk[fi])) and FieldSlotIsWalkable(fi)) or
     { NilPy only: class-typed fields are refcounted bindings (kind 6) —
       released on finalize so a dying instance drops its children. In Pascal
       mode a class field is a manual-lifetime pointer and stays out. }

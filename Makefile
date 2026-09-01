@@ -6621,6 +6621,9 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_record_gate_leaks.pas $(TESTTMP)/test_mrg26
 	tools/expect_same.sh test_mrg26 "$$($(TESTTMP)/test_mrg26 | tail -1)" "managed-record-gate 9000/9000"
 	tools/assert_no_leak.sh managed_record_gate 50 $(TESTTMP)/test_mrg26
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_member_array_leaks.pas $(TESTTMP)/test_mma26
+	tools/expect_same.sh test_mma26 "$$($(TESTTMP)/test_mma26 | tail -1)" "managed-member-array 10000/10000"
+	tools/assert_no_leak.sh managed_member_array 50 $(TESTTMP)/test_mma26
 	@# ...and the RSS ceiling, because every assertion above passes on a build
 	@# that never frees anything: correctness and reclamation are different
 	@# claims. Measured on this program: 3.6 MB fixed, 54 MB with only the
