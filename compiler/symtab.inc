@@ -12911,6 +12911,22 @@ begin
     EmitI32($E340C000);   { movt ip, #0   (hi16 patched) }
     EmitI32($E59C0000);   { ldr  r0, [ip] (resolved fn ptr) }
   end
+  else if TargetArch = TARGET_I386 then
+  begin
+    { `mov eax, [abs32]` -- the SAME GOT slot the i386 external CALL reaches with
+      `call dword [abs32]` (EmitExternalIndirectCall), with a load instead of a
+      call. ModRM $05 is mod=00 rm=101, which is an absolute disp32 on i386 where
+      the identical byte is rip-relative on x86-64; PatchDynCallSites already
+      splits those two cases on TargetArch alone, so this site needs no new
+      patch arm -- it falls into the absolute `else` with every non-x86-64
+      target.
+      bug-a-the-address-of-an-external-routine-is-refused-on-i386-and-xtensa }
+    EmitB($8B); EmitB($05);           { mov eax, [abs32] }
+    DynCallCodePos[DynCallCount] := CodeLen;
+    DynCallExtIdx[DynCallCount] := extIdx;
+    Inc(DynCallCount);
+    EmitI32(0);
+  end
   else if TargetArch = TARGET_RISCV32 then
   begin
     { Same inline-literal slot the riscv32 external CALL uses (EmitCallProc): the

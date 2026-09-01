@@ -4030,7 +4030,19 @@ begin
       begin
         { @proc -> mov eax, imm32 (absolute code address, patched at finalize). }
         if ProcExternal[IRA[node]] then
-          Error('@ on external routine not supported; wrap it in a local routine');
+        begin
+          { An external has no BodyAddr to patch in, so the imm32 form below has
+            nothing to say. It goes through the GOT slot instead -- the same one
+            this backend's external CALL already reaches -- which is what the
+            x86-64, aarch64, arm32 and riscv32 arms of EmitExternalProcAddr do.
+            The refusal this replaces suggested "wrap it in a local routine",
+            which a C program receiving the pointer from a table it does not own
+            cannot do, and which is not something a compiler can ask of
+            hand-written C.
+            bug-a-the-address-of-an-external-routine-is-refused-on-i386-and-xtensa }
+          EmitExternalProcAddr(IRA[node]);
+          Exit;
+        end;
         EmitB($B8);                                  { mov eax, imm32 }
         if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
         ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;

@@ -17870,6 +17870,27 @@ test-emit-obj: $(COMPILER)
 	  tools/expect_same.sh test_emit_obj_cinit386 "$$($(TESTTMP)/test_emit_obj_cinit386_host)" "42 pxx-c-data" || exit 1; \
 	  echo "test-emit-obj: an i386 object's file-scope initialisers run under a gcc -m32 main"; \
 	else echo "gcc -m32 (multilib) not installed; i386 object initialiser check skipped"; fi
+	# 4e. @ ON AN EXTERNAL ROUTINE, on i386. A function pointer initialised from
+	#    an extern -- syscall tables, sqlite's aSyscall[] idiom, vtable-style
+	#    dispatch. i386 REFUSED this outright until 2026-09-01 ("wrap it in a
+	#    local routine", which a C program receiving the pointer from a table it
+	#    does not own cannot do). It goes through the same GOT slot the i386
+	#    external CALL already used.
+	#
+	#    THE VALUE IS THE ASSERTION, not the compile. A refusal is loud and a
+	#    wrong address is silent: ModRM $05 is an absolute disp32 on i386 and
+	#    rip-relative on x86-64, so the identical two bytes mean different things
+	#    per target and a mismatch here calls through a wild pointer. Running it
+	#    against a host that owns the symbol is what distinguishes the two.
+	#    bug-a-the-address-of-an-external-routine-is-refused-on-i386-and-xtensa
+	printf 'extern int extaddr_cb(int);\ntypedef int (*fn)(int);\nint extaddr_use(void){fn f=extaddr_cb;return f(41);}\n' > $(TESTTMP)/test_extaddr386.c
+	./$(COMPILER) --target=i386 --emit-obj $(TESTTMP)/test_extaddr386.c $(TESTTMP)/test_extaddr386.o
+	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
+	  printf '#include <stdio.h>\nint extaddr_cb(int x){return x+1;}\nextern int extaddr_use(void);\nint main(void){printf("%%d\\n",extaddr_use());return 0;}\n' > $(TESTTMP)/test_extaddr386_host.c; \
+	  gcc -m32 $(TESTTMP)/test_extaddr386_host.c $(TESTTMP)/test_extaddr386.o -o $(TESTTMP)/test_extaddr386_host 2>/dev/null || { echo "test-emit-obj: i386 @extern host FAILED to build"; exit 1; }; \
+	  tools/expect_same.sh test_extaddr386 "$$($(TESTTMP)/test_extaddr386_host)" "42" || exit 1; \
+	  echo "test-emit-obj: i386 @ on an external routine resolves and calls through"; \
+	else echo "gcc -m32 (multilib) not installed; i386 @extern check skipped"; fi
 	# 4c. THE ABI CONTRACT, not just "it links and runs". ebx, esi and edi are
 	#    callee-saved on i386 and this backend writes all three (ebx is also the
 	#    `int 0x80` arg0 register). The printf caller in 4b did NOT catch that
