@@ -95,6 +95,10 @@ After the fix all six pass, and `satdemo` and `fm` both go green on riscv32 and
 xtensa (`fm` still fails to BUILD on i386 for an unrelated reason —
 `lib/rtl/image.pas` passes a record by value and i386 refuses that).
 
+## Landed
+
+`eabd599ee` — the fix, the test and its six wirings in one commit.
+
 ## Measured at
 
 compiler `58620a6d3662`, `converged after 1 round(s)`, `gate.sh quick` GREEN with
