@@ -99,3 +99,51 @@ RemObjects Pascal Script's `uPSCompiler.pas` hits it at line 1930
 shape in that file alone) and again at 2753 (`SetLength(tbtstring(vari^.tstring),
 n)`). Those are **two of the three walls** that stop that unit compiling; the
 third was a missing `PByteArray`, fixed separately.
+
+---
+
+## 2026-09-01 (frankH) — does anything currently pass BECAUSE of the swallow? Measured: no
+
+frankA's caution, and it is the right one to raise: *"a leftover token that
+changes three faces by position is the shape that has silent dependents."* A
+token that is swallowed rather than misparsed can be load-bearing somewhere, and
+the refactor would then break a green test for a good reason and look like a
+regression.
+
+**Swept the tree for the shape and there are none.** 122 occurrences of
+`Ident(...)[` across `compiler/ lib/ test/ examples/ apps/`, reduced to the 36
+distinct leading identifiers, cross-checked against declared type names. Only
+four are types, and two of those (`f`, `F`) are false hits on an unrelated
+`f = ...`. **The other two are `PByte` and `PUInt8` — POINTER casts, which are
+already transparent and are NOT affected.** Zero casts to a string or array type
+followed by an index exist in our own sources.
+
+So nothing in the tree depends on the swallow, and the refactor cannot break a
+passing test through this path.
+
+### The positive control the refactor DOES need, and it is live
+
+The pointer-cast-then-index shape must keep working, and it is not hypothetical
+— `lib/rtl/typinfo.pas` uses it at 700, 807, 867, 904 and 920, all
+`@PUInt8(instance)[p^.GetRef]`. **Verified live rather than assumed present:**
+
+```
+propinfo ok, GetRef=8 GetKind=0
+GetOrdProp=5
+after SetOrdProp: o.N=41
+```
+
+Both the read and the write path go through it, so a refactor that unified the
+walkers and lost the pointer arm would fail this in under a second. Use it as
+the second acceptance row beside the wrong-value one.
+
+### One thing checked and deliberately NOT filed
+
+While building that control I passed a string literal where a `PPropInfo` was
+expected. pxx compiles it and segfaults; FPC refuses it
+(*"Incompatible type for arg no. 1: Got \"Constant String\", expected \"PRec\""*).
+That is **not a defect by CLAUDE.md's rules** and is recorded here only so the
+next person does not re-find it and file it: accepting what FPC rejects is not a
+defect, and `F('literal')` into a typed-pointer parameter is reachable only by
+code the programmer already got wrong. It is `rejected/` territory, not compat.
+It is mentioned at all because the crash is loud enough to look like a lead.
