@@ -16,3 +16,8 @@ test_rtti*
 # that it opened a real window on the workstation session and was skipped as
 # TIMEOUT-O0, so the sweep never compared it.
 t_rw*
+# writes from several threads with no ordering between them: 6 runs of ONE
+# -O0 binary produced 5 distinct outputs, so every level pair differs by
+# construction. Became visible on 2026-09-01 only because the --threadsafe
+# retry let it build at all; before that it was a silent BUILD-FAIL skip.
+test_thread_writeln_interleave*

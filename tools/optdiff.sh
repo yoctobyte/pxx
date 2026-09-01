@@ -79,7 +79,7 @@ FILES=$(ls test/*.pas test/*.c 2>/dev/null | awk -v s="$SHARD" -v n="$NSHARD" '
     if (h % n == s) print }')
 
 n=0; pass=0; skip=0; diff=0
-skip_listed=""; skip_build=""; skip_timeout=""
+skip_listed=""; skip_build=""; skip_timeout=""; recovered=""
 for t in $FILES; do
   [ -e "$t" ] || continue
   n=$((n + 1))
@@ -89,9 +89,42 @@ for t in $FILES; do
     skip=$((skip + 1)); skip_listed="$skip_listed $b"; continue
   fi
   # shellcheck disable=SC2086  # CF is a flag list, split on purpose
-  if ! "./$CC" $CF "$t" "$TMP/d0" >/dev/null 2>&1; then
-    skip=$((skip + 1)); skip_build="$skip_build $b"
-    continue                              # doesn't build at -O0: not a diff
+  # -O0 EXPLICITLY. The baseline used to be built with no -O flag at all, which
+  # is -O2 (compiler.pas:908) -- so the `for L in 1 2 3` loop compared -O2
+  # against -O2 and that arm could not report a difference under any
+  # circumstances. A guard that cannot fail is not a guard, and this one printed
+  # PASS for every program in the corpus. The header above and the `d0` naming
+  # both already said -O0 was the baseline; the code was the half that was
+  # wrong. Positive control for the change, measured 2026-09-01 on
+  # test_threadsafe_refcount_lockfree: FAILED at -O0/-O1 and OK at -O2/-O3, so
+  # it must now report DIFF on the -O2 and -O3 arms, which were unreportable
+  # before. Nothing else in shard 2 changes verdict.
+  if ! "./$CC" $CF -O0 "$t" "$TMP/d0" >/dev/null 2>&1; then
+    # RETRY WITH --threadsafe BEFORE CALLING IT A SKIP. Any program that reaches
+    # __pxxclone -- through palthread, classes, TThread, the parallel-for
+    # lowering -- is REFUSED without the flag since the directive-without-flag
+    # became a hard error, and the Makefile passes it on exactly those recipes.
+    # optdiff counts a build-fail as a skip, so those programs left the sweep
+    # silently: SEVEN of shard 2's twenty-four skips, and with them the -O3 DCE
+    # miscompile that had five shards reporting `rc 0 vs 124`. Once they stopped
+    # building, those shards would have gone GREEN with the bug still live. A
+    # guard that cannot fail is not a guard.
+    #
+    # ASK THE COMPILER, DO NOT GREP THE SOURCE. Grepping for {$threadsafe on}
+    # looks like the obvious predicate and it is wrong -- measured 2026-09-01:
+    # all seven of shard 2's threading build-fails carry the directive ZERO
+    # times. The refusal is raised inside lib/rtl/palthread.pas, not in the
+    # test. A source-text predicate would have reinstated the same blind spot
+    # while reading as a fix, which is why the retry asks the only oracle that
+    # cannot go stale. The other seventeen skips in that shard do NOT recover,
+    # and eight of them are `*_fail.pas` that must not: the retry distinguishes
+    # them for free, where a grep would have had to know about them.
+    if [ "${t%.c}" = "$t" ] && "./$CC" --threadsafe -O0 "$t" "$TMP/d0" >/dev/null 2>&1; then
+      CF="$CF --threadsafe"; recovered="$recovered $b"
+    else
+      skip=$((skip + 1)); skip_build="$skip_build $b"
+      continue                            # doesn't build at -O0: not a diff
+    fi
   fi
   o0=$(timeout "$TMO" "$TMP/d0" </dev/null 2>&1); r0=$?
   if [ "$r0" -ge 124 ]; then
@@ -131,5 +164,10 @@ done
 [ -n "$skip_listed" ]  && echo "optdiff skip SKIPLIST:$skip_listed"
 [ -n "$skip_timeout" ] && echo "optdiff skip TIMEOUT-O0:$skip_timeout"
 [ -n "$skip_build" ]   && echo "optdiff skip BUILD-FAIL:$skip_build"
+# Name the recovered ones too. They are the population this sweep silently lost
+# once already, so the line has to be READ, not just counted -- an empty
+# THREADSAFE line on a shard that used to print names is the same regression
+# coming back, and it looks exactly like good news.
+[ -n "$recovered" ]    && echo "optdiff THREADSAFE-RETRY:$recovered"
 echo "optdiff shard $SHARD/$NSHARD: pass=$pass skip=$skip diff=$diff"
 [ "$diff" -eq 0 ]
