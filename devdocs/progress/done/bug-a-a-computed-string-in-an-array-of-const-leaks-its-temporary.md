@@ -67,4 +67,4 @@ in `88e1ab536` was precisely that the shape stops describing what the lowering
 produced. Ask what the lowering emitted, not what the source looked like.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 95ca8fa22.
+- 2026-09-01 — FIXED in ir.inc's TVarRec element lowering: a tyAnsiString element is parked in an owning hidden local before the raw pointer reaches the slot. 2977 -> 10 live, allocs unchanged at 28165, identical on all five targets; rejected by the pre-fix binary. Test test_array_of_const_string_leaks.pas, commit f42665459. Resolve carried separately by 95ca8fa22.
