@@ -403,3 +403,61 @@ range map.
 
 Only `writeELFRelX64General` needs this: it refuses any target but x86-64, and
 the ELF32 writer serves xtensa/riscv32 where the refusal stands.
+
+## The open question is ANSWERED, and the answer corrects the option-2 rejection
+
+Measured 2026-09-01 (frankA), compiler binary `70c62f7968b6` at `88e1ab536`,
+x86-64 `--emit-obj`, C frontend. The question was whether an incomplete-array
+import gets a zero-length `.bss` range, which would leave the range map nothing
+to match.
+
+**It does not: the reservation is ONE ELEMENT, never zero.** `arrLen` falls
+through to `1` for a declarator with no size and no initialiser
+(`cparser.inc`, the `else arrLen := 1` at the end of that chain), and
+`CGrowGlobalArray` only ever grows it if a definition appears later in the same
+TU. So every import owns a distinct base and no two can collide. `extern char
+p[]; extern char q[];` land 8 bytes apart (9504, 950c) — one element plus
+alignment padding.
+
+**But the premise the option-2 rejection rests on is FALSE for C, and I checked
+it because it was the reason a design was discarded.** The ticket says element
+and field offsets are folded into the same integer, so `buf[3]` would arrive as
+`bias + ordinal + 3`. Measured, every shape relocating to its symbol's BARE
+BASE with no addend fold:
+
+| expression | fold would give | actual addend |
+| --- | --- | --- |
+| `p[0]` / `p[3]` | base, base+3 | `.bss + 9504` both |
+| `ia[0]` / `ia[5]` | base, base+20 | `.bss + 9514` both |
+| `m2[i]` / `m2[1000]` | base, base+4000 | `.bss + 950c` both |
+| `st.c` (field +8) | base+8 | `.bss + 9504` |
+| `ta[4].y` (+36) | base+36 | `.bss + 9504` |
+| `single.y` (+4) | base+4 | `.bss + 9514` |
+
+The constant index and the field offset are computed in the instruction stream
+after the `LEA`; the relocation carries the base only. So **an exact-match table
+`base -> importIdx` is sufficient for the C half** — no range containment test,
+no ordinal table, and option 2 was not disqualified for the reason given.
+
+**The residual, which is why the range map does not simply disappear.** x86-64
+DOES have call sites that fold: `EmitGlobRef(Syms[idx].Offset + 8)` in
+`symtab.inc` (6743, 6762, 6930, 6932, 7263 — `EmitStringCharLoad` and the
+string-header paths). Those are Pascal string/ShortString accesses skipping a
+header word, and no C array indexing reaches them, which is why every row above
+is clean. But this ticket's acceptance covers Pascal `cdecl` units too, and a
+Pascal string global as an IMPORT would produce `base+8` against a reservation
+that may be a single element — too small for a range check keyed on
+`ArrLen * elemSize` to contain it.
+
+**So: exact-match table, plus a positive control that makes the residual LOUD.**
+Any `GlobFix` whose addend is not an exact import base but falls between one
+import's base and the next symbol's base must be a hard compiler error, not a
+fallback to a section-relative relocation. That is the case I could not
+construct from C, and silently relocating it is the current bug wearing the new
+hat that this section was written to look for. A guard that cannot fire is worth
+nothing here; this one has a real case behind it and a reason it did not appear
+in my rows.
+
+Scope of these numbers, kept attached: x86-64, C frontend, `--emit-obj`, the
+shapes tabulated. `writeELFRelX64General` is the only writer that needs this,
+so that is the right scope — but the Pascal row is UNMEASURED, not clean.

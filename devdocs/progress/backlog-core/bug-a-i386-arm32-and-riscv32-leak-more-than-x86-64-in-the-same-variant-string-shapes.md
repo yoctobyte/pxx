@@ -56,3 +56,30 @@ others do, and the allocation-count column says the second is in play.
 Do not treat "all five are under the bound now" as an answer. That is the
 condition under which this is cheap to investigate, not evidence there is
 nothing there.
+
+## Narrowed by a negative result (frankB, 2026-09-01) — NOT the general release matrix
+
+frankB swept 20 shapes that measure clean on x86-64 across all five targets,
+1000 trips each, at `42507851cdde`: interfaces (local, reassigned, function
+result, in a dyn array, as a parameter), 2-D dyn arrays including shrink and
+regrow, `for..in` over strings and over records, a class with a destructor,
+`try/finally`, an open-array parameter, a concat loop, variant+promo in one
+record, 3-deep nesting, inherited managed fields, and dyn-array-of-variant and
+dyn-array-of-promo as record members.
+
+**Every cell identical across x86-64 / i386 / arm32 / riscv32 / aarch64, and
+every one clean (1 to 10).** No spread at all.
+
+That matters because it removes the hypothesis this ticket was filed under. If
+the scope-exit release matrix were broadly short on i386 and arm32, at least one
+of twenty shapes covering interfaces, nested dyn arrays, destructors, `for..in`
+and `finally` should have shown it. So the spread is specific to the variant
+string-temp family rather than general to managed memory on those targets, and
+the search should start there rather than in the release matrix.
+
+**The harness was shown to reflect the target rather than falling back**, with a
+positive instance rather than an assertion: a member-array run produced 12 on
+i386 and riscv32 against 7 on x86-64 and aarch64 — a real 32-vs-64-bit split
+from the promo stride. So the identical rows are identical because the counts
+match, not because one binary ran five times. That is the check that makes a
+20-shape zero mean something.
