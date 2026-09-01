@@ -14193,6 +14193,14 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_i386_x64
 	tools/expect_same.sh i386/test_managed_str_ownership_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/msol_i386)" "$$($(TESTTMP)/msol_i386_x64)"
+	# ABSOLUTE, not differential — and the two are not the same check. The row
+	# above compares this target against the x86-64 build, which catches a
+	# backend that DIVERGES and is blind to a leak every backend SHARES. The
+	# Length arm of this program was exactly that: identical on all six, so a
+	# differential compared two equally wrong numbers. assert_no_leak refuses
+	# when there is no census line at all, so it cannot pass by measuring nothing.
+	tools/assert_no_leak.sh i386/managed_str_ownership 50 tools/run_target.sh i386 $(TESTTMP)/msol_i386
+	tools/assert_no_leak.sh x86-64/managed_str_ownership 50 $(TESTTMP)/msol_i386_x64
 
 test-aarch64: $(COMPILER)
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
@@ -14718,6 +14726,14 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a64_x64
 	tools/expect_same.sh aarch64/test_managed_str_ownership_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/msol_a64)" "$$($(TESTTMP)/msol_a64_x64)"
+	# ABSOLUTE, not differential — and the two are not the same check. The row
+	# above compares this target against the x86-64 build, which catches a
+	# backend that DIVERGES and is blind to a leak every backend SHARES. The
+	# Length arm of this program was exactly that: identical on all six, so a
+	# differential compared two equally wrong numbers. assert_no_leak refuses
+	# when there is no census line at all, so it cannot pass by measuring nothing.
+	tools/assert_no_leak.sh aarch64/managed_str_ownership 50 tools/run_target.sh aarch64 $(TESTTMP)/msol_a64
+	tools/assert_no_leak.sh x86-64/managed_str_ownership 50 $(TESTTMP)/msol_a64_x64
 
 test-riscv32: $(COMPILER)
 	# A `var` parameter of every scalar kind, plus var->var forwarding. The
@@ -15280,6 +15296,14 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_rv32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_rv32_x64
 	tools/expect_same.sh riscv32/test_managed_str_ownership_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/msol_rv32)" "$$($(TESTTMP)/msol_rv32_x64)"
+	# ABSOLUTE, not differential — and the two are not the same check. The row
+	# above compares this target against the x86-64 build, which catches a
+	# backend that DIVERGES and is blind to a leak every backend SHARES. The
+	# Length arm of this program was exactly that: identical on all six, so a
+	# differential compared two equally wrong numbers. assert_no_leak refuses
+	# when there is no census line at all, so it cannot pass by measuring nothing.
+	tools/assert_no_leak.sh riscv32/managed_str_ownership 50 tools/run_target.sh riscv32 $(TESTTMP)/msol_rv32
+	tools/assert_no_leak.sh x86-64/managed_str_ownership 50 $(TESTTMP)/msol_rv32_x64
 
 
 # ---------------------------------------------------------------------------
@@ -16187,6 +16211,14 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_xt
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_xt_x64
 	tools/expect_same.sh xtensa/test_managed_str_ownership_leaks "$$(tools/run_target.sh xtensa $(TESTTMP)/msol_xt)" "$$($(TESTTMP)/msol_xt_x64)"
+	# ABSOLUTE, not differential — and the two are not the same check. The row
+	# above compares this target against the x86-64 build, which catches a
+	# backend that DIVERGES and is blind to a leak every backend SHARES. The
+	# Length arm of this program was exactly that: identical on all six, so a
+	# differential compared two equally wrong numbers. assert_no_leak refuses
+	# when there is no census line at all, so it cannot pass by measuring nothing.
+	tools/assert_no_leak.sh xtensa/managed_str_ownership 50 tools/run_target.sh xtensa $(TESTTMP)/msol_xt
+	tools/assert_no_leak.sh x86-64/managed_str_ownership 50 $(TESTTMP)/msol_xt_x64
 
 test-arm32: $(COMPILER)
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
@@ -16706,6 +16738,14 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a32_x64
 	tools/expect_same.sh arm32/test_managed_str_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/msol_a32)" "$$($(TESTTMP)/msol_a32_x64)"
+	# ABSOLUTE, not differential — and the two are not the same check. The row
+	# above compares this target against the x86-64 build, which catches a
+	# backend that DIVERGES and is blind to a leak every backend SHARES. The
+	# Length arm of this program was exactly that: identical on all six, so a
+	# differential compared two equally wrong numbers. assert_no_leak refuses
+	# when there is no census line at all, so it cannot pass by measuring nothing.
+	tools/assert_no_leak.sh arm32/managed_str_ownership 50 tools/run_target.sh arm32 $(TESTTMP)/msol_a32
+	tools/assert_no_leak.sh x86-64/managed_str_ownership 50 $(TESTTMP)/msol_a32_x64
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

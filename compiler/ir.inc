@@ -12050,7 +12050,25 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           (not isRefArg) and
           (ParamWantsManagedStrTemp(cpi, pathIdx) or
            ((cpi < 0) and (-cpi = Ord(tkGetMem)) and (pathIdx > 0) and
-            ParamWantsManagedStrTemp(slot, pathIdx))) and
+            ParamWantsManagedStrTemp(slot, pathIdx)) or
+           { Length(<a fresh managed string VALUE>) -- a call result or a concat.
+             tkLength is lowered INLINE by every backend: emit the arg, deref to
+             the handle, read [-8]. Nothing there releases it, so the temporary
+             was dropped on the floor and `Length(F(i))` leaked one handle per
+             evaluation on ALL SIX backends alike (measured allocs=921 frees=0
+             live=921, against frees=919 live=2 for `s := F(i)`). Routing it
+             through the SAME hidden-local path a managed-string PARAMETER uses
+             fixes it once in the IR rather than six times in the backends: the
+             STORE takes a proper +1 and scope exit frees it.
+
+             Restricted to a non-lvalue, which is what `isRefArg` already
+             decides for tkLength a few hundred lines up (an lvalue is
+             force-addressed so the codegen can read its slot header, and there
+             is no temporary to own). The AN_IDENT/AN_FIELD/AN_INDEX exclusions
+             below are lvalues too and would be redundant here -- they are left
+             to do their existing job for the parameter case. }
+           ((cpi < 0) and (-cpi = Ord(tkLength)) and (pathIdx = 0) and
+            (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyAnsiString))) and
           (ASTKind[ASTLeft[item]] <> AN_IDENT) and
           (ASTKind[ASTLeft[item]] <> AN_FIELD) and
           (ASTKind[ASTLeft[item]] <> AN_INDEX) and

@@ -21,6 +21,11 @@
   on every cross target. The concat arm gave xtensa `frees=3657 live=7318`
   against riscv32's `live=2`.
 
+  THE TWO CHECKS ARE NOT THE SAME CHECK. The cross-target rows catch a backend
+  that DIVERGES; tools/assert_no_leak.sh catches a leak every backend SHARES,
+  which a differential cannot see by construction. The Length arm below is
+  exactly that case and is why both are wired.
+
   NOT covered here, deliberately: the VIRTUAL call arm. xtensa allocates twice
   per iteration for it and still leaks after the ownership fix, which is a
   separate defect with its own ticket -- wiring it now would pin a known-bad
@@ -28,7 +33,7 @@
 program test_managed_str_ownership_leaks;
 type TMakeFn = function(n: Integer): AnsiString;
 
-var s: AnsiString; i: Integer; fp: TMakeFn;
+var s: AnsiString; i, k: Integer; fp: TMakeFn;
 
 function MakeStr(n: Integer): AnsiString;
 begin
@@ -47,4 +52,16 @@ begin
   for i := 1 to 2000 do
     s := fp(i);
   Writeln('indirect len=', Length(s));
+
+  { the DISCARDED arm: a fresh result consumed by Length and never stored.
+    tkLength is lowered inline by every backend -- emit the arg, deref, read
+    [-8] -- and nothing there released the temporary, so this leaked one handle
+    per evaluation on ALL SIX backends identically. That sameness is the point:
+    the cross-target rows above compare each target against the x86-64 build and
+    would have compared two equally wrong numbers, so this arm is the reason
+    tools/assert_no_leak.sh exists beside them. }
+  k := 0;
+  for i := 1 to 2000 do
+    k := k + Length(MakeStr(i));
+  Writeln('discarded k=', k);
 end.
