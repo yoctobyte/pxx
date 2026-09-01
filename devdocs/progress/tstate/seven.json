@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-31T19:12:56Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "3b67d074eded73fc53f29a631ca5800885e1a4ef",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-31T19:18:57Z",
    "fixed": [],
    "new_red": [],
@@ -465,6 +456,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-01T01:20:02Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "49486deea058a1ad45bab6cb566d3cfa5fceaa26",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "seven",
@@ -4036,7 +4036,6 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "49486deea058a1ad45bab6cb566d3cfa5fceaa26",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "49486deea058a1ad45bab6cb566d3cfa5fceaa26",
   "test-threads#src:tools/compiler_srchash.sh": "49486deea058a1ad45bab6cb566d3cfa5fceaa26",
-  "test-uforth#src:compiler/.pascal26.fixedpoint": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@1": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@10": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@11": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
@@ -4050,6 +4049,7 @@
   "test-uforth#src:compiler/.pascal26.fixedpoint@7": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@8": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@9": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
+  "test-uforth#src:tools/compiler_srchash.sh": "49486deea058a1ad45bab6cb566d3cfa5fceaa26",
   "test-uforth#src:tools/compiler_srchash.sh@1": "49486deea058a1ad45bab6cb566d3cfa5fceaa26",
   "test-uforth#src:tools/compiler_srchash.sh@10": "49486deea058a1ad45bab6cb566d3cfa5fceaa26",
   "test-uforth#src:tools/compiler_srchash.sh@11": "49486deea058a1ad45bab6cb566d3cfa5fceaa26",
@@ -7771,7 +7771,6 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "full",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "full",
   "test-threads#src:tools/compiler_srchash.sh": "full",
-  "test-uforth#src:compiler/.pascal26.fixedpoint": "slow",
   "test-uforth#src:compiler/.pascal26.fixedpoint@1": "full",
   "test-uforth#src:compiler/.pascal26.fixedpoint@10": "full",
   "test-uforth#src:compiler/.pascal26.fixedpoint@11": "full",
@@ -7785,6 +7784,7 @@
   "test-uforth#src:compiler/.pascal26.fixedpoint@7": "full",
   "test-uforth#src:compiler/.pascal26.fixedpoint@8": "full",
   "test-uforth#src:compiler/.pascal26.fixedpoint@9": "full",
+  "test-uforth#src:tools/compiler_srchash.sh": "slow",
   "test-uforth#src:tools/compiler_srchash.sh@1": "full",
   "test-uforth#src:tools/compiler_srchash.sh@10": "full",
   "test-uforth#src:tools/compiler_srchash.sh@11": "full",
@@ -11432,7 +11432,7 @@
   "test-threads#src:test/threadsafe_lockdefine.pas@1": "pass",
   "test-threads#src:test/threadsafe_lockdefine.pas@2": "pass",
   "test-threads#src:tools/compiler_srchash.sh": "pass",
-  "test-uforth#src:compiler/.pascal26.fixedpoint": "pass",
+  "test-uforth#src:tools/compiler_srchash.sh": "pass",
   "test-uforth#src:tools/compiler_srchash.sh@1": "pass",
   "test-uforth#src:tools/compiler_srchash.sh@10": "pass",
   "test-uforth#src:tools/compiler_srchash.sh@11": "pass",
@@ -11577,14 +11577,14 @@
  },
  "last": {
   "code_fp": "802e5ed96a48",
-  "date": "2026-09-01T01:16:26Z",
+  "date": "2026-09-01T01:20:02Z",
   "deadline": 3600.0,
   "sha": "49486deea058a1ad45bab6cb566d3cfa5fceaa26",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 346.4
+  "verdict": "GREEN",
+  "wall": 206.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -11635,14 +11635,14 @@
   },
   "slow": {
    "code_fp": "802e5ed96a48",
-   "date": "2026-09-01T00:48:49Z",
+   "date": "2026-09-01T01:20:02Z",
    "deadline": 3600.0,
-   "sha": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
+   "sha": "49486deea058a1ad45bab6cb566d3cfa5fceaa26",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
    "verdict": "GREEN",
-   "wall": 201.9
+   "wall": 206.1
   }
  },
  "last_full": {
