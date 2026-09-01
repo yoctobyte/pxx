@@ -29,6 +29,25 @@ the proven shape, already shipping for class fields. So reentrancy is no longer
 load-bearing for any open bug, and this ticket exists to ask the allocator
 question on its own terms.
 
+**Measured 2026-09-01 (frankB): the proven shape covers FIELDS, not ARRAY
+ELEMENTS, and the benign leak is still live for those.** A dyn array of
+`record i: IThing; s: AnsiString; end`, 1000 trips of 4 elements, grow then
+shrink:
+
+    default        live=5
+    --threadsafe   live=3905      (~every interface, i.e. all 4000)
+
+The mechanism is `ManagedElemKindLocked`, which degrades kind 4 (and kind 6) to
+0 under `ThreadSafeMode` for ELEMENTS specifically, because releasing one
+re-enters the non-reentrant lock. So the sentence above is accurate about the
+field walks and should not be read as covering element walks — the same
+outside-the-lock shape has not been extended to them.
+
+Recorded here rather than as its own ticket because it is the same benign-leak
+trade this section already describes, and because the number is the useful part:
+it is not a rounding error, it is all of them. A Variant element takes the same
+degradation for the same reason.
+
 ## What the allocator actually needs, in its own words
 
 `EmitAcquireHeapLock` (`compiler/ir_codegen.inc`) already replaced a bare
