@@ -4,8 +4,8 @@ track: A
 type: bug
 blocked-by: []
 summary: "One arm of bug-aggregate-member-array-as-var-param (done) never got fixed: a ROW of a 2D array passed as a CONST array parameter still segfaults, on all five targets. The var form of the same row works, and the record-field form works in both modes, so three of the four cells that ticket's own acceptance named pass and the fourth does not. It is what still blocks reverting lib/rtl/ed25519.pas's 4-standalone-TGf workaround."
-status: new
-owner: ""
+status: working
+owner: frankA
 ---
 
 # A 2D-array row passed as a `const` array param still segfaults
