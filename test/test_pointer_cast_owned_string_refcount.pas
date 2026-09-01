@@ -24,7 +24,11 @@
 program test_pointer_cast_owned_string_refcount;
 {$mode objfpc}{$H+}
 var s: AnsiString; p: Pointer; pc: PChar; k, bad: Integer;
-function Cnt: Int64; begin Cnt := PWord(Int64(PChar(s)) - 16)^; end;
+{ machine-word alias, declared here on purpose: the refcount at [handle-16] is
+  eight bytes and `PWord` is two (it only read eight while builtinheap's leaked
+  alias shadowed the builtin one). }
+type PRefCnt = ^NativeInt;
+function Cnt: Int64; begin Cnt := PRefCnt(Int64(PChar(s)) - 16)^; end;
 procedure Chk(const what: AnsiString; got, want: Int64);
 begin
   if got <> want then

@@ -517,17 +517,25 @@ implementation
 
 
 type
-  PWord = ^NativeInt;  { pointer-sized machine-word access at an arbitrary
+  { NOT `PWord`. This block is not private -- pxx has no interface/implementation
+    visibility boundary (measured 2026-09-02; FPC has one), so every type here is
+    visible to every importer, and builtinheap reaches essentially every program.
+    Spelled `PWord`, it shadowed the builtin `PWord = ^UInt16` in USER code:
+    `PWord(p)^` read eight bytes instead of two and `PWord(p)^ := x` WROTE eight,
+    silently, at every -O level. `builtin.pas` already spelled it `PMachineWord`
+    for the same reason. See
+    bug-p-a-units-implementation-section-is-visible-to-its-importers. }
+  PMachineWord = ^NativeInt;  { pointer-sized machine-word access at an arbitrary
                          address: 8 bytes on 64-bit targets, 4 on 32-bit. Must
                          not be ^Int64 — on i386 that writes 8 bytes into a
                          4-byte handle/pointer slot and corrupts its neighbour. }
   PByte = ^Byte;    { byte access at an arbitrary address }
   PInt64 = ^Int64;  { qword access (dyn-array count header at [data-8]) }
   PInt32 = ^Integer; { 32-bit integer access }
-  PU16   = ^Word;   { 2-byte access, for UTF-16 code units. NOT `PWord` -- that
+  PU16   = ^Word;   { 2-byte access, for UTF-16 code units. NOT `PMachineWord` -- that
                       name is taken above and means ^NativeInt (8 bytes on
                       64-bit), which is the single easiest mistake to make in
-                      this file: `PWord(d)^ := unit` compiles, writes eight
+                      this file: `PMachineWord(d)^ := unit` compiles, writes eight
                       bytes, and silently clobbers the next three code units. }
   TPXXIntfMethod = function(AInst: Pointer): NativeInt;  { COM/ARC interface IMT
                        slot signature: _AddRef/_Release take only the implicit
@@ -549,7 +557,7 @@ const
   — the seed build is the only way this change can be compiled at all. }
 procedure PXXHdrInit(base: Int64);
 begin
-  PWord(base + PXX_HDR_META)^ := PXX_KIND_LEGACY;
+  PMachineWord(base + PXX_HDR_META)^ := PXX_KIND_LEGACY;
 end;
 
 { Stamp a block's meta word outright. Callers that know what they are building
@@ -557,7 +565,7 @@ end;
   exactly as before. }
 procedure PXXHdrSetMeta(base: Int64; meta: Int64);
 begin
-  PWord(base + PXX_HDR_META)^ := meta;
+  PMachineWord(base + PXX_HDR_META)^ := meta;
 end;
 
 { The meta word for a freshly built managed STRING, given the OR of all its
@@ -604,11 +612,11 @@ var base, meta: Int64;
 begin
   if p = nil then Exit;
   base := Int64(p) - PXX_HDR_SIZE;
-  meta := PWord(base + PXX_HDR_META)^;
+  meta := PMachineWord(base + PXX_HDR_META)^;
   meta := meta or PXX_FLAG_ASCII_KNOWN;
   if isAscii then meta := meta or PXX_FLAG_ASCII
   else meta := meta and (not PXX_FLAG_ASCII);
-  PWord(base + PXX_HDR_META)^ := meta;
+  PMachineWord(base + PXX_HDR_META)^ := meta;
 end;
 
 { Forget the cached ASCII answer — the bytes are about to change. }
@@ -617,8 +625,8 @@ var base, meta: Int64;
 begin
   if p = nil then Exit;
   base := Int64(p) - PXX_HDR_SIZE;
-  meta := PWord(base + PXX_HDR_META)^;
-  PWord(base + PXX_HDR_META)^ :=
+  meta := PMachineWord(base + PXX_HDR_META)^;
+  PMachineWord(base + PXX_HDR_META)^ :=
     meta and (not (PXX_FLAG_ASCII_KNOWN or PXX_FLAG_ASCII));
 end;
 
@@ -626,7 +634,7 @@ end;
 function PXXHdrMeta(p: Pointer): Int64;
 begin
   if p = nil then PXXHdrMeta := PXX_KIND_LEGACY
-  else PXXHdrMeta := PWord(Int64(p) - PXX_HDR_SIZE + PXX_HDR_META)^;
+  else PXXHdrMeta := PMachineWord(Int64(p) - PXX_HDR_SIZE + PXX_HDR_META)^;
 end;
 
 { Block base for a managed handle, and the ONLY thing that may be passed to
@@ -650,7 +658,7 @@ begin
     poison ($DD = 221 > PXX_KIND_MAX), so use-after-free is still caught. }
   if p <> nil then
   begin
-    hdrKind := PWord(Int64(p) - PXX_HDR_SIZE + PXX_HDR_META)^ and PXX_KIND_MASK;
+    hdrKind := PMachineWord(Int64(p) - PXX_HDR_SIZE + PXX_HDR_META)^ and PXX_KIND_MASK;
     if hdrKind > PXX_KIND_MAX then Halt(204);
   end;
 {$endif}
@@ -927,7 +935,7 @@ begin
     espZ := 0;
     while espZ < len do
     begin
-      PWord(Result + espZ)^ := 0;
+      PMachineWord(Result + espZ)^ := 0;
       espZ := espZ + SizeOf(NativeInt);
     end;
   end;
@@ -1036,7 +1044,7 @@ begin
   if size <= 0 then size := 8;
   size := (size + 7) and (not NativeInt(7));
   p := Int64(calloc(1, NativeUInt(size + 8)));   { zeroed: keeps the contract }
-  PWord(p)^ := size;                             { 8-byte size header }
+  PMachineWord(p)^ := size;                             { 8-byte size header }
   Result := Pointer(p + 8);                      { payload }
 end;
 
@@ -1052,7 +1060,7 @@ begin
   np := PXXAlloc(newSize, align);
   if p <> nil then
   begin
-    oldSize := NativeInt(PWord(Pointer(Int64(p) - 8))^);
+    oldSize := NativeInt(PMachineWord(Pointer(Int64(p) - 8))^);
     if oldSize > newSize then oldSize := newSize;
     PXXMemMove(np, p, oldSize);
     PXXFree(p);
@@ -1078,7 +1086,7 @@ begin
   if size <= 0 then size := 8;
   size := (size + 7) and (not NativeInt(7));
   p := Int64(pxx_libc_calloc(1, NativeUInt(size + 8)));
-  PWord(p)^ := size;                             { 8-byte size header }
+  PMachineWord(p)^ := size;                             { 8-byte size header }
   Result := Pointer(p + 8);                      { payload }
   if (HeapLow = 0) or (p < HeapLow) then HeapLow := p;
   if p + size + 8 > HeapHigh then HeapHigh := p + size + 8;
@@ -1096,7 +1104,7 @@ begin
   np := PXXAlloc(newSize, align);
   if p <> nil then
   begin
-    oldSize := NativeInt(PWord(Pointer(Int64(p) - 8))^);
+    oldSize := NativeInt(PMachineWord(Pointer(Int64(p) - 8))^);
     if oldSize > newSize then oldSize := newSize;
     PXXMemMove(np, p, oldSize);
     PXXFree(p);
@@ -1225,7 +1233,7 @@ begin
     cur := FreeBins[bin];
     if cur <> 0 then
     begin
-      FreeBins[bin] := PWord(cur)^;        { pop }
+      FreeBins[bin] := PMachineWord(cur)^;        { pop }
 {$ifdef PXX_ALLOC_CENSUS}
       CensusReuse := CensusReuse + 1;
 {$endif}
@@ -1244,8 +1252,8 @@ begin
         i := 0;
         while i < size do
         begin
-          PWord(cur + i)^ := 0;
-          i := i + SizeOf(NativeInt);        { PWord writes one machine word: 8 on
+          PMachineWord(cur + i)^ := 0;
+          i := i + SizeOf(NativeInt);        { PMachineWord writes one machine word: 8 on
                                                64-bit, 4 on 32-bit — must match the
                                                step or half the span is skipped }
         end;
@@ -1269,10 +1277,10 @@ begin
     cur := FreeList;
     while cur <> 0 do
     begin
-      if PWord(cur - 8)^ >= size then
+      if PMachineWord(cur - 8)^ >= size then
       begin
-        if prev = 0 then FreeList := PWord(cur)^
-        else PWord(prev)^ := PWord(cur)^;
+        if prev = 0 then FreeList := PMachineWord(cur)^
+        else PMachineWord(prev)^ := PMachineWord(cur)^;
 {$ifdef PXX_ALLOC_CENSUS}
         CensusList := CensusList + 1;
 {$endif}
@@ -1295,7 +1303,7 @@ begin
         Exit;
       end;
       prev := cur;
-      cur := PWord(cur)^;
+      cur := PMachineWord(cur)^;
     end;
   end;
 
@@ -1318,7 +1326,7 @@ begin
     if arena < HEAP_ARENA then arena := HEAP_ARENA;
     HeapPtr := HeapMmap(arena);
     { The check the ticket is about. Without it the -errno BECOMES the heap base
-      and the `PWord(base)^ := size` below faults on it. }
+      and the `PMachineWord(base)^ := size` below faults on it. }
     if HeapMmapFailed(HeapPtr) then PXXHeapExhausted;
     HeapEnd := HeapPtr + arena;
 {$ifdef PXX_ALLOC_CENSUS}
@@ -1329,7 +1337,7 @@ begin
   end;
   base := HeapPtr;
   HeapPtr := HeapPtr + need;
-  PWord(base)^ := size;                     { size header }
+  PMachineWord(base)^ := size;                     { size header }
   Result := Pointer(base + 8);              { payload }
 {$ifdef PXX_ALLOC_CENSUS}
   CensusBump := CensusBump + 1;
@@ -1475,7 +1483,7 @@ var i: Integer;
 begin
   HeapDbgNStack := 32;
   for i := 0 to HeapDbgNStack - 1 do
-    HeapDbgStack[i] := PWord(anchor + i * SizeOf(Pointer))^;
+    HeapDbgStack[i] := PMachineWord(anchor + i * SizeOf(Pointer))^;
 end;
 
 procedure PXXDbgFlush;
@@ -1599,7 +1607,7 @@ end;
 function PXXDbgQuarantine(addr: Int64): Int64;
 var sz, vic, vsz, i, bad: Int64; slot: Integer;
 begin
-  sz := PWord(addr - 8)^;
+  sz := PMachineWord(addr - 8)^;
   { A header we cannot trust (never allocated here, or already corrupted):
     poison only the one word the free list would overwrite anyway. }
   if (sz < 8) or (sz > (HeapHigh - HeapLow)) then sz := 8;
@@ -1621,7 +1629,7 @@ begin
     vic := HeapQuar[HeapQuarHead];
     { The victim has sat poisoned since it was freed. Anything that changed it
       wrote through a dangling pointer. }
-    vsz := PWord(vic - 8)^;
+    vsz := PMachineWord(vic - 8)^;
     if (vsz < 8) or (vsz > (HeapHigh - HeapLow)) then vsz := 8;
     bad := PXXDbgPoisonFirstBad(vic, vsz);
     if bad >= 0 then
@@ -1631,7 +1639,7 @@ begin
       { Everything below was already known here and was being discarded. }
       HeapDbgSize := vsz;
       HeapDbgOff  := bad;
-      HeapDbgVal  := PWord(vic + bad)^;
+      HeapDbgVal  := PMachineWord(vic + bad)^;
       HeapDbgNBytes := 0;
       i := bad;
       while (i < vsz) and (HeapDbgNBytes < 16) do
@@ -1680,16 +1688,16 @@ begin
   { The header carries the block's exact (already 8-rounded) size, so its size
     class is recoverable here — that is what lets alloc skip the walk entirely.
     Both pushes are O(1); the next link lives in the payload at [addr]. }
-  sz := PWord(addr - 8)^;
+  sz := PMachineWord(addr - 8)^;
   if (sz >= 8) and (sz <= HEAP_BIN_MAX) then
   begin
     bin := Integer(sz shr 3) - 1;
-    PWord(addr)^ := FreeBins[bin];
+    PMachineWord(addr)^ := FreeBins[bin];
     FreeBins[bin] := addr;
   end
   else
   begin
-    PWord(addr)^ := FreeList;               { large (or a header we cannot trust) }
+    PMachineWord(addr)^ := FreeList;               { large (or a header we cannot trust) }
     FreeList := addr;
   end;
 end;
@@ -1729,16 +1737,16 @@ begin
   { The header carries the block's exact (already 8-rounded) size, so its size
     class is recoverable here — that is what lets alloc skip the walk entirely.
     Both pushes are O(1); the next link lives in the payload at [addr]. }
-  sz := PWord(addr - 8)^;
+  sz := PMachineWord(addr - 8)^;
   if (sz >= 8) and (sz <= HEAP_BIN_MAX) then
   begin
     bin := Integer(sz shr 3) - 1;
-    PWord(addr)^ := FreeBins[bin];
+    PMachineWord(addr)^ := FreeBins[bin];
     FreeBins[bin] := addr;
   end
   else
   begin
-    PWord(addr)^ := FreeList;               { large (or a header we cannot trust) }
+    PMachineWord(addr)^ := FreeList;               { large (or a header we cannot trust) }
     FreeList := addr;
   end;
 {$endif}
@@ -1763,7 +1771,7 @@ begin
   end;
   if newSize <= 0 then newSize := 8;
   newSize := (newSize + 7) and (not NativeInt(7));
-  oldSize := PWord(addr - 8)^;
+  oldSize := PMachineWord(addr - 8)^;
   if newSize <= oldSize then
   begin
     Result := p;                            { shrink/no-op: keep the block }
@@ -1775,8 +1783,8 @@ begin
   i := 0;
   while i < oldSize do                       { oldSize is a multiple of 8 }
   begin
-    PWord(dst + i)^ := PWord(src + i)^;
-    i := i + SizeOf(NativeInt);              { one machine word per PWord copy —
+    PMachineWord(dst + i)^ := PMachineWord(src + i)^;
+    i := i + SizeOf(NativeInt);              { one machine word per PMachineWord copy —
                                                step 8 dropped every other word on
                                                32-bit (NativeInt=4) }
   end;
@@ -1796,8 +1804,8 @@ var rcAddr, rc: Int64;
 begin
   if arrData = nil then Exit;
   rcAddr := PXXHdrRC(arrData);             { refcount — NOT the block base }
-  rc := PWord(rcAddr)^ - 1;
-  PWord(rcAddr)^ := rc;
+  rc := PMachineWord(rcAddr)^ - 1;
+  PMachineWord(rcAddr)^ := rc;
   if rc <= 0 then PXXFree(Pointer(PXXHdrBase(arrData)));
 end;
 
@@ -1807,18 +1815,18 @@ var
   oldLen, elSize, copyLen, i: Int64;
 begin
   if (arrSlot = nil) or (desc = nil) then Exit;
-  oldData := Pointer(PWord(arrSlot)^);
+  oldData := Pointer(PMachineWord(arrSlot)^);
   elSize := PInt32(Int64(desc) + 4)^;
   if newLen <= 0 then
   begin
-    PWord(arrSlot)^ := 0;
+    PMachineWord(arrSlot)^ := 0;
     PXXDynArrayReleaseEsp(oldData);
     Exit;
   end;
   newBlock := PXXAlloc(PXX_HDR_SIZE + newLen * elSize, 8);
   PXXHdrInit(Int64(newBlock));
-  PWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;      { refcount }
-  PWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;          { length }
+  PMachineWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;      { refcount }
+  PMachineWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;          { length }
   newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
   { Same two calls as the hosted PXXDynSetLen below, for the same reason. Both
     helpers are forward-declared at the top of this unit, so the ESP arm is not
@@ -1827,12 +1835,12 @@ begin
   PXXMemZero(newArrData, newLen * elSize);
   if oldData <> nil then
   begin
-    oldLen := PWord(Int64(oldData) - 8)^;
+    oldLen := PMachineWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
     PXXBlockCopy(Int64(newArrData), Int64(oldData), copyLen * elSize);
   end;
-  PWord(arrSlot)^ := Int64(newArrData);
+  PMachineWord(arrSlot)^ := Int64(newArrData);
   PXXDynArrayReleaseEsp(oldData);
 end;
 {$endif}
@@ -1863,8 +1871,8 @@ begin
     Exit;
   end;
   base := Int64(PXXAlloc(len + PXX_HDR_SIZE + 1, 8));   { +1 = nul terminator }
-  PWord(base + PXX_HDR_RC)^ := 1;      { refcount }
-  PWord(base + PXX_HDR_LEN)^ := len;   { length }
+  PMachineWord(base + PXX_HDR_RC)^ := 1;      { refcount }
+  PMachineWord(base + PXX_HDR_LEN)^ := len;   { length }
   d := base + PXX_HDR_SIZE;
   s := Int64(src);
   i := 0;
@@ -1889,7 +1897,7 @@ end;
 function PXXStrAllocSize(h: Pointer): Int64;
 begin
   if h = nil then PXXStrAllocSize := 0
-  else PXXStrAllocSize := PWord(Int64(h) - PXX_HDR_SIZE - 8)^;
+  else PXXStrAllocSize := PMachineWord(Int64(h) - PXX_HDR_SIZE - 8)^;
 end;
 
 { The ASCII answer for the RESULT of an append, given what the destination
@@ -1964,7 +1972,7 @@ end;
   Keyed on CPU64/CPU32, which the lexer predefines for every target, rather than
   on a list of target names — the ENUMERATION is what goes stale, and a mask one
   word too wide is a silently wrong ASCII verdict rather than a build error. The
-  32-bit value is deliberately only 4 bytes: PWord on a 32-bit target reads 4
+  32-bit value is deliberately only 4 bytes: PMachineWord on a 32-bit target reads 4
   bytes, and a hardcoded 8-byte step in this same routine already copied every
   other word once. }
 const
@@ -1986,8 +1994,8 @@ begin
   if PXXWordCopyOk(d, s, n) then
     while i + w <= n do
     begin
-      PWord(d + i)^ := PWord(s + i)^;
-      acc := acc or PWord(s + i)^;
+      PMachineWord(d + i)^ := PMachineWord(s + i)^;
+      acc := acc or PMachineWord(s + i)^;
       i := i + w;
     end;
   if (acc and PXX_HIGH_BITS) <> 0 then acc := $80 else acc := 0;
@@ -2017,14 +2025,14 @@ var
 begin
   if strSlot = nil then Exit;
   if lenB <= 0 then Exit;
-  h := PWord(strSlot)^;
+  h := PMachineWord(strSlot)^;
   if h = 0 then
   begin
-    PWord(strSlot)^ := Int64(PXXStrFromLit(lenB, srcB));
+    PMachineWord(strSlot)^ := Int64(PXXStrFromLit(lenB, srcB));
     Exit;
   end;
-  oldLen := PWord(h - 8)^;
-  rc := PWord(h - 16)^;
+  oldLen := PMachineWord(h - 8)^;
+  rc := PMachineWord(h - 16)^;
   newLen := oldLen + lenB;
   need := PXX_HDR_SIZE + newLen + 1;          { +1 = nul terminator }
   cap := PXXStrAllocSize(Pointer(h));
@@ -2039,10 +2047,10 @@ begin
     d := h + oldLen;
     orAll := PXXBlockCopy(d, Int64(srcB), lenB);
     PByte(h + newLen)^ := 0;
-    PWord(h - 8)^ := newLen;
+    PMachineWord(h - 8)^ := newLen;
     { The bytes changed, but not unknowably: carry the answer forward rather
       than forgetting it. }
-    PWord(h - PXX_HDR_SIZE + PXX_HDR_META)^ :=
+    PMachineWord(h - PXX_HDR_SIZE + PXX_HDR_META)^ :=
       (oldMeta and (not (PXX_FLAG_ASCII_KNOWN or PXX_FLAG_ASCII))) or
       PXXStrAppendAsciiBits(oldMeta, orAll);
     Exit;
@@ -2059,19 +2067,19 @@ begin
     capacity the size word describes. The ASCII bits are filled in below, once
     the appended bytes have been OR'd — the old half's answer comes from
     oldMeta, so the copy does not have to rescan what was already known. }
-  PWord(base + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
-  PWord(base + PXX_HDR_RC)^ := 1;
-  PWord(base + PXX_HDR_LEN)^ := newLen;
+  PMachineWord(base + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
+  PMachineWord(base + PXX_HDR_RC)^ := 1;
+  PMachineWord(base + PXX_HDR_LEN)^ := newLen;
   d := base + PXX_HDR_SIZE;
   { the old half's ASCII answer comes from oldMeta, so its copy discards the
     scan; only the appended half's bytes are new information }
   PXXBlockCopy(d, h, oldLen);
   orAll := PXXBlockCopy(d + oldLen, Int64(srcB), lenB);
   PByte(d + newLen)^ := 0;
-  PWord(base + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE or
+  PMachineWord(base + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE or
                                  PXXStrAppendAsciiBits(oldMeta, orAll);
   newH := Pointer(d);
-  PWord(strSlot)^ := Int64(newH);
+  PMachineWord(strSlot)^ := Int64(newH);
   PXXStrDecRef(Pointer(h));
 end;
 
@@ -2083,7 +2091,7 @@ procedure PXXStrAppendStr(strSlot: Pointer; srcH: Pointer);
 var len: Int64;
 begin
   if srcH = nil then Exit;
-  len := PWord(Int64(srcH) - 8)^;
+  len := PMachineWord(Int64(srcH) - 8)^;
   if len <= 0 then Exit;
   PXXStrAppend(strSlot, srcH, len);
 end;
@@ -2126,8 +2134,8 @@ begin
     Exit;
   end;
   base := Int64(PXXAlloc(total + PXX_HDR_SIZE + 1, 8));   { +1 = nul terminator }
-  PWord(base + PXX_HDR_RC)^ := 1;        { refcount }
-  PWord(base + PXX_HDR_LEN)^ := total;   { length }
+  PMachineWord(base + PXX_HDR_RC)^ := 1;        { refcount }
+  PMachineWord(base + PXX_HDR_LEN)^ := total;   { length }
   d := base + PXX_HDR_SIZE;
   { one word per iteration where the ends allow it, byte tail otherwise, and
     the ASCII scan folded in — see PXXBlockCopy. Each segment asks for itself:
@@ -2461,8 +2469,8 @@ begin
   if len < 0 then len := 0;
   newp := PXXStrFromLit(len, @PXXLineBuf[PXXLinePos]);
   PXXLinePos := PXXLineLen;
-  oldp := Pointer(PWord(slot)^);
-  PWord(slot)^ := Int64(newp);
+  oldp := Pointer(PMachineWord(slot)^);
+  PMachineWord(slot)^ := Int64(newp);
   PXXStrDecRef(oldp);
 end;
 
@@ -2621,7 +2629,7 @@ procedure PXXWriteStrMW(p: Pointer; wid: NativeInt);
 var len: Int64; r: Int64;
 begin
   len := 0;
-  if p <> nil then len := PWord(Int64(p) - 8)^;
+  if p <> nil then len := PMachineWord(Int64(p) - 8)^;
   if wid > len then PXXWritePad(wid - len);
   if len > 0 then r := PXXSysWrite(1, Int64(p), len);
 end;
@@ -2634,8 +2642,8 @@ begin
   len := 0;
   if src <> nil then
     while (PByte(Int64(src) + len)^ <> 0) and (len < 255) do len := len + 1;
-  PWord(dst)^ := len;
-  PWord(Int64(dst) + 4)^ := 0;     { high half of the 8-byte length prefix }
+  PMachineWord(dst)^ := len;
+  PMachineWord(Int64(dst) + 4)^ := 0;     { high half of the 8-byte length prefix }
   PXXBlockCopy(Int64(dst) + 8, Int64(src), len);
 end;
 
@@ -2643,8 +2651,8 @@ end;
 procedure PXXStrPublish(slot: Pointer; h: Pointer);
 var oldp: Pointer;
 begin
-  oldp := Pointer(PWord(slot)^);
-  PWord(slot)^ := Int64(h);
+  oldp := Pointer(PMachineWord(slot)^);
+  PMachineWord(slot)^ := Int64(h);
   PXXStrDecRef(oldp);
 end;
 
@@ -2652,7 +2660,7 @@ end;
 procedure PXXWriteFrozenW(p: Pointer; wid: NativeInt);
 var len: Int64; r: Int64;
 begin
-  len := PWord(p)^;
+  len := PMachineWord(p)^;
   if wid > len then PXXWritePad(wid - len);
   if len > 0 then r := PXXSysWrite(1, Int64(p) + 8, len);
 end;
@@ -2786,12 +2794,12 @@ begin
   PXXSysLseek(fd, 0, 0);                   { SEEK_SET }
   base := Int64(PXXAlloc(size + PXX_HDR_SIZE + 1, 8));
   PXXHdrInit(base);
-  PWord(base + PXX_HDR_RC)^ := 1;          { refcount }
-  PWord(base + PXX_HDR_LEN)^ := size;      { length (corrected below) }
+  PMachineWord(base + PXX_HDR_RC)^ := 1;          { refcount }
+  PMachineWord(base + PXX_HDR_LEN)^ := size;      { length (corrected below) }
   d := base + PXX_HDR_SIZE;
   n := PXXSysRead(fd, d, size);
   if n < 0 then n := 0;
-  PWord(base + PXX_HDR_LEN)^ := n;         { actual bytes read }
+  PMachineWord(base + PXX_HDR_LEN)^ := n;         { actual bytes read }
   PByte(d + n)^ := 0;                      { nul terminator }
   PXXSysClose(fd);
   Result := Pointer(d);
@@ -2822,7 +2830,7 @@ begin
 {$ifdef PXX_HEAP_DEBUG}
   { Mirror of the check in PXXStrDecRef -- see DBG_M9 for why this arm exists
     with nothing yet observed on it. }
-  if PXXDbgIsPoisonWord(PWord(rcAddr)^) then
+  if PXXDbgIsPoisonWord(PMachineWord(rcAddr)^) then
   begin
     HeapDbgPend := 9;
     HeapDbgAddr := Int64(p);
@@ -2834,7 +2842,7 @@ begin
       PXX_KIND_MAX), so routing through it killed the process one line before
       PXXDbgFlush and this check read as SILENT on every target that calls the
       routine at all. }
-    HeapDbgSize := PWord(Int64(p) - PXX_HDR_SIZE - 8)^;
+    HeapDbgSize := PMachineWord(Int64(p) - PXX_HDR_SIZE - 8)^;
     PXXDbgFlush;
     Exit;
   end;
@@ -2844,7 +2852,7 @@ begin
     (1600x under qemu — see the parent ticket) and defeats ever placing these
     blocks in a non-writable segment. The read below is already on this path;
     the guard costs a compare and a branch and removes a store. }
-  if PWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
+  if PMachineWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
 {$ifdef PXX_TS_SOFTLOCK}
   { threadsafe: atomic increment of the low refcount word (the count never
     approaches 2^32, so the 8-byte header's high dword stays zero). The plain
@@ -2852,7 +2860,7 @@ begin
     saturated block's count is immutable, and a real one cannot reach 2^30. }
   tsIgnore := __pxxatomic_add(Pointer(rcAddr), 1);
 {$else}
-  PWord(rcAddr)^ := PWord(rcAddr)^ + 1;
+  PMachineWord(rcAddr)^ := PMachineWord(rcAddr)^ + 1;
 {$endif}
 end;
 
@@ -2868,7 +2876,7 @@ begin
     much later, which is exactly how these first showed up.
     Note the static guard below cannot catch this: poison is $DDDD..., which is
     NEGATIVE as a signed machine word and so never >= PXX_STATIC_RC_FLOOR. }
-  if PXXDbgIsPoisonWord(PWord(rcAddr)^) then
+  if PXXDbgIsPoisonWord(PMachineWord(rcAddr)^) then
   begin
     HeapDbgPend := 8;
     HeapDbgAddr := Int64(p);
@@ -2880,7 +2888,7 @@ begin
       PXX_KIND_MAX), so routing through it killed the process one line before
       PXXDbgFlush and this check read as SILENT on every target that calls the
       routine at all. }
-    HeapDbgSize := PWord(Int64(p) - PXX_HDR_SIZE - 8)^;
+    HeapDbgSize := PMachineWord(Int64(p) - PXX_HDR_SIZE - 8)^;
     PXXDbgFlush;
     Exit;
   end;
@@ -2888,12 +2896,12 @@ begin
   { Saturated: no write, and no free to consider. Same guard as PXXStrIncRef —
     they must move together, because suppressing one direction only is what
     would let a static block's count drift. }
-  if PWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
+  if PMachineWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
 {$ifdef PXX_TS_SOFTLOCK}
   rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;   { returns the OLD value }
 {$else}
-  rc := PWord(rcAddr)^ - 1;
-  PWord(rcAddr)^ := rc;
+  rc := PMachineWord(rcAddr)^ - 1;
+  PMachineWord(rcAddr)^ := rc;
 {$endif}
   { NOT Pointer(rcAddr): the refcount no longer sits at the block base — see
     the header note. This was one address before the kind word and is two now. }
@@ -2979,8 +2987,8 @@ begin
   if size < 8 then size := 8;
   base := Int64(PXXAlloc(size + PXX_HDR_SIZE, 8));
   PXXHdrInit(base);
-  PWord(base + PXX_HDR_RC)^ := 1;                    { refcount }
-  PWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC;    { population tag, see the interface }
+  PMachineWord(base + PXX_HDR_RC)^ := 1;                    { refcount }
+  PMachineWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC;    { population tag, see the interface }
   Result := Pointer(base + PXX_HDR_SIZE);
 {$ifdef PXX_OBJTRACE}
   PXXObjTrace(Ord('A'), Result, 1);
@@ -2993,8 +3001,8 @@ begin
   if size < 8 then size := 8;
   base := Int64(PXXAlloc(size + PXX_HDR_SIZE, 8));
   PXXHdrInit(base);
-  PWord(base + PXX_HDR_RC)^ := 1;                        { refcount }
-  PWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC_RAW;    { VMT-less block (bound pairs) }
+  PMachineWord(base + PXX_HDR_RC)^ := 1;                        { refcount }
+  PMachineWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC_RAW;    { VMT-less block (bound pairs) }
   Result := Pointer(base + PXX_HDR_SIZE);
 {$ifdef PXX_OBJTRACE}
   PXXObjTrace(Ord('A'), Result, 1);
@@ -3014,7 +3022,7 @@ end;
 function PXXObjIsBoundPair(p: Pointer): Boolean;
 begin
   PXXObjIsBoundPair := (p <> nil) and PXXObjPlausible(p) and
-                       (PWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC_RAW);
+                       (PMachineWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC_RAW);
 end;
 
 function PXXObjAllocRaw2(size: NativeInt): Pointer;
@@ -3023,8 +3031,8 @@ begin
   if size < 8 then size := 8;
   base := Int64(PXXAlloc(size + PXX_HDR_SIZE, 8));
   PXXHdrInit(base);
-  PWord(base + PXX_HDR_RC)^ := 1;                         { refcount }
-  PWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC_RAW2;    { pyeval closure object }
+  PMachineWord(base + PXX_HDR_RC)^ := 1;                         { refcount }
+  PMachineWord(base + PXX_HDR_LEN)^ := PXX_OBJ_MAGIC_RAW2;    { pyeval closure object }
   Result := Pointer(base + PXX_HDR_SIZE);
 {$ifdef PXX_OBJTRACE}
   PXXObjTrace(Ord('A'), Result, 1);
@@ -3040,7 +3048,7 @@ begin
   if p = nil then Exit;
   if not PXXObjPlausible(p) then Exit;
   base := PXXHdrRC(p);            { refcount slot; the spare/magic is at base+8 }
-  t := PWord(base + 8)^;
+  t := PMachineWord(base + 8)^;
   if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
      (t <> PXX_OBJ_MAGIC_RAW2) then
   begin
@@ -3062,10 +3070,10 @@ begin
 {$ifdef PXX_TS_SOFTLOCK}
   tsIgnore := __pxxatomic_add(Pointer(base), 1);
 {$else}
-  PWord(base)^ := PWord(base)^ + 1;
+  PMachineWord(base)^ := PMachineWord(base)^ + 1;
 {$endif}
 {$ifdef PXX_OBJTRACE}
-  PXXObjTrace(Ord('R'), p, PWord(base)^);
+  PXXObjTrace(Ord('R'), p, PMachineWord(base)^);
 {$endif}
 end;
 
@@ -3075,7 +3083,7 @@ begin
   if p = nil then Exit;
   if not PXXObjPlausible(p) then Exit;
   base := PXXHdrRC(p);            { refcount slot; the spare/magic is at base+8 }
-  t := PWord(base + 8)^;
+  t := PMachineWord(base + 8)^;
   if (t <> PXX_OBJ_MAGIC) and (t <> PXX_OBJ_MAGIC_RAW) and
      (t <> PXX_OBJ_MAGIC_RAW2) then
   begin
@@ -3094,8 +3102,8 @@ begin
 {$ifdef PXX_TS_SOFTLOCK}
   rc := __pxxatomic_add(Pointer(base), -1) - 1;   { returns the OLD value }
 {$else}
-  rc := PWord(base)^ - 1;
-  PWord(base)^ := rc;
+  rc := PMachineWord(base)^ - 1;
+  PMachineWord(base)^ := rc;
 {$endif}
 {$ifdef PXX_OBJTRACE}
   PXXObjTrace(Ord('r'), p, rc);
@@ -3170,10 +3178,10 @@ begin
     begin
       itemAddr := Pointer(Int64(memberAddr) + j * memberSize);
       case kind of
-        1: PWord(itemAddr)^ := 0;                     { String handle }
-        2: PWord(itemAddr)^ := 0;                     { DynArray handle }
+        1: PMachineWord(itemAddr)^ := 0;                     { String handle }
+        2: PMachineWord(itemAddr)^ := 0;                     { DynArray handle }
         3: PXXRecordZeroManaged(itemAddr, subDesc);   { nested record }
-        4: PWord(itemAddr)^ := 0;                     { COM interface }
+        4: PMachineWord(itemAddr)^ := 0;                     { COM interface }
         5: begin                                      { Variant: varEmpty = all zero }
              k := 0;
              while k < memberSize do
@@ -3182,7 +3190,7 @@ begin
                k := k + 1;
              end;
            end;
-        6: PWord(itemAddr)^ := 0;                     { NilPy class reference }
+        6: PMachineWord(itemAddr)^ := 0;                     { NilPy class reference }
         7: begin                                      { promo: all-zero = inline 0 }
              k := 0;
              while k < memberSize do
@@ -3244,7 +3252,7 @@ procedure PXXClassFinalize(inst: Pointer); forward;
 procedure PXXObjFree(p: Pointer);
 begin
   if p = nil then Exit;
-  if PXXObjPlausible(p) and (PWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC) then
+  if PXXObjPlausible(p) and (PMachineWord(Int64(p) - 8)^ = PXX_OBJ_MAGIC) then
     PXXObjRelease(p)
   else
   begin
@@ -3280,24 +3288,24 @@ var rtti, ifaces, e, vmt: Pointer; cnt, i: NativeInt;
 begin
   Result := nil;
   if inst = nil then Exit;
-  vmt := Pointer(PWord(inst)^);
+  vmt := Pointer(PMachineWord(inst)^);
   if vmt = nil then Exit;
-  rtti := Pointer(PWord(Pointer(Int64(vmt) - 8))^);
+  rtti := Pointer(PMachineWord(Pointer(Int64(vmt) - 8))^);
   while rtti <> nil do
   begin
-    cnt := NativeInt(PWord(Pointer(Int64(rtti) + PXXH_RTTI_IFCOUNT))^);
-    ifaces := Pointer(PWord(Pointer(Int64(rtti) + PXXH_RTTI_IFACES))^);
+    cnt := NativeInt(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_IFCOUNT))^);
+    ifaces := Pointer(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_IFACES))^);
     if (cnt > 0) and (ifaces <> nil) then
       for i := 0 to cnt - 1 do
       begin
         e := Pointer(Int64(ifaces) + i * PXXH_RTTI_IFSIZE);
-        if NativeInt(PWord(Pointer(Int64(e) + PXXH_RTTI_IF_ID))^) = ifaceId then
+        if NativeInt(PMachineWord(Pointer(Int64(e) + PXXH_RTTI_IF_ID))^) = ifaceId then
         begin
-          Result := Pointer(PWord(Pointer(Int64(e) + PXXH_RTTI_IF_IMT))^);
+          Result := Pointer(PMachineWord(Pointer(Int64(e) + PXXH_RTTI_IF_IMT))^);
           Exit;
         end;
       end;
-    rtti := Pointer(PWord(Pointer(Int64(rtti) + PXXH_RTTI_PARENT))^);
+    rtti := Pointer(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_PARENT))^);
   end;
 end;
 
@@ -3308,7 +3316,7 @@ begin
   if inst = nil then Exit;
   imt := PXXIntfIMTOf(inst, ifaceId);
   if imt = nil then Exit;
-  fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + IMT_ADDREF_OFF))^));
+  fn := TPXXIntfMethod(Pointer(PMachineWord(Pointer(Int64(imt) + IMT_ADDREF_OFF))^));
   Result := fn(inst);
 end;
 
@@ -3317,7 +3325,7 @@ var inst: Pointer;
 begin
   Result := 0;
   if p = nil then Exit;
-  inst := Pointer(PWord(p)^);
+  inst := Pointer(PMachineWord(p)^);
   Result := PXXIntfAddRefRaw(inst, ifaceId);
 end;
 
@@ -3326,11 +3334,11 @@ var imt, inst: Pointer; fn: TPXXIntfMethod;
 begin
   Result := 0;
   if p = nil then Exit;
-  inst := Pointer(PWord(p)^);
+  inst := Pointer(PMachineWord(p)^);
   if inst = nil then Exit;
   imt := PXXIntfIMTOf(inst, ifaceId);
   if imt = nil then Exit;
-  fn := TPXXIntfMethod(Pointer(PWord(Pointer(Int64(imt) + IMT_RELEASE_OFF))^));
+  fn := TPXXIntfMethod(Pointer(PMachineWord(Pointer(Int64(imt) + IMT_RELEASE_OFF))^));
   Result := fn(inst);
 end;
 
@@ -3341,7 +3349,7 @@ procedure PXXIntfAssign(dest, src: Pointer; ifaceId: NativeInt);
 begin
   PXXIntfAddRef(src, ifaceId);
   PXXIntfRelease(dest, ifaceId);
-  PWord(dest)^ := PWord(src)^;
+  PMachineWord(dest)^ := PMachineWord(src)^;
 end;
 
 { GUID-keyed interface lookup for TInterfacedObject.QueryInterface — the same
@@ -3359,13 +3367,13 @@ var
 begin
   Result := 0;
   if (inst = nil) or (iid = nil) then Exit;
-  vmt := Pointer(PWord(inst)^);
+  vmt := Pointer(PMachineWord(inst)^);
   if vmt = nil then Exit;
-  rtti := Pointer(PWord(Pointer(Int64(vmt) - 8))^);
+  rtti := Pointer(PMachineWord(Pointer(Int64(vmt) - 8))^);
   while rtti <> nil do
   begin
-    cnt := NativeInt(PWord(Pointer(Int64(rtti) + PXXH_RTTI_IFCOUNT))^);
-    ifaces := Pointer(PWord(Pointer(Int64(rtti) + PXXH_RTTI_IFACES))^);
+    cnt := NativeInt(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_IFCOUNT))^);
+    ifaces := Pointer(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_IFACES))^);
     if (cnt > 0) and (ifaces <> nil) then
       for i := 0 to cnt - 1 do
       begin
@@ -3379,12 +3387,12 @@ begin
         end;
         if same then
         begin
-          if objOut <> nil then PWord(objOut)^ := NativeInt(inst);
+          if objOut <> nil then PMachineWord(objOut)^ := NativeInt(inst);
           Result := 1;
           Exit;
         end;
       end;
-    rtti := Pointer(PWord(Pointer(Int64(rtti) + PXXH_RTTI_PARENT))^);
+    rtti := Pointer(PMachineWord(Pointer(Int64(rtti) + PXXH_RTTI_PARENT))^);
   end;
 end;
 
@@ -3426,7 +3434,7 @@ begin
     Exit;
   end;
   slotAddr := Int64(strSlot);
-  oldHandle := PWord(slotAddr)^;
+  oldHandle := PMachineWord(slotAddr)^;
   if oldHandle = 0 then
   begin
     Result := nil;
@@ -3459,16 +3467,16 @@ begin
     invariant by naming a routine, check the OPERATION's other implementations,
     not the routine.
     bug-a-the-comment-that-caused-three-bugs-survived-all-three-fixes }
-  rc := PWord(oldHandle - 16)^;
+  rc := PMachineWord(oldHandle - 16)^;
   if rc <= 1 then
   begin
     PXXStrForgetAscii(Pointer(oldHandle));
     Result := Pointer(oldHandle);
     Exit;
   end;
-  len := PWord(oldHandle - 8)^;
+  len := PMachineWord(oldHandle - 8)^;
   newHandle := Int64(PXXStrFromLit(len, Pointer(oldHandle)));
-  PWord(slotAddr)^ := newHandle;
+  PMachineWord(slotAddr)^ := newHandle;
   PXXStrDecRef(Pointer(oldHandle));
   PXXStrForgetAscii(Pointer(newHandle));
   Result := Pointer(newHandle);
@@ -3565,11 +3573,11 @@ begin
 {$ifdef PXX_HEAP_DEBUG}
   { Same stale-handle check as PXXStrDecRef's. RAW arithmetic for the size word:
     PXXHdrBase Halt(204)s on a poisoned kind byte, which is this input exactly. }
-  if PXXDbgIsPoisonWord(PWord(rcAddr)^) then
+  if PXXDbgIsPoisonWord(PMachineWord(rcAddr)^) then
   begin
     HeapDbgPend := 11;
     HeapDbgAddr := Int64(p);
-    HeapDbgSize := PWord(Int64(p) - PXX_HDR_SIZE - 8)^;
+    HeapDbgSize := PMachineWord(Int64(p) - PXX_HDR_SIZE - 8)^;
     PXXDbgGrabStack(Int64(@rcAddr));
     PXXDbgFlush;
     Exit;
@@ -3578,7 +3586,7 @@ begin
 {$ifdef PXX_TS_SOFTLOCK}
   tsIgnore := __pxxatomic_add(Pointer(rcAddr), 1);
 {$else}
-  PWord(rcAddr)^ := PWord(rcAddr)^ + 1;
+  PMachineWord(rcAddr)^ := PMachineWord(rcAddr)^ + 1;
 {$endif}
 end;
 
@@ -3594,11 +3602,11 @@ begin
 {$ifdef PXX_HEAP_DEBUG}
   { Same stale-handle check as PXXStrDecRef's. RAW arithmetic for the size word:
     PXXHdrBase Halt(204)s on a poisoned kind byte, which is this input exactly. }
-  if PXXDbgIsPoisonWord(PWord(rcAddr)^) then
+  if PXXDbgIsPoisonWord(PMachineWord(rcAddr)^) then
   begin
     HeapDbgPend := 10;
     HeapDbgAddr := Int64(arrData);
-    HeapDbgSize := PWord(Int64(arrData) - PXX_HDR_SIZE - 8)^;
+    HeapDbgSize := PMachineWord(Int64(arrData) - PXX_HDR_SIZE - 8)^;
     PXXDbgGrabStack(Int64(@rcAddr));
     PXXDbgFlush;
     Exit;
@@ -3607,19 +3615,19 @@ begin
 {$ifdef PXX_TS_SOFTLOCK}
   rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;   { returns the OLD value }
 {$else}
-  rc := PWord(rcAddr)^ - 1;
-  PWord(rcAddr)^ := rc;
+  rc := PMachineWord(rcAddr)^ - 1;
+  PMachineWord(rcAddr)^ := rc;
 {$endif}
   if rc = 0 then
   begin
-    len := PWord(Int64(arrData) - 8)^;
+    len := PMachineWord(Int64(arrData) - 8)^;
     if depth > 1 then
     begin
       i := 0;
       while i < len do
       begin
         itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
-        PXXDynArrayReleaseDepth(Pointer(PWord(itemAddr)^), depth - 1, baseKind, baseRecDesc);
+        PXXDynArrayReleaseDepth(Pointer(PMachineWord(itemAddr)^), depth - 1, baseKind, baseRecDesc);
         i := i + 1;
       end;
     end
@@ -3631,7 +3639,7 @@ begin
         while i < len do
         begin
           itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
-          PXXStrDecRef(Pointer(PWord(itemAddr)^));
+          PXXStrDecRef(Pointer(PMachineWord(itemAddr)^));
           i := i + 1;
         end;
       end
@@ -3686,8 +3694,8 @@ begin
           while i < len do
           begin
             itemAddr := Pointer(Int64(arrData) + i * elSize);
-            if PWord(itemAddr)^ = PROMO_TAG_HEAP then
-              PXXStrDecRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
+            if PMachineWord(itemAddr)^ = PROMO_TAG_HEAP then
+              PXXStrDecRef(Pointer(PMachineWord(Int64(itemAddr) + SizeOf(NativeInt))^));
             i := i + 1;
           end;
         end;
@@ -3727,7 +3735,7 @@ begin
     while i < len do
     begin
       itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
-      PXXDynArrayIncRef(Pointer(PWord(itemAddr)^));
+      PXXDynArrayIncRef(Pointer(PMachineWord(itemAddr)^));
       i := i + 1;
     end;
   end
@@ -3739,7 +3747,7 @@ begin
       while i < len do
       begin
         itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
-        PXXStrIncRef(Pointer(PWord(itemAddr)^));
+        PXXStrIncRef(Pointer(PMachineWord(itemAddr)^));
         i := i + 1;
       end;
     end
@@ -3836,7 +3844,7 @@ begin
     while i < len do
     begin
       itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
-      PXXStrDecRef(Pointer(PWord(itemAddr)^));
+      PXXStrDecRef(Pointer(PMachineWord(itemAddr)^));
       i := i + 1;
     end;
   end
@@ -3884,8 +3892,8 @@ begin
       while i < len do
       begin
         itemAddr := Pointer(Int64(arrData) + i * elSize);
-        if PWord(itemAddr)^ = PROMO_TAG_HEAP then
-          PXXStrDecRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
+        if PMachineWord(itemAddr)^ = PROMO_TAG_HEAP then
+          PXXStrDecRef(Pointer(PMachineWord(Int64(itemAddr) + SizeOf(NativeInt))^));
         i := i + 1;
       end;
     end;
@@ -3956,9 +3964,9 @@ begin
       itemAddr := Pointer(Int64(memberAddr) + j * memberSize);
       case kind of
         1: { String }
-          PXXStrIncRef(Pointer(PWord(itemAddr)^));
+          PXXStrIncRef(Pointer(PMachineWord(itemAddr)^));
         2: { DynArray }
-          PXXDynArrayIncRef(Pointer(PWord(itemAddr)^));
+          PXXDynArrayIncRef(Pointer(PMachineWord(itemAddr)^));
         3: { Record }
           PXXRecordRetain(itemAddr, subDesc);
         5: { Variant member — the mirror of PXXRecordRelease's PXXVarClear arm.
@@ -3973,8 +3981,8 @@ begin
         7: { Promo field — the mirror of the release arm's PXXStrDecRef, landing
              with it because a release without its retain destroys SetLength
              survivors instead of merely leaking them. }
-          if PWord(itemAddr)^ = PROMO_TAG_HEAP then
-            PXXStrIncRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
+          if PMachineWord(itemAddr)^ = PROMO_TAG_HEAP then
+            PXXStrIncRef(Pointer(PMachineWord(Int64(itemAddr) + SizeOf(NativeInt))^));
       end;
       j := j + 1;
     end;
@@ -4118,11 +4126,11 @@ begin
       itemAddr := Pointer(Int64(memberAddr) + j * memberSize);
       case kind of
         1: { String }
-          PXXStrDecRef(Pointer(PWord(itemAddr)^));
+          PXXStrDecRef(Pointer(PMachineWord(itemAddr)^));
         2: { DynArray }
           begin
             subDesc := Pointer(memberPtr + 12 + typeRef);
-            PXXDynArrayRelease(Pointer(PWord(itemAddr)^), subDesc);
+            PXXDynArrayRelease(Pointer(PMachineWord(itemAddr)^), subDesc);
           end;
         3: { Record }
           PXXRecordRelease(itemAddr, subDesc);
@@ -4132,12 +4140,12 @@ begin
           PXXVarClear(itemAddr);
         6: { NilPy class-typed field: drop the instance's ref on its child
              (magic-guarded — a Pascal instance stored here no-ops) }
-          PXXObjRelease(Pointer(PWord(itemAddr)^));
+          PXXObjRelease(Pointer(PMachineWord(itemAddr)^));
         7: { Promotable-int field. Only the HEAP tier owns anything: its payload
              word is a managed AnsiString handle, and every other tag holds an
              inline value that must not be touched. }
-          if PWord(itemAddr)^ = PROMO_TAG_HEAP then
-            PXXStrDecRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
+          if PMachineWord(itemAddr)^ = PROMO_TAG_HEAP then
+            PXXStrDecRef(Pointer(PMachineWord(Int64(itemAddr) + SizeOf(NativeInt))^));
       end;
       j := j + 1;
     end;
@@ -4180,9 +4188,9 @@ var
   vmt, desc: Pointer;
 begin
   if inst = nil then Exit;
-  vmt := Pointer(PWord(inst)^);
+  vmt := Pointer(PMachineWord(inst)^);
   if vmt = nil then Exit;
-  desc := Pointer(PWord(Pointer(Int64(vmt) - 16))^);
+  desc := Pointer(PMachineWord(Pointer(Int64(vmt) - 16))^);
   if desc = nil then Exit;
   PXXRecordRelease(inst, desc);
 end;
@@ -4212,9 +4220,9 @@ var
   memberPtr: Int64;
 begin
   if inst = nil then Exit;
-  vmt := Pointer(PWord(inst)^);
+  vmt := Pointer(PMachineWord(inst)^);
   if vmt = nil then Exit;
-  desc := Pointer(PWord(Pointer(Int64(vmt) - 16))^);
+  desc := Pointer(PMachineWord(Pointer(Int64(vmt) - 16))^);
   if desc = nil then Exit;
 
   memberCount := PInt32(Int64(desc) + 8)^;
@@ -4228,7 +4236,7 @@ begin
       offset := PInt32(memberPtr)^;
       typeRef := PInt32(memberPtr + 12)^;
       PXXIntfRelease(Pointer(Int64(inst) + offset), typeRef);
-      PWord(Pointer(Int64(inst) + offset))^ := 0;
+      PMachineWord(Pointer(Int64(inst) + offset))^ := 0;
     end;
     memberPtr := memberPtr + 16;
     i := i + 1;
@@ -4277,8 +4285,8 @@ end;
 function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
 var
   arrData: Pointer;
-  refCountPtr: PWord;
-  lenPtr: PWord;
+  refCountPtr: PMachineWord;
+  lenPtr: PMachineWord;
   rc, len, elSize, i: Int64;
   newBlock, newArrData: Pointer;
   depth, baseKind, baseTypeRef: Integer;
@@ -4286,10 +4294,10 @@ var
 begin
   Result := nil;
   if (arrSlot = nil) or (desc = nil) then Exit;
-  arrData := Pointer(PWord(arrSlot)^);
+  arrData := Pointer(PMachineWord(arrSlot)^);
   if arrData = nil then Exit;
 
-  refCountPtr := PWord(Int64(arrData) - 16);
+  refCountPtr := PMachineWord(Int64(arrData) - 16);
   rc := refCountPtr^;
   if rc <= 1 then
   begin
@@ -4297,14 +4305,14 @@ begin
     Exit;
   end;
 
-  lenPtr := PWord(Int64(arrData) - 8);
+  lenPtr := PMachineWord(Int64(arrData) - 8);
   len := lenPtr^;
   elSize := PInt32(Int64(desc) + 4)^;
 
   newBlock := PXXAlloc(PXX_HDR_SIZE + len * elSize, 8);
   PXXHdrInit(Int64(newBlock));
-  PWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;
-  PWord(Int64(newBlock) + PXX_HDR_LEN)^ := len;
+  PMachineWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;
+  PMachineWord(Int64(newBlock) + PXX_HDR_LEN)^ := len;
   newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
 
   { The copy-on-write duplicate — every write to a shared dyn array lands here.
@@ -4324,7 +4332,7 @@ begin
     baseRecDesc := nil;
 
   PXXDynArrayRetainImmediate(newArrData, len, depth, baseKind, baseRecDesc);
-  PWord(arrSlot)^ := Int64(newArrData);
+  PMachineWord(arrSlot)^ := Int64(newArrData);
   PXXDynArrayRelease(arrData, desc);
 
   Result := newArrData;
@@ -4374,7 +4382,7 @@ begin
   if (n >= w) and ((d and (w - 1)) = 0) then
     while i + w <= n do
     begin
-      PWord(d + i)^ := 0;
+      PMachineWord(d + i)^ := 0;
       i := i + w;
     end;
   while i < n do
@@ -4401,7 +4409,7 @@ var
   baseRecDesc: Pointer;
 begin
   if (arrSlot = nil) or (desc = nil) then Exit;
-  oldData := Pointer(PWord(arrSlot)^);
+  oldData := Pointer(PMachineWord(arrSlot)^);
   elSize := PInt32(Int64(desc) + 4)^;
   depth := PInt32(Int64(desc) + 8)^;
   baseKind := PInt32(Int64(desc) + 12)^;
@@ -4417,15 +4425,15 @@ begin
 
   if newLen <= 0 then
   begin
-    PWord(arrSlot)^ := 0;
+    PMachineWord(arrSlot)^ := 0;
     PXXDynArrayRelease(oldData, desc);
     Exit;
   end;
 
   newBlock := PXXAlloc(PXX_HDR_SIZE + newLen * elSize, 8);
   PXXHdrInit(Int64(newBlock));
-  PWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;
-  PWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;
+  PMachineWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;
+  PMachineWord(Int64(newBlock) + PXX_HDR_LEN)^ := newLen;
   newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
 
   { PXXMemZero / PXXBlockCopy, not a byte loop. Both are defined above and both
@@ -4442,14 +4450,14 @@ begin
 
   if oldData <> nil then
   begin
-    oldLen := PWord(Int64(oldData) - 8)^;
+    oldLen := PMachineWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
     PXXBlockCopy(Int64(newArrData), Int64(oldData), copyLen * elSize);
     PXXDynArrayRetainImmediate(newArrData, copyLen, depth, baseKind, baseRecDesc);
   end;
 
-  PWord(arrSlot)^ := Int64(newArrData);
+  PMachineWord(arrSlot)^ := Int64(newArrData);
   PXXDynArrayRelease(oldData, desc);
 end;
 {$endif}
@@ -4468,7 +4476,7 @@ var
 begin
   if strSlot = nil then Exit;
   oldLen := 0;   { read below only when oldData <> nil; do not rely on short-circuit }
-  oldData := Pointer(PWord(strSlot)^);
+  oldData := Pointer(PMachineWord(strSlot)^);
 
 {$ifdef PXX_NILPY_STR}
   { see PXXStrFromLit: NilPy zero-length strings do not collapse to nil. }
@@ -4477,7 +4485,7 @@ begin
   if newLen <= 0 then
 {$endif}
   begin
-    PWord(strSlot)^ := 0;
+    PMachineWord(strSlot)^ := 0;
     PXXStrDecRef(oldData);
     Exit;
   end;
@@ -4503,16 +4511,16 @@ begin
     quickly. Unknown is the state the old code already produced. }
   if oldData <> nil then
   begin
-    oldLen := PWord(Int64(oldData) - 8)^;
-    if (PWord(Int64(oldData) - 16)^ <= 1) and
+    oldLen := PMachineWord(Int64(oldData) - 8)^;
+    if (PMachineWord(Int64(oldData) - 16)^ <= 1) and
        ((PXXHdrMeta(oldData) and PXX_FLAG_APPENDABLE) <> 0) and
        (PXXStrAllocSize(oldData) >= newLen + PXX_HDR_SIZE + 1) then
     begin
       if newLen > oldLen then
         PXXMemZero(Pointer(Int64(oldData) + oldLen), newLen - oldLen);
-      PWord(Int64(oldData) - 8)^ := newLen;
+      PMachineWord(Int64(oldData) - 8)^ := newLen;
       PByte(Int64(oldData) + newLen)^ := 0;
-      PWord(Int64(oldData) - PXX_HDR_SIZE + PXX_HDR_META)^ :=
+      PMachineWord(Int64(oldData) - PXX_HDR_SIZE + PXX_HDR_META)^ :=
         PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
       Exit;
     end;
@@ -4536,9 +4544,9 @@ begin
   if (oldData <> nil) and (newLen > oldLen) then want := want + want;
   newBase := PXXAlloc(want, 8);
   PXXHdrInit(Int64(newBase));
-  PWord(Int64(newBase) + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
-  PWord(Int64(newBase) + PXX_HDR_RC)^ := 1;        { refcount }
-  PWord(Int64(newBase) + PXX_HDR_LEN)^ := newLen;  { length }
+  PMachineWord(Int64(newBase) + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
+  PMachineWord(Int64(newBase) + PXX_HDR_RC)^ := 1;        { refcount }
+  PMachineWord(Int64(newBase) + PXX_HDR_LEN)^ := newLen;  { length }
   newData := Pointer(Int64(newBase) + PXX_HDR_SIZE);
 
   copyLen := 0;
@@ -4556,7 +4564,7 @@ begin
     PXXMemZero(Pointer(Int64(newData) + copyLen), newLen - copyLen);
   PByte(Int64(newData) + newLen)^ := 0;       { nul terminator }
 
-  PWord(strSlot)^ := Int64(newData);
+  PMachineWord(strSlot)^ := Int64(newData);
   PXXStrDecRef(oldData);
 end;
 
@@ -4572,7 +4580,7 @@ end;
 function PXXClampLen(srcData: Pointer; index: NativeInt; count: NativeInt): NativeInt;
 var len, avail: Int64;
 begin
-  if srcData = nil then len := 0 else len := PWord(Int64(srcData) - 8)^;
+  if srcData = nil then len := 0 else len := PMachineWord(Int64(srcData) - 8)^;
   if index < 0 then index := 0;
   if index >= len then begin Result := 0; Exit; end;
   avail := len - index;
@@ -4608,7 +4616,7 @@ end;
 function PXXDynLen(srcData: Pointer): NativeInt;
 begin
   if srcData = nil then Result := 0
-  else Result := PWord(Int64(srcData) - 8)^;
+  else Result := PMachineWord(Int64(srcData) - 8)^;
 end;
 
 { Length after Delete(arr, index, count). FPC clamp semantics: index < 0 or
@@ -4962,10 +4970,10 @@ var
   lLen, rLen: Int64;
   lStrPtr, rStrPtr: Pointer;
 begin
-  lTag := PWord(left)^;
-  rTag := PWord(right)^;
-  lVal := PWord(Int64(left) + 8)^;
-  rVal := PWord(Int64(right) + 8)^;
+  lTag := PMachineWord(left)^;
+  rTag := PMachineWord(right)^;
+  lVal := PMachineWord(Int64(left) + 8)^;
+  rVal := PMachineWord(Int64(right) + 8)^;
 
   { 1. String check }
   if (isCompare = 1) or (opTk = 70) then { tkPlus = 70 }
@@ -5006,7 +5014,7 @@ begin
           else
           begin
             lStr := Pointer(lVal);
-            if lStr = nil then lLen := 0 else lLen := PWord(Int64(lStr) - 8)^;
+            if lStr = nil then lLen := 0 else lLen := PMachineWord(Int64(lStr) - 8)^;
           end;
           if rTag = 5 then
           begin
@@ -5016,7 +5024,7 @@ begin
           else
           begin
             rStr := Pointer(rVal);
-            if rStr = nil then rLen := 0 else rLen := PWord(Int64(rStr) - 8)^;
+            if rStr = nil then rLen := 0 else rLen := PMachineWord(Int64(rStr) - 8)^;
           end;
 
           { resVal = -1 / 0 / +1 ordering: byte compare over the common
@@ -5057,7 +5065,7 @@ begin
         else
         begin
           lStrPtr := Pointer(lVal);
-          if lStrPtr = nil then lLen := 0 else lLen := PWord(Int64(lStrPtr) - 8)^;
+          if lStrPtr = nil then lLen := 0 else lLen := PMachineWord(Int64(lStrPtr) - 8)^;
         end;
 
         if rTag = 5 then
@@ -5068,14 +5076,14 @@ begin
         else
         begin
           rStrPtr := Pointer(rVal);
-          if rStrPtr = nil then rLen := 0 else rLen := PWord(Int64(rStrPtr) - 8)^;
+          if rStrPtr = nil then rLen := 0 else rLen := PMachineWord(Int64(rStrPtr) - 8)^;
         end;
 
         resStr := PXXStrConcat(lLen, lStrPtr, rStrPtr, rLen);
-        if PWord(dest)^ = 6 then
-          PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
-        PWord(dest)^ := 6;
-        PWord(Int64(dest) + 8)^ := Int64(resStr);
+        if PMachineWord(dest)^ = 6 then
+          PXXStrDecRef(Pointer(PMachineWord(Int64(dest) + 8)^));
+        PMachineWord(dest)^ := 6;
+        PMachineWord(Int64(dest) + 8)^ := Int64(resStr);
         Result := Int64(dest);
         Exit;
       end;
@@ -5084,7 +5092,7 @@ begin
 
   { 2. Numeric path.
     Re-read both payloads as the full 8 bytes of the slot. The reads at the top
-    of this function go through PWord, which is pointer-sized — exactly right
+    of this function go through PMachineWord, which is pointer-sized — exactly right
     for the string arms above, where the payload IS a handle, and exactly wrong
     here: on a 32-bit target it takes 4 bytes, so -2 arrives as 4294967294 and
     every negative operand or result comes back zero-extended. The double arm
@@ -5142,9 +5150,9 @@ begin
         if rVal = 0 then PXXDivZero;
         if opTk = 33 then resVal := lVal div rVal else resVal := lVal mod rVal;
       end;
-      if PWord(dest)^ = 6 then
-        PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
-      PWord(dest)^ := 1;
+      if PMachineWord(dest)^ = 6 then
+        PXXStrDecRef(Pointer(PMachineWord(Int64(dest) + 8)^));
+      PMachineWord(dest)^ := 1;
       PInt64(Int64(dest) + 8)^ := resVal;   { full 8 bytes — see the note above }
       Result := Int64(dest);
       Exit;
@@ -5156,9 +5164,9 @@ begin
       else if opTk = 72 then resDbl := lDbl * rDbl
       else if opTk = 73 then resDbl := lDbl / rDbl;
 
-      if PWord(dest)^ = 6 then
-        PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
-      PWord(dest)^ := 3;
+      if PMachineWord(dest)^ = 6 then
+        PXXStrDecRef(Pointer(PMachineWord(Int64(dest) + 8)^));
+      PMachineWord(dest)^ := 3;
       PDouble(Int64(dest) + 8)^ := resDbl;
       Result := Int64(dest);
       Exit;
@@ -5203,9 +5211,9 @@ begin
         resVal := 0;
       end;
 
-      if PWord(dest)^ = 6 then
-        PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
-      PWord(dest)^ := 1;
+      if PMachineWord(dest)^ = 6 then
+        PXXStrDecRef(Pointer(PMachineWord(Int64(dest) + 8)^));
+      PMachineWord(dest)^ := 1;
       PInt64(Int64(dest) + 8)^ := resVal;   { full 8 bytes — see the note above }
       Result := Int64(dest);
       Exit;
@@ -5228,20 +5236,20 @@ end;
 function PXXVarNot(dest: Pointer; src: Pointer): Int64;
 var tag, v: Int64;
 begin
-  tag := PWord(src)^;
+  tag := PMachineWord(src)^;
   { the destination may be a reused temp still holding a string handle }
-  if PWord(dest)^ = 6 then
-    PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
+  if PMachineWord(dest)^ = 6 then
+    PXXStrDecRef(Pointer(PMachineWord(Int64(dest) + 8)^));
   if tag = 4 then                       { VT_BOOL }
   begin
     v := PInt64(Int64(src) + 8)^;
-    PWord(dest)^ := 4;
+    PMachineWord(dest)^ := 4;
     PInt64(Int64(dest) + 8)^ := Int64(v = 0);
   end
   else if (tag = 1) or (tag = 2) then   { VT_INT, VT_INT64 }
   begin
     v := PInt64(Int64(src) + 8)^;
-    PWord(dest)^ := 1;
+    PMachineWord(dest)^ := 1;
     PInt64(Int64(dest) + 8)^ := not v;
   end
   else if tag = 3 then                  { VT_DOUBLE }
@@ -5251,12 +5259,12 @@ begin
       that `not Round(..)` is bitwise -- the local this used to round through
       was a workaround for
       bug-p-not-of-a-builtin-round-or-trunc-call-is-logical, since fixed. }
-    PWord(dest)^ := 1;
+    PMachineWord(dest)^ := 1;
     PInt64(Int64(dest) + 8)^ := not Round(PDouble(Int64(src) + 8)^);
   end
   else if tag = 0 then                  { VT_EMPTY / Null propagates }
   begin
-    PWord(dest)^ := 0;
+    PMachineWord(dest)^ := 0;
     PInt64(Int64(dest) + 8)^ := 0;
   end
   else
@@ -5286,14 +5294,14 @@ var dTag, rTag: Int64; rp: Pointer; rLen: Int64;
 begin
   Result := 0;
   if (dest = nil) or (right = nil) then Exit;
-  dTag := PWord(dest)^;
+  dTag := PMachineWord(dest)^;
   if dTag <> 6 then Exit;                        { VT_STRING }
-  rTag := PWord(right)^;
+  rTag := PMachineWord(right)^;
   if rTag = 6 then
   begin
-    rp := Pointer(PWord(Int64(right) + 8)^);
+    rp := Pointer(PMachineWord(Int64(right) + 8)^);
     if rp = nil then begin Result := 1; Exit; end;   { appending '' }
-    rLen := PWord(Int64(rp) - 8)^;
+    rLen := PMachineWord(Int64(rp) - 8)^;
   end
   else if rTag = 5 then                          { VT_CHAR: the byte is the
                                                    low end of the payload word }
@@ -5357,11 +5365,11 @@ procedure PXXVarReleasePayload(v: Pointer);
   release -1, copy a slot onto itself) with no test to get wrong and no branch
   in the hot path. bug-a-a-variant-assigned-to-itself-becomes-empty }
 begin
-  if (PWord(v)^ = VT_STRING_TAG) or
-     ((PWord(v)^ >= VT_PROMO_FIRST) and (PWord(v)^ <= VT_PROMO_LAST)) then
-    PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^))
-  else if (PWord(v)^ >= VT_OBJ_FIRST) and (PWord(v)^ <= VT_OBJ_LAST) then
-    PXXObjRelease(Pointer(PWord(Int64(v) + 8)^));
+  if (PMachineWord(v)^ = VT_STRING_TAG) or
+     ((PMachineWord(v)^ >= VT_PROMO_FIRST) and (PMachineWord(v)^ <= VT_PROMO_LAST)) then
+    PXXStrDecRef(Pointer(PMachineWord(Int64(v) + 8)^))
+  else if (PMachineWord(v)^ >= VT_OBJ_FIRST) and (PMachineWord(v)^ <= VT_OBJ_LAST) then
+    PXXObjRelease(Pointer(PMachineWord(Int64(v) + 8)^));
 end;
 
 { Retain ONE promo-int element in place: an inline-tier slot owns nothing, a
@@ -5376,18 +5384,18 @@ end;
 procedure PXXPromoRetainOne(p: Pointer);
 begin
   if p = nil then Exit;
-  if PWord(p)^ = PROMO_TAG_HEAP then
-    PXXStrIncRef(Pointer(PWord(Int64(p) + SizeOf(NativeInt))^));
+  if PMachineWord(p)^ = PROMO_TAG_HEAP then
+    PXXStrIncRef(Pointer(PMachineWord(Int64(p) + SizeOf(NativeInt))^));
 end;
 
 procedure PXXVarRetain(v: Pointer);
 { The exact mirror of PXXVarClear — see the note there. }
 begin
-  if (PWord(v)^ = VT_STRING_TAG) or
-     ((PWord(v)^ >= VT_PROMO_FIRST) and (PWord(v)^ <= VT_PROMO_LAST)) then
-    PXXStrIncRef(Pointer(PWord(Int64(v) + 8)^))
-  else if (PWord(v)^ >= VT_OBJ_FIRST) and (PWord(v)^ <= VT_OBJ_LAST) then
-    PXXObjRetain(Pointer(PWord(Int64(v) + 8)^));
+  if (PMachineWord(v)^ = VT_STRING_TAG) or
+     ((PMachineWord(v)^ >= VT_PROMO_FIRST) and (PMachineWord(v)^ <= VT_PROMO_LAST)) then
+    PXXStrIncRef(Pointer(PMachineWord(Int64(v) + 8)^))
+  else if (PMachineWord(v)^ >= VT_OBJ_FIRST) and (PMachineWord(v)^ <= VT_OBJ_LAST) then
+    PXXObjRetain(Pointer(PMachineWord(Int64(v) + 8)^));
 end;
 
 { ---- Float -> text writers (portable bodies for the cross targets, used in
@@ -6062,7 +6070,7 @@ procedure PXXWriteVariant(v: Pointer);
   Boolean was the ONLY tag the two renderers disagreed about. }
 var tag, iv, len, i, s: Int64; ch: Char;
 begin
-  tag := PWord(v)^;
+  tag := PMachineWord(v)^;
   if tag = 4 then                              { VT_BOOL }
   begin
     { Not as an integer. `writeln(v)` with v a Boolean Variant printed True and
@@ -6071,19 +6079,19 @@ begin
       what FPC prints either. The Python spelling is the same word, so one arm
       serves both frontends.
       bug-a-a-boolean-variant-writes-as-1-or-0-off-x86-64 }
-    iv := PWord(Int64(v) + 8)^;
+    iv := PMachineWord(Int64(v) + 8)^;
     if iv <> 0 then write('True') else write('False');
   end
   else if (tag = 1) or (tag = 2) then          { VT_INT / VT_INT64 }
   begin
-    { PInt64, NOT PWord. The payload of BOTH integer tags is a full Int64 (see
-      defs.inc: VT_INT is "payload = sign-extended Int64"), and PWord is a
-      MACHINE word — four bytes on i386 and arm32. Reading it as PWord threw
+    { PInt64, NOT PMachineWord. The payload of BOTH integer tags is a full Int64 (see
+      defs.inc: VT_INT is "payload = sign-extended Int64"), and PMachineWord is a
+      MACHINE word — four bytes on i386 and arm32. Reading it as PMachineWord threw
       away the high half of every integer variant on those two targets, so
       `v := 3000000000; v := v * 2` wrote 1705032704 and `v(1) shl 40` wrote 0,
       while x86-64 and aarch64 — where a machine word happens to BE eight bytes
       — printed both correctly. Silent, target-dependent, and invisible until a
-      variant carried a value that did not fit 32 bits. The other three PWord
+      variant carried a value that did not fit 32 bits. The other three PMachineWord
       reads in this routine are right as they are: a tag, a Boolean's 0/1, and a
       string HANDLE really are machine words.
       bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical }
@@ -6103,10 +6111,10 @@ begin
     decimal, so it PRINTS through the same path. An inline-tier promo is stored
     as an ordinary VT_INT64 and never reaches here. }
   begin
-    s := PWord(Int64(v) + 8)^;
+    s := PMachineWord(Int64(v) + 8)^;
     if s <> 0 then
     begin
-      len := PWord(s - 8)^;
+      len := PMachineWord(s - 8)^;
       i := 0;
       while i < len do
       begin

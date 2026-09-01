@@ -738,7 +738,8 @@ type
   { Machine-word access at an arbitrary address. Declared rather than spelled
     `PNativeInt`, because the built-in pointer names are only registered from
     a TYPE position -- a bare cast in an expression does not reach
-    EnsureBuiltinPtrAlias. builtinheap spells the same type `PWord`. }
+    EnsureBuiltinPtrAlias. builtinheap and builtinwide spell the same type
+    `PMachineWord` too — deliberately NOT `PWord`, which is the builtin ^UInt16. }
   PMachineWord = ^NativeInt;
 
 { May the bulk loops below move a whole machine word at a time? x86 loads and

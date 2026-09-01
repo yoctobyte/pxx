@@ -38,10 +38,20 @@ var
   arr: array of AnsiString;
   k, i, fail: Integer;
 
+{ The refcount field at [handle-16] is a MACHINE WORD, so read it through a
+  machine-word alias declared right here. It used to say `PWord`, which worked
+  only because builtinheap's implementation-section `PWord = ^NativeInt` leaked
+  into this program and shadowed the builtin `PWord = ^UInt16`. With that name
+  fixed, `PWord` correctly means two bytes -- and the saturated literal sentinel
+  $40000000 reads back as 0, so `born saturated` failed. The instrument was
+  reading eight bytes through a name that means two.
+  bug-p-a-units-implementation-section-is-visible-to-its-importers }
+type PRefCnt = ^NativeInt;
+
 function RC(const v: AnsiString): Int64;
 begin
   if Pointer(v) = nil then RC := -1
-  else RC := PWord(Int64(Pointer(v)) - 16)^;
+  else RC := PRefCnt(Int64(Pointer(v)) - 16)^;
 end;
 
 procedure Check(ok: Boolean; const what: AnsiString);

@@ -26,11 +26,16 @@ uses sysutils;
 type
   MyU16 = ^Word;
   MyB   = ^Byte;
+  { the block header's length field is a MACHINE WORD. This said `PWord`, which
+    meant ^NativeInt only because builtinheap's implementation-section alias
+    leaked in and shadowed the builtin ^UInt16; spelled out here instead.
+    bug-p-a-units-implementation-section-is-visible-to-its-importers }
+  PWideLen = ^NativeInt;
 
 { the managed-block header's length word, which is a BYTE count for both kinds }
 function WBytes(w: Pointer): NativeInt;
 begin
-  if w = nil then WBytes := 0 else WBytes := PWord(Int64(w) - 8)^;
+  if w = nil then WBytes := 0 else WBytes := PWideLen(Int64(w) - 8)^;
 end;
 
 procedure ShowWide(const tag: AnsiString; const src: AnsiString);

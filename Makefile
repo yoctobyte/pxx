@@ -5762,6 +5762,8 @@ test-core: $(COMPILER)
 	# and a SOURCE declaration of the same name must still WIN (the compiler's own PWord)
 	./$(COMPILER) test/test_builtin_pointer_types_b303.pas $(TESTTMP)/test_builtin_pointer_types_b30326
 	tools/expect_same.sh test_builtin_pointer_types_b30326 "$$($(TESTTMP)/test_builtin_pointer_types_b30326)" "$$(printf 'source PWord is ^NativeInt : TRUE\ncast via source PWord      : TRUE\nsource PInteger is ^Int64  : -5\nPByte      : 200\nPCardinal  : 4000000000\nPDouble    : 2.5\ndone')"
+	./$(COMPILER) test/test_builtin_pword_not_shadowed_by_rtl.pas $(TESTTMP)/test_builtin_pword_not_shadowed_by_rtl26
+	tools/expect_same.sh test_builtin_pword_not_shadowed_by_rtl26 "$$($(TESTTMP)/test_builtin_pword_not_shadowed_by_rtl26 | tail -n 2)" "$$(printf 'fail=0\nPWORDSHADOW OK')"
 	# `^string` — a pointer to a MANAGED string: reading p^ segfaulted (@s gave the HANDLE,
 	# not the variable's address)
 	./$(COMPILER) test/test_deref_managed_string_b302.pas $(TESTTMP)/test_deref_managed_string_b30226
