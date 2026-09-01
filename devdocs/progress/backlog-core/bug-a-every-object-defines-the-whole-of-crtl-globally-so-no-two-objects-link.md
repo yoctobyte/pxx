@@ -9,7 +9,7 @@ created: 2026-09-01
 found-by: frankD
 owner: ""
 blocked-by: []
-summary: "Every --emit-obj object carries the WHOLE of crtl and exports each entry point as a GLOBAL definition, so any two pxx objects collide on 116 symbols and ld refuses the link. Measured on a two-line .c: 117 global symbols, 116 of them crtl, exactly one the program's own; .text 162KB, .data 11KB, .bss 56KB per object. meta-a-pxx-produces-linkable-code establishes that a gcc-built main links ONE pxx object; nobody had attempted TWO. Found attempting busybox's own build model. SEPARATE COMPILATION OTHERWISE WORKS: all 41 busybox TUs became objects with zero failures and the link produced a working multiplexer (--list, echo, and ash arithmetic all correct) -- but only with -Wl,-z,muldefs to get past THIS bug, and at 13.7MB because every object carries a full crtl."
+summary: "CORRECTED 2026-09-01: weakening only the CODE is NOT sufficient -- crtl STATE is object-local with no linkage at all (`nm` finds no errno symbol), so a program touching errno/optind BY NAME reads its own copy; measured against gcc, errno=0 vs 2 and optind=1 vs 2, and that is exactly why the busybox separate build diverges from the oracle while still linking and running. Every --emit-obj object carries the WHOLE of crtl and exports each entry point as a GLOBAL definition, so any two pxx objects collide on 116 symbols and ld refuses the link. Measured on a two-line .c: 117 global symbols, 116 of them crtl, exactly one the program's own; .text 162KB, .data 11KB, .bss 56KB per object. meta-a-pxx-produces-linkable-code establishes that a gcc-built main links ONE pxx object; nobody had attempted TWO. Found attempting busybox's own build model. SEPARATE COMPILATION OTHERWISE WORKS: all 41 busybox TUs became objects with zero failures and the link produced a working multiplexer (--list, echo, and ash arithmetic all correct) -- but only with -Wl,-z,muldefs to get past THIS bug, and at 13.7MB because every object carries a full crtl."
 ---
 
 # Two objects cannot be linked together
@@ -77,18 +77,52 @@ gcc -Wl,-z,muldefs -o twotu alloc_a.o alloc_b.o    # what weak linkage would do
 3 stdio from B
 ```
 
-**So weak/COMDAT is SOUND ONLY WHILE THE PULL STAYS WHOLESALE.** Anything that
-makes crtl inclusion demand-driven — an obvious size win, and someone will
-want it — breaks the property that makes it safe, silently. Whoever does that
-must move the state to global linkage in the same change, or the two halves
-part company.
+**That is TRUE AND NOT SUFFICIENT, and the second half was measured a few
+hours later, on busybox.** Wholesale-pull makes the CODE consistent: every
+caller reaches A's heap because the surviving `malloc` has A's heap compiled
+into it. It does nothing at all for state a program touches **directly by
+name**, never going through crtl code that could funnel it. busybox does that
+constantly. Two more two-object repros, gcc as the oracle:
+
+```
+                      gcc                                  pxx (-z muldefs)
+errno    fopen in A   errno=2 [No such file or directory]  errno=0 []
+optind   getopt in A  opt=u optind=2                       opt=u optind=1
+```
+
+`nm` finds **no `errno` symbol in a pxx object at all** — it is object-local
+state with no linkage, so the reader gets its own untouched copy.
+
+This is not hypothetical. It is exactly and only why the busybox separate
+build diverges from the oracle:
+
+```
+< cat: can't open '.../missing.txt': No such file or directory
+> cat: can't open '.../missing.txt'
+> cat: can't open '-u'
+```
+
+The missing reason is split `errno`. `-u` becoming a filename is split
+`optind`. One mechanism, twice.
+
+**And it LOOKED like it worked.** 41 objects linked, the binary ran, `--list`,
+`echo` and `ash` arithmetic were all correct. Only the 62-case differential
+caught it. A smoke test on a runtime-state bug is not a weaker version of the
+claim; it is a different claim.
+
+So a fix that weakens only the 116 CODE symbols leaves `errno` and `optind`
+split N ways and ships. **The state must get linkage too** — exported and weak
+alongside the code — or option 2 below, which removes the question instead of
+balancing on it.
 
 ## The options, and a recommendation
 
-1. **Weak / COMDAT the crtl definitions.** Small. Correct today, for the
-   reason above. Leaves N copies of a 162KB runtime in the objects, which
-   `--gc-sections` can reap but nothing currently does. **Carries the hazard
-   above as an undocumented invariant unless this ticket's note goes with it.**
+1. **Weak / COMDAT the crtl definitions — CODE AND STATE BOTH.** Small, but
+   not as small as it first looked: weakening the code alone is measurably
+   wrong (see the errno/optind rows above), so this is "give the state global
+   linkage and weaken both", not "mark the functions weak". Leaves N copies of
+   a 162KB runtime in the objects, which `--gc-sections` could reap and
+   nothing currently does.
 2. **Emit crtl ONCE into its own object or archive; objects import it.** The
    real answer, and how every other toolchain does it. Makes the state
    question disappear rather than balancing on it, and makes object size
@@ -99,7 +133,17 @@ part company.
    what lies BEYOND it.
 
 **Recommend 2, with 1 as a stepping stone if a measurement is wanted sooner** —
-but only with the wholesale-pull invariant written next to it.
+and if 1, the invariant written next to the code is the STATE one above, not
+the wholesale-pull one, which is the half that is true and insufficient.
+
+**UNMEASURED, and it should be measured before either option lands:** whether
+a WEAK pxx `malloc` still beats libc's when a gcc-built main links the object.
+A strong definition in a `.o` beats `libc.so` today, which is what
+`test-emit-obj` relies on. A weak DEFINED symbol should also stop ld pulling
+the archive member, but "should" is not a measurement. My attempt with
+`objcopy --weaken` failed for an unrelated reason (the object carried an
+undefined data symbol and ld refused the PIE relocation), so this is absence
+of evidence, not evidence.
 
 ## Why this is not covered by the meta
 
