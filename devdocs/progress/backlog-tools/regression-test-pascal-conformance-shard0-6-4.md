@@ -182,3 +182,81 @@ nothing yet. Resolve failure 1 first; this one may fall out of it.
 
 The filename is the watcher's; moving it risks the autoticket re-filing a
 duplicate stub. The `track:` field is the lane of record.
+
+---
+
+## RESOLVED (claude-T, seven, 2026-09-01) — both failures fixed, shard verified green
+
+```
+test-pascal-conformance: 61 pass, 0 fail, 26 skip, 5 auto-gated (of 92)
+```
+
+Run on seven against a compiler whose `srchash` MATCHES the tree, so the result
+is conclusive in both directions. Leaving the close itself to
+`close_stub_tickets()` rather than moving this file by hand.
+
+### Failure 1 — `tgeneric32.pp`: cause CONFIRMED, fixed by `78e3b6426`
+
+The bisect closed. Both verdicts forced to print `converged after` and to name
+the binary, after the first attempt was found to be accepting a stamp path that
+builds nothing:
+
+```
+b613b5fcf^   GOOD   bin=8cb1778e7539
+b613b5fcf    BAD    bin=5175d0569e42
+```
+
+So `b613b5fcf` is confirmed, and the earlier "prime suspect, NOT PROVEN" above
+can be read as settled.
+
+**Root cause.** `b613b5fcf` introduced `DGenDeclAnchor`, which walks forward from
+the template to the use to place the minted alias, ending the type section at a
+bare routine heading at depth 0. Its heading list held `tkProcedure` and
+`tkFunction` only. `constructor` and `destructor` are **soft keywords** here —
+`tkIdent`, compared by text — so there is no `tkConstructor` token for a reader
+to notice missing. The walk ran straight through the constructor and its body
+and anchored the alias after the use. A `procedure` in the same position was
+fine, which is why the symptom read as a specialization bug.
+
+Three other heading lists in the same file already spell both soft keywords out
+(`:450`, `:921`, `:1105`), and `:450` carries a comment explaining why they need
+saying. Four sites, one omission — the file's own convention was already right
+three times, and the sibling grep is what turned this from plausible to
+confirmed.
+
+**This is not a defect in `b613b5fcf`'s design.** Anchoring at the use is sound;
+the regression is one incomplete list inside the new walk.
+
+### Failure 2 — `tgeneric49.pp`: fixed by `9801b0bcb`
+
+The template capture in `pasparser_generic.inc` scans the token array ahead of
+the parser and had no equivalent of `pasparser_decl.inc`'s
+`SkipHintDirectives`, so it stopped on the `end` and left the outer parser
+resuming on the directive. `SkipHintDirectiveToks` is the token-index twin and
+shares `IsHintDirectiveName` so the list lives in one place. All five
+directives, classes and records.
+
+Verified passing on seven. `tgeneric49.pp` was never in `pxx.skip`, so no
+skiplist change was needed.
+
+### Still open, and deliberately NOT folded in
+
+- **`tgeneric50.pp` stays skipped.** Its `pxx.skip` reason names two gaps —
+  *"hint directives … on generics **and specializations**"* — and only the
+  generics half is closed. The residual is a hint directive on a
+  **specialization alias**, which leaves the alias undefined:
+
+  ```pascal
+  TTest<T> = class end;
+  TOk  = TTest<Integer>;                              { works }
+  TBad = TTest<Integer> deprecated 'M' experimental;  { TBad goes undefined }
+  ```
+
+  A third site for the same concept, separate from the two template-capture
+  terminators. The entry stays accurate for what remains; narrowing its wording
+  is a data change, not part of this ticket.
+
+- **The `near:` excerpt defect** surfaced while diagnosing this: correct line
+  number, excerpt drawn from an unrelated token stream. Filed separately as
+  `bug-p-error-context-near-quotes-an-unrelated-token-stream` — it is not part
+  of this regression and folding it in would have buried it.
