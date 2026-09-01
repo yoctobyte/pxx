@@ -12245,6 +12245,20 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-multi-applet
 	./$(COMPILER) test/cvoid_ptr_arith.c $(TESTTMP)/c_voidptr26
 	tools/expect_same.sh c_voidptr26 "$$($(TESTTMP)/c_voidptr26)" "$$(printf '1 7\n2 7\n3 7\n4 1\n5 7\n6 3\n7 5\n8 8\n9 7')"
+	# `x & 0' is a constant-false branch and its arm must be ELIMINATED, not
+	# merely not-taken: busybox's feature-flag idiom
+	# `OPT_h = (1 << OPTBIT_h) * ENABLE_FEATURE_HUMAN_READABLE' is a literal 0
+	# when the feature is off, and the arm calls a function that is not in the
+	# build at all. This program declares never_defined_anywhere and defines it
+	# NOWHERE, so LINKING AND STARTING is half the assertion -- before the fix
+	# it died with `undefined symbol: never_defined_anywhere'.
+	# Row 4 is the discriminator and it asserts what must SURVIVE: folding the
+	# condition must not delete an impure operand. The first cut of the fix
+	# deleted the call and every "the arm is gone" row still passed.
+	# $(COMPILER), not $(PXX_STABLE): the pin has no such fold.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/c_and_zero_dead_arm.c $(TESTTMP)/c_andzero26
+	tools/expect_same.sh c_andzero26 "$$($(TESTTMP)/c_andzero26)" "$$(printf '1 11\n2 22\n3 0\n4 1\n5 55\n6 66\n7 ok')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The SIBLING defect, and it is not the const-branch one: a loop in dead code

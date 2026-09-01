@@ -65,6 +65,14 @@
 #   --targets   space-separated target list (default: x86_64 aarch64)
 #   --applets   space-separated applet list (default: cat echo -- rung 2).
 #               A single applet reproduces rung 1 exactly.
+#   --separate  build busybox the way BUSYBOX does -- one object per translation
+#               unit and a real link -- instead of as a unity. x86_64 only,
+#               because --emit-obj has no aarch64 object writer yet. This is a
+#               STRICTLY STRONGER claim than the unity: it needs no include
+#               ordering, no ASH_TEST exclusion, and no preamble tricks, so it
+#               is the configuration that scales past the handful of applets a
+#               unity can hold. It currently needs -Wl,-z,muldefs; see
+#               bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link.
 # env:
 #   PXX_BUSYBOX_DIR   use this tree instead of library_candidates/busybox
 #
@@ -80,6 +88,7 @@ COMPILER="$ROOT/compiler/pascal26"
 TARGETS="x86_64 aarch64"
 APPLETS="cat echo"
 KEEP=0
+SEPARATE=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -87,6 +96,7 @@ while [ $# -gt 0 ]; do
     --keep)    KEEP=1; shift ;;
     --targets) TARGETS="$2"; shift 2 ;;
     --applets) APPLETS="$2"; shift 2 ;;
+    --separate) SEPARATE=1; shift ;;
     *) printf 'busybox-diff: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
 done
@@ -663,7 +673,50 @@ for t in $TARGETS; do
   if [ "$t" = "x86_64" ]; then targflag=""; runner=""
   else targflag="--target=$t"; runner="$ROOT/tools/run_target.sh $t"; fi
 
-  if ! ( cd "$BB" && "$COMPILER" $targflag $INC "$UNITY" "$out" ) > "$WORK/build_$t.log" 2>&1; then
+  if [ "$SEPARATE" -eq 1 ]; then
+    if [ "$t" != "x86_64" ]; then
+      printf '  note    %-8s skipped: --emit-obj has no object writer for this target\n' "$t"
+      continue
+    fi
+    # One object per TU. Each gets the SAME preamble the unity's preamble
+    # supplies, because busybox's real build force-includes include/autoconf.h
+    # (Makefile.flags) and pxx has no -include -- so this is what
+    # `gcc -include include/autoconf.h` does, spelled as source, not a dodge.
+    sed -n '1,/^#include "libbb\/appletlib.c"$/p' "$CATUNITY" | sed '$d' > "$WORK/preamble.h"
+    grep -q '^#include "include/autoconf.h"$' "$WORK/preamble.h" \
+      || die "the unity preamble no longer includes autoconf.h -- every ENABLE_* would be undeclared and every applet would compile itself out"
+    rm -rf "$WORK/obj" "$WORK/wrap"; mkdir -p "$WORK/obj" "$WORK/wrap"
+    nobj=0; objfail=0
+    # The unity's own include list, so this compiles EXACTLY the translation
+    # units the unity does and the two builds stay comparable. appletlib is
+    # added back: separate compilation has no ordering constraint to work
+    # around, which is half the point of this mode.
+    { printf '#include "libbb/appletlib.c"\n'; cat "$WORK/includes.txt"; } | while read -r inc; do
+        printf '%s\n' "$inc" | sed 's|^#include "||; s|"$||'
+      done > "$WORK/tulist.txt"
+    while read -r src; do
+      tag="$(printf '%s' "$src" | tr / _ | sed 's/\.c$//')"
+      { cat "$WORK/preamble.h"; printf '#include "%s"\n' "$src"; } > "$WORK/wrap/$tag.c"
+      if ( cd "$BB" && "$COMPILER" --emit-obj $INC "$WORK/wrap/$tag.c" "$WORK/obj/$tag.o" ) \
+           >> "$WORK/build_$t.log" 2>&1; then
+        nobj=$((nobj+1))
+      else
+        objfail=$((objfail+1))
+        printf '  FAIL    %-8s %s did not become an object: %s\n' "$t" "$src" \
+               "$(grep -E 'error:' "$WORK/build_$t.log" | tail -1)"
+      fi
+    done < "$WORK/tulist.txt"
+    # A link over zero objects is the same silent success as a diff over zero
+    # cases, so the count is asserted rather than printed.
+    nobj=$(ls "$WORK/obj"/*.o 2>/dev/null | wc -l)
+    [ "$nobj" -gt 1 ] || die "separate mode produced $nobj object(s) -- there is nothing here that a unity build would not also prove"
+    if ! gcc -Wl,-z,muldefs -o "$out" "$WORK/obj"/*.o >> "$WORK/build_$t.log" 2>&1; then
+      printf '  FAIL    %-8s %d objects did not link\n' "$t" "$nobj"
+      grep -oE "undefined reference to \`[^']*'" "$WORK/build_$t.log" | sort -u | head -10
+      RC=1; continue
+    fi
+    printf '  note    %-8s %d objects linked separately (%d bytes)\n' "$t" "$nobj" "$(stat -c%s "$out")"
+  elif ! ( cd "$BB" && "$COMPILER" $targflag $INC "$UNITY" "$out" ) > "$WORK/build_$t.log" 2>&1; then
     printf '  FAIL    %-8s pxx could not build the unity\n' "$t"
     grep -v '^ok:' "$WORK/build_$t.log" | head -10
     RC=1; continue

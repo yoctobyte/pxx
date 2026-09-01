@@ -9,13 +9,17 @@ created: 2026-09-01
 found-by: frankD
 owner: ""
 blocked-by: []
-summary: "Every --emit-obj object carries the WHOLE of crtl and exports each entry point as a GLOBAL definition, so any two pxx objects collide on 116 symbols and ld refuses the link. Measured on a two-line .c: 117 global symbols, 116 of them crtl, exactly one the program's own; .text 162KB, .data 11KB, .bss 56KB per object. meta-a-pxx-produces-linkable-code establishes that a gcc-built main links ONE pxx object; nobody had attempted TWO. Found attempting busybox's own build model after the unity hit its ceiling."
+summary: "Every --emit-obj object carries the WHOLE of crtl and exports each entry point as a GLOBAL definition, so any two pxx objects collide on 116 symbols and ld refuses the link. Measured on a two-line .c: 117 global symbols, 116 of them crtl, exactly one the program's own; .text 162KB, .data 11KB, .bss 56KB per object. meta-a-pxx-produces-linkable-code establishes that a gcc-built main links ONE pxx object; nobody had attempted TWO. Found attempting busybox's own build model. SEPARATE COMPILATION OTHERWISE WORKS: all 41 busybox TUs became objects with zero failures and the link produced a working multiplexer (--list, echo, and ash arithmetic all correct) -- but only with -Wl,-z,muldefs to get past THIS bug, and at 13.7MB because every object carries a full crtl."
 ---
 
 # Two objects cannot be linked together
 
 Found by attempting separate compilation of busybox for
-[[feature-c-corpus-busybox-multi-applet]], once
+[[feature-c-corpus-busybox-multi-applet]] -- NOT because the unity was
+exhausted (it was not; nine of twelve candidate applets build fine as a
+fourth, see the logbook correction of 2026-09-01), but because separate
+compilation is busybox's OWN model and a strictly stronger claim. It became
+worth attempting once
 [[bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong]]
 landed and made it worth attempting. Compiler `eb0cff098`.
 

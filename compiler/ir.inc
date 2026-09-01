@@ -14611,6 +14611,22 @@ begin
     (IRKind[i] = IR_JUMP) or (IRKind[i] = IR_TERMINATE) or (IRKind[i] = IR_RAISE);
 end;
 
+function IRCondOperandIsPure(n: Integer): Boolean;
+{ May this operand be discarded without changing what the program DOES?
+
+  An allowlist, not a blocklist, and that direction is the whole safety
+  argument: an IR kind nobody has thought about answers False and the fold
+  simply does not fire, where a blocklist would answer True for every kind
+  added after this was written. Two entries, because two are what the case
+  this serves needs -- busybox's `opt & OPT_h` is a variable read against a
+  literal zero. Widen it with a measurement, never with an assumption; the
+  thing being risked is a call the program was supposed to make. }
+begin
+  IRCondOperandIsPure := False;
+  if (n < 0) or (n >= IRCount) then Exit;
+  IRCondOperandIsPure := (IRKind[n] = IR_CONST_INT) or (IRKind[n] = IR_LOAD_SYM);
+end;
+
 function IRConstCondValue(n: Integer; var val: Boolean): Boolean;
 { Is this branch condition decidable at compile time, and to what?
 
@@ -14634,7 +14650,58 @@ function IRConstCondValue(n: Integer; var val: Boolean): Boolean;
   get wrong. The ordered comparisons would need the operands' type kinds
   consulted to choose a signed or unsigned compare, and a wrong guess there
   silently inverts a branch, which is a far worse failure than the missed fold
-  it would buy. Add them when something real needs them, with the type test. }
+  it would buy. Add them when something real needs them, with the type test.
+
+  PLUS ONE ABSORBING IDENTITY, `x and 0`, and it is here for the same
+  CORRECTNESS reason as the comparisons rather than for speed. It is the
+  feature-flag idiom, and busybox writes it everywhere:
+
+      OPT_h = (1 << OPTBIT_h) * ENABLE_FEATURE_HUMAN_READABLE,   /* = 0 */
+      ...
+      if (opt & OPT_h) column += printf(..., make_human_readable_str(...));
+
+  With the feature off the mask is a literal 0, so the arm is dead and
+  human_readable.c is not in the build at all. gcc emits no reference to
+  `make_human_readable_str`; we emitted one, and the link fails outright.
+  Measured 2026-09-01 on coreutils/ls.c -- it was the ONLY undefined symbol
+  left when all 49 busybox translation units were compiled separately, so this
+  one identity is the whole distance between a link that fails and one that
+  does not.
+
+  Note WHICH half was missing: `if (0)` already folded, because the frontends
+  hand the branch a literal. Nothing folded `x & 0` INTO that literal, so the
+  branch never became constant and the existing dead-arm machinery never got
+  its chance.
+
+  Restricted to `and`, deliberately, and not widened to `x * 0`:
+  multiplication is not integer-only, and `NaN * 0` is NaN, which is not
+  false -- that arm needs the operand's type kind consulted, which is exactly
+  the trap the ordered comparisons are held back for. `and` has no such
+  question: bitwise on integers and logical on booleans both give 0/False,
+  whatever the other side is and whatever its signedness.
+
+  SIDE EFFECTS DO NOT SURVIVE ON THEIR OWN, and the first cut of this said
+  they did. The reasoning was that this function only ANSWERS -- the caller
+  rewrites the jump's kind and touches nothing else, so the condition's
+  operand nodes stay ahead of the jump in the same reachable region. That is
+  true of the JUMP and false of the PROGRAM: once the jump stops reading its
+  condition, the binop has no live consumer, and the call feeding it is
+  collected with it. Measured, `if (sideeffect() & 0)`:
+
+      gcc -O2  calls=1     gcc -O0  calls=1     pxx pinned  calls=1
+      pxx with the naive fold                   calls=0
+
+  So the OTHER operand must be provably pure before the identity may fire,
+  and the allowlist below is deliberately tiny: a literal and a plain variable
+  read. busybox's shape is `opt & OPT_h`, a LOAD_SYM against a zero literal,
+  which is the case this exists for. `(a | b) & 0` is left unfolded rather
+  than reasoned about -- a purity walk over arbitrary operand subtrees is a
+  bigger claim than this ticket needs, and being wrong about it deletes a call
+  the program was supposed to make.
+
+  The test row that caught this is the one that does not look like the bug:
+  every row asserting the arm is GONE still passed while the call was being
+  deleted. Assert what must SURVIVE, not only what must vanish. }
 begin
   IRConstCondValue := False;
   if (n < 0) or (n >= IRCount) then Exit;
@@ -14646,6 +14713,20 @@ begin
   end;
   if (IRKind[n] <> IR_BINOP) then Exit;
   if (IRA[n] < 0) or (IRA[n] >= IRCount) or (IRB[n] < 0) or (IRB[n] >= IRCount) then Exit;
+  { `x and 0` -- one side a literal zero, and the OTHER side pure, so that
+    folding the condition cannot delete work the program must still do. Tested
+    before the both-const gate below because the other side is by definition
+    not a constant in the case this exists for. }
+  if IRC[n] = Ord(tkAnd) then
+    if ((IRKind[IRA[n]] = IR_CONST_INT) and (IRIVal[IRA[n]] = 0)
+        and IRCondOperandIsPure(IRB[n])) or
+       ((IRKind[IRB[n]] = IR_CONST_INT) and (IRIVal[IRB[n]] = 0)
+        and IRCondOperandIsPure(IRA[n])) then
+    begin
+      val := False;
+      IRConstCondValue := True;
+      Exit;
+    end;
   if (IRKind[IRA[n]] <> IR_CONST_INT) or (IRKind[IRB[n]] <> IR_CONST_INT) then Exit;
   if IRC[n] = Ord(tkEq) then
   begin
