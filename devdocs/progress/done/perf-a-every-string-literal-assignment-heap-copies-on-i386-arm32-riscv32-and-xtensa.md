@@ -99,4 +99,5 @@ is not testing the COW path. `test/test_string_index_cow.pas` already exists
 (added by `ad5559ff0`) and is the place to look first.
 
 ## Log
-- 2026-09-01 — resolved, commit 0159ab983.
+- 2026-09-01 — resolved, FIX in e95538346 (0159ab983 is only the ticket move; sync
+  fills this line with the move commit, not the change).
