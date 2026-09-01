@@ -8,7 +8,7 @@ blocked-by: []
 found: 2026-08-31
 found-by: frank-user
 owner: ""
-summary: "Implements the ruling in decided/decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0. Fold the CONSENSUS CORE at every level including -O0 -- a condition constant in the expression itself (literal, sizeof comparison, short-circuit against a literal) and statements after a return -- because all three of gcc, clang and tcc do, and tcc has no optimizer, so this is LOWERING and does not spend -O0's byte-identity property. HARD CONSTRAINT, measured: prune only when unreachable AND the address does not escape; a dead arm holding a label whose address is taken is kept by all three at every level, and an if-only test will not catch getting this wrong. Unblocks feature-c-corpus-busybox-applet. Also adds -OO for the true source-1:1 build, as a NAMED FLAG not a level."
+summary: "Implements the ruling in decided/decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0. What REMAINS is the DEAD-ARM PRUNE at -O0: fold statements after a return, and drop the arm of an if whose condition is already a constant, because gcc, clang and tcc all do and tcc has no optimizer, so this is LOWERING. The SHORT-CIRCUIT half is DONE (f859fedab, 2026-09-01) and it was worse than this file said: `0 && f()` folded at NO level, -O3 included, not just at -O0. HARD CONSTRAINT, measured: prune only when unreachable AND the address does not escape; a dead arm holding a label whose address is taken is kept by all three at every level, and an if-only test will not catch getting this wrong. Both frontends: the Pascal arm is measured open, `if False and (F=0)` keeps its dead call at -O2. Also adds -OO for the true source-1:1 build, as a NAMED FLAG not a level."
 ---
 
 # Fold the consensus dead-branch core at every level
@@ -23,6 +23,51 @@ measurement; this ticket is the work.
 -O0: symbol lookup error: undefined symbol: NEVER_stmt   (exit 127)
 -O1/-O2/-O3: fine
 ```
+
+**That second line was FALSE for one of the shapes this ticket names, and the
+correction is why the busybox work hit it** (frankD, 2026-09-01). The listed
+core includes *"short-circuit against a literal"*, and that shape folded at **no
+level at all** — `0 && f()` kept the call at `-O0`, `-O1`, `-O2` and `-O3`.
+The mechanism is specific and it is why raising `-O` did not help: `&&`/`||`
+lower through a boolean temp and the branch RELOADS it, so `IROptConstBranch`
+— which reads the operand feeding the jump — saw a `load_sym` and gave up. A
+reader who took the two lines above at face value would have concluded the
+default build was safe and moved on; that is exactly what the summary rule
+exists to stop.
+
+**That half is now DONE** — `f859fedab`, folded in the C frontend at the three
+sites a chain needs (`CMakeBinop`'s `&&`/`||`, `CMakeTruthy`, unary `!`), with
+`test/c_short_circuit_const_folds.c`. The two lines above are true again.
+
+**What is left is the DEAD ARM, and it is the larger half.** Once the condition
+is a constant, the arm behind it is still emitted at `-O0`:
+
+```c
+if (0 || 0 || !1) { return NEVER(); }   /* condition folds; arm survives at -O0 */
+```
+
+Rows 13/14/15 of `test/c_short_circuit_const_folds.c` are exactly this and are
+built at the default level for that reason; when this ticket lands, add the
+`-O0` run there.
+
+**THE PASCAL ARM IS OPEN AND MEASURED** (frankD, 2026-09-01, compiler
+`b4ffb6c0caf4`). The same shape through the Pascal frontend keeps its dead call
+at **`-O2`**, not merely at `-O0`:
+
+```pascal
+function NeverDefinedP: Integer; external name 'never_defined_P';
+begin
+  if False and (NeverDefinedP = 0) then Writeln('x');
+  if (False or False) or (not True) then Writeln('y');
+end.
+```
+
+Both `-O0` and `-O2` die with `undefined symbol: never_defined_P`. This is the
+sibling of the C defect, in the frontend the C fix does not touch — `and`/`or`
+on constants are not folded there either. Whoever takes this ticket owns both
+arms: the C fold went in `cparser.inc` because parsers are duplicated per
+language by design, so the Pascal one needs its own, or the whole thing needs
+to move into shared lowering as this ticket's part 1 already proposes.
 
 `IROptDeadCode` and `IROptConstBranch` live in `IROptimize`, gated at
 `ir_codegen.inc:11332` behind `if OptLevel >= 1`, so `-O0` has never pruned any

@@ -34,10 +34,16 @@ qemu-user. Every existing corpus proves one layer. This proves they compose.
    **DONE 2026-08-31.** Byte-identical to a gcc-built binary across 12 input
    cases on x86-64 AND aarch64 under `tools/run_target.sh`, and equal to
    upstream's own separately-linked `busybox_CAT`. Repeatable:
-   `tools/busybox_cat_diff.sh`. Cost three compiler fixes and the aarch64
+   `tools/busybox_diff.sh --applets cat`. Cost three compiler fixes and the aarch64
    `IR_ALLOCA` port; see the resolved ticket.
 2. **busybox multi-applet + `ash`** — the shell half.
-   `feature-c-corpus-busybox-multi-applet` [C]. `feature-eliah-shell` is
+   `feature-c-corpus-busybox-multi-applet` [C]. **FIRST BAR MET 2026-09-01**
+   (`41526aab4`): cat+echo+the multiplexer, `NUM_APPLETS 2` with the dispatch
+   table compiled IN, byte-identical to gcc over 28 cases on x86-64 and
+   aarch64, argv[0] and `busybox <applet>` both. Cost one compiler fix — a
+   constant left operand of `&&`/`||` survived every `-O` level including
+   `-O3` (`f859fedab`). `ash` and the TU surface (28 of ~145) are still open,
+   which is why the rung is not resolved. `feature-eliah-shell` is
    `done/` and is our own shell, a separate artifact; this rung is busybox's.
    Rung 1 says explicitly what it does NOT establish: `cat` reaches 25 of
    libbb's ~145 TUs, and the ones it misses are where `pwd`/`grp`/`statfs`/
