@@ -282,6 +282,18 @@ begin
   PatchRel8(pNonZero);
 end;
 
+{ The runtime retain entry point for a single element of kind 5 or 6, by name.
+  Both x86-64 SetLength lowerings need it and neither can express the promo
+  tag test inline, so the pair lives here rather than being spelled twice.
+  Kinds 1/3/4 are NOT routed through this: they have established inline
+  sequences (incref, record walk, PXXIntfAddRef) that this would slow down for
+  no gain. }
+function PromoOrVarRetainProc(mek: Integer): AnsiString;
+begin
+  if mek = 5 then PromoOrVarRetainProc := 'PXXPromoRetainOne'
+  else PromoOrVarRetainProc := 'PXXVarRetain';
+end;
+
 procedure EmitManagedRecordRetain(recId: Integer);
 var procIdx: Integer;
 begin
@@ -9925,6 +9937,22 @@ begin
                 EmitB($5F);                                             { pop rdi }
                 EmitB($59);                                             { pop rcx }
               end
+              else if (slMek = 5) or (slMek = 6) then
+              begin
+                { The sibling of the SetLength arm's kinds 5/6 case; see the
+                  reasoning there. This site additionally had the STRIDE wrong
+                  for them (below) -- latent only because the record walk it
+                  emitted was inert for REC_NONE, so adding the arms without the
+                  stride would have walked every other element. }
+                EmitB($51);                                             { push rcx }
+                EmitB($57);                                             { push rdi }
+                slProcIdx := FindProc(PromoOrVarRetainProc(slMek));
+                if slProcIdx < 0 then
+                  Error('compiler error: ' + PromoOrVarRetainProc(slMek) + ' not found');
+                EmitCallProc(slProcIdx);                                { arg0 = rdi }
+                EmitB($5F);                                             { pop rdi }
+                EmitB($59);                                             { pop rcx }
+              end
               else
               begin
                 EmitB($51);                                             { push rcx }
@@ -9940,7 +9968,22 @@ begin
                 EmitB($59);                                             { pop rcx }
               end;
               EmitB($48); EmitB($81); EmitB($C7);
+              { Kinds 5/6 are NOT 8 bytes, and the width tracks the PROMO
+                WIDTH rather than the target word size: TypeSlotSize says
+                tyPromoInt32 = 8, tyPromoInt64 = 16, tyVariant = 16. So the old
+                `else 8` was ACCIDENTALLY RIGHT for tyPromoInt32 — which is the
+                shape anyone reaches for first when testing "an array of
+                promotable int", and is very likely why a wrong stride sat here
+                unnoticed. Test with tyPromoInt64 or Variant, where it moves.
+                The width comes from ManagedElemRef (the compiler's own
+                TypeSlotSize); the ALLOCATION uses TypeStorageSize, which
+                defers to TypeSlotSize for every non-record kind, so the two
+                agree by construction. The old `else 8` was
+                harmless while the else arm emitted an inert record walk; it
+                stops being harmless the moment kinds 5/6 retain anything. }
               if slMek = 3 then EmitI32(RecSize(SymTR[symIdx].ElemRec))
+              else if (slMek = 5) or (slMek = 6) then
+                EmitI32(ManagedElemRef(SymTR[symIdx].ElemTk, SymTR[symIdx].ElemRec))
               else EmitI32(8);                                         { add rdi, element size }
               EmitB($48); EmitB($FF); EmitB($C9);                       { dec rcx }
               EmitB($0F); EmitB($85); EmitI32(pDynKeepCopy - (CodeLen + 4));
@@ -10631,6 +10674,29 @@ begin
             slProcIdx := FindProc('PXXIntfAddRef');
             if slProcIdx < 0 then Error('compiler error: PXXIntfAddRef not found');
             EmitCallProc(slProcIdx);
+            EmitB($5F);                                         { pop rdi }
+            EmitB($59);                                         { pop rcx }
+          end
+          else if (slMek = 5) or (slMek = 6) then
+          begin
+            { Kinds 5 (promo int) and 6 (Variant). They used to fall into the
+              RECORD else below, whose EmitManagedRecordRetain returns at once
+              for `recId < REC_UCLASS_BASE` -- and their recId IS REC_NONE, so
+              they were retained by nothing while the release emitted after this
+              loop (PXXDynArrayRelease) has real kind 5 and 6 arms. The
+              asymmetry stayed invisible only because the descriptor wrote
+              baseTypeRef = 0 for these kinds, so the release half declined too
+              on its `elSize > 0` guard: balanced, and leaky. Emitting the real
+              stride without these arms wakes the release alone and turns the
+              leak into a double free, which is how it was found (9cb079528,
+              reverted a584e8fef). The two halves must land together.
+              bug-a-x86-64-inline-setlength-never-retains-promo-or-variant-elements }
+            EmitB($51);                                         { push rcx }
+            EmitB($57);                                         { push rdi }
+            slProcIdx := FindProc(PromoOrVarRetainProc(slMek));
+            if slProcIdx < 0 then
+              Error('compiler error: ' + PromoOrVarRetainProc(slMek) + ' not found');
+            EmitCallProc(slProcIdx);                            { arg0 = rdi = &element }
             EmitB($5F);                                         { pop rdi }
             EmitB($59);                                         { pop rcx }
           end
@@ -12476,7 +12542,9 @@ begin
               EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
             end
             else
-            begin  { kinds 1/4: immediate — 0, or the interface id }
+            begin  { kinds 1/4/5/6: immediate — 0, the interface id, or the
+                     element stride. Said "kinds 1/4" until 2026-09-01; the
+                     sibling of this arm in symtab.inc carries the measurement. }
               EmitB($68); EmitI32(ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
             end;
             EmitCallProc(procIdx);

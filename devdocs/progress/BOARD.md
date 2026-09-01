@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-x86-64-inline-setlength-never-retains-promo-or-variant-elements | A | 6 | bug | FIXED. x86-64 inlines SetLength at TWO sites and both retain chains stopped at kind 4, so promo and variant array elements were never retained — which is why the descriptor stride for kinds 5/6 could not be emitted. Both halves now land together: kind 5/6 arms at both sites (one runtime call each), the stride at the second site via ManagedElemRef, and the descriptor re-widened. Promo live 2955/5985/10779 (linear) -> 7/9/7 flat; variant live 7708 -> 4; kind 4 unchanged. | umbrella-managed-memory-is-correct |
 | feature-c-corpus-busybox-multi-applet | C | 70→90 | feature | Rung 2 of feature-busybox-kiosk-selfhosting-target. FIRST BAR MET 2026-09-01 (2789f87a7): a two-applet busybox (cat+echo+the multiplexer, NUM_APPLETS 2, dispatch table compiled IN) built by pxx is byte-identical to gcc over 28 cases on x86-64 AND aarch64 and agrees with upstream's separately-linked binary; argv[0], `busybox <applet>`, --list, --help, unknown applet and bare busybox all covered. Cost ONE compiler fix: a constant left operand of && / \|\| survived every -O level including -O3 (88ef1232f). Harness is now tools/busybox_diff.sh --applets. STILL OPEN: `ash` (fork/exec/wait, the process model) and the TU surface -- 28 of libbb's ~145, so getpwnam/statfs/getrlimit/getmntent are still untouched. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
@@ -87,7 +88,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (136)
+## backlog-core (135)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -139,7 +140,6 @@ _none_
 | bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage | A | 40 | bug | tyUnknown is simultaneously the legitimate 'untyped Pointer' pointee sentinel and the value every unwritten/recycled slot reads back as. A consumer cannot tell 'this parameter genuinely takes anything' from 'I read a slot that is not mine', and because the permissive answer is the shared one, every such guard fails OPEN. | — |
 | bug-a-wasm32-has-no-variant-ir-arms-so-any-variant-assignment-traps | A | 30 | bug | ANY Variant assignment traps on wasm32: `v := 42` in a bare program body, with no procedure in it, gives `wasm trap: wasm unreachable instruction executed`, exit 134. NOT a leak and NOT a scope-exit problem -- the compiler says so itself, in its own broken-body report: `main$0 - statement IR op 43`, which is IR_VAR_STORE. The whole Variant family is absent from this backend: grep counts IR_VAR_STORE 0, IR_VAR_BINOP 0, IR_VAR_BOX 0 in ir_codegen_wasm32.inc against 2, 2, 2 in ir_codegen_riscv32.inc. So this is not a bug in Variant handling, it is Variant not being lowered at all, and the trap is the backend's deliberate unsupported marker (WasmUnsupported -> WasmBodyUnreachable) doing exactly what it is for. Consequence beyond the trap: wasm32's scope-exit release now HAS a PXXVarClear arm (74e33af46) and nothing can reach it, so that arm is written and unverified until this lands -- do not read its presence as coverage. Scope is three IR ops ported from the riscv32 or aarch64 arm, plus whatever Variant RTL the wasi profile is missing; the descriptor-cell indirection this backend uses for record RTTI (WasmRecDescAddr) is the pattern for any blob address a Variant op needs, because wasm32 has no code->data fixups. | — |
 | bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc | A | 30 | bug | `Write` of a real renders at a width that depends on the TARGET: x86-64 prints `s1+s2` (Single+Single) in Double form where FPC and xtensa print Single, and xtensa prints `i/2` in Single form where FPC and x86-64 print Double. Two backends, opposite errors, same source and same compiler. The values are right; the width dispatch is not. | — |
-| bug-a-x86-64-inline-setlength-never-retains-promo-or-variant-elements | A | 6 | bug | x86-64 inlines SetLength and its retain chain stops at kind 4, so promo and variant array elements are never retained — which is why the descriptor stride for kinds 5/6 cannot be emitted | — |
 | bug-a-xtensa-allocates-twice-per-virtual-call-returning-a-string-and-leaks-one | A+S | 45 | bug | xtensa allocates TWO managed strings per iteration where every other backend allocates one, for `s := o.Make(i)` with a virtual method returning AnsiString -- 7707 allocs against 3799 for the identical source. After the ownership-predicate fix in the same session, x86-64/arm32/riscv32 all settle at live=3 and xtensa settles at live=3856: the fix released one of the two, and the second allocation is never released by anything. So there are two distinct defects here, an EXTRA allocation and an unreleased one, and the extra allocation is the one to find first because the leak may simply be its shadow. Measured with -dPXX_ALLOC_CENSUS; the direct-call and indirect-call arms of the same predicate are clean on xtensa, so this is specific to IR_VIRTUAL_CALL. | — |
 | bug-a-xtensa-cannot-return-a-dynamic-array-from-a-function | A+S | 35 | bug | `function MakeArr(n: Integer): array of Integer` is refused outright on --target=xtensa with 'target xtensa: only ordinal/float/pointer/string function results supported yet' (symtab.inc:12364), while riscv32 -- which carries a refusal of the same shape at symtab.inc:12476 -- accepts it and runs it correctly. So the gap is xtensa's list being narrower than its sibling's, not a missing mechanism. It is why test/test_dynarray_ownership_leaks.pas has no xtensa row, and it means the two dyn-array ownership guards in ir_codegen_xtensa.inc are correct but currently unreachable through a function result. | — |
 | bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp | A+S | 45 | bug | Every windowed xtensa prologue emits `entry a1, 32` then moves sp again with a plain addi/addmi. The windowed ABI requires MOVSP for that, because the caller's 16-byte register save area sits at [a1-16] and a plain add relocates sp while leaving the area behind. Ten executed entry sites, all immediate 32. NOT known to cause a fault -- the obvious mechanism was tested and falsified. | — |
@@ -1343,7 +1343,6 @@ _none_
 - [p 10] [A] feature-a-shrink-managed-header-on-32-bit
 - [p 10] [A+O] feature-opt-alloc-intent-hint
 - [p  6] [A] bug-a-a-variant-or-promo-FIELD-of-a-record-is-not-a-managed-member-so-its-payload-leaks
-- [p  6] [A] bug-a-x86-64-inline-setlength-never-retains-promo-or-variant-elements
 - [p  5] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
 - [p  5] [N] feature-nilpy-nested-def-as-value
 - [p  5] [A] idea-a-auto-enable-threadsafe-by-restarting-the-compile [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
@@ -1392,3 +1391,4 @@ _none_
 - **1** — feature-tls13-from-scratch
 - **1** — perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - **1** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
+- **1** — umbrella-managed-memory-is-correct

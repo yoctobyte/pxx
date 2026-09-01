@@ -11613,8 +11613,16 @@ begin
           EmitAsmX64(['mov rcx, @data',
             -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE))])
         else
-          { kinds 1 and 4: the fourth argument is an immediate, not an address —
-            0 for a string element, the interface id for kind 4. }
+          { kinds 1, 4, 5 and 6: the fourth argument is an immediate, not an
+            address — 0 for a string element, the interface id for kind 4, and
+            the element STRIDE for kinds 5 and 6. This read "kinds 1 and 4"
+            until 2026-09-01, which was a live enumeration of a set the code
+            does not restrict: ManagedElemRef has returned a stride for 5/6 for
+            some time and PXXArrayReleaseImmediate has had arms for all of
+            1/3/4/5/6. Checked by running it rather than by reading: a local
+            `array[0..7] of Variant` given 8 heap-tier payloads per call over
+            2000 calls reports live=4, flat; a restriction to 1 and 4 would
+            have leaked 8 per call. }
           x64_mov_reg_imm(8, rRCX, ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
         EmitCallProc(procIdx);
       end

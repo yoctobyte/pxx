@@ -482,6 +482,7 @@ function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarReleasePayload(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
+procedure PXXPromoRetainOne(p: Pointer);
 procedure PXXWriteVariant(v: Pointer);
 { Exact 17-significant-digit decimal expansion of a finite non-zero |Double|.
   Exposed so builtin.pas's `Str(F, S)` shares the ONE correct implementation
@@ -3789,9 +3790,7 @@ begin
         i := 0;
         while i < len do
         begin
-          itemAddr := Pointer(Int64(arrData) + i * elSize);
-          if PWord(itemAddr)^ = PROMO_TAG_HEAP then
-            PXXStrIncRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
+          PXXPromoRetainOne(Pointer(Int64(arrData) + i * elSize));
           i := i + 1;
         end;
       end;
@@ -5363,6 +5362,22 @@ begin
     PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^))
   else if (PWord(v)^ >= VT_OBJ_FIRST) and (PWord(v)^ <= VT_OBJ_LAST) then
     PXXObjRelease(Pointer(PWord(Int64(v) + 8)^));
+end;
+
+{ Retain ONE promo-int element in place: an inline-tier slot owns nothing, a
+  heap-tier slot's payload is a managed AnsiString and needs exactly one incref.
+
+  Exists because x86-64 INLINES SetLength rather than calling PXXDynSetLen, so
+  its element walk is emitted as machine code and cannot express this two-line
+  conditional without hand-emitting a branch at each of the two lowering sites.
+  A call it can make instead keeps the tag test in one place, which is the same
+  argument ManagedElemKind's own header makes about the policy it answers.
+  bug-a-x86-64-inline-setlength-never-retains-promo-or-variant-elements }
+procedure PXXPromoRetainOne(p: Pointer);
+begin
+  if p = nil then Exit;
+  if PWord(p)^ = PROMO_TAG_HEAP then
+    PXXStrIncRef(Pointer(PWord(Int64(p) + SizeOf(NativeInt))^));
 end;
 
 procedure PXXVarRetain(v: Pointer);
