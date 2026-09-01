@@ -5,9 +5,9 @@ track: C
 prio: 70
 type: feature
 blocked-by: []
-status: new
+status: working
 created: 2026-08-31
-owner: ""
+owner: frankD
 summary: "Rung 2 of feature-busybox-kiosk-selfhosting-target. Rung 1 (cat, byte-identical to gcc on x86-64 + aarch64) is done and REACHED ONLY 25 of libbb's ~145 TUs; the applet-dispatch table and the TUs cat never touches are what is untested. First bar: a two-applet binary that dispatches by argv[0]/argv[1]. Second: ash. tools/busybox_cat_diff.sh is the harness to extend, not to rewrite."
 ---
 

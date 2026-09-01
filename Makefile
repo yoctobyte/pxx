@@ -11933,6 +11933,22 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_unsigned_const_guard_folds.c $(TESTTMP)/c_uguard26
 	tools/expect_same.sh c_uguard26 "$$($(TESTTMP)/c_uguard26)" "$$(printf '11\n12\n13\n14\n15\n16\n100\n200')"
+	# The SIBLING of that fold, through the OPERATOR rather than the comparison,
+	# and it was the one that survived every -O level including -O3: `&&`/`||`
+	# lower through a boolean temp that the branch reloads, so IROptConstBranch
+	# read a load_sym and gave up. Found by building busybox with TWO applets --
+	# `ENABLE_FEATURE_INSTALLER && ...` guarding xmalloc_readlink and
+	# `(0 || 0 || !BB_MMU)` guarding re_execed_comm, neither linked in that
+	# configuration, so the binary died before main with `undefined symbol`.
+	# gcc at -O0 and tcc (no optimiser at all) both fold it, which is why the
+	# fix is in the C frontend's lowering and not in IROptimize.
+	# Rows 11/12 hold at -O0 too (the call is in the DROPPED operand); 13/14/15
+	# need IROptDeadCode's -O1 gate to prune the now-dead arm -- the file says
+	# which is which. The `calls=` rows are the control: a fold that ate a live
+	# side effect prints a negated count.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/c_short_circuit_const_folds.c $(TESTTMP)/c_scfold26
+	tools/expect_same.sh c_scfold26 "$$($(TESTTMP)/c_scfold26)" "$$(printf '11\n12\n13\n14\n15\nlit0&& 0 calls=0\nlit1&& 1 calls=1\nlit1|| 1 calls=0\nlit0|| 1 calls=1\nrun&&0 0 calls=1\nrun||1 1 calls=1')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The SIBLING defect, and it is not the const-branch one: a loop in dead code

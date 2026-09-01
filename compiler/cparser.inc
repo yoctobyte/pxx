@@ -341,9 +341,42 @@ end;
   boolean. C `&&`/`||` must yield exactly 0/1, and the short-circuit IR stores
   the operand value into a 1-byte boolean temp — a raw `2` would read back as 2.
   Normalising both operands here keeps the result canonical. }
-function CMakeTruthy(e: Integer): Integer;
-var node, zero: Integer;
+{ Is this AST node an integer literal, and what is its value? The one question
+  the constant folds below ask. Deliberately literal-only: a `const int z = 0`
+  is NOT folded, because gcc and tcc both keep it and nothing portable may rely
+  on either answer (decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0
+  puts propagation-through-a-variable explicitly out of the consensus core). }
+function CConstIntLit(n: Integer; var v: Int64): Boolean;
 begin
+  CConstIntLit := False;
+  if (n < 0) or (n >= ASTNodeCount) then Exit;
+  if ASTKind[n] <> AN_INT_LIT then Exit;
+  v := ASTIVal[n];
+  CConstIntLit := True;
+end;
+
+{ A 0/1 boolean literal -- the folded result of a logical operator. }
+function CBoolLit(b: Boolean): Integer;
+begin
+  Result := AllocNode(AN_INT_LIT);
+  if b then ASTIVal[Result] := 1 else ASTIVal[Result] := 0;
+  ASTTk[Result] := Ord(tyBoolean);
+end;
+
+function CMakeTruthy(e: Integer): Integer;
+var node, zero: Integer; v: Int64;
+begin
+  { A literal operand answers its own truthiness. Folding HERE and not only at
+    the `&&`/`||` site is what makes a CHAIN collapse: `0 || 0 || !BB_MMU` is
+    left-associative, so the first `||` hands its folded result to the second as
+    an operand, and an unfolded `(0 != 0)` binop there would stop the chain one
+    step in. Measured on busybox's appletlib.c:1118, which is exactly that
+    shape. }
+  if CConstIntLit(e, v) then
+  begin
+    Result := CBoolLit(v <> 0);
+    Exit;
+  end;
   zero := AllocNode(AN_INT_LIT);
   ASTIVal[zero] := 0;
   ASTTk[zero] := Ord(tyInteger);
@@ -887,7 +920,7 @@ begin
 end;
 
 function CMakeBinop(cTok, l, r: Integer): Integer;
-var node, ivalOp, bfPrec: Integer; bfSigned: Boolean;
+var node, ivalOp, bfPrec: Integer; bfSigned: Boolean; cv: Int64;
 begin
   { Both operands undergo the integer promotions before the usual arithmetic
     conversions (6.3.1.8), so a plain char sign-extends HERE on a signed-char
@@ -933,6 +966,40 @@ begin
     straight through. }
   if (cTok = Ord(tkAnd)) or (cTok = Ord(tkOr)) then       { logical && / || }
   begin
+    { SHORT-CIRCUIT ON A CONSTANT LEFT OPERAND, and it is LOWERING, not an
+      optimisation -- gcc at -O0 and tcc (which has no optimiser at all) both do
+      it, so real C relies on it at every level. C 6.5.13/14 says the right
+      operand is NOT EVALUATED when the left already decides the answer, so
+      dropping r here is the language's own rule and not a liberty taken.
+
+      What it costs to skip: the `&&`/`||` lowering materialises its result in a
+      boolean temp and the branch then RELOADS it, so IROptConstBranch -- which
+      reads the operand feeding the jump -- sees a load_sym and gives up. A
+      constant condition therefore survived every -O level, including -O3, and
+      its dead arm's call to a declared-but-never-defined symbol became a real
+      external reference: busybox's `ENABLE_FEATURE_INSTALLER && ...` guarding
+      xmalloc_readlink, and `(0 || 0 || !BB_MMU)` guarding re_execed_comm. Both
+      link, and the binary dies before main with `undefined symbol`. Same
+      failure as bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start,
+      reached through the operator instead of through the comparison.
+
+      The address-escape hazard that decide-should-unreachable-code-... names
+      does not arise here: this folds an EXPRESSION before any statement or
+      label exists, so there is no arm holding a label whose address could have
+      been taken. }
+    if CConstIntLit(l, cv) then
+    begin
+      if cTok = Ord(tkAnd) then
+      begin
+        if cv = 0 then begin CMakeBinop := CBoolLit(False); Exit; end;
+      end
+      else
+        if cv <> 0 then begin CMakeBinop := CBoolLit(True); Exit; end;
+      { The left operand decides nothing: the value IS the right operand's
+        truthiness. }
+      CMakeBinop := CMakeTruthy(r);
+      Exit;
+    end;
     l := CMakeTruthy(l);
     r := CMakeTruthy(r);
   end;
@@ -3396,6 +3463,7 @@ var node, operand, castElemTk, castElemRec, castDepth, castBaseTk, castBaseRec,
     frTmp, frIdn, frAsn, frSeq: Integer;
     clScalar: Boolean;
     castTk, opTk: TTypeKind; isVoidCast: Boolean;
+    notv: Int64;
     undeclTy, suggestTy: AnsiString;
 begin
   clScalar := False;
@@ -3763,6 +3831,14 @@ begin
     begin
       Next;
       operand := ParseCUnary();
+      { A literal answers its own negation. Needed for the same chain reason as
+        CMakeTruthy's fold: `!BB_MMU` is the third term of busybox's
+        `0 || 0 || !BB_MMU`, and left unfolded it stops that chain collapsing. }
+      if CConstIntLit(operand, notv) then
+      begin
+        Result := CBoolLit(notv = 0);
+        Exit;
+      end;
       node := AllocNode(AN_BINOP);
       ASTIVal[node] := Ord(tkEq);
       ASTLeft[node] := operand;
