@@ -3,8 +3,8 @@ prio: 45
 track: A
 type: bug
 blocked-by: []
-summary: "One arm of bug-aggregate-member-array-as-var-param (done) never got fixed: a ROW of a 2D array passed as a CONST array parameter still segfaults, on all five targets. The var form of the same row works, and the record-field form works in both modes, so three of the four cells that ticket's own acceptance named pass and the fourth does not. It is what still blocks reverting lib/rtl/ed25519.pas's 4-standalone-TGf workaround."
-status: working
+summary: "FIXED. A partial N-D subscript (`pa[0]`, and now `pb[1][2]` too) names a SUB-ARRAY, and every parameter mode free to form a COPY resolved its argument source through a block that enumerated AN_IDENT and AN_FIELD only -- so a row fell past it to the scalar tail and the callee received element [0][0]'s VALUE where the row's address belonged. `var`/`out` were unaffected because they must pass an address. Both tables green on all five targets; the 3-D `wrong number of array subscripts` diagnostic is gone, fixed as the same operation rather than deferred."
+status: done
 owner: frankA
 ---
 
@@ -245,3 +245,106 @@ Every cell of both tables, plus: the `q[0].a` and `r.a`-by-value controls stay
 green (a fix that repairs the row by making every aggregate member take the
 slow path would pass a test that only watches the failing cells), and the 3D
 `@b[0][0]` diagnostic either goes away or is shown to be a separate bug.
+
+---
+
+## Fixed 2026-09-01 (frankA, Track A) — cec0b94f2, build fix 40942a4d6
+
+**Root cause, measured.** `PXXDBG=a.ir` on a driver procedure holding both
+calls, beside each other:
+
+```
+  { TakeC(std)    -- the working cell }
+  copy_rec a=5 b=6 ival=32          <- 32 bytes copied into a [len:8][data] temp
+  arg a=10                          <- &data passed
+
+  { TakeC(pa[0])  -- the failing cell }
+  index a=13 b=18 ival=8 [lo=0 size=8]
+  load_mem a=19                     <- the row's FIRST 8 BYTES, as a value
+  arg a=20                          <- passed as the pointer
+```
+
+So the argument was a scalar load of `pa[0][0]`. NULL for a zeroed array, which
+is why the ticket saw `const arg addr = 0` rather than a wrong address, and
+exactly why a callee that never dereferences did not crash.
+
+`IRLowerCallArg` resolved the static-array source in **two** near-identical
+blocks — one for the by-value/`const` arm, one for `var`/`out` — and both
+enumerated `AN_IDENT` and `AN_FIELD`. The row is an `AN_INDEX`, so it matched
+neither and fell to the scalar tail. `var`/`out` never reach those blocks with a
+row (they take `IRLowerAddress`), which is the whole of the mode split the
+ticket's boundary measurement found, and it is why `q[0].a` worked: its final
+step is a FIELD.
+
+**Why an AST column was needed.** After parsing, `pa[0]` and `pa[0,1]` are
+indistinguishable: one `AN_INDEX`, `Right` a flattened element offset, `Tk` the
+ELEMENT's kind. The only residual difference is whether the arithmetic in
+`Right` tops out in a `tkStar` (partial) or a `tkPlus` (full) — a structural
+tell that constant folding could invert without anyone noticing. `ASTNDRowSubs`
+stores how many subscripts were consumed when that is fewer than the array has
+dimensions; the row's SHAPE is re-derived from the base through
+`NodeArrNDInfo`, so it is one integer to keep in step and not a second set of
+dim columns.
+
+**The 3-D lead was the same root, and fixing it separately would have been the
+error.** `pb[1][2]` was refused with `wrong number of array subscripts`. A
+compile error stops the run before the miscompiled 2-D row executes, so any
+single-file test over both reports the loud one and never reaches the quiet one
+— the reason the ticket could not put the 3-D row in its tables.
+`BuildPartialNDIndex` answers for every k now; `BuildPartialNDRowIndex` is the
+k=1 call into it, so the row and the plane cannot diverge.
+
+**Two duplications removed, which is why this is a fix and not a third arm.**
+`StaticArraySourceInfo` is the single source resolver (the two copies had
+already drifted: the dyn-array-HANDLE element-size correction sat inside the
+shared body in one and was re-tested afterwards in the other).
+`BuildPartialNDRowIndex` now takes the index node and stamps it, so a caller
+cannot build a sub-array and forget to say so.
+
+### Acceptance, item by item
+
+- **all five rows of the table, on all five targets** — `test/test_nd_subarray_
+  as_param.pas`, wired into `test-core` with native plus i386 / aarch64 / arm32
+  / riscv32 rows. Green on all five.
+- **a `const` row of a 3-D array, and a row through a record field
+  (`r.rows[0]`)** — both in the test (`3d plane const`, `3d plane comma`, `row
+  via record const`, `row via record value`).
+- **a regression test covering the whole matrix, not one arm** — 21 assertions,
+  both tables plus the address diagnostics.
+- **the `q[0].a` and `r.a`-by-value controls stay green** — in the test, and
+  placed FIRST so a run that dies part-way says where.
+- **the 3-D `@b[0][0]` diagnostic goes away or is shown separate** — gone. It
+  was the same operation; `3d addr two level` asserts the stride it now returns.
+
+### The control, both directions
+
+Built from this tree with the change stashed (`88f6dacbbd44`, not the pin — the
+pin would have confounded the measurement with every other commit since v393):
+
+- the test file **does not compile** — it stops at the 3-D row
+- a 3-D-free variant of it **SIGSEGVs**: natively, and under qemu on i386
+  (rc=139), aarch64, arm32 and riscv32
+
+All five green after, at `e557bae09a2f`.
+
+### It unblocks the revert it was named for
+
+The ticket's shape-exact probe, unchanged:
+
+```pascal
+type TGf = array[0..15] of Int64;  TPoint = array[0..3] of TGf;
+procedure AddF(var o: TGf; const a, b: TGf);
+AddF(o, p[0], p[1]);      { was SIGSEGV -- now the right sum }
+```
+
+`lib/rtl/ed25519.pas` is Track B's file and needs Track B's gate; frankB has
+been told, and told to re-measure rather than take this line for it.
+
+### One cost worth recording
+
+`cec0b94f2` and frankB's `62540cc27` both rebased cleanly and the tree did not
+compile: they made `pasparser_expr.inc` a fourth caller of
+`ParseNDSubscriptTail` in the same window that this changed its signature. Two
+agents on one TOPIC in two different FILES — the collision git cannot see, and
+neither author's own build could see it either. Fixed in `40942a4d6`, pushed as
+soon as it built rather than held for the gate.
