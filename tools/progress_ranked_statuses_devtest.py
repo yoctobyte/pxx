@@ -46,9 +46,22 @@ def check(cond, what):
 
 
 print("the ranked set is declared, not scattered")
-check(set(P.Board.RANKED_STATUSES) ==
-      {"urgent", "backlog", "backlog_new", "unfinished"},
-      "RANKED_STATUSES is exactly urgent/backlog/backlog_new/unfinished")
+# Was a hard-coded four-element set, written before the per-lane backlogs
+# landed on 2026-08-31. RANKED_STATUSES has been eighteen since; this check has
+# been RED ever since, taking tools-devtest#00 with it. A literal list of the
+# thing under test is the shape that goes stale -- so assert the INVARIANT: the
+# four base ranked folders, plus every backlog-<lane>, and nothing else.
+BASE = {"urgent", "backlog", "backlog_new", "unfinished"}
+LANES = {st for st in P.STATUSES if st.startswith("backlog-")}
+# Collapse detector: if STATUSES ever stops listing per-lane folders, LANES goes
+# empty and the check below would still be comparing two things -- it must not
+# be able to pass by matching nothing. Same reason the population floor exists
+# in exit_observable_devtest.
+check(len(LANES) >= 5,
+      "STATUSES still lists per-lane backlog folders (%d found)" % len(LANES))
+check(set(P.Board.RANKED_STATUSES) == BASE | LANES,
+      "RANKED_STATUSES is the four base ranked folders plus every "
+      "backlog-<lane> (%d ranked)" % len(P.Board.RANKED_STATUSES))
 check(all(st in P.STATUSES for st in P.Board.RANKED_STATUSES),
       "every ranked folder is also a loaded folder")
 
