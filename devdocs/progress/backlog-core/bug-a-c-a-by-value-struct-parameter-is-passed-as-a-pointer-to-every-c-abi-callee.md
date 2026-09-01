@@ -6,7 +6,7 @@ status: open
 found: 2026-08-31
 found-by: frankC
 owner: frankC
-summary: "A C function taking a struct BY VALUE is compiled to take a POINTER. Self-consistent inside pxx, so every existing test passes; gcc passes the struct bytes, our callee dereferences them as an address, SEGFAULT on x86-64 and i386. ROOT CAUSE FOUND and it is a DELIBERATE DESIGN, not an oversight: cparser.inc:11107 marks every C struct param isRef:=True with a comment saying so -- the caller copies to a temp and passes &temp, which gives correct by-value SEMANTICS at any size but is not the ABI gcc implements. Pascal differs (pasparser_proc.inc:2284): <=8 bytes by value, >8 by reference, so Pascal is SysV-correct below 8 bytes by construction and equally wrong above it. SysV wants eightbyte classification up to 16 and MEMORY beyond. So the work is REPLACING a working convention with the psABI one, not repairing a broken one -- bigger than the first filing implied. GATE BUILT and RED: `make test-c-abi-mixed-link` (gcc main + pxx object, both call directions, x86-64 and i386; no gcc cross exists for the other targets), unwired while this is open. If split, split at 8 bytes: <=8 occupies one slot under both schemes so it cannot shift a later argument, and above 8 the slot count changes, which is where the xtensa two-of-three state turned data loss into active corruption."
+summary: "A C function taking a struct BY VALUE is compiled to take a POINTER. Self-consistent inside pxx, so every existing test passes; gcc passes the struct bytes, our callee dereferences them as an address, SEGFAULT on x86-64 and i386. ROOT CAUSE FOUND and it is a DELIBERATE DESIGN, not an oversight: cparser.inc:11107 marks every C struct param isRef:=True with a comment saying so -- the caller copies to a temp and passes &temp, which gives correct by-value SEMANTICS at any size but is not the ABI gcc implements. Pascal differs (pasparser_proc.inc:2284): <=8 bytes by value, >8 by reference, so Pascal is SysV-correct below 8 bytes by construction and equally wrong above it. SysV wants eightbyte classification up to 16 and MEMORY beyond. So the work is REPLACING a working convention with the psABI one, not repairing a broken one -- bigger than the first filing implied. GATE BUILT and RED: `make test-c-abi-mixed-link` (gcc main + pxx object, both call directions, x86-64 and i386; no gcc cross exists for the other targets), unwired while this is open. THE BLOCKER IS STRUCTURAL, NOT THE FLAG: caller and callee both hard-code ONE ARGUMENT = ONE ABI SLOT (`argIsSse[i]`/`argRegIdx[i]`/`argIsStack[i]` indexed by argument; the spill walks `for i := 0 to nparams-1` advancing intIdx/sseIdx once each), and SysV needs an argument to occupy 0, 1 or 2 register slots or ceil(size/8) stack slots. So the first job is splitting that conflation; classification is a table lookup afterwards. Do NOT split the work by size -- measured, that seam does not exist."
 
 
 ---
@@ -223,3 +223,48 @@ than none. The precedent is in this repo — a two-of-three xtensa state
 *"turned the data loss into active corruption"*, because a caller pushing two
 words and a spill consuming one shifts every later parameter rather than
 failing. The same applies per-target here, so it lands whole or not at all.
+
+## THE ROOT CAUSE IS A CONFLATION, AND IT IS NOT THE `isRef` FLAG (2026-09-01, frankC)
+
+Verified by reading BOTH halves, not inferred from one:
+
+| | site | what it assumes |
+| --- | --- | --- |
+| caller | `ir_codegen.inc:5769-5772` — `argIsSse`/`argIsStack`/`argRegIdx`/`argNodeArr`, all `array[0..127]` indexed by ARGUMENT | one argument occupies exactly one register-or-stack slot |
+| callee | `EmitParamSpillsForTarget` (`ir_codegen.inc:1279`) — `for i := 0 to nparams-1`, `intIdx`/`sseIdx` incremented once per param | the same |
+
+**The concept "argument" and the concept "ABI slot" are the same variable
+everywhere.** SysV needs one argument to occupy 0, 1 or 2 register slots, or
+`ceil(size/8)` stack slots for MEMORY. No assignment to `isRef`, and no change
+to `ABIParamSlotIsPointer`, can express that in a structure with one index.
+
+**This is why THE OBVIOUS FIRST ATTEMPT above failed the way it did**, and the
+failure is now explained rather than merely recorded: flipping the flag moved
+the CALLEE onto the value convention while the caller kept passing one slot
+containing an address, because passing two slots is not something the caller's
+arrays can represent. The garbage values in that table are an address read as
+field bytes — exactly what a one-slot caller and a two-slot callee produce.
+
+**It also makes frankA's NSAA note precise.** `ABIA64CdeclArgSlot` advancing
+NSAA by exactly 8 per stack argument is not a separate hazard; it is the SAME
+conflation on aarch64, in the oracle rather than in the backend arrays.
+
+**So the order of work is the reverse of what this ticket implied.** Not
+"implement SysV classification, then fix the fallout" but:
+
+1. **Split argument from slot** — the caller's arrays become slot-indexed with
+   an argument->slots mapping; the callee spill walks slots. Inert by
+   construction while every argument still maps to exactly one slot, so it
+   lands GREEN on its own and is verifiable by the existing suite showing no
+   change. This is the whole risk of the ticket, and it is separable.
+2. **Then classification is a table lookup** in `abi.inc`, read by both halves,
+   which is the small half.
+
+Step 1 is a refactor that DELETES a case rather than adding one, which is the
+shape `root-cause-over-microfix.md` predicts. It is also the only part that can
+be landed and proven without the mixed-link gate going green, so it is the
+right first commit and it is NOT a partial aggregate classification -- nothing
+observable changes until step 2.
+
+**Not started.** Diagnosis banked; the session that takes it should start at
+step 1 and should not re-derive this from the `isRef` flag, which is a symptom.
