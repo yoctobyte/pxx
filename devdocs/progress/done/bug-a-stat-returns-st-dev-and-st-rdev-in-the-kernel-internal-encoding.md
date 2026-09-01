@@ -77,6 +77,8 @@ aarch64, arm32 and riscv32.
 `make compiler/pascal26` → `converged after 1 round(s)`.
 `tools/gate.sh quick` → `gate: GREEN (exit 0)`, FPC seed canary PASS.
 
+Landed 6880c5a7c.
+
 ## Residual, NOT fixed here
 The same differential (`gcc -m32 -D_FILE_OFFSET_BITS=64` vs
 `pxx --target=i386`, `_GNU_SOURCE` set explicitly) leaves three rows open:
