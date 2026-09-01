@@ -39,6 +39,7 @@
 procedure EnsureCloneStub;
 var
   jmpOver: Integer;
+  pParent: Integer;   { rel8 placeholder: the child/parent split in the x86-64 stub }
 begin
   if CloneStubAddr <> 0 then Exit;
   if TargetArch = TARGET_X86_64 then
@@ -79,7 +80,10 @@ begin
     EmitB($B8); EmitB($38); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 56  (SYS_clone) }
     EmitB($0F); EmitB($05);                           { syscall }
     EmitB($48); EmitB($85); EmitB($C0);               { test rax, rax }
-    EmitB($75); EmitB($1E);                           { jnz .parent  (skip 30 child bytes) }
+    { jnz .parent -- COMPUTED. It was 30 hand-counted bytes over ten
+      instructions of child setup, and every one of them is a line someone may
+      add to. }
+    EmitB($75); pParent := CodeLen; EmitB(0);         { jnz .parent }
     { ---- child: rsp = tlsBlock-16, [rsp]=entry [rsp+8]=arg ---- }
     { Install the TLS block FIRST, before anything Pascal runs. clone does not
       reset the thread pointer, so a child that skipped this would read the PARENT's block --
@@ -103,6 +107,7 @@ begin
     EmitB($B8); EmitB($3C); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 60  (SYS_exit) }
     EmitB($0F); EmitB($05);                           { syscall  (thread exits here) }
     { ---- .parent: rax already = child tid ---- }
+    PatchRel8(pParent);
     EmitB($C3);                                       { ret }
     { patch the jump-over to land here, past the stub. }
     Patch32(jmpOver, CodeLen - (jmpOver + 4));

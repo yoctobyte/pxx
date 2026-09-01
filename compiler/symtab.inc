@@ -6900,6 +6900,7 @@ begin
 end;
 
 procedure EmitLoadFile(pathIdx, dstIdx: Integer);
+var pSkip: Integer;   { rel8 placeholder: jump over the negative-read clamp }
 begin
   { open(path, O_RDONLY) }
   EmitTerminateString(pathIdx);
@@ -6919,9 +6920,12 @@ begin
 
   { If rax is negative (error), clamp it to 0 }
   EmitB($48); EmitB($85); EmitB($C0);              { test rax, rax }
-  EmitB($79); EmitB($0A);                          { jns skip }
+  { jns skip -- COMPUTED. The span is one MovRaxImm, whose encoding depends on
+    the immediate and on what the emitter chooses today; 0x0A was right for a
+    10-byte `mov rax, 0` and says nothing about tomorrow's. }
+  EmitB($79); pSkip := CodeLen; EmitB(0);          { jns skip }
   MovRaxImm(0);                                    { mov rax, 0 }
-  { skip }
+  PatchRel8(pSkip);                                { skip }
 
   EmitStoreStrLen(dstIdx);
 

@@ -6097,6 +6097,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     asmGfK: Integer; asmGfFound: Boolean;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pUnsNeg, pUnsDone, pAppendDone: Integer;
+    pPad: Integer;   { rel8 placeholder: jump over the string-width space pad }
     pMagDone: Integer;   { the heap-magazine fast path's jump over the locked path; -1 = no fast path emitted }
     w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
     shiftImmCnt: Integer;  { -O1 W1: >= 0 = a constant shift count NOT materialised into rcx }
@@ -8900,10 +8901,17 @@ begin
             EmitLoadStrLen(symIdx);              { rcx = len }
             MovRaxImm(wid);
             EmitB($48); EmitB($29); EmitB($C8);  { sub rax, rcx }
-            EmitB($7E); EmitB(35);               { jle .skip_pad (35 bytes) }
+            { jle .skip_pad -- COMPUTED, and it was hand-counted as 35 over
+              MovRaxImm/MovRdiImm/EmitSyscall, three emitters whose size is not
+              fixed. rel8.inc's own header records EmitSyscall going from 2
+              bytes to ~140 and putting a `jns` 181 bytes from its target; this
+              is that shape, and the sibling AnsiString arm forty lines down
+              already patches instead of counting. }
+            EmitB($7E); pPad := CodeLen; EmitB(0);
             EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
             EmitB($48); EmitB($89); EmitB($C2);  { mov rdx, rax }
             MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+            PatchRel8(pPad);
           end;
           EmitwriteStrVar(symIdx);
         end

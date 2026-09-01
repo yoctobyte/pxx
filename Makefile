@@ -4685,6 +4685,28 @@ test-threads: $(COMPILER)
 	# ...and the VARIABLE-width rows, in a program with NO uses clause
 	tools/expect_same.sh test_wcw26.5 "$$($(TESTTMP)/test_wcw26 | head -11 | tail -3 | tr '\n' '|')" "[   ab]|[    q]|[ TRUE]|"
 	tools/expect_same.sh test_wcw26.6 "$$($(TESTTMP)/test_wcw26 | head -14 | tail -3 | tr '\n' '|')" "[    5]|[ 3.50]|[ab][  abc]|"
+	# ...and the SHORTSTRING half of the same question, which was still wrong.
+	# `Write(s:w)` with w <= Length(s) jumped over the space pad with a
+	# hand-counted `jle +35` across five emitters that now emit 27 bytes, so it
+	# landed eight bytes inside the following EmitwriteStrVar. Uncovered above
+	# because `var s: string` is an AnsiString here and that arm already
+	# computed its displacement -- one construct, two arms, one of them fixed.
+	./$(COMPILER) test/test_write_shortstring_field_width_narrower.pas $(TESTTMP)/test_ssfw26
+	tools/expect_same.sh test_ssfw26.1 "$$($(TESTTMP)/test_ssfw26 | tail -1)" "WRITE SHORTSTRING NARROW FIELD WIDTH OK"
+	tools/expect_same.sh test_ssfw26.2 "$$($(TESTTMP)/test_ssfw26 | head -1)" "[abcdef]"
+	tools/expect_same.sh test_ssfw26.3 "$$($(TESTTMP)/test_ssfw26 | head -2 | tail -1)" "[abcdef]"
+	tools/expect_same.sh test_ssfw26.4 "$$($(TESTTMP)/test_ssfw26 | head -3 | tail -1)" "[   abcdef]"
+	tools/expect_same.sh test_ssfw26.5 "$$($(TESTTMP)/test_ssfw26 | head -7 | tail -1)" "[abcdef][abcdef]"
+	# LoadFile into a SHORTSTRING: the raw EmitLoadFile arm clamped a negative
+	# read() with `jns +10` over a MovRaxImm(0) that emits TWO bytes, so the
+	# successful path -- every real call -- skipped the length store as well and
+	# returned an empty string. The existing LoadFile tests all declare
+	# AnsiString destinations, which route to a different emitter.
+	./$(COMPILER) test/test_loadfile_shortstring.pas $(TESTTMP)/test_lfss26
+	tools/expect_same.sh test_lfss26.1 "$$($(TESTTMP)/test_lfss26 | tail -1)" "LOADFILE SHORTSTRING OK"
+	tools/expect_same.sh test_lfss26.2 "$$($(TESTTMP)/test_lfss26 | head -1)" "len   21"
+	tools/expect_same.sh test_lfss26.3 "$$($(TESTTMP)/test_lfss26 | head -2 | tail -1)" "text  [shortstring-loadfile"
+	tools/expect_same.sh test_lfss26.4 "$$($(TESTTMP)/test_lfss26 | head -4 | tail -1)" "miss  0"
 	# a metaclass-typed FIELD as a receiver. The parser recognises a metaclass
 	# receiver from a LIST of base node kinds (variable, cast, array element --
 	# the last added at b328 for this same bug) and a FIELD was never in it.
