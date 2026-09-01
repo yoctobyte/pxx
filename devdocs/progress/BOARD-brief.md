@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:7 unfinished:28 blocked:7 backlog:9 backlog-umbrella:5 backlog-core:138 backlog-nilpy:97 backlog-tools:71 backlog-pascal:55 backlog-decide:24 backlog-libs:15 backlog-cfront:11 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3022 rejected:72`
+`working:7 unfinished:28 blocked:7 backlog:10 backlog-umbrella:5 backlog-core:138 backlog-nilpy:97 backlog-tools:71 backlog-pascal:55 backlog-decide:24 backlog-libs:15 backlog-cfront:11 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3022 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -58,7 +58,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 449, ranked
+## Ready — top 30 of 450, ranked
 
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -82,6 +82,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
 - `[p 70] [T]` regression-test-sqlite-threads-aarch64-compiler-srchash
 - `[p 70] [A]` regression-test-threads-test-exception-threads-race
+- `[p 70] [T]` regression-test-threads-test-threadsafe-refcount-lockfree
 - `[p 70] [A+S]` regression-test-xtensa-test-signal-default-revert-b336
 - `[p 70] [A+S]` regression-test-xtensa-test-signal-handler-callback-b336
 - `[p 70] [T]` regression-tools-devtest-00-3
@@ -89,6 +90,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [A]` bug-a-a-caught-exception-leaks-its-managed-fields-under-threadsafe
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
-- `[p 65] [N]` bug-n-yield-from-is-not-implemented
 
-_419 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_420 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
