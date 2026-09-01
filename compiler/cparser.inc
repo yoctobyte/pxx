@@ -13113,7 +13113,7 @@ begin
             declElemRec := REC_NONE;
           end;
           sz := TypeSlotSize(IntToTypeKind(baseScalarTk));
-          al := TypeAlign(IntToTypeKind(baseScalarTk));
+          al := TypeFieldAlign(IntToTypeKind(baseScalarTk));
         end;
         if al < 1 then al := 1;
         attrEndIdx := TokPos - 1;

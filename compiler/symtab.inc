@@ -3251,15 +3251,59 @@ begin
 end;
 
 function TypeAlign(tk: TTypeKind): Integer;
-{ Returns alignment requirement (power of 2) for type tk.
-  On x86-64 all scalar types are naturally aligned. }
-var sz: Integer;
+{ STORAGE alignment for a standalone object of type tk -- a global in .bss, a
+  frame slot, a const array baked into .data. Natural alignment on every
+  target, i386 included.
+
+  THIS IS NOT THE ALIGNMENT OF A STRUCT MEMBER, and the two answers differ on
+  i386. See TypeFieldAlign below, which is the one the psABI caps. Conflating
+  them is a real defect in both directions and it was made here on
+  2026-09-01: capping this function put an `array of Double` const on a mod-4
+  address and test_const_array_align went red on i386, while leaving the
+  member case uncapped is bug-a-an-8-byte-scalar-is-over-aligned-inside-a-
+  struct-on-i386.
+
+  MEASURED, gcc -m32, the two observables side by side:
+
+    _Alignof(double)                            4   <- TypeFieldAlign
+    (unsigned long)G % 8, G a global double[4]  0   <- this function
+
+  gcc places the array on 8 despite requiring only 4, and it is free to:
+  over-aligning storage is never wrong, and on xtensa l32i FAULTS on a
+  misaligned word rather than absorbing it. Under-aligning a member is wrong
+  the moment anything else on the platform reads the struct. }
 begin
-  sz := TypeSlotSize(tk);
-  if sz <= 1 then Result := 1
-  else if sz <= 2 then Result := 2
-  else if sz <= 4 then Result := 4
+  Result := TypeSlotSize(tk);
+  if Result <= 1 then Result := 1
+  else if Result <= 2 then Result := 2
+  else if Result <= 4 then Result := 4
   else Result := 8;
+end;
+
+function TypeFieldAlign(tk: TTypeKind): Integer;
+{ Alignment of tk as a MEMBER of an aggregate -- what the psABI constrains and
+  what a foreign compiler agrees with. Natural everywhere except i386, where
+  SysV caps every scalar at 4: a `double` or a `long long` inside a struct
+  aligns to 4, not 8.
+
+  MEASURED against gcc rather than taken from the psABI text, because the
+  observable is the struct layout and not the sentence:
+
+    struct MIX { int a; double y; }   gcc -m32  sizeof 12, y at 4
+                                      gcc -m64  sizeof 16, y at 8
+
+  Before this, pxx answered 16/8 on both, so any i386 struct with an 8-byte
+  member disagreed with every other compiler on the platform -- silently, and
+  self-consistently, so only a mixed link could see it.
+
+  ONLY THE C FRONTEND READS THIS TODAY. The Pascal, NilPy, Rust and Zig
+  aggregate layouts still call TypeAlign and so still over-align an 8-byte
+  member on i386; each is the same one-line change and none has a mixed-link
+  oracle to prove it, which is why they are a ticket rather than a hunk here.
+  bug-a-an-8-byte-scalar-is-over-aligned-inside-a-struct-on-i386 }
+begin
+  Result := TypeAlign(tk);
+  if (TargetArch = TARGET_I386) and (Result > 4) then Result := 4;
 end;
 
 function AlignTo(value, alignment: Integer): Integer;
