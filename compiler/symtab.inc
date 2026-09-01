@@ -3025,8 +3025,25 @@ end;
   All new code must call these instead of hard-coding numbers. }
 
 function TypeSlotSize(tk: TTypeKind): Integer;
-{ Returns byte count needed to store one value of type tk.
-  For pointer-sized types, returns TARGET_PTR_SIZE (8 on x86-64). }
+{ The width of ONE SLOT holding a value of type tk -- a frame slot, a parameter
+  slot, an ABI register's worth. For pointer-sized types, TARGET_PTR_SIZE (8 on
+  x86-64).
+
+  IT IS NOT "the bytes needed to store one value", which is what this comment
+  used to say and is what TypeStorageSize answers. The two differ at exactly one
+  kind, tyRecord, where this returns a pointer-width PLACEHOLDER and the real
+  size is RecSize -- and that difference is not cosmetic: it is the `array of
+  TRec` sized at 8 bytes per element that under-allocates and lets element 1
+  overrun into adjacent heap.
+
+  The old wording was accurate for the single function that existed before
+  2d63e62cf split the stride question out into TypeStorageSize. It survived the
+  split describing the half that left, on the half that stayed, under a name now
+  carried by 336 sites -- so a reader who consults it reaches for this function
+  precisely where the other one is meant. Corrected rather than deleted because
+  the distinction is the point of there being two.
+
+  Wanted a record's actual bytes? TypeStorageSize(tk, recId), or RecSize. }
 begin
   Result := 8; { default / legacy path — pointer-width slot }
   case Ord(tk) of
