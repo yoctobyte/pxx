@@ -89,4 +89,4 @@ there, but the missing check probably reads the same — and "fixed one arm of a
 double case, grep for the sibling" applies.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 32c15a95b.
