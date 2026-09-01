@@ -180,4 +180,4 @@ still the thing to read first.
   leaks the same way. Same probe shape would answer it.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 746cbb20f.
