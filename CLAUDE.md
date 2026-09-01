@@ -385,9 +385,18 @@ the URL DOES discriminate (verified: two sessions, two ids), while
 
 **A CLEAN TREE IS NOT EVIDENCE ABOUT THE BINARY. The `converged after N round(s)`
 line is.** `compiler/pascal26` is untracked, so `git status` says nothing about
-which compiler is on disk. Three routes to a stale one: a seeded tree (`cp`
-stamps a newer mtime, so `make` no-ops and exits 0), a reverted experiment, and a
-sync that pulled someone else's `compiler/**`. **Rebuild after any sync touching
+which compiler is on disk. Four routes to a stale one: a seeded tree (`cp`
+stamps a newer mtime, so `make` no-ops and exits 0), a reverted experiment, a
+sync that pulled someone else's `compiler/**`, and — measured 2026-09-01,
+`df1a8c17c` — **the positive-control discipline itself.** Proving a fix by
+reverting it is revert→rebuild→restore→rebuild, and EACH REBUILD SEEDS FROM THE
+PREVIOUS LOCAL BINARY; after a few cycles, with other agents' `compiler/**` and
+**`lib/rtl/**` (also a compiler build input, which is the part nobody expects)**
+arriving by rebase, the local seed walks off the pin-derived chain. `gate.sh
+quick` then goes RED with *"the fixedpoint reached from PINNED differs from
+`compiler/pascal26`"* — **two valid fixedpoints, not a miscompile**: both
+binaries self-reproduce. **That RED is not a reason to distrust the fix.**
+Recover by reseeding from the pin AND `touch`ing the sources. **Rebuild after any sync touching
 `compiler/**` before you measure, and print `sha256sum compiler/pascal26` beside
 every number you report — and the COMMIT beside the sha.** A sha names the
 binary; it is not a source identity. `compiler/.pascal26.fixedpoint` holds
