@@ -128,4 +128,4 @@ an empty main body. i386 `--shared` is refused (the backend is still
 position-dependent there). No `DT_SONAME` or versioning.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 84a4fda97.
