@@ -109,3 +109,39 @@ Then re-widen the `rtti_emit.inc` arm (the comment there names this ticket).
 
 **Gate: full tier, not quick.** `gate.sh quick` was GREEN on the broken commit;
 only `--tier full` caught it, as `test-core#244`.
+
+## A four-target red was raised against this premise, CHECKED, and CLEARED — 2026-09-01
+
+Recorded so nobody re-raises it. **The premise above survives**; nothing in the
+analysis changed.
+
+Track T on seven published `test/test_managed_dynarray_field_leaks.pas` RED on
+**aarch64, arm32, i386 and riscv32** (`bad=0d3d061121a7`) — exactly the four
+backends this ticket exonerates by saying they delegate to `PXXDynSetLen`. That
+looked like the premise failing, and frank-coordinator's argument for taking it
+seriously was a good one: four backends failing *identically* points at shared
+descriptor/retain logic rather than at one emitter.
+
+**It does not reproduce.** frankB ran the test on all four targets against
+`origin/master` with in-flight work stashed, compiler `6b74eeb25a98`: `rc=0`,
+every counter 1000. That baseline is precisely where a broken cross-path
+descriptor/retain would show.
+
+**The bracket closes the other reading.** Exactly one commit touches `compiler/`
+or `lib/` between the red sha and origin/master — frankC's `b392fd5d0`, which is
+i386-only and cannot explain aarch64, arm32 and riscv32 going green.
+
+**The residual is not a codegen question and does not belong to this ticket:**
+it is the second unreproducible red on seven that afternoon (the other was
+`test-sqlite-threads-aarch64`, triaged as a timeout on a loaded box, ticket
+`4982837ff`), so it is a question about the HOST. Owned by Track U / the T-host
+thread, not by whoever works this ticket.
+
+**One correction to what was circulating:** `a584e8fef` is the **revert**, not
+the stride widening — `9cb079528` was the widening. The tree at the red sha
+therefore has the descriptor **narrow**: safe-but-leaky, not a double free.
+Anyone told otherwise would have hunted a double free that was not there.
+
+The leak this ticket is actually about is real and measured on x86-64: promo
+`live` 2955 / 5985 / 10779 growing linearly in trips, against 7 / 9 / 7 flat;
+variant 7708 against 4.
