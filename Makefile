@@ -17525,13 +17525,46 @@ test-emit-obj: $(COMPILER)
 	@if command -v gcc >/dev/null 2>&1; then \
 	  printf '#include <stdio.h>\n#include <string.h>\n#include <dlfcn.h>\nint main(int c,char**v){void*h=dlopen(v[1],RTLD_NOW);if(!h){printf("dlopen: %%s\\n",dlerror());return 1;}const char*(*vi)(void)=dlsym(h,"so_virtual");int(*da)(int)=dlsym(h,"so_dynarray");int(*sc)(int)=dlsym(h,"so_strcat");int(*lc)(void)=dlsym(h,"so_libc");const char*(*tg)(void)=dlsym(h,"so_tag");if(!vi||!da||!sc||!lc||!tg){printf("dlsym: %%s\\n",dlerror());return 1;}if(strcmp(vi(),"derived")){printf("virtual=%%s want derived\\n",vi());return 1;}if(da(5)!=30){printf("dynarray=%%d want 30\\n",da(5));return 1;}if(sc(100)!=200){printf("strcat=%%d want 200\\n",sc(100));return 1;}if(lc()!=11){printf("libc=%%d want 11\\n",lc());return 1;}printf("%%s\\n",tg());return 0;}\n' > $(TESTTMP)/test_shared_lib26_dlopen.c; \
 	  gcc $(TESTTMP)/test_shared_lib26_dlopen.c -o $(TESTTMP)/test_shared_lib26_dlopen -ldl || { echo "test-shared: dlopen host FAILED to build"; exit 1; }; \
-	  tools/expect_same.sh test_shared_lib26_dlopen "$$($(TESTTMP)/test_shared_lib26_dlopen $(TESTTMP)/test_shared_lib26.so)" "pxx-shared"; \
+	  tools/expect_same.sh test_shared_lib26_dlopen "$$($(TESTTMP)/test_shared_lib26_dlopen $(TESTTMP)/test_shared_lib26.so)" "pxx-shared" && \
 	  echo "test-shared: dlopen/dlsym -- virtual dispatch, heap, strings, extern GOT ok"; \
 	  printf '#include <stdio.h>\nextern const char *so_tag(void);\nextern int so_dynarray(int);\nint main(void){ printf("%%d %%s\\n", so_dynarray(5), so_tag()); return 0; }\n' > $(TESTTMP)/test_shared_lib26_link.c; \
 	  gcc $(TESTTMP)/test_shared_lib26_link.c $(TESTTMP)/test_shared_lib26.so -o $(TESTTMP)/test_shared_lib26_link || { echo "test-shared: LINKING against the .so FAILED -- section headers are what ld needs and dlopen does not"; exit 1; }; \
-	  tools/expect_same.sh test_shared_lib26_link "$$(LD_LIBRARY_PATH=$(TESTTMP) $(TESTTMP)/test_shared_lib26_link)" "30 pxx-shared"; \
+	  tools/expect_same.sh test_shared_lib26_link "$$(LD_LIBRARY_PATH=$(TESTTMP) $(TESTTMP)/test_shared_lib26_link)" "30 pxx-shared" && \
 	  echo "test-shared: ld links against the .so and it runs"; \
 	else echo "gcc not installed; shared-library checks skipped"; fi
+	# NOTE ON `&&` ABOVE AND BELOW, which is a fix and not a style choice.
+	# tools/expect_same.sh exits 1 on a mismatch, but every assertion in these
+	# `@if command -v gcc` blocks was chained with `;`, so the block's status
+	# was whichever command ran LAST -- an echo. A MISMATCH printed its diff in
+	# full and the target passed anyway: measured, on the row added below, which
+	# reported `expect_same: MISMATCH [test_shared_init26_link]` and then the
+	# success line two lines later, with make exiting 0. That is the shape
+	# CLAUDE.md names -- an instrument whose refutation is in the output while
+	# the verdict contradicts it -- and the remedy it names is this one:
+	# `&&` between shell stages, not `;`.
+	# 4e. A .so MUST RUN ITS INITIALISATION. A shared library has no ELF entry
+	#    point, so the loader has to be told through the dynamic section, and we
+	#    were telling it nothing: no DT_INIT and no .init_array, so the global
+	#    initialisers, the unit initialization sections and the program body all
+	#    sat in the image unreachable and every piece of pre-main state stayed
+	#    unset. Row 4a above could not see it -- its body is empty, and its
+	#    comment said so as though that were the design.
+	#    Three separately-failing facts: the unit's init ran, the body ran, and
+	#    the unit ran BEFORE the body. The ordering row is not decoration: a
+	#    DT_INIT that ran the body alone satisfies the other two.
+	./$(COMPILER) -Futest/sharedinit_units -Fulib/rtl --shared test/test_shared_lib_init.pas $(TESTTMP)/test_shared_init26.so
+	readelf -dW $(TESTTMP)/test_shared_init26.so | grep -q '(INIT)'
+	readelf -dW $(TESTTMP)/test_shared_init26.so | grep -q '(FINI)'
+	@if command -v gcc >/dev/null 2>&1; then \
+	  printf '#include <stdio.h>\n#include <dlfcn.h>\nint main(int c,char**v){void*h=dlopen(v[1],RTLD_NOW);if(!h){printf("dlopen: %%s\\n",dlerror());return 1;}int(*gf)(void)=dlsym(h,"GetFlag");int(*gu)(void)=dlsym(h,"GetUnitInit");int(*go)(void)=dlsym(h,"GetOrder");if(!gf||!gu||!go){printf("dlsym: %%s\\n",dlerror());return 1;}if(gu()!=7){printf("unit-init=%%d want 7\\n",gu());return 1;}if(gf()!=4242){printf("body=%%d want 4242\\n",gf());return 1;}if(go()!=1){printf("order=%%d want 1\\n",go());return 1;}fflush(stdout);dlclose(h);printf("shared-init ok\\n");return 0;}\n' > $(TESTTMP)/test_shared_init26_host.c; \
+	  gcc $(TESTTMP)/test_shared_init26_host.c -o $(TESTTMP)/test_shared_init26_host -ldl || { echo "test-shared: init host FAILED to build"; exit 1; }; \
+	  tools/expect_same.sh test_shared_init26_host "$$($(TESTTMP)/test_shared_init26_host $(TESTTMP)/test_shared_init26.so)" "$$(printf 'shared-fini-ran\nshared-init ok')" && \
+	  echo "test-shared: DT_INIT runs unit init + program body in order, DT_FINI runs at dlclose"; \
+	  printf '#include <stdio.h>\nextern int GetFlag(void);\nint main(void){printf("%%d\\n",GetFlag());fflush(stdout);return 0;}\n' > $(TESTTMP)/test_shared_init26_link.c; \
+	  gcc $(TESTTMP)/test_shared_init26_link.c $(TESTTMP)/test_shared_init26.so -o $(TESTTMP)/test_shared_init26_link || { echo "test-shared: linking the init .so FAILED"; exit 1; }; \
+	  tools/expect_same.sh test_shared_init26_link "$$(LD_LIBRARY_PATH=$(TESTTMP) $(TESTTMP)/test_shared_init26_link)" "$$(printf '4242\nshared-fini-ran')" && \
+	  echo "test-shared: DT_INIT also runs when ld.so loads the library at startup"; \
+	else echo "gcc not installed; shared-library init check skipped"; fi
 	# 4d. THE SAME MODE FROM A C TRANSLATION UNIT, WITH NO main. The Pascal row
 	#    above cannot see this: --shared reused --emit-obj's export surface but
 	#    not its entry-stub guard, so the C frontend still demanded a `main` and
@@ -17543,7 +17576,7 @@ test-emit-obj: $(COMPILER)
 	@if command -v gcc >/dev/null 2>&1; then \
 	  printf '#include <stdio.h>\n#include <string.h>\n#include <dlfcn.h>\nint main(int c,char**v){void*h=dlopen(v[1],RTLD_NOW);if(!h){printf("dlopen: %%s\\n",dlerror());return 1;}int(*a)(int)=dlsym(h,"shared_c_addup");const char*(*t)(void)=dlsym(h,"shared_c_tag");const char*(*d)(void)=dlsym(h,"shared_c_from_data");if(!a||!t||!d){printf("dlsym: %%s\\n",dlerror());return 1;}if(a(6)!=42){printf("addup=%%d want 42\\n",a(6));return 1;}if(strcmp(t(),"pxx-c-shared")){printf("tag=%%s\\n",t());return 1;}if(strcmp(d(),"pxx-c-data")){printf("data=%%s want pxx-c-data\\n",d());return 1;}printf("%%s\\n",t());return 0;}\n' > $(TESTTMP)/test_shared_libc26_dlopen.c; \
 	  gcc $(TESTTMP)/test_shared_libc26_dlopen.c -o $(TESTTMP)/test_shared_libc26_dlopen -ldl || { echo "test-shared: C dlopen host FAILED to build"; exit 1; }; \
-	  tools/expect_same.sh test_shared_libc26_dlopen "$$($(TESTTMP)/test_shared_libc26_dlopen $(TESTTMP)/test_shared_libc26.so)" "pxx-c-shared"; \
+	  tools/expect_same.sh test_shared_libc26_dlopen "$$($(TESTTMP)/test_shared_libc26_dlopen $(TESTTMP)/test_shared_libc26.so)" "pxx-c-shared" && \
 	  echo "test-shared: a C translation unit with no main builds and loads as a .so"; \
 	else echo "gcc not installed; C shared-library check skipped"; fi
 	# 4b. THE SAME OBJECT, ON i386 -- and this is the row the whole umbrella was

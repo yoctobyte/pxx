@@ -917,6 +917,8 @@ begin
   EmitObjMode := False;
   TlsMainInstalled := False;
   EmitSharedMode := False;
+  SharedInitOff := -1;
+  SharedFiniOff := -1;
   EmitAsmTextMode := False;
   CodePadStart := -1;   { no ELF page padding until the writer appends it }
   EspBareBoot := False;

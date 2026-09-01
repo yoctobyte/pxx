@@ -96,8 +96,20 @@ begin
   so_tag := 'pxx-shared';
 end;
 
-{ No initialisation runs when a foreign program loads this library, exactly as
-  for an object -- so nothing above may depend on the main body. It is empty to
-  say so. }
+{ The body is EMPTY, and that is now a property of this test rather than of the
+  output mode. It used to carry a comment saying "No initialisation runs when a
+  foreign program loads this library, exactly as for an object -- so nothing
+  above may depend on the main body. It is empty to say so." That sentence was
+  wrong about the mode and it DOCUMENTED A DEFECT AS IF IT WERE THE DESIGN: a
+  .so has DT_INIT for exactly this, we were not emitting it, and every piece of
+  pre-main state in every pxx library silently stayed unset. Written as a
+  decision, it stopped the next reader looking -- which is worse than an
+  untested path, and is why this file could never have caught the bug it sat
+  next to. Fixed in the commit that added test_shared_lib_init.pas, which is
+  where initialisation IS asserted.
+
+  It stays empty here so that this file keeps testing ONE thing -- the export
+  surface, the relocations and the two consumers -- rather than quietly
+  depending on initialisation for its own results. }
 begin
 end.

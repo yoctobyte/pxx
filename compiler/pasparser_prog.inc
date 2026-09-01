@@ -561,6 +561,92 @@ begin
   end;
 end;
 
+{ The .so's DT_INIT and DT_FINI bodies, and the RET that turns the program body
+  into something a loader may call.
+
+  A shared library has no ELF entry point by design -- the loader is told about
+  initialisers through the dynamic section instead. It was not being told, so
+  the global initialisers, the unit initialization sections and the program body
+  were all compiled into the image with nothing able to reach them, and every
+  piece of pre-main state stayed unset. Measured: a `.so` whose body does
+  `Flag := 4242` exported a GetFlag that returned 0.
+
+  WHY A THUNK AND NOT `DT_INIT = code offset 0`. Offset 0 already holds the
+  program entry stub and jumping there does run the body -- but the loader CALLS
+  DT_INIT under the ordinary C ABI, and the program body was compiled on the
+  standing assumption that it never returns, so nothing has ever required it to
+  preserve a callee-saved register.
+
+  THE SAVES BELOW ARE NOT A FIX FOR AN OBSERVED CLOBBER, and saying otherwise
+  would be inventing a defect. I tried to construct one and could not: the
+  top-level body codegen uses caller-saved scratch and memory, and the procs it
+  calls preserve their own registers, so a host holding values in rbx and
+  r12..r15 across the dlopen got them all back INTACT from a thunk with the
+  saves removed -- executed, on a body doing 40 iterations of arithmetic and
+  AnsiString concatenation, not on the trivial one.
+
+  They stay because "no case I could build" is a statement about my search and
+  not about the language, and because of the ASYMMETRY: the body carries no
+  contract to preserve anything, the cost is fourteen bytes once per library,
+  and the failure it would prevent corrupts ld.so rather than the library --
+  which surfaces somewhere else entirely, in a caller that did nothing wrong.
+  A guard whose necessity is unproven and whose absence is unrecoverable is
+  worth its fourteen bytes; it is the claim that it fixed something that would
+  not be worth making.
+
+  FINALISATION IS THE SAME GAP AND THE SAME FIX: there is no DT_FINI in the
+  image either, so a library's finalization sections never ran. The fini thunk
+  is the finalization runner and a ret; PXXExitProcess is deliberately NOT used
+  here, since a library that terminates the host process at unload is worse than
+  one that leaks. }
+procedure EmitSharedInitFiniThunks;
+var callSite: Integer;
+begin
+  { The program body falls into here. Return to the loader instead of exiting. }
+  EmitB($C3);                                     { ret }
+
+  SharedInitOff := CodeLen;
+  EmitB($53);                                     { push rbx }
+  EmitB($55);                                     { push rbp }
+  EmitB($41); EmitB($54);                         { push r12 }
+  EmitB($41); EmitB($55);                         { push r13 }
+  EmitB($41); EmitB($56);                         { push r14 }
+  EmitB($41); EmitB($57);                         { push r15 }
+  { Six pushes leave rsp 8 mod 16, the same as at entry, so one more 8 makes it
+    16-aligned for the call below -- what the SysV ABI requires AT a call site. }
+  EmitB($48); EmitB($83); EmitB($EC); EmitB($08); { sub rsp, 8 }
+  EmitB($E8);                                     { call <code offset 0> }
+  callSite := CodeLen;
+  EmitI32(0 - (callSite + 4));
+  EmitB($48); EmitB($83); EmitB($C4); EmitB($08); { add rsp, 8 }
+  EmitB($41); EmitB($5F);                         { pop r15 }
+  EmitB($41); EmitB($5E);                         { pop r14 }
+  EmitB($41); EmitB($5D);                         { pop r13 }
+  EmitB($41); EmitB($5C);                         { pop r12 }
+  EmitB($5D);                                     { pop rbp }
+  EmitB($5B);                                     { pop rbx }
+  EmitB($C3);                                     { ret }
+
+  SharedFiniOff := CodeLen;
+  EmitB($53);                                     { push rbx }
+  EmitB($55);                                     { push rbp }
+  EmitB($41); EmitB($54);                         { push r12 }
+  EmitB($41); EmitB($55);                         { push r13 }
+  EmitB($41); EmitB($56);                         { push r14 }
+  EmitB($41); EmitB($57);                         { push r15 }
+  EmitB($48); EmitB($83); EmitB($EC); EmitB($08); { sub rsp, 8 }
+  if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
+    EmitCallProc(GetFiniRunnerProc);
+  EmitB($48); EmitB($83); EmitB($C4); EmitB($08); { add rsp, 8 }
+  EmitB($41); EmitB($5F);                         { pop r15 }
+  EmitB($41); EmitB($5E);                         { pop r14 }
+  EmitB($41); EmitB($5D);                         { pop r13 }
+  EmitB($41); EmitB($5C);                         { pop r12 }
+  EmitB($5D);                                     { pop rbp }
+  EmitB($5B);                                     { pop rbx }
+  EmitB($C3);                                     { ret }
+end;
+
 procedure ParseProgram;
 var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     needsWide: Boolean;   { program can reach the UTF-16 runtime — see the token scan }
@@ -1670,12 +1756,17 @@ begin
     the build that has no builtinheap, where PXXExitProcess does not exist.
     The runner's run-once guard makes whichever path arrives first the only
     one. feature-pascal-exitcode-finalization-halt }
-  exitPi := FindProc('PXXExitProcess');
-  if exitPi >= 0 then
-    EmitCallProc(exitPi)
-  else if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
-    EmitCallProc(GetFiniRunnerProc);
-  EmitExit(0);   { unreachable once PXXExitProcess is in — it does not return }
+  if EmitSharedMode then
+    EmitSharedInitFiniThunks
+  else
+  begin
+    exitPi := FindProc('PXXExitProcess');
+    if exitPi >= 0 then
+      EmitCallProc(exitPi)
+    else if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
+      EmitCallProc(GetFiniRunnerProc);
+    EmitExit(0);   { unreachable once PXXExitProcess is in — it does not return }
+  end;
   EmitFinalizerRunnerBody;
   FillRootVMTSlotDefaults;
   ApplyCallFixups;

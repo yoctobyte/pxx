@@ -3708,8 +3708,14 @@ begin
   hashSize := (dynCount + 4) * 4;
   { DT_NEEDED*, DT_HASH, DT_STRTAB, DT_STRSZ, DT_SYMTAB, DT_SYMENT, DT_RELA,
     DT_RELASZ, DT_RELAENT, DT_RELACOUNT, DT_NULL -- 10 fixed entries,
-    Elf64_Dyn = 16 bytes. }
+    Elf64_Dyn = 16 bytes -- plus DT_INIT and DT_FINI when the frontend emitted
+    thunks for them. COUNTED FROM THE SAME CONDITION that writes them below,
+    not from a second reading of it: this size decides where .dynstr lands, so a
+    count that disagrees with the writes by one entry moves every following
+    section by 16 bytes and the library loads with a shredded string table. }
   dynamicSize := (neededCount + 10) * 16;
+  if SharedInitOff >= 0 then Inc(dynamicSize, 16);
+  if SharedFiniOff >= 0 then Inc(dynamicSize, 16);
 
   phOff := ELF_HEADER_SIZE;
   textOff := phOff + 3 * PROG_HEADER_SIZE;   { PT_LOAD + PT_DYNAMIC + PT_GNU_STACK }
@@ -3898,6 +3904,20 @@ begin
   writeU64(f, 8); writeU64(f, (relCount + ExternalCount) * 24); { DT_RELASZ }
   writeU64(f, 9); writeU64(f, 24);                   { DT_RELAENT }
   writeU64(f, $6ffffff9); writeU64(f, relCount);     { DT_RELACOUNT }
+  { DT_INIT / DT_FINI -- the whole point of the thunks. A .so has no ELF entry
+    point, so this is the ONLY way the loader can be told to run anything before
+    a caller arrives; without them the initialisers sit in the image with
+    nothing able to reach them (bug-a-c-a-shared-library-never-runs-its-
+    initialisation). vaddr = file offset holds for everything IN the file in
+    this layout, which is why a code offset plus textOff is the address. }
+  if SharedInitOff >= 0 then
+  begin
+    writeU64(f, 12); writeU64(f, textOff + SharedInitOff);   { DT_INIT }
+  end;
+  if SharedFiniOff >= 0 then
+  begin
+    writeU64(f, 13); writeU64(f, textOff + SharedFiniOff);   { DT_FINI }
+  end;
   writeU64(f, 0); writeU64(f, 0);                    { DT_NULL }
 
   { .shstrtab -- 69 bytes, and the offsets below are hand-counted against it.
