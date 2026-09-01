@@ -2045,11 +2045,43 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
             lines.append("## %s" % title)
             lines += ["- %s" % listed(n) for n in names]
             lines.append("")
+    # THE ONE DETAIL BLOCK GOES TO A NEW RED IF THERE IS ONE, not to whichever
+    # failure sorts first.
+    #
+    # This dumped the first failing job in job order, and a job that is red in
+    # every run keeps winning that slot: on 2026-09-01 a report carried SEVEN
+    # failures, four of them a brand-new four-target red, and the single detail
+    # block went to `test-threads#...exception_threads_race`, red in all five
+    # recent runs. The four new ones got a 160-char log tail apiece, cut
+    # mid-word. Three agents then spent an afternoon inferring what the diff
+    # would have said, and the answer was still not in the record.
+    #
+    # A permanently-red job crowds out the news exactly when the news matters
+    # most — the same shape as citing a row that is red in 5 of 5 runs as
+    # evidence that one particular run was slow: a constant cannot discriminate,
+    # and here it was not even being asked to, it was simply first.
+    #
+    # STILL-RED keeps the slot when there is no new red, so nothing loses
+    # coverage; this only decides who wins when they compete.
+    _newred = set(new_red)
     first = next((j for j in report["jobs"]
-                  if j["status"] not in ("pass", "skip")), None)
+                  if j["status"] not in ("pass", "skip")
+                  and job_key(j) in _newred), None)
+    if first is None:
+        first = next((j for j in report["jobs"]
+                      if j["status"] not in ("pass", "skip")), None)
     if first:
-        lines.append("## first failure: %s (%s)" % (label(job_key(first)),
-                                                    first["status"]))
+        # NOT "first failure" any more, and the heading must not say so.
+        # The slot is CHOSEN (new red first), so a heading claiming job
+        # order is a correct-sounding name for a different thing, and a
+        # reader who trusts it concludes the still-red is the earliest
+        # failure -- the one inference this block exists to prevent.
+        # Reports written before 2026-09-01 carry the old spelling.
+        picked = ("NEW RED this run" if job_key(first) in _newred
+                  else "first failure in job order; no new red this run")
+        lines.append("## failure detail: %s (%s)" % (label(job_key(first)),
+                                                     first["status"]))
+        lines.append("selected: %s" % picked)
         lines.append("repro: `tools/testmgr.py --tier %s --job '%s'` at %s"
                      % (report["tier"], job_key(first), sha))
         log = first.get("log")
