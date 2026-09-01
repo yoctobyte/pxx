@@ -245,7 +245,9 @@ or claim none.
 finding — name who owns "then what?" before closing.
 
 **A GUARD THAT CANNOT FAIL IS NOT A GUARD, AND IT PRINTS PASS.** Every guard
-needs a **positive control**: a case it must reject, asserted. The same applies
+needs a **positive control**: a case it must reject, asserted, and **drawn from
+the population your question is about** — a control from the wrong population
+passes and certifies the broken instrument. The same applies
 to any "proof-grade" flag — a flag that cannot come out false is the same animal.
 And a **gate that cannot pass** is not a gate either.
 
