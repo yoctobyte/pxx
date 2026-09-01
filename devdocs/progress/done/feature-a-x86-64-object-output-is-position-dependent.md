@@ -7,7 +7,7 @@ found: 2026-08-31
 found-by: frankC
 owner: frankA
 blocked-by: []
-summary: "DONE 2026-09-01 (44b256356, phase 2; d0537380a phase 1). A pxx x86-64 .o used to need `-no-pie`; it now carries ZERO absolute relocations in .text (272 R_X86_64_PC32, nothing else) and links+runs under gcc with no flags, gcc -pie, gcc -no-pie and clang -pie. The 84 R_X86_64_64 that remain are all in .rela.data -- absolute pointers stored IN data, which a PIE resolves at load time. Fixed in the BACKEND as this ticket said: a rip-relative form in EmitGlobRef for absolute [disp32] memory operands, and an INSTRUCTION rewrite (movabs -> lea [rip+disp32], mov r32,imm32 -> lea, call [abs] -> call [rip]) for addresses loaded as immediates, which no relocation can make position-independent. i386 is UNCHANGED and still needs -no-pie. Two corrections this ticket carried and that are now settled: (1) its 'zero encoding change' alternative does not exist, accepted by frankC; (2) THIS SUMMARY PREVIOUSLY ASSERTED that zero sites carry a trailing immediate -- that census was taken over five objects built WITHOUT --threadsafe, a population that could not contain the shape. Re-measured: 13 of 191 converted sites trail four bytes, and believing the zero cost a hang in test_multithreading. Docs and the test-emit-obj assertions are inverted to match."
+summary: "DONE 2026-09-01 (d0537380a phase 1, 44b256356 phase 2, a3b1af61a the @proc correction). A pxx x86-64 .o used to need `-no-pie`; .text now carries ZERO absolute relocations (273 R_X86_64_PC32, nothing else) and the object links+runs under gcc with no flags, gcc -pie, gcc -no-pie, clang -pie AND the hardened gcc -pie -Wl,-z,text. The 84 R_X86_64_64 that remain are all in .rela.data -- absolute pointers stored IN data, which a PIE resolves at load. Fixed in the BACKEND: a rip-relative form in EmitGlobRef for absolute [disp32] memory operands, and an INSTRUCTION rewrite (movabs -> lea [rip+disp32], mov r32,imm32 -> lea, call [abs] -> call [rip], @proc mov rax,imm64 -> lea) for addresses held as immediates, which no relocation can make position-independent. i386 UNCHANGED, still needs -no-pie. THREE corrections this ticket carried: (1) its 'zero encoding change' alternative does not exist, accepted by frankC; (2) the 'zero sites trail an immediate' census was taken without --threadsafe and was empty -- 13 of 191 trail four bytes, and believing it hung test_multithreading; (3) phase 2 CLAIMED zero absolute relocations in .text while @proc still emitted an absolute R_X86_64_64 -- that census ran on test_emit_obj.pas, which took no procedure address. Same empty-population failure, twice in one ticket. test_emit_obj.pas now takes @proc so the assertion runs on a population that can contain it."
 ---
 
 # x86-64 object output is position-dependent, so a link needs `-no-pie`
@@ -268,3 +268,41 @@ this and is next.
 
 ## Log
 - 2026-09-01 — resolved, commit ccf155eb6.
+
+
+## Correction — 2026-09-01, `a3b1af61a`
+
+**The resolution above was published with a claim that was not yet true.** It
+said `.text` carries zero absolute relocations. That was measured on
+`test_emit_obj.pas`, which takes no procedure address; `IR_PROCADDR` was still
+emitting `mov rax, imm64`, an `R_X86_64_64` against `.text`.
+
+| program with `@proc` | `.text` relocations | `gcc -pie` | `gcc -pie -Wl,-z,text` |
+| --- | --- | --- | --- |
+| before `a3b1af61a` | 2 × R_X86_64_64 + 190 × PC32 | links, **creating DT_TEXTREL** | **REFUSED** |
+| after | 0 absolute + 192 × PC32 | links, no warning | links and runs |
+
+ld accepts an absolute `.text` relocation into a PIE by making the text segment
+writable — which is precisely the behaviour this ticket's own docs update cites
+as the reason i386 is *not* position-independent. So the object was
+position-independent only for the shapes the test source happened to contain.
+
+**This is the second empty population in one ticket.** Phase 1's census said
+"zero sites trail an immediate", taken from five objects built without
+`--threadsafe`. Phase 2's said "zero absolute relocations", taken from one
+object with no `@proc`. Both instruments were sound. Neither population could
+contain what it was counting. The lesson had already been written into a comment
+in `emit.inc` between the two measurements, by frankC, at my request.
+
+The fix: `lea rax, [rip+disp32]` with a 4-byte field, patched PC-relatively in
+both exec `writeELF` loops and `writeELFRelX64General` under
+`TargetArch = TARGET_X86_64`. That keying is safe only because `ir_codegen.inc`
+holds the **only** x86-64 emitter feeding `ProcAddrFix` — the assumption that
+failed for `DynCallCodePos` in phase 2, so it is checked and stated at the site.
+
+**The test change is the population, not the assertion.** `test_emit_obj.pas`
+gained `emit_obj_cbaddr`, taking `@AddUp` (a local symbol, so the relocation is
+against `.text` itself). Control, run: with the emitter reverted to the absolute
+form and the compiler rebuilt back to `d9ed759a200c` byte-for-byte, the existing
+row FAILS on the new source and PASSES on the old one. That difference is the
+whole value of the change.
