@@ -112,4 +112,4 @@ against an address below 4GB, and my first version used a `static` buffer and
 passed on a compiler I already knew was broken. Positive control measured — the
 unfixed compiler exits 3 with `void* callback returned 0x40a00008, want
 0x7dea40a00008`.
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved by `f8d24acef` (the ParseCDeclType fix); moved to done/ in `695dd4183`.
