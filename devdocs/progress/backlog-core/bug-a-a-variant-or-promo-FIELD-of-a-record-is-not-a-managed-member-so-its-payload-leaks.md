@@ -2,7 +2,7 @@
 type: bug
 track: A
 prio: 6
-summary: only one shape still leaks — a record whose ONLY member is a Variant (live=7708), because RecordHasManagedFields does not count one; the Variant half landed in b2997a31b and the PromoInt half as member kind 7 in f806993c8
+summary: one shape still leaks — a record whose ONLY member is a Variant, INSIDE A DYN ARRAY (live=7708); a plain local of it is clean (2) and so is the same record with a second managed member (5), because RecordHasManagedFields does not count a Variant. Variant half landed b2997a31b, PromoInt half as member kind 7 in f806993c8
 tags: [memory-leak, variant, promoint, rtti, records]
 ---
 
@@ -22,9 +22,35 @@ retain/release/zero arms in builtinheap. Regression test
 
 **ONE thing remains open and this ticket stays open for it:**
 
-- **A record whose ONLY member is a Variant** (live=7708) — `RecordHasManagedFields`
-  does not count a variant, so the record is never managed and no walk is
-  emitted at all. That is the broad change `ClassFieldNeedsFinal` warns about.
+- **A record whose ONLY member is a Variant, INSIDE A DYN ARRAY** (live=7708).
+  `RecordHasManagedFieldsDepth2` counts AnsiString, dyn-array, COM-interface and
+  nested-record fields, and neither a Variant nor a promo, so such a record is
+  not a managed record and a dyn-array element release never walks it.
+
+  **NAME THE CONTAINER, because three neighbouring shapes are clean and one of
+  them is the obvious probe.** Measured at 1000 trips:
+
+      record{v:Variant}          plain local          live=2      clean
+      record{v:Variant}          class field          live=1      clean
+      record{v:Variant; s:Str}   in a dyn array       live=5      clean
+      record{v:Variant}          in a dyn array       live=7708   LEAK
+
+  A plain local is clean because a local is finalized by its own scope-exit
+  path, which knows a Variant directly; only the DYN ARRAY element goes through
+  the record descriptor, and only the record descriptor consults this gate.
+  Adding any second managed member flips the gate and the leak vanishes — which
+  is why the row above it reads clean and why a one-field probe reports success.
+  An earlier revision of this ticket said "a record whose ONLY member is a
+  Variant (live=7708)" with no container, while its own matrix said that shape
+  was clean; both halves were measurements of DIFFERENT shapes filed as one.
+
+  The walk machinery is now complete — `PXXRecordRetain`/`Release`/`ZeroManaged`
+  have kind-5 arms since `b2997a31b` and kind-7 arms since `f806993c8`, and
+  `RecordDescMember` describes both. **This gate is the last missing piece**,
+  and it is the broad change `ClassFieldNeedsFinal` warns about: flipping the
+  gate changes copy, zero-init and finalization together, the exact
+  one-predicate-answers-three-questions shape that the interface-field history
+  in `RecordHasManagedFieldsDepth2` records as having gone wrong before.
   Note the promo fix does NOT reach it and was never going to: the same
   single-member row for promo measured clean at 6 both before and after, because
   with no second managed member the record is not managed and there is no walk
