@@ -2,12 +2,12 @@
 track: A
 prio: 50
 type: feature
-status: working
+status: done
 found: 2026-08-31
 found-by: frankC
 owner: frankA
 blocked-by: []
-summary: "A pxx x86-64 .o needs `-no-pie` to link, and modern toolchains default to PIE, so `gcc main.c mylib.o` fails with `relocation R_X86_64_32S against .bss can not be used when making a PIE object`. The cause is the BACKEND, not the writer: EmitDataRef emits an 8-byte absolute operand and EmitGlobRef a 4-byte sign-extended absolute displacement, so an object carries R_X86_64_64/R_X86_64_32S. The fix is a rip-relative global-reference form (R_X86_64_PC32), which changes instruction ENCODINGS and therefore lengths. MEASURED 2026-09-01 (frankA), see the census at the end: 854 of 1271 sites are a plain absolute [disp32] whose field ENDS the instruction (addend -4), 417 are `movabs $abs,%reg` that must become `lea %reg,[rip+disp32]`, and ZERO are indexed or carry a trailing immediate. The three byte-shapes preceding the relocated field are recognisable from what was just emitted, so this is a ONE-PLACE rewrite inside EmitGlobRef/EmitDataRef with a refusing guard, not ~200 call-site edits. The 'zero encoding change' alternative this ticket recommended pricing FIRST does not exist: a 64-bit absolute IMMEDIATE cannot be made position-independent by any relocation, so a third of the sites need an instruction rewrite either way -- frankC, who filed this, has accepted that correction. Do it unconditionally on x86-64, not under --emit-obj: a form emitted only under that flag is invisible to the self-host fixedpoint. Nothing is broken: -no-pie links and runs today under gcc, clang and tcc, and is documented in docs/reference/objects.md. Raise this when someone must link a pxx object into a PIE they do not control."
+summary: "DONE 2026-09-01 (44b256356, phase 2; d0537380a phase 1). A pxx x86-64 .o used to need `-no-pie`; it now carries ZERO absolute relocations in .text (272 R_X86_64_PC32, nothing else) and links+runs under gcc with no flags, gcc -pie, gcc -no-pie and clang -pie. The 84 R_X86_64_64 that remain are all in .rela.data -- absolute pointers stored IN data, which a PIE resolves at load time. Fixed in the BACKEND as this ticket said: a rip-relative form in EmitGlobRef for absolute [disp32] memory operands, and an INSTRUCTION rewrite (movabs -> lea [rip+disp32], mov r32,imm32 -> lea, call [abs] -> call [rip]) for addresses loaded as immediates, which no relocation can make position-independent. i386 is UNCHANGED and still needs -no-pie. Two corrections this ticket carried and that are now settled: (1) its 'zero encoding change' alternative does not exist, accepted by frankC; (2) THIS SUMMARY PREVIOUSLY ASSERTED that zero sites carry a trailing immediate -- that census was taken over five objects built WITHOUT --threadsafe, a population that could not contain the shape. Re-measured: 13 of 191 converted sites trail four bytes, and believing the zero cost a hang in test_multithreading. Docs and the test-emit-obj assertions are inverted to match."
 ---
 
 # x86-64 object output is position-dependent, so a link needs `-no-pie`
@@ -169,3 +169,102 @@ program with no `cdecl` export and 115 of 120 sampled programs have none. The
 two zeroes are therefore measured over a narrow corpus of emittable objects.
 They should be re-run over whatever the implementation's own test corpus turns
 out to be; the refusing peephole is what makes that safe rather than the census.
+
+
+## Resolved — 2026-09-01, Track A (frankA), 44b256356
+
+Phase 1 `d0537380a` (memory operands), phase 2 `44b256356` (immediates, the
+external call, docs, assertions). Binary `d9ed759a200c`.
+
+### The result
+
+`test_emit_obj.o`, measured off the artefact:
+
+| section | relocations |
+| --- | --- |
+| `.rela.text` | **272 R_X86_64_PC32, and nothing else** |
+| `.rela.data` | 84 R_X86_64_64 (absolute pointers stored IN data — fine for a PIE) |
+
+| link | result |
+| --- | --- |
+| `gcc main.c mylib.o` (no flags) | DYN, `45 pxx-emit-obj` |
+| `gcc -pie` | DYN, `45 pxx-emit-obj` |
+| `gcc -no-pie` | EXEC, `45 pxx-emit-obj` |
+| `clang -fPIE -pie` | `45 pxx-emit-obj` |
+| pre-PIC object (control) | ld refuses: *relocation R_X86_64_32S* |
+
+### What phase 2 had to change, and why it was not a relocation choice
+
+Phase 1 converted absolute `[disp32]` **memory operands**. The remainder was an
+address loaded as an **immediate**, and no relocation makes an immediate
+position-independent — it needs a different instruction. `movabs r64, imm64`
+(10 bytes) became `lea r64, [rip+disp32]` (7), the register moving from the
+opcode's low bits into ModRM.reg so REX.B becomes REX.R; `mov reg, @glob` in the
+text assembler emits the lea directly; the external call became `FF 15`
+(`call [rip+disp32]`) and `PatchDynCallSites` took a `codeVA` parameter.
+
+`PICRefsAreRipRelative` is one predicate for all of it because the encoder and
+the writer must agree — disagreement means a lea patched absolute, a wrong
+address with no diagnostic.
+
+### The sibling arm — the part worth keeping
+
+`PatchDynCallSites` chooses rip-relative vs absolute from `TargetArch` **alone**,
+and **two** emitters feed `DynCallCodePos` on x86-64: the call in
+`EmitExternalCall`, and `mov rax,[abs GOT slot]` in `EmitExternalProcAddr` ~150
+lines away, serving `@ext`. Converting the call and not the load left the load
+absolute while its displacement was patched PC-relatively;
+`soname_host_discovery.pas` segfaulted on `mov rax,[0xec9]`.
+
+Caught by `gate.sh quick`, not by reading. Nothing in the patch table
+distinguishes the two sites, so a third emitter has to be **converted**, not
+flagged — recorded in the comment at the site.
+
+### The nil check that could not have caught it
+
+Every existing check of `@external` in the repo — `soname_host_discovery.pas`
+and `cexternal_func_addr_b106.c` — asserts `<> nil` and stops. With the DynCall
+addend deliberately shifted one slot (+8) and the compiler rebuilt:
+
+```
+@strlen  ->  NON-NIL: it resolved to the neighbouring GOT entry, puts
+calling through it returned 12, not 11
+exit code 0, no crash, every nil check PASSED
+```
+
+So `test/test_external_proc_addr_callable.pas` calls through the pointer and
+compares against a direct call. It declares **two** externals deliberately: with
+one, the neighbouring slot is zero and the defect degrades into the easy nil
+case the old tests already catch. It fails on the +8 binary and passes on this
+one; both arms were run.
+
+### The assertion that noticed, as designed
+
+`test-emit-obj` asserted that a PIE link FAILS and that `R_X86_64_32S` is
+PRESENT. Phase 1's commit message said it was "deliberately left alone; it is
+the thing that will notice when it stops." It stopped, and it noticed. Inverted:
+`.text` must have PC32 and must NOT have 32S or 64; `.data` must still have 64
+— **by section**, because "no 64-bit relocation anywhere" is false and is the
+easy wrong assertion. The PC32 row doubles as the AIM CHECK for the two negative
+rows, which would otherwise go vacuous together if the `sed` range stopped
+matching. `readelf` must say DYN, since ld quietly produces a non-PIE otherwise.
+
+### Docs, including a correction I made to my own first draft
+
+`docs/reference/objects.md` said `-no-pie` was required on x86-64 and i386
+alike; it is now required only on i386. My first rewrite claimed GNU ld
+*refuses* the i386 object in a PIE. **It does not** — it accepts it and creates
+`DT_TEXTREL`, with warnings. Measured before committing and corrected;
+`-Wl,-z,text` is what actually separates them (refuses i386, links x86-64
+clean). `cli.md` updated too.
+
+### Not done here
+
+i386 is untouched and still position-dependent
+(`feature-a-object-output-for-i386-arm32-and-aarch64` owns that if anyone wants
+it). This ticket's remaining consumer is
+`feature-a-shared-library-output-for-compiled-sources`, which needed exactly
+this and is next.
+
+## Log
+- 2026-09-01 — resolved, commit PENDING-COMMIT.
