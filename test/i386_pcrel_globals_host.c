@@ -10,7 +10,7 @@ int main(void)
 {
   int r = pic_probe(1000);
   int want = 1000 + 0x11223344 + (-70000) + 200 + (-100) + 60000 + (-30000) + 110;
-  if (r >= 101 && r <= 107) { printf("FAIL: subject row %d\n", r); return 1; }
+  if (r >= 101 && r <= 112) { printf("FAIL: subject row %d\n", r); return 1; }
   if (r != want) { printf("FAIL: pic_probe=%d want=%d\n", r, want); return 1; }
   printf("PCREL GLOBALS OK\n");
   return 0;

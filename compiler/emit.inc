@@ -245,6 +245,28 @@ begin
   Result := (TargetArch = TARGET_X86_64) and (not EncToAsmBuffer);
 end;
 
+procedure EmitPicAnchorInto(reg: Integer);
+{ mov reg, [ebp+X386PicSlot] -- 8B /r with mod=10 rm=101 (ebp+disp32). Puts this
+  body's call/pop anchor value into reg. Callers must have established that reg
+  is dead here. }
+begin
+  EmitB($8B);
+  EmitB(Byte($80 or (reg shl 3) or $05));
+  EmitI32(X386PicSlot);
+end;
+
+function I386PicBaseUsable(reg: Integer): Boolean;
+{ Whether reg can serve as the anchor base in a mod=10 ModRM.
+
+  esp (4) cannot: rm=100 selects a SIB byte rather than a base register, so the
+  encoding would mean something else entirely. ebp (5) could be encoded, but
+  loading the anchor into it destroys the frame pointer the slot is addressed
+  through -- and the slot is read again by every later reference in the body.
+  Both refuse, and a refusing site keeps its absolute form. }
+begin
+  I386PicBaseUsable := (reg <> 4) and (reg <> 5);
+end;
+
 function TryI386PcRelLoad: Boolean;
 { Rewrite an absolute [disp32] LOAD, just emitted by the caller, into a load
   through this body's PC anchor, and report whether it did.
@@ -282,6 +304,41 @@ begin
   if CodeLen < 2 then Exit;
 
   modrm := Code[CodeLen-1];
+
+  { --- SHAPE B: the moffs LOADS, A0 (mov al,[moffs]) and A1 (mov eax,[moffs]).
+    One opcode byte and NO ModRM at all, which is why the first version of this
+    function could not see them: it keyed on a ModRM that is not there. The
+    destination is architecturally eax, so it is the base, and the ModRM form
+    they become is the ordinary one. A2/A3 are the STORES of the same family and
+    are not here -- they must keep eax. --- }
+  if (modrm = $A0) or (modrm = $A1) then
+  begin
+    Dec(CodeLen);
+    EmitPicAnchorInto(0);                { eax }
+    if modrm = $A0 then EmitB($8A) else EmitB($8B);
+    EmitB($80);                          { mod=10 reg=eax rm=eax }
+    TryI386PcRelLoad := True;
+    Exit;
+  end;
+
+  { --- SHAPE C: B8+r, `mov reg, imm32` where the IMMEDIATE is the data address.
+    Not a memory reference at all -- it is address-of -- so it becomes a `lea`
+    rather than a `mov`: the anchor into reg, then `lea reg,[reg+disp32]`. Same
+    dead-destination argument as the loads, since the instruction's whole effect
+    is to define reg. This is the i386 twin of what EmitDataRef already does on
+    x86-64, where `movabs r64, imm64` becomes `lea r64,[rip+disp32]`. --- }
+  if (modrm >= $B8) and (modrm <= $BF) then
+  begin
+    dest := modrm - $B8;
+    if not I386PicBaseUsable(dest) then Exit;
+    Dec(CodeLen);
+    EmitPicAnchorInto(dest);
+    EmitB($8D);                          { lea }
+    EmitB(Byte($80 or (dest shl 3) or dest));
+    TryI386PcRelLoad := True;
+    Exit;
+  end;
+
   if (modrm and $C7) <> $05 then Exit;   { not absolute [disp32] }
 
   opLen := 0;
@@ -292,18 +349,11 @@ begin
   if opLen = 0 then Exit;                { unlisted encoding: stay absolute }
 
   dest := (modrm shr 3) and 7;
-  if dest = 4 then Exit;                 { esp as a base means SIB; refuse }
-  if dest = 5 then Exit;                 { ebp base: mod=10 rm=101 is fine but
-                                           collides with the form we just left,
-                                           so refuse rather than reason }
+  if not I386PicBaseUsable(dest) then Exit;
 
   for k := 0 to opLen - 1 do saved[k] := Code[CodeLen - opLen + k];
   CodeLen := CodeLen - opLen;
-
-  { mov dest, [ebp+picslot]  --  8B /r, mod=10 rm=101 (ebp+disp32) }
-  EmitB($8B);
-  EmitB(Byte($80 or (dest shl 3) or $05));
-  EmitI32(X386PicSlot);
+  EmitPicAnchorInto(dest);
 
   { the caller's instruction, with ModRM mod=10 rm=dest }
   for k := 0 to opLen - 2 do EmitB(saved[k]);
@@ -365,12 +415,17 @@ begin
      (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) or
      (TargetArch = TARGET_WASM32) then
   begin
-    DbgI386RelocShape('EmitDataRef');
     if TryI386PcRelLoad then
     begin
       FixupPCRel[FixCount] := True;
       FixupPicDelta[FixCount] := CodeLen - X386PicAnchor;
     end;
+    { AFTER the rewrite, deliberately, so the census reads as "what is still
+      absolute" rather than "what arrived". Printing it before cost a reading in
+      which 58 converted `8a` sites counted as unconverted -- the object said 120
+      R_386_PC32 and the census could account for 62. EmitGlobRef prints after
+      its rewrite too, for the same reason. }
+    DbgI386RelocShape('EmitDataRef');
     Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
     Inc(FixCount);
     EmitI32(0);

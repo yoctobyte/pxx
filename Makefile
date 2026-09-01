@@ -18242,6 +18242,18 @@ test-emit-obj: $(COMPILER)
 	rm -f $(TESTTMP)/i386_pcrel_globals.o
 	./$(COMPILER) --target=i386 --emit-obj test/i386_pcrel_globals.c $(TESTTMP)/i386_pcrel_globals.o
 	readelf -rW $(TESTTMP)/i386_pcrel_globals.o | grep -qE 'R_386_PC32' || { echo "test-emit-obj: i386 object carries NO R_386_PC32 -- the data-reference conversion did not fire, so the value assertions below prove nothing"; exit 1; }
+	@# .text must be MOSTLY position-independent for this subject, not merely
+	@# partly. A bare nonzero PC32 count stays green after a whole family stops
+	@# converting; this does not. It is a guard that can fail and has: before
+	@# families B and C (moffs loads, address-as-immediate) landed, the same
+	@# subject was 332 absolute against 120 PC-relative and this line was RED.
+	@# It is 138 against 314 now. Scoped to .rel.text on purpose -- .rel.data
+	@# is absolute by nature and counting it would drown the signal.
+	@abs=$$(readelf -rW $(TESTTMP)/i386_pcrel_globals.o | awk '/^Relocation section/{s=($$0 ~ /rel\.text/)} s && /R_386_32/{n++} END{print n+0}'); \
+	 pcr=$$(readelf -rW $(TESTTMP)/i386_pcrel_globals.o | awk '/^Relocation section/{s=($$0 ~ /rel\.text/)} s && /R_386_PC32/{n++} END{print n+0}'); \
+	 if [ "$$pcr" -le "$$abs" ]; then echo "test-emit-obj: i386 .text is $$abs absolute vs $$pcr PC-relative -- the data-reference conversion regressed"; exit 1; fi; \
+	 echo "test-emit-obj: i386 .text $$pcr PC-relative vs $$abs absolute"
+
 	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
 	  gcc -m32 -no-pie test/i386_pcrel_globals_host.c $(TESTTMP)/i386_pcrel_globals.o -o $(TESTTMP)/i386_pcrel_globals_exe || { echo "test-emit-obj: i386 pcrel subject FAILED to link"; exit 1; }; \
 	  tools/expect_same.sh i386_pcrel_globals "$$($(TESTTMP)/i386_pcrel_globals_exe)" "PCREL GLOBALS OK" || exit 1; \
