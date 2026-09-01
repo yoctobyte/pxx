@@ -12100,6 +12100,18 @@ test-core: $(COMPILER)
 	# bug-c-sizeof-reaches-a-pointee-through-one-spelling-only
 	./$(COMPILER) test/csizeof_pointee_spellings.c $(TESTTMP)/csizeof_spellings26
 	tools/expect_same.sh csizeof_spellings26 "$$($(TESTTMP)/csizeof_spellings26 | tail -1)" "SIZEOF OK"
+	# sizeof yields UNSIGNED size_t (C 6.5.3.4); the result node was tagged
+	# tyInteger. Every SIZE was already right -- what was wrong was every
+	# operator that then CONSUMED one: `-1 < sizeof(int)` said 1, the
+	# difference of two sizeofs compared and divided and shifted SIGNED.
+	# An isolated probe cannot see this. Printing a sizeof, printing a
+	# difference of two, `sizeof(a)-1` and `(int)(sizeof(a)-sizeof(b))` are
+	# all correct with either tag; it takes a SECOND operator reading the
+	# type. frankD hit the same shape on ptr-ptr the same day (52ad546b9),
+	# where only `q-p+1` exposed it. The everyday idioms (sizeof/sizeof,
+	# %zu, memcpy) are kept in the test as the controls a wrong fix breaks.
+	./$(COMPILER) test/csizeof_result_is_unsigned.c $(TESTTMP)/csizeof_sign26
+	tools/expect_same.sh csizeof_sign26 "$$($(TESTTMP)/csizeof_sign26 | tail -1)" "SIZEOF SIGN OK"
 	./$(COMPILER) test/c_const_branch_dead_arm.c $(TESTTMP)/c_constbranch26
 	tools/expect_same.sh c_constbranch26 "$$($(TESTTMP)/c_constbranch26)" "$$(printf '42 42 42 42 42\n100 200 400 300 500 600')"
 	# An UNSIGNED constant guard must be decidable at compile time, like every

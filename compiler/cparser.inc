@@ -3255,9 +3255,23 @@ begin
     Result := node;
     Exit;
   end;
+  { C 6.5.3.4: sizeof yields size_t, which is UNSIGNED. This said tyInteger, and
+    the SIZES were all correct -- what was wrong was every operator that then
+    CONSUMED one. Measured against gcc:
+
+      -1 < sizeof(int)                 gcc 0   pxx 1
+      (sizeof(a) - sizeof(b)) > 0      gcc 1   pxx 0
+      (sizeof(a) - sizeof(b)) / 2      gcc unsigned   pxx signed
+      (sizeof(a) - sizeof(b)) >> 1     gcc shr        pxx sar
+
+    while printing the difference itself, `sizeof(a) - 1`, and the int-cast were
+    all ALREADY RIGHT -- so a probe that measures sizeof in isolation passes
+    every row and finds nothing. It needs a second operator consuming the
+    result. frankD hit the identical shape on `ptr - ptr` the same day
+    (52ad546b9): the subtraction was right and only `q - p + 1` exposed it. }
   node := AllocNode(AN_INT_LIT);
   ASTIVal[node] := sz;
-  ASTTk[node] := Ord(tyInteger);
+  ASTTk[node] := Ord(tyUInt64);
   Result := node;
 end;
 
