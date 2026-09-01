@@ -3280,10 +3280,15 @@ end;
 
 { Does parameter `pathIdx` of proc `cpi` want an OWNING managed-string temp?
 
-  ONE PLACE, because the question is asked at SIX sites — the plain AN_CALL
+  ONE PLACE, because the question is asked at SEVEN sites — the plain AN_CALL
   argument loop, the constructor-argument loop (twice: once for `cpi`, once for
-  the `tkGetMem` `slot` alternative), AN_CALL_IND, AN_INTF_CALL and
-  AN_VIRTUAL_CALL — and until 2026-08-29 every one of them asked it by reading
+  the `tkGetMem` `slot` alternative), AN_CALL_IND, AN_INTF_CALL, AN_VIRTUAL_CALL
+  and the OMITTED-DEFAULT-ARGUMENT path —
+
+  and it said SIX until 2026-09-01, which is how the seventh survived this
+  consolidation: it kept reading `Params[pathIdx].TypeKind` directly while this
+  header asserted that every site had been converted. A count in a comment is
+  read as a census. Recount from the callers, as the next line already says — and until 2026-08-29 every one of them asked it by reading
   `Params[pathIdx].TypeKind = tyAnsiString` directly, and every one was wrong
   in the same way. Count them from the callers below, not from this sentence.
 
@@ -12312,7 +12317,23 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             value := IRAppend(IR_CONST_STR, ProcParamDefaultSOff[cpi * MAX_PROC_PARAMS + pathIdx],
                               ProcParamDefaultSLen[cpi * MAX_PROC_PARAMS + pathIdx], -1, 0,
                               Ord(tyString));
-            if Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString then
+            { THE SEVENTH SITE. The other six ask ParamWantsManagedStrTemp; this
+              one read Params[pathIdx].TypeKind directly -- the exact spelling
+              that helper was extracted to delete on 2026-08-29 -- and so was
+              missing its `not IsArray` half. The helper's own header says SIX
+              sites, and that sentence is why nobody counted a seventh.
+              Reachable: `procedure P(const a: array of string = 'x')` compiled
+              and printed High(a) = 1073741823.
+
+              It is now unreachable from the front end, because the parser
+              refuses a default on an array parameter outright (see
+              pasparser_proc.inc) -- that is the real fix, and it also covers
+              the non-string element types this site never looked at. So this
+              call is NOT load-bearing today and its necessity is no longer
+              demonstrable. It is here so that one concept has one spelling:
+              the next person to widen defaults will change the predicate, not
+              rediscover this line. }
+            if ParamWantsManagedStrTemp(cpi, pathIdx) then
             begin
               hiddenArgSym := AllocVar('', tyAnsiString);
               SymIsHiddenArgTemp[hiddenArgSym] := True;

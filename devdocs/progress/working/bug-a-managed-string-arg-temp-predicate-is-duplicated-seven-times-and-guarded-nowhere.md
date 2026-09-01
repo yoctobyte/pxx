@@ -4,9 +4,10 @@ title: "One concept, seven copies, zero guards: the managed-string arg-temp deci
 track: A
 type: bug
 prio: 20
-status: backlog
+status: working
 found: 2026-08-29
 found-by: frankwasm
+owner: frankA
 ---
 
 > **Refiled 2026-08-30 out of `chore-a-grant-wasm32-lane-holds-ir-inc-for-the-11207-mistyping`.**

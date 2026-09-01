@@ -1017,6 +1017,35 @@ begin
         pbyref[i] := isByRef;
         pconst[i] := isConst;
         pout[i] := isOut;
+        { A DEFAULT VALUE ON AN OPEN-ARRAY PARAMETER CANNOT MEAN ANYTHING, and
+          until 2026-09-01 we accepted it silently for every element type. There
+          is no syntax for an array literal in a default, so the value parsed is
+          always a scalar, and the callee then reads its length header out of
+          whatever that scalar is: `const a: array of string = 'x'` gave
+          High(a) = 1073741823 (a frozen literal's inline length prefix read as
+          an array header) and `array of Integer = 5` printed an empty High.
+          Compiling and running wrong, not merely accepted -- FPC refuses at the
+          `=`, and here that is the right answer rather than a compat choice.
+
+          `paramDynDepth > 0` is NOT this case and must stay accepted: a named
+          DYNAMIC-array type (`TArr = array of Integer`) is a handle, `nil` is a
+          meaningful default for it, and FPC compiles `a: TArr = nil` and prints
+          Length = 0. The first version of this guard tested `isArr` alone and
+          rejected it -- isArr is true for the open-array param, the named FIXED
+          array param and the named dynamic one alike, so it is the wrong half
+          of the type to ask about. Caught by running the shape, not by reading.
+
+          This is the ONE place the parser learns both halves; the durable param
+          row is copied to three others downstream, and guarding those instead
+          would be guarding the reads rather than the write. }
+        if isArr and hasDefault and (paramDynDepth <= 0) then
+          Error('a parameter of an open-array or fixed-array type cannot have a '
+                + 'default value: there is no array literal to write there, so '
+                + 'the value would be a scalar whose bytes the callee reads as a '
+                + 'length header. A named DYNAMIC array type takes a default '
+                + '(`a: TArr = nil`) because it is a handle '
+                + '(bug-a-managed-string-arg-temp-predicate-is-duplicated-seven-'
+                + 'times-and-guarded-nowhere)');
         pdefault[i] := hasDefault;
         pdefaultval[i] := defaultVal;
         pdefaultisstr[i] := defaultIsStr;

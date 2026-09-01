@@ -6024,6 +6024,10 @@ test-core: $(COMPILER)
 	! ./$(COMPILER) --target=esp32c6 -O0 test/test_target_name_in_external_refusal.pas $(TESTTMP)/test_tner26 > $(TESTTMP)/test_tner_c.log 2>&1
 	grep -q "target esp32c6: external (dynamic) symbols are not supported" $(TESTTMP)/test_tner_c.log
 	! ./$(COMPILER) test/test_file_type_fail.pas $(TESTTMP)/test_ftf26 > $(TESTTMP)/test_ftf.log 2>&1
+	! ./$(COMPILER) test/test_array_param_default_refused.pas $(TESTTMP)/test_apdr26 > $(TESTTMP)/test_apdr.log 2>&1
+	grep -q "cannot have a default value" $(TESTTMP)/test_apdr.log
+	./$(COMPILER) test/test_array_param_default_allowed.pas $(TESTTMP)/test_apda26
+	tools/expect_same.sh test_apda26 "$$($(TESTTMP)/test_apda26)" "$$(printf 'dyn len=0\ndyn len=3\nmixed high=1 b=7\nmixed high=1 b=9')"
 	grep -q "file types are not supported" $(TESTTMP)/test_ftf.log
 	! ./$(COMPILER) test/test_default_filefield_fail.pas $(TESTTMP)/test_dff26 > $(TESTTMP)/test_dff.log 2>&1
 	grep -q "record type contains a file field" $(TESTTMP)/test_dff.log
