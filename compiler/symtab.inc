@@ -4276,7 +4276,7 @@ begin
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymHashBkt, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
-  SetLength(SymCExternOnly, n);    SetLength(SymCStaticLink, n);  SetLength(SymObjDataScope, n);  SetLength(SymAllocSize, n);  SetLength(ObjDataStrOff, n);
+  SetLength(SymCExternOnly, n);    SetLength(SymCStaticLink, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(ObjDataStrOff, n);
   SetLength(SymCellPtr, n);
   SetLength(SymArrIdxTk, n);      SetLength(SymArrIdxEnumId, n);
   { the two per-DIMENSION tables ride the same index, MAX_ARR_DIMS to a symbol }
@@ -4449,7 +4449,8 @@ begin
   SymCLongRank[SymCount]  := 0;
   SymCExternOnly[SymCount] := False;   { a definition unless a declaration says otherwise }
   SymCStaticLink[SymCount] := False;
-  SymObjDataScope[SymCount] := False;  { outside the object's data surface until a frontend says otherwise }
+  SymObjDataScope[SymCount] := False;   { outside the object's data surface until a frontend says otherwise }
+  SymObjRuntimeCopy[SymCount] := False; { ...and not pxx's own runtime's, which is a different linkage }
   SymAllocSize[SymCount] := 0;         { set by whichever reservation path takes global storage }
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
@@ -10180,7 +10181,7 @@ begin
   SetLength(ProcFrameSensitive, n);  SetLength(DceLive, n);  SetLength(DceWork, n);
   SetLength(DceOrder, n);  SetLength(DceLimit, n);  SetLength(DceRemStart, n);
   SetLength(DceRemEnd, n);  SetLength(ProcHashNext, n);  SetLength(ProcOverloadDirective, n);
-  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcCModule, n);
+  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);
   SetLength(ProcCaseSensitive, n);  SetLength(ProcLibrary, n);  SetLength(ProcExtName, n);
   SetLength(ProcCdecl, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
   SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcPyDefTok, n);  SetLength(ProcPyRebindTok, n);  SetLength(ProcPyAliasRebindTok, n);
@@ -10235,6 +10236,7 @@ begin
   Procs[ProcCount].RetSymIdx  := -1;
   Procs[ProcCount].ScopeBase  := 0;
   ProcExternal[ProcCount]     := False;
+  ProcObjRuntimeCopy[ProcCount] := False;   { set when a crtl module supplies the BODY }
   ProcCaseSensitive[ProcCount] := DeclCaseSensitive;
   ProcOverloadDirective[ProcCount] := False;
   ProcFlexColumn[ProcCount]   := False;

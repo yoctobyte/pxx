@@ -4,10 +4,10 @@ title: "Two --emit-obj objects cannot be linked together: each defines all 116 c
 track: A
 prio: 70
 type: bug
-status: backlog
+status: done
 created: 2026-09-01
 found-by: frankD
-owner: ""
+owner: frankA
 blocked-by: []
 summary: "CORRECTED 2026-09-01: weakening only the CODE is NOT sufficient -- crtl STATE is object-local with no linkage at all (`nm` finds no errno symbol), so a program touching errno/optind BY NAME reads its own copy; measured against gcc, errno=0 vs 2 and optind=1 vs 2, and that is exactly why the busybox separate build diverges from the oracle while still linking and running. Every --emit-obj object carries the WHOLE of crtl and exports each entry point as a GLOBAL definition, so any two pxx objects collide on 116 symbols and ld refuses the link. Measured on a two-line .c: 117 global symbols, 116 of them crtl, exactly one the program's own; .text 162KB, .data 11KB, .bss 56KB per object. meta-a-pxx-produces-linkable-code establishes that a gcc-built main links ONE pxx object; nobody had attempted TWO. Found attempting busybox's own build model. SEPARATE COMPILATION OTHERWISE WORKS: all 41 busybox TUs became objects with zero failures and the link produced a working multiplexer (--list, echo, and ash arithmetic all correct) -- but only with -Wl,-z,muldefs to get past THIS bug, and at 13.7MB because every object carries a full crtl."
 ---
@@ -151,3 +151,57 @@ of evidence, not evidence.
 pxx object**, on four targets, and that all works. Two pxx objects is a
 different claim and had never been attempted — an umbrella cell with no
 blockers because nobody had tried it, not because it was clear.
+
+## Resolved: three changes, not one — and the first two each looked like the fix
+
+frankA, 2026-09-01. Two objects now link with no `-z muldefs` and share one
+heap, one `errno` and one `optind`, matching a gcc build of the same sources.
+Compiler `742e616ec446`. Regression row: `test-emit-obj` block 4b-septies over
+`test/c_obj_runtime_state_{a,b}.c`, with the gcc build as the oracle rather
+than a literal.
+
+Each stage below was measured on the same repro, and the first two produce a
+program that links and runs and answers WRONGLY — which is why they are
+recorded as stages rather than as one diff.
+
+1. **crtl code exported WEAK** (`ObjProcBind`, `$20`). The 116 collisions go.
+   The link still fails rc=2 — on `stdin` and `stdout`. Those were already
+   strong globals, because the old membership test asked "did the user's file
+   mention this name" and `#include <stdio.h>` puts `extern FILE *stdin;` in
+   the user's TU. So the runtime's data surface was inconsistent before this
+   ticket: `stdin`/`stdout` exported strongly, `errno`/`optind` not at all.
+2. **crtl state exported WEAK too.** Link rc=0, and `errno` reads 0 where gcc
+   says 2 — frankD's number, reproduced exactly. The cause is a layer below
+   binding: every data reference in an object relocated against `.bss + n`, the
+   SECTION, so the linker's choice between two definitions of a name reached
+   nobody. Both copies still existed and each object read its own.
+3. **An exported definition relocates against its own SYMBOL**
+   (`ObjDataExportSymForOff`). `errno=2`, `optind=2`, cross-TU `free` works.
+
+The import side of that contract was wired by
+[[bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong]];
+the export side never was. Sharing a definition is two-sided, and one side
+alone is the silent-wrong-read bug pointed the other way.
+
+**The membership rule that made stage 1's leftovers disappear as a side effect
+rather than as a special case: the question is WHOSE DEFINITION, not whose
+mention.** A crtl definition makes a name runtime state however many user files
+declare it (`ObjDataIsRuntime`).
+
+**One regression caused and guarded.** Widening the candidate set made `errno`
+an UND IMPORT in a TU that pulls crtl's declaration without the module that
+defines it — `test/test_shared_lib.c` does exactly that — and ld then refuses
+libc.so outright: "TLS definition in libc.so.6 section .tbss mismatches non-TLS
+reference". A hard refusal, not a warning. **A name our own runtime owns is
+never imported**, whatever the extern-fold says; we ship a C runtime, so asking
+the host's libc for a piece of its state is always wrong.
+
+**What is NOT fixed, and it is the 13.7MB.** Weak resolves the symbol; it does
+not drop the bytes. The two-object binary here is 580088 against 310544 for one
+object, so both copies of crtl are still linked in. Section-granular
+deduplication is a separate mechanism (a crtl archive, or function sections
+plus COMDAT groups) and is filed as
+[[feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes]].
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

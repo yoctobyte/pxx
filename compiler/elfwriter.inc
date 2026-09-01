@@ -2937,6 +2937,35 @@ begin
   Result := ProcCdecl[procIdx];
 end;
 
+function ObjProcBind(procIdx: Integer): Byte;
+{ The st_info BINDING NIBBLE, already shifted: $10 GLOBAL, $20 WEAK.
+
+  WHY THE RUNTIME IS WEAK AND THE PROGRAM IS NOT. crtl is pulled into every
+  --emit-obj object WHOLESALE -- a two-line .c comes out with 117 global
+  definitions, 116 of them crtl -- so any two pxx objects collide on all 116 and
+  ld refuses the link outright. WEAK makes the linker keep one definition and
+  discard the rest, which is what every C runtime does for the same reason.
+
+  NOT LOCAL, and the difference matters. A self-contained runtime per object
+  looks like the tidier answer and is wrong: object A's `malloc` would take from
+  A's heap and object B's `free` would return to B's, so a pointer crossing a
+  translation unit corrupts rather than collides. Weak keeps ONE copy of the
+  code, and that copy carries its own state's addresses, so every caller reaches
+  the same allocator AND the same heap.
+
+  THAT ARGUMENT COVERS STATE REACHED THROUGH CODE AND NOTHING ELSE, which is why
+  the data half of this change exists. A program that reads `errno` or `optind`
+  BY NAME never goes through a crtl routine, so no surviving copy funnels it --
+  and those had no linkage at all, so two objects kept separate copies in
+  silence. Measured by frankD against gcc: `errno=0 strerror=[]` where gcc says
+  `errno=2 strerror=[No such file or directory]`, and busybox's `cat` losing its
+  reason string and taking `-u` as a filename, one bug each. So the state is
+  exported weak alongside the code; see ObjDataIsRuntime.
+  bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link }
+begin
+  if ProcObjRuntimeCopy[procIdx] then ObjProcBind := $20 else ObjProcBind := $10;
+end;
+
 function ObjProcSize(procIdx: Integer): Int64;
 begin
   if ProcBodyEnd[procIdx] > Procs[procIdx].BodyAddr then
@@ -2955,22 +2984,57 @@ function ObjDataIsCandidate(i: Integer): Boolean;
   exporting the whole runtime. }
 begin
   ObjDataIsCandidate := (i >= 0) and (i < SymCount) and
-                        SymObjDataScope[i] and (Syms[i].Kind = skGlobal) and
-                        (Syms[i].Name <> '');
+                        (SymObjDataScope[i] or SymObjRuntimeCopy[i]) and
+                        (Syms[i].Kind = skGlobal) and (Syms[i].Name <> '');
+end;
+
+function ObjDataIsRuntime(i: Integer): Boolean;
+{ Is this one of pxx's OWN C runtime's variables, rather than the user's?
+
+  RUNTIME WINS OVER SCOPE WHEN BOTH ARE SET, and that combination is the common
+  case rather than a corner: `#include <stdio.h>` puts `extern FILE *stdin;` in
+  the USER's translation unit, so the user's file really does declare it, while
+  crtl holds the DEFINITION. Asking only "did the user's file mention this name"
+  therefore called `stdin` and `stdout` the program's own, and two objects that
+  both included stdio.h collided on them -- before reaching the 116 code
+  symbols, and for a different reason.
+
+  The question that answers correctly is WHOSE DEFINITION, not whose mention. A
+  crtl definition makes it runtime state however many user files declare it.
+  bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link }
+begin
+  ObjDataIsRuntime := ObjDataIsCandidate(i) and SymObjRuntimeCopy[i];
 end;
 
 function ObjDataIsImport(i: Integer): Boolean;
 { Every declaration of this NAME said `extern` and none defined it. Rule 3 of
   C 6.9.2 as the ticket states it -- and note `static` wins outright, because an
-  internal-linkage name is never undefined-elsewhere. }
+  internal-linkage name is never undefined-elsewhere.
+
+  A NAME OUR OWN RUNTIME OWNS IS NEVER IMPORTED, whatever the fold says. We
+  ship a C runtime; asking the host's libc for a piece of its state is how a
+  non-TLS reference to `errno` meets glibc's TLS one, and ld does not warn --
+  it refuses libc.so outright with "bad value". A translation unit that pulls
+  crtl's declaration of errno without pulling the module that defines it is
+  the shape that reaches here, and it is a real one: test_shared_lib.c does it.
+  The answer is a private slot, which is what it had before this ticket, not an
+  UND that the linker will resolve into a different runtime. }
 begin
   ObjDataIsImport := ObjDataIsCandidate(i) and SymCExternOnly[i] and
-                     (not SymCStaticLink[i]);
+                     (not SymCStaticLink[i]) and (not SymObjRuntimeCopy[i]);
 end;
 
 function ObjDataIsLocal(i: Integer): Boolean;
 begin
   ObjDataIsLocal := ObjDataIsCandidate(i) and SymCStaticLink[i];
+end;
+
+function ObjDataExportInfo(i: Integer): Byte;
+{ st_info for an exported data symbol: $11 GLOBAL OBJECT, $21 WEAK OBJECT.
+  The runtime's state is weak for the same reason its code is -- see
+  ObjProcBind, which carries the argument and the measurement. }
+begin
+  if SymObjRuntimeCopy[i] then ObjDataExportInfo := $21 else ObjDataExportInfo := $11;
 end;
 
 function ObjDataIsExport(i: Integer): Boolean;
@@ -3023,6 +3087,63 @@ begin
       ObjDataSymIndexForOff := k;
       Exit;
     end;
+end;
+
+function ObjDataExportSymForOff(bssOff: Integer): Integer;
+{ The EXPORTED definition whose slot starts exactly at `bssOff`, or -1.
+
+  The twin of ObjDataSymIndexForOff, and it exists for the same reason with the
+  arrow reversed. An import must name its symbol or it reads a private slot; an
+  EXPORT must name its symbol or it *is* the private slot -- every reference
+  inside this object resolves to its own .bss and the linker's choice between
+  two definitions of the name reaches nobody. Measured: two objects that both
+  used errno linked cleanly and each read its own copy, so `errno` came back 0
+  where gcc says 2. Sharing a definition is a two-sided contract and only the
+  import side was wired.
+
+  .bss only, because the export loop declares section 5 for every data symbol
+  it writes. Accepting a .data-encoded offset here would name a symbol whose
+  own st_shndx says .bss -- a wrong address that still links. }
+var k: Integer;
+begin
+  ObjDataExportSymForOff := -1;
+  if SymOffIsData(bssOff) then Exit;
+  for k := 0 to SymCount-1 do
+    if ObjDataIsExport(k) and (not SymOffIsData(Syms[k].Offset)) and
+       (Syms[k].Offset = bssOff) then
+    begin
+      ObjDataExportSymForOff := k;
+      Exit;
+    end;
+end;
+
+function ObjDataExportOrdinal(symIdx: Integer): Integer;
+{ Position within the EXPORT group, counted with the predicate the planner and
+  both writers walk -- see ObjDataImportOrdinal for why it is recomputed. }
+var k, n: Integer;
+begin
+  n := 0;
+  for k := 0 to SymCount-1 do
+  begin
+    if ObjDataIsExport(k) then
+    begin
+      if k = symIdx then
+      begin
+        ObjDataExportOrdinal := n;
+        Exit;
+      end;
+      n := n + 1;
+    end;
+  end;
+  ObjDataExportOrdinal := -1;
+end;
+
+function ObjDataRelocIsSymbolic(bssOff: Integer): Boolean;
+{ Does this reference name a data SYMBOL rather than a section? Import or
+  export -- the i386 writer needs the question without needing the index. }
+begin
+  ObjDataRelocIsSymbolic := (ObjDataSymIndexForOff(bssOff) >= 0) or
+                            (ObjDataExportSymForOff(bssOff) >= 0);
 end;
 
 function ObjDataImportOrdinal(symIdx: Integer): Integer;
@@ -3307,13 +3428,13 @@ begin
       writeSym64(f, ObjDataStrOff[i], $01, 5, Syms[i].Offset, SymAllocSize[i]);
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then
-      writeSym64(f, ObjProcStrOff[i], $12, 1, Procs[i].BodyAddr, ObjProcSize(i));
+      writeSym64(f, ObjProcStrOff[i], Byte(ObjProcBind(i) or 2), 1, Procs[i].BodyAddr, ObjProcSize(i));
   { EXPORTED data ($11 = GLOBAL OBJECT). A tentative definition is a definition
     (C 6.9.2) and lands here with the rest -- and as a real .bss OBJECT, not
     SHN_COMMON, which is -fno-common semantics and matches gcc 10 and later. }
   for i := 0 to SymCount-1 do
     if ObjDataIsExport(i) then
-      writeSym64(f, ObjDataStrOff[i], $11, 5, Syms[i].Offset, SymAllocSize[i]);
+      writeSym64(f, ObjDataStrOff[i], ObjDataExportInfo(i), 5, Syms[i].Offset, SymAllocSize[i]);
   for i := 0 to ExternalCount-1 do
     writeSym64(f, ObjExtStrOff[i], $10, 0, 0, 0);  { GLOBAL NOTYPE UNDEF }
   { IMPORTED data ($10 = GLOBAL NOTYPE, shndx 0 = UND, value 0, size 0). The
@@ -3384,7 +3505,18 @@ begin
       the linker supplies it. The PC32 correction still applies. }
     dsym := ObjDataSymIndexForOff(GlobFix[i].BSSoff);
     if dsym >= 0 then
-      dsym := impSym0 + ObjDataImportOrdinal(dsym);
+      dsym := impSym0 + ObjDataImportOrdinal(dsym)
+    else
+    begin
+      { An EXPORTED definition names its own symbol for the mirror-image
+        reason -- see ObjDataExportSymForOff. Addend 0 either way: an import's
+        value comes from the linker, an export's from its own st_value, and
+        adding this object's .bss offset on top of either is the same wrong
+        address. }
+      dsym := ObjDataExportSymForOff(GlobFix[i].BSSoff);
+      if dsym >= 0 then
+        dsym := firstGlobal + numExportProcs + ObjDataExportOrdinal(dsym);
+    end;
     if dsym >= 0 then
     begin
       if GlobFixPCRel[i] then
@@ -3637,7 +3769,7 @@ begin
       import's symbol in .rel.text would resolve to the definition PLUS a
       private offset, which is a wrong address that still links.
       The x86-64 twin puts the same 0 in the RELA addend field. }
-    if ObjDataSymIndexForOff(GlobFix[i].BSSoff) >= 0 then
+    if ObjDataRelocIsSymbolic(GlobFix[i].BSSoff) then
     begin
       if GlobFixPCRel[i] then
         Patch32(GlobFix[i].CodePos, GlobFixPicDelta[i])
@@ -3775,10 +3907,10 @@ begin
       writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $01, 5);
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then
-      writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, ObjProcSize(i), $12, 1);
+      writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, ObjProcSize(i), Byte(ObjProcBind(i) or 2), 1);
   for i := 0 to SymCount-1 do
     if ObjDataIsExport(i) then
-      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $11, 5);
+      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], ObjDataExportInfo(i), 5);
   for i := 0 to ExternalCount-1 do
     writeSym32(f, ObjExtStrOff[i], 0, 0, $10, 0);  { GLOBAL NOTYPE UNDEF }
   for i := 0 to SymCount-1 do
@@ -3825,7 +3957,13 @@ begin
       than this object's private .bss offset -- the linker supplies the address.
       Getting only one of the two right is the silent-wrong-read bug again. }
     dsym := ObjDataSymIndexForOff(GlobFix[i].BSSoff);
-    if dsym >= 0 then dsym := impSym0 + ObjDataImportOrdinal(dsym);
+    if dsym >= 0 then dsym := impSym0 + ObjDataImportOrdinal(dsym)
+    else
+    begin
+      dsym := ObjDataExportSymForOff(GlobFix[i].BSSoff);
+      if dsym >= 0 then
+        dsym := firstGlobal + numExportProcs + ObjDataExportOrdinal(dsym);
+    end;
     if dsym >= 0 then
       writeRel32(f, GlobFix[i].CodePos, dsym, Rel386Type(GlobFixPCRel[i]))
     else if SymOffIsData(GlobFix[i].BSSoff) then

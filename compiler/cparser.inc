@@ -8944,7 +8944,8 @@ begin
         Only the USER's translation unit joins it -- see CDeclIsFromCrtl. Set
         True and never cleared, so a name the user's file also declares stays a
         candidate even when crtl redeclares it afterwards. }
-      if not CDeclIsFromCrtl(TokPos - 1) then SymObjDataScope[idx] := True;
+      if CDeclIsFromCrtl(TokPos - 1) then SymObjRuntimeCopy[idx] := True
+      else SymObjDataScope[idx] := True;
       if PxxDbgEnabled('a.clink') then
       begin
         Write('PXXDBG a.clink ', name, ' externOnly=');
@@ -11676,6 +11677,11 @@ begin
   ProcExternal[procIdx] := False;
   CProcHasLocalDef[procIdx] := True;
   ProcCModule[procIdx] := CModuleOfTok(TokPos - 1);
+  { WHOSE BODY IS THIS. Recorded here, at the one place a C function body is
+    attributed to a module, rather than re-derived in the object writer: the
+    same predicate the data side already asks, so the two cannot drift.
+    bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link }
+  ProcObjRuntimeCopy[procIdx] := CDeclIsFromCrtl(TokPos - 1);
   Procs[procIdx].BodyAddr := CodeLen;
   
   { Save scope }

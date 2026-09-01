@@ -18855,6 +18855,50 @@ test-emit-obj: $(COMPILER)
 	 [ -n "$$tgt" ] || { echo "test-emit-obj: could not FIND the i386 I/O unlock stub -- the locator matched nothing, so the check below would have passed on an empty comparison"; exit 1; }; \
 	 grep -qE "^ *$$tgt:.*\bret\b" $(TESTTMP)/pcr_ts.dis || { echo "test-emit-obj: the i386 I/O unlock stub's jnz targets $$tgt, which is not a ret -- it lands inside the store wrapper"; grep -nE "^ *$$tgt:" $(TESTTMP)/pcr_ts.dis; exit 1; }; \
 	 echo "test-emit-obj: the --threadsafe i386 I/O unlock jump lands on the ret, not inside the store wrapper"
+	# 4b-septies. TWO OBJECTS SHARE ONE RUNTIME -- one heap, one errno, one
+	#    optind. Every --emit-obj object carries the whole of pxx's C runtime,
+	#    and it used to carry it as STRONG GLOBAL definitions, so two of them
+	#    could not be linked at all: 116 `multiple definition` errors before the
+	#    linker reached anything the program wrote. That is the headline symptom
+	#    and it is the easy half.
+	#
+	#    THE HARD HALF IS WHAT "FIXED" LOOKS LIKE. Weakening only the CODE makes
+	#    the link succeed and leaves the STATE split -- each object keeps its own
+	#    errno, its own optind and its own heap, so the program links, runs, and
+	#    answers wrongly. Measured at that stage, on this shape: errno=0 where
+	#    gcc says 2, and optind=1 where gcc says 2. Weakening the state as well
+	#    was still not enough, because every data reference relocated against
+	#    this object's .bss SECTION rather than against the symbol -- so the
+	#    linker's choice between two definitions of `errno` reached nobody and
+	#    errno stayed 0 (compiler 0d289a738621). Sharing a definition is a
+	#    two-sided contract; only the import side had been wired.
+	#
+	#    THE ORACLE IS gcc BUILDING THE SAME TWO SOURCES, not a literal, because
+	#    the interesting values are all "what a real runtime would say".
+	rm -f $(TESTTMP)/rtst_*.o $(TESTTMP)/rtst_pxx $(TESTTMP)/rtst_gcc
+	./$(COMPILER) --emit-obj test/c_obj_runtime_state_a.c $(TESTTMP)/rtst_a.o
+	./$(COMPILER) --emit-obj test/c_obj_runtime_state_b.c $(TESTTMP)/rtst_b.o
+	#    AIM CHECKS, and neither is decoration. A link of two objects that did
+	#    not both contain the runtime would succeed for no reason at all, and a
+	#    run whose data references were still section-relative would print the
+	#    right answer if both copies happened to agree. So: the runtime must be
+	#    present and weak in BOTH objects, and `errno` must actually be named by
+	#    relocations rather than folded into `.bss + n`.
+	@for o in a b; do \
+	  n=$$(readelf -sW $(TESTTMP)/rtst_$$o.o | awk '$$4=="FUNC" && $$5=="WEAK"' | wc -l); \
+	  [ "$$n" -gt 50 ] || { echo "test-emit-obj: object $$o has $$n weak FUNC symbols -- the runtime is not in it, so the link below cannot fail"; exit 1; }; \
+	  n=$$(readelf -sW $(TESTTMP)/rtst_$$o.o | awk '$$4=="OBJECT" && $$5=="WEAK"' | wc -l); \
+	  [ "$$n" -gt 0 ] || { echo "test-emit-obj: object $$o exports no weak OBJECT symbol -- the runtime's STATE is still private, which is the half that fails silently"; exit 1; }; \
+	 done
+	@n=$$(readelf -rW $(TESTTMP)/rtst_b.o | grep -c ' errno'); \
+	 [ "$$n" -gt 0 ] || { echo "test-emit-obj: no relocation names errno -- every reference is section-relative, so the shared definition below is unreachable and the run would pass on two private copies"; exit 1; }; \
+	 echo "test-emit-obj: $$n relocations name errno by symbol"
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc $(TESTTMP)/rtst_a.o $(TESTTMP)/rtst_b.o -o $(TESTTMP)/rtst_pxx || { echo "test-emit-obj: two pxx objects FAILED to link -- each defines the whole C runtime"; exit 1; }; \
+	  gcc test/c_obj_runtime_state_a.c test/c_obj_runtime_state_b.c -o $(TESTTMP)/rtst_gcc || { echo "test-emit-obj: the gcc oracle FAILED to build"; exit 1; }; \
+	  tools/expect_same.sh rtst_shared_runtime "$$($(TESTTMP)/rtst_pxx)" "$$($(TESTTMP)/rtst_gcc)" || exit 1; \
+	  echo "test-emit-obj: two objects share one heap, one errno and one optind, matching gcc"; \
+	else echo "gcc not installed; two-object runtime-state check skipped"; fi
 	# 4c. A SHARED LIBRARY FROM A COMPILED SOURCE -- the other half of the same
 	#    backend work (feature-a-shared-library-output-for-compiled-sources).
 	#    --shared used to describe .asm-frontend output only: the writer built

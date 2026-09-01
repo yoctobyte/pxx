@@ -2931,6 +2931,7 @@ var
   BlockCount: Integer;
   CurBlockId: Integer;
   ProcExternal : array of Boolean;
+  ProcObjRuntimeCopy : array of Boolean;   { this proc's BODY came from lib/crtl -- see SymObjRuntimeCopy }
   ProcCModule : array of Integer;   { the C .c MODULE whose text defined this proc's body (KeyStrs[] index, -1 = the main source / not C). Two definitions from different modules are not a same-TU duplicate -- see CModRange* below. bug-c-static-functions-in-different-crtl-modules-collide }
   ProcCaseSensitive : array of Boolean; { match this proc name case-sensitively (C imports, or Pascal in case-sensitive mode) }
   ProcLibrary  : array of Integer; { Strs[] entry for DT_NEEDED name }
@@ -3242,6 +3243,16 @@ var
     bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong
     bug-a-a-pascal-cdecl-program-emits-no-data-symbols-either }
   SymObjDataScope  : array of Boolean;
+  { The same membership question for pxx's OWN C runtime, kept SEPARATE from the
+    one above because the two get different LINKAGE, not different treatment of
+    the same kind. A crtl entry point and a crtl file-scope variable are carried
+    wholesale into every --emit-obj object, so any two objects define all 116 of
+    them and the link is refused; and the state -- errno, optind, environ -- had
+    no linkage at all, so two objects that both touch it silently kept separate
+    copies. Both halves are emitted WEAK: the linker keeps one definition of
+    each and every caller reaches the same code AND the same state.
+    bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link }
+  SymObjRuntimeCopy : array of Boolean;
   { The BYTES actually reserved for a global, recorded where the reservation
     happens. The object writer needs `st_size`, and recomputing it at write time
     from the type and ArrLen would be a second implementation of a number that
