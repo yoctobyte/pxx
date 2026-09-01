@@ -130,3 +130,32 @@ Fixed in commit d5e0a1e48.
 
 ## Log
 - 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 10b1bd737.
+
+## The habit, not the guard — carry this to the next campaign
+
+frankZ's framing, and it is the right one: a row in `gate.sh quick` guards
+against exactly these four programs, which are now fixed. A SET of four is a
+habit someone can carry to the next ownership campaign, which is where the value
+is. So it lives here.
+
+**When a change touches managed ownership, run these four before pushing.** They
+cost under a minute between them and each covers a managed kind the self-host
+fixedpoint cannot reach:
+
+```sh
+./compiler/pascal26 -Fulib/rtl test/test_rtl_fpc_compat_helpers.pas        /tmp/a && /tmp/a
+./compiler/pascal26 --threadsafe test/test_threadsafe_refcount_lockfree.pas /tmp/b && /tmp/b
+./compiler/pascal26 test/test_interface_byval_param_no_leak.pas            /tmp/c && /tmp/c
+./compiler/pascal26 --threadsafe test/test_exception_threads_race.pas      /tmp/d && /tmp/d
+```
+
+`-Fulib/rtl` is **load-bearing on the first** — without it the crash does not
+happen at all, so a repro that drops the flag exits 0 and certifies nothing.
+That is a guard that cannot fail, in the exact sense CLAUDE.md means it.
+
+frankA's sharpening of the diagnosis is worth keeping too, because it moves the
+fault off "we were not careful enough": the fixedpoint answers a question about
+`compiler.pas` and gets READ as answering one about the compiler. It is not a
+weak gate, it is a gate that cannot express this property. The remedy is
+therefore a habit that carries a repro in a shape `compiler.pas` never emits —
+one per change — not more caution about the same gate.
