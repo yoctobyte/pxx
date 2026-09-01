@@ -72,6 +72,7 @@ function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileSta
 function PalBackendFstat(handle: Integer; var info: TPalFileStat): Integer;
 function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
+function PalBackendSync: Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
@@ -836,6 +837,12 @@ begin
 {$else}
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
+end;
+
+{ WASI has no whole-system sync: fd_sync is per-descriptor only, and inventing a loop over every open fd would be a different operation wearing this name. }
+function PalBackendSync: Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
 end;
 
 function PalBackendFchmod(handle, mode: Integer): Integer;

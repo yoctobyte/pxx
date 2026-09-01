@@ -16,6 +16,7 @@ extern long long __pxx_write(int fd, void *buf, long long n);
 extern int __pxx_close(int fd);
 extern long long __pxx_seek(int fd, long long offset, int whence);
 extern int __pxx_fsync(int fd);
+extern int __pxx_sync(void);
 extern int __pxx_dup(int oldFd);
 extern int __pxx_chdir(const char *path);
 extern int __pxx_getuid(void);
@@ -119,6 +120,13 @@ static int sysret(int rc) {
 }
 
 int fsync(int fd) { return sysret(__pxx_fsync(fd)); }
+
+/* sync(2) returns void in POSIX, so there is nothing to report and nothing to
+   check -- the PAL's status is deliberately discarded here rather than
+   smuggled out through errno, which no caller of sync() reads. On xtensa,
+   ESP and WASI the PAL refuses (PAL_ERR_UNSUPPORTED) and this is a no-op,
+   which is what a platform with no global buffer cache should do. */
+void sync(void) { (void)__pxx_sync(); }
 
 int getpid(void) { return __pxx_getpid(); }
 

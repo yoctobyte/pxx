@@ -683,6 +683,27 @@ begin
   if negative then Result := -Result;
 end;
 
+{ Unsigned views of the 64-bit bit patterns the `#if` evaluator carries. C99
+  6.10.1 evaluates a preprocessor expression in intmax_t/uintmax_t under the
+  usual arithmetic conversions, so ONE unsigned operand makes the comparison,
+  division and right shift unsigned -- and those are the only operators whose
+  RESULT BITS differ by signedness; +, -, *, &, |, ^ and << are identical
+  either way and are left alone.
+
+  FOUND BY BUSYBOX, and the symptom points nowhere near signedness.
+  include/platform.h asks `#if ULONG_MAX > 0xffffffff` to decide whether a
+  64-bit byte swap can be a builtin. ULONG_MAX was correct at RUNTIME
+  (18446744073709551615) and the preprocessor compared it as -1, took the
+  32-bit arm, and emitted a call to bb_bswap_64 -- a function gcc never
+  references, so it is not in the build at all and the link fails on an
+  undefined symbol. }
+function CPUGT(a, b: Int64): Boolean; begin CPUGT := QWord(a) >  QWord(b); end;
+function CPUGE(a, b: Int64): Boolean; begin CPUGE := QWord(a) >= QWord(b); end;
+function CPULT(a, b: Int64): Boolean; begin CPULT := QWord(a) <  QWord(b); end;
+function CPULE(a, b: Int64): Boolean; begin CPULE := QWord(a) <= QWord(b); end;
+function CPUDiv(a, b: Int64): Int64;  begin CPUDiv := Int64(QWord(a) div QWord(b)); end;
+function CPUMod(a, b: Int64): Int64;  begin CPUMod := Int64(QWord(a) mod QWord(b)); end;
+
 function CPExprOr: Int64; forward;
 function CPExprCond: Int64; forward;   { `?:` level, above Or — see its body }
 { The include search itself, shared with `#include` — see its body, far below,
@@ -837,16 +858,21 @@ begin
 end;
 
 function CPExprAtom: Int64;
+{ Sets CPExprUnsigned for the value it produces. Signed is the default: an
+  undefined identifier is 0, and `defined(X)` is an int. }
 var a, b, mi, p, q, depth, argc, argBase, ai, hd: Integer;
     hc: Char;
     savedText, expanded: AnsiString; savedPos, savedEnd: Integer;
 begin
   CPSkipExprSpace;
   Result := 0;
+  CPExprUnsigned := False;          { signed unless this atom says otherwise }
   if CPExprPos > CPExprEnd then Exit;
   if CPExprText[CPExprPos] = '(' then
   begin
     Inc(CPExprPos);
+    { The sub-expression sets CPExprUnsigned for its own value; a parenthesis
+      does not change signedness, so nothing is reset after this returns. }
     Result := CPExprCond;   { a parenthesised sub-expression may be a ternary }
     CPSkipExprSpace;
     if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = ')') then Inc(CPExprPos);
@@ -890,7 +916,14 @@ begin
         Inc(CPExprPos);
       end;
     while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['u','U','l','L']) do
+    begin
+      if CPExprText[CPExprPos] in ['u','U'] then CPExprUnsigned := True;
       Inc(CPExprPos);
+    end;
+    { A literal too large for intmax_t is unsigned in C whether or not it is
+      suffixed, and after parsing a POSITIVE literal that shows up as the top
+      bit being set. This is the arm ULONG_MAX (18446744073709551615) takes. }
+    if Result < 0 then CPExprUnsigned := True;
     Exit;
   end;
   if CPIsIdentStart(CPExprText[CPExprPos]) then
@@ -1035,6 +1068,7 @@ begin
   begin
     Inc(CPExprPos);
     if CPExprUnary() = 0 then Result := 1 else Result := 0;
+    CPExprUnsigned := False;        { `!x` is an int, whatever x was }
   end
   else if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '~') then
   begin
@@ -1062,26 +1096,40 @@ end;
   ==0` (sqlite's SQLITE_SYSTEM_MALLOC auto-select) and `FLAGS&MASK` / `1<<n`
   directives mis-evaluated — the trailing operators were silently dropped. }
 function CPExprMul: Int64;
-var v: Int64; op: Char;
+var v: Int64; op: Char; u: Boolean;
 begin
   Result := CPExprUnary;
+  u := CPExprUnsigned;
   CPSkipExprSpace;
   while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['*', '/', '%']) do
   begin
     op := CPExprText[CPExprPos];
     Inc(CPExprPos);
     v := CPExprUnary;
-    if op = '*' then Result := Result * v
-    else if op = '/' then begin if v <> 0 then Result := Result div v else Result := 0; end
-    else begin if v <> 0 then Result := Result mod v else Result := 0; end;
+    u := u or CPExprUnsigned;       { one unsigned operand converts the other }
+    if op = '*' then Result := Result * v          { same bits either way }
+    else if op = '/' then
+    begin
+      if v = 0 then Result := 0
+      else if u then Result := CPUDiv(Result, v)
+      else Result := Result div v;
+    end
+    else
+    begin
+      if v = 0 then Result := 0
+      else if u then Result := CPUMod(Result, v)
+      else Result := Result mod v;
+    end;
     CPSkipExprSpace;
   end;
+  CPExprUnsigned := u;
 end;
 
 function CPExprAdd: Int64;
-var v: Int64; op: Char;
+var v: Int64; op: Char; u: Boolean;
 begin
   Result := CPExprMul;
+  u := CPExprUnsigned;
   CPSkipExprSpace;
   { A leading-position `+`/`-` was handled by CPExprUnary; here both sides exist. }
   while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] in ['+', '-']) do
@@ -1089,15 +1137,19 @@ begin
     op := CPExprText[CPExprPos];
     Inc(CPExprPos);
     v := CPExprMul;
+    u := u or CPExprUnsigned;
+    { + and - produce the same BITS signed or unsigned; only the flag travels. }
     if op = '+' then Result := Result + v else Result := Result - v;
     CPSkipExprSpace;
   end;
+  CPExprUnsigned := u;
 end;
 
 function CPExprShift: Int64;
-var v: Int64; op: Char;
+var v: Int64; op: Char; u: Boolean;
 begin
   Result := CPExprAdd;
+  u := CPExprUnsigned;
   CPSkipExprSpace;
   while (CPExprPos < CPExprEnd) and
         (((CPExprText[CPExprPos] = '<') and (CPExprText[CPExprPos + 1] = '<')) or
@@ -1106,15 +1158,24 @@ begin
     op := CPExprText[CPExprPos];
     Inc(CPExprPos); Inc(CPExprPos);
     v := CPExprAdd;
-    if op = '<' then Result := Result shl v else Result := Result shr v;
+    { A shift takes its signedness from the LEFT operand only -- the right one
+      is just a count and does not convert it. `shl` is the same bits either
+      way. The signed `shr` arm is left exactly as it was: C leaves a negative
+      right-shift implementation-defined, and changing it here would be an
+      unrelated behaviour change riding along with this fix. }
+    if op = '<' then Result := Result shl v
+    else if u then Result := Int64(QWord(Result) shr v)
+    else Result := Result shr v;
     CPSkipExprSpace;
   end;
+  CPExprUnsigned := u;
 end;
 
 function CPExprRel: Int64;
-var right: Int64; op1, op2: Char;
+var right: Int64; op1, op2: Char; u: Boolean;
 begin
   Result := CPExprShift;
+  u := CPExprUnsigned;
   CPSkipExprSpace;
   { `<` / `<=` / `>` / `>=`, but a `<<`/`>>` belongs to the shift operand already
     consumed below us — guard against grabbing one half of it. }
@@ -1127,12 +1188,18 @@ begin
     Inc(CPExprPos);
     if op2 = '=' then Inc(CPExprPos);
     right := CPExprShift;
-    if (op1 = '<') and (op2 = '=') then begin if Result <= right then Result := 1 else Result := 0; end
-    else if (op1 = '>') and (op2 = '=') then begin if Result >= right then Result := 1 else Result := 0; end
-    else if op1 = '<' then begin if Result < right then Result := 1 else Result := 0; end
-    else begin if Result > right then Result := 1 else Result := 0; end;
+    u := u or CPExprUnsigned;
+    if (op1 = '<') and (op2 = '=') then begin if (u and CPULE(Result, right)) or ((not u) and (Result <= right)) then Result := 1 else Result := 0; end
+    else if (op1 = '>') and (op2 = '=') then begin if (u and CPUGE(Result, right)) or ((not u) and (Result >= right)) then Result := 1 else Result := 0; end
+    else if op1 = '<' then begin if (u and CPULT(Result, right)) or ((not u) and (Result < right)) then Result := 1 else Result := 0; end
+    else begin if (u and CPUGT(Result, right)) or ((not u) and (Result > right)) then Result := 1 else Result := 0; end;
+    { The comparison RESULT is an int, so the next level up compares signed
+      again unless its own operand says otherwise. }
+    u := False;
+    CPExprUnsigned := False;
     CPSkipExprSpace;
   end;
+  CPExprUnsigned := u;
 end;
 
 function CPExprEq: Int64;
@@ -1147,16 +1214,21 @@ begin
     op2 := CPExprText[CPExprPos + 1];
     Inc(CPExprPos); Inc(CPExprPos);
     right := CPExprRel;
+    { `==` and `!=` are the one comparison pair that does NOT need the flag:
+      equality of the bit patterns is the same question signed or unsigned.
+      The RESULT is an int, so clear it for whoever is above us. }
     if op1 = '=' then begin if Result = right then Result := 1 else Result := 0; end
     else begin if Result <> right then Result := 1 else Result := 0; end;
+    CPExprUnsigned := False;
     CPSkipExprSpace;
   end;
 end;
 
 function CPExprBitAnd: Int64;
-var v: Int64;
+var v: Int64; u: Boolean;
 begin
   Result := CPExprEq;
+  u := CPExprUnsigned;
   CPSkipExprSpace;
   { single `&` only — `&&` belongs to the logical level above. }
   while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '&') and
@@ -1164,29 +1236,35 @@ begin
   begin
     Inc(CPExprPos);
     v := CPExprEq;
+    u := u or CPExprUnsigned;
     Result := Result and v;
     CPSkipExprSpace;
   end;
+  CPExprUnsigned := u;
 end;
 
 function CPExprBitXor: Int64;
-var v: Int64;
+var v: Int64; u: Boolean;
 begin
   Result := CPExprBitAnd;
+  u := CPExprUnsigned;
   CPSkipExprSpace;
   while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '^') do
   begin
     Inc(CPExprPos);
     v := CPExprBitAnd;
+    u := u or CPExprUnsigned;
     Result := Result xor v;
     CPSkipExprSpace;
   end;
+  CPExprUnsigned := u;
 end;
 
 function CPExprBitOr: Int64;
-var v: Int64;
+var v: Int64; u: Boolean;
 begin
   Result := CPExprBitXor;
+  u := CPExprUnsigned;
   CPSkipExprSpace;
   { single `|` only — `||` belongs to the logical level above. }
   while (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = '|') and
@@ -1194,9 +1272,11 @@ begin
   begin
     Inc(CPExprPos);
     v := CPExprBitXor;
+    u := u or CPExprUnsigned;
     Result := Result or v;
     CPSkipExprSpace;
   end;
+  CPExprUnsigned := u;
 end;
 
 function CPExprAnd: Int64;
@@ -1209,7 +1289,10 @@ begin
   begin
     Inc(CPExprPos); Inc(CPExprPos);
     v := CPExprBitOr;
+    { `&&`/`||` test against zero -- signedness cannot change that -- and yield
+      an int. }
     if (Result <> 0) and (v <> 0) then Result := 1 else Result := 0;
+    CPExprUnsigned := False;
     CPSkipExprSpace;
   end;
 end;
@@ -1225,6 +1308,7 @@ begin
     Inc(CPExprPos); Inc(CPExprPos);
     v := CPExprAnd;
     if (Result <> 0) or (v <> 0) then Result := 1 else Result := 0;
+    CPExprUnsigned := False;
     CPSkipExprSpace;
   end;
 end;
@@ -1250,7 +1334,7 @@ end;
   bogus "expected ':'" pointing at a colon that was right there.
   bug-cfront-if-ternary-unimplemented }
 function CPExprCond: Int64;
-var t, f: Int64;
+var t, f: Int64; ut: Boolean;
 begin
   Result := CPExprOr;
   CPSkipExprSpace;
@@ -1258,12 +1342,19 @@ begin
   begin
     Inc(CPExprPos);
     t := CPExprCond();
+    { The CONDITION's signedness is spent; the type of a `?:` comes from its two
+      ARMS, both of which are converted to their common type -- so the answer is
+      unsigned when EITHER arm is, regardless of which one was taken. Capturing
+      the true arm's flag before evaluating the false one is the whole reason
+      this needs a local. }
+    ut := CPExprUnsigned;
     CPSkipExprSpace;
     if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = ':') then
       Inc(CPExprPos)
     else
       Error('C #if: expected '':'' in conditional expression');
     f := CPExprCond();
+    CPExprUnsigned := ut or CPExprUnsigned;
     if Result <> 0 then Result := t else Result := f;
   end;
 end;
@@ -1274,6 +1365,7 @@ begin
   CPExprPos := p;
   CPExprEnd := last;
   CPExprDepth := 0;
+  CPExprUnsigned := False;
   Result := CPExprCond <> 0;
 end;
 

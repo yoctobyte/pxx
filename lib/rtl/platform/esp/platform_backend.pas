@@ -36,6 +36,7 @@ function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileSta
 function PalBackendFstat(handle: Integer; var info: TPalFileStat): Integer;
 function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
+function PalBackendSync: Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
@@ -518,6 +519,12 @@ begin
 end;
 
 function PalBackendFsync(handle: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ FreeRTOS has no sync(2): there is no global buffer cache to flush, so this joins the deliberate-refusal set rather than pretending to succeed. }
+function PalBackendSync: Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

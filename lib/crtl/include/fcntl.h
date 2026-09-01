@@ -52,4 +52,15 @@ extern int openat(int dirfd, const char *path, int flags, ...);
 extern int creat(const char *path, mode_t mode);
 extern int fcntl(int fd, int cmd, ...);
 
+
+/* *at() family constants. These are Linux-ABI-wide, not per-arch: AT_FDCWD is
+   -100 and the flag bits are fixed across every architecture, which is why
+   they can sit here rather than in a per-target table the way syscall NUMBERS
+   have to. busybox's touch/stat/chmod pass them. */
+#define AT_FDCWD              (-100)
+#define AT_SYMLINK_NOFOLLOW   0x100
+#define AT_REMOVEDIR          0x200
+#define AT_SYMLINK_FOLLOW     0x400
+#define AT_EMPTY_PATH         0x1000
+
 #endif

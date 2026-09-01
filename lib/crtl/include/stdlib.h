@@ -66,6 +66,8 @@ char *getenv(const char *name);
    surface at all; see the standing constraint at the definition in stdlib.c. */
 int setenv(const char *name, const char *value, int overwrite);
 int unsetenv(const char *name);
+int clearenv(void);
+int putenv(char *string);
 
 /* Allocating string duplicates. strndup always NUL-terminates, even when the
    source is longer than n — that is the point of it. */

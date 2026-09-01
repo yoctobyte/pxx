@@ -541,7 +541,7 @@ _none_
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 
-## backlog-cfront (14)
+## backlog-cfront (15)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -554,6 +554,7 @@ _none_
 | bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently | C | 50 | bug | C: two conflicting typedefs for one name are accepted silently, last wins | — |
 | feature-c-corpus-busybox-userland-by-separate-compilation | C | 70 | feature | Rung 2's successor. The unity build tops out at twelve applets for reasons that are not pxx's -- three busybox files assume they own their namespace and gcc rejects the unity too. Separate compilation removes all of them and is busybox's OWN model: measured 2026-09-01, all 41 TUs compile to objects and link into a working multiplexer. It is NOT correct yet: crtl state is object-local, so errno and optind split per object and the binary diverges from the gcc oracle while still linking and running. Blocked on the crtl linkage ticket; `tools/busybox_diff.sh --separate` is the harness and already exists. | bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link |
 | feature-c-crtl-stdio-buffering-and-setvbuf | C | 55 | feature | lib/crtl/src/stdio.c is entirely unbuffered — fputc is one write() syscall per character — and setvbuf at :1051 is a stub that ignores its arguments and returns SUCCESS, which is the dishonest-stub shape the SetTextBuf ruling exists to reject, and worse here because C callers check the return. Add FILE write buffering under C99 7.19.3p7's policy, make setvbuf real, and share a flush registry with lib/rtl so mixed WriteLn/printf output keeps its order. | — |
+| feature-c-crtl-utimensat-and-futimens | C | 45 | feature | `touch` is the one applet keeping the busybox userland at 26 instead of 27: it calls utimensat() and futimens(), which crtl neither declares nor implements, and no PAL entry exists for either. The rest of the gap that attempt exposed is CLOSED (clearenv, putenv, sync, AT_*/AF_UNIX/SOCK_* constants). The work is a PAL chain like PalSync's, and the honest blocker is that the syscall NUMBER cannot be sourced on this box for arm32 or xtensa. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | S | 18 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-package-namespace-decision | A | 35 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
@@ -1127,6 +1128,7 @@ _none_
 - [p 45] [A] feature-a-dynamic-array-of-frozen-strings
 - [p 45] [A] feature-a-getinterface-refcounting
 - [p 45] [A] feature-a-object-output-for-arm32-and-aarch64
+- [p 45] [C] feature-c-crtl-utimensat-and-futimens
 - [p 45] [A] feature-dynamic-compiler-tables [parked — re-claim, do not duplicate]
 - [p 45] [B] feature-embed-pascal-script
 - [p 45] [N] feature-n-from-accepts-a-quoted-foreign-file

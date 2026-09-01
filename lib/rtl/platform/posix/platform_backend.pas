@@ -40,6 +40,7 @@ function PalBackendStatAt(dirHandle: Integer; path: PChar; var info: TPalFileSta
 function PalBackendFstat(handle: Integer; var info: TPalFileStat): Integer;
 function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
+function PalBackendSync: Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
@@ -133,6 +134,7 @@ const
 
 {$ifdef CPUX86_64}
   SYS_read = 0; SYS_write = 1; SYS_close = 3; SYS_lseek = 8;
+  SYS_sync = 162;      { /usr/include/.../asm/unistd_64.h __NR_sync }
   SYS_fsync = 74; SYS_openat = 257; SYS_mkdirat = 258; SYS_getdents64 = 217; SYS_statx = 332;
   SYS_chdir = 80; SYS_linkat = 265; SYS_symlinkat = 266;
   SYS_unlinkat = 263; SYS_renameat = 264;
@@ -152,6 +154,7 @@ const
 {$endif}
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
+  SYS_sync = 36;       { asm/unistd_32.h __NR_sync }
   SYS_fsync = 118; SYS_openat = 295; SYS_mkdirat = 296; SYS_getdents64 = 220; SYS_statx = 383;
   SYS_chdir = 12; SYS_linkat = 303; SYS_symlinkat = 304;
   SYS_unlinkat = 301; SYS_renameat = 302;
@@ -173,6 +176,7 @@ const
 {$endif}
 {$ifdef CPU_AARCH64}
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
+  SYS_sync = 81;       { asm-generic: sync(81) sits directly below fsync(82) }
   SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
   SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
   SYS_unlinkat = 35; SYS_renameat = 38;
@@ -192,6 +196,7 @@ const
 {$endif}
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
+  SYS_sync = 36;       { arm EABI keeps the legacy low numbers, as i386 does }
   SYS_fsync = 118; SYS_openat = 322; SYS_mkdirat = 323; SYS_getdents64 = 217; SYS_statx = 397;
   SYS_chdir = 12; SYS_linkat = 330; SYS_symlinkat = 331;
   SYS_unlinkat = 328; SYS_renameat = 329;
@@ -231,6 +236,7 @@ const
 
     The time-related calls keep the legacy generic numbers qemu implements. }
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
+  SYS_sync = 81;       { asm-generic, the same table aarch64 uses }
   SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
   SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
   SYS_unlinkat = 35; SYS_renameat = 38;
@@ -718,6 +724,26 @@ end;
 function PalBackendFsync(handle: Integer): Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_fsync, handle, 0, 0, 0, 0, 0));
+end;
+
+{ sync(2) -- flush ALL filesystem buffers. busybox's `sync' applet is the
+  caller that wanted it.
+
+  XTENSA REFUSES RATHER THAN GUESSES, and that is the whole reason this has an
+  ifdef when PalBackendFsync does not. Every other table here comes from a
+  source: x86-64 and i386 are read off this box's asm/unistd_{64,32}.h, and
+  aarch64/riscv32 are asm-generic where sync(81) sits directly below fsync(82).
+  The xtensa numbers in this file were obtained EMPIRICALLY, one syscall per
+  process (see the note above their table), and sync was never among them. A
+  guessed number does not fail -- it issues a DIFFERENT syscall, which is this
+  repo's expensive shape. Measure it and delete this arm. }
+function PalBackendSync: Integer;
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_sync, 0, 0, 0, 0, 0, 0));
+{$endif}
 end;
 
 function PalBackendFchmod(handle, mode: Integer): Integer;

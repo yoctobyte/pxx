@@ -102,6 +102,7 @@ function __pxx_fstat(fd: Integer; sb: PPxxStatBuf): Integer;
 function __pxx_stat(path: PChar; sb: PPxxStatBuf): Integer;
 function __pxx_lstat(path: PChar; sb: PPxxStatBuf): Integer;
 function __pxx_fcntl(fd, cmd: Integer; arg: Int64): Integer;
+function __pxx_sync: Integer;
 function __pxx_fsync(fd: Integer): Integer;
 { dup/dup2 for crtl. PalDup2 already existed; dup(oldFd) is expressed as
   "lowest free descriptor", which the PAL has no primitive for, so it is
@@ -502,6 +503,11 @@ end;
 function __pxx_fsync(fd: Integer): Integer;
 begin
   Result := PalFsync(fd);
+end;
+
+function __pxx_sync: Integer;
+begin
+  Result := PalSync;
 end;
 
 function __pxx_chdir(path: PChar): Integer;

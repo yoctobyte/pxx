@@ -154,6 +154,7 @@ function PalStatAt(dirHandle: Integer; path: PChar; var info: TPalFileStat): Int
 function PalFstat(handle: Integer; var info: TPalFileStat): Integer;
 function PalLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalFcntl(handle, cmd: Integer; arg: Int64): Integer;
+function PalSync: Integer;
 function PalFsync(handle: Integer): Integer;
 function PalFchmod(handle, mode: Integer): Integer;
 function PalChmod(path: PChar; mode: Integer): Integer;
@@ -434,6 +435,11 @@ end;
 function PalFsync(handle: Integer): Integer;
 begin
   Result := PalBackendFsync(handle);
+end;
+
+function PalSync: Integer;
+begin
+  Result := PalBackendSync;
 end;
 
 function PalChmod(path: PChar; mode: Integer): Integer;

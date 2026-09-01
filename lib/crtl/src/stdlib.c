@@ -833,3 +833,52 @@ int unsetenv(const char *name) {
   pxx_env_hide(name);
   return 0;
 }
+
+/* putenv(): add or replace a record given as one "NAME=VALUE" string.
+ * busybox's env applet uses it beside setenv.
+ *
+ * A DELIBERATE DIVERGENCE FROM GLIBC, stated rather than hidden: POSIX lets
+ * putenv() make the CALLER'S BUFFER part of the environment, so under glibc a
+ * later write through that same pointer changes the variable. This copies into
+ * pxx_env_buf like setenv does, because the buffer here is a fixed 16K arena
+ * that getenv() returns interior pointers into -- there is nowhere to store a
+ * foreign pointer without giving every record a discriminator and teaching
+ * every scan about it. A program that writes through the pointer afterwards
+ * and expects the environment to follow will differ from glibc; a program that
+ * calls putenv and moves on will not. Real code overwhelmingly does the
+ * latter, and busybox does.
+ *
+ * With no '=' POSIX says remove the variable, which is unsetenv's job. */
+int putenv(char *string) {
+  char name[256];
+  long i;
+  if (!string) return -1;
+  for (i = 0; string[i] && string[i] != '=' && i < (long)sizeof(name) - 1; i++)
+    name[i] = string[i];
+  if (i >= (long)sizeof(name) - 1) return -1;      /* name too long to isolate */
+  name[i] = 0;
+  if (!i) return -1;                               /* "=VALUE" has no name */
+  if (string[i] != '=') return unsetenv(name);
+  pxx_env_load();
+  pxx_env_hide(name);
+  return pxx_env_put(name, &string[i + 1]);
+}
+
+/* clearenv(): remove EVERY variable. busybox's `env -i` calls it, which is how
+ * it was found -- coreutils/env.c would not compile at all.
+ *
+ * It must mark the buffer LOADED as well as empty, and that is the whole of
+ * the implementation's subtlety: pxx_env_load() is lazy, so setting only the
+ * length to 0 leaves pxx_env_loaded == 0 whenever nothing has read the
+ * environment yet, and the NEXT getenv() re-reads /proc/self/environ and
+ * resurrects everything this was called to remove. Emptied and loaded are two
+ * facts here, not one.
+ *
+ * No pxx_env_hide() loop: hiding mangles names to keep the record structure
+ * scannable, which matters when other records must survive. Here none do, so
+ * truncating is both correct and what lets a later setenv() reuse the space. */
+int clearenv(void) {
+  pxx_env_loaded = 1;
+  pxx_env_len = 0;
+  return 0;
+}

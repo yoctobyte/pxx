@@ -673,6 +673,32 @@ run_coreutils_cases() {   # $1 = runner, $2 = install dir
     printf '### sleep 0\n';   run_one "$runner" "$dir/sleep" 0;    printf '### exit=%d\n' "$?"
     printf '### sleep bad\n'; run_one "$runner" "$dir/sleep" zzz;  printf '### exit=%d\n' "$?"
   fi
+  if has_applet sort; then
+    printf 'delta\nalpha\ncharlie\nbravo\nalpha\n' > "$c/uns.txt"
+    printf '10\n9\n100\n1\n' > "$c/nums.txt"
+    for a in "$c/uns.txt" "-r $c/uns.txt" "-u $c/uns.txt" "-n $c/nums.txt" "$c/missing.txt"; do
+      printf '### sort [%s]\n' "$a"; run_one "$runner" "$dir/sort" $a; printf '### exit=%d\n' "$?"
+    done
+  fi
+  if has_applet touch; then
+    # Timestamps are never PRINTED here -- the resulting-tree row is what shows
+    # the file was created, so this stays deterministic across two runs.
+    printf '### touch new\n';     run_one "$runner" "$dir/touch" "$c/touched"; printf '### exit=%d\n' "$?"
+    printf '### touch existing\n';run_one "$runner" "$dir/touch" "$c/three.txt"; printf '### exit=%d\n' "$?"
+    printf '### touch nodir\n';   run_one "$runner" "$dir/touch" "$c/nope/x"; printf '### exit=%d\n' "$?"
+  fi
+  if has_applet chmod; then
+    printf '### chmod ok\n';      run_one "$runner" "$dir/chmod" 0644 "$c/three.txt"; printf '### exit=%d\n' "$?"
+    printf '### chmod symbolic\n';run_one "$runner" "$dir/chmod" a-w "$c/three.txt"; printf '### exit=%d\n' "$?"
+    printf '### chmod missing\n'; run_one "$runner" "$dir/chmod" 0644 "$c/missing.txt"; printf '### exit=%d\n' "$?"
+    run_one "$runner" "$dir/chmod" 0644 "$c/three.txt" >/dev/null 2>&1   # leave it writable for rm
+  fi
+  if has_applet ln; then
+    printf '### ln -s\n';       run_one "$runner" "$dir/ln" -s three.txt "$c/link1"; printf '### exit=%d\n' "$?"
+    printf '### ln hard\n';     run_one "$runner" "$dir/ln" "$c/three.txt" "$c/link2"; printf '### exit=%d\n' "$?"
+    printf '### ln exists\n';   run_one "$runner" "$dir/ln" -s three.txt "$c/link1"; printf '### exit=%d\n' "$?"
+    printf '### ln missing\n';  run_one "$runner" "$dir/ln" "$c/missing.txt" "$c/link3"; printf '### exit=%d\n' "$?"
+  fi
   # The tree that is LEFT is part of the comparison: it catches a tool that
   # reported success and did nothing, which every row above would miss.
   printf '### resulting tree\n'

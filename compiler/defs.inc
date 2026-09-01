@@ -4395,6 +4395,13 @@ var
   CPCondTaken   : array[0..MAX_CPREP_CONDS-1] of Boolean;
   CPCondCount   : Integer;
   CPExprText    : AnsiString;
+  { C99 6.10.1: a `#if` expression is evaluated in intmax_t/uintmax_t and the
+    USUAL ARITHMETIC CONVERSIONS apply, so one unsigned operand makes the whole
+    operation unsigned. The evaluator carries values as Int64 BIT PATTERNS, and
+    18446744073709551615 and -1 are the same 64 bits -- only this flag tells
+    them apart. It holds the signedness of the value most recently produced by
+    an expression level. }
+  CPExprUnsigned: Boolean;
   CPExprPos     : Integer;
   CPExprEnd     : Integer;
   CPExprDepth   : Integer;   { #if macro-atom recursion guard (chained #defines) }

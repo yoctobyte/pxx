@@ -12340,6 +12340,32 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-multi-applet
 	./$(COMPILER) test/c_and_zero_dead_arm.c $(TESTTMP)/c_andzero26
 	tools/expect_same.sh c_andzero26 "$$($(TESTTMP)/c_andzero26)" "$$(printf '1 11\n2 22\n3 0\n4 1\n5 55\n6 66\n7 ok')"
+	# The `#if' evaluator was purely signed Int64; C99 6.10.1 says intmax_t OR
+	# uintmax_t with the usual arithmetic conversions. `ULONG_MAX > 0xffffffff'
+	# was FALSE, so busybox took the 32-bit arm of its byteswap header and
+	# emitted a bb_bswap_64 gcc never emits -- the last undefined reference in
+	# the 26-applet unity.
+	# Seven of the ten rows print WRONG against the pin; 4, 7 and 9 pass on both
+	# and are there to pin down what the fix must NOT change (signed stays
+	# signed; `>>' on Int64 was already logical; `==' compares bits either way).
+	# $(COMPILER), not $(PXX_STABLE): the pin has the signed evaluator.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/c_preproc_unsigned.c $(TESTTMP)/c_ppunsigned26
+	tools/expect_same.sh c_ppunsigned26 "$$($(TESTTMP)/c_ppunsigned26)" "$$(printf '1 ok\n2 ok\n3 ok\n4 ok\n5 ok\n6 ok\n7 ok\n8 ok\n9 ok\n10 ok')"
+	# clearenv() -- busybox's `env -i' calls it, and coreutils/env.c would not
+	# compile at all without the declaration.
+	# ROW 1 IS THE TEST AND IT MUST COME FIRST: pxx_env_load() is lazy, so an
+	# implementation that only zeroes the length leaves the buffer marked
+	# unloaded and the next getenv() re-reads /proc/self/environ and brings
+	# everything back. That is observable only while the buffer is COLD. The
+	# first cut of the file opened with getenv("PATH") to show the variable was
+	# there, and that read warmed the buffer -- every row then passed against a
+	# deliberately naive clearenv, verified. Row 1 now prints `1 0 0' fixed and
+	# `1 0 1' naive.
+	# $(PXX_STABLE): a crtl-source fix, so the pin compiles it from the tree.
+	# feature-c-corpus-busybox-multi-applet
+	$(PXX_STABLE) test/c_clearenv.c $(TESTTMP)/c_clearenv26
+	tools/expect_same.sh c_clearenv26 "$$($(TESTTMP)/c_clearenv26)" "$$(printf '1 0 0\n2 back\n3 0 0\n4 ok')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The SIBLING defect, and it is not the const-branch one: a loop in dead code
