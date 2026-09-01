@@ -49,19 +49,55 @@ recognised managed member the record never becomes managed and something else
 reclaims it. It takes a second, recognised member to expose the gap — the
 obvious one-field probe reports success.
 
-## Doing it
+## Doing it — and the two traps in the obvious version
 
-**Variant is compiler-side only.** The runtime is already complete:
-`PXXRecordRelease` has `kind = 5` with `memberSize := 16` dispatching to
-`PXXVarClear`, and `PXXRecordRetain` mirrors it. Add `tyVariant` to
-`FieldIsManaged` and the `mKind := 5` arm to the RECORD chain — the class chain
-is the worked example. Mind the array-ness hazard the long comment above that
-chain documents: `UFldTk` of an array field is its ELEMENT type, so the dyn-array
-test must stay first.
+**Do NOT extend `FieldIsManaged`.** That is where I first pointed this ticket and
+it is wrong: `ClassFieldNeedsFinal` (rtti_emit.inc:56) already carries the
+Variant arm and says why it lives THERE and not in the shared predicate —
+"extending FieldIsManaged itself would flip records with variant fields into the
+managed-record codegen paths, a much broader change than destroy-time finalize."
+The class/record divergence is deliberate and documented, not an oversight.
+
+The narrow fix mirrors that precedent one level down: extend **RecordDescMember**
+(the descriptor-member predicate) the same way `ClassFieldNeedsFinal` extends its
+own, and add the `tyVariant -> 5` arm to the RECORD mKind chain, copying the
+CLASS chain's ordering so the array-ness test stays first.
+
+**TRAP: `PXXRecordRetain` HAS NO KIND-5 ARM.** It dispatches kinds 1, 2 and 3
+only, and computes `memberSize := SizeOf(Pointer)` for everything that is not a
+kind 3 — no 16-byte branch. `PXXRecordRelease` DOES clear kind 5 via
+PXXVarClear. So emitting kind-5 record members without adding the retain arm
+turns this leak into a DOUBLE FREE on every record COPY, exactly as widening the
+dyn-array descriptor stride did in `9cb079528` (reverted by `a584e8fef`) for the
+element walks. Add, in the same change:
+
+    else if kind = 5 then memberSize := 16      { in PXXRecordRetain }
+    5: PXXVarRetain(itemAddr);                  { its case arm }
+
+A class's Variant field is unaffected by that gap today because a class is
+finalized, never copied by value — which is why the asymmetry has been survivable
+so far and will stop being survivable the moment records use kind 5.
+
+**Scope the narrow fix honestly.** It reaches a record that is ALREADY managed,
+i.e. has a string/array/nested-managed member alongside the Variant. Measured,
+dyn array of records, 1000 trips x 8:
+
+    record v: Variant; s: AnsiString   live=7357   <- narrow fix reaches this
+    record v: Variant                  live=7708   <- it does NOT
+
+The second stays broken because `RecordHasManagedFields` does not count a
+Variant, so the record is not managed at all, `ManagedElemKind` answers 0 for the
+element, and no walk is emitted to fix. Closing that one IS the broad change the
+`ClassFieldNeedsFinal` comment warns about, and it wants its own ticket and a
+full tier rather than being smuggled in here.
 
 **PromoInt needs a new member kind** (7), `memberSize := 16`, with a decref arm
-and its retain mirror. `PXXPromoRetainOne` (builtinheap.pas) already exists for
-the retain half.
+and its retain mirror — and the same trap applies, both halves in one change.
+`PXXPromoRetainOne` (builtinheap.pas) exists for the retain half.
+
+**Gate: full tier.** Widening what becomes a record descriptor member changes
+record copy and release behaviour corpus-wide, and `gate.sh quick` was GREEN on
+the commit that segfaulted `test_promoint_array_cleanup` this morning.
 
 ## Why this keeps happening — read this part
 
@@ -71,7 +107,11 @@ element walks, the x86-64 inline SetLength retain chains
 (`bug-a-x86-64-inline-setlength-never-retains-promo-or-variant-elements`), and
 now `FieldIsManaged` plus two divergent mKind chains.
 
-So the fix worth doing is not two more arms. It is making `FieldIsManaged`
-DELEGATE to `ManagedElemKind`, and collapsing the record and class mKind chains
-into one — `normalise-dont-special-case`, and it deletes cases instead of adding
-them. Adding the arms by hand makes this the fifth and sixth copy.
+The tempting conclusion is "make `FieldIsManaged` delegate to
+`ManagedElemKind` and collapse the two mKind chains into one". That is the
+`normalise-dont-special-case` shape and it deletes cases rather than adding
+them — but read `ClassFieldNeedsFinal`'s comment first: one of these predicates
+feeds DESCRIPTOR EMISSION and the other feeds CODEGEN PATH SELECTION, and they
+are deliberately not the same question. Collapsing them is a real design change
+with a real blast radius, not a tidy-up. It may still be right; it is not
+free, and it is not this ticket.
