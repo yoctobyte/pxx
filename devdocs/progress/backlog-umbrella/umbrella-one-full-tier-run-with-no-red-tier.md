@@ -112,6 +112,49 @@ what this umbrella is for:
   -O0/-O1, OK at -O2/-O3, `rc=0` throughout. Found by the fixed sweep on its
   first run that could see the program at all.
 
+## The `opt` tier is GREEN — 17/17, one run, nothing moving under it
+
+2026-09-02, frankZ. `testmgr --tier opt`, binary `0f1d03315f4eaaa7`,
+`converged after 1 round(s)`, commit `1236bf31f`:
+
+```
+17/17 pass
+testmgr: GREEN
+HEAD_BEFORE = 1236bf31f93084fe...
+HEAD_AFTER  = 1236bf31f93084fe...     (recorded, not assumed)
+```
+
+**Why the before/after pair is in the record.** Two earlier attempts at this
+number were discarded, both contaminated by me and neither by anyone else. The
+first straddled a `git pull` I ran mid-sweep while looking for newly arrived
+regressions — the compiler was snapshotted at one commit while optdiff read
+test sources from a tree that had moved. The second was worse: I edited
+`tools/optdiff.sh` and `optdiff.skip` while the sweep was executing them, and
+`/bin/sh` reads a script incrementally, so all three shards returned `rc=2` —
+a shell parse error wearing the shape of a verdict. **An exit code no test in
+the harness can produce is the signal to suspect the instrument, not the
+subject** (now a rule, `d27c304e1`).
+
+So this run states its own scope: one tier, one commit, one binary, and the
+tree provably unchanged across it.
+
+## What a green `opt` does and does not buy
+
+`opt` is DISJOINT from the quick<native<limited<full chain. `pin_is_green`
+requires a `full` run at the sha AND every judged tier green, so this removes
+one of two conditions and says nothing about the other.
+
+It is also not the same claim as the last green `opt` anyone recorded, and the
+difference is the point: **the previous sweep could not build any threading
+program** (they were BUILD-FAIL skips without `--threadsafe`) **and its `-O2`
+arm compared `-O2` against `-O2`**, which could not fail for any program in the
+corpus. Green from a sweep that can see the programs is the first green here
+worth anything.
+
+The `full` run cannot come from plexus — 41 jobs SKIP for missing corpus
+(`library_candidates/*`, `external/synapse`). It arrives on Track T's cadence
+from seven; it is evidence to watch for, not work to perform.
+
 ## The second wave — 2026-09-02, and it is the umbrella working, not failing
 
 The fourteen tickets wired at the start are all resolved. **Eleven new ones are
