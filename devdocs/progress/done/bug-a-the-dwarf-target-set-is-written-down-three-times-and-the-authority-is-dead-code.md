@@ -71,4 +71,4 @@ compiler/pascal26` plus `-g` emitting the same section count on all four
 supported targets and none on xtensa/riscv32, across exec and shared output.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit ae16da1d2.
