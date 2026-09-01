@@ -53,3 +53,6 @@ expect_same: MISMATCH [test_shared_libc26_dlopen]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-01 — auto-closed by the seven watcher: `test-emit-obj#src:tools/compiler_srchash.sh` passes at fc2adb7ec261 (tier full); it was red at c1f7471fe1d0. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
