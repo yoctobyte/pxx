@@ -158,6 +158,9 @@ function PalSync: Integer;
 function PalSetsid: Integer;
 function PalGetGroups(count: Integer; list: Pointer): Integer;
 function PalClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
+function PalUtimensat(dirFd: Integer; path: PChar;
+                      aSec, aNsec, mSec, mNsec: Int64;
+                      flags: Integer): Integer;
 function PalFsync(handle: Integer): Integer;
 function PalFchmod(handle, mode: Integer): Integer;
 function PalChmod(path: PChar; mode: Integer): Integer;
@@ -458,6 +461,13 @@ end;
 function PalClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 begin
   Result := PalBackendClockSetTime(clockId, sec, nsec);
+end;
+
+function PalUtimensat(dirFd: Integer; path: PChar;
+                      aSec, aNsec, mSec, mNsec: Int64;
+                      flags: Integer): Integer;
+begin
+  Result := PalBackendUtimensat(dirFd, path, aSec, aNsec, mSec, mNsec, flags);
 end;
 
 function PalChmod(path: PChar; mode: Integer): Integer;

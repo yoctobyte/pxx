@@ -4,12 +4,12 @@ title: "crtl has no utimensat/futimens, so busybox's `touch` cannot be built"
 track: C
 prio: 45
 type: feature
-status: backlog
+status: done
 created: 2026-09-01
 found-by: frankD
-owner: ""
+owner: frankD
 blocked-by: []
-summary: "`touch` is the one applet keeping the busybox userland at 26 instead of 27: it calls utimensat() and futimens(), which crtl neither declares nor implements, and no PAL entry exists for either. The rest of the gap that attempt exposed is CLOSED (clearenv, putenv, sync, AT_*/AF_UNIX/SOCK_* constants). The work is a PAL chain like PalSync's, and the honest blocker is that the syscall NUMBER cannot be sourced on this box for arm32 or xtensa."
+summary: "DONE 2026-09-02. One PAL entry, not two: futimens(fd, ts) IS utimensat(fd, NULL, ts, 0), so PalUtimensat carries both and a NIL path is the futimens spelling rather than an error. The nanosecond fields pass through untouched because they also carry UTIME_NOW and UTIME_OMIT, which is how `touch -a` and `touch -m` work at all; they are marshalled as NATIVE words, since a 32-bit kernel timespec is two 32-bit fields. The syscall number was already in platform_backend.pas for every arch -- PalBackendUtimes had been using it as one fixed case. Verified byte-identical to glibc on four rows including UTIME_OMIT and ENOENT.
 ---
 
 # utimensat / futimens
@@ -77,3 +77,24 @@ PalSync=-38  with SYS_sync deliberately set to 9999   <- the control
 ```
 
 Do that before believing a number.
+
+
+## DONE 2026-09-02
+
+The ticket said the honest blocker was that the syscall number could not be
+sourced for arm32 or xtensa. **It did not need to be**: `SYS_utimensat` was
+already in `platform_backend.pas` for every arch, because `PalBackendUtimes`
+has been issuing it all along as one fixed case (AT_FDCWD, no flags, both
+nanosecond fields zero). The general call sits beside it and the specific one
+is unchanged.
+
+xtensa refuses with `PAL_ERR_UNSUPPORTED`, as it does for the other calls whose
+numbering this repo has not measured. esp and wasi refuse with a reason each.
+
+**One PAL entry rather than two.** `futimens(fd, ts)` *is*
+`utimensat(fd, NULL, ts, 0)` — the kernel defines it that way — so a second
+entry would be a second path to keep in step for nothing.
+
+Verified byte-identical to a gcc build of `test/c_crtl_utimensat.c`, whose row
+2 is the discriminator: `UTIME_OMIT` in `tv_nsec` beside a `tv_sec` the kernel
+must ignore.

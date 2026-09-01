@@ -76,6 +76,9 @@ function PalBackendSync: Integer;
 function PalBackendSetsid: Integer;
 function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
+function PalBackendUtimensat(dirFd: Integer; path: PChar;
+                             aSec, aNsec, mSec, mNsec: Int64;
+                             flags: Integer): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
@@ -863,6 +866,14 @@ end;
 
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 { WASI exposes clocks as read-only; there is no host call to set one. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendUtimensat(dirFd: Integer; path: PChar;
+                             aSec, aNsec, mSec, mNsec: Int64;
+                             flags: Integer): Integer;
+{ WASI has path_filestat_set_times, but not through this raw-syscall shape; refusing beats a wrong answer until it is wired properly. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

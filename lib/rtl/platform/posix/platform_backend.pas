@@ -69,6 +69,9 @@ function PalBackendGetcwd(buf: PChar; size: Integer): Integer;
 function PalBackendNanosleep(sec, nsec: Int64): Integer;
 function PalBackendRealtime(var sec, nsec: Int64): Integer;
 function PalBackendUtimes(path: PChar; atimeSec, mtimeSec: Int64): Integer;
+function PalBackendUtimensat(dirFd: Integer; path: PChar;
+                            aSec, aNsec, mSec, mNsec: Int64;
+                            flags: Integer): Integer;
 function PalBackendMmapAnon(len: Int64): Pointer;
 function PalBackendMmapAnonProt(len: Int64; prot: Integer): Pointer;
 function PalBackendMprotect(addr: Pointer; len: Int64; prot: Integer): Integer;
@@ -961,6 +964,34 @@ begin
   ts[0] := NativeInt(atimeSec); ts[1] := 0;
   ts[2] := NativeInt(mtimeSec); ts[3] := 0;
   Result := Integer(__pxxrawsyscall(SYS_utimensat, PAL_AT_FDCWD, Int64(path), Int64(@ts[0]), 0, 0, 0));
+end;
+
+function PalBackendUtimensat(dirFd: Integer; path: PChar;
+                             aSec, aNsec, mSec, mNsec: Int64;
+                             flags: Integer): Integer;
+{ The FULL utimensat(2), which PalBackendUtimes above is one fixed case of:
+  AT_FDCWD, no flags, both nanosecond fields zero.
+
+  ONE ENTRY RATHER THAN TWO, because futimens(fd, ts) IS
+  utimensat(fd, NULL, ts, 0) -- the kernel says so, and a second PAL entry
+  would be a second path to keep in step for no gain. A NIL path is therefore
+  not an error here; it is the futimens spelling.
+
+  The nanosecond fields carry UTIME_NOW ($3FFFFFFF) and UTIME_OMIT ($3FFFFFFE)
+  as well as real nanoseconds -- that is how `touch -a' leaves mtime alone --
+  so they are passed through rather than normalised. NATIVE WORDS, not Int64:
+  a 32-bit kernel's timespec is two 32-bit fields and handing it a 16-byte
+  struct writes past what it was given. }
+var ts: array[0..3] of NativeInt;
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  ts[0] := NativeInt(aSec); ts[1] := NativeInt(aNsec);
+  ts[2] := NativeInt(mSec); ts[3] := NativeInt(mNsec);
+  Result := Integer(__pxxrawsyscall(SYS_utimensat, PtrUInt(dirFd), PtrUInt(path),
+                                    PtrUInt(@ts[0]), PtrUInt(flags), 0, 0));
+{$endif}
 end;
 
 { MAP_PRIVATE|MAP_ANONYMOUS. 34 ($22) everywhere EXCEPT xtensa, which is one of

@@ -40,6 +40,9 @@ function PalBackendSync: Integer;
 function PalBackendSetsid: Integer;
 function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
+function PalBackendUtimensat(dirFd: Integer; path: PChar;
+                             aSec, aNsec, mSec, mNsec: Int64;
+                             flags: Integer): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
@@ -548,6 +551,14 @@ end;
 
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 { FreeRTOS has no settable system clock behind this interface; the RTC is set through IDF, not a syscall. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendUtimensat(dirFd: Integer; path: PChar;
+                             aSec, aNsec, mSec, mNsec: Int64;
+                             flags: Integer): Integer;
+{ FreeRTOS's VFS has no timestamp-setting call behind this interface. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

@@ -81,6 +81,14 @@ int nanosleep(const struct timespec *req, struct timespec *rem);
 int clock_gettime(int clk_id, struct timespec *tp);
 /* Privileged: expect EPERM unless the caller is root. */
 int clock_settime(int clk_id, const struct timespec *tp);
+
+/* utimensat(2) / futimens(3). The two nanosecond fields also carry two magic
+   values instead of a time: UTIME_NOW means "now" and UTIME_OMIT means "leave
+   this one alone", which is how `touch -a' and `touch -m' work at all. */
+#define UTIME_NOW   ((1L << 30) - 1L)
+#define UTIME_OMIT  ((1L << 30) - 2L)
+int utimensat(int dirfd, const char *path, const struct timespec times[2], int flags);
+int futimens(int fd, const struct timespec times[2]);
 double difftime(time_t end, time_t beginning);
 time_t mktime(struct tm *tm);
 struct tm *gmtime(const time_t *timer);

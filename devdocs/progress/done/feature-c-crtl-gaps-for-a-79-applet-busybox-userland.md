@@ -109,3 +109,7 @@ show, and said so in the comment.
 ([[feature-c-crtl-utimensat-and-futimens]]) — that is why the applet set is 79
 and not 80. `addmntent` is deliberately absent: nothing in the corpus writes
 mtab, and a half-written entry is worse than a missing call.
+
+## Log
+
+- 2026-09-02 frankD — all fifteen closed, commit e2068a9cc.

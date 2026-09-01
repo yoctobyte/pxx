@@ -21,6 +21,9 @@ extern long long __pxx_clock(void);
 extern int __pxx_nanosleep(long long sec, long long nsec);
 extern int __pxx_clock_gettime(int clk_id, long long *sec, long long *nsec);
 extern int __pxx_clock_settime(int clk_id, long long sec, long long nsec);
+extern int __pxx_utimensat(int dirfd, const char *path,
+                           long long aSec, long long aNsec,
+                           long long mSec, long long mNsec, int flags);
 
 /* nanosleep: suspend for req->tv_sec + req->tv_nsec. `rem` (unslept remainder on
    signal) is zeroed — the PAL bridge does not surface EINTR partial sleeps, which
@@ -528,4 +531,35 @@ int clock_settime(int clk_id, const struct timespec *tp) {
   rc = __pxx_clock_settime(clk_id, (long long)tp->tv_sec, (long long)tp->tv_nsec);
   if (rc < 0) { errno = -rc; return -1; }
   return 0;
+}
+
+/* utimensat(2) and futimens(3). busybox's coreutils/touch.c is the consumer,
+   and it is the applet that kept the userland at 79 rather than 80.
+ *
+ * ONE PATH, TWO SPELLINGS. futimens(fd, ts) IS utimensat(fd, NULL, ts, 0) --
+ * the kernel defines it that way -- so there is no second implementation here
+ * to drift, and a NULL path is not an error but the futimens form.
+ *
+ * A NULL `times' means "set both to now", which is the plain `touch file' case
+ * and is spelled UTIME_NOW in both fields rather than by reading the clock:
+ * asking the clock here would set a time that is already in the past, and two
+ * files touched in one command would get different stamps.
+ */
+int utimensat(int dirfd, const char *path, const struct timespec times[2], int flags) {
+  long long as, an, ms, mn;
+  int rc;
+  if (times) {
+    as = (long long)times[0].tv_sec; an = (long long)times[0].tv_nsec;
+    ms = (long long)times[1].tv_sec; mn = (long long)times[1].tv_nsec;
+  } else {
+    as = 0; an = UTIME_NOW;
+    ms = 0; mn = UTIME_NOW;
+  }
+  rc = __pxx_utimensat(dirfd, path, as, an, ms, mn, flags);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+int futimens(int fd, const struct timespec times[2]) {
+  return utimensat(fd, 0, times, 0);
 }
