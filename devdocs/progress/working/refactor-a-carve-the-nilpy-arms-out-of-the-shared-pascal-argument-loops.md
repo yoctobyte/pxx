@@ -6,7 +6,7 @@ type: refactor
 status: working
 owner: frankA
 blocked-by: []
-summary: "The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command and the target is zero: `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 209 now, after five steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), ParseFactor's NilPy head (34 sites, two hooks), and the two DEAD-ARM deletions -- the shared expression and statement call loops carried thirteen arms guarded by `isNilPy` where the question was `PyExprMode`, which could not fire at all (7314fab2b, 23c4552af). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead."
+summary: "The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command but the target is NOT zero -- the census counts UNDEFINED symbols under the flag, so a NilPy arm whose helper lives in a shared file is invisible to it: `pasparser_proc.inc` carries nine real `isNilPy` arms and the census scores that file at ZERO. `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 209 now, after five steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), ParseFactor's NilPy head (34 sites, two hooks), and the two DEAD-ARM deletions -- the shared expression and statement call loops carried thirteen arms guarded by `isNilPy` where the question was `PyExprMode`, which could not fire at all (7314fab2b, 23c4552af). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead."
 ---
 
 # Carve the NilPy arms out of the shared Pascal *argument* loops
@@ -323,3 +323,56 @@ the whole argument.
 
 That check is what turned two of the campaign's biggest regions into deletions
 instead of hooks. It costs one build.
+
+## The metric cannot reach zero, and it would print zero anyway — measured 2026-09-01
+
+Re-measured before resuming: **209 sites / 98 distinct symbols**, matching what
+this ticket recorded, and `-Se1000` was never approached so the run reached the
+end rather than being truncated. The count is current.
+
+**But the count is a proxy, and it is blind in one direction that matters.**
+`fpc -dPXX_NO_NILPY` reports *identifiers that are not declared* when the NilPy
+units are excluded. A NilPy arm in the shared parser is therefore visible only
+if it calls something that lives in a NilPy-only file. An arm guarded by
+`PyExprMode` or `isNilPy` whose helpers happen to live in a SHARED file
+contributes zero.
+
+Two demonstrations, both checked:
+
+- **`pasparser_proc.inc` has nine real `isNilPy` arms and does not appear in the
+  census at all.** They are the NilPy import/unit-resolution path (`isNilPy and
+  pyLookupOK and (Length(UnitContent) = 0)`, lines 3920-4472) plus a
+  `PyExprMode` save/restore pair at 4816/5032. Every symbol they touch is
+  shared, so the file scores 0 of 209.
+- **The binary-operator chain in `pasparser_expr.inc` has NINE `PyExprMode`
+  arms and the census sees only the first eight.** The ninth (9618,
+  `PyIntGrowsOp`) is invisible because `PyIntGrowsOp` is defined in
+  `symtab.inc:3114`, a shared file.
+
+So **"drive the census to zero" is not a completion criterion** — it can be
+satisfied with NilPy arms still threaded through the shared parser. It remains a
+good PROGRESS signal, which is a different job. A completion criterion has to be
+stated over the guards themselves: `PyExprMode|isNilPy` mentions across
+`compiler/pasparser_*.inc` is 146 today (expr 82, lval 28, proc 12, call 10,
+name 7, stmt 7). That number counts conditions where the census counts symbol
+references, so the two are not comparable in magnitude — use each against
+itself, never against the other.
+
+### The ninth arm is the trap this ticket is about, in miniature
+
+The nine `PyExprMode` arms in the binop chain are contiguous from 9462 to ~9556
+— and then the chain runs through six NON-Py arms (string concat, set, boolean,
+float, promo-int) before the ninth at 9618. So the obvious carve — one hook
+replacing a contiguous run — moves eight arms, leaves the ninth, and looks
+complete: the census drops to zero for that region and the remaining arm is one
+the census could never see anyway. **Both instruments would agree it was
+finished.**
+
+The ninth also cannot simply move with the others: it sits after the promo-int
+arm deliberately, so hoisting it changes which arm claims a promo-int operand.
+Whatever hook is designed here has to be entered at TWO points in one chain, or
+the chain has to be restructured. That is a species-2 problem in this ticket's
+taxonomy, and it is the reason this region was not a cheap first carve.
+
+**Next session:** design the two-entry hook before moving anything; do not start
+with the contiguous run, because landing it makes the region look done.
