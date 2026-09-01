@@ -324,3 +324,27 @@ pair and the corpus does not contain it, so it would be an invented row.
 Deferred, real but not on the rung-1/2 path: a tentative definition carrying an
 explicit `__attribute__((section(".data")))` (busybox `common_bufsiz.c:71`,
 under a different config).
+
+## COMMON is out of scope, measured — and the simple case is on the critical path
+
+Census by Track C/D over **busybox's own objects, built by gcc** (143 TUs across
+libbb, coreutils, shell, editors):
+
+    43 distinct GLOBAL OBJECT symbols defined across them
+    46 of 143 TUs import at least one cross-TU DATA symbol
+     0 symbols defined in MORE THAN ONE TU
+     0 SHN_COMMON symbols anywhere
+
+The last two lines decide the tentative-definition question for this corpus:
+every tentative definition already resolves to exactly one owning TU under
+gcc's default `-fno-common`, which is what a real build gets. So
+`-fcommon`/`SHN_COMMON` support is a **separate ticket with no evidence behind
+it yet**, and the duplicate-definition row stays in the acceptance list as a
+case that must be REJECTED rather than a shape busybox will present.
+
+46 of 143 also says the plain defined/undefined case is not a corner — a third
+of the translation units need it before anything links.
+
+**Scope of that number, kept attached to it:** it counts what GCC emits for
+busybox's sources. It says nothing about what pxx emits for the same sources —
+that is this ticket's own measurement, and the two must not be quoted as one.
