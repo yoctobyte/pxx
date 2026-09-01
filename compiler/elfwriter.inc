@@ -1772,7 +1772,14 @@ begin
   filesz   := codeOffset + CodeLen + DataLen;
   memsz    := (bssBase - LOAD_ADDR) + BSSSize;
 
-  doDebug := DebugInfo and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64));
+  { DbgArchSupported, not a fourth copy of the target list. This line said
+    "x86_64 or aarch64" in BOTH writeELF variants and "i386 or arm32" in
+    writeELF32, so the DWARF Tier-1 set was written down three times as live
+    code while the one function that states it correctly had ZERO call sites.
+    Anyone who grepped DbgArchSupported found the right answer and reasonably
+    concluded it was enforced; it was not.
+    bug-a-the-dwarf-target-set-is-written-down-three-times-and-the-authority-is-dead-code }
+  doDebug := DebugInfo and DbgArchSupported;
   shoff := 0;
   if doDebug then
   begin
@@ -1943,7 +1950,14 @@ begin
     Measured, not read: `-g` on all four emits 4 .debug sections. Reading only
     the condition under this comment gives the answer "two", which is what makes
     this worth a note rather than a silent edit. }
-  doDebug := DebugInfo and ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64));
+  { DbgArchSupported, not a fourth copy of the target list. This line said
+    "x86_64 or aarch64" in BOTH writeELF variants and "i386 or arm32" in
+    writeELF32, so the DWARF Tier-1 set was written down three times as live
+    code while the one function that states it correctly had ZERO call sites.
+    Anyone who grepped DbgArchSupported found the right answer and reasonably
+    concluded it was enforced; it was not.
+    bug-a-the-dwarf-target-set-is-written-down-three-times-and-the-authority-is-dead-code }
+  doDebug := DebugInfo and DbgArchSupported;
   shoff := 0;
   if doDebug then
   begin
@@ -2170,8 +2184,14 @@ begin
 
   { DWARF -g for the 32-bit hosted targets (i386/arm32). esp (bare/xtensa/riscv32)
     is excluded. Section headers placed past p_filesz, like the 64-bit path. }
-  doDebug := DebugInfo and ((TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32))
-             and (not EspBareBoot);
+  { Same one authority as the two 64-bit writers -- see the note there.
+    `not EspBareBoot` STAYS. It is redundant today (compiler.pas:1702 halts
+    unless the target is xtensa or riscv32, neither of which DbgArchSupported
+    accepts), but "redundant" is a claim about a validation elsewhere, and
+    deleting a live condition on the strength of one is a separate change
+    needing its own proof. It costs a boolean.
+    bug-a-the-dwarf-target-set-is-written-down-three-times-and-the-authority-is-dead-code }
+  doDebug := DebugInfo and DbgArchSupported and (not EspBareBoot);
   shoff32 := 0;
   if doDebug then
   begin

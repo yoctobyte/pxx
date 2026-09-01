@@ -108,6 +108,45 @@ if command -v readelf >/dev/null 2>&1; then
     readelf --debug-dump=frames "$TEXE" 2>/dev/null | grep -q "CIE" \
       || { echo "dwarf-g: FAIL — $T: no .debug_frame CIE"; exit 1; }
   done
+
+  # THE OTHER HALF OF THE SET, and until 2026-09-01 nothing asserted it. Every
+  # row above fails by LOSING debug info and none of them can fail by gaining it
+  # somewhere it does not belong, so a change that widened the DWARF target set
+  # to the ESP ISAs passed the whole suite. xtensa and riscv32 are excluded
+  # deliberately (windowed / no-frame-pointer ABI, no gdb-over-qemu line path),
+  # and an exclusion nothing checks is a comment, not a gate.
+  #
+  # WHICH ROW ACTUALLY DISCRIMINATES, measured rather than assumed. The 32-bit
+  # writer gates on `DbgArchSupported and (not EspBareBoot)`, so ANY bare-profile
+  # build emits no debug sections no matter what the target set says. Widening
+  # DbgArchSupported to both ESP ISAs and rebuilding:
+  #
+  #   riscv32 hosted -> 4 sections   CAUGHT
+  #   riscv32 bare   -> 0 sections   masked by EspBareBoot
+  #   xtensa  bare   -> 0 sections   masked by EspBareBoot
+  #
+  # and xtensa has no hosted exec path at all (a plain -g --target=xtensa refuses
+  # on external symbols before any writer runs). So the riscv32 row is the set
+  # assertion; the xtensa row asserts only that -g still COMPILES for xtensa,
+  # which is worth a second but is not a statement about the target set. Saying
+  # so here because a row that cannot fail prints PASS exactly like one that can.
+  #
+  # THE LIST HERE IS THE SPEC and it is the SECOND statement of it on purpose --
+  # DbgArchSupported in elfwriter.inc is the first, and the two are meant to be
+  # edited in the same commit. That is a different animal from the three
+  # undeclared copies this replaced, where the authority was dead code and the
+  # live gates had drifted:
+  # bug-a-the-dwarf-target-set-is-written-down-three-times-and-the-authority-is-dead-code
+  for T in riscv32 xtensa; do
+    TEXE="$TMP/dbgsmoke.$T"
+    EXTRA=""
+    [ "$T" = xtensa ] && EXTRA="--platform=esp --esp-profile=bare"
+    "$PXX" -g --target=$T $EXTRA "$SRC" "$TEXE" >/dev/null 2>&1 \
+      || { echo "dwarf-g: FAIL — -g --target=$T $EXTRA compile errored (the row cannot answer)"; exit 1; }
+    N=$(readelf -SW "$TEXE" 2>/dev/null | grep -c '\.debug_')
+    [ "$N" = 0 ] || { echo "dwarf-g: FAIL — $T emitted $N .debug_* section(s); the DWARF target set excludes it. If that is intentional, change DbgArchSupported and this list together."; exit 1; }
+  done
+  echo "dwarf-g: cross target set ok — aarch64/i386/arm32 carry DWARF; riscv32 carries none (the discriminating row); xtensa -g compiles and is masked by EspBareBoot"
 fi
 
 # A CYCLIC type graph — `TB = class;` forward, TA holds a TB, TB holds a TA —
