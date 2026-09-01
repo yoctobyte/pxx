@@ -11499,13 +11499,34 @@ begin
   x64_add_reg_imm(8, rRSP, EXC_FRAME_SIZE);  { add rsp, EXC_FRAME_SIZE }
 end;
 
-{ Class-binding ARC eligibility (feature-nilpy-object-reclamation slice 4):
-  only NAMED user locals/globals participate in rebind-release + scope-exit
-  release. Hidden desugar temps ('' or '__py_*') are created MID-body, after
-  the proc-entry zero-init pass, so releasing them would read stale stack
-  bytes; they keep raw pointer semantics (their construction refs leak as
-  before this feature). Except-handler binders are named and get their slot
-  nil'd by the AN_TRY_EXCEPT lowering. }
+{ Class-binding ARC eligibility (feature-nilpy-object-reclamation slice 4).
+
+  EVERY NilPy tyClass local/global participates in rebind-release + scope-exit
+  release — read the Result below, which has no name filter.
+
+  This header said the opposite until 2026-09-01, and said it in the detail a
+  reader would rely on: that only NAMED locals participate, that hidden desugar
+  temps ('' / '__py_*') keep raw pointer semantics because releasing a mid-body
+  temp would read stale stack bytes, and that except-handler binders "get their
+  slot nil'd by the AN_TRY_EXCEPT lowering". All three were true of slice 4 as
+  first written. The hidden temps were folded in afterwards, and whoever did it
+  corrected the comment INSIDE the function and left this one — so the two
+  comments on one predicate disagreed, and this is the one people read.
+
+  The stale-bytes hazard is real and is handled, just not where this said. The
+  mid-body zero-init is the NilPy watermark pass in ir_codegen.inc's statement
+  head (`PyZeroedProc` / `EmitZeroFrameSlot`), whose own comment names handler
+  binders among what it nils. It is NOT in the AN_TRY_EXCEPT lowering, and it
+  emits at CODEGEN rather than as IR — so `PXXDBG=a.ir` cannot see it, and
+  looking there for a store of 0 into the binder correctly finds none. An
+  instrument that cannot observe the mechanism reads as the mechanism's absence.
+
+  What this comment being wrong does NOT settle: the binder is ARC-eligible, so
+  EmitManagedLocalCleanup releases it at scope exit, and any release added at
+  handler exit would be a SECOND release of the same pointer. Nil-at-statement-
+  head does not prevent that; only nil'ing at the handler-exit release would.
+  That hazard (frankB, 2026-09-01, with a NilPy repro where the obvious fix
+  corrupts e.args) is untouched by this correction and is not filed here. }
 function PyClassSymArcEligible(symIdx: Integer): Boolean;
 begin
   { hidden desugar temps included: every NilPy tyClass local — whenever it was
