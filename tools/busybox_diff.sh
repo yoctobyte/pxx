@@ -191,6 +191,28 @@ want_num_applets() { printf '#define NUM_APPLETS %s\n' "$NAPPLETS"; }
 # sufficient: a tree configured for `cat echo ash` with every ASH_* knob off has
 # the right NUM_APPLETS and the wrong shell, and skipping the reconfigure on
 # that basis is how the first run of this got a stub. Ask about the features too.
+#
+# THE COUNT IS NOT SUFFICIENT IN THE OTHER DIRECTION EITHER, and that half was
+# missed when the ash half above was fixed. `cat echo ash ls` and
+# `cat echo ash wc` are both NUM_APPLETS 4 with identical ash knobs, so a run
+# asking for the second was served the first and never reconfigured. Measured
+# 2026-09-01, and it silently turned a twelve-applet sweep into ONE applet
+# measured twelve times -- twelve identical failures that looked like
+# overwhelming agreement and were one data point. The identity of the applets
+# is the thing being asked about, so ask about it.
+applets_ok() {
+  local a A
+  [ -f "$BB/.config" ] || return 1
+  for a in $APPLETS; do
+    A="$(printf '%s' "$a" | tr 'a-z-' 'A-Z_')"
+    grep -qx "CONFIG_$A=y" "$BB/.config" || return 1
+  done
+  # Nothing EXTRA needs no separate check: this asks that every requested
+  # applet is on, and the NUM_APPLETS test beside it asks that the total is
+  # exactly $NAPPLETS. All-present plus right-count is the exact set.
+  return 0
+}
+
 ash_features_ok() {
   local f
   printf '%s\n' $APPLETS | grep -qx ash || return 0
@@ -202,6 +224,7 @@ ash_features_ok() {
 
 if [ ! -f "$BB/include/NUM_APPLETS.h" ] \
    || ! grep -qx "$(want_num_applets)" "$BB/include/NUM_APPLETS.h" \
+   || ! applets_ok \
    || ! ash_features_ok \
    || ! grep -qx "$(printf '#define ENABLE_BUSYBOX %s' "$([ "$NAPPLETS" -gt 1 ] && echo 1 || echo 0)")" "$BB/include/autoconf.h"; then
   CFGLOG="${TMPDIR:-/tmp}/bbdiff-configure.log"
