@@ -57,5 +57,10 @@ IN-ARM; only the handler arms were missing the flush.
 ## Log
 
 - 2026-09-01 — found by asking which statement kinds were still uncovered after
-  the loop and `case` fixes; fixed and closed in the same session, commit
-  PENDING-COMMIT.
+  the loop and `case` fixes; fixed and closed in the same session.
+  Fixed in commit dcadde29f.
+  (Citation kept on ONE line on purpose: a `commit <sha>` wrapped onto a
+  continuation line is invisible to both `progress.py check` and `sync.sh` fill
+  — bug-t-a-wrapped-resolve-citation-is-invisible-to-both-check-and-fill. I hand
+  wrote this Log entry and wrapped it, and the placeholder sat unfilled through a
+  push exactly as that ticket describes.)
