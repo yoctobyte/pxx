@@ -351,12 +351,11 @@ binary as unproven for your change, `rm` the stamp and re-run. Measured live 202
 round(s)`, and `gate.sh quick` went RED against the stale binary; removing the
 stamp and rebuilding was GREEN. **The verb is the tell** — both lines are green,
 both name a round count, and `tools/selfhost_stamp_devtest.sh` asserts each.
-**Cite recipes, not `Makefile:<n>`.** Measured when these three were replaced:
-all were correct when written (`9a0f3bad9`, the same day) and the `make pin` one
-had already drifted **142 lines by that evening** — to `fi; \`, which is a real
-line that explains nothing. A 20k-line Makefile that a dozen commits touch in a
-day cannot carry a line number for longer than a day, and a stale one does not
-error: it points somewhere.
+Those two citations name recipes rather than lines (since `b5a3f68bf`)
+because the three `Makefile:<n>` they replaced had gone stale: all were correct when written
+(`9a0f3bad9`, the same morning) and the `make pin` one had drifted **142 lines
+by that evening** — to `fi; \`, a real line that explains nothing. A stale line
+number does not error; it points somewhere.
 
 A **nonzero** exit deserves the same suspicion: grep
 the tree for the error string — if the source lacks it, the compiler that printed
