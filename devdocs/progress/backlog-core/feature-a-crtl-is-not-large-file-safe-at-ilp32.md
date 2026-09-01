@@ -19,6 +19,17 @@ sigset_t  128          64
 `dev_t`, `ino_t` and `blkcnt_t` were the other three rows and are fixed —
 `bug-a-stat-returns-st-dev-and-st-rdev-in-the-kernel-internal-encoding`.
 
+`rlim_t` is a fourth member of the same LFS family and belongs to this ticket
+rather than to a separate one. Measured: glibc `-m32` gives `sizeof(rlim_t)` 4
+without LFS and 8 with `_FILE_OFFSET_BITS=64`; crtl's `unsigned long` is 4, so
+it matches the NON-LFS shape, the same way `off_t` does. It is not a defect
+today — `<sys/resource.h>` deliberately declares no functions (the PAL has no
+getrlimit entry), so the only path that fills a `struct rlimit` is a hosted
+glibc link, which resolves the non-LFS `getrlimit` symbol and agrees with the
+4-byte fields. It stops agreeing the moment the rest of this ticket lands, so
+`rlim_t` and `RLIM_INFINITY` move with `off_t` or the hosted path silently
+starts reading two fields as one.
+
 ## Why off_t is not a one-line widening
 `lib/crtl/src/fcntl.c`'s header comment is correct today and would become false
 the moment `off_t` moves: the `struct flock` a caller builds matches the
