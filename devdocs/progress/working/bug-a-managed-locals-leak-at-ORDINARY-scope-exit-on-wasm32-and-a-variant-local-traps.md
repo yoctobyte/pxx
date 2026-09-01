@@ -7,7 +7,7 @@ status: working
 found: 2026-09-01
 found-by: frankA
 blocked-by: []
-summary: "MEASURED, not inferred. wasm32's scope-exit release covers scalar AnsiString and dynamic arrays and NOTHING else, so on the ORDINARY path -- no exception, no unwind -- a COM interface local is never released (freed=0 of 1), a record with managed fields leaks (live=269 vs x86-64's 2), and a static array of AnsiString leaks (live=543 vs 3). A Variant local does not leak, it TRAPS: `wasm unreachable`, exit 134, on a program x86-64 runs clean. Alloc counts are IDENTICAL on both sides in every row, so only the frees differ and the comparison is not confounded. wasm32 wires exactly two release helpers, PXXStrDecRef and PXXDynArrayRelease -- no interface, Variant or record-finalize path exists -- so this is the same one-kind-to-seven campaign frankS ran for xtensa in e1d7977a2 + 3a1c1dc73, not a predicate widening. Found while measuring bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, which is a DIFFERENT and much rarer defect."
+summary: "FIXED for the leaks (74e33af46); the Variant row moved to its own ticket because it was never a leak. wasm32's scope-exit release carried a HAND-WRITTEN list of managed kinds -- scalar AnsiString and dynamic array -- while the zero-init pass three lines below it asked ManagedLocalZeroBytes, the shared table. Measured against x86-64 with -dPXX_ALLOC_CENSUS, allocation counts identical on both sides so only the frees differed: COM interface local gone=0 of 50 -> 50, record with managed fields live=543 -> 3, static array of AnsiString live=871 -> 4, all now matching x86-64. The arms are copied from the riscv32 arm of EmitManagedLocalCleanupForTarget in its order and with its predicates, because the set of managed kinds is a SHARED fact and a seventh backend restating it is how six agree and one does not. Guarded by test/wasm/check_scopeexit.sh, which makes the leak PRINT -- the object counts its own destructions -- because a leak is invisible to the native-vs-wasm diff that is every other wasm check's primary assertion; verified to fail against the previous backend at gone=0, exit 1. THE VARIANT ROW IS NOT FIXED AND IS NOT THIS TICKET: `v := 42` traps because IR_VAR_STORE, IR_VAR_BINOP and IR_VAR_BOX have NO wasm32 arms at all, diagnosed from the compiler's own broken-body report (`main$0 - statement IR op 43`) and confirmed on a program-body Variant where scope-exit release cannot be involved -> bug-a-wasm32-has-no-variant-ir-arms-so-any-variant-assignment-traps. The PXXVarClear arm added here is written and UNVERIFIED for that reason; do not read its presence as coverage."
 owner: frankC
 ---
 
@@ -132,3 +132,27 @@ its sweep covered six targets and wasm32 was not one of them, which nothing in
 it said. Recorded here rather than by reopening it; the remaining arm is small
 (`WasmDataAddr(Strs[si].Offset + 8)`, which this backend already emits
 elsewhere) and belongs to whoever takes the wasm work above.
+
+
+## 2026-09-01 — fixed, and the Variant row was a different animal
+
+`74e33af46`. Four of the five rows in the table above were one defect: the
+release half of `WasmEmitManagedLocals` asked its own two-line question while
+the zero half asked the shared table. Six arms now, riscv32's order and
+riscv32's predicates.
+
+The fifth row was never a leak. `v := 42` traps in a **bare program body with no
+procedure in it**, so scope-exit release cannot be involved, and the compiler
+had already said why in its broken-body report: `main$0 — statement IR op 43`,
+`IR_VAR_STORE`. The whole Variant family is absent from this backend. Filed as
+`bug-a-wasm32-has-no-variant-ir-arms-so-any-variant-assignment-traps`.
+
+**The thing worth keeping.** The trap was diagnosed by reading a report the
+compiler prints at COMPILE time, having first been diagnosed by running the
+program and reading a wasm backtrace. The backtrace named a function index; the
+report named the IR op. The report cost nothing and was already on screen — I
+had tailed two lines past it.
+
+And the PXXVarClear arm I added is a live example of face 242's cousin: written,
+committed, green, and **never executed on this target**, because nothing can
+construct its input. It is flagged in both tickets rather than counted.
