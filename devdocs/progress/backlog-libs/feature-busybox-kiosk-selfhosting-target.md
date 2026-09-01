@@ -8,7 +8,7 @@ blocked-by: []
 status: new
 created: 2026-08-30
 owner: ""
-summary: "Owner-set target (2026-08-30): compile busybox, then stand up a qemu-system VM on some kernel/CPU running that busybox userland with a shell, the self-hosting pxx compiler, and a simple kiosk application. Umbrella only -- the work lives in the rungs below, each of which is filed or exists. HOST DEPENDENCY RESOLVED 2026-08-30: the owner granted sudo and qemu-system is now installed for EVERY pxx target -- aarch64, arm, riscv32, riscv64, xtensa, x86_64, i386 -- plus /dev/kvm. Rungs 1-2 (busybox) and rung 3 (image) can all proceed."
+summary: "Owner-set target (2026-08-30): compile busybox, then stand up a qemu-system VM on some kernel/CPU running that busybox userland with a shell, the self-hosting pxx compiler, and a simple kiosk application. Umbrella only -- claim a rung. RUNGS 1 AND 2 ARE DONE and rung 2's successor with them: as of 2026-09-02 the userland is EIGHTY APPLETS built busybox's own way -- 149 translation units, 149 objects, one real link, 261 cases byte-identical to the gcc oracle on x86-64 (`tools/busybox_diff.sh --separate`). aarch64 is proven at 26 applets by unity build and waits on an --emit-obj object writer for the separate one. RUNG 3 (a bootable image) is now the live one and its host dependency is resolved -- qemu-system is installed for every pxx target plus /dev/kvm; what is open is which kernel and rootfs.
 ---
 
 # The target, in the owner's words
@@ -36,18 +36,38 @@ qemu-user. Every existing corpus proves one layer. This proves they compose.
    upstream's own separately-linked `busybox_CAT`. Repeatable:
    `tools/busybox_diff.sh --applets cat`. Cost three compiler fixes and the aarch64
    `IR_ALLOCA` port; see the resolved ticket.
-2. **busybox multi-applet + `ash`** — the shell half. **DONE 2026-09-01.**
-   Twelve applets (`cat echo ash mkdir rm cp mv pwd wc head sleep printf`),
-   61 translation units, 114 cases, byte-identical to the gcc oracle on
-   x86-64 AND aarch64. Repeatable: `tools/busybox_diff.sh --applets '...'`.
-   Cost fifteen compiler/runtime fixes, every one found by ATTEMPTING the
-   target. (A sixteenth, the `x & 0` constant-branch fold `3056e214c`, came
-   out of the SEPARATE-compilation attempt afterwards and is not part of this
-   rung's cost.) Successor:
-   `feature-c-corpus-busybox-userland-by-separate-compilation` [C], which
-   drops the unity for busybox's own build model — the unity tops out on
-   three files that assume they own their namespace, and gcc rejects it too.
-   The old rung text follows.
+2. **busybox multi-applet + `ash`** — the shell half. **DONE 2026-09-01** at
+   twelve applets, 61 translation units, 114 cases, byte-identical to the gcc
+   oracle on x86-64 AND aarch64. Cost fifteen compiler/runtime fixes, every one
+   found by ATTEMPTING the target.
+
+   **2b. The userland, built busybox's own way — DONE 2026-09-02.**
+   `feature-c-corpus-busybox-userland-by-separate-compilation` [C] dropped the
+   unity for separate compilation, and then the applet set kept going:
+
+   | | applets | TUs | objects | cases |
+   | --- | --- | --- | --- | --- |
+   | rung 2 (unity) | 12 | 61 | — | 114 |
+   | unity, widened | 26 | 82 | — | 154 |
+   | **separate** | **80** | **149** | **149** | **261** |
+
+   All byte-identical to the gcc oracle, which now builds separately too — a
+   unity oracle would have capped this mode at the unity's own ceiling, and
+   that ceiling is gcc's rather than pxx's (busybox's `struct globals` pattern
+   is one namespace claim per applet).
+
+   Getting from 12 to 80 cost, all found by attempting it and all closed:
+   `x & 0` never folding a constant-false branch; `sizeof` yielding a fixed
+   64-bit type where `size_t` is pointer-width; the `#if` evaluator being
+   purely signed where C99 6.10.1 wants intmax_t/uintmax_t; a macro call being
+   silently mis-expanded past sixteen arguments (and hanging the compiler on
+   busybox's own `factor.c`); `static` on a C function being ignored by the
+   object writer; crtl being defined globally in every object (frankA); and
+   sixteen crtl gaps enumerated in one measured pass.
+
+   **x86-64 only for the separate build** — `--emit-obj` has no object writer
+   for aarch64 ([[feature-a-object-output-for-arm32-and-aarch64]]). aarch64 is
+   proven at 26 applets by unity build, which is the honest cross claim today.
    `feature-c-corpus-busybox-multi-applet` [C]. **FIRST BAR MET 2026-09-01**
    (`2789f87a7`): cat+echo+the multiplexer, `NUM_APPLETS 2` with the dispatch
    table compiled IN, byte-identical to gcc over 28 cases on x86-64 and
@@ -59,7 +79,9 @@ qemu-user. Every existing corpus proves one layer. This proves they compose.
    Rung 1 says explicitly what it does NOT establish: `cat` reaches 25 of
    libbb's ~145 TUs, and the ones it misses are where `pwd`/`grp`/`statfs`/
    `getrlimit` are actually called — stubs-by-omission today.
-3. **qemu-system + a kernel.** **BLOCKED, and not on us** — see below.
+3. **qemu-system + a kernel.** **NOW THE LIVE RUNG** — the host dependency
+   below is resolved and rungs 1, 2 and 2b are done. Filed as
+   [[feature-b-a-bootable-image-with-the-busybox-userland-on-it]].
 4. **The compiler self-hosting *inside* the image.** Related and not identical:
    `bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-native-one`.
    A self-host under a real kernel on a cross CPU is a strictly stronger claim

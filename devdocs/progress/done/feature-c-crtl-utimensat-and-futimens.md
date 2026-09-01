@@ -98,3 +98,7 @@ entry would be a second path to keep in step for nothing.
 Verified byte-identical to a gcc build of `test/c_crtl_utimensat.c`, whose row
 2 is the discriminator: `UTIME_OMIT` in `tv_nsec` beside a `tv_sec` the kernel
 must ignore.
+
+## Log
+
+- 2026-09-02 frankD — done, commit 87144b8d3.
