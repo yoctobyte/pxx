@@ -4937,6 +4937,53 @@ The tell: I wrote *"either it is reachable and ... or it is not and ..."*. A
 two-branch enumeration built from a one-token delta is a claim that the token
 is the only thing in play. Write the repro instead; it took two lines.
 
+## A CARRIER can be one column AHEAD of every reader, and nothing looks missing
+
+Named 2026-09-01 (frankB), as the mirror of frankA's *"the instrument is
+systematically one column behind the carrier set"*. That one is about a probe
+that prints less than the code stores. This one is about the code storing a fact
+that **nothing ever reads**, which is quieter, because the definition site looks
+finished.
+
+`DerefPtrArrayElemPtr` (symtab.inc) answers "when a `p^`'s array element is
+itself a pointer, how many levels remain and what is the ultimate base". It is
+complete, it is correct, it has a header comment explaining exactly which callers
+would need it and why they must not hand-roll the symbol-vs-ArrType distinction
+themselves — and on 2026-09-01 it had **no caller anywhere in the tree**, three
+days after it was written beside a set of readers that all got wired up.
+
+The consequence was a silent wrong value in a shape the carrier was written for:
+`GetP^[0]^` over a `^array of PInteger` typed the load from the RESULT's pointee
+instead of the ELEMENT's, read 8 bytes where 4 belonged, and printed
+`47244640266` = `(nums[1] shl 32) or nums[0]`.
+
+**Why it hides.** The four things you would normally check all pass:
+
+- the carrier exists, and reads as deliberate;
+- its header names its callers, which makes it *look* wired;
+- `grep DerefPtrArrayElemPtr` returns hits — its own definition, and the header
+  of its sibling. A nonzero grep count reads as "in use";
+- the sibling one line above it (`DerefPtrArrayElem`) has five callers, so the
+  FAMILY is plainly load-bearing.
+
+That is four independent confirmations of "this is fine", none of which is about
+the question. Compare the family's own recurring finding, which four tickets have
+now ended on: *"the metadata was there, the reader was missing."* This is that
+sentence with the tense moved — the metadata is there, the reader was never
+written, and the metadata's own comment describes the reader as though it were.
+
+**The check.** For any carrier, accessor or metadata column, `grep` for it and
+then **subtract its own definition and its own documentation.** If the remainder
+is zero, you have not found a caller — you have found an unread column, and every
+site that should read it is answering from something else. `grep -c` on a name
+that appears in its own header comment cannot come out zero, which makes it the
+same animal as a guard that cannot fail.
+
+The general form, which is why this sits beside the DENOMINATOR section: **a
+search whose result includes the thing you searched for is not evidence about
+anything else.** Name what the count would have to EXCLUDE to mean what you want
+it to mean, and count that instead.
+
 ## An instrument that reports a RESULT should report its DENOMINATOR
 
 Named 2026-08-31 (frankS), from three instruments that failed the same way in
