@@ -49,3 +49,16 @@ int    relay_p6 (void) { struct P6 p; p.a=1;p.b=2;p.c=3;p.d=4;p.e=5;p.f=6; retur
 double relay_d2 (void) { struct D2 p; p.x=1.5; p.y=2.5; return gcc_d2(p); }
 double relay_mix(void) { struct MIX p; p.a=7; p.y=0.25; return gcc_mix(p); }
 int    relay_late(void) { struct P2 p; p.a=8; p.b=9; return gcc_late(1,2,3,4,5,p); }
+
+/* THROUGH A FUNCTION POINTER, which is a SECOND caller in this compiler and not
+   a variation on the first: the direct and indirect cdecl arms classify
+   arguments in separate loops, and the aggregate work landed in the direct one
+   while the gate stayed green -- because every relay above is a direct call, so
+   the subject could not contain the defect. Both classes are here (INTEGER, and
+   INTEGER+SSE) because the indirect arm counts the two banks independently too.
+   bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee */
+typedef int    (*fn_p2)(struct P2);
+typedef double (*fn_mix)(struct MIX);
+
+int    relay_p2_ind (void) { struct P2  p; fn_p2  f = gcc_p2;  p.a=3; p.b=7;    return f(p); }
+double relay_mix_ind(void) { struct MIX p; fn_mix f = gcc_mix; p.a=7; p.y=0.25; return f(p); }

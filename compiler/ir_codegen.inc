@@ -5873,7 +5873,8 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     slotIsAgg: array[0..127] of Boolean;
     slotSrcOff: array[0..127] of Integer;
     aggIsRef, aggIsArr: Boolean;
-    aggRec, sysvSlots, aggK: Integer;
+    aggRec, sysvSlots, aggK, aggPj: Integer;
+    aggTk: TTypeKind;
     apR0, apR1: Integer;
     apMem, apS0, apS1, apAgg: Boolean;
 begin
@@ -6256,22 +6257,50 @@ begin
           mStack := 0; nSlots := 0;
           for i := 0 to nArgs - 1 do
           begin
-            if nSlots >= MAX_CALL_ARGS then Error('cdecl indirect call: too many argument slots');
-            slotArg[nSlots] := i;
-            slotIsSse[nSlots] := argIsSse[i];
-            if argIsSse[i] then
+            { The SIGNATURE's view, shifted by the injected Self the way
+              argIsSse above is. Below the range is Self (a pointer, INTEGER);
+              above it is a variadic tail, already promoted, classified by its
+              own node type. Neither can be an aggregate, so neither carries a
+              record id. }
+            aggPj := i - IRC[node];
+            if (aggPj >= 0) and (aggPj < Procs[cpi].ParamCount) then
             begin
-              if sseIdx < 8 then
-              begin slotIsStack[nSlots] := False; slotRegIdx[nSlots] := sseIdx; Inc(sseIdx); end
-              else begin slotIsStack[nSlots] := True; Inc(mStack); end;
+              aggTk := Procs[cpi].Params[aggPj].TypeKind;
+              aggIsRef := Procs[cpi].Params[aggPj].IsRef;
+              aggIsArr := Procs[cpi].Params[aggPj].IsArray;
+              aggRec := ProcParamRecId[cpi * MAX_PROC_PARAMS + aggPj];
             end
             else
             begin
-              if intIdx < 6 then
-              begin slotIsStack[nSlots] := False; slotRegIdx[nSlots] := intIdx; Inc(intIdx); end
-              else begin slotIsStack[nSlots] := True; Inc(mStack); end;
+              if aggPj < 0 then aggTk := tyPointer
+              else aggTk := IntToTypeKind(IRTk[argNodeArr[i]]);
+              aggIsRef := False; aggIsArr := False; aggRec := REC_NONE;
             end;
-            Inc(nSlots);
+            ABISysVArgPlace(aggTk, aggIsRef, aggIsArr, aggRec, intIdx, sseIdx,
+                            sysvSlots, apMem, apS0, apS1, apR0, apR1, apAgg);
+            for aggK := 0 to sysvSlots - 1 do
+            begin
+              if nSlots >= MAX_CALL_ARGS then Error('cdecl indirect call: too many argument slots');
+              slotArg[nSlots] := i;
+              slotIsAgg[nSlots] := apAgg;
+              slotSrcOff[nSlots] := aggK * 8;
+              if apMem then
+              begin
+                slotIsSse[nSlots] := False;
+                slotIsStack[nSlots] := True;
+                Inc(mStack);
+              end
+              else
+              begin
+                if aggK = 0 then
+                begin slotIsSse[nSlots] := apS0; slotRegIdx[nSlots] := apR0; end
+                else
+                begin slotIsSse[nSlots] := apS1; slotRegIdx[nSlots] := apR1; end;
+                slotIsStack[nSlots] := slotRegIdx[nSlots] < 0;
+                if slotIsStack[nSlots] then Inc(mStack);
+              end;
+              Inc(nSlots);
+            end;
           end;
           IREmitNode(IRA[node]); EmitB($50);       { push callee; P = &this slot }
           { Align + reserve, saving P (= rsp, pointing at the callee slot) below
@@ -6291,17 +6320,48 @@ begin
           for slotIdx := nSlots - 1 downto 0 do
             if slotIsStack[slotIdx] then
             begin
-              IREmitNode(argNodeArr[slotArg[slotIdx]]);
+              i := slotArg[slotIdx];
+              if slotIsAgg[slotIdx] then
+              begin
+                { Evaluated ONCE, at the argument's highest slot, eightbytes
+                  pushed high->low -- the direct arm's rule, in the arm that
+                  needs it for the same reason. }
+                if (slotIdx < nSlots - 1) and (slotArg[slotIdx + 1] = i) then Continue;
+                IREmitNode(argNodeArr[i]);
+                aggK := slotSrcOff[slotIdx] div 8;
+                while aggK >= 0 do
+                begin
+                  if aggK = 0 then begin EmitB($FF); EmitB($30); end
+                  else begin EmitB($FF); EmitB($70); EmitB(aggK * 8); end;
+                  Dec(aggK);
+                end;
+                Continue;
+              end;
+              IREmitNode(argNodeArr[i]);
               EmitB($50);                           { push arg }
             end;
           { Register args: push right-to-left, pop left-to-right into the ABI
-            registers. As in the direct arm, "each arg evaluated once" holds
-            because slotArg is injective TODAY, not because this loop enforces
-            it -- it evaluates once per SLOT. }
+            registers. slotArg is no longer injective -- an aggregate owns two
+            slots -- so "each arg evaluated once" is now enforced HERE rather
+            than inherited from the convention, exactly as in the direct arm. }
           for slotIdx := nSlots - 1 downto 0 do
             if not slotIsStack[slotIdx] then
             begin
-              IREmitNode(argNodeArr[slotArg[slotIdx]]);
+              i := slotArg[slotIdx];
+              if slotIsAgg[slotIdx] then
+              begin
+                if (slotIdx < nSlots - 1) and (slotArg[slotIdx + 1] = i) then Continue;
+                IREmitNode(argNodeArr[i]);
+                aggK := slotSrcOff[slotIdx] div 8;
+                while aggK >= 0 do
+                begin
+                  if aggK = 0 then begin EmitB($FF); EmitB($30); end
+                  else begin EmitB($FF); EmitB($70); EmitB(aggK * 8); end;
+                  Dec(aggK);
+                end;
+                Continue;
+              end;
+              IREmitNode(argNodeArr[i]);
               EmitB($50);                           { push arg }
             end;
           for slotIdx := 0 to nSlots - 1 do

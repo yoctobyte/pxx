@@ -17054,6 +17054,13 @@ test-c-abi-cross: $(COMPILER)
 # reading what gcc laid down, `relay_*` is a pxx caller laying down what a gcc
 # callee reads. They fail independently.
 #
+# THE i386 ARM CANNOT COMPILE THIS SUBJECT since the function-pointer rows were
+# added: initialising a fn-pointer from an `extern` is refused outright on i386
+# (bug-a-the-address-of-an-external-routine-is-refused-on-i386-and-xtensa). i386
+# was already red here, but it now fails at COMPILE time, so the other 13 rows
+# report nothing for that target. Fix that bug first if you are implementing
+# i386's aggregate ABI -- otherwise this gate cannot tell you what you fixed.
+#
 # x86-64 and i386 only, and that is not a shortcut: there is no gcc cross for
 # arm32, aarch64 or riscv32 on this box, so no mixed link is constructible for
 # them at all. The glibc substitute oracle used by test-c-abi-glibc-oracle does
@@ -17061,7 +17068,7 @@ test-c-abi-cross: $(COMPILER)
 # value, and the ones this corpus calls take scalars and varargs.
 .PHONY: test-c-abi-mixed-link
 test-c-abi-mixed-link: $(COMPILER)
-	@exp="$$(printf 'take_p2 37\ntake_p4 1234\ntake_p6 91\ntake_d2 17.50\ntake_mix 700.25\ntake_c3 123\ntake_late 1234537\nrelay_p2 37\nrelay_p4 1234\nrelay_p6 91\nrelay_d2 17.50\nrelay_mix 700.25\nrelay_late 1234589')"; \
+	@exp="$$(printf 'take_p2 37\ntake_p4 1234\ntake_p6 91\ntake_d2 17.50\ntake_mix 700.25\ntake_c3 123\ntake_late 1234537\nrelay_p2 37\nrelay_p4 1234\nrelay_p6 91\nrelay_d2 17.50\nrelay_mix 700.25\nrelay_late 1234589\nrelay_p2_ind 37\nrelay_mix_ind 700.25')"; \
 	overall=0; ran=0; want=0; \
 	for t in x86_64 i386; do \
 	  want=$$((want+1)); \

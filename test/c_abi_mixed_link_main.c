@@ -36,6 +36,8 @@ extern int    relay_p6 (void);
 extern double relay_d2 (void);
 extern double relay_mix(void);
 extern int    relay_late(void);
+extern int    relay_p2_ind(void);
+extern double relay_mix_ind(void);
 
 int main(void)
 {
@@ -60,5 +62,7 @@ int main(void)
   printf("relay_d2 %.2f\n",  relay_d2());
   printf("relay_mix %.2f\n", relay_mix());
   printf("relay_late %d\n",  relay_late());
+  printf("relay_p2_ind %d\n",    relay_p2_ind());
+  printf("relay_mix_ind %.2f\n", relay_mix_ind());
   return 0;
 }

@@ -4736,6 +4736,8 @@ var
   paArrLen: Integer;               { pointer-to-array declarator `elem (*name)[N]` row length }
   fpRetElemTk, fpRetElemRec: Integer;   { fn-ptr return's pointed-at kind/record (struct*-returning callbacks) }
   fpPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  fpPRecIds: array[0..MAX_PROC_PARAMS-1] of Integer;  { record id per fn-ptr param }
+  fpRi: Integer;
   fpPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
   fnRetPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   fnRetPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
@@ -5141,6 +5143,11 @@ begin
           begin
             fpPTypes[fpNParams] := fpPType;
             fpPNames[fpNParams] := 'a';
+            { ParseCDeclType leaves the record id here, the same source
+              precid[] reads for a named function's parameters. Without it a
+              fn-pointer signature cannot classify a by-value struct argument
+              and the indirect call marshals a pointer. }
+            fpPRecIds[fpNParams] := CTypeBaseRec;
             Inc(fpNParams);
           end;
           if CurTok.Kind = tkIdent then Next;  { optional parameter name }
@@ -5167,6 +5174,18 @@ begin
     fpSig := RegisterProc('$cfnptr', True, fpRet, fpNParams, fpPNames, fpPTypes);
     Procs[fpSig].BodyAddr := -1;
     ProcCdecl[fpSig] := True;          { C ABI (System V) for the indirect call }
+    { The record ids and the by-value decision, exactly as a named C function's
+      declaration does them. A fn-pointer signature is a CALLER-ONLY signature --
+      there is no body and no param sym anywhere -- so this is the only place
+      the indirect arm can learn that an argument is a register-classified
+      struct rather than a pointer. }
+    for fpRi := 0 to fpNParams - 1 do
+      if fpRi < MAX_PROC_PARAMS then
+      begin
+        ProcParamRecId[fpSig * MAX_PROC_PARAMS + fpRi] := fpPRecIds[fpRi];
+        if fpPTypes[fpRi] = tyRecord then
+          Procs[fpSig].Params[fpRi].IsRef := not ABICRecordParamByValue(fpPRecIds[fpRi]);
+      end;
     ProcVariadic[fpSig] := fpVariadic; { `...` in the fn-ptr signature }
     CTypeProcSig := fpSig;             { caller threads this onto the typedef/var/field/cast }
     { A struct-pointer return (`struct S *(*)()`) carries its pointed-at record on
@@ -5186,6 +5205,13 @@ begin
       retSig := RegisterProc('$cfnptr', True, fpRet, fpNParams, fpPNames, fpPTypes);
       Procs[retSig].BodyAddr := -1;
       ProcCdecl[retSig] := True;
+      for fpRi := 0 to fpNParams - 1 do
+        if fpRi < MAX_PROC_PARAMS then
+        begin
+          ProcParamRecId[retSig * MAX_PROC_PARAMS + fpRi] := fpPRecIds[fpRi];
+          if fpPTypes[fpRi] = tyRecord then
+            Procs[retSig].Params[fpRi].IsRef := not ABICRecordParamByValue(fpPRecIds[fpRi]);
+        end;
       ProcRetProcSig[fpSig] := retSig;
     end;
     { A function pointer is a non-void pointer VALUE. The inner signature parse
