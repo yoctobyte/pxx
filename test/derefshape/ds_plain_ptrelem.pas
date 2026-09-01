@@ -1,0 +1,14 @@
+program ds_plain_ptrelem;
+type TA = array of PInteger; TP = ^TA; TR = record q: TP; end;
+var
+  a: TA;
+  nums: array[0..3] of Integer;
+  p: TP;
+  i: Integer;
+begin
+  for i := 0 to 3 do nums[i] := 10 + i;
+  SetLength(a, 4);
+  p := @a;
+  for i := 0 to 3 do p^[i] := @nums[i];
+  WriteLn(a[0]^, ' ', a[3]^);
+end.

@@ -13,3 +13,8 @@ ds_field_dynstr v0 v3
 ds_callres_dynstr v0 v3
 ds_arrayelem_dynstr v0 v3
 ds_cast_dynstr v0 v3
+ds_plain_ptrelem 10 13
+ds_field_ptrelem 10 13
+ds_callres_ptrelem 10 13
+ds_arrayelem_ptrelem 10 13
+ds_cast_ptrelem 10 13
