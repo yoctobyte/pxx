@@ -18483,6 +18483,43 @@ test-emit-obj: $(COMPILER)
 	    echo "test-emit-obj: two definitions of \`x\` LINKED -- -fno-common semantics are not being emitted"; exit 1; \
 	  else echo "test-emit-obj: duplicate definition is rejected, as gcc rejects it"; fi; \
 	fi
+	# 4b-quater. THE PASCAL HALF of the same data-symbol work. A global marked
+	#    `cvar` (or `public`) must be linkable BY NAME from a foreign C main.
+	#    Before this `nm --defined-only | grep -cE ' [BbDd] '` was 0 for every
+	#    Pascal object and there was no spelling that could change it.
+	#
+	#    BOTH DIRECTIONS OF THE MARKER ARE ASSERTED, and the negative one is the
+	#    one that matters. C exports every file-scope variable because C 6.9.2
+	#    gives it external linkage; Pascal has no such rule, so an UNMARKED
+	#    global must stay invisible -- GHidden and GName are real storage, really
+	#    read, and must not appear. An exact count, not "the two I wanted are
+	#    there": that assertion passes equally on an object that exported all ~50
+	#    globals `uses sysutils` and the builtin runtime contribute, which is not
+	#    a hypothetical -- the C half exported crtl's `errno` and ld refused the
+	#    object over glibc's TLS mismatch. The host touches errno and environ.
+	rm -f $(TESTTMP)/podp_*.o $(TESTTMP)/podp_link*
+	./$(COMPILER) -Fulib/rtl --emit-obj test/c_obj_data_pascal.pas $(TESTTMP)/podp_x64.o
+	./$(COMPILER) -Fulib/rtl --emit-obj --target=i386 test/c_obj_data_pascal.pas $(TESTTMP)/podp_386.o
+	@for t in x64 386; do \
+	  o=$(TESTTMP)/podp_$$t.o; \
+	  n=$$(readelf -sW $$o | awk '$$4=="OBJECT" && $$5=="GLOBAL"' | wc -l); \
+	  [ "$$n" = "2" ] || { echo "podp[$$t]: $$n exported OBJECT symbols, want exactly 2 (GCount, GPub) -- an unmarked, RTL or runtime global leaked into the object's data surface"; readelf -sW $$o | awk '$$4=="OBJECT" && $$5=="GLOBAL"'; exit 1; }; \
+	  readelf -sW $$o | grep -qE 'OBJECT +GLOBAL +DEFAULT +[0-9]+ +GCount$$' || { echo "podp[$$t]: GCount (cvar) is not an exported OBJECT"; exit 1; }; \
+	  readelf -sW $$o | grep -qE 'OBJECT +GLOBAL +DEFAULT +[0-9]+ +GPub$$'   || { echo "podp[$$t]: GPub (public) is not an exported OBJECT"; exit 1; }; \
+	  readelf -sW $$o | grep -qE ' (GHidden|GName)$$' && { echo "podp[$$t]: an UNMARKED global reached the symbol table -- the directive is not the condition"; exit 1; }; \
+	  echo "test-emit-obj: $$t pascal object exports its 2 marked globals and neither unmarked one"; \
+	done
+	@if command -v gcc >/dev/null 2>&1; then \
+	  printf '#include <stdio.h>\n#include <errno.h>\nextern char **environ;\nextern int GCount;\nextern int GPub;\nextern int obj_readback(void);\nextern void obj_bump(void);\nextern int obj_hidden(void);\nextern int obj_name_len(void);\nint main(void){int c=0;errno=0;while(environ&&environ[c])c++;printf("%%d %%d %%d ",GCount,obj_readback(),GPub);GCount=100;printf("%%d ",obj_readback());obj_bump();printf("%%d %%d %%d %%d\\n",GCount,obj_hidden(),obj_name_len(),(errno==0)&&(c>0));return 0;}\n' > $(TESTTMP)/podp_host.c; \
+	  gcc $(TESTTMP)/podp_host.c $(TESTTMP)/podp_x64.o -o $(TESTTMP)/podp_link || { echo "test-emit-obj: pascal data object FAILED to link"; exit 1; }; \
+	  tools/expect_same.sh podp_x64 "$$($(TESTTMP)/podp_link)" "7 7 42 100 101 5 13 1" || exit 1; \
+	  echo "test-emit-obj: a C main reads and writes a Pascal cvar global by name (x86-64)"; \
+	else echo "gcc not installed; pascal data-symbol link check skipped"; fi
+	@if gcc -m32 -xc /dev/null -o /dev/null -c >/dev/null 2>&1; then \
+	  gcc -m32 $(TESTTMP)/podp_host.c $(TESTTMP)/podp_386.o -o $(TESTTMP)/podp_link32 || { echo "test-emit-obj: i386 pascal data object FAILED to link"; exit 1; }; \
+	  tools/expect_same.sh podp_386 "$$($(TESTTMP)/podp_link32)" "7 7 42 100 101 5 13 1" || exit 1; \
+	  echo "test-emit-obj: same, i386 under gcc -m32"; \
+	else echo "gcc -m32 not available; i386 pascal data-symbol check skipped"; fi
 	# 4c. A SHARED LIBRARY FROM A COMPILED SOURCE -- the other half of the same
 	#    backend work (feature-a-shared-library-output-for-compiled-sources).
 	#    --shared used to describe .asm-frontend output only: the writer built

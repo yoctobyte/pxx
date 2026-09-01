@@ -3211,14 +3211,25 @@ var
     bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
   SymCExternOnly : array of Boolean;
   SymCStaticLink : array of Boolean;   { `static` seen: internal linkage, LOCAL, never UND }
-  { MEMBERSHIP, which the two above cannot express. Both default to False, and
-    False is a meaningful linkage answer ("a definition with external linkage"),
-    so neither can distinguish a C file-scope variable from the several thousand
-    RTL globals that share Syms. Without this the object writer's export pass
-    has no set to walk: it would either export the entire runtime or need to
-    guess from a name. Set once, where the declaration is parsed.
-    bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
-  SymCFileScope  : array of Boolean;
+  { MEMBERSHIP in the object's linkable data surface, which the two flags above
+    cannot express. Both default to False, and False is a meaningful LINKAGE
+    answer ("a definition with external linkage"), so neither can distinguish a
+    file-scope variable from the several thousand runtime globals that share
+    Syms. Without this the export pass has no set to walk: it would either
+    export the entire runtime or guess from a name.
+
+    Set by BOTH frontends, each reading its OWN language's rule for what has
+    external linkage: the C parser marks every file-scope variable a translation
+    unit declares, excluding crtl's own (CDeclIsFromCrtl), because C 6.9.2 says
+    a file-scope variable HAS external linkage; the Pascal parser marks only a
+    global carrying an explicit `cvar`/`public` directive, because Pascal gives
+    a var block no linkage concept at all and the compiler must be told. Not
+    named SymC* any more for exactly that reason -- it was, while it was C-only,
+    and a name that says C on a set containing Pascal globals is the kind of
+    80%-accurate label that gets trusted because the part you sample confirms it.
+    bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong
+    bug-a-a-pascal-cdecl-program-emits-no-data-symbols-either }
+  SymObjDataScope  : array of Boolean;
   { The BYTES actually reserved for a global, recorded where the reservation
     happens. The object writer needs `st_size`, and recomputing it at write time
     from the type and ArrLen would be a second implementation of a number that

@@ -8818,7 +8818,7 @@ begin
         Only the USER's translation unit joins it -- see CDeclIsFromCrtl. Set
         True and never cleared, so a name the user's file also declares stays a
         candidate even when crtl redeclares it afterwards. }
-      if not CDeclIsFromCrtl(TokPos - 1) then SymCFileScope[idx] := True;
+      if not CDeclIsFromCrtl(TokPos - 1) then SymObjDataScope[idx] := True;
       if PxxDbgEnabled('a.clink') then
       begin
         Write('PXXDBG a.clink ', name, ' externOnly=');

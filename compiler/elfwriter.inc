@@ -2948,14 +2948,14 @@ end;
 function ObjDataIsCandidate(i: Integer): Boolean;
 { Is symbol `i` a C file-scope variable that took global storage?
 
-  SymCFileScope is MEMBERSHIP and the linkage flags are not: SymCExternOnly and
+  SymObjDataScope is MEMBERSHIP and the linkage flags are not: SymCExternOnly and
   SymCStaticLink both default to False, and False is a meaningful answer for
   each, so neither can separate a C global from the several thousand RTL globals
   that share Syms. Asking the linkage first is how an export pass ends up
   exporting the whole runtime. }
 begin
   ObjDataIsCandidate := (i >= 0) and (i < SymCount) and
-                        SymCFileScope[i] and (Syms[i].Kind = skGlobal) and
+                        SymObjDataScope[i] and (Syms[i].Kind = skGlobal) and
                         (Syms[i].Name <> '');
 end;
 
@@ -3153,9 +3153,10 @@ begin
     ErrorNoPos('--emit-obj: this object would define no linkable symbol, so nothing '
         + 'could ever link against it. A pxx object exports the routines '
         + 'declared with the C convention -- Pascal `cdecl`, or any function of '
-        + 'a .c translation unit -- and any file-scope variable a .c '
-        + 'translation unit defines. Mark what the object is for, or build an '
-        + 'executable instead');
+        + 'a .c translation unit -- plus any file-scope variable a .c '
+        + 'translation unit defines and any Pascal global marked `cvar` or '
+        + '`public`. Mark what the object is for, or build an executable '
+        + 'instead');
 end;
 
 procedure ObjCheckProcAddrBodies;

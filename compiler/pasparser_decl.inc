@@ -1451,6 +1451,9 @@ var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTy
     absTarget: Integer;   { `x: T absolute y` — y's symbol, or -1 }
     initDepth, scOff, scLen: Integer;
     declTypeNOff, declTypeNLen: Integer;   { single-named-type span, for `parallel for` capture }
+    grpIdx: array[0..MAX_DECL_NAMES-1] of Integer;  { the previous declaration group's symbols }
+    grpN: Integer;                                   { ...and how many; 0 before the first }
+    dirName: AnsiString;
 begin
   Next;
   { Stop at section / declaration-introducer keywords: these are plain
@@ -1463,6 +1466,7 @@ begin
     TFoo.Destroy;` mis-reads `destructor` as a var name (real tokens like
     tkProcedure/tkFunction/tkBegin already stop the loop; the soft ones did
     not). See bug-var-section-eats-constructor-destructor. }
+  grpN := 0;
   while (CurTok.Kind = tkIdent) and
         not CaseEqual(CurTok.SVal, 'implementation') and
         not CaseEqual(CurTok.SVal, 'initialization') and
@@ -1474,6 +1478,70 @@ begin
         not CaseEqual(CurTok.SVal, 'operator') and
         not CaseEqual(CurTok.SVal, 'label') do
   begin
+    { A TRAILING VAR DIRECTIVE -- `var GCount: Integer; cvar;` -- which is how a
+      global says it is part of this object's linkable surface. It follows the
+      semicolon that ENDS the declaration, exactly as a routine's `cdecl` does,
+      so it arrives here looking like the start of the next declaration; what
+      separates the two is the token AFTER it (a variable name is followed by
+      `,` or `:`, a directive by `;`).
+
+      WHY AN EXPLICIT MARKER, when the C half exports every file-scope variable
+      a translation unit defines. That asymmetry is the two LANGUAGES, not an
+      inconsistency: C 6.9.2 gives a file-scope variable external linkage as a
+      language rule, so exporting it is reading C. Pascal gives a program's
+      `var` block no linkage concept at all, so there is nothing to read and the
+      compiler must choose -- and this writer already chose, one screen up, for
+      routines: only `cdecl` exports, "so an object cannot collide with its host
+      over an RTL name". Exporting every global would contradict that in the
+      same file, and it is the loud kind of wrong: `var i: Integer` in two pxx
+      objects, or against a host's own `i`, is a duplicate definition the link
+      refuses. `cvar` is FPC's spelling for the same intent and did not parse at
+      all before this, so nothing existing changes meaning.
+
+      The marker is the WHOLE condition -- no provenance test beside it. An
+      earlier version marked every global of the file the user named, which is
+      wrong in both directions: a unit of a multi-unit program that writes
+      `cvar` means it, and a program's unmarked globals are not an interface
+      just because the user typed the filename.
+      bug-a-a-pascal-cdecl-program-emits-no-data-symbols-either }
+    if (grpN > 0) and (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind <> tkColon) and (Tokens[TokPos].Kind <> tkComma) and
+       (CaseEqual(CurTok.SVal, 'cvar') or CaseEqual(CurTok.SVal, 'public') or
+        CaseEqual(CurTok.SVal, 'external')) then
+    begin
+      dirName := CurTok.SVal;
+      Next;
+      { Refused, not swallowed. An import needs the reference to relocate to an
+        UND symbol instead of to our own .bss, which is writer work this does
+        not do; accepting the keyword would give a variable that silently reads
+        its own zeroed storage in every build.
+        bug-a-a-pascal-global-cannot-import-a-c-global }
+      if CaseEqual(dirName, 'external') then
+        Error('external on a variable is not supported yet: it would allocate '
+              + 'local storage and read zero rather than binding to the '
+              + 'definition elsewhere. Declare it in the defining language, or '
+              + 'reach it through an exported accessor');
+      if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'name') then
+        Error(dirName + ' name ''...'': an explicit link name for a variable is '
+              + 'not supported yet; `cvar` exports it under the identifier as '
+              + 'written, case preserved');
+      if CurTok.Kind <> tkSemicolon then
+        Error(dirName + ': expected '';'' after a variable directive');
+      if CurProc >= 0 then
+        Error(dirName + ': a local variable has no linkage');
+      for i := 0 to grpN-1 do
+        if (grpIdx[i] >= 0) and (Syms[grpIdx[i]].Name <> '') then
+        begin
+          SymObjDataScope[grpIdx[i]] := True;
+          if PxxDbgEnabled('a.plink') then
+            WriteLn('PXXDBG a.plink export ', Syms[grpIdx[i]].Name,
+                    ' off=', Syms[grpIdx[i]].Offset,
+                    ' size=', SymAllocSize[grpIdx[i]],
+                    ' via=', dirName);
+        end;
+      Eat(tkSemicolon);
+      Continue;
+    end;
     n := 0;
     repeat
       if n >= MAX_DECL_NAMES then Error('too many comma-separated names in one var declaration');
@@ -1552,9 +1620,12 @@ begin
       Next;
     end;
 
+	    grpN := n;
 	    for i := 0 to n-1 do
 	    begin
+	      grpIdx[i] := -1;
 	      idx := AllocFromDeclTypeDesc(names[i]);
+	      grpIdx[i] := idx;   { the group a trailing `cvar`/`public` would apply to }
 	      if declTypeNOff <> 0 then begin SymDeclTypeNOff[idx] := declTypeNOff; SymDeclTypeNLen[idx] := declTypeNLen; end;
 	      { `absolute` overlay: take the target's storage instead of our own. The alloc
 	        already reserved a slot; we simply never use it, which costs a few bytes and
