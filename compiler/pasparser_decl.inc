@@ -3136,7 +3136,7 @@ begin
     Next; Next;   { tag name, ':' }
     fTk := ParseTypeKind; fRec := LastTypeRecId;
     fSize := TypeStorageSize(fTk, fRec);
-    fAlign := TypeAlign(fTk);
+    fAlign := TypeFieldAlign(fTk);
     if isPackedRecord then fAlign := 1;
     curOff := AlignTo(curOff, fAlign);
     AddUField(ci, fldNOffs[0], fldNLens[0], curOff, Ord(fTk), fRec);
@@ -3233,7 +3233,7 @@ begin
       else
       begin
         fSize := TypeStorageSize(fTk, fRec);
-        fAlign := TypeAlign(fTk);
+        fAlign := TypeFieldAlign(fTk);
       end;
       if isPackedRecord then fAlign := 1;
       if isArr then fSize := fSize * arrLen;
@@ -4041,7 +4041,7 @@ begin
       else
       begin
         fSize := TypeSlotSize(fTk);
-        fAlign := TypeAlign(fTk);
+        fAlign := TypeFieldAlign(fTk);
       end;
       if isPackedRecord then
         fAlign := 1
@@ -5872,7 +5872,7 @@ begin
             else
             begin
               fSize := TypeSlotSize(fTk);
-              fAlign := TypeAlign(fTk);
+              fAlign := TypeFieldAlign(fTk);
             end;
             if isArr then
               fSize := fSize * arrLen;

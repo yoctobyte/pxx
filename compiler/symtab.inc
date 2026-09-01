@@ -3322,11 +3322,22 @@ function TypeFieldAlign(tk: TTypeKind): Integer;
   member disagreed with every other compiler on the platform -- silently, and
   self-consistently, so only a mixed link could see it.
 
-  ONLY THE C FRONTEND READS THIS TODAY. The Pascal, NilPy, Rust and Zig
-  aggregate layouts still call TypeAlign and so still over-align an 8-byte
-  member on i386; each is the same one-line change and none has a mixed-link
-  oracle to prove it, which is why they are a ticket rather than a hunk here.
-  bug-a-an-8-byte-scalar-is-over-aligned-inside-a-struct-on-i386 }
+  READ BY THE C AND PASCAL FRONTENDS. NilPy, Rust and Zig aggregate layouts
+  still call TypeAlign and so still over-align an 8-byte member on i386. That is
+  not an oversight waiting on a one-line change: none of the three has an export
+  spelling (`ProcCdecl` is set only from `cparser.inc` and `pasparser_*`), so
+  none can produce an object a gcc `main` links against, and a layout edit
+  verified only against itself is how this survived in the first place. Rust's
+  oracle is `rustc --target i686-unknown-linux-gnu` and Zig's is `zig build-obj
+  -target x86-i686-linux` in any case, neither of which `gcc -m32` can stand in
+  for.
+
+  What made the Pascal half provable was not a better argument, it was ONE
+  COMPILER DISAGREEING WITH ITSELF: the same `{int a; double y;}` came out 12/4
+  through this and 16/8 through TypeAlign, in one invocation family for one
+  target. test-record-abi-mixed-link pins it against gcc across a real link.
+  bug-a-an-8-byte-scalar-is-over-aligned-inside-a-struct-on-i386
+  bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386 }
 begin
   Result := TypeAlign(tk);
   if (TargetArch = TARGET_I386) and (Result > 4) then Result := 4;

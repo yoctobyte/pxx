@@ -18033,6 +18033,68 @@ test-c-abi-mixed-link: $(COMPILER)
 # Rule of thumb: the positive control for a lifted version must truncate the
 # SOURCE, not skip an iteration -- the qemu-off-PATH control above would pass a
 # truncated-list version of this guard, which is exactly why it is not enough.
+.PHONY: test-record-abi-mixed-link
+test-record-abi-mixed-link: $(COMPILER)
+	@# AGGREGATE LAYOUT ACROSS A REAL LINK, for the PASCAL frontend. The C one
+	@# is test-c-abi-mixed-link; this is the same shape with the subject swapped,
+	@# and it exists because no pxx-only test could ever have gone red on the bug
+	@# it was written for: every frontend's i386 layout was SELF-CONSISTENT, so a
+	@# whole program agreed with itself while disagreeing with the platform.
+	@#
+	@# THREE ANSWERS, NOT TWO. gcc compiles the main with its own copy of every
+	@# struct; pxx's C frontend compiles one object and pxx's Pascal frontend
+	@# another. Comparing only the two pxx columns would compare one compiler
+	@# with itself. Comparing Pascal against gcc alone would not say WHICH is
+	@# wrong when they differ.
+	@#
+	@# x86_64 IS NOT DECORATION. Nothing about the fix touches it, so it is the
+	@# arm that says the fixture is measuring layout rather than something
+	@# i386-shaped: it was green before the fix and after, on the same fixture
+	@# whose i386 arm mismatched on all four shapes.
+	@#
+	@# ran/want has the same denominator discipline as test-c-abi-mixed-link:
+	@# the target list is a literal in this recipe, which is what makes the
+	@# recipe an independent statement of intent. Read that target's comment
+	@# before lifting the pattern -- a `want` the loop can shorten is a second
+	@# copy of the numerator.
+	@# bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386
+	@overall=0; ran=0; want=0; skipped=0; \
+	for t in x86_64 i386; do \
+	  want=$$((want+1)); \
+	  case $$t in \
+	    x86_64) tgt=""; gccflag="-no-pie" ;; \
+	    i386)   tgt="--target=i386"; gccflag="-m32" ;; \
+	  esac; \
+	  if ! echo 'int main(void){return 0;}' | gcc $$gccflag -x c - -o $(TESTTMP)/ra_probe_$$t >/dev/null 2>&1; then \
+	    echo "test-record-abi-mixed-link: SKIP $$t (gcc $$gccflag cannot build a hosted binary here)"; \
+	    skipped=$$((skipped+1)); continue; \
+	  fi; \
+	  rm -f $(TESTTMP)/ra_c_$$t.o $(TESTTMP)/ra_p_$$t.o $(TESTTMP)/ra_$$t; \
+	  if ! ./$(COMPILER) $$tgt --emit-obj test/record_abi_mixed_link_pxx.c $(TESTTMP)/ra_c_$$t.o >$(TESTTMP)/ra_$$t.err 2>&1; then \
+	    echo "test-record-abi-mixed-link: PXX C COMPILE FAIL $$t"; tail -2 $(TESTTMP)/ra_$$t.err; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  if ! ./$(COMPILER) $$tgt -Fulib/rtl --emit-obj test/record_abi_mixed_link_pxx.pas $(TESTTMP)/ra_p_$$t.o >>$(TESTTMP)/ra_$$t.err 2>&1; then \
+	    echo "test-record-abi-mixed-link: PXX PASCAL COMPILE FAIL $$t"; tail -2 $(TESTTMP)/ra_$$t.err; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  if ! gcc -O0 $$gccflag -o $(TESTTMP)/ra_$$t test/record_abi_mixed_link_main.c $(TESTTMP)/ra_c_$$t.o $(TESTTMP)/ra_p_$$t.o 2>$(TESTTMP)/ra_$$t.link; then \
+	    echo "test-record-abi-mixed-link: LINK FAIL $$t"; tail -2 $(TESTTMP)/ra_$$t.link; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  got="$$($(TESTTMP)/ra_$$t 2>&1)"; rc=$$?; \
+	  if [ "$$rc" = "0" ] && ! printf '%s\n' "$$got" | grep -q MISMATCH; then \
+	    echo "test-record-abi-mixed-link: PASS $$t"; \
+	  else \
+	    echo "test-record-abi-mixed-link: FAIL $$t (rc=$$rc)"; printf '%s\n' "$$got" | sed 's/^/    /'; overall=1; \
+	  fi; \
+	  case "$$got" in *round-trip*) ;; *) echo "test-record-abi-mixed-link: FAIL $$t -- no round-trip line, so the shared-global read never ran"; overall=1 ;; esac; \
+	  ran=$$((ran+1)); \
+	done; \
+	echo "test-record-abi-mixed-link: $$ran of $$want targets measured, $$skipped skipped"; \
+	test "$$overall" = "0" || { echo "test-record-abi-mixed-link: RED"; exit 1; }; \
+	test "$$ran" -ge 1 || \
+	  { echo "test-record-abi-mixed-link: RED -- every target was skipped, so this gate measured NOTHING"; exit 1; }; \
+	test -z "$$PXX_REQUIRE_ALL_TARGETS" || test "$$ran" = "$$want" || \
+	  { echo "test-record-abi-mixed-link: RED -- PXX_REQUIRE_ALL_TARGETS is set, $$want asked for, $$ran ran"; exit 1; }
+
 test-c-abi-glibc-oracle: $(COMPILER)
 	@exp="$$(printf 'ints 11 22 33 44 55 66\nmixed 7 2.50 9\nwide 1 1.50 2 2.50 3')"; \
 	overall=0; ran=0; want=0; \

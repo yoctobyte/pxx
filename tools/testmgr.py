@@ -117,6 +117,10 @@ TIERS = {
         # target whose gcc multilib is absent; RED if every target skips.
         # NOT native: it forks gcc six times, and native is what dev boxes gate on.
         "test-c-abi-mixed-link",
+        # The same shape with the subject swapped: the PASCAL frontend judged
+        # against gcc across a real link. Three answers, not two -- the two pxx
+        # columns come from one compiler and would agree by construction.
+        "test-record-abi-mixed-link",
         # NOT test-float-determinism: it drives examples/mandelbrot through
         # tools/run_target.sh, so it classes `qemu` and would break the one
         # property `limited` promises — that a box with no qemu can run it.
@@ -213,6 +217,10 @@ TIERS = {
         # target whose gcc multilib is absent; RED if every target skips.
         # NOT native: it forks gcc six times, and native is what dev boxes gate on.
         "test-c-abi-mixed-link",
+        # The same shape with the subject swapped: the PASCAL frontend judged
+        # against gcc across a real link. Three answers, not two -- the two pxx
+        # columns come from one compiler and would agree by construction.
+        "test-record-abi-mixed-link",
         "test-float-determinism", "test-emit-obj",
         "test-i386", "test-aarch64", "test-arm32", "test-riscv32",
         # XTENSA — full only, and it could not have gone anywhere else. It
