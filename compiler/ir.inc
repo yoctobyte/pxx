@@ -1361,6 +1361,58 @@ end;
   — every helper reads its operands into locals before storing. }
 procedure IRPromoEmitBinop(dstAddr, node: Integer); forward;
 
+{ The address of a promotable-int LVALUE, or -1 if the node is not one.
+
+  ONE definition for both directions of promocore's calling convention: the
+  assignment path needs a DESTINATION and IRPromoAddrOf needs a SOURCE, and
+  while those were two separate tests they disagreed about what a promo lvalue
+  is. Both accepted a plain identifier and nothing else, so an array element, a
+  record/class field and a pointer dereference were wrong in BOTH directions and
+  in different ways:
+
+    a[i] := n     fell past the store arm into the ordinary integer store and
+                  wrote a machine word over the {tag, payload} slot
+    n := a[i]     was LOWERED TO A VALUE -- the 16-byte slot loaded into a
+                  register -- and handed to a helper that dereferences it, so
+                  the first READ of a[i], r.v or p^ segfaulted, at every -O
+                  level and on the pinned compiler
+
+  Same three missing kinds, two symptoms, one place now. Track N had already met
+  the field half from the other side and routed AROUND it, typing an integer
+  accumulator field tyVariant rather than tyPromoInt64 because "a promo FIELD
+  has no lowering today" (PyFieldIsIntAccumulator, pyparser.inc). It has one.
+
+  The IDENTIFIER arm asks the SYMBOL and the others ask ASTTk deliberately, not
+  inconsistently: ASTTk[node] is tyUnknown for some identifiers -- the assign
+  path repairs it from Syms[] a few lines below for exactly that reason -- while
+  an index, field or deref node has no symbol to ask.
+
+  Emits nothing on the -1 paths, so a caller may test it before committing to
+  the promo shape. bug-a-a-static-array-of-promo-ints-releases-only-element-zero }
+function IRPromoLValueAddr(node: Integer): Integer;
+begin
+  IRPromoLValueAddr := -1;
+  if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+     TypeIsPromoInt(Syms[ASTIVal[node]].TypeKind) then
+  begin
+    if Syms[ASTIVal[node]].IsRef then
+      { A promo PARAMETER is by-ref, like every other aggregate parameter: the
+        slot lives in the caller's hidden temp and the cell here holds its
+        ADDRESS. IR_LEA resolves through that (it is what `@n` already lowers
+        to); IR_SLOTADDR would hand back the address OF THE CELL, i.e. a pointer
+        to a pointer, and the runtime would read the address as a TAG word
+        (bug-a-promoint-parameter-cannot-be-used-at-all). }
+      IRPromoLValueAddr := IRAppend(IR_LEA, ASTIVal[node], -1, -1, 0, Ord(tyPointer))
+    else
+      IRPromoLValueAddr := IRAppend(IR_SLOTADDR, ASTIVal[node], -1, -1, 0, Ord(tyPointer));
+    Exit;
+  end;
+  if ((ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_FIELD) or
+      (ASTKind[node] = AN_DEREF)) and
+     TypeIsPromoInt(IntToTypeKind(ASTTk[node])) then
+    IRPromoLValueAddr := IRLowerAddress(node);
+end;
+
 { The slot ADDRESS of an expression usable as a promotable int. A promo-typed
   expression already IS a slot; an ordinary integer expression is boxed into a
   fresh temp slot first, which is what makes `p + 1` and `p + n` work without
@@ -1375,21 +1427,17 @@ begin
   if (not IsWideIntLit(node)) and (not IsWideNegLit(node)) and
      TypeIsPromoInt(IntToTypeKind(ASTTk[node])) then
   begin
-    if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
-       TypeIsPromoInt(Syms[ASTIVal[node]].TypeKind) and
-       Syms[ASTIVal[node]].IsRef then
-      { A promo PARAMETER is by-ref, like every other aggregate parameter: the
-        slot lives in the caller's hidden temp and the cell here holds its
-        ADDRESS. IR_LEA resolves through that (it is what `@n` already lowers
-        to); IR_SLOTADDR would hand back the address OF THE CELL, i.e. a pointer
-        to a pointer, and the runtime would read the address as a TAG word
-        (bug-a-promoint-parameter-cannot-be-used-at-all). }
-      IRPromoAddrOf := IRAppend(IR_LEA, ASTIVal[node], -1, -1, 0, Ord(tyPointer))
-    else if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
-       TypeIsPromoInt(Syms[ASTIVal[node]].TypeKind) then
-      IRPromoAddrOf := IRAppend(IR_SLOTADDR, ASTIVal[node], -1, -1, 0, Ord(tyPointer))
+    addr := IRPromoLValueAddr(node);
+    if addr >= 0 then
+      IRPromoAddrOf := addr
     else
-      { already lowered to a slot address by the binop path }
+      { AN_BINOP and AN_CALL, which are the ONLY other kinds that reach here
+        across the promo corpus (measured, by instrumenting this branch): a
+        promo binop writes its result into a temp slot and a promo function
+        returns one, so IRLowerAST already yields the ADDRESS for both. The
+        comment this replaces said "already lowered to a slot address by the
+        binop path", which was true of the kinds it was written for and was
+        being applied to every kind that was not an identifier. }
       IRPromoAddrOf := IRLowerAST(node);
     Exit;
   end;
@@ -6441,6 +6489,32 @@ begin
     Exit;
   end;
 
+  { A PROMOTABLE INT RVALUE IS ITS SLOT ADDRESS. That is promocore's whole
+    calling convention, and the AN_IDENT arm far below has always answered that
+    way -- but an array element, a record/class field and a pointer dereference
+    answered with the 16-byte slot LOADED INTO A REGISTER instead, so every
+    consumer that did not route through IRPromoAddrOf got a struct where it
+    expected a pointer and dereferenced it:
+
+        c := a[i]; WriteLn(c)   correct
+        WriteLn(a[i])           segfault, on the same slot, in the same program
+
+  "promo means a plain identifier" had FIVE copies -- this lowering, the store
+  arm, IRPromoAddrOf, the write dispatch, and a NilPy field rule that avoided
+  the whole area by typing the field tyVariant instead. Answering the three
+  memory kinds the way the identifier is already answered is the one place they
+  all reduce to, and it is what stops the sixth consumer needing its own arm.
+  Address-not-value is safe to do here because nothing correct could depend on
+  the old answer: it segfaulted.
+  bug-a-a-static-array-of-promo-ints-releases-only-element-zero }
+  if ((ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_FIELD) or
+      (ASTKind[node] = AN_DEREF)) and
+     TypeIsPromoInt(IntToTypeKind(ASTTk[node])) then
+  begin
+    Result := IRLowerAddress(node);
+    Exit;
+  end;
+
   { the lvalue of a compound assignment, asked for a SECOND time: answer with the
     value it was already read as, instead of running its side effects again
     (bug-c-a-compound-assignment-evaluates-its-lvalue-twice) }
@@ -9975,20 +10049,14 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         (which retains its managed heap payload); an ordinary integer source is
         boxed. Both go through promocore.pas, the only place that knows the
         layout. }
-      if (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] >= 0) and
-         TypeIsPromoInt(Syms[ASTIVal[ASTLeft[node]]].TypeKind) and
-         True then
+      { The destination is any promo LVALUE, not only an identifier -- an array
+        element, a field and a deref are destinations too, and until IRPromoLValueAddr
+        existed they fell PAST this arm into the ordinary integer store, which
+        wrote a machine word over the {tag, payload} slot. The comment above
+        claimed the general property while the guard implemented the narrow one. }
+      leftAddr := IRPromoLValueAddr(ASTLeft[node]);
+      if leftAddr >= 0 then
       begin
-        varIdx := ASTIVal[ASTLeft[node]];
-        { a by-ref promo PARAMETER names its slot through the cell, so the
-          destination address is IR_LEA, not IR_SLOTADDR. This arm used to
-          exclude IsRef outright, which was harmless while promo parameters did
-          not work at all — once they did, `n := n + 1` fell through to a path
-          that silently DROPPED the store. }
-        if Syms[varIdx].IsRef then
-          leftAddr := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer))
-        else
-          leftAddr := IRAppend(IR_SLOTADDR, varIdx, -1, -1, 0, Ord(tyPointer));
         if IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant then
           { variant -> promotable int: the runtime reads whichever tier the
             variant holds (VT_INT64 inline, VT_PROMO_INT64 heap) }

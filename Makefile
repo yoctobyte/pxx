@@ -6559,6 +6559,18 @@ test-core: $(COMPILER)
 	# pre-fix compiler SEGFAULTS on this test.
 	./$(COMPILER) test/test_promoint_local_array_zero_init.pas $(TESTTMP)/test_promoarrzi26
 	tools/expect_same.sh test_promoarrzi26 "$$($(TESTTMP)/test_promoarrzi26 | tail -1)" "promoint-array-zero-init 6/6"
+	# The same array READ, which its neighbour above cannot see: that test takes
+	# `@a[i]` and inspects the tag word, and taking an ADDRESS was the one
+	# direction that always worked. Five sites implemented "a promo rvalue is its
+	# slot address" and all five recognised only a plain identifier, so an array
+	# element, a record/class field and a deref were wrong in both directions --
+	# a machine word written over the 16-byte slot going in, and the slot loaded
+	# into a register coming out. First READ of a[i] segfaulted, at every -O
+	# level and on the pinned compiler. Values past 2^63 on purpose: an
+	# inline-tier slot survives being copied as a machine word by accident and a
+	# heap-tier one does not. Expected digits are CPython's.
+	./$(COMPILER) test/test_promoint_lvalue_shapes.pas $(TESTTMP)/test_promolv26
+	tools/expect_same.sh test_promolv26 "$$($(TESTTMP)/test_promolv26 | tail -1)" "promoint-lvalue-shapes 12/12"
 	# A record holding an interface field, both halves of the same design fault:
 	# RecordHasManagedFields excluded a COM interface field because FINALIZING one
 	# under the non-reentrant record heap lock deadlocks -- and that single
