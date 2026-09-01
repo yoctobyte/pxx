@@ -28,7 +28,13 @@
      - address-as-immediate     -- `&g_i` and the string literal, which become
        (B8+r, rewritten to lea)    `lea reg,[reg+disp32]` off the anchor rather
                                    than a load, and which nothing in the value
-                                   rows above would touch. */
+                                   rows above would touch.
+     - STORES (88/89/A2/A3)     -- pic_store below. A store has no dead register
+                                   to borrow, so it runs inside a push/pop
+                                   scratch wrapper, which is a different and
+                                   riskier rewrite than any of the three above:
+                                   it moves esp. Nothing that only READS globals
+                                   can fail on it. */
 
 long long      g_ll   = 0x1122334455667788LL;
 int            g_i    = -70000;
@@ -39,6 +45,44 @@ short          g_s16  = -30000;
 int            g_arr[4] = {11, 22, 33, 44};
 const char     g_msg[] = "pcrel";
 int           *g_pi = &g_i;      /* address-of at file scope: a .data relocation */
+
+/* STORE side. Every global written here is read back through a DIFFERENT
+   function so the value has to survive in memory rather than in a register the
+   optimiser kept. The interleaved locals exist to keep several registers live
+   across each store: the push/pop wrapper is exactly the rewrite that would
+   corrupt a live value or leave esp unbalanced, and a store standing alone in a
+   statement would not notice either. */
+int s_i;
+unsigned char s_u8;
+short s_s16;
+long long s_ll;
+int s_arr[4];
+
+void pic_store(int base)
+{
+  int a = base + 1, b = base + 2, c = base + 3, d = base + 4;
+  s_i   = base;
+  s_u8  = (unsigned char)(base & 0x7f);
+  s_s16 = (short)(-base);
+  s_ll  = (long long)base * 1000003LL;
+  s_arr[0] = a; s_arr[1] = b; s_arr[2] = c; s_arr[3] = d;
+  /* a..d must still hold their values after four stores went through the
+     wrapper; if esp or a scratch were clobbered this sum is wrong. */
+  s_i += (a + b + c + d) - (4 * base + 10);
+}
+
+int pic_store_check(int base)
+{
+  if (s_i   != base)                          return 201;
+  if (s_u8  != (unsigned char)(base & 0x7f))  return 202;
+  if (s_s16 != (short)(-base))                return 203;
+  if (s_ll  != (long long)base * 1000003LL)   return 204;
+  if (s_arr[0] != base + 1)                   return 205;
+  if (s_arr[1] != base + 2)                   return 206;
+  if (s_arr[2] != base + 3)                   return 207;
+  if (s_arr[3] != base + 4)                   return 208;
+  return 0;
+}
 
 int pic_probe(int k)
 {
@@ -65,6 +109,16 @@ int pic_probe(int k)
         m[3] != 'e' || m[4] != 'l' || m[5] != 0) return 110;
     if (&g_arr[2] - &g_arr[0] != 2) return 111;
     if (*(&g_arr[3]) != 44)       return 112;
+  }
+
+  {
+    int rc;
+    pic_store(7);
+    rc = pic_store_check(7);
+    if (rc) return rc;
+    pic_store(-1234);
+    rc = pic_store_check(-1234);
+    if (rc) return rc;
   }
   return k + (int)(ll >> 32) + g_i + g_u8 + g_s8 + g_u16 + g_s16 + acc;
 }

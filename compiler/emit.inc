@@ -245,229 +245,12 @@ begin
   Result := (TargetArch = TARGET_X86_64) and (not EncToAsmBuffer);
 end;
 
-procedure EmitPicAnchorInto(reg: Integer);
-{ mov reg, [ebp+X386PicSlot] -- 8B /r with mod=10 rm=101 (ebp+disp32). Puts this
-  body's call/pop anchor value into reg. Callers must have established that reg
-  is dead here. }
-begin
-  EmitB($8B);
-  EmitB(Byte($80 or (reg shl 3) or $05));
-  EmitI32(X386PicSlot);
-end;
-
-function I386PicBaseUsable(reg: Integer): Boolean;
-{ Whether reg can serve as the anchor base in a mod=10 ModRM.
-
-  esp (4) cannot: rm=100 selects a SIB byte rather than a base register, so the
-  encoding would mean something else entirely. ebp (5) could be encoded, but
-  loading the anchor into it destroys the frame pointer the slot is addressed
-  through -- and the slot is read again by every later reference in the body.
-  Both refuse, and a refusing site keeps its absolute form. }
-begin
-  I386PicBaseUsable := (reg <> 4) and (reg <> 5);
-end;
-
-function TryI386PcRelLoad: Boolean;
-{ Rewrite an absolute [disp32] LOAD, just emitted by the caller, into a load
-  through this body's PC anchor, and report whether it did.
-
-  Absolute is mod=00 rm=101. The anchor's VALUE lives in a frame slot, so the
-  form becomes
-
-      mov  dest, [ebp+picslot]      <- inserted
-      mov  dest, [dest+disp32]      <- the caller's instruction, ModRM rewritten
-
-  DEST IS ITS OWN BASE, and that is what makes this correct WITHOUT any liveness
-  analysis: the instruction is a load INTO dest, so dest is dead at this point by
-  construction. Nothing has to be preserved across anything, no sequence needs a
-  push/pop wrapper, and no register is pinned. An earlier plan for this ticket
-  pinned the anchor in esi and needed an audit of every sequence that clobbers
-  it; this needs none.
-
-  LOADS ONLY, AND ONLY THE LISTED OPCODES. A store (`89`/`88`/`C7`) must keep its
-  source, a `cmp` (`39`) reads both operands, and the moffs forms (`A1`/`A2`/`A3`)
-  have no ModRM to rewrite -- for all of those this returns False and the site
-  stays absolute, which loses position-independence and never correctness. That
-  is the same refusing posture GlobRefTrailingImm takes on this path.
-
-  0F BE / 0F BF (movsx) are included alongside 0F B6 / 0F B7 (movzx) although the
-  census did not observe them: the rewrite is identical for any `0F xx /r` load,
-  and this file's own history is that the unobserved sibling is the one that stays
-  broken. bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations }
-var modrm, opLen, dest, k: Integer;
-    saved: array[0..3] of Byte;
-begin
-  TryI386PcRelLoad := False;
-  if TargetArch <> TARGET_I386 then Exit;
-  if not EmitObjMode then Exit;
-  if X386PicSlot = 0 then Exit;          { no anchor in this body }
-  if CodeLen < 2 then Exit;
-
-  modrm := Code[CodeLen-1];
-
-  { --- SHAPE B: the moffs LOADS, A0 (mov al,[moffs]) and A1 (mov eax,[moffs]).
-    One opcode byte and NO ModRM at all, which is why the first version of this
-    function could not see them: it keyed on a ModRM that is not there. The
-    destination is architecturally eax, so it is the base, and the ModRM form
-    they become is the ordinary one. A2/A3 are the STORES of the same family and
-    are not here -- they must keep eax. --- }
-  if (modrm = $A0) or (modrm = $A1) then
-  begin
-    Dec(CodeLen);
-    EmitPicAnchorInto(0);                { eax }
-    if modrm = $A0 then EmitB($8A) else EmitB($8B);
-    EmitB($80);                          { mod=10 reg=eax rm=eax }
-    TryI386PcRelLoad := True;
-    Exit;
-  end;
-
-  { --- SHAPE C: B8+r, `mov reg, imm32` where the IMMEDIATE is the data address.
-    Not a memory reference at all -- it is address-of -- so it becomes a `lea`
-    rather than a `mov`: the anchor into reg, then `lea reg,[reg+disp32]`. Same
-    dead-destination argument as the loads, since the instruction's whole effect
-    is to define reg. This is the i386 twin of what EmitDataRef already does on
-    x86-64, where `movabs r64, imm64` becomes `lea r64,[rip+disp32]`. --- }
-  if (modrm >= $B8) and (modrm <= $BF) then
-  begin
-    dest := modrm - $B8;
-    if not I386PicBaseUsable(dest) then Exit;
-    Dec(CodeLen);
-    EmitPicAnchorInto(dest);
-    EmitB($8D);                          { lea }
-    EmitB(Byte($80 or (dest shl 3) or dest));
-    TryI386PcRelLoad := True;
-    Exit;
-  end;
-
-  if (modrm and $C7) <> $05 then Exit;   { not absolute [disp32] }
-
-  opLen := 0;
-  if (Code[CodeLen-2] = $8B) or (Code[CodeLen-2] = $8A) then opLen := 2
-  else if (CodeLen >= 3) and (Code[CodeLen-3] = $0F) and
-          ((Code[CodeLen-2] = $B6) or (Code[CodeLen-2] = $B7) or
-           (Code[CodeLen-2] = $BE) or (Code[CodeLen-2] = $BF)) then opLen := 3;
-  if opLen = 0 then Exit;                { unlisted encoding: stay absolute }
-
-  dest := (modrm shr 3) and 7;
-  if not I386PicBaseUsable(dest) then Exit;
-
-  for k := 0 to opLen - 1 do saved[k] := Code[CodeLen - opLen + k];
-  CodeLen := CodeLen - opLen;
-  EmitPicAnchorInto(dest);
-
-  { the caller's instruction, with ModRM mod=10 rm=dest }
-  for k := 0 to opLen - 2 do EmitB(saved[k]);
-  EmitB(Byte($80 or (dest shl 3) or dest));
-  TryI386PcRelLoad := True;
-end;
-
-procedure DbgI386RelocShape(const site: AnsiString);
-{ PXXDBG=a.i386reloc — print the bytes that PRECEDE a 32-bit absolute fixup on
-  i386, one line per site, so the set of operand shapes needing conversion for
-  bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations can be
-  enumerated from the EMITTER rather than sampled from objects.
-
-  Why this exists rather than an objdump census: an object census reports the
-  shapes the compiled PROGRAMS happen to contain. Measured 2026-09-01, three
-  honestly-taken censuses of the same compiler gave 19, 24 and 23 shapes, and
-  `push imm32` read as ZERO in the newest of them while nine source sites still
-  emit it (RTTI and dyn-array descriptors, which no test object reached). The
-  emitter is the only population that cannot be short. }
-const HEXD = '0123456789abcdef';
-var k, lo: Integer;
-begin
-  if not PxxDbgEnabled('a.i386reloc') then Exit;
-  if TargetArch <> TARGET_I386 then Exit;
-  Write('PXXDBG a.i386reloc ', site, ' bytes=');
-  lo := CodeLen - 8;
-  if lo < 0 then lo := 0;
-  for k := lo to CodeLen - 1 do
-  begin
-    { +1: a Pascal string literal is 1-based, so nibble 0 is HEXD[1]. Without
-      it this printed out-of-bounds bytes that LOOKED like plausible hex. }
-    Write(HEXD[((Code[k] shr 4) and $0F) + 1]);
-    Write(HEXD[(Code[k] and $0F) + 1]);
-    Write(' ');
-  end;
-  WriteLn(' at=', CodeLen);
-end;
-
-procedure EmitDataRef(dataOff: Integer);
-{ Data-address placeholder; width follows the target's pointer size (writeELF
-  patches 8 bytes, writeELF32 patches 4) -- EXCEPT for the x86-64 rip-relative
-  form below, which is 4 bytes on a 64-bit target.
-
-  The absolute form here is `movabs r64, imm64`: an address as a 64-bit
-  IMMEDIATE, which no relocation can make position-independent. It has to
-  become a different instruction, `lea r64, [rip+disp32]` -- REX.W 8D ModRM
-  disp32, 7 bytes where movabs was 10. The register moves from the opcode's
-  low three bits into ModRM.reg, so REX.B becomes REX.R.
-
-  Same refusing shape as GlobRefTrailingImm: anything that is not exactly
-  [REX.W][B8+r] keeps the absolute 8-byte form, which is what every target
-  did before. }
-var drRex, drOp, drReg: Byte;
-begin
-  if FixCount >= MAX_FIXUPS then Error('fixup overflow');
-  FixupPCRel[FixCount] := False;
-  FixupPicDelta[FixCount] := 0;
-  if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
-     (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) or
-     (TargetArch = TARGET_WASM32) then
-  begin
-    if TryI386PcRelLoad then
-    begin
-      FixupPCRel[FixCount] := True;
-      FixupPicDelta[FixCount] := CodeLen - X386PicAnchor;
-    end;
-    { AFTER the rewrite, deliberately, so the census reads as "what is still
-      absolute" rather than "what arrived". Printing it before cost a reading in
-      which 58 converted `8a` sites counted as unconverted -- the object said 120
-      R_386_PC32 and the census could account for 62. EmitGlobRef prints after
-      its rewrite too, for the same reason. }
-    DbgI386RelocShape('EmitDataRef');
-    Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
-    Inc(FixCount);
-    EmitI32(0);
-    Exit;
-  end;
-  if PICRefsAreRipRelative and (CodeLen >= 2) then
-  begin
-    drRex := Code[CodeLen-2];
-    drOp  := Code[CodeLen-1];
-    if ((drRex and $F8) = $48) and (drOp >= $B8) and (drOp <= $BF) then
-    begin
-      drReg := Byte(drOp - $B8);
-      { REX.B (bit 0) extended the opcode register; as ModRM.reg it is REX.R }
-      Code[CodeLen-2] := Byte($48 or ((drRex and $01) shl 2));
-      Code[CodeLen-1] := $8D;                        { lea }
-      EmitB(Byte((drReg shl 3) or $05));             { mod=00 reg=r rm=101 }
-      FixupPCRel[FixCount] := True;
-      Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
-      Inc(FixCount);
-      EmitI32(0);
-      Exit;
-    end;
-  end;
-  Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
-  Inc(FixCount);
-  EmitI64(0);
-end;
-
-function SymOffIsData(off: Integer): Boolean;
-{ Is this global symbol offset a .data offset rather than a BSS one? See
-  DATA_SYM_BIAS. Ask this, never the raw comparison -- the ELF writers, the
-  DWARF location emitter and any future consumer must agree on one decoding. }
-begin
-  Result := off >= DATA_SYM_BIAS;
-end;
-
-function SymOffDataPart(off: Integer): Integer;
-{ The .data offset inside a biased symbol offset. }
-begin
-  Result := off - DATA_SYM_BIAS;
-end;
-
+{ Declaration order matters here and FPC is the only thing that checks it.
+  TryI386PcRelStore calls GlobRefTrailingImm, so it has to come after it.
+  PXX prescans headers and accepts either order; FPC is single-pass and does
+  not, and gate.sh quick's FPC seed canary is the only gate that sees the
+  difference -- `make compiler/pascal26` and --tier quick both passed with
+  this function still below its caller. Measured 2026-09-01. }
 function GlobRefTrailingImm(op, prev, modrm: Byte; var trail: Integer): Boolean;
 { How many instruction bytes follow the disp32 of an absolute memory operand?
   A rip-relative displacement is measured from the END of the instruction, so
@@ -510,11 +293,400 @@ begin
                           deliberately not in the table above until measured }
 end;
 
+procedure EmitPicAnchorInto(reg: Integer);
+{ Put a PC anchor -- an address in .text that this instruction's displacement can
+  be measured from -- into reg. Callers must have established that reg is dead.
+
+  TWO SOURCES, ONE MECHANISM. A body with a frame parked the anchor once in
+  X386PicSlot at entry, so this is a 6-byte load from the frame. A FRAMELESS body
+  has nowhere to park it, so the anchor is materialised inline instead: `call .L;
+  .L: pop reg`, which is also 6 bytes and needs no ebp, no slot and no prologue.
+  The instruction sequence that follows is identical either way.
+
+  Without the second source the frameless body converts NOTHING, and measured on
+  the pcrel subject that was every one of the 39 absolute .text relocations left
+  after four families had landed -- not one of them an unhandled opcode.
+
+  The inline form pays for itself: a `call` that is not matched by a `ret`
+  unbalances the CPU's return-address predictor, so every return in that body
+  mispredicts. That is why gcc emits a shared __x86.get_pc_thunk rather than
+  inline call/pop in code it expects to be hot. It is confined here to bodies
+  with no frame -- in this compiler's output that is the main body, which runs
+  once -- and the framed path, which is all of the rest, keeps the cheap load.
+
+  X386PicAnchor is UPDATED per site on the inline path, because the anchor is
+  per site there. The framed path never touches it: its anchor is the body's. }
+begin
+  if X386PicSlot <> 0 then
+  begin
+    EmitB($8B);
+    EmitB(Byte($80 or (reg shl 3) or $05));   { mod=10 reg rm=101 (ebp+disp32) }
+    EmitI32(X386PicSlot);
+  end
+  else
+  begin
+    EmitB($E8); EmitI32(0);        { call .L  (displacement 0 = the next insn) }
+    X386PicAnchor := CodeLen;      { .L is HERE: the address `call` pushed }
+    EmitB(Byte($58 or reg));       { pop reg }
+  end;
+end;
+
+function I386PicBaseUsable(reg: Integer): Boolean;
+{ Whether reg can serve as the anchor base in a mod=10 ModRM.
+
+  esp (4) cannot: rm=100 selects a SIB byte rather than a base register, so the
+  encoding would mean something else entirely. ebp (5) could be encoded, but
+  loading the anchor into it destroys the frame pointer the slot is addressed
+  through -- and the slot is read again by every later reference in the body.
+  Both refuse, and a refusing site keeps its absolute form. }
+begin
+  I386PicBaseUsable := (reg <> 4) and (reg <> 5);
+end;
+
+function I386PrefixBefore(pos: Integer): Boolean;
+{ Is the byte at pos-1 a legacy instruction prefix?
+
+  THIS IS THE GUARD THAT MAKES EVERY REWRITE IN THIS FILE SAFE, and it was
+  missing for four families. A rewrite rewinds CodeLen past the opcode and its
+  ModRM and emits new instructions in front of the original -- but a prefix the
+  caller already emitted sits BEFORE the opcode, so it is not rewound, and it
+  binds to whatever is emitted next instead.
+
+  MEASURED, on `mov [glob], ax` (`66 89 05 <d32>`): the store wrapper produced
+  `66` + `push ecx`, which the CPU reads as `push cx` -- TWO bytes pushed and
+  four popped -- and the original store lost its `66` and wrote four bytes where
+  it meant two. The body returned to address 0x1. The load family had the same
+  latent defect for `66 8B 05` and had not been caught only because the pcrel
+  subject's `short` reads come out as 0F B7/0F BF, which carry no prefix.
+
+  It REFUSES rather than re-emitting the prefix in the right place, because
+  scanning backwards for a prefix cannot be made sound: the preceding byte may
+  be the last byte of the previous instruction and merely LOOK like one. False
+  refusals cost position-independence on a handful of 16-bit accesses; a false
+  acceptance costs a wrong-width memory access, which is silent. }
+begin
+  I386PrefixBefore := False;
+  if pos < 1 then Exit;
+  case Code[pos-1] of
+    $66, $67, $F0, $F2, $F3,                { opsize, addrsize, lock, rep }
+    $2E, $36, $3E, $26, $64, $65:           { segment overrides }
+      I386PrefixBefore := True;
+  end;
+end;
+
+function TryI386PcRelStore(var popReg: Integer): Boolean;
+{ The store half of the i386 PC-relative conversion. A store must KEEP its
+  source, so unlike a load it has no dead register to borrow and the anchor
+  needs a scratch that is saved and restored:
+
+      push scratch
+      mov  scratch, [ebp+picslot]
+      mov  [scratch+disp32], src      <- the caller's instruction, ModRM rebased
+      pop  scratch                    <- emitted by the CALLER, after the disp32
+
+  The pop is the caller's because the disp32 placeholder is emitted after this
+  function returns; popReg carries the register out and -1 means no conversion.
+  That is also why this only accepts instructions that END at the disp32:
+  GlobRefTrailingImm says C7/81/69 carry four more bytes and C6/83/6B one, and a
+  pop emitted before those would sit in the middle of an instruction. Those keep
+  the absolute form. (C7 is `mov [glob], imm32` -- 8 sites on the pcrel subject
+  and the shape that hung every worker thread once already, so it is refused
+  here explicitly rather than by omission.)
+
+  FF AND 8F ARE REFUSED SEPARATELY AND THAT IS NOT PEDANTRY. Both carry no
+  trailing immediate, so the trail test alone lets them through, and both touch
+  the stack: `FF /6` is `push m32`, which inside this wrapper would push the
+  operand and then have the `pop` take that value straight back off instead of
+  restoring the scratch -- a wrapper that destroys exactly the thing it exists
+  to protect. `8F /0` is `pop m32` and is the mirror. Nothing else in the
+  trail-0 set reads or writes esp, which is what makes the wrapper safe for the
+  rest of it.
+
+  The arithmetic r/m forms (01/03/09/0B/21/23/29/2B/31/33/39/3B/85/87) are
+  accepted although the pcrel subject holds none: the rewrite is the same ModRM
+  rebase for every one of them, and the sibling nobody exercised is this file's
+  standing failure mode. 8A/8B/0F B6/B7/BE/BF never reach here -- TryI386PcRelLoad
+  takes them first and gets them without a scratch. }
+var modrm, src, sc, trail: Integer;
+    op, prev: Byte;
+begin
+  TryI386PcRelStore := False;
+  popReg := -1;
+  if TargetArch <> TARGET_I386 then Exit;
+  if not EmitObjMode then Exit;
+  if CodeLen < 2 then Exit;
+
+  modrm := Code[CodeLen-1];
+
+  { moffs stores: A2 (mov [moffs],al) and A3 (mov [moffs],eax). No ModRM, and
+    the source is architecturally eax, so the scratch is simply not eax. }
+  if ((modrm = $A2) or (modrm = $A3)) and not I386PrefixBefore(CodeLen-1) then
+  begin
+    Dec(CodeLen);
+    EmitB($51);                          { push ecx }
+    EmitPicAnchorInto(1);
+    if modrm = $A2 then EmitB($88) else EmitB($89);
+    EmitB($81);                          { mod=10 reg=eax rm=ecx }
+    popReg := 1;
+    TryI386PcRelStore := True;
+    Exit;
+  end;
+
+  if (modrm and $C7) <> $05 then Exit;   { not absolute [disp32] }
+
+  op := Code[CodeLen-2];
+  if CodeLen >= 3 then prev := Code[CodeLen-3] else prev := 0;
+  if I386PrefixBefore(CodeLen-2) then Exit;           { see I386PrefixBefore }
+  if (op = $FF) or (op = $8F) then Exit;              { see the header }
+  if prev = $0F then Exit;                            { load-only set; family 1 has these }
+  if not GlobRefTrailingImm(op, prev, Byte(modrm), trail) then Exit;
+  if trail <> 0 then Exit;
+
+  src := (modrm shr 3) and 7;
+
+  { THE SOURCE MAY NOT BE esp, AND THIS IS NOT A THEORETICAL CASE. The wrapper
+    preserves the scratch, but `push` also MOVES esp -- so an instruction whose
+    operand IS esp reads a value four bytes off and the wrapper is not
+    transparent to it after all. The program's very first instruction is
+    `mov [glob], esp`, saving the process entry stack pointer that argc and argv
+    are found from; wrapped, it saved entry-esp-4 and the body returned to
+    address 0x1. Measured, and it cost a full debug cycle to see, because the
+    crash is at a `ret` in a different body from the defect.
+
+    ebp as a source is fine -- the wrapper does not touch it. }
+  if src = 4 then Exit;
+
+  sc := 0;
+  while (sc = src) do Inc(sc);            { first of eax/ecx/edx/ebx that is not the source }
+  if not I386PicBaseUsable(sc) then Exit; { unreachable for sc in 0..3; kept as the assert }
+
+  CodeLen := CodeLen - 2;                 { drop the opcode AND its ModRM }
+  EmitB(Byte($50 or sc));                 { push sc }
+  EmitPicAnchorInto(sc);
+  EmitB(op);
+  EmitB(Byte($80 or (src shl 3) or sc));  { mod=10 reg=src rm=sc }
+  popReg := sc;
+  TryI386PcRelStore := True;
+end;
+
+function TryI386PcRelLoad: Boolean;
+{ Rewrite an absolute [disp32] LOAD, just emitted by the caller, into a load
+  through this body's PC anchor, and report whether it did.
+
+  Absolute is mod=00 rm=101. The anchor's VALUE lives in a frame slot, so the
+  form becomes
+
+      mov  dest, [ebp+picslot]      <- inserted
+      mov  dest, [dest+disp32]      <- the caller's instruction, ModRM rewritten
+
+  DEST IS ITS OWN BASE, and that is what makes this correct WITHOUT any liveness
+  analysis: the instruction is a load INTO dest, so dest is dead at this point by
+  construction. Nothing has to be preserved across anything, no sequence needs a
+  push/pop wrapper, and no register is pinned. An earlier plan for this ticket
+  pinned the anchor in esi and needed an audit of every sequence that clobbers
+  it; this needs none.
+
+  LOADS ONLY, AND ONLY THE LISTED OPCODES. A store (`89`/`88`/`C7`) must keep its
+  source, a `cmp` (`39`) reads both operands, and the moffs forms (`A1`/`A2`/`A3`)
+  have no ModRM to rewrite -- for all of those this returns False and the site
+  stays absolute, which loses position-independence and never correctness. That
+  is the same refusing posture GlobRefTrailingImm takes on this path.
+
+  0F BE / 0F BF (movsx) are included alongside 0F B6 / 0F B7 (movzx) although the
+  census did not observe them: the rewrite is identical for any `0F xx /r` load,
+  and this file's own history is that the unobserved sibling is the one that stays
+  broken. bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations }
+var modrm, opLen, dest, k: Integer;
+    saved: array[0..3] of Byte;
+begin
+  TryI386PcRelLoad := False;
+  if TargetArch <> TARGET_I386 then Exit;
+  if not EmitObjMode then Exit;
+  if CodeLen < 2 then Exit;
+
+  modrm := Code[CodeLen-1];
+
+  { --- SHAPE B: the moffs LOADS, A0 (mov al,[moffs]) and A1 (mov eax,[moffs]).
+    One opcode byte and NO ModRM at all, which is why the first version of this
+    function could not see them: it keyed on a ModRM that is not there. The
+    destination is architecturally eax, so it is the base, and the ModRM form
+    they become is the ordinary one. A2/A3 are the STORES of the same family and
+    are not here -- they must keep eax. --- }
+  if ((modrm = $A0) or (modrm = $A1)) and not I386PrefixBefore(CodeLen-1) then
+  begin
+    Dec(CodeLen);
+    EmitPicAnchorInto(0);                { eax }
+    if modrm = $A0 then EmitB($8A) else EmitB($8B);
+    EmitB($80);                          { mod=10 reg=eax rm=eax }
+    TryI386PcRelLoad := True;
+    Exit;
+  end;
+
+  { --- SHAPE C: B8+r, `mov reg, imm32` where the IMMEDIATE is the data address.
+    Not a memory reference at all -- it is address-of -- so it becomes a `lea`
+    rather than a `mov`: the anchor into reg, then `lea reg,[reg+disp32]`. Same
+    dead-destination argument as the loads, since the instruction's whole effect
+    is to define reg. This is the i386 twin of what EmitDataRef already does on
+    x86-64, where `movabs r64, imm64` becomes `lea r64,[rip+disp32]`. --- }
+  if (modrm >= $B8) and (modrm <= $BF) and not I386PrefixBefore(CodeLen-1) then
+  begin
+    dest := modrm - $B8;
+    if not I386PicBaseUsable(dest) then Exit;
+    Dec(CodeLen);
+    EmitPicAnchorInto(dest);
+    EmitB($8D);                          { lea }
+    EmitB(Byte($80 or (dest shl 3) or dest));
+    TryI386PcRelLoad := True;
+    Exit;
+  end;
+
+  if (modrm and $C7) <> $05 then Exit;   { not absolute [disp32] }
+
+  opLen := 0;
+  if (Code[CodeLen-2] = $8B) or (Code[CodeLen-2] = $8A) then opLen := 2
+  else if (CodeLen >= 3) and (Code[CodeLen-3] = $0F) and
+          ((Code[CodeLen-2] = $B6) or (Code[CodeLen-2] = $B7) or
+           (Code[CodeLen-2] = $BE) or (Code[CodeLen-2] = $BF)) then opLen := 3;
+  if opLen = 0 then Exit;                { unlisted encoding: stay absolute }
+  if I386PrefixBefore(CodeLen - opLen) then Exit;   { see I386PrefixBefore }
+
+  dest := (modrm shr 3) and 7;
+  if not I386PicBaseUsable(dest) then Exit;
+
+  for k := 0 to opLen - 1 do saved[k] := Code[CodeLen - opLen + k];
+  CodeLen := CodeLen - opLen;
+  EmitPicAnchorInto(dest);
+
+  { the caller's instruction, with ModRM mod=10 rm=dest }
+  for k := 0 to opLen - 2 do EmitB(saved[k]);
+  EmitB(Byte($80 or (dest shl 3) or dest));
+  TryI386PcRelLoad := True;
+end;
+
+procedure DbgI386RelocShape(const site: AnsiString);
+{ PXXDBG=a.i386reloc — print the bytes that PRECEDE a 32-bit absolute fixup on
+  i386, one line per site, so the set of operand shapes needing conversion for
+  bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations can be
+  enumerated from the EMITTER rather than sampled from objects.
+
+  Why this exists rather than an objdump census: an object census reports the
+  shapes the compiled PROGRAMS happen to contain. Measured 2026-09-01, three
+  honestly-taken censuses of the same compiler gave 19, 24 and 23 shapes, and
+  `push imm32` read as ZERO in the newest of them while nine source sites still
+  emit it (RTTI and dyn-array descriptors, which no test object reached). The
+  emitter is the only population that cannot be short. }
+const HEXD = '0123456789abcdef';
+var k, lo: Integer;
+begin
+  if not PxxDbgEnabled('a.i386reloc') then Exit;
+  if TargetArch <> TARGET_I386 then Exit;
+  Write('PXXDBG a.i386reloc ', site, ' bytes=');
+  lo := CodeLen - 8;
+  if lo < 0 then lo := 0;
+  for k := lo to CodeLen - 1 do
+  begin
+    { +1: a Pascal string literal is 1-based, so nibble 0 is HEXD[1]. Without
+      it this printed out-of-bounds bytes that LOOKED like plausible hex. }
+    Write(HEXD[((Code[k] shr 4) and $0F) + 1]);
+    Write(HEXD[(Code[k] and $0F) + 1]);
+    Write(' ');
+  end;
+  { slot=0 means this body has NO PC anchor -- it is the frameless main body,
+    where the anchor cannot be parked because there is no ebp frame to park it
+    in. Printed because without it a census reads a refusal as an unhandled
+    OPCODE and sends you to write a conversion that already exists: measured, 39
+    `mov reg,imm32` sites read as an unconverted family when B8+r had been
+    converting for two commits and every one of the 39 was in that one body. }
+  WriteLn(' at=', CodeLen, ' slot=', X386PicSlot);
+end;
+
+procedure EmitDataRef(dataOff: Integer);
+{ Data-address placeholder; width follows the target's pointer size (writeELF
+  patches 8 bytes, writeELF32 patches 4) -- EXCEPT for the x86-64 rip-relative
+  form below, which is 4 bytes on a 64-bit target.
+
+  The absolute form here is `movabs r64, imm64`: an address as a 64-bit
+  IMMEDIATE, which no relocation can make position-independent. It has to
+  become a different instruction, `lea r64, [rip+disp32]` -- REX.W 8D ModRM
+  disp32, 7 bytes where movabs was 10. The register moves from the opcode's
+  low three bits into ModRM.reg, so REX.B becomes REX.R.
+
+  Same refusing shape as GlobRefTrailingImm: anything that is not exactly
+  [REX.W][B8+r] keeps the absolute 8-byte form, which is what every target
+  did before. }
+var drRex, drOp, drReg: Byte;
+    drPopReg: Integer;
+begin
+  if FixCount >= MAX_FIXUPS then Error('fixup overflow');
+  FixupPCRel[FixCount] := False;
+  FixupPicDelta[FixCount] := 0;
+  if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
+     (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) or
+     (TargetArch = TARGET_WASM32) then
+  begin
+    drPopReg := -1;
+    if TryI386PcRelLoad or TryI386PcRelStore(drPopReg) then
+    begin
+      FixupPCRel[FixCount] := True;
+      FixupPicDelta[FixCount] := CodeLen - X386PicAnchor;
+    end;
+    { AFTER the rewrite, deliberately, so the census reads as "what is still
+      absolute" rather than "what arrived". Printing it before cost a reading in
+      which 58 converted `8a` sites counted as unconverted -- the object said 120
+      R_386_PC32 and the census could account for 62. EmitGlobRef prints after
+      its rewrite too, for the same reason. }
+    DbgI386RelocShape('EmitDataRef');
+    Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
+    Inc(FixCount);
+    EmitI32(0);
+    { The store wrapper's `pop`, which has to land after the disp32 -- and the
+      disp32 is emitted here, not in the function that opened the wrapper. }
+    if drPopReg >= 0 then EmitB(Byte($58 or drPopReg));
+    Exit;
+  end;
+  if PICRefsAreRipRelative and (CodeLen >= 2) then
+  begin
+    drRex := Code[CodeLen-2];
+    drOp  := Code[CodeLen-1];
+    if ((drRex and $F8) = $48) and (drOp >= $B8) and (drOp <= $BF) then
+    begin
+      drReg := Byte(drOp - $B8);
+      { REX.B (bit 0) extended the opcode register; as ModRM.reg it is REX.R }
+      Code[CodeLen-2] := Byte($48 or ((drRex and $01) shl 2));
+      Code[CodeLen-1] := $8D;                        { lea }
+      EmitB(Byte((drReg shl 3) or $05));             { mod=00 reg=r rm=101 }
+      FixupPCRel[FixCount] := True;
+      Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
+      Inc(FixCount);
+      EmitI32(0);
+      Exit;
+    end;
+  end;
+  Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
+  Inc(FixCount);
+  EmitI64(0);
+end;
+
+function SymOffIsData(off: Integer): Boolean;
+{ Is this global symbol offset a .data offset rather than a BSS one? See
+  DATA_SYM_BIAS. Ask this, never the raw comparison -- the ELF writers, the
+  DWARF location emitter and any future consumer must agree on one decoding. }
+begin
+  Result := off >= DATA_SYM_BIAS;
+end;
+
+function SymOffDataPart(off: Integer): Integer;
+{ The .data offset inside a biased symbol offset. }
+begin
+  Result := off - DATA_SYM_BIAS;
+end;
+
 procedure EmitGlobRef(bssOff: Integer);
 { Emit 4-byte placeholder for a BSS address -- absolute, or rip-relative on
   x86-64 where the operand shape allows it (see GlobRefTrailingImm). }
-var gfN, trailN: Integer;
+var gfN, trailN, gfPopReg: Integer;
 begin
+  gfPopReg := -1;
   { Grows instead of capping. The old fixed table was 2 MB of BSS sized for the
     --threadsafe self-host high-water mark, and the cap it enforced was hit by
     that build 121 entries in (bug-a-threadsafe-self-host-exceeds-max-globfix-by-121)
@@ -594,7 +766,7 @@ begin
       that one requires BOTH a $25 SIB and a ModRM with rm=100, and $8D has
       rm=101. }
     GlobFixPCRel[GlobFixCount] := True
-  else if TryI386PcRelLoad then
+  else if TryI386PcRelLoad or TryI386PcRelStore(gfPopReg) then
   begin
     GlobFixPCRel[GlobFixCount] := True;
     GlobFixPicDelta[GlobFixCount] := CodeLen - X386PicAnchor;
@@ -603,6 +775,8 @@ begin
   GlobFix[GlobFixCount].CodePos := CodeLen;
   GlobFix[GlobFixCount].BSSoff  := bssOff;
   Inc(GlobFixCount); EmitI32(0);
+  { see EmitDataRef: the store wrapper's `pop` belongs after the disp32 }
+  if gfPopReg >= 0 then EmitB(Byte($58 or gfPopReg));
 end;
 
 procedure EmitwriteSyscallA64(dataOff, len: Integer);
