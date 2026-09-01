@@ -208,3 +208,57 @@ across **7** distinct sessions. So the trailer is the only discriminator that
 exists, it is present on well under half the history, and **its absence means
 UNKNOWN, not "someone else"** (frankA, 2026-09-01). Attribute from a message or
 from that trailer, or do not attribute.
+
+## The two halves are in DIFFERENT layers — the import half never reaches the writer
+
+Reproduced the filed measurement first, unchanged: pxx object prints `0`, the
+gcc-only build of the same two sources prints `99`, both links clean. Symbol
+tables, same TU:
+
+    gcc  -c -O0   3: FUNC   GLOBAL  1  read_it
+                  4: NOTYPE GLOBAL UND somebody_elses_global
+    pxx --emit-obj  408: FUNC GLOBAL 1 read_it        (and nothing else)
+
+**The export half is where this ticket says it is** — `ObjPlanHostedSymbols`
+walks `Procs` only, and the symbol table it plans is `null + 3 section syms +
+local procs + exported procs + externals`. `ExternalProc[]` is indexed by
+**procIdx**, so the existing externals group is function-only and cannot carry a
+data symbol at all: a new group is needed, not a widening of that one.
+
+**The import half is NOT a writer problem, and this is the part that changes the
+work.** The `extern` storage class is discarded at parse time. It is consumed
+and thrown away in two independent places — the declaration-specifier loop
+(`cparser.inc:4874`, whose own comment says "consume without affecting the
+type") and the top-level dispatch (`CIsTopLevelSkipIdent`, `:9986`). Nothing
+downstream records that a declaration was `extern`, so the writer could not emit
+`UND` even if it wanted to: by then the fact does not exist.
+
+Measured rather than read, with a positive control:
+
+    pxx:  `extern int x; int get(void){return x;}`
+          `int x;        int get(void){return x;}`   -> objects BYTE-IDENTICAL
+    gcc:  same two TUs                                -> objects DIFFER
+          extern -> NOTYPE GLOBAL UND
+          plain  -> OBJECT GLOBAL 4
+
+So the keyword currently has **zero** effect on pxx's output. That is the
+cleanest statement of the import half, and it means the fix starts in the C
+frontend (carry the storage class, the way `CTypeLong`/`CTypeLongLong` already
+carry facts `TTypeKind` cannot), not in `elfwriter.inc`.
+
+Consequence for sequencing, which sharpens the "land both halves together" note:
+the two halves are not merely a symmetric pair, they are in different layers and
+the frontend one gates the writer one. A writer-only session cannot deliver the
+import half however carefully it is written.
+
+### Two things the acceptance list should pin
+
+- `static int y;` must stay **LOCAL**, which is the control against an export
+  pass that exports everything — and note pxx currently discards `static` at the
+  same two sites, so "LOCAL" is not something the writer can currently know
+  either. Same layer problem, opposite sign.
+- Two TUs each with a bare `int x;` must FAIL to link with a duplicate
+  definition. That is gcc's own behaviour under its default `-fno-common`
+  (verified here on gcc 15.2.0: `OBJECT GLOBAL 4`, and `ld` reports "multiple
+  definition"; under `-fcommon` the same symbol becomes `COM` and the link
+  succeeds). Producing that failure is conformance, not a regression.
