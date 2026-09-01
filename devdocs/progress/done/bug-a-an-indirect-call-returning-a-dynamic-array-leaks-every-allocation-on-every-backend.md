@@ -3,7 +3,7 @@ slug: bug-a-an-indirect-call-returning-a-dynamic-array-leaks-every-allocation-on
 track: A
 prio: 55
 type: bug
-status: working
+status: done
 found: 2026-09-01
 found-by: frankB
 owner: frankA
@@ -95,3 +95,6 @@ block, **but note it cannot use the x86-64 build as its oracle here** — x86-64
 leaks too, so the comparison would pass on two equally wrong numbers. This one
 needs an absolute assertion (`frees` within N of `allocs`) until x86-64 is fixed.
 That asymmetry is the reason this ticket exists separately from the test.
+
+## Log
+- 2026-09-01 — resolved, commit PENDING-COMMIT.
