@@ -705,7 +705,17 @@ begin
      (TargetArch = TARGET_WASM32) then
   begin
     drPopReg := -1;
-    if TryI386PcRelLoad or TryI386PcRelStore(drPopReg) then
+    { The address-as-IMMEDIATE family, announced by the call site rather than
+      sniffed off the end of the buffer -- see X386AddrImmPic. Tested FIRST so
+      the byte-shape tests below never see a buffer whose last bytes are the
+      `add dword [esp],` this is the immediate of. }
+    if X386AddrImmPic then
+    begin
+      X386AddrImmPic := False;
+      FixupPCRel[FixCount] := True;
+      FixupPicDelta[FixCount] := CodeLen - X386PicAnchor;
+    end
+    else if TryI386PcRelLoad or TryI386PcRelStore(drPopReg) then
     begin
       FixupPCRel[FixCount] := True;
       FixupPicDelta[FixCount] := CodeLen - X386PicAnchor;
@@ -846,6 +856,13 @@ begin
       that one requires BOTH a $25 SIB and a ModRM with rm=100, and $8D has
       rm=101. }
     GlobFixPCRel[GlobFixCount] := True
+  else if X386AddrImmPic then
+  begin
+    { see EmitDataRef: announced by the call site, not recognised }
+    X386AddrImmPic := False;
+    GlobFixPCRel[GlobFixCount] := True;
+    GlobFixPicDelta[GlobFixCount] := CodeLen - X386PicAnchor;
+  end
   else if TryI386PcRelLoad or TryI386PcRelStore(gfPopReg) then
   begin
     GlobFixPCRel[GlobFixCount] := True;
@@ -857,6 +874,120 @@ begin
   Inc(GlobFixCount); EmitI32(0);
   { see EmitDataRef: the store wrapper's `pop` belongs after the disp32 }
   if gfPopReg >= 0 then EmitB(Byte($58 or gfPopReg));
+end;
+
+procedure EmitI386PicAddrOpen;
+{ Open the address-as-IMMEDIATE rewrite: reserve a stack word for the result and
+  leave `lea ecx,[ecx+disp32]` waiting for its displacement, which the caller
+  registers as the PC-relative fixup. EmitI386PicAddrClose finishes it, and the
+  symbol's address is then the top word of the stack.
+
+  THE FAMILY THIS SERVES: an address used as an IMMEDIATE -- `push imm32` and
+  `mov [reg], imm32`. Neither reaches TryI386PcRelLoad or TryI386PcRelStore, and
+  neither can: those rewrite a MEMORY OPERAND'S displacement, and here the
+  relocated field is the immediate while the memory operand, if there is one, is
+  a plain register base. Measured: 62 absolute .text relocations survived in an
+  object the moment its program said `uses sysutils`, 32 of them `c7 00` and 30
+  `50 68`, and nothing else.
+
+  IT TOUCHES NO FLAGS, and that is the reason for this shape rather than the
+  three-byte `call .L; add dword [esp], imm32` it replaced. `push imm32` and
+  `mov [reg], imm32` write no flags, so making their replacement write flags
+  would put a NEW INVARIANT on every emitter: never materialise a data address
+  between a `cmp` and its `Jcc`. frankC checked and it holds at all thirteen of
+  today's call sites -- the nearest conditional branch re-establishes flags with
+  an explicit `test` first -- so the `add` form was correct when written and
+  nothing would have enforced it afterwards. A comment saying "this clobbers
+  flags" is not a guard; the six bytes buy an emitter with nothing to remember,
+  and the failure it prevents is a wrong BRANCH, which no relocation count could
+  ever have shown.
+
+  ecx is saved and restored rather than chosen, so this needs no liveness
+  argument at a site that is usually in the middle of an argument list.
+  EmitPicAnchorInto supplies the anchor from the frame slot or, in a frameless
+  body, inline -- so there is no state in which there is nothing to measure from.
+
+  bug-a-an-i386-object-carries-text-relocations-as-soon-as-it-uses-sysutils }
+begin
+  EmitB($50);                     { push eax -- reserve the result word; its
+                                    VALUE is dead, Close overwrites it }
+  EmitB($51);                     { push ecx -- the scratch, restored by Close }
+  EmitPicAnchorInto(1);           { ecx := this body's PC anchor }
+  EmitB($8D); EmitB($89);         { lea ecx,[ecx+disp32] -- disp32 follows }
+  X386AddrImmPic := True;
+end;
+
+procedure EmitI386PicAddrClose;
+{ Store the computed address into the word EmitI386PicAddrOpen reserved, and
+  give ecx back. Stack effect of the pair is +4: one word holding the address. }
+begin
+  EmitB($89); EmitB($4C); EmitB($24); EmitB($04);   { mov [esp+4], ecx }
+  EmitB($59);                                       { pop ecx }
+end;
+
+function I386AddrImmIsPic: Boolean;
+{ Does an address-as-immediate at this point get the PC-relative form? Only
+  under --emit-obj on i386: an executable wants the absolute immediate, which is
+  shorter and correct, and every other target either has no problem or has no
+  object writer. }
+begin
+  I386AddrImmIsPic := EmitObjMode and (TargetArch = TARGET_I386);
+end;
+
+procedure EmitPushDataAddr(dataOff: Integer);
+{ `push &data`. }
+begin
+  if I386AddrImmIsPic then
+  begin
+    EmitI386PicAddrOpen;
+    EmitDataRef(dataOff);
+    EmitI386PicAddrClose;
+  end
+  else
+  begin
+    EmitB($68); EmitDataRef(dataOff);
+  end;
+end;
+
+procedure EmitPushGlobAddr(bssOff: Integer);
+{ `push &bss`. }
+begin
+  if I386AddrImmIsPic then
+  begin
+    EmitI386PicAddrOpen;
+    EmitGlobRef(bssOff);
+    EmitI386PicAddrClose;
+  end
+  else
+  begin
+    EmitB($68); EmitGlobRef(bssOff);
+  end;
+end;
+
+procedure EmitStoreDataAddrToPtr(modrm: Byte; dataOff: Integer);
+{ `mov dword [<modrm>], &data`, where modrm is the byte a `C7 /0` store would
+  use -- mod and rm only, the reg field already 000.
+
+  The PIC form builds the address on the stack and pops it into the destination:
+  `8F /0` is `pop m32`, so the rewrite still leaves every register and every flag
+  as it found them. Restricted to mod=00 with rm neither 100 (a SIB byte
+  follows) nor 101 (a disp32 follows), because either would put bytes between the
+  ModRM and the immediate that this does not carry; anything else keeps the
+  absolute form, which is what every target did before. Today exactly one call
+  site reaches this, with rm=000. }
+begin
+  if I386AddrImmIsPic and ((modrm and $C0) = $00) and
+     ((modrm and $07) <> $04) and ((modrm and $07) <> $05) then
+  begin
+    EmitI386PicAddrOpen;
+    EmitDataRef(dataOff);
+    EmitI386PicAddrClose;
+    EmitB($8F); EmitB(modrm);            { pop dword [rm] }
+  end
+  else
+  begin
+    EmitB($C7); EmitB(modrm); EmitDataRef(dataOff);
+  end;
 end;
 
 procedure EmitMovGlobEsp32(bssOff: Integer);

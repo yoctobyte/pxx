@@ -12758,8 +12758,7 @@ begin
             EmitB($68); EmitI32(mek);                          { push arg2 = baseKind }
             if mek = 3 then
             begin
-              EmitB($68);
-              EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
+              EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
             end
             else
             begin  { kinds 1/4/5/6: immediate — 0, the interface id, or the
@@ -12828,8 +12827,7 @@ begin
               begin
                 EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);  { lea eax, [ebp+off] }
                 EmitB($50);                                        { push arg0 = &rec }
-                EmitB($68);
-                EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
+                EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
                 EmitCallProc(procIdx);
                 EmitB($81); EmitB($C4); EmitI32(8);                { add esp, 8 }
               end;
@@ -12838,8 +12836,7 @@ begin
             if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
             EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);  { lea eax, [ebp+off] }
             EmitB($50);                                        { push arg0 = &rec }
-            EmitB($68);
-            EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
+            EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(8);                { add esp, 8 }
           end
@@ -12874,7 +12871,7 @@ begin
             if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
             EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);  { mov eax, [ebp+off] }
             EmitB($50);                                       { push arg0 = data }
-            EmitB($68); EmitDataRef(GetOrAllocSymRTTI(i));    { push arg1 = desc }
+            EmitPushDataAddr(GetOrAllocSymRTTI(i));          { push arg1 = desc }
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(8);               { add esp, 8 }
           end;

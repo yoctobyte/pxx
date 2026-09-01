@@ -4,7 +4,8 @@ track: A
 prio: 40
 tags: [emit-obj, elf, i386, pic, rtl]
 summary: "An i386 --emit-obj object has 0 absolute .text relocations for a bare program and 62 for the same program with `uses sysutils`, so it cannot link into a hardened PIE. The existing green row asserting the Pascal i386 object is PIE-clean is measured on a fixture that uses no RTL unit, so it cannot see this."
-status: open
+status: working
+owner: frankA
 ---
 
 # An i386 object carries .text relocations as soon as it uses sysutils

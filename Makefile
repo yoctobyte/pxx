@@ -18664,6 +18664,45 @@ test-emit-obj: $(COMPILER)
 	  tools/expect_same.sh podp_386 "$$($(TESTTMP)/podp_link32)" "7 7 42 100 101 5 13 1" || exit 1; \
 	  echo "test-emit-obj: same, i386 under gcc -m32"; \
 	else echo "gcc -m32 not available; i386 pascal data-symbol check skipped"; fi
+	# 4b-quinquies. POSITION INDEPENDENCE FOR AN OBJECT THAT USES AN RTL UNIT.
+	#    The PIE row further down asserts the same property on
+	#    test/test_emit_obj.pas, which uses NO RTL unit -- so its 0 is a number
+	#    that could not have come out otherwise, and it stayed green while an
+	#    object was carrying 62 absolute .text relocations. One line of
+	#    difference: `uses sysutils` took a bare program from 0 to 62, every one
+	#    of them an address used as an IMMEDIATE (32 `mov [eax],imm32`, 30 `push
+	#    imm32`) -- a family with no destination register to borrow, which is why
+	#    neither the load nor the store conversion could reach it.
+	#
+	#    ASSERTED AS A COUNT FIRST, then as a link. `-Wl,-z,text` failing is the
+	#    consequence; the count is the property, and a link can go green for
+	#    reasons that have nothing to do with .text.
+	rm -f $(TESTTMP)/pcr_*.o $(TESTTMP)/pcr_pie
+	./$(COMPILER) -Fulib/rtl --emit-obj --target=i386 test/c_obj_data_pascal.pas $(TESTTMP)/pcr_386.o
+	readelf -rW $(TESTTMP)/pcr_386.o | awk '/Relocation section/{s=($$0 ~ /rel\.text/)} s && /R_386_32/{n++} END{exit (n+0)==0 ? 0 : 1}' || { echo "test-emit-obj: an i386 object that uses an RTL unit still carries absolute .text relocations"; readelf -rW $(TESTTMP)/pcr_386.o | awk '/Relocation section/{s=($$0 ~ /rel\.text/)} s && /R_386_32/{n++} END{print n+0, "of them"}'; exit 1; }
+	@readelf -rW $(TESTTMP)/pcr_386.o | awk '/Relocation section/{s=($$0 ~ /rel\.text/)} s && /R_386_PC32/{n++} END{exit (n+0)>100 ? 0 : 1}' || { echo "test-emit-obj: the i386 RTL-using object has almost no PC-relative .text relocations either -- the count above is vacuous, nothing was emitted"; exit 1; }
+	@if gcc -m32 -xc /dev/null -o /dev/null -c >/dev/null 2>&1; then \
+	  gcc -m32 -pie -Wl,-z,text $(TESTTMP)/podp_host.c $(TESTTMP)/pcr_386.o -o $(TESTTMP)/pcr_pie || { echo "test-emit-obj: the i386 RTL-using object FAILED to link as a hardened PIE"; exit 1; }; \
+	  readelf -d $(TESTTMP)/pcr_pie | grep -q TEXTREL && { echo "test-emit-obj: the i386 RTL-using PIE carries DT_TEXTREL"; exit 1; }; \
+	  tools/expect_same.sh pcr_pie "$$($(TESTTMP)/pcr_pie)" "7 7 42 100 101 5 13 1" || exit 1; \
+	  echo "test-emit-obj: an i386 object that uses sysutils links+runs as a hardened PIE"; \
+	else echo "gcc -m32 not available; i386 RTL-using PIE check skipped"; fi
+	@# 4b-sexies. THE --threadsafe I/O UNLOCK STUB'S JUMP LANDS ON AN INSTRUCTION.
+	@# Its `jnz` used to carry a hand-counted displacement over a span holding a
+	@# global store, and under --emit-obj that store grew a push/anchor/pop
+	@# wrapper: the jump landed on the `pop` INSIDE it, so the still-nested path
+	@# popped the caller's return address into eax, stored through it, and
+	@# returned to garbage. The object built clean and no relocation count could
+	@# see it -- so the assertion is on the DISASSEMBLY, not on the link.
+	@# It must fail on the pre-fix binary: measured there, the target was the
+	@# `pop eax` at the wrapper's tail, not the `ret`.
+	rm -f $(TESTTMP)/pcr_ts.o
+	./$(COMPILER) -Fulib/rtl --threadsafe --emit-obj --target=i386 test/c_obj_data_pascal.pas $(TESTTMP)/pcr_ts.o
+	@objdump -d -M intel $(TESTTMP)/pcr_ts.o > $(TESTTMP)/pcr_ts.dis
+	@tgt=$$(awk '/dec +DWORD PTR/{getline; if ($$0 ~ /jne/) {for(i=1;i<=NF;i++) if($$i=="jne") {print $$(i+1); exit}}}' $(TESTTMP)/pcr_ts.dis); \
+	 [ -n "$$tgt" ] || { echo "test-emit-obj: could not FIND the i386 I/O unlock stub -- the locator matched nothing, so the check below would have passed on an empty comparison"; exit 1; }; \
+	 grep -qE "^ *$$tgt:.*\bret\b" $(TESTTMP)/pcr_ts.dis || { echo "test-emit-obj: the i386 I/O unlock stub's jnz targets $$tgt, which is not a ret -- it lands inside the store wrapper"; grep -nE "^ *$$tgt:" $(TESTTMP)/pcr_ts.dis; exit 1; }; \
+	 echo "test-emit-obj: the --threadsafe i386 I/O unlock jump lands on the ret, not inside the store wrapper"
 	# 4c. A SHARED LIBRARY FROM A COMPILED SOURCE -- the other half of the same
 	#    backend work (feature-a-shared-library-output-for-compiled-sources).
 	#    --shared used to describe .asm-frontend output only: the writer built

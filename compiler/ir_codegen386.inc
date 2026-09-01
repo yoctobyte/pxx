@@ -391,31 +391,49 @@ procedure EmitIoLockStubs386;
   cannot self-deadlock. gettid (224) via int 0x80 once per I/O statement.
   Clobbers eax/ecx/esi + flags — called only at statement boundaries, where the
   386 backend keeps no live evaluation registers. }
-var spinStart, d: Integer;
+var spinStart, pOurs, pGot, pNested: Integer;
 begin
   IOLockAddr := CodeLen;
   EmitB($B8); EmitI32(224);                          { mov eax, 224 (gettid) }
   EmitB($CD); EmitB($80);                            { int 0x80 }
   EmitB($89); EmitB($C6);                            { mov esi, eax }
   EmitB($39); EmitB($35); EmitGlobRef(BSS_IO_OWNER); { cmp [IO_OWNER], esi }
-  EmitB($74); EmitB(16);                             { je +16 (already ours -> depth bump, over the spin block) }
+  { PATCHED, NOT COUNTED. Every one of the three jumps in these two stubs used
+    to carry a hand-counted literal displacement over a span containing an
+    EmitGlobRef -- and under --emit-obj a global reference is no longer a fixed
+    number of bytes: TryI386PcRelStore wraps a store in `push`/anchor/`pop`, and
+    the load family rewrites in place. The release path below was MEASURED wrong
+    in a `--threadsafe --emit-obj --target=i386` object: `jnz +8` landed on the
+    `pop eax` INSIDE the store's wrapper, so the still-nested path popped the
+    caller's return address into eax, stored through it (`mov [eax+0x92bb], ecx`
+    -- a wild write into whatever that address plus 37563 happens to be) and
+    then returned to garbage. The object built clean; no relocation count and no
+    symbol table could show it.
+
+    A hand-counted rel8 over an emitter that can grow is the defect
+    bug-a-a-rel8-jump-patch-truncates-silently-when-its-span-grows exists for,
+    and rel8.inc's PatchRel8 is the fix for all three: it measures the span
+    after the span is emitted, and REFUSES what does not fit rather than
+    truncating. The `je +16`'s 16-byte assert went with it -- it existed only to
+    pin the literal, and a patched jump has nothing to pin.
+    bug-a-an-i386-object-carries-text-relocations-as-soon-as-it-uses-sysutils }
+  EmitB($74); pOurs := CodeLen; EmitB(0);            { je (already ours -> depth bump, over the spin block) }
   spinStart := CodeLen;
   EmitB($31); EmitB($C0);                            { xor eax, eax (expect free) }
   EmitB($89); EmitB($F1);                            { mov ecx, esi (take with our tid) }
   EmitB($F0); EmitB($0F); EmitB($B1); EmitB($0D); EmitGlobRef(BSS_IO_OWNER); { lock cmpxchg [IO_OWNER], ecx }
-  EmitB($74); EmitB(2);                              { je +2 (got it -> depth bump) }
-  d := spinStart - (CodeLen + 2);
-  EmitB($EB); EmitB(d and $FF);                      { jmp back to the spin retry }
-  if CodeLen - spinStart <> 16 then
-    Error('compiler error: i386 I/O lock spin block must be exactly 16 bytes (je +16 above)');
+  EmitB($74); pGot := CodeLen; EmitB(0);             { je (got it -> depth bump) }
+  EmitB($EB); EmitRel8(spinStart);                   { jmp back to the spin retry }
+  PatchRel8(pOurs); PatchRel8(pGot);
   EmitB($FF); EmitB($05); EmitGlobRef(BSS_IO_DEPTH); { inc dword [IO_DEPTH] }
   EmitB($C3);                                        { ret }
 
   IOUnlockAddr := CodeLen;
   EmitB($FF); EmitB($0D); EmitGlobRef(BSS_IO_DEPTH); { dec dword [IO_DEPTH] }
-  EmitB($75); EmitB(8);                              { jnz +8 (still nested: keep ownership, over the clear) }
+  EmitB($75); pNested := CodeLen; EmitB(0);          { jnz (still nested: keep ownership, over the clear) }
   EmitB($31); EmitB($C9);                            { xor ecx, ecx }
   EmitB($89); EmitB($0D); EmitGlobRef(BSS_IO_OWNER); { mov [IO_OWNER], ecx (release) }
+  PatchRel8(pNested);
   EmitB($C3);                                        { ret }
 end;
 
@@ -1759,7 +1777,7 @@ begin
           EmitB($8B); EmitB($0C); EmitB($24);           { mov ecx, [esp] = new }
           EmitB($89); EmitB($0A);                       { mov [edx], ecx — publish new }
           EmitB($50);                                   { push arg0 = old }
-          EmitB($68); EmitDataRef(GetOrAllocSymRTTI(si)); { push arg1 = desc }
+          EmitPushDataAddr(GetOrAllocSymRTTI(si)); { push arg1 = desc }
           procIdx := FindProc('PXXDynArrayRelease');
           if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
           EmitCallProc(procIdx);                        { release(old, desc) — nil-safe }
@@ -1797,7 +1815,7 @@ begin
               sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
               j := InternStr(sVal);
               EmitB($68); EmitI32(Strs[j].Len);           { push len }
-              EmitB($68); EmitDataRef(Strs[j].Offset + 8); { push src }
+              EmitPushDataAddr(Strs[j].Offset + 8); { push src }
               procIdx := FindProc('PXXStrFromLit');
               if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
               EmitCallProc(procIdx);
@@ -2263,7 +2281,7 @@ begin
         EmitB($50);                            { push slot addr }
         IREmitNode386(IRB[node]);              { eax = new length }
         EmitB($50);                            { push n }
-        EmitB($68); EmitDataRef(GetOrAllocNodeDynDesc(node)); { push desc }
+        EmitPushDataAddr(GetOrAllocNodeDynDesc(node)); { push desc }
         procIdx := FindProc('PXXDynSetLen');
         if procIdx < 0 then Error('compiler error: PXXDynSetLen not found');
         EmitCallProc(procIdx);
@@ -2917,7 +2935,7 @@ begin
             Exit;                        { plain GetMem: pointer already in eax }
           { VMT pointer at offset 0 (4 bytes; the 8-byte reserved slot's high
             dword stays zero, matching the data-blob layout). }
-          EmitB($C7); EmitB($00); EmitDataRef(UClsVMTOffset[classIdx - REC_UCLASS_BASE]); { mov dword [eax], VMT_addr }
+          EmitStoreDataAddrToPtr($00, UClsVMTOffset[classIdx - REC_UCLASS_BASE]); { mov dword [eax], VMT_addr }
           p1 := IRResolveCtorProc(node, classIdx);   { overload-resolved ctor }
           if p1 < 0 then
             Exit;                        { no ctor: instance pointer in eax }
@@ -2993,7 +3011,7 @@ begin
           EmitB($50);                    { push slot addr }
           IREmitNode386(IRA[valNode]);   { eax = new length }
           EmitB($50);                    { push n }
-          EmitB($68); EmitDataRef(GetOrAllocSymRTTI(si)); { push desc }
+          EmitPushDataAddr(GetOrAllocSymRTTI(si)); { push desc }
           procIdx := FindProc('PXXDynSetLen');
           if procIdx < 0 then Error('compiler error: PXXDynSetLen not found');
           EmitCallProc(procIdx);
@@ -4437,7 +4455,7 @@ begin
         EmitB($8B); EmitB($0C); EmitB($24);   { mov ecx, [esp] = new }
         EmitB($89); EmitB($0A);               { mov [edx], ecx — publish new }
         EmitB($50);                           { push arg0 = old }
-        EmitB($68); EmitDataRef(GetOrAllocNodeDynDesc(node));  { push arg1 = desc }
+        EmitPushDataAddr(GetOrAllocNodeDynDesc(node));  { push arg1 = desc }
         procIdx := FindProc('PXXDynArrayRelease');
         if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
         EmitCallProc(procIdx);
@@ -4513,7 +4531,7 @@ begin
               si := InternStr(sVal);
               { PXXStrFromLit(len, src): push len then src (arg0 deepest). }
               EmitB($68); EmitI32(Strs[si].Len);          { push len }
-              EmitB($68); EmitDataRef(Strs[si].Offset + 8); { push src }
+              EmitPushDataAddr(Strs[si].Offset + 8); { push src }
               procIdx := FindProc('PXXStrFromLit');
               if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
               EmitCallProc(procIdx);
@@ -4669,7 +4687,7 @@ begin
           begin
             EmitB($8B); EmitB($44); EmitB($24); EmitB($04); { mov eax, [esp+4] (src) }
             EmitB($50);
-            EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+            EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
           end;
@@ -4678,7 +4696,7 @@ begin
           begin
             EmitB($8B); EmitB($04); EmitB($24);          { mov eax, [esp] (dest) }
             EmitB($50);
-            EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+            EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
           end;
@@ -4687,14 +4705,14 @@ begin
         if procIdx < 0 then Error('compiler error: PXXRecordRetain not found');
         EmitB($8B); EmitB($44); EmitB($24); EmitB($04); { mov eax, [esp+4] (src) }
         EmitB($50);                                  { push eax (arg0 recAddr) }
-        EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE))); { push desc }
+        EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE))); { push desc }
         EmitCallProc(procIdx);
         EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
         procIdx := FindProc('PXXRecordRelease');
         if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
         EmitB($8B); EmitB($04); EmitB($24);          { mov eax, [esp] (dest) }
         EmitB($50);                                  { push eax (arg0 recAddr) }
-        EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE))); { push desc }
+        EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE))); { push desc }
         EmitCallProc(procIdx);
         EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
         EmitB($5F);                                  { pop edi (dest) }
@@ -4713,7 +4731,7 @@ begin
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
           EmitB($8B); EmitB($04); EmitB($24);        { mov eax, [esp] (dest) }
           EmitB($50);                                { push eax (arg0) }
-          EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE))); { push desc }
+          EmitPushDataAddr(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE))); { push desc }
           EmitCallProc(procIdx);
           EmitB($81); EmitB($C4); EmitI32(8);        { add esp, 8 }
           EmitB($5F);                                { pop edi (dest) }
@@ -5329,7 +5347,7 @@ begin
         if sgn then
           begin EmitB($6A); EmitB($00); end          { push 0 (dest unused) }
         else
-          begin EmitB($68); EmitGlobRef(Integer(IRIVal[node])); end; { push dest temp }
+          begin EmitPushGlobAddr(Integer(IRIVal[node])); end; { push dest temp }
         EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (left) }
         EmitB($50);
         EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (right) }
@@ -5417,6 +5435,7 @@ begin
     test-emit-obj is the row that has a main body. }
   X386PicAnchor := -1;
   X386PicSlot := 0;
+  X386AddrImmPic := False;   { a flag left set by a refused rewrite must not cross into the next body }
   if EmitObjMode and (CurProc >= 0) then
   begin
     EmitB($E8); EmitI32(0);        { call .L  (displacement 0 = the next insn) }
