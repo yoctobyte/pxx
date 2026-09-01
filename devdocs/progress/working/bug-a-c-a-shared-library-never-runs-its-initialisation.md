@@ -2,10 +2,10 @@
 track: A+C
 prio: 55
 type: bug
-status: open
+status: working
 found: 2026-09-01
 found-by: frankC
-owner:
+owner: frankA
 summary: "NO pxx shared library runs its initialisation, so every piece of pre-main state is left unset. MEASURED both frontends against a gcc dlopen host: a Pascal program whose body does `Flag := 4242` exports GetFlag, which returns 0; a C library reading `environ` gets (nil). Cause is one thing, not two -- a .so has no ELF entry point and elfwriter.inc emits NO DT_INIT and NO .init_array (neither string appears in the file), so the initialisers are compiled in and nothing calls them. Under --shared, naming environ costs 51 extra procs (451 vs 400) that provably cannot run; under --emit-obj it costs 0, correctly, because THAT object is linked into a program whose entry stub does run them. The dead code is the TELL, not the bug: do not 'fix' CNeedsEnvironInit by bailing under EmitSharedMode -- that deletes the evidence and keeps the wrong value."
 ---
 
