@@ -3,9 +3,9 @@ slug: bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations
 track: A
 prio: 40
 type: feature
-status: new
+status: working
 blocked-by: []
-owner: ""
+owner: frankC
 created: 2026-09-01
 found-by: frankA (while adding .init_array to the i386 object writer; pre-existing, not caused by it)
 summary: "i386 --emit-obj output is POSITION-DEPENDENT: .rel.text carries only absolute relocations -- CENSUSED 518 R_386_32 in a Pascal object and 566 in a C one, zero of anything else -- so linking gives `relocation in read-only section .text` and `creating DT_TEXTREL in a PIE`, and `-Wl,-z,text` refuses outright. Pre-existing and NOT from the .init_array work: two warnings measured identically on objects built before and after it. This is the exact i386 twin of feature-a-x86-64-object-output-is-position-dependent (done, p50, three phases d0537380a / 44b256356 / a3b1af61a, which took x86-64 to 273 R_X86_64_PC32 and zero absolutes in .text). Originally filed as a bug about a few offending sites; the census says it is a codegen model, and i386 is HARDER than the x86-64 twin was -- x86-64 had rip-relative addressing to convert to, i386 has no PC-relative data addressing at all and needs a GOT base register established per function."
