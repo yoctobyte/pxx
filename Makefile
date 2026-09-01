@@ -14813,6 +14813,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_managed_str_ownership_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/msol_i386)" "$$($(TESTTMP)/msol_i386_x64)"
 	./$(COMPILER) --target=i386 test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_i386
 	tools/expect_same.sh i386/test_virtual_call_runs_once "$$(tools/run_target.sh i386 $(TESTTMP)/vcro_i386)" "VIRTUAL CALL RUNS ONCE OK"
+	./$(COMPILER) --target=i386 test/test_dynarray_result.pas $(TESTTMP)/dynres_i386
+	tools/expect_same.sh i386/test_dynarray_result "$$(tools/run_target.sh i386 $(TESTTMP)/dynres_i386)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -15475,6 +15477,8 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_managed_str_ownership_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/msol_a64)" "$$($(TESTTMP)/msol_a64_x64)"
 	./$(COMPILER) --target=aarch64 test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_a64
 	tools/expect_same.sh aarch64/test_virtual_call_runs_once "$$(tools/run_target.sh aarch64 $(TESTTMP)/vcro_a64)" "VIRTUAL CALL RUNS ONCE OK"
+	./$(COMPILER) --target=aarch64 test/test_dynarray_result.pas $(TESTTMP)/dynres_a64
+	tools/expect_same.sh aarch64/test_dynarray_result "$$(tools/run_target.sh aarch64 $(TESTTMP)/dynres_a64)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -16191,6 +16195,8 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/test_managed_str_ownership_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/msol_rv32)" "$$($(TESTTMP)/msol_rv32_x64)"
 	./$(COMPILER) --target=riscv32 --platform=posix test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_rv32
 	tools/expect_same.sh riscv32/test_virtual_call_runs_once "$$(tools/run_target.sh riscv32 $(TESTTMP)/vcro_rv32)" "VIRTUAL CALL RUNS ONCE OK"
+	./$(COMPILER) --target=riscv32 --platform=posix test/test_dynarray_result.pas $(TESTTMP)/dynres_rv32
+	tools/expect_same.sh riscv32/test_dynarray_result "$$(tools/run_target.sh riscv32 $(TESTTMP)/dynres_rv32)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -17222,6 +17228,17 @@ test-xtensa: $(COMPILER)
 	# bug-a-xtensa-allocates-twice-per-virtual-call-returning-a-string-and-leaks-one
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_xt
 	tools/expect_same.sh xtensa/test_virtual_call_runs_once "$$(tools/run_target.sh xtensa $(TESTTMP)/vcro_xt)" "VIRTUAL CALL RUNS ONCE OK"
+	# A FUNCTION RETURNING A DYNAMIC ARRAY, on every cross target. The x86-64
+	# row for this test is at the top of the file and was the ONLY one:
+	# bug-a-a-function-returning-a-dynamic-array-is-refused-on-every-cross-target
+	# closed having given the epilogue arm to four backends, and left xtensa --
+	# the seventh -- still refusing, with no cross row anywhere that could say
+	# so. What that cost was not a test: lib/rtl/sysutils.pas itself would not
+	# build for xtensa, because TStringHelper.Split returns a TStringArray, so
+	# every Pascal program touching sysutils was unbuildable for the ESP target.
+	# Found by compiling examples/ across backends, not by reading the backlog.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_result.pas $(TESTTMP)/dynres_xt
+	tools/expect_same.sh xtensa/test_dynarray_result "$$(tools/run_target.sh xtensa $(TESTTMP)/dynres_xt)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -17787,6 +17804,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_managed_str_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/msol_a32)" "$$($(TESTTMP)/msol_a32_x64)"
 	./$(COMPILER) --target=arm32 --platform=posix test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_a32
 	tools/expect_same.sh arm32/test_virtual_call_runs_once "$$(tools/run_target.sh arm32 $(TESTTMP)/vcro_a32)" "VIRTUAL CALL RUNS ONCE OK"
+	./$(COMPILER) --target=arm32 --platform=posix test/test_dynarray_result.pas $(TESTTMP)/dynres_a32
+	tools/expect_same.sh arm32/test_dynarray_result "$$(tools/run_target.sh arm32 $(TESTTMP)/dynres_a32)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The

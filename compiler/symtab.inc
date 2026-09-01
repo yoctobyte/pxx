@@ -82,6 +82,13 @@ procedure EmitLoadDataRefRISCV32(rd, dataOff: Integer); forward;
 procedure EmitLoadImmRISCV32(rd: Integer; v: Int32); forward;
 procedure EmitSlotAddrRISCV32(rd, si: Integer); forward;
 procedure EmitFrameAddrXtensa(rd: Integer; off: Integer); forward;
+{ The xtensa twin of EmitSlotAddrRISCV32 four lines up, and it is here for the
+  same reason: the dynamic-array epilogue arm below calls it, and PXX prescans
+  headers while FPC is SINGLE-PASS -- so without this the tree still self-hosts
+  and `gate.sh quick`'s FPC seed canary fails with `Identifier not found
+  "EmitSlotAddrXtensa"`, which is the whole reason that canary runs on an
+  uncommitted tree. Measured, not anticipated: it went red exactly here. }
+procedure EmitSlotAddrXtensa(rd, si: Integer); forward;
 procedure EmitLoadConstXtensa(rd: Integer; v: Int32); forward;
 { The xtensa inline-asm engine (asmtext_xtensa.inc) replays `la reg,@fp/@glob/
   @data` through these rather than open-coding a second copy: the frame pointer
@@ -12496,6 +12503,37 @@ begin
           EmitCallProc(procIdx);
           EmitLoadVarXtensa(ProcAggregateDestSym[CurProc]);           { a2 = dest (return value) }
         end;
+      end
+      else if Syms[retSymIdx].IsArray and (Syms[retSymIdx].ArrLen = -1) and
+              (Syms[retSymIdx].Kind = skLocal) then
+      begin
+        { DYNAMIC-ARRAY result — the seventh backend's copy of the arm the other
+          four got in bug-a-a-function-returning-a-dynamic-array-is-refused-on-
+          every-cross-target. That ticket says "every cross-target" and closed
+          having fixed FOUR; xtensa is a cross target and still refused, so the
+          summary was false and this is the same omission
+          ir_codegen_xtensa.inc's concat-ownership note records:
+          "which fixed 'the four cross backends' and never listed xtensa -- the
+          seventh backend that a grep for the common spelling does not return."
+
+          WHAT IT COST, measured 2026-09-02 by compiling real programs rather
+          than tests: lib/rtl/sysutils.pas ITSELF does not build for xtensa,
+          because TStringHelper.Split (sysutils.pas:5785) returns a TStringArray.
+          So every Pascal program that touches sysutils was unbuildable for
+          xtensa -- 5 of 6 example programs that build for i386, arm32, aarch64
+          and riscv32 died here, all with the same message and none of them
+          about arrays.
+
+          The slot holds ONE pointer-sized heap handle, like tyAnsiString below;
+          it is not an aggregate. Loaded by hand at pointer width because
+          EmitLoadVarXtensa sizes by TypeSlotSize(TypeKind) and an array's
+          TypeKind is its ELEMENT kind -- `array of Char` would come back
+          through a byte load with the handle's top bytes gone. Ownership
+          transfers to the caller, which is why the managed-local cleanup above
+          already skips retSymIdx. A STATIC array result is still unsupported
+          and still errors below. }
+        EmitSlotAddrXtensa(reg_xtensa_a2, retSymIdx);
+        xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);   { a2 = handle }
       end
       else
       begin
