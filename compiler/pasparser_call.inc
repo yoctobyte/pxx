@@ -486,18 +486,16 @@ function NodeArrNDInfo(node: Integer): Boolean;
 var baseRec, fIdx, sym, d, base: Integer; fname: AnsiString;
 begin
   Result := False;
-  if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
-     (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] >= 0) and
-     (ASTIVal[ASTLeft[node]] < SymCount) and
-     (SymPtrElemNDims[ASTIVal[ASTLeft[node]]] >= 2) then
-  begin
-    sym := ASTIVal[ASTLeft[node]];
-    NDInfoNDims := SymPtrElemNDims[sym];
-    base := sym * MAX_ARR_DIMS;
-    for d := 0 to NDInfoNDims - 1 do
-    begin NDInfoLo[d] := SymArrDimLo[base + d]; NDInfoSpan[d] := SymArrDimSpan[base + d]; end;
-    Result := True;
-  end
+  { Widened past the plain-identifier base 2026-09-01: the arm below read the
+    pointer SYMBOL and a field / call result / array element / nested deref has
+    none, so `r.q^[i, j]` over a `^array[0..1, 0..1]` answered False here and
+    fell through to the jagged comma sugar -- element [0,0] right, every other
+    element written at the flat offset. DerefPtrArrayNDInfo asks the symbol
+    first and the pointee's ArrType row second, so the identifier spelling
+    takes byte-for-byte the path it did.
+    bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+  if DerefPtrArrayNDInfo(node) then
+    Result := True
   else if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and (SymArrNDims[ASTIVal[node]] >= 2) then
   begin
     sym := ASTIVal[node];

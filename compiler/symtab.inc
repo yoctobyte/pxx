@@ -4104,7 +4104,7 @@ begin
   SetLength(SymStrElemTk, n);
   SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
-  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemStrCap, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
+  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemArrAi, n);  SetLength(SymPtrElemStrCap, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymIsCtorResultTemp, n); SetLength(SymBlockId, n);
   SetLength(SymStaticLocal, n);   SetLength(SymAbsAliased, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
@@ -4236,6 +4236,11 @@ procedure SetPtrElemArrayInfo(si: Integer);
 var ptrArrDimI: Integer;
 begin
   if LastTypePointerElemArrAi < 0 then Exit;
+  { The ROW, before any of the copies below. It answers every question they do
+    and one they cannot -- the per-dim shape of the pointee when `si` is an
+    ARRAY whose ELEMENT is the pointer, where the SymArrDim* rows the copies
+    use are already spoken for by the array's own dimensions. }
+  SymPtrElemArrAi[si] := LastTypePointerElemArrAi;
   if ArrTypeIsDyn[LastTypePointerElemArrAi] then
   begin
     { A DYNAMIC pointee has no compile-time extent to record -- ArrTypeLo/Hi are
@@ -4302,6 +4307,7 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
+  SymPtrElemArrAi[SymCount] := -1;   { -1, not 0: zero is a VALID ArrType row }
   SymPtrElemNDims[SymCount] := 0;
   SymPtrElemStrCap[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
@@ -4510,6 +4516,7 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
+  SymPtrElemArrAi[SymCount] := -1;   { -1, not 0: zero is a VALID ArrType row }
   SymPtrElemNDims[SymCount] := 0;
   SymPtrElemStrCap[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
@@ -4840,6 +4847,7 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
+  SymPtrElemArrAi[SymCount] := -1;   { -1, not 0: zero is a VALID ArrType row }
   SymPtrElemNDims[SymCount] := 0;
   SymPtrElemStrCap[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
@@ -4958,6 +4966,7 @@ begin
   SymPtrBaseTk[SymCount] := Ord(tyUnknown);
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
+  SymPtrElemArrAi[SymCount] := -1;   { -1, not 0: zero is a VALID ArrType row }
   SymPtrElemNDims[SymCount] := 0;
   SymPtrElemStrCap[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
@@ -13422,6 +13431,15 @@ begin
   if node < 0 then Exit;
   if ASTKind[node] <> AN_DEREF then Exit;
   if ASTLeft[node] < 0 then Exit;
+  { The SYMBOL's own row first, for the same reason every accessor below asks
+    the symbol first: it is the route that exists for `p^` and for `ap[0]^`
+    alike, and it is the only route the C frontend could ever have. }
+  dpaA := DerefPtrArraySymAny(node);
+  if dpaA >= 0 then
+  begin
+    Result := SymPtrElemArrAi[dpaA];
+    if Result >= 0 then Exit;
+  end;
   dpaA := NodePtrAlias(ASTLeft[node]);
   if dpaA < 0 then Exit;
   Result := AliasPtrElemArrAi[dpaA];
@@ -13550,6 +13568,51 @@ begin
   if not ArrTypeIsDyn[dpaAi] then Exit;
   Result := ArrTypeDynDepth[dpaAi];
   if Result < 1 then Result := 1;
+end;
+
+{ The MULTI-DIM shape of `p^`'s pointee -- dim count, and each dimension's low
+  bound and span -- filled into NDInfo*, for any spelling of p. False when the
+  pointee is not a multi-dim fixed array.
+
+  The thirteenth site to ask this family's question and the last one that still
+  read only the plain-identifier spelling: NodeArrNDInfo's deref arm. Without
+  it a comma-indexed `r.q^[i, j]` fell out of the N-D path onto the jagged /
+  dynamic comma sugar, which indexes the FLAT extent as if it were one
+  dimension -- so element [0,0] was right and every other element was written
+  somewhere else. `1.50 0.00` where FPC says `1.50 6.00`: silent, exit 0, and
+  the same fingerprint for the field, array-element and nested spellings while
+  the plain one was correct.
+  bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+function DerefPtrArrayNDInfo(node: Integer): Boolean;
+var dpnSi, dpnAi, dpnD, dpnBase: Integer;
+begin
+  Result := False;
+  dpnSi := DerefPtrArraySym(node);
+  if dpnSi >= 0 then
+  begin
+    if SymPtrElemNDims[dpnSi] < 2 then Exit;
+    NDInfoNDims := SymPtrElemNDims[dpnSi];
+    dpnBase := dpnSi * MAX_ARR_DIMS;
+    for dpnD := 0 to NDInfoNDims - 1 do
+    begin
+      NDInfoLo[dpnD] := SymArrDimLo[dpnBase + dpnD];
+      NDInfoSpan[dpnD] := SymArrDimSpan[dpnBase + dpnD];
+    end;
+    Result := True;
+    Exit;
+  end;
+  dpnAi := DerefPtrElemArrAi(node);
+  if dpnAi < 0 then Exit;
+  if ArrTypeIsDyn[dpnAi] then Exit;
+  if ArrTypeNDims[dpnAi] < 2 then Exit;
+  NDInfoNDims := ArrTypeNDims[dpnAi];
+  dpnBase := dpnAi * MAX_ARR_DIMS;
+  for dpnD := 0 to NDInfoNDims - 1 do
+  begin
+    NDInfoLo[dpnD] := ArrTypeDimLo[dpnBase + dpnD];
+    NDInfoSpan[dpnD] := ArrTypeDimSpan[dpnBase + dpnD];
+  end;
+  Result := True;
 end;
 
 { "Is `p^` an array at all" -- either half. The one question IsNodeArray and the
