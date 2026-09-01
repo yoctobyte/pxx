@@ -2694,6 +2694,36 @@ the range and the range cannot contain it. Do not revert; go read what the row
 was already printing. The diff text was in the log the whole time, under a
 passing verdict.
 
+**THE `;` IS NOT THE TELL, AND THE FIRST SWEEP FOR IT WILL OVER-MATCH.** frankC
+made this precise the same day, on 3339 `expect_same.sh` call sites: 3266 are
+standalone recipe lines that make checks individually, and of the 73 that are
+line-continued, most of the survivors are the LAST command of their branch, where
+the status does propagate. Two blocks that look identical at a glance can differ
+only in whether anything runs after them. The question is not "which separator"
+but "does anything execute after this inside the same branch".
+
+**The exception, and it is the one a refined sweep still clears wrongly: a `for`
+loop keeps only the LAST iteration's status.** Being last in the body is not
+safety there. Measured, four recipes, and the middle two are the point:
+
+```
+@for a in x y; do false || { echo FAIL; exit 1; }; done   -> exit 2   guard fires
+@for a in x y; do false; done                             -> exit 2   last iter failed too
+@for a in x y; do test "$$a" = y; done                    -> exit 0   FAILS ITER 1, REPORTS PASS
+@for a in x y; do test "$$a" = x; done                    -> exit 2   fails the last iter
+```
+
+Row three is the masked case: iteration 1 fails, iteration 2 passes, the recipe
+reports success. Row one is why the `|| { ...; exit N; }` idiom is worth more
+than it looks -- `exit` leaves the whole shell, so it defeats the loop masking as
+well as the separator problem, and a row carrying it is safe for two independent
+reasons.
+
+Swept on that basis: 28 of the 3339 sites sit in a loop body, 10 of those could
+have discarded a status, and all 10 carry `|| { ...; exit N; }`. Zero masked.
+That zero is worth its denominator precisely because row three above proves the
+population COULD have contained one.
+
 **Corollary for anyone hardening a harness:** you are about to author a red that
 a bisect will blame you for. Say so in the commit message -- name the row, the
 real first-bad commit, and that the change is a disclosure. `7d1aed2b5` did, and
