@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 2d11h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `963c289544a2` | 2026-09-01T21:25:47Z | RED (native) | 167.5s | `12c916c5c9ca` RED |
+| seven | `889bfcf73256` | 2026-09-01T21:45:01Z | GREEN (native) | 171.4s | `12c916c5c9ca` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `12c916c5c9ca` on seven, 2026-09-01T20:42:51Z (57m ago).**
+**Newest full tier in the fleet: `12c916c5c9ca` on seven, 2026-09-01T20:42:51Z (1h ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `12c916c5c9ca` | RED | 57m | — (newest) |
+| seven | `12c916c5c9ca` | RED | 1h | — (newest) |
 | plexus | `27424c927b65` | RED | 2d11h | 2d10h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -51,9 +51,6 @@ Reading a staler host's map for a cross-target job answers a question about an O
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +40 (seven): bad `5d983997a05a`, last good `91b92d5e8c99`, 2 commit(s) in range
 - **test-xtensa#src:test/test_signal_default_revert_b336.pas** — test/test_signal_default_revert_b336.pas tools/run_target.sh +1 (seven): bad `370170edaffe`, last good `5d983997a05a`, 2 commit(s) in range
 - **test-xtensa#src:test/test_signal_handler_callback_b336.pas** — test/test_signal_handler_callback_b336.pas tools/expect_same.sh +2 (seven): bad `370170edaffe`, last good `5d983997a05a`, 2 commit(s) in range
-- **test-threads#src:test/test_threadsafe_refcount_lockfree.pas** — test/test_threadsafe_refcount_lockfree.pas tools/expect_same.sh (seven): bad `1e37a55f6748`, last good `645259ff18c0`, 1 commit(s) in range
-- **test-core#src:test/test_rtl_fpc_compat_helpers.pas** — test/test_rtl_fpc_compat_helpers.pas tools/expect_same.sh (seven): bad `970eabd8eadf`, last good `1e37a55f6748`, 4 commit(s) in range
-- **test-core#src:test/test_interface_byval_param_no_leak.pas** — test/test_interface_byval_param_no_leak.pas tools/expect_same.sh (seven): bad `3f73ad2f6a08`, last good `9801b0bcb2c6`, 2 commit(s) in range
 - **lib-test#src:test/lib_dns_aaaa.pas** — test/lib_dns_aaaa.pas tools/expect_same.sh (seven): bad `021cd94f10a9`, last good `1e37a55f6748`, 14 commit(s) in range
 - **lib-test#src:test/lib_dns_cache_facade.pas** — test/lib_dns_cache_facade.pas tools/expect_same.sh (seven): bad `021cd94f10a9`, last good `1e37a55f6748`, 14 commit(s) in range
 - **lib-test#src:test/lib_dns_chase.pas** — test/lib_dns_chase.pas tools/expect_same.sh (seven): bad `021cd94f10a9`, last good `1e37a55f6748`, 14 commit(s) in range
