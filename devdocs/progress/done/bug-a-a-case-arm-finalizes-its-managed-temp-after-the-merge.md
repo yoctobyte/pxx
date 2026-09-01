@@ -59,4 +59,4 @@ that discriminates: it reads `PXXDBG=a.ir:Hot` and asks whether the last
 
 - 2026-09-01 — found by grepping for the sibling of the loop-flush fix
   (`1308ef1f8`) rather than waiting for a report; fixed and closed in the same
-  session, commit PENDING-COMMIT.
+  session, commit a289b5529.
