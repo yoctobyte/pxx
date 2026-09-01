@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:28 blocked:7 backlog:14 backlog-umbrella:5 backlog-core:140 backlog-nilpy:97 backlog-tools:74 backlog-pascal:56 backlog-decide:24 backlog-libs:15 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:3 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3030 rejected:72`
+`working:6 unfinished:28 blocked:7 backlog:14 backlog-umbrella:5 backlog-core:139 backlog-nilpy:97 backlog-tools:74 backlog-pascal:56 backlog-decide:24 backlog-libs:15 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:3 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3030 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `feature-c-corpus-busybox-multi-applet` [C] — owner: frankD
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
@@ -56,7 +57,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 463, ranked
+## Ready — top 30 of 462, ranked
 
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -89,4 +90,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A+S]` regression-test-xtensa-test-signal-default-revert-b336
 - `[p 70] [A+S]` regression-test-xtensa-test-signal-handler-callback-b336
 
-_433 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_432 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
