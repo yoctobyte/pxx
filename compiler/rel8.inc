@@ -45,8 +45,36 @@
   saying "all sites converted" would have been false.
   Compare bug-a-the-abi-oracle-invariant-is-enforced-by-a-grep-that-cannot-fire:
   an invariant calibrated to a SPELLING reports clean forever. }
+{ HEADROOM, not just violations. CheckRel8 turns an overflow into a hard error,
+  so a jump that no longer fits cannot ship -- but it fires for whoever compiles
+  next, which may be a user rather than the author of the emitter that grew.
+  What nobody could see was how close the tightest span already is.
+
+  MEASURED 2026-09-01 by binary-searching a temporarily-lowered bound: across
+  the self-host build plus the whole quick tier, the largest displacement
+  actually exercised is in [101, 111] -- 17 to 27 bytes of slack -- and the
+  101-byte one is emitted by the `--threadsafe` lock path (test_mutex.pas),
+  which is exactly the region two tracks were growing that week. That search
+  cost four full rebuilds and a gate run. These two counters make it one run:
+
+      PXXDBG=a.rel8max ./compiler/pascal26 --threadsafe prog.pas out
+
+  Kept HERE, beside the check, so test_rel8_guard.pas gets them from the
+  include and still needs exactly five mocks. The REPORT lives in asmtext.inc
+  instead, next to AsmMemoReport, because printing it needs PxxDbgWants and
+  that would be a sixth mock -- the one thing rel8.inc exists to avoid. Do not
+  "tidy" the two halves back together. }
+var
+  Rel8MaxAbs  : Integer;      { largest |d| this compile passed through }
+  Rel8MaxWhat : AnsiString;   { and which kind of jump it was }
+
 procedure CheckRel8(d: Integer; const what: AnsiString);
 begin
+  if Abs(d) > Rel8MaxAbs then
+  begin
+    Rel8MaxAbs := Abs(d);
+    Rel8MaxWhat := what;
+  end;
   if (d < -128) or (d > 127) then
     Error('rel8 ' + what + ' displacement ' + AIntToStr(d) + ' does not fit a '
         + 'signed one-byte field (-128..127); this jump must be widened to '

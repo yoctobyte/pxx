@@ -2453,6 +2453,30 @@ begin
   end;
 
   AsmMemoReport;
+  { PXXDBG a.rel8max — how close the tightest one-byte jump displacement in this
+    compile came to the ±128 limit. The counters are declared in rel8.inc; this
+    reads them.
+
+    It is the HEADROOM number, and a violation cannot give it to you: CheckRel8
+    already hard-errors when a span stops fitting, so by the time anyone sees a
+    failure the margin is already gone. A slack of 17 bytes and a slack of 90
+    are the same clean build, and only one of them is one edit from breaking.
+
+    INLINE HERE, IN compiler.pas, AND NOT IN AN .inc — that is the whole reason
+    for this comment. rel8.inc cannot hold it: printing needs PxxDbgEnabled, and
+    test_rel8_guard.pas includes the real rel8.inc behind exactly five mocks,
+    which is the property that file exists to have. asmtext.inc was the first
+    home and it lasted one gate run: test_asm_emit_x64.pas includes THAT one
+    behind its own mock set and went red on `undefined variable
+    (PxxDbgEnabled)` — the same rot rel8.inc's header records happening to
+    test_asm_emit_rv32.pas three times. compiler.pas is the one file no harness
+    includes, so a diagnostic placed here cannot cost anyone a mock. }
+  if PxxDbgEnabled('a.rel8max') then
+    if Rel8MaxAbs = 0 then
+      WriteLn('PXXDBG a.rel8max none — no rel8 displacement was emitted')
+    else
+      WriteLn('PXXDBG a.rel8max max=', Rel8MaxAbs, ' (', Rel8MaxWhat,
+              ') slack=', 128 - Rel8MaxAbs, ' bytes to the -128..127 limit');
   DerefWalkReport;
   TokPoolReport;
   writeln('ok: ',outFile,'  [code=',CodeLen,'B  data=',DataLen,
