@@ -328,7 +328,7 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 
-## backlog-tools (71)
+## backlog-tools (72)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -338,6 +338,7 @@ _none_
 | bug-t-a-failing-plain-compile-is-reported-as-a-threadsafe-difference | T | 25 | bug | test-core's language-skeleton loop runs the plain compile with a bare ';' while the very next compile has '\|\| exit 1'. A failing plain compile does not stop the loop -- it falls through to comparing an empty 'plain' against 'ts' and still fails, but reports '--threadsafe changes the output' for a defect that has nothing to do with --threadsafe. Not a status hole; a diagnosis-quality one. | — |
 | bug-t-a-fuzz-finding-cited-by-seed-alone-cannot-prove-a-fix | T | 45 | bug | The csmith campaign cites findings by SEED. A seed only reproduces the same program against an identical generator version AND identical --csmith-args, so a later `seed N passes` is equally consistent with `fixed` and with `today's csmith emits a different program`. Three named open findings (901, 1502, 5004) now pass at HEAD and NONE of them can be closed on that evidence. | — |
 | bug-t-a-job-red-at-baseline-can-never-be-auto-ticketed | T | 55 | bug | A job that is red at BASELINE can never be auto-ticketed, and then reads as furniture | — |
+| bug-t-a-permanently-red-job-monopolises-the-single-detail-block | T | 55 | bug | A tstate report carries at most ONE detail block (job_reason_devtest.py:150, twatch.py:2022) and fills it from `## first failure:`. Because a standing red is present in every run, it keeps winning that slot, so genuinely NEW reds ship with a truncated tail and no detail — starved of it exactly when they are the news. Live case: reports/20260901T155512Z-66cda21-seven.md has 7 failures, one detail block, and it went to test-threads#exception_threads_race (red in 5 of 5); the four NEW dynarray reds each got a tail cut mid-word at `\| p`. Three sessions then spent an afternoon inferring what the log on seven said plainly. | — |
 | bug-t-a-present-corpus-is-never-checked-against-its-pinned-commit | T | 45 | bug | T: `present()` compares existence, not the commit the corpus was pinned to | — |
 | bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident | T | 45 | bug | testmgr's classify() picks a job's timeout class by substring-matching the make -n recipe text. test-nilpy gets corpus/1200s because its recipe happens to contain 'sqlite', 'lua' and 'uforth' -- nothing about NilPy. Delete one test file and the whole suite silently drops to unit/90s, turning every slow-but-passing run into a false RED. uforth already fell through this exact hole. | — |
 | bug-t-a-testtmp-binary-name-is-shared-by-two-tests-and-by-two-targets | T | 50 | bug | 117 $(TESTTMP) binary names are written from more than one TARGET, and testmgr runs different targets' jobs concurrently in one scratch root — so two compiles race on one path, which is the ETXTBSY/half-written-binary window the self-host chain already solved with compile-to-unique-name + rename. 15 names are written by two different SOURCES, 6 of those from two targets, where the loser's assertion runs the winner's program. Not a backlog to clean by sweep: the fix is per-recipe and the population is frozen by a devtest so it cannot grow. | — |
@@ -990,6 +991,7 @@ _none_
 - [p 55] [N] bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
 - [p 55] [T] bug-t-a-job-red-at-baseline-can-never-be-auto-ticketed
+- [p 55] [T] bug-t-a-permanently-red-job-monopolises-the-single-detail-block
 - [p 55] [T] bug-t-a-verify-verdict-is-rendered-with-a-reason-from-a-different-run
 - [p 55] [T] bug-t-test-fgl-skips-silently-when-the-corpus-is-absent-so-its-gate-row-passes-by-not-running
 - [p 55] [T] bug-t-the-duplicate-expectation-ratchet-is-npy-only-and-the-first-escape-was-a-pas-test

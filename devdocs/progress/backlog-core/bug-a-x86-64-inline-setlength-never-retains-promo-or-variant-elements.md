@@ -270,3 +270,31 @@ arenas=` tail, and **keeps `allocs=`, `frees=`, `live=`** — verified in the di
 run.** If they do, nothing new is wrong: the census fix was aimed at a real but
 different defect, and "all eight rows verified SAME" is `expect_same`'s verdict,
 not this assertion's.
+
+### Falsified: the reds are NOT one x86-64 binary asserted four times
+
+Each of the four recipes runs **two** `assert_no_leak` calls — the cross target
+first, then x86-64 on the `_x64` companion (Makefile 14929/14930 aarch64,
+14329/14330 i386, 15566/15567 riscv32, 17095/17096 arm32). So four identical
+`live=111` values had a cheaper explanation available: **one x86-64 binary
+asserted four times**, in which case the red never measured a cross backend at
+all and this ticket must not claim it did.
+
+Checked on seven, as a prediction rather than a look-around — the hypothesis
+predicts four identical `x86-64/` labels; the abort-before-it reading predicts
+none:
+
+```
+test-aarch64#147   x86-64/ lines=0   assert_no_leak[aarch64/managed_dynarray_field]
+test-i386#156      x86-64/ lines=0   assert_no_leak[i386/managed_dynarray_field]
+test-riscv32#131   x86-64/ lines=0   assert_no_leak[riscv32/managed_dynarray_field]
+test-arm32#150     x86-64/ lines=0   assert_no_leak[arm32/managed_dynarray_field]
+```
+
+**Zero, and one distinct cross label per log.** `assert_no_leak.sh` exits 1 on
+LEAK (line 65) and the cross assert is first in all four recipes, so make aborts
+before the x86-64 assert runs. The reds measured the cross backends.
+
+(Raised by frankA, ruled out by frank-coordinator's abort argument, falsified
+here. Worth the four minutes: had it been true, every conclusion above about
+cross-backend behaviour would have rested on an x86-64 measurement.)
