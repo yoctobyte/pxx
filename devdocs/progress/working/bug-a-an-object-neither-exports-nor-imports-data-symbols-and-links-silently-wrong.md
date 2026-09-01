@@ -348,3 +348,58 @@ of the translation units need it before anything links.
 **Scope of that number, kept attached to it:** it counts what GCC emits for
 busybox's sources. It says nothing about what pxx emits for the same sources —
 that is this ticket's own measurement, and the two must not be quoted as one.
+
+## Writer half: the design, and the constraint that shapes it
+
+The frontend half landed (`c29cd34f5`) and the linkage is now readable per name
+via `PXXDBG=a.clink`. What remains is the writer.
+
+**Symbol table layout.** ELF requires every LOCAL before every GLOBAL, with
+`sh_info` naming the first global, so the two new definition groups slot around
+the existing ones and one existing constant moves:
+
+    0            null
+    1,2,3        .text / .data / .bss section symbols
+    4..          local procs                       numLocalProcs
+    ..           local data (static)               numLocalData     NEW
+    firstGlobal  = 4 + numLocalProcs + numLocalData
+    ..           exported procs                    numExportProcs
+    ..           exported data                     numExportData    NEW
+    extSym0      = firstGlobal + numExportProcs + numExportData     CHANGED
+    ..           external functions                ExternalCount
+    impSym0      = extSym0 + ExternalCount
+    ..           imported data (UND)               numImportData    NEW
+
+`extSym0` is the only existing index arithmetic that moves; `writeRela64(...,
+extSym0 + i, ...)` for the external GOT slots stays correct once it does.
+
+**The constraint: `EmitGlobRef(bssOff)` takes an OFFSET, not a symbol**, and has
+roughly 200 call sites. A reference to an imported global must relocate against
+that symbol rather than against the `.bss` section, so the writer needs an
+identity the emitter never passed it. Three options, and the first two are
+traps:
+
+- *Thread a symbol index through EmitGlobRef* — 200 call sites for a fact almost
+  none of them have to hand.
+- *Bias the offset the way `DATA_SYM_BIAS` does* — attractive because it matches
+  an idiom already in the tree, and wrong: element and field offsets are folded
+  into the same integer, so `buf[3]` would arrive as bias + ordinal + 3 with no
+  way to separate the ordinal from the 3.
+- **Map the offset back at write time.** Each imported global still owns a
+  distinct `.bss` range, so the writer can hold `(base, size, importIdx)` per
+  import and, for each `GlobFix`, ask which range its `BSSoff` falls in. The
+  addend is then `BSSoff - base` (plus the usual `-4 - GlobFixTrail[i]` for
+  PC32), which is exactly the element offset that the folding produced. No
+  signature change and no new encoding.
+
+**Open question that must be answered before writing it, not assumed:** an
+`extern char buf[];` import has no size at its declaration — the size lives on
+the definition, in another TU. If pxx allocates it a zero-length `.bss` range,
+the lookup above has nothing to match and the relocation silently stays
+section-relative, which is the current bug wearing a new hat. Check what
+`AllocArray` reserves for an incomplete array before relying on ranges;
+if it can be zero, the imports need their own ordinal table rather than a
+range map.
+
+Only `writeELFRelX64General` needs this: it refuses any target but x86-64, and
+the ELF32 writer serves xtensa/riscv32 where the refusal stands.
