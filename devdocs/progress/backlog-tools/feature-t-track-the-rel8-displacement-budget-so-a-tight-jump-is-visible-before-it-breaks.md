@@ -92,3 +92,34 @@ frankA has since grown the same region: exported data references are now
 symbol-relative in `--emit-obj`, and the i386 address-as-immediate helper adds 6
 bytes per site. If `a.rel8max` moves on `--threadsafe` i386 at `742e616ec446` or
 later, that is theirs and not drift — ask before bisecting.
+
+## The hand-written-jump population, sized — 2026-09-02 (frankA, recorded by frankC)
+
+The section above leaves "any hand-written literal jump offset" unquantified.
+frankA has since sized it, and the instrument matters more than the number.
+
+**`grep` for `EmitB($7x); EmitB(...)` DOES NOT COUNT JUMPS.** It matches ModRM
+bytes and the second bytes of two-byte opcodes: `EmitB($0F); EmitB($7E);
+EmitB($C0)` is `movq rax, xmm0`; `EmitB($4C); EmitB($89); EmitB($77); EmitB($20)`
+is `mov [rdi+32], r14`. Neither is a jump. I quoted "about 25" to frankA off that
+grep and frankA had earlier quoted 142 off the same one — **two numbers from one
+broken instrument, which is not two sources.** Neither figure appears in this
+ticket and neither should be used.
+
+Filtering on the trailing `{ mnemonic }` comment instead gives **36 jcc + 8 `$EB`
+sites**, and that instrument can only UNDERCOUNT — it misses any site whose
+comment omits the mnemonic. So **~44 is a FLOOR, not a count.**
+
+frankA converted three of them, building the control artefacts with the
+pre-change compiler and byte-comparing: every displacement is supposed to be
+correct today, so byte-identity is the expected result and a differing byte IS a
+bug. **Two of the three differed, both by exactly 8**, and both were shipping on
+master (`14bc9d218`): `WriteLn(s:2,'|')` on a ShortString printed `|`, and
+`LoadFile` into a ShortString reported `Length(s)=0` for a 21-byte file. The
+third was byte-identical, so **the class is not uniform and the control is worth
+running per site.**
+
+That ticket went 45 -> 70 and stays with frankA; ~41 sites remain. Nothing here
+changes: the budget row still addresses the OTHER class (displacement too large),
+and these two were in-range-landing-in-the-wrong-place, which is why no budget
+number could have shown them.
