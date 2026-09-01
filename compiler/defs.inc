@@ -5061,6 +5061,19 @@ var
     field list that has to be enumerated. LoadPointeeFromArrType /
     StorePointeeToArrType (symtab.inc) are now the only readers and writers of
     this whole set, so a SEVENTH column costs two lines and no sweep. }
+  { ...and the SEVENTH column the note above predicted would cost two lines:
+    when that pointer ELEMENT points at a named ARRAY type (`TAp = array[..] of
+    PArr`, PArr = ^TArr), that ArrType row, else -1. Its absence was a live
+    wrong-value bug, not a gap: LoadPointeeFromArrType restored the other six
+    and left LastTypePointerElemArrAi holding whatever the last unrelated
+    declaration had put there, so `var a: TA` over `array of PInteger` picked
+    up the pointee shape of a `^TDyn` alias declared earlier in the same type
+    section and every consumer that asked believed `a`'s elements pointed at a
+    dynamic array. It read as CORRECT for `array of ^TDyn` -- the stale value
+    was the right one there -- which is why it survived: a right answer from a
+    stale global, order-dependent and invisible until the declarations move.
+    bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+  ArrTypePtrElemArrAi : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypePtrDepth   : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypePtrBaseTk  : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypePtrBaseRec : array[0..MAX_TYPEALIAS-1] of Integer;

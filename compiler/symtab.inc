@@ -4212,7 +4212,12 @@ begin
           ' baseTk=', SymPtrBaseTk[si],
           ' baseRec=', SymPtrBaseRec[si],
           ' ptrElemArrLen=', SymPtrElemArrLen[si],
-          ' ptrElemNDims=', SymPtrElemNDims[si]);
+          ' ptrElemNDims=', SymPtrElemNDims[si],
+          { the DYN half of the same fact. This dump was written to diagnose
+            pointer-to-array symbols and was blind to the one slot that says the
+            pointee is a DYNAMIC array, so a symbol carrying a stale dyn stamp
+            printed as clean. Reader half, again. }
+          ' ptrElemDynDepth=', SymPtrElemDynDepth[si]);
 end;
 
 { The pointee's SHAPE, recorded on the pointer symbol: `PFixed = ^TFixed` where
@@ -4724,6 +4729,7 @@ begin
   LastTypePointerDepth     := ArrTypePtrDepth[ai];
   LastTypePointerBaseTk    := ArrTypePtrBaseTk[ai];
   LastTypePointerBaseRec   := ArrTypePtrBaseRec[ai];
+  LastTypePointerElemArrAi := ArrTypePtrElemArrAi[ai];
 end;
 
 procedure StorePointeeToArrType(row: Integer);
@@ -4734,6 +4740,7 @@ begin
   ArrTypePtrDepth[row]     := LastTypePointerDepth;
   ArrTypePtrBaseTk[row]    := LastTypePointerBaseTk;
   ArrTypePtrBaseRec[row]   := LastTypePointerBaseRec;
+  ArrTypePtrElemArrAi[row] := LastTypePointerElemArrAi;
 end;
 
 function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
