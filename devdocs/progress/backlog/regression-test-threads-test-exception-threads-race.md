@@ -145,3 +145,50 @@ section — and a trailer names a SESSION, not an agent, with agents spanning
 several across restarts (seven session ids against four known-active agents in
 the last 8 hours). So it is recorded as "this session's id is on it", not as an
 attribution.
+
+## Mechanism found, and it is not about threads (frankB, 2026-09-01)
+
+**`620989250` frees the caught exception object at handler exit. This test
+creates its objects ONCE and re-raises them 200000 times.** The second raise
+touches freed memory. Its own header states the design: "an exception that
+allocates takes the heap lock on every raise, which serialises the threads and
+hides the interleaving under test. Phase 3's objects are created once, before
+the thread starts, and only re-raised."
+
+The commit's premise — `raise E.Create(..)` transfers the constructor's one
+reference — is true for that shape and false for `raise <an existing object>`,
+where the program still owns the object.
+
+**Threads, TLS and the shadow chain are all irrelevant.** Reproduces in 15
+lines, single-threaded, 5 iterations:
+
+    program reraise;
+    type TMyErr = class Code: Integer; end;
+    var obj: TMyErr; i, caught: Integer;
+    begin
+      obj := TMyErr.Create; obj.Code := 7;
+      caught := 0;
+      for i := 1 to 5 do
+      begin
+        try raise obj;
+        except on e: TMyErr do if e.Code = 7 then Inc(caught); end;
+      end;
+      WriteLn('caught=', caught, ' code=', obj.Code);
+    end.
+
+    compiler/ at 620989250^   caught=5 code=7   exit 0
+    compiler/ at HEAD         SIGSEGV           exit 139
+
+My earlier thread-stack reading of the gdb frames was the wrong hypothesis and
+is superseded — the repeated stack address is a consequence of the freed object,
+not a shadow-chain race. Recorded rather than deleted because it is what a
+plausible-but-wrong signature reading looks like: the test is *named* for a
+thread race, it *had* been a thread race, and the frames were consistent with
+one. The name routed the diagnosis.
+
+**Not fixable without a decision** — `test_exception_object_leaks` requires the
+opposite behaviour from the same guard. Filed as
+`decide-does-raise-of-an-existing-object-transfer-ownership` (Track U), with
+options, a recommendation, and one seductive shortcut checked and rejected.
+Not reverting: that trades this crash for the 1478/1500 leak and turns the other
+test red, which is not a return to green.
