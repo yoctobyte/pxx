@@ -37,3 +37,6 @@ Segmentation fault (core dumped)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-01 — auto-closed by the seven watcher: `test-core#src:test/test_multithreading.pas@1` passes at fe54f86f7dee (tier native); it was red at 039be8b4aa97. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
