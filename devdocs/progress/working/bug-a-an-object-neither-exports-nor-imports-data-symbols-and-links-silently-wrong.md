@@ -3,11 +3,11 @@ slug: bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silentl
 track: A
 prio: 75
 type: bug
-status: new
+status: working
 blocked-by: []
 created: 2026-09-01
 found-by: frankD
-owner: ""
+owner: frankA
 summary: "--emit-obj emits NO data symbols. A global defined in a .c gets no OBJECT symbol, and `extern int x;` is relocated into the object's OWN .bss instead of becoming an undefined import -- so two pxx objects sharing a global LINK CLEANLY and read different memory. Measured: gcc links the pair and prints 0 where 99 is correct. No diagnostic anywhere. Blocks separate compilation of any real C project (busybox's libbb/ptr_to_globals.c is one global pointer and cannot even be emitted)."
 ---
 

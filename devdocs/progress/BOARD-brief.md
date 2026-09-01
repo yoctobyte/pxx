@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:28 blocked:7 backlog:4 backlog-umbrella:5 backlog-core:135 backlog-nilpy:97 backlog-tools:71 backlog-pascal:54 backlog-decide:23 backlog-libs:16 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3013 rejected:72`
+`working:5 unfinished:28 blocked:7 backlog:4 backlog-umbrella:5 backlog-core:134 backlog-nilpy:97 backlog-tools:71 backlog-pascal:54 backlog-decide:23 backlog-libs:16 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3013 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong` [A] — owner: frankA
 - `feature-c-corpus-busybox-multi-applet` [C] — owner: frankD
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
@@ -55,9 +56,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 436, ranked
+## Ready — top 30 of 435, ranked
 
-- `[p 90] [A]` bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong (unblocks 1)
 - `[p 80] [A]` bug-a-i386-c-main-gets-argc-and-argv-swapped (unblocks 1)
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
@@ -87,5 +87,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
+- `[p 62] [N]` feature-nilpy-enum-class
 
-_406 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_405 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
