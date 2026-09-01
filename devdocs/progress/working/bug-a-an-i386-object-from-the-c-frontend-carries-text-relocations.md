@@ -8,7 +8,7 @@ blocked-by: []
 owner: frankC
 created: 2026-09-01
 found-by: frankA (while adding .init_array to the i386 object writer; pre-existing, not caused by it)
-summary: "i386 --emit-obj output is POSITION-DEPENDENT: every .text relocation is absolute R_386_32, so linking gives `relocation in read-only section .text` and `creating DT_TEXTREL in a PIE`, and `-Wl,-z,text` refuses outright. It is the i386 twin of feature-a-x86-64-object-output-is-position-dependent (done) and the harder one, because i386 has no PC-relative data addressing. CENSUSED 2026-09-01 over three objects (C, Pascal, Pascal --threadsafe): 1482 sites, 24 distinct operand shapes, 0 unmatched, all targeting our OWN .data/.bss/.text -- there are no external symbol references in .text at all and intra-object calls already need no relocation. THE ADDRESSING HALF IS MECHANICAL: 12 of the 24 shapes are `mod=00 rm=101` and become [ebx+disp32] by `modrm := (modrm and $38) or $83`, one length-preserving expression covering 606 sites including the F0-prefixed lock cmpxchg; the rest are moffs (a1/a3, +1 byte), address-as-immediate (b8..bf -> lea, +1), push imm32 (-> push ebx; add [esp], +3, needs no scratch), and SIB-indexed (base 101 -> 011, same length). Every rewrite was assembled and disassembled, not reasoned about. WHAT REMAINS IS NOT ADDRESSING BUT THE BASE REGISTER: all 1482 rewrites assume ebx holds _GLOBAL_OFFSET_TABLE_, and today ebx is short-lived scratch (34 sites in IREmitNode386), is architecturally required by the int 0x80 helpers, and the census itself contains `mov ebx, <global>`. DECIDED: the base register is esi, on three measurements -- 0 R_386_PLT32 in any object (every external call goes through our own .data GOT slot, so ebx's only advantage, the PLT contract, is absent), esi is the least-used register in generated code (1292 vs ebx 3595), and decisively esi is NOT byte-addressable on i386, so it can never be wanted for the 360 `mov bl,[d32]` sites that reserving ebx would have had to relocate onto al/cl/dl. Four phases, with the test-emit-obj assertion row LAST. Four of the 24 shapes appear ONLY in the --threadsafe object -- a census over the C object alone reports 19 shapes and looks just as clean."
+summary: "i386 --emit-obj output is POSITION-DEPENDENT: every .text relocation is absolute R_386_32, so `-Wl,-z,text` refuses the link and a PIE gets DT_TEXTREL. The i386 twin of feature-a-x86-64-object-output-is-position-dependent, and the harder one: i386 has no PC-relative data addressing, so position independence needs a GOT base register. MEASURED, and the measuring is most of what is banked here. 27 operand shapes need conversion, from an EMITTER census (PXXDBG=a.i386reloc, 11645 sites) not an object census (1450) -- the emitter probe found three shapes no object held, including a family the object-based plan had no entry for: `c7 00`, `mov [eax], imm32` with the data address as the IMMEDIATE, 74 sites, the only shape needing a scratch register the emitter must find. Twelve shapes collapse to one length-preserving expression, `modrm := (modrm and $38) or $83`; the rest are moffs (a1/a2/a3, +1), address-as-immediate (b8..bf -> lea, +1), push imm32 (+3, no scratch needed, and still live in 9 source sites for RTTI and dyn-array descriptors even though it reads as ZERO in the newest object census), SIB-indexed (base 101 -> 011, same length) and the new c7 00. Every rewrite was assembled and disassembled. BASE REGISTER: esi, decided by measurement -- 0 R_386_PLT32 anywhere, so ebx's only advantage (the PLT contract) is absent, and esi is not byte-addressable on i386 so it can never be wanted for the 360 `mov bl,[d32]` sites. The technique is SAVE/RESTORE around the self-contained sequences that clobber it, NOT re-homing: 70 of the 91 esi sites are co-live with edi (byte-copy loops, the 64-bit divide), so treating the two as interchangeable spares -- which an earlier revision of this ticket did -- yields a backend that fails in string copies and division. Phases: emitter census (done), establish the GOT base, convert family by family, and the test-emit-obj assertion row LAST."
 ---
 
 # An i386 object from the C frontend carries text relocations
@@ -336,3 +336,55 @@ not a rewrite.
 produces a backend which fails wherever both were live — and the failures would
 be in string copies and 64-bit division, i.e. everywhere, but only in programs
 that reach those paths.
+
+## THE EMITTER CENSUS, AND IT FOUND THREE SHAPES NO OBJECT CENSUS HELD (2026-09-01, frankC)
+
+`PXXDBG=a.i386reloc` (added to `emit.inc`) prints the eight bytes preceding
+every 32-bit absolute fixup on i386, at the `EmitDataRef`/`EmitGlobRef` choke
+point. Run over eight programs chosen to REACH what the objects missed — dyn
+arrays, RTTI/typinfo, a class hierarchy, records — plus a `--threadsafe` build:
+
+```
+11645 emitter sites, against 1450 from the three-object census
+```
+
+Each site is matched against the 24 known shapes and **anything unmatched is
+reported**, which is the whole instrument: a census that can only count what it
+already knows is a tally, not a measurement.
+
+Three unmatched, all confirmed by assembling them:
+
+| N | tail | is | family |
+| ---: | --- | --- | --- |
+| 74 | `c7 00` | `mov DWORD PTR [eax], imm32` | **NEW — address as an IMMEDIATE inside a store** |
+| 42 | `a2` | `mov ds:d32, al` | moffs, the BYTE sibling of `a1`/`a3` |
+| 4 | `0f b7 05` | `movzx eax, WORD PTR ds:d32` | plain ModRM, the 16-bit sibling of `0f b6 05` |
+
+`0f b7 05` and `a2` are new members of families already planned for. **`c7 00`
+is a family that did not exist in the plan**, and it is the hardest one yet:
+the data address is the instruction's IMMEDIATE, not its displacement, and the
+base register is already `eax`, so there is nothing to fold the GOT base into.
+It needs `lea <scratch>, [esi+d32@GOTOFF]` then `mov [eax], <scratch>` — the
+first shape in this whole census that requires a scratch register the emitter
+must find. 74 sites.
+
+Had phase 3 been written from the object census, it would have been written
+without an entry for that, and `-Wl,-z,text` would still have refused the link
+after the assertion certifying otherwise had gone green.
+
+### Neither census is complete alone, and that is the durable point
+
+Six of the 24 object-census shapes — `f0 0f b1 0d`, `ff 14 25`, `8b 05`,
+`39 35`, `ff 05`, `ff 0d` — were **not reached** by the eight-program emitter
+corpus. Adding a `--threadsafe` run covers them and produces **zero further
+unknowns**, so the union stands at **27 shapes**.
+
+- an OBJECT census is bounded by which programs you compiled;
+- an EMITTER census is bounded by which programs you compiled, *but reports what
+  it could not classify*, which is the property that makes it extensible;
+- neither is bounded by the compiler's actual reachable set.
+
+So the honest claim is **"27 shapes across these axes, with an instrument that
+announces a 28th"** — not "27 shapes". The probe stays in the tree for exactly
+that reason: whoever does phase 3 re-runs it, and a new shape says so instead of
+silently becoming an absolute relocation.

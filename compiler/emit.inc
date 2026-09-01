@@ -245,6 +245,37 @@ begin
   Result := (TargetArch = TARGET_X86_64) and (not EncToAsmBuffer);
 end;
 
+procedure DbgI386RelocShape(const site: AnsiString);
+{ PXXDBG=a.i386reloc — print the bytes that PRECEDE a 32-bit absolute fixup on
+  i386, one line per site, so the set of operand shapes needing conversion for
+  bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations can be
+  enumerated from the EMITTER rather than sampled from objects.
+
+  Why this exists rather than an objdump census: an object census reports the
+  shapes the compiled PROGRAMS happen to contain. Measured 2026-09-01, three
+  honestly-taken censuses of the same compiler gave 19, 24 and 23 shapes, and
+  `push imm32` read as ZERO in the newest of them while nine source sites still
+  emit it (RTTI and dyn-array descriptors, which no test object reached). The
+  emitter is the only population that cannot be short. }
+const HEXD = '0123456789abcdef';
+var k, lo: Integer;
+begin
+  if not PxxDbgEnabled('a.i386reloc') then Exit;
+  if TargetArch <> TARGET_I386 then Exit;
+  Write('PXXDBG a.i386reloc ', site, ' bytes=');
+  lo := CodeLen - 8;
+  if lo < 0 then lo := 0;
+  for k := lo to CodeLen - 1 do
+  begin
+    { +1: a Pascal string literal is 1-based, so nibble 0 is HEXD[1]. Without
+      it this printed out-of-bounds bytes that LOOKED like plausible hex. }
+    Write(HEXD[((Code[k] shr 4) and $0F) + 1]);
+    Write(HEXD[(Code[k] and $0F) + 1]);
+    Write(' ');
+  end;
+  WriteLn(' at=', CodeLen);
+end;
+
 procedure EmitDataRef(dataOff: Integer);
 { Data-address placeholder; width follows the target's pointer size (writeELF
   patches 8 bytes, writeELF32 patches 4) -- EXCEPT for the x86-64 rip-relative
@@ -267,6 +298,7 @@ begin
      (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) or
      (TargetArch = TARGET_WASM32) then
   begin
+    DbgI386RelocShape('EmitDataRef');
     Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
     Inc(FixCount);
     EmitI32(0);
@@ -433,6 +465,7 @@ begin
       that one requires BOTH a $25 SIB and a ModRM with rm=100, and $8D has
       rm=101. }
     GlobFixPCRel[GlobFixCount] := True;
+  DbgI386RelocShape('EmitGlobRef');
   GlobFix[GlobFixCount].CodePos := CodeLen;
   GlobFix[GlobFixCount].BSSoff  := bssOff;
   Inc(GlobFixCount); EmitI32(0);
