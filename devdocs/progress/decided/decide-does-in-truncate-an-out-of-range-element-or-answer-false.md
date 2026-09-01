@@ -104,4 +104,4 @@ deferred, and this ruling does not override that. Anyone who wants it files it
 as its own small ticket with the evidence.
 
 ## Log
-- 2026-09-01 — decided, commit PENDING-COMMIT.
+- 2026-09-01 — decided, commit 98fd65524.
