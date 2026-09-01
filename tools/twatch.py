@@ -4370,9 +4370,23 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
         # shadowing it here would crash the SECOND job of the batch on
         # `st["open_regressions"]`.
         hstep = step_fields(j)
-        head_step = ((" in step %d/%d, `%s`"
-                      % (hstep[0] + 1, hstep[1], (hstep[2][:56] or "?")))
-                     if hstep else "")
+        # The truncation MUST announce itself. This was `hstep[2][:56]` with the
+        # closing backtick appended afterwards, so an over-long step came out
+        # looking like a complete, well-formed command. Measured 2026-09-01:
+        # `tools/assert_no_leak.sh aarch64/managed_dynarray_field 50 ...` is
+        # exactly 56 characters up to the `5`, so the cut fell BETWEEN the digits
+        # and the title read `... managed_dynarray_field 5` -- a plausible bound,
+        # silently off by a factor of ten, in the one line everyone reads. A
+        # dropped digit is the worst case: nothing about it looks cut.
+        if hstep:
+            _raw = hstep[2] or "?"
+            # 120, not 56: at 56 the honest ellipsis lands before the BOUND,
+            # and the bound plus the label is the whole diagnostic value of the
+            # line. The full step here is 108 chars and now survives intact.
+            _txt = _raw if len(_raw) <= 120 else _raw[:119] + "\u2026"
+            head_step = " in step %d/%d, `%s`" % (hstep[0] + 1, hstep[1], _txt)
+        else:
+            head_step = ""
         refusals = refusal_markers(clone, j.get("src"))
         immune = pin_immune(clone, dict(reg or {}, pin_built=j.get("pin_built")))
         body = ("""---

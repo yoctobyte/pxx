@@ -7,7 +7,7 @@ track: A
 
 > **origin/master has advanced 4 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
 
-# regression: test-aarch64#src:test/test_managed_dynarray_field_leaks.pas at 0d3d061121a7 in step 4/5, `tools/assert_no_leak.sh aarch64/managed_dynarray_field 5` (auto-filed by twatch)
+# regression: test-aarch64#src:test/test_managed_dynarray_field_leaks.pas at 0d3d061121a7 in step 4/5, `tools/assert_no_leak.sh aarch64/managed_dynarray_field 50 tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64` (auto-filed by twatch)
 
 - **Type:** regression (auto-filed by Track T watcher, host seven, twatch `802e5ed96a48`).
   Untriaged.
@@ -64,3 +64,17 @@ assert_no_leak[aarch64/managed_dynarray_field]: LEAK — live=111 exceeds 50
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## The bound in this heading was WRONG when filed — it read `5`, the real one is `50`
+
+Corrected 2026-09-01. Not a typo and not a transcription slip: `twatch.py`
+truncated the failing step to 56 characters and appended the closing backtick
+afterwards, and this step is **exactly 56 characters up to the `5`**. The cut
+fell between the two digits of the bound, so the heading read a complete,
+well-formed command with a bound off by a factor of ten. Nothing looked
+truncated — that is the whole problem with amputating a number.
+
+Verified the bound was never 5: `git show 0d3d061121a7:Makefile` and its parent
+both carry `50`, and exactly one commit (`2b70ff387`) has ever touched that line.
+
+Fixed in `tools/twatch.py` — the cap is 120 and a truncation now ends in `…`.
