@@ -2,9 +2,21 @@
 type: bug
 track: A
 prio: 6
-summary: a PromoInt field has no record/class member kind at all so it leaks everywhere, and a Variant field leaks specifically through the RECORD descriptor because that chain lacks the Variant arm the CLASS chain has
+summary: a PromoInt field has no record/class member kind at all so it still leaks everywhere; the Variant half is FIXED in b2997a31b, except for a record whose only member is a Variant
 tags: [memory-leak, variant, promoint, rtti, records]
 ---
+
+## Status
+
+The **Variant half is fixed** in `b2997a31b` (RecordDescMember + the RECORD
+`tyVariant -> 5` arm, with PXXRecordRetain's missing kind-5 arm in the same
+commit): live=11658 -> 6, regression test `test_record_variant_member_leaks`.
+
+**Two things remain open and this ticket stays open for them:**
+1. **A PromoInt member**, in every shape — untouched, needs a new member kind.
+2. **A record whose ONLY member is a Variant** (live=7708) — `RecordHasManagedFields`
+   does not count a variant, so the record is never managed and no walk is
+   emitted at all. That is the broad change `ClassFieldNeedsFinal` warns about.
 
 ## Measured first — the two bugs have different shapes
 
