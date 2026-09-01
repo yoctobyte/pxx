@@ -12394,6 +12394,22 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-multi-applet
 	./$(COMPILER) test/c_preproc_unsigned.c $(TESTTMP)/c_ppunsigned26
 	tools/expect_same.sh c_ppunsigned26 "$$($(TESTTMP)/c_ppunsigned26)" "$$(printf '1 ok\n2 ok\n3 ok\n4 ok\n5 ok\n6 ok\n7 ok\n8 ok\n9 ok\n10 ok')"
+	# C99 5.2.4.1 requires at least 127 arguments in a macro invocation. The
+	# preprocessor reserved SIXTEEN argument slots per expansion level -- a
+	# stride constant, not the array size -- and past that the comma stopped
+	# being a separator: the rest of the arguments fused into the last one and
+	# the expansion came out malformed, silently.
+	# busybox's coreutils/factor.c found it. Its packed_wheel table calls a
+	# 20-argument macro from inside another 20-argument one, and the compiler
+	# NEVER RETURNED -- an 8-minute hang, no output. The simpler shape reported
+	# `stray token at top level: G', the same defect landing somewhere nobody
+	# would look. Row 3 is factor.c's own table, values checked against gcc;
+	# rows 1 and 2 bracket the old limit; row 4 is the standard's floor.
+	# $(COMPILER), not $(PXX_STABLE): the pin still has the 16-slot stride and
+	# hangs on this file.
+	# bug-c-a-macro-call-with-more-than-16-arguments-is-silently-mis-expanded
+	./$(COMPILER) test/c_macro_many_args.c $(TESTTMP)/c_manyargs26
+	tools/expect_same.sh c_manyargs26 "$$($(TESTTMP)/c_manyargs26)" "$$(printf '1 136\n2 153\n3 735435177334091028 635800628644997282\n4 17')"
 	# clearenv() -- busybox's `env -i' calls it, and coreutils/env.c would not
 	# compile at all without the declaration.
 	# ROW 1 IS THE TEST AND IT MUST COME FIRST: pxx_env_load() is lazy, so an

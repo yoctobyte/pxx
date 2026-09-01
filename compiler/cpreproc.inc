@@ -971,7 +971,7 @@ begin
           Inc(q);
           argc := 0;
           depth := 0;
-          argBase := 16;
+          argBase := CPREP_ARGS_PER_LEVEL;
           { C99 6.10.3p4: `m()` on a macro that HAS parameters supplies ONE
             argument whose token sequence is EMPTY -- not zero arguments. Read
             as zero, the sole parameter stayed UNBOUND, so `#define pfx(r)
@@ -990,8 +990,11 @@ begin
           begin
             if CPExprText[q] = '(' then Inc(depth)
             else if CPExprText[q] = ')' then Dec(depth)
-            else if (CPExprText[q] = ',') and (depth = 0) and (argc < 16) then
+            else if (CPExprText[q] = ',') and (depth = 0) then
             begin
+              if argc >= CPREP_ARGS_PER_LEVEL then
+                Error('C #if: macro call has more than '
+                      + AIntToStr(CPREP_ARGS_PER_LEVEL) + ' arguments');
               CPArgEnd[argBase + argc - 1] := q - 1;
               CPArgStart[argBase + argc] := q + 1;
               Inc(argc);
@@ -1437,7 +1440,7 @@ var p, last, a, b, ai, argBase, argP, k, savedSlot, q: Integer;
 begin
   pasteNext := False;
   if DebugTrace then writeln('C preprocessor: expand function #', mi, ' level=', level);
-  argBase := level * 16;
+  argBase := level * CPREP_ARGS_PER_LEVEL;
   p := CPMValueOff[mi];
   last := p + CPMValueLen[mi] - 1;
   while p <= last do
@@ -1835,7 +1838,7 @@ begin
           Inc(q);
           argc := 0;
           depth := 0;
-          argBase := (level + 1) * 16;
+          argBase := (level + 1) * CPREP_ARGS_PER_LEVEL;
           { C99 6.10.3p4: `m()` on a macro that HAS parameters supplies ONE
             argument whose token sequence is EMPTY -- not zero arguments. Read
             as zero, the sole parameter stayed UNBOUND, so `#define pfx(r)
@@ -1866,8 +1869,18 @@ begin
             end
             else if src[q] = '(' then Inc(depth)
             else if src[q] = ')' then Dec(depth)
-            else if (src[q] = ',') and (depth = 0) and (argc < 16) then
+            else if (src[q] = ',') and (depth = 0) then
             begin
+              { LOUD, not silent. At the old cap of 16 the comma simply stopped
+                being a separator: the remaining arguments fused into the last
+                one, the expansion came out malformed, and what surfaced was a
+                stray-token error in an unrelated place -- or, on
+                coreutils/factor.c's 20-argument macro called from inside
+                another 20-argument macro, a compiler that never returned.
+                bug-c-a-macro-call-with-more-than-16-arguments-is-silently-mis-expanded }
+              if argc >= CPREP_ARGS_PER_LEVEL then
+                Error('macro call has more than '
+                      + AIntToStr(CPREP_ARGS_PER_LEVEL) + ' arguments');
               CPArgEnd[argBase + argc - 1] := q - 1;
               CPArgStart[argBase + argc] := q + 1;
               Inc(argc);
