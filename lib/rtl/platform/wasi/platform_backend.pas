@@ -75,6 +75,9 @@ function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendSync: Integer;
 function PalBackendSetsid: Integer;
 function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
+function PalBackendGetPriority(which, who: Integer): Integer;
+function PalBackendSetPriority(which, who, prio: Integer): Integer;
+function PalBackendGetSid(pid: Integer): Integer;
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalBackendUtimensat(dirFd: Integer; path: PChar;
                              aSec, aNsec, mSec, mNsec: Int64;
@@ -860,6 +863,23 @@ begin
 end;
 
 function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendGetPriority(which, who: Integer): Integer;
+{ No scheduler is exposed to the module, and no process to name. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendSetPriority(which, who, prio: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendGetSid(pid: Integer): Integer;
+{ No process model, so no sessions -- as setsid above. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

@@ -157,6 +157,9 @@ function PalFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalSync: Integer;
 function PalSetsid: Integer;
 function PalGetGroups(count: Integer; list: Pointer): Integer;
+function PalGetPriority(which, who: Integer): Integer;
+function PalSetPriority(which, who, prio: Integer): Integer;
+function PalGetSid(pid: Integer): Integer;
 function PalClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalUtimensat(dirFd: Integer; path: PChar;
                       aSec, aNsec, mSec, mNsec: Int64;
@@ -456,6 +459,23 @@ end;
 function PalGetGroups(count: Integer; list: Pointer): Integer;
 begin
   Result := PalBackendGetGroups(count, list);
+end;
+
+function PalGetPriority(which, who: Integer): Integer;
+{ Passes the kernel's BIASED result through unchanged (20-nice); the crtl
+  wrapper converts. See PalBackendGetPriority for why. }
+begin
+  Result := PalBackendGetPriority(which, who);
+end;
+
+function PalSetPriority(which, who, prio: Integer): Integer;
+begin
+  Result := PalBackendSetPriority(which, who, prio);
+end;
+
+function PalGetSid(pid: Integer): Integer;
+begin
+  Result := PalBackendGetSid(pid);
 end;
 
 function PalClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;

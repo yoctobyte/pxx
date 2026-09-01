@@ -67,18 +67,29 @@ int errno;
 
 /* ---- FILE + the standard streams ------------------------------------------ */
 
+#define PXX_UNGET_MAX 8
+
 struct PxxCrtlFile {
   int fd;
   int err;
   int eof;
   int heap;
-  int unget;   /* one-char pushback for ungetc; -1 = empty */
+  /* PUSHBACK STACK, not a single character. C guarantees only one level of
+     ungetc and one level is all lua's chunk loader ever used -- but vfscanf
+     below needs to look several characters ahead to decide whether a numeric
+     field has ended (`0x' with no digit behind it, a lone `-', an exponent
+     that never arrived) and then put back everything the conversion did not
+     consume. A deeper stack is a strict superset of the guarantee, so nothing
+     that worked against one level can notice. Pushing onto a full stack fails,
+     which is what ungetc's -1 return is for. */
+  unsigned char ungetbuf[PXX_UNGET_MAX];
+  int ungetn;  /* how many are pending; they come back LAST-pushed-first */
 };
 typedef struct PxxCrtlFile FILE;
 
-static FILE __crtl_stdin  = { 0, 0, 0, 0, -1 };
-static FILE __crtl_stdout = { 1, 0, 0, 0, -1 };
-static FILE __crtl_stderr = { 2, 0, 0, 0, -1 };
+static FILE __crtl_stdin  = { 0, 0, 0, 0, { 0 }, 0 };
+static FILE __crtl_stdout = { 1, 0, 0, 0, { 0 }, 0 };
+static FILE __crtl_stderr = { 2, 0, 0, 0, { 0 }, 0 };
 static FILE __crtl_files[16];
 
 FILE *stdin  = &__crtl_stdin;
@@ -872,12 +883,11 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
   unsigned long got = 0;
   long r;
   if (total == 0) return 0;
-  if (stream->unget >= 0) {           /* honor a pending ungetc pushback */
-    ((unsigned char *)ptr)[0] = (unsigned char)stream->unget;
-    stream->unget = -1;
-    got = 1;
-    if (total == 1) { if (size == 0) return 0; return (size_t)(got / (unsigned long)size); }
+  while (stream->ungetn > 0 && got < total) {   /* drain the pushback first */
+    ((unsigned char *)ptr)[got] = stream->ungetbuf[--stream->ungetn];
+    got++;
   }
+  if (got == total) { if (size == 0) return 0; return (size_t)(got / (unsigned long)size); }
   /* LOOP until the request is satisfied or the source is exhausted. A single
      read() call is not fread: a short read is normal on a pipe, socket or tty
      and returning early there hands the caller fewer elements than were
@@ -899,22 +909,23 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream) {
 int fgetc(FILE *stream) {
   unsigned char ch;
   long r;
-  if (stream->unget >= 0) {           /* pending pushback (see ungetc) */
-    int c = stream->unget;
-    stream->unget = -1;
-    return c;
-  }
+  if (stream->ungetn > 0)             /* pending pushback (see ungetc) */
+    return (int)stream->ungetbuf[--stream->ungetn];
   r = __pxx_read(stream->fd, &ch, 1);
   if (r <= 0) { stream->eof = 1; return -1; }
   return (int)ch;
 }
 
-/* Push one char back so the next fgetc returns it (single-level, per C). EOF is
-   a no-op. lua's chunk loader uses getc/ungetc to peek/skip a leading '#!' or
-   BOM. */
+/* Push one char back so the next fgetc returns it. C guarantees one level;
+   this keeps a small stack (see PXX_UNGET_MAX) because vfscanf needs to unread
+   a short lookahead. EOF is a no-op and a full stack returns -1 without
+   pushing -- which is the only way a caller can be told, so it must not
+   silently drop the character instead. lua's chunk loader uses getc/ungetc to
+   peek/skip a leading '#!' or BOM. */
 int ungetc(int c, FILE *stream) {
   if (c < 0 || !stream) return -1;
-  stream->unget = (unsigned char)c;
+  if (stream->ungetn >= PXX_UNGET_MAX) return -1;
+  stream->ungetbuf[stream->ungetn++] = (unsigned char)c;
   stream->eof = 0;
   return (unsigned char)c;
 }
@@ -923,15 +934,18 @@ int getc(FILE *stream) { return fgetc(stream); }
 
 int getchar(void) { return fgetc(&__crtl_stdin); }
 
+/* Reads through fgetc, NOT through __pxx_read: reading the fd directly skipped
+   any pending ungetc pushback, so `ungetc(c, f); fgets(buf, n, f)' dropped c
+   and returned a line missing its first character -- no error, just a shorter
+   line. vfscanf below unreads its lookahead, which makes that mix ordinary. */
 char *fgets(char *s, int n, FILE *stream) {
   int i = 0;
-  unsigned char ch;
   if (n <= 0) return 0;
   while (i < n - 1) {
-    long r = __pxx_read(stream->fd, &ch, 1);
-    if (r <= 0) { stream->eof = 1; break; }
-    s[i++] = (char)ch;
-    if (ch == '\n') break;
+    int c = fgetc(stream);
+    if (c < 0) break;               /* fgetc set eof/err */
+    s[i++] = (char)c;
+    if (c == '\n') break;
   }
   if (i == 0) return 0;
   s[i] = 0;
@@ -978,7 +992,7 @@ FILE *fopen(const char *path, const char *mode) {
   f->fd = fd;
   f->err = 0;
   f->eof = 0;
-  f->unget = -1;
+  f->ungetn = 0;
   return f;
 }
 
@@ -993,7 +1007,7 @@ FILE *fdopen(int fd, const char *mode) {
   f->fd = fd;
   f->err = 0;
   f->eof = 0;
-  f->unget = -1;
+  f->ungetn = 0;
   return f;
 }
 
@@ -1012,7 +1026,7 @@ FILE *freopen(const char *path, const char *mode, FILE *stream) {
   stream->fd = fd;
   stream->err = 0;
   stream->eof = 0;
-  stream->unget = -1;
+  stream->ungetn = 0;
   return stream;
 }
 
@@ -1031,6 +1045,11 @@ int fclose(FILE *stream) {
 int fseek(FILE *stream, long off, int whence) {
   long r;
   if (!stream) { errno = EINVAL; return -1; }
+  /* A seek DISCARDS the pushback (C99 7.19.7.11p2) -- and a SEEK_CUR seek must
+     do it before the syscall, since the fd is already past the pushed-back
+     characters. Keeping them would deliver bytes from the old position after
+     a seek to a new one. */
+  stream->ungetn = 0;
   r = __pxx_seek(stream->fd, off, whence);
   if (r < 0) { errno = -r; stream->err = 1; return -1; }
   stream->eof = 0;
@@ -1042,7 +1061,11 @@ long ftell(FILE *stream) {
   if (!stream) { errno = EINVAL; return -1; }
   r = __pxx_seek(stream->fd, 0, SEEK_CUR);
   if (r < 0) { errno = -r; stream->err = 1; return -1; }
-  return r;
+  /* The fd has already consumed whatever is pushed back, so the POSITION A
+     CALLER WILL READ FROM is that many bytes earlier. Ignoring this reports a
+     spot the next fgetc will not read from -- the plausible-wrong-value shape,
+     and exactly what a scanf that unreads its lookahead would leave behind. */
+  return r - (long)stream->ungetn;
 }
 
 /* fseeko/ftello: the off_t forms. Identical here -- this stdio has no buffer
@@ -1053,6 +1076,7 @@ long ftell(FILE *stream) {
 int fseeko(FILE *stream, off_t off, int whence) {
   long long r;
   if (!stream) { errno = EINVAL; return -1; }
+  stream->ungetn = 0;                 /* as fseek: a seek discards the pushback */
   r = __pxx_seek(stream->fd, (long long)off, whence);
   if (r < 0) { errno = (int)-r; stream->err = 1; return -1; }
   stream->eof = 0;
@@ -1064,7 +1088,7 @@ off_t ftello(FILE *stream) {
   if (!stream) { errno = EINVAL; return -1; }
   r = __pxx_seek(stream->fd, 0, SEEK_CUR);
   if (r < 0) { errno = (int)-r; stream->err = 1; return -1; }
-  return (off_t)r;
+  return (off_t)(r - (long long)stream->ungetn);   /* as ftell */
 }
 
 /* getdelim/getline (POSIX.1-2008). The buffer is grown with realloc and handed
@@ -1380,6 +1404,305 @@ int sscanf(const char *s, const char *fmt, ...) {
   r = vsscanf(s, fmt, ap);
   va_end(ap);
   return r;
+}
+
+
+/* ---- fscanf: the same conversions, read from a STREAM ---------------------
+ *
+ * NOT vsscanf on a buffered line. That is the obvious spelling and it is wrong:
+ * scanf must leave the stream positioned exactly after the last character a
+ * conversion consumed, and a reader that slurps a line first has already eaten
+ * the rest of it. busybox's debianutils/start_stop_daemon.c reads a pidfile
+ * with `fscanf(f, "%u", &pid)' and then nothing else, so the over-read would
+ * not show there -- which is exactly why it must not be written that way.
+ *
+ * So this is character-driven: every conversion reads while the input can
+ * still belong to it and unreads the one character that ended it. Some need a
+ * SHORT lookahead rather than one character -- `0x' with no hex digit behind
+ * it, a lone `-', a float whose exponent never arrived -- and that is what the
+ * pushback stack at the top of this file is for. The deepest case is three
+ * (sign, `0', `x'), well inside PXX_UNGET_MAX.
+ *
+ * Supported set matches vsscanf: whitespace skipping, literal match, '*'
+ * suppression, field width, l/ll/h/hh lengths, %d %i %u %x %o %f %e %g %s %c
+ * %[ %n %%. Numeric conversions delegate to strtoll/strtod, so the value is
+ * the same one sscanf would have produced from the same characters.
+ */
+
+/* One character, counting what has been consumed so far (%n reads this). */
+static int sc_get(FILE *fp, int *nread) {
+  int c = fgetc(fp);
+  if (c >= 0) (*nread)++;
+  return c;
+}
+
+/* Put one back. EOF is not pushed -- there is nothing to unread. */
+static void sc_unget(int c, FILE *fp, int *nread) {
+  if (c < 0) return;
+  ungetc(c, fp);
+  (*nread)--;
+}
+
+static int sc_digit_ok(int c, int base) {
+  if (c < 0) return 0;
+  if (base == 8)  return c >= '0' && c <= '7';
+  if (base == 10) return c >= '0' && c <= '9';
+  return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+int vfscanf(FILE *fp, const char *fmt, va_list ap) {
+  int count = 0, nread = 0, c;
+  const char *p = fmt;
+
+  if (!fp || !fmt) return EOF;
+
+  while (*p) {
+    if (isspace((unsigned char)*p)) {
+      /* A whitespace directive matches ANY run of whitespace, including none,
+         and end of file ends it without being a failure. */
+      do { c = sc_get(fp, &nread); } while (c >= 0 && isspace(c));
+      sc_unget(c, fp, &nread);
+      p++;
+      continue;
+    }
+    if (*p != '%') {
+      c = sc_get(fp, &nread);
+      if (c != (unsigned char)*p) { sc_unget(c, fp, &nread); goto done; }
+      p++;
+      continue;
+    }
+    p++;                                          /* past '%' */
+    {
+      int lng = 0, shrt = 0, suppress = 0, width = -1;
+      char conv;
+      if (*p == '*') { suppress = 1; p++; }
+      if (*p >= '0' && *p <= '9') {
+        width = 0;
+        while (*p >= '0' && *p <= '9') { width = width * 10 + (*p - '0'); p++; }
+      }
+      while (*p == 'l' || *p == 'L' || *p == 'h') {
+        if (*p == 'l' || *p == 'L') lng++; else shrt++;
+        p++;
+      }
+      conv = *p;
+      if (conv == '\0') break;
+      p++;
+      /* Leading whitespace is skipped before every conversion EXCEPT %c, %[
+         and %n -- those read (or measure) the input where it stands.
+         C99 7.19.6.2p5/p8. */
+      if (conv != 'c' && conv != '%' && conv != '[' && conv != 'n') {
+        do { c = sc_get(fp, &nread); } while (c >= 0 && isspace(c));
+        sc_unget(c, fp, &nread);
+      }
+
+      if (conv == 'd' || conv == 'i' || conv == 'u' || conv == 'x' || conv == 'o') {
+        char buf[72];
+        char *end;
+        long long v;
+        int n = 0, base = (conv == 'x') ? 16 : (conv == 'o') ? 8 : 10;
+        int ndig = 0;
+        int room = (width < 0 || width > (int)sizeof(buf) - 1)
+                   ? (int)sizeof(buf) - 1 : width;
+        c = sc_get(fp, &nread);
+        if ((c == '+' || c == '-') && n < room) { buf[n++] = (char)c; c = sc_get(fp, &nread); }
+        /* %i takes its base from the prefix; %x tolerates an optional one. */
+        if (c == '0' && n < room) {
+          buf[n++] = (char)c; ndig++;
+          c = sc_get(fp, &nread);
+          if ((c == 'x' || c == 'X') && (conv == 'x' || conv == 'i') && n < room) {
+            base = 16; ndig = 0;   /* the prefix is not a digit */
+            buf[n++] = (char)c;
+            c = sc_get(fp, &nread);
+          } else if (conv == 'i') {
+            base = 8;
+          }
+        }
+        while (sc_digit_ok(c, base) && n < room) {
+          buf[n++] = (char)c; ndig++;
+          c = sc_get(fp, &nread);
+        }
+        sc_unget(c, fp, &nread);            /* the character that ended it */
+        buf[n] = '\0';
+        /* MATCHING FAILURE, and only the character that ended the field goes
+           back -- the sign, or a `0x' with no hex digit behind it, stays
+           consumed. That is glibc's behaviour and C99 7.19.6.2p9 requires no
+           more ("the offending input character is left unread"). Restoring the
+           whole lookahead is the tempting alternative and it is a DIFFERENT
+           library: `fscanf(f, "%d", &a)' on "-x" then leaves "-x", where glibc
+           leaves "x", and the next directive sees another character. Measured
+           against glibc, not reasoned about. Note "0x" with no digit is a
+           FAILURE here rather than a conversion of the leading 0, which is the
+           same measurement. */
+        if (ndig == 0) goto done;
+        v = strtoll(buf, &end, (conv == 'i') ? 0 : base);
+        if (end == buf) goto done;
+        /* Anything strtoll did not take was never part of the field. */
+        while (buf + n > end) sc_unget((unsigned char)buf[--n], fp, &nread);
+        if (!suppress) {
+          if (lng >= 2) *va_arg(ap, long long *) = v;
+          else if (lng == 1) *va_arg(ap, long *) = (long)v;
+          else if (shrt >= 2) *va_arg(ap, signed char *) = (signed char)v;
+          else if (shrt == 1) *va_arg(ap, short *) = (short)v;
+          else *va_arg(ap, int *) = (int)v;
+          count++;
+        }
+      } else if (conv == 'f' || conv == 'e' || conv == 'g' ||
+                 conv == 'F' || conv == 'E' || conv == 'G' || conv == 'a' || conv == 'A') {
+        char buf[136];
+        char *end;
+        double v;
+        int n = 0, hex = 0, seen_exp = 0, seen_dot = 0, seen_dig = 0;
+        int room = (width < 0 || width > (int)sizeof(buf) - 1)
+                   ? (int)sizeof(buf) - 1 : width;
+        c = sc_get(fp, &nread);
+        if ((c == '+' || c == '-') && n < room) { buf[n++] = (char)c; c = sc_get(fp, &nread); }
+        if (c == '0' && n < room) {
+          buf[n++] = (char)c; seen_dig = 1;
+          c = sc_get(fp, &nread);
+          if ((c == 'x' || c == 'X') && n < room) {
+            hex = 1; seen_dig = 0; buf[n++] = (char)c; c = sc_get(fp, &nread);
+          }
+        }
+        /* COLLECT ONLY WHAT KEEPS THE TOKEN A VALID PREFIX of a float. That is
+           C99 7.19.6.2p6's "longest initial subsequence of a matching
+           sequence", and getting it right is what makes the failure test below
+           sound: a token that is a valid prefix but not a valid number ("1e+",
+           "0x", "-") is a MATCHING FAILURE with everything consumed, while
+           "1.2.3" must stop at the second dot and convert 1.2. A looser
+           collector conflates the two -- it grabs the second dot and then
+           reports a matching failure for a number glibc converts. */
+        while (n < room) {
+          int ok = 0;
+          if (c >= '0' && c <= '9') { ok = 1; seen_dig = 1; }
+          else if (hex && ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) { ok = 1; seen_dig = 1; }
+          else if (c == '.' && !seen_dot && !seen_exp) { ok = 1; seen_dot = 1; }
+          else if (!hex && !seen_exp && seen_dig && (c == 'e' || c == 'E')) { ok = 1; seen_exp = 1; }
+          else if (hex && !seen_exp && seen_dig && (c == 'p' || c == 'P')) { ok = 1; seen_exp = 1; }
+          else if ((c == '+' || c == '-') && n > 0 &&
+                   (buf[n-1] == 'e' || buf[n-1] == 'E' ||
+                    buf[n-1] == 'p' || buf[n-1] == 'P')) ok = 1;
+          if (!ok) break;
+          buf[n++] = (char)c;
+          c = sc_get(fp, &nread);
+        }
+        sc_unget(c, fp, &nread);
+        buf[n] = '\0';
+        v = strtod(buf, &end);
+        /* Every collected character was part of the item, so strtod stopping
+           short means the item is not a number: a matching failure, with the
+           characters left consumed, exactly as for the integers above. */
+        if (end != buf + n) goto done;
+        if (!suppress) {
+          if (lng >= 1) *va_arg(ap, double *) = v;
+          else *va_arg(ap, float *) = (float)v;
+          count++;
+        }
+      } else if (conv == 's') {
+        char *dst = suppress ? 0 : va_arg(ap, char *);
+        int taken = 0;
+        c = sc_get(fp, &nread);
+        if (c < 0) goto done;                       /* input failure */
+        while (c >= 0 && !isspace(c) && (width < 0 || taken < width)) {
+          if (dst) *dst++ = (char)c;
+          taken++;
+          c = sc_get(fp, &nread);
+        }
+        sc_unget(c, fp, &nread);
+        if (dst) *dst = '\0';
+        if (!suppress) count++;
+      } else if (conv == 'c') {
+        char *dst = suppress ? 0 : va_arg(ap, char *);
+        int want = (width < 0) ? 1 : width;
+        int taken = 0;
+        while (taken < want) {
+          c = sc_get(fp, &nread);
+          if (c < 0) break;
+          if (dst) *dst++ = (char)c;
+          taken++;
+        }
+        if (taken < want) goto done;                /* an incomplete %c fails */
+        if (!suppress) count++;
+      } else if (conv == '[') {
+        unsigned char set[256];
+        int neg = 0, i, taken = 0;
+        char *dst;
+        for (i = 0; i < 256; i++) set[i] = 0;
+        if (*p == '^') { neg = 1; p++; }
+        if (*p == ']') { set[(unsigned char)']'] = 1; p++; }
+        while (*p && *p != ']') {
+          if (p[1] == '-' && p[2] && p[2] != ']') {
+            unsigned char lo = (unsigned char)p[0], hi = (unsigned char)p[2];
+            if (lo <= hi) { for (i = lo; i <= hi; i++) set[i] = 1; }
+            else { set[lo] = 1; set[(unsigned char)'-'] = 1; set[hi] = 1; }
+            p += 3;
+          } else {
+            set[(unsigned char)*p] = 1;
+            p++;
+          }
+        }
+        if (*p == ']') p++;
+        dst = suppress ? 0 : va_arg(ap, char *);
+        c = sc_get(fp, &nread);
+        while (c >= 0 && (width < 0 || taken < width) &&
+               (neg ? !set[(unsigned char)c] : set[(unsigned char)c])) {
+          if (dst) *dst++ = (char)c;
+          taken++;
+          c = sc_get(fp, &nread);
+        }
+        sc_unget(c, fp, &nread);
+        if (taken == 0) goto done;      /* C99 7.19.6.2p12: at least one */
+        if (dst) *dst = '\0';
+        if (!suppress) count++;
+      } else if (conv == 'n') {
+        /* Takes an argument but does NOT count toward the return value. */
+        if (!suppress) {
+          if (lng >= 2) *va_arg(ap, long long *) = (long long)nread;
+          else if (lng == 1) *va_arg(ap, long *) = (long)nread;
+          else if (shrt >= 2) *va_arg(ap, signed char *) = (signed char)nread;
+          else if (shrt == 1) *va_arg(ap, short *) = (short)nread;
+          else *va_arg(ap, int *) = nread;
+        }
+      } else if (conv == '%') {
+        c = sc_get(fp, &nread);
+        if (c != '%') { sc_unget(c, fp, &nread); goto done; }
+      } else {
+        goto done;   /* unsupported conversion: stop, as glibc does */
+      }
+    }
+  }
+done:
+  /* EOF, not 0, when an INPUT FAILURE happened before anything was converted
+     -- the difference `while (fscanf(...) != EOF)' depends on. The test is the
+     EOF INDICATOR, not "nothing was read": `%d' against a stream holding only
+     a newline consumes that newline while skipping leading whitespace and then
+     hits end of file, and glibc calls that EOF. Counting characters instead
+     returned 0 there and the loop never terminated. A format that merely
+     failed to MATCH available input leaves the indicator clear and still
+     returns 0, which is the distinction callers use. */
+  if (count == 0 && feof(fp)) return EOF;
+  return count;
+}
+
+int fscanf(FILE *fp, const char *fmt, ...) {
+  va_list ap;
+  int r;
+  va_start(ap, fmt);
+  r = vfscanf(fp, fmt, ap);
+  va_end(ap);
+  return r;
+}
+
+int scanf(const char *fmt, ...) {
+  va_list ap;
+  int r;
+  va_start(ap, fmt);
+  r = vfscanf(stdin, fmt, ap);
+  va_end(ap);
+  return r;
+}
+
+int vscanf(const char *fmt, va_list ap) {
+  return vfscanf(stdin, fmt, ap);
 }
 
 /* perror: "<msg>: <strerror(errno)>\n" on STDERR, and just the error text when

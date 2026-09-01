@@ -54,6 +54,13 @@ int dprintf(int fd, const char *fmt, ...);
 int vdprintf(int fd, const char *fmt, va_list ap);
 int sscanf(const char *s, const char *fmt, ...);
 int vsscanf(const char *s, const char *fmt, va_list ap);
+/* The stream forms. These read CHARACTER BY CHARACTER and unread the one that
+   ended each field, so the stream is left exactly where the last conversion
+   stopped -- a caller may keep reading from it. */
+int fscanf(FILE *stream, const char *fmt, ...);
+int vfscanf(FILE *stream, const char *fmt, va_list ap);
+int scanf(const char *fmt, ...);
+int vscanf(const char *fmt, va_list ap);
 int puts(const char *s);
 int fputs(const char *s, FILE *stream);
 void perror(const char *msg);

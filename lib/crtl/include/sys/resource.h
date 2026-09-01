@@ -15,10 +15,12 @@
  *
  * UPDATE 2026-09-01: getrlimit/setrlimit ARE declared now, because the PAL work
  * the paragraph above names has been done -- PalPrlimit sits on prlimit64, one
- * syscall serving both. The reasoning above still stands for everything NOT
- * listed here: getrusage and the priority calls have no PAL entry, so they stay
- * undeclared and a call to one is a compile error naming the function, which is
- * the honest answer rather than a silent DT_NEEDED on glibc.
+ * syscall serving both.
+ * UPDATE 2026-09-02: getpriority/setpriority likewise, on PalGetPriority/
+ * PalSetPriority (busybox's `nice' and `renice'). The reasoning above still
+ * stands for everything NOT listed here -- getrusage has no PAL entry, so it
+ * stays undeclared and a call to it is a compile error naming the function,
+ * which is the honest answer rather than a silent DT_NEEDED on glibc.
  *
  * prlimit64 rather than the legacy getrlimit/ugetrlimit pair: the legacy calls
  * use a 32-bit rlim_t on 32-bit targets and saturate at 4GB, so they would need
@@ -99,5 +101,13 @@ struct rusage {
    unlimited resource, so it round-trips rather than being translated. */
 int getrlimit(int resource, struct rlimit *rlim);
 int setrlimit(int resource, const struct rlimit *rlim);
+
+/* getpriority(2) returns the nice value, -20..19 -- and -1 IS A VALID ANSWER,
+   so the return value alone cannot report failure. The POSIX contract is that
+   the caller sets errno to 0 before the call and inspects it after; this
+   implementation touches errno only on failure, which is what makes that
+   contract work. busybox's coreutils/nice.c does exactly that. */
+int getpriority(int which, id_t who);
+int setpriority(int which, id_t who, int prio);
 
 #endif

@@ -105,6 +105,9 @@ function __pxx_fcntl(fd, cmd: Integer; arg: Int64): Integer;
 function __pxx_sync: Integer;
 function __pxx_setsid: Integer;
 function __pxx_getgroups(count: Integer; list: Pointer): Integer;
+function __pxx_getpriority(which, who: Integer): Integer;
+function __pxx_setpriority(which, who, prio: Integer): Integer;
+function __pxx_getsid(pid: Integer): Integer;
 function __pxx_clock_settime(clockId: Integer; sec, nsec: Int64): Integer;
 function __pxx_utimensat(dirFd: Integer; path: PChar;
                          aSec, aNsec, mSec, mNsec: Int64;
@@ -524,6 +527,21 @@ end;
 function __pxx_getgroups(count: Integer; list: Pointer): Integer;
 begin
   Result := PalGetGroups(count, list);
+end;
+
+function __pxx_getpriority(which, who: Integer): Integer;
+begin
+  Result := PalGetPriority(which, who);
+end;
+
+function __pxx_setpriority(which, who, prio: Integer): Integer;
+begin
+  Result := PalSetPriority(which, who, prio);
+end;
+
+function __pxx_getsid(pid: Integer): Integer;
+begin
+  Result := PalGetSid(pid);
 end;
 
 function __pxx_clock_settime(clockId: Integer; sec, nsec: Int64): Integer;

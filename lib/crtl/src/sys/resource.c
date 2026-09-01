@@ -67,3 +67,34 @@ int setrlimit(int resource, const struct rlimit *rlim) {
   if (rc < 0) { errno = -rc; return -1; }
   return 0;
 }
+
+/* ---- process scheduling priority ------------------------------------------
+ *
+ * THE KERNEL DOES NOT RETURN THE NICE VALUE. getpriority(2) would have to
+ * return -20..19, and a syscall cannot distinguish a nice of -1 from -EPERM,
+ * so the kernel returns 20-nice (1..40) instead and every libc converts on the
+ * way out. The PAL passes that biased number through unchanged precisely so
+ * that a negative result still means -errno on the way in; the single
+ * conversion lives here, next to errno.
+ *
+ * -1 IS A VALID RETURN: a process running at nice -1 is reported as -1, the
+ * same value a failure would produce. So the caller cannot use the return
+ * value to detect failure, which is why POSIX has it set errno to 0 beforehand
+ * and read errno afterwards -- and why nothing below writes errno on success.
+ *
+ * Needed by busybox coreutils/nice.c and util-linux/renice.c.
+ */
+extern int __pxx_getpriority(int which, int who);
+extern int __pxx_setpriority(int which, int who, int prio);
+
+int getpriority(int which, id_t who) {
+  int rc = __pxx_getpriority(which, (int)who);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 20 - rc;
+}
+
+int setpriority(int which, id_t who, int prio) {
+  int rc = __pxx_setpriority(which, (int)who, prio);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}

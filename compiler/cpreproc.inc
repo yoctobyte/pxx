@@ -3266,6 +3266,53 @@ begin
   CPAddLiteral('__ORDER_LITTLE_ENDIAN__', '1234');
   CPAddLiteral('__ORDER_BIG_ENDIAN__', '4321');
   CPAddLiteral('__BYTE_ORDER__', '__ORDER_LITTLE_ENDIAN__');
+  { GNU C IDENTITY. This is a FEATURE CLAIM, not a boast, and 2.7 is the
+    LOWEST version that unlocks the one thing pxx actually implements and had
+    no way to announce: `__attribute__'.
+
+    Why it has to be announced at all. The universal spelling in real C is
+    busybox include/platform.h's
+
+        #if !__GNUC_PREREQ(2,7)
+        # ifndef __attribute__
+        #  define __attribute__(x)
+        # endif
+        #endif
+
+    -- and with no __GNUC__ that fires, so PACKED, ALIGNED, NORETURN and
+    UNUSED_PARAM all expand to NOTHING. pxx supports every one of them. The
+    result was a SILENTLY DIFFERENT LAYOUT: archival/libarchive/
+    decompress_gunzip.c's gzip header union came out 12 bytes where gcc makes
+    it 8, and the only reason anyone noticed is that busybox happens to
+    BUILD_BUG_ON exactly that. Anywhere without the assert, the fields are read
+    at the wrong offsets and the program merely produces wrong answers. That is
+    this repo's expensive shape, and it was reachable from an identity macro we
+    declined to set.
+
+    Why 2.7 and not something modern. The version is read as a capability
+    ladder, so claiming more than is implemented turns code ON that pxx cannot
+    compile. Measured on this tree: __attribute__, __inline__, statement
+    expressions, __restrict, __extension__ and __builtin_expect all work;
+    typeof/__typeof__, __builtin_unreachable, __builtin_constant_p,
+    __builtin_choose_expr, __builtin_types_compatible_p, labels-as-values and
+    inline asm with a non-empty template do NOT. 2.7 keeps every 3.x/4.x-gated
+    builtin off -- busybox's own `bb_unreachable' is gated on
+    __GNUC_PREREQ(4,5) and stays on its portable arm -- while `inline' resolves
+    to __inline__, which works.
+
+    What it costs. Code gating INLINE ASM on a bare `defined(__GNUC__)' (with
+    no version test) now takes the asm arm and fails to compile. That is a
+    LOUD failure naming the construct, where the status quo was a quiet wrong
+    layout, so the trade is one-directional. Measured over busybox's 265
+    translation units at this config: 1 fixed, 0 broken.
+    Note libbb/hash_md5_sha.c and networking/tls_*.c DO hold such asm, gated
+    additionally on ENABLE_SHA1_HWACCEL / CONFIG_SHA1_SMALL / ALLOW_ASM; a
+    config that turns those on will now reach the asm. The answer there is
+    inline-asm support, not a smaller version claim.
+    feature-c-corpus-busybox-multi-applet }
+  CPAddLiteral('__GNUC__', '2');
+  CPAddLiteral('__GNUC_MINOR__', '7');
+  CPAddLiteral('__GNUC_PATCHLEVEL__', '0');
   CPAddLiteral('__STDC__', '01');
   CPAddLiteral('__STDC_VERSION__', '199901L');   { C99 — crtl ships C99 stdint/inttypes }
   CPAddLiteral('__STDC_HOSTED__', '01');

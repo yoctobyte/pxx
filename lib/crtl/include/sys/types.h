@@ -13,6 +13,10 @@ typedef long pid_t;
 typedef unsigned int mode_t;
 typedef unsigned int uid_t;
 typedef unsigned int gid_t;
+/* id_t is POSIX's "wide enough for any of pid_t, uid_t, gid_t" id -- it is the
+   `who' argument of get/setpriority, where the same slot holds a pid, a pgrp
+   or a uid depending on `which'. glibc spells it `unsigned int'. */
+typedef unsigned int id_t;
 /* dev_t and ino_t are 64-bit in glibc on EVERY target, independent of
    _FILE_OFFSET_BITS, because both carry values the kernel hands out at 64 bits:
    statx returns stx_ino as a u64, and the userspace dev_t encoding that

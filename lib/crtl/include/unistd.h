@@ -46,6 +46,8 @@ void sync(void);
    count without touching the list. */
 int setsid(void);
 int getgroups(int size, gid_t list[]);
+/* getsid(2): pid 0 means the caller. */
+pid_t getsid(pid_t pid);
 
 /* getlogin_r/getlogin answer from LOGNAME, then USER, then the passwd entry
    for the real uid -- NOT from utmp and the controlling terminal, which is

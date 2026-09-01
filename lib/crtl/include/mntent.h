@@ -7,8 +7,9 @@
  * field-splitting rules tested against glibc rather than guessed". busybox's
  * coreutils/df.c and libbb/find_mount_point.c are that target, and src/mntent.c
  * records which rules were measured -- the octal escapes and the optional
- * freq/passno columns in particular. addmntent is still absent: nothing in the
- * corpus WRITES mtab, and a half-written entry is worse than a missing call.
+ * freq/passno columns in particular. addmntent and getmntent_r joined them on
+ * 2026-09-02, when util-linux/mount.c and umount.c reached rung 2's applet
+ * list -- one writes mtab, the other reads it reentrantly.
  */
 #ifndef _CRTL_MNTENT_H
 #define _CRTL_MNTENT_H
@@ -42,5 +43,13 @@ int            endmntent(FILE *fp);
 struct mntent *getmntent(FILE *fp);
 /* Whole-element match: `ro' does not match `errors=remount-ro'. */
 char          *hasmntopt(const struct mntent *mnt, const char *opt);
+/* Reentrant read into the caller's storage: needs no stream slot, so it works
+   on any FILE*, including one fopen'd directly rather than via setmntent. */
+struct mntent *getmntent_r(FILE *fp, struct mntent *mntbuf,
+                           char *buf, int buflen);
+/* Append one entry, escaping the four characters getmntent decodes.
+   RETURNS 0 ON SUCCESS AND 1 ON FAILURE -- glibc's convention, the opposite of
+   the usual one. */
+int            addmntent(FILE *fp, const struct mntent *mnt);
 
 #endif

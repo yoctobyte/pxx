@@ -20,6 +20,7 @@ extern int __pxx_fsync(int fd);
 extern int __pxx_sync(void);
 extern int __pxx_setsid(void);
 extern int __pxx_getgroups(int count, void *list);
+extern int __pxx_getsid(int pid);
 extern int __pxx_dup(int oldFd);
 extern int __pxx_chdir(const char *path);
 extern int __pxx_getuid(void);
@@ -783,6 +784,16 @@ int getgroups(int size, gid_t list[]) {
   int rc;
   if (size < 0) { errno = EINVAL; return -1; }
   rc = __pxx_getgroups(size, size == 0 ? 0 : (void *)list);
+  if (rc < 0) { errno = -rc; return -1; }
+  return rc;
+}
+
+/* getsid(2): the session id of `pid', or of the caller when pid is 0.
+   procps/kill.c uses it to skip the session leader when killing a whole
+   session, so a wrong answer there kills the wrong process rather than
+   failing. */
+int getsid(pid_t pid) {
+  int rc = __pxx_getsid((int)pid);
   if (rc < 0) { errno = -rc; return -1; }
   return rc;
 }

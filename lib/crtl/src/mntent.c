@@ -23,9 +23,14 @@
  *  - A COMMENT OR BLANK LINE IS SKIPPED, not end of file.
  *
  * setmntent's `mode' argument is passed straight to fopen, so a caller asking
- * for "a" gets an appendable stream -- but addmntent is NOT implemented, since
- * nothing in the corpus writes mtab and a half-written entry is worse than a
- * missing function.
+ * for "a" gets an appendable stream.
+ *
+ * UPDATE 2026-09-02: addmntent and getmntent_r are implemented too --
+ * util-linux/mount.c writes /etc/mtab and util-linux/umount.c reads it with
+ * the reentrant form. addmntent ESCAPES on the way out with the same four
+ * characters the reader decodes on the way in; a writer that skips that
+ * produces a line its own reader cannot parse back, which is the round trip
+ * this pair has to survive.
  */
 #include <mntent.h>
 #include <stdio.h>
@@ -101,43 +106,101 @@ int endmntent(FILE *fp) {
   return 1;
 }
 
+/* Read the next line that is not blank, not a comment and not over-long, into
+   `buf'. An over-long line is DRAINED and skipped rather than truncated, so its
+   tail is never parsed as a fresh entry. Returns buf, or NULL at end of file. */
+static char *mnt_getline(FILE *fp, char *buf, int len) {
+  while (fgets(buf, len, fp)) {
+    if (buf[0] == '#' || buf[0] == '\n' || buf[0] == '\0') continue;
+    if (!strchr(buf, '\n')) {
+      int c;
+      while ((c = fgetc(fp)) != '\n' && c != EOF) { }
+      continue;
+    }
+    return buf;
+  }
+  return 0;
+}
+
+/* Split one line into `e', whose char* fields point INTO the line. Returns 0
+   when the line has fewer than the four mandatory fields. */
+static int mnt_parse(char *line, struct mntent *e) {
+  char *rest = line, *f;
+  e->mnt_fsname = mnt_field(rest, &rest);
+  e->mnt_dir    = mnt_field(rest, &rest);
+  e->mnt_type   = mnt_field(rest, &rest);
+  e->mnt_opts   = mnt_field(rest, &rest);
+  if (!e->mnt_fsname || !e->mnt_dir || !e->mnt_type || !e->mnt_opts) return 0;
+  f = mnt_field(rest, &rest);
+  e->mnt_freq   = f ? atoi(f) : 0;
+  f = mnt_field(rest, &rest);
+  e->mnt_passno = f ? atoi(f) : 0;
+  mnt_unescape(e->mnt_fsname);
+  mnt_unescape(e->mnt_dir);
+  mnt_unescape(e->mnt_type);
+  mnt_unescape(e->mnt_opts);
+  return 1;
+}
+
 struct mntent *getmntent(FILE *fp) {
   struct pxx_mntstream *st = 0;
-  char *rest, *f;
   int i;
 
   for (i = 0; i < (int)(sizeof mnt_used / sizeof mnt_used[0]); i++)
     if (mnt_used[i] && mnt_streams[i].fp == fp) { st = &mnt_streams[i]; break; }
   if (!st) return 0;
 
-  while (fgets(st->line, (int)sizeof st->line, st->fp)) {
-    if (st->line[0] == '#' || st->line[0] == '\n' || st->line[0] == '\0')
-      continue;
-    /* A line that did not fit has no newline: drain and skip, so its tail is
-       never parsed as a fresh entry. */
-    if (!strchr(st->line, '\n')) {
-      int c;
-      while ((c = fgetc(st->fp)) != '\n' && c != EOF) { }
-      continue;
+  while (mnt_getline(st->fp, st->line, (int)sizeof st->line))
+    if (mnt_parse(st->line, &st->ent)) return &st->ent;
+  return 0;
+}
+
+/* getmntent_r(3): the same walk with the caller's storage, so it needs no
+   stream slot at all -- it works on any FILE*, including one fopen'd directly.
+   Returns mntbuf, or NULL at end of file. glibc gives no way to distinguish a
+   short buffer from EOF here and neither does this. */
+struct mntent *getmntent_r(FILE *fp, struct mntent *mntbuf,
+                           char *buf, int buflen) {
+  if (!fp || !mntbuf || !buf || buflen <= 0) return 0;
+  while (mnt_getline(fp, buf, buflen))
+    if (mnt_parse(buf, mntbuf)) return mntbuf;
+  return 0;
+}
+
+/* Write one field with the escapes mnt_unescape decodes. The four characters
+   are exactly the four the kernel emits, and they are the four that would
+   otherwise re-split the line on the way back in. */
+static int mnt_wr_escaped(FILE *fp, const char *s) {
+  if (!s) s = "";
+  for (; *s; s++) {
+    int r;
+    switch (*s) {
+      case ' ':  r = fputs("\\040", fp); break;
+      case '\t': r = fputs("\\011", fp); break;
+      case '\n': r = fputs("\\012", fp); break;
+      case '\\': r = fputs("\\134", fp); break;
+      default:   r = fputc(*s, fp); break;
     }
-    rest = st->line;
-    st->ent.mnt_fsname = mnt_field(rest, &rest);
-    st->ent.mnt_dir    = mnt_field(rest, &rest);
-    st->ent.mnt_type   = mnt_field(rest, &rest);
-    st->ent.mnt_opts   = mnt_field(rest, &rest);
-    if (!st->ent.mnt_fsname || !st->ent.mnt_dir ||
-        !st->ent.mnt_type   || !st->ent.mnt_opts)
-      continue;                              /* fewer than four fields */
-    f = mnt_field(rest, &rest);
-    st->ent.mnt_freq   = f ? atoi(f) : 0;
-    f = mnt_field(rest, &rest);
-    st->ent.mnt_passno = f ? atoi(f) : 0;
-    mnt_unescape(st->ent.mnt_fsname);
-    mnt_unescape(st->ent.mnt_dir);
-    mnt_unescape(st->ent.mnt_type);
-    mnt_unescape(st->ent.mnt_opts);
-    return &st->ent;
+    if (r < 0) return -1;
   }
+  return 0;
+}
+
+/* addmntent(3): append one entry. Returns 0 on success, 1 on failure -- note
+   that this is the OPPOSITE of the usual convention and is glibc's, so a
+   caller testing `if (addmntent(...))' is testing for failure. */
+int addmntent(FILE *fp, const struct mntent *mnt) {
+  if (!fp || !mnt) return 1;
+  if (fseek(fp, 0, SEEK_END) != 0) return 1;
+  if (mnt_wr_escaped(fp, mnt->mnt_fsname) < 0) return 1;
+  if (fputc(' ', fp) < 0) return 1;
+  if (mnt_wr_escaped(fp, mnt->mnt_dir) < 0) return 1;
+  if (fputc(' ', fp) < 0) return 1;
+  if (mnt_wr_escaped(fp, mnt->mnt_type) < 0) return 1;
+  if (fputc(' ', fp) < 0) return 1;
+  if (mnt_wr_escaped(fp, mnt->mnt_opts) < 0) return 1;
+  if (fprintf(fp, " %d %d\n", mnt->mnt_freq, mnt->mnt_passno) < 0) return 1;
+  if (fflush(fp) != 0) return 1;
   return 0;
 }
 

@@ -43,6 +43,9 @@ function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendSync: Integer;
 function PalBackendSetsid: Integer;
 function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
+function PalBackendGetPriority(which, who: Integer): Integer;
+function PalBackendSetPriority(which, who, prio: Integer): Integer;
+function PalBackendGetSid(pid: Integer): Integer;
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
@@ -142,6 +145,7 @@ const
   SYS_read = 0; SYS_write = 1; SYS_close = 3; SYS_lseek = 8;
   SYS_sync = 162;      { /usr/include/.../asm/unistd_64.h __NR_sync }
   SYS_setsid = 112; SYS_getgroups = 115;   { asm/unistd_64.h }
+  SYS_getpriority = 140; SYS_setpriority = 141; SYS_getsid = 124;   { asm/unistd_64.h }
   SYS_clock_settime = 227;                 { asm/unistd_64.h }
   SYS_fsync = 74; SYS_openat = 257; SYS_mkdirat = 258; SYS_getdents64 = 217; SYS_statx = 332;
   SYS_chdir = 80; SYS_linkat = 265; SYS_symlinkat = 266;
@@ -164,6 +168,7 @@ const
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
   SYS_sync = 36;       { asm/unistd_32.h __NR_sync }
   SYS_setsid = 66; SYS_getgroups = 205;    { asm/unistd_32.h: getgroups32, NOT the 16-bit-gid getgroups(80) -- the same *32 choice this file already makes for getuid }
+  SYS_getpriority = 96; SYS_setpriority = 97; SYS_getsid = 147;      { asm/unistd_32.h }
   SYS_clock_settime = 264;                 { asm/unistd_32.h, one below clock_gettime(265) }
   SYS_fsync = 118; SYS_openat = 295; SYS_mkdirat = 296; SYS_getdents64 = 220; SYS_statx = 383;
   SYS_chdir = 12; SYS_linkat = 303; SYS_symlinkat = 304;
@@ -188,6 +193,7 @@ const
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
   SYS_sync = 81;       { asm-generic: sync(81) sits directly below fsync(82) }
   SYS_setsid = 157; SYS_getgroups = 158;   { asm-generic/unistd.h }
+  SYS_getpriority = 141; SYS_setpriority = 140; SYS_getsid = 156;    { asm-generic/unistd.h -- note get/set are SWAPPED relative to the x86 tables }
   SYS_clock_settime = 112;                 { asm-generic, one below clock_gettime(113) }
   SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
   SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
@@ -210,6 +216,7 @@ const
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
   SYS_sync = 36;       { arm EABI keeps the legacy low numbers, as i386 does }
   SYS_setsid = 66; SYS_getgroups = 205;    { arm EABI, getgroups32 as on i386 }
+  SYS_getpriority = 96; SYS_setpriority = 97; SYS_getsid = 147;      { arm EABI, the legacy numbers as on i386 }
   SYS_clock_settime = 262;                 { arm EABI, one below this table's own clock_gettime(263) -- the same -1 relation i386 and asm-generic show, read off this file rather than recalled }
   SYS_fsync = 118; SYS_openat = 322; SYS_mkdirat = 323; SYS_getdents64 = 217; SYS_statx = 397;
   SYS_chdir = 12; SYS_linkat = 330; SYS_symlinkat = 331;
@@ -252,6 +259,7 @@ const
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
   SYS_sync = 81;       { asm-generic, the same table aarch64 uses }
   SYS_setsid = 157; SYS_getgroups = 158;   { asm-generic, the same table aarch64 uses }
+  SYS_getpriority = 141; SYS_setpriority = 140; SYS_getsid = 156;    { asm-generic, the same table aarch64 uses }
   SYS_clock_settime = 112;                 { asm-generic; rv32's time calls keep the legacy generic numbers qemu implements, as the note above says of clock_gettime }
   SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
   SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
@@ -779,6 +787,42 @@ begin
   Result := PAL_ERR_UNSUPPORTED;
 {$else}
   Result := Integer(__pxxrawsyscall(SYS_getgroups, PtrUInt(count), PtrUInt(list), 0, 0, 0, 0));
+{$endif}
+end;
+
+function PalBackendGetPriority(which, who: Integer): Integer;
+{ getpriority(2), and the RAW kernel encoding is deliberate. A nice value is
+  -20..19, so a syscall returning it directly could not tell a nice of -1 from
+  EPERM. The kernel therefore returns 20-nice (1..40) and every real libc
+  converts on the way out; this returns the kernel's number unchanged so that
+  a negative result still means -errno on this side of the PAL, and the
+  conversion happens once, in the crtl wrapper that owns errno. }
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_getpriority, PtrUInt(which), PtrUInt(who), 0, 0, 0, 0));
+{$endif}
+end;
+
+function PalBackendSetPriority(which, who, prio: Integer): Integer;
+{ setpriority(2). Takes the nice value as-is -- only the GET direction is
+  biased; the kernel clamps out-of-range values rather than refusing them. }
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_setpriority, PtrUInt(which), PtrUInt(who), PtrUInt(prio), 0, 0, 0));
+{$endif}
+end;
+
+function PalBackendGetSid(pid: Integer): Integer;
+{ getsid(2). pid=0 asks about the caller. }
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_getsid, PtrUInt(pid), 0, 0, 0, 0, 0));
 {$endif}
 end;
 

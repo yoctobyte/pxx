@@ -12535,6 +12535,61 @@ test-core: $(COMPILER)
 	# feature-c-crtl-utimensat-and-futimens
 	./$(COMPILER) test/c_crtl_utimensat.c $(TESTTMP)/c_utimensat26
 	tools/expect_same.sh c_utimensat26 "$$($(TESTTMP)/c_utimensat26)" "$$(printf '1 0 1000000000 1100000000\n2 0 1000000000 1200000000\n3 0 1300000000 1400000000\n4 -1 2')"
+	# The C frontend announces GNU C 2.7, and row 2 is the whole reason: real C
+	# guards __attribute__ behind __GNUC__ and DEFINES IT AWAY when the macro is
+	# absent, so PACKED expanded to nothing and a packed struct silently gained
+	# padding -- busybox's gzip header union came out 12 bytes where gcc makes 8,
+	# with every field after the first read from the wrong offset and no
+	# diagnostic anywhere. The test copies busybox include/platform.h's guard
+	# rather than describing it, so it fails if the announcement is withdrawn.
+	# Row 3 is the positive control: the SAME struct without the attribute must
+	# still pad to 12. Without it row 2 would pass against a target that happens
+	# to pack, and would be measuring nothing.
+	# Row 1 pins the version, which is a CAPABILITY claim: 2.7 is the lowest that
+	# unlocks __attribute__, and every higher number turns on builtins this
+	# frontend does not have (typeof, __builtin_unreachable, __builtin_constant_p,
+	# inline asm). It is the one row that does NOT match a real gcc, which prints
+	# `1 1 1'; rows 2-6 do, and were checked against it.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/c_gnuc_predef.c $(TESTTMP)/c_gnuc26
+	tools/expect_same.sh c_gnuc26 "$$($(TESTTMP)/c_gnuc26)" "$$(printf '1 1 0 0\n2 8\n3 12\n4 2 6 7\n5 42\n6 22')"
+	# fscanf and friends. WHAT IS TESTED IS WHERE THE STREAM IS LEFT, not the
+	# values -- an implementation built on "read a line, then sscanf it" passes
+	# every value check and has already eaten the rest of the line. Row 2 is that
+	# row. Rows 10/11/15 pin the matching-failure rule against glibc: only the
+	# offending character goes back, so "-x" leaves "x" and not "-x", "0x" with no
+	# hex digit is a failure rather than a conversion of the leading 0, and "1e+"
+	# is a valid PREFIX of a float and therefore a failure with all three
+	# characters consumed. Row 26 is the other side of that boundary: "1.2.3" must
+	# convert 1.2 and leave ".3", which a looser collector turns into a failure.
+	# Rows 13/14 are the ungetc consequences -- ftell must report the position the
+	# next read comes from, and fgets must honour the pushback (it read the fd
+	# directly and dropped it).
+	# Rows 22/23 vs 24: EOF, not 0, when input ran out before any conversion,
+	# INCLUDING a whitespace-only file where characters were consumed; but 0, not
+	# EOF, when input was available and merely did not match.
+	# Every row was diffed against glibc by compiling this same file with gcc.
+	# feature-c-crtl-fscanf-for-the-busybox-userland
+	./$(COMPILER) test/c_crtl_fscanf.c $(TESTTMP)/c_fscanf26
+	tools/expect_same.sh c_fscanf26 "$$($(TESTTMP)/c_fscanf26)" "$$(printf '1 1 12345\n2 10\n3 2 hello|world\n4 4 42 -7 31 493\n5 1 350.0\n6 1 rest\n7 2 abc|def\n8 2 XY\n9 -1\n10 0 120 -1\n11 0 7 122 -1\n12 1 4567 6\n13 1 6\n14   4567tail\n15 0 -1.0 113 -1 -1\n16 3 123 789 abcd\n17 101\n18 3 42 9 42\n19 0 90\n20 3 abc|123|-\n21 2 9999999999 4464\n22 -1\n23 -1\n24 0 122\n25 1 42 [ the rest of it\n]\n26 1 1.20 46 51')"
+	# getsid, get/setpriority, and the addmntent/getmntent_r round trip -- the
+	# gaps between the busybox userland and kill/nice/renice/mount/umount.
+	# ROW 3 IS THE ONE WITH A WRONG ANSWER AVAILABLE: the kernel returns 20-nice
+	# from getpriority(2), not the nice value, so that a nice of -1 cannot be read
+	# as -EPERM. A wrapper that forwards the raw number reports 15 for a process
+	# running at 5 -- in range, no error, and `nice' prints a plausible lie. The
+	# row therefore SETS a priority and reads it back rather than trusting the
+	# box's starting value.
+	# Rows 5-9 are the escape round trip: a mount point with a space is written
+	# `\040' and must read back decoded, and a writer that skips the escaping
+	# produces a table its own reader re-splits into the wrong fields -- surfacing
+	# as a mount point that does not exist rather than as an error.
+	# Rows 2/4 are negative controls (ESRCH, not a silent answer); row 4 also
+	# shows why errno carries the result, since -1 is a legal nice value.
+	# All ten rows were diffed against glibc by compiling this file with gcc.
+	# feature-c-crtl-getsid-priority-and-mtab-writing
+	./$(COMPILER) test/c_crtl_mount_and_prio.c $(TESTTMP)/c_mntprio26
+	tools/expect_same.sh c_mntprio26 "$$($(TESTTMP)/c_mntprio26)" "$$(printf '1 1 1\n2 -1 1\n3 3 0\n4 -1 1\n5 0\n6 0\n7 [/dev/sda1] [/mnt/my disk] [ext4] 0 2\n8 0 1\n9 [/mnt/back\\\\slash] [ro] 1 0\n10 1')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The SIBLING defect, and it is not the const-branch one: a loop in dead code
