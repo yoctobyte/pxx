@@ -13915,6 +13915,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_exception_finally26 "$$($(TESTTMP)/test_exception_finally26)" "$$(printf '1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\n12')"
 	./$(COMPILER) test/test_exception_typed.pas $(TESTTMP)/test_exception_typed26
 	tools/expect_same.sh test_exception_typed26 "$$($(TESTTMP)/test_exception_typed26)" "$$(printf '41\n42\n43\n44\n45')"
+	./$(COMPILER) test/test_virtual_call_runs_once.pas $(TESTTMP)/test_virtual_call_runs_once26
+	tools/expect_same.sh test_virtual_call_runs_once26 "$$($(TESTTMP)/test_virtual_call_runs_once26)" "VIRTUAL CALL RUNS ONCE OK"
 	./$(COMPILER) test/test_except_derived_caught_by_base.pas $(TESTTMP)/test_except_derived_caught_by_base26
 	tools/expect_same.sh test_except_derived_caught_by_base26 "$$($(TESTTMP)/test_except_derived_caught_by_base26)" "$$(printf 'caught1:derived\ncaught2:grandchild\ncaught3:exact\ncaught4-specific:specific\ncaught5:sibling\ndone')"
 	./$(COMPILER) test/test_empty_class_shorthand.pas $(TESTTMP)/test_empty_class_shorthand26
@@ -14784,6 +14786,8 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_i386_x64
 	tools/expect_same.sh i386/test_managed_str_ownership_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/msol_i386)" "$$($(TESTTMP)/msol_i386_x64)"
+	./$(COMPILER) --target=i386 test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_i386
+	tools/expect_same.sh i386/test_virtual_call_runs_once "$$(tools/run_target.sh i386 $(TESTTMP)/vcro_i386)" "VIRTUAL CALL RUNS ONCE OK"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -15444,6 +15448,8 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a64_x64
 	tools/expect_same.sh aarch64/test_managed_str_ownership_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/msol_a64)" "$$($(TESTTMP)/msol_a64_x64)"
+	./$(COMPILER) --target=aarch64 test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_a64
+	tools/expect_same.sh aarch64/test_virtual_call_runs_once "$$(tools/run_target.sh aarch64 $(TESTTMP)/vcro_a64)" "VIRTUAL CALL RUNS ONCE OK"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -16158,6 +16164,8 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_rv32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_rv32_x64
 	tools/expect_same.sh riscv32/test_managed_str_ownership_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/msol_rv32)" "$$($(TESTTMP)/msol_rv32_x64)"
+	./$(COMPILER) --target=riscv32 --platform=posix test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_rv32
+	tools/expect_same.sh riscv32/test_virtual_call_runs_once "$$(tools/run_target.sh riscv32 $(TESTTMP)/vcro_rv32)" "VIRTUAL CALL RUNS ONCE OK"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -17176,6 +17184,19 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_xt
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_xt_x64
 	tools/expect_same.sh xtensa/test_managed_str_ownership_leaks "$$(tools/run_target.sh xtensa $(TESTTMP)/msol_xt)" "$$($(TESTTMP)/msol_xt_x64)"
+	# A VIRTUAL CALL WHOSE RESULT IS USED MUST RUN ONCE. This is the row that
+	# would have caught it: xtensa emitted IR_VIRTUAL_CALL at statement level
+	# (the walker's `else` catch-all) AND again from the parent consuming the
+	# value, so the callee RAN TWICE and every side effect happened twice. It
+	# reached the backlog as an ALLOCATION count -- 7707 vs 3799 -- which is the
+	# shadow of it, and only visible when the callee happens to allocate; the
+	# Integer row in this program doubled just as hard and moved no census
+	# counter. The program asserts CALL COUNTS and carries its own positive
+	# control, so the wrong fix (silencing the arm instead of guarding it on
+	# IRStmtRoot, which deletes virtual PROCEDURE calls) fails it too.
+	# bug-a-xtensa-allocates-twice-per-virtual-call-returning-a-string-and-leaks-one
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_xt
+	tools/expect_same.sh xtensa/test_virtual_call_runs_once "$$(tools/run_target.sh xtensa $(TESTTMP)/vcro_xt)" "VIRTUAL CALL RUNS ONCE OK"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -17739,6 +17760,8 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a32_x64
 	tools/expect_same.sh arm32/test_managed_str_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/msol_a32)" "$$($(TESTTMP)/msol_a32_x64)"
+	./$(COMPILER) --target=arm32 --platform=posix test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_a32
+	tools/expect_same.sh arm32/test_virtual_call_runs_once "$$(tools/run_target.sh arm32 $(TESTTMP)/vcro_a32)" "VIRTUAL CALL RUNS ONCE OK"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The

@@ -4861,6 +4861,31 @@ begin
             IREmitNodeXtensa(i);
         end;
 
+      { The SAME shape as IR_CALL_IND above and as the IR_ATOMIC note below,
+        and it was the one call kind with no arm at all -- so it fell into this
+        case's `else`, which emits unconditionally. A virtual call whose result
+        is USED was therefore emitted TWICE: once here at statement level, then
+        again by the parent that consumes the value.
+
+        MEASURED, not inferred: a counter incremented inside the callee reads
+        200 for 100 iterations of `k := o.F(i)` on xtensa and 100 on x86-64,
+        arm32 and riscv32 -- and 100 on xtensa for `o.P(i)` alone, because a
+        discarded result has only the one emission. So EVERY SIDE EFFECT of a
+        virtual function ran twice: the doubled allocation count that
+        bug-a-xtensa-allocates-twice-per-virtual-call-returning-a-string-and-
+        leaks-one reports is this, one layer down, and it is not confined to
+        strings -- an Integer-returning virtual call doubles identically.
+
+        riscv32 (:4305) and arm32 (:4662) both carry this arm already, worded
+        the same way, and IRMarkStatementNode (ir.inc:889) sets IRStmtRoot for
+        exactly IR_VIRTUAL_CALL and IR_CALL_IND. Xtensa was the only backend
+        without the reader. }
+      IR_VIRTUAL_CALL:
+        begin
+          if IRStmtRoot[i] then
+            IREmitNodeXtensa(i);
+        end;
+
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:
         IREmitNodeXtensa(i);
 
