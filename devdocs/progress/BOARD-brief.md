@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:28 blocked:7 backlog:5 backlog-umbrella:5 backlog-core:133 backlog-nilpy:97 backlog-tools:71 backlog-pascal:54 backlog-decide:23 backlog-libs:16 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3015 rejected:72`
+`working:5 unfinished:28 blocked:7 backlog:7 backlog-umbrella:5 backlog-core:133 backlog-nilpy:97 backlog-tools:71 backlog-pascal:54 backlog-decide:23 backlog-libs:16 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3015 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -56,7 +56,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 437, ranked
+## Ready — top 30 of 439, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
@@ -69,13 +69,15 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [C]` regression-lib-test-crtl-reachability-7
 - `[p 70] [T]` regression-optdiff-shard4-12
 - `[p 70] [T]` regression-test-core-crtl-tiny-regex-match
+- `[p 70] [T]` regression-test-core-test-exception-unhandled-2
+- `[p 70] [T]` regression-test-core-test-header-static-body
 - `[p 70] [T]` regression-test-core-test-setlen-in-parallel-for-body-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard0-6-4
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
 - `[p 70] [T]` regression-test-sqlite-threads-aarch64-compiler-srchash
-- `[p 70] [T]` regression-test-threads-test-exception-threads-race
+- `[p 70] [A]` regression-test-threads-test-exception-threads-race
 - `[p 70] [T]` regression-tools-devtest-00-3
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
@@ -86,7 +88,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
-- `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 
-_407 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_409 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

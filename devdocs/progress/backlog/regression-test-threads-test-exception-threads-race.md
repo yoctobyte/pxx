@@ -1,6 +1,6 @@
 ---
 prio: 70
-track: T
+track: A
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 4 is `tools/expect_same.sh test_exception_threads_race26 "$(/tmp/test_exception_threads_race26)" "$(printf 'single hits=200000`. The job's own `src` (`test/test_exception_threads_race.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -44,3 +44,43 @@ expect_same: MISMATCH [test_exception_threads_race26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+
+## Re-laned T -> A, and it is NOT a race (frankB, 2026-09-01)
+
+Hit as the only RED in a broad-tier run. Enriching rather than working it: the
+crash is not in my lane's change and I did not chase it to a root cause.
+
+**It reproduces 20 times out of 20, in isolation, with no load.** The stub and
+the test's own header both frame this as a race — the header records "18 of 20
+runs failed [before the fix], 0 of 20 after" and warns that a single green run
+is a sampling artifact. That framing no longer applies: it is now deterministic,
+which makes it far cheaper to bisect than the ticket suggests.
+
+**Three different compilers, 20/20 each:**
+
+    compiler/pascal26 at a544cab70 (current)                  20/20 SIGSEGV
+    a compiler built from compiler/ reverted to 785928f20     20/20 SIGSEGV
+    stable_linux_amd64/default/stable_pinned (Aug 30 binary)  20/20 SIGSEGV
+
+**Scope limit, stated because it bounds the conclusion.** The second and third
+rows revert or predate `compiler/` only — `lib/**` and the rest of the tree were
+at current HEAD throughout. So this rules out a cause inside `compiler/` in that
+range; it does NOT rule out `lib/**`, and the bisect range in this ticket should
+be re-derived rather than trusted. It does mean nothing landed in `compiler/`
+today caused it.
+
+**Phase 1 passes, phase 2 crashes.** Output is `single hits=200000 wrong=0` and
+then a SIGSEGV, so the single-threaded control completes and the two-thread
+phase dies. The `expect_same` diff showing an empty actual is the crash, not a
+wrong answer.
+
+**The crash signature matches the bug this test was written for.** Under gdb the
+stack is `0x4077db` with frames repeating one thread-stack address
+(`0x7fffe7e00008`) — a return path walking into another thread's frame, which is
+what `done/bug-a-the-exception-shadow-chain-is-process-wide-so-two-threads-crash`
+describes ("a raise longjmped into the other thread's frame and the process
+CRASHED"). That makes a regression of that fix the first hypothesis to test. Not
+confirmed: the emitted binary carries no symbol table, so the addresses were
+never resolved to names, and `-g -O2` did not add one. Whoever picks this up
+should go through `tools/pxx-gdb.py` / `pxxrc` rather than bare gdb.
