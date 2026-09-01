@@ -3,33 +3,24 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `297a6755c0bd` | 2026-09-01T10:08:12Z | RED (opt) | 877.1s | `297a6755c0bd` RED |
+| plexus **QUIET 2d2h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
+| seven | `764d4e4fb04e` | 2026-09-01T12:41:35Z | RED (full) | 340.9s | `764d4e4fb04e` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `297a6755c0bd` on seven, 2026-09-01T09:49:41Z (18m ago).**
+**Newest full tier in the fleet: `764d4e4fb04e` on seven, 2026-09-01T12:41:35Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `297a6755c0bd` | RED | 18m | — (newest) |
-| plexus | `27424c927b65` | RED | 1d23h | 1d23h |
+| seven | `764d4e4fb04e` | RED | 0m | — (newest) |
+| plexus | `27424c927b65` | RED | 2d2h | 2d2h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
 ## Open regressions
-- **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (plexus): bad `e46dbffaa80d`, last good `49bd043061c1`, 217 commit(s) in range
-- **test-asm#src:test/test_asm_emit_rv32.pas** — test/test_asm_emit_rv32.pas tools/expect_same.sh (plexus): bad `27424c927b65`, last good `5dbcc861e3fc`, 88 commit(s) in range
-- **test-core#src:test/test_opt_store_reload.pas** — test/test_opt_store_reload.pas tools/expect_same.sh (plexus): bad `27424c927b65`, last good `5dbcc861e3fc`, 88 commit(s) in range
-- **test-pascal-conformance#shard1/6** — tools/run_pascal_conformance.sh (plexus): bad `27424c927b65`, last good `e46dbffaa80d`, 231 commit(s) in range
-- **test-pascal-conformance#shard2/6** — tools/run_pascal_conformance.sh (plexus): bad `27424c927b65`, last good `e46dbffaa80d`, 231 commit(s) in range
-- **test-pascal-conformance#shard3/6** — tools/run_pascal_conformance.sh (plexus): bad `27424c927b65`, last good `e46dbffaa80d`, 231 commit(s) in range
-- **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (plexus): bad `27424c927b65`, last good `e46dbffaa80d`, 231 commit(s) in range
-- **test-pascal-conformance#shard5/6** — tools/run_pascal_conformance.sh (plexus): bad `27424c927b65`, last good `e46dbffaa80d`, 231 commit(s) in range
-- **tools-devtest#00** (plexus): bad `27424c927b65`, last good `e46dbffaa80d`, 231 commit(s) in range
 - **CASCADE 18 jobs** (seven): bad `154d1aa3fba6`, last good `e417731e9007`, 12 commit(s) in range
   <details><summary>jobs</summary>
 
@@ -63,3 +54,17 @@ Reading a staler host's map for a cross-target job answers a question about an O
 - **optdiff#shard2/12** — tools/optdiff.sh (seven): bad `a5f0958c6934`, last good `caa34fdeab46`, 12 commit(s) in range
 - **optdiff#shard3/12** — tools/optdiff.sh (seven): bad `a5f0958c6934`, last good `caa34fdeab46`, 12 commit(s) in range
 - **optdiff#shard5/12** — tools/optdiff.sh (seven): bad `a5f0958c6934`, last good `caa34fdeab46`, 12 commit(s) in range
+
+## Held — quiet hosts (not actionable)
+
+A regression clears when a later run on THAT host passes the job. These hosts have stopped publishing, so nothing can clear them; they return to the list above by themselves if the host runs again.
+
+- **test-pascal-conformance#shard0/6** (plexus, quiet 2d2h): bad `e46dbffaa80d`, 217 commit(s) in range
+- **test-asm#src:test/test_asm_emit_rv32.pas** (plexus, quiet 2d2h): bad `27424c927b65`, 88 commit(s) in range
+- **test-core#src:test/test_opt_store_reload.pas** (plexus, quiet 2d2h): bad `27424c927b65`, 88 commit(s) in range
+- **test-pascal-conformance#shard1/6** (plexus, quiet 2d2h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard2/6** (plexus, quiet 2d2h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard3/6** (plexus, quiet 2d2h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard4/6** (plexus, quiet 2d2h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard5/6** (plexus, quiet 2d2h): bad `27424c927b65`, 231 commit(s) in range
+- **tools-devtest#00** (plexus, quiet 2d2h): bad `27424c927b65`, 231 commit(s) in range
