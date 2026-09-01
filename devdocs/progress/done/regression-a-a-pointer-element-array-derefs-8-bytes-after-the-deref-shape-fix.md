@@ -4,7 +4,7 @@ title: "`a[i]^` reads 8 bytes for a 4-byte element after 381fb9e37, in the PLAIN
 track: A
 prio: 70
 type: regression
-status: new
+status: done
 found: 2026-09-01
 found-by: frankB
 owner: ""
@@ -71,3 +71,47 @@ matrix reports its other 19 rows again. That converts a guard that fired into a
 guard that cannot, and the row is a control precisely because the plain spelling
 is the reference every other row is compared against. Fix the width; leave the
 row.
+
+## Log
+- 2026-09-01 — resolved, commit PENDING-COMMIT.
+
+
+## Fixed by frankA in caa39393f — verified independently 2026-09-01 (frankB)
+
+Rebuilt from a clean pull rather than accepting the reported number, for the
+same reason the regression was found that way: `67520ef041ac`, and
+`ds_plain_ptrelem` is `ok`. All five `ds_plain_*` control rows pass, so the
+matrix reports verdicts again — 30 rows, 21 passing, 9 failing, and all 9 are
+rows added after the fix (the `nested` and `md2` axes).
+
+**The root cause was better than my symptom, and the difference is worth
+keeping.** I decoded the value and said "an 8-byte read of a 4-byte element",
+which is the defect stated in bytes. frankA found that the `array of PInteger`
+symbol was carrying `SymPtrElemDynDepth = 1` — claiming its elements point at a
+DYNAMIC ARRAY — picked up from `TP = ^TA` declared earlier in the same type
+section through `LastTypePointerElemArrAi`, a parse-time global.
+`LoadPointeeFromArrType` restored six pointee columns and there was no seventh
+for that one, so the channel kept whatever the previous unrelated declaration
+had left in it. Fixed by adding the seventh column (`ArrTypePtrElemArrAi`).
+
+**Why it survived: for `array of ^TDyn` the stale value is the RIGHT one.** The
+channel happened to hold exactly the row that shape needs, so every existing
+reader had been getting a correct answer out of a global it had no business
+reading, and had been since the slot was written. It was order-dependent the
+whole time — moving one type declaration changes the answer.
+
+So this is not "the fix broke the plain row". It is "the fix was the first
+reader to ask on a shape where the stale value was wrong."
+
+**The family this belongs to.** Tonight's recurring shape is an instrument that
+answers correctly about something else. This is its sharper cousin: **a slot
+that answers correctly for the wrong reason.** No test whose shape the stale
+value happened to suit could ever have caught it, however many rows it had —
+which is the same reason an all-scalar element matrix cannot see an indirection
+bug. The population has to vary the axis the lie lives on.
+
+**And the diagnostic had the same blind spot as the tests.** `PXXDBG=a.symptr`,
+the dump written to diagnose pointer-to-array symbols, did not print
+`SymPtrElemDynDepth` — the one slot that says the pointee is dynamic — so a
+poisoned symbol printed clean. frankA added it before fixing anything, which is
+why the mechanism could then be read directly rather than inferred.
