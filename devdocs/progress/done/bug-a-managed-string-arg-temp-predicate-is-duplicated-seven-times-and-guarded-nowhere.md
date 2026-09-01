@@ -55,7 +55,7 @@ fire. Shape implying a bug is not the bug, and the count of unguarded sites is
 what justifies consolidating rather than patching.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 057502eee.
 
 ## Resolved 2026-09-01 (frankA) — and the count was the finding
 
