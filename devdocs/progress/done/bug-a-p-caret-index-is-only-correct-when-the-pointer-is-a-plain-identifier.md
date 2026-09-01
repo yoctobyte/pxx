@@ -2,7 +2,7 @@
 track: A
 prio: 60
 type: bug
-status: working
+status: done
 found: 2026-08-31
 found-by: frankA
 owner: frankA
@@ -156,3 +156,6 @@ Swap `TF` for `array of Double` (plus `SetLength`) for the SIGSEGV; replace the
 field with `function GetP: TPD; begin GetP := @d; end` and index `GetP^[i]` for
 the hang; put the pointer in an `array[0..1] of TPD` and index `ap[0]^[i]` for
 the other SIGSEGV.
+
+## Log
+- 2026-09-01 — resolved, commit PENDING-COMMIT.
