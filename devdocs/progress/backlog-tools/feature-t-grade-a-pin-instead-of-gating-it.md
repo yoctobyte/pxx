@@ -13,7 +13,7 @@ summary: "A pin's validity and a pin's quality are two questions and the tooling
 publishes one boolean for both. Owner's ruling 2026-09-01: a VALID pin is the
 self-host fixedpoint and nothing else may block one; a pin is GRADED, never
 gated. Emit two fields that cannot be confused — `pin_blocked: never` beside
-`pin_grade: green | reds(N)` — recorded AT PIN TIME rather than re-derived from
+`pin_grade: green | reds(N) | unmeasured` — recorded AT PIN TIME rather than re-derived from
 a shifting archive, plus a MANIFEST of what a red pin is known to break. The
 manifest is the part with the most value: had v398 said `known broken: C on
 i386, arm32`, no B/E session would have built against it unaware for two days
@@ -42,7 +42,7 @@ which every `$(PXX_STABLE)` consumer carried.
 1. **`pin_blocked` is a constant `never`.** If it can ever read otherwise it is
    the same bug again. A flag that cannot come out false is not a guard — and
    neither is one that cannot come out true.
-2. **`pin_grade`: `green` | `reds(N)`, decided AT PIN TIME** and written into
+2. **`pin_grade`: `green` | `reds(N)` | `unmeasured`, decided AT PIN TIME** and written into
    the pin metadata beside `binsha`/`git`/`ts`. Not re-derived later: today
    three separate errors came from reading a shifting archive — a binary sha
    searched as a commit, a tstate bookkeeping commit read as a break point, and
@@ -54,12 +54,51 @@ which every `$(PXX_STABLE)` consumer carried.
 4. **Rollback prefers green, falls back to most recent.** `pin_is_green` stays
    as the preference; an empty result must not mean an empty recovery.
 
+## `unmeasured` is a THIRD grade, not a flavour of red
+
+Added 2026-09-01 after Track T on seven caught the first draft collapsing two
+different claims. **"Known broken" and "never measured" are not the same
+thing**, and a `green | reds(N)` pair has nowhere to put the second.
+
+This is the repo's own stated principle, and the first draft broke it.
+`seed_baseline`'s docstring (`twatch.py:2597`):
+
+> *"We did not measure it" must not be recorded as "we measured it and it was
+> fine" -- that substitution is the defect class this whole gate exists to
+> catch.*
+
+A grade of `green` on an unjudged tree is exactly that substitution.
+
+**The tool already makes this distinction and the first draft would have thrown
+it away.** `trackt.py pinstatus` prints `NOT JUDGED at this sha` as its own
+state, distinct from a verdict. Preserve it; do not invent it.
+
+**Live instance, in v399 itself.** frankB's `4af4645ba` landed at 20:24:36Z --
+a discarded managed function result had no owner, changing statement lowering
+for EVERY Pascal program, with 979 of 1000 string handles previously leaking.
+Verified: it IS in v399's tree, and there are **zero** full rows at that sha or
+at the pin tree `86c71828c`; the three most recent full runs are all older.
+Correctly smoke-gated per CLAUDE.md, so nobody did anything wrong -- which is
+the point. This is normal operation, not an incident, and the manifest has to
+represent it honestly.
+
+**So the manifest carries two lists, never one.** Known-broken, and
+never-measured-here. The second wants the COMMIT, because that is what makes it
+cheap: "if `4af4645ba` misbehaves it is one commit and cheap to bisect to" is
+actionable; "grade: reds(13)" is not.
+
 ## The positive control this needs
 
-A grade that cannot come out `reds` on a red tree certifies nothing. Assert
-both directions against real data: v398's tree (`c8e132a02b92`) must grade
-`reds`, and a tree with a clean full tier must grade `green`. Drawn from the
-pin population, not a synthetic fixture.
+A grade that cannot come out `reds` on a red tree certifies nothing. Assert all
+THREE directions against real data, drawn from the pin population and not a
+synthetic fixture:
+
+- v398's tree (`c8e132a02b92`) must grade `reds` -- it has a full row and it is RED.
+- v399's tree (`86c71828c`) must grade `unmeasured` at pin time -- zero full rows,
+  and `pinstatus` says `NOT JUDGED at this sha`. **This is the row that catches a
+  grader defaulting an unjudged tree to `green`,** which is the whole reason the
+  third grade exists.
+- a tree with a clean full tier must grade `green`.
 
 ## Not in scope
 
