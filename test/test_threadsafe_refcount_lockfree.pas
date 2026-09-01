@@ -54,6 +54,18 @@ begin
   else RC := PRefCnt(Int64(Pointer(v)) - 16)^;
 end;
 
+{ The meta word at handle-24. MSTR_FLAG_STATIC ($0100) is the runtime's OWN
+  answer to "is this block in the image", and it is a DIFFERENT FIELD from the
+  refcount the rows below are about. That separation is the point: deciding the
+  shape from the count and then asserting the count would be one field agreeing
+  with itself. Value pinned to compiler/defs.inc, the way
+  compiler/builtin/builtinheap.pas pins its copy. }
+function IsStaticBlock(const v: AnsiString): Boolean;
+begin
+  if Pointer(v) = nil then IsStaticBlock := False
+  else IsStaticBlock := (PWord(Int64(Pointer(v)) - 24)^ and $0100) <> 0;
+end;
+
 procedure Check(ok: Boolean; const what: AnsiString);
 begin
   if not ok then
@@ -80,7 +92,7 @@ begin
   Hammer := acc;
 end;
 
-var acc: Int64; litRC0: Int64;
+var acc: Int64; litRC0: Int64; litStatic: Boolean; nLit: Integer;
 begin
   fail := 0;
 
@@ -108,8 +120,18 @@ begin
     concurrent churn, and that survives the representation split. So the rows
     below assert the invariant both shapes must satisfy -- the count comes back
     to where it started -- and this one only records which shape is in play. }
-  Check((litRC0 >= $40000000) or (litRC0 = 1),
-        'literal handle is either the static saturated block or one counted ref');
+  { ASK THE META WORD WHICH SHAPE IT IS, then assert the count that shape must
+    have. A disjunction over the two counts -- `(litRC0 >= $40000000) or
+    (litRC0 = 1)` -- records the split correctly and accepts one state that
+    matters: a block whose meta says STATIC carrying a count of 1. That is a
+    literal in the data section that PXXStrDecRef can walk to zero and free,
+    which is the exact failure MSTR_STATIC_RC exists to prevent, and it
+    satisfies the second arm. Branching on the independent field rejects it. }
+  litStatic := IsStaticBlock(lit);
+  if litStatic then
+    Check(litRC0 >= $40000000, 'static literal block is born saturated')
+  else
+    Check(litRC0 = 1, 'heap-materialised literal is born with one counted ref');
 
   acc := Hammer(N);
   Check(acc = Int64(N) * (44 + 23), 'every parallel copy saw an intact payload');
@@ -122,10 +144,13 @@ begin
     the shape that caught a nil-deref when these tests were once stripped in
     favour of the blob's copy. }
   SetLength(arr, 64);
+  nLit := 0;
   for i := 0 to 63 do
     if (i mod 3) = 0 then arr[i] := ''
-    else if (i mod 3) = 1 then arr[i] := lit
+    else if (i mod 3) = 1 then begin arr[i] := lit; nLit := nLit + 1; end
     else arr[i] := shared;
+  { Counted, not written as 21, so editing the loop cannot leave a stale
+    constant in the assertion below quietly passing. }
   for k := 1 to 200 do
   begin
     SetLength(arr, 512);
@@ -136,6 +161,19 @@ begin
       else if (i mod 3) = 1 then arr[i] := lit
       else arr[i] := shared;
   end;
+  { MID-CHURN, while the array still holds its references, and only for the
+    counted shape -- the post-drop row below is the one both shapes share.
+    Worth having on top of it because the two fail differently: post-drop
+    equality reconciles retains against releases in AGGREGATE, so a lost
+    increment matched by a lost decrement returns to litRC0 and passes. This
+    one names the number that must be there while the references are live. The
+    saturated shape cannot ask the question at all -- its count is the same
+    number whatever happens to it -- so at -O2 and above this file's coverage
+    of the SetLength retain/release loops rests on the payload rows, and at
+    -O0/-O1 it rests here. }
+  if not litStatic then
+    Check(RC(lit) = litRC0 + nLit,
+          'counted literal holds exactly one ref per live array element');
   Check(Length(shared) = 44, 'shared payload survived SetLength churn');
   SetLength(arr, 0);
   Check(RC(shared) = 1, 'heap handle back to rc=1 after the array dropped it');
@@ -157,7 +195,23 @@ begin
     `lock inc` weakened to a plain `inc` (still unlocked), this test reports
     fail=2 on every run of three — the parallel hammer and the array drop both
     detect the lost increments. With the atomic form, fail=0. So the guard can
-    fail, and the `lock` prefix is load-bearing rather than defensive. }
+    fail, and the `lock` prefix is load-bearing rather than defensive.
+
+    THREE MORE for the representation branch, run at 480d4584403c. The branch is
+    the part that could quietly disable half the file, so every arm was made to
+    fail on purpose:
+
+      mid-churn count -> `litRC0 + nLit + 1`   : -O0 fail=1, -O2 fail=0
+      IsStaticBlock forced False               : -O2 fail=2, -O0 fail=0
+      IsStaticBlock forced True                : -O0 fail=1, -O2 fail=0
+
+    The last two are the ones to keep in mind: THE PREDICATE IS SELF-GUARDING IN
+    BOTH DIRECTIONS. A broken IsStaticBlock cannot route a level into the wrong
+    arm and get away with it, because each arm asserts a count the other
+    representation does not have — 1 against $40000000. That only holds because
+    the branch is DECIDED by the meta word and CHECKED against the refcount
+    word. Decide it from the count and the test agrees with itself at every
+    level and fails at none. }
   WriteLn('fail=', fail);
   if fail = 0 then WriteLn('TSRCLOCKFREE OK')
   else WriteLn('TSRCLOCKFREE FAILED');

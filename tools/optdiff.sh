@@ -99,6 +99,25 @@ for t in $FILES; do
   # test_threadsafe_refcount_lockfree: FAILED at -O0/-O1 and OK at -O2/-O3, so
   # it must now report DIFF on the -O2 and -O3 arms, which were unreportable
   # before. Nothing else in shard 2 changes verdict.
+  #
+  # THAT CONTROL IS SPENT, 2026-09-02, and is left here as a record of what was
+  # measured rather than as something a reader can re-run. The divergence it
+  # names was the TEST asserting an -O2-only representation, not a miscompile:
+  # EmitStaticLitHandle (compiler/ir_codegen.inc) is gated `OptLevel < 2`, so a
+  # literal is the static block in the image at -O2 and above and a
+  # PXXStrFromLit heap copy below it, and the test read the static block's
+  # saturated refcount as the only correct answer. Both representations were
+  # right. The test now branches on MSTR_FLAG_STATIC and is GREEN at every
+  # level, so it no longer reports DIFF on any arm and CANNOT be used to show
+  # that this baseline is -O0.
+  #
+  # Anyone changing the baseline again therefore needs a NEW control and must
+  # not take the paragraph above as a live one. The cheap way to make one is the
+  # way that paragraph was made: build any program at -O0 and at -O2, confirm
+  # the bytes differ, and confirm this loop says so — an -O2-against--O2
+  # baseline reports PASS for every program in the corpus, which is what it did
+  # for as long as the bug existed and is exactly what a dead control looks like
+  # from the outside.
   if ! "./$CC" $CF -O0 "$t" "$TMP/d0" >/dev/null 2>&1; then
     # RETRY WITH --threadsafe BEFORE CALLING IT A SKIP. Any program that reaches
     # __pxxclone -- through palthread, classes, TThread, the parallel-for
