@@ -2,9 +2,9 @@
 track: T
 prio: 20
 type: feature
-blocked-by: [decide-install-qemu-system-and-a-freebsd-image-on-plexus]
-summary: "Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T."
-status: blocked
+blocked-by: []
+summary: "UNBLOCKED 2026-09-01 -- the permission it waited on was APPROVED 2026-08-31 (decide-install-qemu-system-and-a-freebsd-image-on-plexus) and this ticket was never moved out of blocked/. Owner restated it 2026-09-01: 'we are allowed to install a bsd image on qemu, i thought we already answered that. or maybe i only answered for openbsd, either way, same answer' -- so it covers OpenBSD too. Stays prio 20: permission granted is not priority raised, and BSD is demoted under the linux-only focus. ORIGINAL: Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T."
+status: backlog
 owner: pxx-a5
 ---
 
@@ -139,3 +139,23 @@ work.
 3. Disk is a non-issue: `/data` has 2.0T free.
 4. The only remaining unknown is **the owner's consent**, which is a question,
    not a task.
+
+## UNBLOCKED 2026-09-01 — the answer had been there for a day
+
+`decide-install-qemu-system-and-a-freebsd-image-on-plexus` was **APPROVED
+2026-08-31**: *"this box is dedicated to development. i think we have plenty
+disk space left. so yes, we can pull a BSD image."* Verified at ruling time:
+plexus root 156G, 84G free.
+
+This ticket kept `status: blocked` and the `blocked-by` edge anyway, so it read
+as waiting on a decision that had already been made. **A satisfied blocker that
+nobody clears is indistinguishable from an open one**, and on 2026-09-01 a Track
+U session (this one) re-raised the permission question to the owner as still
+open — which cost him a reply to a question he had already answered.
+
+The owner, restating it: *"yes we are allowed to install a bsd image on qemu, i
+thought we already answered that. or maybe i only answered for openbsd, either
+way, same answer."* So the approval covers **OpenBSD as well as FreeBSD**.
+
+**Priority unchanged at 20.** Permission granted is not priority raised, and BSD
+is demoted under the 2026-09-01 linux-only focus. This is takeable, not urgent.

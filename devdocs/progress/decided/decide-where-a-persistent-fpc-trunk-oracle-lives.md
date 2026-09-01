@@ -151,3 +151,33 @@ same shape, in someone else's build system.
 captured the compile with `2>&1` and compared the compiler's banner plus `42`
 against `42`. Correct about the combined output, wrong about the question. Fixed
 by separating the compile from the run; the reason is a comment in the script.
+
+## Trap 4 — challenged by the owner, re-tested, and MEASURED this time
+
+The owner: *"you confuse me.. we build fpc's nightly before without any issues,
+and fpc stable can build it."* Both true, and both compatible with trap 4 — the
+failure is specific to **this two-step recipe on a PRISTINE tree**, not to
+building trunk in general. Stable builds trunk fine; that was never in question.
+
+The first write-up asserted the no-op mechanism from a **symptom**, not from a
+measurement. Re-tested on challenge, and it holds — with the number that was
+missing:
+
+| tree state | rtl step output | hello-world |
+| --- | --- | --- |
+| pristine (`git clean -xfd`), after `make -C compiler` | **5 lines** — enter, enter, leave, leave. Compiled nothing. | `PPU Invalid Version 207 expecting 208` |
+| same state, after `make -C rtl clean` | **1378 lines**, 60 compiler invocations | prints 42 |
+
+`make -C compiler` **does** leave a seed-built
+`rtl/units/x86_64-linux/system.ppu` on a pristine tree; `ls` confirms it before
+the rtl step runs. The rtl step then has nothing newer to do and says so by
+saying nothing — it never prints "nothing to be done", which is why it reads as
+a build that ran.
+
+**The intermediate test that appeared to REFUTE this was the instrument lying.**
+Checking the claim, this session ran `rm -rf rtl/units` on an already-built tree
+and then re-ran the two steps — 1379 lines, no skip, works. That looked like a
+refutation and was not: deleting `rtl/units` removes exactly the stale
+seed-built units whose presence IS the trap. **The test destroyed the evidence
+it was testing for.** Only `git clean -xfd` reproduces the state a fresh clone
+is in.

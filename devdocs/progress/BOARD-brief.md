@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:3 unfinished:27 blocked:9 backlog:4 backlog-umbrella:5 backlog-core:133 backlog-nilpy:96 backlog-tools:69 backlog-pascal:52 backlog-decide:22 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:2996 rejected:72`
+`working:3 unfinished:27 blocked:8 backlog:4 backlog-umbrella:5 backlog-core:133 backlog-nilpy:96 backlog-tools:70 backlog-pascal:52 backlog-decide:22 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:2996 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -43,7 +43,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (9) — has an unmet blocker; do not claim
+## blocked (8) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
@@ -51,11 +51,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-esp-gpio-and-adc-callback-slices` [B+S]
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
-- `feature-t-freebsd-image-and-runner` [T] — blocked-by: decide-install-qemu-system-and-a-freebsd-image-on-plexus
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 426, ranked
+## Ready — top 30 of 427, ranked
 
 - `[p 90] [C]` feature-c-corpus-busybox-multi-applet (unblocks 1)
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -88,4 +87,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
 
-_396 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_397 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
