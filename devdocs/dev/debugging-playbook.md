@@ -3518,6 +3518,50 @@ compiles **with no import at all** and the from-import binds nothing.
 The companion habit, from the same fix: **when you disprove a comment, correct
 it in place, and grep for its copies.** That one had two.
 
+## `-dPXX_ALLOC_CENSUS`'s LAST LINE is a snapshot at a threshold, so anything freed at the END reads as a leak
+
+Measured 2026-09-02 while sweeping managed seams. `TStringList` looked like it
+leaked 978 of 1000 strings, and so did a dyn array of strings, and so did the
+same array pre-sized with no growth at all — while FPC reported **0 unfreed
+blocks** for every one of them. All three were the instrument.
+
+The census prints at **geometric thresholds** (`CensusNext := CensusNext +
+(CensusNext div 8) + 1`), so the last line it ever emits is a snapshot taken at
+whatever allocation count happened to cross a threshold — **not a total, and not
+end-of-program**. A one-shot program of the shape
+
+```pascal
+sl := TStringList.Create;
+for i := 1 to 1000 do sl.Add(MkS(i));   { last census print lands in HERE }
+sl.Free;                                { ...which is before this }
+```
+
+has its final snapshot taken *inside the loop*, before the `Free`. Everything the
+`Free` is about to release is still live, and the number is a faithful report of
+a moment you did not mean to ask about.
+
+**Two ways to make the question the one you meant, both cheap:**
+
+1. **Put the work in a PROCEDURE and call it many times.** Scope exit then runs
+   hundreds of times inside the measured window and the count reaches a steady
+   state. This is *why* the `test_*_leaks.pas` corpus is written as loops over
+   routines rather than as one-shot programs — a rationale that was not written
+   down anywhere until now.
+2. **Allocate past the next threshold AFTER the release.** Appending
+   `for i := 1 to 6000 do junk := MkS(i);` after the `Free` moved the same
+   program from `live=978` to `live=5`.
+
+The trap generalises past this flag: **`allocs` is cumulative and monotone,
+`live` is instantaneous.** Comparing two runs is only valid at the same
+threshold — which the existing note about that already says — but the subtler
+error is comparing one run against your *expectation*, where nothing warns you
+that the snapshot predates the cleanup.
+
+The tell that should have stopped this sooner: **the pre-sized array leaked as
+much as the growing one.** A real growth bug cannot show up without growth. When
+a variation that removes the proposed mechanism does not move the number, the
+number is not measuring the mechanism.
+
 ## A CENSUS is a predicate, not a number — and the number is what gets relayed
 
 Measured 2026-08-30, when a count of `-O3` gate sites was about to be adopted as
