@@ -565,6 +565,18 @@ begin
       EncB($B8 + (r0 and 7));
       EmitDataRef(Integer(imm0));
     end
+    else if PICRefsAreRipRelative then
+    begin
+      { `lea r64, [rip+disp32]` -- 7 bytes where the mov was 5. The old form
+        put the address in a 32-bit IMMEDIATE, and no relocation makes an
+        immediate position-independent; it was the last thing keeping
+        R_X86_64_32S in .text. The register moves from the opcode's low bits
+        into ModRM.reg, so what was REX.B becomes REX.R. }
+      if r0 >= 8 then EncB($4C) else EncB($48);      { REX.W (+R) }
+      EncB($8D);
+      EncB(Byte(((r0 and 7) shl 3) or $05));         { mod=00 reg=r0 rm=101 }
+      EmitGlobRef(Integer(imm0));
+    end
     else
     begin
       if r0 >= 8 then EncB($41);   { REX.B only; 32-bit mov zero-extends }

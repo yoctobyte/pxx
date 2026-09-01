@@ -235,19 +235,64 @@ begin
   else begin EmitB($0F); EmitB($05); end;
 end;
 
+function PICRefsAreRipRelative: Boolean;
+{ Will a global/data reference emitted right now become rip-relative? ONE
+  predicate because two readers must agree: EmitGlobRef, which rewrites the
+  operand, and the text assembler, which has to choose the `lea` form up front
+  for `mov reg, @glob`. If they disagreed, the encoder would emit a lea and the
+  writer would patch it absolute -- a wrong address with no diagnostic. }
+begin
+  Result := (TargetArch = TARGET_X86_64) and (not EncToAsmBuffer);
+end;
+
 procedure EmitDataRef(dataOff: Integer);
-{ Absolute data-address placeholder; width follows the target's pointer size
-  (writeELF patches 8 bytes, writeELF32 patches 4). }
+{ Data-address placeholder; width follows the target's pointer size (writeELF
+  patches 8 bytes, writeELF32 patches 4) -- EXCEPT for the x86-64 rip-relative
+  form below, which is 4 bytes on a 64-bit target.
+
+  The absolute form here is `movabs r64, imm64`: an address as a 64-bit
+  IMMEDIATE, which no relocation can make position-independent. It has to
+  become a different instruction, `lea r64, [rip+disp32]` -- REX.W 8D ModRM
+  disp32, 7 bytes where movabs was 10. The register moves from the opcode's
+  low three bits into ModRM.reg, so REX.B becomes REX.R.
+
+  Same refusing shape as GlobRefTrailingImm: anything that is not exactly
+  [REX.W][B8+r] keeps the absolute 8-byte form, which is what every target
+  did before. }
+var drRex, drOp, drReg: Byte;
 begin
   if FixCount >= MAX_FIXUPS then Error('fixup overflow');
-  Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
-  Inc(FixCount);
+  FixupPCRel[FixCount] := False;
   if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
      (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) or
      (TargetArch = TARGET_WASM32) then
-    EmitI32(0)
-  else
-    EmitI64(0);
+  begin
+    Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
+    Inc(FixCount);
+    EmitI32(0);
+    Exit;
+  end;
+  if PICRefsAreRipRelative and (CodeLen >= 2) then
+  begin
+    drRex := Code[CodeLen-2];
+    drOp  := Code[CodeLen-1];
+    if ((drRex and $F8) = $48) and (drOp >= $B8) and (drOp <= $BF) then
+    begin
+      drReg := Byte(drOp - $B8);
+      { REX.B (bit 0) extended the opcode register; as ModRM.reg it is REX.R }
+      Code[CodeLen-2] := Byte($48 or ((drRex and $01) shl 2));
+      Code[CodeLen-1] := $8D;                        { lea }
+      EmitB(Byte((drReg shl 3) or $05));             { mod=00 reg=r rm=101 }
+      FixupPCRel[FixCount] := True;
+      Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
+      Inc(FixCount);
+      EmitI32(0);
+      Exit;
+    end;
+  end;
+  Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
+  Inc(FixCount);
+  EmitI64(0);
 end;
 
 function SymOffIsData(off: Integer): Boolean;
@@ -362,11 +407,17 @@ begin
 
     The `else` REFUSES. A fourth byte-shape must not be silently emitted as a
     displacement that is now relative to something else -- that is the shape of
-    bug this repo pays most for. Two shapes are deliberately NOT converted yet
-    and take the absolute path: an address loaded as an immediate (`mov r32,
-    imm32` / `movabs r64, imm64`) needs a different INSTRUCTION, not a different
-    relocation, and that is the next phase. }
-  if (TargetArch = TARGET_X86_64) and (not EncToAsmBuffer) and (CodeLen >= 4) and
+    bug this repo pays most for.
+
+    The address-as-immediate shapes (`mov r32, imm32` / `movabs r64, imm64`)
+    used to be listed here as the unconverted remainder. They are converted
+    now, but NOT by this function: an immediate needs a different INSTRUCTION,
+    so EmitDataRef rewrites the `movabs` into `lea r64, [rip+disp32]` and
+    asmtext.inc emits the lea directly for `mov reg, @glob`. Both then arrive
+    here, or set FixupPCRel themselves, already in rip form -- which is what
+    the second branch below is for. .text now carries no absolute relocation
+    at all, and that is asserted in the Makefile's test-emit-obj rows. }
+  if PICRefsAreRipRelative and (CodeLen >= 4) and
      (Code[CodeLen-1] = $25) and ((Code[CodeLen-2] and $C7) = $04) and
      GlobRefTrailingImm(Code[CodeLen-3], Code[CodeLen-4], Code[CodeLen-2], trailN) then
   begin
@@ -374,7 +425,14 @@ begin
     Dec(CodeLen);                                               { drop the SIB }
     GlobFixPCRel[GlobFixCount] := True;
     GlobFixTrail[GlobFixCount] := trailN;
-  end;
+  end
+  else if PICRefsAreRipRelative and (CodeLen >= 2) and
+          (Code[CodeLen-2] = $8D) and ((Code[CodeLen-1] and $C7) = $05) then
+    { The caller already emitted `lea r64, [rip+disp32]` and wants the
+      displacement recorded, not rewritten. No collision with the branch above:
+      that one requires BOTH a $25 SIB and a ModRM with rm=100, and $8D has
+      rm=101. }
+    GlobFixPCRel[GlobFixCount] := True;
   GlobFix[GlobFixCount].CodePos := CodeLen;
   GlobFix[GlobFixCount].BSSoff  := bssOff;
   Inc(GlobFixCount); EmitI32(0);

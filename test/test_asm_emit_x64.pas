@@ -15,6 +15,11 @@ var
     is about to rewrite went into Code or into AsmBytes. See
     tools/standalone_inc_harnesses.sh for why this file has to carry it. }
   EncToAsmBuffer: Boolean = False;
+  { Backs the mocked PICRefsAreRipRelative below. A VARIABLE, not a constant
+    True: `mov reg, @glob` has two encodings and pinning the mock to one
+    would leave the other untested here -- and the absolute arm is the one
+    every non-x86-64 target and every inline-asm buffer takes. }
+  PICRipMock: Boolean = True;
   CodeLen: Integer = 0;
   Fixups: array[0..1023] of record CodePos, DataOff: Integer; end;
   FixCount: Integer = 0;
@@ -64,6 +69,14 @@ end;
 function AppendChar(var s: AnsiString; c: Char): Integer;
 begin
   s := s + c; Result := Length(s);
+end;
+
+{ Mocked: the real predicate is in emit.inc and reads TargetArch +
+  EncToAsmBuffer, neither of which exists in this harness. asmtext.inc calls
+  it to choose between `lea r64,[rip+disp32]` and `mov r32,imm32`. }
+function PICRefsAreRipRelative: Boolean;
+begin
+  Result := PICRipMock;
 end;
 
 procedure EmitDataRef(dataOff: Integer);
@@ -269,8 +282,20 @@ begin
   ResetCode; EmitAsmX64(['mov rax, @data', 100]);
   AssertBytes('mov rax,@data', [$48,$B8,$00,$00,$00,$00,$00,$00,$00,$00]);
   if (FixCount <> 1) or (Fixups[0].DataOff <> 100) then Error('data reloc failed');
+  { Both arms, because the encoding is chosen at run time and asserting only
+    the live one would let the other rot silently. rip form: REX.W 8D, the
+    register in ModRM.reg -- so a high register needs REX.R, not REX.B, and
+    r10 is here to catch that swap. }
   ResetCode; EmitAsmX64(['mov edx, @glob', 200]);
-  AssertBytes('mov edx,@glob', [$BA,$00,$00,$00,$00]);
+  AssertBytes('mov edx,@glob (rip)', [$48,$8D,$15,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['mov r10, @glob', 200]);
+  AssertBytes('mov r10,@glob (rip, REX.R)', [$4C,$8D,$15,$00,$00,$00,$00]);
+  PICRipMock := False;
+  ResetCode; EmitAsmX64(['mov edx, @glob', 200]);
+  AssertBytes('mov edx,@glob (absolute)', [$BA,$00,$00,$00,$00]);
+  ResetCode; EmitAsmX64(['mov r10, @glob', 200]);
+  AssertBytes('mov r10,@glob (absolute, REX.B)', [$41,$BA,$00,$00,$00,$00]);
+  PICRipMock := True;
   if (GlobFixCount <> 1) or (GlobFix[0].BSSoff <> 200) then Error('glob reloc failed');
 
   { --- [@glob]/[@data] dereference-load (mem->reg, bracketed -- distinct from

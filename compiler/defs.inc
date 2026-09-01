@@ -2594,6 +2594,11 @@ var
   { Bytes of the instruction that FOLLOW the 4-byte displacement -- an immediate
     on a C7/81/83 form. The rip-relative correction is -(4 + this). }
   GlobFixTrail : array of Integer;
+  { Parallel to Fixups, same reason as GlobFixPCRel: TFixup is a bootstrap
+    record (REC_TFIXUP, size asserted at 16). True = the site is a 4-byte
+    rip-relative displacement from a rewritten `movabs`, not an 8-byte
+    absolute address. }
+  FixupPCRel : array[0..MAX_FIXUPS-1] of Boolean;   { fixed, like Fixups itself }
   GlobFixCount : Integer;
   GlobFixCapacity : Integer;
 

@@ -12578,7 +12578,19 @@ begin
   { pxx internal ABI: the external callee runs under SysV, where all XMM are
     volatile — save the callee-saved xmm8..13 pool around the call. }
   FloatPoolSave;
-  EmitB($FF); EmitB($14); EmitB($25); { call qword ptr [absolute address] }
+  { `call qword ptr [rip+disp32]` on x86-64 -- ModRM $15 is mod=00 rm=101 and
+    takes no SIB, where the absolute form is ModRM $14 + SIB $25. Conditioned on
+    TargetArch alone, and matched by PatchDynCallSites and the object writer:
+    this site uses EmitB directly, never EncB, so there is no AsmBytes case to
+    disagree about. }
+  if TargetArch = TARGET_X86_64 then
+  begin
+    EmitB($FF); EmitB($15);
+  end
+  else
+  begin
+    EmitB($FF); EmitB($14); EmitB($25); { call qword ptr [absolute address] }
+  end;
   DynCallCodePos[DynCallCount] := CodeLen;
   DynCallExtIdx[DynCallCount] := extIdx;
   Inc(DynCallCount);
@@ -12692,7 +12704,16 @@ begin
     table of pointers to open/close/fstat/... (never called with a :memory: DB). }
   if TargetArch = TARGET_X86_64 then
   begin
-    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); { mov rax, [abs GOT slot] }
+    { `mov rax, [rip+disp32]` -- ModRM $05 is mod=00 rm=101 and takes no SIB,
+      where the absolute form is ModRM $04 + SIB $25. This is the SECOND x86-64
+      emitter feeding DynCallCodePos, and PatchDynCallSites decides rip-relative
+      vs absolute from TargetArch ALONE -- so both emitters must agree, and the
+      call arm in EmitExternalCall is the other one. Converting only that arm
+      left this one absolute while its displacement was patched PC-relatively:
+      soname_host_discovery.pas took `@_Unwind_Backtrace` and segfaulted on a
+      `mov rax,[0xec9]`. Nothing distinguishes the two sites in the patch table,
+      so a third emitter must be converted here too, not flagged. }
+    EmitB($48); EmitB($8B); EmitB($05);             { mov rax, [rip+disp32] }
     DynCallCodePos[DynCallCount] := CodeLen;
     DynCallExtIdx[DynCallCount] := extIdx;
     Inc(DynCallCount);

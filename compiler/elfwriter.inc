@@ -352,7 +352,11 @@ end;
   `call qword [abs32]`, so the 32-bit operand is the slot VA. aarch64 builds the
   slot VA into x16 via movz/movk (the slot VA is < 2^32 under ET_EXEC), so patch
   both imm16 fields; the following ldr/blr are emitted at codegen time. }
-procedure PatchDynCallSites(dataBase: Int64);
+procedure PatchDynCallSites(dataBase, codeVA: Int64);
+{ codeVA is the virtual address of Code[0]. Only x86-64 needs it: its external
+  call is `call qword ptr [rip+disp32]` through the GOT slot, so the field holds
+  a distance rather than the slot's address. Every other target still patches
+  the absolute VA. }
 var i: Integer; slotVA: Int64;
 begin
   for i := 0 to DynCallCount-1 do
@@ -363,6 +367,8 @@ begin
       Patch32(DynCallCodePos[i],     $D2800010 or ((slotVA and $FFFF) shl 5));
       Patch32(DynCallCodePos[i] + 4, $F2A00010 or (((slotVA shr 16) and $FFFF) shl 5));
     end
+    else if TargetArch = TARGET_X86_64 then
+      Patch32(DynCallCodePos[i], slotVA - (codeVA + DynCallCodePos[i] + 4))
     else
       Patch32(DynCallCodePos[i], slotVA);
   end;
@@ -1796,7 +1802,13 @@ begin
   for i := 0 to FixCount-1 do
   begin
     addr := dataBase + Fixups[i].DataOff;
-    PatchAddr8(Fixups[i].CodePos, addr);
+    { A rewritten `movabs r64, imm64` is now `lea r64, [rip+disp32]`: four
+      bytes measured from the end of the instruction, not eight absolute. }
+    if FixupPCRel[i] then
+      Patch32(Fixups[i].CodePos,
+              addr - (LOAD_ADDR + codeOffset + Fixups[i].CodePos + 4))
+    else
+      PatchAddr8(Fixups[i].CodePos, addr);
   end;
 
   { Apply global fixups (4-byte absolute) }
@@ -1821,7 +1833,7 @@ begin
   end;
   if ExternalCount > 0 then
   begin
-    PatchDynCallSites(dataBase);
+    PatchDynCallSites(dataBase, LOAD_ADDR + codeOffset);
     PatchDynamicData(dataBase);
   end;
 
@@ -1982,7 +1994,13 @@ begin
   for i := 0 to FixCount-1 do
   begin
     addr := dataBase + Fixups[i].DataOff;
-    PatchAddr8(Fixups[i].CodePos, addr);
+    { A rewritten `movabs r64, imm64` is now `lea r64, [rip+disp32]`: four
+      bytes measured from the end of the instruction, not eight absolute. }
+    if FixupPCRel[i] then
+      Patch32(Fixups[i].CodePos,
+              addr - (LOAD_ADDR + codeOffset + Fixups[i].CodePos + 4))
+    else
+      PatchAddr8(Fixups[i].CodePos, addr);
   end;
 
   { Apply global fixups (4-byte absolute) }
@@ -2007,7 +2025,7 @@ begin
   end;
   if ExternalCount > 0 then
   begin
-    PatchDynCallSites(dataBase);
+    PatchDynCallSites(dataBase, LOAD_ADDR + codeOffset);
     PatchDynamicData(dataBase);
   end;
 
@@ -3085,7 +3103,11 @@ begin
   { .rela.text. Section syms: 1 = .text, 2 = .data, 3 = .bss.
     R_X86_64_64 = 1, R_X86_64_32S = 11. }
   for i := 0 to FixCount-1 do
-    writeRela64(f, Fixups[i].CodePos, 2, 1, Fixups[i].DataOff);
+    { rtype 1 = R_X86_64_64 (absolute), 2 = R_X86_64_PC32 for the lea form }
+    if FixupPCRel[i] then
+      writeRela64(f, Fixups[i].CodePos, 2, 2, Fixups[i].DataOff - 4)
+    else
+      writeRela64(f, Fixups[i].CodePos, 2, 1, Fixups[i].DataOff);
   for i := 0 to GlobFixCount-1 do
     { A data-resident global (a typed const baked into .data) carries a BIASED
       offset; SymOffIsData is the one decode point for all of them.
@@ -3118,7 +3140,9 @@ begin
   { `call qword ptr [abs32]` / `mov rax,[abs32]`: the operand names OUR GOT
     slot in .data, not the callee. The slot's own relocation is in .rela.data. }
   for i := 0 to DynCallCount-1 do
-    writeRela64(f, DynCallCodePos[i], 2, 11, ExternalGotOff[DynCallExtIdx[i]]);
+    { `call qword ptr [rip+disp32]` naming our own GOT slot in .data: PC32, so
+      the addend carries the -4 to the end of the instruction. }
+    writeRela64(f, DynCallCodePos[i], 2, 2, ExternalGotOff[DynCallExtIdx[i]] - 4);
   { @proc: the `mov rax, imm64` operand, absolute against .text }
   for i := 0 to ProcAddrFixCount-1 do
     writeRela64(f, ProcAddrFix[i].CodePos, 1, 1,

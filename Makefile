@@ -17387,14 +17387,30 @@ test-emit-obj: $(COMPILER)
 	readelf -sW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'UND ext_aliased_link'
 	! readelf -sW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'ext_alias_decl'
 	readelf -rW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'R_X86_64_64 .* ext_notify + 0'
-	readelf -rW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'R_X86_64_32S'
-	readelf -rW $(TESTTMP)/test_emit_obj_x64.o | grep -q 'R_X86_64_64'
+	# 3b. THE RELOCATION MODEL, and it INVERTED on 2026-09-01
+	#    (feature-a-x86-64-object-output-is-position-dependent). .text used
+	#    to be full of absolute R_X86_64_32S and that was the -no-pie
+	#    contract; every code reference to a global is [rip+disp32] now, so
+	#    .text is R_X86_64_PC32 and a 32S in it is the REGRESSION.
+	#    The R_X86_64_64s that remain are all in .rela.data -- absolute
+	#    pointers stored in data, which a PIE resolves with a RELATIVE
+	#    dynamic relocation. So this is asserted BY SECTION: "no 64-bit
+	#    relocation anywhere" is false and is the easy wrong assertion.
+	#    The PC32 row is also the AIM CHECK for the two that follow -- if
+	#    the sed range ever stops matching, all three go vacuous together
+	#    and this is the one that fails instead of passing empty.
+	readelf -rW $(TESTTMP)/test_emit_obj_x64.o | sed -n '/rela.text/,/^$$/p' | grep -q 'R_X86_64_PC32'
+	! readelf -rW $(TESTTMP)/test_emit_obj_x64.o | sed -n '/rela.text/,/^$$/p' | grep -qE 'R_X86_64_32S|R_X86_64_64'
+	readelf -rW $(TESTTMP)/test_emit_obj_x64.o | sed -n '/rela.data/,/^$$/p' | grep -q 'R_X86_64_64'
 	# 4. IT LINKS AND RUNS UNDER A gcc-BUILT main. Everything above is byte
 	#    inspection, which is what let the old object pass as plausible; only
-	#    this row answers "can somebody else use it". -no-pie is the contract:
-	#    the backend reaches globals through absolute operands, so a PIE link
-	#    is refused BY ld, and that refusal is asserted too -- otherwise the
-	#    day the model changes, nothing notices.
+	#    this row answers "can somebody else use it". BOTH link models are
+	#    asserted: -no-pie, and -pie, which is the default on every distro
+	#    that matters and used to be REFUSED by ld. That refusal was asserted
+	#    here so that the day the model changed, something would notice; it
+	#    changed on 2026-09-01 and this row is what noticed.
+	#    readelf must say DYN, not EXEC -- ld quietly produces a non-PIE if
+	#    you let it, and then "the PIE link succeeded" means nothing.
 	#    emit_obj_addup(9) is 45 and NOT 54: linking this object into a foreign
 	#    program runs no Pascal initialisation, so `g` is still 0.
 	@printf 'int captured;\nvoid ext_notify(int v) { captured = v; }\nvoid ext_aliased_link(int v) { (void)v; }\nextern int emit_obj_addup(int);\nextern const char *emit_obj_tag(void);\n#include <stdio.h>\nint main(void){ printf("%%d %%s\\n", emit_obj_addup(9), emit_obj_tag()); return 0; }\n' > $(TESTTMP)/test_emit_obj_x64_caller.c
@@ -17402,9 +17418,15 @@ test-emit-obj: $(COMPILER)
 	  gcc -no-pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64.o -o $(TESTTMP)/test_emit_obj_x64_exe || { echo "test-emit-obj: x86-64 .o FAILED to link with gcc -no-pie"; exit 1; }; \
 	  tools/expect_same.sh test_emit_obj_x64_exe "$$($(TESTTMP)/test_emit_obj_x64_exe)" "45 pxx-emit-obj"; \
 	  echo "test-emit-obj: x86-64 .o links+runs under a gcc-built main ok"; \
-	  if gcc -pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64.o -o $(TESTTMP)/test_emit_obj_x64_pie 2>/dev/null; then \
-	    echo "test-emit-obj: a PIE link SUCCEEDED -- the relocation model changed; update the -no-pie contract in docs and elfwriter.inc"; exit 1; \
-	  else echo "test-emit-obj: PIE link correctly refused (absolute relocation model, -no-pie contract)"; fi; \
+	  gcc -pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64.o -o $(TESTTMP)/test_emit_obj_x64_pie || { echo "test-emit-obj: PIE link FAILED -- x86-64 objects are position-independent since feature-a-x86-64-object-output-is-position-dependent; an absolute relocation back in .text is the cause"; exit 1; }; \
+	  readelf -hW $(TESTTMP)/test_emit_obj_x64_pie | grep -q 'Type:.*DYN' || { echo "test-emit-obj: -pie produced a non-DYN executable; the PIE assertion below would be vacuous"; exit 1; }; \
+	  tools/expect_same.sh test_emit_obj_x64_pie "$$($(TESTTMP)/test_emit_obj_x64_pie)" "45 pxx-emit-obj"; \
+	  echo "test-emit-obj: x86-64 .o links+runs as a PIE too"; \
+	  if command -v clang >/dev/null 2>&1; then \
+	    clang -fPIE -pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64.o -o $(TESTTMP)/test_emit_obj_x64_clang || { echo "test-emit-obj: clang PIE link FAILED"; exit 1; }; \
+	    tools/expect_same.sh test_emit_obj_x64_clang "$$($(TESTTMP)/test_emit_obj_x64_clang)" "45 pxx-emit-obj"; \
+	    echo "test-emit-obj: x86-64 .o links+runs under clang -pie (second linker)"; \
+	  else echo "clang not installed; second-linker PIE check skipped"; fi; \
 	else echo "gcc not installed; x86-64 .o link check skipped"; fi
 	# 4b. THE SAME OBJECT, ON i386 -- and this is the row the whole umbrella was
 	#    priced for. x86-64 NEVER diverged on the C-ABI convention, so an
@@ -18062,6 +18084,14 @@ test-quick: $(COMPILER)
 	# libgcc_s entry — a silent skip would read as a pass.
 	./$(COMPILER) test/soname_host_discovery.pas $(TESTTMP)/soname_host26
 	tools/expect_same.sh soname_host26 "$$($(TESTTMP)/soname_host26)" "soname discovery ok"
+	# @external must yield the address the CALL path uses, not merely a non-nil
+	# one. soname_host_discovery above (and cexternal_func_addr_b106.c) stop at
+	# `<> nil`, so this calls through the pointer and compares the answer with a
+	# direct call. Measured with the DynCall addend shifted one slot: @strlen
+	# came back non-nil as the neighbouring GOT entry (puts) and returned 12
+	# instead of 11, exit code 0 -- every nil check passed.
+	./$(COMPILER) test/test_external_proc_addr_callable.pas $(TESTTMP)/extprocaddr26
+	tools/expect_same.sh extprocaddr26 "$$($(TESTTMP)/extprocaddr26)" "EXTERNAL PROC ADDR OK"
 	@if [ -r /etc/ld.so.cache ] && command -v readelf >/dev/null 2>&1 && \
 	    grep -aq 'libgcc_s\.so\.1' /etc/ld.so.cache; then \
 	  readelf -d $(TESTTMP)/soname_host26 | grep -q "Shared library: \[libgcc_s.so.1\]" || \

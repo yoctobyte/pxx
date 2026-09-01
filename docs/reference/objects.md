@@ -11,15 +11,16 @@ driven by someone else's toolchain.
 
 ```
 pascal26 --emit-obj mylib.pas mylib.o
-gcc -no-pie main.c mylib.o -o prog
+gcc main.c mylib.o -o prog
 ```
 
 Targets: **x86-64**, **i386**, **riscv32** and **xtensa**. `arm32` and
 `aarch64` have no object writer. This page describes the x86-64 and i386
-objects, which behave identically — same export surface, same `-no-pie`
-contract, and `gcc -m32 -no-pie` for i386. The two ESP targets are a different
-kind of object: they export `app_main` for an IDF image and are covered under
-[Targets](../targets/).
+objects. They share an export surface, but **not** a relocation model: an
+x86-64 object is position-independent and links either way, an i386 object is
+position-dependent and needs `gcc -m32 -no-pie`. The two ESP targets are a
+different kind of object: they export `app_main` for an IDF image and are
+covered under [Targets](../targets/).
 
 ## What the object exports
 
@@ -49,12 +50,34 @@ later at your link step.
 
 ## Two things to know before you link
 
-**`-no-pie` is required.** The backend reaches globals through absolute address
-operands, so the object carries `R_X86_64_64`/`R_X86_64_32S` relocations (or
-`R_386_32` on i386). A linker can satisfy those only in a non-PIE link, and today's
-toolchains default to PIE, so a plain `gcc main.c mylib.o` fails with
-*relocation R_X86_64_32S against `.bss` can not be used when making a PIE
-object*. Add `-no-pie`.
+**x86-64 needs no link flags; i386 needs `-no-pie`.** On x86-64 the backend
+reaches globals through `[rip+disp32]`, so `.text` carries only
+`R_X86_64_PC32`. A plain `gcc main.c mylib.o` is enough, and the object links
+into a PIE and a non-PIE, under `gcc` and under `clang`. The `R_X86_64_64`
+relocations that remain are all in `.data` — absolute pointers *stored* in
+data, which a PIE resolves at load time like any other shared object.
+
+The i386 backend still reaches globals through absolute operands, so an i386
+object carries `R_386_32` in `.text`. GNU `ld` will accept those in a PIE, but
+only by making the text segment writable at load time:
+
+```
+warning: relocation in read-only section `.text'
+warning: creating DT_TEXTREL in a PIE
+```
+
+That is why `-no-pie` remains the documented form for i386. It is not merely
+cosmetic — a hardened link refuses it outright, while the same flag on an
+x86-64 object links clean:
+
+```
+$ gcc -m32 -Wl,-z,text main.c mylib32.o     # read-only segment has dynamic
+                                            # relocations -> error
+$ gcc      -Wl,-z,text main.c mylib.o       # links
+```
+
+> Before 2026-09-01 x86-64 behaved like i386 and this page said `-no-pie` was
+> required on both. Objects emitted by an older pxx still need it.
 
 **No initialisation runs.** Linking an object into a foreign program does not
 run the Pascal main body, unit initialisation, or anything else the program
