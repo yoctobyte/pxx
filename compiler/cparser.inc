@@ -10515,6 +10515,7 @@ var
   hdrStaticBody: Boolean;   { bodied `static` in a header-import surface }
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
+  sysvN, sysvC0, sysvC1: Integer; { PXXDBG=a.sysvcls readout only }
   retPtrElemTk, retPtrElemRec, retRecId, retProcSig: Integer;
   retPtrDepth, retPtrBaseTk, retPtrBaseRec: Integer;
   ptypes: array[0..31] of TTypeKind;
@@ -11159,6 +11160,30 @@ begin
     if ptypes[i] = tyRecord then
     begin
       LastTypeRecId := precid[i];
+      { PXXDBG=a.sysvcls -- what the SysV oracle says this record parameter's ABI
+        SHOULD be, printed beside what pxx currently does with it. The two
+        disagree today by design (that is the open ticket); the point of printing
+        it is that the classifier can be checked against gcc BEFORE any codegen
+        is built on it, rather than debugging the classifier and the marshalling
+        at the same time. Costs nothing when the topic is off. }
+      if PxxDbgEnabled('a.sysvcls') then
+      begin
+        sysvN := ABISysVRecordEightbytes(precid[i], sysvC0, sysvC1);
+        Write('PXXDBG a.sysvcls ', Procs[procIdx].Name, ' param ', pnames[i],
+              ' size=', RecSize(precid[i]), ' -> ');
+        if sysvN < 0 then WriteLn('REFUSE (not classifiable)')
+        else if sysvN = 0 then WriteLn('MEMORY (', (RecSize(precid[i]) + 7) div 8, ' stack slots)')
+        else
+        begin
+          Write(sysvN, ' eightbyte(s): ');
+          if sysvC0 = SYSV_CLS_SSE then Write('SSE') else Write('INTEGER');
+          if sysvN = 2 then
+          begin
+            if sysvC1 = SYSV_CLS_SSE then Write(',SSE') else Write(',INTEGER');
+          end;
+          WriteLn;
+        end;
+      end;
       idx := AllocParam(pnames[i], ptypes[i], True, False);
     end
     else

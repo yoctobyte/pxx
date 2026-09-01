@@ -123,6 +123,160 @@ begin
 end;
 
 { ---------------------------------------------------------------------------
+  BY-VALUE AGGREGATE CLASSIFICATION — SysV x86-64 psABI 3.2.3.
+
+  The question: when a C struct is passed BY VALUE, how many ABI slots does it
+  occupy and what class is each? SysV splits an aggregate of at most 16 bytes
+  into one or two EIGHTBYTES, classes them INTEGER or SSE, and sends anything
+  larger to memory. That is the answer `ABIParamSlotIsPointer` cannot give: it
+  returns one pointer-width slot for every record, which is the CONVENTION pxx
+  implements today and not the ABI gcc does
+  (bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee).
+
+  IT REFUSES RATHER THAN GUESSES, and that is the whole design. A conservative
+  answer is not available here: "when unsure, say MEMORY" is not safe, because
+  gcc will have put the bytes in registers and a disagreement is a silently
+  wrong value across the link, not a slower one. So every shape this cannot
+  classify EXACTLY returns -1 and the caller must refuse to compile. Wrong-and-
+  quiet is the failure mode this whole ticket is about; loud is available and
+  costs a diagnostic.
+
+  Only x86-64 answers. AAPCS64 has HFA/HVA rules that are a different table, and
+  the 32-bit targets another again; asking here on those returns -1 so a caller
+  that forgets to check the target refuses instead of applying the wrong ABI.
+  --------------------------------------------------------------------------- }
+const
+  SYSV_CLS_NONE    = 0;
+  SYSV_CLS_INTEGER = 1;
+  SYSV_CLS_SSE     = 2;
+  SYSV_CLS_MEMORY  = 3;
+
+{ psABI 3.2.3 step 4's merge, minus the X87 rows we refuse before reaching. }
+function ABISysVMergeCls(a, b: Integer): Integer;
+begin
+  if a = b then ABISysVMergeCls := a
+  else if a = SYSV_CLS_NONE then ABISysVMergeCls := b
+  else if b = SYSV_CLS_NONE then ABISysVMergeCls := a
+  else if (a = SYSV_CLS_MEMORY) or (b = SYSV_CLS_MEMORY) then ABISysVMergeCls := SYSV_CLS_MEMORY
+  else ABISysVMergeCls := SYSV_CLS_INTEGER;   { INTEGER dominates SSE }
+end;
+
+{ One scalar's contribution. A field contributes to EVERY eightbyte its bytes
+  touch, which is why this is a range and not a single index -- a double at
+  offset 4 of a 16-byte struct straddles, and both halves become SSE-merged. }
+procedure ABISysVMergeScalar(tk: TTypeKind; ofs, sz: Integer;
+                             var c0, c1: Integer; var ok: Boolean);
+var cls, i, lo, hi: Integer;
+begin
+  if not ok then Exit;
+  if (ofs < 0) or (sz <= 0) or (ofs + sz > 16) then begin ok := False; Exit; end;
+  { tyExtended is x87 (class X87/X87UP), which psABI sends to MEMORY as part of
+    a struct. Refused rather than mapped, because getting it subtly wrong is
+    exactly the silent disagreement this file refuses to risk.
+
+    THIS ARM IS UNREACHABLE FROM THE C FRONTEND TODAY, and that is measured, not
+    assumed: clexer.inc:342 maps C `long double` to double, so
+    `struct { long double x; }` arrives here as one 8-byte tyDouble field and is
+    classified 1x SSE. gcc makes that struct SIXTEEN bytes and MEMORY class.
+    Verified both sides: gcc sizeof = 16, pxx sizeof = 8.
+
+    So the guard cannot fire for the case it was written for -- the information
+    is gone before the oracle is asked -- and the divergence is PRE-EXISTING and
+    wider than this file (any long-double struct crossing a C boundary is
+    already wrong, with or without aggregate classification). Filed as
+    bug-c-long-double-is-8-bytes-in-pxx-and-16-in-gcc.
+
+    KEPT, not deleted: it is correct the day a frontend produces tyExtended, and
+    the Pascal frontend has that type. Deleting it would remove a correct guard
+    because one caller currently cannot reach it. What was wrong was the comment
+    claiming it covered long double, so the comment is what changed. }
+  if tk = tyExtended then begin ok := False; Exit; end;
+  if TypeIsFloat(tk) then cls := SYSV_CLS_SSE else cls := SYSV_CLS_INTEGER;
+  lo := ofs div 8;
+  hi := (ofs + sz - 1) div 8;
+  for i := lo to hi do
+    if i = 0 then c0 := ABISysVMergeCls(c0, cls)
+    else if i = 1 then c1 := ABISysVMergeCls(c1, cls)
+    else begin ok := False; Exit; end;
+end;
+
+{ Walk one record's fields at `base`, recursing into nested records and static
+  arrays. A UNION needs no special case: its members share offsets, so they
+  merge into the same eightbyte, which is what psABI says to do. }
+procedure ABISysVWalkRec(recId, base: Integer; var c0, c1: Integer;
+                         var ok: Boolean; depth: Integer);
+var ci, k, i, f, n, cnt, elemSz, fofs: Integer; ftk: TTypeKind; frec: Integer;
+begin
+  if not ok then Exit;
+  if depth > 8 then begin ok := False; Exit; end;
+  { A BUILTIN record is compiler-authored (TSymbol/TParam/...), never a C struct
+    crossing an ABI boundary. Refused rather than walked. }
+  if recId < REC_UCLASS_BASE then begin ok := False; Exit; end;
+  ci := recId - REC_UCLASS_BASE;
+  n := UClsFCount[ci];
+  if n <= 0 then begin ok := False; Exit; end;
+  for k := 0 to n - 1 do
+  begin
+    f := UClsFBase[ci] + k;
+    fofs := base + UFldOff_[f];
+    ftk := IntToTypeKind(UFldTk[f]);
+    frec := UFldRec_[f];
+    if UFldDynDepth[f] > 0 then begin ok := False; Exit; end;   { dyn array: a handle, not inline }
+    if UFldIsArray[f] then
+    begin
+      cnt := UFldArrLen[f];
+      if cnt < 0 then begin ok := False; Exit; end;
+      elemSz := TypeStorageSize(ftk, frec);
+      if elemSz <= 0 then begin ok := False; Exit; end;
+      for i := 0 to cnt - 1 do
+      begin
+        if ftk = tyRecord then
+          ABISysVWalkRec(frec, fofs + i * elemSz, c0, c1, ok, depth + 1)
+        else
+          ABISysVMergeScalar(ftk, fofs + i * elemSz, elemSz, c0, c1, ok);
+        if not ok then Exit;
+      end;
+    end
+    else if ftk = tyRecord then
+      ABISysVWalkRec(frec, fofs, c0, c1, ok, depth + 1)
+    else
+      ABISysVMergeScalar(ftk, fofs, TypeSlotSize(ftk), c0, c1, ok);
+    if not ok then Exit;
+  end;
+end;
+
+{ How many ABI slots a by-value record parameter occupies on x86-64.
+    > 0  that many eightbytes (1 or 2); cls0/cls1 hold SYSV_CLS_INTEGER or _SSE
+    = 0  MEMORY -- the bytes go on the stack, ceil(size/8) stack slots
+    < 0  NOT CLASSIFIABLE -- the caller must refuse to compile, never guess }
+function ABISysVRecordEightbytes(recId: Integer; var cls0, cls1: Integer): Integer;
+var sz: Integer; ok: Boolean;
+begin
+  cls0 := SYSV_CLS_NONE; cls1 := SYSV_CLS_NONE;
+  ABISysVRecordEightbytes := -1;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  sz := RecSize(recId);
+  if sz <= 0 then Exit;
+  if sz > 16 then begin ABISysVRecordEightbytes := 0; Exit; end;
+  ok := True;
+  ABISysVWalkRec(recId, 0, cls0, cls1, ok, 0);
+  if not ok then Exit;
+  if (cls0 = SYSV_CLS_MEMORY) or (cls1 = SYSV_CLS_MEMORY) then
+  begin ABISysVRecordEightbytes := 0; Exit; end;
+  if cls0 = SYSV_CLS_NONE then Exit;      { no field covered eightbyte 0 }
+  if sz <= 8 then
+  begin
+    if cls1 <> SYSV_CLS_NONE then Exit;   { a field past the size: refuse }
+    ABISysVRecordEightbytes := 1;
+  end
+  else
+  begin
+    if cls1 = SYSV_CLS_NONE then Exit;    { >8 bytes but nothing in eightbyte 1 }
+    ABISysVRecordEightbytes := 2;
+  end;
+end;
+
+{ ---------------------------------------------------------------------------
   RETURNS. `RetViaHiddenDest` is the oracle's `ReturnVia` query, and it was
   ALREADY a single shared function when this ticket was written — the ticket's
   claim that "AN_CALL and AN_VIRTUAL_CALL decide returns independently" is
