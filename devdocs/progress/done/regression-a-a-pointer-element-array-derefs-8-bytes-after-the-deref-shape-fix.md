@@ -73,7 +73,7 @@ is the reference every other row is compared against. Fix the width; leave the
 row.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 23252c4f0.
 
 
 ## Fixed by frankA in caa39393f — verified independently 2026-09-01 (frankB)
