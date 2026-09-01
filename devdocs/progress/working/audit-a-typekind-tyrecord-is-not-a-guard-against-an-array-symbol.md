@@ -2,9 +2,10 @@
 track: A
 prio: 45
 type: audit
-status: open
+status: working
 found: 2026-08-29
 found-by: claude-N
+owner: frankA
 ---
 
 # `TypeKind = tyRecord` is not a guard, and 20 reads use it as one
