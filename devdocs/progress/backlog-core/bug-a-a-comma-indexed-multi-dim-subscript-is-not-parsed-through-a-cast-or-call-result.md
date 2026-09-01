@@ -9,7 +9,7 @@ found: 2026-09-01
 found-by: frankB
 owner: ""
 blocked-by: []
-summary: "A comma-indexed multi-dim subscript is refused with `expected ']' before ','` when the pointer is spelled as a CAST or a CALL RESULT, while the identical construct on a plain identifier compiles and produces the right answer. So pxx disagrees with ITSELF by spelling, which is stronger than a compat gap; FPC 3.2.2 accepts the cast spelling and prints the same values pxx prints for the plain one. Same family as bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier, but a DIFFERENT MECHANISM and not fixed by it: this fails during PARSING, before any pointee-shape machinery runs, so no carrier (ProcRetPtrAlias, NodePtrAlias, an array-element carrier) can repair it. Filed separately so it is not assumed covered by the shape fix. Rows ds_callres_md2 and ds_cast_md2 in test/derefshape."
+summary: "A comma-indexed multi-dim subscript is refused with `expected ']' before ','` when the pointer is spelled as a CAST or a CALL RESULT, while the identical construct on a plain identifier compiles and produces the right answer. So pxx disagrees with ITSELF by spelling, which is stronger than a compat gap; FPC 3.2.2 accepts the cast spelling and prints the same values pxx prints for the plain one. Same family as bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier, but a DIFFERENT MECHANISM and not fixed by it: this fails during PARSING, before any pointee-shape machinery runs, so no carrier (ProcRetPtrAlias, NodePtrAlias, an array-element carrier) can repair it. Filed separately so it is not assumed covered by the shape fix. Rows ds_callres_md2 and ds_cast_md2 in test/derefshape. ESTABLISHED same session: the CHAINED form `[i][j]` COMPILES for both spellings and yields 1.50 0.00, the same wrong answer as the record-field/array-element/nested rows -- so the gap is purely the postfix subscript parser and behind it sits the ordinary shape bug, currently MASKED by the parse error. Fixing the parser alone therefore turns two LOUD compile errors into two SILENT wrong values; land it with the multi-dim shape fix, not before."
 ---
 
 # A comma-indexed multi-dim subscript is not parsed through a cast or a call result
@@ -73,9 +73,34 @@ begin
 end.
 ```
 
-## Note for whoever takes it
+## Established, same session: the gap IS purely in the subscript parser
 
-Worth checking whether `TP(raw)^[i][j]` (chained single subscripts) is accepted
-where the comma form is not. If it is, the gap is purely in the postfix loop's
-subscript parser and not in the lowering at all, which makes it much smaller
-than the rest of the family — and would be the first thing to establish.
+The open question above is answered rather than left. **The chained form
+compiles for both spellings**, at the same binary:
+
+| spelling | comma form `[i, j]` | chained form `[i][j]` |
+| --- | --- | --- |
+| `TP(raw)^` (cast) | `expected ']' before ','` | **compiles** → `1.50 0.00` |
+| `GetP^` (call result) | `expected ']' before ','` | **compiles** → `1.50 0.00` |
+
+So the defect is in the postfix loop's subscript parser — it does not accept a
+comma-separated index list in these two positions — and **not** in the
+lowering. That makes it a much smaller job than the rest of the family.
+
+## The sequencing trap this creates, which is the important part
+
+Once parsed, the cast and call-result rows give `1.50 0.00`: **exactly the same
+wrong answer as the record-field, array-element and nested rows.** They are not
+a separate defect hiding behind the parse error — they are the ordinary
+pointee-shape bug, currently *masked* by a compile error.
+
+**So fixing the parser ALONE makes this family worse, not better.** Two loud
+compile errors become two silently wrong values, and a silent wrong value is the
+failure mode this whole family exists to hunt — the ticket that started it
+(`bug-a-p-caret-index-...-plain-identifier`) opens with the record-field face
+being the one worth most *because* it is silent.
+
+Do not land the parser fix on its own. Either land it with the multi-dim shape
+fix, or land it and accept that `ds_cast_md2` / `ds_callres_md2` move from
+`COMPILE-ERROR` to `WRONG` in `test/derefshape` — which is honest only if the
+shape work is actually in flight.
