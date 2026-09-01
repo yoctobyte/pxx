@@ -52,4 +52,4 @@ becomes wrong. `PChar('')` and `PChar(e + '')` both stay non-nil pointing at a
 ## Log
 
 - 2026-09-01 — found by sweeping sibling ownership seams after the array-of-const
-  fix, fixed and closed in the same session, commit PENDING-COMMIT.
+  fix, fixed and closed in the same session, commit 7cd695c7d.
