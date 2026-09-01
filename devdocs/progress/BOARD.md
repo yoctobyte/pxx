@@ -351,7 +351,7 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 
-## backlog-tools (74)
+## backlog-tools (75)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -408,6 +408,7 @@ _none_
 | feature-t-dead-commit-is-a-closed-stock-and-a-counter-nobody-will-read | T | 30 | feature | The 350 dead citations are unrecoverable and finished; the risk is now the counter | — |
 | feature-t-detect-ticket-clusters-that-share-a-construct | T | 45 | feature | Prio propagates only down declared blocked-by: edges, so a ticket that is upstream of a family it was filed AFTER can never inherit their priority. Measured 2026-08-31: `shr` produced ten tickets, eight closed individually over two months priced 30-60, while the one describing their shared cause sat at prio 20 — the lowest of all ten. Add a scan that groups open AND closed tickets by shared construct tokens and flags a cluster whose members were fixed one at a time. | — |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | UNBLOCKED 2026-09-01 -- the permission it waited on was APPROVED 2026-08-31 (decide-install-qemu-system-and-a-freebsd-image-on-plexus) and this ticket was never moved out of blocked/. Owner restated it 2026-09-01: 'we are allowed to install a bsd image on qemu, i thought we already answered that. or maybe i only answered for openbsd, either way, same answer' -- so it covers OpenBSD too. Stays prio 20: permission granted is not priority raised, and BSD is demoted under the linux-only focus. ORIGINAL: Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | — |
+| feature-t-grade-a-pin-instead-of-gating-it | T | 85 | feature | Grade a pin instead of gating it, and say what a red pin is known to break | — |
 | feature-t-lint-token-text-compared-against-a-keyword | T | 35 | feature | Make the never-true guard a lint instead of an audit | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 45 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-pasmith-rung-selftest | T | 30 | feature | A fuzz rung that has only ever been SILENT is indistinguishable from one that does not work. Proposes a --selftest that proves each rung's fold actually observes its construct, by MUTATING the generated program rather than by rebuilding an old compiler — cheaper, needs no checkout, and applies to rungs that were never written against a specific fix. | — |
@@ -947,6 +948,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 90] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
+- [p 85] [T] feature-t-grade-a-pin-instead-of-gating-it
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 80] [A] meta-a-pxx-produces-linkable-code [meta — a standing index, never "done"; link work to it, do not claim it]

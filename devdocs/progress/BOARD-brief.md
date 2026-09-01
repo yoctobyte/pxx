@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:28 blocked:7 backlog:22 backlog-umbrella:5 backlog-core:140 backlog-nilpy:97 backlog-tools:74 backlog-pascal:56 backlog-decide:24 backlog-libs:15 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:3 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3032 rejected:72`
+`working:5 unfinished:28 blocked:7 backlog:22 backlog-umbrella:5 backlog-core:140 backlog-nilpy:97 backlog-tools:75 backlog-pascal:56 backlog-decide:24 backlog-libs:15 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:3 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3032 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -56,9 +56,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 472, ranked
+## Ready — top 30 of 473, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
+- `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
@@ -87,6 +88,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-core-test-header-static-body
 - `[p 70] [T]` regression-test-core-test-interface-byval-param-no-leak
 - `[p 70] [T]` regression-test-core-test-rtl-fpc-compat-helpers-2
-- `[p 70] [T]` regression-test-core-test-setlen-in-parallel-for-body-2
 
-_442 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_443 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

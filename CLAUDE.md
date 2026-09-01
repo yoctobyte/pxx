@@ -153,6 +153,21 @@ one-line logbook pointer.
   `stabilize`.** A pin blocks every other lane and the human while it runs.
   `stabilize` alone does NOT move B's ground; only `make pin` does, then commit
   `stable_linux_amd64/**`.
+- **A VALID PIN IS THE SELF-HOST FIXEDPOINT. NOTHING ELSE MAY BLOCK ONE** (owner,
+  2026-09-01). Not a red tier, not a red count, not a shadow verdict. A pin is
+  GRADED, never gated: `green` (a full tier at that tree, no RED) or
+  `reds(N)` with the manifest, recorded AT PIN TIME. Rollback prefers a green
+  pin and falls back to the most recent, so recovery is never empty.
+  **A red is a reason to pin SOONER, not later** — the pin in place is red too,
+  and refusing on reds is an argument for never leaving a red pin. It held for
+  19 days: v354 (08-19) was the last green one, while v398 shipped a compiler
+  that could not build C for i386 or arm32 and every `$(PXX_STABLE)` consumer
+  carried that for two days.
+  **Read a shadow verdict as a GRADE, never as permission.** Three sessions
+  reasoned carefully from `would_pin: false` and all three read a refusal —
+  it is advisory, has zero deciding consumers, and `pin_shadow()` says it never
+  touches `pinned` or `make pin`. A verdict nobody may act on gets read as
+  authority anyway, so the fix is the wording, not the reader.
 - **B / E — build with `$(PXX_STABLE)`, never rebuild the compiler.** A compiler
   or language gap → ticket in the owning lane.
 - **T — owns the TOOL, never the BUG.** A compiler gap it hits → ticket in the
