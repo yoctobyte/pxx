@@ -111,4 +111,4 @@ umbrella's dependency. Under a Linux-only focus it will sit near the head of
 Track A and not be takeable. Flagged rather than silently re-edged.
 
 ## Log
-- 2026-09-01 — decided, commit PENDING-COMMIT.
+- 2026-09-01 — decided, commit e9d1b7850.
