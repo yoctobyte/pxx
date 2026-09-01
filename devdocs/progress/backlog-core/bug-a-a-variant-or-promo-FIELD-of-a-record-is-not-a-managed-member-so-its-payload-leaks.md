@@ -2,7 +2,7 @@
 type: bug
 track: A
 prio: 6
-summary: a PromoInt field has no record/class member kind at all so it still leaks everywhere; the Variant half is FIXED in b2997a31b, except for a record whose only member is a Variant
+summary: only one shape still leaks — a record whose ONLY member is a Variant (live=7708), because RecordHasManagedFields does not count one; the Variant half landed in b2997a31b and the PromoInt half as member kind 7 in f806993c8
 tags: [memory-leak, variant, promoint, rtti, records]
 ---
 
@@ -12,11 +12,50 @@ The **Variant half is fixed** in `b2997a31b` (RecordDescMember + the RECORD
 `tyVariant -> 5` arm, with PXXRecordRetain's missing kind-5 arm in the same
 commit): live=11658 -> 6, regression test `test_record_variant_member_leaks`.
 
-**Two things remain open and this ticket stays open for them:**
-1. **A PromoInt member**, in every shape — untouched, needs a new member kind.
-2. **A record whose ONLY member is a Variant** (live=7708) — `RecordHasManagedFields`
-   does not count a variant, so the record is never managed and no walk is
-   emitted at all. That is the broad change `ClassFieldNeedsFinal` warns about.
+The **PromoInt half is fixed** in `f806993c8` as **member kind 7**, in both
+descriptor chains, `RecordDescMember` and `ClassFieldNeedsFinal`, with
+retain/release/zero arms in builtinheap. Regression test
+`test_record_promo_member_leaks`. Measured, live blocks over 2000 trips:
+
+    local record {promo, string}   1904 -> 6      class field    1787 -> 7
+    dyn array of that record       7685 -> 21     array[0..7]    7578 -> 18
+
+**ONE thing remains open and this ticket stays open for it:**
+
+- **A record whose ONLY member is a Variant** (live=7708) — `RecordHasManagedFields`
+  does not count a variant, so the record is never managed and no walk is
+  emitted at all. That is the broad change `ClassFieldNeedsFinal` warns about.
+  Note the promo fix does NOT reach it and was never going to: the same
+  single-member row for promo measured clean at 6 both before and after, because
+  with no second managed member the record is not managed and there is no walk
+  for a member kind to appear in. Describing the member is downstream of the
+  record being walked at all.
+
+### Not covered by the promo fix, deliberately
+
+**An `array[0..N] of PromoInt` MEMBER.** Both new arms are scalar-only
+(`... and not UFldIsArray[fi]`), matching the existing variant arm exactly
+rather than widening two mechanisms in one change. A fixed array OF records that
+each hold a scalar promo IS covered and is measured above (7578 -> 18); the
+uncovered shape is the array being the promo itself.
+
+### Kind 7 is the only member kind carrying a stride
+
+Its `typeRef` word holds `TypeSlotSize`, because `PromoInt` is not one type: it
+resolves through `PromoIntDefaultKind` to `tyPromoInt64` (16 bytes) on a 64-bit
+target and `tyPromoInt32` (8) on a 32-bit one, and the numbered spellings are
+REFUSED on the target they do not match. A runtime constant would be right on
+half the fleet. Verified by reading emitted descriptor bytes on five targets
+(16 on x86-64/aarch64, 8 on i386/arm32/riscv32), with a promo-free program as
+the scanner's negative control.
+
+### The retain arm was the half that could have shipped broken
+
+Describing the member makes `PXXRecordRelease` release it; a release without a
+matching retain does not leak, it DESTROYS SetLength survivors — the pairing
+failure that made `9cb079528` segfault master (reverted as `a584e8fef`). Proven
+rather than assumed: with only the retain arm removed and the compiler rebuilt,
+the new test reports **3/6000** and the `-dPXX_HEAP_DEBUG` build exits **139**.
 
 ## Measured first — the two bugs have different shapes
 
