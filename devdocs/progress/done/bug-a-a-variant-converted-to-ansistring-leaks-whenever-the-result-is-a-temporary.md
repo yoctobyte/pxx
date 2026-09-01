@@ -171,4 +171,4 @@ yet** — it is a separate measurement, not part of this fix, and the test heade
 says so rather than implying five equal numbers.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: f6f712f89.
