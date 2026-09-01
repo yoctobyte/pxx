@@ -55,3 +55,6 @@ Segmentation fault (core dumped)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-01 — the seven watcher saw `test-core#src:test/test_exception_unhandled.pas@3` GREEN at 866bb0b262f9 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-exception-unhandled-3`, not `regression-test-core-test-exception-unhandled`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
