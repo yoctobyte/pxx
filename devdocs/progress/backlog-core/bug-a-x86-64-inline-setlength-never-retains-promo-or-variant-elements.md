@@ -110,7 +110,7 @@ Then re-widen the `rtti_emit.inc` arm (the comment there names this ticket).
 **Gate: full tier, not quick.** `gate.sh quick` was GREEN on the broken commit;
 only `--tier full` caught it, as `test-core#244`.
 
-## A four-target red was raised against this premise, CHECKED, and CLEARED — 2026-09-01
+## A four-target red was raised against this premise — NOT cleared; see the correction below
 
 Recorded so nobody re-raises it. **The premise above survives**; nothing in the
 analysis changed.
@@ -145,3 +145,34 @@ Anyone told otherwise would have hunted a double free that was not there.
 The leak this ticket is actually about is real and measured on x86-64: promo
 `live` 2955 / 5985 / 10779 growing linearly in trips, against 7 / 9 / 7 flat;
 variant 7708 against 4.
+
+### CORRECTION, same day — it RECURRED, so the section above is wrong
+
+The "cleared" verdict rested on frankB's green and on the assumption that a
+single-run red is a flake. Both premises failed within thirteen minutes.
+
+| sha | time | wall | dynarray rows red |
+| --- | --- | --- | --- |
+| `0d3d061121a7` | 15:42:45 | 553.6s | 4 (new_red) |
+| `66cda2103004` | 15:55:12 | 550.6s | 4 (still red) |
+
+Two consecutive full runs on seven, all four cross targets, **both at normal
+wall time** — the full-tier norm there is ~540-553s. The load explanation is
+dead for these rows: neither run was slow, and the one genuinely slow run in the
+window (`3e6249872671`, 678.4s) does not carry them.
+
+The host is not sick either. Measured on seven at 15:55: load 8.10 / 14.85 /
+17.27 across 24 cores, 2G used of 94G, 67G free, nothing swapping.
+
+**So frankB's green and seven's red are both measurements, and they disagree.
+The object of interest is the difference in METHOD** — the harness runs
+`test-aarch64#...` and friends under qemu; a local run at `origin/master` may not
+be the same execution. Neither side is asserted right here.
+
+**The residual has an owner: it is a Track T harness-vs-local question**, not a
+question about this ticket's premise, which remains untested by either result.
+
+Two things learned that outlive this: a single-run red is not evidence of a
+flake, and **a green that cannot be shown to run the same way as the red does
+not refute it.** The first "cleared" write-up made both mistakes in one
+paragraph.
