@@ -119,6 +119,20 @@ for t in $FILES; do
     # cannot go stale. The other seventeen skips in that shard do NOT recover,
     # and eight of them are `*_fail.pas` that must not: the retry distinguishes
     # them for free, where a grep would have had to know about them.
+    # THE RESIDUAL, AND IT IS NOT COVERED BY THIS RETRY. A program that NEEDS
+    # --threadsafe but still BUILDS without it never reaches this arm. That is
+    # every program whose threads come from somewhere other than __pxxclone --
+    # a libc pthread_create in its own source, or a linked C library that
+    # starts its own -- because the refusal is raised by __pxxclone's lowering
+    # and nothing else. Such a program compiles clean, races an allocator with
+    # no lock, and reports a DIFF that is not about the compiler. Measured
+    # 2026-09-01: shard 9 said `rc 1 vs 139` on
+    # test_heap_magazine_foreign_thread.pas, which was mine, added that
+    # afternoon, and missing {$THREADSAFE ON}. One instance, now closed, and no
+    # others in the Pascal corpus -- but the FIX for the class is in the test
+    # (carry the directive, which makes the flagless build a hard error), not
+    # here, because a harness cannot tell "needs the flag" from "does not" by
+    # looking at a program that builds either way.
     if [ "${t%.c}" = "$t" ] && "./$CC" --threadsafe -O0 "$t" "$TMP/d0" >/dev/null 2>&1; then
       CF="$CF --threadsafe"; recovered="$recovered $b"
     else

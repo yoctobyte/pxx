@@ -16,16 +16,31 @@ test_rtti*
 # that it opened a real window on the workstation session and was skipped as
 # TIMEOUT-O0, so the sweep never compared it.
 t_rw*
-# writes from several threads with no ordering between them: 6 runs of ONE
-# -O0 binary produced 5 distinct outputs, so every level pair differs by
-# construction. Became visible on 2026-09-01 only because the --threadsafe
-# retry let it build at all; before that it was a silent BUILD-FAIL skip.
+# ---- THE ATOMICITY FAMILY: three programs, one reason -------------------
+# Several threads each write whole lines with no ordering between them. The
+# ORDER is nondeterministic BY DESIGN -- each program's own header says so --
+# so raw stdout comparison reports a DIFF at every level, for every pair,
+# forever. The property they assert is ATOMICITY: no line is torn. That is
+# what their Makefile rows ask, by COUNTING well-formed lines rather than
+# comparing bytes, and it is a question optdiff has no way to express.
+#
+# Verified before skipping, at -O0/-O1/-O2/-O3, five runs each, rather than
+# assumed: every level gives the right count every time while three runs of a
+# SINGLE binary give three different byte streams. Skipped because the question
+# is wrong here, not because the answer is inconvenient.
+#
+# The pattern to recognise before adding a fourth: several writers, no
+# ordering, and a Makefile row that GREPS rather than compares. If a program's
+# row compares whole output, it does not belong in this family and a DIFF from
+# it is real.
+#   thread_writeln_interleave  6 runs of one -O0 binary -> 5 distinct outputs
+#   io_lock_foreign            4 foreign threads x 50 lines -> 200 lines + `done`
+#   parallel_writeln_atomic    200 parallel-for workers  -> PARWROK + 200 + 200
+#
+# All three were INVISIBLE until 2026-09-01: they did not build under this
+# sweep without --threadsafe, so they were counted as BUILD-FAIL skips. The
+# retry that made them build is what turned them up, all three at once, which
+# is itself the argument that they are one family and not three accidents.
 test_thread_writeln_interleave*
-# four foreign threads each writing 50 lines: the ORDER is nondeterministic by
-# design and the program's own header says so. Its property is ATOMICITY -- no
-# torn line -- which raw stdout comparison cannot express, and which the
-# Makefile row asks instead (200 whole lines plus `done`). Measured
-# 2026-09-01 at -O0/-O1/-O2/-O3, five runs each: 200 done every time, while
-# three runs of ONE binary give three different byte streams. Skipped because
-# the question is wrong here, not because the answer is inconvenient.
 test_threadsafe_io_lock_foreign*
+test_parallel_writeln_atomic*

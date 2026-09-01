@@ -67,10 +67,10 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case | T | 55 | bug | gate.sh's stale_binary_hint asks a WORKING-TREE question (is this binary built from these sources) using GIT-HISTORY inputs (mtime vs the newest commit touching compiler/), so it can only ever see divergence that has been COMMITTED. Measured: an uncommitted edit under compiler/ leaves BOTH its inputs byte-identical, so its output is provably independent of the thing it detects -- it is blind to the entire uncommitted present, which includes every agent between a build and a commit. Three lanes read three stale-binary REDs as a master miscompile on 2026-08-31; the hint fired for one. | — |
-| regression-lib-test-lib-synapse-3 | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas at 889bfcf73256 in step 1/2, `stable_linux_amd64/default/pinned --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse…` (auto-filed by twatch) | — |
-| regression-lib-test-lib-synapse-ssl | B | 70 | regression | regression: lib-test#src:test/lib_synapse_ssl.pas at 889bfcf73256 in step 1/3, `stable_linux_amd64/default/pinned --mimic-fpc -dPXX_DYNLIB_LIBC -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posi…` (auto-filed by twatch) | — |
-| regression-lib-test-lib-synapse-transitive-unit | B | 70 | regression | regression: lib-test#src:test/lib_synapse_transitive_unit.pas at 889bfcf73256 in step 1/2, `stable_linux_amd64/default/pinned --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse…` (auto-filed by twatch) | — |
-| regression-test-core-test-exception-unhandled-3 | T | 70 | regression | regression: test-core#src:test/test_exception_unhandled.pas@3 at 3d4801b6abc3 in step 53/47, `/tmp/next-test_multithreading26 \| grep -q "multithreading test completed successfully"` (auto-filed by twatch) | — |
+| regression-lib-test-lib-synapse-3 | B | 70→85 | regression | regression: lib-test#src:test/lib_synapse.pas at 889bfcf73256 in step 1/2, `stable_linux_amd64/default/pinned --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse…` (auto-filed by twatch) | — |
+| regression-lib-test-lib-synapse-ssl | B | 70→85 | regression | regression: lib-test#src:test/lib_synapse_ssl.pas at 889bfcf73256 in step 1/3, `stable_linux_amd64/default/pinned --mimic-fpc -dPXX_DYNLIB_LIBC -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posi…` (auto-filed by twatch) | — |
+| regression-lib-test-lib-synapse-transitive-unit | B | 70→85 | regression | regression: lib-test#src:test/lib_synapse_transitive_unit.pas at 889bfcf73256 in step 1/2, `stable_linux_amd64/default/pinned --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse…` (auto-filed by twatch) | — |
+| regression-test-core-test-exception-unhandled-3 | T | 70→85 | regression | regression: test-core#src:test/test_exception_unhandled.pas@3 at 3d4801b6abc3 in step 53/47, `/tmp/next-test_multithreading26 \| grep -q "multithreading test completed successfully"` (auto-filed by twatch) | — |
 
 ## backlog_new (0)
 
@@ -83,7 +83,7 @@ _none_
 | umbrella-compile-and-run-dosbox | C | 90 | umbrella | GOAL, not a unit of work. The flagship real-program proof: a large real C/C++ codebase that either builds and runs or does not, with no partial credit to award ourselves. Owner named it first when stating the goal. Attach whatever the ATTEMPT breaks on -- do not pre-populate this from the backlog by guessing. | bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong, feature-c-corpus-busybox-multi-applet |
 | umbrella-cross-target-codegen-is-correct | A | 80 | umbrella | GOAL, not a unit of work. The owner's ranking: 'cross platform has way prio above look-if-I-do-this-on-platform-that-it-would-break-z'. A program that compiles right on one target and wrong on another is the defect this umbrella exists for; a hypothetical about an untried platform is not. Measured target clusters: xtensa 11, riscv 8, arm32 5, i386. | bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs, bug-a-i386-c-main-gets-argc-and-argv-swapped, bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket, feature-a-a-stackful-generator-is-x86-64-only-so-examples-chess-cannot-target-anything-else, feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build, feature-a-port-alloca-to-i386-arm32-and-riscv32 |
 | umbrella-managed-memory-is-correct | A | 75 | umbrella | GOAL, not a unit of work. The owner named memory management as ranking above float-bit and parity work. This is the axis a real program hits hardest and where a wrong answer is silent: a leak, a double free, a refcount that disagrees with itself. Correctness is the case here -- the perf profile is deliberately NOT the argument. | bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower, bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-string-release-has-two-implementations-that-already-disagree, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, feature-a-reentrant-heap-lock-and-per-thread-arenas |
-| umbrella-one-full-tier-run-with-no-red-tier | T | 85 | umbrella | GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk. | — |
+| umbrella-one-full-tier-run-with-no-red-tier | T | 85 | umbrella | GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk. | regression-cascade-fc01c8094434, regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, regression-test-pascal-conformance-shard0-6-4, regression-test-pascal-conformance-shard1-6-2, regression-test-pascal-conformance-shard2-6-2, regression-test-pascal-conformance-shard3-6-2 |
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
@@ -333,7 +333,7 @@ _none_
 | perf-nilpy-remaining-perbyte-string-builders | N | 40 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-n-two-import-handlers-are-twins | N | 45 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
-| regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
+| regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60→85 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 
 ## backlog-tools (77)
 
@@ -408,12 +408,12 @@ _none_
 | idea-t-watch-the-closest-call-approach-not-the-image-size | T | 40 | idea | The obvious guard against xtensa reach failures is a watch on image size, and it would NOT WORK: measured 2026-09-01, the 622444B call0 image FAILS and the 556908B windowed image BUILDS, both over CALL8's 524288 -- the larger one is the one that builds, because the condition is max caller->callee distance and size is only a proxy. Watch closest approach to +-512 KiB across call sites instead; the xtensa backend already computes it to emit its refusal, so this is a report, not a new analysis, and it changes no codegen. | — |
 | meta-t-dev-throughput-and-track-a-t-integration | T | 30 | meta | META: development is wait-limited, not token-limited. Dev tracks stop running suites; T owns breadth and its report LATENCY becomes the product. Coordinates the tooling tickets that get us there. | — |
 | refactor-t-the-automated-pin-stages-the-stable-tree-by-a-hardcoded-path | T | 20 | refactor | NOT a present fault -- verified correct today. The automated pin path in tools/testmgr.py stages the stable tree with `git add -u <root>` plus an explicit `git add <root>/default/builtin`. The second call is what saves it, and it saves it by NAMING the one directory that has ever needed saving. `git add -u` stages tracked files only, so any FUTURE directory added under the stable root is silently left untracked in the pin commit, exactly as builtin/ was before that line existed. Correct by hardcoded path rather than by rule. | — |
-| regression-cascade-fc01c8094434 | T | 70 | regression | regression CASCADE: 38 jobs newly red in 5dbcc861e..fc01c8094 (87 commits) — auto-filed by twatch | — |
-| regression-test-core-test-setlen-in-parallel-for-body-2 | T | 70 | regression | regression: test-core#src:test/test_setlen_in_parallel_for_body.pas at 456361785e34 in step 2/2, `tools/expect_same.sh test_setlen_parfor26 "$(/tmp/test_s` (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard0-6-4 | P | 45 | regression | regression: test-pascal-conformance#shard0/6 at aac20e75ed1f in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 libr` (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard1-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard1/6 red at 27424c927b65 (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard2-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 red at 27424c927b65 (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard3-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 red at 27424c927b65 (auto-filed by twatch) | — |
+| regression-cascade-fc01c8094434 | T | 70→85 | regression | regression CASCADE: 38 jobs newly red in 5dbcc861e..fc01c8094 (87 commits) — auto-filed by twatch | — |
+| regression-test-core-test-setlen-in-parallel-for-body-2 | T | 70→85 | regression | regression: test-core#src:test/test_setlen_in_parallel_for_body.pas at 456361785e34 in step 2/2, `tools/expect_same.sh test_setlen_parfor26 "$(/tmp/test_s` (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard0-6-4 | P | 45→85 | regression | regression: test-pascal-conformance#shard0/6 at aac20e75ed1f in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 libr` (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard1-6-2 | T | 70→85 | regression | regression: test-pascal-conformance#shard1/6 red at 27424c927b65 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard2-6-2 | T | 70→85 | regression | regression: test-pascal-conformance#shard2/6 red at 27424c927b65 (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard3-6-2 | T | 70→85 | regression | regression: test-pascal-conformance#shard3/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | task-t-a-corpus-tree-absence-should-be-counted-not-just-echoed | T | 45 | task | A test row whose corpus tree is absent echoes SKIP and passes, and nothing counts how many did. Measured on this box: test-core's crtl_tiny_regex_match row was UNGUARDED, so a missing library_candidates/tiny-regex-c hard-errored and — because make stops at the first failing recipe line — took 844 of test-core's 1745 compile rows (48%) with it, with no indication in the log of how much had not run. Guarding it (2026-09-01) fixes that and buys the opposite failure: testmgr's own TIERS comment records test-fgl printing SKIP and PASSING for its entire life without running once. Both failure modes are live in this repo TODAY. The missing mechanism is the same one test-c-abi-mixed-link now has: count the skips and report `N of M measured, K skipped`, so a box quietly running half the suite is visible in the verdict instead of indistinguishable from a green one. | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
@@ -937,8 +937,18 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 90] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
+- [p 85] [T] regression-cascade-fc01c8094434 (unblocks 1)
+- [p 85] [B] regression-lib-test-lib-synapse-3 (unblocks 1) [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 85] [B] regression-lib-test-lib-synapse-ssl (unblocks 1) [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 85] [B] regression-lib-test-lib-synapse-transitive-unit (unblocks 1) [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 85] [N] regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native (unblocks 1)
+- [p 85] [T] regression-test-core-test-exception-unhandled-3 (unblocks 1)
+- [p 85] [T] regression-test-core-test-setlen-in-parallel-for-body-2 (unblocks 1)
+- [p 85] [P] regression-test-pascal-conformance-shard0-6-4 (unblocks 1)
+- [p 85] [T] regression-test-pascal-conformance-shard1-6-2 (unblocks 1)
+- [p 85] [T] regression-test-pascal-conformance-shard2-6-2 (unblocks 1)
+- [p 85] [T] regression-test-pascal-conformance-shard3-6-2 (unblocks 1)
 - [p 85] [T] feature-t-grade-a-pin-instead-of-gating-it
-- [p 85] [T] umbrella-one-full-tier-run-with-no-red-tier [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 80] [A+S] bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket (unblocks 1)
 - [p 80] [A] feature-a-a-stackful-generator-is-x86-64-only-so-examples-chess-cannot-target-anything-else (unblocks 1)
 - [p 80] [A] feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
@@ -951,15 +961,6 @@ _none_
 - [p 70] [C] bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [B] feature-b-a-bootable-image-with-the-busybox-userland-on-it
-- [p 70] [T] regression-cascade-fc01c8094434
-- [p 70] [B] regression-lib-test-lib-synapse-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [B] regression-lib-test-lib-synapse-ssl [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [B] regression-lib-test-lib-synapse-transitive-unit [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [T] regression-test-core-test-exception-unhandled-3
-- [p 70] [T] regression-test-core-test-setlen-in-parallel-for-body-2
-- [p 70] [T] regression-test-pascal-conformance-shard1-6-2
-- [p 70] [T] regression-test-pascal-conformance-shard2-6-2
-- [p 70] [T] regression-test-pascal-conformance-shard3-6-2
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [A] bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine
@@ -991,7 +992,6 @@ _none_
 - [p 60] [C] idea-c-realworld-test-targets [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 60] [P] perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor
 - [p 60] [A] refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed [!! DO NOT CLAIM — the ticket says so; read it]
-- [p 60] [N] regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native
 - [p 60] [U] task-u-evaluate-the-2026-08-31-ticket-rules-next-week
 - [p 58] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
 - [p 58] [P] feature-p-packrecords-c-directive
@@ -1127,7 +1127,6 @@ _none_
 - [p 45] [N] refactor-n-two-import-handlers-are-twins
 - [p 45] [P] refactor-p-the-field-declaration-parser-exists-twice
 - [p 45] [P] refactor-p-the-overload-probe-cannot-see-the-argument-match-channels
-- [p 45] [P] regression-test-pascal-conformance-shard0-6-4
 - [p 45] [T] task-t-a-corpus-tree-absence-should-be-counted-not-just-echoed
 - [p 45] [T] task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass
 - [p 42] [P] feature-pascal-builtin-tobject-class
@@ -1433,3 +1432,14 @@ _none_
 - **1** — feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host
 - **1** — feature-target-wasm
 - **1** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
+- **1** — regression-cascade-fc01c8094434
+- **1** — regression-lib-test-lib-synapse-3
+- **1** — regression-lib-test-lib-synapse-ssl
+- **1** — regression-lib-test-lib-synapse-transitive-unit
+- **1** — regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native
+- **1** — regression-test-core-test-exception-unhandled-3
+- **1** — regression-test-core-test-setlen-in-parallel-for-body-2
+- **1** — regression-test-pascal-conformance-shard0-6-4
+- **1** — regression-test-pascal-conformance-shard1-6-2
+- **1** — regression-test-pascal-conformance-shard2-6-2
+- **1** — regression-test-pascal-conformance-shard3-6-2

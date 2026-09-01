@@ -51,3 +51,30 @@ takes it from the repro line.*
 - 2026-08-31 — the seven watcher saw `test-core#src:test/test_setlen_in_parallel_for_body.pas` GREEN at 86126be99600 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-setlen-in-parallel-for-body-2`, not `regression-test-core-test-setlen-in-parallel-for-body`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-08-31 — the seven watcher saw `test-core#src:test/test_setlen_in_parallel_for_body.pas` GREEN at 243ff4a2942d (tier full) and did NOT close this: this is a repeat stub (`regression-test-core-test-setlen-in-parallel-for-body-2`, not `regression-test-core-test-setlen-in-parallel-for-body`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-08-31 — the seven watcher saw `test-core#src:test/test_setlen_in_parallel_for_body.pas` GREEN at 2bdb3c4ef3f6 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-setlen-in-parallel-for-body-2`, not `regression-test-core-test-setlen-in-parallel-for-body`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## Does NOT reproduce on plexus, on EITHER compiler — 2026-09-02, frankZ
+
+Run under the umbrella [[umbrella-one-full-tier-run-with-no-red-tier]], with
+the recipe's own flags:
+
+| binary | commit | runs | failures |
+| --- | --- | --- | --- |
+| `480d4584403c` (HEAD) | `ad55e4dcc` | 40 | **0** |
+| `stable_linux_amd64/default/pinned` (v399) | 2026-08-19 | 30 | **0** |
+
+Two independently built compilers, byte-different programs, 70 runs, no
+failure. The tested sha `456361785e34` is also an upper bound rather than a cause —
+the ticket's own banner says it touches no buildable file.
+
+**This is half a finding and the residual belongs to Track T.** "Not
+reproducible on plexus" does not answer "then why is it red on seven", and I
+cannot answer that from here: **seven runs this job under full-matrix
+parallelism and I ran it solo.** For a threading-adjacent program that is not
+a detail, it is the most likely difference — the same shape as
+`test_multithreading`, which needed no load to fail but whose rate moved with
+it.
+
+What would settle it, and what I am NOT claiming to have done: the same job on
+seven, under load, at this sha. Left open and wired to the umbrella rather than
+resolved, because a red nobody can reproduce is still a red in the tier that
+decides whether a pin is green.

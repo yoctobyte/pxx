@@ -3,7 +3,7 @@ slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
 prio: 85
 type: umbrella
-blocked-by: []
+blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, regression-test-pascal-conformance-shard0-6-4, regression-test-pascal-conformance-shard1-6-2, regression-test-pascal-conformance-shard2-6-2, regression-test-pascal-conformance-shard3-6-2, regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native, regression-cascade-fc01c8094434]
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
@@ -111,6 +111,33 @@ what this umbrella is for:
   [[bug-a-a-refcount-test-passes-at-o2-and-fails-at-o0-and-o1]] — FAILED at
   -O0/-O1, OK at -O2/-O3, `rc=0` throughout. Found by the fixed sweep on its
   first run that could see the program at all.
+
+## The second wave — 2026-09-02, and it is the umbrella working, not failing
+
+The fourteen tickets wired at the start are all resolved. **Eleven new ones are
+wired now**, and that is the point of the shape rather than a setback: an
+umbrella grows by ATTEMPTING THE TARGET, and each pass names the next set in
+the order it actually costs. What arrived between the first sweep and this one:
+
+- **`test-pascal-conformance` shards 0-3** (four) — one job shape, almost
+  certainly one cause. Group before working.
+- **`lib-test lib_synapse`** ×3 — **cannot be reproduced on plexus at all**:
+  `external/synapse` is one of the 41 jobs that SKIP here for missing corpus.
+  These need seven or the corpus.
+- **`test_exception_unhandled` and `test_setlen_in_parallel_for_body`** — do
+  NOT reproduce here on EITHER compiler: 0 failures in 40 runs at HEAD and 0 in
+  30 under the pinned v399, byte-different programs both times. Seven runs them
+  under full-matrix parallelism and I ran them solo, which for
+  threading-adjacent programs is the likeliest difference. Half a finding; the
+  residual is Track T's and is named on both tickets.
+- **`regression-cascade-fc01c8094434`** and the three NilPy dispatch tests,
+  neither triaged here.
+
+**Two of tonight's reds were not regressions and both had EMPTY bisect ranges**
+— every commit in the window touched only docs. That is not missing paperwork,
+it is the finding: `test_multithreading` had been failing since the heap
+magazine landed, and the pinned v399 compiler builds a byte-identical program
+that crashes at the same rate.
 
 ## The count is not falling on its own
 

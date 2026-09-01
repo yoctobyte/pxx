@@ -107,3 +107,28 @@ shard 2/12, same binary throughout: pass 151 -> 156, skip 24 -> 18, diff
 
 ## Log
 - 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2112c18c5.
+
+## The residual the retry does NOT cover -- found by testing my own fix, 2026-09-02
+
+The retry fires on a BUILD FAILURE. So it reaches every program refused by
+`__pxxclone`'s lowering, and **no program that needs `--threadsafe` but still
+builds without it.** That is any program whose threads come from somewhere
+else: a libc `pthread_create` in its own source, or a linked C library that
+starts its own. Such a program compiles clean, races an allocator with no lock,
+and reports a DIFF that is not about the compiler at all.
+
+Measured, and the instance was mine: shard 9 reported
+`rc 1 vs 139: test/test_heap_magazine_foreign_thread.pas` -- a wrong answer at
+-O0 and a SIGSEGV above it -- on a guard test I had added that afternoon,
+against a retry I had written the same afternoon. It was missing
+`{$THREADSAFE ON}`.
+
+One instance, now closed by adding the directive. No others: every other Pascal
+test that calls `pthread_create` carries it.
+
+**The fix for the class is in the TEST, not the harness**, and that is a real
+limit rather than a preference: a harness cannot tell "needs the flag" from
+"does not" by looking at a program that builds either way. The directive is
+what turns silent misuse into a diagnostic, and a diagnostic is the only thing
+a sweep can act on. Recorded in `tools/optdiff.sh` beside the retry so the next
+reader of that arm meets the limit at the same time as the mechanism.

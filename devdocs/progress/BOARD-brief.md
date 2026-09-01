@@ -55,11 +55,21 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 460, ranked
+## Ready — top 30 of 459, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
+- `[p 85] [T]` regression-cascade-fc01c8094434 (unblocks 1)
+- `[p 85] [B]` regression-lib-test-lib-synapse-3 (unblocks 1)
+- `[p 85] [B]` regression-lib-test-lib-synapse-ssl (unblocks 1)
+- `[p 85] [B]` regression-lib-test-lib-synapse-transitive-unit (unblocks 1)
+- `[p 85] [N]` regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native (unblocks 1)
+- `[p 85] [T]` regression-test-core-test-exception-unhandled-3 (unblocks 1)
+- `[p 85] [T]` regression-test-core-test-setlen-in-parallel-for-body-2 (unblocks 1)
+- `[p 85] [P]` regression-test-pascal-conformance-shard0-6-4 (unblocks 1)
+- `[p 85] [T]` regression-test-pascal-conformance-shard1-6-2 (unblocks 1)
+- `[p 85] [T]` regression-test-pascal-conformance-shard2-6-2 (unblocks 1)
+- `[p 85] [T]` regression-test-pascal-conformance-shard3-6-2 (unblocks 1)
 - `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
-- `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [A+S]` bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket (unblocks 1)
 - `[p 80] [A]` feature-a-a-stackful-generator-is-x86-64-only-so-examples-chess-cannot-target-anything-else (unblocks 1)
 - `[p 80] [A]` feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
@@ -72,20 +82,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [C]` bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
-- `[p 70] [T]` regression-cascade-fc01c8094434
-- `[p 70] [B]` regression-lib-test-lib-synapse-3
-- `[p 70] [B]` regression-lib-test-lib-synapse-ssl
-- `[p 70] [B]` regression-lib-test-lib-synapse-transitive-unit
-- `[p 70] [T]` regression-test-core-test-exception-unhandled-3
-- `[p 70] [T]` regression-test-core-test-setlen-in-parallel-for-body-2
-- `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
-- `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
-- `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [A]` bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
-- `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
 
-_430 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_429 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
