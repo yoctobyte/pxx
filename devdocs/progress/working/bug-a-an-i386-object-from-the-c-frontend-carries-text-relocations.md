@@ -8,7 +8,7 @@ blocked-by: []
 owner: frankC
 created: 2026-09-01
 found-by: frankA (while adding .init_array to the i386 object writer; pre-existing, not caused by it)
-summary: "i386 --emit-obj output is POSITION-DEPENDENT: .rel.text carries only absolute relocations -- CENSUSED 518 R_386_32 in a Pascal object and 566 in a C one, zero of anything else -- so linking gives `relocation in read-only section .text` and `creating DT_TEXTREL in a PIE`, and `-Wl,-z,text` refuses outright. Pre-existing and NOT from the .init_array work: two warnings measured identically on objects built before and after it. This is the exact i386 twin of feature-a-x86-64-object-output-is-position-dependent (done, p50, three phases d0537380a / 44b256356 / a3b1af61a, which took x86-64 to 273 R_X86_64_PC32 and zero absolutes in .text). Originally filed as a bug about a few offending sites; the census says it is a codegen model, and i386 is HARDER than the x86-64 twin was -- x86-64 had rip-relative addressing to convert to, i386 has no PC-relative data addressing at all and needs a GOT base register established per function."
+summary: "i386 --emit-obj output is POSITION-DEPENDENT: every .text relocation is absolute R_386_32, so linking gives `relocation in read-only section .text` and `creating DT_TEXTREL in a PIE`, and `-Wl,-z,text` refuses outright. It is the i386 twin of feature-a-x86-64-object-output-is-position-dependent (done) and the harder one, because i386 has no PC-relative data addressing. CENSUSED 2026-09-01 over three objects (C, Pascal, Pascal --threadsafe): 1482 sites, 24 distinct operand shapes, 0 unmatched, all targeting our OWN .data/.bss/.text -- there are no external symbol references in .text at all and intra-object calls already need no relocation. THE ADDRESSING HALF IS MECHANICAL: 12 of the 24 shapes are `mod=00 rm=101` and become [ebx+disp32] by `modrm := (modrm and $38) or $83`, one length-preserving expression covering 606 sites including the F0-prefixed lock cmpxchg; the rest are moffs (a1/a3, +1 byte), address-as-immediate (b8..bf -> lea, +1), push imm32 (-> push ebx; add [esp], +3, needs no scratch), and SIB-indexed (base 101 -> 011, same length). Every rewrite was assembled and disassembled, not reasoned about. WHAT REMAINS IS NOT ADDRESSING BUT THE BASE REGISTER: all 1482 rewrites assume ebx holds _GLOBAL_OFFSET_TABLE_, and today ebx is short-lived scratch (34 sites in IREmitNode386), is architecturally required by the int 0x80 helpers, and the census itself contains `mov ebx, <global>`. Reserve ebx (conventional, collides with the syscall helpers) vs esi/edi (no architectural conflict, collides with the string-op sequences) is the open phase-2 decision. Four of the 24 shapes appear ONLY in the --threadsafe object -- a census over the C object alone reports 19 shapes and looks just as clean."
 ---
 
 # An i386 object from the C frontend carries text relocations
@@ -78,3 +78,92 @@ Note for whoever takes it: the `.rel.init_array` entry added on 2026-09-01 is an
 `R_386_32` against the `.text` symbol and is NOT an instance of this bug — it
 patches a slot in `.init_array`. An assertion written as "no R_386_32 mentioning
 .text anywhere" would flag it and be wrong.
+
+## THE CENSUS THE TICKET ASKED FOR (2026-09-01, frankC)
+
+Three objects — a C one, a Pascal one, and a Pascal `--threadsafe` one — every
+`.text` relocation matched back to the instruction that contains it, **1482
+sites, 24 distinct operand shapes, 0 unmatched.** Every one is `R_386_32`, and
+every one targets `.data`, `.bss` or `.text`; there are **no external symbol
+references in `.text` at all**, and intra-object calls already need no
+relocation. So this is entirely about addressing our own data.
+
+| N | prefix | trail | example | rewrite | Δlen |
+| ---: | --- | ---: | --- | --- | ---: |
+| 301 | `a1` | | `mov eax,ds:d32` | `8b 83` + d32 | **+1** |
+| 180 | `88 1d` | | `mov [d32],bl` | ModRM → `9b` | 0 |
+| 180 | `8a 1d` | | `mov bl,[d32]` | ModRM → `9b` | 0 |
+| 160 | `b9` | | `mov ecx,imm32` | `8d 8b` + d32 (`lea`) | **+1** |
+| 156 | `8b 15` | | `mov edx,[d32]` | ModRM → `93` | 0 |
+| 119 | `a3` | | `mov [d32],eax` | `89 83` + d32 | **+1** |
+| 100 | `68` | | `push imm32` | `53` + `81 04 24` + d32 | **+3** |
+| 92 | `b8` | | `mov eax,imm32` | `8d 83` + d32 (`lea`) | **+1** |
+| 74 | `bf` | | `mov edi,imm32` | `8d bb` + d32 (`lea`) | **+1** |
+| 57 | `89 15` | | `mov [d32],edx` | ModRM → `93` | 0 |
+| 24 | `c7 05` | **+4** | `mov [d32],imm32` | ModRM → `83` | 0 |
+| 10 | `ff 14 25` | | `call [d32]` | `ff 93` + d32 | **−1** |
+| 4 | `89 0d` | | `mov [d32],ecx` | ModRM → `8b` | 0 |
+| 4 | `8b 05` | | `mov eax,[d32]` | ModRM → `83` | 0 |
+| 3 | `8b 04 d5` | | `mov eax,[edx*8+d32]` | mod→10, SIB base→`ebx` | 0 |
+| 3 | `89 04 d5` | | `mov [edx*8+d32],eax` | mod→10, SIB base→`ebx` | 0 |
+| 3 | `bb` | | `mov ebx,imm32` | `8d 9b` + d32 (`lea`) | **+1** |
+| 3 | `0f b6 05` | | `movzx eax,BYTE [d32]` | ModRM → `83` | 0 |
+| 3 | `ba` | | `mov edx,imm32` | `8d 93` + d32 (`lea`) | **+1** |
+| 2 | `89 25` | | `mov [d32],esp` | ModRM → `a3` | 0 |
+| 1 | `39 35` | | `cmp [d32],esi` | ModRM → `b3` | 0 |
+| 1 | `f0 0f b1 0d` | | `lock cmpxchg [d32],ecx` | ModRM → `8b` | 0 |
+| 1 | `ff 05` | | `inc [d32]` | ModRM → `83` | 0 |
+| 1 | `ff 0d` | | `dec [d32]` | ModRM → `8b` | 0 |
+
+**Every rewrite above was assembled and disassembled, not reasoned about.**
+
+### The ModRM family is ONE expression, and that is the whole of half the work
+
+Twelve of the 24 shapes are a memory operand with `mod=00, rm=101` (absolute
+`[disp32]`), and turning it into `[ebx+disp32]` is `mod=10, rm=011` — the
+**reg field is untouched**, so:
+
+```
+modrm := (modrm and $38) or $83
+```
+
+covers all of them, **including the `F0`-prefixed `lock cmpxchg` and the
+two-byte-opcode `0f b6`**, because only the ModRM byte participates. It is
+length-preserving, so no branch offset moves. That is 606 of 1482 sites in one
+line, and it is the same trick `EmitGlobRef` already plays for x86-64 — done at
+the emitter, where the bytes to rewrite are the last ones in the buffer, rather
+than at ~200 call sites.
+
+### THE FOUR SHAPES THAT ONLY A `--threadsafe` BUILD CONTAINS
+
+`39 35`, `f0 0f b1 0d`, `ff 05`, `ff 0d` appear in **one of the three objects**.
+`EmitGlobRef`'s own comment records the x86-64 version of this: that census was
+sound, gcc-validated, and *empty*, because every object was built without
+`--threadsafe` and the shape it was counting lives almost entirely in lock code.
+The cost then was a release writing four bytes past the lock word, every worker
+spinning forever, and `test_mutex` passing.
+
+**So this census is only valid because the population was widened on purpose,
+and the next person to re-take it must widen it the same way.** A census over
+the C object alone would have reported 19 shapes and been just as clean.
+
+### What is NOT solved by any of the above
+
+**Establishing the GOT base.** All 1482 rewrites assume `ebx` holds
+`_GLOBAL_OFFSET_TABLE_`, and today it does not: the backend uses `ebx` as
+short-lived scratch (34 sites inside `IREmitNode386`, 93 in the file), the
+`int 0x80` helpers need it as syscall argument 1, and **the census itself
+contains `mov ebx, <global>`**. Reserving it means the prologue thunk, the
+callee-saved save/restore, and moving those scratch uses — and the syscall
+helpers are the awkward ones because `ebx` is architecturally required there.
+
+That is the phase-2 decision, and it is a real one: reserve `ebx` (conventional,
+what gcc does, collides with the syscall helpers) versus `esi`/`edi` (no
+architectural conflict, unconventional, collides with the string-op sequences).
+**Neither is free, and the census does not decide it** — it only proves the
+addressing half is mechanical once a base register exists.
+
+`push imm32` (100 sites) is worth noting as the one shape needing no scratch
+register at all: `push ebx; add dword [esp], d32@GOTOFF` is +3 bytes and
+clobbers nothing, which is better than `lea` into a register the emitter cannot
+know is free.
