@@ -158,4 +158,4 @@ committed, green, and **never executed on this target**, because nothing can
 construct its input. It is flagged in both tickets rather than counted.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 276fed635.
