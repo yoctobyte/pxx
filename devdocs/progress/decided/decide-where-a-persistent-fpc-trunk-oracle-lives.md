@@ -113,7 +113,7 @@ the same `~` permission question and is **not** covered by this ruling. It was
 raised alongside; it needs its own answer.
 
 ## Log
-- 2026-09-01 — decided, commit PENDING-COMMIT.
+- 2026-09-01 — decided, commit b6f5013cc.
 
 ## TRAP 4 — found by running the recipe, not by reading it
 
