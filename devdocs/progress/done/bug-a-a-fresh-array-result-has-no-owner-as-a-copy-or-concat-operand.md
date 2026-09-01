@@ -4,6 +4,7 @@ track: A
 prio: 8
 summary: "FIXED. A fresh dyn-array call result used as a Copy() or `+` operand was never released — the whole array leaked, one per operand per evaluation, for managed AND non-managed element types, so it was the HANDLE that had no owner. Three spills in ir.inc (AN_DYN_COPY's source, AN_DYN_INSERT's source, AN_DYN_INSERT's array-SPLICE value, which is the arm `a + b` goes through) now run IRParkManagedDyn. What blocked this for a day: the park itself handed the handle back with IR_LOAD_SYM, which routes through EmitLoadVar, whose width comes from Syms[].TypeKind — and AllocDynArray stamps that with the ELEMENT kind, with no IsArray check on that path. So an `array of Integer` handle was loaded 4-byte SIGN-EXTENDED and the release read [data-8] off it and died, while `array of AnsiString` survived on a pointer-sized element kind — which is exactly why it read as 'the park works for strings and segfaults for integers'. IR_LEA is the handle read (every AN_IDENT arm beside these spills already used it). 64-bit only. Measured: Copy rows 2004 live -> 6, concat rows 5006 -> 11."
 owner: frankB
+status: done
 ---
 
 ## What
@@ -191,3 +192,6 @@ fails silently and element-type-dependently. Filed separately as
 [[bug-a-emitloadvar-truncates-a-dynarray-handle-to-its-element-width]] rather
 than fixed here, because it is a hot shared path and this fix is already
 measured and controlled.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
