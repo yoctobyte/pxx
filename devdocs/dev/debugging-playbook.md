@@ -2714,7 +2714,12 @@ safety there. Measured, four recipes, and the middle two are the point:
 ```
 
 Row three is the masked case: iteration 1 fails, iteration 2 passes, the recipe
-reports success. Row one is why the `|| { ...; exit N; }` idiom is worth more
+reports success. **State that as ORDER DEPENDENCE, not as "the first iteration is
+masked", because that is the form in which it bites** (frankC, sharpening this
+the same day): these loops iterate TARGETS, so a row that fails on x86-64 and
+passes on i386 reports green purely because i386 is second in the list.
+Reordering the target list for an unrelated reason flips a suite's colour with no
+diff anywhere near the assertion. Row one is why the `|| { ...; exit N; }` idiom is worth more
 than it looks -- `exit` leaves the whole shell, so it defeats the loop masking as
 well as the separator problem, and a row carrying it is safe for two independent
 reasons.

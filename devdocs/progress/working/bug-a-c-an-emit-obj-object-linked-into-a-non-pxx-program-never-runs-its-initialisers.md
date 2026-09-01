@@ -3,8 +3,8 @@ track: A+C
 prio: 55
 type: bug
 blocked-by: []
-status: new
-owner: ""
+status: working
+owner: frankA
 created: 2026-09-01
 found-by: frankA (while fixing bug-a-c-a-shared-library-never-runs-its-initialisation; frankC found the shared-library half)
 summary: "A pxx --emit-obj object linked into a GCC-built program never runs its file-scope initialisers, because they ride pxx's own entry stub and a gcc program has none. MEASURED: test/test_shared_lib.c as an object, `gcc host.c lib.o`, shared_c_from_data() returns NULL while the identical source as a pxx PROGRAM is correct and matches gcc. The parent ticket reasoned --emit-obj was fine because the object lands in a program with a pxx entry stub -- true only when the consumer is pxx-built, and linking into foreign programs is what --emit-obj is FOR. The .so half is fixed (DT_INIT); an object has no dynamic section to carry one and needs .init_array, which the linker aggregates and the host C runtime runs -- a different mechanism in a different writer."
