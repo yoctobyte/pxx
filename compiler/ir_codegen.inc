@@ -1310,6 +1310,8 @@ var i, j, k, idx, sz, pw, pnWords, whi, xtInBias, xtVReg, xtVReg2: Integer;
     isEight: Boolean;                    { AAPCS soft-float 8-byte by-value param }
     wlo, whiEnd: Integer;                { i386 arg-offset walk bounds }
     sIdx, nSlotsForParam, dstOff: Integer;  { x86-64 cdecl: slots OF one param }
+    plR0, plR1, slotReg: Integer;           { ABISysVArgPlace: bank index per slot }
+    plMem, plS0, plS1, slotSse: Boolean;
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -2069,23 +2071,36 @@ begin
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSlotWordSize(idx);
-      nSlotsForParam := 1;   { step 2: the SysV classifier answers this }
+      { STEP 2. The oracle answers both questions this loop used to answer for
+        itself: how many slots the parameter occupies, and which bank each one
+        arrives in. It also ADVANCES intIdx/sseIdx, so the per-slot code below
+        no longer increments them -- there is one bank accountant now, and it
+        is the same one the caller uses. }
+      ABISysVArgPlace(Syms[idx].TypeKind, Syms[idx].IsRef, Syms[idx].IsArray,
+                      Syms[idx].RecName, intIdx, sseIdx,
+                      nSlotsForParam, plMem, plS0, plS1, plR0, plR1);
+      { An aggregate slot is a whole eightbyte whatever the record's size: the
+        frame slot is rounded up to a multiple of 8 (ParamValueSize), so storing
+        8 bytes for a 3-byte struct writes into that struct's own padding. }
+      if (Syms[idx].TypeKind = tyRecord) and (not Syms[idx].IsRef) and
+         (not Syms[idx].IsArray) then sz := 8;
       for sIdx := 0 to nSlotsForParam - 1 do
       begin
+        if sIdx = 0 then begin slotSse := plS0; slotReg := plR0; end
+        else begin slotSse := plS1; slotReg := plR1; end;
+        if plMem then begin slotSse := False; slotReg := -1; end;
         dstOff := Syms[idx].Offset + sIdx * 8;
-        if TypeIsFloat(Syms[idx].TypeKind) and
-           (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+        if slotSse then
         begin
-          if sseIdx < 8 then
+          if slotReg >= 0 then
           begin
             if Syms[idx].TypeKind = tySingle then EmitB($F3) else EmitB($F2);
             EmitB($0F); EmitB($11);                    { movss/movsd [rbp+off], xmm[n] }
-            case sseIdx of
+            case slotReg of
               0: EmitB($85);  1: EmitB($8D);  2: EmitB($95);  3: EmitB($9D);
               4: EmitB($A5);  5: EmitB($AD);  6: EmitB($B5);  7: EmitB($BD);
             end;
             EmitI32(dstOff);
-            Inc(sseIdx);
             Continue;
           end;
           { 9th+ float: the caller pushed it as double bits, so narrow a Single
@@ -2104,7 +2119,7 @@ begin
           Continue;
         end;
 
-        if intIdx >= 6 then
+        if slotReg < 0 then
         begin
           EmitB($48); EmitB($8B); EmitB($85); EmitI32(stackOff);   { mov rax, [rbp+stackOff] }
           Inc(stackOff, 8);
@@ -2113,11 +2128,10 @@ begin
           else if sz = 4 then begin EmitB($89); EmitB($85); end
           else begin EmitB($48); EmitB($89); EmitB($85); end;
           EmitI32(dstOff);
-          Inc(intIdx);
           Continue;
         end;
 
-        if intIdx < 4 then
+        if slotReg < 4 then
         begin
           if sz = 1 then
           begin
@@ -2127,7 +2141,7 @@ begin
           else if sz = 2 then begin EmitB($66); EmitB($89); end
           else if sz = 4 then EmitB($89)
           else begin EmitB($48); EmitB($89); end;
-          case intIdx of
+          case slotReg of
             0: EmitB($BD);   { rdi }
             1: EmitB($B5);   { rsi }
             2: EmitB($95);   { rdx }
@@ -2135,7 +2149,7 @@ begin
           end;
           EmitI32(dstOff);
         end
-        else if intIdx = 4 then
+        else if slotReg = 4 then
         begin
           if sz = 1 then begin EmitB($44); EmitB($88); EmitB($85); end
           else if sz = 2 then begin EmitB($66); EmitB($44); EmitB($89); EmitB($85); end
@@ -2151,7 +2165,6 @@ begin
           else begin EmitB($4C); EmitB($89); EmitB($8D); end;
           EmitI32(dstOff);
         end;
-        Inc(intIdx);
       end;
     end;
   end
