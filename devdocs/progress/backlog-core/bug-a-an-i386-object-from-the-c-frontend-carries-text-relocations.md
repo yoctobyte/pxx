@@ -1,14 +1,14 @@
 ---
 slug: bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations
-track: A+C
+track: A
 prio: 40
-type: bug
+type: feature
 status: new
 blocked-by: []
 owner: ""
 created: 2026-09-01
 found-by: frankA (while adding .init_array to the i386 object writer; pre-existing, not caused by it)
-summary: "An i386 --emit-obj object from the C frontend carries absolute relocations against .text, so linking it produces `relocation in read-only section .text` and `creating DT_TEXTREL in a PIE`. Measured with `gcc -m32 host.c lib.o`: 2 warnings, identical before and after the .init_array work, so it is pre-existing and independent of it. The program RUNS -- ld resolves it by making .text writable -- but a DT_TEXTREL binary is refused by hardened toolchains (`-Wl,-z,text`) and defeats page sharing. The x86-64 writer does not have this: its equivalent sites were converted to PC-relative, and the emit-obj relocation rows assert .text carries no absolute relocation. i386 has no such row, which is why nobody noticed."
+summary: "i386 --emit-obj output is POSITION-DEPENDENT: .rel.text carries only absolute relocations -- CENSUSED 518 R_386_32 in a Pascal object and 566 in a C one, zero of anything else -- so linking gives `relocation in read-only section .text` and `creating DT_TEXTREL in a PIE`, and `-Wl,-z,text` refuses outright. Pre-existing and NOT from the .init_array work: two warnings measured identically on objects built before and after it. This is the exact i386 twin of feature-a-x86-64-object-output-is-position-dependent (done, p50, three phases d0537380a / 44b256356 / a3b1af61a, which took x86-64 to 273 R_X86_64_PC32 and zero absolutes in .text). Originally filed as a bug about a few offending sites; the census says it is a codegen model, and i386 is HARDER than the x86-64 twin was -- x86-64 had rip-relative addressing to convert to, i386 has no PC-relative data addressing at all and needs a GOT base register established per function."
 ---
 
 # An i386 object from the C frontend carries text relocations
@@ -44,15 +44,35 @@ target that has an object writer, which makes this a test gap first and a codege
 bug second. Adding the assertion is the cheap half and should probably come
 first; it will name the sites.
 
-## Suggested shape
+## Re-scoped 2026-09-01 after censusing it
 
-1. Add the missing relocation-class row to the i386 half of `test-emit-obj`,
-   mirroring the x86-64 one (`! readelf -rW ... | grep -q 'R_386_32 .*\.text'`
-   modulo the intended `.rel.init_array` entry, which IS an absolute relocation
-   against `.text` and is correct — it lives in `.init_array`, not in `.text`,
-   so scope the assertion to relocations whose SECTION is `.text`).
-2. Convert the offending sites to PC-relative or GOT-indirect, as the x86-64
-   path was.
+I filed this as "convert the offending sites". It is not that.
+
+    .rel.text, Pascal i386 object   518 R_386_32, nothing else
+    .rel.text, C i386 object        566 R_386_32, nothing else
+
+Every relocation in `.text` is absolute. So the work is the i386 twin of
+`feature-a-x86-64-object-output-is-position-dependent` — a backend model change,
+which that ticket did in three phases.
+
+**And i386 is the harder of the two.** x86-64 had `rip`-relative addressing to
+convert to, so the fix was largely a different encoding for the same operand.
+i386 has no PC-relative data addressing at all: position independence means
+establishing a GOT base in a register (conventionally `ebx`, via the
+`call/pop` thunk idiom) and addressing through it, which touches the register
+allocator and the prologue rather than just the operand emitter.
+
+**Do NOT just add the assertion to go red.** The obvious first step — mirror the
+x86-64 row that asserts `.text` carries no absolute relocation — would turn
+`test-emit-obj` red on a target that has never been green on this property, and
+that costs Track T's signal for everyone while buying information this census
+already gives. The row lands with the fix, not before it.
+
+**A trap for whoever writes that row:** this file's own `.rel.init_array` entry
+is an `R_386_32` against the `.text` SYMBOL and is not an instance of the bug —
+it patches a slot in `.init_array`. The x86-64 row gets this right by scoping
+with `sed -n '/rela.text/,/^$/p'` before grepping, i.e. by relocation SECTION
+rather than by symbol name. Copy that shape.
 
 Note for whoever takes it: the `.rel.init_array` entry added on 2026-09-01 is an
 `R_386_32` against the `.text` symbol and is NOT an instance of this bug — it
