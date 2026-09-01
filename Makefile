@@ -12146,6 +12146,22 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-multi-applet
 	./$(COMPILER) test/cdeclarator_ptrptr.c $(TESTTMP)/c_declptrptr26
 	tools/expect_same.sh c_declptrptr26 "$$($(TESTTMP)/c_declptrptr26)" "$$(printf '1 n=1 next=0\n2 n=2 next=0\n3 n=3 next=0\n4 n=4 next=0\n5 n=5 next=0\n6 n=6 next=0\n7 n=7 next=0')"
+	# C 6.5.6: ptr - ptr is ptrdiff_t, an INTEGER. The parser asked about the
+	# LEFT operand alone, so the DIFFERENCE was tagged tyPointer and the next
+	# operator scaled against it: `q - p + 1' on a char** one element apart
+	# gave 1 + (1*8) = 9. Rows 1, 2 and 6 were ALWAYS right -- the subtraction
+	# was never broken, only its result type -- so a probe that computes a
+	# difference and prints it passes everything and finds nothing. Row 6
+	# (multiply, which never scales) is the discriminator against a fix that
+	# just suppresses scaling where it looks wrong.
+	# In ash: `ind = optnext - optfirst + 1' in getopts set OPTIND to 9, OPTIND
+	# never advanced, and `while getopts ...; do' SPUN -- it hung the rung-2
+	# harness twice, for 39 and 22 minutes, printing nothing.
+	# $(COMPILER), not $(PXX_STABLE): the fix is IN the compiler; under the pin
+	# rows 3,4,5,7,8 print 9 and that is the control.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/cptrdiff_type.c $(TESTTMP)/c_ptrdiff26
+	tools/expect_same.sh c_ptrdiff26 "$$($(TESTTMP)/c_ptrdiff26)" "$$(printf '1 1\n2 1\n3 2\n4 2\n5 2\n6 2\n7 2\n8 2\n9 3\n10 4\n11 2\n12 1 7')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The SIBLING defect, and it is not the const-branch one: a loop in dead code

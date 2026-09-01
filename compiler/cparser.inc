@@ -1044,7 +1044,26 @@ begin
     IR already scales the offset by element size). }
   if (cTok = Ord(tkPlus)) or (cTok = Ord(tkMinus)) then
   begin
-    if CNodeDecaysToPointer(l) then
+    { C 6.5.6: POINTER MINUS POINTER IS ptrdiff_t, AN INTEGER -- only `ptr - int'
+      stays a pointer. This arm asked about the LEFT operand alone, so `p - q'
+      came out tagged tyPointer, and everything downstream that reads the tag
+      then treated the DIFFERENCE as a pointer. IRNodePointerBase is one such
+      reader, so the next operator scaled against it: `q - p + 1' on a `char**'
+      one element apart evaluated as 1 + (1 * 8) = 9, while `(int)(q - p)' and
+      `int t = q - p; t + 1' were both correct -- the subtraction was never the
+      broken part, its RESULT TYPE was, so an isolated pointer-difference probe
+      passes every row and finds nothing.
+      Measured in busybox ash's getopts: `ind = optnext - optfirst + 1' set
+      OPTIND to 9 instead of 2, OPTIND then never advanced, getopts returned the
+      same option forever and `while getopts ...; do' SPUN. That hung the rung-2
+      harness twice, for 39 and 22 minutes, with no output at all.
+      tyNativeInt, not tyInt64, for the reason the IR's own pointer-difference
+      arm gives: ptrdiff_t is POINTER-WIDTH, and the variadic push believes this
+      tag (bug-a-pointer-difference-as-vararg-pushes-8-bytes-on-32bit). The two
+      now agree instead of the IR correcting the AST. }
+    if (cTok = Ord(tkMinus)) and CNodeDecaysToPointer(l) and CNodeDecaysToPointer(r) then
+      ASTTk[node] := Ord(tyNativeInt)
+    else if CNodeDecaysToPointer(l) then
     begin ASTTk[node] := Ord(tyPointer); ASTSOffset[node] := CNodePtrElemRec(l); end
     else if (cTok = Ord(tkPlus)) and CNodeDecaysToPointer(r) then
     begin ASTTk[node] := Ord(tyPointer); ASTSOffset[node] := CNodePtrElemRec(r); end;
