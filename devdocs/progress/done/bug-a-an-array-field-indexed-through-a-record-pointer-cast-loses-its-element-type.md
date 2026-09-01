@@ -65,4 +65,4 @@ output alone, and only one of them is a revert.
 
 `make compiler/pascal26` (converged, `1beb5391ebf6`), `tools/gate.sh quick`
 GREEN with the FPC seed canary PASS, `tools/derefshape_matrix.sh` 30/30,
-`test/test_index_through_record_pointer_cast.pas`.
+`test/test_index_through_record_pointer_cast.pas`. Fixed in commit `62540cc27`.

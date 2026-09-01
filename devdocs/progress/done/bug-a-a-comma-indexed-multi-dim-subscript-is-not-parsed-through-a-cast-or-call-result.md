@@ -143,3 +143,5 @@ nothing about what was COVERED.
 
 The parse fix is three lines of delegation. What made it hard to see for a day
 was that the write face — the only face any row exercised — was correct.
+
+Fixed in commit `62540cc27`.
