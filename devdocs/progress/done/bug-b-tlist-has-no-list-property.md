@@ -3,10 +3,10 @@ slug: bug-b-tlist-has-no-list-property
 track: B
 prio: 45
 type: bug
-status: backlog
+status: done
 owner:
-blocked-by: [bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults]
-summary: "`L.List^[i]` on a TList is `\"List\": no such member on this record/class`. FPC's TList exposes its internal pointer array as `property List: PPointerList read FList` (PPointerList = ^TPointerList = ^array[0..N] of Pointer), the standard way real code iterates a TList without the per-element Get call. Missing in lib/rtl/classes.pas. NOT gated on anything -- it fails in a plain default build, 9 lines. fcl-xml's xmlutils.pp:760 uses it, so it is the current wall on rung 3 of feature-pascal-corpus-oop."
+blocked-by: []
+summary: "FIXED 2026-09-01. `L.List^[i]` on a TList was `\"List\": no such member on this record/class`. FPC's TList exposes its internal pointer array as `property List: PPointerList read FList` (PPointerList = ^TPointerList = ^array[0..N] of Pointer), the standard way real code iterates a TList without the per-element Get call. Missing in lib/rtl/classes.pas. NOT gated on anything -- it fails in a plain default build, 9 lines. fcl-xml's xmlutils.pp:760 uses it, so it is the current wall on rung 3 of feature-pascal-corpus-oop."
 ---
 
 # `TList` has no `List` property
@@ -105,3 +105,64 @@ producing.
 
 Land the property **with or after** the Track A fix, in one change, gated by
 running `L.List^[i]` rather than building it.
+
+
+---
+
+## 2026-09-01 (frankH) — the blocker was RENAMED, not lost; unblocked, and landed
+
+**Track B.** Two separate findings, and the first is why this sat for two days
+after it was already free.
+
+**The `blocked-by` named a slug that exists nowhere.** `progress.sh check`
+reports it as `DANGLING`. It was not a ticket that was never filed — it was
+**renamed**: the Track A defect is
+[[bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds]]
+and it has been in `done/` since before this ticket was last read. A rename
+breaks the edge silently in exactly the direction that costs the most: the
+dependent still reads as blocked, nothing errors, and the event that cleared it
+happened on the *other* ticket where nobody was standing.
+
+**The blocker is genuinely fixed, verified by running it and not by the folder**
+(`done/` is a claim about the past; the repro is a claim about this binary):
+
+```pascal
+type TPointerList = array[0..3] of Pointer; PPointerList = ^TPointerList;
+var a: TPointerList; p: PPointerList;
+...  p := @a;  for i := 0 to 3 do writeln(PtrUInt(p^[i]));  p^[2] := ...;
+```
+reads all four elements correctly AND the write through `p^[2]` lands in `a[2]`.
+Read and write, the two halves the original element-kind table had failing.
+
+### The fix
+
+`lib/rtl/classes.pas`: `MaxListSize = MaxInt div 16`, `TPointerList` /
+`PPointerList`, and `property List: PPointerList read GetList` where `GetList`
+is `PPointerList(FItems)`. **A cast, no reshaping** — frankB's 2026-08-30
+measurement that the dynamic-array handle is the address of element 0 with an
+8-byte stride is what makes it one line, and it still holds.
+
+`nil` on an empty list, as FPC: `Count` is what says whether it may be indexed.
+`TFPList` inherits it, which is the spelling fcl sources actually use.
+
+### Gate — Track B, `$(PXX_STABLE)`, and a control that fires
+
+`test/lib_classes.pas` gained four rows (`make lib-test` count 21 -> 25).
+Verified green under **both** `stable_linux_amd64/default/pinned` and
+`compiler/pascal26`, plus the ticket's own repro and the fcl-xml
+`xmlutils.pp:760` walk over ten elements.
+
+**The rows can fail, and the control was drawn from the population the claim is
+about** — the way this regresses is not the property vanishing (that is a
+compile error and takes the whole file down), it is `GetList` handing back a
+COPY. With `GetList` deliberately rewritten to copy: `list-List-writethrough`
+goes RED and the Makefile count drops 25 -> 24.
+
+**The two directions are NOT equally strong, and that is recorded in the test.**
+Under the same copying control `list-List-alias` stays GREEN — it re-reads
+`List^` and gets a fresh copy that already contains the write. `writethrough`
+is the row carrying the aliasing claim. A future reader trimming "redundant"
+rows would otherwise keep the weak one.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.

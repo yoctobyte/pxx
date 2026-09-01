@@ -244,6 +244,11 @@ const
   fmShareDenyRead  = $30;
   fmShareDenyNone  = $40;
 
+  { FPC's bound for TPointerList. A TYPE bound only -- the array type is never
+    instantiated, only pointed at, so this costs nothing at runtime. Spelled as
+    FPC spells it so that vendored sources comparing against it agree. }
+  MaxListSize = MaxInt div 16;
+
 type
   { ---- TStringStream: a stream over a string ----
     FPC's TStringStream is a TStream whose contents ARE a string: construct it with the text
@@ -289,6 +294,13 @@ type
     an owning list free its objects on Delete/Clear. Base Notify does nothing. }
   TListNotification = (lnAdded, lnExtracted, lnDeleted);
 
+  { FPC's view of a TList's internal storage, so real code can walk the list
+    without paying GetItem per element. The array bound is a TYPE bound only --
+    the type is never instantiated, it is only ever reached through
+    PPointerList, exactly as in FPC. }
+  TPointerList = array[0..MaxListSize - 1] of Pointer;
+  PPointerList = ^TPointerList;
+
   { ---- TList: a growable list of untyped pointers ---- }
   TList = class
   private
@@ -296,6 +308,7 @@ type
     FCount: Integer;
     function GetItem(Index: Integer): Pointer;
     procedure SetItem(Index: Integer; Item: Pointer);
+    function GetList: PPointerList;
   protected
     procedure Notify(Ptr: Pointer; Action: TListNotification); virtual;
   public
@@ -307,6 +320,11 @@ type
     function Remove(Item: Pointer): Integer;
     property Count: Integer read FCount;
     property Items[Index: Integer]: Pointer read GetItem write SetItem; default;
+    { The FPC idiom `L.List^[i]`. A dynamic array's handle IS the address of
+      element 0 with an 8-byte stride, which is the layout PPointerList
+      expects, so this is a cast and not a reshaping. nil on an empty list,
+      as in FPC -- `Count` is what says whether it may be indexed. }
+    property List: PPointerList read GetList;
   end;
 
   { ---- TFPList: FPC's plain pointer list ----
@@ -701,6 +719,11 @@ begin
 end;
 
 { ============================ TList ============================ }
+
+function TList.GetList: PPointerList;
+begin
+  Result := PPointerList(FItems);
+end;
 
 function TList.GetItem(Index: Integer): Pointer;
 begin

@@ -35,6 +35,28 @@ begin
   SayBool('list-delete', (Int64(list[1]) = 20) and (list.Count = 3));
   list.Remove(Pointer(99));
   SayBool('list-remove', (Int64(list[0]) = 20) and (list.Count = 2));
+
+  { ---- TList.List: the FPC PPointerList idiom (fcl-xml xmlutils.pp:760) ----
+    The property existing at all is proven by this file COMPILING; these rows
+    exist for the way it can regress silently, which is by handing back a COPY
+    of the storage instead of aliasing it. So both directions are asserted:
+    a write through List^ must be visible through the default property, and a
+    write through the default property must be visible through List^.
+
+    THE TWO DIRECTIONS ARE NOT EQUALLY STRONG, measured rather than assumed:
+    with GetList deliberately returning a COPY, `list-List-writethrough` goes
+    red and `list-List-alias` stays GREEN -- the alias row re-reads List^ and
+    so gets a fresh copy that already contains the write. writethrough is the
+    row that carries the aliasing claim; alias is there for the reverse
+    regression (a List^ that reads stale storage). Do not delete writethrough
+    as redundant. bug-b-tlist-has-no-list-property }
+  SayBool('list-List-read', (Int64(list.List^[0]) = 20) and (Int64(list.List^[1]) = 30));
+  list.List^[0] := Pointer(41);
+  SayBool('list-List-writethrough', Int64(list[0]) = 41);
+  list[1] := Pointer(42);
+  SayBool('list-List-alias', Int64(list.List^[1]) = 42);
+  list.Clear;
+  SayBool('list-List-empty-nil', list.List = nil);   { as FPC: Count gates indexing }
   list.Free;
 
   { ---- TStringList: Strings[]/default [i], Objects[], Sort, Text ---- }

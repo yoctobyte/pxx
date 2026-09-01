@@ -20397,7 +20397,7 @@ endif
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_async.pas $(TESTTMP)/lib_dns_async
 	tools/expect_same.sh lib_dns_async "$$($(TESTTMP)/lib_dns_async)" "$$(printf 'ephemeral-ports=ok\nserver-done=ok\nrcode=ok\ncount=ok\nip=ok\nchase-server-done=ok\nchase-rcode=ok\nchase-count=ok\nchase-ip=ok\ntimeout=ok\nv6-server-done=ok\nv6-rcode=ok\nv6-count=ok\nv6-ip=ok\ncache-1st=ok\ncache-2nd=ok\ncache-1query=ok\ntc-udp-done=ok\ntc-tcp-done=ok\ntc-rcode=ok\ntc-count=ok\ntc-ips=ok')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_classes.pas $(TESTTMP)/lib_classes
-	tools/expect_same.sh lib_classes.1 "$$($(TESTTMP)/lib_classes | grep -c '=ok')" "21"
+	tools/expect_same.sh lib_classes.1 "$$($(TESTTMP)/lib_classes | grep -c '=ok')" "25"
 	tools/expect_same.sh lib_classes.2 "$$($(TESTTMP)/lib_classes | grep -c 'FAIL')" "0"
 	$(PXX_STABLE) -Fulib/rtl test/test_tlist_notify.pas $(TESTTMP)/lib_tlist_notify
 	tools/expect_same.sh lib_tlist_notify "$$($(TESTTMP)/lib_tlist_notify)" "total ok 2 / 2"
