@@ -461,3 +461,58 @@ in my rows.
 Scope of these numbers, kept attached: x86-64, C frontend, `--emit-obj`, the
 shapes tabulated. `writeELFRelX64General` is the only writer that needs this,
 so that is the right scope — but the Pascal row is UNMEASURED, not clean.
+
+## Writer half LANDED for the C frontend — 72000d1e1 (frankA, 2026-09-01)
+
+The headline case prints `99` on x86-64 and on i386 under `gcc -m32`, matching
+the gcc-only control. 18 acceptance rows across both targets: BEFORE 0/18,
+AFTER 18/18, against a baseline built by reverting the hunks and rebuilding to
+`converged` (8e853c4cba34 vs 4f594cf743f5).
+
+Every item on this ticket's acceptance list is met FOR C, including the two the
+list called out as controls: `static` stays LOCAL and is not also exported, and
+two TUs each with a bare `int x;` are REJECTED at link with exit 1, the same as
+gcc. A data-only TU emits.
+
+**Three corrections this ticket's own design needs**, all measured:
+
+1. The bias option was rejected here because element and field offsets are
+   folded into the addend. For C they are NOT — every shape relocates to the
+   symbol's bare base. An exact-match table is sufficient; the range containment
+   test was designed around a premise that does not hold.
+2. The open question is answered and its answer is benign: an incomplete array
+   reserves ONE element, never zero, so imports cannot share a base.
+3. **A third flag was needed that this ticket does not mention.** The linkage
+   pair cannot express MEMBERSHIP — both default False and False means
+   "defined, external linkage" — so there was no set to walk. `SymCFileScope`.
+
+**And one failure mode the design did not anticipate, which is the most
+transferable part.** crtl is compiled as C and bundled into every object, so its
+file-scope variables are C file-scope variables: the first version exported
+`errno`, `environ`, `optarg`, `optind`, `opterr`, `optopt`, `optreset`. The link
+then failed outright — glibc's `errno` is TLS in `.tbss` and ours is not, so ld
+refused the object. The export set is the USER's translation unit, not every C
+source the compiler parses. See `CDeclIsFromCrtl`, and note it does NOT use
+`CModuleOfTok < 0`: under `--emit-obj` the user's own `.c` has a module range,
+so its declarations carry a real id, and the id is an interned PATH key.
+
+## STILL OPEN: the Pascal frontend, and it is not covered by anything above
+
+This ticket's acceptance says "both frontends". Only C is done. A Pascal `cdecl`
+program's globals still produce no data symbol at all —
+`nm --defined-only | grep -cE ' [BbDd] '` is 0 — measured independently by
+Track B on a program whose AnsiString globals link, run and mutate correctly.
+Split into
+[[bug-a-a-pascal-cdecl-program-emits-no-data-symbols-either]] rather than left
+implied here, because the C symbol tables now look complete.
+
+**This ticket stays OPEN until that lands**, since its own acceptance names both
+frontends. What is NOT open is the mechanism: the writer walks three data groups
+and both writers emit them; the Pascal side needs only its own answer to "whose
+declaration is this", and the `errno` incident above says what happens when that
+answer is "everything".
+
+Also recorded as a divergence rather than a bug: a name the user's own file
+declares `extern` and crtl defines is now EXPORTED rather than invisible
+(`environ` in `test_shared_lib.c` is the live instance). gcc emits UND there. It
+links and runs correctly.
