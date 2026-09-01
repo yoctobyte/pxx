@@ -6679,6 +6679,34 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_interface_result_temp_leaks.pas $(TESTTMP)/test_irt26
 	tools/expect_same.sh test_irt26 "$$($(TESTTMP)/test_irt26 | tail -1)" "sink=1003000"
 	tools/assert_no_leak.sh interface_result_temp 50 $(TESTTMP)/test_irt26
+	@# A `case` arm's managed temp is finalized IN THE ARM, not after the merge --
+	@# the sibling AN_IF has had since bug-a-managed-temps-for-an-untaken-branch-
+	@# are-still-init-and-finalized. COST, not corruption: 20M calls of a case
+	@# whose allocating arm is never taken ran 1.75s before and 0.24s after, and
+	@# the same dispatch spelled with `if` was ALREADY 0.23s on the pre-fix
+	@# binary. That control is what says the fix removed stray work rather than
+	@# adding anything.
+	@#
+	@# TWO ROWS, aimed at DIFFERENT failures. The program below reads identically
+	@# on the pre-fix binary (a stray finalize on a nil-inited temp releases
+	@# nothing), so it cannot guard the fix -- it guards the opposite direction, a
+	@# finalize moved into the WRONG arm, which is a double free. The IR-shape
+	@# assertion after it is the one that discriminates, and it asserts its own
+	@# AIM: a case with no managed temp emits no finalize at all, and that must
+	@# read as a failure rather than as a pass.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_case_arm_temp_finalize.pas $(TESTTMP)/test_cat26
+	tools/expect_same.sh test_cat26 "$$($(TESTTMP)/test_cat26 | tail -1)" "sink=502445"
+	tools/assert_no_leak.sh case_arm_temp_finalize 50 $(TESTTMP)/test_cat26
+	@shape=$$(PXXDBG=a.ir:Hot ./$(COMPILER) test/test_case_arm_finalize_shape.pas $(TESTTMP)/test_cafs26 2>&1 \
+	  | awk '/^[0-9]+: label /{L=NR} /^[0-9]+: copy_rec_managed/{C=NR} \
+	         END{ if (C==0) print "NO-FINALIZE-EMITTED"; else if (L==0) print "NO-LABEL"; \
+	              else if (C>L) print "AFTER-MERGE"; else print "IN-ARM" }'); \
+	  if [ "$$shape" != "IN-ARM" ]; then \
+	    echo "case-arm finalize placement: expected IN-ARM, got $$shape"; \
+	    echo "  NO-FINALIZE-EMITTED means the probe stopped exercising the path, not that it passed."; \
+	    exit 1; \
+	  fi; \
+	  echo "case_arm_finalize_shape: ok (IN-ARM)"
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_record_gate_leaks.pas $(TESTTMP)/test_mrg26
 	tools/expect_same.sh test_mrg26 "$$($(TESTTMP)/test_mrg26 | tail -1)" "managed-record-gate 9000/9000"
 	tools/assert_no_leak.sh managed_record_gate 50 $(TESTTMP)/test_mrg26

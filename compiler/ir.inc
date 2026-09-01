@@ -13534,8 +13534,21 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         if labelsHead = -1 then
         begin
           { Else Clause }
+          { FLUSH PER ARM, the sibling AN_IF already has and AN_CASE did not.
+            A `case` is ONE statement, so a temp built in one arm had its
+            finalize emitted after the MERGE and ran on every path — including
+            the arms that built nothing. Measured on `case k of 0: Inc(sink);
+            1: TakeR(MkR(k)) end`: the IR_COPY_REC_MANAGED sits after the end
+            label, while the same three-way chain spelled with `if` puts it
+            before the arm's jump. Cost, not corruption — the temp is nil-inited,
+            so the stray finalize is a heap-lock round trip that releases
+            nothing — which is exactly the cost AN_IF's own comment measured at
+            20M calls.
+            bug-a-managed-temps-for-an-untaken-branch-are-still-init-and-finalized }
+          pcBase := PostCallIntfCount;
           bodyIRNode := IRLowerAST(stmtNode);
           IRMarkStatementNode(bodyIRNode);
+          IRFlushPostCallIntf(pcBase);
           if first < 0 then first := bodyIRNode;
           last := bodyIRNode;
         end
@@ -13582,8 +13595,10 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           clauseBodyLabelNode := IRAppend(IR_LABEL, -1, -1, -1, clauseBodyLabel, 0);
           last := clauseBodyLabelNode;
           
+          pcBase := PostCallIntfCount;   { per arm — see the else clause above }
           bodyIRNode := IRLowerAST(stmtNode);
           IRMarkStatementNode(bodyIRNode);
+          IRFlushPostCallIntf(pcBase);
           last := bodyIRNode;
           
           exitJmpNode := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
