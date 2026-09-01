@@ -743,11 +743,25 @@ const
   TLS_SLOT_EXC_OBJ  = 9;
   TLS_SLOT_EXC_CLS  = 10;
   TLS_SLOT_EXC_ADDR = 11;
-  { The allocator fast path's RE-ENTRY GUARD. Nonzero while this thread is
-    inside the magazine's pop or push, so a SIGNAL HANDLER that allocates takes
-    the ordinary locked path instead of interleaving with a half-updated list.
-    Plain loads and stores, no lock prefix: a handler runs on the thread it
-    interrupts, so the only ordering that matters is this thread's own.
+  { The allocator fast path's OWNERSHIP GUARD. Nonzero while somebody is inside
+    the magazine's pop or push, so a would-be second entrant takes the ordinary
+    locked path instead of interleaving with a half-updated list.
+
+    IT WAS A RE-ENTRY GUARD, singular and thread-local, and the rename is the
+    finding. The claim that stood here -- "plain loads and stores, no lock
+    prefix: a handler runs on the thread it interrupts, so the only ordering
+    that matters is this thread's own" -- was true of the only entrant it
+    imagined, a signal handler. It was false about a thread pxx did not create.
+    A libc pthread never runs the clone stub that carves and installs a
+    per-thread TLS block, so it INHERITS its creator's gs and shares that
+    thread's magazine. Measured 2026-09-01 on test/test_multithreading.pas
+    (workers made with pthread_create): gs_base = 0x411f98 for all five
+    threads, i.e. BSS_TLS_MAIN. 18 SIGSEGV in 100 runs, 0 in 100 with
+    -dPXX_NO_HEAP_MAG, and the pinned v399 compiler builds a byte-identical
+    program that crashes the same way -- so this was never a regression, it was
+    the premise. The take is now an `xchg r64, m64`, which asserts LOCK
+    implicitly; see EmitHeapMagTakeGuard for why the release stays a plain
+    store.
 
     The window it closes is two instructions wide -- read the class head, then
     publish its successor -- and a delivery inside it hands ONE block to two

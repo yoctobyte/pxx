@@ -20276,6 +20276,22 @@ test-quick: $(COMPILER)
 	# hang from a slow box -- it wedges the tier instead of failing it.
 	./$(COMPILER) --threadsafe --dce test/test_dce_threadsafe_heaplock.pas $(TESTTMP)/smoke_dcetslock26
 	tools/expect_same.sh smoke_dcetslock26 "$$(timeout 30 $(TESTTMP)/smoke_dcetslock26; echo "exit=$$?")" "$$(printf 'DCETSLOCK OK 2080\nexit=0')"
+	# THE THREADS HERE COME FROM libc, and that is the row's whole content. A
+	# pthread never runs the __pxxclone stub that installs a per-thread TLS
+	# block, so it inherits the main thread's gs and shares its heap magazine --
+	# which guarded itself with a plain load-test-store on the premise that only
+	# a signal handler could be a second entrant. Six threads in that block tore
+	# the head/count pair and the fault landed inside PXXAlloc's GLOBAL bin pop,
+	# nowhere near the magazine.
+	#
+	# In quick because it is deterministic and it costs about a fifth of a
+	# second. Measured 2026-09-01 with a compiler built from the plain-store
+	# guard: 20 of 20 runs SIGSEGV; with the xchg guard, 0 of 20. Assert the
+	# exit status as well as the line -- the failure is a crash, and a row that
+	# only greps stdout reports a truncated pipe as a mismatch instead of a
+	# fault.
+	./$(COMPILER) --threadsafe test/test_heap_magazine_foreign_thread.pas $(TESTTMP)/smoke_magforeign26
+	tools/expect_same.sh smoke_magforeign26 "$$(timeout 30 $(TESTTMP)/smoke_magforeign26; echo "exit=$$?")" "$$(printf 'MAGFOREIGN OK 9000\nexit=0')"
 	./$(COMPILER) test/test_fwd_ptr_alias_field.pas $(TESTTMP)/smoke_fwdptralias26
 	tools/expect_same.sh smoke_fwdptralias26 "$$($(TESTTMP)/smoke_fwdptralias26)" "11 22"
 	# feature-dynamic-soname-discovery: an `external 'lib<x>.so'` for a library

@@ -131,7 +131,14 @@ begin
 end;
 
 function HeapMagazineEnabled: Boolean;
-{ May the two allocator call sites carry a lock-free thread-local fast path?
+{ May the two allocator call sites carry a call-free, heap-lock-free fast path?
+
+  It was called "lock-free thread-local" until 2026-09-01. It is neither, and
+  neither half of the name was harmless: the take is now an atomic xchg, and
+  the block it reaches is thread-local only for threads pxx created --
+  EmitHeapMagTakeGuard has the measurement. What the name should convey is what
+  it still buys, which is skipping the global heap spinlock and the call to
+  PXXAlloc, not the absence of any atomic at all.
 
   WHY THE FAST PATH IS HERE AND NOT INSIDE PXXAlloc, which is the shape anyone
   would reach for first and which DEADLOCKS. On x86-64 the heap lock is emitted
@@ -187,6 +194,45 @@ begin
   EmitB($65); EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitI32(0);
 end;
 
+procedure EmitHeapMagTakeGuard;
+{ rdx = TLS base. Takes the magazine's busy guard ATOMICALLY and leaves the
+  PREVIOUS value in rdi: zero means this thread now owns the magazine, nonzero
+  means somebody else does and the caller must take the locked path.
+
+  `xchg r64, m64` asserts LOCK implicitly -- no prefix byte is needed and none
+  is emitted. The release at the far end stays a plain store: x86-64 is TSO, so
+  a store is already a release, and only the TAKE needed to become atomic.
+
+  WHY AN ATOMIC GUARD IN A FAST PATH THAT WAS BUILT TO AVOID ONE. The magazine
+  is reached through `gs:[0]`, and the premise was that gs names a block this
+  thread owns, so a plain load/store guard was enough against the only re-entry
+  that could exist -- a signal handler on this same thread. That premise is
+  false for any thread pxx did not create. Measured 2026-09-01 on
+  test/test_multithreading.pas, which makes its workers with libc
+  pthread_create rather than __pxxclone: gdb reports gs_base = 0x411f98 for ALL
+  FIVE threads, which is BSS_TLS_MAIN -- the main thread's block. The clone stub
+  in thread_emit.inc is what carves and installs a per-thread block, and a
+  foreign thread never runs it, so it simply INHERITS the creator's gs. Four
+  workers therefore shared one magazine with no mutual exclusion of any kind.
+
+  What that produced: 18 SIGSEGV in 100 runs, against 0 in 100 with
+  -dPXX_NO_HEAP_MAG. The crash is inside PXXAlloc's global bin pop
+  (`FreeBins[bin] := PWord(cur)^`) reading a head of 0x8 -- a magazine COUNT
+  where a pointer belongs, which is what a torn head/count pair leaves behind.
+  Not a regression: the PINNED v399 compiler builds a byte-identical program
+  and crashes at the same rate, so this has been live since the magazine
+  landed.
+
+  This does not make the magazine thread-local again; it makes a SHARED one
+  correct. Blocks may now migrate between threads, which a heap allows, and a
+  loser goes to the global locked path rather than spinning -- so there is no
+  new way to block. Giving foreign threads a real per-thread block is the
+  better answer and it is a design question, not a bug fix: see
+  bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine. }
+begin
+  EmitB($48); EmitB($87); EmitB($BA); EmitI32(HEAP_MAG_BUSYOFF); { xchg rdi, [rdx+BUSYOFF] }
+end;
+
 procedure EmitHeapMagAllocTry(var pDone: Integer);
 { rax = the REQUESTED size on entry (not yet rounded).
 
@@ -227,16 +273,16 @@ begin
   EmitAsmX64(['cmp rcx, %', HEAP_MAG_MAX]);
   EmitB($0F); EmitB($87); pMiss2 := CodeLen; EmitI32(0);      { ja  .missplain }
   EmitHeapMagTlsBase;                                          { rdx = TLS block }
-  EmitAsmX64([
-    { RE-ENTRY GUARD -- see TLS_SLOT_HEAP_MAGBUSY. Plain load and store: the
-      only re-entry that can reach here is a signal handler on THIS thread, and
-      a handler that finds the guard set takes the locked path, which the main
-      flow is provably not holding (it is here, not there). }
-    'mov rdi, [rdx+%]', HEAP_MAG_BUSYOFF,
-    'test rdi, rdi' ]);
+  { OWNERSHIP GUARD -- see TLS_SLOT_HEAP_MAGBUSY and EmitHeapMagTakeGuard. It
+    guards against a signal handler on this thread AND against another thread
+    that inherited this gs base; the second is why the take is an xchg and not
+    a load-test-store. rdi = 1 first, so the xchg both reads the old value and
+    writes the taken one. }
+  EmitB($BF); EmitI32(1);                                     { mov edi, 1 }
+  EmitHeapMagTakeGuard;                                        { rdi = previous }
+  EmitAsmX64(['test rdi, rdi']);
   EmitB($0F); EmitB($85); pMiss4 := CodeLen; EmitI32(0);      { jnz .missplain }
   EmitAsmX64([
-    'mov qword [rdx+%], %', HEAP_MAG_BUSYOFF, 1,
     'add rdx, rcx',                                            { head at [rdx+HDISP] }
     'mov r8, [rdx+%]', HEAP_MAG_HDISP,
     'test r8, r8' ]);
@@ -302,12 +348,11 @@ begin
   EmitAsmX64(['cmp rcx, %', HEAP_MAG_MAX]);
   EmitB($0F); EmitB($87); pMiss2 := CodeLen; EmitI32(0);      { ja  .missplain }
   EmitHeapMagTlsBase;                                          { rdx = TLS block }
-  EmitAsmX64([
-    'mov rdi, [rdx+%]', HEAP_MAG_BUSYOFF,                      { re-entry guard }
-    'test rdi, rdi' ]);
+  EmitB($BF); EmitI32(1);                                     { mov edi, 1 }
+  EmitHeapMagTakeGuard;                                        { ownership guard }
+  EmitAsmX64(['test rdi, rdi']);
   EmitB($0F); EmitB($85); pMiss4 := CodeLen; EmitI32(0);      { jnz .missplain }
   EmitAsmX64([
-    'mov qword [rdx+%], %', HEAP_MAG_BUSYOFF, 1,
     'add rdx, rcx',
     'mov rdi, [rdx+%]', HEAP_MAG_NDISP,                        { how many parked }
     'cmp rdi, %', HEAP_MAG_DEPTH ]);

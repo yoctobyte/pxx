@@ -1,6 +1,7 @@
 ---
 prio: 70
-track: T
+track: A
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/expect_same.sh test_rtl_fpc_compat_helpers26 "$(/tmp/test_rtl_fpc_compat_helpers26 | tail -1)" "total ok 23 / 23"`. The job's own `src` (`test/test_rtl_fpc_compat_helpers.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -43,3 +44,18 @@ expect_same: MISMATCH [test_rtl_fpc_compat_helpers26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Verified fixed at HEAD — 2026-09-01, frankZ
+
+Duplicate; fixed by `d5e0a1e48` (frankB), the managed-ownership seam. Re-derived
+at `c9602d5ce`, binary `76c8be9064e0`, `converged after 2 round(s)`:
+
+```
+./compiler/pascal26 -Fulib/rtl test/test_rtl_fpc_compat_helpers.pas /tmp/r && /tmp/r
+rc=0   ok varcmp-i64   total ok 23 / 23
+```
+
+`-Fulib/rtl` is load-bearing and belongs in any future repro of this one:
+without it the same source exits 0 and the SIGSEGV does not happen. The recipe
+passes it; a repro that drops it reports a false green.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

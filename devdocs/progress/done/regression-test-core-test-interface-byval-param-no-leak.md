@@ -1,6 +1,7 @@
 ---
 prio: 70
-track: T
+track: A
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/expect_same.sh test_ifbyval26 "$(/tmp/test_ifbyval26 | tail -1)" "total ok 25 / 25"`. The job's own `src` (`test/test_interface_byval_param_no_leak.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -43,3 +44,19 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-01 — auto-closed by the seven watcher: `test-core#src:test/test_interface_byval_param_no_leak.pas` passes at 889bfcf73256 (tier native); it was red at 3f73ad2f6a08. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
+
+## Verified fixed at HEAD — 2026-09-01, frankZ
+
+Duplicate; fixed by `d5e0a1e48` (frankB). Re-derived at `c9602d5ce`, binary
+`76c8be9064e0`, `converged after 2 round(s)`:
+
+```
+./compiler/pascal26 test/test_interface_byval_param_no_leak.pas /tmp/r && /tmp/r
+rc=0   total ok 25 / 25
+```
+
+The one failing row was `timing: nested call, function-result temp still holds
+it = 1 want 0`. The fix moved that temp OFF the end-of-statement queue to scope
+exit — the opposite direction from the other three in the same campaign, which
+is why one ticket covering all four would have prescribed the wrong cure.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
