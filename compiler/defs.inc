@@ -5397,13 +5397,16 @@ function EmitObjTargetList: AnsiString;
 var
   a: Integer;
 begin
-  EmitObjTargetList := '';
+  { Result, not the bare own name. Reading `EmitObjTargetList` to accumulate is
+    legal and works, and it warns on every build -- three times, in the build
+    log every other lane reads. }
+  Result := '';
   for a := 0 to TARGET_LAST do
     if TargetHasObjectWriter(a) then
     begin
-      if EmitObjTargetList <> '' then
-        EmitObjTargetList := EmitObjTargetList + ', ';
-      EmitObjTargetList := EmitObjTargetList + TargetArchName(a);
+      if Result <> '' then
+        Result := Result + ', ';
+      Result := Result + TargetArchName(a);
     end;
 end;
 
