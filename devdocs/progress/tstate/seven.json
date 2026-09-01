@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-31T18:54:53Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "ffbc9bb959ecf9c550bf2b5b32233375caa13158",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-31T19:01:26Z",
    "fixed": [],
    "new_red": [],
@@ -459,6 +450,15 @@
    "tier": "native",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-01T01:05:27Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "46212bf887becebeee58115b55df409669f6c158",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "RED"
   }
  ],
  "host": "seven",
@@ -469,8 +469,8 @@
  },
  "job_last_pass": {
   "demos#00": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
-  "fpc-bootstrap#src:compiler/compiler.pas": "7c431e72b4bf668f61844e971a0cf556bac0784c",
-  "lib-fpc-clean#00": "7c431e72b4bf668f61844e971a0cf556bac0784c",
+  "fpc-bootstrap#src:compiler/compiler.pas": "46212bf887becebeee58115b55df409669f6c158",
+  "lib-fpc-clean#00": "46212bf887becebeee58115b55df409669f6c158",
   "lib-test#src:examples/bignum/bigmath.pas": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "lib-test#src:examples/bignum/factorial.pas": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "lib-test#src:examples/calc/calcdemo.pas": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
@@ -692,8 +692,8 @@
   "optdiff#shard7/12": "180464ec5a03f0b150815cf95d6bf908a23a7a56",
   "optdiff#shard8/12": "180464ec5a03f0b150815cf95d6bf908a23a7a56",
   "optdiff#shard9/12": "180464ec5a03f0b150815cf95d6bf908a23a7a56",
-  "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "7c431e72b4bf668f61844e971a0cf556bac0784c",
-  "size-canary#src:tools/size_canary.py": "7c431e72b4bf668f61844e971a0cf556bac0784c",
+  "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "46212bf887becebeee58115b55df409669f6c158",
+  "size-canary#src:tools/size_canary.py": "46212bf887becebeee58115b55df409669f6c158",
   "test-aarch64#src:compiler/.pascal26.fixedpoint": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-aarch64#src:test/ccross_args.c": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-aarch64#src:test/ccross_cdecl_cmode.c": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
@@ -11514,14 +11514,14 @@
  },
  "last": {
   "code_fp": "802e5ed96a48",
-  "date": "2026-09-01T01:03:21Z",
+  "date": "2026-09-01T01:05:27Z",
   "deadline": 3600.0,
-  "sha": "7c431e72b4bf668f61844e971a0cf556bac0784c",
+  "sha": "46212bf887becebeee58115b55df409669f6c158",
   "tier": "native",
   "timed_out": false,
   "unreached": 1846,
   "verdict": "RED",
-  "wall": 67.3
+  "wall": 68.3
  },
  "last_bench": {
   "conf_rows": 550,
@@ -11550,14 +11550,14 @@
   },
   "native": {
    "code_fp": "802e5ed96a48",
-   "date": "2026-09-01T01:03:21Z",
+   "date": "2026-09-01T01:05:27Z",
    "deadline": 3600.0,
-   "sha": "7c431e72b4bf668f61844e971a0cf556bac0784c",
+   "sha": "46212bf887becebeee58115b55df409669f6c158",
    "tier": "native",
    "timed_out": false,
    "unreached": 1846,
    "verdict": "RED",
-   "wall": 67.3
+   "wall": 68.3
   },
   "opt": {
    "code_fp": "802e5ed96a48",
