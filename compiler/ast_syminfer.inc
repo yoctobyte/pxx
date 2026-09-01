@@ -145,7 +145,7 @@ procedure AllocateSymOffset(idx: Integer);
 var sz, align: Integer; tk: TTypeKind;
 begin
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   if tk = tyString then
   begin
     if Syms[idx].Kind = skGlobal then sz := STRING_CAP + 8

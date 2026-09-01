@@ -1033,10 +1033,10 @@ begin
     end;
   end;
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   sgn := TypeSigned(tk);
   { A dynamic array's slot holds a pointer-sized heap handle, not an element, so
-    TypeSize(elementType) — 4 for `array of Integer` — would load HALF the
+    TypeSlotSize(elementType) — 4 for `array of Integer` — would load HALF the
     64-bit handle. EmitStoreVarA64 has carried this exact guard, with this exact
     comment, since `b := a` was fixed on the store side; the LOAD side was left
     without it and stayed invisible while nothing loaded a dyn-array handle
@@ -1169,7 +1169,7 @@ begin
     RegcallRefreshResidentA64(idx);   { not a plain scalar in x0 -- slow form }
     Exit;
   end;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   sgn := TypeSigned(tk);
   if sz = 1 then
   begin
@@ -1193,7 +1193,7 @@ end;
 { aarch64 half of PXXDBG=a.poisonslot. Same contract as the x86-64 one, and
   deliberately gated on the SAME shared predicate (ResidentSlotIsDead), so the
   experiment poisons exactly the set item 3 stops writing on this target too.
-  Writes exactly TypeSize bytes -- a wider store would corrupt the neighbouring
+  Writes exactly TypeSlotSize bytes -- a wider store would corrupt the neighbouring
   slot and manufacture the bug it is hunting. x1 is the scratch EmitStoreVarA64
   itself uses two lines below, which is the evidence it is free here. }
 procedure PoisonResidentSlotA64(idx: Integer);
@@ -1201,7 +1201,7 @@ var sz: Integer;
 begin
   if not PxxDbgEnabled('a.poisonslot') then Exit;
   if not ResidentSlotIsDead(idx) then Exit;
-  sz := TypeSize(Syms[idx].TypeKind);
+  sz := TypeSlotSize(Syms[idx].TypeKind);
   EmitLoadImmA64(9, Syms[idx].Offset);
   EmitI32($8B0903A9);                   { add x9, x29, x9 }
   EmitLoadImmA64(1, Integer($5EEDADAD));
@@ -1303,7 +1303,7 @@ begin
   end;
 
   { Dual-write, unless item 3 has established that nothing can read the slot. }
-  sz := TypeSize(Syms[d].TypeKind);
+  sz := TypeSlotSize(Syms[d].TypeKind);
   sgn := TypeSigned(Syms[d].TypeKind);
   if not ResidentSlotIsDead(d) then
   begin
@@ -1347,9 +1347,9 @@ procedure EmitStoreVarA64(idx: Integer);
 var tk: TTypeKind; sz: Integer;
 begin
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   { A dynamic array's slot holds a pointer-sized heap handle, not an element.
-    TypeSize(elementType) (e.g. 4 for `array of Integer`) would truncate the
+    TypeSlotSize(elementType) (e.g. 4 for `array of Integer`) would truncate the
     64-bit handle to 32 bits — `b := a` then stores a bad pointer and segfaults.
     Force a full pointer-width store. }
   if Syms[idx].IsArray and (Syms[idx].ArrLen = -1) then sz := TARGET_PTR_SIZE;
@@ -1645,10 +1645,10 @@ end;
 function W1LeadingExtA64(node, left, op: Integer): Integer;
 begin
   W1LeadingExtA64 := 0;
-  if TypeSize(IntToTypeKind(IRTk[left])) >= 8 then Exit;
+  if TypeSlotSize(IntToTypeKind(IRTk[left])) >= 8 then Exit;
   if op = Ord(tkShrLogical) then                             { logical `shr` }
   begin
-    if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
+    if (TypeSlotSize(IntToTypeKind(IRTk[node])) = 8) and
        TypeSigned(IntToTypeKind(IRTk[left])) then
       W1LeadingExtA64 := 1
     else
@@ -1673,7 +1673,7 @@ begin
   if OptLevel < 3 then Exit;
   if W1LeadingExtA64(node, left, op) = 0 then Exit;
   if not LeafSymRcxLoadable(left) then Exit;
-  if TypeSize(Syms[IRA[left]].TypeKind) <> 4 then Exit;
+  if TypeSlotSize(Syms[IRA[left]].TypeKind) <> 4 then Exit;
   W1ExtLeftEligibleA64 := ResidentRegOf(IRA[left]);
 end;
 
@@ -1947,16 +1947,16 @@ begin
            (IRIVal[IRB[node]] = 1) and
            TypeIsOrdinal(Syms[IRA[node]].TypeKind) and
            (not Syms[IRA[node]].IsArray) and
-           (TypeSize(Syms[IRA[node]].TypeKind) < 8) then
+           (TypeSlotSize(Syms[IRA[node]].TypeKind) < 8) then
         begin
           if TypeSigned(Syms[IRA[node]].TypeKind) then
-            case TypeSize(Syms[IRA[node]].TypeKind) of
+            case TypeSlotSize(Syms[IRA[node]].TypeKind) of
               1: EmitI32($93401C09);   { sxtb x9, w0 }
               2: EmitI32($93403C09);   { sxth x9, w0 }
             else EmitI32($93407C09);   { sxtw x9, w0 }
             end
           else
-            case TypeSize(Syms[IRA[node]].TypeKind) of
+            case TypeSlotSize(Syms[IRA[node]].TypeKind) of
               1: EmitI32($53001C09);   { uxtb w9, w0 }
               2: EmitI32($53003C09);   { uxth w9, w0 }
             else EmitI32($2A0003E9);   { mov w9, w0 (zero-extends) }
@@ -2098,7 +2098,7 @@ begin
         else if TypeIsOrdinal(tk) then
         begin
           IREmitNodeAarch64(IRA[node]);   { x0 = target address }
-          EmitLoadImmA64(1, TypeSize(tk));      { x1 = size }
+          EmitLoadImmA64(1, TypeSlotSize(tk));      { x1 = size }
           procIdx := FindProc('PXXReadVarInt');
           if procIdx < 0 then Error('compiler error: PXXReadVarInt not found');
           EmitCallProc(procIdx);
@@ -2750,8 +2750,8 @@ begin
           { --strict-fpc on a NARROW operand masks the count to 5 bits, which is
             what the 32-bit lslv does in hardware — see the x86-64 twin.
             bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths }
-          if StrictShiftWidth and (TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8) and
-             (TypeSize(IntToTypeKind(IRTk[node])) < 8) then
+          if StrictShiftWidth and (TypeSlotSize(IntToTypeKind(IRTk[IRA[node]])) < 8) and
+             (TypeSlotSize(IntToTypeKind(IRTk[node])) < 8) then
             EmitI32($1AC12000)                             { lsl w0, w0, w1 }
           else
             EmitI32($9AC12000);                            { lsl x0, x0, x1 }
@@ -2761,8 +2761,8 @@ begin
             (bug-shl-signed-integer-width). 64-bit operands shift as-is. }
           { ...unless the frontend asked for a NATIVE-width result — see the
             x86-64 twin. bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc }
-          if (TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8) and
-             (TypeSize(IntToTypeKind(IRTk[node])) < 8) then
+          if (TypeSlotSize(IntToTypeKind(IRTk[IRA[node]])) < 8) and
+             (TypeSlotSize(IntToTypeKind(IRTk[node])) < 8) then
           begin
             if TypeSigned(IntToTypeKind(IRTk[IRA[node]])) then
               EmitI32($93407C00)                           { sxtw x0, w0 }
@@ -2775,7 +2775,7 @@ begin
           { Logical shr on a <=32-bit operand: zero-extend (`mov w0, w0` clears the
             upper 32 of x0) so a sign-extended negative value's high bits don't
             leak into the 64-bit lsr (bug-shr-signed-integer-width). }
-          if TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8 then
+          if TypeSlotSize(IntToTypeKind(IRTk[IRA[node]])) < 8 then
           begin
             { a NATIVE-width result sign-extends a signed operand first — see
               the x86-64 twin }
@@ -2789,7 +2789,7 @@ begin
             Mirrors the logical case above but sign-extends (`sxtw x0, w0`)
             instead of zero-extending for a <8-byte operand, and uses asrv
             instead of lsrv. }
-          if TypeSize(IntToTypeKind(IRTk[IRA[node]])) < 8 then
+          if TypeSlotSize(IntToTypeKind(IRTk[IRA[node]])) < 8 then
             EmitWidenLeftA64(W1LeadingExtA64(node, left, op), w1ExtLA64);
           EmitI32($9AC12800);                              { asr x0, x0, x1 }
         end
@@ -3871,7 +3871,7 @@ begin
         begin
           { A frozen/inline-string value IS its buffer address. Deref'ing a
             pointer-to-frozen-string (e.g. typinfo NamePtr^) yields that address
-            — a pointer-width load, not a TypeSize(tyString)=8 load (which would
+            — a pointer-width load, not a TypeSlotSize(tyString)=8 load (which would
             be wrong on 32-bit). bug-cross-gate-masked-failures. }
           EmitI32($F9400000);          { ldr x0, [x0] (pointer width) }
           Exit;
@@ -3881,10 +3881,10 @@ begin
                 (tk = tyAnsiString) or (tk = tyClass) or (tk = tyRecord)) then
           Error('target aarch64: load through pointer of this type not yet supported');
         { A small (<=8-byte) by-value record argument loads its packed bytes into
-          x0 (TypeSize(tyRecord)=8 -> the sz=8 ldr below), mirroring x86-64 — lets
+          x0 (TypeSlotSize(tyRecord)=8 -> the sz=8 ldr below), mirroring x86-64 — lets
           a record temporary cross as a by-value arg (bug-aarch64-arm32-record-
           temp-byvalue-arg). }
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         sgn := TypeSigned(tk);
         if sz = 1 then
         begin
@@ -4074,7 +4074,7 @@ begin
           EmitI32($9E670020);         { fmov d0, x1 }
           EmitI32($9E780001);         { fcvtzs x1, d0 }
         end;
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         if sz = 1 then EmitI32($39000001)      { strb w1, [x0] }
         else if sz = 2 then EmitI32($79000001) { strh w1, [x0] }
         else if sz = 4 then EmitI32($B9000001) { str w1, [x0] }

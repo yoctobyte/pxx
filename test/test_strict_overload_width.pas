@@ -13,7 +13,7 @@ uses sysutils;
   and LongInt everywhere else, which is only explicable as narrowest-that-FITS:
   LongInt is the same WIDTH as Cardinal but cannot hold its top half. That is
   why the flag needs IntParamHoldsEveryValue rather than ArgNarrowsInt, whose
-  `TypeSize(p) < TypeSize(a)` test is signedness-blind and calls that a fit.
+  `TypeSlotSize(p) < TypeSlotSize(a)` test is signedness-blind and calls that a fit.
 
   Oracle for every row is FPC 3.2.2 under {$mode objfpc} — required, because in
   default FPC mode `Integer` is 16-bit and silently answers a different

@@ -2080,7 +2080,7 @@ begin
       { Was two raw x86-64 `mov qword [rbp+off], 0` stores, unguarded, so a
         cross build wrote 20 bytes of x86-64 into the ARM/RISC-V stream.
         refactor-a-the-missing-layer-between-frontends-and-backends }
-      EmitZeroLocalSlotForTarget(i, TypeSize(tyVariant));
+      EmitZeroLocalSlotForTarget(i, TypeSlotSize(tyVariant));
     end;
 end;
 
@@ -33571,7 +33571,7 @@ begin
         path. Registered here in the pre-pass, before any method body is parsed. }
       if (not caClassW) and (FindUField(ci, GetTokenStr(i)) < 0) then
       begin
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         curOff := AlignTo(curOff, TypeAlign(tk));
         AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), REC_NONE);
         Inc(curOff, sz);
@@ -33650,7 +33650,7 @@ begin
                             caClassW and caInstW);
       if (not caClassW) and (FindUField(ci, GetTokenStr(i)) < 0) then
       begin
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         curOff := AlignTo(curOff, TypeAlign(tk));
         AddUField(ci, Tokens[i].SOffset, Tokens[i].SLen, curOff, Ord(tk), k);
         Inc(curOff, sz);
@@ -33848,7 +33848,7 @@ begin
       end;
       if FindUField(ci, GetTokenStr(i)) >= 0 then
         Error('Nil Python: duplicate dataclass field ' + GetTokenStr(i));
-      sz := TypeSize(tk);
+      sz := TypeSlotSize(tk);
       curOff := AlignTo(curOff, TypeAlign(tk));
       LastTypeProcSig := fldSig;   { procedural field — see the capture above }
       if (tk = tyClass) and (PyAnnLastCi >= 0) then
@@ -34389,7 +34389,7 @@ begin
                   end;
                 end;
               end;
-              sz := TypeSize(tk);
+              sz := TypeSlotSize(tk);
               curOff := AlignTo(curOff, TypeAlign(tk));
               { AddUField reads LastTypeProcSig for a procedural field, which is
                 what makes `w.native(vm)` lower to an indirect call rather than
@@ -34549,7 +34549,7 @@ begin
     begin
       curOff := AlignTo(curOff, TypeAlign(IntToTypeKind(UFldTk[k])));
       UFldOff_[k] := curOff;
-      Inc(curOff, TypeSize(IntToTypeKind(UFldTk[k])));
+      Inc(curOff, TypeSlotSize(IntToTypeKind(UFldTk[k])));
     end;
   end;
   UClsSize_[ci] := AlignTo(curOff, align);
@@ -45815,67 +45815,67 @@ begin
         begin
           { 'Integer', 'LongInt', 'ShortInt', 'Byte', 'Word', 'SmallInt', 'Cardinal', 'LongWord' }
           if CaseEqual(name, 'shortint') then
-            prevTok := TypeSize(tyInt8)
+            prevTok := TypeSlotSize(tyInt8)
           else if CaseEqual(name, 'byte') then
-            prevTok := TypeSize(tyUInt8)
+            prevTok := TypeSlotSize(tyUInt8)
           else if CaseEqual(name, 'smallint') then
-            prevTok := TypeSize(tyInt16)
+            prevTok := TypeSlotSize(tyInt16)
           else if CaseEqual(name, 'word') then
-            prevTok := TypeSize(tyUInt16)
+            prevTok := TypeSlotSize(tyUInt16)
           else if CaseEqual(name, 'longint') or CaseEqual(name, 'integer') then
-            prevTok := TypeSize(tyInt32)
+            prevTok := TypeSlotSize(tyInt32)
           else if CaseEqual(name, 'cardinal') then
-            prevTok := TypeSize(tyUInt32)
+            prevTok := TypeSlotSize(tyUInt32)
           else
-            prevTok := TypeSize(tyInt32);  { default integer-family }
+            prevTok := TypeSlotSize(tyInt32);  { default integer-family }
         end
         else if CurTok.Kind = tkLongWord_T then
-          prevTok := TypeSize(tyUInt32)
+          prevTok := TypeSlotSize(tyUInt32)
         else if CurTok.Kind = tkBoolean_T then
-          prevTok := TypeSize(tyUInt8)   { Boolean is 1 byte per FPC ObjFPC }
+          prevTok := TypeSlotSize(tyUInt8)   { Boolean is 1 byte per FPC ObjFPC }
         else if CurTok.Kind = tkChar_T then
-          prevTok := TypeSize(tyChar)
+          prevTok := TypeSlotSize(tyChar)
         else if CurTok.Kind = tkString_T then
-          prevTok := TypeSize(tyString)
+          prevTok := TypeSlotSize(tyString)
         else if CurTok.Kind = tkIdent then
         begin
           { Named type: check for known types by name }
           if CaseEqual(name, 'shortint') then
-            prevTok := TypeSize(tyInt8)
+            prevTok := TypeSlotSize(tyInt8)
           else if CaseEqual(name, 'byte') or CaseEqual(name, 'uint8') then
-            prevTok := TypeSize(tyUInt8)
+            prevTok := TypeSlotSize(tyUInt8)
           else if CaseEqual(name, 'smallint') then
-            prevTok := TypeSize(tyInt16)
+            prevTok := TypeSlotSize(tyInt16)
           else if CaseEqual(name, 'word') or CaseEqual(name, 'uint16') then
-            prevTok := TypeSize(tyUInt16)
+            prevTok := TypeSlotSize(tyUInt16)
           else if CaseEqual(name, 'longint') or CaseEqual(name, 'integer') then
-            prevTok := TypeSize(tyInt32)
+            prevTok := TypeSlotSize(tyInt32)
           else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') or CaseEqual(name, 'uint32') or CaseEqual(name, 'dword') then
-            prevTok := TypeSize(tyUInt32)
+            prevTok := TypeSlotSize(tyUInt32)
           else if CaseEqual(name, 'int64') then
-            prevTok := TypeSize(tyInt64)
+            prevTok := TypeSlotSize(tyInt64)
           else if CaseEqual(name, 'qword') or CaseEqual(name, 'uint64') then
-            prevTok := TypeSize(tyUInt64)
+            prevTok := TypeSlotSize(tyUInt64)
           else if CaseEqual(name, 'nativeint') or CaseEqual(name, 'ptrint') then
-            prevTok := TypeSize(tyNativeInt)
+            prevTok := TypeSlotSize(tyNativeInt)
           else if CaseEqual(name, 'nativeuint') or CaseEqual(name, 'ptruint') then
-            prevTok := TypeSize(tyNativeUInt)
+            prevTok := TypeSlotSize(tyNativeUInt)
           else if CaseEqual(name, 'pointer') then
-            prevTok := TypeSize(tyPointer)
+            prevTok := TypeSlotSize(tyPointer)
           else if CaseEqual(name, 'boolean') then
-            prevTok := TypeSize(tyUInt8)
+            prevTok := TypeSlotSize(tyUInt8)
           else if CaseEqual(name, 'char') or CaseEqual(name, 'ansichar') then
-            prevTok := TypeSize(tyChar)
+            prevTok := TypeSlotSize(tyChar)
           else if CaseEqual(name, 'ansistring') or
                   CaseEqual(name, 'unicodestring') or CaseEqual(name, 'widestring') then
           begin
             if PasDefineExists('PXX_MANAGED_STRING') then
-              prevTok := TypeSize(tyAnsiString)
+              prevTok := TypeSlotSize(tyAnsiString)
             else
-              prevTok := TypeSize(tyString);
+              prevTok := TypeSlotSize(tyString);
           end
           else if CaseEqual(name, 'string') then
-            prevTok := TypeSize(tyString)
+            prevTok := TypeSlotSize(tyString)
           else
           begin
             { Try record/class type. A user `type X = ...` alias SHADOWS a
@@ -45921,7 +45921,7 @@ begin
                   if (szElemTk = tyRecord) and (ArrTypeElemRec[szAi] >= 0) then
                     prevTok := RecSize(ArrTypeElemRec[szAi]) * szFlatLen
                   else
-                    prevTok := TypeSize(szElemTk) * szFlatLen;
+                    prevTok := TypeSlotSize(szElemTk) * szFlatLen;
                 end;
               end
               else
@@ -45938,16 +45938,16 @@ begin
                   if AliasTk[aliasIdx] = Ord(tyRecord) then
                     prevTok := RecSize(AliasElemRec[aliasIdx])   { e.g. method-pointer-of-object alias }
                   else
-                    prevTok := TypeSize(IntToTypeKind(AliasTk[aliasIdx]));
+                    prevTok := TypeSlotSize(IntToTypeKind(AliasTk[aliasIdx]));
                 end
                 else if FindEnumType(name) >= 0 then
-                  prevTok := TypeSize(tyInteger)   { enums are ordinal/integer-sized, cf. ParseTypeKind }
+                  prevTok := TypeSlotSize(tyInteger)   { enums are ordinal/integer-sized, cf. ParseTypeKind }
                 else
                 begin
                   { Not a type name — accept a VARIABLE operand (FPC/Delphi allow
                     SizeOf(v) = size of v's declared type, not just SizeOf(Type)).
                     A record-by-value var uses its record size; everything else its
-                    scalar type size (TypeSize returns pointer width for class/
+                    scalar type size (TypeSlotSize returns pointer width for class/
                     pointer references). }
                   sci := FindSym(name);
                   if sci >= 0 then
@@ -45977,7 +45977,7 @@ begin
                       if (szElemTk = tyRecord) and (szRec >= 0) then
                         prevTok := RecSize(szRec)
                       else
-                        prevTok := TypeSize(szElemTk);
+                        prevTok := TypeSlotSize(szElemTk);
                     end
                     else if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) and
                        (SymArrNDims[sci] <= 1) then
@@ -46011,7 +46011,7 @@ begin
                       if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                         prevTok := RecSize(Syms[sci].ElemRecName)
                       else
-                        prevTok := TypeSize(Syms[sci].ElemType);
+                        prevTok := TypeSlotSize(Syms[sci].ElemType);
                     end
                     else if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) then
                     begin
@@ -46046,14 +46046,14 @@ begin
                         if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                           prevTok := RecSize(Syms[sci].ElemRecName) * szFlatLen
                         else
-                          prevTok := TypeSize(Syms[sci].ElemType) * szFlatLen;
+                          prevTok := TypeSlotSize(Syms[sci].ElemType) * szFlatLen;
                       end
                       else if szNIdx = SymArrNDims[sci] then
                       begin
                         if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                           prevTok := RecSize(Syms[sci].ElemRecName)
                         else
-                          prevTok := TypeSize(Syms[sci].ElemType);
+                          prevTok := TypeSlotSize(Syms[sci].ElemType);
                       end
                       else
                       begin
@@ -46071,12 +46071,12 @@ begin
                       if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                         prevTok := RecSize(Syms[sci].ElemRecName) * Syms[sci].ArrLen
                       else
-                        prevTok := TypeSize(Syms[sci].ElemType) * Syms[sci].ArrLen;
+                        prevTok := TypeSlotSize(Syms[sci].ElemType) * Syms[sci].ArrLen;
                     end
                     else if (Syms[sci].TypeKind = tyRecord) and (Syms[sci].RecName >= 0) then
                       prevTok := RecSize(Syms[sci].RecName)
                     else
-                      prevTok := TypeSize(Syms[sci].TypeKind);
+                      prevTok := TypeSlotSize(Syms[sci].TypeKind);
                   end
                   else
                   begin
@@ -47780,7 +47780,7 @@ begin
         if NodeDynDepth(exprNode) >= 1 then
         begin
           { NESTED source: the raw byte copy in AN_DYN_COPY would move SUB-ARRAY
-            HANDLES with the base element's size — TypeSize of the deepest type, 4
+            HANDLES with the base element's size — TypeSlotSize of the deepest type, 4
             for `array of array of Integer` — so element 1 onward read a bogus
             handle and `h[1][1]` segfaulted. Refused loudly here, exactly as
             dynamic-array Delete and Insert already refuse the same shape, until

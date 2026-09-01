@@ -216,7 +216,7 @@ end;
 function CIntegerPromoteTk(tk: TTypeKind): TTypeKind;
 begin
   Result := tk;
-  if TypeIsOrdinal(tk) and (TypeSize(tk) < TypeSize(tyInteger)) then
+  if TypeIsOrdinal(tk) and (TypeSlotSize(tk) < TypeSlotSize(tyInteger)) then
     Result := tyInteger;
 end;
 
@@ -331,7 +331,7 @@ begin
   Result := False;
   lt := IntToTypeKind(ASTTk[l]); rt := IntToTypeKind(ASTTk[r]);
   if not (TypeIsOrdinal(lt) and TypeIsOrdinal(rt)) then Exit;
-  if (TypeSize(lt) > 4) or (TypeSize(rt) > 4) then Exit;
+  if (TypeSlotSize(lt) > 4) or (TypeSlotSize(rt) > 4) then Exit;
   Result := (lt = tyUInt32) or (rt = tyUInt32);
 end;
 
@@ -383,7 +383,7 @@ function CMakeNarrowIntCast(operand: Integer; castTk: TTypeKind): Integer;
 var bits: Integer; isSgn: Boolean; m, sb: Int64;
     lit, n1: Integer;
 begin
-  bits := TypeSize(castTk) * 8;
+  bits := TypeSlotSize(castTk) * 8;
   { tyChar reaching here is a plain `char` on a target where it stays tyChar
     (the unsigned ones) — or an explicit Pascal Char. Ask the one property
     rather than assuming, so the fold cannot disagree with codegen. }
@@ -776,7 +776,7 @@ begin
   if dstTk = tyPointer then Exit;
   if TypeIsFloat(dstTk) then begin Result := CPromoteChar(e); Exit; end;
   if not TypeIsOrdinal(dstTk) then Exit;
-  if TypeSize(dstTk) <= 1 then Exit;
+  if TypeSlotSize(dstTk) <= 1 then Exit;
   Result := CPromoteChar(e);
 end;
 
@@ -1732,7 +1732,7 @@ begin
           { A struct arg occupies one pointer-width slot (see the by-pointer note
             above), so the walk steps by TARGET_PTR_SIZE, not the struct's size. }
           if vaRecId <> REC_NONE then ASTIVal[a3] := TARGET_PTR_SIZE
-          else ASTIVal[a3] := TypeSize(vt);
+          else ASTIVal[a3] := TypeSlotSize(vt);
           ASTTk[a3] := Ord(tyInteger);
           { Slot ALIGNMENT, which the three 32-bit targets sharing this walk do
             not agree on. AAPCS32 aligns an 8-byte scalar to 8 -- register pair
@@ -1744,7 +1744,7 @@ begin
             bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area }
           a4 := AllocNode(AN_INT_LIT);
           if (TargetArch = TARGET_ARM32) and (vaRecId = REC_NONE) and
-             (TypeSize(vt) > 4) then ASTIVal[a4] := 8 else ASTIVal[a4] := 4;
+             (TypeSlotSize(vt) > 4) then ASTIVal[a4] := 8 else ASTIVal[a4] := 4;
           ASTTk[a4] := Ord(tyInteger);
           argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
           a2 := AllocNode(AN_ARG); ASTLeft[a2] := a3; ASTRight[argNode] := a2;
@@ -2555,7 +2555,7 @@ function CTypeSizeBytes(tk: TTypeKind): Integer;
 begin
   if CTypePtrDepth > 0 then Result := TARGET_PTR_SIZE
   else if tk = tyRecord then Result := RecSize(CTypeBaseRec)
-  else Result := TypeSize(tk);
+  else Result := TypeSlotSize(tk);
 end;
 
 { `sizeof(type)`, `sizeof(expr)`, or `sizeof expr` -> a compile-time integer.
@@ -2776,10 +2776,10 @@ begin
     if cArrLen >= 0 then
     begin
       if cTk = tyRecord then sz := cArrLen * RecSize(cRec)
-      else sz := cArrLen * TypeSize(cTk);
+      else sz := cArrLen * TypeSlotSize(cTk);
     end
     else if cTk = tyRecord then sz := RecSize(cRec)
-    else sz := TypeSize(cTk);
+    else sz := TypeSlotSize(cTk);
   end;
   Result := cOK;
 end;
@@ -2906,13 +2906,13 @@ begin
           begin
             elemTk := RecFieldPtrElemTk(recId, fieldName);
             if elemTk = tyRecord then sz := RecSize(RecFieldPtrElemRec(recId, fieldName))
-            else sz := TypeSize(elemTk);
+            else sz := TypeSlotSize(elemTk);
           end;
         end
         else if (si >= 0) and (Syms[si].TypeKind = tyPointer) then
         begin
           if Syms[si].PtrElemTk = tyRecord then sz := RecSize(Syms[si].PtrElemRec)
-          else sz := TypeSize(Syms[si].PtrElemTk);
+          else sz := TypeSlotSize(Syms[si].PtrElemTk);
           { `int (*p)[4]`: the pointee is an ARRAY and this answered its ELEMENT
             size -- 4 where gcc says 16, `double (*q)[3]` 8 where gcc says 24,
             `char (*r)[7]` 1 where gcc says 7. Same shape as every other reader
@@ -2941,12 +2941,12 @@ begin
           SLen is the wrong unit for a wide literal (bug-c-wide-string-literal-
           narrow-in-value-context) — count UTF-8-decoded codepoints instead, the
           same decode CParseWideStringLit/ParseCLocalDeclAST's array-init path use.
-          TypeSize (not CTypeSizeBytes) — CTypeSizeBytes reads CTypePtrDepth, state
+          TypeSlotSize (not CTypeSizeBytes) — CTypeSizeBytes reads CTypePtrDepth, state
           left over from whatever ParseCDeclType call happened to run last (e.g. a
           PRECEDING `const wchar_t *ptr = ...;` declaration), so it silently
           returned the POINTER size (8) instead of sizeof(wchar_t) (4) here. }
         sz := (CWideCodepointCount(Tokens[TokPos - 1].SOffset, Tokens[TokPos - 1].SLen) + 1)
-              * TypeSize(tyInteger)
+              * TypeSlotSize(tyInteger)
       else
         sz := Tokens[TokPos - 1].SLen + 1;
     end
@@ -2984,9 +2984,9 @@ begin
       tk := IntToTypeKind(ASTTk[node]);
       if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
       else if tk = tyPointer then sz := TARGET_PTR_SIZE
-      else if TypeIsFloat(tk) then sz := TypeSize(tk)
+      else if TypeIsFloat(tk) then sz := TypeSlotSize(tk)
       else if tk = tyBoolean then sz := 4   { C `!`/comparisons yield int }
-      else if TypeIsOrdinal(tk) then sz := TypeSize(tk)  { long->8, short->2, char->1; NOT a flat 4 }
+      else if TypeIsOrdinal(tk) then sz := TypeSlotSize(tk)  { long->8, short->2, char->1; NOT a flat 4 }
       else sz := 4;
     end;
     { Skip the rest of the operand to the MATCHING `)` — balanced parens, so
@@ -3022,12 +3022,12 @@ begin
           arrLen := RecFieldArrLen(recId, fieldName);
           elemTk := RecFieldType(recId, fieldName);
           if elemTk = tyRecord then sz := arrLen * RecSize(RecFieldRecId(recId, fieldName))
-          else sz := arrLen * TypeSize(elemTk);
+          else sz := arrLen * TypeSlotSize(elemTk);
         end
         else if RecFieldType(recId, fieldName) = tyPointer then sz := TARGET_PTR_SIZE
         else if RecFieldType(recId, fieldName) = tyRecord then
           sz := RecSize(RecFieldRecId(recId, fieldName))
-        else sz := TypeSize(RecFieldType(recId, fieldName));
+        else sz := TypeSlotSize(RecFieldType(recId, fieldName));
       end;
       Next;   { consume the field name }
     end;
@@ -3070,7 +3070,7 @@ begin
         Next;
       end;
       if Procs[procIdx].RetType = tyRecord then sz := RecSize(ProcRetRecId[procIdx])
-      else sz := TypeSize(Procs[procIdx].RetType);
+      else sz := TypeSlotSize(Procs[procIdx].RetType);
     end;
   end
   else if CurTok.Kind = tkString then
@@ -3098,7 +3098,7 @@ begin
     tk := IntToTypeKind(ASTTk[node]);
     if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
     else if (tk = tyUnknown) or (tk = tyInteger) then sz := 4
-    else sz := TypeSize(tk);
+    else sz := TypeSlotSize(tk);
   end;
   if vlaSz >= 0 then
   begin
@@ -3310,7 +3310,7 @@ begin
   else
     Exit;      { a deref of a pointer-to-array keeps its own path below }
   if elemTk = tyRecord then elemSz := RecSize(elemRec)
-  else elemSz := TypeSize(elemTk);
+  else elemSz := TypeSlotSize(elemTk);
   Result := elemSz > 0;
 end;
 
@@ -3386,7 +3386,7 @@ begin
   if (stamp = 0) and (Syms[si].TypeKind = tyPointer) and
      (SymPtrElemArrLen[si] > 0) then
   begin
-    Result := TypeSize(Syms[si].PtrElemTk);
+    Result := TypeSlotSize(Syms[si].PtrElemTk);
     if Syms[si].PtrElemTk = tyRecord then Result := RecSize(Syms[si].PtrElemRec);
     for k := 1 to SymPtrElemNDims[si] - 1 do
       if SymArrDimSpan[si * MAX_ARR_DIMS + k] > 0 then
@@ -3635,7 +3635,7 @@ begin
       keep the plain retag (no value change at full width). }
     if (castDepth = 0) and TypeIsOrdinal(castTk) and (not TypeIsFloat(castTk))
        and (castTk <> tyBoolean) and (castTk <> tyPointer)
-       and (TypeSize(castTk) < 8)
+       and (TypeSlotSize(castTk) < 8)
        and TypeIsOrdinal(opTk) and (not TypeIsFloat(opTk)) then
       operand := CMakeNarrowIntCast(operand, castTk);
     node := AllocNode(AN_PTR_CAST);
@@ -3757,7 +3757,7 @@ begin
         divided as a SIGNED int (-1) — e.g. `(~(size_t)0)/4` came out 0 on
         aarch64. Sub-int operands promote to int per C. }
       opTk := IntToTypeKind(ASTTk[operand]);
-      if (opTk = tyChar) or (opTk = tyBoolean) or (TypeSize(opTk) < 4) then
+      if (opTk = tyChar) or (opTk = tyBoolean) or (TypeSlotSize(opTk) < 4) then
         ASTTk[node] := Ord(tyInteger)
       else
         ASTTk[node] := ASTTk[operand];
@@ -4029,7 +4029,7 @@ begin
             what IRPointerStride already read.
             refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag }
           flatNode := BuildFlatNDIndex(nIdx);
-          rowStride := TypeSize(Syms[ASTIVal[node]].ElemType);
+          rowStride := TypeSlotSize(Syms[ASTIVal[node]].ElemType);
           for ndi := nIdx to NDInfoNDims - 1 do rowStride := rowStride * NDInfoSpan[ndi];
           strideLit := AllocNode(AN_INT_LIT); ASTIVal[strideLit] := rowStride; ASTTk[strideLit] := Ord(tyInt64);
           mulNode := AllocNode(AN_BINOP); ASTIVal[mulNode] := Ord(tkStar);
@@ -5743,7 +5743,7 @@ begin
           else if CurTok.Kind = tkComma then
             Next
           else if (CurTok.Kind = tkString) and (declTk <> tyPointer) and
-                  TypeIsOrdinal(declTk) and (TypeSize(declTk) = 1) then
+                  TypeIsOrdinal(declTk) and (TypeSlotSize(declTk) = 1) then
           begin
             { A string literal standing for a whole char ROW — `char names[2][8]
               = {"ab", "cd"}`. ParseCExpr would read it as the literal's
@@ -5973,7 +5973,7 @@ begin
                 + ' 6.7.8p3)');
         if declTk = tyRecord then vlaElemSz := RecSize(scalarRec)
         else if declPtrDepth > 0 then vlaElemSz := TARGET_PTR_SIZE
-        else vlaElemSz := TypeSize(declTk);
+        else vlaElemSz := TypeSlotSize(declTk);
         if vlaElemSz < 1 then vlaElemSz := 1;
         if declTk = tyRecord then LastTypeRecId := scalarRec;
         idx := CAllocDeclVar(name, tyPointer);
@@ -7423,7 +7423,7 @@ begin
   end;
   if UFldTk[fi] = Ord(tyRecord) then es := RecSize(UFldRec_[fi])
   else if UFldTk[fi] = Ord(tyPointer) then es := TARGET_PTR_SIZE
-  else es := TypeSize(IntToTypeKind(UFldTk[fi]));
+  else es := TypeSlotSize(IntToTypeKind(UFldTk[fi]));
   if UFldIsArray[fi] then Result := es * UFldArrLen[fi] else Result := es;
 end;
 
@@ -7649,7 +7649,7 @@ function CInitElemIsChar(elemTkOrd: Integer): Boolean;
 var tk: TTypeKind;
 begin
   tk := IntToTypeKind(elemTkOrd);
-  Result := (tk <> tyPointer) and TypeIsOrdinal(tk) and (TypeSize(tk) = 1);
+  Result := (tk <> tyPointer) and TypeIsOrdinal(tk) and (TypeSlotSize(tk) = 1);
 end;
 
 { One record member: descend aggregates (braced = bounded, unbraced = elided
@@ -7660,10 +7660,10 @@ begin
   if UFldIsArray[fi] and (UFldDynDepth[fi] = 0) then
   begin
     CInitPathPush(1, fi, UFldTk[fi]);
-    if (CurTok.Kind = tkString) and (TypeSize(IntToTypeKind(UFldTk[fi])) = 1) then
+    if (CurTok.Kind = tkString) and (TypeSlotSize(IntToTypeKind(UFldTk[fi])) = 1) then
       CInitFillCharArray(UFldTk[fi], UFldArrLen[fi], emit)
     else if (CurTok.Kind = tkBegin) and (Tokens[TokPos].Kind = tkString) and
-            (TypeSize(IntToTypeKind(UFldTk[fi])) = 1) then
+            (TypeSlotSize(IntToTypeKind(UFldTk[fi])) = 1) then
     begin
       Next;
       CInitFillCharArray(UFldTk[fi], UFldArrLen[fi], emit);
@@ -9169,12 +9169,12 @@ begin
           end;
           if (initDim > 0) and (Syms[initSymIdx].ElemType = tyRecord) then
             { array of structs: element stride is the RECORD size, not
-              TypeSize(tyRecord)=8 (that generic 8 made `static T *p = &g[1]` on a
+              TypeSlotSize(tyRecord)=8 (that generic 8 made `static T *p = &g[1]` on a
               struct array point 8 bytes in instead of sizeof(elem) -> `*p = ...`
               corrupted the wrong slot; csmith seed 9048). }
             initOff := initOff * RecSize(Syms[initSymIdx].ElemRecName)
           else if (initDim > 0) and (Syms[initSymIdx].ElemType <> tyUnknown) then
-            initOff := initOff * TypeSize(Syms[initSymIdx].ElemType);
+            initOff := initOff * TypeSlotSize(Syms[initSymIdx].ElemType);
           if CurTok.Kind in [tkComma, tkSemicolon] then
           begin
             PendingInitSym[PendingInitCount]  := idx;
@@ -11419,11 +11419,11 @@ begin
         EmitB($8B); EmitB($85); EmitI32(8 + sz);                  { mov eax, [ebp+disp] }
         if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
            not (Syms[idx].TypeKind in [tyPointer, tyString, tyAnsiString, tyClass]) and
-           (TypeSize(Syms[idx].TypeKind) = 1) then
+           (TypeSlotSize(Syms[idx].TypeKind) = 1) then
           begin EmitB($88); EmitB($85); EmitI32(Syms[idx].Offset); end          { mov [ebp+off], al }
         else if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
            not (Syms[idx].TypeKind in [tyPointer, tyString, tyAnsiString, tyClass]) and
-           (TypeSize(Syms[idx].TypeKind) = 2) then
+           (TypeSlotSize(Syms[idx].TypeKind) = 2) then
           begin EmitB($66); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end { mov [ebp+off], ax }
         else
           begin EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;          { mov [ebp+off], eax }
@@ -11636,9 +11636,9 @@ begin
     if (Procs[procIdx].RetSymIdx >= 0) and
        (Syms[Procs[procIdx].RetSymIdx].TypeKind <> tyRecord) and
        (not Syms[Procs[procIdx].RetSymIdx].IsArray) and
-       (TypeSize(Syms[Procs[procIdx].RetSymIdx].TypeKind) <= 8) then
+       (TypeSlotSize(Syms[Procs[procIdx].RetSymIdx].TypeKind) <= 8) then
       EmitZeroLocalSlotForTarget(Procs[procIdx].RetSymIdx,
-                                 TypeSize(Syms[Procs[procIdx].RetSymIdx].TypeKind));
+                                 TypeSlotSize(Syms[Procs[procIdx].RetSymIdx].TypeKind));
     CompilePendingGlobalInits;
     CEmitDeferredCAggInits;
   end;
@@ -12735,7 +12735,7 @@ begin
               24) for a `long long :0` inside an otherwise 4-aligned struct. Raising
               it here was the single reason the layout model disagreed with gcc on
               the last 5 of 400 generated structs; every offset already matched. }
-            anonBitBytes := TypeSize(fTk);
+            anonBitBytes := TypeSlotSize(fTk);
             if anonBitBytes < 1 then anonBitBytes := 1;
             if not isUnion then
             begin
@@ -12753,7 +12753,7 @@ begin
               the same no-crossing rule against ITS OWN declared type; the old code
               hardwired a 32-bit unit and clamped the width to 32, which silently
               mislaid an unnamed `long long : 40`. }
-            anonBitBytes := TypeSize(fTk);
+            anonBitBytes := TypeSlotSize(fTk);
             if anonBitBytes < 1 then anonBitBytes := 1;
             unitBits := anonBitBytes * 8;
             if unitBits < 8 then unitBits := 8;
@@ -12867,7 +12867,7 @@ begin
             declElemTk := Ord(tyUnknown);
             declElemRec := REC_NONE;
           end;
-          sz := TypeSize(IntToTypeKind(baseScalarTk));
+          sz := TypeSlotSize(IntToTypeKind(baseScalarTk));
           al := TypeAlign(IntToTypeKind(baseScalarTk));
         end;
         if al < 1 then al := 1;

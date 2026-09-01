@@ -362,15 +362,9 @@ begin
       elSize := TARGET_PTR_SIZE
     else if baseKind = 3 then
       elSize := UClsSize_[SymTR[symIdx].ElemRec - REC_UCLASS_BASE]
-    else if IntToTypeKind(SymTR[symIdx].ElemTk) = tyRecord then
-      { Unmanaged record element: TypeSize(tyRecord) is only a pointer-width
-        placeholder (8); the real stride is the full record size. Using 8 here
-        under-allocates the dyn array (e.g. a 2-element `array of const`/TVarRec
-        gets 16 bytes, so element 1 overruns into adjacent heap and is clobbered
-        by the next allocation). }
-      elSize := RecSize(SymTR[symIdx].ElemRec)
     else
-      elSize := TypeSize(IntToTypeKind(SymTR[symIdx].ElemTk));
+      elSize := TypeStorageSize(IntToTypeKind(SymTR[symIdx].ElemTk),
+                                SymTR[symIdx].ElemRec);
     { fixed-array ROW element (`array of T`, T a named fixed array): stride =
       whole row (bug-pascal-openarray-of-array-param-marshal). baseKind 0 only —
       managed row elements are rejected at parse. }
@@ -450,10 +444,8 @@ begin
     elSize := TARGET_PTR_SIZE
   else if baseKind = 3 then
     elSize := UClsSize_[baseRec - REC_UCLASS_BASE]
-  else if baseTk = Ord(tyRecord) then
-    elSize := RecSize(baseRec)
   else
-    elSize := TypeSize(IntToTypeKind(baseTk));
+    elSize := TypeStorageSize(IntToTypeKind(baseTk), baseRec);
   AnonDynArrayElSize[anonIdx] := elSize;
 
   for i := 0 to 19 do
@@ -1384,14 +1376,14 @@ begin
         else if (Procs[procIdx].Params[j].TypeKind = tyInt64) or (Procs[procIdx].Params[j].TypeKind = tyUInt64) then
           Inc(sz, 8)                                 { 64-bit by-value param }
         else if Procs[procIdx].Params[j].TypeKind = tySet then
-          Inc(sz, TypeSize(tySet))                    { 32-byte by-value set }
+          Inc(sz, TypeSlotSize(tySet))                    { 32-byte by-value set }
         else
           Inc(sz, 4);
       end;
       if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
          (Syms[idx].TypeKind = tySet) then
       begin
-        for j := 0 to (TypeSize(tySet) div 4) - 1 do
+        for j := 0 to (TypeSlotSize(tySet) div 4) - 1 do
         begin
           EmitB($8B); EmitB($85); EmitI32(8 + sz + j * 4);      { mov eax, [ebp+disp] }
           EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset + j * 4);
@@ -1433,11 +1425,11 @@ begin
           Char arg). By-ref/array/handle params are always 4-byte. }
         if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
            not (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant]) and
-           (TypeSize(Syms[idx].TypeKind) = 1) then
+           (TypeSlotSize(Syms[idx].TypeKind) = 1) then
           begin EmitB($88); EmitB($85); EmitI32(Syms[idx].Offset); end          { mov [ebp+off], al }
         else if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
            not (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant]) and
-           (TypeSize(Syms[idx].TypeKind) = 2) then
+           (TypeSlotSize(Syms[idx].TypeKind) = 2) then
           begin EmitB($66); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end { mov [ebp+off], ax }
         else
           begin EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;          { mov [ebp+off], eax }
@@ -3089,13 +3081,13 @@ begin
   reg := ResidentRegOf(idx);
   if reg <> 0 then begin W1CmpRightInPlace := W1CMP_REG; Exit; end;
   if not ((Syms[idx].Kind = skLocal) or (Syms[idx].Kind = skParam)) then Exit;
-  if TypeSize(Syms[idx].TypeKind) = 8 then
+  if TypeSlotSize(Syms[idx].TypeKind) = 8 then
   begin
     memOff := Syms[idx].Offset;
     W1CmpRightInPlace := W1CMP_MEM;
     Exit;
   end;
-  if TypeSize(Syms[idx].TypeKind) <> 4 then
+  if TypeSlotSize(Syms[idx].TypeKind) <> 4 then
     begin W1CmpDecline('size', idx, -1, -1); Exit; end;
   if leftNode < 0 then begin W1CmpDecline('noleft', idx, -1, -1); Exit; end;
   if IRKind[leftNode] <> IR_LOAD_SYM then
@@ -3185,10 +3177,10 @@ end;
 function W1LeadingWidenKind(node, left: Integer; op: TTokenKind): Integer;
 begin
   W1LeadingWidenKind := 0;
-  if TypeSize(IntToTypeKind(IRTk[left])) >= 8 then Exit;
+  if TypeSlotSize(IntToTypeKind(IRTk[left])) >= 8 then Exit;
   if op = tkShrLogical then                                   { logical `shr` }
   begin
-    if (TypeSize(IntToTypeKind(IRTk[node])) = 8) and
+    if (TypeSlotSize(IntToTypeKind(IRTk[node])) = 8) and
        TypeSigned(IntToTypeKind(IRTk[left])) then
       W1LeadingWidenKind := 1
     else
@@ -3230,7 +3222,7 @@ begin
   if not LeafSymRcxLoadable(left) then Exit;
   { Exactly-4: a 1- or 2-byte symbol's own load is a movsx/movzx from the low
     8/16 bits, which neither movsxd nor a 32-bit mov reproduces. }
-  if TypeSize(Syms[IRA[left]].TypeKind) <> 4 then Exit;
+  if TypeSlotSize(Syms[IRA[left]].TypeKind) <> 4 then Exit;
   W1WidenLeftEligible := ResidentRegOf(IRA[left]);
 end;
 
@@ -4151,13 +4143,13 @@ procedure EmitOvfCheckNarrowX64(tk: TTypeKind);
 var pSkip, procIdx: Integer;
 begin
   if TypeSigned(tk) then
-    case TypeSize(tk) of
+    case TypeSlotSize(tk) of
       1: begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($C8); end; { movsx rcx, al }
       2: begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($C8); end; { movsx rcx, ax }
     else begin EmitB($48); EmitB($63); EmitB($C8); end;             { movsxd rcx, eax }
     end
   else
-    case TypeSize(tk) of
+    case TypeSlotSize(tk) of
       1: begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($C8); end; { movzx rcx, al }
       2: begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($C8); end; { movzx rcx, ax }
     else begin EmitB($89); EmitB($C1); end;                         { mov ecx, eax (zero-extends) }
@@ -4451,7 +4443,7 @@ begin
   { nosign: }
   Patch32(jNoSign, CodeLen - (jNoSign + 4));
   EmitAsmX64(['mov rax, r9', 'mov [@glob], rdx', BSS_LINE_POS]);
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   if sz = 1 then EmitAsmX64(['mov [rdi], al'])
   else if sz = 2 then EmitAsmX64(['mov [rdi], ax'])
   else if sz = 4 then EmitAsmX64(['mov [rdi], eax'])
@@ -6559,7 +6551,7 @@ begin
              (IRIVal[IRB[node]] = 1) and
              TypeIsOrdinal(Syms[symIdx].TypeKind) and
              (not Syms[symIdx].IsArray) and
-             (TypeSize(Syms[symIdx].TypeKind) < 8) then
+             (TypeSlotSize(Syms[symIdx].TypeKind) < 8) then
             EmitOvfCheckNarrowX64(Syms[symIdx].TypeKind);
           { IR carries floats as double bits in rax; EmitStoreVar reads xmm0.
             A float-typed RHS is bit-copied (movq); an integer-typed RHS into a
@@ -6921,7 +6913,7 @@ begin
         IREmitNode(addressNode);
 
         tk := IntToTypeKind(IRTk[node]);
-        size := TypeSize(tk);
+        size := TypeSlotSize(tk);
         isSigned := TypeSigned(tk);
 
         { A Single field/element is a 4-byte float; the IR value model carries
@@ -7007,7 +6999,7 @@ begin
         valueNode := IRB[node];
 
         tk := IntToTypeKind(IRTk[node]);
-        size := TypeSize(tk);
+        size := TypeSlotSize(tk);
 
         if tk = tyString then
         begin
@@ -7869,7 +7861,7 @@ begin
               begin
                 { sub-64-bit result: the 64-bit flags never fire for a narrow
                   wrap — range-test the exact 64-bit result instead. }
-                if TypeSize(IntToTypeKind(IRTk[node])) < 8 then
+                if TypeSlotSize(IntToTypeKind(IRTk[node])) < 8 then
                   EmitOvfCheckNarrowX64(IntToTypeKind(IRTk[node]))
                 else
                   EmitOvfCheckX64(not TypeSigned(IntToTypeKind(IRTk[node])));
@@ -7880,7 +7872,7 @@ begin
               EmitAluRaxRight($29, w1RightReg);                      { sub rax, rcx|r12..r15 }
               if IRIVal[node] = 1 then
               begin
-                if TypeSize(IntToTypeKind(IRTk[node])) < 8 then
+                if TypeSlotSize(IntToTypeKind(IRTk[node])) < 8 then
                   EmitOvfCheckNarrowX64(IntToTypeKind(IRTk[node]))
                 else
                   EmitOvfCheckX64(not TypeSigned(IntToTypeKind(IRTk[node])));
@@ -7890,7 +7882,7 @@ begin
             begin
               if IRIVal[node] = 1 then
               begin
-                if TypeSize(IntToTypeKind(IRTk[node])) < 8 then
+                if TypeSlotSize(IntToTypeKind(IRTk[node])) < 8 then
                 begin
                   { narrow checked mul: both operands are <= 32-bit extended,
                     so imul's low-64 result is bit-exact for the range test
@@ -7958,7 +7950,7 @@ begin
             to 0. See bug-shl-signed-integer-width. }
           tkShrLogical:
             begin
-              if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
+              if TypeSlotSize(IntToTypeKind(IRTk[left])) < 8 then
               begin
                 { A Pascal shift runs at NATIVE width, so a narrow SIGNED
                   operand is sign-extended first and the logical shift then sees
@@ -7990,8 +7982,8 @@ begin
                 no-op there. `Integer(-16) shr 0` under --strict-fpc answered
                 4294967280 instead of -16 for exactly that reason.
                 bug-a-strict-fpc-shr-by-zero-drops-the-sign }
-              if (TypeSize(IntToTypeKind(IRTk[left])) < 8) and
-                 (TypeSize(IntToTypeKind(IRTk[node])) < 8) and
+              if (TypeSlotSize(IntToTypeKind(IRTk[left])) < 8) and
+                 (TypeSlotSize(IntToTypeKind(IRTk[node])) < 8) and
                  TypeSigned(IntToTypeKind(IRTk[left])) then
                 begin EmitB($48); EmitB($98); end;            { cdqe }
             end;
@@ -8024,8 +8016,8 @@ begin
                 rather than emit an explicit mask. The narrowing below then
                 applies as usual.
                 bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths }
-              if StrictShiftWidth and (TypeSize(IntToTypeKind(IRTk[left])) < 8) and
-                 (TypeSize(IntToTypeKind(IRTk[node])) < 8) then
+              if StrictShiftWidth and (TypeSlotSize(IntToTypeKind(IRTk[left])) < 8) and
+                 (TypeSlotSize(IntToTypeKind(IRTk[node])) < 8) then
                 EmitShiftRax($E0, False, shiftImmCnt)          { shl eax, cl|imm }
               else
                 EmitShiftRax($E0, True, shiftImmCnt);          { shl rax, cl|imm }
@@ -8034,8 +8026,8 @@ begin
                 `1 shl 31` is 2147483648. Pascal-only — C's `<<` keeps its
                 declared-width wrap, and says so by tagging the result narrow.
                 bug-a-shr-on-a-32-bit-operand-does-not-promote-like-fpc }
-              if (TypeSize(IntToTypeKind(IRTk[left])) < 8) and
-                 (TypeSize(IntToTypeKind(IRTk[node])) < 8) then
+              if (TypeSlotSize(IntToTypeKind(IRTk[left])) < 8) and
+                 (TypeSlotSize(IntToTypeKind(IRTk[node])) < 8) then
               begin
                 if TypeSigned(IntToTypeKind(IRTk[left])) then
                   begin EmitB($48); EmitB($98); end           { cdqe }
@@ -8740,7 +8732,7 @@ begin
               EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); { movq rax, xmm0 }
             end
             else if ProcExternal[procIdx] and TypeSigned(Procs[procIdx].RetType) and
-                    (TypeSize(Procs[procIdx].RetType) = 4) then
+                    (TypeSlotSize(Procs[procIdx].RetType) = 4) then
             begin
               { SysV: a 32-bit `int` return only defines EAX; the upper 32 bits of
                 RAX are undefined. The value model treats results as full 64-bit,
@@ -9360,7 +9352,7 @@ begin
             if IntToTypeKind(SymTR[symIdx].ElemTk) = tyRecord then
               elemSize := RecSize(SymTR[symIdx].ElemRec)
             else
-              elemSize := TypeSize(IntToTypeKind(SymTR[symIdx].ElemTk));
+              elemSize := TypeSlotSize(IntToTypeKind(SymTR[symIdx].ElemTk));
             { fixed-array ROW element (`array of T`): stride = whole row }
             if SymDynElemRowLen[symIdx] > 0 then
               elemSize := elemSize * SymDynElemRowLen[symIdx];
@@ -10056,7 +10048,7 @@ begin
         IREmitNode(IRC[node]);                 { rax = src, or the fill byte }
         EmitB($50);                            { push rax }
         IREmitNode(IRB[node]);                 { rax = byte count }
-        if TypeSize(IntToTypeKind(IRTk[IRB[node]])) <= 4 then
+        if TypeSlotSize(IntToTypeKind(IRTk[IRB[node]])) <= 4 then
           begin EmitB($48); EmitB($63); EmitB($C0); end;  { movsxd rax, eax }
         EmitB($48); EmitB($89); EmitB($C1);    { mov rcx, rax }
         EmitB($5E);                            { pop rsi (src / value) }
@@ -10152,7 +10144,7 @@ begin
         else if slBaseTk = tyRecord then
           slElemSize := RecSize(slBaseRec)
         else
-          slElemSize := TypeSize(slBaseTk);
+          slElemSize := TypeSlotSize(slBaseTk);
 
         if AnonDynArrayCount >= 8192 then Error('too many anonymous dynamic arrays');
         anonIdx := AnonDynArrayCount;
@@ -12388,7 +12380,7 @@ begin
           procIdx := FindProc('PXXDynArrayRelease');
           if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
           { Loaded at POINTER width by hand rather than through
-            EmitLoadVarArm32, which sizes by TypeSize(Syms[].TypeKind) — and an
+            EmitLoadVarArm32, which sizes by TypeSlotSize(Syms[].TypeKind) — and an
             array's TypeKind is its ELEMENT kind, so `array of Char` would come
             back through an ldrb with the handle's top three bytes gone. That is
             the same truncation EmitLoadVarA64 had. }

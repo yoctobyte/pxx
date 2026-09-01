@@ -22,9 +22,9 @@ procedure EmitLoadVarArm32(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean;
 begin
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   { A dynamic array's slot holds a pointer-sized heap handle, not an element.
-    TypeSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
+    TypeSlotSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
     ONE-BYTE access to a pointer slot: the store zeroes only the low byte and
     leaves three stale ones, and the load reads a truncated handle. Force a
     full pointer-width access. Twin of the guard in EmitStoreVarA64 -- aarch64
@@ -87,9 +87,9 @@ procedure EmitStoreVarArm32(idx: Integer);
 var tk: TTypeKind; sz: Integer;
 begin
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   { A dynamic array's slot holds a pointer-sized heap handle, not an element.
-    TypeSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
+    TypeSlotSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
     ONE-BYTE access to a pointer slot: the store zeroes only the low byte and
     leaves three stale ones, and the load reads a truncated handle. Force a
     full pointer-width access. Twin of the guard in EmitStoreVarA64 -- aarch64
@@ -710,7 +710,7 @@ begin
       (bug-shl-signed-integer-width): zero the hi word before a logical shr;
       re-derive the narrow result after a shl. Found by the first
       --wide --cross pasmith run (seed 60). }
-    if (op = Ord(tkShrLogical)) and (TypeSize(IntToTypeKind(IRTk[left])) < 8) then
+    if (op = Ord(tkShrLogical)) and (TypeSlotSize(IntToTypeKind(IRTk[left])) < 8) then
       EmitI32($E3A03000); { mov r3, #0 (32-bit operand: zero-extend) }
     EmitI32($E250C020);  { subs r12, r0, #32 (n-32) }
     if op = Ord(tkShl) then
@@ -723,7 +723,7 @@ begin
       EmitI32($41A01013);  { lslmi r1, r3, r0 }
       EmitI32($41811C32);  { orrmi r1, r1, r2, lsr r12 }
       EmitI32($41A00012);  { lslmi r0, r2, r0 }
-      if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
+      if TypeSlotSize(IntToTypeKind(IRTk[left])) < 8 then
       begin
         { narrow operand: result = low 32 bits, sign/zero-extended
           (longint(1) shl 31 = -2147483648, matching FPC and x86-64). }
@@ -1750,12 +1750,12 @@ begin
           check; bug-qplus-narrow-32bit-backends). }
         if (IRB[node] >= 0) and (IRKind[IRB[node]] = IR_BINOP) and
            (IRIVal[IRB[node]] = 1) and TypeIsOrdinal(tk) and
-           (not Syms[IRA[node]].IsArray) and (TypeSize(tk) < 8) and
-           (Is64BitArm32(IntToTypeKind(IRTk[IRB[node]])) or (TypeSize(tk) < 4)) then
+           (not Syms[IRA[node]].IsArray) and (TypeSlotSize(tk) < 8) and
+           (Is64BitArm32(IntToTypeKind(IRTk[IRB[node]])) or (TypeSlotSize(tk) < 4)) then
         begin
           if TypeSigned(tk) then
           begin
-            case TypeSize(tk) of
+            case TypeSlotSize(tk) of
               1: EmitI32($E6AF2070);  { sxtb r2, r0 }
               2: EmitI32($E6BF2070);  { sxth r2, r0 }
             else EmitI32($E1A02000);  { mov r2, r0 }
@@ -1770,7 +1770,7 @@ begin
           end
           else
           begin
-            case TypeSize(tk) of
+            case TypeSlotSize(tk) of
               1: EmitI32($E6EF2070);  { uxtb r2, r0 }
               2: EmitI32($E6FF2070);  { uxth r2, r0 }
             else EmitI32($E1A02000);  { mov r2, r0 }
@@ -1908,7 +1908,7 @@ begin
         else if TypeIsOrdinal(tk) then
         begin
           IREmitNodeArm32(IRA[node]);  { r0 = target address }
-          EmitLoadImmArm32(1, TypeSize(tk));   { r1 = size }
+          EmitLoadImmArm32(1, TypeSlotSize(tk));   { r1 = size }
           procIdx := FindProc('PXXReadVarInt');
           if procIdx < 0 then Error('compiler error: PXXReadVarInt not found');
           EmitCallProc(procIdx);
@@ -3661,7 +3661,7 @@ begin
         begin
           { A frozen/inline-string value IS its buffer address. Deref'ing a
             pointer-to-frozen-string (typinfo NamePtr^) yields that address — a
-            pointer-width (4-byte) load, not the TypeSize(tyString)=8 path.
+            pointer-width (4-byte) load, not the TypeSlotSize(tyString)=8 path.
             bug-cross-gate-masked-failures. }
           EmitI32($E5900000);          { ldr r0, [r0] (pointer width) }
           Exit;
@@ -3670,7 +3670,7 @@ begin
                 (tk = tyChar) or (tk = tyUnknown) or
                 (tk = tyAnsiString) or (tk = tyClass) or (tk = tyRecord)) then
           Error('target arm32: load through pointer of this type not yet supported');
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         sgn := TypeSigned(tk);
         if sz = 1 then
         begin
@@ -3843,7 +3843,7 @@ begin
         IREmitNodeArm32(IRA[node]); { address -> r0 }
         InLValueWrite := savedLValueWrite;
         EmitI32($E8BD0002);         { pop {r1} (value) }
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         if sz = 1 then EmitI32($E5C01000)      { strb r1, [r0] }
         else if sz = 2 then EmitI32($E1C010B0) { strh r1, [r0] }
         else EmitI32($E5801000);               { str r1, [r0] }
@@ -4706,7 +4706,7 @@ begin
         begin
           si := IRA[i];
           tk := Syms[si].TypeKind;
-          sz := TypeSize(tk);
+          sz := TypeSlotSize(tk);
           EmitI32($E59F1000);                                         { ldr r1, [pc] }
           EmitI32($EA000000);                                         { b .+8 }
           EmitGlobRef(IRExcStoreSlot(i));

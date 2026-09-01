@@ -89,7 +89,7 @@ begin
       unrelated routine changes the frame in front of it -- which is why it
       surfaced as a NilPy regression with no NilPy change behind it.
       regression-test-nilpy-test-nilpy-star-operand-in-a-variant }
-    zeroBytes := TypeSize(tyVariant);
+    zeroBytes := TypeSlotSize(tyVariant);
   end
   { RecordNeedsZeroInit, not RecordHasManagedFields: an interface FIELD is
     excluded from the finalization predicate on purpose (releasing it under
@@ -175,7 +175,7 @@ begin
       block the slot never owned. test_promoint_local_array_zero_init
       segfaults on the pre-fix compiler.
       bug-a-managedlocalzerobytes-answers-per-kind-and-has-been-wrong-twice }
-    zeroBytes := TypeSize(Syms[i].TypeKind);
+    zeroBytes := TypeSlotSize(Syms[i].TypeKind);
 
   end;
 
@@ -387,7 +387,7 @@ begin
       (NodeDynBaseRec(left) <> NodeDynBaseRec(right))) then
     Error('array concatenation: the operands'' element types differ');
   { Frozen-string elements are refused by dynamic-array Insert for the same
-    reason (the element width is the declared capacity, not TypeSize), and a
+    reason (the element width is the declared capacity, not TypeSlotSize), and a
     silent wrong stride is exactly what this ticket's diagnostic replaced. }
   if NodeDynBaseTk(left) = tyString then
     Error('array concatenation: frozen-string element type not yet supported');
@@ -1632,8 +1632,8 @@ begin
           bug-p-integer-cast-does-not-truncate-in-rvalue-position }
         castTk := IntToTypeKind(ASTTk[CurASTNode]);
         if TypeIsOrdinal(castTk) and (castTk <> tyBoolean) and (castTk <> tyChar) and
-           ((TypeSize(castTk) > 4) or
-            ((TypeSize(castTk) = 4) and not TypeSigned(castTk))) then
+           ((TypeSlotSize(castTk) > 4) or
+            ((TypeSlotSize(castTk) = 4) and not TypeSigned(castTk))) then
         begin
           node := AllocNode(AN_PTR_CAST);
           ASTLeft[node] := CurASTNode;
@@ -3680,13 +3680,13 @@ begin
           begin
             Expect(tkRParen, ')');
             node := AllocNode(AN_INT_LIT);
-            { a RECORD element is sized by its record id, not by TypeSize(tyRecord) }
+            { a RECORD element is sized by its record id, not by TypeSlotSize(tyRecord) }
             { the FLAT count: SizeOf is the whole aggregate's width, so a
               multi-dim pointee is every element, not the first dimension. }
             if szExprTk = tyRecord then
               ASTIVal[node] := dpaFlat * RecSize(ResolveNodeRec(szExprNode))
             else
-              ASTIVal[node] := dpaFlat * TypeSize(szExprTk);
+              ASTIVal[node] := dpaFlat * TypeSlotSize(szExprTk);
             ASTTk[node] := Ord(tyInteger);
             CurASTNode := node;
             LastExprTk := tyInteger;
@@ -3752,12 +3752,12 @@ begin
           end;
           { A record-typed expression needs a record id to be sized and the AST
             does not carry one on a general node, so refuse rather than answer
-            TypeSize(tyRecord). Same for an operand whose type we failed to
+            TypeSlotSize(tyRecord). Same for an operand whose type we failed to
             infer: a wrong size reaches GetMem and Move, so a diagnostic beats
             a plausible number. }
           if (szExprTk = tyUnknown) or (szExprTk = tyRecord) then
             Error('SizeOf: cannot size this expression (record or untyped) -- name the type or the variable instead');
-          prevTok := TypeSize(szExprTk);
+          prevTok := TypeSlotSize(szExprTk);
           Expect(tkRParen, ')');
           { The operand subtree is DROPPED, so nothing in it is ever lowered and
             `SizeOf(F(x))` cannot call F -- FPC discards the expression too and
@@ -3845,7 +3845,7 @@ begin
             (FindEnumType(name) >= 0) or (FindVarSym(name) >= 0)) then
           szBTk := tyUnknown;
         if szBTk <> tyUnknown then
-          prevTok := TypeSize(szBTk)
+          prevTok := TypeSlotSize(szBTk)
         else if CurTok.Kind = tkIdent then
         begin
         { Try record/class type. A user `type X = ...` alias SHADOWS a
@@ -3896,7 +3896,7 @@ begin
                 if (szElemTk = tyRecord) and (ArrTypeElemRec[szAi] >= 0) then
                   prevTok := RecSize(ArrTypeElemRec[szAi]) * szFlatLen
                 else
-                  prevTok := TypeSize(szElemTk) * szFlatLen;
+                  prevTok := TypeSlotSize(szElemTk) * szFlatLen;
               end;
             end
             else
@@ -3913,16 +3913,16 @@ begin
                 if AliasTk[aliasIdx] = Ord(tyRecord) then
                   prevTok := RecSize(AliasElemRec[aliasIdx])   { e.g. method-pointer-of-object alias }
                 else
-                  prevTok := TypeSize(IntToTypeKind(AliasTk[aliasIdx]));
+                  prevTok := TypeSlotSize(IntToTypeKind(AliasTk[aliasIdx]));
               end
               else if FindEnumType(name) >= 0 then
-                prevTok := TypeSize(tyInteger)   { enums are ordinal/integer-sized, cf. ParseTypeKind }
+                prevTok := TypeSlotSize(tyInteger)   { enums are ordinal/integer-sized, cf. ParseTypeKind }
               else
               begin
                 { Not a type name — accept a VARIABLE operand (FPC/Delphi allow
                   SizeOf(v) = size of v's declared type, not just SizeOf(Type)).
                   A record-by-value var uses its record size; everything else its
-                  scalar type size (TypeSize returns pointer width for class/
+                  scalar type size (TypeSlotSize returns pointer width for class/
                   pointer references). }
                 sci := FindVarSym(name);   { a bare class var is a variable here too }
                 if sci >= 0 then
@@ -3935,7 +3935,7 @@ begin
                       report the FINAL field's size (blcksock's
                       SizeOf(Value.Value)).
 
-                      Sized through RecFieldByteSize, NOT TypeSize(RecFieldType):
+                      Sized through RecFieldByteSize, NOT TypeSlotSize(RecFieldType):
                       RecFieldType answers an array field's ELEMENT kind, so the
                       latter reported 4 for an `array[0..2] of Integer` field
                       while the same array as a plain VAR reported 12, silently
@@ -3992,7 +3992,7 @@ begin
                     if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                       prevTok := RecSize(Syms[sci].ElemRecName)
                     else
-                      prevTok := TypeSize(Syms[sci].ElemType);
+                      prevTok := TypeSlotSize(Syms[sci].ElemType);
                   end
                   else if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) then
                   begin
@@ -4027,14 +4027,14 @@ begin
                       if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                         prevTok := RecSize(Syms[sci].ElemRecName) * szFlatLen
                       else
-                        prevTok := TypeSize(Syms[sci].ElemType) * szFlatLen;
+                        prevTok := TypeSlotSize(Syms[sci].ElemType) * szFlatLen;
                     end
                     else if szNIdx = SymArrNDims[sci] then
                     begin
                       if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                         prevTok := RecSize(Syms[sci].ElemRecName)
                       else
-                        prevTok := TypeSize(Syms[sci].ElemType);
+                        prevTok := TypeSlotSize(Syms[sci].ElemType);
                     end
                     else
                     begin
@@ -4064,12 +4064,12 @@ begin
                     if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                       prevTok := RecSize(Syms[sci].ElemRecName) * Syms[sci].ArrLen
                     else
-                      prevTok := TypeSize(Syms[sci].ElemType) * Syms[sci].ArrLen;
+                      prevTok := TypeSlotSize(Syms[sci].ElemType) * Syms[sci].ArrLen;
                   end
                   else if (Syms[sci].TypeKind = tyRecord) and (Syms[sci].RecName >= 0) then
                     prevTok := RecSize(Syms[sci].RecName)
                   else
-                    prevTok := TypeSize(Syms[sci].TypeKind);
+                    prevTok := TypeSlotSize(Syms[sci].TypeKind);
                 end
                 else
                 begin
@@ -4087,7 +4087,7 @@ begin
                     precedence silently un-fixed SizeOf(ShortString).
                     bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts }
                   if szBTkAny <> tyUnknown then
-                    prevTok := TypeSize(szBTkAny)
+                    prevTok := TypeSlotSize(szBTkAny)
                   else
                   begin
                     ErrorRecover('SizeOf: unknown type or variable');
@@ -4509,7 +4509,7 @@ begin
         if IntToTypeKind(AliasElemTk[aliasIdx]) = tyRecord then
           i := RecSize(AliasElemRec[aliasIdx])
         else
-          i := TypeSize(IntToTypeKind(AliasElemTk[aliasIdx]));
+          i := TypeSlotSize(IntToTypeKind(AliasElemTk[aliasIdx]));
         exprNode := AllocNode(AN_INT_LIT);
         ASTIVal[exprNode] := i;
         ASTTk[exprNode] := Ord(tyInteger);
@@ -6271,7 +6271,7 @@ begin
         if NodeDynDepth(exprNode) >= 1 then
         begin
           { NESTED source: the raw byte copy in AN_DYN_COPY would move SUB-ARRAY
-            HANDLES with the base element's size — TypeSize of the deepest type, 4
+            HANDLES with the base element's size — TypeSlotSize of the deepest type, 4
             for `array of array of Integer` — so element 1 onward read a bogus
             handle and `h[1][1]` segfaulted. Refused loudly here, exactly as
             dynamic-array Delete and Insert already refuse the same shape, until
@@ -9239,7 +9239,7 @@ begin
       if (not CProgramMode) and
          ((not StrictShiftWidth) or shiftLitLeft) and
          TypeIsMachineInt(IntToTypeKind(ASTTk[left])) and
-         (TypeSize(IntToTypeKind(ASTTk[left])) < TypeSize(shiftPromoS)) then
+         (TypeSlotSize(IntToTypeKind(ASTTk[left])) < TypeSlotSize(shiftPromoS)) then
       begin
         if TypeSigned(IntToTypeKind(ASTTk[left])) then
           ASTTk[node] := Ord(shiftPromoS)
@@ -10468,7 +10468,7 @@ begin
   if aliasIdx < 0 then Exit;
   tk := IntToTypeKind(AliasTk[aliasIdx]);
   if not TypeIsOrdinal(tk) then Exit;
-  bytes := TypeSize(tk);
+  bytes := TypeSlotSize(tk);
   signed := TypeSigned(tk);
   Result := True;
 end;
@@ -10590,7 +10590,7 @@ begin
     Next; Expect(tkLParen, '(');
     sofTk := ParseTypeKind;
     if sofTk = tyRecord then r := RecSize(LastTypeRecId)
-    else r := TypeSize(sofTk);
+    else r := TypeSlotSize(sofTk);
     Expect(tkRParen, ')');
   end
   else if (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and

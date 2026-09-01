@@ -243,9 +243,9 @@ procedure EmitLoadVarRISCV32(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean;
 begin
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   { A dynamic array's slot holds a pointer-sized heap handle, not an element.
-    TypeSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
+    TypeSlotSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
     ONE-BYTE access to a pointer slot: the store zeroes only the low byte and
     leaves three stale ones, and the load reads a truncated handle. Force a
     full pointer-width access. Twin of the guard in EmitStoreVarA64 -- aarch64
@@ -274,9 +274,9 @@ procedure EmitStoreVarRISCV32(idx: Integer);
 var tk: TTypeKind; sz: Integer;
 begin
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   { A dynamic array's slot holds a pointer-sized heap handle, not an element.
-    TypeSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
+    TypeSlotSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
     ONE-BYTE access to a pointer slot: the store zeroes only the low byte and
     leaves three stale ones, and the load reads a truncated handle. Force a
     full pointer-width access. Twin of the guard in EmitStoreVarA64 -- aarch64
@@ -831,7 +831,7 @@ begin
       'addi a1, t1, 0',
       '.end:'
     ]);
-    if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
+    if TypeSlotSize(IntToTypeKind(IRTk[left])) < 8 then
     begin
       { <8-byte operand: Pascal shl operates at the OPERAND's width — result
         is the low 32 bits, sign/zero-extended (mirrors x86-64/arm32/i386,
@@ -848,7 +848,7 @@ begin
     { <8-byte operand reaches here SIGN-EXTENDED by the 64-bit promotion, but
       Pascal shr is a 32-bit LOGICAL shift at the operand's width: zero the
       hi word first (longint($80000000) shr 9 = 4194304, not -4194304). }
-    if (op = Ord(tkShrLogical)) and (TypeSize(IntToTypeKind(IRTk[left])) < 8) then
+    if (op = Ord(tkShrLogical)) and (TypeSlotSize(IntToTypeKind(IRTk[left])) < 8) then
       rv32_addi(reg_t1, reg_zero, 0);
     EmitAsmRv32([
       'andi t5, a0, 63',
@@ -1700,13 +1700,13 @@ begin
              (IRIVal[IRB[node]] = 1) and
              TypeIsOrdinal(Syms[IRA[node]].TypeKind) and
              (not Syms[IRA[node]].IsArray) and
-             (TypeSize(Syms[IRA[node]].TypeKind) < 8) and
+             (TypeSlotSize(Syms[IRA[node]].TypeKind) < 8) and
              (Is64BitRISCV32(IntToTypeKind(IRTk[IRB[node]])) or
-              (TypeSize(Syms[IRA[node]].TypeKind) < 4)) then
+              (TypeSlotSize(Syms[IRA[node]].TypeKind) < 4)) then
           begin
             if TypeSigned(Syms[IRA[node]].TypeKind) then
             begin
-              case TypeSize(Syms[IRA[node]].TypeKind) of
+              case TypeSlotSize(Syms[IRA[node]].TypeKind) of
                 1: begin
                      rv32_slli(reg_t4, reg_a0, 24);
                      rv32_srai(reg_t4, reg_t4, 24);   { sign-extend low byte }
@@ -1727,7 +1727,7 @@ begin
             end
             else
             begin
-              case TypeSize(Syms[IRA[node]].TypeKind) of
+              case TypeSlotSize(Syms[IRA[node]].TypeKind) of
                 1: begin
                      rv32_slli(reg_t4, reg_a0, 24);
                      rv32_srli(reg_t4, reg_t4, 24);   { zero-extend low byte }
@@ -1890,7 +1890,7 @@ begin
       begin
         IREmitNodeRISCV32(IRA[node]);
         tk := IntToTypeKind(IRTk[node]);
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         sgn := TypeSigned(tk);
         if sz = 1 then
         begin
@@ -1974,7 +1974,7 @@ begin
     IR_STORE_MEM:
       begin
         tk := IntToTypeKind(IRTk[node]);
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         if tk = tyString then
         begin
           { Frozen inline-string store through an address (string[N] record
@@ -3776,7 +3776,7 @@ begin
         else if TypeIsOrdinal(tk) then
         begin
           IREmitNodeRISCV32(IRA[node]);    { a0 = target address }
-          EmitLoadImmRISCV32(reg_a1, TypeSize(tk));
+          EmitLoadImmRISCV32(reg_a1, TypeSlotSize(tk));
           procIdx := FindProc('PXXReadVarInt');
           if procIdx < 0 then Error('compiler error: PXXReadVarInt not found');
           EmitCallProc(procIdx);

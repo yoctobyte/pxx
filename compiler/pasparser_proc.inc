@@ -1110,7 +1110,7 @@ begin
         { ArrTypeLo/Hi are the FLATTENED bounds for an N-D alias too (the type
           decl stores 0..prod(spans)-1), so this byte count covers both. }
         retFixedArrBytes := (ArrTypeHi[paramAi] - ArrTypeLo[paramAi] + 1) *
-                            TypeSize(IntToTypeKind(ArrTypeElemTk[paramAi]));
+                            TypeSlotSize(IntToTypeKind(ArrTypeElemTk[paramAi]));
       end;
       if retArrAi >= 0 then
       begin
@@ -2465,7 +2465,7 @@ begin
       SymSyncTypeRef(idx);
       Procs[procIdx].RetSymIdx := idx;
       { Restate the returned byte count from the element's real SLOT size. The
-        count above came from TypeSize(elemTk), which is the whole-value size
+        count above came from TypeSlotSize(elemTk), which is the whole-value size
         only for scalars: `array[0..2] of string[8]` copied 3*8 of a 3*(2+8)
         slot run and came back blank, and a record element copied one pointer's
         worth. Same elemSize rule as the whole-static-array copy in ir.inc. }
@@ -2474,7 +2474,7 @@ begin
       else if TypeIsFrozenString(retType) then
         sz := FrozenStrSlotSize(retType, SymStrCap[idx])
       else
-        sz := TypeSize(retType);
+        sz := TypeSlotSize(retType);
       retFixedArrBytes := Syms[idx].ArrLen * sz;
       ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
       ProcRetArrAi[procIdx] := retArrAi;

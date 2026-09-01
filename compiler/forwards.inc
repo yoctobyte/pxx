@@ -10,7 +10,8 @@
   PXX_REQUIRE_FORWARD). Signatures MUST stay byte-identical to the bodies.
   See devdocs/progress/backlog/bug-fpc-seed-helper-ordering-after-lua-c-frontend.md }
 
-function TypeSize(tk: TTypeKind): Integer; forward;
+function TypeSlotSize(tk: TTypeKind): Integer; forward;
+function TypeStorageSize(tk: TTypeKind; recId: Integer): Integer; forward;
 function RegcallScalarType(tk: TTypeKind): Boolean; forward;
 function GenMakeSeq(stmt, next: Integer): Integer; forward;
 {$ifndef PXX_NO_CFRONT}function CNodeDecaysToPointer(node: Integer): Boolean; forward;{$endif}

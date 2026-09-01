@@ -157,7 +157,7 @@ end;
       wasm has exactly four (i32, i64, f32, f64), so a Byte, a Char and a
       Pointer all arrive as i32.
     * its MEMORY width — how many bytes its frame slot actually occupies.
-      symtab packs a frame by TypeSize with no padding to a machine word
+      symtab packs a frame by TypeSlotSize with no padding to a machine word
       (symtab.inc:4113, `FrameSize := AlignTo(FrameSize + sz, align)`), so a
       Boolean local is ONE byte and another local starts immediately after it.
 
@@ -277,7 +277,7 @@ begin
       promotable-int family stays out by construction: symtab deliberately
       keeps it out of TypeIsOrdinal so that integer codegen cannot operate on
       its tag (symtab.inc TypeIsPromoInt). }
-    if TypeSize(tk) = 8 then vt := WT_I64 else vt := WT_I32;
+    if TypeSlotSize(tk) = 8 then vt := WT_I64 else vt := WT_I32;
   end
   else
     WasmScalarType := False;   { records, sets, variants, frozen strings }
@@ -316,12 +316,12 @@ begin
   if vt = WT_F32 then WasmMemOp($2A, 'f32.load', 2, 0)
   else if vt = WT_F64 then WasmMemOp($2B, 'f64.load', 3, 0)
   else if vt = WT_I64 then WasmMemOp($29, 'i64.load', 3, 0)
-  else if TypeSize(tk) = 1 then
+  else if TypeSlotSize(tk) = 1 then
   begin
     if TypeSigned(tk) then WasmMemOp($2C, 'i32.load8_s', 0, 0)
     else WasmMemOp($2D, 'i32.load8_u', 0, 0);
   end
-  else if TypeSize(tk) = 2 then
+  else if TypeSlotSize(tk) = 2 then
   begin
     if TypeSigned(tk) then WasmMemOp($2E, 'i32.load16_s', 1, 0)
     else WasmMemOp($2F, 'i32.load16_u', 1, 0);
@@ -336,8 +336,8 @@ begin
   if vt = WT_F32 then WasmMemOp($38, 'f32.store', 2, 0)
   else if vt = WT_F64 then WasmMemOp($39, 'f64.store', 3, 0)
   else if vt = WT_I64 then WasmMemOp($37, 'i64.store', 3, 0)
-  else if TypeSize(tk) = 1 then WasmMemOp($3A, 'i32.store8', 0, 0)
-  else if TypeSize(tk) = 2 then WasmMemOp($3B, 'i32.store16', 1, 0)
+  else if TypeSlotSize(tk) = 1 then WasmMemOp($3A, 'i32.store8', 0, 0)
+  else if TypeSlotSize(tk) = 2 then WasmMemOp($3B, 'i32.store16', 1, 0)
   else WasmMemOp($36, 'i32.store', 2, 0);
 end;
 

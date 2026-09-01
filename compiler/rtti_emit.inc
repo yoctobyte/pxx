@@ -953,11 +953,11 @@ begin
       Result := True;
     else Exit;
   end;
-  { A promotable int is a {tag,payload} struct, so TypeSize would report the
+  { A promotable int is a {tag,payload} struct, so TypeSlotSize would report the
     struct; report the PAYLOAD's width, which is what the value ranges over. }
   if tk = Ord(tyPromoInt32) then sz := 4
   else if tk = Ord(tyPromoInt64) then sz := 8
-  else sz := TypeSize(IntToTypeKind(tk));
+  else sz := TypeSlotSize(IntToTypeKind(tk));
   signed := TypeSigned(IntToTypeKind(tk)) or (tk = Ord(tyPromoInt32)) or
             (tk = Ord(tyPromoInt64));
   ordTy := OrdTypeCode(sz, signed);
@@ -1184,7 +1184,7 @@ begin
         begin
           if not ScalarTypeData(elemTk, ordTy, fltTy, loV, hiV) then
           begin ordTy := 0; loV := 0; hiV := 0; end;
-          elemSz := TypeSize(IntToTypeKind(elemTk));
+          elemSz := TypeSlotSize(IntToTypeKind(elemTk));
         end;
         tdOff := EmitTypeData(hdr, ordTy, 0, loV, hiV,
                               ElemFPCKind(elemTk, elemEnum), elemSz, 0, 0,
@@ -1219,7 +1219,7 @@ begin
       if (elemRec >= REC_UCLASS_BASE) and (elemTk = Ord(tyRecord)) then
         elemSz := RecSize(elemRec)
       else
-        elemSz := TypeSize(IntToTypeKind(elemTk));
+        elemSz := TypeSlotSize(IntToTypeKind(elemTk));
       if ArrTypeIsDyn[ci] then
         tdOff := EmitTypeData(hdr, 0, 0, 0, 0, ElemFPCKind(elemTk, elemEnum),
                               elemSz, 0, ArrTypeDynDepth[ci],
@@ -1389,7 +1389,7 @@ begin
               else if baseKind = 3 then
                 elSize := UClsSize_[UFldRec_[fi] - REC_UCLASS_BASE]
               else
-                elSize := TypeSize(IntToTypeKind(UFldTk[fi]));
+                elSize := TypeStorageSize(IntToTypeKind(UFldTk[fi]), UFldRec_[fi]);
             end;
             PatchDataI32(dynDescOff + 4, elSize);
             PatchDataI32(dynDescOff + 8, depth);
@@ -1512,7 +1512,7 @@ begin
                 else if baseKind = 3 then
                   elSize := UClsSize_[UFldRec_[fi] - REC_UCLASS_BASE]
                 else
-                  elSize := TypeSize(IntToTypeKind(UFldTk[fi]));
+                  elSize := TypeStorageSize(IntToTypeKind(UFldTk[fi]), UFldRec_[fi]);
               end;
               PatchDataI32(dynDescOff + 4, elSize);
               PatchDataI32(dynDescOff + 8, depth);

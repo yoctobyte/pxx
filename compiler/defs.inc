@@ -1793,7 +1793,7 @@ type
       was spelled tyUInt8 nothing downstream could tell the two apart at the
       point of USE, so `_Bool b = 256` stored 0 and `_Bool ok = ptr` kept the
       pointer's low byte. Everything that cares about SIZE goes through
-      TypeSize/TypeIsOrdinal and needs no change; only the conversion sites ask
+      TypeSlotSize/TypeIsOrdinal and needs no change; only the conversion sites ask
       for this kind by name.
       bug-a-bool-conversion-does-not-normalise-to-0-or-1 }
     tyBool8,       { 29: C99 _Bool — 1 unsigned byte, but converts as 0/1 }
@@ -1827,7 +1827,7 @@ type
 
       Same argument tyUCS4Char and tyBool8 already won: its own kind for
       CONVERSION, not for layout. Everything that cares about SIZE or
-      ordinal-ness goes through TypeSize/TypeIsOrdinal and sees no difference;
+      ordinal-ness goes through TypeSlotSize/TypeIsOrdinal and sees no difference;
       only conversion sites ask for it by name. The tyUInt16 fallbacks stay
       where they are — they are additive, they still catch shapes the kind does
       not reach, and removing them is a separate migration.

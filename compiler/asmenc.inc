@@ -448,7 +448,7 @@ begin
     begin
       AsmOpKind[slot] := AOP_GLOBAL;
       AsmOpVal[slot] := Syms[idx].Offset;
-      AsmOpSize[slot] := TypeSize(Syms[idx].TypeKind);
+      AsmOpSize[slot] := TypeSlotSize(Syms[idx].TypeKind);
       Next;
       Exit;
     end;
@@ -456,7 +456,7 @@ begin
       Error('asm: operand must be a local, param, global, or register: ' + CurTok.SVal);
     AsmOpKind[slot] := AOP_MEM;
     AsmOpVal[slot] := Syms[idx].Offset;
-    AsmOpSize[slot] := TypeSize(Syms[idx].TypeKind);
+    AsmOpSize[slot] := TypeSlotSize(Syms[idx].TypeKind);
     Next;
     Exit;
   end;

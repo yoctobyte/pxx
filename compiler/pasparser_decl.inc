@@ -523,7 +523,7 @@ begin
           and `WriteLn(p^)` printed the ordinal for exactly as long as this said
           otherwise. Found by grepping for the sibling arm of
           bug-a-writeln-of-a-widechar-prints-its-ordinal, per
-          normalise-dont-special-case. Width is unchanged (TypeSize 31 = 2), so
+          normalise-dont-special-case. Width is unchanged (TypeSlotSize 31 = 2), so
           pointer arithmetic still steps by two bytes. }
         LastTypePointerElemTk := tyWideChar;
         Result := tyPointer;
@@ -2585,7 +2585,7 @@ begin
           cBaked := TryBakeConstArrayIntoData(cIdx, cFirstPI, cBssBefore, cBssAfter);
         if cBaked and PxxDbgEnabled('a.constdata') then
           writeln('PXXDBG a.constdata baked ', name, ' n=', Syms[cIdx].ArrLen,
-                  ' elemsize=', TypeSize(cElemTk), ' dataoff=', Syms[cIdx].Offset - DATA_SYM_BIAS);
+                  ' elemsize=', TypeSlotSize(cElemTk), ' dataoff=', Syms[cIdx].Offset - DATA_SYM_BIAS);
       end
       else
       begin
@@ -3064,7 +3064,7 @@ begin
     fldNOffs[0] := Tokens[TokPos-1].SOffset; fldNLens[0] := Tokens[TokPos-1].SLen;
     Next; Next;   { tag name, ':' }
     fTk := ParseTypeKind; fRec := LastTypeRecId;
-    if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSize(fTk);
+    if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSlotSize(fTk);
     fAlign := TypeAlign(fTk);
     if isPackedRecord then fAlign := 1;
     curOff := AlignTo(curOff, fAlign);
@@ -3140,7 +3140,7 @@ begin
       begin fTk := ParseTypeKind; fRec := LastTypeRecId; end;
       { Frozen strings, exactly as the FIXED part of the record does it a few
         hundred lines down. This arm was simply absent: a `string[N]` branch got
-        TypeSize(tyFixedString) = 8 bytes and was registered as tyFixedString
+        TypeSlotSize(tyFixedString) = 8 bytes and was registered as tyFixedString
         rather than tyString+UFldStrCap. So the field READ back as an address
         (`v.s` printed a number) AND the record was undersized — a `case` with a
         `string[40]` branch measured 16 bytes where it needs 52, so writing the
@@ -3161,7 +3161,7 @@ begin
       end
       else
       begin
-        if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSize(fTk);
+        if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSlotSize(fTk);
         fAlign := TypeAlign(fTk);
       end;
       if isPackedRecord then fAlign := 1;
@@ -3969,7 +3969,7 @@ begin
       end
       else
       begin
-        fSize := TypeSize(fTk);
+        fSize := TypeSlotSize(fTk);
         fAlign := TypeAlign(fTk);
       end;
       if isPackedRecord then
@@ -5784,7 +5784,7 @@ begin
             end
             else
             begin
-              fSize := TypeSize(fTk);
+              fSize := TypeSlotSize(fTk);
               fAlign := TypeAlign(fTk);
             end;
             if isArr then

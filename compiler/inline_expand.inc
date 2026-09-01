@@ -501,7 +501,7 @@ begin
       bug-a-function-result-assignment-does-not-narrow-to-the-result-type }
     if TypeIsOrdinal(Syms[retSym].TypeKind) and
        TypeIsOrdinal(IntToTypeKind(ASTTk[rhs])) and
-       (TypeSize(Syms[retSym].TypeKind) < TypeSize(IntToTypeKind(ASTTk[rhs]))) then
+       (TypeSlotSize(Syms[retSym].TypeKind) < TypeSlotSize(IntToTypeKind(ASTTk[rhs]))) then
     begin
       TryRetainInlineStmtBody(procIdx, bodyNode, retSym);
       Exit;

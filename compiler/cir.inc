@@ -357,7 +357,7 @@ begin
       (JS_TAG_OBJECT = -1): the label must compare as 0xFFFFFFFF, not as a
       sign-extended 64-bit -1 that never matches a zero-extended selector. }
     caseVal := ASTIVal[node];
-    selSz := TypeSize(IntToTypeKind(selTk));
+    selSz := TypeSlotSize(IntToTypeKind(selTk));
     if (selSz < 8) and TypeCompareUnsigned(IntToTypeKind(selTk), IntToTypeKind(selTk)) and
        (caseVal < 0) then
       caseVal := caseVal and ((Int64(1) shl (selSz * 8)) - 1);

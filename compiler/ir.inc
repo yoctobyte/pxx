@@ -1093,7 +1093,7 @@ begin
   else if baseTk = tyRecord then
     Result := RecSize(baseRec)
   else
-    Result := TypeSize(baseTk);
+    Result := TypeSlotSize(baseTk);
 end;
 
 function IRBitMask(width: Integer): Int64;
@@ -1146,7 +1146,7 @@ end;
 
 function PromoPayloadOffset(tk: TTypeKind): Integer;
 begin
-  PromoPayloadOffset := TypeSize(tk) div 2;
+  PromoPayloadOffset := TypeSlotSize(tk) div 2;
 end;
 
 { Call a promocore runtime routine, given already-lowered argument nodes.
@@ -1875,7 +1875,7 @@ begin
       if tk = tyRecord then
         elemSize := RecSize(Syms[ASTIVal[baseNode]].PtrElemRec)
       else
-        elemSize := TypeSize(tk);
+        elemSize := TypeSlotSize(tk);
       baseAddr := IRLowerAST(baseNode);
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
       Exit;
@@ -1888,7 +1888,7 @@ begin
       indexNode := IRLowerAST(ASTRight[node]);
       tk := Syms[ASTIVal[baseNode]].ElemType;
       if tk = tyRecord then elemSize := RecSize(Syms[ASTIVal[baseNode]].ElemRecName)
-      else elemSize := TypeSize(tk);
+      else elemSize := TypeSlotSize(tk);
       baseAddr := IRLowerAST(baseNode);
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
       Exit;
@@ -1908,7 +1908,7 @@ begin
         if tk = tyRecord then
           elemSize := RecSize(RecFieldPtrElemRec(recName, fieldName))
         else
-          elemSize := TypeSize(tk);
+          elemSize := TypeSlotSize(tk);
         baseAddr := IRLowerAST(baseNode);   { field value = the pointer }
         Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
         Exit;
@@ -1933,7 +1933,7 @@ begin
         if tk = tyRecord then
           elemSize := RecSize(AliasElemRec[aliasIdx])
         else
-          elemSize := TypeSize(tk);
+          elemSize := TypeSlotSize(tk);
       end;
       baseAddr := IRLowerAST(baseNode);
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
@@ -1951,7 +1951,7 @@ begin
       if tk = tyRecord then
         elemSize := RecSize(ResolveNodeRec(node))
       else
-        elemSize := TypeSize(tk);
+        elemSize := TypeSlotSize(tk);
       baseAddr := IRLowerAST(baseNode);
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, ASTTk[node]);
       Exit;
@@ -2308,7 +2308,7 @@ begin
       else if tk = tyRecord then
         elemSize := RecSize(recName)
       else
-        elemSize := TypeSize(tk);
+        elemSize := TypeSlotSize(tk);
 
       if ASTKind[baseNode] = AN_IDENT then
       begin
@@ -2662,7 +2662,7 @@ begin
       begin
         if elemTk = tyRecord then Result := RecSize(recId)
         else if elemTk = tyUnknown then Result := 1
-        else Result := TypeSize(elemTk);
+        else Result := TypeSlotSize(elemTk);
         for aliasIdx := 1 to SymArrNDims[ASTIVal[node]] - 1 do
           if SymArrDimSpan[ASTIVal[node] * MAX_ARR_DIMS + aliasIdx] > 0 then
             Result := Result * SymArrDimSpan[ASTIVal[node] * MAX_ARR_DIMS + aliasIdx];
@@ -2682,7 +2682,7 @@ begin
       begin
         if elemTk = tyRecord then Result := RecSize(recId)
         else if elemTk = tyUnknown then Result := 1
-        else Result := TypeSize(elemTk);
+        else Result := TypeSlotSize(elemTk);
         Result := Result * SymPtrElemArrLen[ASTIVal[node]];
         Exit;
       end;
@@ -2830,7 +2830,7 @@ begin
   else if elemTk = tyUnknown then
     Result := 1
   else
-    Result := TypeSize(elemTk);
+    Result := TypeSlotSize(elemTk);
 end;
 
 { The ELEMENT stride of an INDEXED base — the pre-decay answer. Split out
@@ -2850,7 +2850,7 @@ begin
       else if Syms[symIdx].ElemType = tyUnknown then
         Result := 1
       else
-        Result := TypeSize(Syms[symIdx].ElemType);
+        Result := TypeSlotSize(Syms[symIdx].ElemType);
       Exit;
     end;
   end;
@@ -2872,7 +2872,7 @@ begin
       fldTk := RecFieldType(fldRec, fldName);
       if fldTk = tyRecord then Result := RecSize(RecFieldRecId(fldRec, fldName))
       else if fldTk = tyUnknown then Result := 1
-      else Result := TypeSize(fldTk);
+      else Result := TypeSlotSize(fldTk);
       Exit;
     end;
   end;
@@ -3322,9 +3322,9 @@ begin
   end;
   if not Result then Exit;
   if elemTk = tyRecord then elemSz := RecSize(elemRec)
-  else elemSz := TypeSize(elemTk);
+  else elemSz := TypeSlotSize(elemTk);
   { ...unless the source array's elements are dyn-array HANDLES
-    (`array[0..1] of TRow`): ElemType is the row's BASE type, so TypeSize
+    (`array[0..1] of TRow`): ElemType is the row's BASE type, so TypeSlotSize
     answered 4 for an Integer row and only half the array was copied into the
     open-array temp -- the callee saw a nil handle for m[1] and Length(m[1])
     was 0 where fpc said 1.
@@ -5425,7 +5425,7 @@ end;
 function FrameRetAddrOffset: Integer;
 begin
   if TargetArch = TARGET_RISCV32 then Result := 12
-  else Result := TypeSize(tyPointer);
+  else Result := TypeSlotSize(tyPointer);
 end;
 
 function IRIoCheckedCallee(pi: Integer): Boolean;
@@ -6310,11 +6310,11 @@ begin
     design and the point of the Single-target control: `s1 * s2` assigned to a
     Double stays a single multiply. An operand this walk just widened is no
     longer narrow, so it no longer blocks. }
-  if (TypeSize(IntToTypeKind(ASTTk[node])) < TypeSize(wantTk)) and
+  if (TypeSlotSize(IntToTypeKind(ASTTk[node])) < TypeSlotSize(wantTk)) and
      not (TypeIsFloat(IntToTypeKind(ASTTk[ASTLeft[node]])) and
-          (TypeSize(IntToTypeKind(ASTTk[ASTLeft[node]])) < TypeSize(wantTk))) and
+          (TypeSlotSize(IntToTypeKind(ASTTk[ASTLeft[node]])) < TypeSlotSize(wantTk))) and
      not (TypeIsFloat(IntToTypeKind(ASTTk[ASTRight[node]])) and
-          (TypeSize(IntToTypeKind(ASTTk[ASTRight[node]])) < TypeSize(wantTk))) then
+          (TypeSlotSize(IntToTypeKind(ASTTk[ASTRight[node]])) < TypeSlotSize(wantTk))) then
     ASTTk[node] := Ord(wantTk);
 end;
 
@@ -6943,11 +6943,11 @@ begin
           strides by a POINTER, not by the base element. Taking it from the base
           type is the original crash: `array of array of Integer` strode by 4,
           so element 0 was right by luck (offset 0) and element 1 onward read a
-          bogus handle. TypeSize(tyPointer), not a literal 8 — a handle is 4
+          bogus handle. TypeSlotSize(tyPointer), not a literal 8 — a handle is 4
           bytes on i386 / arm32 / riscv32. }
-        dcElemSz := TypeSize(tyPointer)
+        dcElemSz := TypeSlotSize(tyPointer)
       else if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
-      else dcElemSz := TypeSize(dcElemTk);
+      else dcElemSz := TypeSlotSize(dcElemTk);
       dcIdxAst := ASTLeft[ASTRight[node]];
       dcCntAst := ASTLeft[ASTRight[ASTRight[node]]];
 
@@ -7134,11 +7134,11 @@ begin
       { A NESTED array's elements are sub-array HANDLES, so the head/tail
         copies stride by a POINTER, not by the base element -- the same three
         things AN_DYN_COPY has to change together (stride, temp depth, retain
-        depth). TypeSize(tyPointer), not 8: a handle is 4 bytes on the 32-bit
+        depth). TypeSlotSize(tyPointer), not 8: a handle is 4 bytes on the 32-bit
         targets. }
-      if dcDepth > 1 then dcElemSz := TypeSize(tyPointer)
+      if dcDepth > 1 then dcElemSz := TypeSlotSize(tyPointer)
       else if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
-      else dcElemSz := TypeSize(dcElemTk);
+      else dcElemSz := TypeSlotSize(dcElemTk);
       dcIdxAst := ASTLeft[ASTRight[node]];
       dcCntAst := ASTLeft[ASTRight[ASTRight[node]]];
 
@@ -7269,9 +7269,9 @@ begin
       dcElemRec := NodeDynBaseRec(dcSrcAst);
       dcDepth := NodeDynDepth(dcSrcAst);
       if dcDepth < 1 then dcDepth := 1;
-      if dcDepth > 1 then dcElemSz := TypeSize(tyPointer)
+      if dcDepth > 1 then dcElemSz := TypeSlotSize(tyPointer)
       else if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
-      else dcElemSz := TypeSize(dcElemTk);
+      else dcElemSz := TypeSlotSize(dcElemTk);
       dcCntAst := ASTLeft[ASTRight[node]];               { value }
       dcIdxAst := ASTLeft[ASTRight[ASTRight[node]]];     { index }
 
@@ -7706,12 +7706,12 @@ begin
           bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit }
         if ((castTk = tyInt64) or (castTk = tyUInt64) or
             (((castTk = tyNativeInt) or (castTk = tyNativeUInt)) and
-             (TypeSize(castTk) = 8)))
+             (TypeSlotSize(castTk) = 8)))
            and not ((IntToTypeKind(IRTk[Result]) = tyInt64) or
                     (IntToTypeKind(IRTk[Result]) = tyUInt64) or
                     (((IntToTypeKind(IRTk[Result]) = tyNativeInt) or
                       (IntToTypeKind(IRTk[Result]) = tyNativeUInt)) and
-                     (TypeSize(IntToTypeKind(IRTk[Result])) = 8))) then
+                     (TypeSlotSize(IntToTypeKind(IRTk[Result])) = 8))) then
         begin
           { Widening numeric reinterpret 32->64 (e.g. Int64(someInteger)): on a
             32-bit target the inner value occupies one register and its high word
@@ -7746,7 +7746,7 @@ begin
             standard two's-complement identity (v xor signbit) - signbit,
             which correctly reinterprets the just-masked low N bits as signed
             regardless of what the wider source value looked like. }
-          narrowSize := TypeSize(castTk);
+          narrowSize := TypeSlotSize(castTk);
           castIsSigned := (castTk = tyInteger) or (castTk = tyInt8) or
                           (castTk = tyInt16) or (castTk = tyInt32) or
                           (castTk = tyNativeInt);
@@ -8554,7 +8554,7 @@ begin
         end
         else
           Result := IRAppend(IR_DEFAULT_MEM, IRVariantAddr(miArg), -1,
-                             REC_NONE, TypeSize(tyVariant), Ord(tyVariant));
+                             REC_NONE, TypeSlotSize(tyVariant), Ord(tyVariant));
       end
       else if (ASTKind[miArg] = AN_IDENT) and Syms[ASTIVal[miArg]].IsArray and
               (Syms[ASTIVal[miArg]].ArrLen = -1) then
@@ -10133,7 +10133,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
               Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, REC_NONE, elemSize, Ord(lhsTk));
           end
           else if lhsTk = tySet then
-            Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, REC_NONE, TypeSize(tySet), Ord(lhsTk))
+            Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, REC_NONE, TypeSlotSize(tySet), Ord(lhsTk))
           else
           begin
             varIdx := ASTIVal[ASTLeft[node]];
@@ -10142,7 +10142,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             if SymTR[varIdx].ElemTk = Ord(tyRecord) then
               elemSize := RecSize(SymTR[varIdx].ElemRec)
             else
-              elemSize := TypeSize(IntToTypeKind(SymTR[varIdx].ElemTk));
+              elemSize := TypeSlotSize(IntToTypeKind(SymTR[varIdx].ElemTk));
             Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, REC_NONE,
                                Syms[varIdx].ArrLen * elemSize, ASTTk[ASTLeft[node]]);
           end;
@@ -10661,9 +10661,9 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         if Syms[i].ElemType = tyRecord then elemSize := RecSize(Syms[i].ElemRecName)
         else if TypeIsFrozenString(Syms[i].ElemType) then
           { `array[..] of string[N]`: the slot is a length word + N chars, not
-            TypeSize's default 8 — which copied only the first element. }
+            TypeSlotSize's default 8 — which copied only the first element. }
           elemSize := FrozenStrSlotSize(Syms[i].ElemType, SymStrCap[i])
-        else elemSize := TypeSize(Syms[i].ElemType);
+        else elemSize := TypeSlotSize(Syms[i].ElemType);
         { Element policy from the single owner — which is what brings COM
           interface elements (kind 4) in: `b := a` on an array of interfaces
           used to take the raw byte copy, so both arrays held the same counted
@@ -10699,7 +10699,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         if UFldTk[faFldIdx] = Ord(tyRecord) then elemSize := RecSize(UFldRec_[faFldIdx])
         else if TypeIsFrozenString(IntToTypeKind(UFldTk[faFldIdx])) then
           elemSize := FrozenStrSlotSize(IntToTypeKind(UFldTk[faFldIdx]), UFldStrCap[faFldIdx])
-        else elemSize := TypeSize(IntToTypeKind(UFldTk[faFldIdx]));
+        else elemSize := TypeSlotSize(IntToTypeKind(UFldTk[faFldIdx]));
         waBaseKind := ManagedElemKind(UFldTk[faFldIdx], UFldRec_[faFldIdx]);
         if waBaseKind = 0 then
         begin
@@ -10726,7 +10726,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           AN_INDEX base, not AN_IDENT, so it keeps the scalar path. }
         i := ASTIVal[ASTLeft[ASTLeft[node]]];
         if Syms[i].ElemType = tyRecord then elemSize := RecSize(Syms[i].ElemRecName)
-        else elemSize := TypeSize(Syms[i].ElemType);
+        else elemSize := TypeSlotSize(Syms[i].ElemType);
         leftAddr := IRLowerDestAddress(ASTLeft[node]);
         right := IRLowerAddress(ASTRight[node]);
         Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,

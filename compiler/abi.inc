@@ -154,7 +154,7 @@ begin
     stack — `function mk: PromoInt; begin end;` + `writeln(mk)` segfaulted, with
     an EMPTY body, so it was never about the assignment
     (bug-a-promoint-function-result-crashes). AggRetCopySize already falls
-    through to TypeSize, which is the right byte count for both widths. }
+    through to TypeSlotSize, which is the right byte count for both widths. }
   Result := TypeIsAggregate(tk) or TypeIsFrozenString(tk) or (tk = tyVariant)
             or TypeIsPromoInt(tk);
 end;
@@ -177,7 +177,7 @@ begin
   else if tk = tyString then Result := LOCAL_STR_CAP + 8
   else if (tk = tyFixedString) or (tk = tyShortString) then
     Result := FrozenStrSlotSize(tk, SymStrCap[retSymIdx])
-  else Result := TypeSize(tk);
+  else Result := TypeSlotSize(tk);
 end;
 
 { Does a CALL to this routine return through the caller-owned hidden

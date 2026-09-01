@@ -2506,7 +2506,7 @@ begin
       if etk = tyRecord then
         Result := inner * RecSize(UFldRec_[fi])
       else
-        Result := inner * TypeSize(etk);
+        Result := inner * TypeSlotSize(etk);
     end;
   end;
 end;
@@ -2740,7 +2740,7 @@ function RecFieldByteSize(rec: Integer; const field: AnsiString): Integer;
 { The byte size of ONE field, ARRAYS INCLUDED — what `SizeOf(r.F)` must answer.
 
   RecFieldType reports an array field's ELEMENT kind (UFldTk holds the element
-  type), so anything that sized a field as TypeSize(RecFieldType(...)) answered 4
+  type), so anything that sized a field as TypeSlotSize(RecFieldType(...)) answered 4
   for an `array[0..2] of Integer` and nothing said so: SizeOf(r.A) was 4 where FPC
   3.2.2 says 12, and the idiomatic `Move(src.A, dst.A, SizeOf(src.A))` /
   `FillChar(r.A, SizeOf(r.A), 0)` touched one element of three while every
@@ -2759,7 +2759,7 @@ begin
   if (etk = tyRecord) and (erec >= 0) then
     Result := RecSize(erec)
   else
-    Result := TypeSize(etk);
+    Result := TypeSlotSize(etk);
   if not RecFieldIsArray(rec, field2) then Exit;
   { a dynamic-array field is a reference }
   if RecFieldDynDepth(rec, field2) > 0 then begin Result := TARGET_PTR_SIZE; Exit; end;
@@ -2984,7 +2984,7 @@ end;
 { These are the single authoritative source for size, alignment, and signedness.
   All new code must call these instead of hard-coding numbers. }
 
-function TypeSize(tk: TTypeKind): Integer;
+function TypeSlotSize(tk: TTypeKind): Integer;
 { Returns byte count needed to store one value of type tk.
   For pointer-sized types, returns TARGET_PTR_SIZE (8 on x86-64). }
 begin
@@ -3139,7 +3139,7 @@ begin
   end
   else if Syms[i].TypeKind = tyVariant then
   begin
-    zeroBytes := TypeSize(tyVariant);
+    zeroBytes := TypeSlotSize(tyVariant);
     Result := True;
   end
   else if TypeIsPromoInt(Syms[i].TypeKind) then
@@ -3148,7 +3148,7 @@ begin
       inline 0 — the correct initial value, at no extra cost. Once the heap
       tier lands, this same zeroing is what keeps the tag from ever starting
       as a garbage HEAP marker pointing at a garbage bignum. }
-    zeroBytes := TypeSize(Syms[i].TypeKind);
+    zeroBytes := TypeSlotSize(Syms[i].TypeKind);
     Result := True;
   end
   else if SymIsComInterface(i) then
@@ -3173,12 +3173,32 @@ begin
   end;
 end;
 
+function TypeStorageSize(tk: TTypeKind; recId: Integer): Integer;
+{ Bytes ONE VALUE of this type occupies inside an array or aggregate -- the
+  stride, not the slot. Identical to TypeSlotSize except for tyRecord, where the
+  slot is a pointer-width placeholder and the real stride is the record size.
+
+  This is the question every dyn-array element-size site is actually asking, and
+  getting it wrong is not cosmetic: an `array of TRec` sized at 8 bytes per
+  element under-allocates, so element 1 overruns into adjacent heap and is
+  clobbered by the next allocation. That rationale used to live as a comment on
+  one arm of a four-way conditional that exists in four places; two of the four
+  had the arm and two did not. RecSize(REC_NONE) is 8, so a non-record recId
+  degrades to exactly the TypeSlotSize answer -- callers do not need to know
+  whether their recId is real. }
+begin
+  if tk = tyRecord then
+    Result := RecSize(recId)
+  else
+    Result := TypeSlotSize(tk);
+end;
+
 function TypeAlign(tk: TTypeKind): Integer;
 { Returns alignment requirement (power of 2) for type tk.
   On x86-64 all scalar types are naturally aligned. }
 var sz: Integer;
 begin
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   if sz <= 1 then Result := 1
   else if sz <= 2 then Result := 2
   else if sz <= 4 then Result := 4
@@ -3461,7 +3481,7 @@ begin
     unsigned via the wider-unsigned-operand rule below). A sub-int vs >=int-width
     operand still falls through (the narrow side promotes to int, then the usual
     conversions with the wider operand apply). Pascal keeps its own rule. }
-  if CProgramMode and (TypeSize(lhs) < 4) and (TypeSize(rhs) < 4) then Exit;
+  if CProgramMode and (TypeSlotSize(lhs) < 4) and (TypeSlotSize(rhs) < 4) then Exit;
   if not CProgramMode then
   begin
     { Pascal converts by RANGE, not by rank: the pair widens to a type that HOLDS
@@ -3483,14 +3503,14 @@ begin
     if TypeSigned(lhs) = TypeSigned(rhs) then
       Result := not TypeSigned(lhs)
     else if not TypeSigned(lhs) then
-      Result := (TypeSize(lhs) = 8) and (TypeSize(rhs) < 8)
+      Result := (TypeSlotSize(lhs) = 8) and (TypeSlotSize(rhs) < 8)
     else
-      Result := (TypeSize(rhs) = 8) and (TypeSize(lhs) < 8);
+      Result := (TypeSlotSize(rhs) = 8) and (TypeSlotSize(lhs) < 8);
     Exit;
   end;
-  if TypeSize(lhs) > TypeSize(rhs) then
+  if TypeSlotSize(lhs) > TypeSlotSize(rhs) then
     Result := not TypeSigned(lhs)
-  else if TypeSize(rhs) > TypeSize(lhs) then
+  else if TypeSlotSize(rhs) > TypeSlotSize(lhs) then
     Result := not TypeSigned(rhs)
   else
   begin
@@ -3501,7 +3521,7 @@ begin
       Only 8-byte needs this here: there is no wider type to widen into and the
       full 64-bit values compare directly; the <8-byte C path is already correct
       via integer promotion, and Pascal keeps its widen-to-larger-signed rule. }
-    if CProgramMode and (TypeSize(lhs) = 8) and
+    if CProgramMode and (TypeSlotSize(lhs) = 8) and
        ((not TypeSigned(lhs)) or (not TypeSigned(rhs))) then
       Result := True;
   end;
@@ -3541,7 +3561,7 @@ const
 function Arg32Words(cls: Integer): Integer;
 { Words occupied by an argument of the given class on a 32-bit target. }
 begin
-  if cls = A32_SET then Arg32Words := TypeSize(tySet) div 4
+  if cls = A32_SET then Arg32Words := TypeSlotSize(tySet) div 4
   else if (cls = A32_PAIR64) or (cls = A32_DOUBLE) then Arg32Words := 2
   else Arg32Words := 1;
 end;
@@ -4387,7 +4407,7 @@ begin
   end
   else
   begin
-    sz := TypeSize(tk);
+    sz := TypeSlotSize(tk);
     if tk = tyString then
     begin
       { A NAMED global frozen string reserves the full capacity (it may hold any
@@ -4528,7 +4548,7 @@ begin
   if ABIParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef, Syms[idx].IsArray) then
     Result := TARGET_PTR_SIZE
   else
-    Result := TypeSize(Syms[idx].TypeKind);
+    Result := TypeSlotSize(Syms[idx].TypeKind);
 end;
 
 function ParamValueSize(idx: Integer): Integer;
@@ -4558,7 +4578,7 @@ begin
   else if ABIParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef, Syms[idx].IsArray) then
     Result := TARGET_PTR_SIZE
   else
-    Result := TypeSize(Syms[idx].TypeKind);
+    Result := TypeSlotSize(Syms[idx].TypeKind);
 end;
 
 function AllocParam(const name: AnsiString; tk: TTypeKind; isRef, isArray: Boolean): Integer;
@@ -4700,8 +4720,8 @@ function TypedConstBakeable(tk: TTypeKind): Boolean;
   nothing per array. }
 begin
   Result := TypeIsOrdinal(tk) or (tk = tyDouble) or (tk = tySingle);
-  if Result and (TypeSize(tk) <> 1) and (TypeSize(tk) <> 2) and
-     (TypeSize(tk) <> 4) and (TypeSize(tk) <> 8) then
+  if Result and (TypeSlotSize(tk) <> 1) and (TypeSlotSize(tk) <> 2) and
+     (TypeSlotSize(tk) <> 4) and (TypeSlotSize(tk) <> 8) then
     Result := False;
 end;
 
@@ -4748,7 +4768,7 @@ begin
   if not TypedConstBakeable(elemTk) then Exit;
   if SymElemDynDepth[symIdx] > 0 then Exit;
   if SymIsSub[symIdx] then Exit;    { a subrange element still stores its ordinal, but leave the narrow cases alone until one is measured }
-  esz := TypeSize(elemTk);
+  esz := TypeSlotSize(elemTk);
 
   { Every recorded init must be a plain literal for THIS array, in element
     order, covering the whole extent. Kind 0 is an ordinal, kind 3 a float
@@ -4866,7 +4886,7 @@ begin
   end
   else
   begin
-    elemSize := TypeSize(elemType);
+    elemSize := TypeSlotSize(elemType);
     { An ARRAY slot is pointer-aligned, whatever its element is. The four
       branches above already say so outright (dyn-element, string, frozen
       string, record all set TARGET_PTR_SIZE); this one asked TypeAlign about
@@ -5226,7 +5246,7 @@ begin
     Exit;
   end;
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   sgn := TypeSigned(tk);
 
   if TypeIsFloat(tk) then
@@ -5395,7 +5415,7 @@ end;
 
 { -O3 store->reload elimination: rax already holds the value that was just
   stored into `idx`, so the reload's only remaining job is the WIDTH fixup.
-  EmitStoreVar wrote exactly the low TypeSize(tk) bytes of rax to the slot, and
+  EmitStoreVar wrote exactly the low TypeSlotSize(tk) bytes of rax to the slot, and
   EmitLoadVar's extension is a pure function of (size, signedness) of those same
   bytes — so re-extending rax in place gives the identical value without
   touching memory. 8-byte slots need nothing at all.
@@ -5408,7 +5428,7 @@ procedure EmitReExtendRax(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean;
 begin
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   sgn := TypeSigned(tk);
   if sz >= 8 then Exit;
   if sz = 1 then
@@ -5908,7 +5928,7 @@ end;
   immediately. Same trick as -dPXX_HEAP_DEBUG's $DD fill, one level up -- a
   stale slot and a correct one are indistinguishable, a poisoned one is not.
 
-  Writes EXACTLY TypeSize bytes: a wider store would corrupt the neighbouring
+  Writes EXACTLY TypeSlotSize bytes: a wider store would corrupt the neighbouring
   slot and manufacture the very bug it is looking for.
 
   DIAGNOSTIC ONLY -- never on by default, and a program compiled with it is
@@ -5921,7 +5941,7 @@ begin
     experiment is only evidence if it poisons exactly the slots item 3 stops
     writing. }
   if not ResidentSlotIsDead(idx) then Exit;
-  sz := TypeSize(Syms[idx].TypeKind);
+  sz := TypeSlotSize(Syms[idx].TypeKind);
   if sz = 1 then
     begin EmitB($C6); EmitB($85); EmitI32(Syms[idx].Offset); EmitB($AD); end
   else if sz = 2 then
@@ -5933,7 +5953,7 @@ begin
 end;
 
 { A plain integer/pointer scalar in a frame slot -- the only thing whose store
-  narrows by TypeSize and whose reload re-extends by TypeSigned, which is the
+  narrows by TypeSlotSize and whose reload re-extends by TypeSigned, which is the
   contract both halves of W2 rest on.
 
   Asked about SYMBOLS, not about IR node types, and deliberately so: a for
@@ -6037,7 +6057,7 @@ begin
   { Dual-write: the frame slot stays authoritative, exactly as EmitStoreVar
     leaves it -- the low sz bytes of the result, at the same point in the
     sequence, just sourced from R instead of rax. }
-  sz := TypeSize(Syms[d].TypeKind);
+  sz := TypeSlotSize(Syms[d].TypeKind);
   sgn := TypeSigned(Syms[d].TypeKind);
   if ResidentSlotIsDead(d) then
     { -O3 item 3: nothing reads this slot, so W2 skips its dual-write too }
@@ -6083,7 +6103,7 @@ begin
     Exit;
   end;
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   sgn := TypeSigned(tk);
   case Syms[idx].Kind of
     skLocal, skParam:
@@ -6186,7 +6206,7 @@ begin
     RegcallRefreshResident(idx);   { not a plain scalar in rax -- take the slow form }
     Exit;
   end;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   sgn := TypeSigned(tk);
   if sz = 1 then
   begin
@@ -6322,7 +6342,7 @@ procedure EmitStoreVar(idx: Integer);
 var tk: TTypeKind; sz: Integer;
 begin
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
 
   if TypeIsFloat(tk) then
   begin
@@ -7031,7 +7051,7 @@ begin
     else elemSize := LOCAL_STR_CAP + 8;
   end
   else if SymTR[arrIdx].ElemTk = Ord(tyRecord) then elemSize := RecSize(SymTR[arrIdx].ElemRec)
-  else elemSize := TypeSize(IntToTypeKind(SymTR[arrIdx].ElemTk));
+  else elemSize := TypeSlotSize(IntToTypeKind(SymTR[arrIdx].ElemTk));
 
   if elemSize = 8 then
   begin
@@ -7069,7 +7089,7 @@ procedure EmitArrLoad(arrIdx: Integer);
 var sz: Integer; sgn: Boolean;
 begin
   EmitArrElemAddr(arrIdx);
-  sz := TypeSize(IntToTypeKind(SymTR[arrIdx].ElemTk));
+  sz := TypeSlotSize(IntToTypeKind(SymTR[arrIdx].ElemTk));
   sgn := TypeSigned(IntToTypeKind(SymTR[arrIdx].ElemTk));
   if sz = 1 then
   begin
@@ -7110,7 +7130,7 @@ var sz: Integer;
 begin
   { addr was pushed before RHS eval }
   EmitB($59);                   { pop rcx -- element address }
-  sz := TypeSize(IntToTypeKind(SymTR[arrIdx].ElemTk));
+  sz := TypeSlotSize(IntToTypeKind(SymTR[arrIdx].ElemTk));
   if sz = 1 then
     begin EmitB($88); EmitB($01); end
   else if sz = 2 then
@@ -9351,13 +9371,13 @@ begin
                        tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt]) and
             (aType in [tyInteger, tyInt8, tyUInt8, tyInt16, tyUInt16, tyInt32,
                        tyUInt32, tyInt64, tyUInt64, tyNativeInt, tyNativeUInt]) and
-            (TypeSize(pType) < TypeSize(aType));
+            (TypeSlotSize(pType) < TypeSlotSize(aType));
 end;
 
 function IntParamHoldsEveryValue(pType, aType: TTypeKind): Boolean;
 { Can EVERY value of integer type aType be represented in pType? The "fits"
   half of FPC's narrowest-that-fits overload rule, and deliberately NOT
-  ArgNarrowsInt: that one compares `TypeSize(pType) < TypeSize(aType)` and is
+  ArgNarrowsInt: that one compares `TypeSlotSize(pType) < TypeSlotSize(aType)` and is
   signedness-blind, so it says a LongInt parameter does not narrow a Cardinal
   argument. It does — same width, but half the range is unreachable — and
   Cardinal is exactly the row that shows FPC ranks by RANGE and not by declared
@@ -9369,10 +9389,10 @@ function IntParamHoldsEveryValue(pType, aType: TTypeKind): Boolean;
   compat-pascal-strict-fpc-should-pick-the-narrowest-integer-overload }
 begin
   if TypeSigned(pType) = TypeSigned(aType) then
-    Result := TypeSize(pType) >= TypeSize(aType)
+    Result := TypeSlotSize(pType) >= TypeSlotSize(aType)
   else if TypeSigned(pType) then
     { signed parameter, unsigned argument: it needs a spare bit for the sign }
-    Result := TypeSize(pType) > TypeSize(aType)
+    Result := TypeSlotSize(pType) > TypeSlotSize(aType)
   else
     { unsigned parameter, signed argument: a negative value has nowhere to go }
     Result := False;
@@ -9732,7 +9752,7 @@ begin
               if TypeIsMachineInt(argTypes[j]) and
                  not IntParamHoldsEveryValue(Procs[i].Params[j].TypeKind, argTypes[j]) then
                 fits := False;
-              Inc(w, TypeSize(Procs[i].Params[j].TypeKind));
+              Inc(w, TypeSlotSize(Procs[i].Params[j].TypeKind));
             end;
           if fits and ((bestI < 0) or (w < bestW)) then
           begin
@@ -11828,7 +11848,7 @@ begin
           unsupported case and still errors below.
 
           Loaded at POINTER width by hand: EmitLoadVar* sizes by
-          TypeSize(Syms[].TypeKind), and an array's TypeKind is its ELEMENT
+          TypeSlotSize(Syms[].TypeKind), and an array's TypeKind is its ELEMENT
           kind, so `array of Char` would come back through a byte load with the
           handle's top bytes gone — the truncation EmitLoadVarA64 carried until
           today. Ownership transfers to the caller, which is why every managed-
@@ -11848,7 +11868,7 @@ begin
         { Load at the result's width and extend to a full eax. A 1-byte
           Boolean/Char slot loaded with a plain 4-byte mov drags in 3 garbage
           bytes, which then defeats callers that `not`/`xor` or test eax. }
-        sz := TypeSize(Syms[retSymIdx].TypeKind);
+        sz := TypeSlotSize(Syms[retSymIdx].TypeKind);
         if sz = 1 then
         begin
           if TypeSigned(Syms[retSymIdx].TypeKind) then
@@ -11967,7 +11987,7 @@ begin
           unsupported case and still errors below.
 
           Loaded at POINTER width by hand: EmitLoadVar* sizes by
-          TypeSize(Syms[].TypeKind), and an array's TypeKind is its ELEMENT
+          TypeSlotSize(Syms[].TypeKind), and an array's TypeKind is its ELEMENT
           kind, so `array of Char` would come back through a byte load with the
           handle's top bytes gone — the truncation EmitLoadVarA64 carried until
           today. Ownership transfers to the caller, which is why every managed-
@@ -12071,7 +12091,7 @@ begin
           unsupported case and still errors below.
 
           Loaded at POINTER width by hand: EmitLoadVar* sizes by
-          TypeSize(Syms[].TypeKind), and an array's TypeKind is its ELEMENT
+          TypeSlotSize(Syms[].TypeKind), and an array's TypeKind is its ELEMENT
           kind, so `array of Char` would come back through a byte load with the
           handle's top bytes gone — the truncation EmitLoadVarA64 carried until
           today. Ownership transfers to the caller, which is why every managed-
@@ -12265,7 +12285,7 @@ begin
           unsupported case and still errors below.
 
           Loaded at POINTER width by hand: EmitLoadVar* sizes by
-          TypeSize(Syms[].TypeKind), and an array's TypeKind is its ELEMENT
+          TypeSlotSize(Syms[].TypeKind), and an array's TypeKind is its ELEMENT
           kind, so `array of Char` would come back through a byte load with the
           handle's top bytes gone — the truncation EmitLoadVarA64 carried until
           today. Ownership transfers to the caller, which is why every managed-

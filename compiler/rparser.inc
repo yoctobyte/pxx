@@ -422,7 +422,7 @@ end;
   what makes `match` work with no further change: RParseMatch resolves arm
   names with RFindVariantInEnum against the scrutinee's own class. }
 { A monomorphized generic's payload occupies its OWN full size, and for a
-  record that is RecSize. `TypeSize(tyRecord)` answers 8 -- a pointer -- and
+  record that is RecSize. `TypeSlotSize(tyRecord)` answers 8 -- a pointer -- and
   says so in its own comment in symtab.inc: *caller must use RecSize() for full
   record size*. Getting it wrong does not fail loudly; the union is simply too
   small and the payload's tail is written past the end of the value.
@@ -434,7 +434,7 @@ end;
 function RPayloadSize(tk: TTypeKind; rec: Integer): Integer;
 begin
   if (tk = tyRecord) and (rec >= REC_UCLASS_BASE) then Result := RecSize(rec)
-  else Result := TypeSize(tk);
+  else Result := TypeSlotSize(tk);
 end;
 
 function RPayloadAlign(tk: TTypeKind; rec: Integer): Integer;
@@ -893,7 +893,7 @@ var sz: Integer;
 begin
   if n <= 0 then Exit;
   RProcRetArrLen[procIdx] := n;
-  if elemTk = tyRecord then sz := RecSize(elemRec) else sz := TypeSize(elemTk);
+  if elemTk = tyRecord then sz := RecSize(elemRec) else sz := TypeSlotSize(elemTk);
   ProcRetFixedArrBytes[procIdx] := n * sz;
 end;
 
@@ -1834,7 +1834,7 @@ begin
         if (RSliceElemTk[ci] = tyRecord) and (RSliceElemRec[ci] >= REC_UCLASS_BASE) then
           ASTIVal[gfi] := RecSize(RSliceElemRec[ci])
         else
-          ASTIVal[gfi] := TypeSize(RSliceElemTk[ci]);
+          ASTIVal[gfi] := TypeSlotSize(RSliceElemTk[ci]);
         ASTTk[gfi] := Ord(tyInt64);
         argNode := AllocNode(AN_FIELD);
         ASTLeft[argNode] := node;
@@ -4533,7 +4533,7 @@ begin
         if Tokens[j].Kind <> tkIdent then Error('Rust: expected field type in tuple struct ' + GetTokenStr(i + 1));
         tk := RTypeKindFromName(GetTokenStr(j), True);
         Inc(j);
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         if TypeAlign(tk) > align then align := TypeAlign(tk);
         curOff := AlignTo(curOff, TypeAlign(tk));
         mangled := RIntToStr(k);
@@ -4585,7 +4585,7 @@ begin
         if (tk = tyRecord) and (LastTypeRecId >= REC_UCLASS_BASE) then
           sz := RecSize(LastTypeRecId)
         else
-          sz := TypeSize(tk);
+          sz := TypeSlotSize(tk);
         if TypeAlign(tk) > align then align := TypeAlign(tk);
         curOff := AlignTo(curOff, TypeAlign(tk));
         AddUField(ci, Tokens[nameTokIdx].SOffset, Tokens[nameTokIdx].SLen, curOff, Ord(tk), LastTypeRecId);
@@ -4647,7 +4647,7 @@ begin
             if Tokens[j].Kind <> tkIdent then Error('Rust: expected type in tuple variant ' + variantName);
             tk := RTypeKindFromName(GetTokenStr(j), True);
             Inc(j);
-            sz := TypeSize(tk);
+            sz := TypeSlotSize(tk);
             if TypeAlign(tk) > align then align := TypeAlign(tk);
             curOff := AlignTo(curOff, TypeAlign(tk));
             mangled := variantName + '.' + RIntToStr(k);
@@ -4672,7 +4672,7 @@ begin
             if Tokens[j].Kind <> tkIdent then Error('Rust: expected field type');
             tk := RTypeKindFromName(GetTokenStr(j), True);
             Inc(j);
-            sz := TypeSize(tk);
+            sz := TypeSlotSize(tk);
             if TypeAlign(tk) > align then align := TypeAlign(tk);
             curOff := AlignTo(curOff, TypeAlign(tk));
             mangled := variantName + '.' + fieldName;

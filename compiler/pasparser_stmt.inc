@@ -3054,7 +3054,7 @@ begin
       if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
       tailSeq := newSeq;
       trValTmp := -1;
-      if TypeIsOrdinal(trTk) and (trTk <> tyUInt64) and (TypeSize(trTk) < 8) then
+      if TypeIsOrdinal(trTk) and (trTk <> tyUInt64) and (TypeSlotSize(trTk) < 8) then
         trValTmp := AllocVar('', tyInt64);
       if trValTmp >= 0 then
         callNode := GenMakeCall6(procVal, Procs[procVal].RetType,
@@ -4569,7 +4569,7 @@ begin
     if ASTKind[valNode] = AN_IDENT then castPrevTok := ASTIVal[valNode];
     if not ((castPrevTok >= 0) and (castPrevTok < SymCount) and
             IsUntypedVarParamSym(castPrevTok)) then
-      if TypeSize(castTk) <> TypeSize(IntToTypeKind(ASTTk[valNode])) then
+      if TypeSlotSize(castTk) <> TypeSlotSize(IntToTypeKind(ASTTk[valNode])) then
         Error('cast-as-lvalue: the cast type must be the same size as the variable');
     node := AllocNode(AN_ADDR);
     ASTLeft[node] := valNode;
@@ -5765,7 +5765,7 @@ begin
         if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) then
           idx := ASTIVal[valNode];
         if idx < 0 then Error('New: undefined variable');
-        { New wants a POINTER. `New(i)` on an Integer took TypeSize(PtrElemTk)
+        { New wants a POINTER. `New(i)` on an Integer took TypeSlotSize(PtrElemTk)
           -- tyUnknown, so a nonsense size -- allocated it, and stored the block
           address INTO the Integer: `i` came back 264241264, silently, exit 0.
           FPC says "Illegal qualifier". Same guard shape as the SetLength and
@@ -5787,7 +5787,7 @@ begin
         if Syms[idx].PtrElemTk = tyRecord then
           castPrevTok := RecSize(Syms[idx].PtrElemRec)
         else
-          castPrevTok := TypeSize(Syms[idx].PtrElemTk);
+          castPrevTok := TypeSlotSize(Syms[idx].PtrElemTk);
         exprNode := AllocNode(AN_INT_LIT);
         ASTIVal[exprNode] := castPrevTok; ASTTk[exprNode] := Ord(tyInteger);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;
@@ -5976,7 +5976,7 @@ begin
           hidden Int64 temp and truncate into the real destination afterwards. }
         valTmpSym := -1;
         if (idx >= 0) and (not TypeIsFloat(Syms[idx].TypeKind)) and
-           TypeIsOrdinal(Syms[idx].TypeKind) and (TypeSize(Syms[idx].TypeKind) < 8) then
+           TypeIsOrdinal(Syms[idx].TypeKind) and (TypeSlotSize(Syms[idx].TypeKind) < 8) then
         begin
           valTmpSym := AllocVar('', tyInt64);
           valTmpIdent := AllocNode(AN_IDENT);

@@ -143,9 +143,9 @@ procedure EmitLoadVarXtensa(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean;
 begin
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   { A dynamic array's slot holds a pointer-sized heap handle, not an element.
-    TypeSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
+    TypeSlotSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
     ONE-BYTE access to a pointer slot: the store zeroes only the low byte and
     leaves three stale ones, and the load reads a truncated handle. Force a
     full pointer-width access. Twin of the guard in EmitStoreVarA64 -- aarch64
@@ -172,9 +172,9 @@ procedure EmitStoreVarXtensa(idx: Integer);
 var tk: TTypeKind; sz: Integer;
 begin
   tk := Syms[idx].TypeKind;
-  sz := TypeSize(tk);
+  sz := TypeSlotSize(tk);
   { A dynamic array's slot holds a pointer-sized heap handle, not an element.
-    TypeSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
+    TypeSlotSize(elementType) sizes the ELEMENT, so a byte-sized element gives a
     ONE-BYTE access to a pointer slot: the store zeroes only the low byte and
     leaves three stale ones, and the load reads a truncated handle. Force a
     full pointer-width access. Twin of the guard in EmitStoreVarA64 -- aarch64
@@ -1778,17 +1778,17 @@ begin
              (IRIVal[IRB[node]] = 1) and
              TypeIsOrdinal(Syms[IRA[node]].TypeKind) and
              (not Syms[IRA[node]].IsArray) and
-             (TypeSize(Syms[IRA[node]].TypeKind) < 8) and
+             (TypeSlotSize(Syms[IRA[node]].TypeKind) < 8) and
              (Is64BitXtensa(IntToTypeKind(IRTk[IRB[node]])) or
-              (TypeSize(Syms[IRA[node]].TypeKind) < 4)) then
+              (TypeSlotSize(Syms[IRA[node]].TypeKind) < 4)) then
           begin
             { a4 = the value as the destination width would keep it }
-            if TypeSize(Syms[IRA[node]].TypeKind) >= 4 then
+            if TypeSlotSize(Syms[IRA[node]].TypeKind) >= 4 then
               xtensa_mov(reg_xtensa_a4, reg_xtensa_a2)
             else
             begin
               xtensa_movi(reg_xtensa_a9,
-                          (4 - TypeSize(Syms[IRA[node]].TypeKind)) * 8);
+                          (4 - TypeSlotSize(Syms[IRA[node]].TypeKind)) * 8);
               xtensa_ssl(reg_xtensa_a9);
               xtensa_sll(reg_xtensa_a4, reg_xtensa_a2);
               xtensa_ssr(reg_xtensa_a9);
@@ -1980,7 +1980,7 @@ begin
       begin
         IREmitNodeXtensa(IRA[node]);
         tk := IntToTypeKind(IRTk[node]);
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         sgn := TypeSigned(tk);
         if (sz = 8) and Is64BitXtensa(tk) then
         begin
@@ -2078,7 +2078,7 @@ begin
     IR_STORE_MEM:
       begin
         tk := IntToTypeKind(IRTk[node]);
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         { THE TYPED STORES. IR_STORE_SYM has dispatched on the destination TYPE
           since managed strings landed; IR_STORE_MEM — the same store reached
           through an ADDRESS (a record field, an array element, a deref) — had
@@ -3598,7 +3598,7 @@ begin
             two ABIs read identically at this site. }
           if XtensaABI = XTENSA_ABI_WINDOWED then
             xtensa_mov(XtensaArgRegN(0), reg_xtensa_a2);
-          EmitLoadConstXtensa(XtensaArgRegN(1), TypeSize(tk));
+          EmitLoadConstXtensa(XtensaArgRegN(1), TypeSlotSize(tk));
           EmitCallProc(procIdx);
         end
         else

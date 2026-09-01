@@ -3618,7 +3618,7 @@ begin
             elemSize := RecSize(curRec);
         end
         else
-          elemSize := TypeSize(curTk);
+          elemSize := TypeSlotSize(curTk);
 
         if elemSize = 8 then
         begin
@@ -3833,7 +3833,7 @@ begin
     begin
       ParseExpr;
       EmitB($59); { pop rcx -- LHS address }
-      i := TypeSize(tk);
+      i := TypeSlotSize(tk);
       if i = 1 then
         begin EmitB($88); EmitB($01); end
       else if i = 2 then

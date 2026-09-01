@@ -736,7 +736,7 @@ end;
 procedure IREmit386CheckScalarSym(symIdx: Integer; const what: AnsiString);
 var whoSym: AnsiString;
 { "Fat slot" symbol model: the parser still lays out 8-byte slots (BSS and
-  frame, 64-bit TypeSize), and i386 code reads/writes only the low 4 bytes.
+  frame, 64-bit TypeSlotSize), and i386 code reads/writes only the low 4 bytes.
   Sound because BSS is zeroed and 4-byte stores/loads are paired — the high
   half is never read. Only ordinal scalars fit that model; refuse the rest. }
 begin
@@ -1181,7 +1181,7 @@ begin
       fix (bug-shl-signed-integer-width): zero the hi word before a logical
       shr; re-derive the narrow result after a shl. Found by the first
       --wide --cross pasmith run (seed 60). }
-    if (op = Ord(tkShrLogical)) and (TypeSize(IntToTypeKind(IRTk[left])) < 8) then
+    if (op = Ord(tkShrLogical)) and (TypeSlotSize(IntToTypeKind(IRTk[left])) < 8) then
     begin
       EmitB($31); EmitB($D2);                      { xor edx, edx (32-bit operand: zero-extend) }
     end;
@@ -1194,7 +1194,7 @@ begin
       EmitB($89); EmitB($C2);                      { mov edx, eax }
       EmitB($31); EmitB($C0);                      { xor eax, eax }
       PatchRel8(skipOff);
-      if TypeSize(IntToTypeKind(IRTk[left])) < 8 then
+      if TypeSlotSize(IntToTypeKind(IRTk[left])) < 8 then
       begin
         { narrow operand: the result is the low 32 bits, sign/zero-extended
           (longint(1) shl 31 = -2147483648, matching FPC and x86-64). }
@@ -1597,7 +1597,7 @@ begin
           end;
           Exit;
         end;
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         sgn := TypeSigned(tk);
         if Syms[si].Kind = skGlobal then
         begin
@@ -1967,12 +1967,12 @@ begin
           low-width re-check then. }
         if (IRB[node] >= 0) and (IRKind[IRB[node]] = IR_BINOP) and
            (IRIVal[IRB[node]] = 1) and TypeIsOrdinal(tk) and
-           (not Syms[si].IsArray) and (TypeSize(tk) < 8) and
-           (Is64Bit386(IntToTypeKind(IRTk[IRB[node]])) or (TypeSize(tk) < 4)) then
+           (not Syms[si].IsArray) and (TypeSlotSize(tk) < 8) and
+           (Is64Bit386(IntToTypeKind(IRTk[IRB[node]])) or (TypeSlotSize(tk) < 4)) then
         begin
           if TypeSigned(tk) then
           begin
-            case TypeSize(tk) of
+            case TypeSlotSize(tk) of
               1: begin EmitB($0F); EmitB($BE); EmitB($C8); end;  { movsx ecx, al }
               2: begin EmitB($0F); EmitB($BF); EmitB($C8); end  { movsx ecx, ax }
             else begin EmitB($89); EmitB($C1); end;             { mov ecx, eax }
@@ -1988,7 +1988,7 @@ begin
           end
           else
           begin
-            case TypeSize(tk) of
+            case TypeSlotSize(tk) of
               1: begin EmitB($0F); EmitB($B6); EmitB($C8); end;  { movzx ecx, al }
               2: begin EmitB($0F); EmitB($B7); EmitB($C8); end  { movzx ecx, ax }
             else begin EmitB($89); EmitB($C1); end;             { mov ecx, eax }
@@ -2000,7 +2000,7 @@ begin
           EmitB($85); EmitB($C9);                               { test ecx, ecx }
           EmitOvfCheckNarrow386Trap;                            { jz skip / trap }
         end;
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         if Syms[si].Kind = skGlobal then
         begin
           if sz = 1 then
@@ -2172,7 +2172,7 @@ begin
         begin
           IREmitNode386(IRA[node]);    { eax = target address }
           EmitB($50);                  { push dst }
-          EmitB($B8); EmitI32(TypeSize(tk));    { mov eax, size }
+          EmitB($B8); EmitI32(TypeSlotSize(tk));    { mov eax, size }
           EmitB($50);                  { push sz }
           procIdx := FindProc('PXXReadVarInt');
           if procIdx < 0 then Error('compiler error: PXXReadVarInt not found');
@@ -3615,7 +3615,7 @@ begin
               EmitB($8B); EmitB($50); EmitB(i * 4);    { mov edx, [eax+i*4] }
               EmitB($52);                              { push edx }
             end;
-            Inc(argBytes, TypeSize(tySet));
+            Inc(argBytes, TypeSlotSize(tySet));
             Inc(nArgs);
             Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
             Continue;
@@ -4215,7 +4215,7 @@ begin
         begin
           { A frozen/inline-string value IS its buffer address. Deref'ing a
             pointer-to-frozen-string (typinfo NamePtr^) yields that address — a
-            pointer-width (4-byte) load, not the TypeSize(tyString)=8 path (which
+            pointer-width (4-byte) load, not the TypeSlotSize(tyString)=8 path (which
             classified it 64-bit and loaded edx:eax, diverging from x86-64).
             bug-cross-gate-masked-failures. }
           EmitB($8B); EmitB($00);                    { mov eax, [eax] (pointer width) }
@@ -4228,14 +4228,14 @@ begin
         if Is64Bit386(tk) or (tk = tyRecord) then
         begin
           { Full 8-byte load -> edx:eax (high dword first so the address in eax
-            is still valid for the low load). tyRecord: TypeSize=8, so mirror the
+            is still valid for the low load). tyRecord: TypeSlotSize=8, so mirror the
             x86-64 8-byte `mov rax,[rax]` (a small by-value struct used as a
             scalar; over-read high bytes are ignored, same as x86-64). }
           EmitB($8B); EmitB($50); EmitB($04);        { mov edx, [eax+4] }
           EmitB($8B); EmitB($00);                    { mov eax, [eax] }
           Exit;
         end;
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         sgn := TypeSigned(tk);
         if sz = 1 then
         begin
@@ -4482,7 +4482,7 @@ begin
         IREmitNode386(IRA[node]);                    { address -> eax }
         InLValueWrite := savedLValueWrite;
         EmitB($59);                                  { pop ecx (value) }
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         if sz = 1 then begin EmitB($88); EmitB($08); end       { mov [eax], cl }
         else if sz = 2 then begin EmitB($66); EmitB($89); EmitB($08); end { mov [eax], cx }
         else begin EmitB($89); EmitB($08); end;                { mov [eax], ecx }
@@ -5398,7 +5398,7 @@ begin
         begin
           si := IRA[i];
           tk := Syms[si].TypeKind;
-          sz := TypeSize(tk);
+          sz := TypeSlotSize(tk);
           EmitB($A1); EmitGlobRef(IRExcStoreSlot(i)); { mov eax, [exc slot] }
           if Syms[si].Kind = skGlobal then
           begin

@@ -505,7 +505,7 @@ begin
         ASTLeft[postNode] := RBinOp(tkPlus,
           ZFieldNode(node, '__ptr', tyInt64),
           RBinOp(tkStar, idxNode,
-            ZIntLit(TypeSize(ZSliceElemTk[Syms[symIdx].RecName - REC_UCLASS_BASE])),
+            ZIntLit(TypeSlotSize(ZSliceElemTk[Syms[symIdx].RecName - REC_UCLASS_BASE])),
             tyInt64),
           tyInt64);
         ASTTk[postNode] := Ord(ZSliceElemTk[Syms[symIdx].RecName - REC_UCLASS_BASE]);
@@ -1618,7 +1618,7 @@ begin
         if Tokens[j].Kind <> tkIdent then Error('Zig: expected scalar field type in struct ' + GetTokenStr(i + 1));
         tk := ZTypeKindFromName(GetTokenStr(j), False);
         Inc(j);
-        sz := TypeSize(tk);
+        sz := TypeSlotSize(tk);
         if TypeAlign(tk) > align then align := TypeAlign(tk);
         curOff := AlignTo(curOff, TypeAlign(tk));
         AddUField(ci, Tokens[nameTokIdx].SOffset, Tokens[nameTokIdx].SLen, curOff, Ord(tk), REC_NONE);
