@@ -9,7 +9,7 @@ created: 2026-09-01
 found-by: frankA
 owner: frankA
 blocked-by: []
-summary: "Short jumps in the backends carry a hand-counted literal displacement over a span emitted by other code; when that span changes size the jump stays IN RANGE and lands mid-sequence, so nothing errors. THREE converted so far and TWO of them were ALREADY WRONG on master, both silent wrong values on x86-64: `Write(s:w)` on a ShortString with w <= Length(s) printed a truncated string (`WriteLn(s:2)` for 'abcdef' printed nothing; FPC prints abcdef), and LoadFile into a ShortString returned an EMPTY string for every successful read. Both jumps overshot by exactly 8 bytes. Fixed with PatchRel8, tests test_write_shortstring_field_width_narrower and test_loadfile_shortstring (both verified to FAIL on the pre-fix binary). The third site (the x86-64 clone stub) was byte-identical. ~41 literal sites remain; the census is NOT ~25 -- that number and an earlier 142 both came from a grep that matches ModRM and second opcode bytes. CheckRel8 covers the 172 computed sites and hard-errors, so the OVERFLOW class cannot ship; this is the other class and no instrument sees it."
+summary: "Short jumps in the backends carry a hand-counted literal displacement over a span emitted by other code; when that span changes size the jump stays IN RANGE and lands mid-sequence, so nothing errors. THREE converted and TWO were ALREADY WRONG on master, both silent wrong values on x86-64: `Write(s:w)` on a ShortString with w <= Length(s) truncated (`WriteLn(s:2)` for 'abcdef' printed nothing; FPC prints abcdef), and LoadFile into a ShortString returned an EMPTY string for every successful read. Both overshot by exactly 8 bytes; the third site was byte-identical. Fixed at 14bc9d218, tests verified to FAIL on the pre-fix binary. The class now has a gate row at 74ed877f2, tools/rel8_literal_span_check.py, enforcing that a literal displacement may only span FIXED-size emission; its positive control is the pre-fix tree, where it flags exactly those two sites and not the third. Census settled at 42 by a POSITION rule (a jump opcode is the first byte emitted on its line), which agreed with the comment rule 108/108 and also classifies the 23 uncommented sites -- the earlier 'about 25' and 142 both came from a grep that matches ModRM bytes. Remaining work is converting the 42, now guarded rather than urgent."
 ---
 
 # A literal displacement is a claim about code someone else emits
@@ -92,19 +92,63 @@ with the fix in one arm.
 that broke the LoadFile site, and it is exactly the "normal work by someone with
 no reason to look for a jump spanning their edit" this ticket predicts.
 
-## The census is not ~25, and not 142
+## The class now has a guard: `tools/rel8_literal_span_check.py`
 
-Both numbers came from the same broken instrument. `EmitB($7x); EmitB(...)`
-matches ModRM bytes and the second byte of two-byte opcodes:
-`EmitB($0F); EmitB($7E); EmitB($C0)` is `movq rax, xmm0`, and
+`gate.sh` runs it in every mode, before the mode `case`, in under a second
+(landed 74ed877f2). The rule it enforces is the one the three conversions
+measured:
+
+> **A literal displacement may only span emissions of FIXED size.**
+
+Spanning `EmitB`/`EmitI32` is fine — the bytes are on the page and a reader
+adding one is looking straight at the count, which is why the clone stub's
+hand-counted 30 was correct. Spanning `MovRaxImm`, `EmitSyscall`,
+`EmitDataRef`, `EmitGlobRef` or anything else that picks an encoding is not.
+
+**Its positive control is the pre-fix tree**, not a fixture: pointed at
+`3f9937e6c` it flags `ir_codegen.inc:8903` and `symtab.inc:6922` and nothing
+else — the two sites that were actually wrong, and not the one that was right.
+`--selftest` additionally asserts it rejects both shapes it was built from,
+accepts a fixed-size span, and does not read a ModRM byte as a jump; the accept
+row carries its own anti-vacuity assert, because "not flagged" and "not seen at
+all" print the same.
+
+Current tree: 42 literal short jumps, every span fixed-size. That is a floor on
+future damage, not a claim the 42 are converted — a fixed-size span is correct
+until someone inserts a line into it, and the checker will then say so.
+
+## The census is 42, and the discriminator is POSITION, not the comment
+
+"About 25" and an earlier 142 came from the same broken instrument.
+`EmitB($7x); EmitB(...)` matches ModRM and SIB bytes and the second byte of
+two-byte opcodes: `EmitB($0F); EmitB($7E); EmitB($C0)` is `movq rax, xmm0`, and
 `EmitB($4C); EmitB($89); EmitB($77); EmitB($20)` is `mov [rdi+32], r14`. Neither
-is a jump. A filter that reads the trailing `{ mnemonic }` comment instead finds
-**36 `jcc` sites + 8 `$EB` short-jmp sites**, and that instrument can only
-UNDERCOUNT — it misses any site whose comment does not name the mnemonic. Three
-are now converted; treat ~41 as a floor, not a count.
+is a jump, and the naive shape reports ~131 sites of which two thirds are not.
 
-Enumerating from the emitted artifact, as the job section says, is still the
-right instrument and has not been built.
+The comment-mnemonic filter (36 `jcc` + 8 `$EB`) was better but still an
+undercount, because **23 sites carry no comment at all** and it cannot classify
+those. The instrument that settles it is POSITION: these files emit one
+instruction per line, so a jump opcode is the FIRST byte emitted on its line and
+a ModRM or immediate byte never is.
+
+**Checked against the comment rule over the whole commented population:
+108 sites, 108 agreements, 0 disagreements.** The two rules can fail
+differently — one reads prose, one reads structure — so the agreement is
+corroboration rather than one measurement taken twice. The position rule then
+classifies the 23 the comment rule could not: **9 are real jumps, 14 are ModRM
+contamination**, including `EmitB($48); EmitB($8D); EmitB($7C); EmitB($24);`
+(`lea rdi, [rsp+n]`), which the risk scan had promoted to a suspected third bug
+before it was decoded.
+
+**42 literal short jumps** on the tree at `14bc9d218`, in six files
+(`ir_codegen386.inc` 21, `ir_codegen.inc` 16, `cparser.inc` 2,
+`pasparser_lval.inc` 1, `symtab.inc` 1, `thread_emit.inc` 1). The count is
+self-consistent across the change: the pre-fix tree gives the same 42 with the
+three converted sites still present and the two uncopied files absent.
+
+Enumerating from the emitted artifact, as the job section says, would be
+stronger still and has not been built; the position rule is a source-level
+instrument with a measured agreement, not a decode.
 
 ## Not in scope, found on the way
 
