@@ -56,14 +56,37 @@ the pointer-cast seam** — `Pointer(MkIA(i))` reads 921/918/3, and
 this is not a latent bug in the landed pointer-seam work. Something specific to
 these two arms rejects a parked value.
 
-Working hypothesis, **not confirmed** — the park round-trips the value through
-`IR_STORE_SYM`/`IR_LOAD_SYM` on a dyn-array symbol, and these two arms want a
-**data pointer** where the park hands back a **handle** (or vice versa). The
-element type changes which of the two the surrounding code computes. `PXXMemCopy`
-/ `PXXDynInsArrFill` then walk from the wrong base. Whoever takes this should
-dump `PXXDBG='a.ir:*'` for `Copy(MkIA(i))` with and without the park and compare
-the operand feeding `PXXClampLen`, rather than reasoning about it — that is the
-step I stopped at.
+### Four hypotheses, all refuted — do not re-run these
+
+I chased this after filing and eliminated every obvious cause. Recorded so the
+next person starts where I stopped, not where I started.
+
+1. **Handle vs data pointer** (my original guess, now DEAD). `PXXDBG='a.ir:*'`
+   with the park applied, for `Copy(MkIA(1))` and `Copy(MkSA(1))`, emits
+   **structurally identical IR** — same `store_sym`/`load_sym`/`store_sym` at
+   nodes 3-5, same value reaching `PXXClampLen`. The element type changes
+   nothing about the shape.
+2. **`Copy` aliases the source buffer on a full-length copy.** No:
+   `Copy(MkIA(i), 0, 2)` and `Copy(MkIA(i), 0, 4)` crash exactly like
+   `Copy(MkIA(i))`.
+3. **The scope-exit release is what crashes.** No: `WriteLn` after the loop never
+   runs and the census dies at `allocs=8`, so the crash is INSIDE the loop —
+   it is the per-iteration release of the slot's previous occupant.
+4. **The parked temp is not nil-initialised.** No: the walker at
+   `ir_codegen.inc:11571` nil-inits every `SymIsHiddenArgTemp` `skLocal`
+   including dyn arrays, and a main-program temp is `skGlobal` in already-zeroed
+   BSS. Both of my repro shapes are covered.
+5. **Non-managed dyn arrays are not refcounted, so the park's release is an
+   unbalanced extra free.** No: a local `array of Integer` assigned from a
+   global, 50 trips, leaves the global intact (`11`/`44`), and FPC agrees. They
+   are refcounted.
+
+What survives: the crash is a per-iteration release, of an `array of Integer`
+temp, at these two arms only, on a value the arm also consumes — and the same
+release of the same array type through `IRParkManagedDyn` at the pointer-cast
+seam is clean. The next step I would take is `-dPXX_HEAP_DEBUG` on the crashing
+build plus `-dPXX_OBJTRACE` to get retain/release provenance for the one handle,
+rather than another hypothesis.
 
 ## Why it is not simply "park only managed element types"
 
