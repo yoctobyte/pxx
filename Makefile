@@ -4133,6 +4133,20 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_ts_heap_mag26 "$$($(TESTTMP)/test_ts_heap_mag26)" "MAGAZINE OK"
 	./$(COMPILER) test/test_threadsafe_heap_magazine.pas $(TESTTMP)/test_ts_heap_mag_plain26
 	tools/expect_same.sh test_ts_heap_mag_plain26 "$$($(TESTTMP)/test_ts_heap_mag_plain26)" "MAGAZINE OK"
+	# A CAUGHT exception must release its managed FIELDS, not just the object.
+	# PXXObjFree runs PXXClassFinalize, whose managed pass is compiled out under
+	# PXX_TS_HARDLOCK (x86-64 --threadsafe), and this lowering did not emit the
+	# compensating locked PXXClassFinalizeManaged call the `Free` desugar emits,
+	# so every managed field of every caught exception leaked. Measured before
+	# the fix, this program: allocs=10975 frees=8230 live=2745 under --threadsafe
+	# against live=3 plain, with identical allocation counts.
+	# assert_no_leak rather than a cross-target diff, for the reason that
+	# script's own header gives: every backend leaked alike, so target-vs-target
+	# would have compared two equally wrong numbers.
+	# bug-a-a-caught-exception-leaks-its-managed-fields-under-threadsafe
+	./$(COMPILER) --threadsafe -dPXX_ALLOC_CENSUS test/test_threadsafe_exception_managed_fields.pas $(TESTTMP)/test_ts_exc_mgd26
+	tools/assert_no_leak.sh threadsafe_exc_managed 200 $(TESTTMP)/test_ts_exc_mgd26
+	tools/expect_same.sh test_ts_exc_mgd26 "$$($(TESTTMP)/test_ts_exc_mgd26 2>/dev/null | grep caught=)" "caught=3000"
 	./$(COMPILER) --threadsafe test/test_palthread.pas $(TESTTMP)/test_palthread26
 	tools/expect_same.sh test_palthread26 "$$($(TESTTMP)/test_palthread26)" "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nPALTHREAD OK')"
 	./$(COMPILER) --threadsafe test/test_atomic_counter.pas $(TESTTMP)/test_atomic_counter26

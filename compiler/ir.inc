@@ -13684,6 +13684,61 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
                         IRAppend(IR_CONST_INT, -1, -1, -1, REC_UCLASS_BASE, Ord(tyInteger)),
                         Ord(tkGe), 0, Ord(tyBoolean)),
                       -1, 0, 0);
+            { THE MANAGED HALF, EXACTLY AS THE `Free` DESUGAR EMITS IT.
+              PXXObjFree runs PXXClassFinalize, whose managed pass is compiled
+              out under PXX_TS_HARDLOCK -- x86-64 --threadsafe -- because there
+              the heap lock is the codegen BSS spinlock and Pascal cannot take
+              it. The Free desugar compensates by emitting PXXClassFinalizeManaged
+              as a SECOND call under the emitted lock (HeapLockedCallProcIdx1,
+              ~line 11592). This site did not, so every managed field of every
+              CAUGHT exception leaked -- and an exception class with a string
+              message is the ordinary case, not a corner.
+
+              MEASURED, 3000 raises of a class with one AnsiString field:
+
+                --threadsafe   allocs=10975 frees=8230  live=2745
+                plain          allocs=10975 frees=10972 live=3
+
+              Same allocation count, so this is the free side alone. The string
+              must be built at RUNTIME to see it at all: a folded literal is a
+              static-rc string that nothing frees either way, and the first
+              probe measured nothing for that reason.
+
+              THE GUARD IS ThreadSafeMode, AND THAT IS ONLY SOUND BECAUSE THE
+              DIRECTIVE NOW REQUIRES THE FLAG. It is a compiler flag while the
+              skip it compensates for is keyed to a DEFINE, and those two had
+              drifted: `{$threadsafe on}` set the mode without setting
+              PXX_TS_HARDLOCK, so on a directive-only build PXXClassFinalize
+              still ran its own pass and this call was a SECOND one -- measured
+              live=-2740, a double free. lexer.inc's directive handler refuses
+              that build now, the way it already refused it on the other three
+              targets, which is what makes mode and define agree again.
+
+              The lock wrap is the call site's job and not the callee's:
+              PXXClassFinalize's kind-4 (COM) pass runs a destructor chain and a
+              self-locking free, and putting THAT under the lock is the deadlock
+              the reverted cb2ed843 hit. Ordered before the free.
+
+              STILL BROKEN, same lowering, not this: PXXObjFree's own inner
+              PXXFree runs with no lock at all, so two threads each raising an
+              object corrupt the free list --
+              bug-a-two-threads-raising-object-exceptions-corrupt-the-heap.
+              That one needs the proc split, not a wrap. }
+            if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+            begin
+              cfPi := FindProc('PXXClassFinalizeManaged');
+              if cfPi >= 0 then
+              begin
+                HeapLockedCallProcIdx1 := cfPi + 1;
+                cfCall := IRAppendCall(cfPi,
+                            IRAppend(IR_ARG,
+                              IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),
+                              -1, -1, 0, Ord(tyPointer)),
+                            -1, Ord(tyNativeInt));
+                IRIVal[cfCall] := 1;   { statement: emit for effect }
+                IRMarkStatementNode(cfCall);
+              end;
+            end;
             last := IRAppendCall(excReleaseProc,
                       IRAppend(IR_ARG,
                         IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),

@@ -2,7 +2,7 @@
 
 - **Type:** bug (Track A — `compiler/ir.inc` exception lowering)
 - **prio:** 65
-- **Status:** open
+- **Status:** done
 
 ## Measured
 3000 raises of a class with one `AnsiString` field, caught each time. Same
@@ -75,3 +75,66 @@ Both this and the double-free are downstream of one unanswered question: what
 actually decides whether `PXXClassFinalize` runs its managed pass. Three
 comments in two files answer it differently from the defines. Settle that
 first, then both call sites follow.
+
+
+## FIXED (frankC, 2026-09-01). The premise above was wrong; frankB found the discriminator.
+
+**`PXX_TS_HARDLOCK` IS defined — but only from the CLI flag, never from
+`{$THREADSAFE ON}`.** Measured, a probe printing its own ifdefs:
+
+```
+plain                          HARDLOCK no    PXX_THREADSAFE no
+--threadsafe (CLI)             HARDLOCK YES   PXX_THREADSAFE YES
+{$threadsafe on} only, no CLI  HARDLOCK no    PXX_THREADSAFE YES
+```
+
+So `lexer.inc:1199`'s "never defined on any build" is STALE — lines 1228-1239 of
+the same function say the opposite and are newer, and the early exit it refers
+to was inverted. Two comments in one function describing opposite worlds, and I
+read the older one and built a whole diagnosis on it. Confirmed independently on
+my own binary before acting.
+
+Which means the attempted fix was RIGHT and its guard was aimed at the wrong
+condition: `ir.inc` gates on `ThreadSafeMode` (a compiler flag, set by the
+directive too) while `builtinheap`'s skip is gated on the DEFINE (set only by
+the flag). Directive-only build: no define, so `PXXClassFinalize` ran its own
+pass AND the emitted call ran — two passes, `live=-2740`. Flag build: define
+present, the emitted call supplied the only pass — correct.
+
+### The real bug underneath, fixed first
+`{$threadsafe on}` and `--threadsafe` produced DIFFERENT BINARIES from one
+source. The directive handler already REFUSES on i386/aarch64/arm32 with "the
+softlock define is applied before lexing" — the identical reasoning applies to
+`PXX_TS_HARDLOCK` on x86-64, and that arm was missing. One arm of a double case,
+the sibling of `bug-p-threadsafe-directive-does-not-define-pxx-threadsafe`.
+
+The refusal now covers every target. Blast radius measured before landing: ZERO
+sources in the repo use the directive without the flag in their Makefile row.
+
+With that, `ThreadSafeMode` implies the flag implies the define, so the
+`ir.inc` guard is sound by construction rather than by coincidence.
+
+### Result
+```
+                       before          after
+--threadsafe (flag)    live=2745       live=3
+plain (no directive)   live=3          live=3
+```
+
+`test/test_threadsafe_exception_managed_fields.pas` + Makefile rows, using
+`assert_no_leak` (bound 200) rather than a cross-target differential. Positive
+control observed, not asserted: the test fails on the parent binary at
+live=2745, twelve times the bound.
+
+`tools/gate.sh quick`: GREEN, FPC seed canary PASS.
+
+**Still open, same lowering, NOT this:**
+`bug-a-two-threads-raising-object-exceptions-corrupt-the-heap` — `PXXObjFree`'s
+inner `PXXFree` still runs with no lock.
+
+**Left for whoever wants it (frankB's measurement):** on a directive-only build
+the `Free` desugar was double-finalizing — two passes over the same fields — and
+did NOT corrupt or double-free, and neither of us found what absorbs the second
+pass. That build can no longer be produced, so the question is now academic
+rather than urgent, but it means something on the `Free` path is idempotent for
+a reason nobody has written down.

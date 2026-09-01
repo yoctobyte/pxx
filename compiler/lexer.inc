@@ -2149,9 +2149,37 @@ begin
         if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386)
            and (TargetArch <> TARGET_AARCH64) and (TargetArch <> TARGET_ARM32) then
           Error('{$threadsafe on} is x86-64/i386/aarch64/arm32 only: the heap/ARC/I-O locks are not implemented on this target yet');
-        if ((TargetArch = TARGET_I386) or (TargetArch = TARGET_AARCH64) or (TargetArch = TARGET_ARM32))
-           and (not ThreadSafeMode) then
-          Error('{$threadsafe on} on i386/aarch64/arm32 must be the --threadsafe flag: the softlock define is applied before lexing');
+        { EVERY supported target, x86-64 included. This guarded three of four,
+          and the fourth had the same defect for a different define.
+
+          The reason given for the other three is that the lock-implementation
+          define (PXX_TS_SOFTLOCK) is applied at option-parse time, so a
+          mid-source directive is too late to re-lex builtinheap with it.
+          PXX_TS_HARDLOCK is applied exactly the same way, from the flag, and
+          x86-64 is the target that reads it -- so `{$threadsafe on}` alone
+          produced a binary whose CODEGEN believed it was threadsafe and whose
+          RTL had been lexed believing it was not.
+
+          MEASURED, one probe printing its own ifdefs:
+
+            plain                          HARDLOCK no    PXX_THREADSAFE no
+            --threadsafe (CLI)             HARDLOCK YES   PXX_THREADSAFE YES
+            {$threadsafe on} only, no CLI  HARDLOCK no    PXX_THREADSAFE YES
+
+          The third row is the bug: two different binaries from one source,
+          differing in whether PXXClassFinalize keeps its own managed-field
+          pass, which the codegen then either duplicates or omits. Found by
+          frankB while checking why a fix for
+          bug-a-a-caught-exception-leaks-its-managed-fields-under-threadsafe
+          worked under the flag and double-freed under the directive.
+
+          Refusing rather than defining it here for the reason the older arm
+          already states: builtinheap is lexed by now, so defining it at this
+          point would set a flag nothing re-reads and be silently wrong. This
+          cannot be. bug-p-threadsafe-directive-does-not-define-pxx-threadsafe
+          fixed this same double case for PXX_THREADSAFE and left the sibling. }
+        if not ThreadSafeMode then
+          Error('{$threadsafe on} must be the --threadsafe flag: the lock-implementation defines (PXX_TS_HARDLOCK on x86-64, PXX_TS_SOFTLOCK elsewhere) are applied before lexing, so the directive alone builds an RTL that disagrees with the codegen');
         ThreadSafeMode := True;
         { …and the DEFINE that goes with the mode. PasApplyTargetDefines sets
           PXX_THREADSAFE from the --threadsafe FLAG, and runs at option-parse
@@ -2160,8 +2188,11 @@ begin
           it (classes.pas's TThread re-export, which is the whole reason the
           define exists) therefore saw nothing, and `{$threadsafe on}` +
           `uses Classes` could not name TThread while `--threadsafe` could.
-          Safe here because the directive is only legal at x86-64 top-of-source:
-          the units it must reach are all lexed after it.
+          REDUNDANT since the check above began requiring the flag -- the flag
+          path already defined it at option-parse time -- and kept anyway: it is
+          idempotent, and it is the line that documents WHY the mode and the
+          define must travel together. Deleting it would leave the next reader
+          with the refusal and no statement of what it protects.
           bug-p-threadsafe-directive-does-not-define-pxx-threadsafe }
         name := 'PXX_THREADSAFE';
         PasDefine(name);
