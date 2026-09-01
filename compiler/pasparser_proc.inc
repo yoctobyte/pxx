@@ -2592,7 +2592,7 @@ begin
     for i := 0 to nparams - 1 do
     begin
       gpi := Procs[procIdx].Params[i].SymIdx;
-      sz := ParamSize(gpi);
+      sz := ParamSlotWordSize(gpi);
       { rax = self }
       EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[CurGenSelfSym].Offset);
       { rax = [rax + CO_OFF_PARAMS + 8*i]  (instance stores each param as a qword) }

@@ -1491,7 +1491,7 @@ begin
       for i := 0 to nparams-1 do
       begin
         idx := Procs[procIdx].Params[i].SymIdx;
-        sz := ParamSize(idx);
+        sz := ParamSlotWordSize(idx);
         ABIA64CdeclArgSlot(procIdx, i, 0, a64Fp, intIdx, stackOff);
         EmitLoadImmA64(9, Syms[idx].Offset);
         EmitI32($8B0903A8);                       { add x8, x29, x9 (slot addr) }
@@ -1531,7 +1531,7 @@ begin
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
-      sz := ParamSize(idx);
+      sz := ParamSlotWordSize(idx);
       if i < 8 then
       begin
         { Load local offset into x9 }
@@ -1649,7 +1649,7 @@ begin
       for i := 0 to nparams-1 do
       begin
         idx := Procs[procIdx].Params[i].SymIdx;
-        sz := ParamSize(idx);
+        sz := ParamSlotWordSize(idx);
         isEight := ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
                     (Syms[idx].TypeKind = tyDouble) or (Syms[idx].TypeKind = tyExtended)) and
                    (not ABIParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef,
@@ -1720,7 +1720,7 @@ begin
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
-      sz := ParamSize(idx);
+      sz := ParamSlotWordSize(idx);
       EmitLoadImmArm32(9, Syms[idx].Offset);
       EmitI32($E08B9009);   { add r9, fp, r9 (slot addr) }
       if (((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
@@ -1800,7 +1800,7 @@ begin
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
-      sz := ParamSize(idx);
+      sz := ParamSlotWordSize(idx);
       EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
       rv32_add(reg_t0, reg_s0, reg_t0);
       if (Syms[idx].TypeKind = tySet) and
@@ -1890,7 +1890,7 @@ begin
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
-      sz := ParamSize(idx);
+      sz := ParamSlotWordSize(idx);
       if XtensaABI = XTENSA_ABI_WINDOWED then
       begin
         if (Syms[idx].Offset >= -128) and (Syms[idx].Offset <= 127) then
@@ -1934,7 +1934,7 @@ begin
           bug-a-a-by-value-wide-record-on-xtensa-renders-a-live-address
 
           The width is asked as RecSize(Syms[idx].RecName), NOT as `sz`. `sz` is
-          ParamSize(idx), and ParamSize answers the SLOT-LAYOUT question through
+          ParamSlotWordSize(idx), and ParamSize answers the SLOT-LAYOUT question through
           ABIParamSlotIsPointer, which holds tyRecord unconditionally -- so `sz`
           is TARGET_PTR_SIZE (4 here) for every record regardless of its real
           width, and a `sz > 4` guard is dead code that compiles, self-hosts and
@@ -2049,7 +2049,7 @@ begin
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
-      sz := ParamSize(idx);
+      sz := ParamSlotWordSize(idx);
       if TypeIsFloat(Syms[idx].TypeKind) and
          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
       begin
@@ -2142,7 +2142,7 @@ begin
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
-      sz := ParamSize(idx);
+      sz := ParamSlotWordSize(idx);
       EmitB($48); EmitB($8B); EmitB($85);
       EmitI32(16 + (nparams - 1 - i) * 8);        { mov rax, [rbp+disp] }
       if (Syms[idx].TypeKind = tySingle) and
@@ -2178,7 +2178,7 @@ begin
   for i := 0 to nparams-1 do
   begin
     idx := Procs[procIdx].Params[i].SymIdx;
-    sz := ParamSize(idx);
+    sz := ParamSlotWordSize(idx);
     if (Syms[idx].TypeKind = tySingle) and
        (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
     begin

@@ -4473,9 +4473,89 @@ end;
 function ABIParamSlotIsPointer(tk: TTypeKind; isRef, isArray: Boolean): Boolean; forward;
 function ABIParamSlotHoldsValueAddr(symIdx: Integer): Boolean; forward;
 
-function ParamSize(idx: Integer): Integer;
+{ THE TWO SIZES A PARAMETER SLOT HAS, and they differ on a 32-bit target.
+
+  ParamSlotWordSize  what the slot LAYOUT is made of -- one machine word for
+                     anything passed by address. It answers TARGET_PTR_SIZE for
+                     EVERY record, because ABIParamSlotIsPointer holds tyRecord
+                     unconditionally.
+  ParamValueSize     how many bytes AllocParam actually RESERVED. For a
+                     genuinely by-value record of RecSize <= 8 that is the
+                     record's own width, which on arm32 / riscv32 / xtensa /
+                     i386 is up to twice the word.
+
+  It used to be one function called `ParamSize`, and the name promised the
+  second answer while returning the first. Measured cost, 2026-08-30 while
+  landing the xtensa by-value-record spill: the natural guard
+
+      ((Syms[idx].TypeKind = tyRecord) and (sz > 4) and (sz <= 8))
+
+  written with `sz := ParamSize(idx)` already three lines up COMPILES,
+  SELF-HOSTS, AND CAN NEVER BE TRUE. The symptom is a repro that comes back
+  byte-identical -- which reads as "my change did nothing" and sends you back
+  to re-read arms that were already right. A comment asserting `sz` was the
+  real width got written on the strength of it.
+
+  So the rename is the fix, and the second function is what makes it one: a
+  name a reader must think about is worth little if the answer they wanted has
+  no name at all.
+  bug-a-paramsize-and-allocparam-disagree-about-a-5-8-byte-byvalue-record
+
+  ParamValueSize is also AllocParam's OWN size computation, extracted and
+  called from there rather than copied -- the two answers cannot diverge again,
+  which is the half of this ticket a rename alone would not have closed.
+
+  WHEN YOU ASK MATTERS, and the reason is measured rather than feared.
+  ParamValueSize reads `Syms[idx].RecName`, and AllocParam calls it on the slot
+  it is still filling, where RecName is whatever LastTypeRecId held. That is
+  REC_NONE more often than not: compiling `compiler.pas`, 41 of 52 record
+  parameters reach AllocParam with recid 0, and `RecSize(REC_NONE)` is the
+  8-byte fallback -- so for those the `RecSize(...) <= 8` test is a CONSTANT
+  TRUE and the branch's comment describes a decision it is not making. The
+  other 11 carry real ids (sizes 16, 40, 56), so the population is not
+  degenerate and this is not a vacuous zero.
+
+  It is not a miscompile, and that is checkable rather than hopeful: the
+  fallback path reserves max(8, TARGET_PTR_SIZE), and every answer this
+  function can give LATER -- once RecName is resolved -- is <= 8, whether the
+  record turns out to be small (its own width, clamped up to a word) or large
+  (a pointer). So the slot can be OVER-allocated by up to four bytes on a
+  32-bit target and never under-read. The wrong input is filed separately
+  (bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized);
+  fixing it here would be changing frame layout while renaming a helper. }
+function ParamSlotWordSize(idx: Integer): Integer;
 begin
   if ABIParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef, Syms[idx].IsArray) then
+    Result := TARGET_PTR_SIZE
+  else
+    Result := TypeSize(Syms[idx].TypeKind);
+end;
+
+function ParamValueSize(idx: Integer): Integer;
+begin
+  Result := 0;
+  { `idx > SymCount`, not `>=`: AllocParam asks about the slot it is still
+    FILLING, so the in-flight index legitimately equals SymCount. Written `>=`
+    first, and it did not answer 0 quietly -- it took the compiler's own
+    frame layout out from under it and the self-host build SEGFAULTED, which
+    is the one direction of failure this bug cannot take in a shipped compiler
+    and the reason the mistake cost seconds instead of a session. }
+  if (idx < 0) or (idx > SymCount) then Exit;
+  { A genuinely by-value record (not var/const/out, not forced to by-ref by
+    size -- that only happens for RecSize > 8) is stored inline in this param's
+    own slot, not behind a pointer, so the slot holds the whole record. On a
+    64-bit target TARGET_PTR_SIZE already covers any RecSize <= 8 and this is a
+    no-op; on a 32-bit target a 5-8 byte record got only a 4-byte slot, and
+    writing its second word overflowed into whatever symbol sat after it
+    (bug-arm32-record-byvalue-over-4-bytes-abi-gap). Never smaller than
+    TARGET_PTR_SIZE, matching the tiny-record (<=4-byte) case. }
+  if (Syms[idx].TypeKind = tyRecord) and (not Syms[idx].IsRef) and
+     (not Syms[idx].IsArray) and (RecSize(Syms[idx].RecName) <= 8) then
+  begin
+    Result := RecSize(Syms[idx].RecName);
+    if Result < TARGET_PTR_SIZE then Result := TARGET_PTR_SIZE;
+  end
+  else if ABIParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef, Syms[idx].IsArray) then
     Result := TARGET_PTR_SIZE
   else
     Result := TypeSize(Syms[idx].TypeKind);
@@ -4571,27 +4651,14 @@ begin
     SetPtrElemArrayInfo(SymCount);
   end;
 
-  if (tk = tyRecord) and not isRef and not isArray and (RecSize(LastTypeRecId) <= 8) then
-  begin
-    { A genuinely by-value record (not var/const/out, not forced to by-ref by
-      size -- that only happens for RecSize > 8) is stored inline in this
-      param's own slot, not behind a pointer -- so the slot must hold the
-      whole record, not just one machine word. On a 64-bit target
-      TARGET_PTR_SIZE (8) already covers any RecSize <= 8, so this is a
-      no-op there; on a 32-bit target (TARGET_PTR_SIZE = 4) a 5-8 byte
-      record previously got only a 4-byte slot, so writing its second word
-      (e.g. the arm32 by-value record-arg fix in ir_codegen_arm32.inc /
-      pasparser_proc.inc's prologue spill) silently overflowed into whatever symbol's
-      slot happened to sit right after it
-      (bug-arm32-record-byvalue-over-4-bytes-abi-gap). Never smaller than
-      TARGET_PTR_SIZE, matching the existing tiny-record (<=4-byte) case. }
-    sz := RecSize(LastTypeRecId);
-    if sz < TARGET_PTR_SIZE then sz := TARGET_PTR_SIZE;
-  end
-  else if ABIParamSlotIsPointer(tk, isRef, isArray) then
-    sz := TARGET_PTR_SIZE
-  else
-    sz := TypeSize(tk);
+  { The size rule lives in ParamValueSize and is CALLED here rather than stated
+    here, because a copy of it in each place is exactly how AllocParam and the
+    old ParamSize came to give different answers for the same parameter. Safe
+    to ask about SymCount already: TypeKind, IsArray, IsRef and RecName are all
+    written above, and RecName := LastTypeRecId is the value the inline version
+    read.
+    bug-a-paramsize-and-allocparam-disagree-about-a-5-8-byte-byvalue-record }
+  sz := ParamValueSize(SymCount);
 
   if ABIParamSlotIsPointer(tk, isRef, isArray) then
     align := TARGET_PTR_SIZE

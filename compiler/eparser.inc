@@ -386,7 +386,7 @@ begin
   for i := 0 to nparams - 1 do
   begin
     idx := Procs[procIdx].Params[i].SymIdx;
-    if ParamSize(idx) = 8 then EmitB($48);
+    if ParamSlotWordSize(idx) = 8 then EmitB($48);
     EmitB($89);
     case i of
       0: EmitB($BD);

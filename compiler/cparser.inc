@@ -11447,7 +11447,7 @@ begin
     for i := 0 to nparams - 1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
-      sz := ParamSize(idx);
+      sz := ParamSlotWordSize(idx);
       EmitLoadImmArm32(9, Syms[idx].Offset);
       EmitI32($E08B9009);   { add r9, fp, r9 (slot addr) }
       if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
@@ -11488,7 +11488,7 @@ begin
     for i := 0 to nparams - 1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
-      sz := ParamSize(idx);
+      sz := ParamSlotWordSize(idx);
       if i < 8 then
       begin
         EmitLoadImmA64(9, Syms[idx].Offset);
@@ -11543,7 +11543,7 @@ begin
     for i := 0 to nparams - 1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
-      sz := ParamSize(idx);
+      sz := ParamSlotWordSize(idx);
       EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
       rv32_add(reg_t0, reg_s0, reg_t0);   { t0 = &slot }
       if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
