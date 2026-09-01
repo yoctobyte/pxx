@@ -605,6 +605,81 @@ run_ash_cases() {   # $1 = runner, $2 = install dir
 }
 
 
+# The coreutils half of a userland. Same two constraints as the ash cases and
+# for the same reasons, plus one more that is specific to file tools:
+#
+#   EVERYTHING RUNS UNDER $D, WHICH IS SHARED. The oracle and each subject are
+#   installed in DIFFERENT directories ($WORK/g vs $WORK/p_<target>), so any
+#   path a tool prints from its own install dir would diff on every row for a
+#   reason that is not a defect. $D is one directory used by both, so an error
+#   message naming a path is comparable -- and error messages are half of what
+#   is being compared here, since that is where errno reaches the output.
+#
+#   NOTHING THAT CARRIES A TIMESTAMP, a uid, or a device number: no `cp -a`,
+#   no `-p`, no mtime-sensitive flag. Two builds of the same program disagree
+#   on none of those, but two RUNS do.
+#
+# The scratch tree is rebuilt per run, so a row never sees the previous run's
+# leftovers and the cases can be read in any order.
+run_coreutils_cases() {   # $1 = runner, $2 = install dir
+  local runner="$1" dir="$2" c="$D/cu"
+  rm -rf "$c"; mkdir -p "$c"
+  printf 'alpha\nbeta\ngamma\n' > "$c/three.txt"
+  printf 'no-trailing-newline' > "$c/nonl.txt"
+
+  if has_applet pwd; then
+    printf '### pwd\n'
+    ( cd "$c" && run_one "$runner" "$dir/pwd" ); printf '### exit=%d\n' "$?"
+  fi
+  if has_applet mkdir; then
+    for a in "$c/d1" "-p $c/d2/d3/d4" "$c/d1" "-p $c/d1" "$c/nope/deep"; do
+      printf '### mkdir [%s]\n' "$a"; run_one "$runner" "$dir/mkdir" $a; printf '### exit=%d\n' "$?"
+    done
+  fi
+  if has_applet wc; then
+    for a in "$c/three.txt" "-l $c/three.txt" "-w $c/three.txt" "-c $c/three.txt" \
+             "$c/three.txt $c/nonl.txt" "$c/missing.txt"; do
+      printf '### wc [%s]\n' "$a"; run_one "$runner" "$dir/wc" $a; printf '### exit=%d\n' "$?"
+    done
+  fi
+  if has_applet head; then
+    for a in "$c/three.txt" "-n 2 $c/three.txt" "-n 0 $c/three.txt" "-n 99 $c/three.txt" \
+             "$c/missing.txt"; do
+      printf '### head [%s]\n' "$a"; run_one "$runner" "$dir/head" $a; printf '### exit=%d\n' "$?"
+    done
+  fi
+  if has_applet cp; then
+    printf '### cp file\n';    run_one "$runner" "$dir/cp" "$c/three.txt" "$c/copy.txt"; printf '### exit=%d\n' "$?"
+    printf '### cp missing\n'; run_one "$runner" "$dir/cp" "$c/missing.txt" "$c/x.txt";  printf '### exit=%d\n' "$?"
+    printf '### cp -r\n';      run_one "$runner" "$dir/cp" -r "$c/d2" "$c/d2copy";       printf '### exit=%d\n' "$?"
+  fi
+  if has_applet mv; then
+    printf '### mv file\n';    run_one "$runner" "$dir/mv" "$c/copy.txt" "$c/moved.txt"; printf '### exit=%d\n' "$?"
+    printf '### mv missing\n'; run_one "$runner" "$dir/mv" "$c/missing.txt" "$c/y.txt";  printf '### exit=%d\n' "$?"
+  fi
+  if has_applet printf; then
+    for a in '%s|%d|%x\n str 42 255' '%5s|%-5s|%05d\n r l 42' '%c%c\n A B' 'plain\n'; do
+      printf '### printf [%s]\n' "$a"; run_one "$runner" "$dir/printf" $a; printf '### exit=%d\n' "$?"
+    done
+  fi
+  if has_applet rm; then
+    printf '### rm file\n';    run_one "$runner" "$dir/rm" "$c/moved.txt";     printf '### exit=%d\n' "$?"
+    printf '### rm missing\n'; run_one "$runner" "$dir/rm" "$c/missing.txt";   printf '### exit=%d\n' "$?"
+    printf '### rm -f\n';      run_one "$runner" "$dir/rm" -f "$c/missing.txt"; printf '### exit=%d\n' "$?"
+    printf '### rm dir\n';     run_one "$runner" "$dir/rm" "$c/d1";            printf '### exit=%d\n' "$?"
+    printf '### rm -rf\n';     run_one "$runner" "$dir/rm" -rf "$c/d2";        printf '### exit=%d\n' "$?"
+  fi
+  if has_applet sleep; then
+    printf '### sleep 0\n';   run_one "$runner" "$dir/sleep" 0;    printf '### exit=%d\n' "$?"
+    printf '### sleep bad\n'; run_one "$runner" "$dir/sleep" zzz;  printf '### exit=%d\n' "$?"
+  fi
+  # The tree that is LEFT is part of the comparison: it catches a tool that
+  # reported success and did nothing, which every row above would miss.
+  printf '### resulting tree\n'
+  ( cd "$c" && find . | sort )
+  printf '### exit=%d\n' "$?"
+}
+
 run_cases() {   # $1 = runner, $2 = install dir
   local runner="$1" dir="$2"
   if [ "$NAPPLETS" -eq 1 ]; then
@@ -615,6 +690,7 @@ run_cases() {   # $1 = runner, $2 = install dir
   has_applet cat  && run_cat_cases  "$runner" "$dir/cat"
   has_applet echo && run_echo_cases "$runner" "$dir"
   has_applet ash  && run_ash_cases  "$runner" "$dir"
+  run_coreutils_cases "$runner" "$dir"
   return 0
 }
 

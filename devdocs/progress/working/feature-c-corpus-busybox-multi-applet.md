@@ -392,3 +392,35 @@ literal, so a constant-false branch kept its dead arm and
 for [[bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link]],
 which is now the one thing between pxx and separately compiling a real C
 project.
+
+## 2026-09-01, later still — twelve applets, both targets
+
+```
+busybox-diff: applets=cat echo ash mkdir rm cp mv pwd wc head sleep printf
+              translation units=61
+  ORACLE  gcc unity build (114 cases)
+  ORACLE  busybox agrees with the gcc unity
+  PASS    x86_64   byte-identical to the gcc oracle over 114 cases
+  PASS    aarch64  byte-identical to the gcc oracle over 114 cases
+busybox-diff: GREEN
+```
+
+compiler sha256 `825c28a30c31`. **Zero new defects** — the fifteen closed
+getting to three applets covered the next nine.
+
+`run_coreutils_cases` is new and carries the constraint that matters for file
+tools: everything runs under `$D`, which oracle and subject SHARE. Each binary
+is installed in its own directory, so a path printed from the install dir would
+diff on every row for no reason — and paths in error messages are half of what
+is being compared, since that is where errno reaches the output. Nothing
+timestamp-, uid- or device-sensitive: no `cp -a`, no `-p`. The last row prints
+the resulting tree, which catches a tool that reported success and did nothing —
+something no other row would notice.
+
+### What this rung does NOT establish
+
+- Twelve applets, not the ~145 a real userland has. `ls`, `tail` and `uname`
+  are still out, and all three are unity-model limits (see the table above),
+  not pxx defects.
+- x86-64 and aarch64, Linux. Nothing here says anything about i386 or arm32.
+- The scripted cases only. `ash` is not proven against an interactive session.
