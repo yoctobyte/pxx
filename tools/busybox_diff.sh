@@ -301,20 +301,37 @@ sed -n '1,/^#include "libbb\/appletlib.c"$/p' "$CATUNITY" > "$UNITY"
 grep -q '^#include "libbb/appletlib.c"$' "$UNITY" \
   || die "$CATUNITY no longer ends its preamble with the appletlib.c include"
 
-gen_includes() {   # member basenames -> #include lines, appletlib/crt* removed
-  local o src
-  grep -oE '[a-z_0-9]+\.o\)' "$MAP" | sed 's/\.o)$//' | sort -u \
-    | grep -vxE 'crtbegin|crtend|crti|crtn|appletlib' \
-    | while read -r o; do
-        src="$(cd "$BB" && find . -name "$o.c" -not -path './scripts/*' -not -path './examples/*' \
-                            | sed 's|^\./||' | sort | head -1)"
-        [ -n "$src" ] || { printf 'no source file for archive member %s.o\n' "$o" >&2; return 1; }
+gen_includes() {   # archive members -> #include lines, appletlib/crt* removed
+  # THE MEMBER'S DIRECTORY IS PART OF ITS IDENTITY. The map names members as
+  # `libbb/lib.a(uuencode.o)', and an earlier cut of this took the BASENAME and
+  # went looking for `uuencode.c' with find. Six basenames exist twice in this
+  # tree (common.c login.c printenv.c ssl_helper.c time.c uuencode.c), so the
+  # sort|head -1 picked `coreutils/uuencode.c' deterministically, dropped
+  # `libbb/uuencode.c' entirely, and the dedupe by basename hid that two
+  # members had collapsed into one. It failed the only way this class fails:
+  # silently, and then as `undefined reference to bb_uuencode' at link time,
+  # in GCC's OWN build -- a name standing in for the thing it names.
+  local mem src n
+  grep -oE '[a-zA-Z0-9_/.+-]+\.a\([a-z_0-9]+\.o\)' "$MAP" | sort -u \
+    | sed 's|/lib\.a(|/|; s|\.o)$|.c|' \
+    | grep -vE '/(crtbegin|crtend|crti|crtn|appletlib)\.c$' \
+    | while read -r src; do
+        [ -f "$BB/$src" ] || { printf 'archive member maps to %s, which is not a file\n' "$src" >&2; return 1; }
         printf '#include "%s"\n' "$src"
       done
 }
 
 gen_includes > "$WORK/includes.txt.raw" || die "could not map every archive member to a source file"
 [ -s "$WORK/includes.txt.raw" ] || die "the map yielded no archive members -- refusing to build an empty unity"
+# The list must ACCOUNT FOR every archive member the tree's own link used. A
+# generator that silently merges two members produces a shorter list and a
+# build that is missing a translation unit, which shows up much later as an
+# undefined reference blaming an applet that did nothing wrong.
+nmem=$(grep -oE '[a-zA-Z0-9_/.+-]+\.a\([a-z_0-9]+\.o\)' "$MAP" | sort -u \
+       | sed 's|/lib\.a(|/|; s|\.o)$|.c|' \
+       | grep -vcE '/(crtbegin|crtend|crti|crtn|appletlib)\.c$')
+ninc=$(wc -l < "$WORK/includes.txt.raw")
+[ "$nmem" -eq "$ninc" ] || die "the map has $nmem archive members but the include list has $ninc entries -- some member was dropped or merged, and the build below would be missing a translation unit"
 
 # SECOND ORDERING CONSTRAINT, and it is the mirror of appletlib.c's "must come
 # FIRST": shell/*.c must come LAST.
@@ -349,8 +366,15 @@ if grep -q '^#include "shell/' "$WORK/includes.txt"; then
   # No ordering saves this pair (see the ASH_TEST note in configure_tree), so
   # catch it here with its cause rather than as 200 lines of gcc errors blaming
   # a macro expansion three files away.
-  grep -q '^#include "coreutils/test.c"$' "$WORK/includes.txt" \
-    && die "coreutils/test.c and shell/ash.c both claim ordinary identifiers via globals macros and collide in BOTH include orders -- this unity cannot contain both. Separate compilation is the fix; turning ASH_TEST back on is not."
+  #
+  # UNITY MODE ONLY. The message has always ended "separate compilation is the
+  # fix", and once that mode existed the guard was still refusing the exact
+  # combination the fix makes legal -- a true statement about the unity, obeyed
+  # by tooling in a mode it was not about. Under --separate each file is its own
+  # translation unit and neither can reach the other's macros.
+  if [ "$SEPARATE" -eq 0 ] && grep -q '^#include "coreutils/test.c"$' "$WORK/includes.txt"; then
+    die "coreutils/test.c and shell/ash.c both claim ordinary identifiers via globals macros and collide in BOTH include orders -- this unity cannot contain both. Separate compilation is the fix (--separate); turning ASH_TEST back on is not."
+  fi
 fi
 
 # POSITIVE CONTROL: for the cat-only configuration the generated list must be
