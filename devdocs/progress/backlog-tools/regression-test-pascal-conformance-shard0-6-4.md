@@ -78,12 +78,35 @@ Verified from `runs-seven.ndjson`. **4 transitions, not one clean regression** �
 treat the 08-31 window as the LAST transition, not the origin of the problem.
 A bisect that assumes a single introducing commit will land on noise.
 
-**Corrections to the numbers this was first reported with** (frank-coordinator's
-relay, since they will otherwise get quoted): the date and sha are exactly
-right; the counts are not. It is **4** transitions and **115** consecutive reds
-on seven, not 6 and 176. The larger figures come from reading across both hosts'
-archives as one sequence — `runs-plexus` and `runs-seven` are separate files
-recording separate runs.
+**Both sets of numbers were right; they answer different questions.** Reported
+first as 6 transitions / 176 red rows, corrected here to 4 / 115 — and the
+reason is worth more than either figure.
+
+| match string | still_red rows | events |
+| --- | --- | --- |
+| `pascal-conformance#shard0` | **140** (115 since the last transition) | **5** |
+| `pascal-conformance` | **176** | **6** |
+
+**A job-name substring without the shard suffix silently aggregates all six
+shards.** Both counts are correct arithmetic over different populations, and
+neither reading errors or looks partial.
+
+For a bisector the shard0 figures are the ones that matter: **115 consecutive
+reds since `aac20e75e`**, 4 label changes.
+
+**It also manufactures an anomaly that is not there.** The aggregated view shows
+two consecutive `fixed` events with no `new_red` between them — 08-30 16:10 and
+08-31 03:28 — which reads as a job being fixed twice, and suggests the shard's
+job identity is unstable across runs (a tempting explanation for four auto-filed
+instances). It is not. All six shards went red together at 08-30 09:10;
+**shards 0-3 cleared at 16:10 and shards 4-5 at 03:28.** Nothing about shard0
+happened at 03:28. The identity is stable; the aperture was wide.
+
+An earlier revision of this section blamed the discrepancy on reading
+`runs-plexus` and `runs-seven` as one sequence. **That was invented, not
+measured** — every figure above comes from `git show
+origin/master:devdocs/progress/tstate/runs-seven.ndjson` alone, which carries no
+`host` key at all.
 
 This job is **full-tier only** (every row mentioning it is `tier: full`), which
 is why the archive's adjacent rows are misleading for it — see the new section

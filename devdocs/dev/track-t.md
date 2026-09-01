@@ -45,11 +45,24 @@ tier alternation manufactures `new_red` events and found **0 spurious `fixed`
 across 178 native-after-full transitions** — the tool compares against the right
 baseline; the naive hand-read does not.
 
+**Match the FULL job name, shard suffix included.** A substring like
+`pascal-conformance` silently aggregates all six shards:
+`pascal-conformance#shard0` gives 140 red rows and 5 events, plain
+`pascal-conformance` gives 176 and 6. Both are correct arithmetic over different
+populations and neither errors. The wide match also **manufactures an anomaly**
+— two consecutive `fixed` with no `new_red` between, which reads as a job being
+fixed twice and invites a theory about unstable job identity. It is shards 0-3
+clearing at one run and shards 4-5 at the next.
+
 **The keys are `date` and `sha`** — not `ts`/`commit`, which this session
-guessed twice and which parse as `None` rather than raising. And the file is
-**per host**: concatenating `runs-plexus` with `runs-seven` and sorting on a key
-that does not exist leaves you with file order, which produced a confident and
-entirely fictional "6 transitions" here before the keys were checked.
+guessed twice. They parse as `None` rather than raising, so the sort silently
+does nothing; combined with concatenating two hosts' files that yielded a
+confident, entirely fictional transition count.
+
+**Those two mistakes produced the SAME wrong number from different causes**, in
+two sessions, at the same time. Two independent wrong readings agreeing is the
+worst confirmation signal there is, and it is precisely the case where "check it
+against a second source" fails: the second source agreed.
 
 Config lives in `<clone>/twatch.conf` (JSON; `trackt config` edits it —
 tier/fast_tier/interval/debounce/no_bisect/autoticket/web/web_port;
