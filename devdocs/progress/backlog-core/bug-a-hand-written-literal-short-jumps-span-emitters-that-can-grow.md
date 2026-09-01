@@ -2,14 +2,14 @@
 slug: bug-a-hand-written-literal-short-jumps-span-emitters-that-can-grow
 title: "Hand-written literal short jumps span emitters that can grow, and land mid-sequence when they do"
 track: A
-prio: 70
+prio: 35
 type: bug
-status: working
+status: open
 created: 2026-09-01
 found-by: frankA
-owner: frankA
+owner: ""
 blocked-by: []
-summary: "Short jumps in the backends carry a hand-counted literal displacement over a span emitted by other code; when that span changes size the jump stays IN RANGE and lands mid-sequence, so nothing errors. THREE converted and TWO were ALREADY WRONG on master, both silent wrong values on x86-64: `Write(s:w)` on a ShortString with w <= Length(s) truncated (`WriteLn(s:2)` for 'abcdef' printed nothing; FPC prints abcdef), and LoadFile into a ShortString returned an EMPTY string for every successful read. Both overshot by exactly 8 bytes; the third site was byte-identical. Fixed at 14bc9d218, tests verified to FAIL on the pre-fix binary. The class now has a gate row at 74ed877f2, tools/rel8_literal_span_check.py, enforcing that a literal displacement may only span FIXED-size emission; its positive control is the pre-fix tree, where it flags exactly those two sites and not the third. Census settled at 42 by a POSITION rule (a jump opcode is the first byte emitted on its line), which agreed with the comment rule 108/108 and also classifies the 23 uncommented sites -- the earlier 'about 25' and 142 both came from a grep that matches ModRM bytes. Remaining work is converting the 42, now guarded rather than urgent."
+summary: "Short jumps in the backends carry a hand-counted literal displacement over a span emitted by other code; when that span changes size the jump stays IN RANGE and lands mid-sequence, so nothing errors. FOUR converted, and TWO were ALREADY WRONG on master -- both silent wrong values on x86-64, fixed at 14bc9d218: `Write(s:w)` on a ShortString with w <= Length(s) truncated (`WriteLn(s:2)` for 'abcdef' printed nothing; FPC prints abcdef), and LoadFile into a ShortString returned an EMPTY string for every successful read. Both overshot by exactly 8 bytes. DROPPED 70 -> 35 because the CLASS is now guarded, not because the sweep is finished: gate row 74ed877f2 (tools/rel8_literal_span_check.py) fails any literal displacement spanning non-fixed-size emission, with the pre-fix tree as its positive control, and all 41 remaining sites span EmitB/EmitI32 only. Remaining work is converting those 41 for uniformity -- preventive, low expected yield, and safe to leave. Census settled at 42 (now 41) by a POSITION rule that agreed with the comment rule 108/108; the earlier 'about 25' and 142 both came from a grep matching ModRM bytes."
 ---
 
 # A literal displacement is a claim about code someone else emits
@@ -162,3 +162,23 @@ The first reading of that said "i386 only", from an A/B whose cross-target rows
 had silently all executed the same stale i386 artefact: the filename was built
 by a `$(...)` that failed, so every target wrote to and ran one path. Distinct
 output names and qemu gave the real answer, which is three targets.
+
+## Why the priority dropped after the guard landed, 2026-09-02
+
+70 was right while the class could ship a wrong value unseen. It cannot now:
+`gate.sh` fails on any literal displacement spanning non-fixed-size emission, in
+every mode, and the 41 remaining sites all span `EmitB`/`EmitI32` only. A
+fixed-size span is wrong only if someone edits inside it, and that edit trips the
+gate row on the same commit.
+
+So the residual job is converting 41 correct jumps for uniformity. Worth doing —
+the i386 clone stub at `d63f434b5` is the argument, one leg computed and one
+counted is how an arm gets left behind — but it is preventive work with a low
+expected yield, and it should not outrank anything that is currently wrong.
+
+**If you take it:** convert per file, and use byte-identity as the control
+(build the artefacts with the pre-change compiler, convert, rebuild, compare).
+Do not treat identity as a pass on its own — a program that never reaches the
+site is byte-identical too, so assert the site is exercised, by searching the
+artifact for the opcode and its displacement byte. That is how the two live ones
+were found: identity was the expected result, so the differing byte WAS the bug.
