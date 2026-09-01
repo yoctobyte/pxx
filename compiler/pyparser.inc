@@ -32732,11 +32732,24 @@ end;
   local was exact (bug-nilpy-class-field-and-recursive-return-narrow-an-
   arbitrary-precision-int).
 
-  The answer types the field tyVariant, NOT tyPromoInt64: a promo rvalue is a
-  slot ADDRESS and IRPromoAddrOf only knows how to take one for a plain
-  identifier, so a promo FIELD has no lowering today. A variant does, it is
-  already the boxing the promo RETURN and CAPTURE paths use, and it is lossless
-  — VT_PROMO_INT64 carries the exact decimal.
+  The answer types the field tyVariant, NOT tyPromoInt64. A variant is already
+  the boxing the promo RETURN and CAPTURE paths use, and it is lossless —
+  VT_PROMO_INT64 carries the exact decimal.
+
+  THE ORIGINAL REASON IS GONE; THE CHOICE MAY STILL BE RIGHT. This comment used
+  to read "a promo rvalue is a slot ADDRESS and IRPromoAddrOf only knows how to
+  take one for a plain identifier, so a promo FIELD has no lowering today." That
+  was true and is no longer: 68f2b9047 gave the three memory lvalues — array
+  element, field, deref — the same slot-address lowering the identifier had, in
+  both directions. This note is left by Track A rather than a rule change,
+  because a stale REASON and a wrong DECISION are two different claims and only
+  the first was measured. Whoever holds N next is the one who can weigh the
+  second; the constraint is simply no longer an argument for it.
+
+  (Recording it here rather than in a logbook because this comment is the only
+  place anyone is looking at the moment the question matters. It was also the
+  independent second source that confirmed the bug it describes — a workaround
+  with its reason written down is evidence; one without is code that looks odd.)
 
   Deliberately narrow: it requires the field to appear on BOTH sides of its own
   assignment, so a field merely assigned from somewhere else keeps its machine
