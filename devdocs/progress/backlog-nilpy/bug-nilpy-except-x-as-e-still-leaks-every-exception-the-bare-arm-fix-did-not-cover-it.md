@@ -67,28 +67,36 @@ binder would then genuinely own a reference instead of borrowing one, which is
 what `feature-nilpy-object-reclamation` slice 4 assumes everywhere else. UNVERIFIED:
 I did not confirm rebind-release actually fires on this symbol.
 
-## A stale comment that is load-bearing, and worth fixing on its own
+## CORRECTED: the nil DOES happen — my instrument could not see it
 
-`PyClassSymArcEligible` (`compiler/symtab.inc`) says in its header:
+I originally recorded here that except-handler binders are never nil'd, on the
+strength of a `PXXDBG=a.ir` dump showing no store of 0 into the binder sym.
+**That conclusion was wrong, and the way it was wrong is the useful part.**
 
-> Except-handler binders are named and get their slot nil'd by the AN_TRY_EXCEPT lowering.
+frankA found the mechanism (fixed the comment in `fa2249f8b`): the nil is
+emitted by the NilPy **watermark pass** at the head of each statement in
+`ir_codegen.inc` (`PyZeroedProc` / `PyZeroedUpTo` -> `EmitZeroFrameSlot`), whose
+own comment names handler binders explicitly. It emits at **CODEGEN, not as
+IR** — so `a.ir` cannot observe it, and looking there returns a truthful "no
+such store" about a question the instrument does not answer. Absence of
+evidence read as evidence of absence, from a tool that was working correctly.
 
-**They are not.** Dumped the IR rather than trusting it (`PXXDBG=a.ir:<proc>`):
-the handler emits `exc_store` into the binder, the release call and `exc_clear`,
-and **no store of 0 into the binder sym anywhere**. `exc_clear` zeroes the BSS
-status globals (`BSS_EXC_OBJ/CLS/ADDR`), not the frame slot.
+`PyClassSymArcEligible`'s header was genuinely stale in other respects (it
+claims only NAMED locals are eligible while the `Result` two lines below has no
+name filter, and a second comment inside the same function contradicts the
+first) — but not in the way this section originally said.
 
-This matters beyond tidiness: the binder is a named `tyClass` local, so it IS
-ARC-eligible, and `EmitManagedLocalCleanup` releases it at scope exit. Any fix
-that frees the object at handler exit without nil'ing the slot arms a second
-release on a freed pointer. Today the allocator has usually scrubbed the header
-and the `PXX_OBJ_MAGIC` guard rejects it — luck, not correctness, and it stops
-being luck once that block belongs to another object with a valid header.
+**THE HAZARD BELOW IS UNAFFECTED, and is why this section stays.** Nil-at-
+statement-head does not prevent it: the binder is ARC-eligible,
+`EmitManagedLocalCleanup` releases it at scope exit, and a release added at
+handler exit is a SECOND release of the same pointer. Only nil'ing at the
+handler-exit release closes that. Today the stale pointer's header has usually
+been scrubbed by the allocator and the `PXX_OBJ_MAGIC` guard rejects it — luck,
+not correctness, and it stops being luck once that block belongs to another
+object with a valid header.
 
-Note the slot the lowering holds is the HIDDEN binder (`__py_exc<N>`), which
-may not be the symbol the user's `e` resolves to — nil'ing the hidden one did
-NOT prevent the corruption above. Whoever takes this should establish that
-relationship first; it is probably the crux.
+So: whatever fix lands here must nil the slot AT the handler-exit release, not
+rely on the statement-head pass.
 
 ## Gate for this work
 
