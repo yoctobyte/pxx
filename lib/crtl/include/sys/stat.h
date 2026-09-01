@@ -69,6 +69,8 @@ extern int fstat(int fd, struct stat *buf);
 extern int lstat(const char *path, struct stat *buf);
 extern int mkdir(const char *path, mode_t mode);
 extern int chmod(const char *path, mode_t mode);
+extern int mknod(const char *path, mode_t mode, dev_t dev);
+extern int mkfifo(const char *path, mode_t mode);
 extern int fchmod(int fd, mode_t mode);
 extern mode_t umask(mode_t mask);
 

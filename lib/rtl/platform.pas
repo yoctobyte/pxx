@@ -159,6 +159,8 @@ function PalFchmod(handle, mode: Integer): Integer;
 function PalChmod(path: PChar; mode: Integer): Integer;
 function PalChown(path: PChar; owner, group: Integer): Integer;
 function PalLchown(path: PChar; owner, group: Integer): Integer;
+function PalTruncate(path: PChar; length: Int64): Integer;
+function PalMknod(path: PChar; mode: Integer; dev: Int64): Integer;
 function PalUmask(mask: Integer): Integer;
 function PalFtruncate(handle: Integer; length: Int64): Integer;
 function PalAccess(path: PChar; mode: Integer): Integer;
@@ -444,6 +446,16 @@ end;
 function PalLchown(path: PChar; owner, group: Integer): Integer;
 begin
   Result := PalBackendLchown(path, owner, group);
+end;
+
+function PalTruncate(path: PChar; length: Int64): Integer;
+begin
+  Result := PalBackendTruncate(path, length);
+end;
+
+function PalMknod(path: PChar; mode: Integer; dev: Int64): Integer;
+begin
+  Result := PalBackendMknod(path, mode, dev);
 end;
 
 function PalUmask(mask: Integer): Integer;

@@ -115,6 +115,8 @@ function __pxx_fchmod(fd, mode: Integer): Integer;
 function __pxx_chmod(path: PChar; mode: Integer): Integer;
 function __pxx_chown(path: PChar; owner, group: Integer): Integer;
 function __pxx_lchown(path: PChar; owner, group: Integer): Integer;
+function __pxx_truncate(path: PChar; length: Int64): Integer;
+function __pxx_mknod(path: PChar; mode: Integer; dev: Int64): Integer;
 function __pxx_umask(mask: Integer): Integer;
 function __pxx_ftruncate(fd: Integer; length: Int64): Integer;
 function __pxx_access(path: PChar; mode: Integer): Integer;
@@ -535,6 +537,16 @@ end;
 function __pxx_lchown(path: PChar; owner, group: Integer): Integer;
 begin
   Result := PalLchown(path, owner, group);
+end;
+
+function __pxx_truncate(path: PChar; length: Int64): Integer;
+begin
+  Result := PalTruncate(path, length);
+end;
+
+function __pxx_mknod(path: PChar; mode: Integer; dev: Int64): Integer;
+begin
+  Result := PalMknod(path, mode, dev);
 end;
 
 function __pxx_umask(mask: Integer): Integer;

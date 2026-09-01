@@ -67,6 +67,7 @@ char *getcwd(char *buf, size_t size);
 int unlink(const char *path);
 int rmdir(const char *path);
 int ftruncate(int fd, off_t length);
+int truncate(const char *path, off_t length);
 int access(const char *path, int mode);
 int fchown(int fd, uid_t owner, gid_t group);
 int chown(const char *path, uid_t owner, gid_t group);

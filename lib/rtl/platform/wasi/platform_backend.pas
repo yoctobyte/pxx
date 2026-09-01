@@ -77,6 +77,8 @@ function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
 function PalBackendChown(path: PChar; owner, group: Integer): Integer;
 function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
+function PalBackendTruncate(path: PChar; length: Int64): Integer;
+function PalBackendMknod(path: PChar; mode: Integer; dev: Int64): Integer;
 function PalBackendUmask(mask: Integer): Integer;
 function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
 function PalBackendAccess(path: PChar; mode: Integer): Integer;
@@ -851,6 +853,17 @@ begin
 end;
 
 function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendTruncate(path: PChar; length: Int64): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ No device nodes and no FIFOs here -- refused rather than faked. }
+function PalBackendMknod(path: PChar; mode: Integer; dev: Int64): Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

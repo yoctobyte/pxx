@@ -29,6 +29,7 @@ extern int __pxx_getpid(void);
 extern int __pxx_getcwd(char *buf, unsigned long size);
 extern int __pxx_remove(const char *path);
 extern int __pxx_ftruncate(int fd, long length);
+extern int __pxx_truncate(const char *path, long long length);
 extern int __pxx_access(const char *path, int mode);
 extern int __pxx_fchown(int fd, int owner, int group);
 extern int __pxx_chown(const char *path, int owner, int group);
@@ -121,6 +122,14 @@ int getpid(void) { return __pxx_getpid(); }
    Kernel returns 0/positive on success or -errno; translate to the C -1+errno. */
 int ftruncate(int fd, off_t length) {
   int rc = __pxx_ftruncate(fd, (long)length);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+/* truncate by PATH. Unlike chown/lchown this is a real syscall on every target
+   including the asm-generic ones -- there is no truncateat to route through. */
+int truncate(const char *path, off_t length) {
+  int rc = __pxx_truncate(path, (long long)length);
   if (rc < 0) { errno = -rc; return -1; }
   return 0;
 }

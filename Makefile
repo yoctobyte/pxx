@@ -21048,6 +21048,27 @@ endif
 	  echo 'cchown: identical to gcc'; \
 	fi; \
 	else echo 'cchown: SKIP (no gcc)'; echo cchown >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cchown) >/dev/null; fi
+	# truncate (by PATH) and mknod/mkfifo -- the other half of the same gap as
+	# cchown above: crtl had ftruncate and no truncate, and no mknod at all,
+	# so busybox's libbb/copy_file.c did not compile. Unprivileged by
+	# construction: only S_IFIFO nodes are made, which need no privilege, and
+	# mknod's dev argument is ignored for a FIFO. The mkfifo row matters
+	# because POSIX defines mkfifo AS mknod|S_IFIFO -- giving it a separate
+	# path is how the two drift.
+	# feature-c-corpus-busybox-multi-applet
+	$(PXX_STABLE) test/cmknod_truncate.c $(TESTTMP)/cmknod_truncate
+	@if command -v gcc >/dev/null 2>&1; then \
+	  if ! gcc -w -o $(TESTTMP)/cmknod_truncate_gcc test/cmknod_truncate.c 2> $(TESTTMP)/cmknod_oracle.err; then \
+	    echo "SKIP: cmknod_truncate (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cmknod_oracle.err))"; echo cmknod_truncate >> $(TESTTMP)/lib-test.skipped; \
+	    (cd $(TESTTMP) && $(TESTTMP)/cmknod_truncate) >/dev/null; \
+	  else \
+	  (cd $(TESTTMP) && $(TESTTMP)/cmknod_truncate_gcc) > $(TESTTMP)/cmt_gcc.txt 2>&1; \
+	  (cd $(TESTTMP) && $(TESTTMP)/cmknod_truncate) > $(TESTTMP)/cmt_pxx.txt 2>&1; \
+	  diff $(TESTTMP)/cmt_gcc.txt $(TESTTMP)/cmt_pxx.txt || \
+	    { echo 'FAIL: cmknod_truncate differs from gcc'; exit 1; }; \
+	  echo 'cmknod_truncate: identical to gcc'; \
+	fi; \
+	else echo 'cmknod_truncate: SKIP (no gcc)'; echo cmknod_truncate >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cmknod_truncate) >/dev/null; fi
 	# struct stat's fields: nlink/uid/gid/rdev and atime/ctime were hardcoded.
 	# Asserted through consequences — nlink rises with a hard link and falls
 	# when it is removed, a directory's nlink counts its subdirectories.

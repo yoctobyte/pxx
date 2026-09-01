@@ -45,6 +45,8 @@ function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
 function PalBackendChown(path: PChar; owner, group: Integer): Integer;
 function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
+function PalBackendTruncate(path: PChar; length: Int64): Integer;
+function PalBackendMknod(path: PChar; mode: Integer; dev: Int64): Integer;
 function PalBackendUmask(mask: Integer): Integer;
 function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
 function PalBackendAccess(path: PChar; mode: Integer): Integer;
@@ -140,6 +142,7 @@ const
   SYS_mmap = 9; SYS_munmap = 11; SYS_mprotect = 10; SYS_fchmod = 91; SYS_getpid = 39; SYS_nanosleep = 35; SYS_utimensat = 280;
   SYS_fchmodat = 268; SYS_fchownat = 260; SYS_umask = 95;
   SYS_getcwd = 79; SYS_rt_sigaction = 13;
+  SYS_truncate = 76; SYS_mknodat = 259;
   SYS_ftruncate = 77; SYS_faccessat = 269; SYS_geteuid = 107; SYS_fchown = 93; SYS_readlinkat = 267;
   SYS_getuid = 102; SYS_getgid = 104; SYS_getegid = 108; SYS_getppid = 110;
   SYS_exit = 60;
@@ -160,6 +163,7 @@ const
   SYS_mmap = 192; SYS_munmap = 91; SYS_mprotect = 125; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 320;
   SYS_fchmodat = 306; SYS_fchownat = 298; SYS_umask = 60;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
+  SYS_truncate = 92; SYS_mknodat = 297;
   SYS_ftruncate = 93; SYS_faccessat = 307; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 305;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
   SYS_exit = 1;
@@ -178,6 +182,7 @@ const
   SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_fchmodat = 53; SYS_fchownat = 54; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
+  SYS_truncate = 45; SYS_mknodat = 33;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
   SYS_exit = 93;
@@ -196,6 +201,7 @@ const
   SYS_mmap = 192; SYS_munmap = 91; SYS_mprotect = 125; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 348;
   SYS_fchmodat = 333; SYS_fchownat = 325; SYS_umask = 60;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
+  SYS_truncate = 92; SYS_mknodat = 324;
   SYS_ftruncate = 93; SYS_faccessat = 334; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 332;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
   SYS_exit = 1;
@@ -234,6 +240,7 @@ const
   SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_fchmodat = 53; SYS_fchownat = 54; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
+  SYS_truncate = 45; SYS_mknodat = 33;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
   SYS_exit = 93;
@@ -268,6 +275,7 @@ const
   SYS_mmap = 80; SYS_munmap = 81; SYS_mprotect = 82; SYS_fchmod = 52; SYS_getpid = 120; SYS_nanosleep = 195; SYS_utimensat = 296;
   SYS_fchmodat = 300; SYS_fchownat = 297; SYS_umask = 58;
   SYS_getcwd = 43; SYS_rt_sigaction = 226;
+  SYS_truncate = 22; SYS_mknodat = 290;
   SYS_ftruncate = 23; SYS_faccessat = 301; SYS_geteuid = 140; SYS_fchown = 53; SYS_readlinkat = 295;
   SYS_getuid = 137; SYS_getgid = 139; SYS_getegid = 141; SYS_getppid = 150;
   SYS_exit = 118;
@@ -707,6 +715,24 @@ end;
 function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_fchownat, -100, Int64(path), owner, group, $100, 0));
+end;
+
+{ truncate by PATH. Unlike chown there IS a legacy syscall on every target
+  here, including the asm-generic ones (45), so this does not go through an
+  *at variant -- there is no truncateat. }
+function PalBackendTruncate(path: PChar; length: Int64): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_truncate, Int64(path), length, 0, 0, 0, 0));
+end;
+
+{ mknod, through mknodat for the same reason chmod goes through fchmodat: the
+  asm-generic targets have no legacy mknod. `dev` is only consulted for
+  S_IFCHR/S_IFBLK; a FIFO or a regular file ignores it, which is the case real
+  code (busybox's libbb/copy_file.c, recreating a device node while copying a
+  tree) reaches most often. }
+function PalBackendMknod(path: PChar; mode: Integer; dev: Int64): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_mknodat, -100, Int64(path), mode, dev, 0, 0));
 end;
 
 { umask always succeeds and returns the PREVIOUS mask — it has no error case,

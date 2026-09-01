@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  392 functions across 27 headers. }
+  395 functions across 27 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -76,9 +76,9 @@ begin
     'm': Result :=
       ' malloc:stdlib.h mallopt:malloc.h memccpy:string.h memchr:string.h memcmp:string.h ' +
       ' memcpy:string.h memmem:string.h memmove:string.h mempcpy:string.h memrchr:string.h ' +
-      ' memset:string.h mkdir:sys/stat.h mkdtemp:stdlib.h mkostemp:stdlib.h mkstemp:stdlib.h ' +
-      ' mktime:time.h mmap:sys/mman.h modf:math.h modff:math.h mprotect:sys/mman.h ' +
-      ' mremap:sys/mman.h msync:sys/mman.h munmap:sys/mman.h ';
+      ' memset:string.h mkdir:sys/stat.h mkdtemp:stdlib.h mkfifo:sys/stat.h mknod:sys/stat.h ' +
+      ' mkostemp:stdlib.h mkstemp:stdlib.h mktime:time.h mmap:sys/mman.h modf:math.h ' +
+      ' modff:math.h mprotect:sys/mman.h mremap:sys/mman.h msync:sys/mman.h munmap:sys/mman.h ';
     'n': Result :=
       ' nan:math.h nanosleep:time.h nearbyint:math.h nextafter:math.h ntohl:netinet/in.h ' +
       ' ntohs:netinet/in.h ';
@@ -118,7 +118,8 @@ begin
       ' tan:math.h tanf:math.h tanh:math.h tcdrain:termios.h tcflow:termios.h tcflush:termios.h ' +
       ' tcgetattr:termios.h tcsendbreak:termios.h tcsetattr:termios.h timegm:time.h ' +
       ' tmpfile:stdio.h tmpnam:stdio.h tolower:ctype.h toupper:ctype.h towlower:wchar.h ' +
-      ' towupper:wchar.h trunc:math.h truncf:math.h ttyname:unistd.h ttyname_r:unistd.h ';
+      ' towupper:wchar.h trunc:math.h truncate:unistd.h truncf:math.h ttyname:unistd.h ' +
+      ' ttyname_r:unistd.h ';
     'u': Result :=
       ' umask:sys/stat.h ungetc:stdio.h unlink:unistd.h unsetenv:stdlib.h usleep:unistd.h ' +
       ' utimes:sys/time.h ';

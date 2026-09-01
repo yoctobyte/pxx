@@ -38,6 +38,7 @@ extern int __pxx_lstat(const char *path, struct __pxx_statbuf *sb);
 extern int __pxx_mkdir(const char *path, int mode);
 extern int __pxx_fchmod(int fd, int mode);
 extern int __pxx_chmod(const char *path, int mode);
+extern int __pxx_mknod(const char *path, int mode, long long dev);
 extern int __pxx_umask(int mask);
 
 static void fill(struct stat *buf, const struct __pxx_statbuf *sb) {
@@ -112,6 +113,23 @@ int chmod(const char *path, mode_t mode) {
   int rc = __pxx_chmod(path, (int)mode);
   if (rc < 0) { errno = -rc; return -1; }
   return 0;
+}
+
+/* mknod creates a FIFO, a device node or a regular file, picked by the file
+   type bits of `mode`. `dev` is consulted only for S_IFCHR/S_IFBLK, which is
+   why mkfifo below can pass 0 and why busybox's libbb/copy_file.c -- which
+   recreates whatever node type it found while copying a tree -- reaches this
+   for FIFOs and sockets far more often than for real devices. */
+int mknod(const char *path, mode_t mode, dev_t dev) {
+  int rc = __pxx_mknod(path, (int)mode, (long long)dev);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+/* mkfifo IS mknod with S_IFIFO and no device number -- POSIX defines it that
+   way, so it is spelled that way rather than given its own syscall path. */
+int mkfifo(const char *path, mode_t mode) {
+  return mknod(path, (mode & ~S_IFMT) | S_IFIFO, 0);
 }
 
 /* umask cannot fail and returns the PREVIOUS mask, so there is no -1/errno
