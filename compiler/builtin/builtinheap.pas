@@ -3928,6 +3928,8 @@ begin
       subDesc := Pointer(memberPtr + 12 + typeRef);
       memberSize := PInt32(Int64(subDesc) + 4)^;
     end
+    else if kind = 5 then
+      memberSize := 16                   { Variant slot: [tag:8][payload:8] }
     else
     begin
       memberSize := SizeOf(Pointer);
@@ -3944,6 +3946,15 @@ begin
           PXXDynArrayIncRef(Pointer(PWord(itemAddr)^));
         3: { Record }
           PXXRecordRetain(itemAddr, subDesc);
+        5: { Variant member — the mirror of PXXRecordRelease's PXXVarClear arm.
+             There was no arm here while the release side had one, survivable
+             only because nothing emitted kind 5 for a RECORD member: a class
+             carries variant fields, but a class is FINALIZED and never copied
+             by value, so this side was never reached for one. The moment record
+             descriptors emit kind 5 that asymmetry becomes a double free on the
+             SetLength survivor path — the same release-without-retain shape that
+             made 9cb079528 segfault — so both halves land in one change. }
+          PXXVarRetain(itemAddr);
       end;
       j := j + 1;
     end;

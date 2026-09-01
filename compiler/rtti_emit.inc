@@ -51,7 +51,27 @@ function RecordDescMember(fi: Integer): Boolean;
   descriptor, two walks split by lock discipline — the same split a CLASS layout
   descriptor has always had. bug-a-a-record-copy-does-not-retain-an-interface-field }
 begin
-  RecordDescMember := FieldIsManaged(fi) or FieldIsComInterface(fi);
+  RecordDescMember := FieldIsManaged(fi) or FieldIsComInterface(fi) or
+    { ...plus a scalar Variant field (kind 5), for the reason ClassFieldNeedsFinal
+      below gives for carrying the same arm: the variant slot can hold a managed
+      string, a promo or a refcounted object, and PXXRecordRelease already clears
+      it via PXXVarClear. Extended HERE and not in FieldIsManaged deliberately —
+      that predicate also selects CODEGEN PATHS, and widening it flips records
+      with variant fields into the managed-record paths wholesale, which is the
+      much broader change that comment warns about. This one only decides who
+      becomes a descriptor member.
+
+      Measured, dyn array of `record v: Variant; s: AnsiString`, 1000 trips of 8:
+      live=7357 before, and the variants were the survivors -- the string member
+      was walked and freed, the variant member was not in the descriptor at all.
+
+      SCOPE: this reaches a record that is ALREADY managed by virtue of some
+      other member. `record v: Variant; end` alone stays broken (live=7708),
+      because RecordHasManagedFields does not count a variant, so the record is
+      never managed, ManagedElemKind answers 0 for the element and no walk is
+      emitted for this descriptor to serve. Closing that one is the broad change
+      and has its own ticket. }
+    ((UFldTk[fi] = Ord(tyVariant)) and not UFldIsArray[fi]);
 end;
 
 function ClassFieldNeedsFinal(fi: Integer): Boolean;
@@ -1374,6 +1394,8 @@ begin
             mKind := 1
           else if FieldIsComInterface(fi) then
             mKind := 4
+          else if UFldTk[fi] = Ord(tyVariant) then
+            mKind := 5                 { Variant slot (PXXVarClear / PXXVarRetain) }
           else
             mKind := 3;
           PatchDataI32(mHdr + 4, mKind);

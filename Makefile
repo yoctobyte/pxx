@@ -6585,6 +6585,25 @@ test-core: $(COMPILER)
 	@# block before it shows, so every row runs 3000 times.
 	./$(COMPILER) test/test_promoint_array_cleanup.pas $(TESTTMP)/test_promoac26
 	tools/expect_same.sh test_promoac26 "$$($(TESTTMP)/test_promoac26 | tail -1)" "promoint-array-cleanup 39000/39000"
+	@# A VARIANT MEMBER of a record, which the RECORD descriptor never described.
+	@# FieldIsManaged knows AnsiString, dyn arrays and nested managed records; the
+	@# CLASS layout chain has carried a tyVariant arm all along, the RECORD chain
+	@# had none, so a class with a variant field was fine and a record with one
+	@# leaked. 4000 assertions rather than a count of blocks because BOTH halves
+	@# of the fix have to be judged and they fail differently: the descriptor half
+	@# alone leaks (values stay correct), and adding it WITHOUT PXXRecordRetain's
+	@# kind-5 arm destroys SetLength survivors instead. Executed all three ways:
+	@#   no fix                      live=11658   4000/4000
+	@#   descriptor, no retain arm   live=1948    1000/4000 under -dPXX_HEAP_DEBUG
+	@#   both halves                 live=6       4000/4000
+	@# The middle row is why the assertions are read back rather than counted, and
+	@# why the leak bound below cannot stand alone -- a double free passes it.
+	@# Built WITH the census: assert_no_leak refuses a binary that has none rather
+	@# than passing, and the census goes to stderr, so the expect_same row below
+	@# still reads a clean stdout through $$(...).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_record_variant_member_leaks.pas $(TESTTMP)/test_rvm26
+	tools/expect_same.sh test_rvm26 "$$($(TESTTMP)/test_rvm26 | tail -1)" "record-variant-member 4000/4000"
+	tools/assert_no_leak.sh record_variant_member 50 $(TESTTMP)/test_rvm26
 	@# ...and the RSS ceiling, because every assertion above passes on a build
 	@# that never frees anything: correctness and reclamation are different
 	@# claims. Measured on this program: 3.6 MB fixed, 54 MB with only the
