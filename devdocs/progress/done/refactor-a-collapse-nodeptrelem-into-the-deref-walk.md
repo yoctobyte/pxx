@@ -5,10 +5,10 @@ track: A
 prio: 30
 type: refactor
 blocked-by: []
-status: working
+status: done
 owner: frankB
 created: 2026-08-30
-summary: "MEASURED 2026-09-01 (frankB), decision now rests on one wider run. PXXDBG=a.derefwalk (probe c4affa68e) counts both NodePtrElem fallbacks and ships its own positive control (:noarms disables the ten typed arms, and the counters then fire). Over 35 files -- the 30 generated derefshape rows plus the deref-shape, cast-deref-siblings, record-cast and N-D-subarray tests -- 11400 calls reach the walk and NEITHER fallback fires; compiler.pas adds 447 more, also zero. The backstop does not fire even on test_cast_deref_chain_siblings, the regression it was added for. The behavioural A/B settles the DIRECTION: with the arms disabled NodePtrElem answers 11356 of 11383 calls and derefshape goes 30/30 -> 27/30, so NodePtrElem is strictly poorer per shape and can never BE the walk. NOT deleted: a 35-file zero is still a search, not a grammar argument. The remaining ask is one full-tier run with PXXDBG=a.derefwalk:* set, which is a Track T job and now costs one env var; the fallbacks print the node KIND when they fire, so a nonzero arrives diagnosed."
+summary: "DONE 2026-09-01 (frankB). NodePtrElem is deleted and both fallbacks inside ResolveDerefShapeAt keep their defaults instead of asking it. Settled by measurement in BOTH directions, not by a dead-code argument: a full tier with PXXDBG=a.derefwalk hit the two lines 939 and 220 times across 1050 job logs and NodePtrElem answered NONE of them (else-ans=0, backstop-ans=0 on every row), while both fallbacks restored those same defaults on a False return -- so removal is behaviour-preserving wherever it was measured. And the arms-disabled control (:noarms) shows NodePtrElem was the POORER walk: it answers 11356 of 11383 calls and derefshape goes 30/30 to 27/30, so a firing anywhere unmeasured would have OVERRIDDEN a correct default rather than rescued a missing one. The kinds that reach the fallbacks name real work, not a net: AN_PTR_CAST (939) because the cast arm guards on ASTIVal >= 0, AN_IDENT (218) because the ident arm can answer tyUnknown -- filed separately as widen-the-guards, which is where the remaining value is."
 ---
 
 # What is left of the two-predicates ticket
@@ -176,3 +176,56 @@ fallbacks stay until they are added.
 compiler is a good search and is still a search; this file has already recorded
 one wrong root cause that came from reasoning where a measurement was available,
 and "I could not construct a case" is exactly that shape one level up.
+
+## 2026-09-01 (frankB): done — and the full-tier run changed the answer
+
+The entry above this one said the fallbacks fire 0 times in 11847 calls across 35
+files and that this was *"a search, not a grammar argument"*. It was right to
+withhold the deletion, and the widening it asked for **overturned its zero**:
+on a full tier the two lines fire **1159 times**. Deleting on the 35-file zero
+would have been deleting live code on a measurement that had simply not looked
+far enough.
+
+What made the deletion safe was not a bigger zero. It was a different column:
+
+| | firings | NodePtrElem answered |
+| --- | --- | --- |
+| full tier (1050 job logs) | else 939, backstop 220 | **0** |
+| 35 files + compiler.pas | 0 | — |
+
+Both fallbacks already restored their defaults when NodePtrElem returned False.
+`ans=0` everywhere therefore means **removing the call is behaviour-preserving on
+every case measured** — a stronger claim than "unreachable", and one that
+survives the code being reached 1159 times.
+
+### The control is what stops this being a safety-net argument
+
+`PXXDBG=a.derefwalk:noarms` disables the ten typed arms. NodePtrElem then answers
+11356 of 11383 calls — it declines almost nothing — and `test/derefshape` goes
+**30/30 to 27/30**: `ds_nested_fixdbl`, `ds_nested_md2` and `ds_cast_ptrelem` turn
+silently wrong. So it was the POORER walk, and a fallback of it firing somewhere
+unmeasured would have overridden a correct `tyInteger` default with a worse
+answer. The thing that read as a net was the opposite of one.
+
+### What is actually left, which is the useful half
+
+The fallbacks are still reachable and now simply keep their defaults. The two
+kinds that reach them name work:
+
+- **`AN_PTR_CAST`, 939 hits** — the cast arm guards on `ASTIVal >= 0`, so the
+  adapter casts (ival -1/-2) fall past it.
+- **`AN_IDENT`, 218 hits** — the ident arm can answer `tyUnknown`, e.g. an
+  untyped `Pointer`.
+
+Widen those two guards. That is a different ticket and a real one; this one was
+about whether a second walk had to exist, and it does not.
+
+### Method note for whoever inherits this file
+
+Three times in this ticket a zero was the wrong answer, each for a different
+reason: a counter that had never been observed nonzero (fixed with `:noarms`);
+a probe that never reached the jobs at all (testmgr's env allowlist keeps `PXX_`
+and the variable is `PXXD`); and a population too small to contain the case
+(fixed by the full tier). **Every one of them printed a clean zero under a green
+gate.** The zeros were only worth reading once each had a control that made it
+possible for them not to be zero.

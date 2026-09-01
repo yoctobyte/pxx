@@ -5376,89 +5376,33 @@ begin
   Result := wCall;
 end;
 
-function NodePtrElem(node: Integer; var elemTk: TTypeKind; var elemRec: Integer;
-                    depth: Integer): Boolean;
-{ The POINTEE type of a pointer-valued expression, seen through the arithmetic.
+{ NodePtrElem was DELETED here 2026-09-01. It answered the pointee of a
+  pointer-valued expression through six node kinds, and by then it was reached
+  from exactly two places, both inside ResolveDerefShapeAt below: the final
+  `else` and the tyUnknown backstop. Neither call survived the measurement.
 
-  `(p + k)^` used to resolve its pointee only when the inner node was a bare
-  identifier or `arr[i]`; a binop "carries no element-type tag" and defaulted to
-  Integer. That default is right for a ^Integer and wrong for every other
-  pointer, so `(pc + 2)^` read FOUR bytes as an integer -- 1717920867, the bytes
-  'dcef' -- where `pc^` and `pc[2]`, the two other spellings of the same access,
-  both answered 'c'. Silent, and on a ^Byte or ^SmallInt it is a wrong SPAN, not
-  just a wrong tag.
+  MEASURED, not assumed, and in both directions:
+  - REACHABILITY. A full tier with PXXDBG=a.derefwalk hit those two lines 939
+    and 220 times across 1050 job logs, and NodePtrElem answered NONE of them:
+    `else-ans=0` and `backstop-ans=0` on every row. On the 35-file derefshape
+    population plus compiler.pas, 11847 calls, neither line was reached at all.
+    So the calls were live and ineffective, which is a stronger result than dead
+    code: both fallbacks restored their defaults on a False return, so removing
+    the call is behaviour-preserving wherever it was measured.
+  - VALUE. With ResolveDerefShapeAt's ten typed arms disabled
+    (PXXDBG=a.derefwalk:noarms, the probe's positive control), NodePtrElem
+    answers 11356 of 11383 calls and test/derefshape goes 30/30 -> 27/30. It was
+    the POORER walk. So its firing anywhere unmeasured would have OVERRIDDEN a
+    correct default with a worse answer, not rescued a missing one -- which is
+    the opposite of the safety net it read as.
 
-  Pointer arithmetic keeps the pointer's type, so the pointee comes from
-  whichever operand carries one. bug-p-a-pchar-plus-offset-loses-its-type-when-dereferenced
+  What the two kinds that reach those fallbacks actually name is WORK, not a
+  net: AN_PTR_CAST (939) arrives because the cast arm guards on `ASTIVal >= 0`,
+  AN_IDENT (218) because the ident arm can answer tyUnknown. Widen those guards.
 
-  The FIELD and PTR_CAST arms were added for
-  bug-p-a-second-deref-on-a-typecast-pointer-field-is-dropped: the alias-cast
-  postfix loop in pasparser_expr.inc answered every `^` in a chain from the
-  ORIGINAL cast's alias, so `PRec(raw)^.n^` typed the second deref as the
-  record the CAST points at instead of what the FIELD points at. Same shape as
-  NodeMetaclassCi's note below — one predicate that knows every spelling beats
-  a per-site copy that knows one, because the copy is what goes stale. }
-var baseRec, fIdx: Integer;
-begin
-  Result := False;
-  if (node < 0) or (node >= ASTNodeCount) or (depth > 8) then Exit;
-  if ASTKind[node] = AN_IDENT then
-  begin
-    if (ASTIVal[node] < 0) or (ASTIVal[node] >= SymCount) then Exit;
-    if IntToTypeKind(ASTTk[node]) <> tyPointer then Exit;
-    elemTk := Syms[ASTIVal[node]].PtrElemTk;
-    elemRec := Syms[ASTIVal[node]].PtrElemRec;
-    Result := elemTk <> tyUnknown;
-  end
-  else if ASTKind[node] = AN_INDEX then
-    Result := NodePtrElem(ASTLeft[node], elemTk, elemRec, depth + 1)
-  else if ASTKind[node] = AN_DEREF then
-  begin
-    { `p^[i]` where p: ^array[..] of <some pointer>. The AN_INDEX arm above
-      recurses into its base, which for this spelling is the DEREF -- and with
-      no arm here it answered "not a pointer", so `WriteLn(p^[1])` on an
-      `array of PChar` printed the ADDRESS while `WriteLn(a[1])` on the same
-      array printed the string. The array symbol's own arm reads exactly this
-      pair of slots (AllocArray parks the ELEMENT's depth and base there); a
-      pointer-to-array symbol parks them the same way, one level deeper.
-      bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
-    baseRec := DerefPtrArraySym(node);
-    if baseRec < 0 then Exit;
-    if SymPtrDepth[baseRec] < 2 then Exit;
-    elemTk := IntToTypeKind(SymPtrBaseTk[baseRec]);
-    elemRec := SymPtrBaseRec[baseRec];
-    Result := elemTk <> tyUnknown;
-  end
-  else if ASTKind[node] = AN_FIELD then
-  begin
-    { A pointer-typed FIELD: the pointee is the FIELD's, from UFldPtrElem*. }
-    if IntToTypeKind(ASTTk[node]) <> tyPointer then Exit;
-    baseRec := ResolveNodeRec(ASTLeft[node]);
-    if baseRec < REC_UCLASS_BASE then Exit;
-    fIdx := FindUField(baseRec - REC_UCLASS_BASE, GetASTIdentName(node));
-    if fIdx < 0 then Exit;
-    elemTk := IntToTypeKind(UFldPtrElemTk[fIdx]);
-    elemRec := UFldPtrElemRec[fIdx];
-    Result := elemTk <> tyUnknown;
-  end
-  else if ASTKind[node] = AN_PTR_CAST then
-  begin
-    { An inline typed pointer cast: the pointee is the alias's. A NEGATIVE
-      ASTIVal is an adapter marker (-2 = the PChar +8 skip, -1 = a widening
-      ordinal pun), not an alias row — those carry no pointee here. }
-    if ASTIVal[node] < 0 then Exit;
-    elemTk := IntToTypeKind(AliasElemTk[ASTIVal[node]]);
-    elemRec := AliasElemRec[ASTIVal[node]];
-    Result := elemTk <> tyUnknown;
-  end
-  else if (ASTKind[node] = AN_BINOP) and
-          (TTokenKind(ASTIVal[node]) in [tkPlus, tkMinus]) then
-  begin
-    Result := NodePtrElem(ASTLeft[node], elemTk, elemRec, depth + 1);
-    if not Result then
-      Result := NodePtrElem(ASTRight[node], elemTk, elemRec, depth + 1);
-  end;
-end;
+  refactor-a-collapse-nodeptrelem-into-the-deref-walk, closing
+  refactor-a-two-predicates-answer-what-a-caret-yields. Full history in both. }
+
 
 { ONE pointer-shape walk for a dereference, `x^`.
 
@@ -5735,23 +5679,32 @@ begin
           population is a handful of files, and NodePtrElem answering False is
           load-bearing here in a way this else is not.
           refactor-a-collapse-nodeptrelem-into-the-deref-walk }
-        tk := tyInteger;
-        recName := REC_NONE;
+        { The two-walk era ends here. This `else` used to ask NodePtrElem for a
+          node kind no arm above claimed, and restore these same defaults when
+          it declined. MEASURED over a full tier with PXXDBG=a.derefwalk:
+          939 hits on this line and 220 on the backstop below, and NodePtrElem
+          answered NONE of them -- `else-ans=0` and `backstop-ans=0` on every
+          one of 1050 job logs, plus 11847 calls across the derefshape
+          population and compiler.pas where neither line was reached at all.
+          So removing the call is behaviour-preserving wherever it was measured,
+          and the defaults it restored on False are simply kept.
+
+          It is not a safety net either, which the ARMS-DISABLED control settles
+          rather than argues: with the ten typed arms off, NodePtrElem answers
+          11356 of 11383 calls and derefshape goes 30/30 -> 27/30. It is the
+          POORER walk. A fallback of it firing somewhere unmeasured would be the
+          poorer walk overriding the default, not rescuing it.
+
+          The kinds that DO reach here name the real work, and it is not a net:
+          AN_PTR_CAST (939) arrives because the cast arm guards on ASTIVal >= 0,
+          and AN_IDENT (218) because the ident arm can answer tyUnknown. Widen
+          those two guards; do not keep a walk.
+          refactor-a-collapse-nodeptrelem-into-the-deref-walk }
         DwElseHits := DwElseHits + 1;
-        { The KIND, not just the count. A bare tally tells whoever runs this
-          over a wider population that something fell through; it does not tell
-          them WHAT, and the next step after a nonzero is always "which shape".
-          Printing it here makes a Track-T-scale run self-diagnosing instead of
-          the first step of a second investigation. }
         if PxxDbgArg('a.derefwalk') <> '' then
           WriteLn('PXXDBG a.derefwalk ELSE kind=', ASTKind[node], ' depth=', depth);
-        if not NodePtrElem(node, tk, recName, 0) then
-        begin
-          tk := tyInteger;
-          recName := REC_NONE;
-        end
-        else
-          DwElseAns := DwElseAns + 1;
+        tk := tyInteger;
+        recName := REC_NONE;
       end;
       { A node whose KIND an arm above recognised but whose pointee it could not
         answer: an AN_INDEX whose base is not a plain variable — which is what
@@ -5761,25 +5714,23 @@ begin
         else, then typed the `^` from the OUTER cast's alias: row b of
         test_cast_deref_chain_siblings printed a raw pointer instead of 'world'.
 
-        NodePtrElem is the predicate that knows every spelling (it recurses an
-        INDEX into its base and has its own FIELD and PTR_CAST arms), and the
-        final else already asks it — it just was not asked when an arm had
-        already claimed the node. It carries no DEPTH, so remDepth stays 0 and
-        exactly one level resolves, which is what these chains did before this
-        procedure took the walk over.
+        NodePtrElem was the predicate that knew every spelling, and the final
+        else already asked it — it just was not asked when an arm had already
+        claimed the node. PAST TENSE since 2026-09-01: it answered 0 of the 220
+        hits this line takes on a full tier, so the call was removed with it and
+        this arm now keeps its defaults. See the epitaph above ResolveDerefShape
+        for the measurement; the shape that reaches here is AN_IDENT with an
+        unknown pointee, and the fix for it is to widen the ident arm.
         regression-test-core-test-cast-deref-chain-siblings }
       if tk = tyUnknown then
       begin
         DwBackHits := DwBackHits + 1;
         if PxxDbgArg('a.derefwalk') <> '' then
           WriteLn('PXXDBG a.derefwalk BACKSTOP kind=', ASTKind[node], ' depth=', depth);
-        if not NodePtrElem(node, tk, recName, 0) then
-        begin
-          tk := tyUnknown;
-          recName := REC_NONE;
-        end
-        else
-          DwBackAns := DwBackAns + 1;
+        { …and the same for the backstop: NodePtrElem answered 0 of 220 hits on
+          a full tier. The defaults it restored on False are kept. }
+        tk := tyUnknown;
+        recName := REC_NONE;
       end;
       if remDepth >= 1 then
       begin
