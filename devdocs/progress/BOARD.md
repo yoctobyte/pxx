@@ -92,7 +92,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (136)
+## backlog-core (137)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -142,6 +142,7 @@ _none_
 | bug-a-threadsafe-builds-leak-every-variant-and-interface-element-of-a-dynamic-array | A | 5 | bug | under --threadsafe a dynamic array of Variants or of COM interfaces never releases its elements — 3848 live blocks per 1000 trips against 4 in a default build; deliberate (it prevents a deadlock) and correct as a choice, but the residual leak had no ticket and no number | — |
 | bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend | A | 25 | bug | compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it. | — |
 | bug-a-two-deref-walk-guards-send-a-resolvable-shape-to-the-fallback | A | 40 | bug | ResolveDerefShapeAt has ten typed arms and two fallbacks that now just keep a default. Measured over a full tier with PXXDBG=a.derefwalk, the fallbacks take 1159 hits and only TWO node kinds ever reach them: AN_PTR_CAST 939 times, because the cast arm guards on `ASTIVal >= 0` and the adapter casts (ival -1/-2) fall past it; and AN_IDENT 220 times, because the ident arm answers tyUnknown for a pointer whose pointee it cannot name. Both then get tyInteger/tyUnknown, which is a GUESS in a walk whose whole job is to stop guessing -- the same family that produced five wrong-value tickets this week. Not urgent and not known to miscompile anything today: no test fails on it, which is exactly why it needs measuring rather than assuming. The counts come free from the probe, so the first job is to find out whether either default is ever WRONG. | — |
+| bug-a-two-threads-raising-object-exceptions-corrupt-the-heap | A | 75 | bug | Two threads raising object exceptions corrupt the heap (x86-64, --threadsafe) | — |
 | bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage | A | 40 | bug | tyUnknown is simultaneously the legitimate 'untyped Pointer' pointee sentinel and the value every unwritten/recycled slot reads back as. A consumer cannot tell 'this parameter genuinely takes anything' from 'I read a slot that is not mine', and because the permissive answer is the shared one, every such guard fails OPEN. | — |
 | bug-a-wasm32-has-no-variant-ir-arms-so-any-variant-assignment-traps | A | 30 | bug | ANY Variant assignment traps on wasm32: `v := 42` in a bare program body, with no procedure in it, gives `wasm trap: wasm unreachable instruction executed`, exit 134. NOT a leak and NOT a scope-exit problem -- the compiler says so itself, in its own broken-body report: `main$0 - statement IR op 43`, which is IR_VAR_STORE. The whole Variant family is absent from this backend: grep counts IR_VAR_STORE 0, IR_VAR_BINOP 0, IR_VAR_BOX 0 in ir_codegen_wasm32.inc against 2, 2, 2 in ir_codegen_riscv32.inc. So this is not a bug in Variant handling, it is Variant not being lowered at all, and the trap is the backend's deliberate unsupported marker (WasmUnsupported -> WasmBodyUnreachable) doing exactly what it is for. Consequence beyond the trap: wasm32's scope-exit release now HAS a PXXVarClear arm (74e33af46) and nothing can reach it, so that arm is written and unverified until this lands -- do not read its presence as coverage. Scope is three IR ops ported from the riscv32 or aarch64 arm, plus whatever Variant RTL the wasi profile is missing; the descriptor-cell indirection this backend uses for record RTTI (WasmRecDescAddr) is the pattern for any blob address a Variant op needs, because wasm32 has no code->data fixups. | — |
 | bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc | A | 30 | bug | `Write` of a real renders at a width that depends on the TARGET: x86-64 prints `s1+s2` (Single+Single) in Double form where FPC and xtensa print Single, and xtensa prints `i/2` in Single form where FPC and x86-64 print Double. Two backends, opposite errors, same source and same compiler. The values are right; the width dispatch is not. | — |
@@ -471,14 +472,13 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog-decide (24)
+## backlog-decide (23)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | decide-a-latent-defect-ticket-should-block-the-work-that-makes-it-observable | U | 55 | decide | f4fb9d31b made generic constraints load-bearing while bug-p-generic-constraints-are-checked-before-the-type-section-closes sat open at p40 describing exactly why the placement was wrong. The regression was predicted in writing before it happened, and nothing in the board could express the dependency. Same shape hit three times on 2026-08-30. Options: a new edge type, a convention on blocked-by, a check in tools/progress.sh, or accept it. | — |
 | decide-c-crtl-rand-max-is-conforming-but-breaks-real-code | U | 40 | decide | crtl defines RAND_MAX as 32767 and rand() returns [0,32767]. C99 7.20.2.1 only requires RAND_MAX >= 32767, so this is conforming — but every mainstream libc uses 2147483647 and real programs branch on the value. busybox editors/awk.c has an #error for anything else and is the only busybox file still blocked on a non-library gap. Raising it is a behaviour change to a shipped library, not a defect fix, so it is a call to make, not a bug to close. | — |
 | decide-do-we-introduce-the-named-trade-off-flag-axis-and-what-is-the-bar | U | 55 | decide | The O charter names -Os, -Ofast and -funroll-loops as the shape a trade-off takes -- an author chooses WHICH trade, not HOW MUCH -- but NONE OF THE THREE EXISTS. No named trade-off flag has ever been built, so the axis is described and empty. A first candidate now exists: the x86-64 static-literal retain guard, measured -3.96% on literal-heavy code and +6.95% on the real workload (compiler.pas), i.e. a genuine trade rather than a win or a loss. The fork: do we open the named-flag axis at all, and what is the bar for putting a pass behind one -- given that PROMISE (delivered value, measured) and PROOF (Track T full tier) were ruled for the -O levels and a trade-off flag by construction cannot show net promise? Filed by the coordinator at frank-optimize's request; frank-optimize declined to file it while holding the candidate. | — |
-| decide-does-raise-of-an-existing-object-transfer-ownership | U | 8 | decide | two tests in the corpus now require opposite things from `raise` — test_exception_object_leaks needs the handler to FREE the caught object, test_exception_threads_race re-raises objects it still owns and needs it NOT to; the current guard cannot satisfy both and the tier is RED on the second | — |
 | decide-is-binds-the-cpyext-runtime-the-ratified-extension-module-check | U | 30 | decide | decide-nilpy-import-rule-vs-a-cpyext-extension-module ratified `PyInit_<name>` as the extension-module criterion; the implementation substituted 'the unit binds the cpyext runtime' after measuring that PyInit_<name> holds for only 3 of the 6 real units, and flagged the deviation for the owner to overrule. Nobody overruled it either way, and it is now shipped, pinned in v391, and — as of this ticket — documented on the public website. Ratify the substitution or order it changed. | — |
 | decide-nilpy-deepcopy-over-the-container-subset | U | 40 | decide | `copy.deepcopy`: implement over the subset, or keep the loud absence? | — |
 | decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample | U | 55 | decide | A fourth-corpus probe (reportlab 4.2.5, 421 .py) at pin v389 found that NONE of its 30 distinct first walls is a wall the webencodings/html5lib/tinycss2 family produced — because 89% of its failures are missing library surface and it never reaches the mechanism layer. The family's mechanism walls are not wrong, they are CONDITIONAL: they are what a corpus hits once its import surface is already covered. The three corpora that generated the whole 55-70 ranking are self-contained web parsers with almost no stdlib footprint. On a corpus with an ordinary footprint, landing the entire mechanism cluster would move compile count by ~zero. prio: is the human's field, so the re-ranking call is the owner's. | — |
@@ -839,9 +839,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3020)
+## done (3021)
 
-3020 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3021 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -925,6 +925,7 @@ _none_
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 80] [A] meta-a-pxx-produces-linkable-code [meta — a standing index, never "done"; link work to it, do not claim it]
 - [p 80] [A] umbrella-cross-target-codegen-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
+- [p 75] [A] bug-a-two-threads-raising-object-exceptions-corrupt-the-heap
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [A] umbrella-managed-memory-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -1358,7 +1359,7 @@ _none_
 - [p 10] [P] compat-p-system-integer-is-smallint-in-fpc
 - [p 10] [A] feature-a-shrink-managed-header-on-32-bit
 - [p 10] [A+O] feature-opt-alloc-intent-hint
-- [p  8] [U] decide-does-raise-of-an-existing-object-transfer-ownership (unblocks 1)
+- [p  5] [A] bug-a-an-exception-that-escapes-its-handler-or-is-bare-re-raised-still-leaks-its-object
 - [p  5] [A] bug-a-threadsafe-builds-leak-every-variant-and-interface-element-of-a-dynamic-array
 - [p  5] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
 - [p  5] [N] feature-nilpy-nested-def-as-value
@@ -1382,7 +1383,6 @@ _none_
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
 - **1** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
-- **1** — decide-does-raise-of-an-existing-object-transfer-ownership
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
 - **1** — decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - **1** — decide-nilpy-dict-mutation-during-iteration

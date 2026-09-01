@@ -192,3 +192,36 @@ opposite behaviour from the same guard. Filed as
 options, a recommendation, and one seductive shortcut checked and rejected.
 Not reverting: that trades this crash for the 1478/1500 leak and turns the other
 test red, which is not a return to green.
+
+
+## The ownership fork is settled, and the blocker moved (frankC, 2026-09-01)
+
+`decide-does-raise-of-an-existing-object-transfer-ownership` is closed for
+option (a): FPC 3.2.2 frees a raised object it did not construct (runtime error
+216 on the repro; heaptrc shows 2 allocated, 2 freed, 0 unfreed on the
+single-raise form), so `raise` transfers ownership unconditionally and
+`620989250` adopted the language's rule rather than inventing one. The test is
+what must change — phase 3 must allocate per raise instead of re-raising
+pre-made objects.
+
+frankB's stated cost for that is gone: the thread-local heap magazine at
+`250fdc6bd` makes small alloc/free lock-free per thread under `--threadsafe`,
+so allocating per raise no longer serialises on the heap lock, which was the
+test's whole reason for reusing objects.
+
+**But the rewrite is blocked, and this ticket's red now has a different cause.**
+Attempting it turns up
+`bug-a-two-threads-raising-object-exceptions-corrupt-the-heap`: two threads
+each raising a freshly constructed object SIGSEGV, with no shared object, no
+shared class and no re-raise. Clean at `620989250^`, SIGSEGV at HEAD. Not the
+magazine (`-dPXX_NO_HEAP_MAG` crashes identically). Cause: on x86-64 the heap
+lock is emitted by codegen at `tkGetMem`/`tkFreeMem` sites and never taken
+inside the runtime helpers, so `620989250`'s emitted call to `PXXObjFree`
+mutates the free list bare.
+
+blocked-by: bug-a-two-threads-raising-object-exceptions-corrupt-the-heap
+
+The rewrite itself is scoped in the closed decide ticket, including the two
+things it must carry (the header sentence stops naming one mechanism, and the
+process-wide control has to fail at the SAME N — sensitivity is a hit rate, not
+a pass).

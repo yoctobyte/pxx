@@ -2,8 +2,9 @@
 type: decide
 track: U
 prio: 8
-summary: two tests in the corpus now require opposite things from `raise` — test_exception_object_leaks needs the handler to FREE the caught object, test_exception_threads_race re-raises objects it still owns and needs it NOT to; the current guard cannot satisfy both and the tier is RED on the second
+summary: SETTLED for option (a) by the FPC oracle -- FPC frees a raised object it did not construct, so `raise` transfers ownership unconditionally and pxx's current behaviour is the language's; test_exception_threads_race is what must change, and that rewrite is blocked on bug-a-two-threads-raising-object-exceptions-corrupt-the-heap
 tags: [exceptions, ownership, memory-leak, semantics]
+status: done
 ---
 
 ## The fork
@@ -116,3 +117,91 @@ that wrote this ticket. A trailer names a SESSION and not an agent — agents sp
 several across restarts (seven session ids against four known-active agents in
 one 8-hour window) — so this is recorded as provenance, not as authorship, and
 nobody should route this ticket on it.
+
+
+---
+
+## SETTLED: option (a). The fork fell to a MEASUREMENT, not to a preference (frankC, 2026-09-01)
+
+Closed by the author's invitation — "the oracle beats the author" (frankB).
+
+**What was missing was never an argument, it was the oracle.** The options
+above are carefully reasoned and the recommendation is (b); neither option
+asked what Pascal actually does. `tools/differential-probes.md` exists for this
+and `raise <an existing object>` is exactly a question it answers.
+
+FPC 3.2.2, the ticket's own 15-line repro, unmodified:
+
+```
+Runtime error 216
+```
+
+The same use-after-free. And the single-raise form, which isolates what the
+handler did rather than what the second raise found:
+
+```
+before:        code=7
+in handler:    code=7
+after handler: code=0        (-252645136 = 0xF0F0F0F0 under -gh)
+heaptrc: 2 memory blocks allocated, 2 freed, 0 unfreed
+```
+
+**FPC frees a raised object it did not construct.** Its rule is that `raise`
+transfers ownership unconditionally, whatever the shape of the operand, and the
+handler drops it. `620989250` did not invent a semantics — it adopted the
+language's, and the premise quoted in "The fork" above is not shape-specific
+after all.
+
+That reverses the recommendation. Option (b) would have pxx diverge from FPC on
+a program someone MEANT to write, and pay a new per-thread status slot written
+in six backends for the privilege. CLAUDE.md's test is what the source MEANT
+and whether real code wants the behaviour; here the language answers directly
+and no real code wants the other answer.
+
+### The stated cost of (a) is also gone, and that half is not the oracle's
+
+Option (a)'s objection was that `test_exception_threads_race` would have to
+allocate per raise, "which would serialise on the heap lock, which is what its
+header says it is avoiding". That was true when written. The thread-local heap
+magazine landed at `250fdc6bd`: under `--threadsafe`, small alloc/free is a
+lock-free per-thread free list and never reaches the heap lock. An exception
+object is well inside the size classes, and the test is built `--threadsafe`.
+
+So the two halves came from different places and both were needed — the FPC
+reading says (a) is CORRECT, the magazine says (a) is AFFORDABLE. frankB's
+words, and worth keeping: a decide ticket can be blocked on a fact about the
+world and a fact about the tree at the same time.
+
+### Consequence, and it is not free
+
+`test_exception_threads_race` must stop re-raising pre-made objects. That
+rewrite is **blocked**, on a bug found while attempting it:
+`bug-a-two-threads-raising-object-exceptions-corrupt-the-heap`. Two threads
+each raising a freshly constructed object SIGSEGV, because `620989250` emits a
+call to `PXXObjFree` and on x86-64 the heap lock is taken by CODEGEN at
+`tkGetMem`/`tkFreeMem` sites, never inside the runtime helpers — so an
+allocator-mutating RTL routine reached by a call runs bare. Measured: clean at
+`620989250^`, SIGSEGV at HEAD, and not the magazine (`-dPXX_NO_HEAP_MAG`
+crashes identically).
+
+So the regression ticket stays red, but on a different and better-understood
+cause than the one it was filed for.
+
+### Two things the rewrite must carry when it happens (frankB)
+
+1. **The header sentence stops being true.** With pre-made objects, `else`
+   isolates one mechanism: the class index. With per-raise allocation a
+   clobbered object pointer also means a wrong class, so `else` counts two
+   mechanisms. Better coverage, but the comment must say "raised its own class
+   and did not catch it" rather than naming the class-index race alone.
+2. **Sensitivity is a number, not a pass.** The forced-process-wide control has
+   to fail at the SAME N, and per-raise allocation lengthens the loop body and
+   grows the denominator the race window sits in. The header already records
+   that N=100 and N=10000 passed on the broken build while N=1000 failed, so
+   failure rate is not monotone in N: run the control several times at the
+   current N and report a hit rate, the way the original "7 of 8 runs" line
+   does. Also keep any leak bound OFF the control — the `else` arm has no
+   `on E:` binder, so every wrong hit leaks its object
+   (`bug-a-an-exception-that-escapes-its-handler-or-is-bare-re-raised-still-leaks-its-object`,
+   open), and the control would trip a leak bound for a reason that is not the
+   bug under test.

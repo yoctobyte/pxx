@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:6 unfinished:28 blocked:7 backlog:9 backlog-umbrella:5 backlog-core:136 backlog-nilpy:97 backlog-tools:71 backlog-pascal:55 backlog-decide:24 backlog-libs:15 backlog-cfront:11 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3020 rejected:72`
+`working:6 unfinished:28 blocked:7 backlog:9 backlog-umbrella:5 backlog-core:137 backlog-nilpy:97 backlog-tools:71 backlog-pascal:55 backlog-decide:23 backlog-libs:15 backlog-cfront:11 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3021 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -57,11 +57,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 446, ranked
+## Ready — top 30 of 447, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
 - `[p 80] [A]` umbrella-cross-target-codegen-is-correct
+- `[p 75] [A]` bug-a-two-threads-raising-object-exceptions-corrupt-the-heap
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [A]` umbrella-managed-memory-is-correct
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -88,6 +89,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
 - `[p 65] [A]` feature-a-fold-the-consensus-dead-branch-core-at-every-level
-- `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 
-_416 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_417 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
