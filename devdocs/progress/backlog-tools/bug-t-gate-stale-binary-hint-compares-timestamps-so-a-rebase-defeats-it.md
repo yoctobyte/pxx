@@ -87,9 +87,14 @@ survives is the message `stage_2a / tested differ: byte 153, line 1`. frankB
 could not produce a repro for that reason.
 
 Retaining those two files on failure would turn this class from anecdote into
-evidence, cheaply. **Byte 153 is early enough to be header rather than code**,
-and one `cmp -l` would discriminate a build-path/timestamp artefact from a real
-codegen divergence — the exact question this ticket had to answer sideways.
+evidence, cheaply — one `cmp -l` on a real instance.
+
+**Do NOT read the byte offset as a mechanism discriminator.** An earlier draft
+of this ticket suggested byte 153 was "early enough to be header rather than
+code". frankA hit the same FAIL at byte **339**, and their reading — which I
+accept — is that the offset merely tracks where the two images first diverge.
+153 and 339 are not two populations, and inviting that inference was a defect in
+this ticket, not in the tool.
 
 ## Third: a closed ticket may cover a narrower population than its failure mode
 
@@ -110,3 +115,41 @@ The backgrounded run's task notification said `exit code 0` while the log's own
 verdict read `gate: RED (exit 1)`. CLAUDE.md:449 already documents this and
 names the count it has misled. This is another instance, on the wide tier rather
 than quick — logged here for the tally, not as news.
+
+
+---
+
+## Second instance, and a real discriminator (frankA via frankB, 2026-09-01)
+
+**Instance 2.** frankA, `gate.sh quick`, same message, byte 339. The NOTE block
+named their own just-landed commit; rebuild, re-gate, GREEN with nothing else
+changed. frankB's was the **wide** tier and frankA's was **quick**, so this is
+not tier-specific.
+
+**The discriminator is the presence of the NOTE block, not the byte offset.**
+When gate.sh emits the stale-binary NOTE alongside the FAIL, the observed cases
+are a correct-or-stale binary against a moved HEAD — nothing about the pinned
+path. **A FAIL *without* that NOTE is the interesting one**, and is the case the
+`stage_2a`/`tested` retention above exists to serve. That is a cheap triage rule
+someone can apply tonight, before any code changes.
+
+### Why this makes the accidentally-right problem worse, not better
+
+The two instances differ in a way the reader cannot see:
+
+| | NOTE emitted | its premise | outcome after rebuild |
+|---|---|---|---|
+| frankA | yes, correct | **true** — binary genuinely predated their commit | GREEN |
+| frankB | yes, correct | **false** — binary built from exactly those sources; a rebase moved the commit date | GREEN |
+
+Same text, same advice, same green. `stale_binary_hint()` has a single `if` and
+one undifferentiated message — verified: five `echo` lines, one condition, no
+`elif`/`else` — so it *cannot* say which case it is in, and the reader has no
+way to tell either.
+
+**This is the argument for replacing the predicate rather than rewording the
+message.** A better-worded NOTE would still be right-for-the-wrong-reason half
+the time. `tools/compiler_srchash.sh` answers the actual question — were these
+bytes built from these sources — and its answer differs between the two rows
+above, which is exactly the discrimination the timestamp test cannot provide at
+any threshold.
