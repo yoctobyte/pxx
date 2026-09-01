@@ -3,7 +3,7 @@ type: bug
 track: A
 prio: 40
 tags: [emit-obj, elf, i386, pic, rtl]
-summary: "RESOLVED cd4af7824. 62 absolute .text relocations -> 0 for an i386 object whose program uses sysutils, and gcc -m32 -pie -Wl,-z,text goes from rc=2 to a running binary with no DT_TEXTREL. The family was an address used as an IMMEDIATE (, ) -- no register to borrow, so it reached neither the load nor the store conversion. Also fixed, found beside it and PRE-EXISTING: the --threadsafe i386 unlock stub's hand-counted  landed inside the store wrapper and returned to garbage."
+summary: "RESOLVED cd4af7824. 62 absolute .text relocations -> 0 for an i386 object whose program uses sysutils, and `gcc -m32 -pie -Wl,-z,text` goes from rc=2 to a running binary with no DT_TEXTREL. The family was an address used as an IMMEDIATE (`push imm32`, `mov [reg],imm32`) -- no register to borrow, so it reached neither the load nor the store conversion. Also fixed, found beside it and PRE-EXISTING: the --threadsafe i386 I/O unlock stub's hand-counted `jnz` landed inside the store family's wrapper, popped the caller's return address into eax, stored through it and returned to garbage."
 status: done
 owner: frankA
 ---
@@ -69,7 +69,7 @@ survivors were found. Enumerate from the artefact, not from the source.
 
 ## RESOLVED — cd4af7824
 
-Enumerated from the artefact as the ticket said to: 32  and 30 ,
+Enumerated from the artefact as the ticket said to: 32 `c7 00` and 30 `50 68`,
 nothing else. One family, and the reason it survived four landed conversions is
 structural rather than accidental — the load conversion borrows the
 instruction's own dead destination, the store conversion borrows a push/pop
@@ -78,68 +78,74 @@ field is the immediate; the memory operand, where there is one, is a plain
 register base, so nothing either function inspects is present.
 
 The replacement builds the address on the stack and **touches no flags**. The
-shorter  was written first and thrown away for
-that reason:  and  write no flags, so making
-their replacement write flags puts "never materialise a data address between a
- and its " on every future emitter, enforced by nothing. frankC
-checked all thirteen sites and it holds today. That is exactly the shape of
-correct-when-written that this repo keeps paying for.
+shorter `call .L; add dword [esp], imm32` was written first and thrown away for
+that reason: `push imm32` and `mov [reg], imm32` write no flags, so making
+their replacement write flags puts *"never materialise a data address between a
+cmp and its Jcc"* on every future emitter, enforced by nothing. frankC checked
+all thirteen sites and it holds today. That is exactly the shape of
+correct-when-written this repo keeps paying for.
 
 Not done by sniffing the end of the code buffer, which is how the other
-families are recognised:  is two bytes that 
-also ends in when its displacement ends , and a ~13MB  makes
-that reachable. Thirteen call sites carry the intent explicitly.
+families are recognised: `c7 00` is two bytes that `mov [eax+disp32], imm32`
+also ends in whenever its displacement ends `$00 $C7`, and a ~13MB `.data`
+makes that reachable rather than theoretical. Thirteen call sites carry the
+intent explicitly instead.
 
-### Measured — both arms built to , shas asserted to differ
+### Measured — both arms built to `converged`, shas asserted to differ
 
-| | before  | after  |
+| | before `a4c67a5e6cc8` | after `aad81be5ae4e` |
 | --- | --- | --- |
-| i386  in ,  | 62 | **0** |
-|  | rc=2, no binary | links, runs, no  |
-| x86-64  object | — | **byte-identical** |
-| i386  executable | — | **byte-identical** |
+| i386 `R_386_32` in `.rel.text`, fixture with `uses sysutils` | 62 | **0** |
+| `gcc -m32 -pie -Wl,-z,text` | rc=2, no binary | links, runs, no `DT_TEXTREL` |
+| x86-64 `--emit-obj` object | — | **byte-identical** |
+| i386 `--threadsafe` executable | — | **byte-identical** |
 
-The two identity rows are the inertness claim and they are measurements: both
-conversions are gated on , and the identical files come from
-compilers whose shas differ.
+The two identity rows are the inertness claim and they are measurements, not
+readings: both conversions are gated on `EmitObjMode`, and the two identical
+files come from compilers whose shas differ.
 
 Both new rows fail on the pre-fix binary — checked, not assumed. The count row
-is 62 against a bound of 0, and it is paired with a **floor** on 
+is 62 against a bound of 0, and it is paired with a **floor** on `R_386_PC32`
 so "zero absolute" cannot pass on an object where nothing was emitted at all.
+The unlock-stub row asserts its locator FOUND the stub before comparing
+anything, because a disassembly search that matches nothing cannot fail.
 
 ### A second, worse defect found beside it — and it was already there
 
-The ticket's acceptance did not ask for this and it is the more dangerous half.
-In , the I/O **unlock** stub's 
-carried a hand-counted  over a span containing a global store — and under
- that store grows a /anchor/ wrapper. The jump landed on
-the  INSIDE it:
+The acceptance did not ask for this and it is the more dangerous half. In
+`--threadsafe --emit-obj --target=i386`, the I/O **unlock** stub's `jnz`
+carried a hand-counted `+8` over a span containing a global store — and under
+`--emit-obj` that store grows a push/anchor/pop wrapper. The jump landed on the
+`pop` INSIDE it:
 
-
+    23c: dec DWORD PTR ds:0x92c0
+    242: jne 24c            <- meant to reach the ret at 254
+    244: xor ecx,ecx
+    246: push eax        }
+    247: call .+0        }   the wrapper this span did not used to contain
+    24c: pop  eax            <- lands here
+    24d: mov [eax+0x92bb],ecx
+    253: pop  eax
+    254: ret
 
 The still-nested path popped the **caller's return address** into eax, stored
-through it (a wild write to that address + 37563), and returned to garbage. The
-object built clean; no relocation count, symbol table or link could see it.
+through it — a wild write to that address plus 37563 — and returned to garbage.
+The object built clean; no relocation count, symbol table or link could see it.
 Byte-identical under the pre-change compiler, so pre-existing.
 
-All three jumps in those two stubs go through  now, which measures
-the span after emitting it and refuses what does not fit. The 's "spin
-block must be exactly 16 bytes" assert went with them — it existed only to pin
-a literal.
+All three jumps in those two stubs go through `PatchRel8` now, which measures
+the span after it is emitted and refuses what does not fit. The `je +16`'s
+*"spin block must be exactly 16 bytes"* assert went with them: it existed only
+to pin a literal, and a patched jump has nothing to pin.
 
 **How it was found is the transferable part.** I asked frankC whether any rel8
-span could contain one of MY thirteen sites. They answered no, and then named
+span could contain one of MY thirteen sites. They answered no — and then named
 the population I had not asked about: hand-written short jumps with literal
-displacements, which never reach  at all. Their cross-reference
-cleared my sites; checking the remainder found one that was already wrong. The
-question I asked was about my change; the answer that mattered was about the
-guard's coverage.
+displacements, which never reach `CheckRel8` at all. Their cross-reference
+cleared my sites; checking the remainder found one already wrong. The question
+was about my change; the answer that mattered was about the guard's coverage.
 
 ### Still open
 
-Nothing from this ticket. The umbrella's remaining i386 line is now closed;
-[[meta-a-pxx-produces-linkable-code]]'s  names the C-frontend
-textrel ticket, which was already done.
-
-## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 48aee7c68.
+Nothing from this ticket. [[meta-a-pxx-produces-linkable-code]] listed i386
+position independence as one of its two remaining gaps; that line is closed.
