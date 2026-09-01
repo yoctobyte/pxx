@@ -2906,9 +2906,18 @@ end;
   are independent, and only one of them was expensive to change.
 
   The .shstrtab blob stays the 66-byte one writeELF32Rel uses when there are no
-  array sections, and grows 29 bytes per pair that exists -- so an object with no
-  initialisers is byte-identical to what this writer produced before the feature,
-  which is a claim the A/B actually checks.
+  array sections, and grows 29 bytes per pair that exists.
+
+  WHAT THAT BUYS, SCOPED TO WHAT WAS ACTUALLY MEASURED -- an object whose
+  frontend emits no thunk is byte-identical to what this writer produced before
+  the feature, verified against the pre-feature compiler with the two compiler
+  shas asserted to differ. Today that means every PASCAL object, because the
+  Pascal frontend does not emit the thunks yet. It does NOT mean "any object with
+  no initialisers": a C object always carries a finalizer runner, so it gains
+  .fini_array either way, and gains .init_array only when it has pre-main work.
+  The first version of this comment said the wider thing and the control that
+  "confirmed" it was a Pascal object -- a population that cannot contain the C
+  thunk at all, so it agreed without ever having been able to disagree.
   bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers }
 
 function ObjProcIsDefined(procIdx: Integer): Boolean;
@@ -3031,9 +3040,9 @@ begin
   relaDataOff := relaTextOff + relaTextCount * 24;
 
   { .init_array / .fini_array exist only when a frontend emitted the thunks --
-    which today means --emit-obj on x86-64 through the C frontend. An object
-    with no pre-main state gets exactly the file it got before this feature,
-    which is what makes "no change" a checkable claim rather than a hope. }
+    which today means --emit-obj on x86-64 through the C frontend, and --shared.
+    See the header comment for the exact scope of "unchanged": it is narrower
+    than it first reads, and the first control I ran for it was vacuous. }
   hasInitArr := InitThunkOff >= 0;
   hasFiniArr := FiniThunkOff >= 0;
   initArrSec := -1;

@@ -9909,7 +9909,8 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     cNeedsHeap, cNeedsAnsi, cNeedsDiv: Boolean;   { shared pre-scan; only cNeedsAnsi is read }
     cWantsSoftFloat: Boolean;   { ESP-class on-demand softfloat pull }
     cSfI: Integer;
-    envPi: Integer;   { __pxx_set_environ, for the --shared init thunk }
+    envPi: Integer;   { __pxx_set_environ, for the init thunk }
+    thunkStart, thunkBody: Integer; { init-thunk rewind: see the emitter }
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
@@ -10476,25 +10477,54 @@ begin
     other. bug-a-c-a-shared-library-never-runs-its-initialisation }
   if (EmitSharedMode or EmitObjMode) and (TargetArch = TARGET_X86_64) then
   begin
+    thunkStart := CodeLen;
     InitThunkOff := CodeLen;
     EmitSharedThunkPrologue;
+    thunkBody := CodeLen;
     if needInit then
     begin
       envPi := FindProc('__pxx_set_environ');
       if envPi < 0 then
-        Error('compiler error: --shared needs environ but __pxx_set_environ ' +
-              'was not pulled; the header sweep and this emitter disagree');
+        Error('compiler error: the init thunk needs environ but ' +
+              '__pxx_set_environ was not pulled; the header sweep and this ' +
+              'emitter disagree');
       EmitB($48); EmitB($89); EmitB($D7);   { mov rdi, rdx  (envp, from ld.so) }
       EmitCallProc(envPi);
     end;
     CompilePendingGlobalInits;
     CEmitDeferredCAggInits;
-    EmitSharedThunkEpilogue;
+    { AN OBJECT WITH NOTHING TO INITIALISE GETS NO THUNK AND NO .init_array.
 
-    FiniThunkOff := CodeLen;
-    EmitSharedThunkPrologue;
-    EmitCallProc(GetFiniRunnerProc);
-    EmitSharedThunkEpilogue;
+      Measured by asking, not by predicting: the body is emitted and then its
+      LENGTH is read. A predicate naming today's three sources of pre-main work
+      (environ, pending global inits, deferred aggregate inits) would be a
+      fourth place to update when a fourth source arrives, and the failure would
+      be a silently missing initialiser -- exactly this ticket, one layer down.
+      Nothing was emitted means nothing registered a fixup either, so rewinding
+      CodeLen is sound.
+
+      --shared is deliberately NOT rewound. A .so keeps the DT_INIT it has had
+      since 9b6ca0475 whether or not the body is empty; changing that is a
+      separate question about a separate carrier, and this ticket is not the
+      place to move the .so rows. bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers }
+    if EmitObjMode and (not EmitSharedMode) and (CodeLen = thunkBody) then
+    begin
+      CodeLen := thunkStart;
+      InitThunkOff := -1;
+    end
+    else
+      EmitSharedThunkEpilogue;
+
+    { Same for finalization: the Pascal thunk already guards this and the C one
+      did not, because under --shared the runner always exists. }
+    if (not EmitObjMode) or EmitSharedMode or
+       (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
+    begin
+      FiniThunkOff := CodeLen;
+      EmitSharedThunkPrologue;
+      EmitCallProc(GetFiniRunnerProc);
+      EmitSharedThunkEpilogue;
+    end;
   end;
 
   CProgramMode := False;

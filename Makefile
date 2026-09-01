@@ -17637,6 +17637,19 @@ test-emit-obj: $(COMPILER)
 	#    a writer that emitted .init_array unconditionally would pass every row
 	#    above. The Pascal object built earlier in this target is that case.
 	! readelf -SW $(TESTTMP)/test_emit_obj_x64.o | grep -qE 'INIT_ARRAY|FINI_ARRAY'
+	#    THE SECOND NEGATIVE CONTROL, which is the one that is not vacuous. The
+	#    Pascal row above passes for a reason unrelated to the guard being
+	#    tested: the Pascal frontend emits no thunk at all, so it would pass even
+	#    if the C emitter's "is the body empty" rewind were deleted. This row is
+	#    a C translation unit through the SAME emitter with nothing to
+	#    initialise, so only the rewind can make it pass. It still gets
+	#    .fini_array -- a C object always carries a finalizer runner, and runtime
+	#    registrations would be silently dropped without it -- so the assertion
+	#    is specifically about .init_array.
+	printf 'int plain_add(int a,int b){return a+b;}\n' > $(TESTTMP)/test_emit_obj_noinit.c
+	./$(COMPILER) --emit-obj $(TESTTMP)/test_emit_obj_noinit.c $(TESTTMP)/test_emit_obj_noinit.o
+	! readelf -SW $(TESTTMP)/test_emit_obj_noinit.o | grep -qE 'INIT_ARRAY'
+	readelf -SW $(TESTTMP)/test_emit_obj_noinit.o | grep -qE 'FINI_ARRAY'
 	@if command -v gcc >/dev/null 2>&1; then \
 	  printf '#include <stdio.h>\nextern const char *shared_c_from_data(void);\nextern int shared_c_envcount(void);\nextern int shared_c_addup(int);\nint main(void){const char*d=shared_c_from_data();if(!d){printf("data=(null) -- .init_array did not run\\n");return 1;}if(shared_c_envcount()<1){printf("envcount=%%d -- environ was not filled\\n",shared_c_envcount());return 1;}printf("%%d %%s\\n",shared_c_addup(6),d);return 0;}\n' > $(TESTTMP)/test_emit_obj_cinit_host.c; \
 	  gcc $(TESTTMP)/test_emit_obj_cinit_host.c $(TESTTMP)/test_emit_obj_cinit.o -o $(TESTTMP)/test_emit_obj_cinit_host || { echo "test-emit-obj: cinit host FAILED to build"; exit 1; }; \
