@@ -4536,12 +4536,16 @@ function IRExcStoreSlot(n: Integer): Integer;
   __pxxSigContext/__pxxSigNum) = the fields the signal dispatch stub parked. Same
   load, different slot — which is why none of them needs a backend op, and why
   adding the signal three cost nothing in the six backends (they all route
-  IR_EXC_STORE through this function).
+  IR_EXC_STORE through this function). Slot 6 (BSS_EXC_CLS, the raised class
+  recId) was added the same way and likewise touched no backend: the try/except
+  lowering needs it to tell a raised OBJECT from a raised Integer before freeing
+  the former.
 
   The op keeps its exception-era name; what it really means is "load a
   compiler-owned status slot". Worth renaming if a fourth family shows up. }
 begin
   if IRC[n] = 1 then Result := BSS_EXC_ADDR
+  else if IRC[n] = 6 then Result := BSS_EXC_CLS
   else if IRC[n] = 2 then Result := BSS_SIG_CODE
   else if IRC[n] = 3 then Result := BSS_SIG_ADDR
   else if IRC[n] = 4 then Result := BSS_SIG_CTX
@@ -6467,6 +6471,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     raiseValueNode, raiseClass: Integer;
     excTargetCi, excBodyLabel, excDescCi: Integer;
     excObjSym, excMatched, excSkipLabel, excOwnTmp, excReleaseProc: Integer;
+    excClsTmp, excSkipFreeLabel: Integer;
     eaSym: Integer;
     narrowSize: Integer; castIsSigned: Boolean;
     i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
@@ -13351,30 +13356,82 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         end;
         excOwnTmp := -1;
         if ASTSOffset[handlerNode] >= 0 then
-          last := IRAppend(IR_EXC_STORE, ASTSOffset[handlerNode], -1, -1, 0, 0)
-        else if NilPyUserCode then
+          last := IRAppend(IR_EXC_STORE, ASTSOffset[handlerNode], -1, -1, 0, 0);
+        { WHO DROPS THE CONSTRUCTOR'S ONE REFERENCE, per frontend and per shape.
+          `raise E.Create(..)` TRANSFERS the reference the constructor made; it
+          does not add another. Something at handler exit has to drop it or
+          every caught exception leaks its object forever.
+
+          NilPy `except .. as e:` binds a real REFCOUNTED local, and that
+          local's own scope-exit release is the drop -- that one shape needs no
+          help here. The other three do:
+
+            frontend  shape            who released it before this change
+            NilPy     `as e:`          the binder local's scope exit    -- ok
+            NilPy     bare             this temp                        -- ok
+            Pascal    `on E: T do`     NOBODY: a class-typed local is
+                                       MANUALLY managed, no scope-exit release
+            Pascal    bare             NOBODY: this arm was NilPy-only
+
+          Measured on x86-64, 1500 raises caught in a loop (frankB 2026-09-01):
+          allocs=1478 frees=0 live=1478 for BOTH Pascal shapes, bare and bound
+          alike, and identically on i386/arm32/riscv32/aarch64. The mechanism
+          below already existed and was gated to one frontend --
+          bug-nilpy-caught-exception-objects-are-never-freed fixed the NilPy arm
+          and left the Pascal sibling broken, which is the double-case trap
+          normalise-dont-special-case.md is about.
+
+          The VERB is PXXObjFree, not PXXObjRelease. PXXObjRelease is a
+          refcount decrement behind a PXX_OBJ_MAGIC guard, and a Pascal class
+          instance is a plain GetMem block with no such header -- so it returns
+          without touching anything, BY DESIGN (PXXVarClear's header says so in
+          those words). Ungating this arm while still calling Release emits a
+          call that is architecturally guaranteed to do nothing; that was
+          measured too, frees stayed 0. PXXObjFree is the frontend-agnostic
+          verb: headered -> PXXObjRelease (NilPy, unchanged), plain GetMem ->
+          PXXClassFinalize + PXXFree (Pascal), and nil-safe either way.
+
+          A `raise;` re-raise inside the handler leaves via the exception path
+          and never reaches this fall-through, so the in-flight object is not
+          freed under itself. An exception that ESCAPES the handler body skips
+          it too and leaks -- same as NilPy has always done here. }
+        excClsTmp := -1;
+        if (not NilPyUserCode) or (ASTSOffset[handlerNode] < 0) then
         begin
-          { No `except ... as e:` binder: the exception object still has the
-            ONE owning reference its constructor gave it (raise transfers that
-            reference, it does not add another), and when a handler binds it
-            to a real local, that local's own scope-exit release is what
-            finally drops it. With no binder, nothing anywhere holds a
-            reference to release -- every caught exception leaked its object
-            forever, and the leak did not care whether the exception was
-            named (bug-nilpy-caught-exception-objects-are-never-freed). Store
-            it into a hidden, release-only temp so IR_EXC_CLEAR below (which
-            only zeroes bookkeeping globals, never releases) has something to
-            hand to PXXObjRelease first. }
           excOwnTmp := AllocVar('', tyPointer);
           last := IRAppend(IR_EXC_STORE, excOwnTmp, -1, -1, 0, 0);
+          { WHAT IS IN FLIGHT NEED NOT BE AN OBJECT. `raise <Integer>` is legal
+            here (test/test_cross_exception.pas raises 42, 100 and 77; FPC
+            rejects the shape, we accept it), and then BSS_EXC_OBJ holds the
+            VALUE, not a pointer -- handing 42 to PXXObjFree walks it as a heap
+            block and segfaults. Measured: that is exactly how this change first
+            went RED, on a test that has been in the quick tier all along.
+
+            BSS_EXC_CLS already carries the answer: AN_RAISE writes the operand's
+            recId there and normalises anything below REC_UCLASS_BASE to
+            REC_NONE, so `>= REC_UCLASS_BASE` is an exact "this is a user class
+            instance" bit rather than a guess about the pointer's shape. Read it
+            into a temp HERE, beside the object, for the same reason the object
+            is copied: a nested try/except inside the handler body overwrites
+            both slots. A bare `raise;` re-raise leaves IRA = -1 and its codegen
+            writes NEITHER slot, so the class survives a re-raise intact. }
+          excClsTmp := AllocVar('', tyInteger);
+          last := IRAppend(IR_EXC_STORE, excClsTmp, -1, 6, 0, 0);
         end;
         last := IRLowerAST(ASTLeft[handlerNode]);
         IRMarkStatementNode(last);
         if excOwnTmp >= 0 then
         begin
-          excReleaseProc := FindProc('PXXObjRelease');
+          excReleaseProc := FindProc('PXXObjFree');
           if excReleaseProc >= 0 then
           begin
+            excSkipFreeLabel := IRNewLabel;
+            last := IRAppend(IR_JUMP_IF_FALSE, excSkipFreeLabel,
+                      IRAppend(IR_BINOP,
+                        IRAppend(IR_LOAD_SYM, excClsTmp, -1, -1, 0, Ord(tyInteger)),
+                        IRAppend(IR_CONST_INT, -1, -1, -1, REC_UCLASS_BASE, Ord(tyInteger)),
+                        Ord(tkGe), 0, Ord(tyBoolean)),
+                      -1, 0, 0);
             last := IRAppendCall(excReleaseProc,
                       IRAppend(IR_ARG,
                         IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),
@@ -13382,6 +13439,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
                       -1, Ord(tyUnknown));
             IRIVal[last] := 1;   { statement: emit for effect, not a value }
             IRMarkStatementNode(last);
+            last := IRAppend(IR_LABEL, -1, -1, -1, excSkipFreeLabel, 0);
           end;
         end;
         last := IRAppend(IR_EXC_CLEAR, -1, -1, -1, 0, 0);

@@ -14215,6 +14215,19 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_dynarray_ownership_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/dao_i386)" "$$($(TESTTMP)/dao_i386_x64)"
 	tools/assert_no_leak.sh i386/dynarray_ownership 50 tools/run_target.sh i386 $(TESTTMP)/dao_i386
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_i386_x64
+	# Every CAUGHT exception object must be freed at handler exit, and a
+	# NON-object raise must not be freed at all. Both arms live in one
+	# program because they failed in opposite directions: the leak fix that
+	# freed unconditionally satisfied every leak bound here and segfaulted
+	# test_cross_exception.pas, which raises plain Integers.
+	# The differential row is NOT sufficient on its own — before the fix
+	# this program printed byte-identical output on every backend while
+	# leaking every object, so only the absolute bound can see it.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_exception_object_leaks.pas $(TESTTMP)/teol_i386
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_i386_x64
+	tools/expect_same.sh i386/test_exception_object_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/teol_i386)" "$$($(TESTTMP)/teol_i386_x64)"
+	tools/assert_no_leak.sh i386/exception_object 50 tools/run_target.sh i386 $(TESTTMP)/teol_i386
+	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_i386_x64
 
 test-aarch64: $(COMPILER)
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
@@ -14762,6 +14775,19 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_dynarray_ownership_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/dao_a64)" "$$($(TESTTMP)/dao_a64_x64)"
 	tools/assert_no_leak.sh aarch64/dynarray_ownership 50 tools/run_target.sh aarch64 $(TESTTMP)/dao_a64
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_a64_x64
+	# Every CAUGHT exception object must be freed at handler exit, and a
+	# NON-object raise must not be freed at all. Both arms live in one
+	# program because they failed in opposite directions: the leak fix that
+	# freed unconditionally satisfied every leak bound here and segfaulted
+	# test_cross_exception.pas, which raises plain Integers.
+	# The differential row is NOT sufficient on its own — before the fix
+	# this program printed byte-identical output on every backend while
+	# leaking every object, so only the absolute bound can see it.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_exception_object_leaks.pas $(TESTTMP)/teol_aarch64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_aarch64_x64
+	tools/expect_same.sh aarch64/test_exception_object_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/teol_aarch64)" "$$($(TESTTMP)/teol_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/exception_object 50 tools/run_target.sh aarch64 $(TESTTMP)/teol_aarch64
+	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_aarch64_x64
 
 test-riscv32: $(COMPILER)
 	# A `var` parameter of every scalar kind, plus var->var forwarding. The
@@ -15346,6 +15372,19 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/test_dynarray_ownership_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/dao_rv32)" "$$($(TESTTMP)/dao_rv32_x64)"
 	tools/assert_no_leak.sh riscv32/dynarray_ownership 50 tools/run_target.sh riscv32 $(TESTTMP)/dao_rv32
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_rv32_x64
+	# Every CAUGHT exception object must be freed at handler exit, and a
+	# NON-object raise must not be freed at all. Both arms live in one
+	# program because they failed in opposite directions: the leak fix that
+	# freed unconditionally satisfied every leak bound here and segfaulted
+	# test_cross_exception.pas, which raises plain Integers.
+	# The differential row is NOT sufficient on its own — before the fix
+	# this program printed byte-identical output on every backend while
+	# leaking every object, so only the absolute bound can see it.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_exception_object_leaks.pas $(TESTTMP)/teol_riscv32
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_riscv32_x64
+	tools/expect_same.sh riscv32/test_exception_object_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/teol_riscv32)" "$$($(TESTTMP)/teol_riscv32_x64)"
+	tools/assert_no_leak.sh riscv32/exception_object 50 tools/run_target.sh riscv32 $(TESTTMP)/teol_riscv32
+	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_riscv32_x64
 
 
 # ---------------------------------------------------------------------------
@@ -16802,6 +16841,22 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_dynarray_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/dao_a32)" "$$($(TESTTMP)/dao_a32_x64)"
 	tools/assert_no_leak.sh arm32/dynarray_ownership 50 tools/run_target.sh arm32 $(TESTTMP)/dao_a32
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_a32_x64
+	# Every CAUGHT exception object must be freed at handler exit, and a
+	# NON-object raise must not be freed at all. Both arms live in one
+	# program because they failed in opposite directions: the leak fix that
+	# freed unconditionally satisfied every leak bound here and segfaulted
+	# test_cross_exception.pas, which raises plain Integers.
+	# The differential row is NOT sufficient on its own — before the fix
+	# this program printed byte-identical output on every backend while
+	# leaking every object, so only the absolute bound can see it.
+	# NO xtensa row: exceptions do not link on that target at all (the raise
+	# runtime pulls calloc, which the backend emits no dynamic segment for).
+	# Verified against the clean-tree compiler, so it predates this test.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_exception_object_leaks.pas $(TESTTMP)/teol_arm32
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_arm32_x64
+	tools/expect_same.sh arm32/test_exception_object_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/teol_arm32)" "$$($(TESTTMP)/teol_arm32_x64)"
+	tools/assert_no_leak.sh arm32/exception_object 50 tools/run_target.sh arm32 $(TESTTMP)/teol_arm32
+	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_arm32_x64
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,
