@@ -58,3 +58,41 @@ the same matrix.
 `(Length(ParamStr(i + 1)) > 0) and (ParamStr(i + 1)[1] = '-')` and had to be
 written through a local instead. The local is fine style here, so the workaround
 is noted in place with a pointer to this ticket rather than left silent.
+
+---
+
+## 2026-09-01 (frankH) — the mechanism is confirmed by a control, and the list needs narrowing
+
+**Your hypothesis is right and there is now a control for it.** The summary says
+the `[` suffix is missing from the BUILTIN arm and that a user function indexes
+fine. That is now measured with the builtin arm as the only variable: **the same
+call flips from rejected to accepted purely by adding `uses sysutils`.**
+
+| expression | no `uses sysutils` | `uses sysutils` |
+| --- | --- | --- |
+| `(ParamStr(1)[1] = '-')` | REJECTS | **REJECTS** |
+| `(IntToStr(i)[1] = '1')` | REJECTS | PARSES |
+| `(UpperCase(s)[1] = 'X')` | REJECTS | PARSES |
+| `(Trim(s)[1] = 'x')` | REJECTS | PARSES |
+| `(Concat(s,s)[1] = 'x')` | REJECTS | PARSES |
+| `(Copy(s,1,2)[1] = 'x')` | PARSES | PARSES |
+
+**So one row of the summary needs correcting:** *"ParamStr, IntToStr, UpperCase,
+Trim and Concat all reject"* is true only without `uses sysutils`. Four of the
+five stop rejecting the moment a real Pascal routine in `sysutils` shadows the
+builtin and the call takes the identifier path. **`ParamStr` is the odd one and
+the important one — it has no sysutils twin, so it rejects either way**, which
+is exactly why `compiler/compiler.pas` is the site that had to be worked around
+and not some other caller. `Copy` parses in both because it has its own node.
+
+That narrows the fix: it is the builtin-call arm of the parenthesised path, and
+`ParamStr` is the row to gate on, because it is the only one that cannot be
+accidentally satisfied by a shadowing unit.
+
+**Also: `compiler/compiler.pas:1841` was citing a slug that does not exist.**
+The workaround comment there named
+`bug-a-indexing-a-call-result-inside-parentheses-is-rejected`, which is in no
+folder and never was — so the comment asserted the limitation was tracked while
+nothing tracked it. Repointed at this ticket, which is the one you filed from
+that same workaround. The technical claim in that comment was re-measured before
+touching it and still holds; only the citation was false.

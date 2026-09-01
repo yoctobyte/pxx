@@ -1842,7 +1842,21 @@ begin
       parenthesised sub-expression is rejected by this compiler --
       `(ParamStr(i)[1] = '-')` is "expected ')' before '['" while the same
       expression unparenthesised, and `WriteLn(F(1)[2])`, both compile.
-      bug-a-indexing-a-call-result-inside-parentheses-is-rejected }
+
+      THE WORKAROUND IS STILL NEEDED -- re-measured 2026-09-01, `ParamStr`
+      still rejects. Only the CITATION was wrong: the slug named here,
+      `bug-a-indexing-a-call-result-inside-parentheses-is-rejected`, exists in
+      no folder and never did, so this comment has been asserting that the
+      limitation is tracked while nothing tracked it. The real ticket is
+      bug-p-a-builtin-call-result-cannot-be-indexed-inside-parentheses, filed
+      by frankA from this very workaround.
+
+      The discriminator, measured rather than inferred: the SAME call flips
+      from rejected to accepted purely by adding `uses sysutils` --
+      `IntToStr`, `UpperCase`, `Trim` and `Concat` all parse once a real
+      Pascal routine shadows the builtin. `ParamStr` has no sysutils twin, so
+      it rejects either way, which is why this site is the one that had to
+      change. bug-p-a-builtin-call-result-cannot-be-indexed-inside-parentheses }
     if (Length(outFile) > 0) and (outFile[1] = '-') then
     begin
       writeln(StdErr, 'output path may not start with "-": ', outFile);

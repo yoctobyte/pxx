@@ -22,6 +22,21 @@ type
     failed to compile with "unknown type" (tset4). }
   TSysCharSet = set of AnsiChar;
 
+  { FPC/Delphi declare this pair in SYSTEM, so real code reaches it with no uses
+    clause -- RemObjects Pascal Script's uPSCompiler writes `Set_Union(Dest, Src:
+    PByteArray; ByteSize: Integer)` and got "unknown type: PByteArray".
+    Same reasoning as HModule below: pxx has no System unit, so implicitly
+    reached System types live here.
+
+    NAME COLLISION, DELIBERATE AND CHECKED: lib/rtl/hashing.pas declares its own
+    `TByteArray = array of Byte` -- a DYNAMIC array, a different type wearing the
+    same name. That is legal and normal in FPC too (a unit's own declaration
+    shadows System's), and `uses sysutils, hashing` resolves to hashing's, which
+    is what every existing caller already means. The static one is only ever
+    reached through PByteArray. }
+  TByteArray = array[0..32767] of Byte;
+  PByteArray = ^TByteArray;
+
   { FPC declares `HModule` in SYSTEM, so it is visible with no uses clause at
     all — verified: a program with an empty uses clause compiles `var h: HModule`
     under FPC. pxx has no System unit, so code that reaches it implicitly has

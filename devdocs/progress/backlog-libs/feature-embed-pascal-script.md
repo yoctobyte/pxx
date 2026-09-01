@@ -1,5 +1,9 @@
 ---
 prio: 45  # auto
+track: B
+type: feature
+status: backlog
+summary: "ATTEMPTED 2026-09-01, and the wall is MAPPED rather than guessed at. uPSUtils compiles CLEAN on the pinned stable, first try, no flags beyond -Mobjfpc. uPSCompiler hits exactly three walls, and TWO OF THEM ARE ONE ROOT CAUSE: (1) missing PByteArray -- FIXED, it is a System-level FPC type and now lives in lib/rtl/sysutils.pas; (2+3) a value cast to a string alias is not transparent to the postfix/lvalue tail, filed as bug-p-a-cast-to-a-string-alias-silently-drops-a-following-index, whose own root cause is refactor-p-one-lvalue-path-for-statements-and-expressions. uPSRuntime has not been reached: it stops earlier on a `{$IF}` comparison. NOT vendored -- probed against a clone outside the repo, which is the reversible half of the ticket's own two options."
 ---
 
 # RemObjects Pascal Script — compile under pxx (embeddable scripting)
@@ -136,3 +140,69 @@ TGuid, variable typecasts as var args, cast-deref Dec targets,
 TObject(x).Free, managed→ShortString param conversion, FreeAndNil.
 
 - 2026-07-19 (backlog sweep note) Note: external/pascalscript clone is gone from library_candidates (only synapse remains) — a resume must re-fetch upstream first. uPSUtils-compiles milestone stands (pin v209 c718f279).
+
+
+---
+
+## 2026-09-01 (frankH) — attempted; the wall is three bricks and two of them are one cause
+
+Probed against a `--depth 1` clone **outside the repo** with `-Fups/Source`,
+which is the reversible half of this ticket's own two options. Nothing was
+vendored, so there is no licence obligation incurred and nothing to revert.
+
+**The good news first, because it changes what this ticket is worth:
+`uPSUtils` compiles CLEAN on `$(PXX_STABLE)`, first try**, with no flags beyond
+`-Mobjfpc` and no source edits. That is a 40KB unit of real third-party Object
+Pascal, and it says the dialect surface is closer than "vendor it and see"
+suggests.
+
+### The three walls in `uPSCompiler.pas`, in the order the target hits them
+
+**1. `unknown type: PByteArray` (line 3085) — FIXED.** FPC and Delphi declare
+`TByteArray` / `PByteArray` in SYSTEM, so real code reaches them with no uses
+clause. pxx has no System unit, so — exactly as the `HModule` note in that file
+already records — implicitly-reached System types live in `lib/rtl/sysutils.pas`.
+Added there.
+
+The interesting part is a **name collision that is deliberate and was checked
+rather than reasoned about**: `lib/rtl/hashing.pas` already declares
+`TByteArray = array of Byte`, a DYNAMIC array — a different type wearing the
+same name. FPC has the same situation and resolves it the same way (a unit's own
+declaration shadows System's). Verified by compiling a program that uses BOTH in
+one file and by re-running every existing `TByteArray` consumer in the tree
+(`lib_base64`, `lib_png`, `lib_zlib`, `raytracer`) — `lib_png`'s output is
+byte-identical to the same test built against the unmodified `sysutils`, which
+is the control that matters, since its last line reads `bad chunk crc` and would
+otherwise look like a regression I had caused.
+
+**2. `expected comma or close parenthesis` (line 1930) — FILED.**
+`tbtwidestring(p^.twidestring)[1]` as a call argument. 13 occurrences of the
+shape in that one file.
+
+**3. `SetLength expects a string variable in IR codegen` (line 2753) — SAME
+BUG.** `SetLength(tbtstring(vari^.tstring), n)`. Confirmed same cause with a
+control: drop the cast and it works — `SetLength(p^.s, 4)` compiles,
+`SetLength(tbtstring(p^.s), 8)` does not.
+
+Both are [[bug-p-a-cast-to-a-string-alias-silently-drops-a-following-index]]: a
+value cast to a non-pointer type is not transparent to the postfix tail. **Its
+worst face is not either of these** — in plain assignment position the index is
+silently DROPPED and FPC disagrees with no diagnostic, which is why that ticket
+is 60 and its two already-closed siblings were 45. Root cause is
+[[refactor-p-one-lvalue-path-for-statements-and-expressions]], which now has
+four instances.
+
+### Not reached
+
+`uPSRuntime` stops earlier and for an unrelated reason —
+`conditional directive: comparison requires integer operands` — which has not
+been characterised. **Probing was bounded deliberately**: past wall 3 I would be
+editing the vendored source to keep going, and a wall map built on a source
+nobody else has is worth less than three walls anybody can reproduce.
+
+### What this ticket needs next
+
+The dialect gap is smaller than the ticket assumed and it is concentrated:
+**land the cast-transparency refactor and re-probe.** That is one change, it
+clears two of three walls here, and it closes four tickets elsewhere. Vendoring
+and the smoke test are downstream of that, not of a long tail of small gaps.
