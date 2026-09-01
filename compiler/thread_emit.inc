@@ -142,7 +142,10 @@ begin
     EmitB($B8); EmitB($78); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 120  (SYS_clone) }
     EmitB($CD); EmitB($80);                           { int 0x80 }
     EmitB($85); EmitB($C0);                           { test eax, eax }
-    EmitB($75); EmitB($0C);                           { jnz .parent  (skip 12 child bytes) }
+    { jnz .parent -- COMPUTED, like the x86-64 leg above. The 12 was correct,
+      but a hand-counted displacement here is the arm that stays wrong the day
+      someone edits the child sequence and only looks at one leg. }
+    EmitB($75); pParent := CodeLen; EmitB(0);         { jnz .parent }
     { ---- child: esp = childStack-8, [esp]=entry [esp+4]=arg ---- }
     EmitB($58);                                       { pop eax  (entry; arg stays at [esp]) }
     EmitB($FF); EmitB($D0);                           { call eax (entry(arg), caller-cleans convention) }
@@ -150,6 +153,7 @@ begin
     EmitB($B8); EmitB($01); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 1  (SYS_exit) }
     EmitB($CD); EmitB($80);                           { int 0x80  (thread exits here) }
     { ---- .parent: eax = child tid ---- }
+    PatchRel8(pParent);
     EmitB($5F);                                       { pop edi }
     EmitB($5E);                                       { pop esi }
     EmitB($5B);                                       { pop ebx }
