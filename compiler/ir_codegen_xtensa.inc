@@ -732,8 +732,7 @@ begin
   else
   begin
     IREmitNodeXtensa(valNode);                  { a2 = source handle }
-    if not (((IRKind[valNode] = IR_BINOP) and (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
-            ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+    if not IRNodeOwnsManagedStr(valNode) then
     begin
       XtensaPushA2;                             { save handle }
       EmitStrRefCallXtensa('PXXStrIncRef');
@@ -1388,9 +1387,7 @@ begin
       { A CALL result / concat BINOP is already OWNED (+1) — retaining again
         leaks one handle per boxed call result. Same test as every other
         backend's; bug-a-runtime-variant-heap-grows-unbounded. }
-      if not (((IRKind[valNode] = IR_BINOP) and
-               (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
-              ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+      if not IRNodeOwnsManagedStr(valNode) then
       begin
         XtensaPushA2;                            { save handle }
         EmitStrRefCallXtensa('PXXStrIncRef');
@@ -2256,14 +2253,26 @@ begin
             xtensa_mov(reg_xtensa_a5, r4);              { a5=lenB }
             EmitCallProc(procIdx);                           { result a2 }
           end;
-          { release fresh tyAnsiString BINOP operand temporaries }
+          { Release fresh tyAnsiString concat operands, asking the ONE predicate
+            (IRNodeOwnsManagedStr) exactly as riscv32 does. This tested
+            `IRKind = IR_BINOP` alone until 2026-09-01, which is a narrower copy
+            missing IR_CALL, IR_VIRTUAL_CALL and IR_CALL_IND -- so `F(i) + F(i)`
+            never released either operand and leaked two handles per evaluation.
+            MEASURED with -dPXX_ALLOC_CENSUS, 4000 iterations, same binary shape
+            on both targets: riscv32 allocs=10975 frees=10973 live=2, xtensa
+            allocs=10975 frees=3657 live=7318.
+
+            This is bug-a-a-string-function-result-in-a-concat-leaks-on-every-
+            cross-target, which fixed "the four cross backends" and never listed
+            xtensa -- the seventh backend that a grep for the common spelling
+            does not return. }
           XtensaPushA2;                                 { slot 2 = result }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 3));
             EmitStrRefCallXtensa('PXXStrDecRef');
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, XtensaSlotOff(argBase, 1, 3));
             EmitStrRefCallXtensa('PXXStrDecRef');

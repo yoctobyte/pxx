@@ -1780,9 +1780,7 @@ begin
           else
           begin
             IREmitNode386(valNode);                     { eax = source handle }
-            if not (((IRKind[valNode] = IR_BINOP) and
-                     (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
-                    ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+            if not IRNodeOwnsManagedStr(valNode) then
             begin
               EmitB($50);                               { push eax (arg0) }
               procIdx := FindProc('PXXStrIncRef');
@@ -4404,9 +4402,7 @@ begin
             IREmitNode386(valNode);                     { eax = source handle }
             { Retain unless the value is already a fresh refcount-1 owner
               (concat result, or a user-function result). }
-            if not (((IRKind[valNode] = IR_BINOP) and
-                     (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
-                    ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+            if not IRNodeOwnsManagedStr(valNode) then
             begin
               EmitB($50);                               { push eax (arg0 = p) }
               procIdx := FindProc('PXXStrIncRef');

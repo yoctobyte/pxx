@@ -14173,6 +14173,17 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_string_index_cow.pas $(TESTTMP)/tsic_i386
 	./$(COMPILER) test/test_string_index_cow.pas $(TESTTMP)/tsic_i386_x64
 	tools/expect_same.sh i386/test_string_index_cow "$$(tools/run_target.sh i386 $(TESTTMP)/tsic_i386)" "$$($(TESTTMP)/tsic_i386_x64)"
+	# Does a fresh managed string get RELEASED — the four-arm ownership
+	# predicate, which each backend used to hand-copy with two arms missing.
+	# -dPXX_ALLOC_CENSUS makes the runtime print exact allocation counters,
+	# identical across targets for one program, so a backend that stops
+	# releasing shows up as a differing frees=/live= against the x86-64 build
+	# of the same source. A missing arm leaks silently and prints nothing
+	# wrong, which is why both earlier instances were found by reading a heap
+	# number rather than by a test.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_i386
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_i386_x64
+	tools/expect_same.sh i386/test_managed_str_ownership_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/msol_i386)" "$$($(TESTTMP)/msol_i386_x64)"
 
 test-aarch64: $(COMPILER)
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
@@ -14687,6 +14698,17 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_string_index_cow.pas $(TESTTMP)/tsic_a64
 	./$(COMPILER) test/test_string_index_cow.pas $(TESTTMP)/tsic_a64_x64
 	tools/expect_same.sh aarch64/test_string_index_cow "$$(tools/run_target.sh aarch64 $(TESTTMP)/tsic_a64)" "$$($(TESTTMP)/tsic_a64_x64)"
+	# Does a fresh managed string get RELEASED — the four-arm ownership
+	# predicate, which each backend used to hand-copy with two arms missing.
+	# -dPXX_ALLOC_CENSUS makes the runtime print exact allocation counters,
+	# identical across targets for one program, so a backend that stops
+	# releasing shows up as a differing frees=/live= against the x86-64 build
+	# of the same source. A missing arm leaks silently and prints nothing
+	# wrong, which is why both earlier instances were found by reading a heap
+	# number rather than by a test.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a64_x64
+	tools/expect_same.sh aarch64/test_managed_str_ownership_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/msol_a64)" "$$($(TESTTMP)/msol_a64_x64)"
 
 test-riscv32: $(COMPILER)
 	# A `var` parameter of every scalar kind, plus var->var forwarding. The
@@ -15238,6 +15260,17 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_string_index_cow.pas $(TESTTMP)/tsic_rv32
 	./$(COMPILER) test/test_string_index_cow.pas $(TESTTMP)/tsic_rv32_x64
 	tools/expect_same.sh riscv32/test_string_index_cow "$$(tools/run_target.sh riscv32 $(TESTTMP)/tsic_rv32)" "$$($(TESTTMP)/tsic_rv32_x64)"
+	# Does a fresh managed string get RELEASED — the four-arm ownership
+	# predicate, which each backend used to hand-copy with two arms missing.
+	# -dPXX_ALLOC_CENSUS makes the runtime print exact allocation counters,
+	# identical across targets for one program, so a backend that stops
+	# releasing shows up as a differing frees=/live= against the x86-64 build
+	# of the same source. A missing arm leaks silently and prints nothing
+	# wrong, which is why both earlier instances were found by reading a heap
+	# number rather than by a test.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_rv32
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_rv32_x64
+	tools/expect_same.sh riscv32/test_managed_str_ownership_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/msol_rv32)" "$$($(TESTTMP)/msol_rv32_x64)"
 
 
 # ---------------------------------------------------------------------------
@@ -16134,6 +16167,17 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_string_index_cow.pas $(TESTTMP)/tsic_xt
 	./$(COMPILER) test/test_string_index_cow.pas $(TESTTMP)/tsic_xt_x64
 	tools/expect_same.sh xtensa/test_string_index_cow "$$(tools/run_target.sh xtensa $(TESTTMP)/tsic_xt)" "$$($(TESTTMP)/tsic_xt_x64)"
+	# Does a fresh managed string get RELEASED — the four-arm ownership
+	# predicate, which each backend used to hand-copy with two arms missing.
+	# -dPXX_ALLOC_CENSUS makes the runtime print exact allocation counters,
+	# identical across targets for one program, so a backend that stops
+	# releasing shows up as a differing frees=/live= against the x86-64 build
+	# of the same source. A missing arm leaks silently and prints nothing
+	# wrong, which is why both earlier instances were found by reading a heap
+	# number rather than by a test.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_xt
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_xt_x64
+	tools/expect_same.sh xtensa/test_managed_str_ownership_leaks "$$(tools/run_target.sh xtensa $(TESTTMP)/msol_xt)" "$$($(TESTTMP)/msol_xt_x64)"
 
 test-arm32: $(COMPILER)
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
@@ -16642,6 +16686,17 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_string_index_cow.pas $(TESTTMP)/tsic_a32
 	./$(COMPILER) test/test_string_index_cow.pas $(TESTTMP)/tsic_a32_x64
 	tools/expect_same.sh arm32/test_string_index_cow "$$(tools/run_target.sh arm32 $(TESTTMP)/tsic_a32)" "$$($(TESTTMP)/tsic_a32_x64)"
+	# Does a fresh managed string get RELEASED — the four-arm ownership
+	# predicate, which each backend used to hand-copy with two arms missing.
+	# -dPXX_ALLOC_CENSUS makes the runtime print exact allocation counters,
+	# identical across targets for one program, so a backend that stops
+	# releasing shows up as a differing frees=/live= against the x86-64 build
+	# of the same source. A missing arm leaks silently and prints nothing
+	# wrong, which is why both earlier instances were found by reading a heap
+	# number rather than by a test.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a32
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a32_x64
+	tools/expect_same.sh arm32/test_managed_str_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/msol_a32)" "$$($(TESTTMP)/msol_a32_x64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

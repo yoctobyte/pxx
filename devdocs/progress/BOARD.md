@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -16,7 +16,6 @@ _none_
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops | A | 45 | refactor | The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command and the target is zero: `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 209 now, after five steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), ParseFactor's NilPy head (34 sites, two hooks), and the two DEAD-ARM deletions -- the shared expression and statement call loops carried thirteen arms guarded by `isNilPy` where the question was `PyExprMode`, which could not fire at all (7314fab2b, 23c4552af). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead. | — |
-| refactor-a-the-owned-string-release-predicate-is-hand-copied-across-five-backends | A | 45 | refactor | IRNodeOwnsManagedStr — 'does this node hand over a +1 reference the consumer must release' — is asked at ~25 hand-written call sites across five backend files. The repo has now been wrong at BOTH ends of that matrix: the predicate was missing from four cross backends (concat) and separately missing from x86-64 (comparison). Each half was found by a heap measurement, months apart, and neither by a test. x86-64 now routes its five comparison sites through one shared helper; the four cross backends still hand-write it 6-7 times each. | — |
 
 ## unfinished (27)
 
@@ -64,12 +63,13 @@ _none_
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (3)
+## backlog (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case | T | 55 | bug | gate.sh's stale_binary_hint asks a WORKING-TREE question (is this binary built from these sources) using GIT-HISTORY inputs (mtime vs the newest commit touching compiler/), so it can only ever see divergence that has been COMMITTED. Measured: an uncommitted edit under compiler/ leaves BOTH its inputs byte-identical, so its output is provably independent of the thing it detects -- it is blind to the entire uncommitted present, which includes every agent between a build and a commit. Three lanes read three stale-binary REDs as a master miscompile on 2026-08-31; the hint fired for one. | — |
 | regression-test-cjson-compiler-srchash | C | 70 | regression | regression: test-cjson#src:tools/compiler_srchash.sh at e5a21152b5d1 in step 2/2, `if [ ! -f "library_candidates/cjson/src/cJSON.h" ]; then` (auto-filed by twatch) | — |
+| regression-test-core-crtl-tiny-regex-match | T | 70 | regression | regression: test-core#src:test/crtl_tiny_regex_match.c at 6e622be95680 in step 2/2, `tools/expect_same.sh crtl_tiny_regex_match26 "$(/tmp/crt` (auto-filed by twatch) | — |
 | regression-test-lua-cross-compiler-srchash | C | 70 | regression | regression: test-lua-cross#src:tools/compiler_srchash.sh at e5a21152b5d1 in step 2/2, `if [ ! -f "library_candidates/lua/src/lua.h" ]; then \ e` (auto-filed by twatch) | — |
 
 ## backlog_new (0)
@@ -86,7 +86,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 85 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 70 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (129)
+## backlog-core (130)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -134,6 +134,7 @@ _none_
 | bug-a-two-deref-walk-guards-send-a-resolvable-shape-to-the-fallback | A | 40 | bug | ResolveDerefShapeAt has ten typed arms and two fallbacks that now just keep a default. Measured over a full tier with PXXDBG=a.derefwalk, the fallbacks take 1159 hits and only TWO node kinds ever reach them: AN_PTR_CAST 939 times, because the cast arm guards on `ASTIVal >= 0` and the adapter casts (ival -1/-2) fall past it; and AN_IDENT 220 times, because the ident arm answers tyUnknown for a pointer whose pointee it cannot name. Both then get tyInteger/tyUnknown, which is a GUESS in a walk whose whole job is to stop guessing -- the same family that produced five wrong-value tickets this week. Not urgent and not known to miscompile anything today: no test fails on it, which is exactly why it needs measuring rather than assuming. The counts come free from the probe, so the first job is to find out whether either default is ever WRONG. | — |
 | bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage | A | 40 | bug | tyUnknown is simultaneously the legitimate 'untyped Pointer' pointee sentinel and the value every unwritten/recycled slot reads back as. A consumer cannot tell 'this parameter genuinely takes anything' from 'I read a slot that is not mine', and because the permissive answer is the shared one, every such guard fails OPEN. | — |
 | bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc | A | 30 | bug | `Write` of a real renders at a width that depends on the TARGET: x86-64 prints `s1+s2` (Single+Single) in Double form where FPC and xtensa print Single, and xtensa prints `i/2` in Single form where FPC and x86-64 print Double. Two backends, opposite errors, same source and same compiler. The values are right; the width dispatch is not. | — |
+| bug-a-xtensa-allocates-twice-per-virtual-call-returning-a-string-and-leaks-one | A+S | 45 | bug | xtensa allocates TWO managed strings per iteration where every other backend allocates one, for `s := o.Make(i)` with a virtual method returning AnsiString -- 7707 allocs against 3799 for the identical source. After the ownership-predicate fix in the same session, x86-64/arm32/riscv32 all settle at live=3 and xtensa settles at live=3856: the fix released one of the two, and the second allocation is never released by anything. So there are two distinct defects here, an EXTRA allocation and an unreleased one, and the extra allocation is the one to find first because the leak may simply be its shadow. Measured with -dPXX_ALLOC_CENSUS; the direct-call and indirect-call arms of the same predicate are clean on xtensa, so this is specific to IR_VIRTUAL_CALL. | — |
 | bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp | A+S | 45 | bug | Every windowed xtensa prologue emits `entry a1, 32` then moves sp again with a plain addi/addmi. The windowed ABI requires MOVSP for that, because the caller's 16-byte register save area sits at [a1-16] and a plain add relocates sp while leaving the area behind. Ten executed entry sites, all immediate 32. NOT known to cause a fault -- the obvious mechanism was tested and falsified. | — |
 | bug-a-xtensa-windowed-refuses-ir-raise-because-unwind-needs-the-windows-spilled | A+S | 45 | bug | Under the xtensa windowed ABI, IR_RAISE and the unwind path refuse. The cause is a RUNTIME gap, not a prologue gap: a longjmp-style unwind must spill the register windows first and bare-metal has no handler for that. Filed to keep it OUT of the four-target cdecl prologue change, which would appear to fix it and would not. | — |
 | bug-c-a-pointer-to-a-typedefd-array-segfaults-while-the-direct-spelling-works | C | 45 | bug | In C, `typedef double TA[4]; TA *p = &a; (*p)[i] = v;` compiles clean and SEGFAULTS, while the identical program written `double (*p)[4] = &a;` is correct and matches gcc. Same declaration, two spellings, one of them loses the pointee's array shape. PRE-EXISTING, not a regression: reproduced on the Aug-27 pinned binary (stable_linux_amd64/default/pinned) as well as on tip. Found while fixing bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier, which is the same defect one frontend over -- there the carrier existed for a plain identifier and not for a field/call/element; here it is written for the direct declarator and not for the typedef'd one. | — |
@@ -817,9 +818,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2993)
+## done (2994)
 
-2993 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2994 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -917,6 +918,7 @@ _none_
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [T] regression-optdiff-shard4-12
 - [p 70] [C] regression-test-cjson-compiler-srchash [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [T] regression-test-core-crtl-tiny-regex-match
 - [p 70] [T] regression-test-core-test-setlen-in-parallel-for-body-2
 - [p 70] [C] regression-test-lua-cross-compiler-srchash [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-pascal-conformance-shard0-6-4
@@ -1022,6 +1024,7 @@ _none_
 - [p 45] [A] bug-a-a-cloned-thread-has-no-sigaltstack-so-its-stack-overflow-is-unhandleable
 - [p 45] [A] bug-a-a-static-array-of-managed-field-records-loses-its-length-as-an-open-array-argument
 - [p 45] [A] bug-a-the-near-context-window-is-stale-after-a-token-splice
+- [p 45] [A+S] bug-a-xtensa-allocates-twice-per-virtual-call-returning-a-string-and-leaks-one
 - [p 45] [A+S] bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp
 - [p 45] [A+S] bug-a-xtensa-windowed-refuses-ir-raise-because-unwind-needs-the-windows-spilled
 - [p 45] [C] bug-c-a-pointer-to-a-typedefd-array-segfaults-while-the-direct-spelling-works

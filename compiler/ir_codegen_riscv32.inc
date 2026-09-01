@@ -1216,9 +1216,7 @@ begin
       { A CALL result / concat BINOP is already OWNED (+1) — retaining again
         leaks one handle per boxed call result. Same test as every other
         backend's; bug-a-runtime-variant-heap-grows-unbounded. }
-      if not (((IRKind[valNode] = IR_BINOP) and
-               (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
-              ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+      if not IRNodeOwnsManagedStr(valNode) then
         EmitStrIncRefRISCV32;
     end;
     rv32_addi(reg_sp, reg_sp, -8);
@@ -1622,8 +1620,7 @@ begin
             IREmitNodeRISCV32(valNode);                       { a0 = source handle }
             { A fresh result (concat / user-call) already carries its +1; a plain
               copy of another handle must IncRef. }
-            if not (((IRKind[valNode] = IR_BINOP) and (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
-                    ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+            if not IRNodeOwnsManagedStr(valNode) then
             begin
               rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0); { save handle }
               procIdx := FindProc('PXXStrIncRef'); EmitCallProc(procIdx);          { a0 = p }
@@ -2158,8 +2155,7 @@ begin
             IREmitNodeRISCV32(valNode);                         { a0 = source handle }
             { a fresh result (concat / user call) already carries its +1; a plain copy
               of another handle must IncRef }
-            if not (((IRKind[valNode] = IR_BINOP) and (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
-                    ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+            if not IRNodeOwnsManagedStr(valNode) then
             begin
               rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
               procIdx := FindProc('PXXStrIncRef');

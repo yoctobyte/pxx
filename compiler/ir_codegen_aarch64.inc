@@ -478,9 +478,7 @@ begin
   else
   begin
     IREmitNodeAarch64(valNode);   { x0 = handle }
-    if not (((IRKind[valNode] = IR_BINOP) and
-             (IntToTypeKind(IRTk[valNode]) = tyAnsiString)) or
-            ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0))) then
+    if not IRNodeOwnsManagedStr(valNode) then
       EmitStrIncRefA64;
   end;
 end;
