@@ -137,4 +137,4 @@ The fixed binary reproduced byte-for-byte (`aa86a9a3a88c`) across the round trip
   commit while `compiler/` was still dirty so the canary was not skipped.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 52f49bded.
