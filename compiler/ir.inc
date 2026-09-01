@@ -6601,7 +6601,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
 
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
     slFldRec, slFldDepth, slFldBaseRec: Integer; slFldName: AnsiString; slFldBaseTk: TTypeKind;
-    helperPi, wrapperArg, wrapperCall: Integer;
+    helperPi, pcVal, pcTmp: Integer;
     lhsTk, lhsStoreTk, castTk: TTypeKind;
     lhsStrCap: Integer;
     rcSubLo, rcSubHi: Int64;
@@ -7873,18 +7873,35 @@ begin
         procIdx := FindProc('PXXPCharOf');
         if procIdx >= 0 then
         begin
-          wrapperArg := AllocNode(AN_ARG);
-          ASTLeft[wrapperArg] := ASTLeft[node];
-          ASTRight[wrapperArg] := -1;
-          ASTTk[wrapperArg] := Ord(tyPointer);
+          { The operand gets an OWNER before the raw char pointer escapes.
 
-          wrapperCall := AllocNode(AN_CALL);
-          ASTIVal[wrapperCall] := procIdx;
-          ASTTk[wrapperCall] := Ord(tyPointer);
-          ASTLeft[wrapperCall] := wrapperArg;
-          ASTRight[wrapperCall] := -1;
+            PXXPCharOf is declared `(p: Pointer): Pointer` -- deliberately, it
+            does pointer arithmetic -- so ParamWantsManagedStrTemp is False for
+            it and none of the seven managed-string-temp sites park anything
+            here. `TakeP(PChar('lit' + c))` therefore handed the callee a char
+            pointer into a block carrying a +1 that belonged to nobody: 937 live
+            in 1000 trips, while `PChar(t)` against a named local was clean at 3
+            because the local owned it.
 
-          Result := IRLowerAST(wrapperCall);
+            Parked at the seam rather than at the arg sites, and unconditionally
+            over tyAnsiString, for the reason the sibling fixes give: IR_STORE_SYM
+            already discriminates (it MOVES a fresh call result and RETAINS
+            anything else), so the named-local row gains a balanced
+            retain/release rather than a second free, and no consumer downstream
+            has to re-ask what SHAPE the operand had.
+
+            The lifetime this creates is scope exit, which is strictly LONGER
+            than FPC's guarantee for PChar-of-a-temporary (end of statement), so
+            no program that was correct under the oracle becomes wrong here.
+            bug-a-pchar-of-a-computed-string-leaks-the-string }
+          pcVal := IRLowerAST(ASTLeft[node]);
+          pcTmp := AllocVar('', tyAnsiString);
+          SymIsHiddenArgTemp[pcTmp] := True;
+          IRAppend(IR_STORE_SYM, pcTmp, pcVal, -1, 0, Ord(tyAnsiString));
+          pcVal := IRAppend(IR_LOAD_SYM, pcTmp, -1, -1, 0, Ord(tyAnsiString));
+          Result := IRAppendCall(procIdx,
+            IRAppend(IR_ARG, pcVal, -1, -1, 0, Ord(tyPointer)),
+            -1, Ord(tyPointer));
           Exit;
         end;
       end;

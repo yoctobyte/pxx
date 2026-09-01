@@ -6627,6 +6627,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_array_of_const_string_leaks.pas $(TESTTMP)/test_aoc26
 	tools/expect_same.sh test_aoc26 "$$($(TESTTMP)/test_aoc26 | tail -1)" "tail=100000000-1000"
 	tools/assert_no_leak.sh array_of_const_string 50 $(TESTTMP)/test_aoc26
+	@# The same family one seam over: PXXPCharOf, which the PChar cast routes a
+	@# managed string through, takes a Pointer -- so no arg-temp site parks the
+	@# operand and a computed one leaked. 1421 -> 9 against this bound, allocs
+	@# 4809 either way. The expect_same row is aimed at the OPPOSITE mistake: the
+	@# pre-fix binary printed every line identically while leaking, so a released-
+	@# too-early temp, not the leak, is what it can catch.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_pchar_of_computed_string_leaks.pas $(TESTTMP)/test_pcl26
+	tools/expect_same.sh test_pcl26 "$$($(TESTTMP)/test_pcl26 | tail -1)" "acclen=500 head=kkkkkkkk"
+	tools/assert_no_leak.sh pchar_of_computed_string 50 $(TESTTMP)/test_pcl26
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_record_gate_leaks.pas $(TESTTMP)/test_mrg26
 	tools/expect_same.sh test_mrg26 "$$($(TESTTMP)/test_mrg26 | tail -1)" "managed-record-gate 9000/9000"
 	tools/assert_no_leak.sh managed_record_gate 50 $(TESTTMP)/test_mrg26
@@ -14488,6 +14497,11 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_array_of_const_string_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/aocs_i386)" "$$($(TESTTMP)/aocs_i386_x64)"
 	tools/assert_no_leak.sh i386/array_of_const_string 50 tools/run_target.sh i386 $(TESTTMP)/aocs_i386
 	tools/assert_no_leak.sh x86-64/array_of_const_string 50 $(TESTTMP)/aocs_i386_x64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_pchar_of_computed_string_leaks.pas $(TESTTMP)/pcls_i386
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_pchar_of_computed_string_leaks.pas $(TESTTMP)/pcls_i386_x64
+	tools/expect_same.sh i386/test_pchar_of_computed_string_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/pcls_i386)" "$$($(TESTTMP)/pcls_i386_x64)"
+	tools/assert_no_leak.sh i386/pchar_of_computed_string 50 tools/run_target.sh i386 $(TESTTMP)/pcls_i386
+	tools/assert_no_leak.sh x86-64/pchar_of_computed_string 50 $(TESTTMP)/pcls_i386_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
 	# NON-object raise must not be freed at all. Both arms live in one
 	# program because they failed in opposite directions: the leak fix that
@@ -15121,6 +15135,11 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_array_of_const_string_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/aocs_aarch64)" "$$($(TESTTMP)/aocs_aarch64_x64)"
 	tools/assert_no_leak.sh aarch64/array_of_const_string 50 tools/run_target.sh aarch64 $(TESTTMP)/aocs_aarch64
 	tools/assert_no_leak.sh x86-64/array_of_const_string 50 $(TESTTMP)/aocs_aarch64_x64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_pchar_of_computed_string_leaks.pas $(TESTTMP)/pcls_aarch64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_pchar_of_computed_string_leaks.pas $(TESTTMP)/pcls_aarch64_x64
+	tools/expect_same.sh aarch64/test_pchar_of_computed_string_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/pcls_aarch64)" "$$($(TESTTMP)/pcls_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/pchar_of_computed_string 50 tools/run_target.sh aarch64 $(TESTTMP)/pcls_aarch64
+	tools/assert_no_leak.sh x86-64/pchar_of_computed_string 50 $(TESTTMP)/pcls_aarch64_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
 	# NON-object raise must not be freed at all. Both arms live in one
 	# program because they failed in opposite directions: the leak fix that
