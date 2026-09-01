@@ -111,4 +111,4 @@ seven C file-scope forms, `fp_t F = helper;` is the only one that gets no symbol
 at all, on every target, which makes it a frontend gap rather than a writer one.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9e4668d27.
