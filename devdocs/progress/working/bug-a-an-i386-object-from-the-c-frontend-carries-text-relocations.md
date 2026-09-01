@@ -8,7 +8,7 @@ blocked-by: []
 owner: frankC
 created: 2026-09-01
 found-by: frankA (while adding .init_array to the i386 object writer; pre-existing, not caused by it)
-summary: "i386 --emit-obj output is POSITION-DEPENDENT: every .text relocation is absolute R_386_32, so `-Wl,-z,text` refuses the link and a PIE gets DT_TEXTREL. The i386 twin of feature-a-x86-64-object-output-is-position-dependent, and the harder one: i386 has no PC-relative data addressing, so position independence needs a GOT base register. MEASURED, and the measuring is most of what is banked here. 27 operand shapes need conversion, from an EMITTER census (PXXDBG=a.i386reloc, 11645 sites) not an object census (1450) -- the emitter probe found three shapes no object held, including a family the object-based plan had no entry for: `c7 00`, `mov [eax], imm32` with the data address as the IMMEDIATE, 74 sites, the only shape needing a scratch register the emitter must find. Twelve shapes collapse to one length-preserving expression, `modrm := (modrm and $38) or $83`; the rest are moffs (a1/a2/a3, +1), address-as-immediate (b8..bf -> lea, +1), push imm32 (+3, no scratch needed, and still live in 9 source sites for RTTI and dyn-array descriptors even though it reads as ZERO in the newest object census), SIB-indexed (base 101 -> 011, same length) and the new c7 00. Every rewrite was assembled and disassembled. BASE REGISTER: esi, decided by measurement -- 0 R_386_PLT32 anywhere, so ebx's only advantage (the PLT contract) is absent, and esi is not byte-addressable on i386 so it can never be wanted for the 360 `mov bl,[d32]` sites. The technique is SAVE/RESTORE around the self-contained sequences that clobber it, NOT re-homing: 70 of the 91 esi sites are co-live with edi (byte-copy loops, the 64-bit divide), so treating the two as interchangeable spares -- which an earlier revision of this ticket did -- yields a backend that fails in string copies and division. Phases: emitter census (done), establish the GOT base, convert family by family, and the test-emit-obj assertion row LAST."
+summary: "i386 --emit-obj output is POSITION-DEPENDENT: every .text relocation is absolute R_386_32, so `-Wl,-z,text` refuses the link and a PIE gets DT_TEXTREL. The i386 twin of feature-a-x86-64-object-output-is-position-dependent, and the harder one: i386 has no [eip+disp32] ADDRESSING MODE, so it needs an explicit call/pop anchor where x86-64 has rip -- but it does NOT need a GOT: our .data/.bss symbols are section-local, so a PC-relative anchor reaches them with a link-time-constant displacement. MEASURED: that form assembles to R_386_PC32, links under `gcc -m32 -pie -Wl,-z,text` (the exact link this ticket exists to unblock) and runs, with no GOT, no _GLOBAL_OFFSET_TABLE_ and no R_386_GOTPC. MEASURED, and the measuring is most of what is banked here. 27 operand shapes need conversion, from an EMITTER census (PXXDBG=a.i386reloc, 11645 sites) not an object census (1450) -- the emitter probe found three shapes no object held, including a family the object-based plan had no entry for: `c7 00`, `mov [eax], imm32` with the data address as the IMMEDIATE, 74 sites, the only shape needing a scratch register the emitter must find. Twelve shapes collapse to one length-preserving expression, `modrm := (modrm and $38) or $86`; the rest are moffs (a1/a2/a3, +1), address-as-immediate (b8..bf -> lea, +1), push imm32 (+3, no scratch needed, and still live in 9 source sites for RTTI and dyn-array descriptors even though it reads as ZERO in the newest object census), SIB-indexed (base 101 -> 011, same length) and the new c7 00. Every rewrite was assembled and disassembled. BASE REGISTER: esi, decided by measurement -- 0 R_386_PLT32 anywhere, so ebx's only advantage (the PLT contract) is absent, and esi is not byte-addressable on i386 so it can never be wanted for the 360 `mov bl,[d32]` sites. The technique is SAVE/RESTORE around the self-contained sequences that clobber it, NOT re-homing: 70 of the 91 esi sites are co-live with edi (byte-copy loops, the 64-bit divide), so treating the two as interchangeable spares -- which an earlier revision of this ticket did -- yields a backend that fails in string copies and division. Phases: emitter census (done, abc5b9979), anchor + R_386_PC32 with NOTHING converted (verified by the absolute count NOT moving), convert family by family, and the test-emit-obj assertion row LAST."
 ---
 
 # An i386 object from the C frontend carries text relocations
@@ -124,7 +124,11 @@ Twelve of the 24 shapes are a memory operand with `mod=00, rm=101` (absolute
 **reg field is untouched**, so:
 
 ```
-modrm := (modrm and $38) or $83
+modrm := (modrm and $38) or $83     <-- WRONG REGISTER. $83 is ebx, written
+                                        before the base register was decided;
+                                        it came out esi, so the constant is
+                                        $86. See CORRECTION 1 near the end.
+                                        The expression SHAPE is right.
 ```
 
 covers all of them, **including the `F0`-prefixed `lock cmpxchg` and the
@@ -388,3 +392,81 @@ So the honest claim is **"27 shapes across these axes, with an instrument that
 announces a 28th"** — not "27 shapes". The probe stays in the tree for exactly
 that reason: whoever does phase 3 re-runs it, and a new shape says so instead of
 silently becoming an absolute relocation.
+
+## NO GOT IS NEEDED, AND TWO EARLIER ENTRIES IN THIS FILE ARE WRONG (2026-09-01, frankC)
+
+Everything above assumes the fix is GOTOFF addressing off a GOT base, because
+that is what gcc does on i386 and what the re-scoping paragraph asserted. **It
+is not necessary here, and the cheaper scheme was never tested against.**
+
+Our `.data`/`.bss` symbols are section-local and not exported, so nothing can
+preempt them and no indirection is required. A **PC-relative anchor** reaches
+them with a link-time-constant displacement:
+
+```asm
+        call    .L1
+.L1:    popl    %esi                    # esi = the address of .L1
+        movl    myval-.L1(%esi), %eax   # R_386_PC32 against .data
+```
+
+Assembled, linked and RUN, rather than argued:
+
+```
+.rel.text:  00000008  R_386_PC32  .data        <- not R_386_32
+gcc -m32 -pie -Wl,-z,text  ->  LINKED CLEAN    <- the link that refuses today
+./pcrel                    ->  exit 42
+```
+
+`-Wl,-z,text` is the exact link this ticket exists to unblock, and it accepts
+this with no GOT, **no `_GLOBAL_OFFSET_TABLE_` symbol, and no `R_386_GOTPC`.**
+That deletes a whole phase: the ELF writer needs one new relocation TYPE and no
+new section, no GOT construction and no symbol synthesis.
+
+### The addend, measured rather than derived
+
+SHT_REL has no addend field, so it lives in the four bytes being patched. The
+assembler stored **3**, and `A = F - anchor` predicts `8 - 5 = 3`. The linker
+then computes `S + A - P = S + 3 - 8 = S - 5`, which is `S - anchor` — the
+displacement wanted. Both `F` (the fixup's offset in `.text`) and the anchor's
+offset are known at emit time, so the emitter can compute the addend directly.
+
+### CORRECTION 1 — the ModRM constant in this file is for the WRONG REGISTER
+
+The census section says the twelve-shape family collapses to
+
+```
+modrm := (modrm and $38) or $83
+```
+
+`$83` is `mod=10, rm=011` — **`ebx`**, written before the base register was
+decided and never revisited when the decision came out `esi`. The correct
+constant is **`$86`** (`mod=10, rm=110`), confirmed by assembling
+`mov eax, [esi+d32]` → `8b 86` and `mov edx, [esi+d32]` → `8b 96`.
+
+The expression's SHAPE is right and the reg field is still preserved; only the
+literal is wrong. It is exactly the kind of constant that would have been
+copied into the implementation verbatim, produced `[ebx+disp32]` against an
+anchor held in `esi`, and read from a register that happens to hold a live
+value — a plausible wrong address rather than a crash.
+
+### CORRECTION 2 — "i386 has no PC-relative data addressing" is misleading
+
+That sentence appears in the summary and the re-scoping paragraph, and it is
+true of the ADDRESSING MODES: there is no `[eip+disp32]` on i386. It was then
+used to conclude that a GOT base register is required, which does not follow —
+`call/pop` puts the PC in a general register, and every addressing mode works
+off that. The correct statement is that i386 needs an explicit anchor
+instruction where x86-64 has `rip`; what it does NOT need is a GOT.
+
+## Phases, revised
+
+1. ~~emitter census~~ **done** (`abc5b9979`, `PXXDBG=a.i386reloc`).
+2. **Anchor + `R_386_PC32` in the writer.** Emit `call/pop` into `esi` per
+   function, `push esi`/`pop esi` around the sequences that clobber it, and
+   teach `writeELFRel386General` the new relocation type. Convert NOTHING yet:
+   the anchor is computed and unused, so every program must behave identically
+   and the absolute count must not move. That is a real assertion, and it is
+   the one this phase is verified by.
+3. **Convert family by family**, watching `.text` absolutes fall from 1450 and
+   re-running the emitter probe after each so a 28th shape announces itself.
+4. **The `test-emit-obj` i386 row LAST**, scoped by relocation SECTION.
