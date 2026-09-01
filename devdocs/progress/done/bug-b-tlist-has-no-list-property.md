@@ -109,7 +109,7 @@ running `L.List^[i]` rather than building it.
 
 ---
 
-## 2026-09-01 (frankH) — the blocker was RENAMED, not lost; unblocked, and landed
+## 2026-09-01 (frankH) — the blocker was RENAMED, not lost; unblocked, and landed, commit befca0866.
 
 **Track B.** Two separate findings, and the first is why this sat for two days
 after it was already free.
