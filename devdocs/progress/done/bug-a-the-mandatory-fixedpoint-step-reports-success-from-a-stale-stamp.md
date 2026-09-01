@@ -138,4 +138,4 @@ Two things this pins down that the constructed repro could not:
    `rm` — against a RED gate that otherwise reads as a miscompile on master.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 5c3aeeecb.
