@@ -4,12 +4,12 @@ title: "`TP(raw)^[i, j]` does not parse, while `p^[i, j]` compiles and runs corr
 track: A
 prio: 45
 type: bug
-status: new
+status: done
 found: 2026-09-01
 found-by: frankB
-owner: ""
+owner: frankB
 blocked-by: []
-summary: "A comma-indexed multi-dim subscript is refused with `expected ']' before ','` when the pointer is spelled as a CAST or a CALL RESULT, while the identical construct on a plain identifier compiles and produces the right answer. So pxx disagrees with ITSELF by spelling, which is stronger than a compat gap; FPC 3.2.2 accepts the cast spelling and prints the same values pxx prints for the plain one. Same family as bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier, but a DIFFERENT MECHANISM and not fixed by it: this fails during PARSING, before any pointee-shape machinery runs, so no carrier (ProcRetPtrAlias, NodePtrAlias, an array-element carrier) can repair it. Filed separately so it is not assumed covered by the shape fix. Rows ds_callres_md2 and ds_cast_md2 in test/derefshape. ESTABLISHED same session: the CHAINED form `[i][j]` COMPILES for both spellings and yields 1.50 0.00, the same wrong answer as the record-field/array-element/nested rows -- so the gap is purely the postfix subscript parser and behind it sits the ordinary shape bug, currently MASKED by the parse error. Fixing the parser alone therefore turns two LOUD compile errors into two SILENT wrong values; land it with the multi-dim shape fix, not before."
+summary: "FIXED 2026-09-01 (frankB). The cast/deref postfix arm in pasparser_expr.inc read one subscript and then demanded `]`, so `TP(raw)^[i, j]` was a hard parse error in EXPRESSION position while the byte-identical STORE compiled and ran. It now calls ParseNDSubscriptTail -- the fourth caller of the one helper the lvalue side uses, not a fourth copy of the comma walk. The sequencing trap this ticket warned about did NOT fire: frankA landed the multi-dim shape fix first, so the two rows went COMPILE-ERROR -> ok rather than COMPILE-ERROR -> WRONG. test/derefshape is 30/30 with a READ-back-through-the-spelling half added, which is what surfaced this face at all."
 ---
 
 # A comma-indexed multi-dim subscript is not parsed through a cast or a call result
@@ -124,3 +124,22 @@ Do not land the parser fix on its own. Either land it with the multi-dim shape
 fix, or land it and accept that `ds_cast_md2` / `ds_callres_md2` move from
 `COMPILE-ERROR` to `WRONG` in `test/derefshape` — which is honest only if the
 shape work is actually in flight.
+
+## 2026-09-01 (frankB): fixed, and the trap this ticket named did not fire
+
+Landed in the same commit as two other read-face defects. The sequencing warning
+above was the right call and was honoured by circumstance rather than by me:
+frankA's multi-dim shape fix went in first, so parsing these two spellings turned
+them from `COMPILE-ERROR` straight to `ok` — never through the `WRONG` state this
+ticket warned it would create.
+
+**How the face was found is the part worth keeping.** Not from this ticket: from
+adding a READ half to every `test/derefshape` row. Until 2026-09-01 every row
+wrote through the spelling under test and read back through the plain array, so
+the matrix was a complete product on the two axes it NAMED and blind on one it
+never named. Switching the read half on failed two rows that had been green, and
+one of them was this. A matrix's axes are a claim about what was VARIED; they say
+nothing about what was COVERED.
+
+The parse fix is three lines of delegation. What made it hard to see for a day
+was that the write face — the only face any row exercised — was correct.
