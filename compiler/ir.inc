@@ -3387,6 +3387,45 @@ begin
   IRParkManagedStr := IRAppend(IR_LOAD_SYM, pmSym, -1, -1, 0, Ord(tyAnsiString));
 end;
 
+function IRParkManagedDyn(val, argAST: Integer): Integer;
+{ The same park, for a DYNAMIC ARRAY value reaching a pointer destination.
+
+  A separate function rather than a kind argument to IRParkManagedStr, because
+  the temp is not the same object: a dyn-array local carries an element type and
+  a nesting depth, and its scope-exit release is PXXDynArrayRelease reading the
+  SYMBOL's layout descriptor. A string temp has neither. Sharing one allocator
+  would mean passing the element shape through every string call site that has
+  none.
+
+  `Pointer(MkArr(i))`, `TakeQ(MkArr(i))` with `TakeQ(p: Pointer)` and
+  `q := Pointer(MkArr(i))` all read frees=0 -- every array leaked, 921 in 1000
+  trips -- while the same call through a NAMED local was clean at 921/919. Same
+  shape as the eight string seams, one managed kind over: the pointer keeps an
+  address and retains nothing, and the handle was never a symbol.
+
+  Returns val UNCHANGED when the node is not a dyn array, so a call site can ask
+  unconditionally. NodeDynDepth is the test rather than the type tag, because a
+  dyn-array-typed node already reads tyPointer -- which is precisely why the
+  string park could not see these.
+
+  LastTypeRecId is a global the declaration path uses to hand AllocDynArray the
+  element's record id; saved and restored here for the same reason IRAppendCall
+  does it around its hidden aggregate-result temp. }
+var pdSym, pdSaved, pdDepth: Integer;
+begin
+  IRParkManagedDyn := val;
+  if argAST < 0 then Exit;
+  pdDepth := NodeDynDepth(argAST);
+  if pdDepth <= 0 then Exit;
+  pdSaved := LastTypeRecId;
+  LastTypeRecId := NodeDynBaseRec(argAST);
+  pdSym := AllocDynArray('', NodeDynBaseTk(argAST), pdDepth);
+  LastTypeRecId := pdSaved;
+  SymIsHiddenArgTemp[pdSym] := True;
+  IRAppend(IR_STORE_SYM, pdSym, val, -1, 0, Ord(tyPointer));
+  IRParkManagedDyn := IRAppend(IR_LOAD_SYM, pdSym, -1, -1, 0, Ord(tyPointer));
+end;
+
 { The STATIC-ARRAY SOURCE behind an argument that is about to be copied into a
   length-headed temp for an array parameter: how many elements, of what kind,
   and how wide one is.
@@ -4613,7 +4652,15 @@ begin
      (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) and
      (not Procs[cpi].Params[pathIdx].IsArray) and
      (IntToTypeKind(ASTTk[argAST]) = tyAnsiString) then
-    value := IRParkManagedStr(value);
+    value := IRParkManagedStr(value)
+  else if (cpi >= 0) and (cpi < ProcCount) and (not isRefArg) and
+          (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+          (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) and
+          (not Procs[cpi].Params[pathIdx].IsArray) then
+    { the dyn-array arm of the same seam — `TakeQ(MkArr(i))` with a Pointer
+      parameter left frees=0. IRParkManagedDyn is a no-op on anything that is
+      not a dyn array, so this asks nothing else. }
+    value := IRParkManagedDyn(value, argAST);
   Result := value;
 end;
 
@@ -7966,7 +8013,12 @@ begin
         the heap unit is absent. }
       if (castTk = tyPointer) and
          (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyAnsiString) then
-        Result := IRParkManagedStr(Result);
+        Result := IRParkManagedStr(Result)
+      else if castTk = tyPointer then
+        { …and a DYNAMIC ARRAY through the same cast, for the same reason: the
+          handle reaches a slot that retains nothing. Asks the node's dyn depth,
+          not its type tag, because a dyn-array node already reads tyPointer. }
+        Result := IRParkManagedDyn(Result, ASTLeft[node]);
       { PChar(stringExpr): an inline-length string value points at its 8-byte
         length prefix; a C `const char*` needs the char data, which sits at +8
         (now guaranteed NUL-terminated by InternStr). Sentinel -2 in ASTIVal
@@ -11263,7 +11315,9 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           at the cast instead, which is why this asks the RIGHT-hand type. }
         if (lhsTk = tyPointer) and
            (IntToTypeKind(ASTTk[ASTRight[node]]) = tyAnsiString) then
-          value := IRParkManagedStr(value);
+          value := IRParkManagedStr(value)
+        else if lhsTk = tyPointer then
+          value := IRParkManagedDyn(value, ASTRight[node]);
         { {$R+}: guard a narrowing store with the range-check helper — index
           bounds (reads AND writes) are handled centrally in IRLowerAddress
           (feature-pascal-range-checks-r-plus). }

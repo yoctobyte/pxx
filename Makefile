@@ -6660,6 +6660,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_string_to_pointer_seam_leaks.pas $(TESTTMP)/test_stp26
 	tools/expect_same.sh test_stp26 "$$($(TESTTMP)/test_stp26 | tail -1)" "acclen=200 head=123456780"
 	tools/assert_no_leak.sh string_to_pointer_seam 50 $(TESTTMP)/test_stp26
+	@# The same seam for a DYNAMIC ARRAY, which the string park could not see: a
+	@# dyn-array node already reads tyPointer, so the test has to be the node's
+	@# dyn DEPTH. 9976 -> 14 against this bound, allocs 10975 either way. The
+	@# string-element/nested/record-element arms are not decoration -- they make
+	@# the layout descriptor do real work, and a wrong element type there is a
+	@# double free rather than a leak.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_to_pointer_seam_leaks.pas $(TESTTMP)/test_dtp26
+	tools/expect_same.sh test_dtp26 "$$($(TESTTMP)/test_dtp26 | tail -1)" "last=3 head=1000"
+	tools/assert_no_leak.sh dynarray_to_pointer_seam 50 $(TESTTMP)/test_dtp26
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_record_gate_leaks.pas $(TESTTMP)/test_mrg26
 	tools/expect_same.sh test_mrg26 "$$($(TESTTMP)/test_mrg26 | tail -1)" "managed-record-gate 9000/9000"
 	tools/assert_no_leak.sh managed_record_gate 50 $(TESTTMP)/test_mrg26
@@ -15176,6 +15185,14 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_string_to_pointer_seam_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/stps_aarch64)" "$$($(TESTTMP)/stps_aarch64_x64)"
 	tools/assert_no_leak.sh aarch64/string_to_pointer_seam 50 tools/run_target.sh aarch64 $(TESTTMP)/stps_aarch64
 	tools/assert_no_leak.sh x86-64/string_to_pointer_seam 50 $(TESTTMP)/stps_aarch64_x64
+	@# Dyn-array seam. NO i386 SIBLING for this one, deliberately: i386 refuses
+	@# the program with "arrays not yet supported", so a row there would compare
+	@# against a file that was never built.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_dynarray_to_pointer_seam_leaks.pas $(TESTTMP)/dtps_aarch64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_to_pointer_seam_leaks.pas $(TESTTMP)/dtps_aarch64_x64
+	tools/expect_same.sh aarch64/test_dynarray_to_pointer_seam_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/dtps_aarch64)" "$$($(TESTTMP)/dtps_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/dynarray_to_pointer_seam 50 tools/run_target.sh aarch64 $(TESTTMP)/dtps_aarch64
+	tools/assert_no_leak.sh x86-64/dynarray_to_pointer_seam 50 $(TESTTMP)/dtps_aarch64_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
 	# NON-object raise must not be freed at all. Both arms live in one
 	# program because they failed in opposite directions: the leak fix that
