@@ -441,4 +441,4 @@ low on the unwind path, which is reported rather than explained — it is balanc
 now, and the runner checks it every run.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: c9a2dbc1c.
