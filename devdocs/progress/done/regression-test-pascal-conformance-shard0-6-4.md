@@ -291,4 +291,4 @@ This ticket had said RESOLVED in its body since 2026-09-01 while its frontmatter
 still said `status: backlog`, so it stayed wired to
 [[umbrella-one-full-tier-run-with-no-red-tier]] as a live blocker for a day.
 Closing it now. The write-up above stands as claude-T's.
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit feb1a0729.

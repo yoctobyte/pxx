@@ -126,4 +126,4 @@ gap and belongs low; `(accepted-invalid)` means the compiler accepts a program i
 can already tell is wrong. Argued in full on
 [[chore-t-fpc-conformance-noise-skews-priority]], where the measured
 disagreement with the pin-allowlist option also lives.
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit feb1a0729.
