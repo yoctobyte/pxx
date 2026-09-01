@@ -51,6 +51,29 @@ begin
   Result := PChar('pxx-emit-obj');
 end;
 
+{ @proc, and it is here because its ABSENCE hid a bug. The relocation rows of
+  test-emit-obj assert that .text carries no absolute relocation; before this
+  routine existed they asserted that over a program with no `@proc` site, and
+  IR_PROCADDR was still emitting `mov rax, imm64` -- an R_X86_64_64 against
+  .text, which ld accepts into a PIE only by creating DT_TEXTREL and which
+  `-Wl,-z,text` refuses. The census said zero because the population could not
+  contain it.
+
+  AddUp is deliberately the target: it is a LOCAL symbol, so the relocation is
+  against .text itself rather than an exported name. Returning the pointer,
+  rather than calling through it, keeps the value observable from C without
+  the object needing to run any Pascal initialisation. }
+function emit_obj_cbaddr: Pointer; cdecl;
+type
+  TAddUp = function(n: Integer): Integer;
+var
+  f: TAddUp;
+begin
+  f := @AddUp;
+  Result := Pointer(@f);
+  Result := Pointer(f);
+end;
+
 begin
   g := 0;
   for i := 1 to 9 do

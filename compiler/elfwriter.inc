@@ -1856,7 +1856,14 @@ begin
       ErrorNoPos('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
             ': the address of a routine with no body was taken');
     addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
-    PatchAddr8(ProcAddrFix[i].CodePos, addr);
+    { x86-64 emits `lea rax, [rip+disp32]`, so the field is the distance from
+      the address AFTER it, four bytes wide. aarch64/arm32/xtensa store an
+      8-byte absolute literal and keep PatchAddr8. }
+    if TargetArch = TARGET_X86_64 then
+      Patch32(ProcAddrFix[i].CodePos,
+              addr - (LOAD_ADDR + codeOffset + ProcAddrFix[i].CodePos + 4))
+    else
+      PatchAddr8(ProcAddrFix[i].CodePos, addr);
   end;
 
   for i := 0 to DataPtrFixCount-1 do
@@ -2049,7 +2056,14 @@ begin
       ErrorNoPos('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
             ': the address of a routine with no body was taken');
     addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
-    PatchAddr8(ProcAddrFix[i].CodePos, addr);
+    { x86-64 emits `lea rax, [rip+disp32]`, so the field is the distance from
+      the address AFTER it, four bytes wide. aarch64/arm32/xtensa store an
+      8-byte absolute literal and keep PatchAddr8. }
+    if TargetArch = TARGET_X86_64 then
+      Patch32(ProcAddrFix[i].CodePos,
+              addr - (LOAD_ADDR + codeOffset + ProcAddrFix[i].CodePos + 4))
+    else
+      PatchAddr8(ProcAddrFix[i].CodePos, addr);
   end;
 
   for i := 0 to DataPtrFixCount-1 do
@@ -3121,9 +3135,18 @@ begin
       the data. (The ELF32 sibling still reads the offset raw, which is correct
       only while that refusal stands.) }
     { rtype 11 = R_X86_64_32S (absolute), 2 = R_X86_64_PC32. A PC32 addend is
-      relative to the address AFTER the field, so it carries the -4; measured
-      across 1271 sites, no site on this path has bytes trailing the field, so
-      the correction is -4 everywhere and never -8. }
+      relative to the address AFTER the field, so it carries the -4 PLUS any
+      instruction bytes that trail the displacement -- which is what
+      GlobFixTrail[i] holds, per site.
+
+      This comment used to say "measured across 1271 sites, no site on this
+      path has bytes trailing the field, so the correction is -4 everywhere and
+      never -8", three lines above the code that adds GlobFixTrail. That census
+      was taken over objects built WITHOUT --threadsafe and the shape lives in
+      lock code, so the population could not contain it; believing it cost a
+      hang in test_multithreading. The same false claim was asserted in
+      emit.inc (fixed in 3156ac887) -- this was its third copy. Do not restore
+      it. }
     if GlobFixPCRel[i] then
     begin
       if SymOffIsData(GlobFix[i].BSSoff) then
@@ -3144,9 +3167,12 @@ begin
       the addend carries the -4 to the end of the instruction. }
     writeRela64(f, DynCallCodePos[i], 2, 2, ExternalGotOff[DynCallExtIdx[i]] - 4);
   { @proc: the `mov rax, imm64` operand, absolute against .text }
+  { @proc: `lea rax,[rip+disp32]` against .text -- PC32 (rtype 2), addend
+    carrying the -4 to the end of the instruction. It was R_X86_64_64 against
+    an absolute code address, the last absolute relocation .text emitted. }
   for i := 0 to ProcAddrFixCount-1 do
-    writeRela64(f, ProcAddrFix[i].CodePos, 1, 1,
-                Procs[ProcAddrFix[i].ProcIdx].BodyAddr);
+    writeRela64(f, ProcAddrFix[i].CodePos, 1, 2,
+                Procs[ProcAddrFix[i].ProcIdx].BodyAddr - 4);
 
   { .rela.data: data->data pointers, data->code method slots, and one
     R_X86_64_64 per external GOT slot against that extern's UND symbol. }

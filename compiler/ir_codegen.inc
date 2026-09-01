@@ -5826,12 +5826,26 @@ begin
           EmitExternalProcAddr(IRA[node]);
           Exit;
         end;
-        EmitB($48); EmitB($B8); { mov rax, imm64 }
+        { `lea rax, [rip+disp32]` (7 bytes), not `mov rax, imm64` (10). A code
+          address held as a 64-bit IMMEDIATE is an absolute R_X86_64_64 in
+          .text, which is the one thing that keeps an object out of a clean PIE
+          -- ld will take it, but only by creating DT_TEXTREL, and `-z text`
+          refuses it outright. This was the LAST such site after
+          feature-a-x86-64-object-output-is-position-dependent, and it survived
+          that ticket's measurement because test_emit_obj.pas takes no @proc:
+          the census was of a population that could not contain it, for the
+          second time in one piece of work.
+          The field is 4 bytes now, so the writers patch it PC-relatively --
+          both exec loops and writeELFRelX64General, all keyed on TargetArch,
+          which is sound here because this is the only x86-64 emitter feeding
+          ProcAddrFix (i386 has its own in ir_codegen386.inc, aarch64/arm32/
+          xtensa store an 8-byte literal and keep PatchAddr8). }
+        EmitB($48); EmitB($8D); EmitB($05); { lea rax, [rip+disp32] }
         if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
         ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;
         ProcAddrFix[ProcAddrFixCount].ProcIdx := IRA[node];
         Inc(ProcAddrFixCount);
-        EmitI64(0);
+        EmitI32(0);
       end;
 
     IR_CLASSREF:
