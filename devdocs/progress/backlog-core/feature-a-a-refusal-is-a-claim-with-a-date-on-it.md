@@ -13243,3 +13243,55 @@ prior. In this file the narrowing left a two-arm defect that also matches
 (`test_const_open_array_managed`), and its existence is part of why nobody
 revisited the arm that was not. **A test pinning one arm of a double case
 reports as coverage of the concept.**
+
+## 242 — THE POPULATION WAS HONEST, NON-EMPTY, AND UNIFORM IN THE ONE ATTRIBUTE THAT MATTERED (frankC, 2026-09-01)
+
+Two known traps have a third sibling, and it is the one that resists every
+existing check.
+
+**Trap one, the vacuous census.** The population cannot contain the shape, so
+counting it gives zero. `GlobRefTrailingImm`'s header records the canonical case:
+five objects said no site trails an immediate, and none of the five was built
+with `--threadsafe`, which is the only thing that emits the shape.
+
+**Trap two, the unexecuted path.** The population *does* contain the shape and
+nothing runs it. Measured today: with every i386 PC-relative addend deliberately
+wrong by `0x30000000`, `test-emit-obj`'s i386 rows and `test-c-abi-mixed-link`
+both PASSED on both targets. Those objects carried 114 converted sites each. The
+census was honest, the coverage real, and no assertion in either gate could come
+out false, because "it links and runs" does not require reading a converted
+global. `+8` passed too. It took a deliberately-broken compiler to see it.
+
+**Trap three, and this is the new one: the population is honest, non-empty,
+EXECUTED — and homogeneous in an attribute nobody was tracking.** The i386 PC
+anchor was claimed "verified inert" on the strength of `test-c-abi-mixed-link`.
+Every row of that gate is a *procedure*. The compiler also emits a main body with
+no `push ebp; mov ebp,esp` at all, and the anchor parked itself at `[ebp+slot]`.
+The moment anything read that slot, the store faulted — `SIGSEGV` at the store
+instruction, `ebp=0x8073efc`, in a body no row of the gate had a specimen of.
+
+**Why it is worse than the other two.** For traps one and two you can ask a
+question with an answer: *is the shape present?* — count it; *did it run?* — break
+it on purpose and see if anything notices. Trap three has no such question,
+because the attribute that varies is one you have not thought of yet. "Every row
+is a procedure" is not a gap in the gate; it is a fact about the gate that reads
+as ordinary until a defect makes frame shape load-bearing. frankA's
+managed-field-record bug is the same species with element type as the axis
+instead of frame shape.
+
+**The cheap check.** Not "does my population contain the construct" but **"name
+one attribute my subjects all share that the code under test could branch on."**
+Frame shape, element type, optimisation level, target, whether the body is the
+main one. If you can name it in ten seconds, that is the axis your gate is blind
+along, and one specimen off it costs less than the debug cycle does. Two of the
+three defects in this ticket's phase 3 were found by *running* a new subject,
+not by reading the code — and the third, a legacy prefix binding to an inserted
+instruction, was invisible to all three traps and only showed as a `push cx`
+where a `push ecx` was meant.
+
+**Corollary, and it is the part worth keeping.** A verification claim scopes to
+what was run. "The anchor is inert" was true of everything measured and false as
+a sentence. The fix is not more gates; it is writing the claim with its
+population attached — *"inert across mixed-link, whose rows are all procedures"*
+— because a claim carrying its own population is one anybody can falsify, and a
+bare one is not.

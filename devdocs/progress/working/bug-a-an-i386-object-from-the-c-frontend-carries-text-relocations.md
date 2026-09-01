@@ -8,7 +8,7 @@ blocked-by: []
 owner: frankC
 created: 2026-09-01
 found-by: frankA (while adding .init_array to the i386 object writer; pre-existing, not caused by it)
-summary: "i386 --emit-obj output is POSITION-DEPENDENT: .text relocations are absolute R_386_32, so `-Wl,-z,text` refuses the link and a PIE gets DT_TEXTREL. The i386 twin of feature-a-x86-64-object-output-is-position-dependent, and the harder one: i386 has no [eip+disp32] ADDRESSING MODE, so it needs an explicit call/pop anchor where x86-64 has rip -- but it does NOT need a GOT: our .data/.bss symbols are section-local, so a PC-relative anchor reaches them with a link-time-constant displacement (measured: assembles to R_386_PC32, links under `gcc -m32 -pie -Wl,-z,text`, runs, no GOT and no R_386_GOTPC). LANDED SO FAR: the per-body anchor (e1209443d), R_386_PC32 writer support (6ab85feb8), and the FIRST conversion family -- absolute [disp32] LOADS from a global, 8B/8A/0F B6/0F B7/0F BE/0F BF with mod=00 rm=101, rewritten to `mov dest,[ebp+picslot]` plus the same instruction rebased on dest (b64341130). 114 of 502 .text relocations in test_emit_obj now convert; 388 remain. THE BASE-REGISTER QUESTION IS CLOSED AND THE ANSWER IS NEITHER esi NOR ebx: the anchor is parked in a FRAME SLOT and each reference loads it into a register that is provably free AT THAT SITE -- its own destination for a load, a push/pop-wrapped scratch for a store -- so no sequence preserves anything across it and the 12-site esi liveness audit an earlier revision planned is not needed at all. REMAINING FAMILIES, from the emitter census (PXXDBG=a.i386reloc, 11645 sites, and it found three shapes no object census held): stores (89/88/C7), cmp (39), moffs (a1/a2/a3), address-as-immediate (b8..bf), push imm32, SIB-indexed, and `c7 00` mov [reg],imm32 with the data address as the IMMEDIATE (74 sites, the one shape needing a scratch the emitter must find). MEASURED GATE FINDING, and the reason a new subject exists: test-emit-obj rows 4b/4d and test-c-abi-mixed-link ALL PASS against a compiler whose PC-relative addend is deliberately wrong by 0x30000000 -- they emit converted sites and never EXECUTE one. test/i386_pcrel_globals.c segfaults against that compiler and is therefore the only aimed guard here."
+summary: "i386 --emit-obj output was POSITION-DEPENDENT: every .text relocation absolute R_386_32, so `-Wl,-z,text` refused the link and a PIE got DT_TEXTREL. DONE FOR THE C FRONTEND: an object from test/i386_pcrel_globals.c is 486 R_386_PC32 and ZERO R_386_32 in .rel.text, links under `gcc -m32 -pie -Wl,-z,text`, carries no DT_TEXTREL and runs correctly -- asserted in test-emit-obj, which also asserts the zero count and the PIE output as separate claims. i386 has no [eip+disp32] ADDRESSING MODE, so the anchor is an instruction: a per-body `call/pop` parked in a frame slot, or materialised inline as `call .L; pop reg` (also 6 bytes) in a body with no frame. NO GOT is needed -- our .data/.bss symbols are section-local, so the displacement is a link-time constant. A reference loads the anchor into a register provably free AT THAT SITE: its own destination for a load, a push/pop-wrapped scratch for a store, so no liveness audit exists anywhere in this work. Addend is symOffset + (fieldPos - anchorPos), per site. Shapes converted: ModRM loads (8B/8A/0F B6/B7/BE/BF), moffs loads (A0/A1), address-as-immediate (B8+r -> lea), stores (88/89/A2/A3 and the trail-0 arithmetic r/m forms), and the SIB form (base field filled with the anchor). C7 and 66 A3 could not be rewritten in place -- the instruction is split between the caller and EmitGlobRef -- so EmitMovGlobImm32 and EmitMovGlobAx16 emit the whole instruction instead. REMAINING, and it is a DIFFERENT problem: the Pascal subject still has 5 absolute .text relocations, in `ff 14 25 <d32>` (call through a .data slot) and `b8 <d32>` with a .text symbol (procedure address as an immediate). Those live in the DynCall and ProcAddrFix arrays, which never pass through EmitGlobRef or EmitDataRef, so no shape in emit.inc can reach them; they need their own conversion plus PC-relative support in writeELFRel386General for those two arrays. FF /2 and FF /3 are safe inside the scratch wrapper even though FF /6 is not (a call is balanced by the callee ret; a push is not)."
 ---
 
 # An i386 object from the C frontend carries text relocations
@@ -620,3 +620,48 @@ than reused: `push`/`pop` around the pair is locally correct and costs 2 bytes.
 Re-run `PXXDBG=a.i386reloc` after each family so a 28th shape announces itself,
 and add the "no absolute relocations in .text" assertion LAST, scoped by
 relocation SECTION rather than by symbol name.
+
+
+## 2026-09-01 — phase 3 complete for the C frontend. `b64341130` `d3b4a1f56` `4924f1524` `b392fd5d0`
+
+`.rel.text` on the pcrel subject: **486 PC-relative, 0 absolute**, from 502
+absolute. `gcc -m32 -pie -Wl,-z,text` links it, `readelf -d` shows no
+`DT_TEXTREL`, and the PIE runs with the right answers.
+
+### What each defect cost, because none of them was in the plan
+
+**The anchor store faulted in the frameless main body.** Claimed inert against
+`test-c-abi-mixed-link`, every row of which is a procedure. Face 242.
+
+**Both existing gates passed against a compiler with a `+0x30000000` PC-relative
+addend** — 114 converted sites per object, none on the executed path. That is
+why `test/i386_pcrel_globals.c` exists and why it asserts values rather than
+linkage.
+
+**The source of a store may not be esp.** The wrapper preserves the scratch, but
+`push` moves esp, so an instruction whose *operand* is esp is not preserved. The
+program's first instruction is `mov [glob], esp`, saving the entry stack pointer
+argc and argv are read from. It saved entry-esp-4 and the body returned to `0x1`.
+
+**A legacy prefix binds to the INSERTED instruction.** Every rewrite rewinds past
+the opcode and ModRM, but a prefix the caller already emitted sits in front of
+the opcode and is not rewound. `mov [glob], ax` (`66 89 05`) produced `66` +
+`push ecx` = **`push cx`**, two bytes pushed against four popped. The load family
+had carried the same latent defect since `b64341130`, unseen because the
+subject's `short` reads come out as `0F B7`/`0F BF`, which carry no prefix.
+`I386PrefixBefore` refuses rather than relocating the prefix: a backwards scan
+cannot distinguish a prefix from the previous instruction's last byte.
+
+**The SIB load arm read the SIB byte as the ModRM** and never fired at all,
+while every count still moved (the other shapes were converting). Two sites.
+
+**`GlobRefTrailingImm` was below its new caller.** `make compiler/pascal26` and
+`--tier quick` both passed; `gate.sh quick`'s FPC seed canary was the only thing
+that failed. It is single-pass and PXX prescans headers.
+
+### Next
+
+`DynCallCodePos` and `ProcAddrFix` — see the summary. Both need a conversion at
+the site AND a PC-relative arm in `writeELFRel386General`, which today keys only
+off `FixupPCRel` and `GlobFixPCRel`. Until then a Pascal-frontend i386 object
+keeps 5 absolute .text relocations and will not take `-z text`.
