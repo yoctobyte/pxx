@@ -11824,8 +11824,8 @@
   "sha": "297a6755c0bd1204449c76ebcf920dd7b9313e24"
  },
  "last_slow": {
-  "date": "2026-09-01T13:51:13Z",
-  "sha": "8fe908a613eaf7400eb061c9c4f9d8f31a6066b3"
+  "date": "2026-09-01T17:44:03Z",
+  "sha": "5d983997a05a49b34dba24f58a4bb38a97afc168"
  },
  "open_regressions": [
   {
