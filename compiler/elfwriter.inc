@@ -2977,7 +2977,7 @@ end;
 function ObjDataIsCandidate(i: Integer): Boolean;
 { Is symbol `i` a C file-scope variable that took global storage?
 
-  SymObjDataScope is MEMBERSHIP and the linkage flags are not: SymCExternOnly and
+  SymObjDataScope is MEMBERSHIP and the linkage flags are not: SymObjDataExternOnly and
   SymCStaticLink both default to False, and False is a meaningful answer for
   each, so neither can separate a C global from the several thousand RTL globals
   that share Syms. Asking the linkage first is how an export pass ends up
@@ -3020,7 +3020,7 @@ function ObjDataIsImport(i: Integer): Boolean;
   The answer is a private slot, which is what it had before this ticket, not an
   UND that the linker will resolve into a different runtime. }
 begin
-  ObjDataIsImport := ObjDataIsCandidate(i) and SymCExternOnly[i] and
+  ObjDataIsImport := ObjDataIsCandidate(i) and SymObjDataExternOnly[i] and
                      (not SymCStaticLink[i]) and (not SymObjRuntimeCopy[i]);
 end;
 
@@ -3040,11 +3040,11 @@ end;
 function ObjDataIsExport(i: Integer): Boolean;
 { A definition with external linkage: not static, and not extern-only. Covers
   both an initialised definition and a tentative one, which is deliberate --
-  `extern T n;` then a bare `T n;` is a DEFINITION and SymCExternOnly has
+  `extern T n;` then a bare `T n;` is a DEFINITION and SymObjDataExternOnly has
   already been folded back to False for it. }
 begin
   ObjDataIsExport := ObjDataIsCandidate(i) and (not SymCStaticLink[i]) and
-                     (not SymCExternOnly[i]);
+                     (not SymObjDataExternOnly[i]);
 end;
 
 function ObjDataIsReferenced(i: Integer): Boolean;

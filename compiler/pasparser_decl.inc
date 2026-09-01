@@ -1454,6 +1454,7 @@ var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTy
     grpIdx: array[0..MAX_DECL_NAMES-1] of Integer;  { the previous declaration group's symbols }
     grpN: Integer;                                   { ...and how many; 0 before the first }
     dirName: AnsiString;
+  grpHadInit: Boolean;
 begin
   Next;
   { Stop at section / declaration-introducer keywords: these are plain
@@ -1511,16 +1512,24 @@ begin
     begin
       dirName := CurTok.SVal;
       Next;
-      { Refused, not swallowed. An import needs the reference to relocate to an
-        UND symbol instead of to our own .bss, which is writer work this does
-        not do; accepting the keyword would give a variable that silently reads
-        its own zeroed storage in every build.
+      { `external` on a variable is an IMPORT and only an object can hold one.
+        Outside --emit-obj there is nothing for the name to bind to, and the
+        keyword would do what it did before this was implemented: allocate our
+        own storage and read zero forever. Refused rather than accepted,
+        because a silent zero is the failure this whole family is about.
         bug-a-a-pascal-global-cannot-import-a-c-global }
       if CaseEqual(dirName, 'external') then
-        Error('external on a variable is not supported yet: it would allocate '
-              + 'local storage and read zero rather than binding to the '
-              + 'definition elsewhere. Declare it in the defining language, or '
-              + 'reach it through an exported accessor');
+      begin
+        if not EmitObjMode then
+          Error('external on a variable needs --emit-obj: in an executable '
+                + 'there is no import for it to bind to, so it would allocate '
+                + 'local storage and read zero. Declare it in the defining '
+                + 'language, or reach it through an exported accessor');
+        if grpHadInit then
+          Error('external: an imported variable cannot have an initializer -- '
+                + 'the definition is elsewhere and this value would never be '
+                + 'written anywhere');
+      end;
       if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'name') then
         Error(dirName + ' name ''...'': an explicit link name for a variable is '
               + 'not supported yet; `cvar` exports it under the identifier as '
@@ -1533,11 +1542,21 @@ begin
         if (grpIdx[i] >= 0) and (Syms[grpIdx[i]].Name <> '') then
         begin
           SymObjDataScope[grpIdx[i]] := True;
+          { The import direction. Its storage stays allocated and unused, which
+            is what the C half does too (measured: an `extern int Big[1000];`
+            translation unit has the same .bss as the defining one) -- the
+            writer retargets every reference to the UND symbol, so the slot is
+            never addressed. Filed separately rather than fixed here, because
+            it is one wasted reservation in both frontends and not a wrong
+            value: feature-a-an-extern-only-variable-still-reserves-its-storage }
+          if CaseEqual(dirName, 'external') then
+            SymObjDataExternOnly[grpIdx[i]] := True;
           if PxxDbgEnabled('a.plink') then
             WriteLn('PXXDBG a.plink export ', Syms[grpIdx[i]].Name,
                     ' off=', Syms[grpIdx[i]].Offset,
                     ' size=', SymAllocSize[grpIdx[i]],
-                    ' via=', dirName);
+                    ' via=', dirName,
+                    ' import=', Ord(SymObjDataExternOnly[grpIdx[i]]));
         end;
       Eat(tkSemicolon);
       Continue;
@@ -1621,6 +1640,7 @@ begin
     end;
 
 	    grpN := n;
+	    grpHadInit := False;
 	    for i := 0 to n-1 do
 	    begin
 	      grpIdx[i] := -1;
@@ -1680,7 +1700,8 @@ begin
 	        end;
 	      end;
 	    end;
-	    if Eat(tkEq) then
+	    grpHadInit := Eat(tkEq);
+	    if grpHadInit then
 	    begin
 	      { Constant initializer `= v` / `= (e0,e1,...)`. Recorded as pending
 	        assignments compiled into the program entry just before `main begin`

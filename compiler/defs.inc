@@ -3218,11 +3218,16 @@ var
     translation unit imports and nothing defines: a clean compile and one
     unresolved symbol at the final link.
 
-    SymCExternOnly stays True only while EVERY declaration seen said `extern`.
+    SymObjDataExternOnly stays True only while EVERY declaration seen said
+    `extern`. C-NAMED NO LONGER, because two frontends set it: Pascal's
+    `var x: Integer; cvar; external;` means exactly the same thing and reaches
+    the same writer. The rule above is still C 6.9.2's, because Pascal has no
+    tentative definition -- a Pascal declaration either says `external` or does
+    not, so the fold is trivially the single declaration's answer.
     False is the safe default and is what AllocVar zeroes it to, which is also
     exactly today's behaviour -- every global a definition.
     bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
-  SymCExternOnly : array of Boolean;
+  SymObjDataExternOnly : array of Boolean;
   SymCStaticLink : array of Boolean;   { `static` seen: internal linkage, LOCAL, never UND }
   { MEMBERSHIP in the object's linkable data surface, which the two flags above
     cannot express. Both default to False, and False is a meaningful LINKAGE

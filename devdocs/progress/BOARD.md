@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-a-pascal-global-cannot-import-a-c-global | A | 45→80 | bug | `var x: Integer; cvar; external;` is REFUSED, so a Pascal object can export a global to C but cannot read one C defines. The C frontend has the import path already (ObjDataIsImport routes the reference to an UND symbol); Pascal has no spelling that reaches it, and accepting the keyword without the routing would allocate local storage and silently read zero. | — |
 | bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386 | A | 45 | bug | PASCAL DONE AND PROVEN; NilPy, Rust and Zig still open. The four `fAlign := TypeAlign(fTk)` record-field sites in pasparser_decl.inc now call TypeFieldAlign, and a new mixed-link oracle (test-record-abi-mixed-link) judges the layout against gcc across a real link on x86_64 and i386, four shapes plus a value round trip through a `cvar` record global. The Track U fork this ticket flagged -- whether a Pascal record must match the C ABI -- dissolved on the first measurement: pxx's C frontend answered 12/4 and pxx's PASCAL frontend 16/8 for the same fields, same target, same compiler. It was not an FPC question, it was one compiler disagreeing with itself. N/R/Z have no export spelling and so no mixed link, and rustc/zig i686 are not on this box. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
@@ -97,7 +96,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (140)
+## backlog-core (141)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -174,6 +173,7 @@ _none_
 | feature-a-a-refusal-is-a-claim-with-a-date-on-it | A | 35 | feature |  | — |
 | feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile | A+S | 35 | feature | xtensa is the only hosted target with NO signal runtime — EmitSignalRuntimeForTarget has arms for five arches and falls through for xtensa, on purpose, because `FreeRTOS is not a Unix`. That rationale was written before the hosted xtensa profile existed, and under --platform=posix xtensa IS a Unix running on Linux via qemu. Not the 8-line IR_SET_SIGNAL port it looks like: the arm depends on a ~155-line runtime that does not exist. Unblocks 4 programs, not 1, because the three SA_SIGINFO refusals are gated on the same fact. | — |
 | feature-a-a-variant-has-no-null-tag | A | 45 | feature | pxx has one no-value variant tag (VT_EMPTY), so VarIsNull and VarIsEmpty are the same question and `v := Null; VarIsEmpty(v)` answers True where FPC says False. variants.pas states the approximation in its header and asks for a ticket rather than a silent guess — this is that ticket. A VT_NULL tag is a compiler change, and decide-variant-tag-space-is-a-language-wide-commitment already settled that the tag space is Track A\'s to renumber freely. | — |
+| feature-a-an-extern-only-variable-still-reserves-its-storage | A | 25 | feature | A variable declared only `extern` (C) or `external` (Pascal) is emitted as an UND symbol and every reference is retargeted to it -- but AllocFromDeclTypeDesc has already reserved its storage, and the slot stays in .bss unaddressed. Measured: a TU containing `extern int Big[1000];` has exactly the same bss= as one containing `int Big[1000];` (42156B both), so the object carries 4000 bytes it can never reach. Wasted space, never a wrong value. Both frontends. | — |
 | feature-a-classinfo-returns-the-typinfo-header | A | 45 | feature | Re-filed from decide-classinfo-returns-our-blob-or-nothing / decide-tobject-classinfo-blob-or-refusal, both decided 2026-08-25. x.ClassInfo returns exactly what TypeInfo(TThatClass) returns -- the 24-byte {Kind; NamePtr; DataPtr} header whose DataPtr points at the class blob -- so o.ClassInfo = TypeInfo(TFoo) holds and a layout walker reads a real kind byte. One header word per declared class. | — |
 | feature-a-coswitch-for-xtensa-and-riscv32-the-scheduler-has-no-context-switch-there | A+S | 30 | feature | EmitCoroutineRuntime covers x86-64/i386/aarch64/arm32 and refuses wasm32; xtensa and riscv32 fall through SILENTLY by design, so CoSwitchAddr is never set. Today that is harmless because the scheduler cannot compile for either target anyway — it has no syscall block for them. The moment either gets one, six programs stop erroring and start jumping into code that was never emitted, onto a stack primed with the x86-64 frame layout. Found while filling xtensa's syscall table; the numbers were deliberately NOT added for this reason. | — |
 | feature-a-crtl-is-not-large-file-safe-at-ilp32 | A | 45 | feature | crtl is not large-file safe at ILP32: off_t is 32 bits, so >2GB files are wrong | — |
@@ -859,9 +859,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3043)
+## done (3044)
 
-3043 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3044 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -1333,6 +1333,7 @@ _none_
 - [p 25] [U] decide-t-should-a-skip-close-an-open-regression
 - [p 25] [U] decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner
 - [p 25] [A] feature-a-a-private-clause-for-parallel-for
+- [p 25] [A] feature-a-an-extern-only-variable-still-reserves-its-storage
 - [p 25] [A] feature-a-the-pascal-reduced-build-must-be-able-to-seed-the-full-compiler
 - [p 25] [A] feature-dynamic-include-paths-config
 - [p 25] [S] feature-esp-hardware-flash-validation
@@ -1415,7 +1416,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-a-a-pascal-global-cannot-import-a-c-global
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - **1** — bug-a-emitzeroframeslot-has-no-wasm32-arm
 - **1** — bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable

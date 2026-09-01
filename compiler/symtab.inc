@@ -4276,7 +4276,7 @@ begin
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymHashBkt, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
-  SetLength(SymCExternOnly, n);    SetLength(SymCStaticLink, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(ObjDataStrOff, n);
+  SetLength(SymObjDataExternOnly, n);    SetLength(SymCStaticLink, n);  SetLength(SymObjDataScope, n);  SetLength(SymObjRuntimeCopy, n);  SetLength(SymAllocSize, n);  SetLength(ObjDataStrOff, n);
   SetLength(SymCellPtr, n);
   SetLength(SymArrIdxTk, n);      SetLength(SymArrIdxEnumId, n);
   { the two per-DIMENSION tables ride the same index, MAX_ARR_DIMS to a symbol }
@@ -4447,7 +4447,7 @@ begin
   Syms[SymCount].TypeKind := tk;
   Syms[SymCount].ConstVal := 0;
   SymCLongRank[SymCount]  := 0;
-  SymCExternOnly[SymCount] := False;   { a definition unless a declaration says otherwise }
+  SymObjDataExternOnly[SymCount] := False;   { a definition unless a declaration says otherwise }
   SymCStaticLink[SymCount] := False;
   SymObjDataScope[SymCount] := False;   { outside the object's data surface until a frontend says otherwise }
   SymObjRuntimeCopy[SymCount] := False; { ...and not pxx's own runtime's, which is a different linkage }

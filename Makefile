@@ -18816,6 +18816,52 @@ test-emit-obj: $(COMPILER)
 	  tools/expect_same.sh podp_386 "$$($(TESTTMP)/podp_link32)" "7 7 42 100 101 5 13 1" || exit 1; \
 	  echo "test-emit-obj: same, i386 under gcc -m32"; \
 	else echo "gcc -m32 not available; i386 pascal data-symbol check skipped"; fi
+	# 4b-quater-bis. THE IMPORT DIRECTION FOR PASCAL. A Pascal object can now
+	#    READ a global a C main defines, which 4b-quater's export half could not
+	#    do in reverse: `external` on a variable was REFUSED, deliberately,
+	#    because accepting the keyword without routing the reference to an UND
+	#    symbol gives a variable that allocates its own storage and reads zero
+	#    forever -- compiles, links, silently wrong.
+	#
+	#    THE UND ASSERTION IS THE LOAD-BEARING ONE. The round trip below passes
+	#    on an object that DEFINED the symbol too, as long as nothing else in
+	#    the link defines it -- so the output alone cannot tell an import from a
+	#    private copy that happens to be initialised the same way. `NOTYPE
+	#    GLOBAL UND` is the property; 35 and 6 are the consequence.
+	rm -f $(TESTTMP)/cimp_*.o $(TESTTMP)/cimp_x64 $(TESTTMP)/cimp_386
+	./$(COMPILER) -Fulib/rtl --emit-obj test/c_obj_import_pascal.pas $(TESTTMP)/cimp_x64.o
+	@for n in ImpCount ImpA ImpB; do \
+	  readelf -sW $(TESTTMP)/cimp_x64.o | grep -qE "NOTYPE +GLOBAL +DEFAULT +UND +$$n$$" || { echo "test-emit-obj: $$n is not an UND import in the Pascal object -- it took local storage, so it reads zero and the link cannot bind it"; readelf -sW $(TESTTMP)/cimp_x64.o | grep -E " $$n$$"; exit 1; }; \
+	 done; echo "test-emit-obj: a Pascal object imports three C globals as UND, group form and both spellings"
+	#    AN UNREFERENCED IMPORT EMITS NOTHING, the rule the C half already
+	#    follows -- an UND nobody reaches asks the linker to find a name for no
+	#    reason. Built from the same source with the two uses removed, so the
+	#    only difference between this object and the one above is the reference.
+	@sed -e 's/ImpCount + ImpA + ImpB/99/' -e 's/ImpCount := ImpCount + 1;//' \
+	   test/c_obj_import_pascal.pas > $(TESTTMP)/cimp_unref.pas
+	./$(COMPILER) -Fulib/rtl --emit-obj $(TESTTMP)/cimp_unref.pas $(TESTTMP)/cimp_unref.o
+	@! readelf -sW $(TESTTMP)/cimp_unref.o | grep -qE " (ImpCount|ImpA|ImpB)$$" || { echo "test-emit-obj: an UNREFERENCED external variable still emitted an UND symbol"; exit 1; }
+	#    REFUSED, NOT SILENT, where there is no import to bind to. An executable
+	#    has no linker step that could resolve it, and the pre-implementation
+	#    behaviour -- local storage reading zero -- is exactly what must not
+	#    come back by accident.
+	@! ./$(COMPILER) -Fulib/rtl test/c_obj_import_pascal.pas $(TESTTMP)/cimp_exe >$(TESTTMP)/cimp_exe.err 2>&1 || { echo "test-emit-obj: 'external' on a variable was ACCEPTED in a non-object build -- it allocates local storage and reads zero"; exit 1; }
+	@grep -q 'needs --emit-obj' $(TESTTMP)/cimp_exe.err || { echo "test-emit-obj: the non-object build failed for some OTHER reason, so the row above proves nothing"; head -3 $(TESTTMP)/cimp_exe.err; exit 1; }
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -no-pie test/c_obj_import_host.c $(TESTTMP)/cimp_x64.o -o $(TESTTMP)/cimp_x64 || { echo "test-emit-obj: the importing Pascal object FAILED to link with its C host"; exit 1; }; \
+	  tools/expect_same.sh cimp_x64 "$$($(TESTTMP)/cimp_x64)" "35 6" || exit 1; \
+	  echo "test-emit-obj: the Pascal object reads three C globals and its write is visible to C"; \
+	fi
+	#    BOTH WRITERS. The symbol-index arithmetic is per writer and the C half's
+	#    i386 object came out truncated the first time this was done, so an
+	#    x86-64-only row would not have caught it.
+	./$(COMPILER) -Fulib/rtl --emit-obj --target=i386 test/c_obj_import_pascal.pas $(TESTTMP)/cimp_386.o
+	@readelf -sW $(TESTTMP)/cimp_386.o | grep -qE "NOTYPE +GLOBAL +DEFAULT +UND +ImpCount$$" || { echo "test-emit-obj: ImpCount is not an UND import in the i386 Pascal object"; exit 1; }
+	@if gcc -m32 -xc /dev/null -o /dev/null -c >/dev/null 2>&1; then \
+	  gcc -m32 -no-pie test/c_obj_import_host.c $(TESTTMP)/cimp_386.o -o $(TESTTMP)/cimp_386 || { echo "test-emit-obj: the i386 importing object FAILED to link"; exit 1; }; \
+	  tools/expect_same.sh cimp_386 "$$($(TESTTMP)/cimp_386)" "35 6" || exit 1; \
+	  echo "test-emit-obj: the i386 Pascal object imports C globals and round-trips too"; \
+	else echo "gcc -m32 not available; i386 import check skipped"; fi
 	# 4b-quinquies. POSITION INDEPENDENCE FOR AN OBJECT THAT USES AN RTL UNIT.
 	#    The PIE row further down asserts the same property on
 	#    test/test_emit_obj.pas, which uses NO RTL unit -- so its 0 is a number

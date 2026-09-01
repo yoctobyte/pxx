@@ -8934,8 +8934,8 @@ begin
     if idx >= 0 then
     begin
       if declSawStatic then SymCStaticLink[idx] := True;
-      if not declSawExtern then SymCExternOnly[idx] := False
-      else if declSymIsNew then SymCExternOnly[idx] := True;
+      if not declSawExtern then SymObjDataExternOnly[idx] := False
+      else if declSymIsNew then SymObjDataExternOnly[idx] := True;
       { Membership, not linkage. The two flags above default to False and False
         MEANS something ("defined, external linkage"), so they cannot say
         whether this symbol is a C file-scope variable at all -- and the object
@@ -8949,7 +8949,7 @@ begin
       if PxxDbgEnabled('a.clink') then
       begin
         Write('PXXDBG a.clink ', name, ' externOnly=');
-        if SymCExternOnly[idx] then Write('1') else Write('0');
+        if SymObjDataExternOnly[idx] then Write('1') else Write('0');
         Write(' static=');
         if SymCStaticLink[idx] then Write('1') else Write('0');
         Write(' sawExtern=');
@@ -9036,7 +9036,7 @@ begin
         -- `extern int x = 5;` defines x (gcc warns and defines). Rule 1 of the
         three outranks the keyword, so settle it here rather than leaving the
         extern claim standing. }
-      if idx >= 0 then SymCExternOnly[idx] := False;
+      if idx >= 0 then SymObjDataExternOnly[idx] := False;
       Next;
       initStartTok := TokPos - 1;   { first token of the initializer expression }
       { File-scope compound-literal initializer for a record var: `= (T){...}` or
