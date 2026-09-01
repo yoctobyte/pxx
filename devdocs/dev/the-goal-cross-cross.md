@@ -13,6 +13,28 @@ perf number — and nothing in the repo said what "on-target" meant. A `prio:`
 number could not carry it: it is one scalar guessing at a question with two axes
 and no stated goal behind either.
 
+## CURRENT FOCUS, 2026-09-01: LINUX ONLY — BSD and wasm are demoted
+
+The owner, asked about umbrella pricing: *"we focus on linux only for now. that
+means demoting bsd and wasm."* **The goal below is unchanged; the ranking is.**
+`umbrella-wasm-is-a-real-platform` and `umbrella-pxx-hosted-beyond-linux` (whose
+only children are OpenBSD) are at **25**, as are the BSD leaves that carried
+their own higher numbers. Those tickets **stay open and correct** — they simply
+must not outrank ordinary Linux work.
+
+**This note is here because the last such ruling was not.** On 2026-08-30 the
+owner demoted wasm to 25, recorded it in two ticket bodies, and on 2026-08-31
+`8d9a5794b` priced `umbrella-wasm-is-a-real-platform` at 70 from *this
+document*, which named wasm in the platform list and said nothing about the
+ruling. `effective_prio` then propagated 70 back down and reinstated everything
+the demotion had removed. A ruling recorded where the ranker cannot see it was
+overturned by a number chosen from a document that did not contain it. **Price
+an umbrella from this section first, not from the matrix below.**
+
+NOT demoted, because they are architectures under Linux rather than other
+kernels: `umbrella-cross-target-codegen-is-correct` (80 — xtensa, i386, arm32,
+riscv32) and `umbrella-managed-memory-is-correct` (75).
+
 ## The goal is a matrix, and its cells are the only things worth rating
 
 **Languages** (what pxx compiles): Pascal, C, Nil-Python, Rust, Zig.

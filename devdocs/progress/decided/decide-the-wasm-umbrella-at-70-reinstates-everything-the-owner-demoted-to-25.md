@@ -4,10 +4,10 @@ title: "umbrella-wasm-is-a-real-platform is priced at 70 and cancels the owner's
 track: U
 prio: 60
 type: decide
-status: new
+status: decided
 blocked-by: []
 owner: user
-summary: "On 2026-08-30 the owner ruled WASM IS LOW PRIO FROM NOW ON -- 'these tickets stay OPEN and correct; they simply must not outrank ordinary Track A work' -- and the wasm bugs were correctly set to prio: 25. On 2026-08-31, 8d9a5794b created umbrella-wasm-is-a-real-platform at prio 70. effective_prio takes the max over dependents, so those same tickets come back out of `ready` at 70 and DO outrank ordinary Track A work: exactly the outcome the ruling forbade. The leaves were re-priced; the goal above them was not. The ranker is working perfectly and delivering the opposite of the instruction. One number fixes it, but which number is the owner's call. NOT affected: bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, whose 75 comes from umbrella-managed-memory-is-correct and is legitimate under either reading."
+summary: "RULED 2026-09-01 (owner): option (a), and wider than asked -- LINUX ONLY FOR NOW, so BSD is demoted alongside wasm. umbrella-wasm-is-a-real-platform 70->25, umbrella-pxx-hosted-beyond-linux 85->25, and the three BSD leaves that carried their own higher numbers (feature-port-openbsd-libc 50, decide-openbsd-pinsyscalls 45, feature-port-freebsd-native 55) all to 25. Recorded in devdocs/dev/the-goal-cross-cross.md under CURRENT FOCUS, above the matrix, so the next umbrella is priced from the ruling rather than from the platform list that caused this. ORIGINAL: On 2026-08-30 the owner ruled WASM IS LOW PRIO FROM NOW ON -- 'these tickets stay OPEN and correct; they simply must not outrank ordinary Track A work' -- and the wasm bugs were correctly set to prio: 25. On 2026-08-31, 8d9a5794b created umbrella-wasm-is-a-real-platform at prio 70. effective_prio takes the max over dependents, so those same tickets come back out of `ready` at 70 and DO outrank ordinary Track A work: exactly the outcome the ruling forbade. The leaves were re-priced; the goal above them was not. The ranker is working perfectly and delivering the opposite of the instruction. One number fixes it, but which number is the owner's call. NOT affected: bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, whose 75 comes from umbrella-managed-memory-is-correct and is legitimate under either reading."
 ---
 
 # The wasm umbrella reinstates what the wasm re-pricing demoted
@@ -85,3 +85,30 @@ them, silently, and the ranker will look correct while it happens.** Worth a
 `effective_prio` *and* whose body contains an explicit ruling is the detectable
 form. Nobody misread anything here — frankA read 25, frankB read 70, both
 numbers are real, and only one reflects intent.
+
+## RULED 2026-09-01 — option (a), and wider
+
+The owner, asked about umbrella pricing: *"we focus on linux only for now. that
+means demoting bsd and wasm."*
+
+So it is not only wasm. `umbrella-pxx-hosted-beyond-linux` (85) had OpenBSD as
+its only children and is demoted with it. Both umbrellas to 25; the three BSD
+leaves whose OWN prio exceeded 25 were demoted too, since `effective_prio` takes
+the max of own and inherited and demoting only the umbrella would have left
+them ranking on their own numbers.
+
+**Not demoted:** `umbrella-cross-target-codegen-is-correct` (80) and
+`umbrella-managed-memory-is-correct` (75). Those are architectures under Linux
+(xtensa, i386, arm32, riscv32), not other kernels, and the ruling was about
+kernels.
+
+**One residual, left deliberately and raised to the owner:**
+`bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa` still comes out at
+75, inherited from `umbrella-managed-memory-is-correct`. Its own prio is 25. It
+is genuinely both things — a managed-memory correctness bug whose remaining work
+is wasm32-only — so the edge is not false and cutting it would falsify the
+umbrella's dependency. Under a Linux-only focus it will sit near the head of
+Track A and not be takeable. Flagged rather than silently re-edged.
+
+## Log
+- 2026-09-01 — decided, commit PENDING-COMMIT.

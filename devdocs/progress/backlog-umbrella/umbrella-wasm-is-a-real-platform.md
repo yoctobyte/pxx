@@ -2,7 +2,7 @@
 slug: umbrella-wasm-is-a-real-platform
 title: "wasm as a real platform — emit it, and host the compiler on it"
 track: A
-prio: 70
+prio: 25
 type: umbrella
 blocked-by: [feature-target-wasm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, bug-a-emitzeroframeslot-has-no-wasm32-arm]
 created: 2026-08-31

@@ -1,7 +1,7 @@
 ---
 summary: "OpenBSD/amd64 target — route RTL through libc.so. The LOWERING landed (feature-port-rtl-over-libc, 3a0ed43fb); what remains is the target. Re-blocked 2026-08-31 on decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, because this ticket's own item 3 says its acceptance criterion ('no raw syscall') is WRONG and must be settled first: the measured residual is 1 instruction non-threaded and 4 threaded, each irreducible. It had been sitting at the head of Track A's ready queue on a satisfied blocker, offering an unstartable job to every idle agent — it also needs an OpenBSD VM built by qemu autoinstall, which is infrastructure nobody has stood up."
 type: feature
-prio: 50
+prio: 25
 blocked-by: [decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual]
 ---
 

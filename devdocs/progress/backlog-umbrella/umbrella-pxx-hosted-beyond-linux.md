@@ -2,7 +2,7 @@
 slug: umbrella-pxx-hosted-beyond-linux
 title: "pxx HOSTED on a second platform — bsd, minix, gnu, windows"
 track: A
-prio: 85
+prio: 25
 type: umbrella
 blocked-by: [feature-port-openbsd-libc, decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual]
 created: 2026-08-31

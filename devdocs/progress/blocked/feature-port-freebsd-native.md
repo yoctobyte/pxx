@@ -1,7 +1,7 @@
 ---
 summary: "FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand"
 type: feature
-prio: 55
+prio: 25
 status: blocked
 blocked-by: [feature-t-freebsd-image-and-runner]
 ---

@@ -3,7 +3,7 @@ slug: decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
 title: Does OpenBSD's pinsyscalls permit our one irreducible raw syscall (rt_sigreturn)?
 track: U
 type: decide
-prio: 45
+prio: 25
 status: backlog
 found: 2026-08-31
 found-by: frank-rust
