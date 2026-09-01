@@ -88,4 +88,4 @@ first rather than inherit either letter from this note.
 
 Recorded and parked under the 2026-08-31 concurrency cap (2-3 active agents);
 no code touched, no claim taken.
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit bd0ef68a3.
