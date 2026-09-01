@@ -13746,6 +13746,85 @@ begin
   end;
 end;
 
+{ THE TWO QUESTIONS `Syms[i].RecName` IS ASKED, separated because they have
+  different answers for an ARRAY symbol and the field cannot tell them apart.
+
+  An array-of-record symbol carries `TypeKind = tyRecord`: the field holds the
+  ELEMENT's kind, by design, and the element's record id lives in ElemRecName
+  while RecName is meaningless. So `if Syms[i].TypeKind = tyRecord then ...
+  Syms[i].RecName` reads like a type test and is not one -- 14 reads across 8
+  routines in three frontends used it as one
+  (audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol).
+
+  Those 14 are SAFE TODAY and were before this: `4a3c88532` made AllocArray and
+  AllocDynArray clear RecName, so the field they misread is clean and they get
+  REC_NONE rather than a recycled neighbour's record id. That is a mask, not a
+  guard. Anything that dirties the field again -- a new allocator, a new write
+  path, a refactor that reorders slot reuse -- walks straight back into all 14,
+  and so does any new reader written by copying one of them.
+
+  SymRecOf     "what record does this symbol's VALUE denote?" -- the element's
+               for an array, because that is what indexing or C's array-decay
+               `arr->field` yields. This is the branch ResolveNodeRec's AN_IDENT
+               arm has made for a while; it is now made HERE and called from
+               there, so there is one copy of it.
+
+  SymOwnRecOf  "is this symbol OF a record type, and which?" -- REC_NONE for an
+               array, because an array of T is not a T. This is the question all
+               14 sites were actually asking, and the tyRecord test folds into
+               it: a caller writes `SymOwnRecOf(i) = textRecId` and cannot spell
+               the array hole any more.
+
+  NOT one accessor. `SymRecOf` in the 14 places would have been a NEW defect
+  rather than a fix, and in the loud direction: `RIsSliceSym` would answer True
+  for an ARRAY of slices, and `TextIOFileSym` would accept `var f: array[0..1]
+  of Text; WriteLn(f, 'x')` as a file write and take the array's address as a
+  handle. Today both correctly say no -- for the wrong reason. The audit's own
+  warning applies to its own suggestion: do not take the smallest diff as the
+  answer. }
+function SymRecOf(idx: Integer): Integer;
+begin
+  Result := REC_NONE;
+  if (idx < 0) or (idx >= SymCount) then Exit;
+  if Syms[idx].IsArray then
+    Result := Syms[idx].ElemRecName
+  else
+    Result := Syms[idx].RecName;
+end;
+
+function SymIsRecordTyped(idx: Integer): Boolean;
+begin
+  Result := (idx >= 0) and (idx < SymCount) and
+            (Syms[idx].TypeKind = tyRecord) and (not Syms[idx].IsArray);
+end;
+
+{ Both spellings exist because REC_NONE is a legitimate answer for a symbol that
+  IS record-typed (an unresolved or anonymous record), so a caller that needs
+  the BRANCH cannot get it by testing the id against REC_NONE. The two sites
+  that take a record branch and then read the id use both, in that order. }
+function SymOwnRecOf(idx: Integer): Integer;
+begin
+  Result := REC_NONE;
+  if not SymIsRecordTyped(idx) then Exit;
+  Result := Syms[idx].RecName;
+end;
+
+{ The USER-CLASS index behind a record-typed symbol, or -1. The
+  `>= REC_UCLASS_BASE` test and the subtraction are the part `RIsSliceSym`,
+  `ZIsSliceSym` and `ZIsOptSym` had character-for-character in common -- three
+  copies of one symbol-table question, in two frontends, differing only in which
+  `Ci[]` table they then consult. Duplicating a PARSER across languages is
+  deliberate policy (the-substrate-is-ast-and-ir-not-the-parser.md); this is not
+  parsing, so the shared half lives here and each frontend keeps only its table
+  lookup. }
+function SymOwnClassIdx(idx: Integer): Integer;
+var socRec: Integer;
+begin
+  Result := -1;
+  socRec := SymOwnRecOf(idx);
+  if socRec >= REC_UCLASS_BASE then Result := socRec - REC_UCLASS_BASE;
+end;
+
 function ResolveNodeRec(node: Integer): Integer;
 var baseNode, baseRec, fIdx, innerNode: Integer; fieldName: AnsiString;
 begin
@@ -13763,10 +13842,7 @@ begin
       instead of the real (often 8-byte pointer) field type — the
       truncated/sign-extended values in
       bug-c-arrow-on-array-store-of-call-result-clobbered. }
-    if Syms[ASTIVal[node]].IsArray then
-      Result := Syms[ASTIVal[node]].ElemRecName
-    else
-      Result := Syms[ASTIVal[node]].RecName;
+    Result := SymRecOf(Integer(ASTIVal[node]));
   end
   else if ASTKind[node] = AN_COMPOUND_LITERAL then
     { C99 compound literal — its record is the hidden temp's RecName. }

@@ -498,15 +498,21 @@ begin
     callNext := GenMakeCall8(gpi, tyBoolean, GenMakeIdent(gIdx, tyPointer),
                              sa1, sa2, sa3, sa4, sa5, sa6, -1);
     callCur := GenMakeCall6(FindProc('SlCurrent'), tyInt64, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
-    if Syms[varIdx].TypeKind = tyRecord then
+    if SymIsRecordTyped(varIdx) then
     begin
       { Record element: the CURRENT word holds the ADDRESS of the record region
         at the instance tail (published at each yield) — deref and copy into the
-        loop variable, same shape as the stackful CoCurrent path below. }
+        loop variable, same shape as the stackful CoCurrent path below.
+
+        SymIsRecordTyped, not `TypeKind = tyRecord`: an ARRAY-typed loop
+        variable carries the ELEMENT's kind there, so an `array of TRec` loop
+        var entered this branch and put a record id on the AN_DEREF that
+        ResolveNodeRec then SIZES THE COPY from -- a garbage copy, silently.
+        audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol }
       curDeref := AllocNode(AN_DEREF);
       ASTLeft[curDeref] := callCur;
       ASTTk[curDeref] := Ord(tyRecord);
-      ASTIVal[curDeref] := Syms[varIdx].RecName;
+      ASTIVal[curDeref] := SymOwnRecOf(varIdx);
       assignX := GenMakeAssign(GenMakeIdent(varIdx, tyRecord), curDeref);
     end
     else if ProcGenElemTk[gpi] = tyVariant then
@@ -553,15 +559,17 @@ begin
   callNext := GenMakeCall6(paCoNext, tyBoolean, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
 
   callCur := GenMakeCall6(paCoCurrent, tyInt64, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
-  if Syms[varIdx].TypeKind = tyRecord then
+  if SymIsRecordTyped(varIdx) then
   begin
     { Record element: CoCurrent returns the address of the yielded record (in the
       generator's preserved frame); deref it and copy into the loop variable. The
-      record id is carried on the deref node so ResolveNodeRec sizes the copy. }
+      record id is carried on the deref node so ResolveNodeRec sizes the copy --
+      which is why the array hole matters here: see the stackless twin above.
+      audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol }
     curDeref := AllocNode(AN_DEREF);
     ASTLeft[curDeref] := callCur;
     ASTTk[curDeref] := Ord(tyRecord);
-    ASTIVal[curDeref] := Syms[varIdx].RecName;
+    ASTIVal[curDeref] := SymOwnRecOf(varIdx);
     assignX := GenMakeAssign(GenMakeIdent(varIdx, tyRecord), curDeref);
   end
   else
@@ -3136,7 +3144,11 @@ begin
     `WriteLn(f.Name)` is a console write of the string field, not a file write. }
   if not ((TokPos < TokCount) and (Tokens[TokPos].Kind in [tkComma, tkRParen])) then Exit;
   vidx := FindSym(CurTok.SVal);
-  if (vidx >= 0) and (Syms[vidx].TypeKind = tyRecord) and (Syms[vidx].RecName = textRecId) then
+  { SymOwnRecOf, so `var f: array[0..1] of Text` cannot be read as a bare Text
+    handle: an array of Text carries TypeKind = tyRecord, and the old spelling
+    said no only because AllocArray clears RecName.
+    audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol }
+  if (vidx >= 0) and (SymOwnRecOf(vidx) = textRecId) then
     Result := vidx;
 end;
 

@@ -9152,6 +9152,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_protopull26 "$$($(TESTTMP)/c_protopull26)" "prototype pull ok"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cgeneric_selection_b209.c $(TESTTMP)/cgeneric_selection_b20926
 	$(TESTTMP)/cgeneric_selection_b20926; tools/expect_same.sh cgeneric_selection_b20926-rc "$$?" "42"
+	# audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol
+	# _Generic over an ARRAY controlling expression. CExprCG had no array shape,
+	# so an array symbol fell through to its TypeKind -- which for an array holds
+	# the ELEMENT's kind -- and `struct S a[3]` reached the tyRecord arm while
+	# `int b[4]` became a plain int. Oracle is gcc -std=c11 on the same file: it
+	# scores 127, the pre-fix compiler scored 96 (only the two non-array
+	# controls), and both score 127 now. The int/char/long rows never touched
+	# RecName, so this is wider than the guard that exposed it.
+	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cgeneric_array_decay.c $(TESTTMP)/cgeneric_array_decay26
+	$(TESTTMP)/cgeneric_array_decay26; tools/expect_same.sh cgeneric_array_decay26-rc "$$?" "127"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/crange_designator_b210.c $(TESTTMP)/crange_designator_b21026
 	$(TESTTMP)/crange_designator_b21026; tools/expect_same.sh crange_designator_b21026-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/carray_designated_init_b211.c $(TESTTMP)/carray_designated_init_b21126

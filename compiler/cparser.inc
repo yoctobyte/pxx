@@ -1215,7 +1215,7 @@ end;
 { Descriptor of a controlling expression (unevaluated). Handles the shapes a
   _Generic controlling expr takes; anything else falls back to its ASTTk. }
 function CExprCG(node: Integer): Integer;
-var sym, sub: Integer;
+var sym, sub, cgD, cgLvl: Integer;
 begin
   Result := 0;
   if node < 0 then Exit;
@@ -1232,7 +1232,49 @@ begin
         sym := ASTIVal[node];
         if (sym >= 0) and (sym < SymCount) then
         begin
-          if Syms[sym].TypeKind = tyPointer then
+          { An ARRAY symbol, FIRST -- before the tyRecord arm below, which its
+            TypeKind would otherwise satisfy: the field holds the ELEMENT's kind
+            for an array (audit-a-typekind-tyrecord-is-not-a-guard-against-an-
+            array-symbol), so `struct S a[3]` arrived as a bare cgStruct and
+            `int b[4]` as a plain cgInt. Measured against gcc -std=c11 on one
+            file: gcc selects `struct S *` and `int *` (CGConvControlling below
+            already implements that decay, and AN_STR_LIT above already relies
+            on it); pxx selected `default` and `int` respectively. The int case
+            never touched RecName at all, so this arm is wider than the guard
+            that exposed it -- CExprCG simply had no array shape. }
+          if Syms[sym].IsArray then
+          begin
+            if Syms[sym].ElemType = tyRecord then
+            begin
+              sub := CGAlloc(cgStruct);
+              CGRecA[sub] := Syms[sym].ElemRecName;
+            end
+            else
+              sub := CGAlloc(CGApplyLongRank(CGScalarKindOfTk(Ord(Syms[sym].ElemType)),
+                                             SymCLongRank[sym]));
+            { MULTI-DIM inside out: `int m[2][3]` is an array OF `int[3]`, so the
+              inner dimensions become nested cgArray levels and the decay below
+              yields `int (*)[3]` -- which matches neither `int*` nor `int` and
+              so selects `default`, exactly as gcc does. Flattening it to one
+              level answered `int*` instead: a CONFIDENT wrong selection where
+              gcc takes the default arm. }
+            cgD := SymArrNDims[sym];
+            while cgD >= 2 do
+            begin
+              cgLvl := CGAlloc(cgArray);
+              CGArrLenA[cgLvl] := SymArrDimSpan[sym * MAX_ARR_DIMS + cgD - 1];
+              CGSubA[cgLvl] := sub;
+              sub := cgLvl;
+              Dec(cgD);
+            end;
+            Result := CGAlloc(cgArray);
+            if SymArrNDims[sym] >= 2 then
+              CGArrLenA[Result] := SymArrDimSpan[sym * MAX_ARR_DIMS]
+            else
+              CGArrLenA[Result] := Syms[sym].ArrLen;
+            CGSubA[Result] := sub;
+          end
+          else if Syms[sym].TypeKind = tyPointer then
           begin
             Result := CGAlloc(cgPtr);
             if SymPtrDepth[sym] >= 2 then
@@ -1248,10 +1290,10 @@ begin
             end;
             CGSubA[Result] := sub;
           end
-          else if Syms[sym].TypeKind = tyRecord then
+          else if SymIsRecordTyped(sym) then
           begin
             Result := CGAlloc(cgStruct);
-            CGRecA[Result] := Syms[sym].RecName;
+            CGRecA[Result] := SymOwnRecOf(sym);
           end
           else
             Result := CGAlloc(CGApplyLongRank(CGScalarKindOfTk(Ord(Syms[sym].TypeKind)),

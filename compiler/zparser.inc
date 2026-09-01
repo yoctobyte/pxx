@@ -270,10 +270,14 @@ begin
 end;
 
 function ZIsOptSym(symIdx: Integer): Boolean;
+var zsCi: Integer;
 begin
-  Result := (Syms[symIdx].TypeKind = tyRecord) and
-            (Syms[symIdx].RecName >= REC_UCLASS_BASE) and
-            ZOptCi[Syms[symIdx].RecName - REC_UCLASS_BASE];
+  { The shared half is SymOwnClassIdx -- see RIsSliceSym, of which these two
+    were character-for-character copies. Only the table lookup is this
+    frontend's, which is the line duplicating a parser policy actually covers.
+    audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol }
+  zsCi := SymOwnClassIdx(symIdx);
+  Result := (zsCi >= 0) and ZOptCi[zsCi];
 end;
 
 { ===== slices (probe-minimal): `var s = a[lo..hi];` over a fixed array =====
@@ -305,10 +309,14 @@ begin
 end;
 
 function ZIsSliceSym(symIdx: Integer): Boolean;
+var zsCi: Integer;
 begin
-  Result := (Syms[symIdx].TypeKind = tyRecord) and
-            (Syms[symIdx].RecName >= REC_UCLASS_BASE) and
-            ZSliceCi[Syms[symIdx].RecName - REC_UCLASS_BASE];
+  { The shared half is SymOwnClassIdx -- see RIsSliceSym, of which these two
+    were character-for-character copies. Only the table lookup is this
+    frontend's, which is the line duplicating a parser policy actually covers.
+    audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol }
+  zsCi := SymOwnClassIdx(symIdx);
+  Result := (zsCi >= 0) and ZSliceCi[zsCi];
 end;
 
 { True when the bracket run starting at Tokens[TokPos] (the `[`) contains a

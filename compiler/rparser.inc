@@ -585,10 +585,16 @@ begin
 end;
 
 function RIsSliceSym(symIdx: Integer): Boolean;
+var rsCi: Integer;
 begin
-  Result := (Syms[symIdx].TypeKind = tyRecord) and
-            (Syms[symIdx].RecName >= REC_UCLASS_BASE) and
-            RSliceCi[Syms[symIdx].RecName - REC_UCLASS_BASE];
+  { SymOwnClassIdx, not the RecName read this used to spell out: an ARRAY of
+    slices carries TypeKind = tyRecord too (the field holds the ELEMENT's kind),
+    so the old three lines asked "is the ELEMENT a slice" while the name says
+    "is this symbol a slice". They answered correctly only because AllocArray
+    clears RecName -- a mask, not a guard.
+    audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol }
+  rsCi := SymOwnClassIdx(symIdx);
+  Result := (rsCi >= 0) and RSliceCi[rsCi];
 end;
 
 { True when the bracket run starting at Tokens[k] (a `[`) contains a
@@ -4315,12 +4321,11 @@ begin
   if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkAssign) then
   begin
     symIdx := FindSym(CurTok.SVal);
-    if (symIdx >= 0) and (Syms[symIdx].TypeKind = tyRecord) and
-       (Syms[symIdx].RecName >= REC_UCLASS_BASE) then
+    if SymOwnClassIdx(symIdx) >= 0 then
     begin
       name := CurTok.SVal;
       Next; Next; { name = }
-      fTokIdx := RPeekAggregateCi(Syms[symIdx].RecName - REC_UCLASS_BASE);
+      fTokIdx := RPeekAggregateCi(SymOwnClassIdx(symIdx));
       if fTokIdx >= 0 then
       begin
         Result := RParseAggregateIntoNode(RMakeIdent(symIdx), fTokIdx);
@@ -4351,12 +4356,16 @@ begin
     ASTLeft[fieldNode] := baseNode;
     ASTSOffset[fieldNode] := Tokens[fTokIdx].SOffset;
     ASTSLen[fieldNode] := Tokens[fTokIdx].SLen;
-    ASTTk[fieldNode] := Ord(RecFieldType(Syms[symIdx].RecName, fname));
+    ASTTk[fieldNode] := Ord(RecFieldType(SymOwnRecOf(symIdx), fname));
     { `self.ep = Some(sq);` — an aggregate literal stored straight into a
       record-typed FIELD. The same RParseAggregateIntoNode the `let` and
       `return` paths use, with the TARGET as the base node instead of a fresh
       local; nothing else can express a whole enum value in this position. }
-    node := RecFieldRecId(Syms[symIdx].RecName, fname);
+    { SymOwnRecOf: Rust has no array-to-pointer decay, so `a.field` on an array
+      is a user error and must NOT resolve against the ELEMENT's record the way
+      C's `arr->field` deliberately does. REC_NONE is the right answer here.
+      audit-a-typekind-tyrecord-is-not-a-guard-against-an-array-symbol }
+    node := RecFieldRecId(SymOwnRecOf(symIdx), fname);
     if node >= REC_UCLASS_BASE then
     begin
       node := RPeekAggregateCi(node - REC_UCLASS_BASE);
