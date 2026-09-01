@@ -3,6 +3,12 @@ slug: bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silentl
 track: A
 prio: 75
 type: bug
+status: done
+blocked-by: []
+created: 2026-09-01
+found-by: frankD
+owner: frankA
+summary: "RESOLVED: the SILENT wrong link is gone on every route that could produce it. C exports and imports data symbols on x86-64 and i386 (72000d1e1); a Pascal global marked `cvar`/`public` exports (d402147d6) and the import direction REFUSES rather than reading its own zeroed .bss. Two scoped successors, both filed and neither silent: Pascal data import, and the ESP writer, which exports only `app_main` and has never named a cdecl routine either."
 status: working
 blocked-by: []
 created: 2026-09-01
@@ -516,3 +522,35 @@ Also recorded as a divergence rather than a bug: a name the user's own file
 declares `extern` and crtl defines is now EXPORTED rather than invisible
 (`environ` in `test_shared_lib.c` is the live instance). gcc emits UND there. It
 links and runs correctly.
+
+
+## RESOLVED — the named defect is gone on every route that could produce it
+
+This ticket is named for a SILENT wrong link: an object that resolves cleanly
+and reads different memory than the source says. That is what is closed.
+
+| route | before | now |
+| --- | --- | --- |
+| C export, x86-64 / i386 | no `OBJECT` symbol at all | `GLOBAL`/`LOCAL` with real size, `-fno-common` semantics — `72000d1e1` |
+| C import, x86-64 / i386 | relocated into this object's own `.bss` — the silent wrong read | `UND` + symbol relocation, reads the definition |
+| Pascal export | 0 data symbols, and no spelling that could change it | `cvar` / `public` — `d402147d6` |
+| Pascal import | not expressible | **refused**, naming its ticket. Loud, not silent |
+| xtensa / riscv32 | one `GLOBAL` symbol, `app_main` | unchanged, and it was never silent — nothing is exported by name, including `cdecl` routines |
+
+The acceptance row *"both frontends, and every target"* is therefore met for the
+DEFECT and not for the FEATURE, which is why the two remainders are tickets
+rather than an open parent:
+
+- [[bug-a-a-pascal-global-cannot-import-a-c-global]] — the refusal above,
+  with the writer work it needs (most of which exists, for C).
+- [[bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable]]
+  — measured, not assumed: a riscv32 object from a fixture with four `cdecl`
+  routines and two `cvar` globals exports exactly `app_main`. That writer has a
+  different symbol model, deliberately (LOCAL FUNC avoids collisions inside an
+  IDF build), so it cannot be closed by extending the general writers.
+
+Keeping this open for those would leave a ticket whose summary is no longer true
+of anything a program can hit, and its summary is the only part everyone reads.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

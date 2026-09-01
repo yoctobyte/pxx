@@ -8,12 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (7)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-a-pascal-cdecl-program-emits-no-data-symbols-either | A | 60 | bug | --emit-obj on a PASCAL cdecl program still emits no data symbol: `nm --defined-only \| grep -cE ' [BbDd] '` is 0 for a program with AnsiString and array globals. The C half landed in 72000d1e1; membership is set only by the C parser, so Pascal globals were never candidates. Needs its own 'whose declaration is this' answer -- exporting every RTL global is the failure mode one line away, and the C half hit exactly that with errno/environ. | — |
-| bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong | A | 75→90 | bug | --emit-obj emits NO data symbols. A global defined in a .c gets no OBJECT symbol, and `extern int x;` is relocated into the object's OWN .bss instead of becoming an undefined import -- so two pxx objects sharing a global LINK CLEANLY and read different memory. Measured: gcc links the pair and prints 0 where 99 is correct. No diagnostic anywhere. Blocks separate compilation of any real C project (busybox's libbb/ptr_to_globals.c is one global pointer and cannot even be emitted). | — |
 | feature-c-corpus-busybox-multi-applet | C | 70→90 | feature | Rung 2 of feature-busybox-kiosk-selfhosting-target. FIRST BAR MET 2026-09-01 (2789f87a7): a two-applet busybox byte-identical to gcc over 28 cases on x86-64 AND aarch64, agreeing with upstream's separately-linked binary. SECOND BAR (ash) IN PROGRESS: the 41-TU ash unity now gets all the way to getpwnam, having named and CLOSED eight defects on the way -- a C frontend parse bug (struct-typed local with a fn-pointer member), crtl's entire missing shell surface (fnmatch, full signal set + NSIG, strsignal, _SC_CLK_TCK, times, uname), a clock_t that was `long long` where glibc has `long` (right on 64-bit, silently wrong on every 32-bit target, and ash reads struct tms by byte offset through it), and crtl'''s own implementation being preprocessed in the PROGRAM'''s macro environment. NEXT: pwd.h/getpwnam. KNOWN CEILING: the unity cannot host ash and coreutils/test.c together in either order, so the `[` builtin needs separate compilation -- bug-a-an-object-neither-exports-nor-imports-data-symbols. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
@@ -94,7 +92,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (137)
+## backlog-core (139)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -105,12 +103,14 @@ _none_
 | bug-a-a-cloned-thread-has-no-sigaltstack-so-its-stack-overflow-is-unhandleable | A | 45 | bug | MEASURED: a stack overflow on the MAIN thread runs the SIGSEGV handler and exits 7; the same overflow on a cloned worker exits 139 with the handler never entered. Same binary, one argument apart. sigaltstack(2) is PER-THREAD and is registered only by SetSignalHandler, which the main thread calls -- a cloned thread's alt stack reads sp=0 flags=SS_DISABLE size=0, so SA_ONSTACK has nowhere to put the frame and the kernel kills the process. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
 | bug-a-a-nested-for-loop-in-a-parallel-for-body-is-a-compile-error | A | 55 | bug | `parallel for` refuses a body containing an ordinary `for` loop — `error: expected ':='`, reported against lib/rtl/palthread.pas rather than the user's file. Measured boundary: `for` and `for ... downto` are the ONLY refused shapes; while, repeat, if, case and a nested begin/end all compile. The worker is synthesized by replaying captured tokens (PFStash, pasparser_stmt.inc ~3744-4330), and the inner loop's `:=` appears to be missing from the replay, so the defect is in the body token capture, not in the lowering. | — |
+| bug-a-a-pascal-global-cannot-import-a-c-global | A | 45 | bug | `var x: Integer; cvar; external;` is REFUSED, so a Pascal object can export a global to C but cannot read one C defines. The C frontend has the import path already (ObjDataIsImport routes the reference to an UND symbol); Pascal has no spelling that reaches it, and accepting the keyword without the routing would allocate local storage and silently read zero. | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized | A | 40 | bug | AllocParam decides a by-value record parameter's slot size from RecSize(LastTypeRecId), and LastTypeRecId is REC_NONE for 41 of the 52 record parameters in compiler.pas. RecSize(REC_NONE) is the 8-byte fallback, so the `RecSize(..) <= 8` test that chooses between an inline record slot and a pointer slot is a CONSTANT TRUE for those 41 — the branch's comment describes a decision it is not making. Not a miscompile: every later answer is <= the 8 it reserves, so the slot is over-allocated by up to 4 bytes on a 32-bit target and never under-read. What it costs is that the rule cannot be reasoned about, and it is the input half of the ticket that renamed ParamSize. | — |
 | bug-a-a-typed-const-record-is-built-by-startup-code-not-stored-as-data | A | 35 | bug | The sibling of bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data, which fixed the SCALAR array case only. A typed const whose element or type is a RECORD is still BSS plus generated stores: measured at 116 bytes of code per 16-byte record — the same ~29 bytes per field the original ticket measured — while an Integer array of identical total size costs zero code and lands in .data. Found by the wasm32 lane, where it is not a size issue but a correctness one: the emitted stores are top-level chunks, and a target whose startup does not run reads zeros. | — |
 | bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds | A | 30 | bug | TWO OF THE THREE KINDS LANDED 2026-08-31; the CDECL INDIRECT call is what is left. The external-direct call and the variadic external call now place arguments past the banks in an AAPCS64 stack area, and so does the callee (EmitParamSpillsForTarget's ProcCdecl arm, which had the same refusal). All of them ask ONE oracle -- ABIA64CdeclArgSlot in abi.inc -- instead of each counting its own lo/hi, which is what let the register half be right and the stack half be absent three times over. Measured against gcc on a 12-argument mixed int/double signature and a 10-double one, both banks overflowing: pxx now matches gcc exactly on x86-64, aarch64, arm32, i386 and riscv32. STILL OPEN: ir_codegen_aarch64.inc:3574 refuses a cdecl INDIRECT call past 8 arguments -- a different restructure, because that block has an injected Self and the callee address pushed below arg0. The old summary said \'nothing reaches it today\'; that was false and is corrected in the body -- a nine-int C function reaches it, lua/src/lcode.c has one, and it broke lua and sqlite on aarch64 the moment a C function always used the C ABI. | — |
 | bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 | A | 45 | bug | aarch64 is the last target where a by-value aggregate argument occupies one pointer-sized slot by CONSTRUCTION rather than by classification: ABIA64CdeclArgSlot advances the NSAA by a fixed 8 bytes per argument, so an aggregate of any size gets exactly one slot and its three readers inherit that. x86-64 and i386 were converted by bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee; this is the same defect, in the one place with NO ORACLE. There is no gcc cross for aarch64 on this box, so no mixed link is constructible and the only available verification is pxx-against-pxx -- which is exactly the self-consistency the parent ticket exists to show is worthless for a calling convention. So the FIRST deliverable here is an oracle, not a fix. | — |
 | bug-a-an-exception-that-escapes-its-handler-or-is-bare-re-raised-still-leaks-its-object | A | 5 | bug | two exception shapes still leak their object after 620989250 — raising a NEW exception from inside a handler leaks the original (live=2001/1000 trips) and a bare `raise;` re-raise leaks (937); both are acknowledged as gaps in that commit's own comments but were never measured | decide-does-raise-of-an-existing-object-transfer-ownership |
+| bug-a-an-i386-object-carries-text-relocations-as-soon-as-it-uses-sysutils | A | 40 | bug | An i386 --emit-obj object has 0 absolute .text relocations for a bare program and 62 for the same program with `uses sysutils`, so it cannot link into a hardened PIE. The existing green row asserting the Pascal i386 object is PIE-clean is measured on a fixture that uses no RTL unit, so it cannot see this. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it | A | 40 | bug | A C diagnostic can now print `in: <the .c module>` (CModRange*, ungated), but an error inside an INCLUDED HEADER prints nothing: the header-accurate per-token file table is DbgRange*, which returns early without -g. Pascal has an ungated twin for exactly this reason (PasMarkTokFile); C does not. | — |
 | bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only | A | 35 | bug | Storing a `char` into a `string[N]` through a pointer compiles on x86-64 only | — |
@@ -567,10 +567,11 @@ _none_
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 | bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep | D | 35 | bug | A THIRD population of docs-vs-compiler defect, which no existing check can see: the flag exists, the docs name it, and the docs are wrong about WHICH TARGETS OR SOURCES it applies to. Measured instance fixed here -- `--emit-obj` was documented as working `on any target` and is refused on 3 of 6 backends. A grep of docs against the parser's flag table cannot detect this class, because the flag is in both lists and the page still lies. | — |
 
-## backlog-esp (2)
+## backlog-esp (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable | A+S | 35 | bug | --emit-obj for xtensa/riscv32 emits exactly ONE global symbol, `app_main`. Every proc is LOCAL FUNC and no data symbol is planned at all, so a `cdecl` routine and a `cvar` global that both link on x86-64 and i386 are invisible in an ESP object. The x86-64/i386 writers gained data groups in 72000d1e1 and d402147d6; writeELF32Rel and writeELF32RelIram have a different symbol model and gained nothing. | — |
 | bug-s-xtensa-cannot-link-any-program-that-uses-the-heap-runtime-calloc-is-external | S | 45 | bug | xtensa links no program that reaches the heap runtime: `calloc` is external | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 
@@ -842,9 +843,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3024)
+## done (3026)
 
-3024 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3026 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -1053,6 +1054,7 @@ _none_
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] bug-a-a-c-headers-variadic-tail-is-dropped-on-import
 - [p 45] [A] bug-a-a-cloned-thread-has-no-sigaltstack-so-its-stack-overflow-is-unhandleable
+- [p 45] [A] bug-a-a-pascal-global-cannot-import-a-c-global
 - [p 45] [A] bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64
 - [p 45] [A] bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386
 - [p 45] [A] bug-a-the-near-context-window-is-stale-after-a-token-splice
@@ -1121,6 +1123,7 @@ _none_
 - [p 40] [A] bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help (unblocks 1)
 - [p 40] [A+S] bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing
 - [p 40] [A] bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized
+- [p 40] [A] bug-a-an-i386-object-carries-text-relocations-as-soon-as-it-uses-sysutils
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse
 - [p 40] [A] bug-a-nilpy-on-cross-targets-four-remaining-walls [parked — re-claim, do not duplicate]
 - [p 40] [A] bug-a-nilpy-under-threadsafe-still-leaks-every-class-field-and-it-cannot-ride-on-the-pascal-fix
@@ -1184,6 +1187,7 @@ _none_
 - [p 35] [A] bug-a-help-does-not-advertise-flags-the-compiler-accepts
 - [p 35] [A] bug-a-pxx-home-is-advertised-but-not-honoured
 - [p 35] [A] bug-a-the-cross-self-host-proof-runs-a-different-configuration-than-the-native-one
+- [p 35] [A+S] bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable
 - [p 35] [A+S] bug-a-xtensa-cannot-return-a-dynamic-array-from-a-function
 - [p 35] [B] bug-b-gtk3-pc-writes-past-its-buffer-on-a-long-string
 - [p 35] [A] bug-c-generic-selection-loses-an-array-elements-pointer-target-and-its-constness
@@ -1380,7 +1384,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - **1** — bug-a-emitzeroframeslot-has-no-wasm32-arm
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help

@@ -18514,6 +18514,11 @@ test-emit-obj: $(COMPILER)
 	#    globals `uses sysutils` and the builtin runtime contribute, which is not
 	#    a hypothetical -- the C half exported crtl's `errno` and ld refused the
 	#    object over glibc's TLS mismatch. The host touches errno and environ.
+	#
+	#    The duplicate-definition row below says the export is a real DEFINITION
+	#    rather than weak or SHN_COMMON. A link that merely FAILS proves nothing
+	#    on its own, so it is read as a differential against the row directly
+	#    above it: same object, same shape of main, one added `int GCount = 1;`.
 	rm -f $(TESTTMP)/podp_*.o $(TESTTMP)/podp_link*
 	./$(COMPILER) -Fulib/rtl --emit-obj test/c_obj_data_pascal.pas $(TESTTMP)/podp_x64.o
 	./$(COMPILER) -Fulib/rtl --emit-obj --target=i386 test/c_obj_data_pascal.pas $(TESTTMP)/podp_386.o
@@ -18531,6 +18536,12 @@ test-emit-obj: $(COMPILER)
 	  gcc $(TESTTMP)/podp_host.c $(TESTTMP)/podp_x64.o -o $(TESTTMP)/podp_link || { echo "test-emit-obj: pascal data object FAILED to link"; exit 1; }; \
 	  tools/expect_same.sh podp_x64 "$$($(TESTTMP)/podp_link)" "7 7 42 100 101 5 13 1" || exit 1; \
 	  echo "test-emit-obj: a C main reads and writes a Pascal cvar global by name (x86-64)"; \
+	  printf '#include <stdio.h>\nint GCount = 1;\nextern int obj_readback(void);\nint main(void){printf("%%d\\n",obj_readback());return 0;}\n' > $(TESTTMP)/podp_dup.c; \
+	  rm -f $(TESTTMP)/podp_dupout; \
+	  gcc $(TESTTMP)/podp_dup.c $(TESTTMP)/podp_x64.o -o $(TESTTMP)/podp_dupout 2>/dev/null; \
+	  [ "$$?" != "0" ] || { echo "test-emit-obj: a C host redefining GCount LINKED -- the Pascal export is not a real definition (weak, or SHN_COMMON)"; exit 1; }; \
+	  [ ! -f $(TESTTMP)/podp_dupout ] || { echo "test-emit-obj: the duplicate link left an executable behind"; exit 1; }; \
+	  echo "test-emit-obj: a C host redefining the same global collides at link, as two C objects do"; \
 	else echo "gcc not installed; pascal data-symbol link check skipped"; fi
 	@if gcc -m32 -xc /dev/null -o /dev/null -c >/dev/null 2>&1; then \
 	  gcc -m32 $(TESTTMP)/podp_host.c $(TESTTMP)/podp_386.o -o $(TESTTMP)/podp_link32 || { echo "test-emit-obj: i386 pascal data object FAILED to link"; exit 1; }; \
