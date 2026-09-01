@@ -4961,11 +4961,26 @@ letting a location imply a bug.
 
 **2. The diff is a claim about the CORPUS you compiled, not about the
 construct.** "Differs by two bytes over `compiler.pas`" is a fact about
-`compiler.pas` — which is a deliberately procedural subset, the same reason
-CLAUDE.md warns the self-host fixedpoint cannot see a construct the compiler
-never writes. If the poisoned site is a record FIELD's dynamic-array descriptor,
-the question "how many of those does `compiler.pas` contain" decides the count
-before the construct does.
+`compiler.pas` — a deliberately procedural subset, the same reason CLAUDE.md
+warns the self-host fixedpoint cannot see a construct the compiler never writes.
+
+**Measured, because the widening was actually run:**
+
+| | |
+| --- | --- |
+| candidate sources | 1645 |
+| **denominator** — compiled in BOTH arms | 1391 |
+| failed in both arms (no evidence either way) | 254 |
+| compiled in one arm only (a confound) | **0** |
+| **DIFFER** between poisoned and clean | **15** (32 bytes) |
+
+Not one datum. **Fifteen**, in real programs — `lib_regex` (two slots),
+`lib_png`, `lib_ansirender`, a raytracer, two games, and eight tests. "One site"
+was an artefact of asking `compiler.pas`, and it is the kind of false limit
+**nobody re-tests**, because a precise-sounding number reads as a finished
+search. Note the denominator and the both-arms-failed row: a source that fails in
+both arms is not evidence, and reporting 15/1645 would have been a different and
+wronger claim than 15/1391.
 
 **3. The follow-up reachability probe can be IMMUNE BY COINCIDENCE.** Having
 found the site, the natural next step is a small program that exercises it. The
@@ -4976,11 +4991,22 @@ built from the first example that comes to mind is disproportionately likely to
 be the one case the defect cannot reach**, because the memorable example is
 usually the simple one, and simple is what the wrong constant is tuned to.
 
-### When frequency is the wrong question, count COPIES
+### Count COPIES *and* widen the corpus — they answer different questions
 
-The corpus caveat above dissolved rather than being answered, and how is worth
-more than the caveat. Instead of widening the corpus, frankA asked what the site
-would look like **if the value were wrong rather than merely unread** — and found
+An earlier draft of this section said the corpus caveat "dissolved rather than
+being answered" once the copies were counted. **That was wrong, and it was
+written before the sweep had run.** The two measurements answer different
+questions and neither substitutes for the other:
+
+- **counting copies** answers *how many implementations of this concept disagree*
+  — 2 of 20, a finite checkable list;
+- **widening the corpus** answers *how many real programs are affected* — 15 of
+  1391, which no count of copies predicts.
+
+Reach for copies when you are about to argue from frequency, not INSTEAD of
+measuring frequency. What follows is still the stronger move when it applies:
+frankA asked what the site would look like **if the value were wrong rather than
+merely unread** — and found
 the concept *"storage size of a value of this type"* written out BY HAND **20
 times** across seven files. **18 had the record arm. 2 did not.** One of the two
 had been fixed in its sibling file 2.5 months earlier, in a commit that touched
@@ -4991,6 +5017,20 @@ No corpus frequency could have produced that number. A count of COPIES did.
 whether the real warrant is code identity** — how many places implement this
 concept, and do they agree. That converts an unfalsifiable "is it one datum or
 fifty" into a finite, checkable list.
+
+### The widening must BE the measurement, not a proxy for it
+
+The same sweep carried a population proxy beside the real diff — *"does the
+source text say `array of`"* — and **only 4 of the 15 differing programs matched
+it.** Eleven carry the construct without the phrase appearing anywhere in their
+own text: it arrives through a unit, an include, or a generic instantiation.
+
+Reporting the proxy would have said 4 where the truth was 15, and it would have
+looked like a widened corpus. **A grep over source text does not measure which
+programs USE a construct in any language with units, includes or generics** — it
+measures which files spell it, and those are different sets by a factor of ~4
+here. If widening the corpus is the point, the widening has to be the same
+experiment run over more inputs, not a cheaper thing correlated with it.
 
 **And the collapse that follows has its own trap.** Merging 18 copies into one
 helper: the control for a pure refactor is byte-identity of emitted output (7/7
