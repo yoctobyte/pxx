@@ -381,7 +381,11 @@ earlier. The instrument answers "are there uncommitted edits" and gets read as
 "has this session done anything". Ask the right question instead —
 `git log origin/master --grep=<the session's Claude-Session URL>` — and note
 the URL DOES discriminate (verified: two sessions, two ids), while
-`Co-Authored-By` does not, because every agent shares it.
+`Co-Authored-By` does not, because every agent shares it. **But NOTHING MAPS A
+SESSION NAME TO ITS ID**, and an id changes when a session restarts, so this
+only works if you already hold that session's id — **ASK IT.** Do not fall back
+to attributing by timing and topic: that produced the false alarm above, and it
+produced a second one the same night, hours later, by this rule's own author.
 
 **A CLEAN TREE IS NOT EVIDENCE ABOUT THE BINARY. The `converged after N round(s)`
 line is.** `compiler/pascal26` is untracked, so `git status` says nothing about
