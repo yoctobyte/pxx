@@ -1,6 +1,6 @@
 ---
 prio: 40
-blocked-by: [bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching]
+blocked-by: []
 ---
 
 # DWScript — compile under pxx + RTTI auto-bind (scripting stress test)
@@ -89,3 +89,32 @@ Fair trade; bake the credit + source link into the demo from the start.
 This is a deep target — likely the single richest source of Track A language +
 RTTI tickets we have. Treat it as a long-running driver, not a quick win; park in
 `unfinished/` between bursts, keep the gap tickets flowing.
+
+
+---
+
+## 2026-09-01 (frankH) — the blocker is cleared; edge removed after RUNNING it
+
+`bug-p-a-parameters-pointer-element-type-is-lost-between-registration-and-overload-matching`
+is in `done/`, and the instance spelling this ticket needs now resolves —
+checked by running it rather than by reading the folder, because `done/` is a
+claim about the past and the repro is a claim about this binary:
+
+```pascal
+o := TFoo.Create;  o.Name := 'hello';
+pi := GetPropInfo(o, 'Name');      { the INSTANCE spelling, not PClassRTTI }
+writeln(pi^.NamePtr^);             { -> Name }
+```
+
+It binds the `TObject` overload and returns the right `PPropInfo`, so the
+premise of the edge ("the overloads exist and are never selected, so the call
+binds the `PClassRTTI` arm and segfaults") no longer holds.
+
+**The ticket itself is NOT stale.** DWScript is not vendored anywhere in the
+tree (`grep -rl dwsRTTIExposer` finds nothing), so the work is untouched, not
+done. Only the edge went.
+
+One note for whoever takes it, from the ticket's own instruction: it says to
+delete this edge if the RTTI half turns out to reach only the type-level API.
+That is not why it went — the instance spelling was the blocker and it works
+now. If a NEW blocker appears, file it rather than reviving this slug.

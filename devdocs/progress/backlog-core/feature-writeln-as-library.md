@@ -119,7 +119,7 @@ Track re-labelled B -> A on 2026-07-20: phases 1 (variadic bracket-elision) and 
 
 ---
 
-## 2026-09-01 (frankH) — phase 1 landed for bare routines; methods are the next slice
+## 2026-09-01 (frankH) — phase 1 landed for bare routines, commit 7c55fb069; methods are the next slice
 
 **Track A.** `Log('x=', x, ' y=', y)` against `procedure Log(const a: array of
 const)` now compiles. Verified absent before the change (*"no overload of Log
