@@ -107,4 +107,4 @@ Green at all five: DEFAULT, -O0, -O1, -O2, -O3 — `fail=0 TSRCLOCKFREE OK`.
 This was the umbrella's last wired blocker.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ad55e4dcc.
