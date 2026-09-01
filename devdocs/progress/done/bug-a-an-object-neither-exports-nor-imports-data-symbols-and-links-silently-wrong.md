@@ -553,4 +553,4 @@ Keeping this open for those would leave a ticket whose summary is no longer true
 of anything a program can hit, and its summary is the only part everyone reads.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9a6b936ec.
