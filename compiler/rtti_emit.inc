@@ -1398,18 +1398,23 @@ begin
             PatchDataI32(dynDescOff + 0, 2); { Kind = 2 (DynArray) }
 
             depth := UFldDynDepth[fi];
-            if UFldTk[fi] = Ord(tyAnsiString) then
-              baseKind := 1
-            else if (UFldTk[fi] = Ord(tyRecord)) and RecordHasManagedFields(UFldRec_[fi]) then
-              baseKind := 3
-            else
-              baseKind := 0;
+            { ASK ManagedElemKind, do not respell it. This spelled out kinds 1
+              and 3 only, so a FIELD holding `array of Variant` or `array of
+              <interface>` got baseKind 0 and its elements were never walked:
+              measured 1500 trips over a record local with a 2-element array,
+              allocs=4274 frees=1424 live=2850 for both, i.e. two leaked per
+              trip. That is the exact failure ManagedElemKind's own header
+              predicts for anyone who writes the policy down a tenth time.
+              ManagedElemKindLocked, matching the anonymous-array site below:
+              it degrades kinds 4 and 6 ONLY under --threadsafe, where releasing
+              one would re-enter the non-reentrant heap lock and hang. }
+            baseKind := ManagedElemKindLocked(UFldTk[fi], UFldRec_[fi]);
 
             if depth > 1 then
               elSize := targetPtrSize
             else
             begin
-              if baseKind = 1 then
+              if (baseKind = 1) or (baseKind = 4) then
                 elSize := targetPtrSize
               else if baseKind = 3 then
                 elSize := UClsSize_[UFldRec_[fi] - REC_UCLASS_BASE]
@@ -1426,7 +1431,12 @@ begin
               subCi := UFldRec_[fi] - REC_UCLASS_BASE;
               if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
                 baseTypeRef := UClsRTTIOff[subCi] - (dynDescOff + 16);
-            end;
+            end
+            else if (baseKind = 4) or (baseKind = 5) or (baseKind = 6) then
+              { kind 4 carries the interface ID in this slot, kinds 5/6 the
+                element STRIDE — ManagedElemRef is the one place that knows
+                which, and its header says so. }
+              baseTypeRef := ManagedElemRef(UFldTk[fi], UFldRec_[fi]);
             PatchDataI32(dynDescOff + 16, baseTypeRef);
 
             Inc(dynIdx);
@@ -1525,18 +1535,17 @@ begin
               PatchDataI32(dynDescOff + 0, 2); { Kind = 2 (DynArray) }
 
               depth := UFldDynDepth[fi];
-              if UFldTk[fi] = Ord(tyAnsiString) then
-                baseKind := 1
-              else if (UFldTk[fi] = Ord(tyRecord)) and RecordHasManagedFields(UFldRec_[fi]) then
-                baseKind := 3
-              else
-                baseKind := 0;
+              { The class-layout twin of the record-layout site above: ask
+                ManagedElemKind rather than respelling kinds 1 and 3, so an
+                `array of Variant` or `array of <interface>` FIELD gets its
+                elements walked instead of silently getting baseKind 0. }
+              baseKind := ManagedElemKindLocked(UFldTk[fi], UFldRec_[fi]);
 
               if depth > 1 then
                 elSize := targetPtrSize
               else
               begin
-                if baseKind = 1 then
+                if (baseKind = 1) or (baseKind = 4) then
                   elSize := targetPtrSize
                 else if baseKind = 3 then
                   elSize := UClsSize_[UFldRec_[fi] - REC_UCLASS_BASE]
@@ -1553,7 +1562,9 @@ begin
                 subCi := UFldRec_[fi] - REC_UCLASS_BASE;
                 if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
                   baseTypeRef := UClsRTTIOff[subCi] - (dynDescOff + 16);
-              end;
+              end
+              else if (baseKind = 4) or (baseKind = 5) or (baseKind = 6) then
+                baseTypeRef := ManagedElemRef(UFldTk[fi], UFldRec_[fi]);
               PatchDataI32(dynDescOff + 16, baseTypeRef);
 
               Inc(dynIdx);
@@ -1613,11 +1624,19 @@ begin
       if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
         baseTypeRef := UClsRTTIOff[subCi] - (hdr + 16);
     end
-    else if baseKind = 4 then
+    else if (baseKind = 4) or (baseKind = 5) or (baseKind = 6) then
       { COM interface elements: the SAME word carries the interface id rather
         than a relative offset to a sub-descriptor — the discriminated slot a
         class layout descriptor's kind-4 member already uses (see mKind = 4
-        above). builtinheap's walks read it back through baseRecDesc. }
+        above). builtinheap's walks read it back through baseRecDesc.
+
+        KINDS 5 AND 6 RIDE THE SAME SLOT, carrying the element STRIDE, and this
+        arm used to test `= 4` alone — so a local `array of Variant` emitted
+        baseTypeRef 0, the walk read a stride of zero, and its `elSize > 0`
+        guard (which exists for exactly this) declined to walk. Measured: 1500
+        trips, allocs=4274 frees=1424 live=2850, two variants leaked per trip.
+        ManagedElemRef already returned the right thing for all three; only
+        this test was narrow. }
       baseTypeRef := ManagedElemRef(AnonDynArrayBaseTk[i], AnonDynArrayBaseRec[i]);
     PatchDataI32(hdr + 16, baseTypeRef);
   end;

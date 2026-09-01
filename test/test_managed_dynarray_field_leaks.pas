@@ -36,6 +36,23 @@ program TestManagedDynArrayFieldLeaks;
                  carries its length. It was correct before and must stay so.
   - mixed        all of them in one record, to catch a member-walk that gets
                  the right kinds but the wrong offsets or stride.
+  - variant      `array of Variant` as a field. A SECOND bug in the same two
+                 writers: they spelled out kinds 1 and 3 by hand, so every
+                 other managed element kind got baseKind 0 and was never
+                 walked. 2 leaked per trip before the fix.
+  - intfelem     `array of <interface>` as a field, the kind-4 half of that.
+  - localvar     `array of Variant` as an ordinary LOCAL. A THIRD site, failing
+                 differently: it asked ManagedElemKind correctly but wrote the
+                 baseTypeRef word only for kind 4, so kinds 5/6 -- which ride
+                 that slot carrying the element STRIDE -- got 0, and the walk's
+                 `elSize > 0` guard declined to walk. Same symptom, different
+                 cause, which is why it is a separate arm and not a duplicate.
+
+  NOTE for anyone running this under --threadsafe: the variant and intfelem
+  arms leak DELIBERATELY there. ManagedElemKindLocked degrades kinds 4 and 6
+  under thread-safe mode because releasing one re-enters the non-reentrant heap
+  lock and would hang; a leak is the chosen trade. Verified both terminate
+  (exit 0) rather than deadlocking. This test is not wired with --threadsafe.
 
   Run with -dPXX_ALLOC_CENSUS; tools/assert_no_leak.sh bounds live objects
   absolutely. }
@@ -57,6 +74,17 @@ type
   public
     v: array of AnsiString;
   end;
+
+  IThing = interface ['{11111111-2222-3333-4444-555555555555}']
+    procedure Poke;
+  end;
+
+  TThing = class(TInterfacedObject, IThing)
+    procedure Poke;
+  end;
+
+  TVarRec = record v: array of Variant; end;
+  TIntfRec = record v: array of IThing; end;
 
 var
   i, k: Integer;
@@ -103,6 +131,38 @@ begin
     k := k + 1;
 end;
 
+procedure TThing.Poke;
+begin
+end;
+
+procedure VariantElems(n: Integer);
+var r: TVarRec;
+begin
+  SetLength(r.v, 2);
+  r.v[0] := Tag(n);
+  r.v[1] := Tag(n + 1);
+  if (r.v[0] <> '') and (r.v[1] <> '') then k := k + 1;
+end;
+
+procedure IntfElems(n: Integer);
+var r: TIntfRec;
+begin
+  SetLength(r.v, 2);
+  r.v[0] := TThing.Create;
+  r.v[1] := TThing.Create;
+  r.v[0].Poke;
+  if (r.v[1] <> nil) and (n >= 0) then k := k + 1;
+end;
+
+procedure LocalVariantArray(n: Integer);
+var v: array of Variant;
+begin
+  SetLength(v, 2);
+  v[0] := Tag(n);
+  v[1] := Tag(n + 1);
+  if (v[0] <> '') and (v[1] <> '') then k := k + 1;
+end;
+
 procedure DynInClass(n: Integer);
 var o: TCls; j: Integer;
 begin
@@ -133,4 +193,16 @@ begin
   k := 0;
   for i := 1 to 1000 do DynInClass(i);
   Writeln('dyncls ', k);
+
+  k := 0;
+  for i := 1 to 1000 do VariantElems(i);
+  Writeln('variant ', k);
+
+  k := 0;
+  for i := 1 to 1000 do IntfElems(i);
+  Writeln('intfelem ', k);
+
+  k := 0;
+  for i := 1 to 1000 do LocalVariantArray(i);
+  Writeln('localvar ', k);
 end.
