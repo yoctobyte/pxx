@@ -158,4 +158,4 @@ the hang; put the pointer in an `array[0..1] of TPD` and index `ap[0]^[i]` for
 the other SIGSEGV.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit e7b4ad7ab.
