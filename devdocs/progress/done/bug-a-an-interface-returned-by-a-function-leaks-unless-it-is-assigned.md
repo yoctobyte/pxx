@@ -69,4 +69,4 @@ which is what the destructor-print control checks.
 ## Log
 
 - 2026-09-01 — found by sweeping managed kinds other than strings through the
-  ownership seams; fixed and closed in the same session, commit PENDING-COMMIT.
+  ownership seams; fixed and closed in the same session, commit 1308ef1f8.
