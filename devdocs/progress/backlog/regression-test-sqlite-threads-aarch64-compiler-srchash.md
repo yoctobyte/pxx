@@ -38,3 +38,6 @@ test-sqlite-threads: FAIL aarch64 (TIMED OUT after 200s; TESTMGR_TIME_SCALE=1.00
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-01 — the seven watcher saw `test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh` GREEN at 46dddae58485 (tier full) and did NOT close this: the job FAILED and passed on a retry in this very run, so this green is the race firing rather than evidence against it. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
