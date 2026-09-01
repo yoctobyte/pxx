@@ -667,4 +667,4 @@ off `FixupPCRel` and `GlobFixPCRel`. Until then a Pascal-frontend i386 object
 keeps 5 absolute .text relocations and will not take `-z text`.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 69075ffaf.
