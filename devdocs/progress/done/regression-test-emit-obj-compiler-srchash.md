@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: A
+status: done
 ---
 
 > **Track A from the job NAME `test-emit-obj`**, not from its source. This job names a MECHANISM rather than a subject — the source it was fed (`tools/compiler_srchash.sh`) is what the mechanism was run ON, not what is being tested, so a lane guessed from it would be wrong by construction. The ranker reads frontmatter, so this line decides who works it; re-lane it if this job has changed what it covers.
@@ -56,3 +57,59 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-01 — auto-closed by the seven watcher: `test-emit-obj#src:tools/compiler_srchash.sh` passes at fc2adb7ec261 (tier full); it was red at c1f7471fe1d0. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
+---
+
+## Resolution (Track A, frankA)
+
+**Already fixed. This is a red I disclosed deliberately, sampled in the window
+between the disclosure and the fix.** Verified green at HEAD `0596c9d0d`:
+`test-emit-obj` exits 0 with zero `expect_same: MISMATCH` lines.
+
+**Independently corroborated, and by a source I did not pick:** the seven
+watcher auto-closed this ticket on its own (the Log line above) after seeing the
+job pass at `fc2adb7ec` — a different host, a different commit, and a full tier
+rather than my single target. Two greens that could have disagreed and did not.
+
+**THE BISECT WILL NAME THE WRONG COMMIT, AND IT IS WORTH SAYING SO.** The
+watcher's range holds two buildable commits, `7d1aed2b5` (mine) and `19125e02e`
+(an xtensa size fix that cannot reach an x86-64 C dlopen row), so an idle bisect
+lands on `7d1aed2b5` and calls it bad. That commit changed four Makefile `;`
+chains to `&&`. It introduced no defect — it removed the thing that had been
+**swallowing** one. The `@if` block's status had been whichever command ran
+last, and the last command was an `echo`, so a failing `expect_same.sh` exited 1
+into a block that then reported success.
+
+The actual defect dates to `46586dba8`, the commit that added
+`test/test_shared_lib.c`: the C frontend emits `CompilePendingGlobalInits` at
+the start of `main`, and a library is precisely a translation unit with **no**
+`main`, so a `.so` emitted none of its file-scope initialisers and
+`shared_c_from_data()` returned NULL. The row had been failing from the day it
+was written while printing green. Fixed in `9b6ca0475`.
+
+The log tail here is that exact failure, not a lookalike: the `Segmentation
+fault` is `strcmp(NULL)` in the dlopen host, and it is the LOUD failure standing
+in front of the quiet one — which is why the host now checks `d()==NULL`
+explicitly and prints `data=(null) -- file-scope initialisers did not run`.
+
+**Ancestry, which is what makes this an identity and not a resemblance:**
+
+    7d1aed2b5 (disclosure)  IS an ancestor of the sampled c1f7471fe
+    9b6ca0475 (the fix)     is NOT an ancestor of c1f7471fe
+
+So T sampled strictly inside the red window. Nothing to bisect and nothing to
+revert.
+
+**On the green being real rather than skipped:** the failing row sits behind
+`@if command -v gcc`, so a box without gcc reports zero mismatches by skipping.
+Checked: `gcc` is present, the skip branch's distinct string (`gcc not
+installed; C shared-library check skipped`) is absent from the run, and the
+success echo is `&&`-gated on `expect_same.sh` itself — so the echo appearing
+proves both that the guard was taken and that the comparison passed.
+
+**Residual, owned and already filed** — `--emit-obj` has the same defect through
+a different mechanism (an object linked into a gcc-built program has no pxx entry
+stub to ride, and needs `.init_array` in the relocatable writer):
+`bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers`,
+p55, unclaimed. That is a separate writer and a separate commit; it is not this
+ticket.
+- 2026-09-01 — resolved, commit PENDING-COMMIT.

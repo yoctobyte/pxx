@@ -2656,6 +2656,52 @@ mechanism, and **watching for one signature makes you look straight past the
 other.** A warning that names a commit but only one of its mechanisms is worse
 than a warning that names neither, because it will be believed for the wrong red.
 
+### The commit is right and it UN-SWALLOWED an older failure -- the harness was the thing that changed
+
+The third cousin, measured 2026-09-01 on `test-emit-obj`. Above, the named commit
+was propping an older bug up; here it was **hiding** one, and the difference
+matters because the two want opposite responses to a same-looking bisect.
+
+`7d1aed2b5` changed four Makefile `;` chains to `&&`. That is the whole diff on
+the failing path. It introduced no defect and it fixed no compiler code: a make
+recipe of the shape
+
+```make
+	@if cond; then \
+	  tools/expect_same.sh NAME "$$(thing)" "expected"; \
+	  echo "row: ok"; \
+	else echo "skipped"; fi
+```
+
+reports the status of **the last command in the branch**, which is the `echo`.
+`expect_same.sh` exits 1, prints its diff into the log, and the block still
+succeeds. That row had been red since the day it was written (`46586dba8`) while
+printing green -- a C `.so` emitted none of its file-scope initialisers, because
+the C frontend emits them at the start of `main` and a library is precisely a
+translation unit with no `main`.
+
+**So the bisect is correct and its verb is wrong.** `7d1aed2b5` is genuinely the
+commit at which the job's exit status flips, and reverting it genuinely restores
+green. It also restores the swallow. Bisection answers "when did this start being
+REPORTED", and only a harness that never changes makes that the same question as
+"when did this start being BROKEN".
+
+**The tell, and it is cheap:** the named commit's diff does not touch the
+subject. A `;`->`&&`, a `set -e`, a `|| exit 1`, an assertion added to an
+existing row, a skip-guard tightened -- when a bisect lands on a change to how a
+result is *reported* rather than how it is *computed*, the defect is older than
+the range and the range cannot contain it. Do not revert; go read what the row
+was already printing. The diff text was in the log the whole time, under a
+passing verdict.
+
+**Corollary for anyone hardening a harness:** you are about to author a red that
+a bisect will blame you for. Say so in the commit message -- name the row, the
+real first-bad commit, and that the change is a disclosure. `7d1aed2b5` did, and
+that message is the only reason the auto-filed ticket cost minutes instead of a
+bisect. This is the same asymmetry as `## Do not read a green as coverage`, one
+level up: there the green was empty, here the green was actively contradicted by
+its own log body. Both print PASS.
+
 ## When you are about to conclude something
 
 Check it against a second source before writing it down. Every wrong root cause
