@@ -262,3 +262,65 @@ import half however carefully it is written.
   (verified here on gcc 15.2.0: `OBJECT GLOBAL 4`, and `ld` reports "multiple
   definition"; under `-fcommon` the same symbol becomes `COM` and the link
   succeeds). Producing that failure is conformance, not a regression.
+
+## The decision is PER NAME over the whole TU, not per declaration
+
+Track C supplied the corpus shapes; every row below was re-measured here with
+`gcc -c -O0` + `readelf -sW`, and the linkage claim was checked with a negative
+control rather than inferred from the symbol table.
+
+| TU contents (one name) | gcc symbol | section | size |
+| --- | --- | --- | --- |
+| `extern const char *n;` then `const char *n;` | OBJECT GLOBAL | `.bss` | 8 |
+| `extern const char *n;` + use only | NOTYPE GLOBAL **UND** | — | 0 |
+| `extern char b[];` then `char b[4096] __attribute__((aligned(8)));` | OBJECT GLOBAL | `.bss` | **4096** |
+| `extern char b[];` + use only | NOTYPE GLOBAL **UND** | — | 0 |
+| `extern const char *m;` then `const char *m = "\n";` | OBJECT GLOBAL | **`.data.rel.local`** | 8 |
+| `static int h = 7;` + use | OBJECT **LOCAL** | `.bss`/`.data` | 4 |
+
+**Row 1 is the trap, and it is busybox's dominant shape** (`applet_name`,
+declared in `include/libbb.h` and defined in `libbb/appletlib.c` with the header
+included, so both lines are in one TU). An `extern` declaration followed by a
+bare tentative definition **is a definition** — C 6.9.2, the tentative
+definition wins and the `extern` only supplied linkage. Verified end to end:
+linking that object against a use-only object prints the value, and dropping it
+gives undefined-symbol diagnostics.
+
+So the obvious implementation — *"`extern` seen for this name, therefore emit
+UND"* — is wrong, and fails in the worst available way: **nothing in the entire
+program would define `applet_name` while every busybox TU imports it.** A clean
+compile, then one unresolved symbol at link, for the variable the applet
+dispatcher needs. That is a rule you would write, ship, and only discover at the
+last link of the corpus this ticket exists to build.
+
+**The rule, stated so it cannot be implemented per-declaration.** For each
+file-scope name, after the WHOLE translation unit is parsed:
+
+1. any declaration carried an initialiser -> **definition**; section from the
+   content (`.data`, `.data.rel.local` when it needs a relocation, `.rodata`),
+   size and alignment from that declaration;
+2. else any declaration omitted `extern` -> **tentative definition**, which is
+   still a definition; `.bss`, size and alignment from the most complete
+   declarator;
+3. else every declaration said `extern` -> **UND import**, `NOTYPE`, size 0,
+   emitted only if the name is referenced;
+4. `static` anywhere -> internal linkage, `LOCAL`, and never UND.
+
+Rules 2 and 3 differ only by a keyword that pxx currently discards, and rule 1
+outranks both — which is why this has to be a per-name decision taken at emit
+time, over accumulated state, rather than a branch at the point the declarator
+is parsed.
+
+**Two consequences for size and section that a declaration-time design gets
+wrong.** The `extern char b[];` import carries no size and the definition
+carries 4096: size must come from the definition, so an incomplete array type is
+not an error at the declaration. And alignment travels with the definition too
+(`aligned(8)`). Row 5 needs a third section — an initialised pointer-to-literal
+is `.data.rel.local`, not `.data`, because it needs a relocation.
+
+Not adopted: a `static` that is also `extern`-declared earlier. gcc rejects the
+pair and the corpus does not contain it, so it would be an invented row.
+
+Deferred, real but not on the rung-1/2 path: a tentative definition carrying an
+explicit `__attribute__((section(".data")))` (busybox `common_bufsiz.c:71`,
+under a different config).
