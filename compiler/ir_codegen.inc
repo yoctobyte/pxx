@@ -81,9 +81,10 @@ procedure EmitAcquireHeapLock;
   recording, since the first reading sends you looking for an accessor that is
   already here.
 
-  Slot budget: TLS_BLOCK_SIZE is 128 bytes = 16 slots, 0..11 are taken and
-  TLS_SLOT_FIRST_FREE = 12, so four are free and a per-thread bump region needs
-  two (ptr, end). It fits.
+  Slot budget: 0..11 are taken and TLS_SLOT_FIRST_FREE = 12, so four map slots
+  are free. The magazine did not need them -- it took a 64-slot TAIL past the
+  map (TLS_SLOT_HEAP_MAG = 16) and TLS_BLOCK_SIZE grew to 640 to hold it, which
+  is stack the thread already owns.
 
   THE REAL CONSTRAINT IS THE TARGET SET. `__pxxTlsBase` refuses on everything
   but x86-64 — the others have a readable thread register (aarch64 tpidr_el0,
@@ -127,6 +128,207 @@ procedure EmitReleaseHeapLock;
 begin
   if ThreadSafeMode then
     EmitAsmX64(['mov dword [@glob], 0', BSS_HEAP_LOCK]);
+end;
+
+function HeapMagazineEnabled: Boolean;
+{ May the two allocator call sites carry a lock-free thread-local fast path?
+
+  WHY THE FAST PATH IS HERE AND NOT INSIDE PXXAlloc, which is the shape anyone
+  would reach for first and which DEADLOCKS. On x86-64 the heap lock is emitted
+  by the compiler AROUND the call (EmitAcquireHeapLock at the tkGetMem and
+  tkFreeMem sites); PXXAlloc does not take it. It is also called from the
+  managed string and dynarray emitters, which are ALREADY holding the lock
+  across the call. A lock taken inside PXXAlloc would therefore be re-acquired
+  by its own holder, and this lock is not reentrant -- so the obvious placement
+  needs the reentrancy half that the owner parked on 2026-08-21. Putting the
+  fast path at the two call sites and nowhere else keeps reentrancy parked and
+  unneeded: every managed-string site keeps today's lock, today's ordering and
+  today's code, and PXXAlloc is untouched.
+
+  Confined to --threadsafe, because that is the only build that HAS a heap lock
+  to skip. A default build emits none (EmitAcquireHeapLock opens with
+  `if ThreadSafeMode`), so nothing here can move the default build's allocator.
+
+  x86-64 only, and that is a target-set limit rather than a design one: the
+  magazine lives in the TLS block, `gs:[0]` is how this runtime reaches it, and
+  __pxxTlsBase refuses off x86-64 because the other threaded targets (i386,
+  aarch64, arm32) have a readable thread register and no way to SET one yet.
+  Those three keep the global lock and the negative scaling measured in
+  feature-a-reentrant-heap-lock-and-per-thread-arenas.
+
+  TlsMainInstalled for the reason StatusSlotTlsIndex gives at length: with
+  --emit-obj/--shared nothing installed a base and `gs:` does not return 0, it
+  FAULTS. Decided at emission; no runtime branch exists downstream.
+
+  THE TWO INSTRUMENT DEFINES TURN IT OFF, and that is not caution. Both
+  -dPXX_HEAP_DEBUG and -dPXX_ALLOC_CENSUS instrument PXXAlloc/PXXFree, which
+  the fast path does not call. Leaving it on would make the quarantine miss
+  most frees and the census under-count most allocations -- and neither would
+  ERROR, they would print a smaller, plausible number. An instrument that
+  quietly stops seeing the traffic is worse than one that is off.
+
+  -dPXX_NO_HEAP_MAG is the A/B switch: same source, same flags, magazine off.
+  It exists so that "the fast path is what moved the number" is a measurement
+  rather than an inference, and so a suspected miscompile has a one-flag
+  bisect. }
+begin
+  HeapMagazineEnabled :=
+    ThreadSafeMode and (TargetArch = TARGET_X86_64) and TlsMainInstalled and
+    (not PasDefineExists('PXX_HEAP_DEBUG')) and
+    (not PasDefineExists('PXX_ALLOC_CENSUS')) and
+    (not PasDefineExists('PXX_NO_HEAP_MAG'));
+end;
+
+procedure EmitHeapMagTlsBase;
+{ rdx = this thread's TLS block, through the self-pointer at slot 0 that
+  IR_TLSBASE reads. Not EmitAsmX64: the text assembler has no segment override,
+  and this is the same five bytes IR_TLSBASE and EmitIoOwner already emit. }
+begin
+  EmitB($65); EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitI32(0);
+end;
+
+procedure EmitHeapMagAllocTry(var pDone: Integer);
+{ rax = the REQUESTED size on entry (not yet rounded).
+
+  On a HIT: rax = a zeroed payload of that size, popped from this thread's
+  magazine with no lock and no call, and control jumps to a rel32 whose patch
+  position is returned in pDone -- the caller emits the ordinary locked path
+  and then patches pDone to just past it.
+
+  On a MISS: falls through with rax UNCHANGED, so the locked path that follows
+  sees exactly what it would have seen. Every miss test happens before anything
+  writes rax, which is what makes "unchanged" a property of the code rather
+  than a promise.
+
+  The class index does not exist as a value. The head lives at
+  `roundedSize + HEAP_MAG_HDISP` and the count at `roundedSize + HEAP_MAG_NDISP`
+  -- see defs.inc -- so the whole bin computation is one `add`.
+
+  The next link lives in the payload's first word, exactly where PXXFree parks
+  it, so the two halves spell the list the same way. It is 8 bytes and the
+  smallest cached block is 8, so it always fits.
+
+  Registers: rcx, rdx, rdi and r8 are saved and restored on BOTH exits. They
+  are not scratch here -- EmitHeapAllocLocked pushes the same family around its
+  own call precisely because the surrounding expression may be holding values
+  in them. }
+var pMiss1, pMiss2, pMiss3, pMiss4: Integer;
+begin
+  EmitAsmX64([
+    'push rcx', 'push rdx', 'push rdi', 'push r8',
+    { rounded = (size + 7) and not 7, spelled as a shift pair so no negative
+      immediate is involved. A size of 0 or a negative one rounds to 0 or to a
+      huge unsigned value and is refused by the two bounds below. }
+    'lea rcx, [rax+%]', 7,
+    'shr rcx, %', 3,
+    'shl rcx, %', 3,
+    'cmp rcx, %', 8 ]);
+  EmitB($0F); EmitB($82); pMiss1 := CodeLen; EmitI32(0);      { jb  .missplain }
+  EmitAsmX64(['cmp rcx, %', HEAP_MAG_MAX]);
+  EmitB($0F); EmitB($87); pMiss2 := CodeLen; EmitI32(0);      { ja  .missplain }
+  EmitHeapMagTlsBase;                                          { rdx = TLS block }
+  EmitAsmX64([
+    { RE-ENTRY GUARD -- see TLS_SLOT_HEAP_MAGBUSY. Plain load and store: the
+      only re-entry that can reach here is a signal handler on THIS thread, and
+      a handler that finds the guard set takes the locked path, which the main
+      flow is provably not holding (it is here, not there). }
+    'mov rdi, [rdx+%]', HEAP_MAG_BUSYOFF,
+    'test rdi, rdi' ]);
+  EmitB($0F); EmitB($85); pMiss4 := CodeLen; EmitI32(0);      { jnz .missplain }
+  EmitAsmX64([
+    'mov qword [rdx+%], %', HEAP_MAG_BUSYOFF, 1,
+    'add rdx, rcx',                                            { head at [rdx+HDISP] }
+    'mov r8, [rdx+%]', HEAP_MAG_HDISP,
+    'test r8, r8' ]);
+  EmitB($0F); EmitB($84); pMiss3 := CodeLen; EmitI32(0);      { jz  .missguarded }
+  EmitAsmX64([
+    'mov rdi, [r8]',                                           { next }
+    'mov [rdx+%], rdi', HEAP_MAG_HDISP,
+    'dec qword [rdx+%]', HEAP_MAG_NDISP,
+    { Guard released HERE, before the zeroing: the list is already consistent
+      and the fill touches nothing the guard protects. rcx is restored to the
+      base first because `rep stosb` below destroys it. }
+    'sub rdx, rcx',
+    'mov qword [rdx+%], %', HEAP_MAG_BUSYOFF, 0,
+    { PXXAlloc guarantees zeroed memory on every one of its paths and callers
+      rely on it -- managed headers, dynarray slots, instance fields. This arm
+      must reproduce that guarantee, not inherit it. The link word this pop
+      just read is inside the span, so zeroing also erases it. }
+    'mov rdi, r8',
+    'push r8',
+    'xor eax, eax',
+    'rep stosb',
+    'pop rax',
+    'pop r8', 'pop rdi', 'pop rdx', 'pop rcx' ]);
+  EmitB($E9); pDone := CodeLen; EmitI32(0);                   { jmp .done }
+  { .missguarded: the guard is SET and the class was empty -- release it, then
+    fall into the plain miss. Two miss labels rather than one because a miss
+    taken before the guard was set must not clear a guard it does not own. }
+  Patch32(pMiss3, CodeLen - (pMiss3 + 4));
+  EmitAsmX64(['sub rdx, rcx', 'mov qword [rdx+%], %', HEAP_MAG_BUSYOFF, 0]);
+  Patch32(pMiss1, CodeLen - (pMiss1 + 4));
+  Patch32(pMiss2, CodeLen - (pMiss2 + 4));
+  Patch32(pMiss4, CodeLen - (pMiss4 + 4));
+  EmitAsmX64(['pop r8', 'pop rdi', 'pop rdx', 'pop rcx']);
+end;
+
+procedure EmitHeapMagFreeTry(var pDone: Integer);
+{ rax = the payload pointer being freed. HIT: pushed onto this thread's
+  magazine, no lock, no call, jump to pDone. MISS: falls through with rax
+  unchanged, so the locked path frees exactly what it was given.
+
+  A nil pointer takes the HIT exit rather than the miss exit. PXXFree ignores
+  nil, so skipping it is the same behaviour and one branch cheaper -- and the
+  header read below would fault on it, which is why the test cannot wait for
+  the size check.
+
+  The size comes from the block's own header at [p-8], the same word PXXFree
+  reads to pick its bin, so the two halves cannot disagree about which class a
+  block belongs to.
+
+  THE COUNT IS CHECKED FIRST and it is the retention bound, not an
+  optimisation: past HEAP_MAG_DEPTH the block goes to the global allocator
+  where any thread can reach it. Without that, a thread that only ever frees a
+  class parks blocks forever while the thread that allocates them always
+  misses. }
+var pNil, pMiss1, pMiss2, pMiss3, pMiss4, pTaken: Integer;
+begin
+  EmitAsmX64(['push rcx', 'push rdx', 'push rdi', 'test rax, rax']);
+  EmitB($0F); EmitB($84); pNil := CodeLen; EmitI32(0);        { jz  .taken }
+  EmitAsmX64([
+    'mov rcx, [rax-%]', 8,
+    'cmp rcx, %', 8 ]);
+  EmitB($0F); EmitB($82); pMiss1 := CodeLen; EmitI32(0);      { jb  .missplain }
+  EmitAsmX64(['cmp rcx, %', HEAP_MAG_MAX]);
+  EmitB($0F); EmitB($87); pMiss2 := CodeLen; EmitI32(0);      { ja  .missplain }
+  EmitHeapMagTlsBase;                                          { rdx = TLS block }
+  EmitAsmX64([
+    'mov rdi, [rdx+%]', HEAP_MAG_BUSYOFF,                      { re-entry guard }
+    'test rdi, rdi' ]);
+  EmitB($0F); EmitB($85); pMiss4 := CodeLen; EmitI32(0);      { jnz .missplain }
+  EmitAsmX64([
+    'mov qword [rdx+%], %', HEAP_MAG_BUSYOFF, 1,
+    'add rdx, rcx',
+    'mov rdi, [rdx+%]', HEAP_MAG_NDISP,                        { how many parked }
+    'cmp rdi, %', HEAP_MAG_DEPTH ]);
+  EmitB($0F); EmitB($83); pMiss3 := CodeLen; EmitI32(0);      { jae .missguarded (class full) }
+  EmitAsmX64([
+    'mov rdi, [rdx+%]', HEAP_MAG_HDISP,
+    'mov [rax], rdi',                                          { p^.next = head }
+    'mov [rdx+%], rax', HEAP_MAG_HDISP,
+    'inc qword [rdx+%]', HEAP_MAG_NDISP,
+    'sub rdx, rcx',
+    'mov qword [rdx+%], %', HEAP_MAG_BUSYOFF, 0 ]);
+  pTaken := CodeLen;
+  Patch32(pNil, pTaken - (pNil + 4));
+  EmitAsmX64(['pop rdi', 'pop rdx', 'pop rcx']);
+  EmitB($E9); pDone := CodeLen; EmitI32(0);                   { jmp .done }
+  Patch32(pMiss3, CodeLen - (pMiss3 + 4));
+  EmitAsmX64(['sub rdx, rcx', 'mov qword [rdx+%], %', HEAP_MAG_BUSYOFF, 0]);
+  Patch32(pMiss1, CodeLen - (pMiss1 + 4));
+  Patch32(pMiss2, CodeLen - (pMiss2 + 4));
+  Patch32(pMiss4, CodeLen - (pMiss4 + 4));
+  EmitAsmX64(['pop rdi', 'pop rdx', 'pop rcx']);
 end;
 
 procedure EmitHeapAllocLocked;
@@ -5895,6 +6097,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     asmGfK: Integer; asmGfFound: Boolean;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pUnsNeg, pUnsDone, pAppendDone: Integer;
+    pMagDone: Integer;   { the heap-magazine fast path's jump over the locked path; -1 = no fast path emitted }
     w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
     shiftImmCnt: Integer;  { -O1 W1: >= 0 = a constant shift count NOT materialised into rcx }
     w1LeftReg: Integer;    { -O3 W1 slice 5: 0 = left is in rax, else r12..r15 read in place }
@@ -9319,12 +9522,24 @@ begin
         end
         else if procIdx = -Ord(tkGetMem) then
         begin
-          { GetMem or class instantiation. Evaluate size -> rax, then Alloc. }
-          EmitAcquireHeapLock;
+          { GetMem or class instantiation. Evaluate size -> rax, then Alloc.
+
+            THE SIZE IS EVALUATED BEFORE THE LOCK, not inside it. It used to be
+            inside, which bought nothing (the argument is a pure value as far as
+            the heap is concerned) and cost two things: the critical section
+            spanned an arbitrary expression, and an argument that itself
+            allocated would re-enter a non-reentrant lock and hang. The
+            magazine fast path also needs the size in hand before deciding
+            whether a lock is needed at all. EmitAcquireHeapLock preserves rax
+            (it pushes and pops it around the spin), so the value survives. }
           argNode := IRB[node]; { size arg }
           IREmitNode(IRA[argNode]); { size -> rax }
+          pMagDone := -1;
+          if HeapMagazineEnabled then EmitHeapMagAllocTry(pMagDone);
+          EmitAcquireHeapLock;
           EmitHeapAllocLocked;      { rax = payload pointer }
           EmitReleaseHeapLock;
+          if pMagDone >= 0 then Patch32(pMagDone, CodeLen - (pMagDone + 4));
 
           { Put instance pointer in rdi }
           EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
@@ -9431,11 +9646,16 @@ begin
             Free, matching GetMem -> Alloc. nil is ignored inside Free. (Was a
             direct push onto the compiler's own BSS_FREE_LIST, which mismatched
             the mmap pool that Alloc now serves.) }
-          EmitAcquireHeapLock;
+          { Pointer evaluated before the lock, for the reasons the GetMem site
+            above gives. }
           argNode := IRB[node]; { pointer arg }
           IREmitNode(IRA[argNode]); { p -> rax }
+          pMagDone := -1;
+          if HeapMagazineEnabled then EmitHeapMagFreeTry(pMagDone);
+          EmitAcquireHeapLock;
           EmitHeapFreeLocked;       { Free(rax) }
           EmitReleaseHeapLock;
+          if pMagDone >= 0 then Patch32(pMagDone, CodeLen - (pMagDone + 4));
         end
         else if procIdx = -103 then
         begin

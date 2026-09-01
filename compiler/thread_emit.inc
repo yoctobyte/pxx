@@ -48,20 +48,24 @@ begin
     CloneStubAddr := CodeLen;
     { input: rdi=flags rsi=childStack rdx=entry rcx=arg r8=ctidptr }
     { ---- carve the child's TLS block off the top of its stack ---- }
-    { 128 bytes = 16 slots, zeroed, slot 0 = its own address (the convention
-      __pxxTlsBase reads through). Zeroed rather than trusted: palthread hands us
+    { TLS_BLOCK_SIZE bytes = 80 slots (16 of slot map + a 64-class heap
+      magazine), zeroed, slot 0 = its own address (the convention __pxxTlsBase
+      reads through). The zeroing is not merely hygiene for the magazine tail:
+      an all-zero magazine IS "every size class empty", so a fresh thread's
+      allocator fast path is correct with no initialisation of its own.
+      Zeroed rather than trusted: palthread hands us
       fresh anonymous mmap, but __pxxclone is reachable directly and a reused
       stack would otherwise present the previous thread's slots as this one's.
       cld because rep stosq reads DF and only the ABI (not this stub's caller)
       guarantees it clear. rdi holds flags and rcx holds arg, so both are saved
       across stosq's fixed-register contract. }
-    EmitB($48); EmitB($81); EmitB($EE); EmitI32(TLS_BLOCK_SIZE);  { sub rsi, 128 }
+    EmitB($48); EmitB($81); EmitB($EE); EmitI32(TLS_BLOCK_SIZE);  { sub rsi, TLS_BLOCK_SIZE }
     EmitB($FC);                                       { cld }
     EmitB($57);                                       { push rdi   (flags) }
     EmitB($51);                                       { push rcx   (arg) }
     EmitB($48); EmitB($89); EmitB($F7);               { mov rdi, rsi }
     EmitB($31); EmitB($C0);                           { xor eax, eax }
-    EmitB($B9); EmitI32(TLS_BLOCK_SIZE div 8);        { mov ecx, 16 }
+    EmitB($B9); EmitI32(TLS_BLOCK_SIZE div 8);        { mov ecx, slot count }
     EmitB($F3); EmitB($48); EmitB($AB);               { rep stosq }
     EmitB($59);                                       { pop rcx }
     EmitB($5F);                                       { pop rdi }

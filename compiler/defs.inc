@@ -626,14 +626,25 @@ const
                            names, so they cannot collide with user routines.
                            feature-signal-siginfo-ucontext }
   { Per-thread TLS block carved off the top of a cloned thread's stack by the
-    clone stub (thread_emit.inc). 16 pointer slots; slot 0 is the block's own
-    address. Sized generously and fixed rather than tunable: it is stack the
-    caller already owns, and a growable one would have to be negotiated through
-    the __pxxclone signature. }
-  TLS_BLOCK_SIZE   = 128;
+    clone stub (thread_emit.inc). Slot 0 is the block's own address. Sized
+    generously and fixed rather than tunable: it is stack the caller already
+    owns, and a growable one would have to be negotiated through the __pxxclone
+    signature.
+
+    16 SLOTS OF MAP + 64 MAGAZINE HEADS + 64 MAGAZINE COUNTS = 144 slots,
+    1152 bytes. The
+    magazine tail is deliberately part of THIS block rather than a pointer to a
+    separately allocated one, and that is what makes the allocator fast path a
+    straight-line sequence: there is no null slot to test on every GetMem, no
+    bootstrap helper, nobody to decide who allocates it, and no thread that can
+    reach the fast path before its magazine exists. The clone stub already
+    zeroes the whole block, and a zeroed magazine reads as "every size class
+    empty", which is the correct initial state and not a special case.
+    feature-a-reentrant-heap-lock-and-per-thread-arenas }
+  TLS_BLOCK_SIZE   = 1152;
   { THE slot map. Every runtime user of the block takes its index from here --
     an ad-hoc offset is how two consumers end up sharing a slot, which is a
-    silent wrong VALUE, not a crash. Slots 12..15 are unclaimed. }
+    silent wrong VALUE, not a crash. Slots 13..15 are unclaimed. }
   TLS_SLOT_SELF    = 0;   { the block's own address; what __pxxTlsBase reads }
   { The I/O lock's cached owner tid, plus the STACK BOUNDS that say whether this
     block is REALLY the reading thread's. Both halves are needed and neither is
@@ -710,7 +721,83 @@ const
   TLS_SLOT_EXC_OBJ  = 9;
   TLS_SLOT_EXC_CLS  = 10;
   TLS_SLOT_EXC_ADDR = 11;
-  TLS_SLOT_FIRST_FREE = 12;
+  { The allocator fast path's RE-ENTRY GUARD. Nonzero while this thread is
+    inside the magazine's pop or push, so a SIGNAL HANDLER that allocates takes
+    the ordinary locked path instead of interleaving with a half-updated list.
+    Plain loads and stores, no lock prefix: a handler runs on the thread it
+    interrupts, so the only ordering that matters is this thread's own.
+
+    The window it closes is two instructions wide -- read the class head, then
+    publish its successor -- and a delivery inside it hands ONE block to two
+    owners, which faults nowhere.
+
+    THIS GUARD IS REASONED, NOT VERIFIED BY EXECUTION, and the distinction is
+    the point rather than an apology. What IS measured: a --threadsafe program
+    whose SIGUSR1 handler calls GetMem, hammered from a sibling thread, hangs
+    today (20s timeout, no output) because the handler re-enters the
+    non-reentrant heap spinlock; with the magazine it completes, 11.8M handler
+    allocations against 3M in main, no aliasing and no dirty block. What is NOT
+    measured is the guard itself. Every shape built to expose the aliasing
+    needs the handler to KEEP its block -- release it and a doubly-handed block
+    is pushed straight back before main can observe it, which is how the first
+    version of that test came back GREEN against a compiler with this guard
+    deliberately removed. And every shape that keeps blocks eventually MISSES
+    the magazine, reaches the locked path, and hits the pre-existing deadlock
+    first -- confirmed: that program hangs identically with the guard present
+    and absent. So the control could not be aimed, and the honest statement is
+    that the magazine narrows the signal hazard rather than removing it.
+    The residual is bug-a-the-threadsafe-allocator-is-not-async-signal-safe.
+
+    A handler that never RETURNS from inside the fast path (an exception raised
+    in a handler, unwinding past it) strands this set, which costs that thread
+    its fast path for the rest of its life and costs correctness nothing. }
+  TLS_SLOT_HEAP_MAGBUSY = 12;
+  TLS_SLOT_FIRST_FREE = 13;
+  { ---- the per-thread heap magazine -------------------------------------
+    A short free LIST per size class, held thread-locally so that a GetMem or
+    FreeMem of a common size takes NO LOCK and makes NO CALL. Class i holds
+    blocks of exactly (i+1)*8 bytes, mirroring builtinheap's FreeBins; an empty
+    class is a zero head, which is what a zeroed TLS block already says.
+
+    TWO PARALLEL REGIONS, heads then counts, rather than interleaved pairs --
+    and that is the whole reason the fast path has no index arithmetic. Both
+    regions start on a 64-slot boundary, so for a ROUNDED size `sz` the head is
+    at `sz + HEAP_MAG_HDISP` and the count at `sz + HEAP_MAG_NDISP`. The
+    emitted code therefore indexes with the SIZE ITSELF: no shift, no
+    decrement, no scaled-index SIB. Interleave the two and that identity is
+    quietly lost -- the code stays correct and grows three instructions on the
+    hottest path in the allocator.
+
+    DEPTH, and why it is not one. A single slot per class was measured first
+    and is a trap: it wins hugely when at most one block of a class is live
+    (28ms -> 9ms on bench/threadsafe_heap_scaling) and LOSES when three are,
+    because two of every three operations then miss and pay the probe on top of
+    the lock they still take -- 0.40s -> 0.85s at 8 threads on a three-live
+    variant of the same benchmark. Depth 8 covers that shape and every ordinary
+    one; the count word it costs is also what BOUNDS the retention.
+
+    HEAP_MAG_DEPTH is that bound and it is load-bearing, not a tuning knob. A
+    thread that only frees a class (a producer/consumer split across two
+    threads is the ordinary way to get there) would otherwise park blocks
+    forever while the allocating thread always misses, and per-thread memory
+    would grow without limit. Capped, the worst case is
+    8 * (8+16+...+512) = 133 KB per thread, and a thread that dies strands at
+    most that -- so there is no drain to write and no thread-exit hook to get
+    wrong.
+
+    HEAP_MAG_MAX / HEAP_MAG_BINS mirror builtinheap.pas's HEAP_BIN_MAX /
+    HEAP_BIN_COUNT. They are not required to be EQUAL for correctness -- the
+    fast path hands back a block of exactly the size it was asked for, whatever
+    the Pascal allocator would have done with it -- but a disagreement means
+    the two halves cache different size ranges, so keep them in step. }
+  HEAP_MAG_MAX      = 512;                { largest cached size, = HEAP_BIN_MAX }
+  HEAP_MAG_BINS     = HEAP_MAG_MAX div 8; { 64 classes: 8, 16, ..., 512 }
+  HEAP_MAG_DEPTH    = 8;                  { blocks per class; see the retention bound above }
+  TLS_SLOT_HEAP_MAG  = 16;                          { 64 list heads }
+  TLS_SLOT_HEAP_MAGN = TLS_SLOT_HEAP_MAG + HEAP_MAG_BINS;   { 64 counts }
+  HEAP_MAG_BUSYOFF  = TLS_SLOT_HEAP_MAGBUSY * 8;    { from the TLS BASE, not size-relative }
+  HEAP_MAG_HDISP    = TLS_SLOT_HEAP_MAG * 8 - 8;    { head  offset = rounded size + this }
+  HEAP_MAG_NDISP    = TLS_SLOT_HEAP_MAGN * 8 - 8;   { count offset = rounded size + this }
 
   AN_GUIDCONST     = 100; { an INTERFACE type name used as a VALUE -- which in Pascal means
                            exactly one thing, its GUID: `g := IHello`, `Supports(o, IHello, f)`.

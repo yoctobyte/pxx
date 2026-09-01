@@ -4122,6 +4122,17 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_exception_threads_race26 "$$($(TESTTMP)/test_exception_threads_race26)" "$$(printf 'single hits=200000 wrong=0\ntwo hitsA=200000 hitsB=200000 wrongA=0 wrongB=0')"
 	tools/expect_same.sh test_exception_threads_race26.2 "$$($(TESTTMP)/test_exception_threads_race26)" "$$(printf 'single hits=200000 wrong=0\ntwo hitsA=200000 hitsB=200000 wrongA=0 wrongB=0')"
 	tools/expect_same.sh test_exception_threads_race26.3 "$$($(TESTTMP)/test_exception_threads_race26)" "$$(printf 'single hits=200000 wrong=0\ntwo hitsA=200000 hitsB=200000 wrongA=0 wrongB=0')"
+	# The --threadsafe heap magazine: a lock-free thread-local free block per
+	# size class, emitted at the tkGetMem/tkFreeMem sites. BOTH spellings, and
+	# the plain one is not decoration -- it is the control that the same source
+	# is correct with no magazine at all, so a green --threadsafe row cannot be
+	# read as "the fast path works" when it might mean "the fast path never
+	# fired". The test's own header records the positive control that was RUN
+	# for the zeroing arm (delete the rep stosb and it reports byte 0 = 171).
+	./$(COMPILER) --threadsafe test/test_threadsafe_heap_magazine.pas $(TESTTMP)/test_ts_heap_mag26
+	tools/expect_same.sh test_ts_heap_mag26 "$$($(TESTTMP)/test_ts_heap_mag26)" "MAGAZINE OK"
+	./$(COMPILER) test/test_threadsafe_heap_magazine.pas $(TESTTMP)/test_ts_heap_mag_plain26
+	tools/expect_same.sh test_ts_heap_mag_plain26 "$$($(TESTTMP)/test_ts_heap_mag_plain26)" "MAGAZINE OK"
 	./$(COMPILER) --threadsafe test/test_palthread.pas $(TESTTMP)/test_palthread26
 	tools/expect_same.sh test_palthread26 "$$($(TESTTMP)/test_palthread26)" "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nPALTHREAD OK')"
 	./$(COMPILER) --threadsafe test/test_atomic_counter.pas $(TESTTMP)/test_atomic_counter26

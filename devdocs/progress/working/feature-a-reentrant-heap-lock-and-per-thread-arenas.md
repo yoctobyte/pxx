@@ -3,9 +3,9 @@ track: A+O
 prio: 45
 type: feature
 blocked-by: []
-summary: "TITLE NAMES THE WRONG MECHANISM (measured) - it is the BINS, not the arenas. Promise: 2M GetMem/FreeMem pairs, total fixed, split across N workers (flat = perfect scaling) goes 0.14s at 1 worker to 0.39s at 12 — 2.8x WORSE, i.e. adding threads makes fixed allocator work slower. A null with the identical loop and per-iteration call but no heap traffic is flat at <=0.01s at every worker count, so dispatch is under 3% and the degradation is entirely the global heap lock. Measured at f23f141f997d, AFTER the refcount path went lock-free (274a9da6c), so it is allocator contention and nothing else. SPECIFIED AND TAKEABLE - diagnosed and parked 2026-09-01 by frankB, NOT held: the design below is complete, the remaining work is hand-emitted x86-64 on the allocator fast path and wants a gate that can see a thread-safety defect, which quick+fixedpoint cannot. WRONG MECHANISM IN THE TITLE, measured 2026-09-01: PXX_ALLOC_CENSUS on the very benchmark above reports bump=3 arenas=1 against ~2,000,000 reuse, so the workload is ~100% size-class BIN traffic and per-thread ARENAS would move 3 allocations out of 2M. The promise attaches to a per-thread BIN MAGAZINE. Ruled out cache-line true-sharing on FreeBins by giving each worker its own size class: it degrades the same (0.17->0.57s at 12), so the lock is the mechanism. Confirmed at source: the lock is emitted by the COMPILER around the call (ir_codegen.inc:8948 tkGetMem, :9059 tkFreeMem), not taken inside PXXAlloc. DESIGN: put the lock-free fast path in the EMITTER at those two sites, never inside PXXAlloc -- PXXAlloc is called by managed string/dynarray sites that already hold the lock, so an internal lock would need the REENTRANCY the owner parked; the emitter route keeps reentrancy parked and unneeded. NO ACCESSOR PREREQUISITE — an earlier version of this summary claimed one and was wrong. `__pxxTlsBase` (pasparser_expr.inc, AN_TLSBASE, IR_TLSBASE) is Pascal-reachable today, verified compiling and running inside parallel workers, and four TLS slots are free (TLS_SLOT_FIRST_FREE=12 of 16) where an arena needs two. THE REAL CONSTRAINT IS THE TARGET SET: `__pxxTlsBase` is x86-64-only while --threadsafe covers x86-64/i386/aarch64/arm32, so per-thread arenas built on it are an x86-64-only optimisation and the other three stay on the global lock. ONE ALLOCATOR (settled 2026-09-01): builtinheap.pas is the only one, its three PXXAlloc bodies are mutually exclusive PROFILES, and the native one already carries a {$ifdef PXX_TS_SOFTLOCK} arm — so arenas are a second capability arm in an existing function, an ordinary Track A change with NO fork and no decide-* needed. Scope to agree before starting, not a blocker. The reentrancy half stays parked by the owner 2026-08-21; do not re-litigate it."
-status: backlog
-owner: unassigned
+summary: "DONE for the ALLOCATOR half; the reentrancy half stays parked by the owner and was never touched. --threadsafe x86-64 GetMem and FreeMem now have a lock-free per-thread MAGAZINE fast path emitted at the two call sites, and the negative scaling this ticket was filed for is gone. bench/threadsafe_heap_scaling, interleaved A/B, min of 3: threads 1/2/4/8 went 27/51/65/84 ms to 9/17/8/5 ms -- 3x at one thread, 17x at eight, and the CURVE INVERTED (vs1x100 was 100/182/232/311, now 100/188/100/55, i.e. constant total work is finally being done in parallel). A three-live-blocks variant, which is the shape that catches a shallow magazine, goes 0.15s to 0.04s at one thread and 0.54s to 0.02s at eight. Built exactly as the design section below specified -- in the EMITTER, never inside PXXAlloc, so no path can re-enter the non-reentrant lock and REENTRANCY STAYED PARKED AND UNNEEDED. Two things the design did not say, both measured rather than argued. (1) DEPTH ONE IS A TRAP: it wins 28->9ms on alloc/free pairs and LOSES 0.40->0.85s at 8 threads when three blocks of a class are live, because two of every three operations then miss and pay the probe on top of the lock they still take. Depth 8 with a per-class count, which is also the retention bound (133 KB/thread worst case, so the thread-exit drain this ticket listed as unsettled does not need writing). (2) The magazine lives in the TLS BLOCK ITSELF (TLS_BLOCK_SIZE 128 -> 1152), not behind a pointer: no null slot to test per GetMem, no bootstrap helper, no thread that can reach the fast path before its magazine exists -- the clone stub already zeroes the block and zero IS empty. Off under -dPXX_HEAP_DEBUG and -dPXX_ALLOC_CENSUS because it bypasses PXXAlloc and both instrument PXXAlloc; -dPXX_NO_HEAP_MAG is the A/B switch every number above was taken with. x86-64 only, as the target-set section predicted; i386/aarch64/arm32 keep the global lock. Guarded by test/test_threadsafe_heap_magazine.pas (both --threadsafe and plain), whose zeroing check has a RUN positive control. RESIDUAL WITH AN OWNER: an allocating signal handler still deadlocks when it misses the magazine -- pre-existing, measured, filed as bug-a-the-threadsafe-allocator-is-not-async-signal-safe -- and the re-entry guard TLS_SLOT_HEAP_MAGBUSY is reasoned and NOT verified by execution, because every shape that would aim a control at it hits that deadlock first."
+status: working
+owner: frankC
 ---
 
 # Reentrant heap lock, and the per-thread arenas it was really for
@@ -423,3 +423,100 @@ names, and step 3 carries real correctness risk that wants its own session.
 Banking the measurement rather than starting a three-step change I could not
 finish. The reentrancy half remains parked by the owner's 2026-08-21 position —
 unchanged and not re-litigated here.
+
+
+## 2026-09-01 (frankC) — done, allocator half. The magazine, not the arena.
+
+Built what the frankB design section above specified, at the two emitter sites
+and nowhere else, so the reentrancy half stayed parked and turned out not to be
+needed. What follows is only what the design did NOT already say.
+
+### Depth one is a trap, and it passes the headline benchmark
+
+The obvious first cut is one free block per size class: no count word, no cap,
+retention trivially bounded at 20 KB per thread, and the thread-exit drain
+question deleted. It measures beautifully on the benchmark this ticket quotes —
+28ms to 9ms at one thread — because that benchmark is a GetMem/FreeMem PAIR, so
+exactly one block of the class is ever live.
+
+Then hold three:
+
+| shape | threads | global lock | depth-1 magazine |
+| --- | ---: | ---: | ---: |
+| 3 live per class | 1 | 0.14s | 0.16s |
+| 3 live per class | 8 | 0.40s | **0.85s** |
+
+**Twice as slow.** Two of every three operations miss, and a miss pays the whole
+probe and then takes the lock anyway. The benchmark that established this
+ticket's promise could not see it, because its promise and its blind spot are
+the same property of the workload.
+
+Depth 8 (with the count that also caps retention):
+
+| shape | threads | global lock | depth-8 magazine |
+| --- | ---: | ---: | ---: |
+| 3 live per class | 1 | 0.15s | 0.04s |
+| 3 live per class | 8 | 0.54s | 0.02s |
+| pairs (this ticket's bench) | 1 | 27ms | 9ms |
+| pairs | 8 | 84ms | 5ms |
+
+The count is not overhead bought for speed — it is the retention bound. Without
+a cap, a thread that only frees a class (the ordinary producer/consumer split)
+parks blocks forever while the allocating thread always misses, and per-thread
+memory grows without limit. Capped at 8 the worst case is 8*(8+16+...+512) =
+133 KB per thread, which is small enough that the thread-exit drain this
+ticket's "not settled" list asks for does not need to exist.
+
+### The magazine is IN the TLS block, not behind a pointer
+
+`TLS_BLOCK_SIZE` went 128 -> 1152 and the magazine is a tail of that block: 64
+list heads, 64 counts, one re-entry guard. The alternative — a slot holding a
+pointer to a separately allocated array — costs a null test on every single
+GetMem, a bootstrap helper, and a decision about who allocates it and under
+which lock. None of that exists now: the clone stub already zeroes the whole
+block, and a zeroed magazine reads as "every class empty", which is the correct
+initial state rather than a special case. It is stack the thread already owns.
+
+The layout is also why the fast path has no index arithmetic. Heads and counts
+are two 64-slot regions on round boundaries, so for a rounded size `sz` the head
+is at `sz + HEAP_MAG_HDISP` and the count at `sz + HEAP_MAG_NDISP`. The emitted
+code indexes with the SIZE ITSELF — one `add`, no shift, no decrement, no
+scaled-index SIB.
+
+### The instrument defines turn it OFF, deliberately
+
+`-dPXX_HEAP_DEBUG` and `-dPXX_ALLOC_CENSUS` both instrument `PXXAlloc`, which
+the fast path does not call. Left on, the quarantine would miss most frees and
+the census would under-count most allocations — and neither would error. They
+would print a smaller, plausible number. This ticket's own "not settled" list
+raised it; the answer is that an instrument which quietly stops seeing the
+traffic is worse than one that is off.
+
+`-dPXX_NO_HEAP_MAG` is the third define and the reason any number above is a
+measurement rather than an inference: same source, same flags, magazine off.
+
+### Two corrections to my own work, recorded because both were nearly shipped
+
+**A benchmark's PROMISE and its BLIND SPOT can be the same property.** Depth one
+was implemented, measured, documented and about to be committed on the strength
+of the 28->9ms row. The three-live shape took ten minutes to write and inverted
+the verdict.
+
+**A positive control that cannot fire looks exactly like a passing one.** The
+signal-aliasing test (below) came back GREEN against a compiler with the
+re-entry guard deliberately REMOVED. The handler allocated and freed, so a
+doubly-handed block was pushed back before main could observe it. Running the
+control is what found that; the test would otherwise have been recorded as
+evidence for a guard it could not see.
+
+### What is NOT done
+
+- **Reentrancy.** Untouched, still parked, still not needed by anything here.
+- **The other three threaded targets.** i386/aarch64/arm32 keep the global lock
+  and the negative scaling, exactly as the target-set section predicted. The
+  primitive, not the design, is what is missing there.
+- **Async-signal safety.** An allocating signal handler deadlocks today
+  (measured: 20s timeout, no output) and still deadlocks when it misses the
+  magazine. The magazine moved the threshold, not the hazard. Filed as
+  [[bug-a-the-threadsafe-allocator-is-not-async-signal-safe]], which also owns
+  the unverified re-entry guard.
