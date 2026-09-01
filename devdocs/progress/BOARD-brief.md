@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:28 blocked:7 backlog:14 backlog-umbrella:5 backlog-core:139 backlog-nilpy:97 backlog-tools:73 backlog-pascal:56 backlog-decide:24 backlog-libs:15 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:3 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3030 rejected:72`
+`working:5 unfinished:28 blocked:7 backlog:14 backlog-umbrella:5 backlog-core:140 backlog-nilpy:97 backlog-tools:73 backlog-pascal:56 backlog-decide:24 backlog-libs:15 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:3 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3030 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -56,7 +56,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 461, ranked
+## Ready — top 30 of 462, ranked
 
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -66,6 +66,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [A]` umbrella-managed-memory-is-correct
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
+- `[p 70] [A]` bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link
 - `[p 70] [C]` bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [T]` regression-cascade-fc01c8094434
@@ -87,6 +88,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-threads-test-threadsafe-refcount-lockfree
 - `[p 70] [A+S]` regression-test-xtensa-test-signal-default-revert-b336
 - `[p 70] [A+S]` regression-test-xtensa-test-signal-handler-callback-b336
-- `[p 70] [T]` regression-tools-devtest-00-3
 
-_431 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_432 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
