@@ -208,6 +208,24 @@ else
   echo "  SKIP  pinned builds live lib/rtl (no pinned binary or fixture)"
 fi
 
+# Literal short-jump displacements. CheckRel8 already guards the OVERFLOW class
+# and hard-errors; this is the other one -- a hand-counted displacement over a
+# span someone else emits, which stays in range when that span changes size and
+# lands mid-instruction. It assembles, links, runs and corrupts a value, and no
+# symbol, relocation or size number moves. Two were found shipping on 2026-09-02
+# (WriteLn(s:w) on a ShortString truncated; LoadFile into a ShortString always
+# returned empty), which is why this is a gate row and not a ticket.
+#
+# Under a second: a text scan, before the case so no mode can forget it. It runs
+# --selftest first because a check that cannot fail prints PASS -- the selftest
+# asserts it REJECTS both shapes it was built from and ACCEPTS a fixed-size one.
+if [ -f tools/rel8_literal_span_check.py ]; then
+  step "rel8 literal-jump spans" "$LOGDIR/rel8-literal-span.log" \
+       python3 tools/rel8_literal_span_check.py --selftest .        || RC=1
+else
+  echo "  SKIP  rel8 literal-jump spans (checker absent)"
+fi
+
 # THE SEED CANARY. Same placement argument as the block above: before the case,
 # so no mode can forget it.
 #
