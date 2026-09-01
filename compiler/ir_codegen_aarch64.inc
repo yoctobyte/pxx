@@ -1767,6 +1767,8 @@ end;
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
+  pNilStr: Integer;   { cbz patch over the nil-handle write; NOT `wid`, which
+                        this arm used to reuse as a code offset }
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   classIdx, elemSize, lo, hi, decs, specialId, jnsOff, jmpDone, j, itemNode, p1, p2, p3: Integer;
   pNilPos, pDonePos: Integer;
@@ -4515,31 +4517,69 @@ begin
           end
           else if tk = tyString then
           begin
-            { write(1, buf+8, [buf]) for an inline [len:8][data] value. }
-            IREmitNodeAarch64(valNode);            { x0 = struct addr }
-            EmitI32($F9400002);                    { ldr x2, [x0] (len) }
-            EmitI32($91002001);                    { add x1, x0, #8 (buf) }
-            EmitI32($D2800020);                    { movz x0, #1 (fd) }
-            EmitI32($D2800808);                    { movz x8, #64 (write) }
-            EmitI32($D4000001);                    { svc #0 }
+            if wid > 0 then
+            begin
+              { A field width is a MINIMUM, and the pad is max(0, wid - len) --
+                a RUNTIME quantity, because the length is. PXXWriteFrozenW owns
+                that rule and riscv32 and wasm32 already call it, so this arm
+                calls it rather than growing a second copy of the arithmetic;
+                the second copy is the one that stays broken, and this arm IS
+                that: it ignored the width entirely while the string-LITERAL
+                arm above honoured it.
+                bug-a-three-backends-drop-the-field-width-on-a-string-variable }
+              IREmitNodeAarch64(valNode);          { x0 = struct addr }
+              EmitLoadImmA64(1, wid);              { x1 = field width }
+              procIdx := FindProc('PXXWriteFrozenW');
+              if procIdx < 0 then Error('compiler error: PXXWriteFrozenW not found');
+              EmitCallProc(procIdx);
+            end
+            else
+            begin
+              { write(1, buf+8, [buf]) for an inline [len:8][data] value. }
+              IREmitNodeAarch64(valNode);            { x0 = struct addr }
+              EmitI32($F9400002);                    { ldr x2, [x0] (len) }
+              EmitI32($91002001);                    { add x1, x0, #8 (buf) }
+              EmitI32($D2800020);                    { movz x0, #1 (fd) }
+              EmitI32($D2800808);                    { movz x8, #64 (write) }
+              EmitI32($D4000001);                    { svc #0 }
+            end;
           end
           else if tk = tyAnsiString then
           begin
-            { write(1, data, [data-8]); nil handle -> skip. }
-            IREmitNodeAarch64(valNode);            { x0 = handle }
-            wid := CodeLen;
-            EmitI32($B4000000);                    { cbz x0, done (patched) }
-            EmitI32($F81F0FE0);                    { str x0, [sp, #-16]! (preserve) }
-            EmitI32($F85F8002);                    { ldur x2, [x0, #-8] (len) }
-            EmitI32($AA0003E1);                    { mov x1, x0 (buf) }
-            EmitI32($D2800020);                    { movz x0, #1 (fd) }
-            EmitI32($D2800808);                    { movz x8, #64 (write) }
-            EmitI32($D4000001);                    { svc #0 }
-            EmitI32($F84107E0);                    { ldr x0, [sp], #16 (handle) }
-            if (IRKind[valNode] = IR_BINOP) and
-               (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
-              EmitStrDecRefA64;
-            Patch32(wid, $B4000000 or ((((CodeLen - wid) div 4) and $7FFFF) shl 5));
+            if wid > 0 then
+            begin
+              { Same rule, managed spelling. PXXWriteStrMW is nil-safe (a nil
+                handle is an empty string and still gets its padding), so the
+                cbz below has no counterpart here. }
+              IREmitNodeAarch64(valNode);          { x0 = handle }
+              EmitI32($F81F0FE0);                  { str x0, [sp, #-16]! (preserve) }
+              EmitLoadImmA64(1, wid);              { x1 = field width }
+              procIdx := FindProc('PXXWriteStrMW');
+              if procIdx < 0 then Error('compiler error: PXXWriteStrMW not found');
+              EmitCallProc(procIdx);
+              EmitI32($F84107E0);                  { ldr x0, [sp], #16 (handle) }
+              if (IRKind[valNode] = IR_BINOP) and
+                 (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+                EmitStrDecRefA64;
+            end
+            else
+            begin
+              { write(1, data, [data-8]); nil handle -> skip. }
+              IREmitNodeAarch64(valNode);            { x0 = handle }
+              pNilStr := CodeLen;
+              EmitI32($B4000000);                    { cbz x0, done (patched) }
+              EmitI32($F81F0FE0);                    { str x0, [sp, #-16]! (preserve) }
+              EmitI32($F85F8002);                    { ldur x2, [x0, #-8] (len) }
+              EmitI32($AA0003E1);                    { mov x1, x0 (buf) }
+              EmitI32($D2800020);                    { movz x0, #1 (fd) }
+              EmitI32($D2800808);                    { movz x8, #64 (write) }
+              EmitI32($D4000001);                    { svc #0 }
+              EmitI32($F84107E0);                    { ldr x0, [sp], #16 (handle) }
+              if (IRKind[valNode] = IR_BINOP) and
+                 (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+                EmitStrDecRefA64;
+              Patch32(pNilStr, $B4000000 or ((((CodeLen - pNilStr) div 4) and $7FFFF) shl 5));
+            end;
           end
           else
             Error('target aarch64: write of this operand not yet supported');

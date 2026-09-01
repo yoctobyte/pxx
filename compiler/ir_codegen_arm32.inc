@@ -4319,30 +4319,67 @@ begin
           end
           else if tk = tyAnsiString then
           begin
-            IREmitNodeArm32(valNode);            { r0 = handle }
-            EmitI32($E3500000);                  { cmp r0, #0 }
-            j := CodeLen;
-            EmitI32($0A000000);                  { beq done }
-            EmitI32($E92D0001);                  { push {r0} }
-            EmitI32($E5102008);                  { ldr r2, [r0, #-8] }
-            EmitI32($E1A01000);                  { mov r1, r0 }
-            EmitI32($E3A00001);                  { mov r0, #1 }
-            EmitI32($E3A07004);                  { mov r7, #4 }
-            EmitI32($EF000000);                  { svc #0 }
-            EmitI32($E8BD0001);                  { pop {r0} handle }
-            if (IRKind[valNode] = IR_BINOP) and
-               (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
-              EmitStrDecRefArm32;
-            Patch32(j, $0A000000 or ((((CodeLen - j) div 4) - 2) and $00ffffff));
+            if wid > 0 then
+            begin
+              { A field width is a MINIMUM and the pad is max(0, wid - len) --
+                RUNTIME, because the length is. PXXWriteStrMW owns that rule,
+                is nil-safe, and riscv32 and wasm32 already call it. This arm
+                had no copy of the arithmetic at all: it dropped the width
+                while the string-LITERAL arm above honoured it.
+                bug-a-three-backends-drop-the-field-width-on-a-string-variable
+                push {r0,r1} rather than {r0} because this preserve now spans a
+                CALL, and AAPCS wants the 8-byte alignment the old syscall did
+                not care about. }
+              IREmitNodeArm32(valNode);            { r0 = handle }
+              EmitI32($E92D0003);                  { push {r0, r1} }
+              EmitLoadImmArm32(1, wid);            { r1 = field width }
+              procIdx := FindProc('PXXWriteStrMW');
+              if procIdx < 0 then Error('compiler error: PXXWriteStrMW not found');
+              EmitCallProc(procIdx);
+              EmitI32($E8BD0003);                  { pop {r0, r1} handle }
+              if (IRKind[valNode] = IR_BINOP) and
+                 (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+                EmitStrDecRefArm32;
+            end
+            else
+            begin
+              IREmitNodeArm32(valNode);            { r0 = handle }
+              EmitI32($E3500000);                  { cmp r0, #0 }
+              j := CodeLen;
+              EmitI32($0A000000);                  { beq done }
+              EmitI32($E92D0001);                  { push {r0} }
+              EmitI32($E5102008);                  { ldr r2, [r0, #-8] }
+              EmitI32($E1A01000);                  { mov r1, r0 }
+              EmitI32($E3A00001);                  { mov r0, #1 }
+              EmitI32($E3A07004);                  { mov r7, #4 }
+              EmitI32($EF000000);                  { svc #0 }
+              EmitI32($E8BD0001);                  { pop {r0} handle }
+              if (IRKind[valNode] = IR_BINOP) and
+                 (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+                EmitStrDecRefArm32;
+              Patch32(j, $0A000000 or ((((CodeLen - j) div 4) - 2) and $00ffffff));
+            end;
           end
           else if tk = tyString then
           begin
-            IREmitNodeArm32(valNode);            { r0 = [len:8][data] }
-            EmitI32($E5902000);                  { ldr r2, [r0] }
-            EmitI32($E2801008);                  { add r1, r0, #8 }
-            EmitI32($E3A00001);                  { mov r0, #1 }
-            EmitI32($E3A07004);                  { mov r7, #4 }
-            EmitI32($EF000000);                  { svc #0 }
+            if wid > 0 then
+            begin
+              { Frozen spelling of the same rule -- see the tyAnsiString arm. }
+              IREmitNodeArm32(valNode);            { r0 = [len:8][data] }
+              EmitLoadImmArm32(1, wid);            { r1 = field width }
+              procIdx := FindProc('PXXWriteFrozenW');
+              if procIdx < 0 then Error('compiler error: PXXWriteFrozenW not found');
+              EmitCallProc(procIdx);
+            end
+            else
+            begin
+              IREmitNodeArm32(valNode);            { r0 = [len:8][data] }
+              EmitI32($E5902000);                  { ldr r2, [r0] }
+              EmitI32($E2801008);                  { add r1, r0, #8 }
+              EmitI32($E3A00001);                  { mov r0, #1 }
+              EmitI32($E3A07004);                  { mov r7, #4 }
+              EmitI32($EF000000);                  { svc #0 }
+            end;
           end
           else
             Error('target arm32: write of this operand not yet supported');

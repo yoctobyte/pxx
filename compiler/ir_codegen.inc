@@ -6082,6 +6082,46 @@ begin
   EmitB($4C); EmitB($89); EmitB($DC);                                { mov rsp, r11 }
 end;
 
+procedure EmitPadSpacesFromRax;
+{ rax = pad count. Writes that many spaces to CurWriteFd, nothing at all when
+  the count is <= 0. Clobbers rax, rdx, rsi, rdi; touches no other register.
+
+  A LOOP, not one syscall, because the spaces buffer is SPACES_SIZE (40) bytes
+  and the count is a field width the PROGRAM chose. Every arm used to emit
+  `write(fd, spaces, count)` unbounded, so `WriteLn(s:300)` for a one-character
+  string put 259 bytes of whatever follows the buffer on stdout -- 518 bytes of
+  process memory across two lines, measured against FPC on 2026-09-02, with the
+  right LENGTH and the wrong CONTENT, which is why nothing counting characters
+  ever saw it.
+
+  One copy for all three x86-64 arms. The other four backends route padding
+  through PXXWritePad, which writes a byte at a time and cannot over-read; the
+  three inline copies here are how this arm drifted from that one, and the
+  field-width construct produced three separate defects in one day from exactly
+  that duplication.
+  bug-a-three-backends-drop-the-field-width-on-a-string-variable }
+var pDone, pLoop, pChunkOk: Integer;
+begin
+  EnsureSpaces;
+  EmitB($48); EmitB($85); EmitB($C0);                      { test rax, rax }
+  EmitB($7E); pDone := CodeLen; EmitB(0);                  { jle done }
+  pLoop := CodeLen;
+  EmitB($48); EmitB($89); EmitB($C2);                      { mov rdx, rax }
+  EmitB($48); EmitB($83); EmitB($FA); EmitB(SPACES_SIZE);  { cmp rdx, SPACES_SIZE }
+  EmitB($76); pChunkOk := CodeLen; EmitB(0);               { jbe chunk_ok }
+  MovRdxImm(SPACES_SIZE);
+  PatchRel8(pChunkOk);                                     { chunk_ok: }
+  EmitB($50);                                              { push rax (remaining) }
+  EmitB($52);                                              { push rdx (this chunk) }
+  EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);       { mov rsi, spaces }
+  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+  EmitB($5A);                                              { pop rdx }
+  EmitB($58);                                              { pop rax }
+  EmitB($48); EmitB($29); EmitB($D0);                      { sub rax, rdx }
+  EmitB($7F); EmitRel8(pLoop);                             { jg loop }
+  PatchRel8(pDone);                                        { done: }
+end;
+
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
@@ -6097,7 +6137,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     asmGfK: Integer; asmGfFound: Boolean;
     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
     pUnsNeg, pUnsDone, pAppendDone: Integer;
-    pPad: Integer;   { rel8 placeholder: jump over the string-width space pad }
+    pAnsiPadEnd: Integer;   { rel8 placeholder: jump past the nil-handle pad arm }
     pMagDone: Integer;   { the heap-magazine fast path's jump over the locked path; -1 = no fast path emitted }
     w1RightReg: Integer;   { -O3 W1: 0 = the normal rcx contract, else r12..r15 }
     shiftImmCnt: Integer;  { -O1 W1: >= 0 = a constant shift count NOT materialised into rcx }
@@ -8897,21 +8937,10 @@ begin
           if wid > 0 then
           begin
             { Runtime string width: pad with max(0, wid - len) spaces. }
-            EnsureSpaces;
             EmitLoadStrLen(symIdx);              { rcx = len }
             MovRaxImm(wid);
             EmitB($48); EmitB($29); EmitB($C8);  { sub rax, rcx }
-            { jle .skip_pad -- COMPUTED, and it was hand-counted as 35 over
-              MovRaxImm/MovRdiImm/EmitSyscall, three emitters whose size is not
-              fixed. rel8.inc's own header records EmitSyscall going from 2
-              bytes to ~140 and putting a `jns` 181 bytes from its target; this
-              is that shape, and the sibling AnsiString arm forty lines down
-              already patches instead of counting. }
-            EmitB($7E); pPad := CodeLen; EmitB(0);
-            EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset);
-            EmitB($48); EmitB($89); EmitB($C2);  { mov rdx, rax }
-            MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
-            PatchRel8(pPad);
+            EmitPadSpacesFromRax;
           end;
           EmitwriteStrVar(symIdx);
         end
@@ -8919,21 +8948,16 @@ begin
         begin
           IREmitNode(valNode);
           EmitB($48); EmitB($85); EmitB($C0);            { test rax, rax }
-          EmitB($74); pNil := CodeLen; EmitB(0);          { jz done }
+          EmitB($74); pNil := CodeLen; EmitB(0);          { jz nil_handle }
           EmitB($50);                                     { preserve managed expression (handle) }
           if wid > 0 then
           begin
             { Field width: pad with max(0, wid - len) spaces before the string.
               rax = handle, length at [rax-8]. Mirrors the runtime tyString path. }
-            EnsureSpaces;
             EmitB($48); EmitB($8B); EmitB($48); EmitB($F8); { mov rcx, [rax-8] = len }
             MovRaxImm(wid);
             EmitB($48); EmitB($29); EmitB($C8);            { sub rax, rcx }
-            EmitB($7E); pDone := CodeLen; EmitB(0);         { jle skip_pad }
-            EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset); { mov rsi, spaces }
-            EmitB($48); EmitB($89); EmitB($C2);            { mov rdx, rax (pad count) }
-            MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
-            PatchRel8(pDone);
+            EmitPadSpacesFromRax;
           end;
           EmitB($48); EmitB($8B); EmitB($04); EmitB($24); { mov rax, [rsp] = handle (reload; syscall clobbered rax) }
           EmitB($48); EmitB($89); EmitB($C6);             { mov rsi, rax }
@@ -8942,7 +8966,22 @@ begin
           EmitB($58);                                     { restore managed expression }
           if (IRKind[valNode] = IR_BINOP) and (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
             IREmitCodeCall(AnsiStrReleaseAddr);
-          PatchRel8(pNil);
+          if wid > 0 then
+          begin
+            { A NIL handle is the EMPTY string, and an empty string still gets
+              its padding -- FPC prints four spaces for `WriteLn('[', e:4, ']')`
+              and x86-64 printed nothing, because the nil test above jumped over
+              the pad as well as the write. It was the only target that did:
+              PXXWriteStrMW, which the other four call, pads first and reads the
+              length second. Measured 2026-09-02. }
+            EmitB($EB); pAnsiPadEnd := CodeLen; EmitB(0);   { jmp past the nil arm }
+            PatchRel8(pNil);                                { nil_handle: }
+            MovRaxImm(wid);
+            EmitPadSpacesFromRax;
+            PatchRel8(pAnsiPadEnd);
+          end
+          else
+            PatchRel8(pNil);
         end
         else if TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
         begin
@@ -8967,15 +9006,10 @@ begin
               tyAnsiString arm above; rax is preserved across the pad syscall
               on the stack, since the syscall clobbers it. }
             EmitB($50);                                      { push rax (the struct) }
-            EnsureSpaces;
             EmitB($48); EmitB($8B); EmitB($08);              { mov rcx, [rax] = len }
             MovRaxImm(wid);
             EmitB($48); EmitB($29); EmitB($C8);              { sub rax, rcx }
-            EmitB($7E); pDone := CodeLen; EmitB(0);           { jle skip_pad }
-            EmitB($48); EmitB($BE); EmitDataRef(SpacesOffset); { mov rsi, spaces }
-            EmitB($48); EmitB($89); EmitB($C2);              { mov rdx, rax (pad count) }
-            MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
-            PatchRel8(pDone);
+            EmitPadSpacesFromRax;
             EmitB($58);                                      { pop rax }
           end;
           EmitB($48); EmitB($89); EmitB($C6);              { mov rsi, rax }

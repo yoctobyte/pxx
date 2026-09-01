@@ -5095,39 +5095,84 @@ begin
           end
           else if tk = tyAnsiString then
           begin
-            { write(1, data, [data-8]); nil handle -> skip. len is the low
-              dword of the 8-byte length header. }
-            IREmitNode386(valNode);                      { eax = handle }
-            EmitB($85); EmitB($C0);                      { test eax, eax }
-            EmitB($74); j := CodeLen; EmitB(0);          { jz done }
-            EmitB($50);                                  { push eax (preserve) }
-            EmitB($8B); EmitB($50); EmitB($F8);          { mov edx, [eax-8] (len) }
-            EmitB($89); EmitB($C1);                      { mov ecx, eax (buf) }
-            EmitB($BB); EmitI32(STDOUT);                 { mov ebx, 1 }
-            EmitB($B8); EmitI32(4);                      { mov eax, 4 (write) }
-            EmitB($CD); EmitB($80);                      { int 0x80 }
-            EmitB($58);                                  { pop eax (handle) }
-            if (IRKind[valNode] = IR_BINOP) and
-               (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+            if wid > 0 then
             begin
-              EmitB($50);                                { push eax (arg0) }
-              procIdx := FindProc('PXXStrDecRef');
-              if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+              { A field width is a MINIMUM and the pad is max(0, wid - len) --
+                RUNTIME, because the length is. PXXWriteStrMW owns that rule,
+                is nil-safe, and riscv32 and wasm32 already call it, so this
+                arm calls it too rather than growing a second copy of the
+                arithmetic. It had NO copy: the width was dropped outright
+                while the string-LITERAL arm above honoured it.
+                bug-a-three-backends-drop-the-field-width-on-a-string-variable }
+              IREmitNode386(valNode);                    { eax = handle }
+              EmitB($50);                                { push eax (preserve) }
+              EmitB($50);                                { push eax (arg0 = p) }
+              EmitB($68); EmitI32(wid);                  { push wid (arg1) }
+              procIdx := FindProc('PXXWriteStrMW');
+              if procIdx < 0 then Error('compiler error: PXXWriteStrMW not found');
               EmitCallProc(procIdx);
-              EmitB($81); EmitB($C4); EmitI32(4);        { add esp, 4 }
+              EmitB($83); EmitB($C4); EmitB($08);        { add esp, 8 }
+              EmitB($58);                                { pop eax (handle) }
+              if (IRKind[valNode] = IR_BINOP) and
+                 (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+              begin
+                EmitB($50);                              { push eax (arg0) }
+                procIdx := FindProc('PXXStrDecRef');
+                if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+                EmitCallProc(procIdx);
+                EmitB($81); EmitB($C4); EmitI32(4);      { add esp, 4 }
+              end;
+            end
+            else
+            begin
+              { write(1, data, [data-8]); nil handle -> skip. len is the low
+                dword of the 8-byte length header. }
+              IREmitNode386(valNode);                      { eax = handle }
+              EmitB($85); EmitB($C0);                      { test eax, eax }
+              EmitB($74); j := CodeLen; EmitB(0);          { jz done }
+              EmitB($50);                                  { push eax (preserve) }
+              EmitB($8B); EmitB($50); EmitB($F8);          { mov edx, [eax-8] (len) }
+              EmitB($89); EmitB($C1);                      { mov ecx, eax (buf) }
+              EmitB($BB); EmitI32(STDOUT);                 { mov ebx, 1 }
+              EmitB($B8); EmitI32(4);                      { mov eax, 4 (write) }
+              EmitB($CD); EmitB($80);                      { int 0x80 }
+              EmitB($58);                                  { pop eax (handle) }
+              if (IRKind[valNode] = IR_BINOP) and
+                 (IntToTypeKind(IRTk[valNode]) = tyAnsiString) then
+              begin
+                EmitB($50);                                { push eax (arg0) }
+                procIdx := FindProc('PXXStrDecRef');
+                if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+                EmitCallProc(procIdx);
+                EmitB($81); EmitB($C4); EmitI32(4);        { add esp, 4 }
+              end;
+              PatchRel8(j);          { patch jz done }
             end;
-            PatchRel8(j);          { patch jz done }
           end
           else if tk = tyString then
           begin
-            { String-valued expression (address of a [len:8][chars] struct in eax) }
-            IREmitNode386(valNode);                      { eax = address }
-            EmitB($89); EmitB($C1);                      { mov ecx, eax }
-            EmitB($83); EmitB($C1); EmitB($08);          { add ecx, 8 }
-            EmitB($8B); EmitB($10);                      { mov edx, [eax] }
-            EmitB($BB); EmitI32(STDOUT);                 { mov ebx, STDOUT }
-            EmitB($B8); EmitI32(4);                      { mov eax, 4 (write) }
-            EmitB($CD); EmitB($80);                      { int 0x80 }
+            if wid > 0 then
+            begin
+              { Frozen spelling of the same rule -- see the tyAnsiString arm. }
+              IREmitNode386(valNode);                    { eax = address }
+              EmitB($50);                                { push eax (arg0 = p) }
+              EmitB($68); EmitI32(wid);                  { push wid (arg1) }
+              procIdx := FindProc('PXXWriteFrozenW');
+              if procIdx < 0 then Error('compiler error: PXXWriteFrozenW not found');
+              EmitCallProc(procIdx);
+              EmitB($83); EmitB($C4); EmitB($08);        { add esp, 8 }
+            end
+            else
+            begin
+              { String-valued expression (address of a [len:8][chars] struct in eax) }
+              IREmitNode386(valNode);                      { eax = address }
+              EmitB($89); EmitB($C1);                      { mov ecx, eax }
+              EmitB($83); EmitB($C1); EmitB($08);          { add ecx, 8 }
+              EmitB($8B); EmitB($10);                      { mov edx, [eax] }
+              EmitB($BB); EmitI32(STDOUT);                 { mov ebx, STDOUT }
+              EmitB($B8); EmitI32(4);                      { mov eax, 4 (write) }
+              EmitB($CD); EmitB($80);                      { int 0x80 }
+            end;
           end
           else
             Error('target i386: write of this operand not yet supported');

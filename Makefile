@@ -4707,6 +4707,26 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_lfss26.2 "$$($(TESTTMP)/test_lfss26 | head -1)" "len   21"
 	tools/expect_same.sh test_lfss26.3 "$$($(TESTTMP)/test_lfss26 | head -2 | tail -1)" "text  [shortstring-loadfile"
 	tools/expect_same.sh test_lfss26.4 "$$($(TESTTMP)/test_lfss26 | head -4 | tail -1)" "miss  0"
+	# `Write(s:w)` on a string VARIABLE. Three separate defects in ONE construct,
+	# all three from the pad rule having five copies: i386/aarch64/arm32 dropped
+	# the width outright (they now call the same PXXWriteFrozenW/PXXWriteStrMW
+	# riscv32 and wasm32 use); x86-64's nil-handle test jumped over the pad as
+	# well as the write, so an EMPTY AnsiString printed nothing where FPC prints
+	# spaces; and every x86-64 arm emitted ONE unbounded write over a 40-byte
+	# spaces buffer, so `s:60` printed the right number of characters and 19
+	# bytes of adjacent process memory. Rows 11-12 are the only ones that can
+	# see the last of those -- it is correct by every length assertion.
+	# Every row below is FPC's answer.
+	./$(COMPILER) test/test_write_string_field_width_cross.pas $(TESTTMP)/test_wsfw26
+	tools/expect_same.sh test_wsfw26.1 "$$($(TESTTMP)/test_wsfw26 | tail -1)" "WRITE STRING FIELD WIDTH CROSS OK"
+	tools/expect_same.sh test_wsfw26.2 "$$($(TESTTMP)/test_wsfw26 | head -2 | tr '\n' '|')" "[   abcdef]|[   abcdef]|"
+	tools/expect_same.sh test_wsfw26.3 "$$($(TESTTMP)/test_wsfw26 | head -5 | tail -2 | tr '\n' '|')" "[abcdef]|[abcdef]|"
+	tools/expect_same.sh test_wsfw26.4 "$$($(TESTTMP)/test_wsfw26 | head -7 | tail -1)" "[    ]"
+	tools/expect_same.sh test_wsfw26.5 "$$($(TESTTMP)/test_wsfw26 | head -9 | tail -2 | tr '\n' '|')" "[  abcdefx]|[  abcdefyz]|"
+	tools/expect_same.sh test_wsfw26.6 "$$($(TESTTMP)/test_wsfw26 | head -10 | tail -1)" "[   abcdef][   abcdef]"
+	tools/expect_same.sh test_wsfw26.7 "$$($(TESTTMP)/test_wsfw26 | head -11 | tail -1)" "$$(printf '[%60s]' y)"
+	tools/expect_same.sh test_wsfw26.8 "$$($(TESTTMP)/test_wsfw26 | head -12 | tail -1)" "$$(printf '[%60s]' z)"
+	tools/expect_same.sh test_wsfw26.9 "$$($(TESTTMP)/test_wsfw26 | wc -c)" "180299"
 	# a metaclass-typed FIELD as a receiver. The parser recognises a metaclass
 	# receiver from a LIST of base node kinds (variable, cast, array element --
 	# the last added at b328 for this same bug) and a FIELD was never in it.
@@ -14390,6 +14410,12 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_in_operator.pas $(TESTTMP)/test_i386_in
 	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_i386_in_x64
 	tools/expect_same.sh i386/test_i386_in "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_in)" "$$($(TESTTMP)/test_i386_in_x64)"
+	# `Write(s:w)` on a string VARIABLE: this target dropped the field width
+	# entirely while padding a string LITERAL. x86-64 is the oracle and is
+	# itself pinned to FPC by test_wsfw26 above.
+	./$(COMPILER) --target=i386 test/test_write_string_field_width_cross.pas $(TESTTMP)/test_i386_wsfw
+	./$(COMPILER) test/test_write_string_field_width_cross.pas $(TESTTMP)/test_i386_wsfw_x64
+	tools/expect_same.sh i386/test_i386_wsfw "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_wsfw | head -12; tools/run_target.sh i386 $(TESTTMP)/test_i386_wsfw | wc -c)" "$$($(TESTTMP)/test_i386_wsfw_x64 | head -12; $(TESTTMP)/test_i386_wsfw_x64 | wc -c)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_cross_loadfile.pas $(TESTTMP)/test_i386_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_i386_loadfile_x64
 	tools/expect_same.sh i386/test_i386_loadfile "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_loadfile)" "$$($(TESTTMP)/test_i386_loadfile_x64)"
@@ -15058,6 +15084,12 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_in_operator.pas $(TESTTMP)/test_aarch64_in
 	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/test_aarch64_in_x64
 	tools/expect_same.sh aarch64/test_aarch64_in "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_in)" "$$($(TESTTMP)/test_aarch64_in_x64)"
+	# `Write(s:w)` on a string VARIABLE: this target dropped the field width
+	# entirely while padding a string LITERAL. x86-64 is the oracle and is
+	# itself pinned to FPC by test_wsfw26 above.
+	./$(COMPILER) --target=aarch64 test/test_write_string_field_width_cross.pas $(TESTTMP)/test_aarch64_wsfw
+	./$(COMPILER) test/test_write_string_field_width_cross.pas $(TESTTMP)/test_aarch64_wsfw_x64
+	tools/expect_same.sh aarch64/test_aarch64_wsfw "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_wsfw | head -12; tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_wsfw | wc -c)" "$$($(TESTTMP)/test_aarch64_wsfw_x64 | head -12; $(TESTTMP)/test_aarch64_wsfw_x64 | wc -c)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_cross_loadfile.pas $(TESTTMP)/test_aarch64_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_aarch64_loadfile_x64
 	tools/expect_same.sh aarch64/test_aarch64_loadfile "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_loadfile)" "$$($(TESTTMP)/test_aarch64_loadfile_x64)"
@@ -15930,6 +15962,12 @@ test-riscv32: $(COMPILER)
 	# lseek: the 3-arg form returns EINVAL, the size comes back -1 and LoadFile
 	# publishes an EMPTY string with no error. Measured under qemu-riscv32
 	# -strace, not inferred.
+	# `Write(s:w)` on a string VARIABLE: this target dropped the field width
+	# entirely while padding a string LITERAL. x86-64 is the oracle and is
+	# itself pinned to FPC by test_wsfw26 above.
+	./$(COMPILER) --target=riscv32 test/test_write_string_field_width_cross.pas $(TESTTMP)/test_rv32_wsfw
+	./$(COMPILER) test/test_write_string_field_width_cross.pas $(TESTTMP)/test_rv32_wsfw_x64
+	tools/expect_same.sh riscv32/test_rv32_wsfw "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_wsfw | head -12; tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_wsfw | wc -c)" "$$($(TESTTMP)/test_rv32_wsfw_x64 | head -12; $(TESTTMP)/test_rv32_wsfw_x64 | wc -c)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_cross_loadfile.pas $(TESTTMP)/test_rv32_loadfile
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_loadfile.pas $(TESTTMP)/test_rv32_loadfile_x64
 	tools/expect_same.sh riscv32/test_rv32_loadfile "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_loadfile; echo "exit=$$?")" "$$($(TESTTMP)/test_rv32_loadfile_x64; echo "exit=$$?")"
@@ -17364,6 +17402,12 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_arm32_frozen_strlen "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_frozen_strlen)" "$$($(TESTTMP)/test_arm32_frozen_strlen_x64)"
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
+	# `Write(s:w)` on a string VARIABLE: this target dropped the field width
+	# entirely while padding a string LITERAL. x86-64 is the oracle and is
+	# itself pinned to FPC by test_wsfw26 above.
+	./$(COMPILER) --target=arm32 test/test_write_string_field_width_cross.pas $(TESTTMP)/test_arm32_wsfw
+	./$(COMPILER) test/test_write_string_field_width_cross.pas $(TESTTMP)/test_arm32_wsfw_x64
+	tools/expect_same.sh arm32/test_arm32_wsfw "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_wsfw | head -12; tools/run_target.sh arm32 $(TESTTMP)/test_arm32_wsfw | wc -c)" "$$($(TESTTMP)/test_arm32_wsfw_x64 | head -12; $(TESTTMP)/test_arm32_wsfw_x64 | wc -c)"
 	./$(COMPILER) --target=arm32 test/test_shortstring_trunc.pas $(TESTTMP)/test_arm32_sstrunc
 	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/test_arm32_sstrunc_x64
 	tools/expect_same.sh arm32/test_arm32_sstrunc "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sstrunc)" "$$($(TESTTMP)/test_arm32_sstrunc_x64)"
