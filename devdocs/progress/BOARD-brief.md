@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:6 unfinished:28 blocked:7 backlog:9 backlog-umbrella:5 backlog-core:138 backlog-nilpy:97 backlog-tools:71 backlog-pascal:55 backlog-decide:23 backlog-libs:15 backlog-cfront:11 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3021 rejected:72`
+`working:7 unfinished:28 blocked:7 backlog:9 backlog-umbrella:5 backlog-core:137 backlog-nilpy:97 backlog-tools:71 backlog-pascal:55 backlog-decide:23 backlog-libs:15 backlog-cfront:11 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3021 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-a-a-pascal-cdecl-program-emits-no-data-symbols-either` [A] — owner: frankA
 - `bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong` [A] — owner: frankA
 - `feature-c-corpus-busybox-multi-applet` [C] — owner: frankD
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
@@ -57,7 +58,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 448, ranked
+## Ready — top 30 of 447, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
@@ -90,4 +91,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
 - `[p 65] [A]` feature-a-fold-the-consensus-dead-branch-core-at-every-level
 
-_418 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_417 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -5,6 +5,8 @@ prio: 60
 type_note: the Pascal half of the object data-symbol work
 tags: [emit-obj, elf, symbols, pascal, linkage]
 summary: "--emit-obj on a PASCAL cdecl program still emits no data symbol: `nm --defined-only | grep -cE ' [BbDd] '` is 0 for a program with AnsiString and array globals. The C half landed in 72000d1e1; membership is set only by the C parser, so Pascal globals were never candidates. Needs its own 'whose declaration is this' answer -- exporting every RTL global is the failure mode one line away, and the C half hit exactly that with errno/environ."
+status: working
+owner: frankA
 ---
 
 # A Pascal cdecl program emits no data symbols either
