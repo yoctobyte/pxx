@@ -3,13 +3,11 @@ track: A+C
 prio: 60
 type: bug
 blocked-by: [bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized]
-status: open
+status: done
 found: 2026-08-31
 found-by: frankC
 owner: frankC
-summary: "A C function taking a struct BY VALUE is compiled to take a POINTER. Self-consistent inside pxx, so every existing test passes; gcc passes the struct bytes, our callee dereferences them as an address, SEGFAULT on x86-64 and i386. ROOT CAUSE FOUND and it is a DELIBERATE DESIGN, not an oversight: cparser.inc:11107 marks every C struct param isRef:=True with a comment saying so -- the caller copies to a temp and passes &temp, which gives correct by-value SEMANTICS at any size but is not the ABI gcc implements. Pascal differs (pasparser_proc.inc:2284): <=8 bytes by value, >8 by reference, so Pascal is SysV-correct below 8 bytes by construction and equally wrong above it. SysV wants eightbyte classification up to 16 and MEMORY beyond. So the work is REPLACING a working convention with the psABI one, not repairing a broken one -- bigger than the first filing implied. GATE BUILT and RED: `make test-c-abi-mixed-link` (gcc main + pxx object, both call directions, x86-64 and i386; no gcc cross exists for the other targets), unwired while this is open. THE BLOCKER IS STRUCTURAL, NOT THE FLAG: caller and callee both hard-code ONE ARGUMENT = ONE ABI SLOT (`argIsSse[i]`/`argRegIdx[i]`/`argIsStack[i]` indexed by argument; the spill walks `for i := 0 to nparams-1` advancing intIdx/sseIdx once each), and SysV needs an argument to occupy 0, 1 or 2 register slots or ceil(size/8) stack slots. So the first job is splitting that conflation; classification is a table lookup afterwards. Do NOT split the work by size -- measured, that seam does not exist."
-
-
+summary: "FIXED for x86-64 and i386. A C function taking a struct BY VALUE was compiled to take a POINTER -- self-consistent inside pxx, so every existing test passed; gcc passed the struct bytes and our callee dereferenced them as an address, SEGFAULT on both targets. It was a DELIBERATE convention (cparser marked every C struct param isRef:=True, the caller copied to a temp and passed &temp), correct by-value SEMANTICS at any size but not the ABI gcc implements -- so the work was REPLACING a working convention with the psABI one. The structural blocker was ONE ARGUMENT = ONE ABI SLOT, hard-coded in the callee spill and both callers; SysV needs 0, 1 or 2 register slots or ceil(size/8) stack slots. Split that, then classification is a table lookup: ABISysVArgPlace for x86-64 (validated against gcc -S for all seven shapes), ceil(size/4) stack slots for i386 cdecl, ABICRecordParamByValue as the single predicate both cparser sites read, ProcParamRecId as the durable carrier (a PROTOTYPE allocates no param syms, so RecName cannot substitute). ACCEPTANCE: `make test-c-abi-mixed-link` PASSES 15 rows both directions on BOTH targets, and is now enrolled in the limited and full tiers. Three separate defects surfaced only once this one was fixed, because a struct behind a pointer never has its fields read across the boundary. REMAINING, split out: aarch64's NSAA advance (bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64), where no gcc cross exists and the first deliverable is an oracle rather than a fix."
 ---
 
 # A by-value struct parameter is passed as a POINTER to every C-ABI callee
@@ -457,3 +455,75 @@ The only thing between that and a false claim in this file was
 `normalise-dont-special-case`'s instruction to grep for the sibling arm, which
 was followed as ritual and not as suspicion. **Read a PASS as being about the
 shapes the subject contains, never about the change you made.**
+
+## STEP 2 IS DONE FOR i386 TOO, AND THE GATE IS ENROLLED (2026-09-01, frankC)
+
+```
+test-c-abi-mixed-link: PASS x86_64
+test-c-abi-mixed-link: PASS i386
+test-c-abi-mixed-link: 2 of 2 targets measured, 0 skipped
+```
+
+15 rows now, both directions, on both targets. **The acceptance criterion this
+ticket named is met, so it closes.** The gate is in the `limited` and `full`
+tiers as of the same day — the Makefile said "wire it in when that ticket
+closes" and that is not paperwork: an unenrolled check asserts nothing while
+reporting success.
+
+i386 took four things, and only the first was the aggregate ABI:
+
+1. **The i386 aggregate ABI itself** (`bb4773a19`) — cdecl has no register
+   arguments, so every aggregate is `ceil(size/4)` 4-byte stack slots, in the
+   callee spill, the direct caller and the indirect caller. All of it gated on
+   `ProcCdecl`: Pascal passes a `<=8`-byte record with `IsRef=False` and the
+   internal caller still pushes an ADDRESS for it, so an ungated
+   `tyRecord and not IsRef` test would have accepted Pascal's records into the
+   C path and broken the language. Caught by an assertion, not by review.
+2. **The address of an external routine on i386** (frankA, `91c293722`) — the
+   two function-pointer rows could not COMPILE for i386 before it, which took
+   the target from 13 informative rows to a compile failure that said nothing
+   about the other 13. *A gate can be made less useful by adding coverage.*
+3. **`TypeFieldAlign`** — see
+   [[bug-a-an-8-byte-scalar-is-over-aligned-inside-a-struct-on-i386]]. The last
+   three rows were not a marshalling defect at all: pxx and gcc agreed about
+   how to pass the struct and disagreed about where the field WAS. It was
+   reachable only after this ticket's fix, because a struct behind a pointer
+   never has its fields read across the boundary — **the defect was hidden by
+   a second bug standing in front of it**, not by a missing test.
+4. **A dead guard in the gate itself**, found while enrolling it: the
+   `ran != want` check could not fire, because every `continue` incremented
+   `ran` first. It had read as coverage since the day it was written.
+
+## The blocked-by edge was routed around, not satisfied
+
+This ticket is `blocked-by:
+[[bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized]]`,
+**which is still open and still true.** `AllocParam` still takes a record
+parameter's identity from the global `LastTypeRecId`, and that is still
+`REC_NONE` for most of them.
+
+It stopped blocking because the ABI path no longer asks it. `ProcParamRecId` is
+a durable per-param carrier written at REGISTRATION, and the classifier reads
+that instead — which it had to, for a reason unrelated to the blocker: a
+PROTOTYPE allocates no param syms at all, so `Syms[Params[i].SymIdx].RecName`
+has nothing to be right or wrong about in the `relay_*` direction. The parallel
+carrier was not a workaround for the blocker; the blocker simply stopped being
+on the path.
+
+**So do not read this closing as evidence about that ticket.** The
+over-allocation it describes is unchanged, and it now has one fewer consumer
+whose breakage would have surfaced it.
+
+## What remains, and it is one thing
+
+**`ABIA64CdeclArgSlot`'s fixed 8-byte NSAA advance** and its three readers, on
+aarch64 — the last place an aggregate argument is a pointer by construction
+rather than by classification. It is filed separately rather than held here,
+because **it has no oracle**: there is no gcc cross for aarch64, arm32 or
+riscv32 on this box, so no mixed link is constructible for any of them. Fixing
+it would mean writing the psABI from the document and verifying it against
+pxx-on-pxx, which is the exact self-consistency this whole ticket exists to
+show is worthless for a calling convention.
+
+## Log
+- 2026-09-01 — resolved, commit PENDING-COMMIT.
