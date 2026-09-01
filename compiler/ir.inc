@@ -6607,6 +6607,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     rcSubLo, rcSubHi: Int64;
     vrCount, vrTmp, vrIdent, vrCountLit, vrArg1, vrArg2, vrSlCall: Integer;
     vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId, vrBoxSym: Integer;
+    vrStrSym: Integer;
     vrElemDepth: Integer;
     vrElemTk, vrBoxTk: TTypeKind;
     setAllConst: Boolean; setSym: Integer;
@@ -6971,7 +6972,35 @@ begin
         else
         begin
           value := IRLowerAST(ASTLeft[item]);
-          if vrElemTk = tyString then
+          if vrElemTk = tyAnsiString then
+          begin
+            { Park a runtime AnsiString element in an owning hidden local before
+              the raw pointer goes into the union slot.
+
+              The slot is a bare pointer -- a TVarRec has no managed field and no
+              finaliser -- so a value that arrives here carrying a +1 nobody holds
+              is unreachable to every scope-exit scan: it was never a symbol.
+              `TakeC(['lit' + c, i])` leaked one handle a call (937 blocks in
+              1000 trips), and so did the same constructor spelled as Format's
+              second argument, while `TakeC([t, i])` against a NAMED AnsiString
+              local was clean -- the local owned it.
+
+              Unconditional over tyAnsiString, deliberately. IR_STORE_SYM already
+              decides ownership (IRNodeOwnsFreshCallResult): it MOVES a fresh
+              call result and RETAINS anything else, so the named-local row that
+              was already clean gains a balanced retain/release rather than a
+              second free. Asking instead whether the ELEMENT AST looks computed
+              is the trap that produced the sibling bugs in
+              bug-a-a-variant-converted-to-ansistring-leaks-whenever-the-result-is-a-temporary:
+              ownership is a property of what the lowering produced, not of the
+              shape the source had.
+              bug-a-a-computed-string-in-an-array-of-const-leaks-its-temporary }
+            vrStrSym := AllocVar('', tyAnsiString);
+            SymIsHiddenArgTemp[vrStrSym] := True;
+            IRAppend(IR_STORE_SYM, vrStrSym, value, -1, 0, Ord(tyAnsiString));
+            value := IRAppend(IR_LOAD_SYM, vrStrSym, -1, -1, 0, Ord(tyAnsiString));
+          end
+          else if vrElemTk = tyString then
             { vtAnsiString from a frozen (inline) string literal: its value points
               at the 8-byte length prefix, so skip to the NUL-terminated char data
               (InternStr terminates it), like FPC's VAnsiString. A runtime

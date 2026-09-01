@@ -6618,6 +6618,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_record_promo_member_leaks.pas $(TESTTMP)/test_rpm26
 	tools/expect_same.sh test_rpm26 "$$($(TESTTMP)/test_rpm26 | tail -1)" "record-promo-member 4000/4000"
 	tools/assert_no_leak.sh record_promo_member 50 $(TESTTMP)/test_rpm26
+	@# An `array of const` element built by an EXPRESSION had no owner: the
+	@# TVarRec slot is a bare pointer union with no finaliser, so the +1 was
+	@# unreachable to every scope-exit scan. 2977 -> 10 against this bound, with
+	@# allocs unchanged at 28165 -- same traffic, so the delta is ownership. The
+	@# expect_same row cannot see it: the pre-fix binary prints this exact tail
+	@# on all five targets while leaking.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_array_of_const_string_leaks.pas $(TESTTMP)/test_aoc26
+	tools/expect_same.sh test_aoc26 "$$($(TESTTMP)/test_aoc26 | tail -1)" "tail=100000000-1000"
+	tools/assert_no_leak.sh array_of_const_string 50 $(TESTTMP)/test_aoc26
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_record_gate_leaks.pas $(TESTTMP)/test_mrg26
 	tools/expect_same.sh test_mrg26 "$$($(TESTTMP)/test_mrg26 | tail -1)" "managed-record-gate 9000/9000"
 	tools/assert_no_leak.sh managed_record_gate 50 $(TESTTMP)/test_mrg26
@@ -14470,6 +14479,15 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_variant_string_temp_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/vstl_i386)" "$$($(TESTTMP)/vstl_i386_x64)"
 	tools/assert_no_leak.sh i386/variant_string_temp 50 tools/run_target.sh i386 $(TESTTMP)/vstl_i386
 	tools/assert_no_leak.sh x86-64/variant_string_temp 50 $(TESTTMP)/vstl_i386_x64
+	@# The array-of-const sibling. Unlike the variant test above, every target
+	@# reads the SAME numbers here (pre 2977, post 10, allocs 28165 on all five),
+	@# because the ownership hole was in the shared element lowering and nothing
+	@# per-target sat beside it.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_array_of_const_string_leaks.pas $(TESTTMP)/aocs_i386
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_array_of_const_string_leaks.pas $(TESTTMP)/aocs_i386_x64
+	tools/expect_same.sh i386/test_array_of_const_string_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/aocs_i386)" "$$($(TESTTMP)/aocs_i386_x64)"
+	tools/assert_no_leak.sh i386/array_of_const_string 50 tools/run_target.sh i386 $(TESTTMP)/aocs_i386
+	tools/assert_no_leak.sh x86-64/array_of_const_string 50 $(TESTTMP)/aocs_i386_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
 	# NON-object raise must not be freed at all. Both arms live in one
 	# program because they failed in opposite directions: the leak fix that
@@ -15098,6 +15116,11 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_variant_string_temp_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/vstl_aarch64)" "$$($(TESTTMP)/vstl_aarch64_x64)"
 	tools/assert_no_leak.sh aarch64/variant_string_temp 50 tools/run_target.sh aarch64 $(TESTTMP)/vstl_aarch64
 	tools/assert_no_leak.sh x86-64/variant_string_temp 50 $(TESTTMP)/vstl_aarch64_x64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_array_of_const_string_leaks.pas $(TESTTMP)/aocs_aarch64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_array_of_const_string_leaks.pas $(TESTTMP)/aocs_aarch64_x64
+	tools/expect_same.sh aarch64/test_array_of_const_string_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/aocs_aarch64)" "$$($(TESTTMP)/aocs_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/array_of_const_string 50 tools/run_target.sh aarch64 $(TESTTMP)/aocs_aarch64
+	tools/assert_no_leak.sh x86-64/array_of_const_string 50 $(TESTTMP)/aocs_aarch64_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
 	# NON-object raise must not be freed at all. Both arms live in one
 	# program because they failed in opposite directions: the leak fix that
