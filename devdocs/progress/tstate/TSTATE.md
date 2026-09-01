@@ -4,19 +4,19 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 2d13h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `1236bf31f930` | 2026-09-01T23:24:54Z | RED (native) | 172.7s | `8e12236502be` RED |
+| seven | `1236bf31f930` | 2026-09-01T23:38:19Z | RED (full) | 778.4s | `1236bf31f930` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `8e12236502be` on seven, 2026-09-01T23:01:56Z (22m ago).**
+**Newest full tier in the fleet: `1236bf31f930` on seven, 2026-09-01T23:38:19Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `8e12236502be` | RED | 22m | — (newest) |
-| plexus | `27424c927b65` | RED | 2d13h | 2d12h |
+| seven | `1236bf31f930` | RED | 0m | — (newest) |
+| plexus | `27424c927b65` | RED | 2d13h | 2d13h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -58,6 +58,8 @@ Reading a staler host's map for a cross-target job answers a question about an O
 - **test-core#src:test/test_c_gtk_call.pas** — test/test_c_gtk_call.pas (seven): bad `1236bf31f930`, last good `ba98601dd917`, 3 commit(s) in range
 - **test-core#src:test/test_c_gtk_types.pas** — test/test_c_gtk_types.pas (seven): bad `1236bf31f930`, last good `ba98601dd917`, 3 commit(s) in range
 - **test-core#src:test/test_c_gtk_window.pas** — test/test_c_gtk_window.pas lib/pcl/gtk3_c.h (seven): bad `1236bf31f930`, last good `ba98601dd917`, 3 commit(s) in range
+- **test-lua#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +1 (seven): bad `1236bf31f930`, last good `8e12236502be`, 10 commit(s) in range
+- **test-lua-cross#src:tools/compiler_srchash.sh** — tools/compiler_srchash.sh compiler/.pascal26.fixedpoint +2 (seven): bad `1236bf31f930`, last good `8e12236502be`, 10 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
