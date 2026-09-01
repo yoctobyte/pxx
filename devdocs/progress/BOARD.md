@@ -62,7 +62,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (5)
+## backlog (11)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -70,6 +70,12 @@ _none_
 | regression-lib-test-lib-synapse-3 | B | 70→85 | regression | regression: lib-test#src:test/lib_synapse.pas at 889bfcf73256 in step 1/2, `stable_linux_amd64/default/pinned --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse…` (auto-filed by twatch) | — |
 | regression-lib-test-lib-synapse-ssl | B | 70→85 | regression | regression: lib-test#src:test/lib_synapse_ssl.pas at 889bfcf73256 in step 1/3, `stable_linux_amd64/default/pinned --mimic-fpc -dPXX_DYNLIB_LIBC -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posi…` (auto-filed by twatch) | — |
 | regression-lib-test-lib-synapse-transitive-unit | B | 70→85 | regression | regression: lib-test#src:test/lib_synapse_transitive_unit.pas at 889bfcf73256 in step 1/2, `stable_linux_amd64/default/pinned --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse…` (auto-filed by twatch) | — |
+| regression-test-core-c-crtl-mount-and-prio | T | 70 | regression | first-ever red: test-core#src:test/c_crtl_mount_and_prio.c at 1236bf31f930 in step 2/2, `tools/expect_same.sh c_mntprio26 "$(/tmp/c_mntprio26)" "$(printf '1 1 1\n2 -1 1\n3 3 0\n4 -1 1\n5 0\n6 0\n7 [/dev/sda1]…` (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk-2 | P | 70 | regression | regression: test-core#src:test/test_c_gtk.pas at 1236bf31f930 in step 1/2, `./compiler/pascal26 test/test_c_gtk.pas /tmp/test_c_gtk26` (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk-call-4 | P | 70 | regression | regression: test-core#src:test/test_c_gtk_call.pas at 1236bf31f930 in step 1/2, `./compiler/pascal26 test/test_c_gtk_call.pas /tmp/test_c_gtk_call26` (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk-types-2 | P | 70 | regression | regression: test-core#src:test/test_c_gtk_types.pas at 1236bf31f930 in step 1/2, `./compiler/pascal26 test/test_c_gtk_types.pas /tmp/test_c_gtk_types26` (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk-window-3 | P | 70 | regression | regression: test-core#src:test/test_c_gtk_window.pas at 1236bf31f930 in step 1/2, `./compiler/pascal26 test/test_c_gtk_window.pas /tmp/test_c_gtk_window26` (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk3-stock-2 | P | 70 | regression | regression: test-core#src:test/test_c_gtk3_stock.pas at 1236bf31f930 in step 1/3, `./compiler/pascal26 -Futest/gtk3stock -I/usr/include/gtk-3.0/ test/test_c_gtk3_stock.pas /tmp/test_c_gtk3_stock26` (auto-filed by twatch) | — |
 | regression-test-core-test-exception-unhandled-3 | T | 70→85 | regression | regression: test-core#src:test/test_exception_unhandled.pas@3 at 3d4801b6abc3 in step 53/47, `/tmp/next-test_multithreading26 \| grep -q "multithreading test completed successfully"` (auto-filed by twatch) | — |
 
 ## backlog_new (0)
@@ -963,6 +969,12 @@ _none_
 - [p 70] [C] bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [B] feature-b-a-bootable-image-with-the-busybox-userland-on-it
+- [p 70] [T] regression-test-core-c-crtl-mount-and-prio
+- [p 70] [P] regression-test-core-test-c-gtk-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [P] regression-test-core-test-c-gtk-call-4 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [P] regression-test-core-test-c-gtk-types-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [P] regression-test-core-test-c-gtk-window-3 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [P] regression-test-core-test-c-gtk3-stock-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [A] bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine

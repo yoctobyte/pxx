@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:7 backlog:5 backlog-umbrella:6 backlog-core:142 backlog-nilpy:97 backlog-tools:77 backlog-pascal:58 backlog-decide:26 backlog-libs:16 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3080 rejected:72`
+`working:5 unfinished:27 blocked:7 backlog:11 backlog-umbrella:6 backlog-core:142 backlog-nilpy:97 backlog-tools:77 backlog-pascal:58 backlog-decide:26 backlog-libs:16 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3080 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -55,7 +55,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 461, ranked
+## Ready — top 30 of 467, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [T]` regression-cascade-fc01c8094434 (unblocks 1)
@@ -82,10 +82,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [C]` bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
-- `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
-- `[p 68] [N]` feature-nilpy-user-defined-decorators
-- `[p 65] [A]` bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine
-- `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
-- `[p 65] [N]` bug-n-yield-from-is-not-implemented
+- `[p 70] [T]` regression-test-core-c-crtl-mount-and-prio
+- `[p 70] [P]` regression-test-core-test-c-gtk-2
+- `[p 70] [P]` regression-test-core-test-c-gtk-call-4
+- `[p 70] [P]` regression-test-core-test-c-gtk-types-2
+- `[p 70] [P]` regression-test-core-test-c-gtk-window-3
 
-_431 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_437 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

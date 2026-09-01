@@ -125,7 +125,18 @@ at -O2); I used the META word and the refcount together:
 
 Those fail differently — a pointer says where the block is, a meta flag says
 what the runtime thinks it is — so the agreement is corroboration rather than
-two readings of one instrument. Also confirmed from the other side: at -O0 two
+two readings of one instrument.
+
+**Read that table with the right instrument.** It was taken at `480d4584403c`,
+before `8761ea55b` fixed the builtin `PWord` to mean `^UInt16`, and a probe that
+spells the read `PWord` now answers **0** for the -O2 refcount, because
+`$40000000`'s low sixteen bits are zero. Re-taken at `0f1d03315f4e` through an
+explicit `^NativeInt` the numbers above are unchanged and correct. The -O0
+column is identical under both widths — everything in it fits in sixteen bits —
+so the wrong instrument is invisible below the gate and wrong above it. Anyone
+reproducing this needs the wide pointer; `uses builtinheap` also supplies one,
+but only by leaking that unit's private name, which is the bug `8761ea55b` was
+about and not something to rely on. Also confirmed from the other side: at -O0 two
 spellings of the same literal get DIFFERENT handles, at -O2 they share one.
 
 Two changes on top, both measured, neither a correction:

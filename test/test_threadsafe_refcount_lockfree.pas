@@ -59,11 +59,16 @@ end;
   refcount the rows below are about. That separation is the point: deciding the
   shape from the count and then asserting the count would be one field agreeing
   with itself. Value pinned to compiler/defs.inc, the way
-  compiler/builtin/builtinheap.pas pins its copy. }
+  compiler/builtin/builtinheap.pas pins its copy.
+
+  PRefCnt for the same reason the note above gives: meta is a machine word too.
+  A two-byte read would still answer correctly here, since $0100 lives in the
+  low half -- which is exactly why it is spelled the wide way rather than left
+  to be right by luck. }
 function IsStaticBlock(const v: AnsiString): Boolean;
 begin
   if Pointer(v) = nil then IsStaticBlock := False
-  else IsStaticBlock := (PWord(Int64(Pointer(v)) - 24)^ and $0100) <> 0;
+  else IsStaticBlock := (PRefCnt(Int64(Pointer(v)) - 24)^ and $0100) <> 0;
 end;
 
 procedure Check(ok: Boolean; const what: AnsiString);
@@ -197,9 +202,13 @@ begin
     detect the lost increments. With the atomic form, fail=0. So the guard can
     fail, and the `lock` prefix is load-bearing rather than defensive.
 
-    THREE MORE for the representation branch, run at 480d4584403c. The branch is
-    the part that could quietly disable half the file, so every arm was made to
-    fail on purpose:
+    THREE MORE for the representation branch, RE-RUN at 0f1d03315f4e after the
+    PWord fix above landed (the earlier numbers were taken at 480d4584403c and
+    the perturbations were spelled against the old `PWord` reads, so they would
+    no longer have applied -- each sed below was checked to have actually
+    changed the file before the binary was built, which is the half of a control
+    that is easy to skip). The branch is the part that could quietly disable
+    half the file, so every arm was made to fail on purpose:
 
       mid-churn count -> `litRC0 + nLit + 1`   : -O0 fail=1, -O2 fail=0
       IsStaticBlock forced False               : -O2 fail=2, -O0 fail=0
