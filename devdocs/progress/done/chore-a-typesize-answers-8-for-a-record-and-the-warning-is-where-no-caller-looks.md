@@ -182,4 +182,4 @@ byte-identical**, with a positive control confirming the comparison can fail
   that most are legitimate is unchanged.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 712031790.
