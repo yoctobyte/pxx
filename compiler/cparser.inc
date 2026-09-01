@@ -2905,14 +2905,12 @@ begin
           if (recId <> REC_NONE) and (RecFieldType(recId, fieldName) = tyPointer) then
           begin
             elemTk := RecFieldPtrElemTk(recId, fieldName);
-            if elemTk = tyRecord then sz := RecSize(RecFieldPtrElemRec(recId, fieldName))
-            else sz := TypeSlotSize(elemTk);
+            sz := TypeStorageSize(elemTk, RecFieldPtrElemRec(recId, fieldName));
           end;
         end
         else if (si >= 0) and (Syms[si].TypeKind = tyPointer) then
         begin
-          if Syms[si].PtrElemTk = tyRecord then sz := RecSize(Syms[si].PtrElemRec)
-          else sz := TypeSlotSize(Syms[si].PtrElemTk);
+          sz := TypeStorageSize(Syms[si].PtrElemTk, Syms[si].PtrElemRec);
           { `int (*p)[4]`: the pointee is an ARRAY and this answered its ELEMENT
             size -- 4 where gcc says 16, `double (*q)[3]` 8 where gcc says 24,
             `char (*r)[7]` 1 where gcc says 7. Same shape as every other reader
@@ -3069,8 +3067,7 @@ begin
         end;
         Next;
       end;
-      if Procs[procIdx].RetType = tyRecord then sz := RecSize(ProcRetRecId[procIdx])
-      else sz := TypeSlotSize(Procs[procIdx].RetType);
+      sz := TypeStorageSize(Procs[procIdx].RetType, ProcRetRecId[procIdx]);
     end;
   end
   else if CurTok.Kind = tkString then
@@ -3309,8 +3306,7 @@ begin
   end
   else
     Exit;      { a deref of a pointer-to-array keeps its own path below }
-  if elemTk = tyRecord then elemSz := RecSize(elemRec)
-  else elemSz := TypeSlotSize(elemTk);
+  elemSz := TypeStorageSize(elemTk, elemRec);
   Result := elemSz > 0;
 end;
 

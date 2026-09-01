@@ -9349,10 +9349,7 @@ begin
             if (IntToTypeKind(SymTR[symIdx].ElemTk) = tyString) and
                (Syms[symIdx].TypeKind <> tyAnsiString) then
               Error('SetLength: dynamic array of record/string not yet supported');
-            if IntToTypeKind(SymTR[symIdx].ElemTk) = tyRecord then
-              elemSize := RecSize(SymTR[symIdx].ElemRec)
-            else
-              elemSize := TypeSlotSize(IntToTypeKind(SymTR[symIdx].ElemTk));
+            elemSize := TypeStorageSize(IntToTypeKind(SymTR[symIdx].ElemTk), SymTR[symIdx].ElemRec);
             { fixed-array ROW element (`array of T`): stride = whole row }
             if SymDynElemRowLen[symIdx] > 0 then
               elemSize := elemSize * SymDynElemRowLen[symIdx];

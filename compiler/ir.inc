@@ -1872,10 +1872,7 @@ begin
     begin
       indexNode := IRLowerAST(ASTRight[node]);
       tk := Syms[ASTIVal[baseNode]].PtrElemTk;
-      if tk = tyRecord then
-        elemSize := RecSize(Syms[ASTIVal[baseNode]].PtrElemRec)
-      else
-        elemSize := TypeSlotSize(tk);
+      elemSize := TypeStorageSize(tk, Syms[ASTIVal[baseNode]].PtrElemRec);
       baseAddr := IRLowerAST(baseNode);
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
       Exit;
@@ -1887,8 +1884,7 @@ begin
     begin
       indexNode := IRLowerAST(ASTRight[node]);
       tk := Syms[ASTIVal[baseNode]].ElemType;
-      if tk = tyRecord then elemSize := RecSize(Syms[ASTIVal[baseNode]].ElemRecName)
-      else elemSize := TypeSlotSize(tk);
+      elemSize := TypeStorageSize(tk, Syms[ASTIVal[baseNode]].ElemRecName);
       baseAddr := IRLowerAST(baseNode);
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
       Exit;
@@ -1905,10 +1901,7 @@ begin
       begin
         indexNode := IRLowerAST(ASTRight[node]);
         tk := RecFieldPtrElemTk(recName, fieldName);
-        if tk = tyRecord then
-          elemSize := RecSize(RecFieldPtrElemRec(recName, fieldName))
-        else
-          elemSize := TypeSlotSize(tk);
+        elemSize := TypeStorageSize(tk, RecFieldPtrElemRec(recName, fieldName));
         baseAddr := IRLowerAST(baseNode);   { field value = the pointer }
         Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
         Exit;
@@ -1930,10 +1923,7 @@ begin
       else
       begin
         tk := IntToTypeKind(AliasElemTk[aliasIdx]);
-        if tk = tyRecord then
-          elemSize := RecSize(AliasElemRec[aliasIdx])
-        else
-          elemSize := TypeSlotSize(tk);
+        elemSize := TypeStorageSize(tk, AliasElemRec[aliasIdx]);
       end;
       baseAddr := IRLowerAST(baseNode);
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, Ord(tk));
@@ -1948,10 +1938,7 @@ begin
     begin
       indexNode := IRLowerAST(ASTRight[node]);
       tk := IntToTypeKind(ASTTk[node]);
-      if tk = tyRecord then
-        elemSize := RecSize(ResolveNodeRec(node))
-      else
-        elemSize := TypeSlotSize(tk);
+      elemSize := TypeStorageSize(tk, ResolveNodeRec(node));
       baseAddr := IRLowerAST(baseNode);
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, ASTTk[node]);
       Exit;
@@ -3321,8 +3308,7 @@ begin
     Result := True;
   end;
   if not Result then Exit;
-  if elemTk = tyRecord then elemSz := RecSize(elemRec)
-  else elemSz := TypeSlotSize(elemTk);
+  elemSz := TypeStorageSize(elemTk, elemRec);
   { ...unless the source array's elements are dyn-array HANDLES
     (`array[0..1] of TRow`): ElemType is the row's BASE type, so TypeSlotSize
     answered 4 for an Integer row and only half the array was copied into the
@@ -10139,10 +10125,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             varIdx := ASTIVal[ASTLeft[node]];
             { feature-a-typeref-migrate-consumers lane 1: ElemType/ElemRecName read
               via SymTR[varIdx].ElemTk/ElemRec (kept in sync by SymSyncTypeRef). }
-            if SymTR[varIdx].ElemTk = Ord(tyRecord) then
-              elemSize := RecSize(SymTR[varIdx].ElemRec)
-            else
-              elemSize := TypeSlotSize(IntToTypeKind(SymTR[varIdx].ElemTk));
+            elemSize := TypeStorageSize(IntToTypeKind(SymTR[varIdx].ElemTk), SymTR[varIdx].ElemRec);
             Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, REC_NONE,
                                Syms[varIdx].ArrLen * elemSize, ASTTk[ASTLeft[node]]);
           end;
@@ -10725,8 +10708,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           (bug-pascal-openarray-of-array-param-marshal). d[i][j] := v has an
           AN_INDEX base, not AN_IDENT, so it keeps the scalar path. }
         i := ASTIVal[ASTLeft[ASTLeft[node]]];
-        if Syms[i].ElemType = tyRecord then elemSize := RecSize(Syms[i].ElemRecName)
-        else elemSize := TypeSlotSize(Syms[i].ElemType);
+        elemSize := TypeStorageSize(Syms[i].ElemType, Syms[i].ElemRecName);
         leftAddr := IRLowerDestAddress(ASTLeft[node]);
         right := IRLowerAddress(ASTRight[node]);
         Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,

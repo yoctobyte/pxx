@@ -893,7 +893,7 @@ var sz: Integer;
 begin
   if n <= 0 then Exit;
   RProcRetArrLen[procIdx] := n;
-  if elemTk = tyRecord then sz := RecSize(elemRec) else sz := TypeSlotSize(elemTk);
+  sz := TypeStorageSize(elemTk, elemRec);
   ProcRetFixedArrBytes[procIdx] := n * sz;
 end;
 

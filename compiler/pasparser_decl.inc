@@ -3064,7 +3064,7 @@ begin
     fldNOffs[0] := Tokens[TokPos-1].SOffset; fldNLens[0] := Tokens[TokPos-1].SLen;
     Next; Next;   { tag name, ':' }
     fTk := ParseTypeKind; fRec := LastTypeRecId;
-    if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSlotSize(fTk);
+    fSize := TypeStorageSize(fTk, fRec);
     fAlign := TypeAlign(fTk);
     if isPackedRecord then fAlign := 1;
     curOff := AlignTo(curOff, fAlign);
@@ -3161,7 +3161,7 @@ begin
       end
       else
       begin
-        if fTk = tyRecord then fSize := RecSize(fRec) else fSize := TypeSlotSize(fTk);
+        fSize := TypeStorageSize(fTk, fRec);
         fAlign := TypeAlign(fTk);
       end;
       if isPackedRecord then fAlign := 1;

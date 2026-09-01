@@ -4506,10 +4506,7 @@ begin
         aliasIdx := FindTypeAlias(CurTok.SVal);
         Next;                                  { the pointer type name }
         Expect(tkRParen, ')');
-        if IntToTypeKind(AliasElemTk[aliasIdx]) = tyRecord then
-          i := RecSize(AliasElemRec[aliasIdx])
-        else
-          i := TypeSlotSize(IntToTypeKind(AliasElemTk[aliasIdx]));
+        i := TypeStorageSize(IntToTypeKind(AliasElemTk[aliasIdx]), AliasElemRec[aliasIdx]);
         exprNode := AllocNode(AN_INT_LIT);
         ASTIVal[exprNode] := i;
         ASTTk[exprNode] := Ord(tyInteger);
@@ -10589,8 +10586,7 @@ begin
       feature-sizeof-const-intrinsic-in-const-eval. }
     Next; Expect(tkLParen, '(');
     sofTk := ParseTypeKind;
-    if sofTk = tyRecord then r := RecSize(LastTypeRecId)
-    else r := TypeSlotSize(sofTk);
+    r := TypeStorageSize(sofTk, LastTypeRecId);
     Expect(tkRParen, ')');
   end
   else if (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
