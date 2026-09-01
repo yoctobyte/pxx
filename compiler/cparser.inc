@@ -5025,7 +5025,23 @@ begin
       onto ProcRetProcSig[fpSig] so a chained call `(*(*p)(..))(..)` resolves. }
     pointeeRetFn := (Tokens[TokPos+1].Kind = tkLParen) and
                     (Tokens[TokPos+2].Kind = tkStar);
-    if isVoid then fpRet := tyInteger;
+    { `isVoid` describes the BASE type, and `void *` is not void. Line ~4850
+      sets Result := tyInteger as a PLACEHOLDER whose own comment says "pointer
+      suffix overrides below" -- and the star loop does override it, to
+      tyPointer. Re-applying the placeholder here overrode the override, so a
+      `void *(*)(...)` callback's signature carried a SIGNED 4-BYTE return type.
+
+      Latent for as long as it existed, then fatal: once the indirect cdecl arm
+      learned to widen a 32-bit signed return (e5a21152b, correct in itself), it
+      read that type, emitted cdqe, and TRUNCATED every pointer a void*-returning
+      callback handed back. lua_newstate segfaulted on the allocator's own result
+      -- 0x71a3aa200008 came back as 0xffffffffaa200008.
+
+      CTypePtrDepth is the same qualifier line 3431 already uses for the cast
+      case (`CTypeIsVoid and (CTypePtrDepth = 0)`); this was the one place that
+      asked about void without it.
+      bug-c-a-void-pointer-returning-callback-has-a-32-bit-signed-return-type }
+    if isVoid and (CTypePtrDepth = 0) then fpRet := tyInteger;
     { Capture the return type's pointed-at kind/record BEFORE the param recursion
       (which resets the CType* globals) so a struct-pointer-returning callback
       `struct S *(*fty)()` records that its result points at S — the indirect

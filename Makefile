@@ -9452,6 +9452,19 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== cexternal_proc_addr_callable: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
 	fi
+	# A void*-returning callback must hand back all 64 bits. It did not: the
+	# fn-pointer branch re-applied ParseCDeclType's `void` -> tyInteger
+	# PLACEHOLDER after the star loop had already overridden it to tyPointer,
+	# so the signature carried a signed 4-byte return. Latent while nothing read
+	# that type, then fatal once the indirect cdecl arm started widening a 32-bit
+	# signed return (e5a21152b) and truncated every pointer such a callback
+	# returned -- six lua programs produced no output at all.
+	# THE SUBJECT ASSERTS ITS OWN FITNESS: a truncation is invisible against an
+	# address below 4GB, so the file refuses (exit 2) rather than passing if the
+	# heap lands there. The int* row is the negative control -- only the `void`
+	# base reached the defect. Positive control recorded in the header.
+	./$(COMPILER) test/cfnptr_void_pointer_return.c $(TESTTMP)/cfnptr_void_pointer_return26
+	$(TESTTMP)/cfnptr_void_pointer_return26; tools/expect_same.sh cfnptr_void_pointer_return26-rc "$$?" "42"
 	./$(COMPILER) test/clocal_static_const_2d_init_b107.c $(TESTTMP)/clocal_static_const_2d_init_b10726
 	$(TESTTMP)/clocal_static_const_2d_init_b10726; tools/expect_same.sh clocal_static_const_2d_init_b10726-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include test/cva_arg_local_fnptr_typedef_b108.c $(TESTTMP)/cva_arg_local_fnptr_typedef_b10826
@@ -9521,8 +9534,28 @@ test-core: $(COMPILER)
 	# stack-spilled named params (7th+ GP / 9th+ FP) + overflow_arg_area anchor + capped va seeds (gcc-verified oracle)
 	./$(COMPILER) test/cvararg_stack_spill.c $(TESTTMP)/cvararg_stack_spill26
 	tools/expect_same.sh cvararg_stack_spill26 "$$($(TESTTMP)/cvararg_stack_spill26)" "$$(printf '7060\n950.25\n7807800.75')"
-	./$(COMPILER) -Ilib/crtl/include -Ilibrary_candidates/tiny-regex-c test/crtl_tiny_regex_match.c $(TESTTMP)/crtl_tiny_regex_match26
-	tools/expect_same.sh crtl_tiny_regex_match26 "$$($(TESTTMP)/crtl_tiny_regex_match26)" "tiny-regex: all cases pass"
+	# GUARDED on the tree being present, like the fgl and stb rows above and
+	# UNLIKE how this row shipped: it was the only library_candidates dependency
+	# in test-core that hard-errored when its tree was absent, and because make
+	# stops at the first failing recipe line, that single missing checkout took
+	# 844 of test-core's 1745 compile rows (48%) with it -- measured 2026-09-01
+	# on a box with lua/sqlite/busybox/c-testsuite but no tiny-regex-c. The rows
+	# after this one were not failing; they were never reached, and the log gave
+	# no hint of how much it had not said.
+	#
+	# A SKIP IS NOT FREE AND THIS ONE IS DELIBERATELY LOUD. tools/testmgr.py's
+	# TIERS comment records the other half of this trade: test-fgl was guarded on
+	# /usr/share/fpcsrc, absent everywhere here, so it printed SKIP and PASSED for
+	# its entire life without running once. Both failure modes are real. The
+	# choice here is that 844 rows dark is worse than one row announced as absent,
+	# and the message names the tree so the absence is fixable rather than
+	# mysterious. Whether these skips should be COUNTED, so a box silently
+	# running less of the suite is visible in the verdict, is
+	# task-t-a-corpus-tree-absence-should-be-counted-not-just-echoed.
+	if [ -f library_candidates/tiny-regex-c/re.c ]; then \
+	  ./$(COMPILER) -Ilib/crtl/include -Ilibrary_candidates/tiny-regex-c test/crtl_tiny_regex_match.c $(TESTTMP)/crtl_tiny_regex_match26 && \
+	  tools/expect_same.sh crtl_tiny_regex_match26 "$$($(TESTTMP)/crtl_tiny_regex_match26)" "tiny-regex: all cases pass"; \
+	else echo "crtl_tiny_regex_match: SKIP (no library_candidates/tiny-regex-c -- fetch tiny-regex-c there to run)"; fi
 	# Three rows, one question: which directories does each include form search.
 	# Row 3 is the one that ran away -- a forwarder whose body is `#include
 	# <cinc_shadow.h>`, which found ITSELF while angled includes searched the

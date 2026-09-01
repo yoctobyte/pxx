@@ -61,3 +61,47 @@ test-cjson: FAILURES
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## ROOT-CAUSED AND FIXED (2026-09-01, frankC)
+
+Not a test-cjson defect, and **not a defect in the failing step the auto-filer
+named** — that step is the recipe's SKIP guard, which is where the bisect
+attribution landed, not where anything went wrong. The lane guess of C was
+right by accident: the bug is in the C frontend, but in `ParseCDeclType`, which
+no line of this job's recipe mentions.
+
+**A `void *`-returning callback's call signature carried a SIGNED 4-BYTE return
+type.** `ParseCDeclType` sets `Result := tyInteger` as a placeholder for a
+`void` base — its own comment says *"pointer suffix overrides below"* — and the
+star loop does override it to `tyPointer`. The fn-pointer branch then
+re-applied the placeholder, **overriding the override**.
+
+Latent for as long as it existed, because nothing read that type: the pointer
+travelled through RAX untouched and was right by accident. It turned fatal at
+`e5a21152b`, where the indirect cdecl arm learned to widen a 32-bit signed
+return — correct in itself, and still correct — read the wrong type, emitted
+`cdqe`, and truncated every pointer such a callback handed back:
+
+```
+lua_newstate: the allocator returned 0x71a3aa200008, the caller saw 0xffffffffaa200008
+```
+
+lua's allocator is exactly `void *(*)(void *, void *, size_t, size_t)`, so
+`luaL_newstate` segfaulted on the block it had just been given. Six lua
+programs produced **no output at all**, which the harness's `2>/dev/null`
+turned into an empty diff rather than a crash message — the failure looked like
+wrong output for a day.
+
+Fixed by qualifying the void test with pointer depth, which is the predicate
+this file already uses for the cast case at line ~3431:
+
+```pascal
+if isVoid and (CTypePtrDepth = 0) then fpRet := tyInteger;
+```
+
+Regression test `test/cfnptr_void_pointer_return.c`, wired into `test-core`.
+It asserts the fitness of its own subject: a 32-bit truncation is invisible
+against an address below 4GB, and my first version used a `static` buffer and
+passed on a compiler I already knew was broken. Positive control measured — the
+unfixed compiler exits 3 with `void* callback returned 0x40a00008, want
+0x7dea40a00008`.
