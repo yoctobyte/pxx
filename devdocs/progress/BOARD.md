@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong | A | 75→90 | bug | --emit-obj emits NO data symbols. A global defined in a .c gets no OBJECT symbol, and `extern int x;` is relocated into the object's OWN .bss instead of becoming an undefined import -- so two pxx objects sharing a global LINK CLEANLY and read different memory. Measured: gcc links the pair and prints 0 where 99 is correct. No diagnostic anywhere. Blocks separate compilation of any real C project (busybox's libbb/ptr_to_globals.c is one global pointer and cannot even be emitted). | — |
-| bug-a-i386-c-main-gets-argc-and-argv-swapped | A | 80 | bug | FIXED. The i386 C entry stub pushed main's two arguments in the pxx-internal leftmost-first order while a C-defined function on i386 has taken the real SysV cdecl prologue for a while now, so main read argc from the slot holding argv. Swapping the two pushes is the whole change. The stub's comment ASSERTED the internal order and cited the ticket that put it there, so comment and code agreed and were both stale -- settled against gcc rather than against the change log: a pxx --target=i386 --emit-obj object defining int f2(int,int), linked by gcc -m32 into a gcc-compiled main calling f2(1,2), returns 12, so pxx i386 C functions ARE standard cdecl and the stub was the last caller speaking the old convention. Checked the sibling before closing: the hand-emitted longjmp stub reads env at [esp+8] on the OLD premise and is CORRECT, because the C frontend lowers that call through the internal path -- setjmp/longjmp round-trips on i386. Two conventions are live and they are distinguished by which call path reaches the callee, so only this arm moved. Now correct on all five runnable targets including argv[argc]==NULL. Guarded by test/ccross_main_argv.c, wired native plus i386/aarch64/arm32/riscv32; its positive control was RUN (revert the swap, rebuild: `FAIL argc=-6317804 want 3` then SIGSEGV on argv[0]). envp is still not passed to main on ANY target -- unchanged by this and not a regression. | — |
 | feature-c-corpus-busybox-multi-applet | C | 70→90 | feature | Rung 2 of feature-busybox-kiosk-selfhosting-target. FIRST BAR MET 2026-09-01 (2789f87a7): a two-applet busybox (cat+echo+the multiplexer, NUM_APPLETS 2, dispatch table compiled IN) built by pxx is byte-identical to gcc over 28 cases on x86-64 AND aarch64 and agrees with upstream's separately-linked binary; argv[0], `busybox <applet>`, --list, --help, unknown applet and bare busybox all covered. Cost ONE compiler fix: a constant left operand of && / \|\| survived every -O level including -O3 (88ef1232f). Harness is now tools/busybox_diff.sh --applets. STILL OPEN: `ash` (fork/exec/wait, the process model) and the TU surface -- 28 of libbb's ~145, so getpwnam/statfs/getrlimit/getmntent are still untouched. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
@@ -829,9 +828,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3014)
+## done (3015)
 
-3014 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3015 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -914,6 +913,7 @@ _none_
 
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 80] [A] meta-a-pxx-produces-linkable-code [meta — a standing index, never "done"; link work to it, do not claim it]
+- [p 80] [A] umbrella-cross-target-codegen-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [A] umbrella-managed-memory-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -1356,7 +1356,6 @@ _none_
 - **1** — bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - **1** — bug-a-emitzeroframeslot-has-no-wasm32-arm
-- **1** — bug-a-i386-c-main-gets-argc-and-argv-swapped
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate

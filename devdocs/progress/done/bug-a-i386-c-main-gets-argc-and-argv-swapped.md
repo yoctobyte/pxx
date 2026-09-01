@@ -3,7 +3,7 @@ slug: bug-a-i386-c-main-gets-argc-and-argv-swapped
 track: A
 prio: 80
 type: bug
-status: working
+status: done
 blocked-by: []
 created: 2026-09-01
 found-by: frankD
@@ -138,3 +138,6 @@ failure shapes frankD described, from one test.
 `envp` is not handed to main on ANY target — x86-64 sets two registers and
 stops. Unchanged here, and adding it on i386 alone would be a new asymmetry
 rather than a fix.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
