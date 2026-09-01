@@ -404,6 +404,11 @@ begin
     begin
       Fixups[j].CodePos := DceNewOff(Fixups[i].CodePos);
       Fixups[j].DataOff := Fixups[i].DataOff;
+      { The PARALLEL arrays move too. They are parallel BY INDEX, so compacting
+        the record without them hands every surviving site the flags of whoever
+        used to sit at its new index -- see the block comment above GlobFix. }
+      FixupPCRel[j] := FixupPCRel[i];
+      FixupPicDelta[j] := FixupPicDelta[i];
       Inc(j);
     end;
     Inc(i);
@@ -418,6 +423,29 @@ begin
     begin
       GlobFix[j].CodePos := DceNewOff(GlobFix[i].CodePos);
       GlobFix[j].BSSoff := GlobFix[i].BSSoff;
+      { CARRY THE PARALLEL ARRAYS. GlobFixPCRel/Trail/PicDelta are parallel to
+        GlobFix BY INDEX -- deliberately outside TGlobFix, because TFixup and
+        TGlobFix are bootstrap records whose size the compiler asserts about
+        itself. Compacting the record alone leaves site j wearing the flags of
+        whatever entry used to occupy index j.
+
+        What that cost, measured 2026-09-01 on a five-line program with no
+        threads: EmitReleaseHeapLock emits `mov dword [@glob], 0` -- C7 /0 with
+        an imm32 TRAILING the disp32, so its Trail is 4 and the rip correction
+        must be -(4+4). Inheriting a Trail of 0 makes the correction -4 and the
+        release stores four bytes PAST the lock word. 11 acquires, 6 releases:
+        every one of the five sites DCE moved wrote to lock+4, the lock was
+        never cleared, and the program spun forever in the acquire loop with a
+        single thread alive. No crash and no diagnostic.
+
+        That is the SAME failure EmitGlobRef's header already describes at
+        length, from the day the addend was assumed to be uniformly -4. The
+        emitter derives it per opcode now and is right; this pass threw the
+        answer away afterwards. Anything added parallel to these tables has to
+        be added here too. }
+      GlobFixPCRel[j] := GlobFixPCRel[i];
+      GlobFixTrail[j] := GlobFixTrail[i];
+      GlobFixPicDelta[j] := GlobFixPicDelta[i];
       Inc(j);
     end;
     Inc(i);

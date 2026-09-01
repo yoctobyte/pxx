@@ -20258,6 +20258,24 @@ test-quick: $(COMPILER)
 	tools/expect_same.sh smoke_mutex26 "$$($(TESTTMP)/smoke_mutex26 | tail -1)" "MUTEX OK"
 	./$(COMPILER) --threadsafe test/test_tthread_sync.pas $(TESTTMP)/smoke_tthread26
 	tools/expect_same.sh smoke_tthread26 "$$($(TESTTMP)/smoke_tthread26 | tail -1)" "TTHREAD SYNC OK"
+	# --dce HAD NO ROW ANYWHERE IN THIS FILE until 2026-09-01. The pass was
+	# reachable only through -O3, so the only thing exercising it was Track T's
+	# opt tier -- nothing a dev lane runs, and the opt tier is not in the
+	# quick<native<limited<full chain. It shipped a miscompile that took five
+	# optdiff shards red for a day. A pass with no row of its own is a pass that
+	# ships broken, so this is in QUICK deliberately: it costs under a second
+	# and it is the tier anyone touching dce.inc actually runs.
+	#
+	# --threadsafe is load-bearing, threads are not. The failure was DCE's
+	# GlobFix compaction dropping the arrays parallel to it, which left the
+	# heap-lock RELEASE writing four bytes past the lock word. One object
+	# allocated and freed is enough; the program has no threads at all.
+	#
+	# RUN UNDER `timeout`, and assert the exit status as well as the line: the
+	# failure mode is a HANG, and a row comparing stdout alone cannot tell a
+	# hang from a slow box -- it wedges the tier instead of failing it.
+	./$(COMPILER) --threadsafe --dce test/test_dce_threadsafe_heaplock.pas $(TESTTMP)/smoke_dcetslock26
+	tools/expect_same.sh smoke_dcetslock26 "$$(timeout 30 $(TESTTMP)/smoke_dcetslock26; echo "exit=$$?")" "$$(printf 'DCETSLOCK OK 2080\nexit=0')"
 	./$(COMPILER) test/test_fwd_ptr_alias_field.pas $(TESTTMP)/smoke_fwdptralias26
 	tools/expect_same.sh smoke_fwdptralias26 "$$($(TESTTMP)/smoke_fwdptralias26)" "11 22"
 	# feature-dynamic-soname-discovery: an `external 'lib<x>.so'` for a library
