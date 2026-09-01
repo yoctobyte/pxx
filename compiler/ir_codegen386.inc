@@ -307,11 +307,11 @@ begin
   Patch32(jOut2, outAt - (jOut2 + 4));
   { .dfl: no hook — revert to SIG_DFL and re-raise. }
   Patch32(jDfl, CodeLen - (jDfl + 4));
-  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 0);  EmitI32(0);  { handler  = SIG_DFL }
-  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 4);  EmitI32(0);  { flags    = 0 }
-  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 8);  EmitI32(0);  { restorer = 0 }
-  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 12); EmitI32(0);  { mask lo  (i386: mask at +12) }
-  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 16); EmitI32(0);  { mask hi }
+  EmitMovGlobImm32(BSS_SIG_SCRATCH + 0, 0);  { handler  = SIG_DFL }
+  EmitMovGlobImm32(BSS_SIG_SCRATCH + 4, 0);  { flags    = 0 }
+  EmitMovGlobImm32(BSS_SIG_SCRATCH + 8, 0);  { restorer = 0 }
+  EmitMovGlobImm32(BSS_SIG_SCRATCH + 12, 0);  { mask lo  (i386: mask at +12) }
+  EmitMovGlobImm32(BSS_SIG_SCRATCH + 16, 0);  { mask hi }
   EmitB($8B); EmitB($5D); EmitB($08);             { mov ebx, [ebp+8]   sig }
   EmitB($B9); EmitGlobRef(BSS_SIG_SCRATCH);       { mov ecx, &scratch  act }
   EmitB($31); EmitB($D2);                         { xor edx, edx       oldact }
@@ -368,11 +368,11 @@ begin
     fault CAUSE is unknowable without si_code (see BSS_SIG_CODE). It is ALSO
     what selects the rt signal frame, so it is inseparable from the restorer
     above: this constant, the 173, and the absent `pop eax` are one change. }
-  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 4); EmitI32($1C000004); { flags = SA_RESTORER|SA_RESTART|SA_SIGINFO|SA_ONSTACK }
+  EmitMovGlobImm32(BSS_SIG_SCRATCH + 4, $1C000004); { flags = SA_RESTORER|SA_RESTART|SA_SIGINFO|SA_ONSTACK }
   EmitCodeAbsToEax386(restorerAt);                { eax = &restorer (absolute) }
   EmitB($A3); EmitGlobRef(BSS_SIG_SCRATCH + 8);   { mov [scratch+8], eax   restorer }
-  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 12); EmitI32(0);  { mask lo }
-  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 16); EmitI32(0);  { mask hi }
+  EmitMovGlobImm32(BSS_SIG_SCRATCH + 12, 0);  { mask lo }
+  EmitMovGlobImm32(BSS_SIG_SCRATCH + 16, 0);  { mask hi }
   EmitB($B9); EmitGlobRef(BSS_SIG_SCRATCH);       { mov ecx, &scratch   act }
   EmitB($31); EmitB($D2);                         { xor edx, edx        oldact }
   EmitB($BE); EmitI32(8);                         { mov esi, 8          sigsetsize }
@@ -2058,7 +2058,7 @@ begin
           if sz = 1 then
             begin EmitB($A2); EmitGlobRef(Syms[si].Offset); end
           else if sz = 2 then
-            begin EmitB($66); EmitB($A3); EmitGlobRef(Syms[si].Offset); end
+            begin EmitMovGlobAx16(Syms[si].Offset); end
           else
             begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end;
         end
@@ -5578,7 +5578,7 @@ begin
             if sz = 1 then
               begin EmitB($A2); EmitGlobRef(Syms[si].Offset); end
             else if sz = 2 then
-              begin EmitB($66); EmitB($A3); EmitGlobRef(Syms[si].Offset); end
+              begin EmitMovGlobAx16(Syms[si].Offset); end
             else
               begin EmitB($A3); EmitGlobRef(Syms[si].Offset); end;
           end

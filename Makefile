@@ -18269,7 +18269,21 @@ test-emit-obj: $(COMPILER)
 	@abs=$$(readelf -rW $(TESTTMP)/i386_pcrel_globals.o | awk '/^Relocation section/{s=($$0 ~ /rel\.text/)} s && /R_386_32/{n++} END{print n+0}'); \
 	 pcr=$$(readelf -rW $(TESTTMP)/i386_pcrel_globals.o | awk '/^Relocation section/{s=($$0 ~ /rel\.text/)} s && /R_386_PC32/{n++} END{print n+0}'); \
 	 if [ "$$pcr" -le "$$abs" ]; then echo "test-emit-obj: i386 .text is $$abs absolute vs $$pcr PC-relative -- the data-reference conversion regressed"; exit 1; fi; \
+	 if [ "$$abs" -ne 0 ]; then echo "test-emit-obj: i386 .text still has $$abs absolute relocation(s) -- the PIE link below is the thing that regressed"; exit 1; fi; \
 	 echo "test-emit-obj: i386 .text $$pcr PC-relative vs $$abs absolute"
+	@# THE LINK THIS WHOLE TICKET EXISTS TO UNBLOCK. `-z text` refuses any
+	@# executable that would need a writable .text, and a PIE built from an
+	@# object with absolute .text relocations gets DT_TEXTREL instead of a
+	@# refusal -- so the relocation count above and this link are two different
+	@# claims and both are asserted. It RUNS as well as links: a PIE is loaded
+	@# at a different base than a no-pie executable, which is precisely the
+	@# condition a wrong PC-relative addend survives in the no-pie row.
+	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
+	  gcc -m32 -pie -Wl,-z,text test/i386_pcrel_globals_host.c $(TESTTMP)/i386_pcrel_globals.o -o $(TESTTMP)/i386_pcrel_globals_pie || { echo "test-emit-obj: i386 .o FAILED to link as a hardened PIE (-pie -Wl,-z,text)"; exit 1; }; \
+	  readelf -d $(TESTTMP)/i386_pcrel_globals_pie | grep -q TEXTREL && { echo "test-emit-obj: i386 PIE carries DT_TEXTREL"; exit 1; }; \
+	  tools/expect_same.sh i386_pcrel_globals_pie "$$($(TESTTMP)/i386_pcrel_globals_pie)" "PCREL GLOBALS OK" || exit 1; \
+	  echo "test-emit-obj: i386 .o links+runs as a hardened PIE, no DT_TEXTREL"; \
+	else echo "gcc -m32 (multilib) not installed; i386 PIE check skipped"; fi
 
 	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
 	  gcc -m32 -no-pie test/i386_pcrel_globals_host.c $(TESTTMP)/i386_pcrel_globals.o -o $(TESTTMP)/i386_pcrel_globals_exe || { echo "test-emit-obj: i386 pcrel subject FAILED to link"; exit 1; }; \

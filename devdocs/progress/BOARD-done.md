@@ -2831,6 +2831,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-procedure-as-value-ok | P | 70 | regression | regression: test-core#src:test/test_procedure_as_value_ok.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-procvar-value-context-2 | P | 70 | regression | regression: test-core#src:test/test_procvar_value_context.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-procvar-value-context | P | 70 | regression | regression: test-core#src:test/test_procvar_value_context.pas red at 0e4ad46330ca (auto-filed by twatch) | — |
+| regression-test-core-test-promoint-array-cleanup | T | 70 | regression | regression: test-core#src:test/test_promoint_array_cleanup.pas at 145e7a11dfed in step 2/3, `tools/expect_same.sh test_promoac26 "$(/tmp/test_promoac` (auto-filed by twatch) | — |
 | regression-test-core-test-ptr-deref-vararg | P | 70 | regression | regression: test-core#src:test/test_ptr_deref_vararg.pas red at b936d125601e (auto-filed by twatch) | — |
 | regression-test-core-test-record-helper-for-string-b331 | P | 70 | regression | regression: test-core#src:test/test_record_helper_for_string_b331.pas red at 2e7286e499d1 (auto-filed by twatch) | — |
 | regression-test-core-test-relpath-uses | T | 70 | regression | regression: test-core#src:test/test_relpath_uses.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |

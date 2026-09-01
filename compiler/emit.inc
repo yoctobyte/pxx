@@ -407,7 +407,7 @@ function TryI386PcRelStore(var popReg: Integer): Boolean;
   rebase for every one of them, and the sibling nobody exercised is this file's
   standing failure mode. 8A/8B/0F B6/B7/BE/BF never reach here -- TryI386PcRelLoad
   takes them first and gets them without a scratch. }
-var modrm, src, sc, trail: Integer;
+var modrm, sib, src, sc, trail: Integer;
     op, prev: Byte;
 begin
   TryI386PcRelStore := False;
@@ -428,6 +428,38 @@ begin
     if modrm = $A2 then EmitB($88) else EmitB($89);
     EmitB($81);                          { mod=10 reg=eax rm=ecx }
     popReg := 1;
+    TryI386PcRelStore := True;
+    Exit;
+  end;
+
+  { The SIB form of the same thing: `mov [edx*8+glob], eax`. The scratch fills
+    the SIB's empty base field, so it must differ from the source AND from the
+    index register -- the load arm only had to avoid the index because its base
+    and destination are the same register. }
+  if (CodeLen >= 3) and ((modrm and $07) = $05) and
+     ((Code[CodeLen-2] and $C7) = $04) then
+  begin
+    sib := modrm;
+    modrm := Code[CodeLen-2];
+    op := Code[CodeLen-3];
+    if CodeLen >= 4 then prev := Code[CodeLen-4] else prev := 0;
+    if I386PrefixBefore(CodeLen-3) then Exit;
+    if (op = $FF) or (op = $8F) then Exit;
+    if prev = $0F then Exit;
+    if not GlobRefTrailingImm(op, prev, Byte(modrm), trail) then Exit;
+    if trail <> 0 then Exit;
+    src := (modrm shr 3) and 7;
+    if src = 4 then Exit;                 { see the esp note below }
+    sc := 0;
+    while (sc = src) or (sc = ((sib shr 3) and 7)) do Inc(sc);
+    if not I386PicBaseUsable(sc) then Exit;
+    CodeLen := CodeLen - 3;               { opcode, ModRM, SIB }
+    EmitB(Byte($50 or sc));
+    EmitPicAnchorInto(sc);
+    EmitB(op);
+    EmitB(Byte($80 or (src shl 3) or $04));
+    EmitB(Byte((sib and $F8) or sc));
+    popReg := sc;
     TryI386PcRelStore := True;
     Exit;
   end;
@@ -496,7 +528,7 @@ function TryI386PcRelLoad: Boolean;
   census did not observe them: the rewrite is identical for any `0F xx /r` load,
   and this file's own history is that the unobserved sibling is the one that stays
   broken. bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations }
-var modrm, opLen, dest, k: Integer;
+var modrm, sib, opLen, dest, k: Integer;
     saved: array[0..3] of Byte;
 begin
   TryI386PcRelLoad := False;
@@ -536,6 +568,43 @@ begin
     EmitPicAnchorInto(dest);
     EmitB($8D);                          { lea }
     EmitB(Byte($80 or (dest shl 3) or dest));
+    TryI386PcRelLoad := True;
+    Exit;
+  end;
+
+  { --- SHAPE D: the SIB form, `mod=00 rm=100` with a SIB whose base field is
+    101 (no base). `mov eax,[edx*8+disp32]` -- an indexed read of a global array,
+    which is the one absolute shape that already HAS a SIB byte and so cannot
+    simply have its ModRM rebased. It does not need to be: SIB already carries a
+    base field, and filling it in with the anchor register is exactly what it is
+    for. Scale and index are copied through untouched.
+
+    The anchor register is the destination again, dead by the same argument, so
+    the only new refusal is dest = index -- the load would then clobber its own
+    index before using it. --- }
+  { The byte at CodeLen-1 is the SIB here, not the ModRM -- reading it as the
+    ModRM is why the first version of this arm never fired. }
+  if (CodeLen >= 3) and ((modrm and $07) = $05) and
+     ((Code[CodeLen-2] and $C7) = $04) then
+  begin
+    sib := modrm;
+    modrm := Code[CodeLen-2];
+    dest := (modrm shr 3) and 7;
+    if not I386PicBaseUsable(dest) then Exit;
+    if ((sib shr 3) and 7) = dest then Exit;   { dest is the index register }
+    opLen := 0;
+    if (Code[CodeLen-3] = $8B) or (Code[CodeLen-3] = $8A) then opLen := 3
+    else if (CodeLen >= 4) and (Code[CodeLen-4] = $0F) and
+            ((Code[CodeLen-3] = $B6) or (Code[CodeLen-3] = $B7) or
+             (Code[CodeLen-3] = $BE) or (Code[CodeLen-3] = $BF)) then opLen := 4;
+    if opLen = 0 then Exit;
+    if I386PrefixBefore(CodeLen - opLen) then Exit;
+    for k := 0 to opLen - 1 do saved[k] := Code[CodeLen - opLen + k];
+    CodeLen := CodeLen - opLen;
+    EmitPicAnchorInto(dest);
+    for k := 0 to opLen - 3 do EmitB(saved[k]);
+    EmitB(Byte($80 or (dest shl 3) or $04));      { mod=10 rm=100 (SIB) }
+    EmitB(Byte((sib and $F8) or dest));           { same scale+index, base=dest }
     TryI386PcRelLoad := True;
     Exit;
   end;
@@ -777,6 +846,74 @@ begin
   Inc(GlobFixCount); EmitI32(0);
   { see EmitDataRef: the store wrapper's `pop` belongs after the disp32 }
   if gfPopReg >= 0 then EmitB(Byte($58 or gfPopReg));
+end;
+
+procedure EmitMovGlobAx16(bssOff: Integer);
+{ `mov word [glob], ax` -- the 16-bit store, `66 A3 <moffs>`.
+
+  Refused by I386PrefixBefore for a sound reason (a byte before an opcode cannot
+  be told from the last byte of the previous instruction by looking at it), and
+  the answer is the same as for C7: stop guessing backwards and emit the whole
+  instruction here, where the `66` is placed by this code and therefore lands in
+  front of the store rather than in front of the inserted push.
+
+  The rewritten form is the ModRM store, not the moffs one -- moffs has no base
+  register to hang the anchor on. }
+var gfIdx: Integer;
+begin
+  if (TargetArch <> TARGET_I386) or (not EmitObjMode) then
+  begin
+    EmitB($66); EmitB($A3); EmitGlobRef(bssOff);
+    Exit;
+  end;
+  EmitB($51);                       { push ecx }
+  EmitPicAnchorInto(1);
+  EmitB($66); EmitB($89); EmitB($81);   { mov word [ecx+disp32], ax }
+  gfIdx := GlobFixCount;
+  EmitGlobRef(bssOff);
+  if GlobFixPCRel[gfIdx] then
+    Error('EmitMovGlobAx16: EmitGlobRef converted a shape it was not meant to');
+  GlobFixPCRel[gfIdx] := True;
+  GlobFixPicDelta[gfIdx] := GlobFix[gfIdx].CodePos - X386PicAnchor;
+  EmitB($59);                       { pop ecx }
+end;
+
+procedure EmitMovGlobImm32(bssOff, imm: Integer);
+{ `mov dword [glob], imm32` -- C7 /0, the one absolute shape TryI386PcRelStore
+  cannot take.
+
+  Its problem is placement, not encoding: the scratch wrapper's `pop` must land
+  after the imm32, and the imm32 is emitted by the CALLER, after EmitGlobRef has
+  already returned. So the fix is not a cleverer rewrite, it is to stop
+  splitting the instruction across the caller and the emitter -- this emits the
+  whole thing, imm32 included, and the pop has somewhere to go.
+
+  There is no source register to avoid (the source is the immediate), so the
+  scratch is simply eax.
+
+  EmitGlobRef is still what records the fixup, so the growth, the capacity
+  doubling and the bookkeeping all stay in one place; it sees a mod=10 ModRM,
+  declines to convert it, and records an absolute entry that this retypes. The
+  assert is not decoration: if a future family ever did convert this shape, the
+  retype would be applied twice and the addend would be silently doubled. }
+var gfIdx: Integer;
+begin
+  if (TargetArch <> TARGET_I386) or (not EmitObjMode) then
+  begin
+    EmitB($C7); EmitB($05); EmitGlobRef(bssOff); EmitI32(imm);
+    Exit;
+  end;
+  EmitB($50);                       { push eax }
+  EmitPicAnchorInto(0);
+  EmitB($C7); EmitB($80);           { mov dword [eax+disp32], imm32 }
+  gfIdx := GlobFixCount;
+  EmitGlobRef(bssOff);
+  if GlobFixPCRel[gfIdx] then
+    Error('EmitMovGlobImm32: EmitGlobRef converted a shape it was not meant to');
+  GlobFixPCRel[gfIdx] := True;
+  GlobFixPicDelta[gfIdx] := GlobFix[gfIdx].CodePos - X386PicAnchor;
+  EmitI32(imm);
+  EmitB($58);                       { pop eax }
 end;
 
 procedure EmitwriteSyscallA64(dataOff, len: Integer);
