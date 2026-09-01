@@ -760,6 +760,31 @@ The generalisation across both: **a new-findings report, `grep -L`, an absent
 commit trailer and a missing dict key all report emptiness for two different
 reasons and label neither.** Ask which of the two you are holding.
 
+### The same shape in the report's DETAIL slot — and it decides what you can debug
+
+A tstate report emits **one** `## first failure:` block with a real log, no
+matter how many jobs failed. The limit is known
+(`tools/job_reason_devtest.py:150`, `tools/twatch.py:2022`, both about a cascade
+leaving the others undumped). The consequence is not:
+
+`reports/20260901T155512Z-66cda21-seven.md` has **7 failures and 1 detail
+block**, and the slot went to `test-threads#...exception_threads_race` — red in
+all five recent runs. The four **new** reds got one truncated tail apiece, cut
+mid-word. So the run's actual news carried no diff at all.
+
+**A permanently-red job keeps winning that slot.** It is red first, every time,
+so it takes the detail every time — new reds are starved of detail *precisely*
+when they are the thing worth reading. Constant crowds out variable, the same
+error as citing a 5-of-5 red as evidence about one run, this time built into the
+renderer instead of into someone's reasoning.
+
+**What it means at the bench:** when a report shows a new red with only a tail,
+**do not read the tail as the assertion.** For the census tests the tail is
+stderr (`PXXCensusPut` writes fd 2 throughout) while `expect_same` compares
+`$(...)` — stdout. The two are different streams: a leak visible in the quoted
+tail cannot be what failed the row. The diff you need is in the job log on the
+runner, and the report is not going to have it. Ask for it explicitly.
+
 
 ## Assert the PRECONDITION, not just the comparison
 
