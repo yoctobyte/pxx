@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: A
+status: done
 ---
 
 > **Track A from the job NAME `test-aarch64`**, not from its source. This job names a MECHANISM rather than a subject — the source it was fed (`test/test_managed_dynarray_field_leaks.pas`) is what the mechanism was run ON, not what is being tested, so a lane guessed from it would be wrong by construction. The ranker reads frontmatter, so this line decides who works it; re-lane it if this job has changed what it covers.
@@ -78,3 +79,36 @@ Verified the bound was never 5: `git show 0d3d061121a7:Makefile` and its parent
 both carry `50`, and exactly one commit (`2b70ff387`) has ever touched that line.
 
 Fixed in `tools/twatch.py` — the cap is 120 and a truncation now ends in `…`.
+One thing this ticket got right that the tstate REPORT for the same run did
+not: the title names the failing ASSERTION, `tools/assert_no_leak.sh`, with its
+label. The report names `tools/expect_same.sh` for these rows, because
+`extract_src` lists source-ish paths from the log rather than the failing step.
+Same run, two artifacts, different tool named — and the artifact everyone opens
+after a red is the one that names the wrong one.
+
+Narrowed from what I first wrote here, which credited the title with naming
+"its label and bound". The bound in it was `5` and the real one is `50` — see
+the section above; the truncation fell between the digits. So the title was
+right about the tool and the label and WRONG about the number, which is a
+sharper version of the same point rather than a softer one: of the two
+artifacts, neither was completely right and neither said so.
+whose own message records the trade: *"With baseTypeRef 0 both halves declined
+and the array merely leaked."* `live=111` against `bound 50` is that leak
+meeting a threshold nobody had connected to it.
+
+Fixed by the retain arms plus the descriptor re-widen. Re-measured after they
+landed, on the post-sync binary `ad879855a65a`:
+
+    assert_no_leak[aarch64/managed_dynarray_field]: ok (allocs=28165 frees=28162 live=3, bound 50)
+
+against the failing run's `live=111, allocs=28165 frees=28054`. Identical
+`allocs` is what makes it the same subject rather than a similar one — the
+workload did not move, 108 more frees did.
+
+One thing this ticket got right that the tstate REPORT for the same run did
+not: the title names `tools/assert_no_leak.sh` with its label and bound, which
+is the failing assertion. The report names `tools/expect_same.sh` for these
+rows, because `extract_src` lists source-ish paths from the log rather than the
+failing step. Same run, two artifacts, different tool named — and the artifact
+everyone opens after a red is the one that names the wrong one. Nothing marks
+either as partial.

@@ -4,7 +4,7 @@ title: "A permanently-red job wins the one detail slot, so NEW reds ship without
 track: T
 prio: 55
 type: bug
-status: new
+status: done
 blocked-by: []
 found: 2026-09-01
 found-by: frank-coordinator
@@ -103,3 +103,21 @@ survives whole, a 200-char one still truncates and shows it.
 
 **All three truncations here are silent.** `extract_src` at least appends `+N`.
 The other two produced well-formed output that read as complete.
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
+
+**Fixed.** The slot now prefers a NEW red, falling back to the first failure in
+job order when there is none, so no report loses detail it used to have. The
+heading moved with it: the block is CHOSEN, so `## first failure:` was a
+true-sounding name for a different thing, and a reader trusting it concludes
+the still-red was earliest — the one inference the change exists to prevent. It
+is now `## failure detail:` plus a `selected:` line naming which rule picked
+the job.
+
+`tools/twatch_detail_slot_devtest.py`, six cases, glob-collected by
+`tools-devtest`. Run against the pre-change file, exactly TWO fail — the
+selection case and the heading case — and the other four pass on both versions.
+That asymmetry is the evidence the fix is narrow, and it was checked by running
+the cases against the old file rather than reasoned about. The cases drive the
+real emitter and read the heading back out of the written markdown, because a
+fixture of a tool's output only ever validates the author's intention.

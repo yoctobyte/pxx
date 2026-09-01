@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:28 blocked:8 backlog:5 backlog-umbrella:5 backlog-core:135 backlog-nilpy:97 backlog-tools:72 backlog-pascal:53 backlog-decide:22 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3009 rejected:72`
+`working:4 unfinished:28 blocked:8 backlog:4 backlog-umbrella:5 backlog-core:135 backlog-nilpy:97 backlog-tools:71 backlog-pascal:53 backlog-decide:22 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3012 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-x86-64-inline-setlength-never-retains-promo-or-variant-elements` [A] — owner: frankA
 - `feature-c-corpus-busybox-multi-applet` [C] — owner: frankD
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
@@ -57,7 +56,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 436, ranked
+## Ready — top 30 of 434, ranked
 
 - `[p 90] [A]` bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong (unblocks 1)
 - `[p 80] [A]` bug-a-i386-c-main-gets-argc-and-argv-swapped (unblocks 1)
@@ -69,7 +68,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [T]` regression-optdiff-shard4-12
-- `[p 70] [A]` regression-test-aarch64-test-managed-dynarray-field-leaks
 - `[p 70] [T]` regression-test-core-crtl-tiny-regex-match
 - `[p 70] [T]` regression-test-core-test-setlen-in-parallel-for-body-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard0-6-4
@@ -89,5 +87,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
+- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 
-_406 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_404 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

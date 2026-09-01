@@ -5,7 +5,7 @@ prio: 6
 summary: "FIXED. x86-64 inlines SetLength at TWO sites and both retain chains stopped at kind 4, so promo and variant array elements were never retained — which is why the descriptor stride for kinds 5/6 could not be emitted. Both halves now land together: kind 5/6 arms at both sites (one runtime call each), the stride at the second site via ManagedElemRef, and the descriptor re-widened. Promo live 2955/5985/10779 (linear) -> 7/9/7 flat; variant live 7708 -> 4; kind 4 unchanged."
 tags: [O, memory-leak, promoint, variant, dynarray]
 blocked-by: [umbrella-managed-memory-is-correct]
-status: working
+status: done
 owner: frankA
 ---
 
@@ -415,3 +415,6 @@ Until then this ticket claims site A, not site B.
 Same species as Track C's wasm32 `PXXVarClear` arm, which cannot be reached at
 all because that backend has no variant IR arms — different backend, identical
 epistemic status.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.

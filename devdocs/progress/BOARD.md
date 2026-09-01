@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-x86-64-inline-setlength-never-retains-promo-or-variant-elements | A | 6 | bug | FIXED. x86-64 inlines SetLength at TWO sites and both retain chains stopped at kind 4, so promo and variant array elements were never retained — which is why the descriptor stride for kinds 5/6 could not be emitted. Both halves now land together: kind 5/6 arms at both sites (one runtime call each), the stride at the second site via ManagedElemRef, and the descriptor re-widened. Promo live 2955/5985/10779 (linear) -> 7/9/7 flat; variant live 7708 -> 4; kind 4 unchanged. | umbrella-managed-memory-is-correct |
 | feature-c-corpus-busybox-multi-applet | C | 70→90 | feature | Rung 2 of feature-busybox-kiosk-selfhosting-target. FIRST BAR MET 2026-09-01 (2789f87a7): a two-applet busybox (cat+echo+the multiplexer, NUM_APPLETS 2, dispatch table compiled IN) built by pxx is byte-identical to gcc over 28 cases on x86-64 AND aarch64 and agrees with upstream's separately-linked binary; argv[0], `busybox <applet>`, --list, --help, unknown applet and bare busybox all covered. Cost ONE compiler fix: a constant left operand of && / \|\| survived every -O level including -O3 (88ef1232f). Harness is now tools/busybox_diff.sh --applets. STILL OPEN: `ash` (fork/exec/wait, the process model) and the TU surface -- 28 of libbb's ~145, so getpwnam/statfs/getrlimit/getmntent are still untouched. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
@@ -64,12 +63,11 @@ _none_
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (5)
+## backlog (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case | T | 55 | bug | gate.sh's stale_binary_hint asks a WORKING-TREE question (is this binary built from these sources) using GIT-HISTORY inputs (mtime vs the newest commit touching compiler/), so it can only ever see divergence that has been COMMITTED. Measured: an uncommitted edit under compiler/ leaves BOTH its inputs byte-identical, so its output is provably independent of the thing it detects -- it is blind to the entire uncommitted present, which includes every agent between a build and a commit. Three lanes read three stale-binary REDs as a master miscompile on 2026-08-31; the hint fired for one. | — |
-| regression-test-aarch64-test-managed-dynarray-field-leaks | A | 70 | regression | regression: test-aarch64#src:test/test_managed_dynarray_field_leaks.pas at 0d3d061121a7 in step 4/5, `tools/assert_no_leak.sh aarch64/managed_dynarray_field 50 tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64` (auto-filed by twatch) | — |
 | regression-test-core-crtl-tiny-regex-match | T | 70 | regression | regression: test-core#src:test/crtl_tiny_regex_match.c at 6e622be95680 in step 2/2, `tools/expect_same.sh crtl_tiny_regex_match26 "$(/tmp/crt` (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-compiler-srchash | T | 70 | regression | regression: test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh at fc9139c264df in step 2/2, `tools/run_sqlite_thread_test.sh aarch64 ./compiler/pasca` (auto-filed by twatch) | — |
 | regression-test-threads-test-exception-threads-race | T | 70 | regression | regression: test-threads#src:test/test_exception_threads_race.pas at e7be39f9a505 in step 2/4, `tools/expect_same.sh test_exception_threads_race26 "$(/t` (auto-filed by twatch) | — |
@@ -330,7 +328,7 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 
-## backlog-tools (72)
+## backlog-tools (71)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -340,7 +338,6 @@ _none_
 | bug-t-a-failing-plain-compile-is-reported-as-a-threadsafe-difference | T | 25 | bug | test-core's language-skeleton loop runs the plain compile with a bare ';' while the very next compile has '\|\| exit 1'. A failing plain compile does not stop the loop -- it falls through to comparing an empty 'plain' against 'ts' and still fails, but reports '--threadsafe changes the output' for a defect that has nothing to do with --threadsafe. Not a status hole; a diagnosis-quality one. | — |
 | bug-t-a-fuzz-finding-cited-by-seed-alone-cannot-prove-a-fix | T | 45 | bug | The csmith campaign cites findings by SEED. A seed only reproduces the same program against an identical generator version AND identical --csmith-args, so a later `seed N passes` is equally consistent with `fixed` and with `today's csmith emits a different program`. Three named open findings (901, 1502, 5004) now pass at HEAD and NONE of them can be closed on that evidence. | — |
 | bug-t-a-job-red-at-baseline-can-never-be-auto-ticketed | T | 55 | bug | A job that is red at BASELINE can never be auto-ticketed, and then reads as furniture | — |
-| bug-t-a-permanently-red-job-monopolises-the-single-detail-block | T | 55 | bug | A tstate report carries at most ONE detail block (job_reason_devtest.py:150, twatch.py:2022) and fills it from `## first failure:`. Because a standing red is present in every run, it keeps winning that slot, so genuinely NEW reds ship with a truncated tail and no detail — starved of it exactly when they are the news. Live case: reports/20260901T155512Z-66cda21-seven.md has 7 failures, one detail block, and it went to test-threads#exception_threads_race (red in 5 of 5); the four NEW dynarray reds each got a tail cut mid-word at `\| p`. Three sessions then spent an afternoon inferring what the log on seven said plainly. | — |
 | bug-t-a-present-corpus-is-never-checked-against-its-pinned-commit | T | 45 | bug | T: `present()` compares existence, not the commit the corpus was pinned to | — |
 | bug-t-a-test-targets-timeout-class-is-decided-by-a-substring-and-is-right-by-accident | T | 45 | bug | testmgr's classify() picks a job's timeout class by substring-matching the make -n recipe text. test-nilpy gets corpus/1200s because its recipe happens to contain 'sqlite', 'lua' and 'uforth' -- nothing about NilPy. Delete one test file and the whole suite silently drops to unit/90s, turning every slow-but-passing run into a false RED. uforth already fell through this exact hole. | — |
 | bug-t-a-testtmp-binary-name-is-shared-by-two-tests-and-by-two-targets | T | 50 | bug | 117 $(TESTTMP) binary names are written from more than one TARGET, and testmgr runs different targets' jobs concurrently in one scratch root — so two compiles race on one path, which is the ETXTBSY/half-written-binary window the self-host chain already solved with compile-to-unique-name + rename. 15 names are written by two different SOURCES, 6 of those from two targets, where the loser's assertion runs the winner's program. Not a backlog to clean by sweep: the fix is per-recipe and the population is frozen by a devtest so it cannot grow. | — |
@@ -832,9 +829,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3009)
+## done (3012)
 
-3009 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3012 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -925,7 +922,6 @@ _none_
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [T] regression-optdiff-shard4-12
-- [p 70] [A] regression-test-aarch64-test-managed-dynarray-field-leaks
 - [p 70] [T] regression-test-core-crtl-tiny-regex-match
 - [p 70] [T] regression-test-core-test-setlen-in-parallel-for-body-2
 - [p 70] [T] regression-test-pascal-conformance-shard0-6-4
@@ -993,7 +989,6 @@ _none_
 - [p 55] [N] bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
 - [p 55] [T] bug-t-a-job-red-at-baseline-can-never-be-auto-ticketed
-- [p 55] [T] bug-t-a-permanently-red-job-monopolises-the-single-detail-block
 - [p 55] [T] bug-t-a-verify-verdict-is-rendered-with-a-reason-from-a-different-run
 - [p 55] [T] bug-t-test-fgl-skips-silently-when-the-corpus-is-absent-so-its-gate-row-passes-by-not-running
 - [p 55] [T] bug-t-the-duplicate-expectation-ratchet-is-npy-only-and-the-first-escape-was-a-pas-test
@@ -1391,4 +1386,3 @@ _none_
 - **1** — feature-tls13-from-scratch
 - **1** — perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - **1** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
-- **1** — umbrella-managed-memory-is-correct
