@@ -78,6 +78,6 @@ control for the other -- they are the two halves of one guard, and the first
 fix passed the half that existed.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 680974b5f.
 - 2026-09-01 — reopened within the hour: the cap belonged on a member, not on
   storage. Split into TypeAlign / TypeFieldAlign. commit PENDING-COMMIT.

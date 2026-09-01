@@ -526,4 +526,4 @@ pxx-on-pxx, which is the exact self-consistency this whole ticket exists to
 show is worthless for a calling convention.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 8981641d6.
