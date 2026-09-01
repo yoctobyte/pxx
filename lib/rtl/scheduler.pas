@@ -42,6 +42,22 @@ procedure WaitReadable(fd: Integer);
 procedure WaitWritable(fd: Integer);
 procedure SetNonBlocking(fd: Integer);
 
+{ True when the CALLING thread is currently inside a coroutine body, i.e. when
+  WaitReadable/WaitWritable will park-and-yield rather than being meaningless.
+
+  This exists so a library that does its own socket I/O can be correct under
+  BOTH transports without being handed a flag through every layer: on EAGAIN it
+  asks here, and either parks on the reactor (thread stays free) or blocks in
+  poll (no reactor to stall). tls13_native's handshake and record layer are the
+  first callers -- see feature-tls-provider-abstraction.
+
+  DELIBERATELY NON-ATTACHING, and that is the whole subtlety: CurR attaches a
+  fresh reactor slot to the calling thread on first use, so a predicate built on
+  it would CONSUME one of the 64 slots merely by asking a question, from any
+  thread that never runs a coroutine at all. This walks the table read-only and
+  answers False for an unattached thread. }
+function InCoroutine: Boolean;
+
 { Suspend the current coroutine for ms milliseconds without blocking the thread
   (a timerfd parked on the same reactor). On non-reactor targets it degrades to
   a plain CoYield (no real delay). }
@@ -64,7 +80,19 @@ implementation
 
 const
   MAX_CO = 64;
-  CO_STK = 65536;   { default per-coroutine heap stack }
+  { Default per-coroutine heap stack. RAISED 64 KB -> 192 KB on 2026-09-01,
+    from a measurement rather than a feeling: an https request over the reactor
+    (TLS 1.3 handshake -> X.509 parse -> RSA-PSS/ECDSA verify -> trust-store
+    walk) CRASHES at 64 KB and at 96 KB, and passes from 128 KB up. A default
+    that cannot run this library's own first-class async feature is the wrong
+    default. 192 KB is the measured floor plus 50%.
+
+    This is charged PER LIVE COROUTINE (allocated in SpawnSized, freed when the
+    body returns), not per MAX_CO slot, so an idle program pays nothing. The
+    constrained-device case the header describes is unaffected: it already has
+    to call SpawnSized with an explicit size, and 4-8 KB stacks there never went
+    through this constant. feature-tls-provider-abstraction }
+  CO_STK = 196608;  { 192 KB }
   { Must round-trip through ONE SIGNED machine word: the guard is written and read
     through PW = ^NativeInt, which is 32-bit and signed on i386/arm32/riscv32. A
     value with the high bit set ($C0DECAFE) sign-extends to a negative on load and
@@ -234,6 +262,20 @@ end;
   Per-thread state without threadvar, keyed on the kernel tid. The fast path
   (already attached) is lock-free; attachment is guarded by a tiny atomic
   spinlock (contended only briefly at worker-thread startup). }
+function InCoroutine: Boolean;
+var me: Int64; i: Integer;
+begin
+  { read-only twin of CurR's fast path -- never attaches, never locks }
+  InCoroutine := False;
+  me := SelfTid;
+  for i := 0 to MAX_REACTORS - 1 do
+    if (reactors[i].used = 1) and (reactors[i].tid = me) then
+    begin
+      InCoroutine := reactors[i].curCo >= 0;   { -1 = the scheduler itself }
+      Exit;
+    end;
+end;
+
 function CurR: PReactor;
 var me, ignore: Int64; i, slot, spins: Integer;
 begin
@@ -543,13 +585,33 @@ begin
         r^.gEntry := r^.coEntry[i];
         r^.gArg := r^.coArg[i];
         __pxxcoswitch(@r^.schedSp, @r^.coSp[i]);   { run i until it yields/finishes }
+        { CHECK THE CANARY ON EVERY RETURN TO THE SCHEDULER, not only on
+          completion. It used to sit inside the `coState = 2` arm below, so a
+          coroutine that overflowed and then died before finishing was never
+          checked at all -- it never reached `done`. Every yield is a free
+          checkpoint; this is one load and one compare.
+
+          WHAT IT CATCHES, measured with a control in both directions rather
+          than claimed: a coroutine that clobbers the canary, yields, and then
+          dies. Old site -> silent SIGSEGV, no output, rc 139. New site ->
+          `fatal: coroutine stack overflow (canary clobbered)`, rc 217. That is
+          the shape of the real TLS failure.
+
+          WHAT IT STILL DOES NOT CATCH, stated because the honest limit matters
+          more than the win: an overflow that runs off the end and faults
+          IMMEDIATELY, before it can yield. A TLS handshake on a 64 KB stack is
+          exactly that -- it segfaults with no output, with this check in place.
+          Nothing here rescues it, which is why CO_STK was RAISED as well; this
+          check narrows the window, it does not close it. A guard page below
+          each stack would, and would cost an mmap per coroutine.
+          feature-tls-provider-abstraction }
+        if PW(r^.coStk[i])^ <> CO_CANARY then
+        begin
+          writeln('fatal: coroutine stack overflow (canary clobbered)');
+          Halt(217);
+        end;
         if r^.coState[i] = 2 then
         begin
-          if PW(r^.coStk[i])^ <> CO_CANARY then
-          begin
-            writeln('fatal: coroutine stack overflow (canary clobbered)');
-            Halt(217);
-          end;
           FreeMem(Pointer(r^.coStk[i]));
           r^.coState[i] := 0;   { free the slot for reuse by a later Spawn }
         end;

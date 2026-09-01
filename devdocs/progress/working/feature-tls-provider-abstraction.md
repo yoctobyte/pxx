@@ -455,3 +455,126 @@ the edge lives on the dependent, so at the moment the claim goes wrong nobody
 is standing where it is written. Here it cost more than tidiness: the queue
 stopped offering work the owner had personally prioritised, and an absence is
 not something anyone notices.
+
+
+---
+
+## 2026-09-01 (frankH) — slice 3: async https WORKED ON, and it was BROKEN, not slow
+
+**Track B.** The slice was pre-approved as *"async is a primary feature"*. What
+I found first changes the framing, so it goes first.
+
+### The premise was wrong, and the truth was worse
+
+This ticket said *"every https request occupies a thread for the length of a
+handshake."* **It did not. Async https did not work at all.** Same server, same
+URL, one binary, both paths:
+
+```
+SYNC  ok status=200
+ASYNC FAILED  lasterror=[no ServerHello (connection closed)]
+```
+
+The async path makes the fd non-blocking before the handshake runs
+(`TcpConnectAddr` -> `PalSetSocketNonBlocking`), and `RecvN` tested
+`if got <= 0` — which swallows `PAL_NET_EAGAIN` along with a real EOF. So a
+would-block was reported as a closed connection, **about a connection that was
+open and healthy.** That is why the message was never a lead: it accused the
+peer.
+
+`SendBytes` had the twin defect and was quieter still: one `NetSend`, result
+ignored — EAGAIN sent nothing, a short write sent a truncated record, and both
+corrupt the stream rather than failing.
+
+### No state machine — because the scheduler is STACKFUL
+
+This ticket prescribed *"a state machine over the flight parser"*. **I did not
+build one, and the reason is a measurement rather than a preference:**
+`scheduler.WaitIO` ends in `__pxxcoswitch`, a real stack switch, and each
+coroutine owns a heap stack. So a yield from six frames down inside the flight
+parser resumes exactly where it left off with every local intact. **The stack IS
+the state machine**, and it is already written and already tested.
+
+So the fix is one pair of EAGAIN-aware helpers used by the handshake AND the
+record layer, with `WaitForFd` choosing how to wait:
+
+* inside a coroutine -> `WaitReadable`/`WaitWritable`: park on epoll and yield,
+  thread free. This is the async property the ticket wanted.
+* outside one -> `PalPoll`: block. No reactor to stall.
+
+It asks the new `scheduler.InCoroutine` rather than threading an `async` flag
+through `Handshake`/`Read`/`Write`, because the seam's signatures do not carry
+one and widening them would push the transport choice onto every caller of a
+deliberately backend-neutral API.
+
+**This is not the thing the ticket warned against.** *"Do NOT fake it:
+returning a want the backend cannot honour is worse than blocking."* Nothing
+here returns a want it cannot honour — it returns no wants at all, which the
+seam explicitly permits, and it genuinely does not occupy the thread.
+`HandshakeResume` stays a legitimate no-op.
+
+`InCoroutine` is **deliberately non-attaching**: `CurR` attaches a reactor slot
+on first use, so a predicate built on it would consume one of 64 slots merely by
+being asked, from threads that never run a coroutine.
+
+### The second defect, found because the first was fixed
+
+With the I/O fixed, async https **segfaulted**. The default coroutine stack was
+64 KB and a handshake does not fit. Measured rather than guessed — 64 KB and
+96 KB crash, 128 KB up passes — so `CO_STK` is now 192 KB, the measured floor
+plus 50%. It is charged per LIVE coroutine, not per slot, and constrained
+devices already call `SpawnSized` explicitly, so they are unaffected.
+
+### The guard that could not fire for its own case
+
+The canary check sat inside the `coState = 2` (done) arm, so **a coroutine that
+overflowed and died before finishing was never checked** — which is every
+serious overflow. Moved to every return to the scheduler.
+
+**Both directions measured, on the same binary and the same input** — a
+coroutine that clobbers the canary, yields, then dies:
+
+| check site | result |
+| --- | --- |
+| old (completion only) | silent SIGSEGV, no output, rc 139 |
+| new (every yield) | `fatal: coroutine stack overflow (canary clobbered)`, rc 217 |
+
+**And the honest limit, which is in the source comment too:** it still does NOT
+catch an overflow that faults immediately, before it can yield. The 64 KB TLS
+case is exactly that and still segfaults silently. This narrows the window; it
+does not close it. A guard page per stack would, at an mmap each.
+
+### Evidence
+
+`test/devtest_https_native_async.pas` + a row in
+`tools/tls_native_seam_devtest.sh`. Plain `Spawn`, not `SpawnSized`, so it also
+asserts the default stack suffices.
+
+**The control that matters: with the EAGAIN fix reverted, the SYNC row still
+passes and only the async row goes red.** That is the whole argument for the new
+row existing — `devtest_https_native` passed throughout the period when every
+async https request failed.
+
+| | |
+| --- | --- |
+| `tls13-handshake-devtest` | OK (ed25519 + rsa_pss + ecdsa_p256, chain verify, kTLS-TX + Pascal fallback) |
+| `tls-native-seam-devtest` | OK (3 schemes, **4 refusals**, https via http.pas, sync + async) |
+| `gate.sh quick` | GREEN |
+| lib suites | lib_tls 16, lib_http 83, lib_http_async 5, lib_asyncnet6, lib_tls13_{keys 5, record 6, hs 6} — all at the counts the Makefile asserts |
+| scheduler | `SCHED WIDE OK`; exhaustion arm rc 216 with its exact fatal |
+
+The four refusals passing is the part that matters most: fail-closed
+CertificateVerify and trust-store anchoring both survived.
+
+**Two scope notes.** The FPC seed canary SKIPPED, correctly — this change is
+`lib/rtl` only and touches no `compiler/**`, so it carries no FPC-seed risk.
+And `make lib-test` cannot currently run to completion for **anyone**: its first
+check, `crtl_reachability`, fails on `<string.h>` declaring `strsignal()`
+defined in `signal.c`. Verified pre-existing at a clean HEAD with my changes
+stashed; it is Track C's and is routed to frankC.
+
+### Still open on this ticket
+
+Application-data `Read`/`Write` now inherit the EAGAIN handling through the
+shared helpers, but they are only exercised by the devtest's single GET. A
+large streamed body over the reactor is untested. Server role is still refused.

@@ -77,7 +77,8 @@ procedure Tls13NativeRegister;
 implementation
 
 uses sysutils, net, platform, random, x25519, sha256, tls13_keys, tls13_record,
-     tls13_hs, x509, truststore, ed25519, ecdsa_p256, rsa, tls13_ktls;
+     tls13_hs, x509, truststore, ed25519, ecdsa_p256, rsa, tls13_ktls,
+     scheduler;   { InCoroutine / WaitReadable — see the socket-helper note }
 
 const
   MAX_CERTS = 10;         { matches truststore.MAX_CHAIN }
@@ -114,7 +115,45 @@ begin
   Name := 'native-tls13';
 end;
 
-{ ---- socket helpers (blocking) -------------------------------------------- }
+{ ---- socket helpers -------------------------------------------------------
+  ONE pair of helpers serves the handshake AND the record layer, and both are
+  EAGAIN-aware. That is not tidiness: a NON-BLOCKING fd is the normal case on
+  the async path (TcpConnectAddr calls PalSetSocketNonBlocking), and the
+  previous version read EAGAIN as end-of-stream, so every https request made
+  through the reactor failed -- reporting `no ServerHello (connection closed)`
+  about a connection that was open and healthy.
+
+  WaitForFd is what makes one code path correct under both transports:
+
+    * inside a coroutine  -> park on the scheduler's epoll and YIELD, so the
+      thread is free for other work. This is what makes the handshake async in
+      the sense that matters, and it works WITHOUT a state machine because the
+      scheduler is STACKFUL -- __pxxcoswitch saves the whole stack, so a yield
+      from six frames down inside the flight parser resumes exactly where it
+      left off, with every local intact.
+    * outside one -> block in poll. There is no reactor to stall, and the
+      caller asked for a blocking transport.
+
+  It asks scheduler.InCoroutine rather than taking an `async` flag through
+  Handshake/Read/Write because the seam's signatures do not carry one and
+  widening them would push the transport choice onto every caller of a
+  backend-neutral API. }
+
+{ Wait until `fd` is readable, by whichever mechanism is correct here.
+  False = the wait itself failed (poll error); the caller then gives up. }
+function WaitForFd(fd: Integer; forRead: Boolean): Boolean;
+var pr: Integer;
+begin
+  if InCoroutine then
+  begin
+    if forRead then WaitReadable(fd) else WaitWritable(fd);
+    WaitForFd := True;
+    Exit;
+  end;
+  if forRead then pr := PalPoll(fd, PAL_POLL_IN, -1)
+  else pr := PalPoll(fd, PAL_POLL_OUT, -1);
+  WaitForFd := pr > 0;
+end;
 
 function RecvN(fd: Integer; n: Integer; var out_: AnsiString): Boolean;
 var got: Int64; buf: array[0..4095] of Byte; need, chunk, k: Integer;
@@ -124,6 +163,13 @@ begin
   begin
     chunk := need; if chunk > 4096 then chunk := 4096;
     got := NetRecv(fd, @buf[0], chunk);
+    if got = PAL_NET_EAGAIN then
+    begin
+      { would-block is NOT end-of-stream. Distinguishing the two is the whole
+        fix: they were the same branch, and `got <= 0` swallowed EAGAIN. }
+      if not WaitForFd(fd, True) then begin RecvN := False; Exit; end;
+      Continue;
+    end;
     if got <= 0 then begin RecvN := False; Exit; end;
     for k := 0 to Integer(got) - 1 do out_ := out_ + Chr(buf[k]);
     need := need - Integer(got);
@@ -144,9 +190,35 @@ begin
   ReadRecord := Length(payload) = len;
 end;
 
+{ Send ALL of `s`, waiting out EAGAIN and SHORT WRITES.
+
+  The previous version issued one NetSend and ignored the result, which is two
+  bugs on a non-blocking fd: EAGAIN sent nothing at all, and a partial write
+  sent a truncated record. Both corrupt the stream silently rather than
+  failing -- the peer sees a malformed handshake message and the error surfaces
+  as something else entirely. False = the peer is gone. }
+function SendAll(fd: Integer; const s: AnsiString): Boolean;
+var off, n: Integer; sent: Int64;
+begin
+  SendAll := True;
+  if s = '' then Exit;
+  off := 0; n := Length(s);
+  while off < n do
+  begin
+    sent := NetSend(fd, @s[off + 1], n - off);
+    if sent = PAL_NET_EAGAIN then
+    begin
+      if not WaitForFd(fd, False) then begin SendAll := False; Exit; end;
+      Continue;
+    end;
+    if sent <= 0 then begin SendAll := False; Exit; end;
+    off := off + Integer(sent);
+  end;
+end;
+
 procedure SendBytes(fd: Integer; const s: AnsiString);
 begin
-  if s <> '' then NetSend(fd, @s[1], Length(s));
+  if not SendAll(fd, s) then { the caller's next read reports the closed peer };
 end;
 
 function RecHdr(ctype, len: Integer): AnsiString;

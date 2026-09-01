@@ -120,8 +120,29 @@ else
   say "FAIL  https client build"; tail -3 /tmp/pxx_https_build.log; fail=1
 fi
 
+# The SAME request over the ASYNC reactor path. Not redundant with the row
+# above: the async path makes the fd NON-BLOCKING before the handshake runs, so
+# it is the only row that covers EAGAIN handling -- the row above passed for
+# months while every async https request failed with a bogus "connection
+# closed". Plain Spawn on purpose: it also asserts the DEFAULT coroutine stack
+# is big enough for a handshake.
+ACLI=/tmp/pxx_devtest_https_native_async
+if "$PXX_STABLE" -Fu"$ROOT/lib/rtl" -Fu"$ROOT/lib/rtl/platform/posix" \
+      "$ROOT/test/devtest_https_native_async.pas" "$ACLI" >/tmp/pxx_https_async_build.log 2>&1; then
+  serve 28829 "$D.rsa.leaf" "$D.rsa.key"
+  out=$(SSL_CERT_FILE="$D.rsa.ca" timeout 40 "$ACLI" "https://localhost:28829/" 2>&1)
+  kill "$SRV_PID" 2>/dev/null; SRV_PID=""
+  if printf '%s' "$out" | grep -q '^ASYNC HTTPS OK'; then
+    say "OK    HttpRequestAsync over https (non-blocking fd, default stack)"
+  else
+    say "FAIL  HttpRequestAsync over https"; printf '%s\n' "$out" | sed 's/^/      /'; fail=1
+  fi
+else
+  say "FAIL  async https client build"; tail -3 /tmp/pxx_https_async_build.log; fail=1
+fi
+
 if [ "$fail" -eq 0 ]; then
-  say "tls-native-seam-devtest OK (3 schemes, 4 refusals, https via http.pas)"
+  say "tls-native-seam-devtest OK (3 schemes, 4 refusals, https via http.pas, sync + async)"
   exit 0
 fi
 say "tls-native-seam-devtest FAILED"
