@@ -522,11 +522,6 @@
   }
  ],
  "host": "seven",
- "idle_yield": {
-  "aborts": 1,
-  "phase": "verify-request",
-  "target": "f370bb08506ab2573b8ab5f1b33a618313cde44c"
- },
  "job_last_pass": {
   "demos#00": "12c916c5c9cae7f04a3e10d72a09079735fafdd9",
   "fpc-bootstrap#src:compiler/compiler.pas": "963c289544a229c11688cd203c4397561fa90bd5",
