@@ -4,6 +4,8 @@ track: A
 prio: 4
 summary: a Variant converted to AnsiString leaks the result whenever it is a TEMPORARY — a const-AnsiString argument (921/1000) or a comparison against a computed string (936/1000); the dyn array and the SetLength churn in the old title were never ingredients, a plain local Variant leaks identically
 tags: [memory-leak, variant, ansistring, temporaries]
+status: working
+owner: frankA
 ---
 
 Found while writing `test_record_variant_member_leaks`: the obvious spelling of
