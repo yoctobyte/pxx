@@ -3985,86 +3985,85 @@ begin
       bug-a-2d-array-row-as-a-const-array-param-still-segfaults }
     if StaticArraySourceInfo(argAST, caCount, caElemTk, caElemRec, caElemSz) then
     begin
-      if not ((caElemTk = tyRecord) and RecordHasManagedFields(caElemRec)) then
+      if caCount * caElemSz > MAX_OPEN_ARRAY_STACK_TEMP then
       begin
-        if caCount * caElemSz > MAX_OPEN_ARRAY_STACK_TEMP then
-        begin
-          { Large source array: a frame-local `[len:8][data]` buffer here would
-            scale the CALLER's stack frame 1:1 with the array's declared size —
-            harmless for a small array, a SIGSEGV risk for a big one (the
-            caller's frame can exceed the ~8 MB default process stack).
-            bug-const-open-array-param-stack-copies-caller-frame. Manufacture a
-            genuine managed dyn-array-of-byte temp instead — heap-backed
-            (bounded, independent of the source array's size) and released
-            automatically by the routine's normal managed-local cleanup at
-            scope exit, exactly like `array of const`'s TVarRec temp
-            (AN_VARREC_ARRAY below) already relies on; its handle already has
-            the `[len:8][data]` layout the open-array param expects, with no
-            manual header bookkeeping needed. }
-          caSym := AllocDynArray('', tyUInt8, 1);
-          { SymIsHiddenArgTemp triggers the codegen PROLOGUE's one-time nil-
-            init for this synthesized-mid-lowering local (runs once at
-            function entry, before this call site's code -- including
-            before a loop containing this call runs any iteration). No
-            *inline* zero here on top of that: this call site's code can
-            execute many times (a loop), and an inline zero right before
-            each SetLength would orphan the PREVIOUS iteration's handle
-            without releasing it -- SetLength itself already correctly
-            resizes/reuses an existing non-nil handle (ordinary array-
-            growing semantics), so trust it instead of re-zeroing. (First
-            attempt at this fix did add an inline zero, copying
-            AN_VARREC_ARRAY's pattern without noticing that literal's own
-            call site can equally be inside a loop -- caught here via a
-            50-iteration RSS-ceiling test leaking ~2 MB/call; fixed by
-            removing the inline zero, not by chasing AN_VARREC_ARRAY.) }
-          SymIsHiddenArgTemp[caSym] := True;
-          { SetLength(caSym, caCount*caElemSz): synthesize the dyn-array
-            SetLength (-102) intrinsic call, exactly as AN_VARREC_ARRAY does. }
-          caIdent := AllocNode(AN_IDENT);
-          ASTIVal[caIdent] := caSym; ASTTk[caIdent] := Ord(tyPointer);
-          caCountLit := AllocNode(AN_INT_LIT);
-          ASTIVal[caCountLit] := caCount * caElemSz; ASTTk[caCountLit] := Ord(tyInteger);
-          caArg1 := AllocNode(AN_ARG); ASTLeft[caArg1] := caIdent;
-          caArg2 := AllocNode(AN_ARG); ASTLeft[caArg2] := caCountLit;
-          ASTRight[caArg1] := caArg2;
-          caSlCall := AllocNode(AN_CALL); ASTIVal[caSlCall] := -102;
-          ASTLeft[caSlCall] := caArg1;
-          value := IRLowerAST(caSlCall);
-          IRIVal[value] := 1;   { mark the SetLength IR_CALL as a statement to emit }
-          IRAppend(IR_COPY_REC, IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer)),
-            IRLowerAddress(argAST),
-            -1, caCount * caElemSz, Ord(tyRecord));
-          Result := IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer));
-          Exit;
-        end;
-        { Copy the fixed array into a frame/BSS-local `[len:8][data]` buffer and
-          pass `&data` — the open-array param reads its length at [data-8] and
-          indexes `data`. A plain byte buffer (not a heap dyn array) auto-frees
-          (it is reused at the same site / private per frame), so there is no
-          per-call leak and recursion is safe; managed element handles are simply
-          borrowed bytes (no per-element ARC), correct for a const/value param
-          whose callee only reads them. }
-        caSym := AllocArray('', tyUInt8, 0, 8 + caCount * caElemSz - 1);
+        { Large source array: a frame-local `[len:8][data]` buffer here would
+          scale the CALLER's stack frame 1:1 with the array's declared size —
+          harmless for a small array, a SIGSEGV risk for a big one (the
+          caller's frame can exceed the ~8 MB default process stack).
+          bug-const-open-array-param-stack-copies-caller-frame. Manufacture a
+          genuine managed dyn-array-of-byte temp instead — heap-backed
+          (bounded, independent of the source array's size) and released
+          automatically by the routine's normal managed-local cleanup at
+          scope exit, exactly like `array of const`'s TVarRec temp
+          (AN_VARREC_ARRAY below) already relies on; its handle already has
+          the `[len:8][data]` layout the open-array param expects, with no
+          manual header bookkeeping needed. }
+        caSym := AllocDynArray('', tyUInt8, 1);
+        { SymIsHiddenArgTemp triggers the codegen PROLOGUE's one-time nil-
+          init for this synthesized-mid-lowering local (runs once at
+          function entry, before this call site's code -- including
+          before a loop containing this call runs any iteration). No
+          *inline* zero here on top of that: this call site's code can
+          execute many times (a loop), and an inline zero right before
+          each SetLength would orphan the PREVIOUS iteration's handle
+          without releasing it -- SetLength itself already correctly
+          resizes/reuses an existing non-nil handle (ordinary array-
+          growing semantics), so trust it instead of re-zeroing. (First
+          attempt at this fix did add an inline zero, copying
+          AN_VARREC_ARRAY's pattern without noticing that literal's own
+          call site can equally be inside a loop -- caught here via a
+          50-iteration RSS-ceiling test leaking ~2 MB/call; fixed by
+          removing the inline zero, not by chasing AN_VARREC_ARRAY.) }
         SymIsHiddenArgTemp[caSym] := True;
-        { length header at buf[0..7] }
-        IRAppend(IR_STORE_MEM,
-          IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
-          IRAppend(IR_CONST_INT, -1, -1, -1, caCount, Ord(tyInteger)),
-          -1, 0, Ord(tyPointer));
-        { data := &buf + 8; copy the fixed array's elements into it }
-        value := IRAppend(IR_BINOP,
-          IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
-          IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-          Ord(tkPlus), 0, Ord(tyPointer));
-        IRAppend(IR_COPY_REC, value,
+        { SetLength(caSym, caCount*caElemSz): synthesize the dyn-array
+          SetLength (-102) intrinsic call, exactly as AN_VARREC_ARRAY does. }
+        caIdent := AllocNode(AN_IDENT);
+        ASTIVal[caIdent] := caSym; ASTTk[caIdent] := Ord(tyPointer);
+        caCountLit := AllocNode(AN_INT_LIT);
+        ASTIVal[caCountLit] := caCount * caElemSz; ASTTk[caCountLit] := Ord(tyInteger);
+        caArg1 := AllocNode(AN_ARG); ASTLeft[caArg1] := caIdent;
+        caArg2 := AllocNode(AN_ARG); ASTLeft[caArg2] := caCountLit;
+        ASTRight[caArg1] := caArg2;
+        caSlCall := AllocNode(AN_CALL); ASTIVal[caSlCall] := -102;
+        ASTLeft[caSlCall] := caArg1;
+        value := IRLowerAST(caSlCall);
+        IRIVal[value] := 1;   { mark the SetLength IR_CALL as a statement to emit }
+        IRAppend(IR_COPY_REC, IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer)),
           IRLowerAddress(argAST),
           -1, caCount * caElemSz, Ord(tyRecord));
-        Result := IRAppend(IR_BINOP,
-          IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
-          IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-          Ord(tkPlus), 0, Ord(tyPointer));
+        Result := IRAppend(IR_LEA, caSym, -1, -1, 0, Ord(tyPointer));
         Exit;
       end;
+      { Copy the fixed array into a frame/BSS-local `[len:8][data]` buffer and
+        pass `&data` — the open-array param reads its length at [data-8] and
+        indexes `data`. A plain byte buffer (not a heap dyn array) auto-frees
+        (it is reused at the same site / private per frame), so there is no
+        per-call leak and recursion is safe; managed element handles are simply
+        borrowed bytes (no per-element ARC), correct for a const/value param
+        whose callee only reads them — and that is the same argument that says a
+        record with MANAGED FIELDS needs no exclusion here either; the var path
+        below records what was measured when that exclusion came out. }
+      caSym := AllocArray('', tyUInt8, 0, 8 + caCount * caElemSz - 1);
+      SymIsHiddenArgTemp[caSym] := True;
+      { length header at buf[0..7] }
+      IRAppend(IR_STORE_MEM,
+        IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
+        IRAppend(IR_CONST_INT, -1, -1, -1, caCount, Ord(tyInteger)),
+        -1, 0, Ord(tyPointer));
+      { data := &buf + 8; copy the fixed array's elements into it }
+      value := IRAppend(IR_BINOP,
+        IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
+        IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+        Ord(tkPlus), 0, Ord(tyPointer));
+      IRAppend(IR_COPY_REC, value,
+        IRLowerAddress(argAST),
+        -1, caCount * caElemSz, Ord(tyRecord));
+      Result := IRAppend(IR_BINOP,
+        IRAppend(IR_SLOTADDR, caSym, -1, -1, 0, Ord(tyPointer)),
+        IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+        Ord(tkPlus), 0, Ord(tyPointer));
+      Exit;
     end;
   end;
   { Static array -> `var`/`out` open-array param: a `var` open array must let the
@@ -4076,8 +4075,9 @@ begin
     observably equal to true aliasing unless the callee reaches the same array by
     another path during the call). A function result in rax/xmm0 is preserved
     across the post-call writeback (the AN_CALL flush spills it to a temp).
-    Element types with managed payloads are excluded (the value path excludes
-    them too). The compiler's own source never feeds a static array to a var
+    Element types with managed payloads ride it too, records with managed
+    FIELDS included (see below). The compiler's own source never feeds a static
+    array to a var
     open-array param, so self-host / cross-bootstrap stay byte-identical (this
     path is not exercised there). }
   if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
@@ -4095,10 +4095,30 @@ begin
       and the copy-out moves the resulting handle set back over the caller's
       slots. Ownership transfers wholesale; refcounts stay balanced because
       the caller's stale copies are overwritten, never released or read.
-      Records with managed FIELDS stay excluded (a field-wise release in the
-      callee would need the copy-out to be field-aware). }
-    if oaEligible and
-       not ((caElemTk = tyRecord) and RecordHasManagedFields(caElemRec)) then
+      RECORDS WITH MANAGED FIELDS RIDE IT TOO, since 2026-09-01. This spot
+      excluded them, and so did the const path above, for the stated reason "a
+      field-wise release in the callee would need the copy-out to be
+      field-aware". The exclusion was not a refusal: an excluded argument fell
+      through to the generic path and was passed as a BARE static-array address
+      with no [len:8] header, so High() read whatever preceded the array and
+      answered -1, and the callee's loop silently never ran.
+
+      The stated reason does not survive being run — it is the same shape as the
+      AnsiString-ELEMENT case just above, which this path has always allowed:
+      ownership moves as a SET in both directions, so nothing is released
+      field-wise across the boundary either way. Measured against fpc 3.2.2 on
+      every arm that could distinguish them: two managed fields per record, a
+      dynamic-array field, a callee that copies an element into a LOCAL (the
+      field-wise release the old comment named), a callee that writes only
+      element 0, and the >MAX_OPEN_ARRAY_STACK_TEMP heap path — all
+      byte-identical to the oracle, with `live` flat at 41 while allocations
+      grew 10975 -> 45116, so neither a leak nor a double free. i386, aarch64,
+      arm32, riscv32 and xtensa agree with x86-64.
+      bug-a-a-static-array-of-managed-field-records-loses-its-length-as-an-open-array-argument
+
+      Keep the two paths in step: they carried one predicate for the same
+      reason they carried one bug. }
+    if oaEligible then
     begin
       if caCount * caElemSz > MAX_OPEN_ARRAY_STACK_TEMP then
       begin

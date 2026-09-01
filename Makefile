@@ -10057,6 +10057,8 @@ test-core: $(COMPILER)
 	@if grep -qE 'bss=[0-9]{7,}B' $(TESTTMP)/test_concat_arg_bss.log; then echo "concat-arg BSS bloat regressed:"; grep -oE 'bss=[0-9]+B' $(TESTTMP)/test_concat_arg_bss.log; exit 1; else echo "concat-arg-bss: OK ($$(grep -oE 'bss=[0-9]+B' $(TESTTMP)/test_concat_arg_bss.log))"; fi
 	./$(COMPILER) test/test_const_open_array_managed.pas $(TESTTMP)/test_const_open_array_managed26
 	tools/expect_same.sh test_const_open_array_managed26 "$$($(TESTTMP)/test_const_open_array_managed26)" "$$(printf 'high=2 sel=1\n aa\n>bb\n cc\naabbcc')"
+	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/test_oamfr26
+	tools/expect_same.sh test_oamfr26 "$$($(TESTTMP)/test_oamfr26)" "$$(printf 'const sum=8 high=1\nafter var: aa/bb ccc/d n=01\nafter partial: ONLY0 ccc/d\ndyn sum=19\nbig sum=12288 high=4095\nloop t=4000 aa/bb ccc/d')"
 	./$(COMPILER) test/test_open_array_ctor_stmt.pas $(TESTTMP)/test_open_array_ctor_stmt26
 	tools/expect_same.sh test_open_array_ctor_stmt26 "$$($(TESTTMP)/test_open_array_ctor_stmt26)" "$$(printf '3\n1 2 3 \n\nhi 5')"
 	./$(COMPILER) test/test_open_array_no_leak.pas $(TESTTMP)/test_open_array_no_leak26
@@ -14246,6 +14248,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_i386_x64
 	tools/expect_same.sh i386/test_dynarray_ownership_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/dao_i386)" "$$($(TESTTMP)/dao_i386_x64)"
+	./$(COMPILER) --target=i386 test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_i386
+	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_i386_x64
+	tools/expect_same.sh i386/test_open_array_managed_field_record "$$(tools/run_target.sh i386 $(TESTTMP)/oamfr_i386)" "$$($(TESTTMP)/oamfr_i386_x64)"
 	tools/assert_no_leak.sh i386/dynarray_ownership 50 tools/run_target.sh i386 $(TESTTMP)/dao_i386
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_i386_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -14823,6 +14828,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a64_x64
 	tools/expect_same.sh aarch64/test_dynarray_ownership_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/dao_a64)" "$$($(TESTTMP)/dao_a64_x64)"
+	./$(COMPILER) --target=aarch64 test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_a64
+	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_a64_x64
+	tools/expect_same.sh aarch64/test_open_array_managed_field_record "$$(tools/run_target.sh aarch64 $(TESTTMP)/oamfr_a64)" "$$($(TESTTMP)/oamfr_a64_x64)"
 	tools/assert_no_leak.sh aarch64/dynarray_ownership 50 tools/run_target.sh aarch64 $(TESTTMP)/dao_a64
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_a64_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -15437,6 +15445,9 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_rv32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_rv32_x64
 	tools/expect_same.sh riscv32/test_dynarray_ownership_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/dao_rv32)" "$$($(TESTTMP)/dao_rv32_x64)"
+	./$(COMPILER) --target=riscv32 test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_rv32
+	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_rv32_x64
+	tools/expect_same.sh riscv32/test_open_array_managed_field_record "$$(tools/run_target.sh riscv32 $(TESTTMP)/oamfr_rv32)" "$$($(TESTTMP)/oamfr_rv32_x64)"
 	tools/assert_no_leak.sh riscv32/dynarray_ownership 50 tools/run_target.sh riscv32 $(TESTTMP)/dao_rv32
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_rv32_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -15674,6 +15685,9 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_openarray_string.pas $(TESTTMP)/test_xtensa_test_cross_openarray_string
 	./$(COMPILER) test/test_cross_openarray_string.pas $(TESTTMP)/test_xtensa_test_cross_openarray_string_x64
 	tools/expect_same.sh xtensa/test_cross_openarray_string "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_openarray_string)" "$$($(TESTTMP)/test_xtensa_test_cross_openarray_string_x64)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_open_array_managed_field_record.pas $(TESTTMP)/test_xtensa_test_open_array_managed_field_record
+	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/test_xtensa_test_open_array_managed_field_record_x64
+	tools/expect_same.sh xtensa/test_open_array_managed_field_record "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_open_array_managed_field_record)" "$$($(TESTTMP)/test_xtensa_test_open_array_managed_field_record_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_param_2darray.pas $(TESTTMP)/test_xtensa_test_cross_param_2darray
 	./$(COMPILER) test/test_cross_param_2darray.pas $(TESTTMP)/test_xtensa_test_cross_param_2darray_x64
 	tools/expect_same.sh xtensa/test_cross_param_2darray "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_param_2darray)" "$$($(TESTTMP)/test_xtensa_test_cross_param_2darray_x64)"
@@ -16940,6 +16954,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a32_x64
 	tools/expect_same.sh arm32/test_dynarray_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/dao_a32)" "$$($(TESTTMP)/dao_a32_x64)"
+	./$(COMPILER) --target=arm32 test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_a32
+	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_a32_x64
+	tools/expect_same.sh arm32/test_open_array_managed_field_record "$$(tools/run_target.sh arm32 $(TESTTMP)/oamfr_a32)" "$$($(TESTTMP)/oamfr_a32_x64)"
 	tools/assert_no_leak.sh arm32/dynarray_ownership 50 tools/run_target.sh arm32 $(TESTTMP)/dao_a32
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_a32_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
