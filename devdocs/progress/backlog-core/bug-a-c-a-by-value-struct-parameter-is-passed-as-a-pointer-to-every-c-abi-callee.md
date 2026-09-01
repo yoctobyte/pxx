@@ -266,5 +266,26 @@ be landed and proven without the mixed-link gate going green, so it is the
 right first commit and it is NOT a partial aggregate classification -- nothing
 observable changes until step 2.
 
-**Not started.** Diagnosis banked; the session that takes it should start at
-step 1 and should not re-derive this from the `isRef` flag, which is a symptom.
+**STEP 1 IS DONE for x86-64** (`47c95af42`). Both cdecl arms -- direct
+(`IR_CALL`) and indirect (`IR_CALL_IND`) -- classify into slot-indexed arrays
+and emit by iterating SLOTS, with `slotArg[k]` naming the argument feeding slot
+k. `slotArg` is the identity, so `nSlots = nArgs` and no emitted byte moved:
+15 images byte-identical across x86_64/i386/aarch64/arm32
+(`tools/argslot_inertness.sh`). `argIsStack[]`/`argRegIdx[]` deleted after
+grep-verifying no readers remained. **Giving an argument more than one slot is
+now a change in the classification loop and nowhere else.**
+
+**What step 2 still needs, in the order the code will demand it:**
+
+1. `abi.inc` gains the SysV eightbyte classifier (INTEGER/SSE up to 16 bytes,
+   MEMORY beyond) and both arms read it in the classification loop.
+2. **The caller must evaluate an argument ONCE and split the result.** The
+   emit loops evaluate once per SLOT, and that is only equivalent to once per
+   argument while `slotArg` is injective. Flagged in place at both loops.
+3. The CALLEE half, `EmitParamSpillsForTarget`, has the same conflation
+   (`for i := 0 to nparams-1`, `intIdx`/`sseIdx` advanced once each) and needs
+   the same split before it can consume multi-slot arguments.
+4. `ABIA64CdeclArgSlot`'s fixed 8-byte NSAA advance is this conflation on
+   aarch64 and moves with its three readers.
+
+**Not to be re-derived from the `isRef` flag, which is a symptom.**
