@@ -295,6 +295,13 @@ cut. Its **sole** job is **topic-collision avoidance**: agents tell it what they
 are working on; it speaks up **only** when two are on the same TOPIC — the one
 conflict git cannot see. **Same FILE is not its business.**
 
+**A stated topic is the agent's BELIEF about its task, not its assignment** — a
+citation sourced from a brief you have not read, arriving in the agent's own
+voice. Check one that is unusually WIDE before acting on it, and never derive
+advice from it. Measured 2026-09-01: *"auditing 470 tickets, all lanes"* was one
+agent's brief written wrong, and guidance DERIVED from it told a worker to fix
+frontmatter instead of fixing the ticket.
+
 It does not pick tickets, fill queues, treat an idle session as available, or
 start a worker the owner has not started. **It sets up no timed callbacks** — it
 is the session most tempted, because polling looks like coordinating.
