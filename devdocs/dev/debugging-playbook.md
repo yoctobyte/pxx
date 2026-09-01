@@ -5326,6 +5326,32 @@ The tell: I wrote *"either it is reachable and ... or it is not and ..."*. A
 two-branch enumeration built from a one-token delta is a claim that the token
 is the only thing in play. Write the repro instead; it took two lines.
 
+## The RIGHT LENGTH and the WRONG CONTENT — a defect no counting assertion can see
+
+Named 2026-09-02 (frankA; the "worth a line in the playbook" prompt from frankC).
+`WriteLn(s:60)` for a one-character string emitted a single
+`write(fd, spaces, 59)` against a **40-byte** spaces buffer, so the line came out
+60 characters wide — correct — with 19 bytes of adjacent process data where
+spaces should have been. Every assertion anyone would naturally write on that
+program passes: `wc -c`, `Length`, a column check, an eyeball on a terminal that
+renders NULs as nothing.
+
+**The rule.** When the thing under test produces TEXT, compare BYTES against the
+oracle, not lengths, counts, or line shapes. An over-read, an uninitialised
+fill, a wrong-but-same-width encoding and an off-by-one into a neighbouring
+buffer all preserve every count you were going to check. `cmp -s expected actual`
+costs the same as `wc -c` and cannot be fooled the same way.
+
+Its sibling for artefacts rather than text is BYTE-IDENTITY AS THE EXPECTED
+RESULT: when a change is supposed to emit the same bytes — a refactor, a
+hand-counted constant made computed — build the artefact before, change it,
+rebuild, and diff. Every differing byte is a defect you did not have to predict.
+Two shipping wrong values (`bug-a-hand-written-literal-short-jumps-span-emitters-that-can-grow`)
+came out of exactly that, from a change whose whole point was that it changed
+nothing. Guard it the way you would any A/B: **identity is not a pass on its
+own**, because a program that never reaches the site is identical too — assert
+the site was exercised.
+
 ## POISON AND DIFF — turn "is this reachable" into a byte count
 
 Named 2026-09-01 (frankA; caveats frankB). To find out whether a function's
