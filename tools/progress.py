@@ -3323,7 +3323,33 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         text += "\n## Log\n"
     verb = "decided" if bucket == "decided" else "resolved"
     commit = args.commit or PENDING_COMMIT
-    text += f"- {_dt.date.today().isoformat()} — {verb}, commit {commit}.\n"
+    # WHAT THIS SHA IS, said in the line itself. sync.sh fills the placeholder
+    # with the commit that carried the RESOLVE. Whether that is also the commit
+    # that carried the CHANGE depends entirely on how the resolver staged it:
+    # resolve-with-the-fix makes them the same, and fix-then-resolve-separately
+    # (the loop CLAUDE.md documents, and what the board-regeneration step
+    # encourages) makes them different. `resolved, commit <sha>` reads as the
+    # second thing being the first, so a reader following it lands on a ticket
+    # move and has to go hunting. Two were hand-corrected on 2026-09-01 before
+    # anyone thought to fix the sentence instead of the instances -- which is
+    # the whole shape of "a documented trap is not a guard".
+    #
+    # A HAND-SUPPLIED sha keeps the old wording: someone passing --commit is
+    # naming the change deliberately, and there is nothing to disclaim.
+    #
+    # The placeholder must stay at END OF LINE: progress.py's own PENDING_RE
+    # matches `- ...PENDING-COMMIT[.\s]*$`, so the disclaimer goes BEFORE it,
+    # never after. sync_citation_guard_devtest.py asserts that pairing.
+    # `verb` is past tense ("resolved"/"decided") and reads wrong as a noun --
+    # "carried the resolved" is what the first version of this line printed, and
+    # a hand-typed regex fixture did not show it. Read the tool's own output.
+    noun = "decision" if verb == "decided" else "resolve"
+    if commit == PENDING_COMMIT:
+        text += (f"- {_dt.date.today().isoformat()} — {verb}; this names the commit "
+                 f"that carried the {noun}, which is not always the one that carried "
+                 f"the change: {commit}.\n")
+    else:
+        text += f"- {_dt.date.today().isoformat()} — {verb}, commit {commit}.\n"
     dst.write_text(text, encoding="utf-8")
     subprocess.run(["git", "add", str(dst)], cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print(f"{verb} {args.slug} -> {bucket}/ (commit {commit}).", file=sys.stderr)

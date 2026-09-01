@@ -2,7 +2,7 @@
 track: A
 prio: 55
 type: bug
-status: working
+status: unfinished
 found: 2026-09-01
 found-by: frankC
 summary: "i386 FIXED 2026-09-01, xtensa still open and it is a DIFFERENT mechanism. i386 now routes @external through the same GOT slot its external CALL already used -- `mov eax, [abs32]` where the call is `call dword [abs32]` -- added as the missing i386 arm of the shared EmitExternalProcAddr, which already had x86-64, aarch64, arm32 and riscv32. Measured: the minimised repro compiles and, linked against a gcc -m32 host that owns the symbol, calls through and returns 42. XTENSA CANNOT COPY THIS: it has no DynCall/GOT external path at all (no DynCallCodePos anywhere in ir_codegen_xtensa.inc), so its externals resolve by a different model and the fix needs that model understood first. Confirmed still refused there, reduced away from stdio because `#include <stdio.h>` independently fails on xtensa (bug-c-including-stdio-h-refuses-to-compile-for-xtensa, filed). The stated value of this ticket -- unblocking test-c-abi-mixed-link's i386 arm so its other 13 rows report again -- is DELIVERED."
