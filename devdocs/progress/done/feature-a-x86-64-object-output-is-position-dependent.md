@@ -267,4 +267,4 @@ it). This ticket's remaining consumer is
 this and is next.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit ccf155eb6.
