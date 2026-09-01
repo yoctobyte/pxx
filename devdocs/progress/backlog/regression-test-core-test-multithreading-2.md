@@ -37,3 +37,6 @@ Segmentation fault (core dumped)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-01 — the seven watcher saw `test-core#src:test/test_multithreading.pas@1` GREEN at b75a2dbab1ec (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-multithreading-2`, not `regression-test-core-test-multithreading`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
