@@ -3162,6 +3162,7 @@ begin
     subDesc := Pointer(memberPtr + 12 + typeRef);
     if kind = 3 then memberSize := PInt32(Int64(subDesc) + 4)^
     else if kind = 5 then memberSize := 16   { Variant slot: [tag:8][payload:8] }
+    else if kind = 7 then memberSize := typeRef  { promo: width is per-target }
     else memberSize := SizeOf(Pointer);
     j := 0;
     while j < arrayCount do
@@ -3181,6 +3182,14 @@ begin
              end;
            end;
         6: PWord(itemAddr)^ := 0;                     { NilPy class reference }
+        7: begin                                      { promo: all-zero = inline 0 }
+             k := 0;
+             while k < memberSize do
+             begin
+               PByte(Int64(itemAddr) + k)^ := 0;
+               k := k + 1;
+             end;
+           end;
       end;
       j := j + 1;
     end;
@@ -3930,6 +3939,13 @@ begin
     end
     else if kind = 5 then
       memberSize := 16                   { Variant slot: [tag:8][payload:8] }
+    else if kind = 7 then
+      { Promo slot, and its width is the one thing a constant cannot express
+        here: 16 bytes on a 64-bit target, 8 on a 32-bit one. The descriptor
+        carries the compiler's own TypeSlotSize answer in typeRef for exactly
+        this reason, so the runtime cannot disagree with the compiler about a
+        layout -- the argument ManagedElemRef makes for the array case. }
+      memberSize := typeRef
     else
     begin
       memberSize := SizeOf(Pointer);
@@ -3955,6 +3971,11 @@ begin
              SetLength survivor path — the same release-without-retain shape that
              made 9cb079528 segfault — so both halves land in one change. }
           PXXVarRetain(itemAddr);
+        7: { Promo field — the mirror of the release arm's PXXStrDecRef, landing
+             with it because a release without its retain destroys SetLength
+             survivors instead of merely leaking them. }
+          if PWord(itemAddr)^ = PROMO_TAG_HEAP then
+            PXXStrIncRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
       end;
       j := j + 1;
     end;
@@ -4080,6 +4101,13 @@ begin
     end
     else if kind = 5 then
       memberSize := 16                   { Variant slot: [tag:8][payload:8] }
+    else if kind = 7 then
+      { Promo slot, and its width is the one thing a constant cannot express
+        here: 16 bytes on a 64-bit target, 8 on a 32-bit one. The descriptor
+        carries the compiler's own TypeSlotSize answer in typeRef for exactly
+        this reason, so the runtime cannot disagree with the compiler about a
+        layout -- the argument ManagedElemRef makes for the array case. }
+      memberSize := typeRef
     else
     begin
       memberSize := SizeOf(Pointer);
@@ -4106,6 +4134,11 @@ begin
         6: { NilPy class-typed field: drop the instance's ref on its child
              (magic-guarded — a Pascal instance stored here no-ops) }
           PXXObjRelease(Pointer(PWord(itemAddr)^));
+        7: { Promotable-int field. Only the HEAP tier owns anything: its payload
+             word is a managed AnsiString handle, and every other tag holds an
+             inline value that must not be touched. }
+          if PWord(itemAddr)^ = PROMO_TAG_HEAP then
+            PXXStrDecRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
       end;
       j := j + 1;
     end;

@@ -6604,6 +6604,9 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_record_variant_member_leaks.pas $(TESTTMP)/test_rvm26
 	tools/expect_same.sh test_rvm26 "$$($(TESTTMP)/test_rvm26 | tail -1)" "record-variant-member 4000/4000"
 	tools/assert_no_leak.sh record_variant_member 50 $(TESTTMP)/test_rvm26
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_record_promo_member_leaks.pas $(TESTTMP)/test_rpm26
+	tools/expect_same.sh test_rpm26 "$$($(TESTTMP)/test_rpm26 | tail -1)" "record-promo-member 4000/4000"
+	tools/assert_no_leak.sh record_promo_member 50 $(TESTTMP)/test_rpm26
 	@# ...and the RSS ceiling, because every assertion above passes on a build
 	@# that never frees anything: correctness and reclamation are different
 	@# claims. Measured on this program: 3.6 MB fixed, 54 MB with only the

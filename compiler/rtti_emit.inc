@@ -71,7 +71,14 @@ begin
       never managed, ManagedElemKind answers 0 for the element and no walk is
       emitted for this descriptor to serve. Closing that one is the broad change
       and has its own ticket. }
-    ((UFldTk[fi] = Ord(tyVariant)) and not UFldIsArray[fi]);
+    ((UFldTk[fi] = Ord(tyVariant)) and not UFldIsArray[fi]) or
+    { ...and a PROMOTABLE INT member (kind 7), whose heap tier owns an
+      AnsiString payload exactly as a variant's does. Same reasoning as the
+      variant arm above and the same containment: RecordDescMember, never
+      FieldIsManaged. Scalar only for now, matching the variant arm -- a
+      `array[0..N] of PromoInt` MEMBER is not covered and is measured in the
+      ticket. }
+    (TypeIsPromoInt(IntToTypeKind(UFldTk[fi])) and not UFldIsArray[fi]);
 end;
 
 function ClassFieldNeedsFinal(fi: Integer): Boolean;
@@ -85,6 +92,10 @@ function ClassFieldNeedsFinal(fi: Integer): Boolean;
 begin
   ClassFieldNeedsFinal := FieldIsManaged(fi) or FieldIsComInterface(fi) or
     ((UFldTk[fi] = Ord(tyVariant)) and not UFldIsArray[fi]) or
+    { A promo field's heap tier owns an AnsiString payload, so a class holding
+      one must release it on finalize for the same reason it releases a variant
+      (kind 7). }
+    (TypeIsPromoInt(IntToTypeKind(UFldTk[fi])) and not UFldIsArray[fi]) or
     { NilPy only: class-typed fields are refcounted bindings (kind 6) —
       released on finalize so a dying instance drops its children. In Pascal
       mode a class field is a manual-lifetime pointer and stays out. }
@@ -1396,6 +1407,8 @@ begin
             mKind := 4
           else if UFldTk[fi] = Ord(tyVariant) then
             mKind := 5                 { Variant slot (PXXVarClear / PXXVarRetain) }
+          else if TypeIsPromoInt(IntToTypeKind(UFldTk[fi])) then
+            mKind := 7                 { promo slot: [tag][payload], stride in typeRef }
           else
             mKind := 3;
           PatchDataI32(mHdr + 4, mKind);
@@ -1412,6 +1425,16 @@ begin
           PatchDataI32(mHdr + 8, arrCount);
 
           typeRef := 0;
+          { A kind-7 member carries its STRIDE here rather than a descriptor offset
+            or an id -- the same discriminated slot kinds 4/5/6 use in an ARRAY
+            descriptor. It has to: PromoInt is a 16-byte slot on a 64-bit target and
+            8 on a 32-bit one, so unlike every other kind the ACTION is one thing and
+            the SIZE is not, and a constant in the runtime walk would be wrong on half
+            the targets. Sending the compiler's own TypeSlotSize answer means the
+            runtime cannot disagree with the compiler about the layout -- the argument
+            ManagedElemRef makes for the array case, in the record/class case. }
+          if mKind = 7 then
+            typeRef := TypeSlotSize(IntToTypeKind(UFldTk[fi]));
           if mKind = 2 then
           begin
             dynDescOff := hdr + 12 + mCount * 16 + dynIdx * 20;
@@ -1533,6 +1556,8 @@ begin
               mKind := 5                 { Variant slot (PXXVarClear on finalize) }
             else if UFldTk[fi] = Ord(tyClass) then
               mKind := 6                 { object binding (PXXObjRelease on finalize) }
+            else if TypeIsPromoInt(IntToTypeKind(UFldTk[fi])) then
+              mKind := 7                 { promo slot: [tag][payload], stride in typeRef }
             else
               mKind := 3;
             PatchDataI32(mHdr + 4, mKind);
@@ -1549,6 +1574,16 @@ begin
             PatchDataI32(mHdr + 8, arrCount);
 
             typeRef := 0;
+            { A kind-7 member carries its STRIDE here rather than a descriptor offset
+              or an id -- the same discriminated slot kinds 4/5/6 use in an ARRAY
+              descriptor. It has to: PromoInt is a 16-byte slot on a 64-bit target and
+              8 on a 32-bit one, so unlike every other kind the ACTION is one thing and
+              the SIZE is not, and a constant in the runtime walk would be wrong on half
+              the targets. Sending the compiler's own TypeSlotSize answer means the
+              runtime cannot disagree with the compiler about the layout -- the argument
+              ManagedElemRef makes for the array case, in the record/class case. }
+            if mKind = 7 then
+              typeRef := TypeSlotSize(IntToTypeKind(UFldTk[fi]));
             if mKind = 2 then
             begin
               dynDescOff := hdr + 12 + mCount * 16 + dynIdx * 20;
