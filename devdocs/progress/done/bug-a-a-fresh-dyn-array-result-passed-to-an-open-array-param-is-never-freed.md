@@ -78,4 +78,4 @@ value assertions pass EITHER WAY — `assert_no_leak.sh` is the row that catches
 this, exactly as for [[bug-a-a-fresh-array-result-has-no-owner-as-a-copy-or-concat-operand]].
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f551475b6.
