@@ -62,4 +62,4 @@ Same cause as its sibling, `db706c2da` (posix never declared
 `PAL_ERR_UNSUPPORTED`) — one bug, two tickets. All three steps pass: the
 xtensa build's output matches the x86-64 oracle exactly, which is what this row
 asserts, rather than matching a literal. Independently confirmed by frankA.
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit bee5a0d19.

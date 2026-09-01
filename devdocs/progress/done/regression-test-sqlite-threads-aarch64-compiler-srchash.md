@@ -174,4 +174,4 @@ includes at least one known race. Two independent runs, both green.
 reproduces; which commit fixed it is unestablished. Recorded that way on purpose
 — an invented cause is worse than an absent one, and the bisect range in this
 ticket dates the window it was FILED in, not the window it was fixed in.
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit bee5a0d19.

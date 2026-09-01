@@ -66,4 +66,4 @@ HEAD, so the chain is causal rather than temporal. Both job steps pass: compile
 is clean and `run_target.sh xtensa` gives rc=143 as the recipe asserts.
 Independently confirmed by frankA, who reached the same conclusion from
 `git log -S` before we discovered we were sweeping the same folder.
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit bee5a0d19.
