@@ -384,3 +384,34 @@ emitted by the native backend.
 That is the same "both halves are only correct together" shape the rest of this
 ticket describes, seen from the cross side: the descriptor arm and the retain
 arms are one change with two authors and about six weeks between them.
+
+## Which arms are confirmed by EXECUTION, and which only by reading
+
+Written down because "unchanged" and "clean" are not evidence about an arm that
+never ran, and an unverified arm that goes unrecorded reads as a verified one.
+
+**By execution.** Three SetLength shapes over `array of Variant`, 500 calls each,
+8 heap-tier payloads per call, in one program: a named local, a dyn array held as
+a RECORD FIELD, and the inner array of a nested `array of TVArr`. Final census
+`allocs=13891 frees=13890 live=1`. A leak in any one shape would be additive —
+500 x 8 = 4000 live for that shape alone — so this clears all three
+individually, not merely in aggregate. Plus the aarch64 row, `live=111 -> 3`.
+
+**By reading only: site B's kind 5 and 6 arm.** x86-64 inlines SetLength twice —
+site A keys off a symbol (`SymTR[symIdx]`), site B off
+`IRSetLenBaseRec`/`AnonDynArray`, a dyn array with no symbol of its own. Arms
+were added at both. An earlier canary showed **site A fires and site B does not**
+for a plain named promo array, which is what inverted this ticket's original
+primary/latent framing. No shape has since been PROVEN to reach site B: the
+three above are clean, but clean cannot say which lowering served them, and the
+two emit near-identical sequences (a call, then a 16-byte stride), so
+disassembly does not separate them either.
+
+Settling it needs canaries at both sites with an `array of Integer` negative
+control — the construction that found the inversion the first time. That needs a
+compiler rebuild and is the first thing to run when the tier releases the tree.
+Until then this ticket claims site A, not site B.
+
+Same species as Track C's wasm32 `PXXVarClear` arm, which cannot be reached at
+all because that backend has no variant IR arms — different backend, identical
+epistemic status.
