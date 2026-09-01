@@ -4,7 +4,7 @@ title: "Compile DOSBox with pxx, for a target, and run it"
 track: C
 prio: 90
 type: umbrella
-blocked-by: [feature-c-corpus-busybox-multi-applet]
+blocked-by: [feature-c-corpus-busybox-multi-applet, bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong]
 created: 2026-08-31
 summary: "GOAL, not a unit of work. The flagship real-program proof: a large real C/C++ codebase that either builds and runs or does not, with no partial credit to award ourselves. Owner named it first when stating the goal. Attach whatever the ATTEMPT breaks on -- do not pre-populate this from the backlog by guessing."
 ---
@@ -33,5 +33,19 @@ construction, not blocking real-world usage.
 The one blocker listed today is the rung below: busybox multi-applet is real C
 at a smaller scale, already ticketed, and failing it means DOSBox is out of
 reach.
+
+**Wired 2026-09-01 by the attempt, not by triage:**
+[[bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong]].
+Compiling busybox's 52 sources as SEPARATE OBJECTS -- its own build model, and
+the only model a project of DOSBox's size has -- ran into it: a pxx object
+emits no data symbols at all, so two objects sharing a global link cleanly and
+read different memory. Measured, not inferred: the pair prints `0` where gcc
+prints `99`, with no diagnostic from the compiler or the linker.
+
+That is the wall for DOSBox specifically. A unity build is what got busybox
+`cat` and `cat`+`echo` through, and it does NOT scale -- at seven applets gcc
+itself refuses the unity, because each busybox applet defines its own `struct
+globals` and `common_bufsiz.h` redeclares its enum. The unity was a way past
+the missing capability at small scale; it stops being one well below DOSBox.
 
 Full goal: `devdocs/dev/the-goal-cross-cross.md`.

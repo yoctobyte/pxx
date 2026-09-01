@@ -121,3 +121,65 @@ from `include/bb_config.h`, a header busybox has never had (so rung 1 built
 with the hardcoded tag throughout), and the case counter printed
 `PASS ... over 0 cases` because one case cats 4KB of `/dev/urandom` and grep
 switched to binary mode. A zero case count is now a hard failure.
+
+---
+
+## Progress 2026-09-01 part 2 (frankD) — the SEPARATE-COMPILATION attempt
+
+The first bar was met with a UNITY build, which is how rung 1 worked too. The
+honest next step was a wider applet set, and it broke the model rather than the
+compiler: **at seven applets gcc itself cannot build the unity.** Each busybox
+applet defines its own `struct globals` and `include/common_bufsiz.h`
+redeclares its enum, both fine across separate translation units and both
+collisions in one. The harness reported no result, correctly — there was no
+oracle, so "no differences" would have been true and worthless.
+
+So the attempt moved to busybox's OWN build model: 52 translation units of a
+seven-applet configuration (`cat echo ls mkdir cp grep sed`), compiled one at a
+time with `--emit-obj` and busybox's real command line. **51 of 52 now
+compile.** Six defects, in the order the attempt hit them:
+
+| | what | where it was fixed |
+| --- | --- | --- |
+| 1 | `-include <file>` did not exist — on every one of busybox's ~145 TUs | `36619c519` |
+| 2 | `, ##__VA_ARGS__` comma deletion not implemented — `ls`, `mkdir` | `36619c519` |
+| 3 | a directive INSIDE a macro argument list abandoned the call — `mkdir` | `36619c519` |
+| 4 | an absolute path in `#include "..."` was never resolved | `36619c519` |
+| 5 | crtl had no `lchown`, then no `mknod`, then no `truncate` | `b433471db`, `e55fd43d5` |
+| 6 | **objects carry no DATA symbols** | filed, not fixed |
+
+Note the shape of 1-4: **four preprocessor defects, and the first one hid the
+other three.** Nothing could compile at all until `-include` existed, so the
+"busybox needs N compiler fixes" estimate could not have been made by reading
+the backlog — only by running the build.
+
+### The wall, and it is one thing
+
+[[bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong]],
+wired to [[umbrella-compile-and-run-dosbox]]. A pxx object exports no `OBJECT`
+symbols and turns `extern int x;` into a local `.bss` slot rather than an
+undefined import, so **two pxx objects sharing a global link cleanly and read
+different memory** — measured, printing `0` where gcc prints `99`, with no
+diagnostic from compiler or linker.
+
+That is why the one TU that fails is `libbb/ptr_to_globals.c`, whose entire
+content is one global pointer, and why the other 51 cannot be linked either.
+`elfwriter.inc`'s object writer is under active work by frankA/frankC, so it is
+filed with the measurement rather than half-fixed in parallel.
+
+### Also found, not on this path
+
+[[bug-a-i386-c-main-gets-argc-and-argv-swapped]] — a C `main` on `--target=i386`
+gets `argv = 0x3` (the real `argc`) and `argc` = a garbled pointer. Pascal's
+`ParamCount` on the same target is correct, so it is the C entry bridge.
+Surfaced because the crtl tests above were run on every runnable target, which
+is the only reason anything looked at i386 argument passing at all. Wired to
+[[umbrella-cross-target-codegen-is-correct]].
+
+### State of the two bars
+
+- **Bar 1, multi-applet dispatch: MET**, and repeatable at `tools/busybox_diff.sh`.
+- **Bar 2, `ash`: not started, and it is now behind the linker.** `ash` is a
+  shell: it forks, execs and waits, and it is far past the size where a unity
+  build is available as a workaround. Whoever takes it should expect to need
+  the data-symbol work first, rather than discovering it a second time.
