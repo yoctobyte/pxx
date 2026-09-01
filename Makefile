@@ -14012,6 +14012,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_virtual_call_runs_once26 "$$($(TESTTMP)/test_virtual_call_runs_once26)" "VIRTUAL CALL RUNS ONCE OK"
 	./$(COMPILER) test/test_dynarray_var_param.pas $(TESTTMP)/test_dynarray_var_param26
 	tools/expect_same.sh test_dynarray_var_param26 "$$($(TESTTMP)/test_dynarray_var_param26)" "DYNARRAY VAR PARAM OK"
+	./$(COMPILER) test/test_ansiterm_raw_write.pas $(TESTTMP)/test_ansiterm_raw_write26
+	tools/expect_same.sh test_ansiterm_raw_write26 "$$($(TESTTMP)/test_ansiterm_raw_write26)" "$$(printf 'aBcD\nRAW WRITE OK')"
 	./$(COMPILER) test/test_except_derived_caught_by_base.pas $(TESTTMP)/test_except_derived_caught_by_base26
 	tools/expect_same.sh test_except_derived_caught_by_base26 "$$($(TESTTMP)/test_except_derived_caught_by_base26)" "$$(printf 'caught1:derived\ncaught2:grandchild\ncaught3:exact\ncaught4-specific:specific\ncaught5:sibling\ndone')"
 	./$(COMPILER) test/test_empty_class_shorthand.pas $(TESTTMP)/test_empty_class_shorthand26
@@ -14893,6 +14895,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_dynarray_result "$$(tools/run_target.sh i386 $(TESTTMP)/dynres_i386)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) --target=i386 test/test_dynarray_var_param.pas $(TESTTMP)/dvp_i386
 	tools/expect_same.sh i386/test_dynarray_var_param "$$(tools/run_target.sh i386 $(TESTTMP)/dvp_i386)" "DYNARRAY VAR PARAM OK"
+	./$(COMPILER) --target=i386 test/test_ansiterm_raw_write.pas $(TESTTMP)/arw_i386
+	tools/expect_same.sh i386/test_ansiterm_raw_write "$$(tools/run_target.sh i386 $(TESTTMP)/arw_i386)" "$$(printf 'aBcD\nRAW WRITE OK')"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -15565,6 +15569,8 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_dynarray_result "$$(tools/run_target.sh aarch64 $(TESTTMP)/dynres_a64)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) --target=aarch64 test/test_dynarray_var_param.pas $(TESTTMP)/dvp_a64
 	tools/expect_same.sh aarch64/test_dynarray_var_param "$$(tools/run_target.sh aarch64 $(TESTTMP)/dvp_a64)" "DYNARRAY VAR PARAM OK"
+	./$(COMPILER) --target=aarch64 test/test_ansiterm_raw_write.pas $(TESTTMP)/arw_a64
+	tools/expect_same.sh aarch64/test_ansiterm_raw_write "$$(tools/run_target.sh aarch64 $(TESTTMP)/arw_a64)" "$$(printf 'aBcD\nRAW WRITE OK')"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -16300,6 +16306,19 @@ test-riscv32: $(COMPILER)
 	# bug-a-riscv32-and-xtensa-read-a-var-dynamic-array-param-one-deref-short
 	./$(COMPILER) --target=riscv32 --platform=posix test/test_dynarray_var_param.pas $(TESTTMP)/dvp_rv32
 	tools/expect_same.sh riscv32/test_dynarray_var_param "$$(tools/run_target.sh riscv32 $(TESTTMP)/dvp_rv32)" "DYNARRAY VAR PARAM OK"
+	# ANSITERM MUST ACTUALLY WRITE. Its syscall number comes from a per-CPU
+	# ifdef table that had no arm for riscv32 or xtensa, so GetSysWrite returned
+	# -1, AnsiWrite took its `if w = -1 then Exit`, and every TUI drew NOTHING on
+	# those two targets while ordinary WriteLn kept working. menudemo and
+	# console_2048 printed their last ordinary line and not one byte of screen --
+	# no crash, no warning. A missing arm in an ifdef table fails by doing
+	# nothing. The program interleaves buffered Write with AnsiWrite so neither
+	# path can carry the other.
+	# NOTE the xtensa row needs --xtensa-long-calls: pulling ansiterm in pushes
+	# this past CALL0's +-512 KiB, which is
+	# feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image, not this.
+	./$(COMPILER) --target=riscv32 --platform=posix test/test_ansiterm_raw_write.pas $(TESTTMP)/arw_rv32
+	tools/expect_same.sh riscv32/test_ansiterm_raw_write "$$(tools/run_target.sh riscv32 $(TESTTMP)/arw_rv32)" "$$(printf 'aBcD\nRAW WRITE OK')"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -17344,6 +17363,8 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/test_dynarray_result "$$(tools/run_target.sh xtensa $(TESTTMP)/dynres_xt)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_dynarray_var_param.pas $(TESTTMP)/dvp_xt
 	tools/expect_same.sh xtensa/test_dynarray_var_param "$$(tools/run_target.sh xtensa $(TESTTMP)/dvp_xt)" "DYNARRAY VAR PARAM OK"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_ansiterm_raw_write.pas $(TESTTMP)/arw_xt
+	tools/expect_same.sh xtensa/test_ansiterm_raw_write "$$(tools/run_target.sh xtensa $(TESTTMP)/arw_xt)" "$$(printf 'aBcD\nRAW WRITE OK')"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The
@@ -17919,6 +17940,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_dynarray_result "$$(tools/run_target.sh arm32 $(TESTTMP)/dynres_a32)" "$$(printf '1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) --target=arm32 --platform=posix test/test_dynarray_var_param.pas $(TESTTMP)/dvp_a32
 	tools/expect_same.sh arm32/test_dynarray_var_param "$$(tools/run_target.sh arm32 $(TESTTMP)/dvp_a32)" "DYNARRAY VAR PARAM OK"
+	./$(COMPILER) --target=arm32 --platform=posix test/test_ansiterm_raw_write.pas $(TESTTMP)/arw_a32
+	tools/expect_same.sh arm32/test_ansiterm_raw_write "$$(tools/run_target.sh arm32 $(TESTTMP)/arw_a32)" "$$(printf 'aBcD\nRAW WRITE OK')"
 	# ABSOLUTE, not differential — and the two are not the same check. The row
 	# above compares this target against the x86-64 build, which catches a
 	# backend that DIVERGES and is blind to a leak every backend SHARES. The

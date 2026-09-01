@@ -117,6 +117,14 @@ begin
   {$ifdef CPUX86_64}
     Result := 16;
   {$endif}
+  { riscv32 and xtensa are deliberately NOT listed here, unlike GetSysRead
+    and GetSysWrite above. This compiler never emits ioctl or fcntl for
+    either target, so there is no in-tree source for the number and the
+    only way to fill these in would be to copy one out of a header and
+    hope. A wrong syscall number does not fail like a missing one -- it
+    calls something else. -1 makes the caller take its no-terminal
+    fallback, which is the same path a redirected stdout takes on x86-64.
+    Fill them in when something needs raw mode there, against a run. }
 end;
 
 function GetSysRead: Integer;
@@ -133,6 +141,24 @@ begin
   {$endif}
   {$ifdef CPUX86_64}
     Result := 0;
+  {$endif}
+  { riscv32 uses the asm-generic table (same numbers as aarch64); xtensa has
+    its OWN. Both taken from what this compiler actually emits for the same
+    call -- ir_codegen_riscv32.inc:3003/3005 and ir_codegen_xtensa.inc:
+    3148/3150 -- rather than from a header, so the number is the one the
+    running program uses.
+
+    THESE TWO WERE MISSING AND THE FAILURE WAS SILENT: GetSysWrite returned
+    -1, AnsiWrite's `if w = -1 then Exit` took it, and every TUI drew
+    NOTHING on riscv32 and xtensa while ordinary WriteLn kept working.
+    examples/tui/menudemo and examples/g2048/console_2048 printed their
+    final line and not one byte of screen.
+    bug-b-ansiterm-has-no-syscall-numbers-for-riscv32-or-xtensa-so-every-tui-draws-nothing }
+  {$ifdef CPU_RISCV32}
+    Result := 63;
+  {$endif}
+  {$ifdef CPU_XTENSA}
+    Result := 12;
   {$endif}
 end;
 
@@ -151,6 +177,14 @@ begin
   {$ifdef CPUX86_64}
     Result := 72;
   {$endif}
+  { riscv32 and xtensa are deliberately NOT listed here, unlike GetSysRead
+    and GetSysWrite above. This compiler never emits ioctl or fcntl for
+    either target, so there is no in-tree source for the number and the
+    only way to fill these in would be to copy one out of a header and
+    hope. A wrong syscall number does not fail like a missing one -- it
+    calls something else. -1 makes the caller take its no-terminal
+    fallback, which is the same path a redirected stdout takes on x86-64.
+    Fill them in when something needs raw mode there, against a run. }
 end;
 
 function GetSysWrite: Integer;
@@ -167,6 +201,24 @@ begin
   {$endif}
   {$ifdef CPUX86_64}
     Result := 1;
+  {$endif}
+  { riscv32 uses the asm-generic table (same numbers as aarch64); xtensa has
+    its OWN. Both taken from what this compiler actually emits for the same
+    call -- ir_codegen_riscv32.inc:3003/3005 and ir_codegen_xtensa.inc:
+    3148/3150 -- rather than from a header, so the number is the one the
+    running program uses.
+
+    THESE TWO WERE MISSING AND THE FAILURE WAS SILENT: GetSysWrite returned
+    -1, AnsiWrite's `if w = -1 then Exit` took it, and every TUI drew
+    NOTHING on riscv32 and xtensa while ordinary WriteLn kept working.
+    examples/tui/menudemo and examples/g2048/console_2048 printed their
+    final line and not one byte of screen.
+    bug-b-ansiterm-has-no-syscall-numbers-for-riscv32-or-xtensa-so-every-tui-draws-nothing }
+  {$ifdef CPU_RISCV32}
+    Result := 64;
+  {$endif}
+  {$ifdef CPU_XTENSA}
+    Result := 13;
   {$endif}
 end;
 
