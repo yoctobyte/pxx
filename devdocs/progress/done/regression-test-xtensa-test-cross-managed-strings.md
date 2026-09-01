@@ -105,4 +105,4 @@ being told" coverage survives there instead of being lost with the line.
 Not masking: shrinking the generated body to duck the wall was the alternative
 and it would have destroyed the subject, which needs ~130 KB to cross J's range
 at all.
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 19125e02e.

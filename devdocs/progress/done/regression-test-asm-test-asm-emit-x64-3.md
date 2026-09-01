@@ -89,4 +89,4 @@ in `636e4470d`.
 The class now has a guard: `tools/standalone_inc_harnesses.sh` compiles all
 seven such harnesses, wired into `gate.sh` conditionally on the two-configuration
 `.inc` files being touched.
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 19125e02e.
