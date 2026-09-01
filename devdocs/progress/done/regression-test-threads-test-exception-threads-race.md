@@ -3,6 +3,7 @@ prio: 70
 track: A
 blocked-by: [bug-a-two-threads-raising-object-exceptions-corrupt-the-heap]
 summary: "TRIAGED, do not bisect: this is not a compiler regression. decide-does-raise-of-an-existing-object-transfer-ownership settled that `raise` transfers ownership unconditionally (FPC oracle), so freeing at handler exit is the LANGUAGE and pxx is right. The test re-raises two objects created once, which is a use-after-free by that rule, and the test is what must change. Measured 2026-09-01 at 4a0dd77ef: it dies SINGLE-THREADED in phase 1 on the THIRD raise of the same object -- no threads, no TLS, no shadow chain. The rewrite needs each raise to construct, which is what walks into the blocker."
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 4 is `tools/expect_same.sh test_exception_threads_race26 "$(/tmp/test_exception_threads_race26)" "$(printf 'single hits=200000`. The job's own `src` (`test/test_exception_threads_race.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -291,3 +292,47 @@ Do not read the `bad e7be39f9a505 / last good 62e176c3c4e5` range as a lead. It
 is real but it dates the OWNERSHIP change's arrival, not a defect. And do not
 trust a run whose output is captured through a pipe: this program prints nothing
 on the way down, and "no output" reads identically to "crashed at line 1".
+
+## RESOLVED 2026-09-01 (frankC) — the test now constructs per raise
+
+Phase 3 raised two objects created once, which the settled ownership rule makes
+a use-after-free. It now constructs per raise. `SpinRaw` is UNTOUCHED and still
+raises an Integer, so the allocation-free crash detector — the phase that
+actually needs two threads to interleave — keeps its sensitivity. The
+serialisation the old header worried about lands only on phase 3, whose question
+("did each thread catch the class IT raised?") is per-iteration and does not
+need two raises to overlap.
+
+This could not be done until `bug-a-two-threads-raising-object-exceptions-corrupt-the-heap`
+was fixed (`4d71c93f3`): constructing per raise on two threads is precisely what
+that bug corrupted.
+
+MEASURED, 5 runs green, `single hits=200000 wrong=0` / `two hitsA=200000
+hitsB=200000 wrongA=0 wrongB=0`, matching the Makefile's existing expected
+string unchanged.
+
+**Positive control, and it needed doing twice.** My first attempt reverted the
+fix with `git diff compiler/ir.inc > p; git checkout -- compiler/ir.inc` — but
+the fix was already COMMITTED, so the diff was empty, the checkout was a no-op,
+and three "PRE-FIX" runs passed on the FIXED compiler. Nothing errored; the
+control simply never ran, and had I stopped there I would have recorded "the
+rewritten test does not detect the heap bug", which is false. Redone against
+`4d71c93f3^` with the revert ASSERTED before believing it (`grep -c tkFreeMem`
+in ir.inc: 1 pre-fix, 5 fixed), both tests then failed 3/3:
+
+```
+test_exception_threads_race.pas          rc=139, after printing phase 1 clean
+test_threadsafe_exception_two_threads    rc=139
+```
+
+So this test does still have teeth against the heap bug, and its phase 1 passes
+first, which is what makes the phase-2 crash readable.
+
+### What is NOT verified here
+
+The chain-race the test was ORIGINALLY written for. That needs the control this
+ticket's sibling documents — a compiler with `StatusSlotTlsIndex` forced to -1,
+which fails with rc=217 rather than rc=139. I did not build it. The test's
+sensitivity to the shadow-chain bug is therefore inherited from its history, not
+re-measured today.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

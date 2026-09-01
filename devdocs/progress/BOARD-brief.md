@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:7 unfinished:28 blocked:7 backlog:14 backlog-umbrella:6 backlog-core:141 backlog-nilpy:97 backlog-tools:77 backlog-pascal:56 backlog-decide:25 backlog-libs:15 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3046 rejected:72`
+`working:7 unfinished:28 blocked:7 backlog:13 backlog-umbrella:6 backlog-core:141 backlog-nilpy:97 backlog-tools:77 backlog-pascal:56 backlog-decide:25 backlog-libs:15 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3047 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -58,7 +58,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 468, ranked
+## Ready — top 30 of 467, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [C]` regression-lib-test-crtl-reachability-7 (unblocks 1)
@@ -68,7 +68,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [T]` regression-test-core-test-interface-byval-param-no-leak (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-rtl-fpc-compat-helpers-2 (unblocks 1)
 - `[p 85] [P]` regression-test-core-test-thread-api-no-uses (unblocks 1)
-- `[p 85] [A]` regression-test-threads-test-exception-threads-race (unblocks 1)
 - `[p 85] [T]` regression-test-threads-test-threadsafe-refcount-lockfree (unblocks 1)
 - `[p 85] [A+S]` regression-test-xtensa-test-signal-default-revert-b336 (unblocks 1)
 - `[p 85] [A+S]` regression-test-xtensa-test-signal-handler-callback-b336 (unblocks 1)
@@ -90,5 +89,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-core-test-setlen-in-parallel-for-body-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
+- `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
 
-_438 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_437 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

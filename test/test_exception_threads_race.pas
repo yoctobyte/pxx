@@ -14,10 +14,30 @@ program test_exception_threads_race;
   process: a count from phase 2 means nothing without a run that cannot produce
   the failure. Phase 2 adds one thread and changes nothing else.
 
-  ALLOCATION-FREE IN BOTH LOOPS, which is not an optimisation but the whole
+  ALLOCATION-FREE IN THE CRASH LOOP, which is not an optimisation but the whole
   point: an exception that allocates takes the heap lock on every raise, which
-  serialises the threads and hides the interleaving under test. Phase 3's
-  objects are created once, before the thread starts, and only re-raised.
+  serialises the threads and hides the interleaving under test. SpinRaw raises
+  an INTEGER and stays allocation-free for that reason, and it is the phase that
+  detects the chain race.
+
+  PHASE 3 NOW CONSTRUCTS PER RAISE, and used to re-raise two objects made once.
+  That was a use-after-free by our own settled rule: `raise` transfers ownership
+  unconditionally (decide-does-raise-of-an-existing-object-transfer-ownership,
+  FPC oracle), so the handler frees what it caught and the second raise of the
+  same object touches freed memory. It did exactly that -- SIGSEGV on the THIRD
+  raise, single-threaded, in phase 1, with no thread ever created. The test was
+  wrong, not the compiler.
+
+  It could not be fixed until allocating on two threads was safe: freeing a
+  caught object used to call PXXObjFree, whose plain arm frees with no heap lock
+  held, so a per-raise construct/free pair corrupted the free list
+  (bug-a-two-threads-raising-object-exceptions-corrupt-the-heap, fixed
+  2026-09-01). That is why this rewrite is dated later than the decision.
+
+  The serialisation the old header worried about applies to THIS phase only, and
+  costs it little: phase 3 asks "did each thread catch the class IT raised",
+  which is a per-iteration question, not one that needs two raises to overlap.
+  The overlap-sensitive detector is SpinRaw, and SpinRaw is untouched.
 
   Phase 3 exists because the chain head is not the only shared slot: the
   exception OBJECT and its CLASS INDEX were process-wide too, and those produce a
@@ -44,8 +64,6 @@ type
 
 var
   hitsA, hitsB, wrongA, wrongB, ready, go: Integer;
-  objA: TAlphaError;
-  objB: TBetaError;
   id: TThreadID;
 
 { The crash detector: no objects, no allocation, nothing but chain traffic. }
@@ -66,7 +84,7 @@ var i: Integer;
 begin
   for i := 1 to N do
     try
-      raise objA;
+      raise TAlphaError.Create;   { constructs per raise -- see the header }
     except
       on E: TAlphaError do hits := hits + 1;
       else wrong := wrong + 1;
@@ -78,7 +96,7 @@ var i: Integer;
 begin
   for i := 1 to N do
     try
-      raise objB;
+      raise TBetaError.Create;    { constructs per raise -- see the header }
     except
       on E: TBetaError do hits := hits + 1;
       else wrong := wrong + 1;
@@ -95,9 +113,6 @@ begin
 end;
 
 begin
-  objA := TAlphaError.Create; objA.Code := 1;
-  objB := TBetaError.Create;  objB.Code := 2;
-
   { phase 1 — the control }
   SpinRaw(hitsA, 5);
   SpinAlpha(hitsA, wrongA);
