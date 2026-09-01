@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-an-i386-object-carries-text-relocations-as-soon-as-it-uses-sysutils | A | 40 | bug | An i386 --emit-obj object has 0 absolute .text relocations for a bare program and 62 for the same program with `uses sysutils`, so it cannot link into a hardened PIE. The existing green row asserting the Pascal i386 object is PIE-clean is measured on a fixture that uses no RTL unit, so it cannot see this. | — |
 | feature-c-corpus-busybox-multi-applet | C | 70→90 | feature | Rung 2 of feature-busybox-kiosk-selfhosting-target. BOTH BARS MET 2026-09-01. First bar (2789f87a7): a two-applet busybox byte-identical to gcc over 28 cases on x86-64 AND aarch64, agreeing with upstream'''s separately-linked binary. SECOND BAR (ash) MET: tools/busybox_diff.sh --applets '''cat echo ash''' is GREEN -- the 41-TU ash unity is byte-identical to the gcc oracle over 62 cases on x86-64 AND aarch64, and the gcc unity agrees with upstream'''s own build. FIFTEEN defects were named and closed getting there, every one found by ATTEMPTING the target rather than by triaging the backlog: a C frontend parse bug (struct-typed local with a fn-pointer member); crtl'''s whole missing shell surface (fnmatch, full signal set + NSIG, strsignal, _SC_CLK_TCK, times, uname, pwd/getpwnam, a real execvp over a new execve, NAME_MAX/PATH_MAX, dprintf/vdprintf, getrlimit/setrlimit); a clock_t that was `long long` where glibc has `long`; crtl'''s own implementation being preprocessed in the PROGRAM'''s macro environment, and then the OPPOSITE error where crtl could not see its OWN header'''s macros; printf %m emitted verbatim, which blanked the reason on every busybox error at once; fork/vfork/wait/waitpid stubbed because a PAL entry issuing SYS_fork was NAMED PalVfork and three comments reasoned from the name; a compiler SEGFAULT with no diagnostic at -O0/-O1 (AN_PTR_CAST overloads ASTRight as a proc-signature index, not a child); sizeof(**p) answering the pointer size; a `**` declarator losing its pointee record unless it was FIRST in its declaration; pointer-minus-pointer tagged as a pointer so the next operator scaled (OPTIND became 9, getopts spun forever, hanging the harness twice for 39 and 22 minutes); and `void *` arithmetic scaling by FOUR (ash builds on `stackblock() + n`, uncast, beside a cast sibling that was always right). STILL OPEN, not blocking this ticket: the unity cannot host ash and coreutils/test.c together in EITHER order, measured, so the `[` builtin needs separate compilation -- bug-a-an-object-neither-exports-nor-imports-data-symbols. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
@@ -853,9 +852,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3028)
+## done (3029)
 
-3028 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3029 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
