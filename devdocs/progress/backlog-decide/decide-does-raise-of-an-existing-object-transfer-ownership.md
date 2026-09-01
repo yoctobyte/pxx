@@ -89,11 +89,23 @@ It would silently stop matching handlers for re-raised objects on that target.
 I checked this before proposing it, which is the only reason it is written down
 as rejected rather than attempted.
 
+## The trade, measured rather than predicted
+
+From Track T's `tstate/runs-seven.ndjson` (frank-coordinator). Both tests entered
+the tier in the SAME run — `e7be39f9a505`, which is `620989250`'s own:
+
+    test_exception_object_leaks   first_seen 13:33:31Z   reds:  0   never red, ever
+    test_exception_threads_race   new_red    13:27:15Z   reds: 53   still_red through 18:00:08Z
+
+So `620989250` bought a test that has never once failed, at the cost of one that
+has failed in every run since. This is why "reverting swaps one red for another"
+is not a guess: the archive only ever saw the leak test in its fixed state, so
+reverting moves the red rather than removing it.
+
 ## Interim
 
-Nothing is reverted, deliberately. Reverting the free trades this crash for the
-1478/1500 leak AND turns `test_exception_object_leaks` red, so it swaps one red
-for another rather than restoring green. Whoever takes the decision should
+Nothing is reverted, deliberately, and the tier stays RED at `test-threads`
+until this is decided. Whoever takes the decision should
 expect the broad tier to stay red at test-threads until it lands; the per-fix
 quick tier is unaffected and green.
 
