@@ -8569,6 +8569,12 @@ test-core: $(COMPILER)
 	# vtable -- was missing from CalleeSig entirely, which handles AN_INDEX over an
 	# AN_IDENT but not over an AN_FIELD. gcc -O0 oracle; pinned cannot compile it.
 	./$(COMPILER) test/cfnptr_array_callable.c $(TESTTMP)/cfnptr_array26
+	# A C main's OWN argc/argv, natively. The cross rows carry the same test
+	# because the defect it was written for was i386-only, but a native row is
+	# what makes a REGRESSION here visible in the quick tier rather than only
+	# in a cross sweep. bug-a-i386-c-main-gets-argc-and-argv-swapped
+	./$(COMPILER) test/ccross_main_argv.c $(TESTTMP)/cmain_argv26
+	tools/expect_same.sh cmain_argv26 "$$($(TESTTMP)/cmain_argv26 one two)" "ARGV OK"
 	tools/expect_same.sh cfnptr_array26 "$$($(TESTTMP)/cfnptr_array26)" "$$(printf 'local  11 30 -1\nfield  11 30 -1\ngfield 11 30\narrow  11 30\nvaridx 30 30\n16 48 8 \nderef  11 30\nnolist 5 13\nglobal 11 30\nraw    11 30\ntemp   -1\ndirect 11\nplain  9 7')"
 	# GCC extended inline asm. Not recognised at all, so `asm` parsed as a call to
 	# an undeclared function and the operand sections died at the first ':'.
@@ -14252,6 +14258,12 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/ccross_cdecl_cmode.c $(TESTTMP)/test_i386_cdeclcmode
 	tools/expect_same.sh i386/cdecl-cmode "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cdeclcmode)" "CDECL-CMODE OK"
 	./$(COMPILER) --target=i386 test/ccross_args.c $(TESTTMP)/test_i386_cargs
+	# ...and main's OWN arguments, which ccross_args.c above does not read and
+	# therefore could not see swapped. The two arguments are mandatory: the
+	# test asserts argc=3, so running it bare would fail for the right reason
+	# by accident and stop testing the swap. bug-a-i386-c-main-gets-argc-and-argv-swapped
+	./$(COMPILER) --target=i386 test/ccross_main_argv.c $(TESTTMP)/test_i386_cmargv
+	tools/expect_same.sh i386/main-argv "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cmargv one two)" "ARGV OK"
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_cargs; tools/expect_same.sh i386/test_i386_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/ccross_double_to_int.c $(TESTTMP)/test_i386_cd2i
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_cd2i; tools/expect_same.sh i386/test_i386_cd2i-rc "$$?" "42"
@@ -14845,6 +14857,12 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/ccross_cdecl_cmode.c $(TESTTMP)/test_aarch64_cdeclcmode
 	tools/expect_same.sh aarch64/cdecl-cmode "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cdeclcmode)" "CDECL-CMODE OK"
 	./$(COMPILER) --target=aarch64 test/ccross_args.c $(TESTTMP)/test_aarch64_cargs
+	# ...and main's OWN arguments, which ccross_args.c above does not read and
+	# therefore could not see swapped. The two arguments are mandatory: the
+	# test asserts argc=3, so running it bare would fail for the right reason
+	# by accident and stop testing the swap. bug-a-i386-c-main-gets-argc-and-argv-swapped
+	./$(COMPILER) --target=aarch64 test/ccross_main_argv.c $(TESTTMP)/test_aarch64_cmargv
+	tools/expect_same.sh aarch64/main-argv "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cmargv one two)" "ARGV OK"
 	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cargs; tools/expect_same.sh aarch64/test_aarch64_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=aarch64 test/ccross_double_to_int.c $(TESTTMP)/test_aarch64_cd2i
 	tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cd2i; tools/expect_same.sh aarch64/test_aarch64_cd2i-rc "$$?" "42"
@@ -15060,6 +15078,12 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/ccross_cdecl_cmode.c $(TESTTMP)/test_riscv32_cdeclcmode
 	tools/expect_same.sh riscv32/cdecl-cmode "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cdeclcmode)" "CDECL-CMODE OK"
 	./$(COMPILER) --target=riscv32 test/ccross_args.c $(TESTTMP)/test_riscv32_cargs
+	# ...and main's OWN arguments, which ccross_args.c above does not read and
+	# therefore could not see swapped. The two arguments are mandatory: the
+	# test asserts argc=3, so running it bare would fail for the right reason
+	# by accident and stop testing the swap. bug-a-i386-c-main-gets-argc-and-argv-swapped
+	./$(COMPILER) --target=riscv32 test/ccross_main_argv.c $(TESTTMP)/test_riscv32_cmargv
+	tools/expect_same.sh riscv32/main-argv "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cmargv one two)" "ARGV OK"
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cargs; tools/expect_same.sh riscv32/test_riscv32_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/ccross_double_to_int.c $(TESTTMP)/test_riscv32_cd2i
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cd2i; tools/expect_same.sh riscv32/test_riscv32_cd2i-rc "$$?" "42"
@@ -17018,6 +17042,12 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/ccross_cdecl_cmode.c $(TESTTMP)/test_arm32_cdeclcmode
 	tools/expect_same.sh arm32/cdecl-cmode "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cdeclcmode)" "CDECL-CMODE OK"
 	./$(COMPILER) --target=arm32 test/ccross_args.c $(TESTTMP)/test_arm32_cargs
+	# ...and main's OWN arguments, which ccross_args.c above does not read and
+	# therefore could not see swapped. The two arguments are mandatory: the
+	# test asserts argc=3, so running it bare would fail for the right reason
+	# by accident and stop testing the swap. bug-a-i386-c-main-gets-argc-and-argv-swapped
+	./$(COMPILER) --target=arm32 test/ccross_main_argv.c $(TESTTMP)/test_arm32_cmargv
+	tools/expect_same.sh arm32/main-argv "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cmargv one two)" "ARGV OK"
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cargs; tools/expect_same.sh arm32/test_arm32_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=arm32 test/ccross_double_to_int.c $(TESTTMP)/test_arm32_cd2i
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cd2i; tools/expect_same.sh arm32/test_arm32_cd2i-rc "$$?" "42"

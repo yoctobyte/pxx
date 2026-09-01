@@ -10200,13 +10200,35 @@ begin
         EmitB($A1); EmitGlobRef(BSS_INITIAL_RSP);              { mov eax, [initial_sp] (call clobbered eax) }
       end;
       EmitB($8D); EmitB($48); EmitB($04);                      { lea ecx, [eax+4] (argv) }
-      { The i386 internal convention pushes LEFTMOST-FIRST, and ir_codegen386's
-        cdecl reversal is disabled inside a C program, so main reads arg1 from
-        the HIGHER slot. Push argc first, then argv — pushing cdecl order here
-        handed main the argv pointer as argc.
-        bug-c-i386-entry-stub-hands-main-argc-and-argv-swapped }
-      EmitB($FF); EmitB($30);                                  { push [eax]      (arg1 = argc) }
+      { PLAIN SysV cdecl: rightmost pushed FIRST, so argc ends up at [ebp+8] and
+        argv at [ebp+12] in main's frame.
+
+        THIS COMMENT USED TO SAY THE OPPOSITE, and it was true when it was
+        written. It said the i386 internal convention pushes leftmost-first and
+        that ir_codegen386's cdecl reversal is disabled inside a C program, so
+        main read arg1 from the higher slot -- and it cited
+        bug-c-i386-entry-stub-hands-main-argc-and-argv-swapped, the ticket that
+        put the pushes in that order. The C i386 ABI has moved under it since:
+        a C-defined function is ProcCdecl and takes the real cdecl prologue, so
+        `main` reads arg0 from the LOW slot like any other C function, and this
+        stub was the last caller still speaking the old convention.
+
+        Not inferred from the change log -- measured against gcc, which is the
+        only oracle that cannot share our mistake. A pxx --target=i386
+        --emit-obj object defining `int f2(int a,int b)`, linked by gcc -m32
+        into a gcc-compiled main calling f2(1,2), returns 12. So pxx's i386 C
+        functions ARE standard cdecl and the stub was the thing out of step.
+
+        The internal leftmost-deepest convention is still live and still
+        correct where it is used -- the hand-emitted longjmp stub reads env at
+        [esp+8] and val at [esp+4] because the C frontend lowers that call
+        through the internal path, and it verifies (setjmp/longjmp round-trips
+        on i386). Two conventions, distinguished by which call path a callee is
+        reached through; `main` is reached through this stub and is a cdecl C
+        function, so this is the arm that had to change.
+        bug-a-i386-c-main-gets-argc-and-argv-swapped }
       EmitB($51);                                              { push ecx        (arg2 = argv) }
+      EmitB($FF); EmitB($30);                                  { push [eax]      (arg1 = argc) }
       EmitB($E8); callPatch := CodeLen; EmitI32(0);            { call main }
       { Run registered finalizers before exiting, so a plain `return` from main
         is not a silent skip. The stub is `call main; exit_group(retval)`, so
