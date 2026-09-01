@@ -2,8 +2,9 @@
 type: bug
 track: A
 prio: 6
-summary: x86-64 inlines SetLength and its retain chain stops at kind 4, so promo and variant array elements are never retained — which is why the descriptor stride for kinds 5/6 cannot be emitted
+summary: "FIXED. x86-64 inlines SetLength at TWO sites and both retain chains stopped at kind 4, so promo and variant array elements were never retained — which is why the descriptor stride for kinds 5/6 could not be emitted. Both halves now land together: kind 5/6 arms at both sites (one runtime call each), the stride at the second site via ManagedElemRef, and the descriptor re-widened. Promo live 2955/5985/10779 (linear) -> 7/9/7 flat; variant live 7708 -> 4; kind 4 unchanged."
 tags: [O, memory-leak, promoint, variant, dynarray]
+blocked-by: [umbrella-managed-memory-is-correct]
 status: working
 owner: frankA
 ---
@@ -320,3 +321,46 @@ before the x86-64 assert runs. The reds measured the cross backends.
 (Raised by frankA, ruled out by frank-coordinator's abort argument, falsified
 here. Worth the four minutes: had it been true, every conclusion above about
 cross-backend behaviour would have rested on an x86-64 measurement.)
+
+### The residual above is ANSWERED — it was never a harness-vs-local question
+
+The section above closes on "a Track T harness-vs-local question", and that
+is wrong in the same direction the two write-ups before it were: it looks for
+the difference in the METHOD because both measurements were assumed to be
+about a working tree. They were not. The red is this ticket's own leak half
+arriving at a fixed bound, and the fix below takes it out. The local green
+and seven's red do not disagree — they were run against trees on opposite
+sides of `a584e8fef`.
+
+## The four-target tstate red is this ticket, and this fix closes it
+
+The `test_managed_dynarray_field_leaks` rows that went red across i386, aarch64,
+riscv32 and arm32 at 15:42 are the leak half of this bug meeting a fixed bound,
+not a separate regression. They were green for four consecutive full runs and
+turned at the commit that narrowed the descriptor arm back to `baseKind = 4` —
+the trade recorded in that commit's own message: *"With baseTypeRef 0 both halves
+declined and the array merely leaked."* `live=111` against `bound 50` is that
+leak arriving at a threshold nobody had connected to it.
+
+Run by hand on the tree carrying both halves (binary `712a6472d018`, the
+fixedpoint of this tree), the aarch64 row's own two assertions:
+
+    assert_no_leak[aarch64/managed_dynarray_field]: ok (allocs=28165 frees=28162 live=3, bound 50)
+    assert_no_leak[x86-64/managed_dynarray_field]:  ok (allocs=28165 frees=28162 live=3, bound 50)
+
+against the failing run's `live=111, allocs=28165 frees=28054`. Identical
+`allocs` on both sides is what makes this the same subject rather than a similar
+one: the workload did not move, 108 more frees did.
+
+**What that measurement does NOT settle.** Each of the four rows carries three
+assertions and *two* of them are x86-64 — the cross binary, and the same source
+built for the native backend:
+
+    tools/assert_no_leak.sh aarch64/managed_dynarray_field 50 tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64
+    tools/assert_no_leak.sh x86-64/managed_dynarray_field  50 $(TESTTMP)/mdf_aarch64_x64
+
+So four *identical* `live=111` values have a cheaper explanation than four
+backends coinciding on a number: one x86-64 binary asserted four times. Until
+the literal label is read off the failing logs, this ticket should not claim the
+cross backends' release arm was implicated — the fix is the same either way, but
+the claim is not. Asked for verbatim; unanswered at the time of writing.
