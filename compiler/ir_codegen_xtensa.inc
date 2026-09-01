@@ -1659,7 +1659,7 @@ begin
           IREmitNodeXtensa(IRB[node]);                { a2 = new data pointer }
           { Move semantics: a fresh user-function result already carries the +1
             for this owner; intrinsics (IRA < 0) keep the conservative retain. }
-          if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+          if not IRNodeOwnsFreshCallResult(IRB[node]) then
           begin
             procIdx := FindProc('PXXDynArrayIncRef');
             if procIdx < 0 then Error('compiler error: PXXDynArrayIncRef not found');
@@ -2040,7 +2040,7 @@ begin
           already carrying the +1), publish it into the slot, then element-aware
           release the old one through the node-derived descriptor. }
         IREmitNodeXtensa(IRB[node]);              { a2 = new handle }
-        if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+        if not IRNodeOwnsFreshCallResult(IRB[node]) then
         begin
           procIdx := FindProc('PXXDynArrayIncRef');
           if procIdx < 0 then Error('compiler error: PXXDynArrayIncRef not found');

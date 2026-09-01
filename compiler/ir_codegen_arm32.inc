@@ -1548,7 +1548,7 @@ begin
             destined for this owner, so retaining again would leak one
             reference. Intrinsic results (IRA < 0) keep the conservative
             retain. Same discrimination as x86-64. }
-          if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+          if not IRNodeOwnsFreshCallResult(IRB[node]) then
           begin
             EmitI32($E92D0001);              { push {r0} — the call clobbers it }
             procIdx := FindProc('PXXDynArrayIncRef');
@@ -3720,7 +3720,7 @@ begin
           +1), publish it into the slot, then element-aware release the old one
           through the node-derived descriptor. }
         IREmitNodeArm32(IRB[node]);           { r0 = new handle }
-        if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+        if not IRNodeOwnsFreshCallResult(IRB[node]) then
         begin
           EmitI32($E92D0001);                 { push {r0} }
           procIdx := FindProc('PXXDynArrayIncRef');
@@ -4394,10 +4394,11 @@ begin
               IREmitNodeArm32(IRB[node]);             { r0 = handle }
               { A CALL result / concat BINOP is already OWNED (+1) — retaining
                 again leaked one handle per boxed call result (mirrors the
-                x86-64 fix; bug-a-runtime-variant-heap-grows-unbounded). }
-              if not (((IRKind[IRB[node]] = IR_BINOP) and
-                       (IntToTypeKind(IRTk[IRB[node]]) = tyAnsiString)) or
-                      ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0))) then
+                x86-64 fix; bug-a-runtime-variant-heap-grows-unbounded). This
+                was a hand-rolled copy listing direct IR_CALL only, so a boxed
+                VIRTUAL or INDIRECT call result still leaked here after that
+                fix; it asks the shared predicate now. }
+              if not IRNodeOwnsManagedStr(IRB[node]) then
                 EmitStrIncRefArm32;
             end;
             EmitI32($E92D0001);                       { push {r0} (payload) }

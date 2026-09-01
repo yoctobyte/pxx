@@ -177,6 +177,12 @@ procedure BuildCSysIncludeDirs; forward;    { the host `<>` fallback table — c
 {$include cir.inc}
 function GetOrAllocNodeDynDesc(node: Integer): Integer; forward;
 function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
+{ "is this a call to user code", the shared core of the three ownership
+  questions below. Forwarded for the same reason they are: the cross backends
+  are included BEFORE ir_codegen.inc, and their thirteen inline dyn-array
+  guards each hand-rolled a copy that listed IR_CALL only. Body in
+  ir_codegen.inc. }
+function IRNodeOwnsFreshCallResult(n: Integer): Boolean; forward;
 { "does this operand already own its +1" — the ONE predicate for managed-string
   ownership, body in ir_codegen.inc. Forwarded here because the cross backends
   are included BEFORE it and each had hand-rolled a narrower copy that listed

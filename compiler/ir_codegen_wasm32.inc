@@ -4805,7 +4805,7 @@ begin
   if WasmBodyBroken then Exit;
   WasmLocalSet(WasmStrLocN);
 
-  if not ((IRKind[valNode] = IR_CALL) and (IRA[valNode] >= 0)) then
+  if not IRNodeOwnsFreshCallResult(valNode) then
   begin
     WasmLocalGet(WasmStrLocN);
     WasmCall(WasmSlotForProc(hpInc), 'PXXDynArrayIncRef');

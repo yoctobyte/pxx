@@ -3,10 +3,10 @@ slug: bug-a-an-indirect-call-returning-a-dynamic-array-leaks-every-allocation-on
 track: A
 prio: 55
 type: bug
-status: new
+status: working
 found: 2026-09-01
 found-by: frankB
-owner: ""
+owner: frankA
 blocked-by: []
 summary: "`fp := @MakeArr; a := fp(i)` with a procedural variable returning a dynamic array leaks EVERY allocation -- frees=0, live=1871 of 1871 -- on x86-64, i386, arm32, aarch64 and riscv32 alike. The same function called DIRECTLY is clean (live=2), so this is the ownership guard testing IR_CALL alone and missing IR_CALL_IND, the dynamic-array twin of the string bug fixed in 746cbb20f. Unlike that one it is broken on the DEFAULT backend too, because x86-64's dyn-array path was never migrated to a shared predicate the way its string path was. xtensa is exempt: it refuses the program outright ('only ordinal/float/pointer/string function results supported yet'), which is the correct behaviour. Measured with -dPXX_ALLOC_CENSUS."
 ---

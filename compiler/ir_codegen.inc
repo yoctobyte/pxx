@@ -3911,20 +3911,42 @@ begin
                           ((elemSize = 1) or (elemSize = 2));
 end;
 
+{ Is this node a call to USER code whose result therefore arrives already
+  owning its +1 — so a slot receiving it MOVES rather than retains? A call is a
+  call whether it is direct, virtual or indirect; only the intrinsics (IR_CALL
+  with IRA < 0) are excluded, because a compiler-generated helper does not run
+  the `Result := X` retain that creates the ownership.
+
+  This is DATATYPE-FREE on purpose. It was three separate copies of the same
+  three arms — the string predicate, the object predicate, and thirteen inline
+  dyn-array guards across seven backends — and the dyn-array copies listed
+  IR_CALL alone, so `a := fp(i)` through a function pointer retained a second
+  time and freed nothing at all: 1871 allocs / 0 frees, against 1871/1869 for
+  the identical direct call
+  (bug-a-an-indirect-call-returning-a-dynamic-array-leaks-every-allocation-on-every-backend).
+  The dyn-array sites deliberately do NOT call IRNodeOwnsManagedStr even though
+  it would answer correctly today: the name would be a lie and the next arm
+  added for strings would silently move dyn arrays too. }
+function IRNodeOwnsFreshCallResult(n: Integer): Boolean;
+begin
+  IRNodeOwnsFreshCallResult := (n >= 0) and
+    (((IRKind[n] = IR_CALL) and (IRA[n] >= 0)) or
+     (IRKind[n] = IR_VIRTUAL_CALL) or (IRKind[n] = IR_CALL_IND));
+end;
+
 { Does this IR node produce a managed string that is ALREADY owned (+1) by
   whoever receives it, so storing it MOVES rather than retains? A concat result
-  and a user CALL result both are — and a call is a call whether it is direct,
-  virtual or indirect. Three stores carried this discrimination and all three
-  listed IR_CALL only, so a METHOD's freshly built string was retained a second
-  time and leaked ~32 bytes per call while the identical plain def was flat
-  (bug-nilpy-method-returning-a-fresh-string-leaks). One predicate, so the next
-  call kind is added in one place. }
+  is, and so is any fresh call result. Three stores carried this discrimination
+  and all three listed IR_CALL only, so a METHOD's freshly built string was
+  retained a second time and leaked ~32 bytes per call while the identical plain
+  def was flat (bug-nilpy-method-returning-a-fresh-string-leaks). The call arms
+  now live in IRNodeOwnsFreshCallResult, so the next call kind is added in one
+  place for strings, objects and dynamic arrays at once. }
 function IRNodeOwnsManagedStr(n: Integer): Boolean;
 begin
   IRNodeOwnsManagedStr := (n >= 0) and
     (((IRKind[n] = IR_BINOP) and (IntToTypeKind(IRTk[n]) = tyAnsiString)) or
-     ((IRKind[n] = IR_CALL) and (IRA[n] >= 0)) or
-     (IRKind[n] = IR_VIRTUAL_CALL) or (IRKind[n] = IR_CALL_IND));
+     IRNodeOwnsFreshCallResult(n));
 end;
 
 { The object twin of IRNodeOwnsManagedStr, and it needs one case that one does
@@ -3943,8 +3965,7 @@ end;
 function IRNodeOwnsManagedObj(n: Integer): Boolean;
 begin
   IRNodeOwnsManagedObj := (n >= 0) and
-    (((IRKind[n] = IR_CALL) and (IRA[n] >= 0)) or
-     (IRKind[n] = IR_VIRTUAL_CALL) or (IRKind[n] = IR_CALL_IND) or
+    (IRNodeOwnsFreshCallResult(n) or
      ((IRKind[n] = IR_LOAD_SYM) and (IRA[n] >= 0) and
       (IRA[n] < Length(SymIsCtorResultTemp)) and SymIsCtorResultTemp[IRA[n]]));
 end;
@@ -6603,7 +6624,7 @@ begin
             `Result := X` and excluded from the callee's scope-exit release), so
             retaining again here would leak one reference. Intrinsic results
             (IRA < 0) keep the conservative retain. }
-          if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+          if not IRNodeOwnsFreshCallResult(IRB[node]) then
             EmitDynArrayRetain;
           EmitB($50);                             { push new data pointer }
           if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
@@ -7233,7 +7254,7 @@ begin
           which (like IR_STORE_SYM's release) leaves [rsp] intact. }
         valueNode := IRB[node];
         IREmitNode(valueNode);                       { rax = new data pointer }
-        if not ((IRKind[valueNode] = IR_CALL) and (IRA[valueNode] >= 0)) then
+        if not IRNodeOwnsFreshCallResult(valueNode) then
           EmitDynArrayRetain;
         EmitB($50);                                  { push new }
         IREmitNode(IRA[node]);                       { rax = slot address }

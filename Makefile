@@ -14201,6 +14201,20 @@ test-i386: $(COMPILER)
 	# when there is no census line at all, so it cannot pass by measuring nothing.
 	tools/assert_no_leak.sh i386/managed_str_ownership 50 tools/run_target.sh i386 $(TESTTMP)/msol_i386
 	tools/assert_no_leak.sh x86-64/managed_str_ownership 50 $(TESTTMP)/msol_i386_x64
+	# The dyn-array twin, same mechanism and same pairing of checks. Thirteen
+	# inline guards across the backends asked "is this a DIRECT call" and
+	# nothing else, so an array from a function pointer, a virtual method or an
+	# interface method was retained twice and NOTHING was freed -- on x86-64
+	# too, which is why the absolute row beside the differential is the one
+	# that catches it. The program carries a direct-call arm as its own
+	# control: on the parent commit it freed 2000 and the other three arms
+	# freed zero. No xtensa row -- xtensa cannot return a dynamic array from a
+	# function at all, which is a separate gap with its own ticket.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_i386
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_i386_x64
+	tools/expect_same.sh i386/test_dynarray_ownership_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/dao_i386)" "$$($(TESTTMP)/dao_i386_x64)"
+	tools/assert_no_leak.sh i386/dynarray_ownership 50 tools/run_target.sh i386 $(TESTTMP)/dao_i386
+	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_i386_x64
 
 test-aarch64: $(COMPILER)
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
@@ -14734,6 +14748,20 @@ test-aarch64: $(COMPILER)
 	# when there is no census line at all, so it cannot pass by measuring nothing.
 	tools/assert_no_leak.sh aarch64/managed_str_ownership 50 tools/run_target.sh aarch64 $(TESTTMP)/msol_a64
 	tools/assert_no_leak.sh x86-64/managed_str_ownership 50 $(TESTTMP)/msol_a64_x64
+	# The dyn-array twin, same mechanism and same pairing of checks. Thirteen
+	# inline guards across the backends asked "is this a DIRECT call" and
+	# nothing else, so an array from a function pointer, a virtual method or an
+	# interface method was retained twice and NOTHING was freed -- on x86-64
+	# too, which is why the absolute row beside the differential is the one
+	# that catches it. The program carries a direct-call arm as its own
+	# control: on the parent commit it freed 2000 and the other three arms
+	# freed zero. No xtensa row -- xtensa cannot return a dynamic array from a
+	# function at all, which is a separate gap with its own ticket.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a64_x64
+	tools/expect_same.sh aarch64/test_dynarray_ownership_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/dao_a64)" "$$($(TESTTMP)/dao_a64_x64)"
+	tools/assert_no_leak.sh aarch64/dynarray_ownership 50 tools/run_target.sh aarch64 $(TESTTMP)/dao_a64
+	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_a64_x64
 
 test-riscv32: $(COMPILER)
 	# A `var` parameter of every scalar kind, plus var->var forwarding. The
@@ -15304,6 +15332,20 @@ test-riscv32: $(COMPILER)
 	# when there is no census line at all, so it cannot pass by measuring nothing.
 	tools/assert_no_leak.sh riscv32/managed_str_ownership 50 tools/run_target.sh riscv32 $(TESTTMP)/msol_rv32
 	tools/assert_no_leak.sh x86-64/managed_str_ownership 50 $(TESTTMP)/msol_rv32_x64
+	# The dyn-array twin, same mechanism and same pairing of checks. Thirteen
+	# inline guards across the backends asked "is this a DIRECT call" and
+	# nothing else, so an array from a function pointer, a virtual method or an
+	# interface method was retained twice and NOTHING was freed -- on x86-64
+	# too, which is why the absolute row beside the differential is the one
+	# that catches it. The program carries a direct-call arm as its own
+	# control: on the parent commit it freed 2000 and the other three arms
+	# freed zero. No xtensa row -- xtensa cannot return a dynamic array from a
+	# function at all, which is a separate gap with its own ticket.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_rv32
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_rv32_x64
+	tools/expect_same.sh riscv32/test_dynarray_ownership_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/dao_rv32)" "$$($(TESTTMP)/dao_rv32_x64)"
+	tools/assert_no_leak.sh riscv32/dynarray_ownership 50 tools/run_target.sh riscv32 $(TESTTMP)/dao_rv32
+	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_rv32_x64
 
 
 # ---------------------------------------------------------------------------
@@ -16746,6 +16788,20 @@ test-arm32: $(COMPILER)
 	# when there is no census line at all, so it cannot pass by measuring nothing.
 	tools/assert_no_leak.sh arm32/managed_str_ownership 50 tools/run_target.sh arm32 $(TESTTMP)/msol_a32
 	tools/assert_no_leak.sh x86-64/managed_str_ownership 50 $(TESTTMP)/msol_a32_x64
+	# The dyn-array twin, same mechanism and same pairing of checks. Thirteen
+	# inline guards across the backends asked "is this a DIRECT call" and
+	# nothing else, so an array from a function pointer, a virtual method or an
+	# interface method was retained twice and NOTHING was freed -- on x86-64
+	# too, which is why the absolute row beside the differential is the one
+	# that catches it. The program carries a direct-call arm as its own
+	# control: on the parent commit it freed 2000 and the other three arms
+	# freed zero. No xtensa row -- xtensa cannot return a dynamic array from a
+	# function at all, which is a separate gap with its own ticket.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a32
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a32_x64
+	tools/expect_same.sh arm32/test_dynarray_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/dao_a32)" "$$($(TESTTMP)/dao_a32_x64)"
+	tools/assert_no_leak.sh arm32/dynarray_ownership 50 tools/run_target.sh arm32 $(TESTTMP)/dao_a32
+	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_a32_x64
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,
