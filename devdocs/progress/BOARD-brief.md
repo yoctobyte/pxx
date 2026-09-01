@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:28 blocked:7 backlog:14 backlog-umbrella:5 backlog-core:141 backlog-nilpy:97 backlog-tools:76 backlog-pascal:56 backlog-decide:24 backlog-libs:15 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:3 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3042 rejected:72`
+`working:6 unfinished:28 blocked:7 backlog:15 backlog-umbrella:5 backlog-core:140 backlog-nilpy:97 backlog-tools:76 backlog-pascal:56 backlog-decide:24 backlog-libs:15 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:3 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3042 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-a-a-pascal-global-cannot-import-a-c-global` [A] — owner: frankA
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
@@ -56,13 +57,14 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 468, ranked
+## Ready — top 30 of 467, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
+- `[p 80] [A+S]` bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable (unblocks 1)
+- `[p 80] [A]` feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
-- `[p 80] [A]` meta-a-pxx-produces-linkable-code
 - `[p 80] [A]` umbrella-cross-target-codegen-is-correct
 - `[p 75] [A]` bug-a-two-threads-raising-object-exceptions-corrupt-the-heap
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -79,6 +81,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-core-test-exception-unhandled-2
 - `[p 70] [T]` regression-test-core-test-header-static-body
 - `[p 70] [T]` regression-test-core-test-interface-byval-param-no-leak
+- `[p 70] [P]` regression-test-core-test-multithreading
 - `[p 70] [T]` regression-test-core-test-rtl-fpc-compat-helpers-2
 - `[p 70] [T]` regression-test-core-test-setlen-in-parallel-for-body-2
 - `[p 70] [P]` regression-test-core-test-thread-api-no-uses
@@ -86,7 +89,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
 - `[p 70] [T]` regression-test-sqlite-threads-aarch64-compiler-srchash
-- `[p 70] [A]` regression-test-threads-test-exception-threads-race
-- `[p 70] [T]` regression-test-threads-test-threadsafe-refcount-lockfree
 
-_438 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_437 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

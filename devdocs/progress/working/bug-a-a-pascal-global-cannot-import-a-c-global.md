@@ -4,7 +4,8 @@ track: A
 prio: 45
 tags: [emit-obj, elf, symbols, pascal, linkage]
 summary: "`var x: Integer; cvar; external;` is REFUSED, so a Pascal object can export a global to C but cannot read one C defines. The C frontend has the import path already (ObjDataIsImport routes the reference to an UND symbol); Pascal has no spelling that reaches it, and accepting the keyword without the routing would allocate local storage and silently read zero."
-status: open
+status: working
+owner: frankA
 ---
 
 # A Pascal global cannot import a C global
