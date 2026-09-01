@@ -1740,6 +1740,97 @@ begin
     EmitB(0);   { EmitB, never `Code[CodeLen] := 0` -- see the note above }
 end;
 
+procedure ApplyImageFixups(codeVA, dataBase, bssBase, entry: Int64);
+{ Resolve every code and data fixup against the addresses an IMAGE will have.
+  One copy, because there were two and they had already drifted: writeELF is
+  written twice ({$ifdef FPC} / self-hosted, for the file handle type alone)
+  and the two patch passes differed only in the COMMENT above the @proc loop --
+  which is the half that goes stale silently. Both said `mov rax, imm64` after
+  x86-64 started emitting a lea.
+
+  Every rip-relative field here is a DISPLACEMENT measured from the address
+  after it, so each needs codeVA -- the virtual address of Code[0]. `entry` is
+  separate and is NOT the same number: it carries AsmEntryOff.
+
+  Callers pass absolute VAs for an ET_EXEC and base-relative ones (codeVA =
+  file offset, load base 0) for an ET_DYN, where the loader adds the base. }
+var
+  i: Integer;
+  addr: Int64;
+begin
+  { Apply data fixups (8-byte absolute) }
+  for i := 0 to FixCount-1 do
+  begin
+    addr := dataBase + Fixups[i].DataOff;
+    { A rewritten `movabs r64, imm64` is now `lea r64, [rip+disp32]`: four
+      bytes measured from the end of the instruction, not eight absolute. }
+    if FixupPCRel[i] then
+      Patch32(Fixups[i].CodePos,
+              addr - (codeVA + Fixups[i].CodePos + 4))
+    else
+      PatchAddr8(Fixups[i].CodePos, addr);
+  end;
+
+  { Apply global fixups (4-byte absolute) }
+  for i := 0 to GlobFixCount-1 do
+  begin
+    { A data-resident global (a typed const array baked into .data) carries a
+      BIASED offset -- the one decode point for all of them, because every
+      backend reaches a global through the same EmitGlobRef. See DATA_SYM_BIAS. }
+    if SymOffIsData(GlobFix[i].BSSoff) then
+      addr := dataBase + SymOffDataPart(GlobFix[i].BSSoff)
+    else
+      addr := bssBase + GlobFix[i].BSSoff;
+    { PCRel: EmitGlobRef rewrote the operand to [rip+disp32], so the field holds
+      the distance from the address AFTER it (rip at execution) to the target,
+      not the target. }
+    if GlobFixPCRel[i] then
+      Patch32(GlobFix[i].CodePos,
+              addr - (codeVA + GlobFix[i].CodePos + 4
+                      + GlobFixTrail[i]))
+    else
+      Patch32(GlobFix[i].CodePos, addr);
+  end;
+  if ExternalCount > 0 then
+  begin
+    PatchDynCallSites(dataBase, codeVA);
+    PatchDynamicData(dataBase);
+  end;
+
+  for i := 0 to MethodFixCount-1 do
+  begin
+    addr := entry + Procs[MethodFixups[i].ProcIdx].BodyAddr;
+    PatchDataU64(MethodFixups[i].DataPos, addr);
+  end;
+
+  { @proc: the routine's own code address -- `lea rax,[rip+disp32]` on x86-64,
+    an 8-byte absolute literal elsewhere. }
+  for i := 0 to ProcAddrFixCount-1 do
+  begin
+    { A routine with NO BODY has BodyAddr = -1, and `entry + (-1)` is a
+      perfectly plausible-looking address one byte below the entry point. The
+      program then jumps there the first time the value is called — a crash
+      with no diagnostic, arbitrarily far from the cause (songformatter reached
+      it through a Tk callback registered 500 widgets earlier). Say so at LINK
+      time instead. }
+    if Procs[ProcAddrFix[i].ProcIdx].BodyAddr < 0 then
+      ErrorNoPos('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
+            ': the address of a routine with no body was taken');
+    addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
+    { x86-64 emits `lea rax, [rip+disp32]`, so the field is the distance from
+      the address AFTER it, four bytes wide. aarch64/arm32/xtensa store an
+      8-byte absolute literal and keep PatchAddr8. }
+    if TargetArch = TARGET_X86_64 then
+      Patch32(ProcAddrFix[i].CodePos,
+              addr - (codeVA + ProcAddrFix[i].CodePos + 4))
+    else
+      PatchAddr8(ProcAddrFix[i].CodePos, addr);
+  end;
+
+  for i := 0 to DataPtrFixCount-1 do
+    PatchDataU64(DataPtrFix[i].DataPos, dataBase + DataPtrFix[i].TargetOff);
+end;
+
 {$ifdef FPC}
 procedure writeELF(const outPath: AnsiString);
 var f: File; i: Integer;
@@ -1798,76 +1889,7 @@ begin
     shoff := shoff + padN;
   end;
 
-  { Apply data fixups (8-byte absolute) }
-  for i := 0 to FixCount-1 do
-  begin
-    addr := dataBase + Fixups[i].DataOff;
-    { A rewritten `movabs r64, imm64` is now `lea r64, [rip+disp32]`: four
-      bytes measured from the end of the instruction, not eight absolute. }
-    if FixupPCRel[i] then
-      Patch32(Fixups[i].CodePos,
-              addr - (LOAD_ADDR + codeOffset + Fixups[i].CodePos + 4))
-    else
-      PatchAddr8(Fixups[i].CodePos, addr);
-  end;
-
-  { Apply global fixups (4-byte absolute) }
-  for i := 0 to GlobFixCount-1 do
-  begin
-    { A data-resident global (a typed const array baked into .data) carries a
-      BIASED offset -- the one decode point for all of them, because every
-      backend reaches a global through the same EmitGlobRef. See DATA_SYM_BIAS. }
-    if SymOffIsData(GlobFix[i].BSSoff) then
-      addr := dataBase + SymOffDataPart(GlobFix[i].BSSoff)
-    else
-      addr := bssBase + GlobFix[i].BSSoff;
-    { PCRel: EmitGlobRef rewrote the operand to [rip+disp32], so the field holds
-      the distance from the address AFTER it (rip at execution) to the target,
-      not the target. }
-    if GlobFixPCRel[i] then
-      Patch32(GlobFix[i].CodePos,
-              addr - (LOAD_ADDR + codeOffset + GlobFix[i].CodePos + 4
-                      + GlobFixTrail[i]))
-    else
-      Patch32(GlobFix[i].CodePos, addr);
-  end;
-  if ExternalCount > 0 then
-  begin
-    PatchDynCallSites(dataBase, LOAD_ADDR + codeOffset);
-    PatchDynamicData(dataBase);
-  end;
-
-  for i := 0 to MethodFixCount-1 do
-  begin
-    addr := entry + Procs[MethodFixups[i].ProcIdx].BodyAddr;
-    PatchDataU64(MethodFixups[i].DataPos, addr);
-  end;
-
-  { @proc: patch each `mov rax, imm64` with the routine's absolute code address }
-  for i := 0 to ProcAddrFixCount-1 do
-  begin
-    { A routine with NO BODY has BodyAddr = -1, and `entry + (-1)` is a
-      perfectly plausible-looking address one byte below the entry point. The
-      program then jumps there the first time the value is called — a crash
-      with no diagnostic, arbitrarily far from the cause (songformatter reached
-      it through a Tk callback registered 500 widgets earlier). Say so at LINK
-      time instead. }
-    if Procs[ProcAddrFix[i].ProcIdx].BodyAddr < 0 then
-      ErrorNoPos('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
-            ': the address of a routine with no body was taken');
-    addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
-    { x86-64 emits `lea rax, [rip+disp32]`, so the field is the distance from
-      the address AFTER it, four bytes wide. aarch64/arm32/xtensa store an
-      8-byte absolute literal and keep PatchAddr8. }
-    if TargetArch = TARGET_X86_64 then
-      Patch32(ProcAddrFix[i].CodePos,
-              addr - (LOAD_ADDR + codeOffset + ProcAddrFix[i].CodePos + 4))
-    else
-      PatchAddr8(ProcAddrFix[i].CodePos, addr);
-  end;
-
-  for i := 0 to DataPtrFixCount-1 do
-    PatchDataU64(DataPtrFix[i].DataPos, dataBase + DataPtrFix[i].TargetOff);
+  ApplyImageFixups(LOAD_ADDR + codeOffset, dataBase, bssBase, entry);
 
   Assign(f, outPath); Rewrite(f, 1);
 
@@ -1997,77 +2019,7 @@ begin
     shoff := shoff + padN;
   end;
 
-  { Apply data fixups (8-byte absolute) }
-  for i := 0 to FixCount-1 do
-  begin
-    addr := dataBase + Fixups[i].DataOff;
-    { A rewritten `movabs r64, imm64` is now `lea r64, [rip+disp32]`: four
-      bytes measured from the end of the instruction, not eight absolute. }
-    if FixupPCRel[i] then
-      Patch32(Fixups[i].CodePos,
-              addr - (LOAD_ADDR + codeOffset + Fixups[i].CodePos + 4))
-    else
-      PatchAddr8(Fixups[i].CodePos, addr);
-  end;
-
-  { Apply global fixups (4-byte absolute) }
-  for i := 0 to GlobFixCount-1 do
-  begin
-    { A data-resident global (a typed const array baked into .data) carries a
-      BIASED offset -- the one decode point for all of them, because every
-      backend reaches a global through the same EmitGlobRef. See DATA_SYM_BIAS. }
-    if SymOffIsData(GlobFix[i].BSSoff) then
-      addr := dataBase + SymOffDataPart(GlobFix[i].BSSoff)
-    else
-      addr := bssBase + GlobFix[i].BSSoff;
-    { PCRel: EmitGlobRef rewrote the operand to [rip+disp32], so the field holds
-      the distance from the address AFTER it (rip at execution) to the target,
-      not the target. }
-    if GlobFixPCRel[i] then
-      Patch32(GlobFix[i].CodePos,
-              addr - (LOAD_ADDR + codeOffset + GlobFix[i].CodePos + 4
-                      + GlobFixTrail[i]))
-    else
-      Patch32(GlobFix[i].CodePos, addr);
-  end;
-  if ExternalCount > 0 then
-  begin
-    PatchDynCallSites(dataBase, LOAD_ADDR + codeOffset);
-    PatchDynamicData(dataBase);
-  end;
-
-  for i := 0 to MethodFixCount-1 do
-  begin
-    addr := entry + Procs[MethodFixups[i].ProcIdx].BodyAddr;
-    PatchDataU64(MethodFixups[i].DataPos, addr);
-  end;
-
-  { @proc: patch each `mov rax, imm64` (x86-64) / 8-byte literal (aarch64) with
-    the routine's absolute code address. }
-  for i := 0 to ProcAddrFixCount-1 do
-  begin
-    { A routine with NO BODY has BodyAddr = -1, and `entry + (-1)` is a
-      perfectly plausible-looking address one byte below the entry point. The
-      program then jumps there the first time the value is called — a crash
-      with no diagnostic, arbitrarily far from the cause (songformatter reached
-      it through a Tk callback registered 500 widgets earlier). Say so at LINK
-      time instead. }
-    if Procs[ProcAddrFix[i].ProcIdx].BodyAddr < 0 then
-      ErrorNoPos('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
-            ': the address of a routine with no body was taken');
-    addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
-    { x86-64 emits `lea rax, [rip+disp32]`, so the field is the distance from
-      the address AFTER it, four bytes wide. aarch64/arm32/xtensa store an
-      8-byte absolute literal and keep PatchAddr8. }
-    if TargetArch = TARGET_X86_64 then
-      Patch32(ProcAddrFix[i].CodePos,
-              addr - (LOAD_ADDR + codeOffset + ProcAddrFix[i].CodePos + 4))
-    else
-      PatchAddr8(ProcAddrFix[i].CodePos, addr);
-  end;
-
-  for i := 0 to DataPtrFixCount-1 do
-    PatchDataU64(DataPtrFix[i].DataPos, dataBase + DataPtrFix[i].TargetOff);
+  ApplyImageFixups(LOAD_ADDR + codeOffset, dataBase, bssBase, entry);
 
   AssignPath := outPath;
   f := sysopen(AssignPath, 577); { O_WRONLY | O_CREAT | O_TRUNC }
