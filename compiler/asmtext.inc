@@ -1078,21 +1078,6 @@ begin
           ' pool=', AsmMemoPoolLen, '/', ASM_MEMO_POOL_CAP);
 end;
 
-{ One line under PXXDBG a.derefwalk, at end of compile: which arm of
-  ResolveDerefShapeAt answered. `else` and `backstop` are the two NodePtrElem
-  fallbacks; `-ans` counts the subset where NodePtrElem returned True, i.e.
-  actually contributed an answer rather than being asked and declining.
-  refactor-a-collapse-nodeptrelem-into-the-deref-walk }
-procedure DerefWalkReport;
-begin
-  if PxxDbgArg('a.derefwalk') = '' then Exit;
-  if DwArmsOff then
-    WriteLn('PXXDBG a.derefwalk CONTROL (arms disabled — every node must reach the else)');
-  WriteLn('PXXDBG a.derefwalk calls=', DwTotalCalls,
-          ' else=', DwElseHits, ' else-ans=', DwElseAns,
-          ' backstop=', DwBackHits, ' backstop-ans=', DwBackAns);
-end;
-
 procedure EmitAsmX64(const items: array of const); overload;
 var
   i, n, h, nHoles, j: Integer;

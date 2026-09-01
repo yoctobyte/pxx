@@ -5520,7 +5520,8 @@ begin
     { EXACT arg, not PxxDbgWants: that returns True for the `*` wildcard too, so
       `a.derefwalk:*` silently armed the CONTROL and both columns of the first
       run read 315/315. The instrument answered — about the control build. }
-    DwArmsOff := (PxxDbgArg('a.derefwalk') = 'noarms');   { read once, on first entry }
+    DwArmsOff := (PxxDbgArg('a.derefwalk') = 'noarms') or
+                 (PxxDbgArg('a.derefwalk') = 'noarms-hits');   { read once, on first entry }
   DwTotalCalls := DwTotalCalls + 1;   { PXXDBG=a.derefwalk — the denominator }
   remDepth := 0;
   ptrBaseTk := Ord(tyUnknown);
@@ -5785,6 +5786,49 @@ begin
         tk := tyPointer;
         recName := ptrBaseRec;
       end;
+end;
+
+{ Lives HERE, beside the walk it reports on, and NOT beside AsmMemoReport in
+  asmtext.inc where it was first written. That placement cost a RED on seven
+  (1cd7afe74731, test-asm#src:test/test_asm_emit_x64.pas): asmtext.inc has a
+  SECOND including configuration -- a standalone oracle harness that mocks the
+  defs.inc environment -- and the harness says so in its own header, that "a NEW
+  reference from asmtext.inc into defs.inc surfaces HERE as undefined". The
+  counters are defs.inc globals, so the report could not compile there.
+  It was put beside AsmMemoReport only because that was the end-of-compile hook
+  I found first; proximity to a HOOK is not a reason to live in a FILE.
+  make compiler/pascal26 and gate.sh quick both passed it -- an include used by
+  something that is not the compiler is exactly the shape the fixedpoint cannot
+  see. }
+{ One line under PXXDBG a.derefwalk, at end of compile: which arm of
+  ResolveDerefShapeAt answered. `else` and `backstop` are the two NodePtrElem
+  fallbacks; `-ans` counts the subset where NodePtrElem returned True, i.e.
+  actually contributed an answer rather than being asked and declining.
+  refactor-a-collapse-nodeptrelem-into-the-deref-walk }
+procedure DerefWalkReport;
+begin
+  if PxxDbgArg('a.derefwalk') = '' then Exit;
+  { `:hits` is the TIER RIDE-ALONG mode — silent unless a fallback actually
+    fired. A tier's logs are what every other lane reads its verdicts from, and
+    a probe that prints one line per compile either pollutes them or gets
+    switched off; a probe that prints only on a hit can ride a run somebody was
+    making anyway. It is also the only mode safe to leave armed across a suite
+    whose tests compare compiler OUTPUT.
+
+    `:noarms-hits` is the POSITIVE CONTROL FOR `:hits` ITSELF — arms off, so
+    there are certainly hits, so the suppression must NOT apply. Without it the
+    silent case is the only one ever observed, and a `:hits` that could never
+    print would report a tier as clean forever while being switched on. The
+    suppressing guard needs a case it must let through, exactly as the counters
+    need a case that must make them fire. }
+  if ((PxxDbgArg('a.derefwalk') = 'hits') or
+      (PxxDbgArg('a.derefwalk') = 'noarms-hits')) and
+     (DwElseHits = 0) and (DwBackHits = 0) then Exit;
+  if DwArmsOff then
+    WriteLn('PXXDBG a.derefwalk CONTROL (arms disabled — every node must reach the else)');
+  WriteLn('PXXDBG a.derefwalk calls=', DwTotalCalls,
+          ' else=', DwElseHits, ' else-ans=', DwElseAns,
+          ' backstop=', DwBackHits, ' backstop-ans=', DwBackAns);
 end;
 
 { ===== A static `array of Char` IS a string =====
