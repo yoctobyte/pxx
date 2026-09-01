@@ -194,3 +194,43 @@ Commits do carry a `Claude-Session:` trailer that distinguishes agents — four
 distinct session ids across the last 200 commits on origin/master — so
 attribution is possible where it matters. Its limit: not every commit has one
 (`a584e8fef` carries none), so **absence means unknown, never "someone else."**
+
+### RESOLVED WHAT FAILED — read off seven's own job logs, 2026-09-01
+
+The assertion that fails is **`assert_no_leak`, not `expect_same`**. From
+`/tmp/testmgr-7nkwm2i4/test-<target>#<n>.log` on seven, all four verbatim:
+
+```
+assert_no_leak[aarch64/managed_dynarray_field]: LEAK — live=111 exceeds 50
+  allocs=28165 frees=28054
+assert_no_leak[i386/managed_dynarray_field]:    LEAK — live=111 exceeds 50
+assert_no_leak[riscv32/managed_dynarray_field]: LEAK — live=111 exceeds 50
+assert_no_leak[arm32/managed_dynarray_field]:   LEAK — live=111 exceeds 50
+```
+
+**`assert_no_leak` IS in the recipes** — `grep -c assert_no_leak Makefile` on
+seven returns **39**. The reasoning that it appears only in the test's comment
+and in none of the four recipes, and that therefore some `expect_same` counter
+must differ, is wrong at its first step. No counter comparison failed; a
+threshold did.
+
+**All four targets report byte-identical counters**: `allocs=28165 frees=28054
+live=111`, against a threshold of 50. (`bytes` differs — 942600 on aarch64,
+902600 on the three 32-bit targets — which is word size, not behaviour.)
+Against the local x86-64 run's `live=3`, the allocation trace agrees exactly and
+**108 frees do not happen**.
+
+**Four targets producing identical counters to the digit is not four bugs.** It
+is one shared path, which is the argument frank-coordinator made first and then
+talked itself out of. It also means this is a real reclamation difference on the
+cross targets rather than a harness artefact — the jobs run under **qemu**
+(`FAIL test-aarch64#147 qemu 1.2s`), but qemu does not invent 108 missing frees
+identically on four ISAs.
+
+**So the premise IS in question, and now for a stated reason.** This ticket says
+the cross backends delegate to `PXXDynSetLen` and are correct. On this test they
+leak 111 live blocks where x86-64 leaks 3. Whoever works this should start from
+`PXXDynSetLen`'s release arm, not from the x86-64 inlining path.
+
+The local green remains true and remains scoped to x86-64: `live=3` passes a
+threshold of 50, so a local run cannot see this at all.
