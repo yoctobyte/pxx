@@ -18284,6 +18284,19 @@ test-emit-obj: $(COMPILER)
 	  tools/expect_same.sh i386_pcrel_globals_pie "$$($(TESTTMP)/i386_pcrel_globals_pie)" "PCREL GLOBALS OK" || exit 1; \
 	  echo "test-emit-obj: i386 .o links+runs as a hardened PIE, no DT_TEXTREL"; \
 	else echo "gcc -m32 (multilib) not installed; i386 PIE check skipped"; fi
+	@# THE SAME CLAIM FOR THE PASCAL FRONTEND, and it is a separate one. The C
+	@# object above reaches every global through EmitGlobRef/EmitDataRef; a
+	@# Pascal object also carries @proc addresses (ProcAddrFix) and external
+	@# calls through a .data slot (DynCall), which are different arrays that
+	@# never pass through those emitters at all. The C row was green with five
+	@# absolute relocations still in this one.
+	readelf -rW $(TESTTMP)/test_emit_obj_386.o | awk '/Relocation section/{s=($$0 ~ /rel\.text/)} s && /R_386_32/{n++} END{exit (n+0)==0 ? 0 : 1}' || { echo "test-emit-obj: the Pascal i386 object still carries absolute .text relocations"; exit 1; }
+	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
+	  gcc -m32 -pie -Wl,-z,text $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_386.o -o $(TESTTMP)/test_emit_obj_386_pie || { echo "test-emit-obj: the Pascal i386 .o FAILED to link as a hardened PIE"; exit 1; }; \
+	  readelf -d $(TESTTMP)/test_emit_obj_386_pie | grep -q TEXTREL && { echo "test-emit-obj: the Pascal i386 PIE carries DT_TEXTREL"; exit 1; }; \
+	  tools/expect_same.sh test_emit_obj_386_pie "$$($(TESTTMP)/test_emit_obj_386_pie)" "done99 pxx-emit-obj" || exit 1; \
+	  echo "test-emit-obj: the Pascal i386 .o links+runs as a hardened PIE too"; \
+	else echo "gcc -m32 (multilib) not installed; Pascal i386 PIE check skipped"; fi
 
 	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
 	  gcc -m32 -no-pie test/i386_pcrel_globals_host.c $(TESTTMP)/i386_pcrel_globals.o -o $(TESTTMP)/i386_pcrel_globals_exe || { echo "test-emit-obj: i386 pcrel subject FAILED to link"; exit 1; }; \

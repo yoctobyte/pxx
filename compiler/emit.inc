@@ -538,7 +538,18 @@ begin
 
   modrm := Code[CodeLen-1];
 
-  { --- SHAPE B: the moffs LOADS, A0 (mov al,[moffs]) and A1 (mov eax,[moffs]).
+  { SHAPES B AND C READ THE LAST BYTE AS AN OPCODE, AND A ModRM CAN LOOK EXACTLY
+    LIKE ONE. $A0..$A3 as a ModRM is mod=10 reg=esp rm=eax..ebx, and $B8..$BF is
+    mod=10 reg=edi -- so `mov [eax+disp32], esp` and `mov [eax+disp32], edi` are
+    indistinguishable here from the moffs and B8+r forms. Today no caller reaches
+    this with a mod=10 ModRM: absolute code has no base register, so callers emit
+    either mod=00 rm=101 or the SIB form, and the only producers of mod=10 before
+    a fixup are the whole-instruction helpers below -- each of which asserts that
+    EmitGlobRef did NOT convert what it handed over. Keep those asserts; they are
+    the only thing standing between this ambiguity and a silent miscompile, and
+    one of them has already fired for real (EmitMovGlobEsp32).
+
+    --- SHAPE B: the moffs LOADS, A0 (mov al,[moffs]) and A1 (mov eax,[moffs]).
     One opcode byte and NO ModRM at all, which is why the first version of this
     function could not see them: it keyed on a ModRM that is not there. The
     destination is architecturally eax, so it is the base, and the ModRM form
@@ -846,6 +857,48 @@ begin
   Inc(GlobFixCount); EmitI32(0);
   { see EmitDataRef: the store wrapper's `pop` belongs after the disp32 }
   if gfPopReg >= 0 then EmitB(Byte($58 or gfPopReg));
+end;
+
+procedure EmitMovGlobEsp32(bssOff: Integer);
+{ `mov [glob], esp` -- the program entry's very first instruction, saving the
+  process entry stack pointer.
+
+  TryI386PcRelStore refuses this shape and must keep refusing it: its wrapper
+  `push`es, and an instruction whose operand IS esp cannot survive that. This
+  emits it without a wrapper instead, which needs a base register that is free
+  WITHOUT being saved -- and here there is one for a reason that holds only at
+  this site. It is the entry sequence's first instruction: nothing of ours runs
+  before it, and however the object is reached (Linux hands a fresh process
+  zeroed registers; a gcc-built main reaches it through a thunk) eax is
+  caller-saved under cdecl, so nothing live can be in it.
+
+  The anchor's own `call` pushes and its `pop` takes back, so esp is exactly its
+  entry value by the time the store reads it. That is the property the whole
+  rewrite turns on, and it is why the anchor must come FIRST. }
+var gfIdx: Integer;
+begin
+  if (TargetArch <> TARGET_I386) or (not EmitObjMode) then
+  begin
+    EmitB($89); EmitB($25); EmitGlobRef(bssOff);
+    Exit;
+  end;
+  { THE ADDRESS IS COMPUTED FIRST AND STORED THROUGH SEPARATELY, and that is not
+    style. The direct form `mov [eax+disp32], esp` encodes as 89 A0 <disp32> --
+    and $A0 as a ModRM (mod=10, reg=esp, rm=eax) is byte-identical to $A0 as the
+    moffs OPCODE `mov al,[moffs]`. EmitGlobRef sees only the last byte before the
+    displacement it is about to emit, so it read this ModRM as a moffs opcode and
+    rewrote the instruction. Caught by the assert below, which is why the assert
+    is here. `lea` puts the fixup behind ModRM $80 instead, which collides with
+    nothing, and the store that follows carries no relocation at all. }
+  EmitPicAnchorInto(0);
+  EmitB($8D); EmitB($80);           { lea eax, [eax+disp32] }
+  gfIdx := GlobFixCount;
+  EmitGlobRef(bssOff);
+  if GlobFixPCRel[gfIdx] then
+    Error('EmitMovGlobEsp32: EmitGlobRef converted a shape it was not meant to');
+  GlobFixPCRel[gfIdx] := True;
+  GlobFixPicDelta[gfIdx] := GlobFix[gfIdx].CodePos - X386PicAnchor;
+  EmitB($89); EmitB($20);           { mov [eax], esp }
 end;
 
 procedure EmitMovGlobAx16(bssOff: Integer);

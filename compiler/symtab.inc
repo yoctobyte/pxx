@@ -12822,9 +12822,30 @@ begin
     TargetArch alone, and matched by PatchDynCallSites and the object writer:
     this site uses EmitB directly, never EncB, so there is no AsmBytes case to
     disagree about. }
+  DynCallPCRel[DynCallCount] := False;
+  DynCallPicDelta[DynCallCount] := 0;
   if TargetArch = TARGET_X86_64 then
   begin
     EmitB($FF); EmitB($15);
+  end
+  else if EmitObjMode then
+  begin
+    { i386 --emit-obj: reach the GOT slot through a PC anchor instead of an
+      absolute address, so this site stops being the last thing that forces a
+      writable .text. `call [eax+disp32]` -- FF /2 with mod=10 rm=eax.
+
+      EAX, AND NO push/pop WRAPPER. The wrapper every other store uses would be
+      wrong here for a reason that has nothing to do with the wrapper: the
+      caller has ALREADY pushed this call's arguments, so moving esp by four
+      makes the callee read every one of them from the wrong place. So the base
+      has to be a register that is genuinely free, and at a cdecl call site eax
+      is: arguments go on the stack, eax/ecx/edx are caller-saved by the psABI
+      so nothing live can be sitting in one, and the call returns its result in
+      eax and therefore destroys it regardless. }
+    EmitPicAnchorInto(0);
+    EmitB($FF); EmitB($90);            { call dword ptr [eax+disp32] }
+    DynCallPCRel[DynCallCount] := True;
+    DynCallPicDelta[DynCallCount] := CodeLen - X386PicAnchor;
   end
   else
   begin

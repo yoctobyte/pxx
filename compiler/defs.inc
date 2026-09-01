@@ -2690,6 +2690,10 @@ var
   { @proc: code-side `mov rax, imm64` placeholders patched at finalize with the
     absolute runtime address of an internal proc (entry + BodyAddr). }
   ProcAddrFix : array[0..MAX_CALLFIX-1] of TCallFix;
+  { i386 --emit-obj: `mov eax, @proc` became `lea eax,[anchor+disp32]`. Same
+    meaning as DynCallPCRel/DynCallPicDelta, for the .text-symbol fixups. }
+  ProcAddrPCRel    : array[0..MAX_CALLFIX-1] of Boolean;
+  ProcAddrPicDelta : array[0..MAX_CALLFIX-1] of Integer;
   ProcAddrFixCount : Integer;
   { Cross-section internal calls (a flash<->iram pair). The call is emitted as an
     indirect load of a 32-bit literal slot (like an external call); the literal
@@ -3105,6 +3109,12 @@ var
   ExternalCount  : Integer;
   DynCallCodePos : array[0..MAX_CALLFIX-1] of Integer;
   DynCallExtIdx  : array[0..MAX_CALLFIX-1] of Integer;
+  { i386 --emit-obj: this call site was rewritten to reach its GOT slot through a
+    PC anchor, so its relocation is R_386_PC32 and its addend carries the
+    distance past the anchor. Parallel to FixupPCRel/FixupPicDelta; see
+    TryI386PcRelLoad. False and 0 on every other target and mode. }
+  DynCallPCRel    : array[0..MAX_CALLFIX-1] of Boolean;
+  DynCallPicDelta : array[0..MAX_CALLFIX-1] of Integer;
   DynCallCount   : Integer;
   DynamicInterpOff : Integer;
   DynamicInterpSize: Integer;

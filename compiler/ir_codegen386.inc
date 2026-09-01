@@ -4161,8 +4161,25 @@ begin
           EmitExternalProcAddr(IRA[node]);
           Exit;
         end;
-        EmitB($B8);                                  { mov eax, imm32 }
         if ProcAddrFixCount >= MAX_CALLFIX then Error('proc addr fixup overflow');
+        ProcAddrPCRel[ProcAddrFixCount] := False;
+        ProcAddrPicDelta[ProcAddrFixCount] := 0;
+        if EmitObjMode then
+        begin
+          { `mov eax, @proc` with the address as a 32-bit IMMEDIATE is the last
+            absolute .text relocation a Pascal-frontend i386 object carries. It
+            is the B8+r shape EmitDataRef already converts, but it never reaches
+            that function -- @proc goes through the ProcAddrFix array instead --
+            so the conversion has to be repeated here. Same rewrite: the anchor
+            into the destination, which a `mov reg, imm32` makes dead, then a
+            `lea` off it. }
+          EmitPicAnchorInto(0);                      { anchor -> eax }
+          EmitB($8D); EmitB($80);                    { lea eax, [eax+disp32] }
+          ProcAddrPCRel[ProcAddrFixCount] := True;
+          ProcAddrPicDelta[ProcAddrFixCount] := CodeLen - X386PicAnchor;
+        end
+        else
+          EmitB($B8);                                { mov eax, imm32 }
         ProcAddrFix[ProcAddrFixCount].CodePos := CodeLen;
         ProcAddrFix[ProcAddrFixCount].ProcIdx := IRA[node];
         Inc(ProcAddrFixCount);

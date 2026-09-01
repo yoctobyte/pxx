@@ -2382,8 +2382,9 @@ var
 begin
   if TargetArch = TARGET_I386 then
   begin
-    { mov [BSS_INITIAL_RSP], esp }
-    EmitB($89); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+    { mov [BSS_INITIAL_RSP], esp -- see EmitMovGlobEsp32 for why this one
+      instruction cannot go through the generic store conversion. }
+    EmitMovGlobEsp32(BSS_INITIAL_RSP);
     if withHeapArena then
     begin
       EmitMmapArena(HEAP_ARENA_SIZE);          { -> eax = base }

@@ -3337,6 +3337,14 @@ end;
   section headers. Sections (9): 0 null, 1 .text, 2 .rel.text, 3 .data,
   4 .rel.data, 5 .bss, 6 .symtab, 7 .strtab, 8 .shstrtab. }
 
+function Rel386Type(pcRel: Boolean): Integer;
+{ R_386_PC32 (2) or R_386_32 (1). The whole difference between an object that
+  takes `-Wl,-z,text` and one that forces a writable .text, in one place so the
+  four fixup arrays cannot disagree. }
+begin
+  if pcRel then Rel386Type := 2 else Rel386Type := 1;
+end;
+
 procedure writeELFRel386General(const outPath: AnsiString);
 var
   i: Integer;
@@ -3406,9 +3414,15 @@ begin
         Patch32(GlobFix[i].CodePos, GlobFix[i].BSSoff);
     end;
   for i := 0 to DynCallCount-1 do
-    Patch32(DynCallCodePos[i], ExternalGotOff[DynCallExtIdx[i]]);
+    if DynCallPCRel[i] then
+      Patch32(DynCallCodePos[i], ExternalGotOff[DynCallExtIdx[i]] + DynCallPicDelta[i])
+    else
+      Patch32(DynCallCodePos[i], ExternalGotOff[DynCallExtIdx[i]]);
   for i := 0 to ProcAddrFixCount-1 do
-    Patch32(ProcAddrFix[i].CodePos, Procs[ProcAddrFix[i].ProcIdx].BodyAddr);
+    if ProcAddrPCRel[i] then
+      Patch32(ProcAddrFix[i].CodePos, Procs[ProcAddrFix[i].ProcIdx].BodyAddr + ProcAddrPicDelta[i])
+    else
+      Patch32(ProcAddrFix[i].CodePos, Procs[ProcAddrFix[i].ProcIdx].BodyAddr);
   { The .data slots are 8 bytes wide (the layout is shared with the 64-bit
     targets); R_386_32 covers the low dword and the high dword stays zero,
     which is what a 32-bit pointer read of the slot sees. }
@@ -3531,26 +3545,27 @@ begin
     This reads False for every i386 site until the addressing conversion sets
     it, so landing it is inert.
     bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations }
+  { FOUR ARRAYS, ONE QUESTION. Each of Fixups/GlobFix/DynCall/ProcAddrFix carries
+    its own PCRel flag, so the relocation TYPE is chosen in four places; Rel386Type
+    is the one place that answers it. The arm added second is the one that stays
+    wrong, and there are already four (frankA, 2026-09-01). }
   for i := 0 to FixCount-1 do
-    if FixupPCRel[i] then writeRel32(f, Fixups[i].CodePos, 2, 2)
-    else                  writeRel32(f, Fixups[i].CodePos, 2, 1);
+    writeRel32(f, Fixups[i].CodePos, 2, Rel386Type(FixupPCRel[i]));
   for i := 0 to GlobFixCount-1 do
     if SymOffIsData(GlobFix[i].BSSoff) then
     begin
-      if GlobFixPCRel[i] then writeRel32(f, GlobFix[i].CodePos, 2, 2)
-      else                    writeRel32(f, GlobFix[i].CodePos, 2, 1);
+      writeRel32(f, GlobFix[i].CodePos, 2, Rel386Type(GlobFixPCRel[i]));
     end
     else
     begin
-      if GlobFixPCRel[i] then writeRel32(f, GlobFix[i].CodePos, 3, 2)
-      else                    writeRel32(f, GlobFix[i].CodePos, 3, 1);
+      writeRel32(f, GlobFix[i].CodePos, 3, Rel386Type(GlobFixPCRel[i]));
     end;
   { `call dword [abs32]`: the operand names OUR GOT slot in .data, not the
     callee. The slot's own relocation is in .rel.data below. }
   for i := 0 to DynCallCount-1 do
-    writeRel32(f, DynCallCodePos[i], 2, 1);
+    writeRel32(f, DynCallCodePos[i], 2, Rel386Type(DynCallPCRel[i]));
   for i := 0 to ProcAddrFixCount-1 do
-    writeRel32(f, ProcAddrFix[i].CodePos, 1, 1);
+    writeRel32(f, ProcAddrFix[i].CodePos, 1, Rel386Type(ProcAddrPCRel[i]));
 
   { .rel.data: data->data pointers, data->code method slots, and one entry per
     external GOT slot against that extern's UND symbol. }
