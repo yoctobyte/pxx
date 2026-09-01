@@ -46,7 +46,7 @@ begin
   pr := PalBindIpv4(tcpl, PAL_NET_IP_LOOPBACK, boundP);
   pr := PalListen(tcpl, 4);
 
-  pid := PalVfork;
+  pid := PalFork;
   if pid = 0 then
   begin
     { UDP: reply with TC bit set (QR|TC|RD, RA), no answers. }

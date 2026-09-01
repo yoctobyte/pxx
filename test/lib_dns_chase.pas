@@ -40,7 +40,7 @@ begin
   boundP := 0;
   pr := PalGetSockNameIpv4(mock, boundA, boundP);
 
-  pid := PalVfork;
+  pid := PalFork;
   if pid = 0 then
   begin
     { CHILD: serve two queries. Echo the query header+question, then append

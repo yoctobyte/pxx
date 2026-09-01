@@ -37,7 +37,7 @@ begin
   boundA := 0; boundP := 0;
   pr := PalGetSockNameIpv4(mock, boundA, boundP);
 
-  pid := PalVfork;
+  pid := PalFork;
   if pid = 0 then
   begin
     pr := PalPoll(mock, PAL_POLL_IN, 3000);

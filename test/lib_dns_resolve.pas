@@ -57,7 +57,7 @@ begin
   boundP := 0;
   pr := PalGetSockNameIpv4(mock, boundA, boundP);
 
-  pid := PalVfork;
+  pid := PalFork;
   if pid = 0 then
   begin
     { CHILD: serve one query, echoing its id into the canned response. }

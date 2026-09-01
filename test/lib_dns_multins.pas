@@ -40,7 +40,7 @@ begin
   boundA := 0; boundP := 0;
   pr := PalGetSockNameIpv4(mock, boundA, boundP);
 
-  pid := PalVfork;
+  pid := PalFork;
   if pid = 0 then
   begin
     { Only the 127.0.0.1 query reaches the mock; the 127.0.0.2 one is dropped. }

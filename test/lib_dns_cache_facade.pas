@@ -43,7 +43,7 @@ begin
   boundP := 0;
   pr := PalGetSockNameIpv4(mock, boundA, boundP);
 
-  pid := PalVfork;
+  pid := PalFork;
   if pid = 0 then
   begin
     { CHILD: serve exactly one query — echo header+question, append one A
@@ -122,7 +122,7 @@ begin
   boundP := 0;
   pr := PalGetSockNameIpv4(mock, boundA, boundP);
 
-  pid := PalVfork;
+  pid := PalFork;
   if pid = 0 then
   begin
     { CHILD: two queries. "wc" (label length 2) -> CNAME rc.x TTL 60;

@@ -41,7 +41,7 @@ begin
   boundP := 0;
   pr := PalGetSockNameIpv4(mock, boundA, boundP);
 
-  pid := PalVfork;
+  pid := PalFork;
   if pid = 0 then
   begin
     { CHILD: echo the query header+question, append one AAAA answer. }
@@ -101,7 +101,7 @@ begin
   boundP := 0;
   pr := PalGetSockNameIpv4(mock, boundA, boundP);
 
-  pid := PalVfork;
+  pid := PalFork;
   if pid = 0 then
   begin
     { CHILD: two queries — CNAME (real6.x) when the first label is "www6",
