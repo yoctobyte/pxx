@@ -104,7 +104,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (139)
+## backlog-core (140)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -114,6 +114,7 @@ _none_
 | bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
 | bug-a-a-cloned-thread-has-no-sigaltstack-so-its-stack-overflow-is-unhandleable | A | 45 | bug | MEASURED: a stack overflow on the MAIN thread runs the SIGSEGV handler and exits 7; the same overflow on a cloned worker exits 139 with the handler never entered. Same binary, one argument apart. sigaltstack(2) is PER-THREAD and is registered only by SetSignalHandler, which the main thread calls -- a cloned thread's alt stack reads sp=0 flags=SS_DISABLE size=0, so SA_ONSTACK has nowhere to put the frame and the kernel kills the process. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
+| bug-a-a-fresh-array-result-has-no-owner-as-a-copy-or-concat-operand | A | 8 | bug | a fresh dyn-array call result used as a Copy() or `+` operand is never released — the whole array leaks, one per operand per evaluation, and the obvious park fix segfaults on non-managed element types | — |
 | bug-a-a-nested-for-loop-in-a-parallel-for-body-is-a-compile-error | A | 55 | bug | `parallel for` refuses a body containing an ordinary `for` loop — `error: expected ':='`, reported against lib/rtl/palthread.pas rather than the user's file. Measured boundary: `for` and `for ... downto` are the ONLY refused shapes; while, repeat, if, case and a nested begin/end all compile. The worker is synthesized by replaying captured tokens (PFStash, pasparser_stmt.inc ~3744-4330), and the inner loop's `:=` appears to be missing from the replay, so the defect is in the body token capture, not in the lowering. | — |
 | bug-a-a-pascal-global-cannot-import-a-c-global | A | 45 | bug | `var x: Integer; cvar; external;` is REFUSED, so a Pascal object can export a global to C but cannot read one C defines. The C frontend has the import path already (ObjDataIsImport routes the reference to an UND symbol); Pascal has no spelling that reaches it, and accepting the keyword without the routing would allocate local storage and silently read zero. | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
@@ -1408,6 +1409,7 @@ _none_
 - [p 10] [P] compat-p-system-integer-is-smallint-in-fpc
 - [p 10] [A] feature-a-shrink-managed-header-on-32-bit
 - [p 10] [A+O] feature-opt-alloc-intent-hint
+- [p  8] [A] bug-a-a-fresh-array-result-has-no-owner-as-a-copy-or-concat-operand
 - [p  5] [A] bug-a-an-exception-that-escapes-its-handler-or-is-bare-re-raised-still-leaks-its-object
 - [p  5] [A] bug-a-threadsafe-builds-leak-every-variant-and-interface-element-of-a-dynamic-array
 - [p  5] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
