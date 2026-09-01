@@ -10,7 +10,10 @@
 
 typedef unsigned long nlink_t;
 typedef long          blksize_t;
-typedef long          blkcnt_t;
+/* 64-bit like glibc's, for the reason in <sys/types.h>: statx gives stx_blocks
+   as a u64, and 32 bits of 512-byte blocks stops at 2TB. Reasoned, not
+   observed -- no file on this host is large enough to show it. */
+typedef long long     blkcnt_t;
 
 struct stat {
   dev_t     st_dev;

@@ -622,12 +622,39 @@ begin
   info.CTimeSec := 0;
 end;
 
+{ Pack a (major, minor) pair the way USERSPACE spells a dev_t -- the encoding
+  the kernel calls new_encode_dev and glibc's makedev/major/minor implement:
+
+    bits  7..0   minor, low 8      bits 19..12  minor, high 24
+    bits 19..8   major, low 12     bits 63..32  major, high 20
+
+  IT IS NOT THE KERNEL-INTERNAL MKDEV, which is a plain `(major shl 20) or
+  minor`, and the two look identical on the common case in the wrong direction:
+  MKDEV(1,3) is 0x100003 and every field of it decodes as a NUMBER, so nothing
+  errors -- crtl's major() returns 0 and minor() returns 259 for /dev/null.
+  Measured against glibc on the same box, same file: glibc's st_rdev is 0x103.
+
+  Which one belongs in a struct stat is not a matter of taste: crtl's
+  <sys/sysmacros.h> is transcribed from glibc's, and mknod(2) takes the
+  userspace encoding too (the kernel new_decode_dev's it), so the internal
+  spelling was the one value in the chain nobody could decode. The old code
+  encoded BOTH st_dev and st_rdev this way; sqlite never noticed because it
+  keys file identity on (dev, ino) as an opaque pair and any bijection serves.
+  bug-a-stat-returns-st-dev-and-st-rdev-in-the-kernel-internal-encoding }
+function EncodeDevUser(major, minor: Int64): Int64;
+begin
+  Result := (minor and $FF)
+         or ((major and $FFF) shl 8)
+         or ((minor and $FFFFFF00) shl 12)
+         or ((major and $FFFFF000) shl 32);
+end;
+
 { statx(2) — arch-neutral stat with a uniform struct layout on every target, so
   one field-offset map works for x86-64/i386/aarch64/arm32/riscv32 alike. }
 function DoStatx(dirHandle: Integer; path: PChar; flags: Integer; var info: TPalFileStat): Integer;
 var
   sx: array[0..255] of Byte;
-  mode, major, minor: Integer;
+  mode: Integer;
 begin
   ClearPalFileStat(info);
   Result := Integer(__pxxrawsyscall(SYS_statx, dirHandle, Int64(path), flags,
@@ -648,11 +675,9 @@ begin
   info.Gid := Integer(StatxDwordLE(@sx[0], $18));
   info.ATimeSec := StatxInt64LE(@sx[0], $40);
   info.CTimeSec := StatxInt64LE(@sx[0], $60);
-  info.Rdev := (Int64(StatxDwordLE(@sx[0], $80)) shl 20)
-            or Int64(StatxDwordLE(@sx[0], $84) and $FFFFF);
-  major := Integer(StatxDwordLE(@sx[0], $88));
-  minor := Integer(StatxDwordLE(@sx[0], $8C));
-  info.Dev := (Int64(major) shl 20) or Int64(minor and $FFFFF);  { stable (dev,ino) key for sqlite locks }
+  info.Rdev := EncodeDevUser(StatxDwordLE(@sx[0], $80), StatxDwordLE(@sx[0], $84));
+  { stable (dev,ino) key for sqlite locks, AND a value major()/minor() can read }
+  info.Dev := EncodeDevUser(StatxDwordLE(@sx[0], $88), StatxDwordLE(@sx[0], $8C));
   info.IsDir := (mode and PAL_S_IFMT) = PAL_S_IFDIR;
   info.IsFile := (mode and PAL_S_IFMT) = PAL_S_IFREG;
 end;

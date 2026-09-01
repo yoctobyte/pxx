@@ -12462,6 +12462,15 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-applet
 	./$(COMPILER) test/c_sysmacros_dev.c $(TESTTMP)/c_sysmacros26
 	tools/expect_same.sh c_sysmacros26 "$$($(TESTTMP)/c_sysmacros26)" "$$(printf 'makedev(0,0)=0 major=0 minor=0 roundtrip=1\nmakedev(1,3)=259 major=1 minor=3 roundtrip=1\nmakedev(8,0)=2048 major=8 minor=0 roundtrip=1\nmakedev(7,255)=2047 major=7 minor=255 roundtrip=1\nmakedev(7,256)=1050368 major=7 minor=256 roundtrip=1\nmakedev(7,300)=1050412 major=7 minor=300 roundtrip=1\nmakedev(136,1048575)=4293953791 major=136 minor=1048575 roundtrip=1\nmakedev(4095,1)=1048321 major=4095 minor=1 roundtrip=1\nmakedev(4096,1)=17592186044417 major=4096 minor=1 roundtrip=1\nmakedev(1048575,1048575)=4486011736293375 major=1048575 minor=1048575 roundtrip=1\nliteral: major(0x1234)=18 minor(0x1234)=52')"
+	# The sibling above validates the three macros against each other: every
+	# dev_t it inspects is one makedev() just built. It stayed green for the
+	# whole life of a bug where the PAL packed st_dev/st_rdev with the KERNEL
+	# encoding, (major<<20)|minor, instead of the userspace one those macros
+	# implement -- so /dev/null decoded as 0:259 and nothing errored. This row
+	# adds the population it was missing: a dev_t that came from stat(2).
+	# bug-a-stat-returns-st-dev-and-st-rdev-in-the-kernel-internal-encoding
+	./$(COMPILER) test/c_stat_rdev_decodes.c $(TESTTMP)/c_rdev26
+	tools/expect_same.sh c_rdev26 "$$($(TESTTMP)/c_rdev26)" "$$(printf 'null 1:3 want 1:3\nzero 1:5 want 1:5\nmakedev(7,300) 7:300\nmakedev(4096,1) 4096:1\nRDEV OK')"
 	# the same unit included twice, once spelled with a './': one file, allowed
 	./$(COMPILER) test/c_pasunit_twice.c $(TESTTMP)/c_pasunit_twice26
 	tools/expect_same.sh c_pasunit_twice26 "$$($(TESTTMP)/c_pasunit_twice26)" "42"
@@ -14282,6 +14291,13 @@ test-i386: $(COMPILER)
 	# by accident and stop testing the swap. bug-a-i386-c-main-gets-argc-and-argv-swapped
 	./$(COMPILER) --target=i386 test/ccross_main_argv.c $(TESTTMP)/test_i386_cmargv
 	tools/expect_same.sh i386/main-argv "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cmargv one two)" "ARGV OK"
+	# 32-bit half of the rdev decode check: crtl spelled dev_t `unsigned long`,
+	# so it was 32 bits here and the userspace encoding's (major & ~0xfff) bit,
+	# which sits at bit 32, fell off. makedev(4096,1) came back as major 0 on
+	# this target and as 4096 natively, from one source. The native row cannot
+	# see that; only running it at ILP32 can.
+	./$(COMPILER) --target=i386 test/c_stat_rdev_decodes.c $(TESTTMP)/test_i386_crdev
+	tools/expect_same.sh i386/rdev-decodes "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_crdev)" "$$(printf 'null 1:3 want 1:3\nzero 1:5 want 1:5\nmakedev(7,300) 7:300\nmakedev(4096,1) 4096:1\nRDEV OK')"
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_cargs; tools/expect_same.sh i386/test_i386_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/ccross_double_to_int.c $(TESTTMP)/test_i386_cd2i
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_cd2i; tools/expect_same.sh i386/test_i386_cd2i-rc "$$?" "42"
@@ -15102,6 +15118,13 @@ test-riscv32: $(COMPILER)
 	# by accident and stop testing the swap. bug-a-i386-c-main-gets-argc-and-argv-swapped
 	./$(COMPILER) --target=riscv32 test/ccross_main_argv.c $(TESTTMP)/test_riscv32_cmargv
 	tools/expect_same.sh riscv32/main-argv "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cmargv one two)" "ARGV OK"
+	# 32-bit half of the rdev decode check: crtl spelled dev_t `unsigned long`,
+	# so it was 32 bits here and the userspace encoding's (major & ~0xfff) bit,
+	# which sits at bit 32, fell off. makedev(4096,1) came back as major 0 on
+	# this target and as 4096 natively, from one source. The native row cannot
+	# see that; only running it at ILP32 can.
+	./$(COMPILER) --target=riscv32 test/c_stat_rdev_decodes.c $(TESTTMP)/test_riscv32_crdev
+	tools/expect_same.sh riscv32/rdev-decodes "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_crdev)" "$$(printf 'null 1:3 want 1:3\nzero 1:5 want 1:5\nmakedev(7,300) 7:300\nmakedev(4096,1) 4096:1\nRDEV OK')"
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cargs; tools/expect_same.sh riscv32/test_riscv32_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/ccross_double_to_int.c $(TESTTMP)/test_riscv32_cd2i
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cd2i; tools/expect_same.sh riscv32/test_riscv32_cd2i-rc "$$?" "42"
@@ -17066,6 +17089,13 @@ test-arm32: $(COMPILER)
 	# by accident and stop testing the swap. bug-a-i386-c-main-gets-argc-and-argv-swapped
 	./$(COMPILER) --target=arm32 test/ccross_main_argv.c $(TESTTMP)/test_arm32_cmargv
 	tools/expect_same.sh arm32/main-argv "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cmargv one two)" "ARGV OK"
+	# 32-bit half of the rdev decode check: crtl spelled dev_t `unsigned long`,
+	# so it was 32 bits here and the userspace encoding's (major & ~0xfff) bit,
+	# which sits at bit 32, fell off. makedev(4096,1) came back as major 0 on
+	# this target and as 4096 natively, from one source. The native row cannot
+	# see that; only running it at ILP32 can.
+	./$(COMPILER) --target=arm32 test/c_stat_rdev_decodes.c $(TESTTMP)/test_arm32_crdev
+	tools/expect_same.sh arm32/rdev-decodes "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_crdev)" "$$(printf 'null 1:3 want 1:3\nzero 1:5 want 1:5\nmakedev(7,300) 7:300\nmakedev(4096,1) 4096:1\nRDEV OK')"
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cargs; tools/expect_same.sh arm32/test_arm32_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=arm32 test/ccross_double_to_int.c $(TESTTMP)/test_arm32_cd2i
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cd2i; tools/expect_same.sh arm32/test_arm32_cd2i-rc "$$?" "42"
