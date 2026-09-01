@@ -1721,14 +1721,19 @@ begin
     thunk emitter puts a `ret` where the body falls off instead -- the same
     discipline --shared already needed, for the same reason.
 
-    TARGET-GATED, and this is not optional: EmitSharedThunkPrologue emits raw
-    x86-64 pushes. --shared is x86-64-only so the call site never needed a
-    guard; --emit-obj also accepts i386, xtensa and riscv32, and without this
-    gate those objects get x86-64 bytes spliced into them. Only
-    writeELFRelX64General emits .init_array today, so the other targets would
-    additionally carry a thunk nothing can reach.
-    bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers }
-  if EmitSharedMode or (EmitObjMode and (TargetArch = TARGET_X86_64)) then
+    TARGET-GATED, and this is not optional: the thunk prologue is raw machine
+    code. --shared is x86-64-only so the call site never needed a guard;
+    --emit-obj also accepts i386, xtensa and riscv32. x86-64 and i386 have a
+    prologue and a writer that emits .init_array; xtensa and riscv32 have
+    neither, and an ungated call site splices x86-64 bytes into their objects.
+
+    The gate names the same set EmitSharedThunkPrologue implements, and that
+    function REFUSES anything outside it rather than falling through -- so the
+    two cannot drift apart silently, only loudly.
+    bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers
+    bug-a-an-i386-emit-obj-object-still-never-runs-its-initialisers }
+  if EmitSharedMode or (EmitObjMode and
+       ((TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386))) then
     EmitInitFiniThunks
   else
   begin

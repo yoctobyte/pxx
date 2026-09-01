@@ -10501,7 +10501,9 @@ begin
 
     Emitted BEFORE ApplyCallFixups because the call below is a forward like any
     other. bug-a-c-a-shared-library-never-runs-its-initialisation }
-  if (EmitSharedMode or EmitObjMode) and (TargetArch = TARGET_X86_64) then
+  if (EmitSharedMode or EmitObjMode) and
+     ((TargetArch = TARGET_X86_64) or
+      (EmitObjMode and (TargetArch = TARGET_I386))) then
   begin
     thunkStart := CodeLen;
     InitThunkOff := CodeLen;
@@ -10514,8 +10516,29 @@ begin
         Error('compiler error: the init thunk needs environ but ' +
               '__pxx_set_environ was not pulled; the header sweep and this ' +
               'emitter disagree');
-      EmitB($48); EmitB($89); EmitB($D7);   { mov rdi, rdx  (envp, from ld.so) }
-      EmitCallProc(envPi);
+      { ENVP ARRIVES DIFFERENTLY ON THE TWO psABIs and the thunk is the one
+        place that has to know. Both carriers hand an initialiser
+        (argc, argv, envp) under the ordinary C ABI -- x86-64 puts envp in rdx,
+        i386 puts it on the stack. }
+      if TargetArch = TARGET_X86_64 then
+      begin
+        EmitB($48); EmitB($89); EmitB($D7); { mov rdi, rdx  (envp, from ld.so) }
+        EmitCallProc(envPi);
+      end
+      else
+      begin
+        { At entry: [esp]=retaddr, [esp+4]=argc, [esp+8]=argv, [esp+12]=envp.
+          The prologue moved esp down 28 (four pushes plus a 12-byte adjust), so
+          envp sits at [esp+40] -- read BEFORE the reservation below, or it
+          would be at 56. Then 16 bytes are reserved rather than the 4 a `push`
+          would take, because cdecl wants esp 16-aligned AT the call WITH the
+          argument already in place, and a bare push leaves it 12 mod 16. }
+        EmitB($8B); EmitB($44); EmitB($24); EmitB($28); { mov eax, [esp+40] }
+        EmitB($83); EmitB($EC); EmitB($10);             { sub esp, 16 }
+        EmitB($89); EmitB($04); EmitB($24);             { mov [esp], eax }
+        EmitCallProc(envPi);
+        EmitB($83); EmitB($C4); EmitB($10);             { add esp, 16 }
+      end;
     end;
     CompilePendingGlobalInits;
     CEmitDeferredCAggInits;

@@ -10262,29 +10262,73 @@ end;
   it -- which is what lets the C init body reach the environment without a
   process stack to read.
   bug-a-c-a-shared-library-never-runs-its-initialisation }
+{ The init/fini thunk's ABI halves, shared by every frontend and BOTH carriers
+  (a .so's DT_INIT and an object's .init_array). The body between them differs
+  per frontend and legitimately so; the register and alignment discipline owed
+  to whoever calls us does not.
+
+  REFUSES an unhandled target rather than falling through to x86-64. These are
+  raw opcodes: a silent fallthrough splices x86-64 pushes into an i386 or xtensa
+  object, which is what an ungated first attempt at the Pascal arm would have
+  done. A guard that cannot fail is not a guard -- this one can, and the caller
+  is expected to gate on the same set.
+  bug-a-an-i386-emit-obj-object-still-never-runs-its-initialisers }
 procedure EmitSharedThunkPrologue;
 begin
-  EmitB($53);                                     { push rbx }
-  EmitB($55);                                     { push rbp }
-  EmitB($41); EmitB($54);                         { push r12 }
-  EmitB($41); EmitB($55);                         { push r13 }
-  EmitB($41); EmitB($56);                         { push r14 }
-  EmitB($41); EmitB($57);                         { push r15 }
-  { Six pushes leave rsp 8 mod 16, the same as at entry, so one more 8 makes it
-    16-aligned -- what the SysV ABI requires AT a call site. }
-  EmitB($48); EmitB($83); EmitB($EC); EmitB($08); { sub rsp, 8 }
+  if TargetArch = TARGET_X86_64 then
+  begin
+    EmitB($53);                                     { push rbx }
+    EmitB($55);                                     { push rbp }
+    EmitB($41); EmitB($54);                         { push r12 }
+    EmitB($41); EmitB($55);                         { push r13 }
+    EmitB($41); EmitB($56);                         { push r14 }
+    EmitB($41); EmitB($57);                         { push r15 }
+    { Six pushes leave rsp 8 mod 16, the same as at entry, so one more 8 makes
+      it 16-aligned -- what the SysV ABI requires AT a call site. }
+    EmitB($48); EmitB($83); EmitB($EC); EmitB($08); { sub rsp, 8 }
+  end
+  else if TargetArch = TARGET_I386 then
+  begin
+    EmitB($53);                                     { push ebx }
+    EmitB($56);                                     { push esi }
+    EmitB($57);                                     { push edi }
+    EmitB($55);                                     { push ebp }
+    { i386 SysV: the caller aligned esp to 16 before the call, so at entry esp
+      is 12 mod 16. Four pushes move it by 16 and leave it 12 mod 16, so 12 more
+      makes a call site 16-aligned. Same reasoning as the x86-64 arm, different
+      arithmetic -- do not copy the constant. }
+    EmitB($83); EmitB($EC); EmitB($0C);             { sub esp, 12 }
+  end
+  else
+    ErrorNoPos('internal: no init/fini thunk prologue for --target=' +
+               TargetArchName(TargetArch));
 end;
 
 procedure EmitSharedThunkEpilogue;
 begin
-  EmitB($48); EmitB($83); EmitB($C4); EmitB($08); { add rsp, 8 }
-  EmitB($41); EmitB($5F);                         { pop r15 }
-  EmitB($41); EmitB($5E);                         { pop r14 }
-  EmitB($41); EmitB($5D);                         { pop r13 }
-  EmitB($41); EmitB($5C);                         { pop r12 }
-  EmitB($5D);                                     { pop rbp }
-  EmitB($5B);                                     { pop rbx }
-  EmitB($C3);                                     { ret }
+  if TargetArch = TARGET_X86_64 then
+  begin
+    EmitB($48); EmitB($83); EmitB($C4); EmitB($08); { add rsp, 8 }
+    EmitB($41); EmitB($5F);                         { pop r15 }
+    EmitB($41); EmitB($5E);                         { pop r14 }
+    EmitB($41); EmitB($5D);                         { pop r13 }
+    EmitB($41); EmitB($5C);                         { pop r12 }
+    EmitB($5D);                                     { pop rbp }
+    EmitB($5B);                                     { pop rbx }
+    EmitB($C3);                                     { ret }
+  end
+  else if TargetArch = TARGET_I386 then
+  begin
+    EmitB($83); EmitB($C4); EmitB($0C);             { add esp, 12 }
+    EmitB($5D);                                     { pop ebp }
+    EmitB($5F);                                     { pop edi }
+    EmitB($5E);                                     { pop esi }
+    EmitB($5B);                                     { pop ebx }
+    EmitB($C3);                                     { ret }
+  end
+  else
+    ErrorNoPos('internal: no init/fini thunk epilogue for --target=' +
+               TargetArchName(TargetArch));
 end;
 
 function GetFiniRunnerProc: Integer;

@@ -3344,6 +3344,10 @@ var
   textOff, dataOff, symOff, strOff, relTextOff, relDataOff: Integer;
   shstrOff, shOff, strSize: Integer;
   relTextCount, relDataCount: Integer;
+  initArrOff, relInitArrOff, finiArrOff, relFiniArrOff: Integer;
+  initArrSec, finiArrSec, numSects, shstrSize: Integer;
+  initArrNm, relInitArrNm, finiArrNm, relFiniArrNm: Integer;
+  hasInitArr, hasFiniArr: Boolean;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -3395,8 +3399,48 @@ begin
   strOff  := symOff + numSyms * 16;
   relTextOff := AlignTo(strOff + strSize, 4);
   relDataOff := relTextOff + relTextCount * 8;
-  shstrOff := relDataOff + relDataCount * 8;
-  shOff := AlignTo(shstrOff + 64, 4);            { 64 = .shstrtab blob size }
+
+  { .init_array / .fini_array, the i386 twin of the x86-64 writer's. Same shape,
+    three differences that are all the psABI and none of them cosmetic: entries
+    are 4 bytes not 8, the relocation is R_386_32 (1) against the .text section
+    symbol, and SHT_REL carries NO addend field -- so the thunk offset is written
+    into the section BYTES and the relocation only says "add .text here".
+    bug-a-an-i386-emit-obj-object-still-never-runs-its-initialisers }
+  hasInitArr := InitThunkOff >= 0;
+  hasFiniArr := FiniThunkOff >= 0;
+  initArrSec := -1;
+  finiArrSec := -1;
+  numSects := 9;
+  if hasInitArr then begin initArrSec := numSects; numSects := numSects + 2; end;
+  if hasFiniArr then begin finiArrSec := numSects; numSects := numSects + 2; end;
+
+  { Names appended only for sections that exist, so an object without a thunk is
+    byte-identical to what this writer produced before. 12 = len('.init_array')+1,
+    16 = len('.rel.init_array')+1 -- REL, not RELA: one byte shorter than the
+    x86-64 twin's, which is exactly the kind of constant that gets copied. }
+  shstrSize := 64;
+  initArrNm := 0; relInitArrNm := 0; finiArrNm := 0; relFiniArrNm := 0;
+  if hasInitArr then
+  begin
+    initArrNm := shstrSize; relInitArrNm := shstrSize + 12;
+    shstrSize := shstrSize + 28;
+  end;
+  if hasFiniArr then
+  begin
+    finiArrNm := shstrSize; relFiniArrNm := shstrSize + 12;
+    shstrSize := shstrSize + 28;
+  end;
+
+  initArrOff    := relDataOff + relDataCount * 8;
+  relInitArrOff := initArrOff;
+  if hasInitArr then relInitArrOff := initArrOff + 4;
+  finiArrOff := relInitArrOff;
+  if hasInitArr then finiArrOff := relInitArrOff + 8;
+  relFiniArrOff := finiArrOff;
+  if hasFiniArr then relFiniArrOff := finiArrOff + 4;
+  shstrOff := relFiniArrOff;
+  if hasFiniArr then shstrOff := relFiniArrOff + 8;
+  shOff := AlignTo(shstrOff + shstrSize, 4);
 
 {$ifdef FPC}
   Assign(f, outPath); Rewrite(f, 1);
@@ -3414,7 +3458,7 @@ begin
   writeU32(f,0);writeU32(f,0);writeU32(f,shOff);        { entry, phoff, shoff }
   writeU32(f,0);                                        { e_flags }
   writeU16(f,ELF32_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
-  writeU16(f,40);writeU16(f,9);writeU16(f,8);   { shentsize, shnum, shstrndx }
+  writeU16(f,40);writeU16(f,numSects);writeU16(f,8); { shentsize, shnum, shstrndx }
 
 {$ifdef FPC}
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
@@ -3476,7 +3520,22 @@ begin
   for i := 0 to ExternalCount-1 do
     writeRel32(f, ExternalGotOff[i], extSym0 + i, 1);
 
-  { .shstrtab: fixed 64-byte blob; name offsets hardcoded in the shdrs below }
+  { .init_array / .fini_array contents. Unlike the x86-64 twin, the slot is NOT
+    zero: SHT_REL has no addend field, so the thunk's code offset lives in these
+    four bytes and the relocation supplies only the .text base. Writing zero
+    here -- the x86-64 habit -- yields a null pointer the C runtime calls. }
+  if hasInitArr then
+  begin
+    writeU32(f, InitThunkOff);
+    writeRel32(f, 0, 1, 1);          { R_386_32 vs the .text section symbol }
+  end;
+  if hasFiniArr then
+  begin
+    writeU32(f, FiniThunkOff);
+    writeRel32(f, 0, 1, 1);
+  end;
+
+  { .shstrtab: 64-byte base blob, plus 28 bytes per array pair that exists. }
   writeU8(f, 0);
   writeStrZ(f, '.text');        { 1 }
   writeStrZ(f, '.rel.text');    { 7 }
@@ -3486,7 +3545,17 @@ begin
   writeStrZ(f, '.symtab');      { 38 }
   writeStrZ(f, '.strtab');      { 46 }
   writeStrZ(f, '.shstrtab');    { 54 }
-  writePad(f, shOff - (shstrOff + 64));
+  if hasInitArr then
+  begin
+    writeStrZ(f, '.init_array');
+    writeStrZ(f, '.rel.init_array');
+  end;
+  if hasFiniArr then
+  begin
+    writeStrZ(f, '.fini_array');
+    writeStrZ(f, '.rel.fini_array');
+  end;
+  writePad(f, shOff - (shstrOff + shstrSize));
 
   { shdrs. SHT_REL = 9, entsize 8. $40 = SHF_INFO_LINK; 6 = ALLOC|EXEC,
     3 = ALLOC|WRITE, 8 = SHT_NOBITS for .bss. }
@@ -3506,8 +3575,24 @@ begin
   writeShdrB(f, 7, firstGlobal, 4, 16);
   writeShdrA(f, 46, 3, 0, strOff, strSize);
   writeShdrB(f, 0, 0, 1, 0);
-  writeShdrA(f, 54, 3, 0, shstrOff, 64);
+  writeShdrA(f, 54, 3, 0, shstrOff, shstrSize);
   writeShdrB(f, 0, 0, 1, 0);
+  { 14 = SHT_INIT_ARRAY, 15 = SHT_FINI_ARRAY, flags 3 = ALLOC|WRITE, entsize 4.
+    The rel sections link to .symtab (6) and INFO to the array they patch. }
+  if hasInitArr then
+  begin
+    writeShdrA(f, initArrNm, 14, 3, initArrOff, 4);
+    writeShdrB(f, 0, 0, 4, 4);
+    writeShdrA(f, relInitArrNm, 9, $40, relInitArrOff, 8);
+    writeShdrB(f, 6, initArrSec, 4, 8);
+  end;
+  if hasFiniArr then
+  begin
+    writeShdrA(f, finiArrNm, 15, 3, finiArrOff, 4);
+    writeShdrB(f, 0, 0, 4, 4);
+    writeShdrA(f, relFiniArrNm, 9, $40, relFiniArrOff, 8);
+    writeShdrB(f, 6, finiArrSec, 4, 8);
+  end;
 
 {$ifdef FPC}
   Close(f);

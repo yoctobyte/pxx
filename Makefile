@@ -17792,19 +17792,44 @@ test-emit-obj: $(COMPILER)
 	! readelf -sW $(TESTTMP)/test_emit_obj_386.o | grep -q 'GLOBAL DEFAULT    1 AddUp'
 	readelf -sW $(TESTTMP)/test_emit_obj_386.o | grep -q 'UND ext_aliased_link'
 	! readelf -sW $(TESTTMP)/test_emit_obj_386.o | grep -q 'ext_alias_decl'
-	# The same caller as the x86-64 row, and DELIBERATELY NOT the same expected
-	# output any more. x86-64 objects now run their initialisers from
-	# .init_array, so that row expects `done99`; only writeELFRelX64General
-	# emits .init_array, so an i386 object still never runs its body and still
-	# answers 45. The divergence is a gap, not a design: this row is the one
-	# that will change when i386 gets the same treatment, and it is written
-	# down here rather than left as a puzzling constant.
+	# The SAME caller and the SAME expected output as the x86-64 row above --
+	# and it is the same for a REASON now rather than by luck. Between the two
+	# rows the object runs its initialisers through a different mechanism
+	# (.rel.init_array + R_386_32, the thunk offset in the section bytes, since
+	# SHT_REL has no addend) and a different thunk prologue (four pushes and a
+	# 12-byte adjust, because i386 enters at esp 12 mod 16). Identical output
+	# across two psABIs is the assertion.
 	# bug-a-an-i386-emit-obj-object-still-never-runs-its-initialisers
+	readelf -SW $(TESTTMP)/test_emit_obj_386.o | grep -qE '\.init_array +INIT_ARRAY'
+	readelf -SW $(TESTTMP)/test_emit_obj_386.o | grep -qE '\.fini_array +FINI_ARRAY'
+	#    SHT_REL, so the slot must carry the offset ITSELF -- a writer that
+	#    zeroed it the way the x86-64 one correctly does would hand the C
+	#    runtime a null pointer to call, and every other assertion here would
+	#    still pass.
+	readelf -rW $(TESTTMP)/test_emit_obj_386.o | grep -qE 'R_386_32 .*\.text'
+	! readelf -x .init_array $(TESTTMP)/test_emit_obj_386.o | grep -qE '0x00000000 00000000'
 	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
 	  gcc -m32 -no-pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_386.o -o $(TESTTMP)/test_emit_obj_386_exe || { echo "test-emit-obj: i386 .o FAILED to link with gcc -m32 -no-pie"; exit 1; }; \
-	  tools/expect_same.sh test_emit_obj_386_exe "$$($(TESTTMP)/test_emit_obj_386_exe)" "45 pxx-emit-obj" || exit 1; \
+	  tools/expect_same.sh test_emit_obj_386_exe "$$($(TESTTMP)/test_emit_obj_386_exe)" "done99 pxx-emit-obj" || exit 1; \
 	  echo "test-emit-obj: i386 .o links+runs under a gcc -m32 main ok"; \
 	else echo "gcc -m32 (multilib) not installed; i386 .o link check skipped"; fi
+	# 4d. THE C FRONTEND'S i386 OBJECT RUNS ITS INITIALISERS TOO. The Pascal row
+	#    above proves the writer and the thunk; this proves the C emitter's own
+	#    i386 arm, which is a DIFFERENT piece of code -- envp arrives in rdx on
+	#    x86-64 and on the stack on i386, so the thunk is the one place that has
+	#    to know the psABI, and a wrong offset there reads a neighbouring word
+	#    and sets environ to garbage rather than failing loudly.
+	#    Pre-fix this object answered `envcount=-1 data=(NULL)`, measured.
+	#    bug-a-an-i386-emit-obj-object-still-never-runs-its-initialisers
+	rm -f $(TESTTMP)/test_emit_obj_cinit386.o
+	./$(COMPILER) --target=i386 --emit-obj test/test_shared_lib.c $(TESTTMP)/test_emit_obj_cinit386.o
+	readelf -SW $(TESTTMP)/test_emit_obj_cinit386.o | grep -qE '\.init_array +INIT_ARRAY'
+	! readelf -x .init_array $(TESTTMP)/test_emit_obj_cinit386.o | grep -qE '0x00000000 00000000'
+	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
+	  gcc -m32 $(TESTTMP)/test_emit_obj_cinit_host.c $(TESTTMP)/test_emit_obj_cinit386.o -o $(TESTTMP)/test_emit_obj_cinit386_host 2>/dev/null || { echo "test-emit-obj: i386 cinit host FAILED to build"; exit 1; }; \
+	  tools/expect_same.sh test_emit_obj_cinit386 "$$($(TESTTMP)/test_emit_obj_cinit386_host)" "42 pxx-c-data" || exit 1; \
+	  echo "test-emit-obj: an i386 object's file-scope initialisers run under a gcc -m32 main"; \
+	else echo "gcc -m32 (multilib) not installed; i386 object initialiser check skipped"; fi
 	# 4c. THE ABI CONTRACT, not just "it links and runs". ebx, esi and edi are
 	#    callee-saved on i386 and this backend writes all three (ebx is also the
 	#    `int 0x80` arg0 register). The printf caller in 4b did NOT catch that
