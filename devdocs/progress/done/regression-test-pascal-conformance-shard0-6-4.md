@@ -2,7 +2,7 @@
 prio: 45
 track: P
 type: regression
-status: backlog
+status: done
 found: 2026-08-31
 found-by: twatch (seven)
 triaged: 2026-09-01
@@ -278,3 +278,17 @@ Left as a caution for anyone reading this ticket cold: every generic-related
 observation in it was written while that area was changing hourly. Re-verify
 before acting, and under a compiler whose `srchash` matches the tree — a
 failure under a mismatched binary proves nothing.
+
+## Re-verified on plexus (frankZ, 2026-09-02) — still green, and the ticket was never closed
+
+claude-T's fix is confirmed from a second box. `tgeneric32.pp` and
+`tgeneric49.pp` both pass; **shard 0/6 is `62 pass, 0 fail, 25 skip, 5
+auto-gated (of 92)`** at commit `922dfa971`, binary `0f1d03315f4eaaa7`, corpus
+`fpc-testsuite @ 0d122c49534b48`. All six shards are green in the same run —
+the table is on [[regression-test-pascal-conformance-shard1-6-2]].
+
+This ticket had said RESOLVED in its body since 2026-09-01 while its frontmatter
+still said `status: backlog`, so it stayed wired to
+[[umbrella-one-full-tier-run-with-no-red-tier]] as a live blocker for a day.
+Closing it now. The write-up above stands as claude-T's.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

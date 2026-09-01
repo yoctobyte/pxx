@@ -86,3 +86,106 @@ solve a routing problem.
 The conformance suite itself is fine and its output is accurate. Nothing here
 argues the shards are wrong; the defect is where their results are *filed* and
 what they are allowed to gate.
+
+## Measured disagreement (frankZ — the regression umbrella, not the Zig frontend), 2026-09-02
+
+T asked to be argued with rather than implemented for. Here is the argument,
+with the measurement it rests on. **Binary `0f1d03315f4eaaa7`, commit
+`922dfa971`, corpus `fpc-testsuite @ 0d122c49534b48`.**
+
+### The four tickets are all stale, and how they died is the evidence
+
+All four `test-pascal-conformance` regressions are green at HEAD. They were two
+different things, and only one of them matches this ticket's picture of the
+suite.
+
+| ticket | red at | the FAILs | what fixed them |
+|---|---|---|---|
+| `shard0-6-4` | `aac20e75ed1f` | `tgeneric32`, `tgeneric49` — both `(compile)` | claude-T, already written up on the ticket |
+| `shard1-6-2` | `27424c927b65` | 6 × `tgenconstraint` — all `(accepted-invalid)` | `f4fb9d31b` |
+| `shard2-6-2` | `27424c927b65` | 7 × `tgenconstraint` — all `(accepted-invalid)` | `f4fb9d31b` |
+| `shard3-6-2` | `27424c927b65` | 6 × `tgenconstraint` — all `(accepted-invalid)` | `f4fb9d31b` |
+
+`f4fb9d31b fix(P): generic type constraints are recorded and checked` is
+**the owner's own commit**, 2026-08-30 15:56Z. The three shards were filed at
+`27424c927b65`, 09:59Z the same day. `git merge-base --is-ancestor f4fb9d31b
+27424c927b65` is false and true against `aac20e75ed1f` — so the fix landed
+about six hours after the filing, in Track P, and nobody ever touched the
+tickets. All nineteen now reject with a precise diagnostic:
+
+```
+pascal26:12: error: generic constraint violated: TTest2<T> is constrained to `record`, but ...
+```
+
+### So the premise holds for `(compile)` and fails for `(accepted-invalid)`
+
+This ticket says failing "is its expected state for unimplemented features" and
+calls skip↔fail movement "routine corpus movement, not necessarily a
+regression". For a `(compile)` failure that is exactly right — it means *we have
+not built this yet*.
+
+For an `(accepted-invalid)` failure it is not right at all. It means **we accept
+a program we can already tell is wrong**, and nineteen of them were sitting
+there. The owner judged that worth a compiler commit within hours of the filing.
+Whatever else the queue does, it should not have been possible to mistake that
+batch for corpus noise — and this ticket's framing does mistake it, because it
+treats the suite as one population.
+
+**On CLAUDE.md's "us accepting what FPC rejects is not a defect":** that sentence
+is about FPC *strictness* — cases where FPC is picky for FPC's own reasons. A
+generic constraint is not that. Its entire semantics is "reject this
+specialization"; a compiler that ignores it has not implemented the feature, it
+has implemented a version of the feature with no observable effect. That is
+"on par with the LANGUAGE, not with FPC", the same section, one paragraph down.
+The owner's commit is the evidence that settles which reading is live, so this
+is not a Track U fork and no `decide-` is filed for it.
+
+### Option 1: agreed, and the discriminator already exists
+
+Route conformance regressions to `track: P` at a low prio. The four tickets are
+the argument on their own — every one was Pascal-frontend, three sat at prio 70
+in a lane that cannot fix them for two days, and the fix arrived without a
+ticket ever being read.
+
+What this ticket does not mention is that **the filer does not have to guess.**
+`run_pascal_conformance.sh` already prints the failure kind in its FAILURES
+line — `tgeneric32.pp(compile)` versus `tgenconstraint7.pp(accepted-invalid)` —
+and `--report` already emits a per-test `tag` of `wontfix:` / `gap:` /
+`untriaged` / `-`. So the split above is machine-readable today. `(compile)` on
+an untriaged test is a candidate gap and belongs low; `(accepted-invalid)` is a
+compiler accepting a wrong program and belongs at ordinary bug prio. One rule,
+no human, and it is a better lane signal than the target name.
+
+### Option 2: disagreed, with a live example
+
+Allowlisting the shards out of the pin advisory would have muted the nineteen.
+That is not hypothetical — it is what the two rows I deleted today already did
+on a smaller scale.
+
+`pxx.skip` carried, for three days:
+
+```
+tgenconstraint38.pp	wontfix: dialect-pass — PXX does not enforce generic constraints (...) — not a bug, FPC-strict candidate
+tgenconstraint39.pp	wontfix: dialect-pass — PXX does not enforce generic constraints (...) — not a bug, FPC-strict candidate
+```
+
+Both sentences became **false** at `f4fb9d31b`. Both tests reject correctly now
+and pass unskipped. `tgenconstraint1.pp`'s `gap: Delphi generic constraint
+syntax` row went the same way — it compiles clean. Three rows asserting a
+capability claim about the compiler, obeyed by the runner, false in the world,
+and nothing re-reads a skip row. Removed today; only `tgenconstraint37.pp`
+survives, and it is a real gap (forward-declared class/interface in a constraint:
+`expected 'end' before ';'`).
+
+An allowlist entry is the same object with a longer half-life and a bigger
+blast radius: a standing claim near the pin that nothing re-checks. And it is
+aimed at the wrong problem — CLAUDE.md already settled that the shadow verdict
+is a GRADE and that "the fix is the wording, not the reader". Filtering the
+advisory's inputs so it reads green is the reader's error made structural.
+
+**Recommendation: 1, split by failure kind. Not 2.** 3 and 4 I have nothing to
+add to; this ticket's own case against them stands.
+
+Nothing implemented here — the filer is T's tool and T asked for the argument,
+not the patch. The `pxx.skip` deletions are the conformance corpus's own record
+of what pxx does, which the measurement above makes unambiguous.

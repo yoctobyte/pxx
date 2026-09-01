@@ -3,7 +3,7 @@ slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
 prio: 85
 type: umbrella
-blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, regression-test-pascal-conformance-shard0-6-4, regression-test-pascal-conformance-shard1-6-2, regression-test-pascal-conformance-shard2-6-2, regression-test-pascal-conformance-shard3-6-2, regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native, regression-cascade-fc01c8094434]
+blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native, regression-cascade-fc01c8094434]
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
@@ -195,3 +195,53 @@ run where the arrival rate loses to the fix rate for one tier's duration."
 - Do not widen this into a triage desk. One clean run and it closes.
 - Do not read a shrinking red count as progress without checking whether the
   job still RUNS. Group 1 is exactly that failure mode.
+
+## The conformance group is closed — four tickets, two causes, neither ours
+
+2026-09-02, frankZ. `fpc-testsuite @ 0d122c49534b48` fetched to plexus (it was
+one of the 41 jobs that SKIP here for missing corpus, which is why the first
+pass at this group could only hypothesise and correctly refused to skiplist on
+a hypothesis).
+
+**All six shards green in one run, tree provably unchanged across it.** Binary
+`0f1d03315f4eaaa7`, commit `922dfa971`:
+
+```
+shard 0/6   62 pass, 0 fail, 25 skip, 5 auto-gated (of 92)
+shard 1/6   63 pass, 0 fail, 24 skip, 5 auto-gated (of 92)
+shard 2/6   50 pass, 0 fail, 36 skip, 6 auto-gated (of 92)
+shard 3/6   57 pass, 0 fail, 29 skip, 6 auto-gated (of 92)
+shard 4/6   61 pass, 0 fail, 25 skip, 5 auto-gated (of 91)
+shard 5/6   56 pass, 0 fail, 28 skip, 7 auto-gated (of 91)
+HEAD_BEFORE = 922dfa971e21c7e0...
+HEAD_AFTER  = 922dfa971e21c7e0...     (recorded, not assumed)
+```
+
+Four tickets, **two causes, and I fixed neither**:
+
+- **shard0** — `tgeneric32`/`tgeneric49`, both `(compile)`. Fixed by claude-T on
+  2026-09-01 and written up on the ticket. It stayed wired here for a day
+  because the body said RESOLVED while the frontmatter still said
+  `status: backlog`. **A ticket that says RESOLVED in prose is not resolved to
+  anything that reads frontmatter**, and the ranker reads frontmatter and
+  nothing else.
+- **shards 1/2/3** — nineteen `tgenconstraint*(accepted-invalid)` rows, one
+  construct: a generic specialized with an argument its constraint rejects.
+  Fixed by **`f4fb9d31b`, the owner's own commit**, 2026-08-30 15:56Z — *six
+  hours after the shards were filed at 09:59Z the same day*. They then sat open
+  for three days at prio 70 in Track T, a lane that could not have fixed them.
+
+**What this group cost was routing, not engineering.** Both causes were fixed by
+other people before anyone read the tickets; the umbrella's only real work was
+finding that out. The filer's `track: T` fallback is the mechanism and it is
+argued, with this as the evidence, on
+[[chore-t-fpc-conformance-noise-skews-priority]] — where I agree with option 1
+(route to `P`, split by the failure KIND the runner already prints) and disagree
+with option 2 (pin-allowlist), because allowlisting would have muted exactly the
+nineteen the owner acted on.
+
+**Three `pxx.skip` rows had gone false** in the same fix and were deleted:
+`tgenconstraint38`/`39`'s `wontfix: PXX does not enforce generic constraints`
+(it does, since `f4fb9d31b`) and `tgenconstraint1`'s `gap:` (it compiles). A
+skip row is a capability claim the runner obeys and nothing re-reads. Only
+`tgenconstraint37` keeps its `gap:`, and it is real.

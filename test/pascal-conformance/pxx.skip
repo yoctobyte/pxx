@@ -62,8 +62,6 @@ tforin4.pp	gap: for-in over function-returned and open/dynamic arrays with body 
 tforin8.pp	gap: IEnumerable/IEnumerator interfaces driving for-in
 tforin9.pp	gap: `enumerator MoveNext/Current` directives + operator Enumerator
 tgenconstraint37.pp	gap: generic constraints on forward-declared class/interface (T: IInterface)
-tgenconstraint38.pp	wontfix: dialect-pass — PXX does not enforce generic constraints (compile-time safety net only; runtime semantics well-defined) — not a bug, FPC-strict candidate
-tgenconstraint39.pp	wontfix: dialect-pass — PXX does not enforce generic constraints (compile-time safety net only; runtime semantics well-defined) — not a bug, FPC-strict candidate
 tgeneric102.pp	gap: specialize of generic class declared in another unit (inline class funcs)
 tgeneric107.pp	gap: inline specialize expression (specialize G<T>.Create as expression/procvar)
 tgeneric15.pp	gap: class inheriting from `specialize TStack<Integer>` as parent type
@@ -164,7 +162,6 @@ terecs3.pp	gap: advanced-record features from a unit — class var/const/nested 
 terecs8.pp	gap: `class var` in a record referencing its own type + class property
 tforin6.pp	gap: `operator enumerator` for a class, returning an `object`-type enumerator
 tforin7.pp	gap: `enumerator MoveNext` / `enumerator Current` method+property directives
-tgenconstraint1.pp	gap: Delphi generic constraint syntax (class/record/constructor/interface constraints)
 tgeneric103.pp	gap: standalone `generic procedure Test<T>` + specialize; also unit-only compilation
 tgeneric105.pp	gap: %FAIL diagnostic — impl type params must match interface decl (TTest<S> vs <T>)
 tgeneric106.pp	gap: generic class with `class var` procvar field of type G<T>, method-of-object
