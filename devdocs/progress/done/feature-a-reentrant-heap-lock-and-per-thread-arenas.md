@@ -4,7 +4,7 @@ prio: 45
 type: feature
 blocked-by: []
 summary: "DONE for the ALLOCATOR half; the reentrancy half stays parked by the owner and was never touched. --threadsafe x86-64 GetMem and FreeMem now have a lock-free per-thread MAGAZINE fast path emitted at the two call sites, and the negative scaling this ticket was filed for is gone. bench/threadsafe_heap_scaling, interleaved A/B, min of 3: threads 1/2/4/8 went 27/51/65/84 ms to 9/17/8/5 ms -- 3x at one thread, 17x at eight, and the CURVE INVERTED (vs1x100 was 100/182/232/311, now 100/188/100/55, i.e. constant total work is finally being done in parallel). A three-live-blocks variant, which is the shape that catches a shallow magazine, goes 0.15s to 0.04s at one thread and 0.54s to 0.02s at eight. Built exactly as the design section below specified -- in the EMITTER, never inside PXXAlloc, so no path can re-enter the non-reentrant lock and REENTRANCY STAYED PARKED AND UNNEEDED. Two things the design did not say, both measured rather than argued. (1) DEPTH ONE IS A TRAP: it wins 28->9ms on alloc/free pairs and LOSES 0.40->0.85s at 8 threads when three blocks of a class are live, because two of every three operations then miss and pay the probe on top of the lock they still take. Depth 8 with a per-class count, which is also the retention bound (133 KB/thread worst case, so the thread-exit drain this ticket listed as unsettled does not need writing). (2) The magazine lives in the TLS BLOCK ITSELF (TLS_BLOCK_SIZE 128 -> 1152), not behind a pointer: no null slot to test per GetMem, no bootstrap helper, no thread that can reach the fast path before its magazine exists -- the clone stub already zeroes the block and zero IS empty. Off under -dPXX_HEAP_DEBUG and -dPXX_ALLOC_CENSUS because it bypasses PXXAlloc and both instrument PXXAlloc; -dPXX_NO_HEAP_MAG is the A/B switch every number above was taken with. x86-64 only, as the target-set section predicted; i386/aarch64/arm32 keep the global lock. Guarded by test/test_threadsafe_heap_magazine.pas (both --threadsafe and plain), whose zeroing check has a RUN positive control. RESIDUAL WITH AN OWNER: an allocating signal handler still deadlocks when it misses the magazine -- pre-existing, measured, filed as bug-a-the-threadsafe-allocator-is-not-async-signal-safe -- and the re-entry guard TLS_SLOT_HEAP_MAGBUSY is reasoned and NOT verified by execution, because every shape that would aim a control at it hits that deadlock first."
-status: working
+status: done
 owner: frankC
 ---
 
@@ -520,3 +520,6 @@ evidence for a guard it could not see.
   magazine. The magazine moved the threshold, not the hazard. Filed as
   [[bug-a-the-threadsafe-allocator-is-not-async-signal-safe]], which also owns
   the unverified re-entry guard.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.

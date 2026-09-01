@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong | A | 75→90 | bug | --emit-obj emits NO data symbols. A global defined in a .c gets no OBJECT symbol, and `extern int x;` is relocated into the object's OWN .bss instead of becoming an undefined import -- so two pxx objects sharing a global LINK CLEANLY and read different memory. Measured: gcc links the pair and prints 0 where 99 is correct. No diagnostic anywhere. Blocks separate compilation of any real C project (busybox's libbb/ptr_to_globals.c is one global pointer and cannot even be emitted). | — |
-| feature-a-reentrant-heap-lock-and-per-thread-arenas | A+O | 45→75 | feature | DONE for the ALLOCATOR half; the reentrancy half stays parked by the owner and was never touched. --threadsafe x86-64 GetMem and FreeMem now have a lock-free per-thread MAGAZINE fast path emitted at the two call sites, and the negative scaling this ticket was filed for is gone. bench/threadsafe_heap_scaling, interleaved A/B, min of 3: threads 1/2/4/8 went 27/51/65/84 ms to 9/17/8/5 ms -- 3x at one thread, 17x at eight, and the CURVE INVERTED (vs1x100 was 100/182/232/311, now 100/188/100/55, i.e. constant total work is finally being done in parallel). A three-live-blocks variant, which is the shape that catches a shallow magazine, goes 0.15s to 0.04s at one thread and 0.54s to 0.02s at eight. Built exactly as the design section below specified -- in the EMITTER, never inside PXXAlloc, so no path can re-enter the non-reentrant lock and REENTRANCY STAYED PARKED AND UNNEEDED. Two things the design did not say, both measured rather than argued. (1) DEPTH ONE IS A TRAP: it wins 28->9ms on alloc/free pairs and LOSES 0.40->0.85s at 8 threads when three blocks of a class are live, because two of every three operations then miss and pay the probe on top of the lock they still take. Depth 8 with a per-class count, which is also the retention bound (133 KB/thread worst case, so the thread-exit drain this ticket listed as unsettled does not need writing). (2) The magazine lives in the TLS BLOCK ITSELF (TLS_BLOCK_SIZE 128 -> 1152), not behind a pointer: no null slot to test per GetMem, no bootstrap helper, no thread that can reach the fast path before its magazine exists -- the clone stub already zeroes the block and zero IS empty. Off under -dPXX_HEAP_DEBUG and -dPXX_ALLOC_CENSUS because it bypasses PXXAlloc and both instrument PXXAlloc; -dPXX_NO_HEAP_MAG is the A/B switch every number above was taken with. x86-64 only, as the target-set section predicted; i386/aarch64/arm32 keep the global lock. Guarded by test/test_threadsafe_heap_magazine.pas (both --threadsafe and plain), whose zeroing check has a RUN positive control. RESIDUAL WITH AN OWNER: an allocating signal handler still deadlocks when it misses the magazine -- pre-existing, measured, filed as bug-a-the-threadsafe-allocator-is-not-async-signal-safe -- and the re-entry guard TLS_SLOT_HEAP_MAGBUSY is reasoned and NOT verified by execution, because every shape that would aim a control at it hits that deadlock first. | — |
 | feature-c-corpus-busybox-multi-applet | C | 70→90 | feature | Rung 2 of feature-busybox-kiosk-selfhosting-target. FIRST BAR MET 2026-09-01 (2789f87a7): a two-applet busybox (cat+echo+the multiplexer, NUM_APPLETS 2, dispatch table compiled IN) built by pxx is byte-identical to gcc over 28 cases on x86-64 AND aarch64 and agrees with upstream's separately-linked binary; argv[0], `busybox <applet>`, --list, --help, unknown applet and bare busybox all covered. Cost ONE compiler fix: a constant left operand of && / \|\| survived every -O level including -O3 (88ef1232f). Harness is now tools/busybox_diff.sh --applets. STILL OPEN: `ash` (fork/exec/wait, the process model) and the TU surface -- 28 of libbb's ~145, so getpwnam/statfs/getrlimit/getmntent are still untouched. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
@@ -830,9 +829,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3013)
+## done (3014)
 
-3013 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3014 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -917,6 +916,7 @@ _none_
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 80] [A] meta-a-pxx-produces-linkable-code [meta — a standing index, never "done"; link work to it, do not claim it]
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
+- [p 75] [A] umbrella-managed-memory-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [T] regression-cascade-fc01c8094434
@@ -1373,7 +1373,6 @@ _none_
 - **1** — decide-the-utf16-payload-fact-is-spelled-twice-kind-widestr-and-enc-ucs2
 - **1** — decide-tobject-classinfo-blob-or-refusal
 - **1** — decide-which-gtk-a-bare-gtk-gtk-h-means
-- **1** — feature-a-reentrant-heap-lock-and-per-thread-arenas
 - **1** — feature-c-corpus-busybox-multi-applet
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-os-targets-bsd-mac
