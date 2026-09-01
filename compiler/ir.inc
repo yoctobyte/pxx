@@ -3345,6 +3345,48 @@ begin
     and (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString);
 end;
 
+function IRParkManagedStr(val: Integer): Integer;
+{ Give a managed-string VALUE an owner, and yield the owned value.
+
+  THE ONE SHAPE BEHIND SIX BUGS. A lowering produces a fresh AnsiString and
+  hands it to a consumer that keeps a RAW POINTER -- a TVarRec union slot, a
+  PChar, a Pointer, a variant box. The +1 belongs to nobody and no scope-exit
+  scan can ever find it, because it was never a symbol. Measured ~1 leaked
+  handle per call at every one of:
+    Take(v)                   v: Variant, string param      88e1ab536
+    v = ('lit' + c)           variant binop box operand     88e1ab536
+    TakeC(['lit' + c, i])     array-of-const element        f42665459
+    TakeP(PChar('lit' + c))   PChar cast over a computed s  7cd695c7d
+    Cish('lit' + c)           implicit AnsiString -> PChar param
+    p := 'lit' + c            assignment to a PChar/Pointer
+    Pointer('lit' + c)        the generic pointer cast
+
+  WHY A PARK AND NOT A SHAPE TEST. The seven call-argument sites decide
+  ownership by asking whether the argument AST is AN_IDENT/AN_FIELD/AN_INDEX/
+  AN_DEREF -- sound reasoning about SOURCE, since those name storage somebody
+  else owns, and wrong about a LOWERING, which by then may have replaced the
+  node with a brand-new string. That mismatch is the common cause of all six.
+  So every fix goes at the seam that CREATES or CONSUMES the value, and asks
+  nothing about shape.
+
+  UNCONDITIONAL IS SAFE because IR_STORE_SYM already discriminates: it MOVES a
+  fresh call result and RETAINS anything else (IRNodeOwnsFreshCallResult). A
+  value that already had an owner gains a balanced retain/release rather than a
+  second free, which is why every named-local control row stays put.
+
+  The lifetime created is SCOPE EXIT. For the pointer seams that is strictly
+  LONGER than FPC's guarantee for a temporary (end of statement), so no program
+  correct under the oracle becomes wrong -- verified against `fpc -gh`, which
+  poisons freed blocks and prints the same garbage pxx does for the one shape
+  where both dangle (a PChar of a temporary RETURNED out of its function). }
+var pmSym: Integer;
+begin
+  pmSym := AllocVar('', tyAnsiString);
+  SymIsHiddenArgTemp[pmSym] := True;
+  IRAppend(IR_STORE_SYM, pmSym, val, -1, 0, Ord(tyAnsiString));
+  IRParkManagedStr := IRAppend(IR_LOAD_SYM, pmSym, -1, -1, 0, Ord(tyAnsiString));
+end;
+
 { The STATIC-ARRAY SOURCE behind an argument that is about to be copied into a
   length-headed temp for an array parameter: how many elements, of what kind,
   and how wide one is.
@@ -4552,6 +4594,26 @@ begin
     value := IRStrWidthConv(value, argAST,
                ProcParamStrElemTk[cpi * MAX_PROC_PARAMS + pathIdx] = Ord(tyWideChar),
                ASTStrElemTkOf(argAST) = Ord(tyWideChar));
+  { A managed string handed to a POINTER parameter has to be owned by somebody,
+    and the parameter cannot be that somebody: a PChar/Pointer param keeps a raw
+    address and retains nothing. `Cish('lit' + c)` with `Cish(s: PChar)` -- the
+    implicit conversion every C binding relies on, no PChar() in the source --
+    left 921 blocks live in 1000 trips, frees=0.
+
+    Here at the single tail, not at the seven call sites, and for the same
+    reason the width conversion above gives: every argument reaches `Result :=
+    value` here, while the seven sites ask ParamWantsManagedStrTemp, which is
+    False for a pointer parameter by construction. A clause at one of them
+    fixes one spelling and leaves six.
+
+    VALUE parameters only. A `var`/`out` pointer parameter binds the caller's
+    variable and the callee may write it back; parking would hand it a temp. }
+  if (cpi >= 0) and (cpi < ProcCount) and (not isRefArg) and
+     (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) and
+     (not Procs[cpi].Params[pathIdx].IsArray) and
+     (IntToTypeKind(ASTTk[argAST]) = tyAnsiString) then
+    value := IRParkManagedStr(value);
   Result := value;
 end;
 
@@ -6237,16 +6299,11 @@ function IRLowerBoxOperand(argAST: Integer): Integer;
   need to ask what SHAPE the operand had, which is the question that produced
   the sibling bug in this same ticket.
   bug-a-a-variant-converted-to-ansistring-leaks-whenever-the-result-is-a-temporary }
-var boTmp, boVal: Integer;
+var boVal: Integer;
 begin
   boVal := IRLowerAST(argAST);
   if IntToTypeKind(ASTTk[argAST]) = tyAnsiString then
-  begin
-    boTmp := AllocVar('', tyAnsiString);
-    SymIsHiddenArgTemp[boTmp] := True;
-    IRAppend(IR_STORE_SYM, boTmp, boVal, -1, 0, Ord(tyAnsiString));
-    boVal := IRAppend(IR_LOAD_SYM, boTmp, -1, -1, 0, Ord(tyAnsiString));
-  end;
+    boVal := IRParkManagedStr(boVal);
   IRLowerBoxOperand := boVal;
 end;
 
@@ -6601,13 +6658,12 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
 
     slTargetAST, slCountAST, slRootSym, slDepth, slTargetAddr, slCountNode: Integer;
     slFldRec, slFldDepth, slFldBaseRec: Integer; slFldName: AnsiString; slFldBaseTk: TTypeKind;
-    helperPi, pcVal, pcTmp: Integer;
+    helperPi, pcVal: Integer;
     lhsTk, lhsStoreTk, castTk: TTypeKind;
     lhsStrCap: Integer;
     rcSubLo, rcSubHi: Int64;
     vrCount, vrTmp, vrIdent, vrCountLit, vrArg1, vrArg2, vrSlCall: Integer;
     vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId, vrBoxSym: Integer;
-    vrStrSym: Integer;
     vrElemDepth: Integer;
     vrElemTk, vrBoxTk: TTypeKind;
     setAllConst: Boolean; setSym: Integer;
@@ -6995,10 +7051,7 @@ begin
               ownership is a property of what the lowering produced, not of the
               shape the source had.
               bug-a-a-computed-string-in-an-array-of-const-leaks-its-temporary }
-            vrStrSym := AllocVar('', tyAnsiString);
-            SymIsHiddenArgTemp[vrStrSym] := True;
-            IRAppend(IR_STORE_SYM, vrStrSym, value, -1, 0, Ord(tyAnsiString));
-            value := IRAppend(IR_LOAD_SYM, vrStrSym, -1, -1, 0, Ord(tyAnsiString));
+            value := IRParkManagedStr(value);
           end
           else if vrElemTk = tyString then
             { vtAnsiString from a frozen (inline) string literal: its value points
@@ -7894,11 +7947,7 @@ begin
             than FPC's guarantee for PChar-of-a-temporary (end of statement), so
             no program that was correct under the oracle becomes wrong here.
             bug-a-pchar-of-a-computed-string-leaks-the-string }
-          pcVal := IRLowerAST(ASTLeft[node]);
-          pcTmp := AllocVar('', tyAnsiString);
-          SymIsHiddenArgTemp[pcTmp] := True;
-          IRAppend(IR_STORE_SYM, pcTmp, pcVal, -1, 0, Ord(tyAnsiString));
-          pcVal := IRAppend(IR_LOAD_SYM, pcTmp, -1, -1, 0, Ord(tyAnsiString));
+          pcVal := IRParkManagedStr(IRLowerAST(ASTLeft[node]));
           Result := IRAppendCall(procIdx,
             IRAppend(IR_ARG, pcVal, -1, -1, 0, Ord(tyPointer)),
             -1, Ord(tyPointer));
@@ -7909,6 +7958,15 @@ begin
       { A cast PType(expr) is purely a type-tag change — the value in rax is
         already the pointer. No load-through-memory here. }
       Result := IRLowerAST(ASTLeft[node]);
+      { ...but a type-tag change is exactly how a managed string stops being
+        managed. `Pointer('lit' + c)` yields the handle under a tag that owns
+        nothing, so the +1 was dropped: 921 live in 1000 trips, frees=0. The
+        PChar spelling exits above through PXXPCharOf; this is every other
+        pointer cast, including the one the PChar branch falls through to when
+        the heap unit is absent. }
+      if (castTk = tyPointer) and
+         (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyAnsiString) then
+        Result := IRParkManagedStr(Result);
       { PChar(stringExpr): an inline-length string value points at its 8-byte
         length prefix; a C `const char*` needs the char data, which sits at +8
         (now guaranteed NUL-terminated by InternStr). Sentinel -2 in ASTIVal
@@ -11195,6 +11253,17 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           value := IRStrWidthConv(value, ASTRight[node],
                      StrElemIsWide(ASTStrElemTkOf(ASTLeft[node])),
                      StrElemIsWide(ASTStrElemTkOf(ASTRight[node])));
+        { 7d: the MIRROR of 7c, for the destination that owns nothing. A managed
+          string assigned to a PChar/Pointer stores the bare handle under a tag
+          with no finaliser, so `p := 'lit' + c` dropped the +1 on the floor:
+          921 live in 1000 trips, frees=0. Park it, exactly as the pointer-
+          PARAMETER case does at IRLowerCallArg's tail and the pointer CAST does
+          in AN_PTR_CAST -- three spellings of one destination that keeps a raw
+          address. `p := PChar(s)` arrives here already tyPointer and is handled
+          at the cast instead, which is why this asks the RIGHT-hand type. }
+        if (lhsTk = tyPointer) and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyAnsiString) then
+          value := IRParkManagedStr(value);
         { {$R+}: guard a narrowing store with the range-check helper — index
           bounds (reads AND writes) are handled centrally in IRLowerAddress
           (feature-pascal-range-checks-r-plus). }
