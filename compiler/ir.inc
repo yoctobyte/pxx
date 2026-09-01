@@ -990,17 +990,68 @@ end;
   statement, is what keeps the call from being emitted TWICE: the store is
   itself a statement root and drags its operand tree in with it. Callers pass
   the result straight on to IRMarkStatementNode, which ignores a store. }
-function IRDropManagedStrResult(irNode: Integer): Integer;
-var tmp: Integer;
+{ A discarded MANAGED result is an owned handle nobody stores, so nothing ever
+  releases it: `flabel(7)` as a statement leaked ~32 bytes per call, for plain
+  defs and methods alike (bug-nilpy-discarded-string-result-leaks).
+
+  Bind it to a hidden temp belonging to THIS SITE and return the STORE. The
+  managed store releases the slot's previous value before taking the new one, so
+  a loop through this site keeps at most one handle alive and the scope-exit
+  release frees the last -- no new IR op (which every backend would then have to
+  implement) and no ownership transfer to invent.
+
+  Returning the store, rather than emitting it and keeping the call as the
+  statement, is what keeps the call from being emitted TWICE: the store is
+  itself a statement root and drags its operand tree in with it. Callers pass
+  the result straight on to IRMarkStatementNode, which ignores a store.
+
+  It was `IRDropManagedStrResult`, gated `if not PyProgramMode then Exit`, on the
+  stated premise that "Pascal has no value-discarding expression statement".
+  That premise is FALSE: extended syntax lets a function be called as a
+  statement, and `MkS(i);` in a 1000-trip loop leaked 979 handles while FPC
+  reported 0 unfreed. The NilPy arm of this bug was fixed and its Pascal sibling
+  was left standing behind a mode gate -- so the gate is gone and the test is
+  purely structural (managed result, call node, statement level). The name lost
+  its `Str` in the same edit, because it now parks arrays too and an 80%-accurate
+  name is the worse kind.
+  bug-a-a-discarded-managed-function-result-is-never-released }
+function IRDropManagedResult(astNode, irNode: Integer): Integer;
+var dmTmp, dmDepth, dmSaved: Integer; dmRet: TTypeKind;
 begin
-  IRDropManagedStrResult := irNode;
+  IRDropManagedResult := irNode;
   if (irNode < 0) or (irNode >= IRCount) then Exit;
-  if not PyProgramMode then Exit;
-  if IntToTypeKind(IRTk[irNode]) <> tyAnsiString then Exit;
   if not (((IRKind[irNode] = IR_CALL) and (IRA[irNode] >= 0)) or
           (IRKind[irNode] = IR_VIRTUAL_CALL) or (IRKind[irNode] = IR_CALL_IND)) then Exit;
-  tmp := AllocVar('', tyAnsiString);
-  IRDropManagedStrResult := IRAppend(IR_STORE_SYM, tmp, irNode, -1, 0, Ord(tyAnsiString));
+  { The IR node's OWN tag is not the authority here. A function called as a
+    STATEMENT is lowered as a void call -- `call a=735 ival=1 tk=0` -- so the
+    result type is erased before this point and every type-tag test reads
+    tyUnknown. The proc table still knows, and the AST node still carries the
+    proc index, so ask THAT. (Measured: `MkS(i);` in a 1000-trip loop dumped
+    `kind=8 tk=0`, which is why the tag-based first draft of this function
+    changed nothing at all.) }
+  dmRet := IntToTypeKind(IRTk[irNode]);
+  if (dmRet = tyUnknown) and (astNode >= 0) and (astNode < ASTNodeCount) and
+     (ASTKind[astNode] = AN_CALL) and
+     (Integer(ASTIVal[astNode]) >= 0) and (Integer(ASTIVal[astNode]) < ProcCount) then
+    dmRet := Procs[Integer(ASTIVal[astNode])].RetType;
+  if dmRet = tyAnsiString then
+  begin
+    dmTmp := AllocVar('', tyAnsiString);
+    SymIsHiddenArgTemp[dmTmp] := True;
+    IRDropManagedResult := IRAppend(IR_STORE_SYM, dmTmp, irNode, -1, 0, Ord(tyAnsiString));
+    Exit;
+  end;
+  { A dyn-array result reads back tyPointer, exactly as it did at the eight
+    pointer seams, so the type tag cannot see it -- NodeDynDepth on the CALL
+    node can, via ProcRetIsDynArray. }
+  dmDepth := NodeDynDepth(astNode);
+  if dmDepth <= 0 then Exit;
+  dmSaved := LastTypeRecId;
+  LastTypeRecId := NodeDynBaseRec(astNode);
+  dmTmp := AllocDynArray('', NodeDynBaseTk(astNode), dmDepth);
+  LastTypeRecId := dmSaved;
+  SymIsHiddenArgTemp[dmTmp] := True;
+  IRDropManagedResult := IRAppend(IR_STORE_SYM, dmTmp, irNode, -1, 0, Ord(tyPointer));
 end;
 
 procedure IRDiscardValue(astNode, irNode: Integer);
@@ -1023,8 +1074,11 @@ procedure IRDiscardValue(astNode, irNode: Integer);
   a caller is part-way through building an argument or init chain splices it into that
   chain and corrupts it. That is what IRMarkStatementNode stays for.
 
-  C-mode only: Pascal has no value-discarding expression statement, so the self-host
-  binary stays byte-identical. }
+  C-mode only. NOTE: the reason once given here -- "Pascal has no value-discarding
+  expression statement" -- is FALSE (extended syntax has one, and it leaked; see
+  IRDropManagedResult above). What actually holds is narrower and is the real
+  reason to stay C-only: the wrapping below exists for C's comma/assignment-value
+  rules, and Pascal reaches none of those shapes. }
 var mkTk: TTypeKind; mkTmp: Integer;
 begin
   if (irNode < 0) or (irNode >= IRCount) then Exit;
@@ -13025,7 +13079,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         reason: an inner statement lowers while the outer statement's temps are
         still pending. }
       pcBase := PostCallIntfCount;
-      last := IRLowerAST(ASTLeft[pairNode]);
+      last := IRDropManagedResult(ASTLeft[pairNode], IRLowerAST(ASTLeft[pairNode]));
       IRMarkStatementNode(last);
       IRFlushPostCallIntf(pcBase);
       last := IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
@@ -13033,7 +13087,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       if ASTRight[pairNode] <> -1 then
       begin
         pcBase := PostCallIntfCount;
-        last := IRLowerAST(ASTRight[pairNode]);
+        last := IRDropManagedResult(ASTRight[pairNode], IRLowerAST(ASTRight[pairNode]));
         IRMarkStatementNode(last);
         IRFlushPostCallIntf(pcBase);
       end;
@@ -13244,7 +13298,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         the enclosing statement where they are live across every iteration --
         the same base-not-blanket discipline AN_IF and AN_SEQ use. }
       pcBase := PostCallIntfCount;
-      last := IRLowerAST(ASTRight[node]);
+      last := IRDropManagedResult(ASTRight[node], IRLowerAST(ASTRight[node]));
       IRMarkStatementNode(last);
       IRFlushPostCallIntf(pcBase);
       
@@ -13381,7 +13435,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       Inc(IRLoopStackDepth);
       
       pcBase := PostCallIntfCount;
-      bodyIRNode := IRLowerAST(bodyNode);
+      bodyIRNode := IRDropManagedResult(bodyNode, IRLowerAST(bodyNode));
       IRMarkStatementNode(bodyIRNode);
       IRFlushPostCallIntf(pcBase);   { per iteration — see AN_WHILE }
       
@@ -13429,7 +13483,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       Inc(IRLoopStackDepth);
       
       pcBase := PostCallIntfCount;
-      bodyIRNode := IRLowerAST(ASTLeft[node]);
+      bodyIRNode := IRDropManagedResult(ASTLeft[node], IRLowerAST(ASTLeft[node]));
       IRMarkStatementNode(bodyIRNode);
       IRFlushPostCallIntf(pcBase);   { per iteration — see AN_WHILE }
       
@@ -13546,7 +13600,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             20M calls.
             bug-a-managed-temps-for-an-untaken-branch-are-still-init-and-finalized }
           pcBase := PostCallIntfCount;
-          bodyIRNode := IRLowerAST(stmtNode);
+          bodyIRNode := IRDropManagedResult(stmtNode, IRLowerAST(stmtNode));
           IRMarkStatementNode(bodyIRNode);
           IRFlushPostCallIntf(pcBase);
           if first < 0 then first := bodyIRNode;
@@ -13596,7 +13650,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           last := clauseBodyLabelNode;
           
           pcBase := PostCallIntfCount;   { per arm — see the else clause above }
-          bodyIRNode := IRLowerAST(stmtNode);
+          bodyIRNode := IRDropManagedResult(stmtNode, IRLowerAST(stmtNode));
           IRMarkStatementNode(bodyIRNode);
           IRFlushPostCallIntf(pcBase);
           last := bodyIRNode;
@@ -13820,7 +13874,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           0.07-0.10s. Same output, sink=5000000 both.
           bug-a-an-exception-handler-arm-finalizes-its-managed-temp-after-the-merge }
         pcBase := PostCallIntfCount;
-        last := IRLowerAST(ASTLeft[handlerNode]);
+        last := IRDropManagedResult(ASTLeft[handlerNode], IRLowerAST(ASTLeft[handlerNode]));
         IRMarkStatementNode(last);
         IRFlushPostCallIntf(pcBase);
         if excOwnTmp >= 0 then
@@ -14118,13 +14172,13 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       begin
         if ASTKind[seq] = AN_SEQ then
         begin
-          item := IRDropManagedStrResult(IRLowerAST(ASTLeft[seq]));
+          item := IRDropManagedResult(ASTLeft[seq], IRLowerAST(ASTLeft[seq]));
           IRDiscardValue(ASTLeft[seq], item);
           seq := ASTRight[seq];
         end
         else
         begin
-          item := IRDropManagedStrResult(IRLowerAST(seq));
+          item := IRDropManagedResult(seq, IRLowerAST(seq));
           IRDiscardValue(seq, item);
           seq := -1;
         end;
@@ -14431,7 +14485,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           append BLOCK_k, BLOCK_k-1, ... BLOCK_0 (innermost first, as before)
 
         The recursive version also passed each inner BLOCK through
-        IRDropManagedStrResult and IRMarkStatementNode. Both are no-ops on an
+        IRDropManagedResult and IRMarkStatementNode. Both are no-ops on an
         IR_BLOCK — the first only rewrites a managed-string CALL result, the
         second only tags a call — so dropping them changes nothing, and the
         equality was verified by compiling the same sources with the old and new
@@ -14450,7 +14504,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             ((ASTKind[seqCur] = AN_SEQ) or (ASTKind[seqCur] = AN_PAIR)) do
       begin
         pcBase := PostCallIntfCount;
-        left := IRDropManagedStrResult(IRLowerAST(ASTLeft[seqCur]));
+        left := IRDropManagedResult(ASTLeft[seqCur], IRLowerAST(ASTLeft[seqCur]));
         IRMarkStatementNode(left);
         { The statement is complete: release the by-value interface temps it
           created. A BASE rather than a blanket flush, because an inner sequence
@@ -14473,7 +14527,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       end;
       { seqCur is the TAIL — the first node that is not itself a sequence. }
       pcBase := PostCallIntfCount;
-      right := IRDropManagedStrResult(IRLowerAST(seqCur));
+      right := IRDropManagedResult(seqCur, IRLowerAST(seqCur));
       IRMarkStatementNode(right);
       IRFlushPostCallIntf(pcBase);
       while IRSeqSpineTop > seqBase do

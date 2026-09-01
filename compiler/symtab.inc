@@ -5908,7 +5908,7 @@ end;
   chain it lands on is.
 
   Safe to leave rax dead: an IR_STORE_SYM is always a statement root -- a store
-  consumed by a parent would be emitted twice (ir.inc's IRDropManagedStrResult
+  consumed by a parent would be emitted twice (ir.inc's IRDropManagedResult
   note says exactly this), and assignment-as-a-VALUE in C lowers to the store
   followed by a separate IR_LOAD_SYM rather than to a consumed store, which
   `PXXDBG=a.ir` confirms on `x = (y = 3)`. Keeping rax live costs half the win

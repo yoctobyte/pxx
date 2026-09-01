@@ -6679,6 +6679,28 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_interface_result_temp_leaks.pas $(TESTTMP)/test_irt26
 	tools/expect_same.sh test_irt26 "$$($(TESTTMP)/test_irt26 | tail -1)" "sink=1003000"
 	tools/assert_no_leak.sh interface_result_temp 50 $(TESTTMP)/test_irt26
+	@# A managed function result DISCARDED at statement level. Extended syntax
+	@# lets a function be called as a statement; the result is a fresh handle
+	@# nobody stores, and nothing released it. 979 of 1000 string handles leaked
+	@# and 1968 dyn-array handles, against FPC's 0 unfreed for the same program.
+	@#
+	@# TWO defects again, and the SECOND is why every statement-body context is
+	@# in the program. The helper existed (IRDropManagedStrResult) but was gated
+	@# `if not PyProgramMode then Exit` on the premise that "Pascal has no
+	@# value-discarding expression statement", which is false. Ungating it was
+	@# not enough on its own: a statement-level call is lowered as a VOID call
+	@# (tk=0), so the result type is erased and every type-tag test reads
+	@# tyUnknown -- the proc table is the authority, not the node. And that STILL
+	@# left `for .. do MkS(i);` leaking while `for .. do begin MkS(i); end;` was
+	@# clean, because a bare-statement body reaches neither AN_BLOCK nor the
+	@# AN_SEQ spine. Same coverage hole as the AN_IF-arm flush, one construct
+	@# over. All 12 contexts leaked 979 pre-fix and read <=19 after.
+	@#
+	@# The USED-result and guard assertions are the positive control for the
+	@# other direction: the park must not consume the value it parks.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_discarded_managed_result_leaks.pas $(TESTTMP)/test_dmr26
+	tools/expect_same.sh test_dmr26 "$$($(TESTTMP)/test_dmr26 2>/dev/null | tail -1)" "ok sink=692 guard=s7"
+	tools/assert_no_leak.sh discarded_managed_result 50 $(TESTTMP)/test_dmr26
 	@# A `case` arm's managed temp is finalized IN THE ARM, not after the merge --
 	@# the sibling AN_IF has had since bug-a-managed-temps-for-an-untaken-branch-
 	@# are-still-init-and-finalized. COST, not corruption: 20M calls of a case
@@ -14703,6 +14725,14 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_interface_result_temp_leaks.pas $(TESTTMP)/irts_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_interface_result_temp_leaks.pas $(TESTTMP)/irts_i386_x64
 	tools/expect_same.sh i386/test_interface_result_temp_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/irts_i386)" "$$($(TESTTMP)/irts_i386_x64)"
+	@# The discarded-result park, cross-checked: the dyn-array arm allocates its
+	@# temp from a layout descriptor, so a wrong element width is a target-
+	@# specific double free rather than a leak. Builds its OWN x86-64 comparison
+	@# binary -- borrowing test-core's would compare against a file this target
+	@# may never have built.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_discarded_managed_result_leaks.pas $(TESTTMP)/dmrs_i386
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_discarded_managed_result_leaks.pas $(TESTTMP)/dmrs_i386_x64
+	tools/expect_same.sh i386/test_discarded_managed_result_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/dmrs_i386)" "$$($(TESTTMP)/dmrs_i386_x64)"
 	tools/assert_no_leak.sh i386/interface_result_temp 50 tools/run_target.sh i386 $(TESTTMP)/irts_i386
 	tools/assert_no_leak.sh x86-64/interface_result_temp 50 $(TESTTMP)/irts_i386_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -15351,6 +15381,14 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_interface_result_temp_leaks.pas $(TESTTMP)/irts_aarch64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_interface_result_temp_leaks.pas $(TESTTMP)/irts_aarch64_x64
 	tools/expect_same.sh aarch64/test_interface_result_temp_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/irts_aarch64)" "$$($(TESTTMP)/irts_aarch64_x64)"
+	@# The discarded-result park, cross-checked: the dyn-array arm allocates its
+	@# temp from a layout descriptor, so a wrong element width is a target-
+	@# specific double free rather than a leak. Builds its OWN x86-64 comparison
+	@# binary -- borrowing test-core's would compare against a file this target
+	@# may never have built.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_discarded_managed_result_leaks.pas $(TESTTMP)/dmrs_aarch64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_discarded_managed_result_leaks.pas $(TESTTMP)/dmrs_aarch64_x64
+	tools/expect_same.sh aarch64/test_discarded_managed_result_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/dmrs_aarch64)" "$$($(TESTTMP)/dmrs_aarch64_x64)"
 	tools/assert_no_leak.sh aarch64/interface_result_temp 50 tools/run_target.sh aarch64 $(TESTTMP)/irts_aarch64
 	tools/assert_no_leak.sh x86-64/interface_result_temp 50 $(TESTTMP)/irts_aarch64_x64
 	@# Dyn-array seam. NO i386 SIBLING for this one, deliberately: i386 refuses
