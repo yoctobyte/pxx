@@ -2824,6 +2824,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-mode-delphi-callarg | P | 70 | regression | regression: test-core#src:test/test_mode_delphi_callarg.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-mode-delphi-methptr | P | 70 | regression | regression: test-core#src:test/test_mode_delphi_methptr.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-mode-delphi | P | 70 | regression | regression: test-core#src:test/test_mode_delphi.pas red at a2ae11a64191 (auto-filed by twatch) | — |
+| regression-test-core-test-multithreading | P | 70 | regression | regression: test-core#src:test/test_multithreading.pas@1 at 039be8b4aa97 in step 2/2, `/tmp/test_multithreading26 \| grep -q "multithreading test completed successfully"` (auto-filed by twatch) | — |
 | regression-test-core-test-named-operators | P | 70 | regression | regression: test-core#src:test/test_named_operators.pas red at 203438d2cf63 (auto-filed by twatch) | — |
 | regression-test-core-test-nested-class-type-b348 | P | 70 | regression | regression: test-core#src:test/test_nested_class_type_b348.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-nested-cow | T | 70 | regression | regression: test-core#src:test/test_nested_cow.pas red at 899e51cda3ba (auto-filed by twatch) | — |

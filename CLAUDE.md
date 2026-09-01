@@ -188,7 +188,12 @@ one-line logbook pointer.
   the proven default · `-O3` experimental, **on track for `-O2`, it drains** ·
   `-O4` research, never assumed — **RATIFIED (`54ba60170`) BUT NOT IMPLEMENTED:
   the compiler answers `unknown option: -O4` and has never accepted it, so any
-  sweep or acceptance record naming `-O4` did not run that level.** **Both must be CORRECT** — `-O4` is speculative
+  sweep or acceptance record naming `-O4` did not run that level. NOBODY WORKS
+  ON `-O4`** (owner, 2026-09-01): *"that makes O4 very speculative and nothing at
+  the moment should be working on that. yet, we are sortof free to define it
+  already."* **Defining the top of the ladder is free and implementing it is not
+  on anyone's queue** — do not read an unbuilt tier as an opening. Sweep
+  `-O0..-O3`; a missing `-O4` is not a finding. **Both must be CORRECT** — `-O4` is speculative
   in value, never in correctness. **Trade-offs are a named flag, not a level**
   (`-Ofast`, `-Os`, `-funroll-loops` are sideways).
   **TWO gates, both required: PROMISE** (delivered value, measured — not
