@@ -5366,6 +5366,33 @@ begin
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
 
+  { --- PC-RELATIVE ANCHOR (i386 --emit-obj only) ---
+    `call .L; .L: pop esi` leaves the address of the pop in esi, and every data
+    reference in this body can then be `esi + (sym - anchor)` -- a link-time
+    constant, recorded as R_386_PC32, which is what lets the object link into a
+    PIE. i386 has no [eip+disp32] mode, so the anchor has to be an instruction.
+
+    IT NEEDS NO GOT. Our .data/.bss symbols are section-local and cannot be
+    preempted, so there is nothing to indirect through; measured, this form
+    links under `gcc -m32 -pie -Wl,-z,text`, which is the exact link that
+    refuses today.
+
+    EMITTED BUT NOT YET READ. Nothing converts a data reference to use it, so
+    this phase must be INERT: every program behaves identically and the count
+    of absolute relocations must not move. That is the assertion this phase is
+    verified by -- and it is a real one, because a `call` that did not pop
+    would corrupt the stack in every body at once.
+
+    Gated on EmitObjMode: a freestanding image is loaded at a fixed address and
+    has no text-relocation problem to solve, so it pays nothing for this. }
+  X386PicAnchor := -1;
+  if EmitObjMode then
+  begin
+    EmitB($E8); EmitI32(0);        { call .L  (displacement 0 = the next insn) }
+    X386PicAnchor := CodeLen;      { .L is HERE: the address `call` pushed }
+    EmitB($5E);                    { pop esi }
+  end;
+
   { Carve this body's alloca base slot plus three scratch words, and record
     where the expression stack starts. Only when the body actually contains an
     IR_ALLOCA, so a body without one is byte-identical to before -- which is
