@@ -10186,6 +10186,28 @@ test-core: $(COMPILER)
 	# silent shape this row exists for.
 	./$(COMPILER) test/test_variadic_bracket_elision.pas $(TESTTMP)/test_varelide26
 	tools/expect_same.sh test_varelide26 "$$($(TESTTMP)/test_varelide26 | tail -n 1)" "ELISION OK"
+	# The METHOD slice of the same feature. Separate file because it is a
+	# separate MECHANISM: the bare-routine elision hooks the resolver's
+	# failure, while methods bind mpi by name on the class and parse arguments
+	# slot by slot in seven loops that share only ExpectCallRParen -- so a fix
+	# that reached one loop would pass a one-shape test. The rows enumerate the
+	# loops: statement vs expression position, instance / class / virtual /
+	# chained selector, and fixed parameters ahead of the vector.
+	# The one-element rows are the valuable ones: `g.D('only')` COMPILED AND
+	# SEGFAULTED before this slice (verified on the pinned compiler, so
+	# pre-existing), and it carries no comma, which is why the absorb cannot be
+	# gated on seeing a surplus.
+	# Controls were RUN, not assumed: with the absorb disabled the file does
+	# not compile (`wrong number of parameters in call to TLogger.D`), and with
+	# the pass-through guard removed the two passthrough rows go RED with the
+	# forwarded vector wrapped into a vector-of-one-vector.
+	./$(COMPILER) test/test_variadic_elision_methods.pas $(TESTTMP)/test_varelidem26
+	tools/expect_same.sh test_varelidem26 "$$($(TESTTMP)/test_varelidem26 | tail -n 1)" "METHOD ELISION OK"
+	# ...and its refusal: a bracketed vector followed by more arguments stays an
+	# arity error. Absorbing it would nest a vector inside a vector and the
+	# resolver would take it in silence.
+	! ./$(COMPILER) test/test_variadic_elision_method_refusal.pas $(TESTTMP)/test_varelidemr26 > $(TESTTMP)/test_varelidemr.log 2>&1
+	grep -q 'wrong number of parameters' $(TESTTMP)/test_varelidemr.log
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas $(TESTTMP)/test_aoc_types26
 	tools/expect_same.sh test_aoc_types26 "$$($(TESTTMP)/test_aoc_types26)" "$$(printf 'vt0: 42\nvt1: TRUE\nvt2: Q\nvt16: 5000000000\nvt3: 3.50\nvt3: 0.25\nvt11: hi')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas $(TESTTMP)/test_write_pchar26

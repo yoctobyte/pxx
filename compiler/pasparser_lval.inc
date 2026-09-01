@@ -2677,7 +2677,7 @@ begin
               else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
               Inc(mai);
             end;
-            ExpectCallRParen(mpi);
+            ExpectCallRParen(mpi, mlastArg);
           end
           else CheckMethodCallArity(mpi);
           { Continue the selector loop rather than exiting, so a trailing
@@ -2884,7 +2884,7 @@ begin
               else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
               Inc(mai);
             end;
-            ExpectCallRParen(mpi);
+            ExpectCallRParen(mpi, mlastArg);
             mnArgs := 0;
             PyBindKwArgs(mpi, mselfArg, mlastArg, mnArgs);
             ASTLeft[mcallNode] := mselfArg;
@@ -3145,7 +3145,7 @@ begin
       else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
       Inc(mai);
     end;
-    ExpectCallRParen(mpi);
+    ExpectCallRParen(mpi, mlastArg);
   end
   else CheckMethodCallArity(mpi);
   Result := mcallNode;
@@ -3429,6 +3429,101 @@ begin
             (argNo >= 0) and (argNo < Procs[procIdx].ParamCount) and
             Procs[procIdx].Params[argNo].IsArray and
             (Procs[procIdx].Params[argNo].TypeKind = tyRecord);
+end;
+
+function AbsorbVariadicTailArgs(mpi, lastArg: Integer): Boolean;
+{ Variadic bracket-elision for METHOD calls: `g.Log('x=', x)` against
+  `procedure TLogger.Log(const a: array of const)`.
+  Phase 1's second slice of feature-writeln-as-library.
+
+  WHY THIS IS A DIFFERENT MECHANISM FROM THE BARE-ROUTINE ONE, rather than a
+  missing call to it. TryElideVariadicBrackets hooks the `procIdx < 0` arm --
+  it runs after MatchCallDelphiProcAddr has FAILED, and re-resolves. The method
+  paths never go near that resolver: `mpi` is already bound by name on the
+  class, and the arguments are then parsed SLOT BY SLOT, driven by the
+  signature. So there is nothing to re-resolve and nothing that failed; the
+  call simply runs out of declared slots with tokens left over, and
+  ExpectCallRParen reports `wrong number of parameters`. The fix has to happen
+  where the surplus is still in the token stream.
+
+  IT CANNOT CHANGE THE MEANING OF A PROGRAM THAT COMPILES TODAY, by
+  construction and not by care -- the same property phase 1 has, reached a
+  different way. It is called only from ExpectCallRParen, and only on the
+  branch where CurTok is not `)`, which is exactly the branch that was about to
+  call ErrorRecover. Every MULTI-argument call this can see is one that fails
+  to compile without it.
+
+  THE SINGLE-ARGUMENT CASE IS DIFFERENT AND IS A DELIBERATE BEHAVIOUR CHANGE.
+  `g.D('only')` -- one elided element, no comma -- compiles TODAY and segfaults
+  at run time: the method loops do not know `array of const`, so the scalar is
+  passed where a vector is required, with no diagnostic at all. Verified on the
+  PINNED compiler, which predates this work entirely, so it is pre-existing and
+  is not a regression introduced here. It is fixed rather than left alone
+  because the bare-routine spelling of the very same source, `Desc('only')`,
+  ALREADY yields a correct one-element vector through phase 1 -- so leaving it
+  would ship a compiler in which `g.D('a', 1)` works and `g.D('a')` crashes.
+  That two-spellings-one-concept split is what
+  normalise-dont-special-case.md exists to refuse. Hence the gate is NOT
+  `CurTok = tkComma`; the comma loop below simply absorbs zero or more extras.
+
+  DELIBERATELY NOT GATED ON isNilPy, and that is not an oversight. The earlier
+  slice recorded the two pyparser.inc resolver sites as out of scope, and the
+  obvious-looking way to honour that here would be `if isNilPy then Exit`. That
+  would be wrong for the reason defs.inc:3955 already documents: isNilPy is
+  true for the WHOLE compilation, including the nested `uses` of every Pascal
+  RTL unit a NilPy program drags in -- so it would disable this for ordinary
+  Pascal library code merely because the program at the root was Python. The
+  real gate is structural and language-independent: the callee's last parameter
+  is `array of const`, and the call errors without us. Python's own `*args`
+  packing is a separate mechanism (PyPackStarArgs / PyStarArgAhead) which fires
+  earlier in the same loops and is untouched.
+
+  The already-parsed final argument becomes element 0 rather than being
+  re-parsed: it was parsed as an ordinary expression into lastArg's slot, and
+  only its POSITION in the tree changes. }
+var elemHead, elemLast, seq: Integer;
+begin
+  Result := False;
+  if (mpi < 0) or (mpi >= ProcCount) or (lastArg < 0) then Exit;
+  if not ParamIsVarRecArrayAt(mpi, Procs[mpi].ParamCount - 1) then Exit;
+  if ASTLeft[lastArg] < 0 then Exit;
+  { PASS-THROUGH MUST NOT BE WRAPPED. `Inner(a)` from inside
+    `Outer(const a: array of const)` forwards the SAME vector and must never
+    become `Inner([a])`. Phase 1 got this free -- such a call resolves, so its
+    hook on the resolver's FAILURE was never reached. Here there is no
+    resolution step to lean on, so the guard is explicit and it is a TYPE test:
+    the argument is already a record-typed value. ParamIsVarRecArrayAt's own
+    comment establishes the licence -- in this dialect an open array whose
+    element type is a record is only ever `array of const`. Measured before it
+    was written: a forwarded argument parses to AN_IDENT with tk = tyRecord,
+    where an elided element (string, int, char, float, bool) never does.
+    A plain record variable passed as a single element is skipped too. That is
+    not meaningful input -- TVarRec has no record tag and FPC rejects it -- and
+    skipping leaves its existing behaviour exactly as it was. }
+  if ASTTk[ASTLeft[lastArg]] = Ord(tyRecord) then Exit;
+  { Do not wrap a wrap. `g.Log(['a', 1], 2)` is a genuine arity error and keeps
+    its diagnostic; absorbing it would build a vector whose first element is a
+    vector, which the resolver would accept in silence. }
+  if (ASTKind[ASTLeft[lastArg]] = AN_VARREC_ARRAY) or
+     (ASTKind[ASTLeft[lastArg]] = AN_ARRAY_CTOR) then Exit;
+
+  elemHead := AllocNode(AN_ARG);
+  ASTLeft[elemHead] := ASTLeft[lastArg];
+  elemLast := elemHead;
+  while CurTok.Kind = tkComma do
+  begin
+    Next;
+    ParseArgExpr;
+    seq := AllocNode(AN_ARG);
+    ASTLeft[seq] := CurASTNode;
+    ASTRight[elemLast] := seq;
+    elemLast := seq;
+  end;
+  { THE one place that decides what an AN_VARREC_ARRAY is -- shared with
+    ParseVarRecLiteralAST and with phase 1, so the elided and bracketed
+    spellings cannot drift apart. }
+  ASTLeft[lastArg] := MakeVarRecArrayFromArgs(elemHead);
+  Result := True;
 end;
 
 function ParamIsVarRecArray(procIdx, argNo: Integer): Boolean;
@@ -4430,7 +4525,7 @@ begin
             else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
             Inc(mai);
           end;
-          ExpectCallRParen(mpi);
+          ExpectCallRParen(mpi, lastA);
         end
         else CheckMethodCallArity(mpi);
         tk := Procs[mpi].RetType;

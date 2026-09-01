@@ -138,6 +138,10 @@ procedure EmitStatusSlotX64(reg, bssSlot: Integer; store: Boolean); forward;
 {$include asmtext_wasm.inc}
 {$ifndef PXX_NO_CFRONT}procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;{$endif}
 procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in pasparser_proc.inc needs it too }
+{ ExpectCallRParen (pasparser_call.inc) absorbs an elided `array of const` tail,
+  but the two routines that decide what such a vector IS live in
+  pasparser_lval.inc, which is included after it. }
+function AbsorbVariadicTailArgs(mpi, lastArg: Integer): Boolean; forward;
 procedure BuildCSysIncludeDirs; forward;    { the host `<>` fallback table — cpreproc.inc fills it, --where prints it }
 { stubs for any frontend omitted from this build; no-op in the default }
 {$include frontend_stubs.inc}

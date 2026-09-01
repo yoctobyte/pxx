@@ -3,7 +3,7 @@ prio: 40
 track: A
 type: feature
 status: backlog
-summary: "PHASE 1 LANDED 2026-09-01: variadic bracket-elision -- `Log('x=', x)` against `procedure Log(const a: array of const)` now compiles, for BARE ROUTINE calls (procedure statement and function-in-expression). METHOD calls still require the brackets: they go through a signature-driven argument loop that never reaches the resolver this hooks, so `g.Log('a', 1)` is still `wrong number of parameters` -- that is the next slice. Phases 2 (`expr:w:p` via a vtFormatted tag) and 3 (the library write/writeln over array of const) are untouched. Do NOT replace the builtin writeln: compiler.pas self-hosts on it."
+summary: "PHASE 1 COMPLETE 2026-09-01, both slices: variadic bracket-elision -- `Log('x=', x)` against `procedure Log(const a: array of const)` -- now works for BARE ROUTINE calls (slice 1) and for METHOD calls (slice 2: instance, class, virtual, chained selector, and with fixed parameters ahead of the vector, in statement and expression position). Slice 2 also FIXED A PRE-EXISTING SILENT CRASH it uncovered: `g.D('one')`, a single elided element, compiled cleanly and segfaulted on the pinned compiler because the method loops passed a scalar where a vector was required with no diagnostic. Phases 2 (`expr:w:p` via a vtFormatted tag) and 3 (the library write/writeln over array of const) are untouched. Do NOT replace the builtin writeln: compiler.pas self-hosts on it."
 ---
 
 # write/writeln as a library function (via `array of const` + variadic sugar)
@@ -206,3 +206,95 @@ Pascal-surface feature, so they were left alone **on purpose** — recorded here
 because the next person to touch elision will find four sites with two handled.
 
 Phases 2 and 3 are untouched.
+
+
+---
+
+## 2026-09-01 (frankH) — slice 2: method calls, and the crash that was hiding behind them
+
+`g.Log('x=', x)` now compiles, for every method shape. The boundary the phase-1
+note stated — *"method calls are NOT covered … that is the next slice"* — is
+closed.
+
+### It is a different mechanism, not a missing call to the phase-1 one
+
+Phase 1 hooks the `procIdx < 0` arm: it runs after `MatchCallDelphiProcAddr`
+has FAILED, and re-resolves. The method paths never reach that resolver — `mpi`
+is bound by name on the class and the arguments are then parsed **slot by slot,
+driven by the signature**. Nothing failed and there is nothing to re-resolve;
+the call simply runs out of declared slots with tokens left over.
+
+So the absorb happens where the surplus still exists, in `ExpectCallRParen` —
+**the shared tail all seven loops already funnel through.** Its own comment says
+it exists precisely so there is not a seventh hand-written guard, so that is
+where a seventh special case would have gone wrong. `ExpectCallRParen(mpi)`
+became `ExpectCallRParen(mpi, lastArg)`; one implementation, seven mechanical
+call sites, one place that decides.
+
+### The pre-existing crash
+
+Building the test found something the ticket did not predict. **`g.D('only')` —
+one elided element — compiled cleanly and SEGFAULTED at run time.** The method
+loops did not know `array of const` at all, so a scalar was passed where a
+vector was required, with no diagnostic. **Verified on the PINNED compiler**, so
+it is pre-existing and not a regression from this work.
+
+It is fixed here rather than filed separately because the bare-routine spelling
+of the identical source, `Desc('only')`, already produced a correct one-element
+vector via phase 1. Leaving it would have shipped a compiler where
+`g.D('a', 1)` works and `g.D('a')` crashes — the two-spellings-one-concept split
+`normalise-dont-special-case.md` exists to refuse. **It is also why the absorb
+cannot be gated on seeing a surplus:** that call has no comma, and the first cut
+of this slice gated on `tkComma` and silently left it crashing.
+
+### The guard phase 1 got for free, and this one had to state
+
+`array of const` **pass-through** — `Inner(a)` from inside
+`Outer(const a: array of const)` — must forward the same vector and must never
+become `Inner([a])`. Phase 1 was immune by construction (such a call resolves,
+so its hook was never reached). With no resolution step to lean on, the guard is
+explicit and is a type test: skip when the argument is already record-typed,
+which `ParamIsVarRecArrayAt`'s own comment licenses — in this dialect an open
+array of record is only ever `array of const`. **Measured before it was
+written**, via `PXXDBG=a.ast`: a forwarded argument is `AN_IDENT` with
+`tk = tyRecord`; an elided element never is.
+
+### Deliberately NOT gated on `isNilPy`
+
+The obvious way to honour phase 1's "NilPy sites are out of scope" note would be
+`if isNilPy then Exit`. That would be wrong for the reason `defs.inc:3955`
+already documents: **`isNilPy` is true for the WHOLE compilation**, including
+the nested `uses` of every Pascal RTL unit a NilPy program drags in — so it
+would disable this for ordinary Pascal library code merely because the program
+at the root was Python. The real gate is structural and language-independent.
+The one NilPy-specific site (`pasparser_expr.inc`, the keyword-argument path)
+passes `-1` instead, because `PyBindKwArgs` has just reordered that chain and
+its `mlastArg` is no longer the tail.
+
+### Tests and the controls, which were RUN
+
+`test/test_variadic_elision_methods.pas`, 18 rows in `test-core`. The rows
+enumerate the loops rather than the feature — statement vs expression position,
+instance / class / virtual / chained selector, fixed parameters ahead of the
+vector — because a fix reaching one loop would pass a one-shape test. The
+load-bearing rows are again the `same-as-brackets` pairs.
+
+| control | result |
+| --- | --- |
+| absorb disabled | test file **does not compile** — `wrong number of parameters in call to TLogger.D` |
+| pass-through guard removed | both `passthrough` rows **RED**, forwarded vector wrapped into a vector-of-one-vector |
+
+`test/test_variadic_elision_method_refusal.pas` is the wrap-a-wrap positive
+control: `g.D(['already', 1], 2)` must stay an arity error, and the recipe greps
+for the diagnostic rather than just asserting non-zero exit.
+
+**Gate:** `make compiler/pascal26` **`converged after 1 round(s)`** (the
+recompute verb), binary `ea4a720bf6f9`; `tools/gate.sh quick` **GREEN**, with
+the FPC seed canary **PASS rather than SKIP** — which matters here because this
+adds a forward declaration to `compiler.pas`, and declaration order is exactly
+the class only that canary catches.
+
+### Still open
+
+Phases 2 and 3, untouched. Also unchanged: the two `pyparser.inc` resolver
+sites, still deliberately out of scope.

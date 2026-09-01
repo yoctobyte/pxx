@@ -1192,7 +1192,7 @@ begin
               else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
                 Inc(mai);
               end;
-              ExpectCallRParen(mpi);
+              ExpectCallRParen(mpi, mlastArg);
             end
             else CheckMethodCallArity(mpi);
             node := mcallNode;
@@ -1283,7 +1283,11 @@ begin
                 PyBindKwArgs(mpi, margSeq, mlastArg, nArgs);
                 ASTRight[ASTLeft[mcallNode]] := margSeq;
               end;
-              ExpectCallRParen(mpi);
+              { -1, not mlastArg: PyBindKwArgs has just REORDERED this chain
+                into declaration order, so mlastArg is no longer its tail and
+                absorbing into it would append elements to the wrong slot.
+                Python packs *args itself (PyPackStarArgs) anyway. }
+              ExpectCallRParen(mpi, -1);
             end
             else CheckMethodCallArity(mpi);
             { result type for chaining (e.g. (o as T).GetChild.M) }

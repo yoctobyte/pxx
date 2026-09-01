@@ -1575,10 +1575,26 @@ end;
   have left it, so there is nothing to resync. Nothing reaches codegen: the
   driver halts on ErrCount before any emission.
   feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
-procedure ExpectCallRParen(mpi: Integer);
+procedure ExpectCallRParen(mpi: Integer; lastArg: Integer);
 var depth: Integer;
+    absorbed: Boolean;
 begin
-  if (CurTok.Kind <> tkRParen) and (mpi >= 0) and (mpi < ProcCount) then
+  { An elided `array of const` tail is absorbed HERE rather than in each of the
+    seven argument loops, for the same reason this tail is shared at all: the
+    copy is what stays broken. lastArg is the loop's final AN_ARG (-1 where the
+    caller has no meaningful one); AbsorbVariadicTailArgs re-homes its payload
+    into a TVarRec vector and consumes the surplus, after which CurTok is `)`
+    and the error below correctly does not fire.
+    feature-writeln-as-library, method slice. }
+  { Called UNCONDITIONALLY, not only when a surplus is visible. The
+    single-element case `g.D('only')` leaves CurTok sitting on `)` -- there is
+    nothing surplus about it -- and gating on `<> tkRParen` is exactly how the
+    first cut of this silently kept that call crashing. The helper does its own
+    (cheap) refusal: it exits unless the callee's LAST parameter is
+    `array of const`. }
+  absorbed := AbsorbVariadicTailArgs(mpi, lastArg);
+  if (not absorbed) and (CurTok.Kind <> tkRParen) and
+     (mpi >= 0) and (mpi < ProcCount) then
   begin
     ErrorRecover('wrong number of parameters in call to ' + Procs[mpi].Name);
     depth := 0;
@@ -1693,7 +1709,7 @@ begin
       else if ai < Procs[mpi].ParamCount - 1 then Expect(tkComma, ',');
       Inc(ai);
     end;
-    ExpectCallRParen(mpi);
+    ExpectCallRParen(mpi, lastArg);
     { The chain starts at the SELF argument, exactly as the instance path hands
       it over — PyKwArgIndex returns the ABSOLUTE parameter index, and self is
       parameter 0, so the two agree without an offset. A no-keyword chain is
