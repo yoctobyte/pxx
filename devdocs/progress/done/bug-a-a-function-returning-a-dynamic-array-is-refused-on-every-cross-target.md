@@ -3,7 +3,7 @@ track: A
 prio: 45
 type: bug
 blocked-by: []
-summary: "A function whose RESULT is a dynamic array compiles natively and is REFUSED by all four cross backends — each epilogue errors on `Syms[retSymIdx].IsArray` with 'only ordinal/pointer/string function results supported yet'. One missing arm, four copies, three whole tests unbuildable on every non-x86-64 target."
+summary: "A function whose RESULT is a dynamic array compiles natively and is REFUSED by all four cross backends — each epilogue errors on `Syms[retSymIdx].IsArray` with 'only ordinal/pointer/string function results supported yet'. One missing arm, four copies, three whole tests unbuildable on every non-x86-64 target. — CORRECTED 2026-09-02 (frankC): 'every cross-target' was FOUR of five. Xtensa still refused, which is why lib/rtl/sysutils.pas itself would not build for xtensa (TStringHelper.Split returns TStringArray) and no program using sysutils could target the ESP ABI. Ported at 7cc404961; the test was wired on x86-64 ONLY, so nothing could have caught the missing backend, and it now runs on all five."
 status: done
 owner: claude-A
 ---
@@ -136,3 +136,32 @@ and ESP-platform issues untouched by this change.
 
 ## Log
 - 2026-08-21 — resolved, commit 481c397c6.
+
+## 2026-09-02 (frankC) — "every cross-target" meant four of five; xtensa was still refusing
+
+Not a re-opening: the arm this ticket added is correct and stands. Recording that
+its **title and summary over-claimed**, because they are what the next reader
+believes.
+
+Four backends got the epilogue arm — i386, arm32, aarch64, riscv32. **Xtensa did
+not**, and xtensa is a cross target. It still answered `target xtensa: only
+ordinal/float/pointer/string function results supported yet` for a function
+returning `array of T`. Ported at `7cc404961`.
+
+**What the gap cost, which is larger than a refused test:** `lib/rtl/sysutils.pas`
+ITSELF would not build for xtensa, because `TStringHelper.Split`
+(`sysutils.pas:5785`) returns a `TStringArray`. So every Pascal program that
+touches sysutils was unbuildable for the ESP target. Measured by compiling
+`examples/` across five backends: 5 of 6 programs that build for the other four
+died on xtensa, all with that one message, none of it mentioning arrays.
+
+**Why nothing said so:** `test_dynarray_result.pas` was wired on **x86-64 only**.
+The fix for four cross backends was never gated on a single one of them, so a
+missing fifth could not show up. Now wired on all five (`7cc404961`).
+
+This is the second time xtensa has been the backend missed by a "cross-target"
+fix — `ir_codegen_xtensa.inc`'s concat-ownership note records the first, in the
+same words: *"which fixed 'the four cross backends' and never listed xtensa — the
+seventh backend that a grep for the common spelling does not return."*
+**"Every cross-target" in a summary should be read as a claim to check, not a
+count.**
