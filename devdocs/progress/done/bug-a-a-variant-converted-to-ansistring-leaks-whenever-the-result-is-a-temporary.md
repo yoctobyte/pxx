@@ -4,7 +4,7 @@ track: A
 prio: 4
 summary: a Variant converted to AnsiString leaks the result whenever it is a TEMPORARY — a const-AnsiString argument (921/1000) or a comparison against a computed string (936/1000); the dyn array and the SetLength churn in the old title were never ingredients, a plain local Variant leaks identically
 tags: [memory-leak, variant, ansistring, temporaries]
-status: working
+status: done
 owner: frankA
 ---
 
@@ -125,3 +125,50 @@ calls itself "THE SEVENTH SITE" — so adding a clause in one place fixes one
 spelling and leaves six. The right change is one helper taking the arg AST that
 answers "does this argument need an owning temp", replacing the repeated
 predicate at all seven, per normalise-dont-special-case.
+
+## Resolved 2026-09-01 (frankA) — fixed at the seam, not at the seven sites
+
+Two lowerings, both handing out a fresh managed string nobody owned:
+
+- `IRLowerVariantAsScalar` (`compiler/ir.inc`) ends at a `VariantToStrPas` call
+  whose result is brand new — the const-AnsiString argument row, 921/1000.
+- the scalar side of a variant binop is boxed into a temp Variant, and a
+  COMPUTED operand arrives as a concat result with a +1 belonging to nobody —
+  the comparison row, 936/1000, through **two** call sites, one per operand.
+  The mirrored `('lit' + Chr(c)) = v` leaked 936 identically and no repro in
+  this ticket had reached it.
+
+Both are fixed where the value is created, upstream of the seven
+call-argument sites that ask the argument's AST SHAPE. That predicate is not
+wrong — `AN_IDENT/AN_FIELD/AN_INDEX/AN_DEREF` do name storage someone else owns
+— it is asking about a node the variant lowering already replaced. Ownership of
+the parked value stays `IR_STORE_SYM`'s call, which already MOVES a fresh call
+result and RETAINS anything else (`IRNodeOwnsFreshCallResult`).
+
+**The box temp was never the leak**, which needed two controls to establish:
+`v = w` builds no box temp and was clean; `v = s` against a NAMED AnsiString
+local builds one and was clean too. Only a computed operand leaked. Without the
+second control the natural reading of the comparison row is "temp variants
+leak", and the fix would have gone in the wrong place.
+
+Baseline built by reverting the hunk and rebuilding to `converged`
+(71b70fe885fe vs 9fe88c4bfc09): arg 921 -> 1, cmp-right 936 -> 1, cmp-left
+936 -> 1, fn-result 936 -> 1, `allocs` unchanged on every row. Controls
+vv/vs/into/ctlstr unmoved at 1.
+
+`test/test_variant_string_temp_leaks.pas` carries all nine arms and is wired
+into the i386 and aarch64 blocks. Live before -> after: x86-64 1549 -> 2,
+aarch64 1549 -> 2, i386 3616 -> 1, arm32 3856 -> 2, riscv32 364 -> 1. The
+pre-fix binary REJECTS it (live=1549, bound 50) while printing byte-identical
+output on all five targets — so the differential rows beside it are blind to
+this class and only the absolute bound sees it.
+
+Not closed by this: the i386/arm32/riscv32 baselines differ from each other and
+from x86-64, and the allocation COUNT moves on those three (i386 8671 -> 6850)
+where it is unchanged on x86-64 and aarch64. That says those targets carry
+additional holes in these same shapes. **Nobody owns that residual question
+yet** — it is a separate measurement, not part of this fix, and the test header
+says so rather than implying five equal numbers.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
