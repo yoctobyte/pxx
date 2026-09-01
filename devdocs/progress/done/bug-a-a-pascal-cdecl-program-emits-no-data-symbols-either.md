@@ -181,11 +181,59 @@ $ ./compiler/pascal26 -Fulib/rtl -dPXX_HEAP_DEBUG --emit-obj pg2.pas pg2d.o && .
 
 The concatenation is a TEMPORARY and the `PChar` points into it, so it dies at
 `return` under any ownership model — the first run prints correctly only
-because nothing has reused the block yet. Track B's string-ownership work
-(`b788c5865`, `IRParkManagedStr`) makes the lifetime of a managed string
-reaching a pointer destination scope exit rather than forever, which is
-plausibly why this now frees where it previously leaked; **not bisected here,
-and it is Track B's topic** — the mechanism above holds either way.
+because nothing has reused the block yet.
 
-Keep the shape out of interop examples: a `cdecl` routine returning `PChar` has
-to return a pointer the CALLER owns or one that outlives the call.
+**Bisected (frankB, 2026-09-01): `7cd695c7d`**, "give PChar(computedString) an
+owner at the cast". Before it the temporary leaked and the pointer stayed
+readable by luck; after it the temporary is owned and released at scope exit, so
+the same read lands in freed memory and `-dPXX_HEAP_DEBUG` paints it `0xDD`.
+Nothing regressed — the fix made an existing latent bug *visible*, which is what
+the poison byte is for.
+
+**And it is not a divergence.** FPC compiles the same shape and prints garbage
+too:
+
+```
+$ fpc -O2 -gh pg2fpc.pas && ./pg2fpc | od -An -tx1 | head -2
+ f0 f0 f0 f0 f0 f0 f0 f0 f0 f0 f0 f0 f0 f0 f0 f0
+ f0 ef be ad de ef be ad de 0a
+...
+0 unfreed memory blocks : 0
+```
+
+`ef be ad de` is 0xDEADBEEF little-endian, twice — heaptrc's freed-block
+signature, the exact counterpart of pxx's `0xDD`. Both compilers free the
+temporary, both then read it, and FPC reports **0 unfreed blocks** while
+printing rubbish. So this is not "pxx frees where FPC keeps"; the program is
+undefined in both, and there is no compat question left to answer.
+
+### The claim was fine — the WITNESS was broken
+
+The original write-up's claim ("the globals are initialised, mutated and survive
+across calls") is TRUE. `GName` does persist and is mutated. The fixture just
+proved it the one way that proves nothing: through a pointer into a temporary.
+The witness that actually holds is the global itself, with no concatenation:
+
+```pascal
+function pick3: PChar; cdecl;
+begin
+  GName := GName + '!';
+  pick3 := PChar(GName);          { the GLOBAL itself — no temporary }
+end;
+```
+
+```
+$ pascal26 -Fulib/rtl -dPXX_HEAP_DEBUG --emit-obj pg3.pas pg3.o && gcc main3.c pg3.o -o pg3 && ./pg3
+global-string!
+global-string!!
+global-string!!!
+```
+
+Correct under the poison flag, and shorter than the original. The symbol-table
+finding this ticket was filed on never depended on the broken fixture either
+way.
+
+Keep the shape out of interop examples. The rule is sharper than "don't return a
+temporary": **a `cdecl` routine returning `PChar` must return a pointer into
+storage the caller can name.** Any expression at all inside `PChar()` makes it a
+temporary — it worked for exactly as long as it leaked.

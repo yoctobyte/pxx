@@ -102,4 +102,4 @@ dyn-array arm added, and called at all eight statement-body positions. The name
 lost its `Str` in the same edit — it parks arrays now, and an 80%-accurate name
 is the worse kind.
 
-Fixed in commit PENDING-COMMIT.
+Fixed in commit 4af4645ba.
