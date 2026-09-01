@@ -3211,6 +3211,22 @@ var
     bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
   SymCExternOnly : array of Boolean;
   SymCStaticLink : array of Boolean;   { `static` seen: internal linkage, LOCAL, never UND }
+  { MEMBERSHIP, which the two above cannot express. Both default to False, and
+    False is a meaningful linkage answer ("a definition with external linkage"),
+    so neither can distinguish a C file-scope variable from the several thousand
+    RTL globals that share Syms. Without this the object writer's export pass
+    has no set to walk: it would either export the entire runtime or need to
+    guess from a name. Set once, where the declaration is parsed.
+    bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
+  SymCFileScope  : array of Boolean;
+  { The BYTES actually reserved for a global, recorded where the reservation
+    happens. The object writer needs `st_size`, and recomputing it at write time
+    from the type and ArrLen would be a second implementation of a number that
+    already exists -- free to drift, and drifting silently, since a wrong size
+    still links. Three reservation sites write this and they are the only
+    authority on it. Zero for anything that never took global storage.
+    bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
+  SymAllocSize   : array of Integer;
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalCount  : Integer;
@@ -4056,6 +4072,14 @@ var
   { writeELF32Rel scratch: per-proc / per-external .strtab name offsets
     (globals, not locals — 64KB each would strain the self-hosted stack). }
   ObjProcStrOff : array of Integer;
+  { The data half of the object symbol table, indexed by SYMBOL index the way
+    ObjProcStrOff is indexed by proc index. It cannot share ObjExtStrOff: that
+    array is indexed by procIdx through ExternalProc[], so the existing
+    externals group is function-only by construction and a data import needs a
+    group of its own rather than a widening.
+    -1 means "not in the object's symbol table".
+    bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
+  ObjDataStrOff : array of Integer;
   ObjExtStrOff  : array[0..MAX_EXTERNAL-1] of Integer;
   ObjProcSymIdx : array of Integer; { .symtab index of each proc (extended iram writer) }
   ObjProcIramOff: array of Integer; { offset of an iram proc's body within .iram1.text }

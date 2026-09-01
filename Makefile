@@ -18352,6 +18352,82 @@ test-emit-obj: $(COMPILER)
 	  tools/expect_same.sh test_emit_obj_cinit "$$($(TESTTMP)/test_emit_obj_cinit_host)" "42 pxx-c-data" || exit 1; \
 	  echo "test-emit-obj: an object's file-scope initialisers run under a gcc-built main"; \
 	else echo "gcc not installed; object initialiser check skipped"; fi
+	# 4b-ter. DATA SYMBOLS: an object must EXPORT what it defines and IMPORT
+	#    what it does not. Before this, --emit-obj emitted no OBJECT symbol at
+	#    all: a defined global was invisible to the linker, and `extern int x;`
+	#    was relocated into this object's OWN .bss. Two objects sharing a global
+	#    LINKED CLEANLY and read different memory, with no diagnostic anywhere.
+	#    The repo's expensive shape -- no crash, a plausible wrong value.
+	#
+	#    THE OUTPUT ROWS COME FIRST because the symbol-table rows below cannot
+	#    see the bug on their own: an object with the right symbols can still
+	#    carry a section-relative relocation and read the wrong memory. Only a
+	#    real link against a foreign definition settles it, which is why 99 and
+	#    "43 43" are asserted before anything is grepped.
+	#
+	#    Both targets, and i386 is not symmetry: x86-64 objects were already
+	#    exercised by the rows above, and the index arithmetic these groups
+	#    changed (firstGlobal, extSym0, and the new impSym0) is duplicated per
+	#    writer. An i386 row is what catches one writer's counts describing a
+	#    table the other one wrote -- which happened while landing this, as a
+	#    truncated object no x86-64 row could see.
+	rm -f $(TESTTMP)/cods_*.o $(TESTTMP)/cods_link* 
+	./$(COMPILER) --emit-obj test/c_obj_data_import.c $(TESTTMP)/cods_imp_x64.o
+	./$(COMPILER) --emit-obj --target=i386 test/c_obj_data_import.c $(TESTTMP)/cods_imp_386.o
+	./$(COMPILER) --emit-obj test/c_obj_data_export.c $(TESTTMP)/cods_exp_x64.o
+	./$(COMPILER) --emit-obj --target=i386 test/c_obj_data_export.c $(TESTTMP)/cods_exp_386.o
+	./$(COMPILER) --emit-obj test/c_obj_data_linkage.c $(TESTTMP)/cods_mat_x64.o
+	./$(COMPILER) --emit-obj --target=i386 test/c_obj_data_linkage.c $(TESTTMP)/cods_mat_386.o
+	#    A data-only TU must EMIT. busybox's libbb/ptr_to_globals.c is one
+	#    global pointer and nothing else, and it used to be refused outright.
+	./$(COMPILER) --emit-obj test/c_obj_data_only.c $(TESTTMP)/cods_only_x64.o
+	readelf -sW $(TESTTMP)/cods_only_x64.o | grep -qE 'OBJECT +GLOBAL .* ptr_to_globals'
+	@if command -v gcc >/dev/null 2>&1; then \
+	  printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void);\nint main(void){printf("%%d\\n", read_it());return 0;}\n' > $(TESTTMP)/cods_imp_main.c; \
+	  printf '#include <stdio.h>\nextern int shared_counter;\nint bump(void);\nint main(void){printf("%%d %%d\\n", shared_counter, bump());return 0;}\n' > $(TESTTMP)/cods_exp_main.c; \
+	  gcc $(TESTTMP)/cods_imp_main.c $(TESTTMP)/cods_imp_x64.o -o $(TESTTMP)/cods_link_imp || { echo "test-emit-obj: data-import object FAILED to link"; exit 1; }; \
+	  tools/expect_same.sh cods_import_x64 "$$($(TESTTMP)/cods_link_imp)" "99" || exit 1; \
+	  gcc $(TESTTMP)/cods_exp_main.c $(TESTTMP)/cods_exp_x64.o -o $(TESTTMP)/cods_link_exp || { echo "test-emit-obj: data-export object FAILED to link"; exit 1; }; \
+	  tools/expect_same.sh cods_export_x64 "$$($(TESTTMP)/cods_link_exp)" "43 43" || exit 1; \
+	  echo "test-emit-obj: x86-64 data symbols import and export across a gcc link"; \
+	else echo "gcc not installed; object data-symbol link checks skipped"; fi
+	@if gcc -m32 -xc /dev/null -o /dev/null -c >/dev/null 2>&1; then \
+	  gcc -m32 $(TESTTMP)/cods_imp_main.c $(TESTTMP)/cods_imp_386.o -o $(TESTTMP)/cods_link_imp32 || { echo "test-emit-obj: i386 data-import object FAILED to link"; exit 1; }; \
+	  tools/expect_same.sh cods_import_386 "$$($(TESTTMP)/cods_link_imp32)" "99" || exit 1; \
+	  gcc -m32 $(TESTTMP)/cods_exp_main.c $(TESTTMP)/cods_exp_386.o -o $(TESTTMP)/cods_link_exp32 || { echo "test-emit-obj: i386 data-export object FAILED to link"; exit 1; }; \
+	  tools/expect_same.sh cods_export_386 "$$($(TESTTMP)/cods_link_exp32)" "43 43" || exit 1; \
+	  echo "test-emit-obj: i386 data symbols import and export across a gcc -m32 link"; \
+	else echo "gcc -m32 not available; i386 data-symbol link checks skipped"; fi
+	#    The linkage matrix, both writers. `static` staying LOCAL is the control
+	#    against a pass that simply exports everything; the tentative definition
+	#    being GLOBAL OBJECT in .bss rather than SHN_COMMON is -fno-common.
+	@for t in x64 386; do \
+	  o=$(TESTTMP)/cods_mat_$$t.o; \
+	  readelf -sW $$o | grep -qE 'OBJECT +LOCAL .* file_local'          || { echo "cods[$$t]: static file_local is not LOCAL OBJECT"; exit 1; }; \
+	  readelf -sW $$o | grep -qE 'OBJECT +GLOBAL .* defined_initialised'|| { echo "cods[$$t]: defined_initialised is not GLOBAL OBJECT"; exit 1; }; \
+	  readelf -sW $$o | grep -qE 'OBJECT +GLOBAL .* defined_tentative'  || { echo "cods[$$t]: a tentative definition is not a definition"; exit 1; }; \
+	  readelf -sW $$o | grep -qE 'NOTYPE +GLOBAL +DEFAULT +UND +imported_elsewhere' || { echo "cods[$$t]: extern-only did not become UND"; exit 1; }; \
+	  readelf -sW $$o | grep -qE 'NOTYPE +GLOBAL +DEFAULT +UND +incomplete_arr'     || { echo "cods[$$t]: an incomplete-array import did not become UND"; exit 1; }; \
+	  readelf -sW $$o | grep -E ' file_local$$' | grep -q ' GLOBAL '     && { echo "cods[$$t]: static file_local was ALSO exported"; exit 1; }; \
+	  echo "test-emit-obj: $$t linkage matrix matches C 6.9.2"; \
+	done
+	#    POSITIVE CONTROL. Two TUs each defining `int x;` must FAIL to link.
+	#    A guard that cannot fail is not a guard: without this row nothing pins
+	#    that the LOUD failure appears when it should, and an emitter that
+	#    reverted to SHN_COMMON would pass every row above.
+	./$(COMPILER) --emit-obj test/c_obj_data_dup_a.c $(TESTTMP)/cods_dup_a.o
+	./$(COMPILER) --emit-obj test/c_obj_data_dup_b.c $(TESTTMP)/cods_dup_b.o
+	#    Positively: `x` must EXIST as an OBJECT in .bss. `grep -v COM` alone
+	#    would pass on an object that has no `x` at all, which is exactly the
+	#    pre-fix state -- an absence reading as a pass.
+	readelf -sW $(TESTTMP)/cods_dup_a.o | grep -qE 'OBJECT +GLOBAL +DEFAULT +[0-9]+ +x$$'
+	! readelf -sW $(TESTTMP)/cods_dup_a.o | grep -qE ' COM +x$$'
+	@if command -v gcc >/dev/null 2>&1; then \
+	  printf 'int dup_a(void);int dup_b(void);int main(void){return dup_a()+dup_b();}\n' > $(TESTTMP)/cods_dup_main.c; \
+	  if gcc $(TESTTMP)/cods_dup_a.o $(TESTTMP)/cods_dup_b.o $(TESTTMP)/cods_dup_main.c -o /dev/null >/dev/null 2>&1; then \
+	    echo "test-emit-obj: two definitions of \`x\` LINKED -- -fno-common semantics are not being emitted"; exit 1; \
+	  else echo "test-emit-obj: duplicate definition is rejected, as gcc rejects it"; fi; \
+	fi
 	# 4c. A SHARED LIBRARY FROM A COMPILED SOURCE -- the other half of the same
 	#    backend work (feature-a-shared-library-output-for-compiled-sources).
 	#    --shared used to describe .asm-frontend output only: the writer built

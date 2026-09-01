@@ -4265,7 +4265,7 @@ begin
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymHashBkt, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
-  SetLength(SymCExternOnly, n);    SetLength(SymCStaticLink, n);
+  SetLength(SymCExternOnly, n);    SetLength(SymCStaticLink, n);  SetLength(SymCFileScope, n);  SetLength(SymAllocSize, n);  SetLength(ObjDataStrOff, n);
   SetLength(SymCellPtr, n);
   SetLength(SymArrIdxTk, n);      SetLength(SymArrIdxEnumId, n);
   { the two per-DIMENSION tables ride the same index, MAX_ARR_DIMS to a symbol }
@@ -4438,6 +4438,8 @@ begin
   SymCLongRank[SymCount]  := 0;
   SymCExternOnly[SymCount] := False;   { a definition unless a declaration says otherwise }
   SymCStaticLink[SymCount] := False;
+  SymCFileScope[SymCount] := False;    { not a C file-scope variable unless the C parser says so }
+  SymAllocSize[SymCount] := 0;         { set by whichever reservation path takes global storage }
   Syms[SymCount].IsArray  := False;
   Syms[SymCount].ArrLen   := 0;
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
@@ -4563,6 +4565,7 @@ begin
       BSSSize := AlignTo(BSSSize, align);
       Syms[SymCount].Kind   := skGlobal;
       Syms[SymCount].Offset := BSSSize;
+      SymAllocSize[SymCount] := sz;
       Inc(BSSSize, sz);
     end
     else
@@ -5150,6 +5153,7 @@ begin
     BSSSize := AlignTo(BSSSize, align);
     Syms[SymCount].Kind   := skGlobal;
     Syms[SymCount].Offset := BSSSize;
+    SymAllocSize[SymCount] := totalSize;
     Inc(BSSSize, totalSize);
   end
   else
@@ -5282,6 +5286,7 @@ begin
     BSSSize := AlignTo(BSSSize, TARGET_PTR_SIZE);
     Syms[SymCount].Kind   := skGlobal;
     Syms[SymCount].Offset := BSSSize;
+    SymAllocSize[SymCount] := TARGET_PTR_SIZE;
     Inc(BSSSize, TARGET_PTR_SIZE);
   end
   else

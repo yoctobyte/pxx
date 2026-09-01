@@ -2945,28 +2945,181 @@ begin
     Result := 0;
 end;
 
-procedure ObjPlanHostedSymbols(var strSize, numLocalProcs, numExportProcs: Integer);
+function ObjDataIsCandidate(i: Integer): Boolean;
+{ Is symbol `i` a C file-scope variable that took global storage?
+
+  SymCFileScope is MEMBERSHIP and the linkage flags are not: SymCExternOnly and
+  SymCStaticLink both default to False, and False is a meaningful answer for
+  each, so neither can separate a C global from the several thousand RTL globals
+  that share Syms. Asking the linkage first is how an export pass ends up
+  exporting the whole runtime. }
+begin
+  ObjDataIsCandidate := (i >= 0) and (i < SymCount) and
+                        SymCFileScope[i] and (Syms[i].Kind = skGlobal) and
+                        (Syms[i].Name <> '');
+end;
+
+function ObjDataIsImport(i: Integer): Boolean;
+{ Every declaration of this NAME said `extern` and none defined it. Rule 3 of
+  C 6.9.2 as the ticket states it -- and note `static` wins outright, because an
+  internal-linkage name is never undefined-elsewhere. }
+begin
+  ObjDataIsImport := ObjDataIsCandidate(i) and SymCExternOnly[i] and
+                     (not SymCStaticLink[i]);
+end;
+
+function ObjDataIsLocal(i: Integer): Boolean;
+begin
+  ObjDataIsLocal := ObjDataIsCandidate(i) and SymCStaticLink[i];
+end;
+
+function ObjDataIsExport(i: Integer): Boolean;
+{ A definition with external linkage: not static, and not extern-only. Covers
+  both an initialised definition and a tentative one, which is deliberate --
+  `extern T n;` then a bare `T n;` is a DEFINITION and SymCExternOnly has
+  already been folded back to False for it. }
+begin
+  ObjDataIsExport := ObjDataIsCandidate(i) and (not SymCStaticLink[i]) and
+                     (not SymCExternOnly[i]);
+end;
+
+function ObjDataIsReferenced(i: Integer): Boolean;
+{ Does any relocation actually reach this symbol's own slot?
+
+  gcc emits UND only for an imported name the translation unit USES, and an
+  unreferenced UND would be a name this object asks the linker to find for no
+  reason. The reference test is an exact match on the symbol's base, which is
+  what every measured C shape produces: a constant index and a field offset are
+  computed after the LEA, so `ia[5]`, `st.c` and `ta[4].y` all relocate to the
+  bare base. }
+var k: Integer;
+begin
+  ObjDataIsReferenced := False;
+  for k := 0 to GlobFixCount-1 do
+    if (not SymOffIsData(GlobFix[k].BSSoff)) and
+       (GlobFix[k].BSSoff = Syms[i].Offset) then
+    begin
+      ObjDataIsReferenced := True;
+      Exit;
+    end;
+end;
+
+function ObjDataSymIndexForOff(bssOff: Integer): Integer;
+{ The IMPORT whose slot starts exactly at `bssOff`, or -1.
+
+  Exact match, not range containment, and that is a measured choice rather than
+  a simplification: the design this replaces assumed element and field offsets
+  were folded into the relocation addend, and for C they are not (see the
+  ticket's table). A range test would additionally have to decide how far an
+  import extends, and an incomplete array reserves a single element -- so a
+  range keyed on the reservation would be too SMALL for any folded reference
+  while a range keyed on the next symbol's base would silently swallow one. }
+var k: Integer;
+begin
+  ObjDataSymIndexForOff := -1;
+  for k := 0 to SymCount-1 do
+    if ObjDataIsImport(k) and (Syms[k].Offset = bssOff) then
+    begin
+      ObjDataSymIndexForOff := k;
+      Exit;
+    end;
+end;
+
+function ObjDataImportOrdinal(symIdx: Integer): Integer;
+{ The position of `symIdx` within the IMPORT group, counted with exactly the
+  predicate the planner and the writers walk. Recomputed rather than stored so
+  there is one definition of the order: a stored ordinal would be a second copy
+  free to disagree with the emission loop, and a wrong symbol index still
+  links. }
+var k, n: Integer;
+begin
+  n := 0;
+  for k := 0 to SymCount-1 do
+    if ObjDataIsImport(k) and ObjDataIsReferenced(k) then
+    begin
+      if k = symIdx then
+      begin
+        ObjDataImportOrdinal := n;
+        Exit;
+      end;
+      Inc(n);
+    end;
+  ObjDataImportOrdinal := -1;
+end;
+
+function ObjDataOffIsInsideAnImport(bssOff: Integer): Integer;
+{ The import whose reserved extent STRICTLY CONTAINS `bssOff` without starting
+  at it, or -1. This is the shape the exact-match lookup cannot serve, and the
+  reason it exists is that relocating it against `.bss` is the original defect
+  wearing a new hat: it would link cleanly and read this object's own memory.
+
+  It is separate from the lookup so it can be MEASURED before it is trusted --
+  see the `a.datareloc` channel. A guard whose case nobody has constructed is
+  not obviously better than no guard: it reads as "handled" to the next person.
+  Track B looked for one from the Pascal side (a global AnsiString indexed
+  through EmitStringCharLoad) and found the +8 lands on the string HEADER after
+  the pointer load, never on the symbol's own slot, so it does not reach here. }
+var k: Integer;
+begin
+  ObjDataOffIsInsideAnImport := -1;
+  for k := 0 to SymCount-1 do
+    if ObjDataIsImport(k) and (bssOff > Syms[k].Offset) and
+       (bssOff < Syms[k].Offset + SymAllocSize[k]) then
+    begin
+      ObjDataOffIsInsideAnImport := k;
+      Exit;
+    end;
+end;
+
+procedure ObjPlanHostedSymbols(var strSize, numLocalProcs, numExportProcs,
+                               numLocalData, numExportData, numImportData: Integer);
 { The EXPORT POLICY of a hosted relocatable object, in one place because it is
   the half that must never drift between targets: if x86-64 and i386 disagreed
   about what an object exports, the i386 link that exists to MEASURE the C-ABI
   convention would be measuring the writer instead.
 
   Assigns every .strtab name offset in the order the symbol table emits them --
-  local procs, exported procs, externals -- and counts each group. The caller
-  writes the symbols; it does not decide who is in them. }
+  local procs, local data, exported procs, exported data, externals, imported
+  data -- and counts each group. The caller writes the symbols; it does not
+  decide who is in them.
+
+  The data groups arrived with
+  bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong:
+  before them an object emitted no OBJECT symbol at all, so a defined global was
+  invisible to the linker and an `extern` one was relocated into this object's
+  OWN .bss -- two objects sharing a global linked cleanly and read different
+  memory. }
 var i: Integer;
 begin
   strSize := 1;                { index 0 is the empty name }
   numLocalProcs := 0;
   numExportProcs := 0;
+  numLocalData := 0;
+  numExportData := 0;
+  numImportData := 0;
   for i := 0 to ProcCount-1 do
     ObjProcStrOff[i] := -1;
+  for i := 0 to SymCount-1 do
+    ObjDataStrOff[i] := -1;
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then
     begin
       ObjProcStrOff[i] := strSize;
       strSize := strSize + Length(Procs[i].Name) + 1;
       Inc(numLocalProcs);
+    end;
+  { DATA joins in the three groups the symbol table emits it in, and the order
+    below IS that layout. ELF requires every LOCAL before every GLOBAL with
+    sh_info naming the first global, so local (static) data sits with the local
+    procs ahead of firstGlobal, and the two global groups follow the exported
+    procs. Both writers walk these same predicates in this same order; the
+    counts returned here are what their index arithmetic is built on. }
+  for i := 0 to SymCount-1 do
+    if ObjDataIsLocal(i) then
+    begin
+      ObjDataStrOff[i] := strSize;
+      strSize := strSize + Length(Syms[i].Name) + 1;
+      Inc(numLocalData);
     end;
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then
@@ -2975,16 +3128,33 @@ begin
       strSize := strSize + Length(Procs[i].Name) + 1;
       Inc(numExportProcs);
     end;
+  for i := 0 to SymCount-1 do
+    if ObjDataIsExport(i) then
+    begin
+      ObjDataStrOff[i] := strSize;
+      strSize := strSize + Length(Syms[i].Name) + 1;
+      Inc(numExportData);
+    end;
   for i := 0 to ExternalCount-1 do
   begin
     ObjExtStrOff[i] := strSize;
     strSize := strSize + Length(ExternalLinkName(i)) + 1;
   end;
-  if numExportProcs = 0 then
+  { Imports last, and only those a relocation actually reaches -- an
+    unreferenced UND asks the linker to resolve a name this object never uses. }
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
+    begin
+      ObjDataStrOff[i] := strSize;
+      strSize := strSize + Length(Syms[i].Name) + 1;
+      Inc(numImportData);
+    end;
+  if (numExportProcs = 0) and (numExportData = 0) then
     ErrorNoPos('--emit-obj: this object would define no linkable symbol, so nothing '
         + 'could ever link against it. A pxx object exports the routines '
         + 'declared with the C convention -- Pascal `cdecl`, or any function of '
-        + 'a .c translation unit. Mark what the object is for, or build an '
+        + 'a .c translation unit -- and any file-scope variable a .c '
+        + 'translation unit defines. Mark what the object is for, or build an '
         + 'executable instead');
 end;
 
@@ -3004,6 +3174,7 @@ procedure writeELFRelX64General(const outPath: AnsiString);
 var
   i: Integer;
   numLocalProcs, numExportProcs, numSyms, firstGlobal, extSym0: Integer;
+  numLocalData, numExportData, numImportData, impSym0, dsym: Integer;
   textOff, dataOff, symOff, strOff, relaTextOff, relaDataOff: Integer;
   shstrOff, shOff, strSize: Integer;
   relaTextCount, relaDataCount: Integer;
@@ -3023,11 +3194,17 @@ begin
         + 'have no object writer yet');
 
   ObjCheckProcAddrBodies;
-  ObjPlanHostedSymbols(strSize, numLocalProcs, numExportProcs);
+  ObjPlanHostedSymbols(strSize, numLocalProcs, numExportProcs,
+                       numLocalData, numExportData, numImportData);
 
-  firstGlobal := 4 + numLocalProcs;   { null + 3 section syms + local procs }
-  extSym0 := firstGlobal + numExportProcs;
-  numSyms := extSym0 + ExternalCount;
+  { null + 3 section syms + local procs + local data | exported procs +
+    exported data + external funcs + imported data. extSym0 moves by
+    numExportData and impSym0 is new; every relocation that names a symbol
+    index is built from these three. }
+  firstGlobal := 4 + numLocalProcs + numLocalData;
+  extSym0 := firstGlobal + numExportProcs + numExportData;
+  impSym0 := extSym0 + ExternalCount;
+  numSyms := impSym0 + numImportData;
 
   relaTextCount := FixCount + GlobFixCount + DynCallCount + ProcAddrFixCount;
   relaDataCount := DataPtrFixCount + MethodFixCount + ExternalCount;
@@ -3121,19 +3298,43 @@ begin
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then
       writeSym64(f, ObjProcStrOff[i], $02, 1, Procs[i].BodyAddr, ObjProcSize(i));
+  { LOCAL data ($01 = LOCAL OBJECT), shndx 5 = .bss. A `static` file-scope
+    variable must never become an export -- it is the control that catches a
+    pass which simply exports everything. }
+  for i := 0 to SymCount-1 do
+    if ObjDataIsLocal(i) then
+      writeSym64(f, ObjDataStrOff[i], $01, 5, Syms[i].Offset, SymAllocSize[i]);
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then
       writeSym64(f, ObjProcStrOff[i], $12, 1, Procs[i].BodyAddr, ObjProcSize(i));
+  { EXPORTED data ($11 = GLOBAL OBJECT). A tentative definition is a definition
+    (C 6.9.2) and lands here with the rest -- and as a real .bss OBJECT, not
+    SHN_COMMON, which is -fno-common semantics and matches gcc 10 and later. }
+  for i := 0 to SymCount-1 do
+    if ObjDataIsExport(i) then
+      writeSym64(f, ObjDataStrOff[i], $11, 5, Syms[i].Offset, SymAllocSize[i]);
   for i := 0 to ExternalCount-1 do
     writeSym64(f, ObjExtStrOff[i], $10, 0, 0, 0);  { GLOBAL NOTYPE UNDEF }
+  { IMPORTED data ($10 = GLOBAL NOTYPE, shndx 0 = UND, value 0, size 0). The
+    size lives on the DEFINITION in another TU -- `extern char b[];` carries
+    none -- so emitting anything but 0 here would be inventing it. }
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
+      writeSym64(f, ObjDataStrOff[i], $10, 0, 0, 0);
 
   { .strtab, in the same order }
   writeU8(f, 0);
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then writeStrZ(f, Procs[i].Name);
+  for i := 0 to SymCount-1 do
+    if ObjDataIsLocal(i) then writeStrZ(f, Syms[i].Name);
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then writeStrZ(f, Procs[i].Name);
+  for i := 0 to SymCount-1 do
+    if ObjDataIsExport(i) then writeStrZ(f, Syms[i].Name);
   for i := 0 to ExternalCount-1 do writeStrZ(f, ExternalLinkName(i));
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then writeStrZ(f, Syms[i].Name);
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text. Section syms: 1 = .text, 2 = .data, 3 = .bss.
@@ -3145,6 +3346,7 @@ begin
     else
       writeRela64(f, Fixups[i].CodePos, 2, 1, Fixups[i].DataOff);
   for i := 0 to GlobFixCount-1 do
+  begin
     { A data-resident global (a typed const baked into .data) carries a BIASED
       offset; SymOffIsData is the one decode point for all of them.
       UNREACHABLE TODAY, DELIBERATELY, AND NOT DEAD: the promotion that creates
@@ -3169,7 +3371,27 @@ begin
       hang in test_multithreading. The same false claim was asserted in
       emit.inc (fixed in 3156ac887) -- this was its third copy. Do not restore
       it. }
-    if GlobFixPCRel[i] then
+    { An IMPORTED global must relocate against ITS OWN SYMBOL, not against this
+      object's .bss. Relocating it section-relative is the defect this whole
+      ticket is named for: the link succeeds, and the program reads a private
+      slot in the importing object instead of the definition. dsym < 0 means
+      "not an import", which is every reference in an executable and every
+      reference to a global this TU defines, so the old paths below are
+      unchanged for them.
+
+      The addend is 0, not the slot offset: an UND symbol has no value yet, and
+      the linker supplies it. The PC32 correction still applies. }
+    dsym := ObjDataSymIndexForOff(GlobFix[i].BSSoff);
+    if dsym >= 0 then
+      dsym := impSym0 + ObjDataImportOrdinal(dsym);
+    if dsym >= 0 then
+    begin
+      if GlobFixPCRel[i] then
+        writeRela64(f, GlobFix[i].CodePos, dsym, 2, -4 - GlobFixTrail[i])
+      else
+        writeRela64(f, GlobFix[i].CodePos, dsym, 11, 0);
+    end
+    else if GlobFixPCRel[i] then
     begin
       if SymOffIsData(GlobFix[i].BSSoff) then
         writeRela64(f, GlobFix[i].CodePos, 2, 2,
@@ -3182,6 +3404,7 @@ begin
       writeRela64(f, GlobFix[i].CodePos, 2, 11, SymOffDataPart(GlobFix[i].BSSoff))
     else
       writeRela64(f, GlobFix[i].CodePos, 3, 11, GlobFix[i].BSSoff);
+  end;
   { `call qword ptr [abs32]` / `mov rax,[abs32]`: the operand names OUR GOT
     slot in .data, not the callee. The slot's own relocation is in .rela.data. }
   for i := 0 to DynCallCount-1 do
@@ -3349,6 +3572,7 @@ procedure writeELFRel386General(const outPath: AnsiString);
 var
   i: Integer;
   numLocalProcs, numExportProcs, numSyms, firstGlobal, extSym0: Integer;
+  numLocalData, numExportData, numImportData, impSym0, dsym: Integer;
   textOff, dataOff, symOff, strOff, relTextOff, relDataOff: Integer;
   shstrOff, shOff, strSize: Integer;
   relTextCount, relDataCount: Integer;
@@ -3366,11 +3590,17 @@ begin
     ErrorNoPos('--emit-obj: the general ELF32/i386 object writer is i386 only');
 
   ObjCheckProcAddrBodies;
-  ObjPlanHostedSymbols(strSize, numLocalProcs, numExportProcs);
+  ObjPlanHostedSymbols(strSize, numLocalProcs, numExportProcs,
+                       numLocalData, numExportData, numImportData);
 
-  firstGlobal := 4 + numLocalProcs;   { null + 3 section syms + local procs }
-  extSym0 := firstGlobal + numExportProcs;
-  numSyms := extSym0 + ExternalCount;
+  { null + 3 section syms + local procs + local data | exported procs +
+    exported data + external funcs + imported data. extSym0 moves by
+    numExportData and impSym0 is new; every relocation that names a symbol
+    index is built from these three. }
+  firstGlobal := 4 + numLocalProcs + numLocalData;
+  extSym0 := firstGlobal + numExportProcs + numExportData;
+  impSym0 := extSym0 + ExternalCount;
+  numSyms := impSym0 + numImportData;
 
   relTextCount := FixCount + GlobFixCount + DynCallCount + ProcAddrFixCount;
   relDataCount := DataPtrFixCount + MethodFixCount + ExternalCount;
@@ -3399,7 +3629,21 @@ begin
     else
       Patch32(Fixups[i].CodePos, Fixups[i].DataOff);
   for i := 0 to GlobFixCount-1 do
-    if SymOffIsData(GlobFix[i].BSSoff) then
+  begin
+    { REL carries no addend field, so the in-place code word IS the addend. For
+      an IMPORT it must be 0 (plus the PC-relative correction), never this
+      object's own .bss offset -- writing the offset here while naming the
+      import's symbol in .rel.text would resolve to the definition PLUS a
+      private offset, which is a wrong address that still links.
+      The x86-64 twin puts the same 0 in the RELA addend field. }
+    if ObjDataSymIndexForOff(GlobFix[i].BSSoff) >= 0 then
+    begin
+      if GlobFixPCRel[i] then
+        Patch32(GlobFix[i].CodePos, GlobFixPicDelta[i])
+      else
+        Patch32(GlobFix[i].CodePos, 0);
+    end
+    else if SymOffIsData(GlobFix[i].BSSoff) then
     begin
       if GlobFixPCRel[i] then
         Patch32(GlobFix[i].CodePos, SymOffDataPart(GlobFix[i].BSSoff) + GlobFixPicDelta[i])
@@ -3413,6 +3657,7 @@ begin
       else
         Patch32(GlobFix[i].CodePos, GlobFix[i].BSSoff);
     end;
+  end;
   for i := 0 to DynCallCount-1 do
     if DynCallPCRel[i] then
       Patch32(DynCallCodePos[i], ExternalGotOff[DynCallExtIdx[i]] + DynCallPicDelta[i])
@@ -3519,19 +3764,39 @@ begin
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then
       writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, ObjProcSize(i), $02, 1);
+  { The data groups, in the same order and by the same predicates as the x86-64
+    writer -- the policy is shared, so these six loops are the FORMAT half of
+    one decision taken in ObjPlanHostedSymbols. If only one writer emitted them
+    the counts that writer returns would no longer describe the table it wrote,
+    which is exactly the truncated object this loop was added to fix. }
+  for i := 0 to SymCount-1 do
+    if ObjDataIsLocal(i) then
+      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $01, 5);
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then
       writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, ObjProcSize(i), $12, 1);
+  for i := 0 to SymCount-1 do
+    if ObjDataIsExport(i) then
+      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $11, 5);
   for i := 0 to ExternalCount-1 do
     writeSym32(f, ObjExtStrOff[i], 0, 0, $10, 0);  { GLOBAL NOTYPE UNDEF }
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then
+      writeSym32(f, ObjDataStrOff[i], 0, 0, $10, 0);
 
   { .strtab, in the same order }
   writeU8(f, 0);
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then writeStrZ(f, Procs[i].Name);
+  for i := 0 to SymCount-1 do
+    if ObjDataIsLocal(i) then writeStrZ(f, Syms[i].Name);
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then writeStrZ(f, Procs[i].Name);
+  for i := 0 to SymCount-1 do
+    if ObjDataIsExport(i) then writeStrZ(f, Syms[i].Name);
   for i := 0 to ExternalCount-1 do writeStrZ(f, ExternalLinkName(i));
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) and ObjDataIsReferenced(i) then writeStrZ(f, Syms[i].Name);
   writePad(f, relTextOff - (strOff + strSize));
 
   { .rel.text. Section syms: 1 = .text, 2 = .data, 3 = .bss.
@@ -3552,7 +3817,17 @@ begin
   for i := 0 to FixCount-1 do
     writeRel32(f, Fixups[i].CodePos, 2, Rel386Type(FixupPCRel[i]));
   for i := 0 to GlobFixCount-1 do
-    if SymOffIsData(GlobFix[i].BSSoff) then
+  begin
+    { An IMPORTED global relocates against its OWN symbol here too. REL (not
+      RELA) carries no addend field, so the addend already sits in the code
+      word: Patch32 below writes it, and for an import that must be 0 rather
+      than this object's private .bss offset -- the linker supplies the address.
+      Getting only one of the two right is the silent-wrong-read bug again. }
+    dsym := ObjDataSymIndexForOff(GlobFix[i].BSSoff);
+    if dsym >= 0 then dsym := impSym0 + ObjDataImportOrdinal(dsym);
+    if dsym >= 0 then
+      writeRel32(f, GlobFix[i].CodePos, dsym, Rel386Type(GlobFixPCRel[i]))
+    else if SymOffIsData(GlobFix[i].BSSoff) then
     begin
       writeRel32(f, GlobFix[i].CodePos, 2, Rel386Type(GlobFixPCRel[i]));
     end
@@ -3560,6 +3835,7 @@ begin
     begin
       writeRel32(f, GlobFix[i].CodePos, 3, Rel386Type(GlobFixPCRel[i]));
     end;
+  end;
   { `call dword [abs32]`: the operand names OUR GOT slot in .data, not the
     callee. The slot's own relocation is in .rel.data below. }
   for i := 0 to DynCallCount-1 do

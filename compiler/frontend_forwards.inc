@@ -26,6 +26,12 @@ procedure NormalizePath(var p: AnsiString); forward;
 procedure ExpandIncludes(var src: AnsiString; const baseDir, selfPath: AnsiString); forward;
 procedure ExpandPasMacros(var src: AnsiString); forward;
 {$ifndef PXX_NO_CFRONT}
+{ cpreproc.inc is included AFTER cparser.inc, so a cparser call into it needs
+  the signature stated up here. CDeclIsFromCrtl asks whether a declaration's
+  module path sits under lib/crtl, and the substring search it uses lives with
+  the preprocessor. pxx prescans and FPC does not, so this compiled and
+  self-hosted cleanly and only the FPC seed canary saw it. }
+function CPFindSub(const s, sub: AnsiString): Integer; forward;
 procedure ParseCUnit; forward;
 procedure RegisterCMacroConsts; forward;
 {$endif}

@@ -64,6 +64,7 @@ procedure ParseCSubroutine; forward;
   prescans headers where FPC does not, so only the seed canary sees it. }
 function CDeclSawExtern(typeIdx: Integer): Boolean; forward;
 function CDeclSawStatic(typeIdx: Integer): Boolean; forward;
+function CDeclIsFromCrtl(tokIdx: Integer): Boolean; forward;
 function ParseCExpr: Integer; forward;
 function ParseCCommaExpr: Integer; forward;
 function CEvalConstExpr: Int64; forward;
@@ -8267,6 +8268,39 @@ end;
   the slot is reserved and any initialiser is skipped (C zero-inits globals; a
   non-zero constant/runtime initialiser is a follow-up). Re-running across the
   two driver passes is idempotent — a name already present is not re-allocated. }
+function CDeclIsFromCrtl(tokIdx: Integer): Boolean;
+{ Do these tokens come from pxx's OWN C runtime rather than from the file the
+  user named?
+
+  It decides whether a file-scope variable joins the object's linkable surface.
+  crtl is bundled into every C object and its globals were never symbols;
+  making them symbols exports the runtime's internals into the user's link.
+  Measured, and not theoretical: `errno`, `environ`, `optarg`, `optind`,
+  `opterr`, `optopt` and `optreset` all became GLOBAL OBJECT, and the link then
+  failed outright because glibc's `errno` is TLS (.tbss) and ours is not --
+  "TLS definition ... mismatches non-TLS reference", ld refusing the object
+  rather than mis-linking it.
+
+  The question is `whose tokens are these`, the same one the header-vs-.c
+  decision in ParseCFuncOrVar asks. It is NOT `CModuleOfTok < 0`, which that
+  decision uses: under --emit-obj the user's own .c HAS a module range, so its
+  declarations come back with a real id naming their own path. The id is an
+  interned PATH key, so the PATH is what to ask -- keying on the id would have
+  meant "module zero", which is whatever file happened to intern first.
+
+  A name declared in BOTH -- `extern char **environ;` in the user's file and
+  again inside crtl -- stays a candidate, and should: the user's translation
+  unit really does refer to it, which is the reference gcc emits too.
+  bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
+var m: Integer;
+begin
+  CDeclIsFromCrtl := False;
+  m := CModuleOfTok(tokIdx);
+  if (m < 0) or (m >= KeyCount) then Exit;   { the main source: never crtl }
+  CDeclIsFromCrtl := (CPFindSub(KeyStrs[m], 'lib/crtl/') > 0) or
+                     (CPFindSub(KeyStrs[m], '<crtl-') > 0);
+end;
+
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
     recId, initSymIdx, procIdx, initOff, di, rangeHiG, gk: Integer; wasArr: Boolean; initV: Int64;
@@ -8776,6 +8810,15 @@ begin
       if declSawStatic then SymCStaticLink[idx] := True;
       if not declSawExtern then SymCExternOnly[idx] := False
       else if declSymIsNew then SymCExternOnly[idx] := True;
+      { Membership, not linkage. The two flags above default to False and False
+        MEANS something ("defined, external linkage"), so they cannot say
+        whether this symbol is a C file-scope variable at all -- and the object
+        writer needs exactly that set, or it walks every RTL global.
+
+        Only the USER's translation unit joins it -- see CDeclIsFromCrtl. Set
+        True and never cleared, so a name the user's file also declares stays a
+        candidate even when crtl redeclares it afterwards. }
+      if not CDeclIsFromCrtl(TokPos - 1) then SymCFileScope[idx] := True;
       if PxxDbgEnabled('a.clink') then
       begin
         Write('PXXDBG a.clink ', name, ' externOnly=');
@@ -8786,6 +8829,13 @@ begin
         if declSawExtern then Write('1') else Write('0');
         Write(' new=');
         if declSymIsNew then Write('1') else Write('0');
+        Write(' mod='); Write(CModuleOfTok(TokPos - 1));
+        Write(' modpath=');
+        if (CModuleOfTok(TokPos - 1) >= 0) and (CModuleOfTok(TokPos - 1) < KeyCount) then
+          Write(KeyStrs[CModuleOfTok(TokPos - 1)])
+        else Write('<main>');
+        Write(' off='); Write(Syms[idx].Offset);
+        Write(' arr='); if Syms[idx].IsArray then Write(Syms[idx].ArrLen) else Write(-1);
         WriteLn;
       end;
     end;
