@@ -122,7 +122,7 @@ looked like the premise failing, and frank-coordinator's argument for taking it
 seriously was a good one: four backends failing *identically* points at shared
 descriptor/retain logic rather than at one emitter.
 
-**It does not reproduce.** frankB ran the test on all four targets against
+**It did not reproduce in a local run.** The test was run on all four targets against
 `origin/master` with in-flight work stashed, compiler `6b74eeb25a98`: `rc=0`,
 every counter 1000. That baseline is precisely where a broken cross-path
 descriptor/retain would show.
@@ -148,7 +148,7 @@ variant 7708 against 4.
 
 ### CORRECTION, same day — it RECURRED, so the section above is wrong
 
-The "cleared" verdict rested on frankB's green and on the assumption that a
+The "cleared" verdict rested on that local green and on the assumption that a
 single-run red is a flake. Both premises failed within thirteen minutes.
 
 | sha | time | wall | dynarray rows red |
@@ -164,7 +164,7 @@ window (`3e6249872671`, 678.4s) does not carry them.
 The host is not sick either. Measured on seven at 15:55: load 8.10 / 14.85 /
 17.27 across 24 cores, 2G used of 94G, 67G free, nothing swapping.
 
-**So frankB's green and seven's red are both measurements, and they disagree.
+**So the local green and seven's red are both measurements, and they disagree.
 The object of interest is the difference in METHOD** — the harness runs
 `test-aarch64#...` and friends under qemu; a local run at `origin/master` may not
 be the same execution. Neither side is asserted right here.
@@ -176,3 +176,21 @@ Two things learned that outlive this: a single-run red is not evidence of a
 flake, and **a green that cannot be shown to run the same way as the red does
 not refute it.** The first "cleared" write-up made both mistakes in one
 paragraph.
+
+### Who ran the local green — do not attribute it, identify it by its compiler
+
+Two records credit that run to two different agents, and this section originally
+said **frankB** because it inherited a topic-ownership correction (frankB owns
+`test_managed_dynarray_field_leaks.pas`, having added it in `9cb079528`) and
+applied it to the question of *who ran this particular run*. Those are different
+questions and the second was never established.
+
+**The run's identity is `compiler 6b74eeb25a98`, and that is the only part that
+is evidence.** Both records agree on it, which is what shows it is one run
+rather than two. The agent name adds nothing a reader of this ticket needs, and
+a wrong owner on a disputed measurement misroutes whoever picks it up.
+
+Commits do carry a `Claude-Session:` trailer that distinguishes agents — four
+distinct session ids across the last 200 commits on origin/master — so
+attribution is possible where it matters. Its limit: not every commit has one
+(`a584e8fef` carries none), so **absence means unknown, never "someone else."**
