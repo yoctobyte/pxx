@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 2d10h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `082b24a45bc3` | 2026-09-01T21:10:13Z | RED (native) | 166.9s | `12c916c5c9ca` RED |
+| seven | `e06eef0a8dfc` | 2026-09-01T21:14:31Z | RED (native) | 172.2s | `12c916c5c9ca` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `12c916c5c9ca` on seven, 2026-09-01T20:42:51Z (27m ago).**
+**Newest full tier in the fleet: `12c916c5c9ca` on seven, 2026-09-01T20:42:51Z (31m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `12c916c5c9ca` | RED | 27m | — (newest) |
+| seven | `12c916c5c9ca` | RED | 31m | — (newest) |
 | plexus | `27424c927b65` | RED | 2d10h | 2d10h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -48,7 +48,6 @@ Reading a staler host's map for a cross-target job answers a question about an O
 - **optdiff#shard2/12** — tools/optdiff.sh (seven): bad `a5f0958c6934`, last good `caa34fdeab46`, 12 commit(s) in range
 - **optdiff#shard3/12** — tools/optdiff.sh (seven): bad `a5f0958c6934`, last good `caa34fdeab46`, 12 commit(s) in range
 - **optdiff#shard5/12** — tools/optdiff.sh (seven): bad `a5f0958c6934`, last good `caa34fdeab46`, 12 commit(s) in range
-- **test-threads#src:test/test_exception_threads_race.pas** — test/test_exception_threads_race.pas tools/expect_same.sh (seven): bad `e7be39f9a505`, last good `62e176c3c4e5`, 1 commit(s) in range
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +40 (seven): bad `5d983997a05a`, last good `91b92d5e8c99`, 2 commit(s) in range
 - **test-core#src:test/test_header_static_body.pas** — test/test_header_static_body.pas tools/expect_same.sh +2 (seven): bad `f9e495823dce`, last good `5d983997a05a`, 1 commit(s) in range
 - **test-xtensa#src:test/test_signal_default_revert_b336.pas** — test/test_signal_default_revert_b336.pas tools/run_target.sh +1 (seven): bad `370170edaffe`, last good `5d983997a05a`, 2 commit(s) in range
