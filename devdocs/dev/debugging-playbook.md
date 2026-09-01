@@ -829,6 +829,37 @@ written down.
 the actual assertion sat in a log on the runner that nobody had opened. `live=111
 exceeds 50` — a threshold, not a comparison.
 
+### Two clocks and a wrong baseline — both answered, both about something else
+
+**`git log %ad` is LOCAL; tstate stamps UTC.** Dating a regression from the
+tstate ndjson against commit times, `620989250` printed as **15:18** while the
+job went red at **13:27:15Z**. Read together that says the commit landed two
+hours *after* the failure it caused — so the only code commit in the window gets
+discarded as impossible. It landed at 13:18 UTC, nine minutes before. Neither
+clock is wrong and nothing marks the difference. **Print `%ad --date=iso-strict`
+or `%aI` when comparing against anything UTC**, and never mix the two in one
+table. It was later confirmed causal by bisect: 0/20 fail at `620989250^`,
+20/20 at `620989250`.
+
+**The adjacent row in `runs-<host>.ndjson` is NOT the baseline the row was
+diffed against.** Runs alternate tiers, and a job need not exist in both:
+`test-pascal-conformance#shard0/6` appears in **181 full runs and zero native
+ones**. Reading each `new_red` against the file's previous *line* therefore
+produced "green, then red, at the same sha" three times over — which reads as
+proof that tier alternation manufactures spurious transitions. It is not.
+Measured across **178** native-after-full transitions, the number falsely
+reporting that job as `fixed` is **0**; recomputed against the previous **full**
+run, every transition sits between different shas. `new_red` is trustworthy —
+the hand-rolled comparison beside it is not.
+
+**Both belong here for the same reason, and it is the one this section is
+about:** each produced a confident, internally consistent, *checkable* claim
+that a reader would have accepted. The second one was mine, it was tidy, it
+explained three observations at once, and it was wrong — caught only because
+the theory implied something ("native runs must report full-only reds as
+fixed") that could be measured and came back **0 of 178**. **A theory that
+explains the data and predicts nothing testable is where this failure lives.**
+
 
 ## Assert the PRECONDITION, not just the comparison
 
