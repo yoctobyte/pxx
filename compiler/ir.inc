@@ -838,6 +838,7 @@ end;
 
 function IRLowerAST(node: Integer): Integer; forward;
 function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer; forward;
+function IRLowerBoxOperand(argAST: Integer): Integer; forward;
 function IRVariantAddr(argAST: Integer): Integer; forward;
 function IRMethodRefCode(mref: Integer): Integer; forward;
 function IRMethodRefToTemp(mref: Integer): Integer; forward;
@@ -6212,6 +6213,43 @@ begin
   IRVariantAddr := IRLowerAddress(argAST);
 end;
 
+function IRLowerBoxOperand(argAST: Integer): Integer;
+{ Lower the SCALAR side of a variant binop, giving a managed-string operand an
+  owner before IR_VAR_BOX consumes it.
+
+  The box itself was never the leak. `v = s` against a named AnsiString local
+  builds a box temp and comes back clean (1871/1870), and `v = w` variant-to-
+  variant builds none and is equally clean -- the epilogue clears the temp and
+  the named local both. What leaks is a COMPUTED operand: `v = ('lit' + Chr(c))`
+  hands IR_VAR_BOX a concat result with a +1 that belongs to nobody, and no
+  scope-exit scan can find it because it was never a symbol. Measured 936 blocks
+  live in 1000 trips.
+
+  The reason the same expression is clean one line away, against an AnsiString
+  instead of a Variant, is that the string compare's operand path already
+  materialises its temporaries; the box path did not. Parking it in a real local
+  is what makes the epilogue's existing skLocal scan able to see it at all.
+
+  Ownership of the parked value is IR_STORE_SYM's decision, not ours -- it moves
+  a fresh call result and retains anything else (IRNodeOwnsFreshCallResult), so
+  a named local passed here gains a balanced retain/release rather than a second
+  free. That is why this can be unconditional over managed strings and does not
+  need to ask what SHAPE the operand had, which is the question that produced
+  the sibling bug in this same ticket.
+  bug-a-a-variant-converted-to-ansistring-leaks-whenever-the-result-is-a-temporary }
+var boTmp, boVal: Integer;
+begin
+  boVal := IRLowerAST(argAST);
+  if IntToTypeKind(ASTTk[argAST]) = tyAnsiString then
+  begin
+    boTmp := AllocVar('', tyAnsiString);
+    SymIsHiddenArgTemp[boTmp] := True;
+    IRAppend(IR_STORE_SYM, boTmp, boVal, -1, 0, Ord(tyAnsiString));
+    boVal := IRAppend(IR_LOAD_SYM, boTmp, -1, -1, 0, Ord(tyAnsiString));
+  end;
+  IRLowerBoxOperand := boVal;
+end;
+
 function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer;
 { Unbox a tyVariant expression into a scalar of `target`'s class by calling the
   matching builtin. Target-independent on purpose: routing through a runtime
@@ -6222,7 +6260,7 @@ function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer;
   A variant argument is always passed BY ADDRESS — same marshalling the
   str()/write paths use, so a call-returning-Variant (`xs[0]`, whose result is
   an sret temp) works here exactly as it does there. }
-var vuProc, vuAddr, vuArg: Integer;
+var vuProc, vuAddr, vuArg, vuCall, vuTmp: Integer;
     vuName: string;
     vuRet: TTypeKind;
 begin
@@ -6291,7 +6329,39 @@ begin
   if vuProc < 0 then Error('variant unbox: ' + vuName + ' builtin not loaded');
   vuAddr := IRVariantAddr(argAST);
   vuArg := IRAppend(IR_ARG, vuAddr, -1, -1, 0, Ord(tyVariant));
-  IRLowerVariantAsScalar := IRAppendCall(vuProc, vuArg, -1, Ord(vuRet));
+  vuCall := IRAppendCall(vuProc, vuArg, -1, Ord(vuRet));
+
+  { A STRING result is a fresh AnsiString that nobody owns, so park it in an
+    owning temp the epilogue releases.
+
+    Here, and not at the call-argument sites, because ownership is a property of
+    what THIS lowering produced and not of the argument's AST shape. The seven
+    managed-string-temp sites all ask the shape -- they exclude
+    AN_IDENT/AN_FIELD/AN_INDEX/AN_DEREF on the sound reasoning that those name
+    storage somebody else owns -- and by the time they look, the node no longer
+    denotes that storage: `Take(v)` with `v: Variant` IS an AN_IDENT, and the
+    exclusion fires on a variant that has already been replaced by a brand-new
+    string. Measured 921 leaked blocks in 1000 trips, and `a[1].v` leaks
+    identically because AN_INDEX and AN_FIELD are on the same list.
+
+    A clause at one of those seven sites would fix one spelling and leave six.
+    This is upstream of all of them and of any future consumer, which is why the
+    comparison row (`v = 'lit' + c`, 936 leaked) is fixed by the same edit
+    without mentioning comparisons.
+
+    The two clean rows are the ones this must not break: `s := v` and a
+    comparison against an AnsiString both already balance, so the temp must add
+    an owner rather than a second release -- IR_STORE_SYM does the ARC-correct
+    store, exactly as the argument-temp sites rely on.
+    bug-a-a-variant-converted-to-ansistring-leaks-whenever-the-result-is-a-temporary }
+  if vuRet = tyAnsiString then
+  begin
+    vuTmp := AllocVar('', tyAnsiString);
+    SymIsHiddenArgTemp[vuTmp] := True;
+    IRAppend(IR_STORE_SYM, vuTmp, vuCall, -1, 0, Ord(tyAnsiString));
+    vuCall := IRAppend(IR_LOAD_SYM, vuTmp, -1, -1, 0, Ord(tyAnsiString));
+  end;
+  IRLowerVariantAsScalar := vuCall;
 end;
 
 { Whole STATIC-array assignment whose elements are MANAGED (AnsiString, or a
@@ -9662,7 +9732,7 @@ begin
             (bug-variant-boxing-temp-global-shared). }
           value := AllocVar('', tyVariant);
           left := IRAppend(IR_VAR_BOX, IRAppend(IR_LEA, value, -1, -1, 0, Ord(tyPointer)),
-                           IRLowerAST(ASTLeft[node]), Ord(IntToTypeKind(ASTTk[ASTLeft[node]])), 0, Ord(tyVariant));
+                           IRLowerBoxOperand(ASTLeft[node]), Ord(IntToTypeKind(ASTTk[ASTLeft[node]])), 0, Ord(tyVariant));
         end;
         if IntToTypeKind(ASTTk[ASTRight[node]]) = tyVariant then
           right := IRVariantAddr(ASTRight[node])
@@ -9675,7 +9745,7 @@ begin
             global (bug-variant-boxing-temp-global-shared). }
           value := AllocVar('', tyVariant);
           right := IRAppend(IR_VAR_BOX, IRAppend(IR_LEA, value, -1, -1, 0, Ord(tyPointer)),
-                            IRLowerAST(ASTRight[node]), Ord(IntToTypeKind(ASTTk[ASTRight[node]])), 0, Ord(tyVariant));
+                            IRLowerBoxOperand(ASTRight[node]), Ord(IntToTypeKind(ASTTk[ASTRight[node]])), 0, Ord(tyVariant));
         end;
         item := Integer(ASTIVal[node]);
         { The VARIANT runtime has its own operator vocabulary, and it disagrees

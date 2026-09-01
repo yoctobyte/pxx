@@ -14445,6 +14445,28 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_managed_dynarray_field_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/mdf_i386)" "$$($(TESTTMP)/mdf_i386_x64)"
 	tools/assert_no_leak.sh i386/managed_dynarray_field 50 tools/run_target.sh i386 $(TESTTMP)/mdf_i386
 	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_i386_x64
+	# A managed string handed to the VARIANT boundary with nobody owning it:
+	# VariantToStrPas's result passed as a `const AnsiString` argument, and a
+	# COMPUTED operand boxed into the temp variant of a variant compare (both
+	# operand sides, two call sites). Neither value was ever a symbol, so no
+	# scope-exit scan could find it. The seven call-argument sites ask the
+	# argument's AST SHAPE and exclude AN_IDENT -- correct for storage someone
+	# owns, wrong here, because the variant lowering had already replaced the
+	# node with a new string. Fixed at the two seams that create the value.
+	# The vv/vs/into/ctlstr arms always passed and are what localise the defect
+	# to the boundary: `vs` builds a box temp around a NAMED local and was
+	# always clean, which is what rules out the box temp itself.
+	# The differential row cannot see this -- the pre-fix binary printed
+	# hits=2800 sink=44800 and the identical tail on all five targets while
+	# leaking 1549 blocks. Only the absolute bound catches it. Pre-fix live by
+	# target: x86-64 1549, aarch64 1549, i386 3616, arm32 3856, riscv32 364;
+	# after, 1 or 2 everywhere. The three that differ carry additional
+	# per-target holes in these shapes and are not a reading of this fix.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_variant_string_temp_leaks.pas $(TESTTMP)/vstl_i386
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_variant_string_temp_leaks.pas $(TESTTMP)/vstl_i386_x64
+	tools/expect_same.sh i386/test_variant_string_temp_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/vstl_i386)" "$$($(TESTTMP)/vstl_i386_x64)"
+	tools/assert_no_leak.sh i386/variant_string_temp 50 tools/run_target.sh i386 $(TESTTMP)/vstl_i386
+	tools/assert_no_leak.sh x86-64/variant_string_temp 50 $(TESTTMP)/vstl_i386_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
 	# NON-object raise must not be freed at all. Both arms live in one
 	# program because they failed in opposite directions: the leak fix that
@@ -15051,6 +15073,28 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_managed_dynarray_field_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64)" "$$($(TESTTMP)/mdf_aarch64_x64)"
 	tools/assert_no_leak.sh aarch64/managed_dynarray_field 50 tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64
 	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_aarch64_x64
+	# A managed string handed to the VARIANT boundary with nobody owning it:
+	# VariantToStrPas's result passed as a `const AnsiString` argument, and a
+	# COMPUTED operand boxed into the temp variant of a variant compare (both
+	# operand sides, two call sites). Neither value was ever a symbol, so no
+	# scope-exit scan could find it. The seven call-argument sites ask the
+	# argument's AST SHAPE and exclude AN_IDENT -- correct for storage someone
+	# owns, wrong here, because the variant lowering had already replaced the
+	# node with a new string. Fixed at the two seams that create the value.
+	# The vv/vs/into/ctlstr arms always passed and are what localise the defect
+	# to the boundary: `vs` builds a box temp around a NAMED local and was
+	# always clean, which is what rules out the box temp itself.
+	# The differential row cannot see this -- the pre-fix binary printed
+	# hits=2800 sink=44800 and the identical tail on all five targets while
+	# leaking 1549 blocks. Only the absolute bound catches it. Pre-fix live by
+	# target: x86-64 1549, aarch64 1549, i386 3616, arm32 3856, riscv32 364;
+	# after, 1 or 2 everywhere. The three that differ carry additional
+	# per-target holes in these shapes and are not a reading of this fix.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_variant_string_temp_leaks.pas $(TESTTMP)/vstl_aarch64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_variant_string_temp_leaks.pas $(TESTTMP)/vstl_aarch64_x64
+	tools/expect_same.sh aarch64/test_variant_string_temp_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/vstl_aarch64)" "$$($(TESTTMP)/vstl_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/variant_string_temp 50 tools/run_target.sh aarch64 $(TESTTMP)/vstl_aarch64
+	tools/assert_no_leak.sh x86-64/variant_string_temp 50 $(TESTTMP)/vstl_aarch64_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
 	# NON-object raise must not be freed at all. Both arms live in one
 	# program because they failed in opposite directions: the leak fix that
