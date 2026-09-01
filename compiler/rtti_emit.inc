@@ -1624,19 +1624,34 @@ begin
       if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
         baseTypeRef := UClsRTTIOff[subCi] - (hdr + 16);
     end
-    else if (baseKind = 4) or (baseKind = 5) or (baseKind = 6) then
+    else if baseKind = 4 then
       { COM interface elements: the SAME word carries the interface id rather
         than a relative offset to a sub-descriptor — the discriminated slot a
         class layout descriptor's kind-4 member already uses (see mKind = 4
         above). builtinheap's walks read it back through baseRecDesc.
 
-        KINDS 5 AND 6 RIDE THE SAME SLOT, carrying the element STRIDE, and this
-        arm used to test `= 4` alone — so a local `array of Variant` emitted
-        baseTypeRef 0, the walk read a stride of zero, and its `elSize > 0`
-        guard (which exists for exactly this) declined to walk. Measured: 1500
-        trips, allocs=4274 frees=1424 live=2850, two variants leaked per trip.
-        ManagedElemRef already returned the right thing for all three; only
-        this test was narrow. }
+        KINDS 5 AND 6 RIDE THE SAME SLOT TOO, carrying the element STRIDE,
+        and on the face of it this arm should cover them: with baseTypeRef 0 a
+        local `array of Variant` makes the walk read a stride of zero, its
+        `elSize > 0` guard declines, and the elements leak — measured at 1500
+        trips as allocs=4274 frees=1424 live=2850, two variants per trip.
+        ManagedElemRef already returns the right stride for all three.
+
+        IT STAYS AT KIND 4 ANYWAY, and the reason is not in this file. x86-64
+        does not call PXXDynSetLen; it inlines SetLength (ir_codegen.inc,
+        IR_SETLEN_DYN), and that sequence's RETAIN chain has arms for depth>1,
+        kind 1 and kind 4 and then an unguarded `else` that assumes RECORD.
+        Kinds 5 and 6 fall into that else and get a record walk on an id that
+        is not a record — no retain at all — while the release it calls
+        immediately after is PXXDynArrayRelease, which DOES have kind 5 and 6
+        arms. Emitting the stride here turns that asymmetry from a leak into a
+        DOUBLE FREE. Measured: test_promoint_array_cleanup segfaulted, reduced
+        to `SetLength(a,4); fill; SetLength(a,8); read a[3]; SetLength(a,2)`
+        handing back a reused block on the second trip (got=0000000003).
+
+        The stride and the retain arms are correct only as a PAIR. Widen this
+        on the day ir_codegen.inc grows kind 5 and 6 retain arms, not before:
+        bug-a-x86-64-inline-setlength-never-retains-promo-or-variant-elements. }
       baseTypeRef := ManagedElemRef(AnonDynArrayBaseTk[i], AnonDynArrayBaseRec[i]);
     PatchDataI32(hdr + 16, baseTypeRef);
   end;
