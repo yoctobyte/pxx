@@ -1343,10 +1343,35 @@ begin
           mHdr := hdr + 12 + k * 16;
           PatchDataI32(mHdr + 0, UFldOff_[fi]); { Offset }
 
-          if UFldTk[fi] = Ord(tyAnsiString) then
-            mKind := 1
-          else if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then
+          { ARRAY-NESS FIRST. UFldTk of an array field is its ELEMENT type, so
+            asking `= tyAnsiString` before asking `is this a dyn array` claims
+            `v: array of AnsiString` is a plain String member. The descriptor
+            then describes the array HANDLE as a string, and PXXRecordRelease's
+            kind-1 arm runs PXXStrDecRef on it: that decrements the word at the
+            array's refcount offset and frees the array BLOCK, so it looks like
+            it worked -- exactly one free per record -- while the elements are
+            never walked and every string in the array leaks.
+
+            Measured: a record local holding `array of AnsiString`, 1500 trips,
+            allocs=3000 frees=1499 live=1501 -- one free per iteration, the
+            array, never the string. The leaked count scales with the ELEMENT
+            count (3 elements per array leaked 3 per trip), which is what
+            identifies the elements rather than the array as the survivors.
+
+            `array of TE` where TE is a record with a string was always FINE,
+            and that inversion is the tell: tyRecord does not match the string
+            test, so it fell through to the dyn-array arm and got a correct
+            kind-3 element walk. One element kind was broken because one element
+            kind collided with an earlier branch.
+
+            This is the ORDER hazard ManagedElemKind's own header warns about
+            for interface-before-record, in a second pair. A FIXED-length array
+            of strings still lands on the string arm below and is still correct:
+            arrCount carries its length and the walk strides by pointer size. }
+          if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then
             mKind := 2
+          else if UFldTk[fi] = Ord(tyAnsiString) then
+            mKind := 1
           else if FieldIsComInterface(fi) then
             mKind := 4
           else
@@ -1462,10 +1487,14 @@ begin
             mHdr := hdr + 12 + k * 16;
             PatchDataI32(mHdr + 0, UFldOff_[fi]); { Offset (absolute in instance) }
 
-            if UFldTk[fi] = Ord(tyAnsiString) then
-              mKind := 1
-            else if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then
+            { Array-ness FIRST -- the class-layout twin of the record-layout
+              ordering above, same reason, same bug. Grepped for it rather than
+              fixing one arm: `array of AnsiString` was misdescribed as a String
+              member in BOTH descriptor writers. }
+            if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then
               mKind := 2
+            else if UFldTk[fi] = Ord(tyAnsiString) then
+              mKind := 1
             else if FieldIsComInterface(fi) then
               mKind := 4
             else if UFldTk[fi] = Ord(tyVariant) then

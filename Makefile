@@ -14257,6 +14257,26 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_open_array_managed_field_record "$$(tools/run_target.sh i386 $(TESTTMP)/oamfr_i386)" "$$($(TESTTMP)/oamfr_i386_x64)"
 	tools/assert_no_leak.sh i386/dynarray_ownership 50 tools/run_target.sh i386 $(TESTTMP)/dao_i386
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_i386_x64
+	# A dyn array of AnsiString held as a FIELD released the array and
+	# leaked every string in it: UFldTk of an array field is its ELEMENT
+	# type, and both descriptor writers asked `= tyAnsiString` before
+	# asking `is this a dyn array`, so the array HANDLE was described as a
+	# plain String member. PXXStrDecRef on it freed the array BLOCK -- one
+	# free per record, so it looked like it worked -- and never walked the
+	# elements. The differential row cannot see this: the descriptor is
+	# shared, every backend leaked identically, and the output is
+	# byte-identical either way. Only the absolute bound catches it.
+	# The `fixed` and `recelem` arms are controls, not coverage: recelem
+	# always passed (tyRecord does not collide with the string test) and
+	# fixed is what a careless REORDER of that branch would break.
+	# No xtensa row: dynamic arrays do not link there at all (the runtime
+	# pulls calloc) -- see bug-s-exceptions-do-not-link-on-xtensa..., which
+	# is the same gap and is not exception-specific.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_i386
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_i386_x64
+	tools/expect_same.sh i386/test_managed_dynarray_field_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/mdf_i386)" "$$($(TESTTMP)/mdf_i386_x64)"
+	tools/assert_no_leak.sh i386/managed_dynarray_field 50 tools/run_target.sh i386 $(TESTTMP)/mdf_i386
+	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_i386_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
 	# NON-object raise must not be freed at all. Both arms live in one
 	# program because they failed in opposite directions: the leak fix that
@@ -14837,6 +14857,26 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_open_array_managed_field_record "$$(tools/run_target.sh aarch64 $(TESTTMP)/oamfr_a64)" "$$($(TESTTMP)/oamfr_a64_x64)"
 	tools/assert_no_leak.sh aarch64/dynarray_ownership 50 tools/run_target.sh aarch64 $(TESTTMP)/dao_a64
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_a64_x64
+	# A dyn array of AnsiString held as a FIELD released the array and
+	# leaked every string in it: UFldTk of an array field is its ELEMENT
+	# type, and both descriptor writers asked `= tyAnsiString` before
+	# asking `is this a dyn array`, so the array HANDLE was described as a
+	# plain String member. PXXStrDecRef on it freed the array BLOCK -- one
+	# free per record, so it looked like it worked -- and never walked the
+	# elements. The differential row cannot see this: the descriptor is
+	# shared, every backend leaked identically, and the output is
+	# byte-identical either way. Only the absolute bound catches it.
+	# The `fixed` and `recelem` arms are controls, not coverage: recelem
+	# always passed (tyRecord does not collide with the string test) and
+	# fixed is what a careless REORDER of that branch would break.
+	# No xtensa row: dynamic arrays do not link there at all (the runtime
+	# pulls calloc) -- see bug-s-exceptions-do-not-link-on-xtensa..., which
+	# is the same gap and is not exception-specific.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_aarch64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_aarch64_x64
+	tools/expect_same.sh aarch64/test_managed_dynarray_field_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64)" "$$($(TESTTMP)/mdf_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/managed_dynarray_field 50 tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64
+	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_aarch64_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
 	# NON-object raise must not be freed at all. Both arms live in one
 	# program because they failed in opposite directions: the leak fix that
@@ -15454,6 +15494,26 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/test_open_array_managed_field_record "$$(tools/run_target.sh riscv32 $(TESTTMP)/oamfr_rv32)" "$$($(TESTTMP)/oamfr_rv32_x64)"
 	tools/assert_no_leak.sh riscv32/dynarray_ownership 50 tools/run_target.sh riscv32 $(TESTTMP)/dao_rv32
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_rv32_x64
+	# A dyn array of AnsiString held as a FIELD released the array and
+	# leaked every string in it: UFldTk of an array field is its ELEMENT
+	# type, and both descriptor writers asked `= tyAnsiString` before
+	# asking `is this a dyn array`, so the array HANDLE was described as a
+	# plain String member. PXXStrDecRef on it freed the array BLOCK -- one
+	# free per record, so it looked like it worked -- and never walked the
+	# elements. The differential row cannot see this: the descriptor is
+	# shared, every backend leaked identically, and the output is
+	# byte-identical either way. Only the absolute bound catches it.
+	# The `fixed` and `recelem` arms are controls, not coverage: recelem
+	# always passed (tyRecord does not collide with the string test) and
+	# fixed is what a careless REORDER of that branch would break.
+	# No xtensa row: dynamic arrays do not link there at all (the runtime
+	# pulls calloc) -- see bug-s-exceptions-do-not-link-on-xtensa..., which
+	# is the same gap and is not exception-specific.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_riscv32
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_riscv32_x64
+	tools/expect_same.sh riscv32/test_managed_dynarray_field_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/mdf_riscv32)" "$$($(TESTTMP)/mdf_riscv32_x64)"
+	tools/assert_no_leak.sh riscv32/managed_dynarray_field 50 tools/run_target.sh riscv32 $(TESTTMP)/mdf_riscv32
+	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_riscv32_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
 	# NON-object raise must not be freed at all. Both arms live in one
 	# program because they failed in opposite directions: the leak fix that
@@ -16963,6 +17023,26 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_open_array_managed_field_record "$$(tools/run_target.sh arm32 $(TESTTMP)/oamfr_a32)" "$$($(TESTTMP)/oamfr_a32_x64)"
 	tools/assert_no_leak.sh arm32/dynarray_ownership 50 tools/run_target.sh arm32 $(TESTTMP)/dao_a32
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_a32_x64
+	# A dyn array of AnsiString held as a FIELD released the array and
+	# leaked every string in it: UFldTk of an array field is its ELEMENT
+	# type, and both descriptor writers asked `= tyAnsiString` before
+	# asking `is this a dyn array`, so the array HANDLE was described as a
+	# plain String member. PXXStrDecRef on it freed the array BLOCK -- one
+	# free per record, so it looked like it worked -- and never walked the
+	# elements. The differential row cannot see this: the descriptor is
+	# shared, every backend leaked identically, and the output is
+	# byte-identical either way. Only the absolute bound catches it.
+	# The `fixed` and `recelem` arms are controls, not coverage: recelem
+	# always passed (tyRecord does not collide with the string test) and
+	# fixed is what a careless REORDER of that branch would break.
+	# No xtensa row: dynamic arrays do not link there at all (the runtime
+	# pulls calloc) -- see bug-s-exceptions-do-not-link-on-xtensa..., which
+	# is the same gap and is not exception-specific.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_arm32
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_arm32_x64
+	tools/expect_same.sh arm32/test_managed_dynarray_field_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/mdf_arm32)" "$$($(TESTTMP)/mdf_arm32_x64)"
+	tools/assert_no_leak.sh arm32/managed_dynarray_field 50 tools/run_target.sh arm32 $(TESTTMP)/mdf_arm32
+	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_arm32_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
 	# NON-object raise must not be freed at all. Both arms live in one
 	# program because they failed in opposite directions: the leak fix that
