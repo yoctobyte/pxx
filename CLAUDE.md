@@ -381,9 +381,14 @@ earlier. The instrument answers "are there uncommitted edits" and gets read as
 "has this session done anything". Ask the right question instead —
 `git log origin/master --grep=<the session's Claude-Session URL>` — and note
 the URL DOES discriminate (verified: two sessions, two ids), while
-`Co-Authored-By` does not, because every agent shares it. **But NOTHING MAPS A
-SESSION NAME TO ITS ID**, and an id changes when a session restarts, so this
-only works if you already hold that session's id — **ASK IT.** Do not fall back
+`Co-Authored-By` does not, because every agent shares it. **Nothing in the COMMIT maps
+an id to a session name**, and an id changes when a session restarts — but the
+mapping is recoverable without asking, because each session commits in its own
+checkout first: `git -C ~/<name> reflog --format='%h %gs' | grep '^<sha> commit'`
+names the tree that CREATED it. Plain reflog membership does NOT discriminate —
+every pull walks a sha through every checkout's HEAD — so match on the `commit`
+entry, not on presence. Verified 2026-09-02: seven of eight shas in one arc,
+one checkout, one id. Do not fall back
 to attributing by timing and topic: that produced the false alarm above, and it
 produced a second one the same night, hours later, by this rule's own author.
 
