@@ -3860,6 +3860,17 @@ var
   capHandle: array[0..MAX_PFCAP-1] of Boolean;  { dyn array / ansistring: value at frame slot is a HANDLE (needs an extra deref) }
   capCount, ci, absOff, ptrCastOff, niCastOff, pniOff: Integer;
   found: Boolean;
+  { PRIVATE variables: the control variable of a `for` loop INSIDE the body.
+    Each worker gets its own local, never a capture and never a shared global --
+    see the note beside the pre-scan below. }
+  privN, pk: Integer;
+  privSi   : array[0..MAX_PFCAP-1] of Integer;
+  privNmOff: array[0..MAX_PFCAP-1] of Integer;
+  privNmLen: array[0..MAX_PFCAP-1] of Integer;
+  privKwOff: array[0..MAX_PFCAP-1] of Integer;
+  privKwLen: array[0..MAX_PFCAP-1] of Integer;
+  privTypeTok: array[0..MAX_PFCAP-1] of TTokenKind;
+  privNm: AnsiString;
   policyNode, ppiP, a5, polAddr: Integer; hasPolicy: Boolean;
   { named-arg policy clause `parallel(dist pdX, cap N, ...)` -> constant-folded to
     five ints passed to PXXParallelForN. }
@@ -4060,12 +4071,87 @@ begin
     worker at `ctx + Syms[si].Offset`. A non-scalar capture (record/class/array/
     string) is a clear error until Phase B. }
   scopeBase := Procs[CurProc].ScopeBase;
+
+  { --- PRIVATE PRE-SCAN: `for <ident> :=` anywhere in the body ---
+    A loop's control variable is written by the loop, so N workers sharing one
+    is a race by construction. Both spellings that reached users were broken and
+    only one of them said so:
+
+      for j := 1 to 3 do ...     j an enclosing local -> captured -> the body
+                                 became `for j^ := 1 to 3`, which the grammar
+                                 refuses. That refusal is the reported bug, and
+                                 it was the only thing protecting the program.
+      j := 0; while j < 3 do     the same capture, spelled so the grammar allows
+                                 it. Compiles, and 100000x3 increments came back
+                                 299674 / 299015 / 295718 across runs.
+      for g := 1 to 3 do ...     g a GLOBAL, so not captured at all. Compiles,
+                                 and HANGS: a worker resetting g to 1 keeps the
+                                 others' loops alive.
+
+    So the control variable of an inner `for` becomes a worker-private local,
+    whatever its storage was outside. That is what OpenMP does with the loop
+    variables of loops inside a parallel region, and it is the only reading
+    under which the three rows above agree. A variable a worker merely WRITES
+    (the `while` shape) is still shared and still racy -- that needs an explicit
+    clause, feature-a-a-private-clause-for-parallel-for.
+    bug-a-a-nested-for-loop-in-a-parallel-for-body-is-a-compile-error }
+  privN := 0;
+  for i := bodyStart to bodyEnd - 3 do
+    if (Tokens[i].Kind = tkFor) and (Tokens[i+1].Kind = tkIdent) and
+       (Tokens[i+2].Kind = tkAssign) then
+    begin
+      privNm := GetTokenStrFromRaw(Tokens[i+1].SOffset, Tokens[i+1].SLen);
+      if CaseEqual(privNm, Vname) then
+        Error('parallel for: the body reuses the loop variable ''' + privNm
+            + ''' as an inner `for` control variable');
+      si := FindSym(privNm);
+      if si < 0 then Continue;               { undeclared: let the worker report it }
+      found := False;
+      for j := 0 to privN - 1 do
+        if privSi[j] = si then begin found := True; Break; end;
+      if found then Continue;
+      if privN >= MAX_PFCAP then Error('parallel for: too many private loop variables');
+      kw := '';
+      if (not Syms[si].IsArray) and (SymDynDepth[si] = 0) then
+        kw := PFScalarKw(Syms[si].TypeKind);
+      if kw = '' then
+      begin
+        ErrorIdent := privNm;
+        Error('parallel for: ''' + privNm + ''' is an inner `for` control '
+            + 'variable, so each worker needs a private copy, and its type is '
+            + 'not a scalar this can declare');
+      end;
+      privSi[privN] := si;
+      privNmOff[privN] := NestStrOff(privNm);
+      privNmLen[privN] := Length(privNm);
+      privKwOff[privN] := NestStrOff(kw);
+      privKwLen[privN] := Length(kw);
+      { the private local needs the type's KEYWORD token where one exists -- the
+        same rule the reduction accumulators below follow, and for the same
+        reason: a bare tkIdent('Integer') does not resolve as a named type. }
+      case Syms[si].TypeKind of
+        tyInteger, tyInt32: privTypeTok[privN] := tkInteger_T;
+        tyBoolean:          privTypeTok[privN] := tkBoolean_T;
+        tyChar:             privTypeTok[privN] := tkChar_T;
+        tyUInt32:           privTypeTok[privN] := tkLongWord_T;
+        tySingle:           privTypeTok[privN] := tkSingle_T;
+        tyDouble:           privTypeTok[privN] := tkDouble_T;
+      else                  privTypeTok[privN] := tkIdent;
+      end;
+      Inc(privN);
+    end;
+
   capCount := 0;
   for i := bodyStart to bodyEnd - 1 do
     if Tokens[i].Kind = tkIdent then
     begin
       capNm := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
       if CaseEqual(capNm, Vname) then Continue;
+      found := False;
+      for pk := 0 to privN - 1 do
+        if CaseEqual(capNm, GetTokenStrFromRaw(privNmOff[pk], privNmLen[pk])) then
+          begin found := True; Break; end;
+      if found then Continue;                { private: the worker declares its own }
       if (i > bodyStart) and (Tokens[i-1].Kind = tkDot) then Continue;   { qualified field }
       si := FindSym(capNm);
       if (si < 0) or (si < scopeBase) then Continue;                     { global / not a capture }
@@ -4228,6 +4314,16 @@ begin
     PFStash(tkSemicolon, 0, 0, ln);
   end;
   { reduction: private accumulators `__pfred<K> : <type> ;` }
+  for pk := 0 to privN - 1 do
+  begin
+    PFStash(tkIdent, privNmOff[pk], privNmLen[pk], ln);
+    PFStash(tkColon, 0, 0, ln);
+    if privTypeTok[pk] = tkIdent then
+      PFStash(tkIdent, privKwOff[pk], privKwLen[pk], ln)
+    else
+      PFStash(privTypeTok[pk], 0, 0, ln);
+    PFStash(tkSemicolon, 0, 0, ln);
+  end;
   for rk := 0 to redN - 1 do
   begin
     PFStash(tkIdent, red0OffA[rk], 8, ln);   { __pfred<K> }

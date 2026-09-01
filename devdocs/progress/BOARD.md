@@ -87,7 +87,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (141)
+## backlog-core (140)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -99,7 +99,6 @@ _none_
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
 | bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine | A | 65 | bug | A thread pxx did not create — a libc pthread, or any thread a linked C library starts — never runs the __pxxclone stub that carves and installs a per-thread TLS block, so it INHERITS its creator's gs and every `gs:` slot it touches is the creator's. Measured: gs_base is BSS_TLS_MAIN on all five threads of test_multithreading. The CRASH this caused is fixed (ba2682d2f made the heap magazine's guard atomic, so a shared magazine is correct); what is left is that the TLS block is not per-thread for foreign threads, which is a design question and touches every slot, not just the magazine. | — |
 | bug-a-a-fresh-array-result-has-no-owner-as-a-copy-or-concat-operand | A | 8 | bug | a fresh dyn-array call result used as a Copy() or `+` operand is never released — the whole array leaks, one per operand per evaluation, and the obvious park fix segfaults on non-managed element types | — |
-| bug-a-a-nested-for-loop-in-a-parallel-for-body-is-a-compile-error | A | 55 | bug | `parallel for` refuses a body containing an ordinary `for` loop — `error: expected ':='`, reported against lib/rtl/palthread.pas rather than the user's file. Measured boundary: `for` and `for ... downto` are the ONLY refused shapes; while, repeat, if, case and a nested begin/end all compile. The worker is synthesized by replaying captured tokens (PFStash, pasparser_stmt.inc ~3744-4330), and the inner loop's `:=` appears to be missing from the replay, so the defect is in the body token capture, not in the lowering. | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized | A | 40 | bug | AllocParam decides a by-value record parameter's slot size from RecSize(LastTypeRecId), and LastTypeRecId is REC_NONE for 41 of the 52 record parameters in compiler.pas. RecSize(REC_NONE) is the 8-byte fallback, so the `RecSize(..) <= 8` test that chooses between an inline record slot and a pointer slot is a CONSTANT TRUE for those 41 — the branch's comment describes a decision it is not making. Not a miscompile: every later answer is <= the 8 it reserves, so the slot is over-allocated by up to 4 bytes on a 32-bit target and never under-read. What it costs is that the rule cannot be reasoned about, and it is the input half of the ticket that renamed ParamSize. | — |
 | bug-a-a-refcount-test-passes-at-o2-and-fails-at-o0-and-o1 | A | 60→85 | bug | `test_threadsafe_refcount_lockfree` prints TSRCLOCKFREE FAILED at -O0 and -O1 and TSRCLOCKFREE OK at -O2 and -O3, with rc=0 every time — a silent wrong answer that changes with the optimisation level. Two rows: a string literal's handle is not born saturated, and its count is not bit-identical after SetLength churn. Both levels must be correct, so one of the two answers is a bug and it is not yet established which. Invisible until 2026-09-01 because the program did not build under optdiff at all and the -O2 arm was comparing -O2 against -O2. | — |
@@ -160,7 +159,7 @@ _none_
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 15 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | compat-pascal-overload-prefers-signed-for-an-unsigned-argument | A | 12 | compat | Overload resolution picks the signed arm for an unsigned argument | — |
-| feature-a-a-private-clause-for-parallel-for | A | 25 | feature | `parallel for` has `reduction(op: v)` and nothing else, so a captured local the body ASSIGNS cannot be made per-worker. That is not a defect -- docs/library/concurrency.md documents capture-by-reference and says an unguarded shared write is a data race -- but it means a whole class of loop body cannot be written at all: the natural `s := ''; SetLength(s, 8); use(s)` scratch variable has no race-free spelling with a captured scalar. A `private(v)` clause giving each worker its own copy (initialised empty/zero, discarded at the end) would close it; the reduction machinery already builds exactly this, a per-worker private plus a combine, so private is that minus the combine. | — |
+| feature-a-a-private-clause-for-parallel-for | A | 50 | feature | `parallel for` has `reduction(op: v)` and nothing else, so a captured local the body ASSIGNS cannot be made per-worker. That is not a defect -- docs/library/concurrency.md documents capture-by-reference and says an unguarded shared write is a data race -- but it means a whole class of loop body cannot be written at all: the natural `s := ''; SetLength(s, 8); use(s)` scratch variable has no race-free spelling with a captured scalar. A `private(v)` clause giving each worker its own copy (initialised empty/zero, discarded at the end) would close it; the reduction machinery already builds exactly this, a per-worker private plus a combine, so private is that minus the combine. | — |
 | feature-a-a-refusal-is-a-claim-with-a-date-on-it | A | 35 | feature |  | — |
 | feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile | A+S | 35 | feature | xtensa is the only hosted target with NO signal runtime — EmitSignalRuntimeForTarget has arms for five arches and falls through for xtensa, on purpose, because `FreeRTOS is not a Unix`. That rationale was written before the hosted xtensa profile existed, and under --platform=posix xtensa IS a Unix running on Linux via qemu. Not the 8-line IR_SET_SIGNAL port it looks like: the arm depends on a ~155-line runtime that does not exist. Unblocks 4 programs, not 1, because the three SA_SIGINFO refusals are gated on the same fact. | — |
 | feature-a-a-variant-has-no-null-tag | A | 45 | feature | pxx has one no-value variant tag (VT_EMPTY), so VarIsNull and VarIsEmpty are the same question and `v := Null; VarIsEmpty(v)` answers True where FPC says False. variants.pas states the approximation in its header and asks for a ticket rather than a silent guess — this is that ticket. A VT_NULL tag is a compiler change, and decide-variant-tag-space-is-a-language-wide-commitment already settled that the tag space is Track A\'s to renumber freely. | — |
@@ -853,9 +852,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3077)
+## done (3078)
 
-3077 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3078 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -996,7 +995,6 @@ _none_
 - [p 55] [M] feature-port-windows-pe (unblocks 3)
 - [p 55] [U] decide-the-utf16-payload-fact-is-spelled-twice-kind-widestr-and-enc-ucs2 (unblocks 1)
 - [p 55] [T] feature-t-freebsd-image-and-runner (unblocks 1)
-- [p 55] [A] bug-a-a-nested-for-loop-in-a-parallel-for-body-is-a-compile-error
 - [p 55] [B] bug-b-fprecv-and-fpsend-silently-discard-their-flags-argument
 - [p 55] [C] bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead [parked — re-claim, do not duplicate]
 - [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
@@ -1061,6 +1059,7 @@ _none_
 - [p 50] [T] chore-t-fpc-conformance-noise-skews-priority
 - [p 50] [U] decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
+- [p 50] [A] feature-a-a-private-clause-for-parallel-for
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] bug-a-a-c-headers-variadic-tail-is-dropped-on-import
 - [p 45] [A] bug-a-a-cloned-thread-has-no-sigaltstack-so-its-stack-overflow-is-unhandleable
@@ -1318,7 +1317,6 @@ _none_
 - [p 25] [U] decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one
 - [p 25] [U] decide-t-should-a-skip-close-an-open-regression
 - [p 25] [U] decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner
-- [p 25] [A] feature-a-a-private-clause-for-parallel-for
 - [p 25] [A] feature-a-an-extern-only-variable-still-reserves-its-storage
 - [p 25] [A] feature-a-the-pascal-reduced-build-must-be-able-to-seed-the-full-compiler
 - [p 25] [A] feature-dynamic-include-paths-config

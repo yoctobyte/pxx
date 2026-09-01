@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 25
+prio: 50
 type: feature
 status: open
 found: 2026-08-31
@@ -46,3 +46,34 @@ Two questions to settle when someone picks this up, neither blocking:
   (`only scalar variables are supported (not dyn-array/string)`). `private` has
   no such excuse — a private AnsiString is the motivating case — so it needs a
   per-worker release at loop end.
+
+## Raised 25 → 50 on 2026-09-02: it is not "cannot be written", it is "quietly wrong"
+
+Filed as a missing capability — a scratch variable with no race-free spelling.
+Measured while fixing
+[[bug-a-a-nested-for-loop-in-a-parallel-for-body-is-a-compile-error]], the same
+shape also COMPILES and returns a short answer:
+
+```pascal
+parallel(pdChunked) for i := 0 to n - 1 reduction(+: acc) do
+begin
+  j := 0;                                    { j: an enclosing local }
+  while j < 3 do begin acc := acc + 1; j := j + 1; end;
+end;
+```
+
+n = 100000, so `acc` must be 300000. Five runs: **299674, 299015, 295718,
+298575, 296181.** Every worker increments the same `j` through the same
+pointer, so iterations are lost, and nothing anywhere says so.
+
+The docs are not wrong — concurrency.md does say capture is by reference and an
+unguarded shared write is a race — but a documented trap that produces a
+plausible number is the expensive kind. The sibling `for` spelling used to be a
+compile error, which at least sent people looking; it is now correct, and that
+removes the last signpost pointing at this.
+
+The inner-`for` fix builds most of what is needed: a pre-scan that names
+variables needing a per-worker copy, a private declaration in the worker's own
+`var` section with the right type token, and exclusion from the capture list so
+no `^` is appended. `private(v, ...)` is that machinery driven by a clause
+instead of by the `for <ident> :=` pattern.

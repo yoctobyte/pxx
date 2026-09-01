@@ -4810,6 +4810,18 @@ test-threads: $(COMPILER)
 	# exact deterministic +/xor results (a race would flake the sum).
 	./$(COMPILER) --threadsafe test/test_parallel_reduction.pas $(TESTTMP)/test_parallel_reduction26
 	tools/expect_same.sh test_parallel_reduction26 "$$($(TESTTMP)/test_parallel_reduction26)" "PARRED OK"
+	# a `for` INSIDE a parallel-for body. The control variable of a loop is
+	# written by the loop, so N workers sharing one is a race by construction,
+	# and all three spellings were broken: a captured local was rewritten to
+	# `for j^ :=` and REFUSED (which was the only thing protecting the program);
+	# the same capture spelled as a `while` compiled and came back 299674 for
+	# 300000; and a GLOBAL control variable compiled and HUNG. Inner `for`
+	# control variables are now worker-private, as in OpenMP. Exact totals: a
+	# race shows as a SHORT count.
+	./$(COMPILER) --threadsafe test/test_parallel_for_nested_for_body.pas $(TESTTMP)/test_pfnest26
+	tools/expect_same.sh test_pfnest26.1 "$$($(TESTTMP)/test_pfnest26 | tail -1)" "PARFOR NESTED FOR OK"
+	tools/expect_same.sh test_pfnest26.2 "$$($(TESTTMP)/test_pfnest26 | head -3 | tr '\n' '|')" "asc   300000|desc  300000|glob  300000|"
+	tools/expect_same.sh test_pfnest26.3 "$$($(TESTTMP)/test_pfnest26 | head -5 | tail -2 | tr '\n' '|')" "nest  600000|reuse 500000|"
 	# parallel(named args) for: bare enum / dist|workers keys / cap|chunk|n ints
 	# folded to PXXParallelForN; each form covers exactly once, composes w/ reduction.
 	./$(COMPILER) --threadsafe test/test_parallel_policy_named.pas $(TESTTMP)/test_parallel_policy_named26

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:7 backlog:5 backlog-umbrella:6 backlog-core:141 backlog-nilpy:97 backlog-tools:77 backlog-pascal:57 backlog-decide:26 backlog-libs:16 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3077 rejected:72`
+`working:5 unfinished:27 blocked:7 backlog:5 backlog-umbrella:6 backlog-core:140 backlog-nilpy:97 backlog-tools:77 backlog-pascal:57 backlog-decide:26 backlog-libs:16 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3078 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -55,7 +55,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 460, ranked
+## Ready — top 30 of 459, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [A]` bug-a-a-refcount-test-passes-at-o2-and-fails-at-o0-and-o1 (unblocks 1)
@@ -88,4 +88,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [A]` feature-a-fold-the-consensus-dead-branch-core-at-every-level
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 
-_430 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_429 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
