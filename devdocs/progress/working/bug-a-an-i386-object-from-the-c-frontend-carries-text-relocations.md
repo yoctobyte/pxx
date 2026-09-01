@@ -8,7 +8,7 @@ blocked-by: []
 owner: frankC
 created: 2026-09-01
 found-by: frankA (while adding .init_array to the i386 object writer; pre-existing, not caused by it)
-summary: "i386 --emit-obj output is POSITION-DEPENDENT: every .text relocation is absolute R_386_32, so linking gives `relocation in read-only section .text` and `creating DT_TEXTREL in a PIE`, and `-Wl,-z,text` refuses outright. It is the i386 twin of feature-a-x86-64-object-output-is-position-dependent (done) and the harder one, because i386 has no PC-relative data addressing. CENSUSED 2026-09-01 over three objects (C, Pascal, Pascal --threadsafe): 1482 sites, 24 distinct operand shapes, 0 unmatched, all targeting our OWN .data/.bss/.text -- there are no external symbol references in .text at all and intra-object calls already need no relocation. THE ADDRESSING HALF IS MECHANICAL: 12 of the 24 shapes are `mod=00 rm=101` and become [ebx+disp32] by `modrm := (modrm and $38) or $83`, one length-preserving expression covering 606 sites including the F0-prefixed lock cmpxchg; the rest are moffs (a1/a3, +1 byte), address-as-immediate (b8..bf -> lea, +1), push imm32 (-> push ebx; add [esp], +3, needs no scratch), and SIB-indexed (base 101 -> 011, same length). Every rewrite was assembled and disassembled, not reasoned about. WHAT REMAINS IS NOT ADDRESSING BUT THE BASE REGISTER: all 1482 rewrites assume ebx holds _GLOBAL_OFFSET_TABLE_, and today ebx is short-lived scratch (34 sites in IREmitNode386), is architecturally required by the int 0x80 helpers, and the census itself contains `mov ebx, <global>`. Reserve ebx (conventional, collides with the syscall helpers) vs esi/edi (no architectural conflict, collides with the string-op sequences) is the open phase-2 decision. Four of the 24 shapes appear ONLY in the --threadsafe object -- a census over the C object alone reports 19 shapes and looks just as clean."
+summary: "i386 --emit-obj output is POSITION-DEPENDENT: every .text relocation is absolute R_386_32, so linking gives `relocation in read-only section .text` and `creating DT_TEXTREL in a PIE`, and `-Wl,-z,text` refuses outright. It is the i386 twin of feature-a-x86-64-object-output-is-position-dependent (done) and the harder one, because i386 has no PC-relative data addressing. CENSUSED 2026-09-01 over three objects (C, Pascal, Pascal --threadsafe): 1482 sites, 24 distinct operand shapes, 0 unmatched, all targeting our OWN .data/.bss/.text -- there are no external symbol references in .text at all and intra-object calls already need no relocation. THE ADDRESSING HALF IS MECHANICAL: 12 of the 24 shapes are `mod=00 rm=101` and become [ebx+disp32] by `modrm := (modrm and $38) or $83`, one length-preserving expression covering 606 sites including the F0-prefixed lock cmpxchg; the rest are moffs (a1/a3, +1 byte), address-as-immediate (b8..bf -> lea, +1), push imm32 (-> push ebx; add [esp], +3, needs no scratch), and SIB-indexed (base 101 -> 011, same length). Every rewrite was assembled and disassembled, not reasoned about. WHAT REMAINS IS NOT ADDRESSING BUT THE BASE REGISTER: all 1482 rewrites assume ebx holds _GLOBAL_OFFSET_TABLE_, and today ebx is short-lived scratch (34 sites in IREmitNode386), is architecturally required by the int 0x80 helpers, and the census itself contains `mov ebx, <global>`. DECIDED: the base register is esi, on three measurements -- 0 R_386_PLT32 in any object (every external call goes through our own .data GOT slot, so ebx's only advantage, the PLT contract, is absent), esi is the least-used register in generated code (1292 vs ebx 3595), and decisively esi is NOT byte-addressable on i386, so it can never be wanted for the 360 `mov bl,[d32]` sites that reserving ebx would have had to relocate onto al/cl/dl. Four phases, with the test-emit-obj assertion row LAST. Four of the 24 shapes appear ONLY in the --threadsafe object -- a census over the C object alone reports 19 shapes and looks just as clean."
 ---
 
 # An i386 object from the C frontend carries text relocations
@@ -167,3 +167,73 @@ addressing half is mechanical once a base register exists.
 register at all: `push ebx; add dword [esp], d32@GOTOFF` is +3 bytes and
 clobbers nothing, which is better than `lea` into a register the emitter cannot
 know is free.
+
+## THE BASE REGISTER IS `esi`, AND IT WAS DECIDED BY MEASUREMENT (2026-09-01, frankC)
+
+The section above left "reserve `ebx` versus `esi`/`edi`" open and said the
+census did not decide it. Three measurements do, and none of them needed a
+Track U ticket.
+
+**1. `ebx` is conventional for exactly one reason, and that reason is absent
+here.** gcc reserves `%ebx` on i386 because the PLT's entry stubs are written
+to expect the GOT base there. We have no PLT:
+
+```
+R_386_PLT32 in c386.o, p386.o, p386ts.o:  0, 0, 0
+```
+
+Every external call is `ff 14 25 <d32>` — `call [d32]` through **our own GOT
+slot in `.data`**, which the ELF writer's comment already states outright. So
+the convention buys interoperability with a mechanism this backend does not
+use, and costs the collision below.
+
+**2. `esi` is the least-used register in generated code, by a factor of 2.8.**
+Counted over the `--threadsafe` Pascal object's `.text`:
+
+| eax | ebp | edx | esp | ecx | ebx | edi | **esi** |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 23036 | 10987 | 8928 | 8062 | 4759 | 3595 | 1521 | **1292** |
+
+**3. And this is the one that actually decides it: `esi` CANNOT BE WANTED for
+the largest class of sites.** i386 has no REX, so the byte-addressable
+registers are exactly `al/cl/dl/bl` (+ `ah/ch/dh/bh`) — `sil` and `dil` do not
+exist. 360 of the 1482 census sites are `88 1d` / `8a 1d`, byte moves through
+`bl`. Reserving `ebx` would mean relocating every one of them into `al`, `cl`
+or `dl` — the accumulator, the shift/second operand, and the 64-bit high half,
+all three of which are busier than `ebx` was. Reserving `esi` cannot ever
+create that pressure, **because no byte move can name `esi` in the first
+place.**
+
+That is the difference between "least used today" and "structurally cannot be
+wanted", and only the second one survives the backend growing. Points 1 and 2
+are reasons; point 3 is the argument.
+
+### What reserving `esi` still costs, stated plainly
+
+91 `esi` mentions in `ir_codegen386.inc`, all of the same short-lived shape as
+`ebx`'s (`mov esi, eax`, use, done — never live across an IR node). They are
+the string-compare and string-copy sequences, and each needs re-homing onto
+`edi` or a spill. **That is real work and it is not zero**; the claim here is
+only that it is the smallest of the three options and the only one that cannot
+regrow.
+
+### Phase order, and it is deliberately not the obvious one
+
+1. **Reserve `esi` and establish nothing.** Re-home the 91 sequences, prove the
+   six-target sweep is unchanged, land. `esi` is now dead but reserved. This
+   phase is verifiable on its own and touches no relocation.
+2. **Establish the GOT base** in the prologue (`call/pop` thunk +
+   `add $_GLOBAL_OFFSET_TABLE_`), save/restore `esi` as callee-saved, emit
+   `R_386_GOTPC`. Still no addressing change: the base is computed and unused,
+   so the object is byte-identical except for the prologue and it can be
+   diffed as such.
+3. **Convert the addressing**, family by family from the table above, watching
+   the `.text` absolute count fall from 1482. The ModRM family is one
+   expression and 606 sites; take it first because it is length-preserving.
+4. **Add the `test-emit-obj` i386 row** asserting `.text` carries no absolute
+   relocation — scoped by relocation SECTION as the x86-64 row is, so the
+   `.rel.init_array` entry against the `.text` symbol is not miscounted.
+
+**The row lands in phase 4, not phase 1.** The ticket already says why: a red
+assertion on a property that has never held costs Track T's signal for everyone
+and buys information this census already gives.
