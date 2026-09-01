@@ -4,6 +4,7 @@ track: A
 prio: 5
 summary: a COMPUTED string inside an `array of const` literal is never released — 937 per 1000 trips bare, 989 through Format, 900 for a function result; a named variable or a plain literal in the same position is clean. Survives 88e1ab536, so it is a third site in that family, not the same one
 tags: [memory-leak, array-of-const, format, temporaries]
+status: done
 ---
 
 ## Measured
@@ -64,3 +65,6 @@ predicate decides "this operand is already owned" rather than at one call site.
 argument node is `AN_IDENT`/`AN_FIELD`/`AN_INDEX`/`AN_DEREF`, and the bug fixed
 in `88e1ab536` was precisely that the shape stops describing what the lowering
 produced. Ask what the lowering emitted, not what the source looked like.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
