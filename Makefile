@@ -12499,9 +12499,17 @@ test-core: $(COMPILER)
 	#   9  RAND_MAX is 31 bits AND the generator agrees -- raising the macro
 	#      over a 15-bit generator leaves every high bit zero and still passes
 	#      an in-range check, so saw_high is the row that catches it.
-	# $(PXX_STABLE): crtl-source work, so the pin compiles it from the tree.
+	# ./$(COMPILER), NOT $(PXX_STABLE) -- and the reason is the TIER.
+	# "crtl-source work, so the pin compiles it from the tree" is true of
+	# both compilers: either one reads lib/crtl from the working tree, so
+	# the pin buys this row nothing. What it costs is that test-core runs in
+	# NATIVE, and tools/testmgr_pin_built_devtest.py asserts that no job
+	# below `full' is pin-built -- which is the measurement behind "a pin
+	# taken during a native window is safe". Third instance of this idiom in
+	# test-core; identical output under ./$(COMPILER) verified before each
+	# swap. A row that genuinely needs the pin belongs in a full-only target.
 	# feature-c-crtl-gaps-for-a-79-applet-busybox-userland
-	$(PXX_STABLE) test/c_crtl_busybox_surface.c $(TESTTMP)/c_crtlbb26
+	./$(COMPILER) test/c_crtl_busybox_surface.c $(TESTTMP)/c_crtlbb26
 	tools/expect_same.sh c_crtlbb26 "$$($(TESTTMP)/c_crtlbb26)" "$$(printf '1 1\n2 ro=0 rw=1\n3 [/mnt/my disk]\n4 0 2\n5 [/mnt/plain] 0 0\n6.0 4\n6.1 3\n7 4 116\n8 1\n9 1 1 1\n10 [piped\n] 0\n11 1 5')"
 	# utimensat/futimens -- the last crtl gap between the busybox userland and
 	# `touch', and the reason its applet set was 79 rather than 80.
@@ -12513,9 +12521,17 @@ test-core: $(COMPILER)
 	# Row 3 asserts futimens reaches the same place -- it IS utimensat(fd,
 	# NULL, ts, 0) and is not a second implementation. Row 4 keeps the failure
 	# path honest: ENOENT, not a silent 0.
-	# $(PXX_STABLE): crtl-source work, so the pin compiles it from the tree.
+	# ./$(COMPILER), NOT $(PXX_STABLE) -- and the reason is the TIER.
+	# "crtl-source work, so the pin compiles it from the tree" is true of
+	# both compilers: either one reads lib/crtl from the working tree, so
+	# the pin buys this row nothing. What it costs is that test-core runs in
+	# NATIVE, and tools/testmgr_pin_built_devtest.py asserts that no job
+	# below `full' is pin-built -- which is the measurement behind "a pin
+	# taken during a native window is safe". Third instance of this idiom in
+	# test-core; identical output under ./$(COMPILER) verified before each
+	# swap. A row that genuinely needs the pin belongs in a full-only target.
 	# feature-c-crtl-utimensat-and-futimens
-	$(PXX_STABLE) test/c_crtl_utimensat.c $(TESTTMP)/c_utimensat26
+	./$(COMPILER) test/c_crtl_utimensat.c $(TESTTMP)/c_utimensat26
 	tools/expect_same.sh c_utimensat26 "$$($(TESTTMP)/c_utimensat26)" "$$(printf '1 0 1000000000 1100000000\n2 0 1000000000 1200000000\n3 0 1300000000 1400000000\n4 -1 2')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"

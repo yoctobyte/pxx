@@ -80,7 +80,26 @@ begin
 
   Check(RC(shared) = 1, 'heap handle starts at rc=1');
   litRC0 := RC(lit);
-  Check(litRC0 >= $40000000, 'literal handle is born saturated');
+  { EITHER REPRESENTATION IS CORRECT AND THE LEVEL PICKS ONE. Since 440c822e6
+    the static-literal handle (a ready-made saturated header in the image, no
+    allocation and no copy) is emitted at -O2 AND ABOVE; below that the literal
+    becomes an ordinary refcounted heap copy, and EmitStaticLitHandle's
+    `if OptLevel < 2 then Exit` says so deliberately. The REPRESENTATION is
+    built at every level; only its USE is gated.
+
+    This row asserted saturation flatly, so the whole test printed
+    TSRCLOCKFREE FAILED at -O0/-O1 and OK at -O2/-O3, rc=0 in all four -- a
+    silent wrong answer that changed with the level, which is exactly the class
+    tools/optdiff.sh exists to catch. It was invisible until 2026-09-01 because
+    the program did not BUILD under that sweep (it needs --threadsafe) and the
+    sweep's -O2 arm was comparing -O2 against -O2.
+
+    What this test is FOR is that a literal handle is not corrupted by
+    concurrent churn, and that survives the representation split. So the rows
+    below assert the invariant both shapes must satisfy -- the count comes back
+    to where it started -- and this one only records which shape is in play. }
+  Check((litRC0 >= $40000000) or (litRC0 = 1),
+        'literal handle is either the static saturated block or one counted ref');
 
   acc := Hammer(N);
   Check(acc = Int64(N) * (44 + 23), 'every parallel copy saw an intact payload');
@@ -107,10 +126,16 @@ begin
       else if (i mod 3) = 1 then arr[i] := lit
       else arr[i] := shared;
   end;
-  Check(RC(lit) = litRC0, 'literal count still bit-identical after SetLength churn');
   Check(Length(shared) = 44, 'shared payload survived SetLength churn');
   SetLength(arr, 0);
   Check(RC(shared) = 1, 'heap handle back to rc=1 after the array dropped it');
+  { AFTER the array is dropped, not before. A saturated handle reads litRC0 at
+    both points; a counted one legitimately reads litRC0 + (elements holding it)
+    while the array is live, so comparing mid-churn asserted the -O2 shape
+    rather than the property. Here both shapes must agree, and a churn that
+    loses or double-counts a reference -- which is what a raced retain/release
+    looks like -- fails it under either. }
+  Check(RC(lit) = litRC0, 'literal count back where it started once the array dropped it');
 
   { The OK line is CONDITIONAL. An earlier draft printed it unconditionally and
     the positive control below caught that: a broken compiler produced `fail=2`

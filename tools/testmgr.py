@@ -342,7 +342,14 @@ CLASSES = {
     "selfhost":    {"est_mem": 782 << 20,  "timeout": 600},
     "corpus":      {"est_mem": 400 << 20,  "timeout": 1200},
     "conformance": {"est_mem": 256 << 20,  "timeout": 1200},
-    "opt":         {"est_mem": 800 << 20,  "timeout": 900},
+    # 1934 = the 1289 MB optdiff#shard0/12 actually peaked at on 2026-09-01,
+    # * 1.5, which is what mem_estimate_report() tells you to do when it catches
+    # a breach — and it caught this one on a COLD START, with no learned metric
+    # to admit the job on instead. The old 800 was under the real figure, so the
+    # scheduler was letting opt shards in on a promise the box did not have to
+    # keep. The peak moved because the shards now BUILD the threading programs
+    # they used to count as skips.
+    "opt":         {"est_mem": 1934 << 20, "timeout": 900},
     # T's own guard sweep: one recipe that runs ~130 devtest scripts in series.
     # Small (peak RSS 37 MB measured), but nowhere near unit-sized in TIME.
     # 600 = the 207s a full green pass took on plexus on 2026-09-01, tripled,

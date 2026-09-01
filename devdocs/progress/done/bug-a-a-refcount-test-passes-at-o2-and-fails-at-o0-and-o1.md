@@ -4,7 +4,7 @@ track: A
 prio: 60
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-01
 found-by: frankZ
 owner: unassigned
@@ -60,3 +60,51 @@ Two harness holes, both closed by `baae75b6b`:
 So the first shard run that could see this program at all is the one that
 found it. It blocks [[umbrella-one-full-tier-run-with-no-red-tier]] — optdiff
 lives in the `opt` tier, and `pin_is_green` requires every judged tier green.
+
+## Resolved — 2026-09-01, frankZ. The compiler is right and the TEST over-specified.
+
+`EmitStaticLitHandle` (`compiler/ir_codegen.inc:4374`) opens with
+`if OptLevel < 2 then Exit;`, and the paragraph above it says so at length: the
+static-literal handle — a ready-made saturated header already in the image, no
+allocation, no copy — is used at **-O2 and above, since `440c822e6` promoted it
+from -O3**. Below that a literal becomes an ordinary refcounted heap copy. The
+REPRESENTATION is emitted unconditionally at every level ("a pool that changed
+shape with the optimisation level would be two layouts to keep sound"); only
+its USE is gated. Both shapes are correct.
+
+Measured, `-O0` vs `-O2`, the same six-line probe:
+
+```
+-O0  ptr=136961851392032   (an mmap heap address)
+-O2  ptr=4265208           (a static address inside the image)
+```
+
+So `Check(litRC0 >= $40000000, 'literal handle is born saturated')` asserted an
+**-O2-only representation**, and with it the whole program printed
+`TSRCLOCKFREE FAILED` at -O0/-O1 and `OK` at -O2/-O3 with `rc=0` throughout.
+
+## What the rows now assert
+
+The test's purpose survives the split: a literal handle must not be corrupted
+by concurrent churn. That is checkable under either shape.
+
+- The birth row records WHICH shape is in play (`saturated` or `one counted
+  ref`) instead of demanding one.
+- The churn row moved to **after** `SetLength(arr, 0)`. A saturated handle
+  reads `litRC0` at both points; a counted one legitimately reads
+  `litRC0 + (elements holding it)` while the array is live, so comparing
+  mid-churn was asserting the -O2 shape rather than the property.
+
+**The moved row is not vacuous, and I measured that rather than assuming it.**
+Mid-churn, at -O0, `RC(lit)=22` against `litRC0=1` — 21 live array elements —
+so the post-drop equality is a real reconciliation of 21 retains against 21
+releases. At -O2 both readings are the saturated sentinel. A churn that loses
+or double-counts a reference, which is what a raced retain/release looks like,
+fails the row under either shape.
+
+Green at all five: DEFAULT, -O0, -O1, -O2, -O3 — `fail=0 TSRCLOCKFREE OK`.
+
+This was the umbrella's last wired blocker.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

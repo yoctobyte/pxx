@@ -1,6 +1,19 @@
 program test_heap_magazine_foreign_thread;
 
-{ THE FOREIGN THREAD IS THE WHOLE POINT. These workers come from libc's
+{$THREADSAFE ON}
+
+{ THE DIRECTIVE IS NOT DECORATION -- it is what makes running this program
+  WITHOUT --threadsafe an error instead of a crash. The workers come from libc,
+  so nothing here reaches __pxxclone, so nothing refuses the build: a bare
+  `pascal26 thisfile` compiles happily and then races six threads through an
+  allocator with no lock at all. Measured 2026-09-01 by tools/optdiff.sh, which
+  builds every program with no flags and RETRIES with --threadsafe only when the
+  build FAILS: shard 9 reported `rc 1 vs 139` on this file -- a wrong answer at
+  -O0 and a SIGSEGV above it, neither of which is about the compiler. The
+  directive turns that silent misuse into a diagnostic, which is the only signal
+  a harness can act on.
+
+  THE FOREIGN THREAD IS THE WHOLE POINT. These workers come from libc's
   pthread_create, not from __pxxclone, so none of them runs the clone stub in
   thread_emit.inc that carves and installs a per-thread TLS block -- each one
   simply INHERITS the main thread's gs. Measured 2026-09-01 with gdb on
