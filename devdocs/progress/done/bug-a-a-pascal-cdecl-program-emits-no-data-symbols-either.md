@@ -156,3 +156,36 @@ more, plus ~23 from the builtin runtime).
 
 ## Log
 - 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9a6b936ec.
+
+
+## Correction to the repro quoted above — it reads freed memory
+
+The `pg2` program in "Measured, by Track B" returns `PChar(GName + '/' +
+GTable[i])`, and the write-up reads its correct-looking output as evidence that
+"the globals are initialised, mutated and survive across calls". The output is
+correct; the reasoning is not, and the symbol-table finding the ticket was
+filed on does not depend on it.
+
+Re-measured 2026-09-01 at `a4c67a5e6cc8`, same source, same C main, one flag
+added:
+
+```
+$ ./compiler/pascal26 -Fulib/rtl --emit-obj pg2.pas pg2.o && gcc main.c pg2.o -o pg2 && ./pg2
+global-string!/a
+global-string!!/bb
+global-string!!!/ccc
+
+$ ./compiler/pascal26 -Fulib/rtl -dPXX_HEAP_DEBUG --emit-obj pg2.pas pg2d.o && ...
+<24 bytes of 0xDD>   (x3)
+```
+
+The concatenation is a TEMPORARY and the `PChar` points into it, so it dies at
+`return` under any ownership model — the first run prints correctly only
+because nothing has reused the block yet. Track B's string-ownership work
+(`b788c5865`, `IRParkManagedStr`) makes the lifetime of a managed string
+reaching a pointer destination scope exit rather than forever, which is
+plausibly why this now frees where it previously leaked; **not bisected here,
+and it is Track B's topic** — the mechanism above holds either way.
+
+Keep the shape out of interop examples: a `cdecl` routine returning `PChar` has
+to return a pointer the CALLER owns or one that outlives the call.
