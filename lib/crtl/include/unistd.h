@@ -42,6 +42,18 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset);
 int fsync(int fd);
 void sync(void);
 
+/* setsid(2) returns the new session id; getgroups(2) with size 0 returns the
+   count without touching the list. */
+int setsid(void);
+int getgroups(int size, gid_t list[]);
+
+/* getlogin_r/getlogin answer from LOGNAME, then USER, then the passwd entry
+   for the real uid -- NOT from utmp and the controlling terminal, which is
+   what glibc does and which pxx's targets have no way to provide. See
+   src/unistd.c. getlogin_r returns 0 or an errno value, never -1. */
+int getlogin_r(char *buf, size_t bufsize);
+char *getlogin(void);
+
 /* Descriptor duplication. dup picks the lowest free fd; dup2 forces newfd,
    closing it first if it was open. */
 int dup(int oldfd);

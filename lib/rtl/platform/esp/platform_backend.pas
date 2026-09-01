@@ -37,6 +37,9 @@ function PalBackendFstat(handle: Integer; var info: TPalFileStat): Integer;
 function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendSync: Integer;
+function PalBackendSetsid: Integer;
+function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
+function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
@@ -525,6 +528,26 @@ end;
 
 { FreeRTOS has no sync(2): there is no global buffer cache to flush, so this joins the deliberate-refusal set rather than pretending to succeed. }
 function PalBackendSync: Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendSetsid: Integer;
+{ FreeRTOS gives TASKS, not processes: there is no session and no process
+  group for setsid to create, and no supplementary-group list for getgroups to
+  report. Refusing is the honest answer -- see the 33 other deliberate refusals
+  in this file. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
+{ FreeRTOS has no settable system clock behind this interface; the RTC is set through IDF, not a syscall. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

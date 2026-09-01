@@ -24,6 +24,7 @@
 #include <stddef.h>
 #include <errno.h>
 #include <unistd.h>   /* read/write/close/lseek/pread/pwrite live there now */
+#include <sys/wait.h>
 /* vsscanf below delegates numeric conversions to strtol/strtod and skips
    whitespace with isspace. Include the crtl headers (not bare externs) so the
    auto-pull links their libc-free bodies (stdlib.c / ctype.c) — otherwise they
@@ -1044,6 +1045,74 @@ long ftell(FILE *stream) {
   return r;
 }
 
+/* fseeko/ftello: the off_t forms. Identical here -- this stdio has no buffer
+   to flush and __pxx_seek is already 64-bit -- but they are the ONLY spelling
+   that is correct on a 32-bit target, where `long' is 32 bits and off_t is
+   not, so a file past 2GB needs them. busybox's libbb/dump.c and
+   util-linux/hexdump_xxd.c call them. */
+int fseeko(FILE *stream, off_t off, int whence) {
+  long long r;
+  if (!stream) { errno = EINVAL; return -1; }
+  r = __pxx_seek(stream->fd, (long long)off, whence);
+  if (r < 0) { errno = (int)-r; stream->err = 1; return -1; }
+  stream->eof = 0;
+  return 0;
+}
+
+off_t ftello(FILE *stream) {
+  long long r;
+  if (!stream) { errno = EINVAL; return -1; }
+  r = __pxx_seek(stream->fd, 0, SEEK_CUR);
+  if (r < 0) { errno = (int)-r; stream->err = 1; return -1; }
+  return (off_t)r;
+}
+
+/* getdelim/getline (POSIX.1-2008). The buffer is grown with realloc and handed
+   back through the *lineptr and *n arguments so the caller may reuse it across
+   calls, and frees
+   it once at the end. *lineptr may start NULL with *n zero, which is how it is
+   almost always called.
+
+   WHAT IT RETURNS IS NOT strlen. The delimiter is KEPT, the result is
+   NUL-terminated, and the count is the number of bytes before that NUL -- so a
+   line holding an embedded NUL still reports its true length, which is the
+   whole reason this exists rather than fgets. -1 at end of file with nothing
+   read, and -1 on error; feof/ferror tell those apart, as usual. */
+ssize_t getdelim(char **lineptr, size_t *n, int delim, FILE *stream) {
+  size_t len = 0;
+  int c;
+
+  if (!lineptr || !n || !stream) { errno = EINVAL; return -1; }
+  if (!*lineptr || *n < 2) {
+    char *p = (char *)realloc(*lineptr, 128);
+    if (!p) { errno = ENOMEM; return -1; }
+    *lineptr = p;
+    *n = 128;
+  }
+  for (;;) {
+    c = fgetc(stream);
+    if (c < 0) break;
+    /* Room for this byte AND the terminator, always -- the +2 is the whole
+       invariant, and an off-by-one here writes the NUL one past the buffer. */
+    if (len + 2 > *n) {
+      size_t cap = *n * 2;
+      char *p = (char *)realloc(*lineptr, cap);
+      if (!p) { errno = ENOMEM; return -1; }
+      *lineptr = p;
+      *n = cap;
+    }
+    (*lineptr)[len++] = (char)c;
+    if (c == delim) break;
+  }
+  if (len == 0) return -1;          /* end of file (or error) with nothing read */
+  (*lineptr)[len] = '\0';
+  return (ssize_t)len;
+}
+
+ssize_t getline(char **lineptr, size_t *n, FILE *stream) {
+  return getdelim(lineptr, n, '\n', stream);
+}
+
 void rewind(FILE *stream) {
   if (stream) {
     if (__pxx_seek(stream->fd, 0, SEEK_SET) < 0) stream->err = 1;
@@ -1377,4 +1446,84 @@ int dprintf(int fd, const char *fmt, ...) {
   r = vdprintf(fd, fmt, ap);
   va_end(ap);
   return r;
+}
+
+
+/* ---- popen / pclose -------------------------------------------------------
+ *
+ * `/bin/sh -c command', with one pipe wired to the child's stdout ("r") or
+ * stdin ("w"). busybox's editors/awk.c needs it for `cmd | getline' and
+ * `print | cmd'.
+ *
+ * THIS RUNS A SHELL, and that is a change of position for this runtime rather
+ * than a gap being filled. stdlib.c's system() has always returned -1 with the
+ * note "the libc-free runtime has no command processor" -- true when it was
+ * written, and no longer: crtl has fork, execvp, pipe, dup2 and waitpid now, so
+ * the machinery is here and the only question left is whether a /bin/sh exists
+ * on the target. When it does not, execvp fails, the child exits 127, and the
+ * caller sees exactly what glibc shows it in the same situation. That is a real
+ * answer; -1 for every command was not.
+ *
+ * The child closes ONLY the ends it must, and the parent closes its copy of the
+ * child's end before returning -- a forgotten copy leaves the pipe open, so the
+ * reader never sees EOF and pclose blocks forever, which is the failure this
+ * shape is famous for.
+ */
+struct pxx_popen_slot { FILE *fp; int pid; };
+static struct pxx_popen_slot pxx_popens[16];
+
+FILE *popen(const char *command, const char *mode) {
+  int fds[2], i, slot = -1, reading;
+  int pid;
+  FILE *fp;
+
+  if (!command || !mode || (mode[0] != 'r' && mode[0] != 'w')) {
+    errno = EINVAL; return 0;
+  }
+  reading = (mode[0] == 'r');
+
+  for (i = 0; i < 16; i++) if (!pxx_popens[i].fp) { slot = i; break; }
+  if (slot < 0) { errno = EMFILE; return 0; }
+
+  if (pipe(fds) != 0) return 0;
+
+  pid = fork();
+  if (pid < 0) { close(fds[0]); close(fds[1]); return 0; }
+  if (pid == 0) {
+    char *argv[4];
+    if (reading) { dup2(fds[1], 1); }        /* child writes, parent reads */
+    else         { dup2(fds[0], 0); }        /* child reads, parent writes */
+    close(fds[0]);
+    close(fds[1]);
+    argv[0] = (char *)"sh";
+    argv[1] = (char *)"-c";
+    argv[2] = (char *)command;
+    argv[3] = 0;
+    execvp("/bin/sh", argv);
+    _exit(127);                              /* what a shell reports for "not found" */
+  }
+
+  /* Parent: keep one end, and close the other BEFORE returning. */
+  if (reading) { close(fds[1]); fp = fdopen(fds[0], "r"); }
+  else         { close(fds[0]); fp = fdopen(fds[1], "w"); }
+  if (!fp) { close(reading ? fds[0] : fds[1]); return 0; }
+
+  pxx_popens[slot].fp = fp;
+  pxx_popens[slot].pid = pid;
+  return fp;
+}
+
+int pclose(FILE *stream) {
+  int i, status = 0, pid = -1;
+  if (!stream) { errno = EINVAL; return -1; }
+  for (i = 0; i < 16; i++)
+    if (pxx_popens[i].fp == stream) { pid = pxx_popens[i].pid; pxx_popens[i].fp = 0; break; }
+  if (pid < 0) { errno = EINVAL; return -1; }   /* not one of ours */
+  fclose(stream);
+  /* EINTR is not failure here: a signal during the wait must not lose the
+     child's exit status, which is the whole return value. */
+  while (waitpid(pid, &status, 0) < 0) {
+    if (errno != EINTR) return -1;
+  }
+  return status;                               /* the raw wait status, as glibc */
 }

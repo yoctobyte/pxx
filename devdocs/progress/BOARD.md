@@ -340,7 +340,7 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 
-## backlog-tools (78)
+## backlog-tools (79)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -362,6 +362,7 @@ _none_
 | bug-t-file-ticket-sh-stages-board-md-but-not-board-brief-md | T | 40 | bug | `tools/file-ticket.sh` runs `tools/progress.sh board-md`, which regenerates BOTH devdocs/progress/BOARD.md and BOARD-brief.md, then `git add`s only BOARD.md. The unstaged BOARD-brief.md makes the following `git pull --rebase` abort with 'cannot pull with rebase: You have unstaged changes', so the script dies after committing, never pushes, and leaves a worktree behind that it explicitly does not clean up. Reproduced twice; every ticket filed through the tool hits it whenever the board regeneration touches the brief. | — |
 | bug-t-forward-decl-lint-counts-nested-functions-as-globals | T | 45 | bug | gate.sh's `fpc seed compiles (forward decls)` step treats a NESTED function's name as a global, so any later file using that name as a parameter, local or field is failed for calling something FPC has not seen. Measured: a parameter named argName failed against rparser.inc's ArgName, nested inside RResultClassForRec and invisible outside it. False positive, and it fails the gate. | — |
 | bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier | T | 30 | bug | One gate.sh quick run reported the FPC seed canary RED with 'symtab.inc(5934,30) Identifier not found ByRefArgNeedsLvalue' — but line 5934 of that file contains an unrelated loop, and the real call sites are at 6185/6186, AFTER the definition at 6099. Not reproducible: fpc compiled the identical tree rc=0 twice by hand and the next gate.sh run was GREEN. Evidence points at the canary reading a stale/other tree state, the same class the fixedpoint step already defends against; a false RED costs an agent a full investigation. | — |
+| bug-t-gate-stale-binary-hint-compares-timestamps-so-a-rebase-defeats-it | T | 55 | bug | gate.sh's stale_binary_hint() compares a COMMIT TIMESTAMP (git log -1 --format=%ct -- compiler/) against the binary's FILE MTIME. A `git pull --rebase` re-dates commits without changing content, so a binary genuinely built from exactly those sources is declared STALE. Observed by frankB: the note fired on a correct binary, a forced rebuild produced a byte-identical sha, and frankA reached the same bytes independently in a separate checkout. The defect is self-concealing — acting on the note produces a green and never reveals the note was wrong. The tree already has the right instrument: tools/compiler_srchash.sh, a content hash over the same file set. | — |
 | bug-t-nothing-checks-that-two-hosts-run-the-same-suite | T | 60 | bug | plexus's watcher tree was missing five library_candidates that seven's had, so every Track T run on plexus silently omitted those jobs and reported GREEN. Fetched by hand 2026-08-30; nothing prevents it recurring or detects it today. AMENDED the same evening — the acceptance criterion is capability x job, NOT job: a second parity gap was measured where both hosts run the SAME job (csmith-fuzz#arm32) and one claims an ILP32 oracle while the other does not, so job list, count and verdict all agree. A job name is a promise, not a description of what ran, and a job-set diff cannot see it. Fix is persistence, not a new prober: probe_oracle already computes the vector and drops it — emit it into the runs-<host>.ndjson row. Read the amendment before implementing. | — |
 | bug-t-pin-verify-corroboration-matches-job-names-that-carry-a-shard-count | T | 30 | bug | twatch.py's pin_verify_corroboration() decides whether a pin-verify RED is corroborated by matching job names LITERALLY, and a shard count lives inside the name (`test-pascal-conformance#shard5/6`). Resplit that suite to 8 shards and every match fails: the caveat silently degrades to `the full tier reported on none of those -- still a single run`, which is the uncorroborated verdict. No error, no diff, correct about something else. Latent, not firing today; the trigger is a shard-count change, which is a routine thing to do. | — |
 | bug-t-progress-check-cannot-see-an-orphan-fragment-or-a-duplicated-slug | T | 45 | bug | `progress.sh check` validates ticket CONTENT but not the ticket SET: it cannot see a file with no frontmatter, nor one slug present in two ranked folders. Both occurred together on `bug-a-per-cpu-ifdef-chains-in-builtinheap-fail-open` — two appends addressed to `backlog/` while the ticket lived in `backlog_new/` created an empty-headed orphan there, and the ranker then offered the slug twice, once complete-but-analysis-free and once carrying all the analysis with no frontmatter. Neither the checker nor the board reported anything. | — |
@@ -535,7 +536,7 @@ _none_
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 
-## backlog-cfront (15)
+## backlog-cfront (14)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -546,7 +547,6 @@ _none_
 | bug-c-sizeof-reaches-a-pointee-through-one-spelling-only | C | 40 | bug | C: sizeof of a subscript through a pointer-to-pointer answers the pointer size | — |
 | bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet | C | 35 | bug | LATENT, with a named trigger. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]` tests pick the 4-byte-slot va_arg helper; everything else falls to an else whose comment says `Cross (aarch64)` but whose condition is `<> TARGET_X86_64`, i.e. the 8-byte-slot path. xtensa and wasm32 are 32-bit and absent from the set -- the set is correct TODAY only because neither can compile a C program at all (`C program entry stub not implemented for this target yet`). The day either gains an entry stub it silently gets 64-bit varargs slots. Fix the set in the SAME commit as the stub. | — |
 | bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently | C | 50 | bug | C: two conflicting typedefs for one name are accepted silently, last wins | — |
-| feature-c-crtl-gaps-for-a-79-applet-busybox-userland | C | 55 | feature | Measured, not guessed: with the 26-applet userland GREEN, a 79-applet attempt compiles 133 of 148 translation units. One failure was a compiler hang (fixed, bug-c-a-macro-call-with-more-than-16-arguments-is-silently-mis-expanded); the other fourteen are crtl gaps, and this ticket lists exactly which function each file wants. Thirteen are missing declarations/implementations (getline, fseeko, setsid, mktemp, getgroups, getgrnam, getgrgid, getgrouplist, getlogin_r, setmntent, clock_settime); the fourteenth is different in kind -- editors/awk.c #errors on crtl's RAND_MAX value. | — |
 | feature-c-crtl-stdio-buffering-and-setvbuf | C | 55 | feature | lib/crtl/src/stdio.c is entirely unbuffered — fputc is one write() syscall per character — and setvbuf at :1051 is a stub that ignores its arguments and returns SUCCESS, which is the dishonest-stub shape the SetTextBuf ruling exists to reject, and worse here because C callers check the return. Add FILE write buffering under C99 7.19.3p7's policy, make setvbuf real, and share a flush registry with lib/rtl so mixed WriteLn/printf output keeps its order. | — |
 | feature-c-crtl-utimensat-and-futimens | C | 45 | feature | `touch` is the one applet keeping the busybox userland at 26 instead of 27: it calls utimensat() and futimens(), which crtl neither declares nor implements, and no PAL entry exists for either. The rest of the gap that attempt exposed is CLOSED (clearenv, putenv, sync, AT_*/AF_UNIX/SOCK_* constants). The work is a PAL chain like PalSync's, and the honest blocker is that the syscall NUMBER cannot be sourced on this box for arm32 or xtensa. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
@@ -858,9 +858,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3067)
+## done (3068)
 
-3067 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3068 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -1029,6 +1029,7 @@ _none_
 - [p 55] [T] bug-t-a-job-red-at-baseline-can-never-be-auto-ticketed
 - [p 55] [T] bug-t-a-verify-verdict-is-rendered-with-a-reason-from-a-different-run
 - [p 55] [T] bug-t-an-acceptance-record-cites-a-sweep-at-an-o-level-the-compiler-rejects
+- [p 55] [T] bug-t-gate-stale-binary-hint-compares-timestamps-so-a-rebase-defeats-it
 - [p 55] [T] bug-t-test-fgl-skips-silently-when-the-corpus-is-absent-so-its-gate-row-passes-by-not-running
 - [p 55] [T] bug-t-the-duplicate-expectation-ratchet-is-npy-only-and-the-first-escape-was-a-pas-test
 - [p 55] [T] bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case
@@ -1039,7 +1040,6 @@ _none_
 - [p 55] [U] decide-who-reads-progress-sh-check
 - [p 55] [U] decide-widening-to-the-group-sends-every-agent-to-the-same-folder
 - [p 55] [B] feature-b-buffered-text-io-and-settextbuf
-- [p 55] [C] feature-c-crtl-gaps-for-a-79-applet-busybox-userland
 - [p 55] [C] feature-c-crtl-stdio-buffering-and-setvbuf
 - [p 55] [C] feature-c-gtk3-header-final-wiring [parked — re-claim, do not duplicate]
 - [p 55] [N] feature-n-a-kwargs-collecting-callee-through-a-callable-value

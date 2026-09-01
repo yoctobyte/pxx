@@ -1,16 +1,14 @@
 /* SPDX-License-Identifier: Zlib */
 /*
- * C runtime: <mntent.h> -- struct mntent and the option-name macros. No
- * setmntent/getmntent/endmntent/hasmntopt.
+ * C runtime: <mntent.h> -- struct mntent, the option-name macros, and the
+ * /etc/mtab readers.
  *
- * Same rule as <pwd.h> and <grp.h>: the type travels with the headers (this
- * one arrives in every busybox translation unit via include/libbb.h) while
- * the calls appear only in mount/umount/df. Unlike those two, this family is
- * implementable here with nothing but stdio -- /etc/mtab is a text file --
- * so its absence is scheduling, not a limitation. It gets written when a
- * corpus target calls it, with the field-splitting rules (octal escapes in
- * mnt_dir, the missing trailing freq/passno columns) tested against glibc
- * rather than guessed.
+ * The calls were deferred until "a corpus target calls it, with the
+ * field-splitting rules tested against glibc rather than guessed". busybox's
+ * coreutils/df.c and libbb/find_mount_point.c are that target, and src/mntent.c
+ * records which rules were measured -- the octal escapes and the optional
+ * freq/passno columns in particular. addmntent is still absent: nothing in the
+ * corpus WRITES mtab, and a half-written entry is worse than a missing call.
  */
 #ifndef _CRTL_MNTENT_H
 #define _CRTL_MNTENT_H
@@ -36,5 +34,13 @@ struct mntent {
   int   mnt_freq;    /* dump frequency, in days */
   int   mnt_passno;  /* fsck pass number */
 };
+
+/* The returned struct and its strings live in the stream's own buffer and are
+   invalidated by the next getmntent on that stream. */
+FILE          *setmntent(const char *filename, const char *mode);
+int            endmntent(FILE *fp);
+struct mntent *getmntent(FILE *fp);
+/* Whole-element match: `ro' does not match `errors=remount-ro'. */
+char          *hasmntopt(const struct mntent *mnt, const char *opt);
 
 #endif

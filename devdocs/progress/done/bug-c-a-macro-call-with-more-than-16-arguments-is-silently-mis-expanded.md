@@ -62,3 +62,7 @@ compiler HANGS on that file** (`timeout` exit 124), so the row cannot pass by
 accident.
 
 `tools/gate.sh quick` GREEN with the FPC seed canary concurrent.
+
+## Log
+
+- 2026-09-02 frankD — fixed and closed, commit d7b3ecf5d.

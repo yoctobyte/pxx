@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <string.h>
 #include <stdlib.h>
+#include <pwd.h>
 
 extern long long __pxx_read(int fd, void *buf, long long n);
 extern long long __pxx_write(int fd, void *buf, long long n);
@@ -17,6 +18,8 @@ extern int __pxx_close(int fd);
 extern long long __pxx_seek(int fd, long long offset, int whence);
 extern int __pxx_fsync(int fd);
 extern int __pxx_sync(void);
+extern int __pxx_setsid(void);
+extern int __pxx_getgroups(int count, void *list);
 extern int __pxx_dup(int oldFd);
 extern int __pxx_chdir(const char *path);
 extern int __pxx_getuid(void);
@@ -715,4 +718,71 @@ int getopt(int argc, char *const argv[], const char *optstring)
     pxx_optpos++;
     if (av[optind][pxx_optpos] == 0) { optind++; pxx_optpos = 1; }
     return (int)(unsigned char)c;
+}
+
+/* ---- login name ----------------------------------------------------------- */
+
+/* getlogin_r(3) / getlogin(3).
+ *
+ * A DELIBERATE DIVERGENCE, and the reason is that glibc answers a different
+ * question than the name suggests: it looks up the CONTROLLING TERMINAL in
+ * utmp, so it reports who logged in on this tty and fails outright when there
+ * is no tty -- in a pipeline, a cron job, or a container with no utmp. There is
+ * no utmp on the systems pxx targets and no way to synthesise one.
+ *
+ * So this answers the question callers actually mean: LOGNAME, then USER, then
+ * the passwd entry for the real uid. busybox's coreutils/logname.c is the
+ * consumer and prints exactly this. The difference is observable -- `su' to
+ * another user leaves LOGNAME pointing at the original on some systems, where
+ * glibc would still report the tty's owner -- and is documented rather than
+ * hidden. Returns 0, or an errno value (never -1): ERANGE when the buffer is
+ * too small, ENXIO when no name can be determined.
+ */
+int getlogin_r(char *buf, size_t bufsize) {
+  const char *nm;
+  struct passwd *pw;
+  size_t n;
+
+  if (!buf || bufsize == 0) return EINVAL;
+  nm = getenv("LOGNAME");
+  if (!nm || !*nm) nm = getenv("USER");
+  if (!nm || !*nm) {
+    pw = getpwuid(getuid());
+    nm = pw ? pw->pw_name : 0;
+  }
+  if (!nm || !*nm) return ENXIO;
+  n = strlen(nm);
+  if (n + 1 > bufsize) return ERANGE;
+  memcpy(buf, nm, n + 1);
+  return 0;
+}
+
+char *getlogin(void) {
+  /* One static buffer, invalidated by the next call -- glibc's contract. */
+  static char pxx_login_buf[256];
+  if (getlogin_r(pxx_login_buf, sizeof pxx_login_buf) != 0) return 0;
+  return pxx_login_buf;
+}
+
+/* setsid(2): make the caller a session leader. busybox's
+   libbb/vfork_daemon_rexec.c calls it in bb_daemonize_or_rexec, which is how
+   every daemonising applet detaches from its controlling terminal.
+   Returns the new session id (which is the pid) or -1/errno. */
+int setsid(void) {
+  int rc = __pxx_setsid();
+  if (rc < 0) { errno = -rc; return -1; }
+  return rc;
+}
+
+/* getgroups(2). size == 0 asks only for the COUNT and must not touch list --
+   that is the call every caller makes first, to size its array, so it is the
+   one that has to be right. Otherwise -1/EINVAL when the list is shorter than
+   the answer, which is the kernel's own behaviour and is what tells a caller
+   its buffer was too small. */
+int getgroups(int size, gid_t list[]) {
+  int rc;
+  if (size < 0) { errno = EINVAL; return -1; }
+  rc = __pxx_getgroups(size, size == 0 ? 0 : (void *)list);
+  if (rc < 0) { errno = -rc; return -1; }
+  return rc;
 }

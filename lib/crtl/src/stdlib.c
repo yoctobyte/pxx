@@ -17,6 +17,8 @@
 #include <limits.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
 extern void *__pxx_malloc(long n);
 extern void  __pxx_free(void *p);
@@ -64,6 +66,7 @@ void abort(void)     { __pxx_exit(134); }   /* 128 + SIGABRT(6) */
 
 extern int __pxx_open(const char *path, int flags, int mode);
 extern int __pxx_close(int fd);
+extern int __pxx_remove(const char *path);
 extern int __pxx_getpid(void);
 extern int __pxx_realtime(void *secOut, void *usecOut);
 
@@ -105,6 +108,30 @@ static int pxx_mktemp_open(char *tmpl, int flags, int mode)
 int mkstemp(char *tmpl)
 {
   return pxx_mktemp_open(tmpl, O_RDWR | O_CREAT | O_EXCL, 0600);
+}
+
+/* mktemp(3), the DEPRECATED one, and the deprecation is the point: it returns
+   a name it did not claim, so anything may create that path before the caller
+   does. It exists because real code asks for a name without wanting the file --
+   busybox's `mktemp -u' is exactly that -- and refusing to provide it would
+   only push callers onto something worse.
+
+   Implemented ON TOP of the same claim-by-O_EXCL search, then the file is
+   unlinked: that is how the name is known to have been available, and it is
+   strictly better than testing with access(2), which answers about a moment
+   that has already passed. The race is still there and is inherent to the
+   interface, not to this implementation.
+
+   Returns tmpl on success. On failure it returns tmpl with the template
+   EMPTIED to "" -- glibc's convention, and the reason a caller must test the
+   first byte rather than the pointer. */
+char *mktemp(char *tmpl)
+{
+  int fd = pxx_mktemp_open(tmpl, O_RDWR | O_CREAT | O_EXCL, 0600);
+  if (fd < 0) { tmpl[0] = '\0'; return tmpl; }
+  __pxx_close(fd);
+  __pxx_remove(tmpl);
+  return tmpl;
 }
 
 /* mkostemp adds caller flags (O_CLOEXEC / O_APPEND); the access mode and the
@@ -158,6 +185,7 @@ char *mkdtemp(char *tmpl)
 extern int __pxx_open(const char *path, int flags, int mode);
 extern long __pxx_read(int fd, void *buf, unsigned long n);
 extern int __pxx_close(int fd);
+extern int __pxx_remove(const char *path);
 
 #define PXX_ENV_BUFSZ 16384
 
@@ -520,12 +548,43 @@ double strtod(const char *s, char **end) {
   return sign * v;
 }
 
-/* system(): the libc-free runtime has no command processor. Per C, system(NULL)
-   queries availability — return 0 (none). A real command returns -1 (failure).
-   lua's os.execute links this but the test scripts never shell out. */
+/* system(): `/bin/sh -c command', waited for, returning the raw wait status.
+ *
+ * THIS REVERSES A POSITION AND THE OLD ONE IS WORTH KEEPING IN VIEW. It used to
+ * read "the libc-free runtime has no command processor", answer 0 to
+ * system(NULL) and -1 to everything else. That was true when written; it is not
+ * now. crtl has fork, execvp, pipe, dup2 and waitpid, so the machinery is here
+ * and the only remaining question is whether the TARGET has a /bin/sh. Where it
+ * does not, execvp fails, the child exits 127, and the caller sees the same 127
+ * glibc would give it -- a real answer about a real system, where -1 for every
+ * command was a claim about this runtime that callers could not act on.
+ *
+ * system(NULL) still asks whether a command processor is available, and the
+ * honest answer needs a LOOK rather than a constant: it reports 1 only if
+ * /bin/sh is executable. Returning 1 unconditionally would be the same kind of
+ * unfounded claim in the other direction.
+ *
+ * EINTR is not failure in the wait: a signal must not lose the child's status,
+ * which is the entire return value. */
 int system(const char *command) {
-  if (command == 0) return 0;
-  return -1;
+  int pid, status = 0;
+
+  if (command == 0) return access("/bin/sh", X_OK) == 0 ? 1 : 0;
+
+  pid = fork();
+  if (pid < 0) return -1;
+  if (pid == 0) {
+    char *argv[4];
+    argv[0] = (char *)"sh";
+    argv[1] = (char *)"-c";
+    argv[2] = (char *)command;
+    argv[3] = 0;
+    execvp("/bin/sh", argv);
+    _exit(127);
+  }
+  while (waitpid(pid, &status, 0) < 0)
+    if (errno != EINTR) return -1;
+  return status;
 }
 
 /* ---- qsort (insertion sort — simple, stable enough for lua's small uses) --- */
@@ -566,13 +625,35 @@ void *bsearch(const void *key, const void *base, size_t nmemb, size_t size,
    Chosen deliberately over copying glibc's TYPE_3 additive-feedback generator:
    matching a sequence nobody is entitled to rely on would buy a nicer diff and
    an obligation to keep it. */
-static unsigned long __crtl_rand_state = 1;
+static unsigned long long __crtl_rand_state = 1;
 
 void srand(unsigned int seed) { __crtl_rand_state = seed; }
 
+/* THE RANGE IS 31 BITS, and that is a compatibility fact rather than a taste.
+   RAND_MAX was 32767 -- C99's required MINIMUM, and legal -- but real code
+   selects an implementation on it and simply refuses the small one:
+   busybox's editors/awk.c is `#if RAND_MAX >= 0x7fffffff ... #else #error Not
+   implemented for this value of RAND_MAX'. So awk did not compile, and the
+   diagnostic was about the macro rather than about anything missing. glibc,
+   musl and the BSDs all use 0x7fffffff; being the one runtime that does not is
+   a gap dressed as a conforming choice.
+
+   The MACRO AND THE GENERATOR HAVE TO AGREE -- raising RAND_MAX over a
+   generator that still returns 15 bits would leave every high bit permanently
+   zero, which is the plausible-wrong-value shape and would pass an in-range
+   test. So the state widened to 64 bits and the result is taken from the HIGH
+   half: the low bits of a power-of-two LCG have famously short periods (bit 0
+   alternates), and that is exactly the half the old `/65536' was already
+   avoiding, for the same reason.
+
+   The SEQUENCE is still not glibc's and still must not be diffed against a gcc
+   build -- C fixes none of it. test/cstdlib_batch3.c asserts only what the
+   standard promises: deterministic for a seed, within [0, RAND_MAX], and
+   srand(1) as the initial state. */
 int rand(void) {
-  __crtl_rand_state = __crtl_rand_state * 1103515245UL + 12345UL;
-  return (int)((__crtl_rand_state / 65536UL) % 32768UL);
+  __crtl_rand_state = __crtl_rand_state * 6364136223846793005ULL
+                    + 1442695040888963407ULL;
+  return (int)((__crtl_rand_state >> 33) & 0x7fffffffULL);
 }
 
 void qsort(void *base, size_t nmemb, size_t size,

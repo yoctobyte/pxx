@@ -73,6 +73,9 @@ function PalBackendFstat(handle: Integer; var info: TPalFileStat): Integer;
 function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendSync: Integer;
+function PalBackendSetsid: Integer;
+function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
+function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
@@ -841,6 +844,25 @@ end;
 
 { WASI has no whole-system sync: fd_sync is per-descriptor only, and inventing a loop over every open fd would be a different operation wearing this name. }
 function PalBackendSync: Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendSetsid: Integer;
+{ WASI has no process model at all: no sessions, no process groups, no user or
+  group identities. A zero from getgroups would be a claim about a list that
+  does not exist. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
+{ WASI exposes clocks as read-only; there is no host call to set one. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

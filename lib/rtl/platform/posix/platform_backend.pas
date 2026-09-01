@@ -41,6 +41,9 @@ function PalBackendFstat(handle: Integer; var info: TPalFileStat): Integer;
 function PalBackendLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendSync: Integer;
+function PalBackendSetsid: Integer;
+function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
+function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
@@ -135,6 +138,8 @@ const
 {$ifdef CPUX86_64}
   SYS_read = 0; SYS_write = 1; SYS_close = 3; SYS_lseek = 8;
   SYS_sync = 162;      { /usr/include/.../asm/unistd_64.h __NR_sync }
+  SYS_setsid = 112; SYS_getgroups = 115;   { asm/unistd_64.h }
+  SYS_clock_settime = 227;                 { asm/unistd_64.h }
   SYS_fsync = 74; SYS_openat = 257; SYS_mkdirat = 258; SYS_getdents64 = 217; SYS_statx = 332;
   SYS_chdir = 80; SYS_linkat = 265; SYS_symlinkat = 266;
   SYS_unlinkat = 263; SYS_renameat = 264;
@@ -155,6 +160,8 @@ const
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
   SYS_sync = 36;       { asm/unistd_32.h __NR_sync }
+  SYS_setsid = 66; SYS_getgroups = 205;    { asm/unistd_32.h: getgroups32, NOT the 16-bit-gid getgroups(80) -- the same *32 choice this file already makes for getuid }
+  SYS_clock_settime = 264;                 { asm/unistd_32.h, one below clock_gettime(265) }
   SYS_fsync = 118; SYS_openat = 295; SYS_mkdirat = 296; SYS_getdents64 = 220; SYS_statx = 383;
   SYS_chdir = 12; SYS_linkat = 303; SYS_symlinkat = 304;
   SYS_unlinkat = 301; SYS_renameat = 302;
@@ -177,6 +184,8 @@ const
 {$ifdef CPU_AARCH64}
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
   SYS_sync = 81;       { asm-generic: sync(81) sits directly below fsync(82) }
+  SYS_setsid = 157; SYS_getgroups = 158;   { asm-generic/unistd.h }
+  SYS_clock_settime = 112;                 { asm-generic, one below clock_gettime(113) }
   SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
   SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
   SYS_unlinkat = 35; SYS_renameat = 38;
@@ -197,6 +206,8 @@ const
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
   SYS_sync = 36;       { arm EABI keeps the legacy low numbers, as i386 does }
+  SYS_setsid = 66; SYS_getgroups = 205;    { arm EABI, getgroups32 as on i386 }
+  SYS_clock_settime = 262;                 { arm EABI, one below this table's own clock_gettime(263) -- the same -1 relation i386 and asm-generic show, read off this file rather than recalled }
   SYS_fsync = 118; SYS_openat = 322; SYS_mkdirat = 323; SYS_getdents64 = 217; SYS_statx = 397;
   SYS_chdir = 12; SYS_linkat = 330; SYS_symlinkat = 331;
   SYS_unlinkat = 328; SYS_renameat = 329;
@@ -237,6 +248,8 @@ const
     The time-related calls keep the legacy generic numbers qemu implements. }
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
   SYS_sync = 81;       { asm-generic, the same table aarch64 uses }
+  SYS_setsid = 157; SYS_getgroups = 158;   { asm-generic, the same table aarch64 uses }
+  SYS_clock_settime = 112;                 { asm-generic; rv32's time calls keep the legacy generic numbers qemu implements, as the note above says of clock_gettime }
   SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
   SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
   SYS_unlinkat = 35; SYS_renameat = 38;
@@ -743,6 +756,46 @@ begin
   Result := PAL_ERR_UNSUPPORTED;
 {$else}
   Result := Integer(__pxxrawsyscall(SYS_sync, 0, 0, 0, 0, 0, 0));
+{$endif}
+end;
+
+function PalBackendSetsid: Integer;
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_setsid, 0, 0, 0, 0, 0, 0));
+{$endif}
+end;
+
+function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
+{ getgroups(2). count=0 asks for the COUNT and must not write through list --
+  that is the call every caller makes first, so it is the one that matters. }
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_getgroups, PtrUInt(count), PtrUInt(list), 0, 0, 0, 0));
+{$endif}
+end;
+
+function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
+{ clock_settime(2). The kernel takes a `struct timespec', so the two halves are
+  marshalled here rather than passed as registers -- and it is TWO NATIVE
+  WORDS, not two Int64s: on a 32-bit target the kernel's timespec is 32-bit and
+  handing it a 16-byte one writes past the struct it was given.
+
+  Almost every call fails with EPERM, which is correct and is not a stub: only
+  root may set the clock. A caller that cannot tell "refused" from "not
+  implemented" is exactly what a stub would have produced. }
+var ts: array[0..1] of NativeInt;
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  ts[0] := NativeInt(sec);
+  ts[1] := NativeInt(nsec);
+  Result := Integer(__pxxrawsyscall(SYS_clock_settime, PtrUInt(clockId), PtrUInt(@ts[0]), 0, 0, 0, 0));
 {$endif}
 end;
 

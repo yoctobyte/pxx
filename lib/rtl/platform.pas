@@ -155,6 +155,9 @@ function PalFstat(handle: Integer; var info: TPalFileStat): Integer;
 function PalLstat(path: PChar; var info: TPalFileStat): Integer;
 function PalFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalSync: Integer;
+function PalSetsid: Integer;
+function PalGetGroups(count: Integer; list: Pointer): Integer;
+function PalClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalFsync(handle: Integer): Integer;
 function PalFchmod(handle, mode: Integer): Integer;
 function PalChmod(path: PChar; mode: Integer): Integer;
@@ -440,6 +443,21 @@ end;
 function PalSync: Integer;
 begin
   Result := PalBackendSync;
+end;
+
+function PalSetsid: Integer;
+begin
+  Result := PalBackendSetsid;
+end;
+
+function PalGetGroups(count: Integer; list: Pointer): Integer;
+begin
+  Result := PalBackendGetGroups(count, list);
+end;
+
+function PalClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
+begin
+  Result := PalBackendClockSetTime(clockId, sec, nsec);
 end;
 
 function PalChmod(path: PChar; mode: Integer): Integer;

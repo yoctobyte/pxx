@@ -12424,6 +12424,31 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-multi-applet
 	$(PXX_STABLE) test/c_clearenv.c $(TESTTMP)/c_clearenv26
 	tools/expect_same.sh c_clearenv26 "$$($(TESTTMP)/c_clearenv26)" "$$(printf '1 0 0\n2 back\n3 0 0\n4 ok')"
+	# The crtl surface a 79-applet busybox userland needed, every row measured
+	# against glibc rather than reasoned about. The file failing to COMPILE is
+	# half the assertion -- none of getgrgid, setmntent, getline, fseeko,
+	# getgroups, popen or a 31-bit RAND_MAX existed before this.
+	# The rows with a wrong answer available are the point:
+	#   1  a ROUND TRIP, not a name: asserting gid 0 is called "root" would be a
+	#      claim about the box, and would fail where it is called `wheel'.
+	#   2  hasmntopt matches a WHOLE element -- the substring reading finds
+	#      `ro' inside `errors=remount-ro' and answers yes to nothing asked.
+	#   3  `\040' in a mount table is DECODED; skipping it returns a path that
+	#      does not exist.
+	#   4/5 freq and passno are OPTIONAL.
+	#   6  getline KEEPS the delimiter and counts bytes, not strlen, and a last
+	#      line with no newline is still a line.
+	#   7  SEQUENCED on purpose: ftello and fgetc in one printf have no defined
+	#      argument order, and both compilers happened to agree, which is how
+	#      an unspecified-behaviour row passes and means nothing.
+	#   8  getgroups(0, NULL) asks the COUNT without touching the list.
+	#   9  RAND_MAX is 31 bits AND the generator agrees -- raising the macro
+	#      over a 15-bit generator leaves every high bit zero and still passes
+	#      an in-range check, so saw_high is the row that catches it.
+	# $(PXX_STABLE): crtl-source work, so the pin compiles it from the tree.
+	# feature-c-crtl-gaps-for-a-79-applet-busybox-userland
+	$(PXX_STABLE) test/c_crtl_busybox_surface.c $(TESTTMP)/c_crtlbb26
+	tools/expect_same.sh c_crtlbb26 "$$($(TESTTMP)/c_crtlbb26)" "$$(printf '1 1\n2 ro=0 rw=1\n3 [/mnt/my disk]\n4 0 2\n5 [/mnt/plain] 0 0\n6.0 4\n6.1 3\n7 4 116\n8 1\n9 1 1 1\n10 [piped\n] 0\n11 1 5')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The SIBLING defect, and it is not the const-branch one: a loop in dead code

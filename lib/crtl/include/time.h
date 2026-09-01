@@ -79,6 +79,8 @@ extern time_t __crtl_time(time_t *t);
 clock_t clock(void);
 int nanosleep(const struct timespec *req, struct timespec *rem);
 int clock_gettime(int clk_id, struct timespec *tp);
+/* Privileged: expect EPERM unless the caller is root. */
+int clock_settime(int clk_id, const struct timespec *tp);
 double difftime(time_t end, time_t beginning);
 time_t mktime(struct tm *tm);
 struct tm *gmtime(const time_t *timer);

@@ -3,6 +3,10 @@
 #define PXX_CRTL_STDIO_H 1
 
 #include <stddef.h>
+/* off_t and ssize_t, for fseeko/ftello and getdelim/getline. glibc's <stdio.h>
+   declares those without exposing all of <sys/types.h>; ours has no such
+   split, and pulling the whole header in is the honest spelling. */
+#include <sys/types.h>
 
 #ifndef NULL
 #define NULL 0
@@ -63,6 +67,11 @@ int ungetc(int c, FILE *stream);
 char *fgets(char *s, int n, FILE *stream);
 FILE *fopen(const char *path, const char *mode);
 FILE *fdopen(int fd, const char *mode);
+/* popen runs `/bin/sh -c command'; pclose returns the raw wait status, as
+   glibc does (use WEXITSTATUS). See src/stdio.c for why this runtime runs a
+   shell now when system() historically did not. */
+FILE *popen(const char *command, const char *mode);
+int pclose(FILE *stream);
 int fileno(FILE *stream);
 FILE *freopen(const char *path, const char *mode, FILE *stream);
 FILE *tmpfile(void);
@@ -73,6 +82,16 @@ size_t fread(void *ptr, size_t size, size_t nmemb, FILE *stream);
 size_t fwrite(const void *ptr, size_t size, size_t nmemb, FILE *stream);
 int fseek(FILE *stream, long off, int whence);
 long ftell(FILE *stream);
+/* The off_t forms: the only spelling that is correct past 2GB on a 32-bit
+   target, where `long' is 32 bits and off_t is not. */
+int fseeko(FILE *stream, off_t off, int whence);
+off_t ftello(FILE *stream);
+
+/* POSIX.1-2008. The delimiter is KEPT and the result NUL-terminated; the
+   return is the byte count before that NUL, so an embedded NUL survives, and
+   -1 at end of file. *lineptr may start NULL with *n zero; the caller frees. */
+ssize_t getdelim(char **lineptr, size_t *n, int delim, FILE *stream);
+ssize_t getline(char **lineptr, size_t *n, FILE *stream);
 void rewind(FILE *stream);
 int feof(FILE *stream);
 int ferror(FILE *stream);

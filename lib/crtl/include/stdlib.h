@@ -44,7 +44,11 @@ lldiv_t lldiv(long long num, long long den);
 
 /* the standard's minimum, and what our generator actually produces */
 #ifndef RAND_MAX
-#define RAND_MAX 32767
+/* 31 bits, as glibc/musl/BSD have. Not merely C99's required minimum of 32767:
+   real code selects an implementation on this macro and refuses the small one
+   -- busybox's awk `#error`s outright. src/stdlib.c has the rest, including why
+   the generator had to widen with it. */
+#define RAND_MAX 0x7fffffff
 #endif
 
 int rand(void);
@@ -55,6 +59,9 @@ void srand(unsigned int seed);
    from the quality of the guess. The digits come from the clock and the pid —
    NOT a CSPRNG, and not claimed to be one. Mode 0600 / 0700, per POSIX. */
 int mkstemp(char *tmpl);
+/* mktemp(3) is DEPRECATED and returns a name it did not claim; on failure it
+   empties the template, so test tmpl[0], not the pointer. */
+char *mktemp(char *tmpl);
 int mkostemp(char *tmpl, int flags);
 char *mkdtemp(char *tmpl);
 
@@ -74,6 +81,9 @@ int putenv(char *string);
 char *strdup(const char *s);
 char *strndup(const char *s, size_t n);
 char *realpath(const char *path, char *resolved);
+/* system() runs `/bin/sh -c command' and returns the raw wait status (use
+   WEXITSTATUS); system(NULL) reports whether /bin/sh is executable. See
+   src/stdlib.c -- this runtime used to have no command processor and now does. */
 int system(const char *command);
 
 void qsort(void *base, size_t nmemb, size_t size, int (*cmp)(const void *, const void *));

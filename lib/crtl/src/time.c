@@ -20,6 +20,7 @@ extern long long __pxx_time(void);
 extern long long __pxx_clock(void);
 extern int __pxx_nanosleep(long long sec, long long nsec);
 extern int __pxx_clock_gettime(int clk_id, long long *sec, long long *nsec);
+extern int __pxx_clock_settime(int clk_id, long long sec, long long nsec);
 
 /* nanosleep: suspend for req->tv_sec + req->tv_nsec. `rem` (unslept remainder on
    signal) is zeroed — the PAL bridge does not surface EINTR partial sleeps, which
@@ -515,4 +516,16 @@ static const char *sp_parse(const char *s, const char *fmt, struct tm *tm) {
     }
   }
   return s;
+}
+
+/* clock_settime(2). busybox's coreutils/date.c calls it for `date -s'.
+   Almost every call fails with EPERM and that is the correct answer, not a
+   stub: only a privileged process may set the clock, and a caller must be able
+   to tell "refused" from "not implemented". */
+int clock_settime(int clk_id, const struct timespec *tp) {
+  int rc;
+  if (!tp) { errno = EFAULT; return -1; }
+  rc = __pxx_clock_settime(clk_id, (long long)tp->tv_sec, (long long)tp->tv_nsec);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
 }
