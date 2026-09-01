@@ -112,4 +112,4 @@ stub to ride, and needs `.init_array` in the relocatable writer):
 `bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers`,
 p55, unclaimed. That is a separate writer and a separate commit; it is not this
 ticket.
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 9d183dea9.
