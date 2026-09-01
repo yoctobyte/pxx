@@ -237,3 +237,58 @@ regrow.
 **The row lands in phase 4, not phase 1.** The ticket already says why: a red
 assertion on a property that has never held costs Track T's signal for everyone
 and buys information this census already gives.
+
+## RE-CENSUS AFTER `e95538346`, AND THE OBJECT CENSUS IS A SAMPLE (2026-09-01, frankC)
+
+Re-taken against frankA's `EmitStaticLitHandle386`, which changed how string
+literals are addressed on i386:
+
+| | sites | shapes | `b8` | `68` |
+| --- | ---: | ---: | ---: | ---: |
+| at `91a139b70` | 1482 | 24 | 92 | 100 |
+| at `2d17f449f` | **1450** | **23** | **160** | **0** |
+
+`68 push imm32` — my most invasive family, the only one needing
+`push ebx; add dword [esp], d32` at +3 bytes — **went to zero**, replaced by
+`b8 mov eax,imm32` at +1. That looks like the hardest quarter of phase 3
+evaporating.
+
+**IT IS NOT, AND BELIEVING IT WOULD HAVE BEEN A REAL ERROR.** The shape is gone
+from these three OBJECTS, not from the compiler. `grep 'EmitB($68)'` over
+`ir_codegen386.inc` finds 26 sites, of which **nine push a DATA ADDRESS**:
+
+```
+1762  push arg1 = desc          GetOrAllocSymRTTI
+1800  push src                  string-literal fallback
+2266  push desc                 GetOrAllocNodeDynDesc
+2996  push desc                 GetOrAllocSymRTTI
+4423  push arg1 = desc          GetOrAllocNodeDynDesc
+4499  push src                  string-literal fallback
+4655, 4664, 4673  push desc     RECORD_RTTI_DATAREF_BASE
+```
+
+RTTI descriptors, dynamic-array descriptors, record RTTI. The three test
+objects simply do not exercise those paths on i386. Had I read the zero as
+coverage, the `+3` rewrite would not have been written and the first program
+using RTTI on i386 would have carried an absolute relocation the new assertion
+was supposed to forbid — after the assertion had gone green.
+
+### So phase 3 must be driven by an EMITTER census, not an object census
+
+An object census SAMPLES: it reports the shapes the programs I happened to
+compile contain. The authoritative population is the emitter, and it is not one
+file — `EmitDataRef`/`EmitGlobRef` are called from `ir_codegen386.inc` (33/82),
+`ir_codegen.inc` (27/43) and `emit.inc` (10/11), with `coroutine_emit.inc`,
+`exception_emit.inc` and `asmenc.inc` also able to emit for i386.
+
+**The method is already recorded in this repo**, in `EmitGlobRef`'s own comment
+for the x86-64 twin: *"Re-measured over a population that CAN contain it
+(instrumenting the emitter, building --threadsafe)"*. Instrument the choke
+point, print the preceding bytes, compile a broad corpus, union the shapes.
+That is phase 3's first step, ahead of any rewriting.
+
+**Three censuses, three different answers, each honestly taken:** the C object
+alone reports 19 shapes; three objects report 24; three objects after an
+unrelated string-literal change report 23 — and the true count is whatever the
+emitter can produce, which none of them measured. Every one of those numbers
+would have read as complete.
