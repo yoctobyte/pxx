@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 summary: "WASM32 ONLY NOW -- the xtensa half LANDED in af5d2b534 (Call0; windowed stays false, and that is the ABI condition, not a gap). A proc's managed locals are released by a proc CLEANUP FRAME, and TargetHasProcCleanupFrame today covers x86-64, i386, arm32, aarch64, riscv32 and xtensa-under-Call0 -- wasm32 is the only target left out, so an exception unwinding THROUGH a wasm32 frame still leaks everything that frame owned. Silent by construction: an unwind leak prints nothing and both sides of the native-vs-wasm differential produce identical OUTPUT. The stale source comment this ticket flagged is ALSO already fixed. NOT WIRING (measured 2026-09-01): all three shared hooks are register-shaped -- every arm of EmitProcCleanupFramePatchLanding is Patch32(landPatch, branch-to-CodeLen), assuming a linear code buffer, a two-return setjmp entry and a patchable relative branch. wasm32 has none of the three (its pad is a BASIC BLOCK NUMBER; propagation is a pending global checked after every call), so the hooks have nothing to return or patch there. The wasm32 SEMANTICS do fit -- WasmEmitUnwind already branches to a frame whose fp matches, so a cleanup frame is a handler frame whose pad releases and re-raises. Real job is a design choice: give wasm32 its own path around the shared hooks, or generalise the pad to an opaque token across six backends. Plus three named sub-tasks: reserve a shadow-frame slot (the pre-pass counts IR_EXC_ENTER nodes and a proc frame is not one), materialise the pad as a block and get its number into the frame, and re-raise out of it. Predicate arm still LAST."
 
-status: backlog
+status: open
 owner: unassigned
 ---
 
@@ -338,3 +338,59 @@ back in rotation — that is the owner's call. So the wasm32 remainder is
 **unowned**, which is a different state from parked and should be raised as such
 rather than left looking assigned. Recorded here because a handoff nobody
 accepted is exactly the residual that goes missing.
+
+---
+
+## 2026-09-01 (frankA) — MEASURED on wasm32 for the first time, and released again
+
+Took this, measured it, did not do it. wasmtime 48.0.1 was installed all along,
+so the wasm32 half was measurable by anyone who tried; three write-ups had
+analysed it and none had run it.
+
+### The "silent by construction" claim is FALSE here too
+
+The body says the failure *"prints nothing ... both sides of the
+native-vs-wasm differential produce identical OUTPUT"*. frankS already corrected
+that for xtensa on 2026-08-30 — *"true of a leak and false of this corpus"* —
+and it is false for wasm32 as well, in the same test:
+
+```
+test_interface_arc_exc   x86-64:  reassign created=2 freed=2   caught  unwind freed=3
+                         wasm32:  reassign created=2 freed=1   caught  unwind freed=1
+```
+
+**But the delta is NOT attributable to the unwind**, and this is the part worth
+carrying. That test's FIRST line already disagrees, and it contains no exception
+at all: `RunReassign` leaks on wasm32 for an unrelated reason. Reducing it to a
+procedure whose whole body is `f := MakeFoo` gives `freed=0` against x86-64's
+`freed=1` — an interface local is never released at ORDINARY scope exit on this
+target. So `unwind freed=1` vs `3` is two defects added together, and reading it
+as an unwind measurement would over-state this ticket.
+
+Filed separately, with the full seven-kind table:
+`bug-a-managed-locals-leak-at-ORDINARY-scope-exit-on-wasm32-and-a-variant-local-traps`
+(interface leaks entirely, record-with-managed-fields and static-array-of-string
+leak partially, a Variant local TRAPS with exit 134; strings, dyn arrays and
+promo-ints are fine). **That one must be fixed before this one can be measured
+at all** — until it is, no wasm32 unwind number is readable.
+
+### The other test does NOT discriminate here
+
+`test_managed_exception_cleanup` was the loud one on xtensa — frankS recorded a
+SEGFAULT and ~590 MB never released. On wasm32 it prints `1` and exits 0,
+matching x86-64 exactly. So the corpus that proved the xtensa half observable
+proves only half of that here, and a sweep wiring both tests to wasm32 would get
+one discriminating row and one that passes for reasons unrelated to this ticket.
+
+### Released, not parked
+
+Back to unowned and unclaimed. I am not taking it for the same reason frankB and
+frankwasm did not: it is wasm backend work under an open
+`decide-the-wasm-umbrella-at-70-reinstates-everything-the-owner-demoted-to-25`,
+and the ordinary-path ticket above must land first regardless. Nothing here
+changes the (a)/(b) design choice, which stands exactly as frankB framed it.
+
+**The residual owner question frankB raised is still open** and I am not closing
+it by having held this for an hour: the wasm32 remainder has no owner, and a
+peer cannot put frankwasm back in rotation. Raised to the coordinator rather
+than left implicit.
