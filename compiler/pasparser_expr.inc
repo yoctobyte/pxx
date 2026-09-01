@@ -6936,12 +6936,12 @@ begin
                 faces of one spelling, and the write face is the one every
                 derefshape row exercised.
                 bug-a-a-comma-indexed-multi-dim-subscript-is-not-parsed-through-a-cast-or-call-result }
-              ndFlat := ParseNDSubscriptTail(node, ndIsND);
+              ndFlat := ParseNDSubscriptTail(indexNode, node, ndIsND);
               if ndFlat >= 0 then
                 ASTRight[indexNode] := ndFlat
               else
               begin
-                if ndIsND then ASTRight[indexNode] := BuildPartialNDRowIndex(CurASTNode)
+                if ndIsND then BuildPartialNDRowIndex(indexNode, CurASTNode)
                 else ASTRight[indexNode] := CurASTNode;
                 Expect(tkRBrack, ']');
               end;
