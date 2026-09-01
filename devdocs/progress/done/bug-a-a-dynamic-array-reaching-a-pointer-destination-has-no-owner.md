@@ -60,4 +60,4 @@ has an oracle and the COUNT does not.
 ## Log
 
 - 2026-09-01 — found by sweeping the string family's seams for other managed
-  kinds, fixed and closed in the same session, commit PENDING-COMMIT.
+  kinds, fixed and closed in the same session, commit 65e15e5ab.
