@@ -336,9 +336,29 @@ begin
     SIB=$25 (no base, no index); rip-relative is mod=00 rm=101 and NO SIB byte,
     so the rewrite drops one byte.
 
-    MEASURED before writing this: across 1271 relocation sites, none is indexed
-    and none has an immediate trailing the displacement, so no site needs a
-    scratch lea and every addend here is -4.
+    THAT CENSUS WAS EMPTY, AND THIS COMMENT USED TO STATE ITS RESULT AS FACT.
+    It said: across 1271 relocation sites, none is indexed and none has an
+    immediate trailing the displacement, so every addend here is -4. The
+    instrument was sound and gcc-validated; the POPULATION could not contain
+    what it was counting -- all five objects were built without --threadsafe,
+    and the trailing-immediate shape lives almost entirely in lock code. The
+    zero was not wrong, it was empty.
+
+    What it cost, before the re-measure: EmitReleaseHeapLock emits
+    `mov dword [@glob], 0` -- C7 /0, imm32 TRAILING the disp32 -- so measured
+    from rip the release wrote four bytes PAST the lock word. The lock was
+    never freed, every worker spun forever, test_multithreading hung at its
+    first join, and test_mutex passed. No crash and no diagnostic.
+
+    Re-measured over a population that CAN contain it (instrumenting the
+    emitter, building --threadsafe): 13 of 191 converted sites are C7 and trail
+    four bytes. So the addend is NOT uniformly -4, which is why GlobRefTrailingImm
+    derives it from the opcode -- and returns False for anything unlisted, in
+    which case the operand stays absolute. An unrecognised encoding loses
+    position-independence, never correctness.
+
+    Do not restore a "no site trails an immediate" claim from a census of
+    objects built without --threadsafe.
 
     The `else` REFUSES. A fourth byte-shape must not be silently emitted as a
     displacement that is now relative to something else -- that is the shape of
