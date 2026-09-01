@@ -11231,6 +11231,11 @@ begin
         end;
       end;
       idx := AllocParam(pnames[i], ptypes[i], True, False);
+      if PxxDbgEnabled('a.cparamslot') then
+        WriteLn('PXXDBG a.cparamslot ', Procs[procIdx].Name, ' param ', pnames[i],
+                ' precid=', precid[i], ' RecName=', Syms[idx].RecName,
+                ' RecSize(RecName)=', RecSize(Syms[idx].RecName),
+                ' slot=', ParamValueSize(idx));
     end
     else
       idx := AllocParam(pnames[i], ptypes[i], False, False);

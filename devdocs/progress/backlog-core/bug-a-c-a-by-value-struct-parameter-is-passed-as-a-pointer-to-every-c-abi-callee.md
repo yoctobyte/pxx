@@ -338,3 +338,58 @@ the cheap way is to make one C record parameter non-`isRef` and check the frame
 slot is `RecSize` and not 8. Recorded at this strength on purpose rather than
 promoted to a finding.
 
+
+## THE PREREQUISITE WAS MEASURED, AND IT REACHES THE C HALF BY A DIFFERENT ROUTE (2026-09-01, frankC)
+
+The section above recorded, at deliberately low strength, a conclusion from
+reading two lines: that `precid` is resolved on the C path, so the `REC_NONE`
+sizing bug blocks the Pascal half and not this ticket's C-only gate. It said
+"whoever takes step 2 should measure it before relying on it". Measured now,
+with a `PXXDBG=a.cparamslot` probe at the `AllocParam` call
+(`cparser.inc`, kept — it costs nothing when the topic is off):
+
+| C struct | RecSize | precid | RecName | slot |
+| --- | --- | --- | --- | --- |
+| `{int a,b}` | 8 | 26 | 26 | 8 |
+| `{int a,b,c}` | 12 | 27 | 27 | 8 |
+| `{long a,b}` | 16 | 28 | 28 | 8 |
+| `{double x,y}` | 16 | 29 | 29 | 8 |
+| `{char buf[40]}` | 40 | 30 | 30 | 8 |
+| `{int a}` | 4 | 31 | 31 | 8 |
+
+**The reading was RIGHT and the conclusion drawn from it was WRONG.**
+`precid = RecName` on every row and `RecSize` returns gcc's true size, so the
+id really is resolved on the C path and the 41-of-52 `REC_NONE` problem really
+is Pascal-only. **But the prerequisite still binds the C half**, through a
+mechanism neither the blocking ticket nor this one had named:
+
+`ParamValueSize` (`symtab.inc`) stores a record inline **only when
+`RecSize(...) <= 8`**. Above that it falls through to `ABIParamSlotIsPointer`,
+which answers True for `tyRecord`, and the slot is `TARGET_PTR_SIZE`. So
+flipping `isRef` to False leaves a 12- or 16-byte by-value record with an
+**8-byte frame slot**, and the callee spill's second eightbyte at
+`Syms[idx].Offset + 8` lands in the neighbouring parameter exactly as feared.
+The `<= 8` cap is not a bug today: it is the size at which the current
+convention switches to by-reference, so the two agree by construction. It
+becomes an under-allocation on the commit that changes the convention.
+
+**Same shape as the other two hazards in this ticket, and now there are three:
+a quantity that is correct today BECAUSE of the convention being replaced.**
+The NSAA advance (frankA), the `REC_NONE` fallback (frankC), and now the
+`<= 8` inline cap. All three were found by asking what a present-tense fact
+depends on, and none of them is reachable by testing the current compiler.
+
+**Correction to the plan, therefore:** step 2's first move is not the
+classification loop. It is `ParamValueSize` learning to size a
+register-classified aggregate at `ceil(RecSize/8)*8`, because every later piece
+writes into that slot. It is also inert while nothing sets `isRef := False`,
+so it lands and is provable on its own like step 1 was.
+
+**A note on how this was found, because it was nearly missed.** The probe was
+written to answer the `REC_NONE` question, and on that question the answer is
+"resolved, no problem". The `slot=8` column was printed only because it was one
+more field to print. **The question the ticket asked was answered YES and the
+prerequisite held anyway** -- the id was never the binding constraint, and
+verifying the named suspect would have cleared the case. This is the
+`the-name-is-not-the-thing` pattern in a prerequisite rather than an
+identifier: the blocker was real, and it was filed under the wrong reason.
