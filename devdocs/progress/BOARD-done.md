@@ -2853,6 +2853,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-writeln-nonfinite-float | T | 70 | regression | regression: test-core#src:test/test_writeln_nonfinite_float.pas red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-tkinter-facade | T | 70 | regression | regression: test-core#src:examples/tk/tkinter_facade.npy red at f8b8a7eb5ed2 (auto-filed by twatch) | — |
 | regression-test-emit-obj-02 | T | 70 | regression | regression: test-emit-obj#02 red at c53553f21214 (auto-filed by twatch) | — |
+| regression-test-emit-obj-compiler-srchash | A | 70 | regression | regression: test-emit-obj#src:tools/compiler_srchash.sh at c1f7471fe1d0 in step 95/57, `if command -v gcc >/dev/null 2>&1; then \ printf '#inclu` (auto-filed by twatch) | — |
 | regression-test-emit-obj-cxtensa-obj | A+S | 70 | regression | regression: `--target=xtensa` on a C source selects the POSIX platform backend | — |
 | regression-test-emit-obj-test-emit-obj | A+S | 70 | regression | regression: test-emit-obj#src:test/test_emit_obj.pas red at bfec13534396 (auto-filed by twatch) | — |
 | regression-test-fgl-pascal26 | P | 70 | regression | regression: test-fgl#src:compiler/.pascal26.fixedpoint red at 719bef10ea68 (auto-filed by twatch) | — |

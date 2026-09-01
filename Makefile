@@ -4245,7 +4245,7 @@ test-threads: $(COMPILER)
 	# were refused at once, and never a hang, which is what serialising Halt produced.
 	./$(COMPILER) --threadsafe -dPXX_SCHED_TINY_REACTORS test/test_sched_reactor_exhaustion.pas $(TESTTMP)/test_sched_exhaust26
 	set +e; $(TESTTMP)/test_sched_exhaust26 > $(TESTTMP)/sched_exhaust.log 2>&1; rc=$$?; set -e; \
-	  tools/expect_same.sh test_sched_exhaust26-rc "$$rc" "216"; \
+	  tools/expect_same.sh test_sched_exhaust26-rc "$$rc" "216" || exit 1; \
 	  tools/expect_same.sh test_sched_exhaust26-msg "$$(head -n 1 $(TESTTMP)/sched_exhaust.log)" "fatal: scheduler out of reactor slots (MAX_REACTORS)"
 	# Halt(n) from a NON-MAIN thread must end the PROCESS. x86-64 and arm32 emitted
 	# `exit` (thread exit) rather than `exit_group`, so the fatal killed only the
@@ -4258,7 +4258,7 @@ test-threads: $(COMPILER)
 	# bug-b-concurrent-halt-from-several-threads-exits-0
 	./$(COMPILER) --threadsafe test/test_halt_from_worker_thread.pas $(TESTTMP)/test_halt_worker26
 	set +e; $(TESTTMP)/test_halt_worker26 > $(TESTTMP)/halt_worker.log 2>&1; rc=$$?; set -e; \
-	  tools/expect_same.sh test_halt_worker26-rc "$$rc" "216"; \
+	  tools/expect_same.sh test_halt_worker26-rc "$$rc" "216" || exit 1; \
 	  tools/expect_same.sh test_halt_worker26-msg "$$(head -n 1 $(TESTTMP)/halt_worker.log)" "worker: calling Halt(216)"
 	# a CONSTANT shift count uses the immediate form at -O3 (no `mov rcx,k`).
 	# Every operand width and signedness, counts 0/1/3/5/7/9/31/32/63, and each
@@ -17491,15 +17491,15 @@ test-emit-obj: $(COMPILER)
 	@printf 'int captured;\nvoid ext_notify(int v) { captured = v; }\nvoid ext_aliased_link(int v) { (void)v; }\nextern int emit_obj_addup(int);\nextern const char *emit_obj_tag(void);\n#include <stdio.h>\nint main(void){ printf("%%d %%s\\n", emit_obj_addup(9), emit_obj_tag()); return 0; }\n' > $(TESTTMP)/test_emit_obj_x64_caller.c
 	@if command -v gcc >/dev/null 2>&1; then \
 	  gcc -no-pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64.o -o $(TESTTMP)/test_emit_obj_x64_exe || { echo "test-emit-obj: x86-64 .o FAILED to link with gcc -no-pie"; exit 1; }; \
-	  tools/expect_same.sh test_emit_obj_x64_exe "$$($(TESTTMP)/test_emit_obj_x64_exe)" "45 pxx-emit-obj"; \
+	  tools/expect_same.sh test_emit_obj_x64_exe "$$($(TESTTMP)/test_emit_obj_x64_exe)" "45 pxx-emit-obj" || exit 1; \
 	  echo "test-emit-obj: x86-64 .o links+runs under a gcc-built main ok"; \
 	  gcc -pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64.o -o $(TESTTMP)/test_emit_obj_x64_pie || { echo "test-emit-obj: PIE link FAILED -- x86-64 objects are position-independent since feature-a-x86-64-object-output-is-position-dependent; an absolute relocation back in .text is the cause"; exit 1; }; \
 	  readelf -hW $(TESTTMP)/test_emit_obj_x64_pie | grep -q 'Type:.*DYN' || { echo "test-emit-obj: -pie produced a non-DYN executable; the PIE assertion below would be vacuous"; exit 1; }; \
-	  tools/expect_same.sh test_emit_obj_x64_pie "$$($(TESTTMP)/test_emit_obj_x64_pie)" "45 pxx-emit-obj"; \
+	  tools/expect_same.sh test_emit_obj_x64_pie "$$($(TESTTMP)/test_emit_obj_x64_pie)" "45 pxx-emit-obj" || exit 1; \
 	  echo "test-emit-obj: x86-64 .o links+runs as a PIE too"; \
 	  if command -v clang >/dev/null 2>&1; then \
 	    clang -fPIE -pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64.o -o $(TESTTMP)/test_emit_obj_x64_clang || { echo "test-emit-obj: clang PIE link FAILED"; exit 1; }; \
-	    tools/expect_same.sh test_emit_obj_x64_clang "$$($(TESTTMP)/test_emit_obj_x64_clang)" "45 pxx-emit-obj"; \
+	    tools/expect_same.sh test_emit_obj_x64_clang "$$($(TESTTMP)/test_emit_obj_x64_clang)" "45 pxx-emit-obj" || exit 1; \
 	    echo "test-emit-obj: x86-64 .o links+runs under clang -pie (second linker)"; \
 	  else echo "clang not installed; second-linker PIE check skipped"; fi; \
 	else echo "gcc not installed; x86-64 .o link check skipped"; fi
@@ -17625,7 +17625,7 @@ test-emit-obj: $(COMPILER)
 	# The SAME caller and the SAME expected output as the x86-64 row above.
 	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
 	  gcc -m32 -no-pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_386.o -o $(TESTTMP)/test_emit_obj_386_exe || { echo "test-emit-obj: i386 .o FAILED to link with gcc -m32 -no-pie"; exit 1; }; \
-	  tools/expect_same.sh test_emit_obj_386_exe "$$($(TESTTMP)/test_emit_obj_386_exe)" "45 pxx-emit-obj"; \
+	  tools/expect_same.sh test_emit_obj_386_exe "$$($(TESTTMP)/test_emit_obj_386_exe)" "45 pxx-emit-obj" || exit 1; \
 	  echo "test-emit-obj: i386 .o links+runs under a gcc -m32 main ok"; \
 	else echo "gcc -m32 (multilib) not installed; i386 .o link check skipped"; fi
 	# 4c. THE ABI CONTRACT, not just "it links and runs". ebx, esi and edi are
