@@ -49,6 +49,37 @@
   to `specialize TBase<T>` by DelphiRewriteGenericUses rather than given a
   resolver of its own. }
 
+{ Advance k past any hint directives (`deprecated ['msg']`, `platform`,
+  `experimental`, `library`, `unimplemented`) sitting at token index k.
+
+  The token-index twin of pasparser_decl.inc's SkipHintDirectives, which walks
+  CurTok and so cannot be used by the template capture -- that capture scans the
+  Tokens[] array ahead of the parser. Both consult IsHintDirectiveName, which is
+  the point: that function exists so the list lives in ONE place, and a
+  hand-rolled copy here would be the drift it was written to prevent.
+
+  Written as a helper rather than inline because the capture needs it at TWO
+  terminators (the `end`-counted body and the bodyless form) and the file
+  already carries a scar from the alternative -- the `abstract`/`sealed` skip
+  next to the bodyless test is a hand-rolled copy of CollectNestedTypeNames'
+  skip, and its own comment calls that out as "one decision, two hand-rolled
+  copies". Three would not have been better than two.
+  bug-p-a-hint-directive-on-a-generic-type-is-a-parse-error }
+procedure SkipHintDirectiveToks(var k: Integer);
+begin
+  while (k < TokCount) and (Tokens[k].Kind = tkIdent) and
+        IsHintDirectiveName(GetTokenStr(k)) do
+  begin
+    if CaseEqual(GetTokenStr(k), 'deprecated') then
+    begin
+      Inc(k);
+      if (k < TokCount) and (Tokens[k].Kind = tkString) then Inc(k);
+    end
+    else
+      Inc(k);
+  end;
+end;
+
 function FindSpecialization(const nm: AnsiString): Integer;
 { VISIBILITY-AWARE, and it has to be. The table is one flat global list, but a
   specialization is not a global fact: SpecializeStream declares an ordinary
@@ -2053,6 +2084,7 @@ procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm
 var
   templateName: AnsiString;
   depth, startTok, cur, finalCur, np, gi, scan, bEnd: Integer;
+  hintLo, hintHi: Integer;   { the hint-directive span, excluded from the arena }
   dgenAt, dgenRounds, dgenBefore, dgenAtBefore, dgenT, dgenEmitted: Integer;   { the nested-specialize fixed point }
   pnames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   doneParams, bodyless: Boolean;
@@ -2064,6 +2096,7 @@ var
   cFlags, cNTypes, groupStart, cgi, cj: Integer;
   cTypeOff, cTypeLen: array[0..MAX_TPC_TYPES-1] of Integer;
 begin
+  hintLo := -1; hintHi := -1;
   { Copy BEFORE Next: callers pass CurTok.SVal, and a const AnsiString param
     aliases it by reference — Next would mutate the name out from under us. }
   templateName := templateNameIn;
@@ -2246,6 +2279,12 @@ begin
           Inc(scan);
         until (scan >= TokCount) or (depth = 0);
       end;
+      { ...and past a hint directive, for the same reason the modifiers are
+        skipped above: this test asks "is the next token a ';'", so anything
+        legal in between makes a BODYLESS declaration read as one with a body.
+        Measured pre-fix on binary 39e033c85335: `class(TObject) deprecated;`
+        swallowed to EOF and blamed the final '.'. }
+      hintLo := scan; SkipHintDirectiveToks(scan); hintHi := scan;
       if (scan < TokCount) and (Tokens[scan].Kind = tkSemicolon) then
       begin
         cur := scan;
@@ -2289,6 +2328,29 @@ begin
     Inc(cur);
   end;
 
+  { A hint directive sits BETWEEN the closing `end` and the ';' --
+    `TTest<T> = class end deprecated 'M';`. The depth loop above stops on the
+    `end`, so the ';' test below was looking at `deprecated`, never consumed
+    the ';', and left the outer parser resuming ON the directive. Every
+    generic type carrying a hint answered `expected 'begin' before
+    'deprecated'`; dropping the `<T>` compiled, because the non-generic path
+    has gone through SkipHintDirectives since it was written. This is that
+    procedure's template arm, over token INDICES rather than CurTok, and it
+    shares IsHintDirectiveName so the two cannot drift apart -- which is the
+    whole reason that function exists.
+    The directives land INSIDE the captured span, like the ';' does, so a
+    specialization re-emits them and the non-generic path parses them there.
+    Of the two sibling terminators only ONE was safe, and testing rather than
+    reasoning is what said so. The no-`end` arm breaks at the first ';' at
+    depth 0, already past any directive. The BODYLESS arm was not safe: it
+    tests for ';' at a fixed point, so `TB<T> = class(TObject) deprecated;`
+    failed its test, was ruled to HAVE a body, and went to a depth loop with no
+    `end` to find -- swallowing the rest of the file and reporting `expected
+    'begin' before '.'`. That is a worse failure than the one being fixed here
+    and it is fixed at that arm.
+    bug-p-a-hint-directive-on-a-generic-type-is-a-parse-error }
+  hintLo := cur; SkipHintDirectiveToks(cur); hintHi := cur;
+
   if (cur < TokCount) and (Tokens[cur].Kind = tkSemicolon) then
     Inc(cur);
 
@@ -2325,6 +2387,15 @@ begin
 
   for cur := startTok to finalCur - 1 do
   begin
+    { The hint directive is an annotation on the DECLARATION, not part of the
+      type, so it is consumed above but never enters the arena. Uniform across
+      both arms deliberately: with `deprecated` left in, a bodyless template
+      re-emitted `TBodyless$Integer = class(TBase) deprecated;` at the
+      specialization site and the emitter answered `expected ':' before 'end'`.
+      The `end`-bodied arm happened to survive the same treatment, which is
+      exactly why it should not be left to happen -- one concept, one rule.
+      bug-p-a-hint-directive-on-a-generic-type-is-a-parse-error }
+    if (hintLo >= 0) and (cur >= hintLo) and (cur < hintHi) then continue;
     if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then
       Error('generic template tokens overflow');
     TemplateTokens[TemplateTokenCount].Kind := Tokens[cur].Kind;

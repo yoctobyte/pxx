@@ -8149,6 +8149,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_constbool26 "$$($(TESTTMP)/test_constbool26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_hint_directives_on_vars_and_fields.pas $(TESTTMP)/test_hintdir26
 	tools/expect_same.sh test_hintdir26 "$$($(TESTTMP)/test_hintdir26 | tail -1)" "ALL OK"
+	./$(COMPILER) -Fulib/rtl test/test_hint_directive_on_a_generic_type.pas $(TESTTMP)/test_hintdirgen26
+	tools/expect_same.sh test_hintdirgen26 "$$($(TESTTMP)/test_hintdirgen26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_open_array_of_a_named_dynamic_array.pas $(TESTTMP)/test_oadynelem26
 	tools/expect_same.sh test_oadynelem26 "$$($(TESTTMP)/test_oadynelem26 | tail -1)" "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_named_fixed_array_of_a_dynamic_array.pas $(TESTTMP)/test_fixdynelem26
