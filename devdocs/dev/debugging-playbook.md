@@ -4937,6 +4937,48 @@ The tell: I wrote *"either it is reachable and ... or it is not and ..."*. A
 two-branch enumeration built from a one-token delta is a claim that the token
 is the only thing in play. Write the repro instead; it took two lines.
 
+## A FALLBACK can be a downgrade, not a net — measure which before you keep it
+
+Named 2026-09-01 (frankB, at frankA's suggestion). A fallback reads as a safety
+net: the good path could not answer, so the fallback catches it. That reading is
+an assumption about RELATIVE QUALITY, and it is almost never measured, because
+the fallback's mere existence supplies the reassurance.
+
+Invert it and ask: **if this fallback fires, is its answer BETTER or WORSE than
+the default it replaces?** For a fallback that is a second, older implementation
+of the same question — which is what most of them are — the honest prior is
+worse, since the first implementation is the one that stopped being maintained.
+
+**The case.** `ResolveDerefShapeAt` had ten typed arms and two fallbacks that
+called `NodePtrElem`, an older walk answering the same question. It read as a
+net. Measured:
+
+- **Does it fire?** A full tier: 939 hits on one, 220 on the other, across 1050
+  of 7158 job logs. Live code, not dead.
+- **Does it ANSWER?** Zero. `else-ans=0`, `backstop-ans=0` on every row — it was
+  asked 1159 times and declined 1159 times, and both call sites restored the same
+  default they had before asking.
+- **Would it be RIGHT if it did answer?** Disable the ten arms so the fallback
+  must carry everything: it answers 11356 of 11383 calls — it declines almost
+  nothing when it is the only option — and the generated test matrix goes 30/30
+  to 27/30, three rows turning SILENTLY wrong.
+
+So it was the poorer walk. A firing anywhere unmeasured would have **overridden a
+correct default with a worse answer**, not rescued a missing one. Keeping it "to
+be safe" would have been keeping a downgrade, and the argument for keeping it was
+entirely the word *fallback*.
+
+**The three questions, in order, because each is cheap and the next only matters
+if the previous says yes:** does it fire; does it answer; is its answer better.
+Most fallbacks fail at the second and nobody asks the third.
+
+**And the deletion warrant this yields is the durable one.** "Unreachable" is a
+claim about a SEARCH, and it dies the moment somebody runs a bigger corpus — mine
+did, from 0 hits over 35 files to 1159 over a tier. *"It is present 1159 times,
+answers none of them, and the caller restores the same default when it declines"*
+is a claim about the CODE, and it survives the reachability number moving
+underneath it. Prefer the warrant that a larger population cannot overturn.
+
 ## A probe needs a control for DELIVERY, not only for behaviour
 
 Named 2026-09-01 (frankB and frankT, from opposite ends of the same hour). It is
