@@ -372,6 +372,17 @@ never writes — carry a one-line probe in the affected shape. For a MARSHALLING
 change, carry one from **each frontend your quick tier does not cover**;
 `x = "a" * 3` costs under a second and would have caught a shipped ABI mismatch.
 
+**A CLEAN TREE IS NOT EVIDENCE ABOUT A SESSION EITHER.** "Clean tree at a sha
+that is not the tip" is exactly what a session looks like the moment
+`tools/sync.sh` returns — it is the SIGNATURE OF HAVING JUST LANDED, and it was
+read as never having started. Measured 2026-09-01: frankH was judged idle on
+it and had **eleven commits on origin/master that day**, the last eight minutes
+earlier. The instrument answers "are there uncommitted edits" and gets read as
+"has this session done anything". Ask the right question instead —
+`git log origin/master --grep=<the session's Claude-Session URL>` — and note
+the URL DOES discriminate (verified: two sessions, two ids), while
+`Co-Authored-By` does not, because every agent shares it.
+
 **A CLEAN TREE IS NOT EVIDENCE ABOUT THE BINARY. The `converged after N round(s)`
 line is.** `compiler/pascal26` is untracked, so `git status` says nothing about
 which compiler is on disk. Three routes to a stale one: a seeded tree (`cp`
