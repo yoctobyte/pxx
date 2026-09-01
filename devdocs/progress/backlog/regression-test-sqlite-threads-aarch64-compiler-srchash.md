@@ -41,3 +41,80 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-01 — the seven watcher saw `test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh` GREEN at 46dddae58485 (tier full) and did NOT close this: the job FAILED and passed on a retry in this very run, so this green is the race firing rather than evidence against it. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+- 2026-09-01 (frankA) — that retry-green is independent corroboration of the triage below, from a source the triage did not choose: the job passing on a retry at 46dddae58485 is what a transient looks like, and the byte comparison says there was no codegen change to be transient ABOUT. Together they close the question the harness's contention gate deliberately leaves open ("is this a perf regression?") from both ends — the run recovered, and the binaries are identical.
+
+## Triaged 2026-09-01 (frankA) — NOT `d9a8fa192`, and the interval is genuinely one wide
+
+frankC flagged this to me because the interval names my commit and nothing else:
+`git log 04f5b94624b3..fc9139c264df -- compiler/ lib/` returns exactly
+`d9a8fa192` (open-array copy-in: managed-field records). I verified that range
+myself, and both endpoints are ancestors of origin/master, so it is a bisect by
+construction rather than by inference. The attribution is fair. It is still wrong.
+
+### The measurement
+
+Built both endpoint trees (`compiler/` + `lib/` at each sha) and compiled the
+same corpus for aarch64 with each:
+
+| | |
+| --- | --- |
+| GOOD tree `04f5b94624b3` | compiler sha `423bba4cf0a8` |
+| BAD tree `fc9139c264df` | compiler sha **`f1636ca270a8`** |
+
+That second sha is the one the failing run's own log line quotes, so this is the
+exact artifact seven ran, not a rebuild of something like it.
+
+**134 aarch64 binaries compiled by both compilers. 134 byte-identical, 0
+differ.** 130 C programs (the C frontend + `lib/crtl`, which is what the sqlite
+job compiles) plus `test_multithreading`, `test_palthread`,
+`lib_classes_tthread` and `test_exception_threads_race` (the RTL + PAL pthread
+path the job links).
+
+**The zero is not vacuous.** Positive control: `test_open_array_managed_field_record.pas`
+built for aarch64 by both compilers DIFFERS, and differs in behaviour
+(`const sum=0` vs `const sum=8`). So the comparison can discriminate; it simply
+found nothing to discriminate in this corpus. The reason is structural: the
+changed path fires only on a PASCAL open-array parameter given a static array of
+managed-field records, and sqlite is C.
+
+**Scope, stated rather than implied:** the sqlite amalgamation is absent on
+frankA's box (`library_candidates/sqlite` does not exist), so this job SKIPS
+here and I could not run it. What I compared is every other producer that goes
+into that binary. The part I did not compare is sqlite's own C source, which
+cannot contain a Pascal open-array parameter.
+
+### So what was it — the residual question, with an owner
+
+It **timed out**; it did not crash or mismatch. The report's own captured tail:
+
+```
+test-sqlite-threads: building threadsafe sqlite (aarch64) ...
+ok: $TMP  [code=7208728B ...]
+test-sqlite-threads: FAIL aarch64 (TIMED OUT after 200s;
+  TESTMGR_TIME_SCALE=1.00 TESTMGR_LOAD_SCALE=2.00 cap=200s)
+```
+
+The build SUCCEEDED. `run_sqlite_thread_test.sh`'s own comment records the
+aarch64 run as **~37s of its 120s budget on plexus**; on seven it exceeded 200s.
+And `tools-devtest#00` **TIMED OUT in both runs**, good and bad alike, with the
+bad run's wall 15% longer overall (749.2s vs 653.9s). Two unrelated jobs blowing
+budgets on the same box is a statement about the box.
+
+**Why it became a permanent verdict rather than a flake:** `testmgr.py` has an
+overlong-duration retry, but it only PROPOSES the shape — the caller routes it
+through `_retriable_contention`, which requires a peer testmgr to have been live.
+That gate is deliberate and its reasoning is sound: without it, a 9x-overlong
+failure could equally be a real performance regression, and retrying would mask
+the one finding duration is good at surfacing. So the open question the gate
+exists to protect is precisely *"is this a perf regression?"* — and the byte
+comparison above answers it: **no, the binaries are identical.**
+
+That is the residual and it is Track T's, as a finding now rather than as the
+auto-filer's fallback: either seven's budgets need to fit seven, or the
+contention gate needs a second discriminator for the no-live-peer case. Sibling
+precedent is `done/bug-t-flaky-async-multithreaded-tests-false-newred` — same
+shape (a transient becomes a permanent verdict for a multithreaded job),
+different arm of it, since that one was about nonzero exits and this is a
+timeout that the retry path deliberately declines.
+
+Not re-laned out of T. Leaving prio as filed; I hold no claim on it.
