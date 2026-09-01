@@ -43,3 +43,6 @@ expect_same: MISMATCH [test_promoac26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-01 — auto-closed by the seven watcher: `test-core#src:test/test_promoint_array_cleanup.pas` passes at 2017b6eac619 (tier native); it was red at 145e7a11dfed. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
