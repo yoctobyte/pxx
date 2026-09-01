@@ -84,3 +84,64 @@ CRASHED"). That makes a regression of that fix the first hypothesis to test. Not
 confirmed: the emitted binary carries no symbol table, so the addresses were
 never resolved to names, and `-g -O2` did not add one. Whoever picks this up
 should go through `tools/pxx-gdb.py` / `pxxrc` rather than bare gdb.
+
+## SETTLED: the cause is 620989250 (frankB, 2026-09-01, later)
+
+    compiler/ at 620989250^ (992aa2a20)   0/20 fail   both phases, full expected output
+    compiler/ AT 620989250                20/20 fail  rc=139, empty output
+
+Both built with `lib/**` and the test source at HEAD; only `compiler/` moved.
+That is the whole bisect — no gdb, no symbols, and the thread-stack reading
+below is not needed to place it.
+
+**620989250** is `fix(A): every caught exception object leaked on every backend,
+both Pascal shapes` — 90 lines of `compiler/ir.inc` in the exception path,
+landing 13:18 UTC, nine minutes before the test went red.
+
+### Two claims in the section above are WRONG. Corrected here rather than edited away.
+
+**1. "It predates today" is false.** It is a same-day regression. From
+`tstate/runs-seven.ndjson` (frank-coordinator): this job appears in 51 runs,
+`new_red` in exactly one — `e7be39f9a505` at 13:27:15Z — and `still_red` in the
+50 since; the run before it, `62e176c3c4e5` at 13:24:30Z, was green. A
+three-minute green→red window holding exactly one code commit.
+
+**2. The `785928f20` leg was void, and it is the reason the range looked wrong.**
+`git merge-base --is-ancestor 620989250 785928f20` is **TRUE** — 785928f20 is
+16:20 UTC, three hours ABOVE the suspect. So reverting `compiler/` to it KEPT
+the change worth removing, and the 20/20 measured there proves nothing about
+`compiler/`. I also handed that sha to another agent as the bottom of a search
+interval, who bisected `785928f20..5f3c7ed75` — a range that excludes the cause.
+Endpoint measurements there were all correct and simply sit above the break.
+
+**3. The pinned-binary leg was not independent either.** Two agents ran the same
+Aug-30 pinned compiler and got different symptoms (rc=139 vs rc=217) because
+each ran it against their own then-HEAD `lib/**` and test source. Neither held
+the moving part still, so it was never one measurement.
+
+What survives from that section: it is deterministic, not a race (20/20 in
+isolation, no load), and the test source is unchanged today.
+
+### Where to look
+
+NOT the slot allocation — that was my first guess and it is wrong. The diff adds
+status slot 6 (`BSS_EXC_CLS`, the raised class recId) to `IRExcStoreSlot` so the
+try/except lowering can tell a raised OBJECT from a raised Integer before
+freeing it, and the obvious hypothesis was a process-wide BSS slot repeating the
+shadow-chain bug this very test was written for. Checked and false:
+`exception_emit.inc` maps `BSS_EXC_CLS` to `TLS_SLOT_EXC_CLS`, the indices
+(8..11 exception, 12 magbusy, 16+ heap magazines) fit `TLS_BLOCK_SIZE = 1152`
+exactly, and **620989250 does not touch `defs.inc` at all**, so the slot
+allocation predates it.
+
+That leaves the two lowering hunks: `ir.inc` ~6467 and the ~82-line one at
+~13351. Note the TLS form is **x86-64 only** and gated on `ExceptionUsed`
+(`StatusSlotTlsIndex` exits -1 otherwise), so the other five backends run a
+non-TLS path through the same lowering.
+
+**Authorship unresolved on purpose.** The commit carries
+`session_01Hkux3cssbhbVSdw6JvJamq`, which is the session that wrote this
+section — and a trailer names a SESSION, not an agent, with agents spanning
+several across restarts (seven session ids against four known-active agents in
+the last 8 hours). So it is recorded as "this session's id is on it", not as an
+attribution.

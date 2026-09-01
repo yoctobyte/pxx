@@ -67,3 +67,59 @@ The conversion site that materialises an AnsiString from a Variant for a
 non-owning destination — an argument slot or a comparison operand — and does not
 register the temporary for release. `s := v` taking the owning path is the
 contrast that should localise it.
+
+## Root cause, found 2026-09-01 (frankB)
+
+**The predicate asks about the AST SHAPE; the ownership question is about what
+the LOWERING produced.**
+
+`ir.inc` gives a managed-string argument an owning temp like this (7 sites, the
+one at ~11862 shown):
+
+    argIsManagedTemp :=
+      (not isRefArg) and ParamWantsManagedStrTemp(cpi, pathIdx) and
+      (ASTKind[ASTLeft[item]] <> AN_IDENT) and
+      (ASTKind[ASTLeft[item]] <> AN_FIELD) and
+      (ASTKind[ASTLeft[item]] <> AN_INDEX) and
+      (ASTKind[ASTLeft[item]] <> AN_DEREF);
+
+When true it allocates a hidden `tyAnsiString` var, stores the value into it and
+passes that, so scope exit releases it. The four exclusions say "this argument
+is a place somebody else already owns, so no temp is needed."
+
+For `Take(v)` where `v: Variant` and the parameter is `const AnsiString`, the
+argument node IS an `AN_IDENT`, so the exclusion fires and no owning temp is
+made. But the value passed is not `v`: `IRLowerCallArg` has routed through
+`IRLowerVariantAsScalar` (ir.inc ~6215), which ends at
+
+    IRLowerVariantAsScalar := IRAppendCall(vuProc, vuArg, -1, Ord(vuRet));
+
+calling `VariantToStrPas` and returning a BRAND-NEW AnsiString with a refcount
+nobody holds. The AST still looks like a plain variable. The same applies to
+`a[1].v` (AN_INDEX / AN_FIELD), which is why the dyn-array-record spelling leaks
+identically — and why the old "needs SetLength churn" reading looked plausible.
+
+Confirmed by IR dump (`PXXDBG=a.ir:Leaky`) — node 13 is the conversion call
+returning tk=23 (AnsiString), node 14 passes it, and nothing releases it:
+
+    11: lea      [sym=v]
+    12: arg      a=11  tk=22
+    13: call     a=156 b=12  tk=23     <- fresh AnsiString, unowned
+    14: arg      a=13  tk=22
+    15: call     a=248 b=14            <- Take
+
+**The temp machinery itself is not broken**, which is what makes this narrow.
+Measured, 1000 trips: a binop string temp as an argument, a CALL-RESULT string
+temp as an argument, a call-result temp as a comparison operand, and a
+call-result temp assigned to a variable are all clean (live=1). Only the Variant
+coercion leaks (921). So every other producer of an unowned AnsiString is
+registered; this one seam is not.
+
+**Fix shape, and the trap in it.** The predicate needs to be true when the
+argument is a Variant being coerced to AnsiString, regardless of AST kind. The
+trap is that the same predicate-plus-four-exclusions is spelled out at SEVEN
+sites (~11862, 12107, 12346, 12545, 12666, 13806, 13923) — the comment at 12346
+calls itself "THE SEVENTH SITE" — so adding a clause in one place fixes one
+spelling and leaves six. The right change is one helper taking the arg AST that
+answers "does this argument need an owning temp", replacing the repeated
+predicate at all seven, per normalise-dont-special-case.
