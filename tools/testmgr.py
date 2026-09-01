@@ -109,6 +109,14 @@ TIERS = {
         "test-nilpy", "test-uforth",
         "lib-fpc-clean",
         "test-c-conformance",
+        # The mixed-link ABI gate: gcc compiles main, pxx compiles the object,
+        # they are linked and the struct fields are read across the boundary in
+        # BOTH directions. It is the only job here that can judge a calling
+        # convention or a struct layout at all -- every other C subject is pxx on
+        # both sides, and a self-consistent pair agrees by construction. Skips a
+        # target whose gcc multilib is absent; RED if every target skips.
+        # NOT native: it forks gcc six times, and native is what dev boxes gate on.
+        "test-c-abi-mixed-link",
         # NOT test-float-determinism: it drives examples/mandelbrot through
         # tools/run_target.sh, so it classes `qemu` and would break the one
         # property `limited` promises — that a box with no qemu can run it.
@@ -197,6 +205,14 @@ TIERS = {
         "test-nilpy", "test-uforth",
         "lib-fpc-clean",
         "test-c-conformance",
+        # The mixed-link ABI gate: gcc compiles main, pxx compiles the object,
+        # they are linked and the struct fields are read across the boundary in
+        # BOTH directions. It is the only job here that can judge a calling
+        # convention or a struct layout at all -- every other C subject is pxx on
+        # both sides, and a self-consistent pair agrees by construction. Skips a
+        # target whose gcc multilib is absent; RED if every target skips.
+        # NOT native: it forks gcc six times, and native is what dev boxes gate on.
+        "test-c-abi-mixed-link",
         "test-float-determinism", "test-emit-obj",
         "test-i386", "test-aarch64", "test-arm32", "test-riscv32",
         # XTENSA — full only, and it could not have gone anywhere else. It

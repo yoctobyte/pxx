@@ -17136,10 +17136,32 @@ test-c-abi-cross: $(COMPILER)
 # oracle available on this box.
 # bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area
 .PHONY: test-c-abi-glibc-oracle
-# THE MIXED-LINK GATE. Deliberately NOT wired into any suite: it is RED today,
-# by design, and it is the gate named by
-# bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee.
-# Run it with `make test-c-abi-mixed-link`; wire it in when that ticket closes.
+# THE MIXED-LINK GATE, in the `limited` and `full` tiers since 2026-09-01. It
+# was written RED and unwired for
+# bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee,
+# and enrolled the day that closed. Enrolment is the point, not the paperwork:
+# an unenrolled check asserts nothing while reporting success, which is the
+# failure test-fgl and test-fpjson demonstrated (see TIERS in tools/testmgr.py).
+# NOT `native` -- that is the tier dev boxes gate their pushes on, and this
+# forks gcc six times.
+#
+# IT IS ALSO THE ONLY ASSERTION IN THE TREE THAT A STRUCT MEMBER IS ALIGNED THE
+# WAY THE PLATFORM ALIGNS IT. TypeFieldAlign caps an 8-byte scalar at 4 on i386
+# and nothing pxx-only can see that, because pxx agrees with itself either way;
+# this gate reads the fields across a gcc boundary. Its sibling in the other
+# direction is test_const_array_align in test-core, which goes red if the cap
+# leaks onto TypeAlign (storage). Neither is a positive control for the other.
+#
+# A MISSING TOOLCHAIN SKIPS, IT DOES NOT FAIL -- a box without gcc multilib has
+# nothing to say about i386, and a suite job that reddens there would be
+# removed rather than fixed. The non-vacuity guard is `ran >= 1`: every target
+# skipping is RED, because a gate that measured nothing must never print PASS.
+# Set PXX_REQUIRE_ALL_TARGETS=1 on a box that is supposed to have both (this
+# one does) to turn any skip back into a failure.
+#
+# The `ran != want` check this replaces WAS DEAD: every `continue` in the loop
+# incremented `ran` first, so `ran` always equalled `want` and the guard could
+# not fire. It read as coverage for two years of nothing.
 #
 # Every other subject in this family is pxx on BOTH sides of the call, so it can
 # only prove pxx agrees with itself. A calling convention is agreed by
@@ -17150,12 +17172,11 @@ test-c-abi-cross: $(COMPILER)
 # reading what gcc laid down, `relay_*` is a pxx caller laying down what a gcc
 # callee reads. They fail independently.
 #
-# THE i386 ARM CANNOT COMPILE THIS SUBJECT since the function-pointer rows were
-# added: initialising a fn-pointer from an `extern` is refused outright on i386
-# (bug-a-the-address-of-an-external-routine-is-refused-on-i386-and-xtensa). i386
-# was already red here, but it now fails at COMPILE time, so the other 13 rows
-# report nothing for that target. Fix that bug first if you are implementing
-# i386's aggregate ABI -- otherwise this gate cannot tell you what you fixed.
+# i386 reports row-by-row again as of 91c293722, which implemented the address of
+# an external routine on i386. Before that, initialising a fn-pointer from an
+# `extern` was refused outright, so adding the two function-pointer rows took
+# i386 from 13 informative rows to a COMPILE FAIL that said nothing about the
+# other 13 -- a gate can be made less useful by adding coverage to it.
 #
 # x86-64 and i386 only, and that is not a shortcut: there is no gcc cross for
 # arm32, aarch64 or riscv32 on this box, so no mixed link is constructible for
@@ -17165,13 +17186,17 @@ test-c-abi-cross: $(COMPILER)
 .PHONY: test-c-abi-mixed-link
 test-c-abi-mixed-link: $(COMPILER)
 	@exp="$$(printf 'take_p2 37\ntake_p4 1234\ntake_p6 91\ntake_d2 17.50\ntake_mix 700.25\ntake_c3 123\ntake_late 1234537\nrelay_p2 37\nrelay_p4 1234\nrelay_p6 91\nrelay_d2 17.50\nrelay_mix 700.25\nrelay_late 1234589\nrelay_p2_ind 37\nrelay_mix_ind 700.25')"; \
-	overall=0; ran=0; want=0; \
+	overall=0; ran=0; want=0; skipped=0; \
 	for t in x86_64 i386; do \
 	  want=$$((want+1)); \
 	  case $$t in \
 	    x86_64) tgt=""; gccflag="-no-pie" ;; \
 	    i386)   tgt="--target=i386"; gccflag="-m32" ;; \
 	  esac; \
+	  if ! echo 'int main(void){return 0;}' | gcc $$gccflag -x c - -o $(TESTTMP)/ml_probe_$$t >/dev/null 2>&1; then \
+	    echo "test-c-abi-mixed-link: SKIP $$t (gcc $$gccflag cannot build a hosted binary here)"; \
+	    skipped=$$((skipped+1)); continue; \
+	  fi; \
 	  if ! ./$(COMPILER) $$tgt --emit-obj test/c_abi_mixed_link_pxx.c $(TESTTMP)/ml_$$t.o >$(TESTTMP)/ml_$$t.err 2>&1; then \
 	    echo "test-c-abi-mixed-link: PXX COMPILE FAIL $$t"; tail -2 $(TESTTMP)/ml_$$t.err; overall=1; ran=$$((ran+1)); continue; \
 	  fi; \
@@ -17184,10 +17209,12 @@ test-c-abi-mixed-link: $(COMPILER)
 	       printf '%s\n' "$$got" | sed 's/^/    /'; overall=1; fi; \
 	  ran=$$((ran+1)); \
 	done; \
-	echo "test-c-abi-mixed-link: $$ran of $$want targets measured"; \
+	echo "test-c-abi-mixed-link: $$ran of $$want targets measured, $$skipped skipped"; \
 	test "$$overall" = "0" || { echo "test-c-abi-mixed-link: RED"; exit 1; }; \
-	test "$$ran" = "$$want" || [ -n "$$PXX_ALLOW_SKIPPED_TARGETS" ] || \
-	  { echo "test-c-abi-mixed-link: RED -- $$want targets were asked for and only $$ran ran"; exit 1; }
+	test "$$ran" -ge 1 || \
+	  { echo "test-c-abi-mixed-link: RED -- every target was skipped, so this gate measured NOTHING"; exit 1; }; \
+	test -z "$$PXX_REQUIRE_ALL_TARGETS" || test "$$ran" = "$$want" || \
+	  { echo "test-c-abi-mixed-link: RED -- PXX_REQUIRE_ALL_TARGETS is set, $$want asked for, $$ran ran"; exit 1; }
 
 # WHAT THE ran/want ASSERT BELOW PROVES, AND WHAT IT DOES NOT.
 # It catches a SKIP: an iteration that ran and bailed (qemu absent) while
