@@ -109,7 +109,13 @@ gcc main.c ./mylib.so -o prog      # link against it
 
 The export surface is the same as an object's — the C-convention routines, and
 nothing else — so the `cdecl` example above applies unchanged. A library that
-exports nothing is refused rather than written.
+exports nothing is refused rather than written. That also bounds which
+frontends can produce one: Pascal `cdecl` and C functions are the only
+spellings that mark a routine C-convention, so a NilPy source has nothing to
+export and is refused.
+
+A C translation unit meant to be a library needs no `main`, the same as for
+`--emit-obj`.
 
 What works inside one: the pxx heap, managed strings, dynamic arrays, classes
 with virtual methods, and calls out to `external` routines, which are resolved

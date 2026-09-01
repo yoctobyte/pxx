@@ -7,7 +7,7 @@ found: 2026-08-31
 found-by: frank-user, at the owner's direction
 owner: ""
 blocked-by: []
-summary: "Standing umbrella, priced ABOVE bug fixing by the owner 2026-08-31. OBJECT OUTPUT WORKS ON FOUR TARGETS: x86-64 (41045d7b4, frankC), i386 (writeELFRel386General, frankC), riscv32 and xtensa -- a gcc-built main links a pxx object and calls into it; clang and tcc link the same object; export surface is the C-convention routines. x86-64 OUTPUT IS NOW POSITION-INDEPENDENT and needs no link flags at all (d0537380a / 44b256356 / a3b1af61a, frankA): .text carries no absolute relocation, so the object links into a PIE and a non-PIE, under gcc and clang, and survives a hardened -Wl,-z,text. i386 still needs -no-pie. --SHARED NOW WORKS FOR COMPILED SOURCES (0419bab94, frankA): a Pascal/C/NilPy source builds a .so that both links with ld and loads with dlopen, with virtual dispatch, heap, managed strings and libc calls working inside it. i386 ALREADY PAID THE DEBT IT WAS PRICED FOR: the C-ABI trigger fired and says OPTION A, and it exposed bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function (fixed 7a30658e7 -- ebx, esi AND edi). WHAT REMAINS: arm32 + aarch64 object output (p45, feature-a-object-output-for-arm32-and-aarch64, explicitly NOT urgent -- they are a second and third oracle for a ruling already made, and aarch64 is gated on making cparser.inc's positional param spill AAPCS first), i386 position independence (nobody has asked), and a Pascal `library` unit (worth LESS than it looked -- `cdecl` on a definition is already a working export spelling). pxx can now be linked into most things on x86-64; the remaining gap is targets, not output kinds."
+summary: "Standing umbrella, priced ABOVE bug fixing by the owner 2026-08-31. OBJECT OUTPUT WORKS ON FOUR TARGETS: x86-64 (41045d7b4, frankC), i386 (writeELFRel386General, frankC), riscv32 and xtensa -- a gcc-built main links a pxx object and calls into it; clang and tcc link the same object; export surface is the C-convention routines. x86-64 OUTPUT IS NOW POSITION-INDEPENDENT and needs no link flags at all (d0537380a / 44b256356 / a3b1af61a, frankA): .text carries no absolute relocation, so the object links into a PIE and a non-PIE, under gcc and clang, and survives a hardened -Wl,-z,text. i386 still needs -no-pie. --SHARED NOW WORKS FOR COMPILED SOURCES (0419bab94, frankA): a Pascal or C source builds a .so that both links with ld and loads with dlopen (NilPy cannot: only the Pascal and C frontends can mark a routine cdecl, so nothing is exportable), with virtual dispatch, heap, managed strings and libc calls working inside it. i386 ALREADY PAID THE DEBT IT WAS PRICED FOR: the C-ABI trigger fired and says OPTION A, and it exposed bug-a-i386-clobbers-ebx-across-a-cdecl-exported-function (fixed 7a30658e7 -- ebx, esi AND edi). WHAT REMAINS: arm32 + aarch64 object output (p45, feature-a-object-output-for-arm32-and-aarch64, explicitly NOT urgent -- they are a second and third oracle for a ruling already made, and aarch64 is gated on making cparser.inc's positional param spill AAPCS first), i386 position independence (nobody has asked), and a Pascal `library` unit (worth LESS than it looked -- `cdecl` on a definition is already a working export spelling). pxx can now be linked into most things on x86-64; the remaining gap is targets, not output kinds."
 ---
 
 # Meta: pxx produces linkable code, not just programs
@@ -53,7 +53,7 @@ in it is what the fix was built on.
   names three targets but whose summary is accurate: i386 done, the other two
   split out), the trigger fired, and the answer is recorded in the decide.
 - **`--shared` now works for compiled sources** — DONE 2026-09-01, `0419bab94`
-  ([[feature-a-shared-library-output-for-compiled-sources]]). A Pascal/C/NilPy
+  ([[feature-a-shared-library-output-for-compiled-sources]]). A Pascal or C
   source builds a `.so` that both links with `ld` and loads with `dlopen`. It
   was blocked on the relocation model exactly as predicted — a `.so` is
   relocated at load, so `-no-pie` could not rescue it — and unblocked by
@@ -61,6 +61,9 @@ in it is what the fix was built on.
   reading the old text here: `compiler.pas:1238` did NOT restrict `--shared` to
   `.asm`; it carried a comment saying so and no check, so a compiled source
   already reached the writer and got a valid `ET_DYN` exporting nothing.
+  **Pascal and C only** — `ProcCdecl` is set from `pasparser_*` and
+  `cparser.inc` and nowhere else, so NilPy, Rust and Zig have no export
+  spelling and can produce neither a `.so` nor a `.o`.
 - **x86-64 objects are position-independent** — DONE 2026-09-01, `d0537380a` /
   `44b256356` / `a3b1af61a`. `.text` carries only `R_X86_64_PC32`, so a link
   needs no flags and a PIE link works under gcc and clang. i386 is unchanged and

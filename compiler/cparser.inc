@@ -9937,9 +9937,22 @@ begin
     "main function not found" from an app_main-only riscv32 object.
     bug-cfront-no-entry-stub-for-xtensa. }
   callPatch := -1;
-  if EmitObjMode then
+  if EmitObjMode or EmitSharedMode then
   begin
-    { no entry stub, no main lookup — see the patch guard below }
+    { no entry stub, no main lookup — see the patch guard below. --shared is
+      here for the same reason -c is: a shared library has no ELF entry point,
+      the host program supplies one, and a translation unit meant to BE a
+      library legitimately has no `main`. Without this a C .so demanded one and
+      the workaround was to write an empty `main` that never runs.
+
+      NOT collapsed with the other three `EmitObjMode or EmitSharedMode` sites
+      into a shared predicate, deliberately. They agree in VALUE and not in
+      MEANING: this one and ir_codegen.inc's are "there is no entry point";
+      asmfront.inc's is "the program cannot fall off its end"; dce.inc's is
+      "the output carries its own code-offset relocations"; symtab.inc's is
+      "the writer relocates by section, not by absolute address". One predicate
+      would merge four rationales, and the day a fifth output mode arrives some
+      of them would be wrong together and silently. }
   end
   else
   case TargetArch of

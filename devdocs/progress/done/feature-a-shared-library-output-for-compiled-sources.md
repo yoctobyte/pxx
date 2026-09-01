@@ -7,7 +7,7 @@ found: 2026-08-31
 found-by: frankC
 owner: frankA
 blocked-by: []
-summary: "DONE 2026-09-01 (0419bab94). --shared now builds a real x86-64 shared library from a compiled source (Pascal/C/NilPy): it LINKS with ld and LOADS with dlopen, exports the C-convention routines, and runs virtual dispatch, the pxx heap, managed strings and calls out to libc from inside. It was blocked on the backend exactly as this ticket said -- a .so is relocated at load, so the absolute operands -no-pie rescued in an object could not work here -- and unblocked by feature-a-x86-64-object-output-is-position-dependent. CORRECTION to this ticket: it said compiler.pas restricts --shared to .asm sources 'in the option handler'. It does not; the handler carries a COMMENT saying so and no check, so a compiled source already reached writeELFSharedX64 and got a structurally valid ET_DYN with zero dynamic symbols, zero relocations and no .bss. Four changes: exports from the same ObjProcIs* predicates --emit-obj uses; a .bss past end-of-file (memsz > filesz); R_X86_64_RELATIVE + DT_RELACOUNT for DataPtrFix and MethodFixups, the only absolute pointers left now that code is rip-relative; and TEN SECTION HEADERS, which no loader reads but which ld requires -- without them `gcc prog.c ./lib.so` says 'file in wrong format' while dlopen of the same file works. Also NOT small: the ticket predicted it would be."
+summary: "DONE 2026-09-01 (0419bab94). --shared now builds a real x86-64 shared library from a compiled source: it LINKS with ld and LOADS with dlopen, exports the C-convention routines, and runs virtual dispatch, the pxx heap, managed strings and calls out to libc from inside. It was blocked on the backend exactly as this ticket said -- a .so is relocated at load, so the absolute operands -no-pie rescued in an object could not work here -- and unblocked by feature-a-x86-64-object-output-is-position-dependent. CORRECTION to this ticket: it said compiler.pas restricts --shared to .asm sources 'in the option handler'. It does not; the handler carries a COMMENT saying so and no check, so a compiled source already reached writeELFSharedX64 and got a structurally valid ET_DYN with zero dynamic symbols, zero relocations and no .bss. Four changes: exports from the same ObjProcIs* predicates --emit-obj uses; a .bss past end-of-file (memsz > filesz); R_X86_64_RELATIVE + DT_RELACOUNT for DataPtrFix and MethodFixups, the only absolute pointers left now that code is rip-relative; and TEN SECTION HEADERS, which no loader reads but which ld requires -- without them `gcc prog.c ./lib.so` says 'file in wrong format' while dlopen of the same file works. Also NOT small: the ticket predicted it would be. TWO THINGS FOUND BY CHECKING A CLAIM I HAD ALREADY WRITTEN DOWN (a359a2abb152): (a) --shared reused --emit-obj's export surface but not its ENTRY-STUB guard, so a C translation unit with no `main` was refused while --emit-obj on the same file succeeded -- fixed, and test/test_shared_lib.c has no main on purpose; (b) NilPy cannot produce a .so or a .o at all, because only pasparser_* and cparser.inc ever set ProcCdecl, so there is no export spelling -- docs corrected in both directions."
 ---
 
 # `--shared` for compiled sources, not just `.asm`
@@ -129,3 +129,41 @@ position-dependent there). No `DT_SONAME` or versioning.
 
 ## Log
 - 2026-09-01 — resolved, commit 84a4fda97.
+
+
+## Follow-up — 2026-09-01, `a359a2abb152`
+
+Both of these came from checking a claim I had already written into the docs,
+the summary and the umbrella: *"a Pascal/C/NilPy source builds a .so"*. I had
+tested Pascal only.
+
+**C was broken.** `--shared` reused `--emit-obj`'s export surface but not its
+entry-stub guard, so the C frontend still demanded a `main`:
+
+```
+$ pascal26 --shared lib.c lib.so
+error: main function not found
+$ pascal26 --emit-obj lib.c lib.o        # the identical file
+ok
+```
+
+A shared library has no ELF entry point either, so the two modes had to agree
+and only one had been told. `test/test_shared_lib.c` covers it and has **no
+main on purpose** — adding one would make it pass against the broken compiler.
+Control run: against the pre-fix binary `ac47455d7c6c` it fails with exactly
+`main function not found`.
+
+**NilPy was never possible.** `ProcCdecl` is set only from `pasparser_proc.inc`,
+`pasparser_decl.inc` and `cparser.inc`, so no NilPy (or Rust, or Zig) routine
+can be marked C-convention and a `.so` from one exports nothing. The refusal
+message is correct; my claim was not. `cli.md` also claimed `--emit-obj`
+supported NilPy — same error, pre-existing, corrected in the same pass.
+
+**The four sites that spell `EmitObjMode or EmitSharedMode` were NOT collapsed
+into one predicate**, deliberately, and the reason is at the fixed site: they
+agree in value and not in meaning. This one and `ir_codegen.inc`'s are *there
+is no entry point*; `asmfront.inc`'s is *the program cannot fall off its end*;
+`dce.inc`'s is *the output carries its own code-offset relocations*;
+`symtab.inc`'s is *the writer relocates by section, not absolute address*. One
+predicate would merge four rationales and a fifth output mode would break some
+of them together, silently.

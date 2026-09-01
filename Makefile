@@ -17486,6 +17486,20 @@ test-emit-obj: $(COMPILER)
 	  tools/expect_same.sh test_shared_lib26_link "$$(LD_LIBRARY_PATH=$(TESTTMP) $(TESTTMP)/test_shared_lib26_link)" "30 pxx-shared"; \
 	  echo "test-shared: ld links against the .so and it runs"; \
 	else echo "gcc not installed; shared-library checks skipped"; fi
+	# 4d. THE SAME MODE FROM A C TRANSLATION UNIT, WITH NO main. The Pascal row
+	#    above cannot see this: --shared reused --emit-obj's export surface but
+	#    not its entry-stub guard, so the C frontend still demanded a `main` and
+	#    refused a file meant to BE a library, while --emit-obj on the identical
+	#    file succeeded. test/test_shared_lib.c has no main on purpose -- adding
+	#    one makes it pass against the broken compiler.
+	./$(COMPILER) -Fulib/crtl --shared test/test_shared_lib.c $(TESTTMP)/test_shared_libc26.so
+	readelf --dyn-syms -W $(TESTTMP)/test_shared_libc26.so | grep -q 'FUNC    GLOBAL DEFAULT    1 shared_c_addup'
+	@if command -v gcc >/dev/null 2>&1; then \
+	  printf '#include <stdio.h>\n#include <string.h>\n#include <dlfcn.h>\nint main(int c,char**v){void*h=dlopen(v[1],RTLD_NOW);if(!h){printf("dlopen: %%s\\n",dlerror());return 1;}int(*a)(int)=dlsym(h,"shared_c_addup");const char*(*t)(void)=dlsym(h,"shared_c_tag");const char*(*d)(void)=dlsym(h,"shared_c_from_data");if(!a||!t||!d){printf("dlsym: %%s\\n",dlerror());return 1;}if(a(6)!=42){printf("addup=%%d want 42\\n",a(6));return 1;}if(strcmp(t(),"pxx-c-shared")){printf("tag=%%s\\n",t());return 1;}if(strcmp(d(),"pxx-c-data")){printf("data=%%s want pxx-c-data\\n",d());return 1;}printf("%%s\\n",t());return 0;}\n' > $(TESTTMP)/test_shared_libc26_dlopen.c; \
+	  gcc $(TESTTMP)/test_shared_libc26_dlopen.c -o $(TESTTMP)/test_shared_libc26_dlopen -ldl || { echo "test-shared: C dlopen host FAILED to build"; exit 1; }; \
+	  tools/expect_same.sh test_shared_libc26_dlopen "$$($(TESTTMP)/test_shared_libc26_dlopen $(TESTTMP)/test_shared_libc26.so)" "pxx-c-shared"; \
+	  echo "test-shared: a C translation unit with no main builds and loads as a .so"; \
+	else echo "gcc not installed; C shared-library check skipped"; fi
 	# 4b. THE SAME OBJECT, ON i386 -- and this is the row the whole umbrella was
 	#    priced for. x86-64 NEVER diverged on the C-ABI convention, so an
 	#    x86-64 object proves the machinery and settles nothing; i386 did
