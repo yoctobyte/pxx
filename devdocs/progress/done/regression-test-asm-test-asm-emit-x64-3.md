@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: A
+status: done
 ---
 
 > **Track A from the job NAME `test-asm`**, not from its source. This job names a MECHANISM rather than a subject — the source it was fed (`test/test_asm_emit_x64.pas`) is what the mechanism was run ON, not what is being tested, so a lane guessed from it would be wrong by construction. The ranker reads frontmatter, so this line decides who works it; re-lane it if this job has changed what it covers.
@@ -65,3 +66,27 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-01 — the seven watcher saw `test-asm#src:test/test_asm_emit_x64.pas` GREEN at 8ee50ea242c0 (tier native) and did NOT close this: this is a repeat stub (`regression-test-asm-test-asm-emit-x64-3`, not `regression-test-asm-test-asm-emit-x64`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## Resolution — 2026-09-01, frankB (Track A)
+
+Re-verified GREEN at HEAD `00c5b90a4be5`, as the sha banner above asks:
+
+```
+./compiler/pascal26 -Fucompiler test/test_asm_emit_x64.pas <tmp>/sweep_x64
+  -> ok: ... ALL X64 ASM EMIT TESTS PASSED   exit=0
+```
+
+**Not intermittent, and the 2026-09-01 log note above can stop worrying about
+that.** The undefined-variable list in the tail (`DwArmsOff`, `DwTotalCalls`,
+`DwElseHits`...) names the deref-walk counters I added in `defs.inc`, reached
+from `compiler/asmtext.inc`. That file has a SECOND including configuration --
+the standalone `test_asm_emit_*` harnesses include the `.inc` directly against a
+mocked `defs.inc`, where those counters do not exist. So the break was a real
+one-way build error in a configuration the main build never exercises, not a
+flake, and it is gone because the code that caused it moved out of `asmtext.inc`
+in `636e4470d`.
+
+The class now has a guard: `tools/standalone_inc_harnesses.sh` compiles all
+seven such harnesses, wired into `gate.sh` conditionally on the two-configuration
+`.inc` files being touched.
+- 2026-09-01 — resolved, commit PENDING-COMMIT.

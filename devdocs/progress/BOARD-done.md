@@ -2672,6 +2672,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-asm-test-asm-avx | T | 70 | regression | regression: test-asm#src:test/test_asm_avx.pas red at 05f21c126295 (auto-filed by twatch) | — |
 | regression-test-asm-test-asm-emit-rv32 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_rv32.pas red at 108ac182bed6 (auto-filed by twatch) | — |
 | regression-test-asm-test-asm-emit-x64-2 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_x64.pas red at 94492d162332 (auto-filed by twatch) | — |
+| regression-test-asm-test-asm-emit-x64-3 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_x64.pas at a0c5a21e2c2e in step 1/2, `./compiler/pascal26 -Fucompiler test/test_asm_emit_x64.p` (auto-filed by twatch) | — |
 | regression-test-asm-test-asm-emit-x64 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_x64.pas red at 31198d3674df (auto-filed by twatch) | — |
 | regression-test-asm-test-asmcore-x64 | A | 70 | regression | regression: test-asm#src:test/test_asmcore_x64.pas red at 97c5fba007f9 (auto-filed by twatch) | — |
 | regression-test-asm-test-x64enc | A | 70 | regression | regression: test-asm#src:test/test_x64enc.pas red at 31198d3674df (auto-filed by twatch) | — |
@@ -2951,6 +2952,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-threads-test-static-string-literals | T | 70 | regression | regression: test-threads#src:test/test_static_string_literals.pas@2 red at 5bb3e120d3f7 (auto-filed by twatch) | — |
 | regression-test-uforth-00 | T | 70 | regression | regression: test-uforth#00 red at 378295f7c218 (auto-filed by twatch) | — |
 | regression-test-uforth-core | T | 70 | regression | regression: test-uforth#core red at 44193e547f6d (auto-filed by twatch) | — |
+| regression-test-xtensa-test-cross-managed-strings | A+S | 70 | regression | regression: test-xtensa#src:test/test_cross_managed_strings.pas at 6a38839c2f81 in step 18/32, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
 | regression-test-zlib-00 | T | 70 | regression | regression: test-zlib#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-testmgr-conformance-shard-timeout-under-load | T | 60 | regression | Track T: c-conformance shards time out under full parallel load (false REDs) | — |
 | regression-tools-devtest-00-2 | N | 70 | regression | regression: tools-devtest#00 red at 8787cfe4235a — a new hardcoded /tmp path in a NilPy test | — |

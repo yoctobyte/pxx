@@ -15976,7 +15976,23 @@ test-xtensa: $(COMPILER)
 	  print "begin"; print "  Loop(7);"; \
 	  print "  Writeln(\"acc=\", n, \" iters=\", r);"; print "end."}' \
 	  | tr '"' "'" > $(TESTTMP)/xt_backjump.pas
-	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh $(TESTTMP)/xt_backjump.pas $(TESTTMP)/xt_backjump
+	# --xtensa-long-calls ON THE CALL0 ARM ONLY, and it is not this row's subject
+	# that needs it. Call0 lays this image out with __pxx_run_finalizers last, at
+	# 620060, and its earliest caller sits at 59154 -- 560906 apart, 36618 bytes
+	# past CALL8's +-512 KiB. That is the FORWARD CALL wall, which has its own
+	# ticket (feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image); the
+	# backward JUMP this row exists to test is unaffected by the flag, and the two
+	# count_bytes controls below still find their long sequence exactly once, so
+	# the subject is still covered. Do NOT shrink the generated body to duck the
+	# wall instead: it has to stay ~130 KB to cross J's +-128 KiB at all.
+	# MEASURED not inferred: with builtinheap.pas reverted to 156be41b504a this
+	# same arm builds, at the SAME code size (622444B both ways) -- 4419e1aa7
+	# reordered the image rather than growing it, which is why a commit that
+	# changed no size moved the body 36618 bytes out of reach.
+	# The WINDOWED arm keeps no flag deliberately: it lays out at 556908B and
+	# still builds, so the "a large image builds without being told" coverage
+	# lives on there rather than being lost with this line.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls $(TESTTMP)/xt_backjump.pas $(TESTTMP)/xt_backjump
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed $(TESTTMP)/xt_backjump.pas $(TESTTMP)/xt_backjump_w
 	./$(COMPILER) $(TESTTMP)/xt_backjump.pas $(TESTTMP)/xt_backjump_x64
 	# THE POSITIVE CONTROL, and this row needs one badly: if the body ever falls

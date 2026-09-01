@@ -63,15 +63,13 @@ _none_
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (5)
+## backlog (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case | T | 55 | bug | gate.sh's stale_binary_hint asks a WORKING-TREE question (is this binary built from these sources) using GIT-HISTORY inputs (mtime vs the newest commit touching compiler/), so it can only ever see divergence that has been COMMITTED. Measured: an uncommitted edit under compiler/ leaves BOTH its inputs byte-identical, so its output is provably independent of the thing it detects -- it is blind to the entire uncommitted present, which includes every agent between a build and a commit. Three lanes read three stale-binary REDs as a master miscompile on 2026-08-31; the hint fired for one. | — |
-| regression-test-asm-test-asm-emit-x64-3 | A | 70 | regression | regression: test-asm#src:test/test_asm_emit_x64.pas at a0c5a21e2c2e in step 1/2, `./compiler/pascal26 -Fucompiler test/test_asm_emit_x64.p` (auto-filed by twatch) | — |
 | regression-test-cjson-compiler-srchash | C | 70 | regression | regression: test-cjson#src:tools/compiler_srchash.sh at e5a21152b5d1 in step 2/2, `if [ ! -f "library_candidates/cjson/src/cJSON.h" ]; then` (auto-filed by twatch) | — |
 | regression-test-lua-cross-compiler-srchash | C | 70 | regression | regression: test-lua-cross#src:tools/compiler_srchash.sh at e5a21152b5d1 in step 2/2, `if [ ! -f "library_candidates/lua/src/lua.h" ]; then \ e` (auto-filed by twatch) | — |
-| regression-test-xtensa-test-cross-managed-strings | A+S | 70 | regression | regression: test-xtensa#src:test/test_cross_managed_strings.pas at 6a38839c2f81 in step 18/32, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
 
 ## backlog_new (0)
 
@@ -177,7 +175,7 @@ _none_
 | feature-a-typeinfo-integer-name-under-strict-fpc | A | 20 | feature | TypeInfo of a plain Integer rename reports `Integer`; FPC reports `LongInt`. decide-typeinfo-scalar-name-spelling settled this on 2026-08-21 -- keep ours by default, report FPC's under --strict-fpc -- and cited this slug as its Implementation. It was never filed. Measured NOT delivered: the name is `Integer` under default, --mimic-fpc and --strict-fpc alike. | — |
 | feature-a-unreferenced-class-rtti-keeps-every-method-alive | A | 30 | feature | An unreferenced class keeps every one of its methods alive | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 20 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
-| feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image | A+S | 35 | feature | --xtensa-long-calls builds a large image today (bug-a-xtensa-cannot-widen-a-forward-call-..., closed) but the user has to know it exists, and a program that needs it fails with an error until they do. The right default is to widen only the forward calls that need it. The per-body relaxation that closed the forward JUMP wall does NOT transfer -- a jump's fixups are per-body and a call's are whole-program, so the analogous retry is a second parse. A veneer pool is the untried candidate and is more attractive here than it was for jumps: CALL0 reaches +-512 KiB against J's +-128 KiB, so a trampoline at the END OF THE CALLING BODY is within the call site's reach, where the jump case's veneer was not. | — |
+| feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image | A+S | 50 | feature | An unrelated RTL commit (4419e1aa7) pushed the test-xtensa xt_backjump call0 arm past CALL8 reach WITHOUT changing the image size (622444B both ways) -- it reordered __pxx_run_finalizers to the tail, 36618 bytes out of reach of its earliest caller -- so the margin is not a property of the program and any RTL edit can flip any near-512KiB image; that arm now passes --xtensa-long-calls explicitly. --xtensa-long-calls builds a large image today (bug-a-xtensa-cannot-widen-a-forward-call-..., closed) but the user has to know it exists, and a program that needs it fails with an error until they do. The right default is to widen only the forward calls that need it. The per-body relaxation that closed the forward JUMP wall does NOT transfer -- a jump's fixups are per-body and a call's are whole-program, so the analogous retry is a second parse. A veneer pool is the untried candidate and is more attractive here than it was for jumps: CALL0 reaches +-512 KiB against J's +-128 KiB, so a trampoline at the END OF THE CALLING BODY is within the call site's reach, where the jump case's veneer was not. | — |
 | feature-a-xtensa-ucontext-pc-sp-offsets | A+S | 40 | feature | xtensa has no ucontext PC/SP offset, so fault-to-raise is refused there | — |
 | feature-bare-esp-supports-uses-builtin | A+S | 20 | feature | Make `uses builtin;` compile on a bare ESP boot | — |
 | feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
@@ -819,9 +817,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2988)
+## done (2990)
 
-2988 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2990 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -918,7 +916,6 @@ _none_
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [T] regression-optdiff-shard4-12
-- [p 70] [A] regression-test-asm-test-asm-emit-x64-3
 - [p 70] [C] regression-test-cjson-compiler-srchash [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-core-test-setlen-in-parallel-for-body-2
 - [p 70] [C] regression-test-lua-cross-compiler-srchash [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
@@ -926,7 +923,6 @@ _none_
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard3-6-2
-- [p 70] [A+S] regression-test-xtensa-test-cross-managed-strings
 - [p 70] [T] regression-tools-devtest-00-3
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
@@ -1021,6 +1017,7 @@ _none_
 - [p 50] [T] bug-t-the-deploy-recipe-builds-a-box-that-reports-but-cannot-measure
 - [p 50] [U] decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
+- [p 50] [A+S] feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] bug-a-a-c-headers-variadic-tail-is-dropped-on-import
 - [p 45] [A] bug-a-a-cloned-thread-has-no-sigaltstack-so-its-stack-overflow-is-unhandleable
@@ -1169,7 +1166,6 @@ _none_
 - [p 35] [A] feature-a-a-refusal-is-a-claim-with-a-date-on-it
 - [p 35] [A+S] feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile
 - [p 35] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
-- [p 35] [A+S] feature-a-xtensa-should-not-need-a-flag-to-build-a-large-image
 - [p 35] [A] feature-c-package-namespace-decision
 - [p 35] [E] feature-demo-portable-userland
 - [p 35] [N] feature-nilpy-counter-api-beyond-the-constructor

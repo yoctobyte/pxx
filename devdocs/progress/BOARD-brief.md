@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:27 blocked:9 backlog:5 backlog-umbrella:5 backlog-core:131 backlog-nilpy:96 backlog-tools:68 backlog-pascal:52 backlog-decide:25 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:24 done-followup:3 decided:140 done:2988 rejected:72`
+`working:4 unfinished:27 blocked:9 backlog:3 backlog-umbrella:5 backlog-core:131 backlog-nilpy:96 backlog-tools:68 backlog-pascal:52 backlog-decide:25 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:24 done-followup:3 decided:140 done:2990 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -56,7 +56,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — blocked-by: perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 427, ranked
+## Ready — top 30 of 425, ranked
 
 - `[p 90] [C]` feature-c-corpus-busybox-multi-applet (unblocks 1)
 - `[p 85] [U]` decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual (unblocks 2)
@@ -74,7 +74,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [T]` regression-optdiff-shard4-12
-- `[p 70] [A]` regression-test-asm-test-asm-emit-x64-3
 - `[p 70] [C]` regression-test-cjson-compiler-srchash
 - `[p 70] [T]` regression-test-core-test-setlen-in-parallel-for-body-2
 - `[p 70] [C]` regression-test-lua-cross-compiler-srchash
@@ -82,11 +81,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
-- `[p 70] [A+S]` regression-test-xtensa-test-cross-managed-strings
 - `[p 70] [T]` regression-tools-devtest-00-3
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
+- `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
+- `[p 65] [A]` feature-a-fold-the-consensus-dead-branch-core-at-every-level
 
-_397 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_395 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
