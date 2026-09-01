@@ -3,10 +3,10 @@ slug: bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-in
 track: A+S
 prio: 50
 type: bug
-status: open
+status: working
 created: 2026-09-02
 found-by: frankC
-owner: ""
+owner: frankC
 blocked-by: []
 summary: "riscv32 and xtensa still Error() on an aggregate/frozen-string result returned via a VIRTUAL or INDIRECT call, and the message cites feature-cross-virtual-indirect-hidden-dest — which is in done/. That ticket scoped itself to i386/arm32/aarch64 and those three now implement it; the other two were never in scope and the title says 'cross backends'. Real cost: examples/json/jsondemo.pas builds for i386, arm32 and aarch64 and fails to build for riscv32 and xtensa. Third instance today of a cross-target ticket closing over a subset."
 ---

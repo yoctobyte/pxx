@@ -4232,18 +4232,48 @@ begin
 
     IR_CALL_IND:
       begin
-        if IRCallDest[node] >= 0 then
-          Error('target xtensa: aggregate/frozen-string result via an indirect call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
+        { AGGREGATE / FROZEN-STRING RESULT. THE TWO ABIS DISAGREE ABOUT WHAT THE
+          HIDDEN DESTINATION IS, and this is the whole difficulty: on Call0 it
+          is NOT an argument -- it rides in a8 and the callee prologue stashes
+          it from there -- while windowed has no register that survives the
+          call8 rotation, so it travels as the implicit FIRST argument word and
+          every real argument shifts up one. Both are the direct path's
+          convention (see EmitAggregateDestStash in symtab.inc); an indirect
+          call must not invent a third.
+
+          ON CALL0 THE CALLEE ADDRESS MOVES FROM a8 TO a9, in BOTH arms rather
+          than only the aggregate one. a8 is the hidden-destination register
+          here, so an indirect call returning an aggregate would have loaded the
+          callee over the destination pointer. Fixing that only in the arm that
+          needs it would leave one spelling of the collision live, which is the
+          arm that stays broken; a9 is caller-saved and free at this point.
+          bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket }
+        if (IRCallDest[node] >= 0) and (XtensaABI = XTENSA_ABI_CALL0) then
+        begin
+          IREmitNodeXtensa(IRCallDest[node]);   { a2 = hidden dest addr }
+          XtensaPushA2;                         { deepest, BELOW the callee word }
+        end;
         { Indirect call through a proc-typed value (e.g. the PXXDivZeroHook
           runtime hook). v1 mirrors arm32: scalar word args only (no by-value
           Int64/float marshalling through a proc pointer yet). Spill the callee
           first, then the arg words, load the ABI arg registers from the slots,
-          load the callee into a8, and callx8/callx0 through it. }
+          load the callee into a9 (Call0) or a8 (windowed), and callx8/callx0
+          through it.
+
+          argBase is taken HERE, after any Call0 destination push, so it still
+          names the callee word: windowed reads its argument block from
+          argBase + 4 and never takes the push above. }
         argBase := XtSpillDepth;
         IREmitNodeXtensa(IRA[node]);          { a2 = callee address }
         XtensaPushA2;                         { callee @ argBase (call0: deepest) }
-        argNode := IRB[node];
         nArgs := 0;
+        if (IRCallDest[node] >= 0) and (XtensaABI = XTENSA_ABI_WINDOWED) then
+        begin
+          IREmitNodeXtensa(IRCallDest[node]);   { a2 = hidden dest addr }
+          XtensaPushA2;                         { argument word 0 -> callee a2 }
+          nArgs := 1;
+        end;
+        argNode := IRB[node];
         while argNode <> -1 do
         begin
           IREmitNodeXtensa(IRA[argNode]);
@@ -4267,32 +4297,62 @@ begin
             deepest at nArgs*4. Overflow words stay allocated across the call
             (they are the callee's incoming stack args) and are freed after. }
           XtensaLoadArgRegsCall0(nArgs);
-          xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, nArgs * 4);    { callee }
+          xtensa_l32i(reg_xtensa_a9, reg_xtensa_sp, nArgs * 4);    { callee }
+          { The destination is loaded BEFORE the sp adjustment below, because in
+            the <= 6 arm that adjustment happens before the call. }
+          if IRCallDest[node] >= 0 then
+            xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, (nArgs + 1) * 4);  { dest }
           if nArgs > 6 then
           begin
-            xtensa_callx0(reg_xtensa_a8);
-            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
+            xtensa_callx0(reg_xtensa_a9);
+            if IRCallDest[node] >= 0 then
+              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 2) * 4)
+            else
+              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
           end
           else
           begin
-            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
-            xtensa_callx0(reg_xtensa_a8);
+            if IRCallDest[node] >= 0 then
+              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 2) * 4)
+            else
+              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4);
+            xtensa_callx0(reg_xtensa_a9);
           end;
         end;
       end;
 
     IR_VIRTUAL_CALL:
       begin
-        if IRCallDest[node] >= 0 then
-          Error('target xtensa: aggregate/frozen-string result via a virtual call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
+        { AGGREGATE / FROZEN-STRING RESULT, same split as IR_CALL_IND above: on
+          Call0 the destination is not an argument and rides in a8; on windowed
+          it IS argument word 0, so SELF SHIFTS FROM a10 TO a11 and the VMT read
+          has to follow it. That shift is the part worth stating -- the VMT
+          pointer is read from [Self], and reading it from a10 when Self is in
+          a11 dispatches through the hidden destination pointer instead, which
+          is a wild call rather than a wrong answer.
+
+          On Call0 the dispatch target moves from a8 to a9 for the same reason
+          the callee did in IR_CALL_IND: a8 is the destination register here.
+          bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket }
+        if (IRCallDest[node] >= 0) and (XtensaABI = XTENSA_ABI_CALL0) then
+        begin
+          IREmitNodeXtensa(IRCallDest[node]);   { a2 = hidden dest addr }
+          XtensaPushA2;                         { deepest, BELOW Self }
+        end;
         { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
           Word-push args (Self = word 0, deepest on Call0), load the arg
           registers, read the VMT pointer from [Self], call through
           [VMT + slot*8] (8-byte data slots, address in the low word — mirrors
           riscv32/arm32). }
         argBase := XtSpillDepth;
-        argNode := IRA[node];
         nArgs := 0;
+        if (IRCallDest[node] >= 0) and (XtensaABI = XTENSA_ABI_WINDOWED) then
+        begin
+          IREmitNodeXtensa(IRCallDest[node]);   { a2 = hidden dest addr }
+          XtensaPushA2;                         { argument word 0; Self becomes word 1 }
+          nArgs := 1;
+        end;
+        argNode := IRA[node];
         while argNode <> -1 do
         begin
           IREmitNodeXtensa(IRA[argNode]);
@@ -4304,7 +4364,11 @@ begin
         begin
           XtensaLoadArgRegsWindowed(argBase, nArgs);
           XtSpillDepth := argBase;
-          xtensa_l32i(reg_xtensa_a8, reg_xtensa_a10, 0);              { VMT ptr from [Self] }
+          { Self is word 0 normally, word 1 when the destination took word 0. }
+          if IRCallDest[node] >= 0 then
+            xtensa_l32i(reg_xtensa_a8, reg_xtensa_a11, 0)             { VMT ptr from [Self] }
+          else
+            xtensa_l32i(reg_xtensa_a8, reg_xtensa_a10, 0);            { VMT ptr from [Self] }
           xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, Integer(IRIVal[node]) * 8);
           xtensa_callx8(reg_xtensa_a8);
           xtensa_mov(reg_xtensa_a2, reg_xtensa_a10);
@@ -4314,14 +4378,28 @@ begin
         else
         begin
           XtensaLoadArgRegsCall0(nArgs);
+          { Destination loaded before the sp adjustment, which in the <= 6 arm
+            happens before the call. }
+          if IRCallDest[node] >= 0 then
+            xtensa_l32i(reg_xtensa_a8, reg_xtensa_sp, nArgs * 4);     { dest, deepest }
           if nArgs <= 6 then
-            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
-          xtensa_l32i(reg_xtensa_a8, reg_xtensa_a2, 0);               { VMT ptr from [Self] }
-          xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, Integer(IRIVal[node]) * 8);
-          xtensa_callx0(reg_xtensa_a8);
+          begin
+            if IRCallDest[node] >= 0 then
+              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4)
+            else
+              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
+          end;
+          xtensa_l32i(reg_xtensa_a9, reg_xtensa_a2, 0);               { VMT ptr from [Self] }
+          xtensa_l32i(reg_xtensa_a9, reg_xtensa_a9, Integer(IRIVal[node]) * 8);
+          xtensa_callx0(reg_xtensa_a9);
           { Overflow words are the callee's incoming stack args: free after. }
           if nArgs > 6 then
-            xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
+          begin
+            if IRCallDest[node] >= 0 then
+              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, (nArgs + 1) * 4)
+            else
+              xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, nArgs * 4);
+          end;
         end;
       end;
 

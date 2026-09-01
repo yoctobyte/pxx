@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386 | A | 45 | bug | PASCAL DONE AND PROVEN; NilPy, Rust and Zig still open. The four `fAlign := TypeAlign(fTk)` record-field sites in pasparser_decl.inc now call TypeFieldAlign, and a new mixed-link oracle (test-record-abi-mixed-link) judges the layout against gcc across a real link on x86_64 and i386, four shapes plus a value round trip through a `cvar` record global. The Track U fork this ticket flagged -- whether a Pascal record must match the C ABI -- dissolved on the first measurement: pxx's C frontend answered 12/4 and pxx's PASCAL frontend 16/8 for the same fields, same target, same compiler. It was not an FPC question, it was one compiler disagreeing with itself. N/R/Z have no export spelling and so no mixed link, and rustc/zig i686 are not on this box. | — |
+| bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket | A+S | 50→80 | bug | riscv32 and xtensa still Error() on an aggregate/frozen-string result returned via a VIRTUAL or INDIRECT call, and the message cites feature-cross-virtual-indirect-hidden-dest — which is in done/. That ticket scoped itself to i386/arm32/aarch64 and those three now implement it; the other two were never in scope and the title says 'cross backends'. Real cost: examples/json/jsondemo.pas builds for i386, arm32 and aarch64 and fails to build for riscv32 and xtensa. Third instance today of a cross-target ticket closing over a subset. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
@@ -95,7 +96,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (141)
+## backlog-core (140)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -129,7 +130,6 @@ _none_
 | bug-a-pxx-home-is-advertised-but-not-honoured | A | 35 | bug | `--where` advertises PXX_HOME as tier 2, overriding the exe-dir defaults, but setting it changes nothing: units still resolve from compiler/../lib/rtl, and even REMOVING a unit from the PXX_HOME tree does not produce 'unit not found'. Found while trying to test a compiler hypothesis against a modified copy of the RTL instead of editing Track B's files. | — |
 | bug-a-pxxcoswitch-and-pxxclone-are-missing-on-riscv32 | A | 25 | bug | `__pxxcoswitch(@a, @b)` compiles for x86-64 and arm32 and gives `pascal26: error: target riscv32: unsupported node in IR codegen: coswitch` on riscv32; `__pxxclone` has the same missing arm. Compile-time error, not a wrong answer. Found while auditing what else riscv32 lacked after adding IR_RTTI_REG/IR_RESOURCES — the other four absent node kinds are all unreachable on riscv32, these two are not. | — |
 | bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body | A | 30 | bug |  | — |
-| bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket | A+S | 50→80 | bug | riscv32 and xtensa still Error() on an aggregate/frozen-string result returned via a VIRTUAL or INDIRECT call, and the message cites feature-cross-virtual-indirect-hidden-dest — which is in done/. That ticket scoped itself to i386/arm32/aarch64 and those three now implement it; the other two were never in scope and the title says 'cross backends'. Real cost: examples/json/jsondemo.pas builds for i386, arm32 and aarch64 and fails to build for riscv32 and xtensa. Third instance today of a cross-target ticket closing over a subset. | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
 | bug-a-set-membership-truncates-the-test-value-on-32-bit-backends | A | 25 | bug | FIXED on all four 32-bit backends 2026-08-31. Wider than filed: riscv32 and xtensa have the same defect (they gained their `in` arms after this was written), and there are TWO shapes, not one. A constant set literal is SPECIAL_IN, compared inline -- that shape silently answered TRUE for 2^32+1. A set VARIABLE is IR_BINOP tkIn -- that shape did not compile at all, because a 64-bit LEFT operand routed `in` into the 64-bit ARITHMETIC emitter, which has no tkIn arm. One root cause: `in` was being treated as 64-bit arithmetic when it is a membership test with a Boolean result. Test test_set_in_64bit_element.pas, 21 rows, six targets. NOTE: FPC 3.2.2 truncates and so disagrees on 7 rows -- deliberate, see decide-does-in-truncate-an-out-of-range-element-or-answer-false. | — |
 | bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug | A | 20 | bug | Sweep of every comment that ENUMERATES targets, checked against a derived backend list. Three miscounts: PXXVarBinOp's 'the other four targets' (five call it), symtab.inc's 'Every 32-bit backend (i386, arm32, riscv32)' (xtensa is a fourth and does NOT consult the shared decision), and PXXStrCmp3's 'the four cross backends' — that last one already filed as a live bug. A count reads as a complete enumeration, so nobody counts. | — |
@@ -536,10 +536,11 @@ _none_
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 
-## backlog-cfront (13)
+## backlog-cfront (14)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero | C | 60 | bug | x86-64, C frontend: a struct returned through a FUNCTION POINTER reads its third int back as its first when the field is used directly as a call argument. `struct P v = fp(3); printf(\"%d %d %d\", v.x, v.y, v.z)` prints `7 11 7` where gcc prints `7 11 13`. The struct in memory is CORRECT — copying the fields to locals first prints 7 11 13 — so this is the field READ in argument position, not the return. Needs an INDIRECT call: a plain local struct and a DIRECT call are both right. Silent wrong value, rc=0. Reproduces on the v399 pin, so it is not new. | — |
 | bug-c-a-file-scope-pointer-to-array-crashes-on-indexing | C | 70 | bug | A file-scope pointer-to-array SEGFAULTS on indexing; the identical local is correct | — |
 | bug-c-including-stdio-h-refuses-to-compile-for-xtensa | C+S | 45 | bug | `#include <stdio.h>` refuses to compile for --target=xtensa: `__pxx_read is a pxx-internal runtime symbol and cannot be imported dynamically`, raised in lib/crtl/src/unistd.c at `ssize_t write`. The identical two-line file compiles for x86-64. Reduced to `#include <stdio.h>` plus one trivial function -- nothing in the user code touches read/write. A C file with NO include compiles for xtensa fine, so this is the crtl pull, not the xtensa C backend generally. The guard is correct in what it says (the symbol needs a Pascal bridge that is not visible); what is target-specific is why the bridge is missing on xtensa and present on x86-64. | — |
 | bug-c-long-double-is-8-bytes-in-pxx-and-16-in-gcc | C | 35 | bug | C `long double` is mapped to double (clexer.inc:342), so it is 8 bytes where gcc's is 16. MEASURED both sides: `struct { long double x; }` is sizeof 16 under gcc and 8 under pxx. Any such struct crossing a real C boundary therefore disagrees about its own SIZE before any calling-convention question is reached, and psABI puts an x87 member in MEMORY class where pxx would see one SSE eightbyte. Found by writing the NEGATIVE control for the new SysV classifier: the classifier's tyExtended refusal is unreachable from C because the frontend erases the distinction first, so a guard that looks like it covers long double cannot fire. Pre-existing and independent of the aggregate-classification work. | — |
@@ -950,7 +951,6 @@ _none_
 - [p 85] [T] regression-test-core-test-exception-unhandled-3 (unblocks 1)
 - [p 85] [T] regression-test-core-test-setlen-in-parallel-for-body-2 (unblocks 1)
 - [p 85] [T] feature-t-grade-a-pin-instead-of-gating-it
-- [p 80] [A+S] bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket (unblocks 1)
 - [p 80] [A] feature-a-a-stackful-generator-is-x86-64-only-so-examples-chess-cannot-target-anything-else (unblocks 1)
 - [p 80] [A] feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - [p 80] [A] feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build (unblocks 1)
@@ -983,6 +983,7 @@ _none_
 - [p 65] [P] feature-pascal-corpus-generics [parked — re-claim, do not duplicate]
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
+- [p 60] [C] bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero
 - [p 60] [N] bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - [p 60] [N] bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 - [p 60] [N] bug-n-a-local-named-after-its-own-def-aliases-the-function-result [parked — re-claim, do not duplicate]

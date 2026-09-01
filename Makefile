@@ -16384,6 +16384,14 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_rv32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_rv32_x64
 	tools/expect_same.sh riscv32/test_managed_str_ownership_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/msol_rv32)" "$$($(TESTTMP)/msol_rv32_x64)"
+	# Aggregate / frozen-string result via a VIRTUAL and an INDIRECT call. Both
+	# paths Error()ed on this target until 2026-09-02, under a ticket whose title
+	# said "cross backends" and whose body named i386/arm32/aarch64 -- so this
+	# row existed for three of the seven backends and the two that were refusing
+	# had none. The x86-64 build is the oracle, as the other three rows do.
+	./$(COMPILER) --target=riscv32 --platform=posix test/test_cross_virtual_indirect_aggret.pas $(TESTTMP)/vindaggret_rv32
+	./$(COMPILER) test/test_cross_virtual_indirect_aggret.pas $(TESTTMP)/vindaggret_rv32_x64
+	tools/expect_same.sh riscv32/test_cross_virtual_indirect_aggret "$$(tools/run_target.sh riscv32 $(TESTTMP)/vindaggret_rv32)" "$$($(TESTTMP)/vindaggret_rv32_x64)"
 	./$(COMPILER) --target=riscv32 --platform=posix test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_rv32
 	tools/expect_same.sh riscv32/test_virtual_call_runs_once "$$(tools/run_target.sh riscv32 $(TESTTMP)/vcro_rv32)" "VIRTUAL CALL RUNS ONCE OK"
 	./$(COMPILER) --target=riscv32 --platform=posix test/test_dynarray_result.pas $(TESTTMP)/dynres_rv32
@@ -17441,6 +17449,17 @@ test-xtensa: $(COMPILER)
 	# control, so the wrong fix (silencing the arm instead of guarding it on
 	# IRStmtRoot, which deletes virtual PROCEDURE calls) fails it too.
 	# bug-a-xtensa-allocates-twice-per-virtual-call-returning-a-string-and-leaks-one
+	# Aggregate / frozen-string result via a VIRTUAL and an INDIRECT call --
+	# see the riscv32 row for why this one was missing. xtensa is the harder of
+	# the two: Call0 carries the hidden destination in a8, which is exactly where
+	# both of these paths used to put the callee address and the VMT entry, and
+	# windowed has no register that survives the call8 rotation so the
+	# destination is the implicit FIRST argument word -- which shifts Self from
+	# a10 to a11 and makes reading the VMT from a10 a call through the
+	# destination pointer.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_virtual_indirect_aggret.pas $(TESTTMP)/vindaggret_xt
+	./$(COMPILER) test/test_cross_virtual_indirect_aggret.pas $(TESTTMP)/vindaggret_xt_x64
+	tools/expect_same.sh xtensa/test_cross_virtual_indirect_aggret "$$(tools/run_target.sh xtensa $(TESTTMP)/vindaggret_xt)" "$$($(TESTTMP)/vindaggret_xt_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_xt
 	tools/expect_same.sh xtensa/test_virtual_call_runs_once "$$(tools/run_target.sh xtensa $(TESTTMP)/vcro_xt)" "VIRTUAL CALL RUNS ONCE OK"
 	# A FUNCTION RETURNING A DYNAMIC ARRAY, on every cross target. The x86-64

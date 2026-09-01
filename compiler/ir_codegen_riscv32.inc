@@ -3632,8 +3632,19 @@ begin
 
     IR_CALL_IND:
       begin
+        { AGGREGATE / FROZEN-STRING RESULT: the hidden caller-destination is
+          pushed DEEPEST -- below the callee word -- and loaded into t1
+          immediately before the jalr. Same slot discipline and the same
+          register as the direct path above, deliberately: the callee prologue
+          (EmitAggregateDestStash, symtab.inc) reads t1 and has no idea how it
+          was reached, so an indirect call that used a different register would
+          be a second convention for one thing.
+          bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket }
         if IRCallDest[node] >= 0 then
-          Error('target riscv32: aggregate/frozen-string result via an indirect call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
+        begin
+          IREmitNodeRISCV32(IRCallDest[node]);   { a0 = hidden destination }
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+        end;
         { Indirect call through a proc-typed value (e.g. the PXXDivZeroHook
           runtime hook). Push the callee first (deepest), push arg words, load
           a0.. from the slots, load the callee into t0, drop the block, jalr
@@ -3673,15 +3684,30 @@ begin
           EmitStackTailToPsABIOrderRISCV32(nArgs);
           for i := 0 to 7 do
             rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
-          rv32_lw(reg_t0, reg_sp, nArgs * 4);            { callee (deepest) }
-          rv32_jalr(reg_ra, reg_t0, 0);
-          rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);    { drop args + callee }
+          rv32_lw(reg_t0, reg_sp, nArgs * 4);            { callee }
+          if IRCallDest[node] >= 0 then
+          begin
+            rv32_lw(reg_t1, reg_sp, (nArgs + 1) * 4);    { hidden dest (deepest) }
+            rv32_jalr(reg_ra, reg_t0, 0);
+            rv32_addi(reg_sp, reg_sp, (nArgs + 2) * 4);  { args + callee + dest }
+          end
+          else
+          begin
+            rv32_jalr(reg_ra, reg_t0, 0);
+            rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);  { drop args + callee }
+          end;
           Exit;
         end;
         for i := 0 to nArgs - 1 do
           rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
-        rv32_lw(reg_t0, reg_sp, nArgs * 4);              { callee (deepest) }
-        rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);      { drop args + callee }
+        rv32_lw(reg_t0, reg_sp, nArgs * 4);              { callee }
+        if IRCallDest[node] >= 0 then
+        begin
+          rv32_lw(reg_t1, reg_sp, (nArgs + 1) * 4);      { hidden dest (deepest) }
+          rv32_addi(reg_sp, reg_sp, (nArgs + 2) * 4);    { args + callee + dest }
+        end
+        else
+          rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);    { drop args + callee }
         rv32_jalr(reg_ra, reg_t0, 0);
       end;
 
@@ -3829,8 +3855,26 @@ begin
 
     IR_VIRTUAL_CALL:
       begin
+        { AGGREGATE / FROZEN-STRING RESULT: hidden caller-destination pushed
+          DEEPEST, below Self, and loaded into t1 immediately before the
+          dispatch -- the direct path's convention, which the callee prologue
+          reads without knowing how it was called.
+
+          THE DISPATCH TARGET MOVED FROM t1 TO t0, in BOTH arms rather than only
+          the aggregate one. t1 is the hidden-destination register on this
+          target, so a virtual call with an aggregate result would otherwise
+          have loaded the VMT entry over the destination pointer -- and the two
+          loads are eleven lines apart. Keeping the old register for the
+          no-destination case would leave the collision live in one arm and fix
+          it in the other, which is the shape that stays broken; t0 is a
+          caller-saved temp and is already what the indirect path uses for its
+          callee.
+          bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket }
         if IRCallDest[node] >= 0 then
-          Error('target riscv32: aggregate/frozen-string result via a virtual call is not yet supported (feature-cross-virtual-indirect-hidden-dest)');
+        begin
+          IREmitNodeRISCV32(IRCallDest[node]);   { a0 = hidden destination }
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+        end;
         { VMT dispatch. IRA=first arg, IRB=last arg, IRC=proc idx, IRIVal=slot.
           Word-push args (Self = word 0, deepest), load a0.., load the VMT
           pointer from [Self], call through [VMT + slot*8] (8-byte data slots,
@@ -3869,18 +3913,38 @@ begin
           EmitStackTailToPsABIOrderRISCV32(nArgs);
           for i := 0 to 7 do
             rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
-          rv32_lw(reg_t1, reg_a0, 0);                   { VMT pointer }
-          rv32_lw(reg_t1, reg_t1, Integer(IRIVal[node]) * 8);
-          rv32_jalr(reg_ra, reg_t1, 0);
-          rv32_addi(reg_sp, reg_sp, nArgs * 4);
+          rv32_lw(reg_t0, reg_a0, 0);                   { VMT pointer }
+          rv32_lw(reg_t0, reg_t0, Integer(IRIVal[node]) * 8);
+          if IRCallDest[node] >= 0 then
+          begin
+            rv32_lw(reg_t1, reg_sp, nArgs * 4);         { hidden dest (deepest) }
+            rv32_jalr(reg_ra, reg_t0, 0);
+            rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);
+          end
+          else
+          begin
+            rv32_jalr(reg_ra, reg_t0, 0);
+            rv32_addi(reg_sp, reg_sp, nArgs * 4);
+          end;
           Exit;
         end;
         for i := 0 to nArgs - 1 do
           rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
-        rv32_addi(reg_sp, reg_sp, nArgs * 4);
-        rv32_lw(reg_t1, reg_a0, 0);                     { VMT pointer }
-        rv32_lw(reg_t1, reg_t1, Integer(IRIVal[node]) * 8);
-        rv32_jalr(reg_ra, reg_t1, 0);
+        { VMT read BEFORE the stack is freed, not after as it used to be. a0
+          holds Self either way so the old order was correct, but the hidden
+          destination below is addressed off sp and the two orders cannot both
+          be right; doing the dispatch load first makes the free the last thing
+          that happens before the jalr in both arms. }
+        rv32_lw(reg_t0, reg_a0, 0);                     { VMT pointer }
+        rv32_lw(reg_t0, reg_t0, Integer(IRIVal[node]) * 8);
+        if IRCallDest[node] >= 0 then
+        begin
+          rv32_lw(reg_t1, reg_sp, nArgs * 4);           { hidden dest (deepest) }
+          rv32_addi(reg_sp, reg_sp, (nArgs + 1) * 4);
+        end
+        else
+          rv32_addi(reg_sp, reg_sp, nArgs * 4);
+        rv32_jalr(reg_ra, reg_t0, 0);
       end;
 
     IR_SETLEN_STR:

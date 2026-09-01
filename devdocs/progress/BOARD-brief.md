@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:7 backlog:13 backlog-umbrella:6 backlog-core:141 backlog-nilpy:97 backlog-tools:73 backlog-pascal:58 backlog-decide:26 backlog-libs:16 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3086 rejected:72`
+`working:6 unfinished:27 blocked:7 backlog:13 backlog-umbrella:6 backlog-core:140 backlog-nilpy:97 backlog-tools:73 backlog-pascal:58 backlog-decide:26 backlog-libs:16 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3086 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
+- `bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket` [A+S] — owner: frankC
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
@@ -66,7 +67,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [T]` regression-test-core-test-exception-unhandled-3 (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-setlen-in-parallel-for-body-2 (unblocks 1)
 - `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
-- `[p 80] [A+S]` bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket (unblocks 1)
 - `[p 80] [A]` feature-a-a-stackful-generator-is-x86-64-only-so-examples-chess-cannot-target-anything-else (unblocks 1)
 - `[p 80] [A]` feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - `[p 80] [A]` feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build (unblocks 1)
@@ -87,5 +87,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [C]` regression-test-lua-compiler-srchash
 - `[p 70] [C]` regression-test-lua-cross-compiler-srchash-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
+- `[p 68] [N]` feature-nilpy-user-defined-decorators
 
 _434 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
