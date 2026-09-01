@@ -73,6 +73,26 @@ begin
 end.
 ```
 
+## Where the missing arm lives
+
+frankA places this in
+[[refactor-a-the-pointer-suffix-walk-has-six-copies-in-the-pascal-frontend]]
+territory, and that ticket is in `done/` — which makes this a **residual of it,
+not a duplicate**. Its summary is the reason to expect exactly this defect:
+
+> The pointer/field/index suffix walk is duplicated SIX times in the Pascal
+> frontend … Each copy stamps a different subset of the node tags the rest of
+> the compiler reads, which is why four separate tickets have now ended "the
+> metadata was there, the reader was missing".
+
+A comma-separated index list is one such arm, and the two spellings that refuse
+it are two of the copies. So the prediction that ticket makes — that the copies
+disagree about which constructs they accept — is confirmed here in the parse
+direction rather than the tag direction, which is a face it did not record.
+
+Not reopening a `done/` ticket; noting the link so this is not filed a third
+time by someone who greps for "suffix walk".
+
 ## Established, same session: the gap IS purely in the subscript parser
 
 The open question above is answered rather than left. **The chained form
