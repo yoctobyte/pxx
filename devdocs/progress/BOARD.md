@@ -516,7 +516,7 @@ _none_
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | feature-tls13-from-scratch |
 
-## backlog-cfront (10)
+## backlog-cfront (11)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -524,6 +524,7 @@ _none_
 | bug-c-long-double-is-8-bytes-in-pxx-and-16-in-gcc | C | 35 | bug | C `long double` is mapped to double (clexer.inc:342), so it is 8 bytes where gcc's is 16. MEASURED both sides: `struct { long double x; }` is sizeof 16 under gcc and 8 under pxx. Any such struct crossing a real C boundary therefore disagrees about its own SIZE before any calling-convention question is reached, and psABI puts an x87 member in MEMORY class where pxx would see one SSE eightbyte. Found by writing the NEGATIVE control for the new SysV classifier: the classifier's tyExtended refusal is unreachable from C because the frontend erases the distinction first, so a guard that looks like it covers long double cannot fire. Pre-existing and independent of the aggregate-classification work. | — |
 | bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size | C | 40 | bug | `sizeof(*s.fp)` where `fp` is a struct member of type `int (*)[4]` answers 8 -- the POINTER size, i.e. the arm never fired at all -- where gcc says 16. The VARIABLE spelling of the same construct is fixed; this is the field spelling, and it is NOT the same one-line gap: 8 rather than 4 says `RecFieldType(recId, 'fp') = tyPointer` is false or the pointee type is unrecorded, so the field arm declines before any extent could be applied. INDEXING through the same field is CORRECT -- `(*s.fp)[1]` reads and writes fine -- so the field carries enough to address and not enough to size, and a fix needs the pointee's extent on the FIELD (there is no UFldPtrElemArrLen; the symbol side has SymPtrElemArrLen). | — |
 | bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet | C | 35 | bug | LATENT, with a named trigger. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]` tests pick the 4-byte-slot va_arg helper; everything else falls to an else whose comment says `Cross (aarch64)` but whose condition is `<> TARGET_X86_64`, i.e. the 8-byte-slot path. xtensa and wasm32 are 32-bit and absent from the set -- the set is correct TODAY only because neither can compile a C program at all (`C program entry stub not implemented for this target yet`). The day either gains an entry stub it silently gets 64-bit varargs slots. Fix the set in the SAME commit as the stub. | — |
+| bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently | C | 50 | bug | C: two conflicting typedefs for one name are accepted silently, last wins | — |
 | feature-c-crtl-stdio-buffering-and-setvbuf | C | 55 | feature | lib/crtl/src/stdio.c is entirely unbuffered — fputc is one write() syscall per character — and setvbuf at :1051 is a stub that ignores its arguments and returns SUCCESS, which is the dishonest-stub shape the SetTextBuf ruling exists to reject, and worse here because C callers check the return. Add FILE write buffering under C99 7.19.3p7's policy, make setvbuf real, and share a flush registry with lib/rtl so mixed WriteLn/printf output keeps its order. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | S | 18 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -1027,6 +1028,7 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
 - [p 50] [U] decide-release-signing-key-custody (unblocks 1)
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
+- [p 50] [C] bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base

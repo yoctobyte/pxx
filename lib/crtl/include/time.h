@@ -2,11 +2,37 @@
 #ifndef PXX_CRTL_TIME_H
 #define PXX_CRTL_TIME_H 1
 
-#include <stddef.h>   /* size_t, NULL */
+#include <stddef.h>     /* size_t, NULL */
+#include <sys/_types.h>  /* __time_t -- the ONE definition, see below */
 
-/* Wall-clock seconds since the Unix epoch. 64-bit on every pxx target so the
-   2038 problem never appears (lua stores time in lua_Integer, also 64-bit). */
-typedef long long time_t;
+/* Wall-clock seconds since the Unix epoch.
+
+   This said `typedef long long time_t` and claimed "64-bit on every pxx target
+   so the 2038 problem never appears". It was NOT delivering that, and had not
+   been: <sys/types.h> says `typedef __time_t time_t` with __time_t == long, so
+   time_t had TWO conflicting definitions in crtl. Including <time.h> auto-pulls
+   crtl/src/time.c (CPAutoPullCrtlImpl), which reaches <sys/types.h>, and the
+   frontend takes the LAST of two conflicting typedefs without a diagnostic --
+   gcc rejects that outright. MEASURED with <time.h> as the only include:
+   sizeof(time_t) is 4 on i386 and 8 on x86-64, i.e. `long`, which is what
+   glibc says and the opposite of what this comment promised.
+
+   Two definitions is the defect regardless of which width is right, because
+   the width then depends on what else a TU happened to pull -- two objects in
+   one program could disagree about a struct. Collapsed onto __time_t, which
+   is the width that was already being delivered, so this changes nothing
+   observable and makes the header true.
+
+   `long` is also the only self-consistent choice today: `struct timespec`
+   below has `long tv_sec`, so a 64-bit time_t at ILP32 would disagree with the
+   crtl struct that carries a time in the same header.
+
+   Y2038 at ILP32 is therefore real and NOT fixed here -- it rides with
+   feature-a-crtl-is-not-large-file-safe-at-ilp32, which is the same class of
+   change (glibc spells it _TIME_BITS=64 and it needs the *64 syscalls).
+   The silent conflicting-typedef acceptance is
+   bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently. */
+typedef __time_t time_t;
 /* `long', matching glibc/Linux, NOT `long long'. This is an ABI fact rather
    than a preference: `struct tms' is filled by the KERNEL with four
    target-word-sized clock_t, and real code indexes it by byte offset and reads

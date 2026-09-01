@@ -12471,6 +12471,15 @@ test-core: $(COMPILER)
 	# bug-a-stat-returns-st-dev-and-st-rdev-in-the-kernel-internal-encoding
 	./$(COMPILER) test/c_stat_rdev_decodes.c $(TESTTMP)/c_rdev26
 	tools/expect_same.sh c_rdev26 "$$($(TESTTMP)/c_rdev26)" "$$(printf 'null 1:3 want 1:3\nzero 1:5 want 1:5\nmakedev(7,300) 7:300\nmakedev(4096,1) 4096:1\nRDEV OK')"
+	# time_t had TWO definitions in crtl -- `long long` in <time.h> and `long`
+	# via <sys/types.h> -- and the frontend takes the LAST of two conflicting
+	# typedefs with no diagnostic (gcc errors), so the width depended on what
+	# the TU happened to pull. The global reached through both headers is the
+	# row that catches it: with the conflict restored, i386 prints matching
+	# sizeof rows and still FAILS, because the global was laid out at 8.
+	# bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently
+	./$(COMPILER) test/c_time_t_one_definition.c $(TESTTMP)/c_timet26
+	tools/expect_same.sh c_timet26 "$$($(TESTTMP)/c_timet26)" "$$(printf 'sizeof(time_t)=8 sizeof(long)=8\nnegative=1\ny2038=2147483647\nTIME_T OK')"
 	# the same unit included twice, once spelled with a './': one file, allowed
 	./$(COMPILER) test/c_pasunit_twice.c $(TESTTMP)/c_pasunit_twice26
 	tools/expect_same.sh c_pasunit_twice26 "$$($(TESTTMP)/c_pasunit_twice26)" "42"
@@ -14298,6 +14307,12 @@ test-i386: $(COMPILER)
 	# see that; only running it at ILP32 can.
 	./$(COMPILER) --target=i386 test/c_stat_rdev_decodes.c $(TESTTMP)/test_i386_crdev
 	tools/expect_same.sh i386/rdev-decodes "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_crdev)" "$$(printf 'null 1:3 want 1:3\nzero 1:5 want 1:5\nmakedev(7,300) 7:300\nmakedev(4096,1) 4096:1\nRDEV OK')"
+	# time_t had TWO definitions in crtl -- `long long` in <time.h> and `long`
+	# 32-bit half: on x86-64 long and long long are the same width, so the
+	# conflict is invisible there. This is the population that sees it.
+	# bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently
+	./$(COMPILER) --target=i386 test/c_time_t_one_definition.c $(TESTTMP)/test_i386_timet
+	tools/expect_same.sh i386/time_t-one-def "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_timet)" "$$(printf 'sizeof(time_t)=4 sizeof(long)=4\nnegative=1\ny2038=2147483647\nTIME_T OK')"
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_cargs; tools/expect_same.sh i386/test_i386_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=i386 test/ccross_double_to_int.c $(TESTTMP)/test_i386_cd2i
 	tools/run_target.sh i386 $(TESTTMP)/test_i386_cd2i; tools/expect_same.sh i386/test_i386_cd2i-rc "$$?" "42"
@@ -15125,6 +15140,12 @@ test-riscv32: $(COMPILER)
 	# see that; only running it at ILP32 can.
 	./$(COMPILER) --target=riscv32 test/c_stat_rdev_decodes.c $(TESTTMP)/test_riscv32_crdev
 	tools/expect_same.sh riscv32/rdev-decodes "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_crdev)" "$$(printf 'null 1:3 want 1:3\nzero 1:5 want 1:5\nmakedev(7,300) 7:300\nmakedev(4096,1) 4096:1\nRDEV OK')"
+	# time_t had TWO definitions in crtl -- `long long` in <time.h> and `long`
+	# 32-bit half: on x86-64 long and long long are the same width, so the
+	# conflict is invisible there. This is the population that sees it.
+	# bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently
+	./$(COMPILER) --target=riscv32 test/c_time_t_one_definition.c $(TESTTMP)/test_riscv32_timet
+	tools/expect_same.sh riscv32/time_t-one-def "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_timet)" "$$(printf 'sizeof(time_t)=4 sizeof(long)=4\nnegative=1\ny2038=2147483647\nTIME_T OK')"
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cargs; tools/expect_same.sh riscv32/test_riscv32_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=riscv32 test/ccross_double_to_int.c $(TESTTMP)/test_riscv32_cd2i
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cd2i; tools/expect_same.sh riscv32/test_riscv32_cd2i-rc "$$?" "42"
@@ -17096,6 +17117,12 @@ test-arm32: $(COMPILER)
 	# see that; only running it at ILP32 can.
 	./$(COMPILER) --target=arm32 test/c_stat_rdev_decodes.c $(TESTTMP)/test_arm32_crdev
 	tools/expect_same.sh arm32/rdev-decodes "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_crdev)" "$$(printf 'null 1:3 want 1:3\nzero 1:5 want 1:5\nmakedev(7,300) 7:300\nmakedev(4096,1) 4096:1\nRDEV OK')"
+	# time_t had TWO definitions in crtl -- `long long` in <time.h> and `long`
+	# 32-bit half: on x86-64 long and long long are the same width, so the
+	# conflict is invisible there. This is the population that sees it.
+	# bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently
+	./$(COMPILER) --target=arm32 test/c_time_t_one_definition.c $(TESTTMP)/test_arm32_timet
+	tools/expect_same.sh arm32/time_t-one-def "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_timet)" "$$(printf 'sizeof(time_t)=4 sizeof(long)=4\nnegative=1\ny2038=2147483647\nTIME_T OK')"
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cargs; tools/expect_same.sh arm32/test_arm32_cargs-rc "$$?" "42"
 	./$(COMPILER) --target=arm32 test/ccross_double_to_int.c $(TESTTMP)/test_arm32_cd2i
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cd2i; tools/expect_same.sh arm32/test_arm32_cd2i-rc "$$?" "42"
