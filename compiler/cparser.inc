@@ -8447,6 +8447,60 @@ begin
                      (CPFindSub(KeyStrs[m], '<crtl-') > 0);
 end;
 
+procedure CRecordGlobalLinkage(idx: Integer; const name: AnsiString;
+                               declSawStatic, declSawExtern, declSymIsNew: Boolean);
+{ ONE place decides a C global's linkage and its membership of the object's
+  data surface, because there are TWO declaration paths and only one of them
+  ran it. A function-pointer global -- `fp_t F;`, `int (*G)(int);`, a table
+  of them -- is registered by its own branch, which never called here, so it
+  got no OBJECT symbol at all: measured, six of seven file-scope forms export
+  and every function-pointer form does not, on every target. Another object
+  referencing it links cleanly against its own private .bss and reads NULL,
+  which is exactly the callback-table shape.
+
+  Order matters and is the whole point: a declaration WITHOUT `extern` is a
+  tentative definition and settles the question permanently, whichever way an
+  earlier `extern` had it -- `extern T n;` then `T n;` is a definition
+  (C 6.9.2). An `extern` only claims import-so-far, and only when nothing has
+  claimed definition yet, which is why it is guarded on the symbol being new.
+
+  Membership is separate from linkage: the two flags below default to False
+  and False MEANS something ("defined, external linkage"), so they cannot say
+  whether this symbol is a C file-scope variable at all -- and the object
+  writer needs exactly that set, or it walks every RTL global. Only the
+  USER's translation unit joins it; see CDeclIsFromCrtl. Set True and never
+  cleared, so a name the user's file also declares stays a candidate even
+  when crtl redeclares it afterwards.
+  bug-a-c-a-global-initialised-with-a-function-address-is-not-exported }
+begin
+  if idx < 0 then Exit;
+  if declSawStatic then SymCStaticLink[idx] := True;
+  if not declSawExtern then SymObjDataExternOnly[idx] := False
+  else if declSymIsNew then SymObjDataExternOnly[idx] := True;
+  if CDeclIsFromCrtl(TokPos - 1) then SymObjRuntimeCopy[idx] := True
+  else SymObjDataScope[idx] := True;
+  if PxxDbgEnabled('a.clink') then
+  begin
+    Write('PXXDBG a.clink ', name, ' externOnly=');
+    if SymObjDataExternOnly[idx] then Write('1') else Write('0');
+    Write(' static=');
+    if SymCStaticLink[idx] then Write('1') else Write('0');
+    Write(' sawExtern=');
+    if declSawExtern then Write('1') else Write('0');
+    Write(' new=');
+    if declSymIsNew then Write('1') else Write('0');
+    Write(' mod='); Write(CModuleOfTok(TokPos - 1));
+    Write(' modpath=');
+    if (CModuleOfTok(TokPos - 1) >= 0) and (CModuleOfTok(TokPos - 1) < KeyCount) then
+      Write(KeyStrs[CModuleOfTok(TokPos - 1)])
+    else Write('<main>');
+    Write(' off='); Write(Syms[idx].Offset);
+    Write(' arr='); if Syms[idx].IsArray then Write(Syms[idx].ArrLen) else Write(-1);
+    WriteLn;
+  end;
+end;
+
+
 procedure ParseCGlobalVarDecl;
 var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, fSz: Integer;
     recId, initSymIdx, procIdx, initOff, di, rangeHiG, gk: Integer; wasArr: Boolean; initV: Int64;
@@ -8646,12 +8700,18 @@ begin
     end;
     idx := FindSym(name);
     if (idx >= 0) and (Syms[idx].Kind = skConst) then idx := -1;
+    declSymIsNew := idx < 0;
     if idx < 0 then
     begin
       if wasArr then idx := AllocArray(name, tyPointer, 0, arrLen - 1)
       else idx := AllocVar(name, tyPointer);
     end
     else if wasArr then CGrowGlobalArray(idx, tyPointer, arrLen);
+    { The SECOND declaration path, and the reason CRecordGlobalLinkage is a
+      procedure rather than the inline block it used to be. Everything a
+      function-pointer global needs to be linkable is decided here; nothing
+      about it made it invisible except which branch registered it. }
+    CRecordGlobalLinkage(idx, name, declSawStatic, declSawExtern, declSymIsNew);
     if idx >= 0 then
     begin
       { An ARRAY of callable pointers carries its ELEMENT signature in
@@ -8945,47 +9005,7 @@ begin
         idx := AllocVar(name, baseTk);
     end
     else if wasArr then CGrowGlobalArray(idx, baseTk, arrLen);
-    { Accumulate the file-scope linkage for this NAME. Order matters and is the
-      whole point: a declaration WITHOUT `extern` is a tentative definition and
-      settles the question permanently, whichever way an earlier `extern` had
-      it -- `extern T n;` then `T n;` is a definition (C 6.9.2). An `extern`
-      only claims import-so-far, and only when nothing has claimed definition
-      yet, which is why it is guarded on the symbol being new. }
-    if idx >= 0 then
-    begin
-      if declSawStatic then SymCStaticLink[idx] := True;
-      if not declSawExtern then SymObjDataExternOnly[idx] := False
-      else if declSymIsNew then SymObjDataExternOnly[idx] := True;
-      { Membership, not linkage. The two flags above default to False and False
-        MEANS something ("defined, external linkage"), so they cannot say
-        whether this symbol is a C file-scope variable at all -- and the object
-        writer needs exactly that set, or it walks every RTL global.
-
-        Only the USER's translation unit joins it -- see CDeclIsFromCrtl. Set
-        True and never cleared, so a name the user's file also declares stays a
-        candidate even when crtl redeclares it afterwards. }
-      if CDeclIsFromCrtl(TokPos - 1) then SymObjRuntimeCopy[idx] := True
-      else SymObjDataScope[idx] := True;
-      if PxxDbgEnabled('a.clink') then
-      begin
-        Write('PXXDBG a.clink ', name, ' externOnly=');
-        if SymObjDataExternOnly[idx] then Write('1') else Write('0');
-        Write(' static=');
-        if SymCStaticLink[idx] then Write('1') else Write('0');
-        Write(' sawExtern=');
-        if declSawExtern then Write('1') else Write('0');
-        Write(' new=');
-        if declSymIsNew then Write('1') else Write('0');
-        Write(' mod='); Write(CModuleOfTok(TokPos - 1));
-        Write(' modpath=');
-        if (CModuleOfTok(TokPos - 1) >= 0) and (CModuleOfTok(TokPos - 1) < KeyCount) then
-          Write(KeyStrs[CModuleOfTok(TokPos - 1)])
-        else Write('<main>');
-        Write(' off='); Write(Syms[idx].Offset);
-        Write(' arr='); if Syms[idx].IsArray then Write(Syms[idx].ArrLen) else Write(-1);
-        WriteLn;
-      end;
-    end;
+    CRecordGlobalLinkage(idx, name, declSawStatic, declSawExtern, declSymIsNew);
     { Record a multidimensional array's shape so `a[i][j]` strides correctly and
       the init walker distributes nested braces per dimension. }
     if (idx >= 0) and wasArr and (dimCount >= 2) then

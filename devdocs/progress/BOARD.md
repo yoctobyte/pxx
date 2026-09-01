@@ -65,7 +65,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (13)
+## backlog (14)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -76,6 +76,7 @@ _none_
 | regression-test-core-test-exception-unhandled-2 | T | 70 | regression | regression: test-core#src:test/test_exception_unhandled.pas@3 at f9e495823dce in step 53/47, `/tmp/next-test_multithreading26 \| grep -q "multithreadin` (auto-filed by twatch) | — |
 | regression-test-core-test-header-static-body | T | 70→85 | regression | regression: test-core#src:test/test_header_static_body.pas at f9e495823dce in step 14/33, `out=$(./compiler/pascal26 /tmp/cdiag_mod.c /tmp/cdiag_mo` (auto-filed by twatch) | — |
 | regression-test-core-test-interface-byval-param-no-leak | T | 70→85 | regression | regression: test-core#src:test/test_interface_byval_param_no_leak.pas at 3f73ad2f6a08 in step 2/2, `tools/expect_same.sh test_ifbyval26 "$(/tmp/test_ifbyval26 \| tail -1)" "total ok 25 / 25"` (auto-filed by twatch) | — |
+| regression-test-core-test-multithreading-2 | P | 70 | regression | regression: test-core#src:test/test_multithreading.pas@1 at 9c76d9ba089c in step 2/2, `/tmp/test_multithreading26 \| grep -q "multithreading test completed successfully"` (auto-filed by twatch) | — |
 | regression-test-core-test-rtl-fpc-compat-helpers-2 | T | 70→85 | regression | regression: test-core#src:test/test_rtl_fpc_compat_helpers.pas at 970eabd8eadf in step 2/2, `tools/expect_same.sh test_rtl_fpc_compat_helpers26 "$(/tmp/test_rtl_fpc_compat_helpers26 \| tail -1)" "total ok 23 / 23"` (auto-filed by twatch) | — |
 | regression-test-core-test-thread-api-no-uses | P | 70→85 | regression | regression: test-core#src:test/test_thread_api_no_uses.pas at 970eabd8eadf in step 1/2, `./compiler/pascal26 test/test_thread_api_no_uses.pas /tmp/test_thread_api_no_uses26` (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-compiler-srchash | T | 70 | regression | regression: test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh at fc9139c264df in step 2/2, `tools/run_sqlite_thread_test.sh aarch64 ./compiler/pasca` (auto-filed by twatch) | — |
@@ -98,7 +99,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (143)
+## backlog-core (142)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -117,7 +118,6 @@ _none_
 | bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 | A | 45 | bug | aarch64 is the last target where a by-value aggregate argument occupies one pointer-sized slot by CONSTRUCTION rather than by classification: ABIA64CdeclArgSlot advances the NSAA by a fixed 8 bytes per argument, so an aggregate of any size gets exactly one slot and its three readers inherit that. x86-64 and i386 were converted by bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee; this is the same defect, in the one place with NO ORACLE. There is no gcc cross for aarch64 on this box, so no mixed link is constructible and the only available verification is pxx-against-pxx -- which is exactly the self-consistency the parent ticket exists to show is worthless for a calling convention. So the FIRST deliverable here is an oracle, not a fix. | — |
 | bug-a-an-exception-that-escapes-its-handler-or-is-bare-re-raised-still-leaks-its-object | A | 5 | bug | raising a NEW exception from inside a handler still leaks the original (live=1997/1000 trips, re-measured 2026-09-01) — the bare `raise;` re-raise half of this ticket is now CLEAN (937 -> 3) and is no longer part of it | decide-does-raise-of-an-existing-object-transfer-ownership |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
-| bug-a-c-a-global-initialised-with-a-function-address-is-not-exported | A | 40 | bug | `fp_t F = helper;` is the ONE file-scope form the --emit-obj data work does not export. Swept seven shapes in one translation unit -- scalar with and without an initialiser, array, data pointer `int *P = &A;`, string pointer, struct -- and six get `OBJECT GLOBAL`; the function-pointer one gets no symbol at all. So another object referencing F links against its own private .bss and reads NULL, which is the silent-wrong-value shape the data work was filed to remove, surviving in one shape. Measured on x86-64 and riscv32 alike, so it is frontend, not writer. | — |
 | bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it | A | 40 | bug | A C diagnostic can now print `in: <the .c module>` (CModRange*, ungated), but an error inside an INCLUDED HEADER prints nothing: the header-accurate per-token file table is DbgRange*, which returns early without -g. Pascal has an ungated twin for exactly this reason (PasMarkTokFile); C does not. | — |
 | bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only | A | 35 | bug | Storing a `char` into a `string[N]` through a pointer compiles on x86-64 only | — |
 | bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together | A | 35 | bug | arm32/riscv32/xtensa take NO PXXObjRetain when boxing an object into a variant, and none of the five cross arms of EmitManagedLocalCleanupForTarget releases a NilPy tyClass local at scope exit. The two errors cancel, so the observable today is bounded at one object per scope — but FIXING EITHER HALF ALONE turns that bounded leak into a use-after-free. They move together or not at all. Filed so the next person to 'add the missing retain' reads this first. | — |
@@ -864,9 +864,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3047)
+## done (3051)
 
-3047 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3051 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -951,16 +951,16 @@ _none_
 - [p 85] [A] bug-a-pointer-cast-of-an-owned-string-retains-it-for-the-rest-of-the-program (unblocks 1)
 - [p 85] [C] regression-lib-test-crtl-reachability-7 (unblocks 1) [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 85] [T] regression-optdiff-shard4-12 (unblocks 1)
-- [p 85] [T] regression-test-core-c-crtl-enosys-stubs (unblocks 1)
-- [p 85] [T] regression-test-core-test-header-static-body (unblocks 1)
 - [p 85] [T] regression-test-core-test-interface-byval-param-no-leak (unblocks 1)
 - [p 85] [T] regression-test-core-test-rtl-fpc-compat-helpers-2 (unblocks 1)
-- [p 85] [P] regression-test-core-test-thread-api-no-uses (unblocks 1) [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 85] [T] regression-test-threads-test-threadsafe-refcount-lockfree (unblocks 1)
 - [p 85] [A+S] regression-test-xtensa-test-signal-default-revert-b336 (unblocks 1)
 - [p 85] [A+S] regression-test-xtensa-test-signal-handler-callback-b336 (unblocks 1)
 - [p 85] [T] regression-tools-devtest-00-3 (unblocks 1)
 - [p 85] [T] feature-t-grade-a-pin-instead-of-gating-it
+- [p 85] [T] regression-test-core-c-crtl-enosys-stubs
+- [p 85] [T] regression-test-core-test-header-static-body
+- [p 85] [P] regression-test-core-test-thread-api-no-uses [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 80] [A] feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
@@ -974,6 +974,7 @@ _none_
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [T] regression-test-core-crtl-tiny-regex-match
 - [p 70] [T] regression-test-core-test-exception-unhandled-2
+- [p 70] [P] regression-test-core-test-multithreading-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-core-test-setlen-in-parallel-for-body-2
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-2
@@ -1154,7 +1155,6 @@ _none_
 - [p 40] [A] bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help (unblocks 1)
 - [p 40] [A+S] bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing
 - [p 40] [A] bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized
-- [p 40] [A] bug-a-c-a-global-initialised-with-a-function-address-is-not-exported
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse
 - [p 40] [A] bug-a-nilpy-on-cross-targets-four-remaining-walls [parked — re-claim, do not duplicate]
 - [p 40] [A] bug-a-nilpy-under-threadsafe-still-leaks-every-class-field-and-it-cannot-ride-on-the-pascal-fix
@@ -1455,11 +1455,8 @@ _none_
 - **1** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
 - **1** — regression-lib-test-crtl-reachability-7
 - **1** — regression-optdiff-shard4-12
-- **1** — regression-test-core-c-crtl-enosys-stubs
-- **1** — regression-test-core-test-header-static-body
 - **1** — regression-test-core-test-interface-byval-param-no-leak
 - **1** — regression-test-core-test-rtl-fpc-compat-helpers-2
-- **1** — regression-test-core-test-thread-api-no-uses
 - **1** — regression-test-threads-test-threadsafe-refcount-lockfree
 - **1** — regression-test-xtensa-test-signal-default-revert-b336
 - **1** — regression-test-xtensa-test-signal-handler-callback-b336

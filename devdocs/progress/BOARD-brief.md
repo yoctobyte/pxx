@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:7 unfinished:28 blocked:7 backlog:13 backlog-umbrella:6 backlog-core:143 backlog-nilpy:97 backlog-tools:77 backlog-pascal:56 backlog-decide:25 backlog-libs:15 backlog-cfront:15 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3047 rejected:72`
+`working:7 unfinished:28 blocked:7 backlog:14 backlog-umbrella:6 backlog-core:142 backlog-nilpy:97 backlog-tools:77 backlog-pascal:56 backlog-decide:25 backlog-libs:15 backlog-cfront:15 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3051 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -64,16 +64,16 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [A]` bug-a-pointer-cast-of-an-owned-string-retains-it-for-the-rest-of-the-program (unblocks 1)
 - `[p 85] [C]` regression-lib-test-crtl-reachability-7 (unblocks 1)
 - `[p 85] [T]` regression-optdiff-shard4-12 (unblocks 1)
-- `[p 85] [T]` regression-test-core-c-crtl-enosys-stubs (unblocks 1)
-- `[p 85] [T]` regression-test-core-test-header-static-body (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-interface-byval-param-no-leak (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-rtl-fpc-compat-helpers-2 (unblocks 1)
-- `[p 85] [P]` regression-test-core-test-thread-api-no-uses (unblocks 1)
 - `[p 85] [T]` regression-test-threads-test-threadsafe-refcount-lockfree (unblocks 1)
 - `[p 85] [A+S]` regression-test-xtensa-test-signal-default-revert-b336 (unblocks 1)
 - `[p 85] [A+S]` regression-test-xtensa-test-signal-handler-callback-b336 (unblocks 1)
 - `[p 85] [T]` regression-tools-devtest-00-3 (unblocks 1)
 - `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
+- `[p 85] [T]` regression-test-core-c-crtl-enosys-stubs
+- `[p 85] [T]` regression-test-core-test-header-static-body
+- `[p 85] [P]` regression-test-core-test-thread-api-no-uses
 - `[p 80] [A]` feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -87,8 +87,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-cascade-fc01c8094434
 - `[p 70] [T]` regression-test-core-crtl-tiny-regex-match
 - `[p 70] [T]` regression-test-core-test-exception-unhandled-2
+- `[p 70] [P]` regression-test-core-test-multithreading-2
 - `[p 70] [T]` regression-test-core-test-setlen-in-parallel-for-body-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
-- `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
 
 _439 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

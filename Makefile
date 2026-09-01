@@ -18858,6 +18858,40 @@ test-emit-obj: $(COMPILER)
 	    echo "test-emit-obj: two definitions of \`x\` LINKED -- -fno-common semantics are not being emitted"; exit 1; \
 	  else echo "test-emit-obj: duplicate definition is rejected, as gcc rejects it"; fi; \
 	fi
+	# 4b-ter-bis. A FUNCTION-POINTER GLOBAL IS A DATA SYMBOL TOO. It was the one
+	#    file-scope form that got no OBJECT symbol at all. Swept seven shapes in
+	#    one translation unit -- scalar with and without an initialiser, array,
+	#    data pointer, string pointer, struct -- and six exported; every
+	#    fn-pointer form did not, on x86-64, i386, riscv32 and xtensa alike.
+	#    The cause was not the initialiser the slug names: a fn-pointer
+	#    declaration is registered by its OWN branch in cparser.inc, which never
+	#    recorded linkage. Both branches now call CRecordGlobalLinkage, so there
+	#    is one place that decides it rather than two that can disagree.
+	#
+	#    THE CENSUS COMES FIRST and it is what makes the round trip below mean
+	#    something: a symbol that exists but is referenced section-relative still
+	#    reads a private copy, and a round trip passes on a private copy whenever
+	#    both objects happen to agree.
+	rm -f $(TESTTMP)/fnp_*.o $(TESTTMP)/fnp_x64 $(TESTTMP)/fnp_386 $(TESTTMP)/fnp_gcc
+	@printf 'typedef int (*fp_t)(int);\nint helper(int x){return x;}\nfp_t F1;\nfp_t F2 = helper;\nint (*G1)(int);\nint (*G2)(int) = helper;\nfp_t Tab[2] = { helper, helper };\nvoid app_main(void){}\n' > $(TESTTMP)/fnp_forms.c
+	@for t in "" "--target=i386" "--target=riscv32 --platform=esp" "--target=xtensa --platform=esp"; do \
+	  ./$(COMPILER) --emit-obj $$t $(TESTTMP)/fnp_forms.c $(TESTTMP)/fnp_forms.o >/dev/null || { echo "test-emit-obj: the fn-pointer census fixture FAILED to build for [$$t]"; exit 1; }; \
+	  n=$$(readelf -sW $(TESTTMP)/fnp_forms.o | grep -cE "OBJECT +GLOBAL +DEFAULT +[0-9]+ (F1|F2|G1|G2|Tab)$$"); \
+	  [ "$$n" = 5 ] || { echo "test-emit-obj: [$$t] exports $$n of 5 function-pointer globals -- scalar, initialised, raw declarator and table must all be data symbols"; readelf -sW $(TESTTMP)/fnp_forms.o | grep -E " (F1|F2|G1|G2|Tab)$$"; exit 1; }; \
+	 done; echo "test-emit-obj: all five function-pointer global forms are data symbols on four writers"
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) --emit-obj test/c_obj_fnptr_a.c $(TESTTMP)/fnp_a.o && ./$(COMPILER) --emit-obj test/c_obj_fnptr_b.c $(TESTTMP)/fnp_b.o || { echo "test-emit-obj: the callback-table objects FAILED to build"; exit 1; }; \
+	  gcc $(TESTTMP)/fnp_a.o $(TESTTMP)/fnp_b.o -o $(TESTTMP)/fnp_x64 || { echo "test-emit-obj: the two callback-table objects FAILED to link"; exit 1; }; \
+	  gcc test/c_obj_fnptr_a.c test/c_obj_fnptr_b.c -o $(TESTTMP)/fnp_gcc || { echo "test-emit-obj: the gcc oracle FAILED to build"; exit 1; }; \
+	  tools/expect_same.sh fnp_x64 "$$($(TESTTMP)/fnp_x64)" "$$($(TESTTMP)/fnp_gcc)" || exit 1; \
+	  echo "test-emit-obj: one object defines a callback pointer, the other rebinds it, and the first sees the change"; \
+	fi
+	@if gcc -m32 -xc /dev/null -o /dev/null -c >/dev/null 2>&1; then \
+	  ./$(COMPILER) --emit-obj --target=i386 test/c_obj_fnptr_a.c $(TESTTMP)/fnp_a386.o && ./$(COMPILER) --emit-obj --target=i386 test/c_obj_fnptr_b.c $(TESTTMP)/fnp_b386.o || { echo "test-emit-obj: the i386 callback-table objects FAILED to build"; exit 1; }; \
+	  gcc -m32 -no-pie $(TESTTMP)/fnp_a386.o $(TESTTMP)/fnp_b386.o -o $(TESTTMP)/fnp_386 || { echo "test-emit-obj: the i386 callback-table link FAILED"; exit 1; }; \
+	  tools/expect_same.sh fnp_386 "$$($(TESTTMP)/fnp_386)" "$$($(TESTTMP)/fnp_gcc)" || exit 1; \
+	  echo "test-emit-obj: the i386 callback-table round trip matches too"; \
+	else echo "gcc -m32 not available; i386 callback-table check skipped"; fi
 	# 4b-quater. THE PASCAL HALF of the same data-symbol work. A global marked
 	#    `cvar` (or `public`) must be linkable BY NAME from a foreign C main.
 	#    Before this `nm --defined-only | grep -cE ' [BbDd] '` was 0 for every
