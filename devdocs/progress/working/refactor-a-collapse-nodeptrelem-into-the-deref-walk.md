@@ -5,8 +5,8 @@ track: A
 prio: 30
 type: refactor
 blocked-by: []
-status: new
-owner: ""
+status: working
+owner: frankB
 created: 2026-08-30
 summary: "After the deref-shape widening, NodePtrElem in pasparser_lval.inc is reached from exactly two places, both inside ResolveDerefShape itself: the final else and the tyUnknown backstop added by bfb7b4c59. Measured with a counter and an arms-disabled control, neither fallback fires on any shape tried, including the compiler's own 436 deref-walk calls -- the new arms take those hits one for one. Not deleted on that: the population is six files, and NodePtrElem's False return is what both fallbacks branch on."
 ---

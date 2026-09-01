@@ -1,0 +1,12 @@
+program ds_arrayelem_dyndbl;
+type TA = array of Double; TP = ^TA; TR = record q: TP; end;
+var
+  a: TA;
+  ap: array[0..1] of TP;
+  i: Integer;
+begin
+  SetLength(a, 4);
+  ap[0] := @a;
+  for i := 0 to 3 do ap[0]^[i] := (i+1)*1.5;
+  WriteLn(a[0]:0:2, ' ', a[3]:0:2);
+end.

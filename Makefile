@@ -136,6 +136,17 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: pxx-debug
 .PHONY: test-esp-idf
 .PHONY: fuzz-csmith
+.PHONY: derefshape
+
+# Per-shape x per-arm control for `p^[i]` (bug-a-p-caret-index-...-plain-identifier
+# and refactor-a-collapse-nodeptrelem-into-the-deref-walk). 15 rows =
+# 5 spellings x 3 element kinds, each a separate program because four of them
+# SEGV or HANG today. The ds_plain_* rows are the positive control and abort the
+# run if they fail, so a broken build reports nothing rather than 15 findings.
+# NOT part of `make test`: it is a control for a specific refactor, and it is
+# EXPECTED TO FAIL until the deref-shape family is fixed.
+derefshape: compiler/pascal26
+	tools/derefshape_matrix.sh compiler/pascal26
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
 .PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-xtensa test-c-abi-glibc-oracle test-selfcompile-odiff test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \

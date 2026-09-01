@@ -1,0 +1,11 @@
+program ds_field_fixdbl;
+type TA = array[0..3] of Double; TP = ^TA; TR = record q: TP; end;
+var
+  a: TA;
+  r: TR;
+  i: Integer;
+begin
+  r.q := @a;
+  for i := 0 to 3 do r.q^[i] := (i+1)*1.5;
+  WriteLn(a[0]:0:2, ' ', a[3]:0:2);
+end.

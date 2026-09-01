@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -16,6 +16,7 @@ _none_
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops | A | 45 | refactor | The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command and the target is zero: `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 209 now, after five steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), ParseFactor's NilPy head (34 sites, two hooks), and the two DEAD-ARM deletions -- the shared expression and statement call loops carried thirteen arms guarded by `isNilPy` where the question was `PyExprMode`, which could not fire at all (7314fab2b, 23c4552af). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead. | — |
+| refactor-a-collapse-nodeptrelem-into-the-deref-walk | A | 30 | refactor | After the deref-shape widening, NodePtrElem in pasparser_lval.inc is reached from exactly two places, both inside ResolveDerefShape itself: the final else and the tyUnknown backstop added by bfb7b4c59. Measured with a counter and an arms-disabled control, neither fallback fires on any shape tried, including the compiler's own 436 deref-walk calls -- the new arms take those hits one for one. Not deleted on that: the population is six files, and NodePtrElem's False return is what both fallbacks branch on. | — |
 
 ## unfinished (27)
 
@@ -84,7 +85,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 85 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 70 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (134)
+## backlog-core (133)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -207,7 +208,6 @@ _none_
 | meta-constant-normalisation | A | 20 | meta | Standing index: stop writing compiler code that branches on constant-vs-variable. Each constant expression becomes its own uniquely-named read-only variable, so downstream has ONE shape to handle. Goal is less double work on future fixes, not speed. | — |
 | refactor-a-backend-machine-code-lives-in-six-shared-files | A | 25 | refactor | A backend is not ir_codegen_<arch>.inc + asmtext_<arch>.inc. Six shared files emit or name per-arch machine code: symtab.inc (three full function epilogues), asmenc.inc (inline-asm text for all five targets), ir_codegen.inc (the shared -O pipeline calls two aarch64 passes by name), asmfront.inc, exception_emit.inc, and -- the one that crosses a lane -- cparser.inc, the C FRONTEND, which writes the C _start entry stub as raw rv32_/a64_/arm32_ emission. Measured by the omission defines, which turn every one of these into a compile error. | — |
 | refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed | A | 60 | refactor | C owns its lexer/parser/preproc but NOT its lowering: ir.inc carries 40 CProgramMode references. So most Track C work needs Track A's files, and a C agent cannot be staffed independently -- measured 2026-08-29, four of six ranked C tickets need an A file. | — |
-| refactor-a-collapse-nodeptrelem-into-the-deref-walk | A | 30 | refactor | After the deref-shape widening, NodePtrElem in pasparser_lval.inc is reached from exactly two places, both inside ResolveDerefShape itself: the final else and the tyUnknown backstop added by bfb7b4c59. Measured with a counter and an arms-disabled control, neither fallback fires on any shape tried, including the compiler's own 436 deref-walk calls -- the new arms take those hits one for one. Not deleted on that: the population is six files, and NodePtrElem's False return is what both fallbacks branch on. | — |
 | refactor-a-nilpy-calling-convention-logic-lives-in-the-pascal-parser-files | A | 25 | refactor | 78 `isNilPy` branches sit inside the pasparser_*.inc set — NilPy language rules living in files named for the Pascal parser. It is why a Track N ticket routes its holder into files Track N does not own, and it is `the-substrate-is-ast-and-ir-not-the-parser` violated by filename rather than by design. | — |
 | refactor-a-nodearrndinfo-is-a-symtab-query-living-in-a-pascal-parser-file | A | 30 | refactor | NodeArrNDInfo contains no Pascal syntax and no Pascal semantics — it is a pure symbol-table query (SymArrNDims / UFldArrNDims / SymArrDimSpan) that happens to live in pasparser_call.inc. Track C now calls it across the frontend boundary, which the-substrate-is-ast-and-ir-not-the-parser.md warns against. The doctrine violation is the FILE, not the call: move it to symtab.inc. | — |
 | refactor-a-one-program-driver-prologue-for-every-frontend | A | 45 | refactor | Five frontend drivers each open-code the same program prologue (entry stub, div0 stub, signal runtime, I/O lock stubs, System intrinsics, the emitted AnsiString runtime). The copies drift in one direction — whatever the Pascal driver gained last — and the BASIC one has now been caught missing four of them, one at a time. | — |
@@ -1231,7 +1231,6 @@ _none_
 - [p 30] [A] feature-toolchain-cli-ux
 - [p 30] [W] feature-web-syndication-feeds
 - [p 30] [T] meta-t-dev-throughput-and-track-a-t-integration
-- [p 30] [A] refactor-a-collapse-nodeptrelem-into-the-deref-walk
 - [p 30] [A] refactor-a-nodearrndinfo-is-a-symtab-query-living-in-a-pascal-parser-file
 - [p 30] [A] refactor-a-two-dyn-array-depth-functions-that-drift [parked — re-claim, do not duplicate]
 - [p 25] [U] decide-posix-master-vs-fpc-named-master-for-the-socket-facades (unblocks 1)

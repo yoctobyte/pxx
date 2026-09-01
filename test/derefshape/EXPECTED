@@ -1,0 +1,15 @@
+ds_plain_fixdbl 1.50 6.00
+ds_field_fixdbl 1.50 6.00
+ds_callres_fixdbl 1.50 6.00
+ds_arrayelem_fixdbl 1.50 6.00
+ds_cast_fixdbl 1.50 6.00
+ds_plain_dyndbl 1.50 6.00
+ds_field_dyndbl 1.50 6.00
+ds_callres_dyndbl 1.50 6.00
+ds_arrayelem_dyndbl 1.50 6.00
+ds_cast_dyndbl 1.50 6.00
+ds_plain_dynstr v0 v3
+ds_field_dynstr v0 v3
+ds_callres_dynstr v0 v3
+ds_arrayelem_dynstr v0 v3
+ds_cast_dynstr v0 v3
