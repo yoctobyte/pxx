@@ -4,7 +4,7 @@ title: "EmitLoadVar loads a dyn-array handle at the ELEMENT's width, sign-extend
 track: A
 prio: 40
 type: bug
-status: backlog
+status: done
 found: 2026-09-02
 found-by: frankB
 owner: ""
@@ -87,3 +87,6 @@ Worth checking in the same pass whether the other backends' load emitters
 same shape. They are 32-bit or have their own paths, so the bug does not BITE
 there, but the missing check probably reads the same — and "fixed one arm of a
 double case, grep for the sibling" applies.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

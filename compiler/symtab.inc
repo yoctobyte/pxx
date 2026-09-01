@@ -5410,6 +5410,26 @@ begin
     Exit;
   end;
   tk := Syms[idx].TypeKind;
+  { A DYNAMIC array's slot holds a pointer-sized HANDLE, but AllocDynArray sets
+    Syms[].TypeKind to the ELEMENT kind -- so without this, loading one took its
+    width and SIGNEDNESS from the element: an `array of Integer` handle came back
+    as a 4-byte sign-extended value (measured: 0xffffffffe7e00018), and whatever
+    dereferenced it read [handle-8] off garbage. Pointer-sized element kinds
+    (AnsiString, class, a nested array) were correct by accident, so the failure
+    was silent, element-type-dependent, and 64-BIT ONLY -- a handle is 4 bytes on
+    i386/arm32/riscv32, where the wrong width is the right one.
+
+    No caller depended on the truncation (a truncated handle is never useful);
+    every handle read in the tree goes through IR_LEA, and the one caller that
+    did not -- IRParkManagedDyn -- was moved to IR_LEA in ac02e5462. This is the
+    guard that was missing, not a behaviour change anyone asked for.
+
+    ArrLen = -1 is the dynamic marker; a STATIC array must not take this arm,
+    its slot being the storage rather than a handle. IR_LOAD_SYM's call-arg
+    loadability helper in ir_codegen.inc already made exactly this distinction,
+    which is the sibling that should have been grepped for the first time.
+    bug-a-emitloadvar-truncates-a-dynarray-handle-to-its-element-width }
+  if Syms[idx].IsArray and (Syms[idx].ArrLen = -1) then tk := tyPointer;
   sz := TypeSlotSize(tk);
   sgn := TypeSigned(tk);
 
