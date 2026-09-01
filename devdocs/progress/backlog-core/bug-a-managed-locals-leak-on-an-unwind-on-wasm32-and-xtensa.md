@@ -3,8 +3,10 @@ track: A
 prio: 25
 type: bug
 blocked-by: []
-summary: "WASM32 ONLY NOW -- the xtensa half LANDED in af5d2b534 (Call0; windowed stays false, and that is the ABI condition, not a gap). A proc's managed locals are released by a proc CLEANUP FRAME, and TargetHasProcCleanupFrame today covers x86-64, i386, arm32, aarch64, riscv32 and xtensa-under-Call0 -- wasm32 is the only target left out, so an exception unwinding THROUGH a wasm32 frame still leaks everything that frame owned. Silent by construction: an unwind leak prints nothing and both sides of the native-vs-wasm differential produce identical OUTPUT. The stale source comment this ticket flagged is ALSO already fixed. Remaining work is one lane's: wire wasm32's existing WasmEmitExcEnter/shadow-frame machinery as a proc cleanup frame, then add the predicate arm LAST."
+summary: "WASM32 ONLY NOW -- the xtensa half LANDED in af5d2b534 (Call0; windowed stays false, and that is the ABI condition, not a gap). A proc's managed locals are released by a proc CLEANUP FRAME, and TargetHasProcCleanupFrame today covers x86-64, i386, arm32, aarch64, riscv32 and xtensa-under-Call0 -- wasm32 is the only target left out, so an exception unwinding THROUGH a wasm32 frame still leaks everything that frame owned. Silent by construction: an unwind leak prints nothing and both sides of the native-vs-wasm differential produce identical OUTPUT. The stale source comment this ticket flagged is ALSO already fixed. NOT WIRING (measured 2026-09-01): all three shared hooks are register-shaped -- every arm of EmitProcCleanupFramePatchLanding is Patch32(landPatch, branch-to-CodeLen), assuming a linear code buffer, a two-return setjmp entry and a patchable relative branch. wasm32 has none of the three (its pad is a BASIC BLOCK NUMBER; propagation is a pending global checked after every call), so the hooks have nothing to return or patch there. The wasm32 SEMANTICS do fit -- WasmEmitUnwind already branches to a frame whose fp matches, so a cleanup frame is a handler frame whose pad releases and re-raises. Real job is a design choice: give wasm32 its own path around the shared hooks, or generalise the pad to an opaque token across six backends. Plus three named sub-tasks: reserve a shadow-frame slot (the pre-pass counts IR_EXC_ENTER nodes and a proc frame is not one), materialise the pad as a block and get its number into the frame, and re-raise out of it. Predicate arm still LAST."
 
+status: backlog
+owner: unassigned
 ---
 
 # Managed locals leak on an unwind on wasm32 and xtensa
@@ -77,6 +79,92 @@ the same frame with different landing pads").
 
 For **xtensa** it stays ESP-campaign work and is tracked with that campaign;
 do not treat the two halves as one job just because they share this ticket.
+
+## CORRECTION 2026-09-01 (frankB): "wiring, not new machinery" is wrong about the INTERFACE
+
+Read the three shared hooks before starting and did not start. The claim above
+is right that wasm32's *frame* machinery exists and wrong about the part that
+sets the size of the job.
+
+**All three shared entry points are register-machine shaped, and the patcher
+proves it.** `EmitProcCleanupFramePatchLanding` (`ir_codegen.inc:13022`) has one
+arm per target and **every one of them** is
+
+```pascal
+Patch32(landPatch, <branch encoded from landPatch to CodeLen>)
+```
+
+x86-64, i386, arm32, aarch64, riscv32, xtensa — six arms, one shape. The
+interface assumes three things at once:
+
+1. a **linear code buffer with byte addresses** (`CodeLen`, `Patch32`),
+2. a **two-return entry** — `EmitProcCleanupFrameEnterForTarget` does
+   `setjmp`, `test eax,eax`, `jne landing`, and hands back the position of that
+   `jne` for later patching,
+3. a **patchable relative branch** to a code address.
+
+**wasm32 has none of the three.** Its own backend comment says it outright:
+*"the pad is a BASIC BLOCK NUMBER, not a code address — there are no code
+addresses in a wasm module"*. There is no `setjmp`; propagation is a `pending`
+global checked after every call (`WasmEmitPostCall` → `WasmEmitExcCheck` →
+`WasmEmitUnwind`). A pad is reached by setting `$pc` and `br`ing to the dispatch
+loop, not by a patched branch.
+
+So `EmitProcCleanupFrameEnterForTarget(var landPatch: Integer)` has **no
+meaningful value to return on wasm32**, and `...PatchLanding` has nothing to
+patch.
+
+## What IS true, and it is the good news
+
+The wasm32 semantics are already there and are a close fit. `WasmEmitUnwind`
+(`ir_codegen_wasm32.inc:3680`) already tests *"is the innermost handler frame
+mine?"* by comparing the frame's `fp` against `$fp`, and branches to that
+frame's pad when it matches. **A proc cleanup frame is exactly a handler frame
+whose pad releases the managed locals and re-raises**, and an exception
+unwinding out of a callee already arrives at that test via the post-call
+pending check. Nothing new is needed at the raise site or the propagate site.
+
+## So the actual job, correctly sized
+
+Not "add a seventh arm". One of:
+
+- **(a) Give wasm32 its own path** around the three shared hooks — the frontend
+  gate at `pasparser_proc.inc:2571` calls the target hook, so wasm32 needs a
+  branch there rather than an arm inside it. Smallest diff, and it is a second
+  path for one concept, which `normalise-dont-special-case` says is the one
+  that stays broken.
+- **(b) Generalise the interface** so the landing pad is an opaque token each
+  backend interprets (a code offset for five targets, a block number for
+  wasm32). Larger, touches six working backends, and is the version that does
+  not leave a second path.
+
+**Both are real work with a design choice in front of them, not wiring.**
+
+Three sub-tasks either way, none of which the "wiring" reading anticipates:
+1. **Reserve a shadow-frame slot.** `WasmExcSites` is counted by a pre-pass over
+   `IR_EXC_ENTER` nodes; a proc cleanup frame is emitted by the frontend and is
+   not an IR node, so today it would index past the end and hit
+   `WasmUnsupported('exception frame slot out of range')`.
+2. **Materialise the cleanup pad as a basic block** and get its number into the
+   frame's `pad` word, which is written in the prologue before that block
+   exists — the wasm equivalent of the patch, and it needs its own mechanism.
+3. **Re-raise out of the pad**: set `pending`, pop the frame, propagate.
+
+## Why I released it rather than doing it
+
+Verifiable here — wasmtime 48.0.1 and node v22.22.1 are both installed, so the
+leak can actually be measured rather than argued about. What stopped me is
+scope plus ranking: this is a shared-interface design decision across six
+working backends, and it is wasm work, which the owner demoted on 2026-08-30
+(*"they simply must not outrank ordinary Track A work"*). This ticket's 75 comes
+from `umbrella-managed-memory-is-correct`, not from the wasm umbrella, so its
+rank is legitimate — but the *work* is still wasm work, and
+[[decide-the-wasm-umbrella-at-70-reinstates-everything-the-owner-demoted-to-25]]
+is open on exactly that question. Starting a night of wasm backend work while
+holding that filing open would contradict it.
+
+Unclaimed and left accurate. Whoever takes it inherits the (a)/(b) choice
+already framed and the three sub-tasks named.
 
 ## Do not "fix" this by widening the predicate
 
