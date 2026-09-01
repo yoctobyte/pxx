@@ -3271,7 +3271,27 @@ begin
     (52ad546b9): the subtraction was right and only `q - p + 1` exposed it. }
   node := AllocNode(AN_INT_LIT);
   ASTIVal[node] := sz;
-  ASTTk[node] := Ord(tyUInt64);
+  { size_t is POINTER-WIDTH unsigned, not 64-bit unsigned. tyUInt64 fixed the
+    SIGNEDNESS (which was the defect above) and introduced a WIDTH one on every
+    32-bit target: a variadic push believes the node's tag, so `printf("%d %d",
+    sizeof(char), sizeof(a))` pushed 8 bytes where the callee reads two 4-byte
+    slots, and the second `%d` read the high half of the first argument.
+    Measured on c-testsuite 00184.c, which prints `1 1 / 2 2` under gcc:
+
+        i386     1 0 / 2 0        riscv32  1 0 / 2 0
+        arm32    1082131044 1 / 135184056 2
+        x86_64   1 1 / 2 2        <- 64-bit hides it completely
+
+    tyNativeUInt is defs.inc's "NativeUInt/PtrUInt -- pointer-sized unsigned",
+    which is what size_t IS, so this keeps the signedness fix and drops the
+    width assumption.
+
+    THE SIBLING WAS GOING THE OTHER WAY ON THE SAME DAY. ir.inc's pointer-
+    difference arm carries the note that ptrdiff_t must be pointer-width and
+    NOT tyInt64 for exactly this variadic reason; `ptr - ptr` and `sizeof` are
+    the two places C hands you a pointer-width integer, and they are only
+    correct together. }
+  ASTTk[node] := Ord(tyNativeUInt);
   Result := node;
 end;
 
