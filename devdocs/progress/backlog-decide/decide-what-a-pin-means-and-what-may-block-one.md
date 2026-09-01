@@ -5,12 +5,40 @@ type: decide
 prio: 80
 status: open
 blocked-by: []
-summary: "The pin gate INVERTED and nobody noticed. devdocs/dev/track-t.md says a pin is fast and unverified ON PURPOSE — a self-host fixedpoint, with a bad pin 'recovered, not prevented' and T supplying the verdict afterwards. But `would_pin`/`pin_is_green` became a PRECONDITION: seven's shadow answers 'would NOT pin' and no pin is cut. Measured cost: 49h with no pin, last fully-green pin v354 from 2026-08-19 (12 days), tree 1724 commits and 256 compiler/ commits past the pin, and Tracks B/C/D/E building C for i386/arm32 against a binary that cannot. Owner's view (2026-09-01): 'a pin is a successful self compile... we added in all regression testing before we would do a full pin, but that is why we ran into this issue - no pin at all. which is a worse outcome.' Recommendation: restore the documented design — fixedpoint gates the pin, regressions are a post-hoc verdict — and keep the shadow as ADVICE."
+summary: "NOTHING IN THE TOOLING PREVENTS A PIN — verified, and this corrects the first version of this ticket. `would_pin` has ZERO deciding consumers (one assignment at twatch.py:2718, one comment); `pin_is_green` is used once, in cmd_pinstatus (trackt.py:1581), to name a ROLLBACK TARGET; and pin_shadow() says it 'deliberately never touches pinned, make pin, or stable_linux_amd64/**'. The code already implements the documented design. THE INVERSION IS IN READING: agents read 'would NOT pin' as 'cannot pin', and `make pin` — a ~34s human action needing only the self-host fixedpoint — was available every hour of the 49. The real cost is the RECOVERY leg, not the pin: pin_is_green needs a full run with no RED tier, nothing has qualified since v354 (2026-08-19), so the fast-pin trade's 'recovered, not prevented' has no fresh target. Owner (2026-09-01): 'a pin is a successful self compile... we added in all regression testing before we would do a full pin, but that is why we ran into this issue - no pin at all. which is a worse outcome.' The finding worth keeping is general: A SHADOW GATE THAT PUBLISHES A VERDICT NOBODY IS AUTHORISED TO ACT ON WILL BE READ AS AUTHORITY ANYWAY."
 ---
 
 # What is a pin, and what is allowed to block one?
 
-## The inversion, in the repo's own words
+## CORRECTED 2026-09-01 — the code was never the problem
+
+**The first version of this ticket said `would_pin`/`pin_is_green` had become a
+precondition. That is false and it would have sent someone to "fix" correct
+code.** Verified by grep:
+
+| symbol | every non-test use |
+| --- | --- |
+| `would_pin` | `twatch.py:2718` assignment, `twatch.py:2654` comment. **Nothing reads it.** |
+| `pin_is_green` | defined `trackt.py:1525`; used once at `:1581` inside `cmd_pinstatus`, to print *"last pin T found fully green"* — a **rollback target**. |
+| `pin_shadow()` | docstring, `twatch.py:2628`: *"Deliberately never touches `pinned`, `make pin`, or `stable_linux_amd64/**`."* |
+
+`pin_is_green` does not gate the pin; it **is** the recovery half of
+"recovered, not prevented". Credit frank-T-on-seven for catching this, including
+that it was the first to misread its own signal.
+
+**So the inversion is in READING, not in code.** `make pin` is a ~34s human
+action needing only the self-host fixedpoint, and it was available every hour of
+those 49. What happened is that agents — this one included — read *"would NOT
+pin"* as *"cannot pin"*.
+
+**The general finding, which is worth more than any code change:**
+
+> **A shadow gate that publishes a verdict nobody is authorised to act on will
+> be read as authority anyway.**
+
+That is a fact about advisory signals, not about pinning.
+
+## The design, in the repo's own words
 
 `devdocs/dev/track-t.md` states the design plainly:
 
@@ -33,6 +61,14 @@ improvement.
 | last pin T found FULLY GREEN | **v354, 2026-08-19** — 12 days |
 | tree past the pin | **1724 commits**, 256 touching `compiler/` |
 | `would_pin` outcomes today | every shadowed candidate: **would NOT pin** |
+
+**The number that actually matters is the RECOVERY leg, not the pin count.**
+"49h with no pin" is a human not running a 34s command. The real degradation is
+that `pin_is_green` requires a `full` run with no RED tier, **nothing has
+qualified since v354 on 2026-08-19**, so if v398 turns out bad the only
+fully-verified target to recover to is twelve days stale. The fast-pin trade is
+explicitly "a bad pin is recovered, not prevented" — and the recovery leg is the
+half that quietly went missing.
 
 The user-visible consequence: **the pin cannot build any C program for i386 or
 arm32**, because the fix (`fc9c8ade2`) landed one day after v398. The tree
@@ -62,11 +98,13 @@ days.** That is the argument in one sentence.
 
 ## Recommendation
 
-1. **The pin gate is the self-host fixedpoint.** Restore what track-t.md already
-   says. `make stabilize-fast && make pin`, ~35s, and it is Track A's operation.
-2. **Regression state is a post-hoc VERDICT, not a precondition.** T keeps
-   shadowing and keeps publishing `would_pin` — as **advice**, and as the input
-   to `make revert`. Recovered, not prevented.
+1. **Say out loud that the pin gate is the self-host fixedpoint** — because the
+   code already does this and the confusion was entirely in how the shadow's
+   output reads. No tooling change is needed to cut a pin today.
+2. **Make the shadow's output say what it is.** `would_pin: false` reads as a
+   refusal. If it said *"advisory — 12 reds this pin does not have; pinning is
+   not blocked"*, none of tonight happens. That is the one cheap code change and
+   it is Track T's.
 3. **Keep `pinstatus` and the green-fallback**, because "last pin T found fully
    green" is genuinely useful — it just must not be the thing that stops a pin
    being cut.
