@@ -1,6 +1,6 @@
 ---
 prio: 53  # auto
-blocked-by: [feature-tls13-from-scratch]
+blocked-by: []
 ---
 
 # TLS provider abstraction — pluggable backends (OpenSSL + handrolled)
@@ -411,3 +411,47 @@ blocking, because the reactor will believe it. The two properties in the header
 above (fail-closed CertificateVerify, trust-store anchoring) must survive the
 rewrite, and `tls13-handshake-devtest` + `truststore-devtest` must keep passing
 unchanged as the evidence they did.
+
+
+---
+
+## 2026-09-01 (frankH) — the `blocked-by` was HIDING the slice the owner asked for
+
+**This ticket has been suppressed from the Track B ready queue**, and the thing
+it was hiding is slice 3 — the one Rene named directly: *"async is a primary
+feature"*, recorded above as pre-approved, *"a fresh session should start it
+without re-asking for scope."*
+
+The edge said `blocked-by: [feature-tls13-from-scratch]`. That ticket is
+**deliberately parked in `rainy-day/`** (Track B sweep, 2026-07-20) because its
+own status line has read *"DEFERRED, start alongside BSD support (not now)"*
+since it was opened. `ready_tickets` keeps a ticket whose blockers are all
+resolved — parked is not resolved — so `progress.sh ready --track B` did not
+list this one at all. Checked, not inferred: it was absent from that queue
+while sitting at p53.
+
+**The edge was false, not merely stale.** The parking note says it outright:
+*"Nothing is lost: M1-M7 are implemented and tested... The next slices can be
+pulled individually if one becomes urgent — that does not require un-deferring
+the umbrella."* And this ticket's own body already records the native backend
+landing (`backend=native-tls13`, `status=200`, `HTTPS OK`).
+
+**Verified by running it rather than by reading either ticket** —
+`make tls13-handshake-devtest`:
+
+```
+tls13-handshake-devtest OK (ed25519 + rsa_pss + ecdsa_p256; chain verify;
+                            kTLS-TX + Pascal fallback)
+```
+
+Three signature schemes, chain verification against the trust store, a real
+https GET through the Pascal record layer. Nothing here is waiting on the
+deferred umbrella.
+
+**Shape of the failure, because it is the third of this kind today.** A
+`blocked-by` edge is a claim about the world at filing time and nothing
+re-checks it; resolving or PARKING a blocker is an event on the blocker, and
+the edge lives on the dependent, so at the moment the claim goes wrong nobody
+is standing where it is written. Here it cost more than tidiness: the queue
+stopped offering work the owner had personally prioritised, and an absence is
+not something anyone notices.

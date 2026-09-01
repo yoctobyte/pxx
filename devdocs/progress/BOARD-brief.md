@@ -56,7 +56,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 445, ranked
+## Ready — top 30 of 446, ranked
 
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` meta-a-pxx-produces-linkable-code
@@ -89,4 +89,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [A]` feature-a-fold-the-consensus-dead-branch-core-at-every-level
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 
-_415 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_416 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

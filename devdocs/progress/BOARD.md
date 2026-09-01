@@ -517,7 +517,7 @@ _none_
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | feature-os-targets-bsd-mac |
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
-| feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | feature-tls13-from-scratch |
+| feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 
 ## backlog-cfront (11)
 
@@ -1031,6 +1031,7 @@ _none_
 - [p 55] [P] refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins
 - [p 55] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
+- [p 53] [B] feature-tls-provider-abstraction
 - [p 50] [U] decide-release-signing-key-custody (unblocks 1)
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [C] bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently
@@ -1401,5 +1402,4 @@ _none_
 - **1** — feature-t-freebsd-image-and-runner
 - **1** — feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host
 - **1** — feature-target-wasm
-- **1** — feature-tls13-from-scratch
 - **1** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
