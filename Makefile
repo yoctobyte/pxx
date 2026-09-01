@@ -14228,6 +14228,23 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_exception_object_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/teol_i386)" "$$($(TESTTMP)/teol_i386_x64)"
 	tools/assert_no_leak.sh i386/exception_object 50 tools/run_target.sh i386 $(TESTTMP)/teol_i386
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_i386_x64
+	# Is a string literal handed over WITHOUT a heap copy. A literal is already
+	# a complete managed string in .data, so `s := 'yy'` should allocate
+	# nothing; these four backends had no EmitStaticLitHandle and copied it to
+	# the heap every time -- 1871 allocations per 2000 iterations against
+	# x86-64's zero, with frees tracking allocs so nothing leaked and no
+	# existing check could see it. TWO rows, asking different questions: the
+	# ceiling is the subject (it fails if literals start allocating again, and
+	# the program carries a deliberate allocator so the census has a floor and
+	# cannot pass by measuring nothing), the differential is correctness (the
+	# optimisation hands out a pointer INTO the literal pool, and a backend
+	# that writes through it or lets its refcount reach zero changes the output
+	# without changing any count).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_static_string_literal.pas $(TESTTMP)/ssl_i386
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_static_string_literal.pas $(TESTTMP)/ssl_i386_x64
+	tools/assert_alloc_ceiling.sh i386/static_string_literal 600 tools/run_target.sh i386 $(TESTTMP)/ssl_i386
+	tools/assert_alloc_ceiling.sh x86-64/static_string_literal 600 $(TESTTMP)/ssl_i386_x64
+	tools/expect_same.sh i386/test_static_string_literal "$$(tools/run_target.sh i386 $(TESTTMP)/ssl_i386 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_i386_x64 | grep -v '^pxx-census')"
 
 test-aarch64: $(COMPILER)
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
@@ -14788,6 +14805,23 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_exception_object_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/teol_aarch64)" "$$($(TESTTMP)/teol_aarch64_x64)"
 	tools/assert_no_leak.sh aarch64/exception_object 50 tools/run_target.sh aarch64 $(TESTTMP)/teol_aarch64
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_aarch64_x64
+	# Is a string literal handed over WITHOUT a heap copy. A literal is already
+	# a complete managed string in .data, so `s := 'yy'` should allocate
+	# nothing; these four backends had no EmitStaticLitHandle and copied it to
+	# the heap every time -- 1871 allocations per 2000 iterations against
+	# x86-64's zero, with frees tracking allocs so nothing leaked and no
+	# existing check could see it. TWO rows, asking different questions: the
+	# ceiling is the subject (it fails if literals start allocating again, and
+	# the program carries a deliberate allocator so the census has a floor and
+	# cannot pass by measuring nothing), the differential is correctness (the
+	# optimisation hands out a pointer INTO the literal pool, and a backend
+	# that writes through it or lets its refcount reach zero changes the output
+	# without changing any count).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_static_string_literal.pas $(TESTTMP)/ssl_a64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_static_string_literal.pas $(TESTTMP)/ssl_a64_x64
+	tools/assert_alloc_ceiling.sh aarch64/static_string_literal 600 tools/run_target.sh aarch64 $(TESTTMP)/ssl_a64
+	tools/assert_alloc_ceiling.sh x86-64/static_string_literal 600 $(TESTTMP)/ssl_a64_x64
+	tools/expect_same.sh aarch64/test_static_string_literal "$$(tools/run_target.sh aarch64 $(TESTTMP)/ssl_a64 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_a64_x64 | grep -v '^pxx-census')"
 
 test-riscv32: $(COMPILER)
 	# A `var` parameter of every scalar kind, plus var->var forwarding. The
@@ -15385,6 +15419,23 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/test_exception_object_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/teol_riscv32)" "$$($(TESTTMP)/teol_riscv32_x64)"
 	tools/assert_no_leak.sh riscv32/exception_object 50 tools/run_target.sh riscv32 $(TESTTMP)/teol_riscv32
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_riscv32_x64
+	# Is a string literal handed over WITHOUT a heap copy. A literal is already
+	# a complete managed string in .data, so `s := 'yy'` should allocate
+	# nothing; these four backends had no EmitStaticLitHandle and copied it to
+	# the heap every time -- 1871 allocations per 2000 iterations against
+	# x86-64's zero, with frees tracking allocs so nothing leaked and no
+	# existing check could see it. TWO rows, asking different questions: the
+	# ceiling is the subject (it fails if literals start allocating again, and
+	# the program carries a deliberate allocator so the census has a floor and
+	# cannot pass by measuring nothing), the differential is correctness (the
+	# optimisation hands out a pointer INTO the literal pool, and a backend
+	# that writes through it or lets its refcount reach zero changes the output
+	# without changing any count).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_static_string_literal.pas $(TESTTMP)/ssl_rv32
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_static_string_literal.pas $(TESTTMP)/ssl_rv32_x64
+	tools/assert_alloc_ceiling.sh riscv32/static_string_literal 600 tools/run_target.sh riscv32 $(TESTTMP)/ssl_rv32
+	tools/assert_alloc_ceiling.sh x86-64/static_string_literal 600 $(TESTTMP)/ssl_rv32_x64
+	tools/expect_same.sh riscv32/test_static_string_literal "$$(tools/run_target.sh riscv32 $(TESTTMP)/ssl_rv32 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_rv32_x64 | grep -v '^pxx-census')"
 
 
 # ---------------------------------------------------------------------------
@@ -16300,6 +16351,23 @@ test-xtensa: $(COMPILER)
 	# when there is no census line at all, so it cannot pass by measuring nothing.
 	tools/assert_no_leak.sh xtensa/managed_str_ownership 50 tools/run_target.sh xtensa $(TESTTMP)/msol_xt
 	tools/assert_no_leak.sh x86-64/managed_str_ownership 50 $(TESTTMP)/msol_xt_x64
+	# Is a string literal handed over WITHOUT a heap copy. A literal is already
+	# a complete managed string in .data, so `s := 'yy'` should allocate
+	# nothing; these four backends had no EmitStaticLitHandle and copied it to
+	# the heap every time -- 1871 allocations per 2000 iterations against
+	# x86-64's zero, with frees tracking allocs so nothing leaked and no
+	# existing check could see it. TWO rows, asking different questions: the
+	# ceiling is the subject (it fails if literals start allocating again, and
+	# the program carries a deliberate allocator so the census has a floor and
+	# cannot pass by measuring nothing), the differential is correctness (the
+	# optimisation hands out a pointer INTO the literal pool, and a backend
+	# that writes through it or lets its refcount reach zero changes the output
+	# without changing any count).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_static_string_literal.pas $(TESTTMP)/ssl_xt
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_static_string_literal.pas $(TESTTMP)/ssl_xt_x64
+	tools/assert_alloc_ceiling.sh xtensa/static_string_literal 600 tools/run_target.sh xtensa $(TESTTMP)/ssl_xt
+	tools/assert_alloc_ceiling.sh x86-64/static_string_literal 600 $(TESTTMP)/ssl_xt_x64
+	tools/expect_same.sh xtensa/test_static_string_literal "$$(tools/run_target.sh xtensa $(TESTTMP)/ssl_xt | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_xt_x64 | grep -v '^pxx-census')"
 
 test-arm32: $(COMPILER)
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
@@ -16857,6 +16925,23 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_exception_object_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/teol_arm32)" "$$($(TESTTMP)/teol_arm32_x64)"
 	tools/assert_no_leak.sh arm32/exception_object 50 tools/run_target.sh arm32 $(TESTTMP)/teol_arm32
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_arm32_x64
+	# Is a string literal handed over WITHOUT a heap copy. A literal is already
+	# a complete managed string in .data, so `s := 'yy'` should allocate
+	# nothing; these four backends had no EmitStaticLitHandle and copied it to
+	# the heap every time -- 1871 allocations per 2000 iterations against
+	# x86-64's zero, with frees tracking allocs so nothing leaked and no
+	# existing check could see it. TWO rows, asking different questions: the
+	# ceiling is the subject (it fails if literals start allocating again, and
+	# the program carries a deliberate allocator so the census has a floor and
+	# cannot pass by measuring nothing), the differential is correctness (the
+	# optimisation hands out a pointer INTO the literal pool, and a backend
+	# that writes through it or lets its refcount reach zero changes the output
+	# without changing any count).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_static_string_literal.pas $(TESTTMP)/ssl_a32
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_static_string_literal.pas $(TESTTMP)/ssl_a32_x64
+	tools/assert_alloc_ceiling.sh arm32/static_string_literal 600 tools/run_target.sh arm32 $(TESTTMP)/ssl_a32
+	tools/assert_alloc_ceiling.sh x86-64/static_string_literal 600 $(TESTTMP)/ssl_a32_x64
+	tools/expect_same.sh arm32/test_static_string_literal "$$(tools/run_target.sh arm32 $(TESTTMP)/ssl_a32 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_a32_x64 | grep -v '^pxx-census')"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

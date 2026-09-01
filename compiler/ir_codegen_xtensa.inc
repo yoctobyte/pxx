@@ -702,9 +702,23 @@ begin
   begin
     sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
     j := InternStr(sVal);
-    EmitLoadConstXtensa(reg_xtensa_a2, Strs[j].Len);          { len }
-    EmitLoadDataRefXtensa(reg_xtensa_a3, Strs[j].Offset + 8); { src }
-    EmitStrFromLitXtensa;                                     { a2 = handle }
+    { The twin of EmitStaticLitHandle in ir_codegen.inc — read THAT for why a
+      literal needs no allocation and, load-bearingly, why it needs NO RETAIN.
+      emit.inc writes a full saturated header for every literal on every target,
+      and this backend calls PXXStrDecRef, which has always refused to write an
+      MSTR_STATIC_RC block. Not repeated here: four more copies of that argument
+      would go stale one at a time.
+      perf-a-every-string-literal-assignment-heap-copies-on-i386-arm32-riscv32-and-xtensa }
+    if (OptLevel >= 2) and ((Strs[j].Len > 0) or isNilPy) then
+      EmitLoadDataRefXtensa(reg_xtensa_a2, Strs[j].Offset + 8) { a2 = the handle }
+    else if (OptLevel >= 2) and (Strs[j].Len = 0) then
+      EmitLoadConstXtensa(reg_xtensa_a2, 0)                    { Pascal '' is nil }
+    else
+    begin
+      EmitLoadConstXtensa(reg_xtensa_a2, Strs[j].Len);          { len }
+      EmitLoadDataRefXtensa(reg_xtensa_a3, Strs[j].Offset + 8); { src }
+      EmitStrFromLitXtensa;                                     { a2 = handle }
+    end;
   end
   else if IntToTypeKind(IRTk[valNode]) = tyChar then
   begin

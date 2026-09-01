@@ -81,6 +81,55 @@ begin
   EmitB($81); EmitB($C4); EmitI32(8);
 end;
 
+{ A string literal is ALREADY a managed string in .data — the pool writes a
+  full header (meta at handle-24, MSTR_STATIC_RC at handle-16, an 8-byte length
+  at handle-8, bytes at handle) for every literal, on every target, in
+  emit.inc's one shared emitter. So handing back its address is the whole job:
+  no PXXStrFromLit, no allocation, no copy of bytes that are already there.
+
+  x86-64 has had this as EmitStaticLitHandle since the uforth profile put
+  PXXStrFromLit at 9.28%, and aarch64 as EmitStaticLitHandleA64. i386, arm32,
+  riscv32 and xtensa had NO such function at all and fell through to
+  allocate-and-copy, so `s := 'yy'` in a 2000-iteration loop allocated 1871
+  times here against ZERO on x86-64 — every string literal in every program on
+  four of the six runnable targets
+  (perf-a-every-string-literal-assignment-heap-copies-on-i386-arm32-riscv32-and-xtensa).
+
+  NO RETAIN, and that is the load-bearing half. It is safe here for the reason
+  it is safe on x86-64 since 2026-08-31: the block is born saturated and the
+  release path refuses to write a saturated block. This backend CALLS
+  PXXStrDecRef rather than inlining a blob, and that routine has always carried
+  the MSTR_STATIC_RC guard — which is why the port needs no runtime change and
+  must not grow one. If that guard is ever removed, this returns a block whose
+  refcount walks down one per store/overwrite cycle.
+
+  The empty string splits: a Pascal AnsiString collapses '' to nil (PXXStrFromLit's
+  `len <= 0` arm) and a NilPy str does not, so the same split the runtime makes
+  is made here. Gated at -O2 like both existing twins; the REPRESENTATION is
+  emitted unconditionally, only its use is gated.
+
+  Decides AND emits, deliberately: a caller that re-tests the predicate itself
+  can disagree with the emitter, and the way that fails is eax never loaded — a
+  wrong value rather than a crash. }
+function EmitStaticLitHandle386(node: Integer): Boolean;
+var si: Integer;
+begin
+  EmitStaticLitHandle386 := False;
+  if OptLevel < 2 then Exit;
+  if node < 0 then Exit;
+  if IRKind[node] <> IR_CONST_STR then Exit;
+  si := InternStr(GetTokenStrFromRaw(IRA[node], IRB[node]));
+  if (Strs[si].Len = 0) and (not isNilPy) then
+  begin
+    EmitB($31); EmitB($C0);                      { xor eax, eax — Pascal '' is nil }
+  end
+  else
+  begin
+    EmitB($B8); EmitDataRef(Strs[si].Offset + 8); { mov eax, handle }
+  end;
+  EmitStaticLitHandle386 := True;
+end;
+
 procedure EmitArgvToFixedString386(dstIdx: Integer);
 { On entry eax = argv index. Copy argv[index] into fixed string dstIdx. }
 var loopStart, donePos, capDone, copyLoop, copyDone, nilPos: Integer;
@@ -1743,14 +1792,17 @@ begin
           end
           else if IRKind[valNode] = IR_CONST_STR then
           begin
-            sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
-            j := InternStr(sVal);
-            EmitB($68); EmitI32(Strs[j].Len);           { push len }
-            EmitB($68); EmitDataRef(Strs[j].Offset + 8); { push src }
-            procIdx := FindProc('PXXStrFromLit');
-            if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
-            EmitCallProc(procIdx);
-            EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+            if not EmitStaticLitHandle386(valNode) then
+            begin
+              sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+              j := InternStr(sVal);
+              EmitB($68); EmitI32(Strs[j].Len);           { push len }
+              EmitB($68); EmitDataRef(Strs[j].Offset + 8); { push src }
+              procIdx := FindProc('PXXStrFromLit');
+              if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+              EmitCallProc(procIdx);
+              EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+            end;
           end
           else if IntToTypeKind(IRTk[valNode]) = tyChar then
           begin
@@ -4438,15 +4490,18 @@ begin
           valNode := IRB[node];
           if IRKind[valNode] = IR_CONST_STR then
           begin
-            sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
-            si := InternStr(sVal);
-            { PXXStrFromLit(len, src): push len then src (arg0 deepest). }
-            EmitB($68); EmitI32(Strs[si].Len);          { push len }
-            EmitB($68); EmitDataRef(Strs[si].Offset + 8); { push src }
-            procIdx := FindProc('PXXStrFromLit');
-            if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
-            EmitCallProc(procIdx);
-            EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+            if not EmitStaticLitHandle386(valNode) then
+            begin
+              sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
+              si := InternStr(sVal);
+              { PXXStrFromLit(len, src): push len then src (arg0 deepest). }
+              EmitB($68); EmitI32(Strs[si].Len);          { push len }
+              EmitB($68); EmitDataRef(Strs[si].Offset + 8); { push src }
+              procIdx := FindProc('PXXStrFromLit');
+              if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+              EmitCallProc(procIdx);
+              EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
+            end;
           end
           else if IntToTypeKind(IRTk[valNode]) = tyChar then
           begin

@@ -1190,6 +1190,23 @@ begin
   begin
     sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
     si := InternStr(sVal);
+    { The twin of EmitStaticLitHandle in ir_codegen.inc — read THAT for why a
+    literal needs no allocation and, load-bearingly, why it needs NO RETAIN. The
+    short version: emit.inc writes a full saturated header for every literal on
+    every target, and this backend calls PXXStrDecRef, which has always refused to
+    write an MSTR_STATIC_RC block. The reasoning is not repeated here on purpose;
+    four more copies of it would go stale one at a time.
+    perf-a-every-string-literal-assignment-heap-copies-on-i386-arm32-riscv32-and-xtensa }
+    if (OptLevel >= 2) and ((Strs[si].Len > 0) or isNilPy) then
+    begin
+      EmitLoadDataRefArm32(0, Strs[si].Offset + 8);   { r0 = the handle }
+      Exit;
+    end;
+    if (OptLevel >= 2) and (Strs[si].Len = 0) then
+    begin
+      EmitLoadImmArm32(0, 0);                         { Pascal '' is nil }
+      Exit;
+    end;
     EmitLoadImmArm32(0, Strs[si].Len);
     EmitLoadDataRefArm32(1, Strs[si].Offset + 8);
     procIdx := FindProc('PXXStrFromLit');

@@ -1593,10 +1593,24 @@ begin
           begin
             sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
             j := InternStr(sVal);
-            EmitLoadImmRISCV32(reg_a0, Strs[j].Len);          { arg0 = len }
-            EmitLoadDataRefRISCV32(reg_a1, Strs[j].Offset + 8); { arg1 = chars }
-            procIdx := FindProc('PXXStrFromLit'); if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
-            EmitCallProc(procIdx);                                 { a0 = handle }
+            { The twin of EmitStaticLitHandle in ir_codegen.inc — read THAT for why a
+            literal needs no allocation and, load-bearingly, why it needs NO RETAIN. The
+            short version: emit.inc writes a full saturated header for every literal on
+            every target, and this backend calls PXXStrDecRef, which has always refused to
+            write an MSTR_STATIC_RC block. The reasoning is not repeated here on purpose;
+            four more copies of it would go stale one at a time.
+            perf-a-every-string-literal-assignment-heap-copies-on-i386-arm32-riscv32-and-xtensa }
+            if (OptLevel >= 2) and ((Strs[j].Len > 0) or isNilPy) then
+              EmitLoadDataRefRISCV32(reg_a0, Strs[j].Offset + 8)   { a0 = the handle }
+            else if (OptLevel >= 2) and (Strs[j].Len = 0) then
+              rv32_addi(reg_a0, reg_zero, 0)                        { Pascal '' is nil }
+            else
+            begin
+              EmitLoadImmRISCV32(reg_a0, Strs[j].Len);             { arg0 = len }
+              EmitLoadDataRefRISCV32(reg_a1, Strs[j].Offset + 8);  { arg1 = chars }
+              procIdx := FindProc('PXXStrFromLit'); if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+              EmitCallProc(procIdx);                                { a0 = handle }
+            end;
           end
           else if IntToTypeKind(IRTk[valNode]) = tyChar then
           begin
@@ -2123,11 +2137,21 @@ begin
           begin
             sVal := GetTokenStrFromRaw(IRA[valNode], IRB[valNode]);
             j := InternStr(sVal);
-            EmitLoadImmRISCV32(reg_a0, Strs[j].Len);            { arg0 = len }
-            EmitLoadDataRefRISCV32(reg_a1, Strs[j].Offset + 8); { arg1 = chars }
-            procIdx := FindProc('PXXStrFromLit');
-            if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
-            EmitCallProc(procIdx);                              { a0 = handle }
+            { The static-literal handle, same as IR_STORE_SYM above — see the
+              note there, and EmitStaticLitHandle in ir_codegen.inc for why
+              there is no retain. }
+            if (OptLevel >= 2) and ((Strs[j].Len > 0) or isNilPy) then
+              EmitLoadDataRefRISCV32(reg_a0, Strs[j].Offset + 8)  { a0 = the handle }
+            else if (OptLevel >= 2) and (Strs[j].Len = 0) then
+              rv32_addi(reg_a0, reg_zero, 0)                      { Pascal '' is nil }
+            else
+            begin
+              EmitLoadImmRISCV32(reg_a0, Strs[j].Len);            { arg0 = len }
+              EmitLoadDataRefRISCV32(reg_a1, Strs[j].Offset + 8); { arg1 = chars }
+              procIdx := FindProc('PXXStrFromLit');
+              if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
+              EmitCallProc(procIdx);                              { a0 = handle }
+            end;
           end
           else if IntToTypeKind(IRTk[valNode]) = tyChar then
           begin
