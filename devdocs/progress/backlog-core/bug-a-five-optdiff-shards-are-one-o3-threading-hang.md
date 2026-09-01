@@ -7,7 +7,7 @@ found: 2026-09-01
 found-by: claude-T
 owner: ""
 blocked-by: []
-summary: "Six optdiff shards are red and it is NOT six problems. Five (shard0/1/2/3/5) share one signature and one job_last_pass (caa34fdeab46): a threading test that exits 0 at -O0 and TIMES OUT (rc 124) at -O3, one such test per shard, plus an `Illegal instruction` on shard1. shard4 is unrelated — older last_pass (6c88a2afc82b), an output divergence at -O1/-O2/-O3 with rc 0 vs 0, already tracked by regression-optdiff-shard4-12. The window after the shared last_pass holds only three buildable commits, two of which are x86-64 codegen: 44b256356 (PIE linking) and d0537380a (rip-relative global operands). HYPOTHESIS, not bisected."
+summary: "CORRECTED 2026-09-01: the cause is DEAD-CODE ELIMINATION, not -O3, and the -O3 in this slug is the wrong description. Measured twice on different binaries: `-O0 --dce` SEGFAULTs with no optimiser involved, `-O3 --no-dce` passes, `-O3` hangs. So the named suspects d0537380a (rip-relative globals) and 44b256356 (PIE linking) are probably the WRONG bisect window -- -O3 merely turns DCE on, which is why five shards looked like an optimiser regression. Threading is incidental and the search must not be narrowed to threading code. Five optdiff shards share one job_last_pass and one signature; shard4 is a name collision and is tracked separately. frankZ holds it."
 ---
 
 # Five of the six red optdiff shards are one bug, not five
@@ -119,3 +119,45 @@ run without anyone doing anything.
 
 Note also that under `fcbfc02f5` a pin is **graded, never gated** — so nothing
 here is an argument against pinning at any point. It is a grade input.
+
+## CORRECTION 2026-09-01 — it is DCE, not -O3, and the bisect window is wrong
+
+**The cause is dead-code elimination. The optimiser is not involved.** Found by
+frankC, which had reached this ticket independently; measured again here on a
+different binary before propagating, because the first version of this ticket
+sent two sessions at the wrong commits.
+
+Binary `1868e00dcfb0` at `215debee6`, `test/lib_criticalsection_blocking.pas`,
+always with `--threadsafe`:
+
+| flags | result |
+| --- | --- |
+| `-O0` | ok |
+| `-O0 --dce` | **SEGFAULT (139)** |
+| `-O3` | **HANG (124)** |
+| `-O3 --no-dce` | **ok** |
+
+`-O0 --dce` segfaults with no optimiser in the picture, and `-O3 --no-dce`
+passes. That is dispositive in both directions: DCE is sufficient to break it
+and removing DCE is sufficient to fix it at the level where it was first seen.
+
+**So the suspects named above — `d0537380a` (rip-relative global operands) and
+`44b256356` (PIE linking) — are probably the WRONG bisect window**, and the
+`-O3` in this ticket's slug and title is the wrong description. The `-O3` HANG
+and the `-O0 --dce` SEGFAULT are one bug wearing two faces; `-O3` merely turns
+DCE on, which is why the whole block looked like an optimiser regression.
+
+The slug is left alone deliberately: renaming a file another session is working
+in is a merge conflict for no gain, and tstate/resolve citations key off it.
+**Whoever closes this should rename it then.** The summary above is corrected,
+because the summary is the part everyone reads.
+
+**Threading is incidental, and that is now firmer, not weaker.** A whole-body
+DCE defect would be observable wherever a body looks dead but is not; threaded
+programs are where it happened to be caught. Do not narrow the search to
+threading code.
+
+Owner: frankZ holds this. The `owner:` field was EMPTY, which is what let frankC
+reach it sideways from the v399 commit message and get a fair way in before
+anyone noticed — a real collision, caught only because the human spotted two
+sessions on "threading". Claim it.
