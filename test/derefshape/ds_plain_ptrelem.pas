@@ -1,5 +1,5 @@
 program ds_plain_ptrelem;
-type TA = array of PInteger; TP = ^TA; TR = record q: TP; end;
+type TA = array of PInteger; TP = ^TA; TPP = ^TP; TR = record q: TP; end;
 var
   a: TA;
   nums: array[0..3] of Integer;

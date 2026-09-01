@@ -1,5 +1,5 @@
 program ds_callres_dyndbl;
-type TA = array of Double; TP = ^TA; TR = record q: TP; end;
+type TA = array of Double; TP = ^TA; TPP = ^TP; TR = record q: TP; end;
 var
   a: TA;
   i: Integer;

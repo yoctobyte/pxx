@@ -1,5 +1,5 @@
 program ds_cast_dynstr;
-type TA = array of AnsiString; TP = ^TA; TR = record q: TP; end;
+type TA = array of AnsiString; TP = ^TA; TPP = ^TP; TR = record q: TP; end;
 var
   a: TA;
   raw: Pointer;
