@@ -53,3 +53,58 @@ property) before and after.
 
 Track P's, plus a target-shape differential against fpc 3.2.2, plus the
 self-host fixedpoint (this path parses every assignment in `compiler.pas`).
+
+
+---
+
+## 2026-09-02 (frankH) — the differential this ticket asks for now EXISTS, and it is 23/25
+
+This ticket's gate says: *"Sweep with a differential over every target shape
+(bare, field, index, deref, cast, property, default property) before and
+after."* That sweep has now been built and run against fpc 3.2.2, so the
+before-picture is a measurement rather than an expectation.
+
+**25 target shapes. 23 match FPC exactly.** Bare, field, index, deref,
+deref-field, deref-index, pointer-cast-deref, pointer-cast-deref-index, class
+field, class-field-index, class-field-record-field, class-field-deref, string
+index, PChar deref, PChar index, property, named indexed property, default
+property, class-cast-field, class-cast-property, with-block field, record-alias
+cast field, and non-pointer alias whole assignment.
+
+That number is the useful part, and it changes what this ticket is worth. The
+body above lists three instances and says the statement copy "has to be taught
+each capability separately" — all three named ones are already fixed, and the
+sweep says the remaining divergence surface is **two shapes**, not a class:
+
+1. [[bug-p-a-cast-to-a-string-alias-silently-drops-a-following-index]] —
+   `TAlias(s)[2] := 'X'` stores nothing, silently.
+2. [[bug-p-a-class-cast-cannot-index-a-default-property-as-an-assignment-target]]
+   — `TDerived(b)[3] := v` is refused; FPC stores it. Filed 2026-09-02, and the
+   sixth measured instance.
+
+**A third was found by the sweep and FIXED rather than filed**, because it was
+the dangerous kind: `type TS = AnsiString; TS(s) := 'z'` stored a managed string
+through a POINTER-shaped target — this arm is entered on `FindTypeAlias`, which
+finds every named alias, and then stamped `AN_PTR_CAST` / `tyPointer`
+unconditionally. Length came back `1073741824` and reading the target walked off
+into the heap, with **no diagnostic**. The builtin spelling of the same line,
+`AnsiString(s) := 'z'`, was already correct on the pinned compiler — the same
+one-concept-two-lookup-paths defect the arms above it each carry a comment
+about, arriving by a fourth spelling. Regression test:
+`test/test_alias_cast_assign_target.pas`.
+
+### What this means for whoever takes the refactor
+
+- **The harness is the deliverable to reuse.** Its worth is that 23/25 is
+  now known, so a unification has a gate instead of a hope. It lives in the
+  ticket history rather than in `test/` because it is a before/after
+  instrument, not a permanent row; rebuild it from the shape list above.
+- **The int and char alias rows are load-bearing.** `TI(i) := 5` and
+  `TC(c) := 'q'` go through the very arm that corrupted the string case and
+  were already correct, which is why the fix above is scoped to managed strings.
+  A refactor that re-routes every non-pointer alias must keep those green — and
+  when that was tried here it also turned the silent-index bug into a new parse
+  error, i.e. traded a wrong value for a different wrong answer.
+- **Two of the remaining shapes refuse loudly and one is silent.** If the
+  refactor is ranked on risk removed rather than tickets closed, the silent one
+  is the whole argument.

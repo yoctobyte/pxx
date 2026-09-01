@@ -6650,6 +6650,50 @@ begin
               ASTTk[indexNode]   := Ord(tyPointer);
               castTk  := tyPointer;
               valNode := indexNode;
+              { A NON-POINTER alias over a MANAGED STRING is not a pointer cast,
+                and treating it as one corrupted memory in silence.
+
+                This arm's own heading says "pointer-type-alias cast as lvalue",
+                but it is entered on FindTypeAlias, which finds EVERY named type
+                alias, and then stamps AN_PTR_CAST / tyPointer unconditionally.
+                For `type TS = AnsiString; TS(s) := 'z'` that stores a managed
+                string through a pointer-shaped target: the descriptor is written
+                raw and the refcount release/addref is skipped entirely.
+                Measured against fpc 3.2.2 -- FPC prints `len=3 [zzz]`, pxx
+                printed `len=1073741824` and then walked off into the heap, with
+                NO diagnostic, which is the expensive class.
+
+                SCOPED TO WHAT WAS MEASURED, deliberately. `type TI = Integer;
+                TI(i) := 5` and the Char alias BOTH already agree with FPC
+                through this same arm on the pinned compiler, so they are left
+                on it -- widening to every non-pointer alias is a bigger change
+                than the evidence supports, and it broke the suffixed spelling
+                `TS(s)[2] := 'X'` when tried (that shape is a separate, still-open
+                bug, and it stays exactly as it was rather than trading a silent
+                wrong value for a new parse error).
+
+                The cast is dropped rather than reinterpreted because for a
+                managed string through a non-pointer alias there is nothing to
+                reinterpret: `TS(s) := v` means `s := v`. Guarded on tkAssign so
+                only the whole-value target is taken and every suffixed shape
+                still reaches the walk below untouched.
+                refactor-p-one-lvalue-path-for-statements-and-expressions }
+              if (not pcharCast) and (aliasIdx >= 0) and
+                 (AliasPtrDepth[aliasIdx] = 0) and
+                 (CurTok.Kind = tkAssign) and
+                 ((ASTTk[ASTLeft[indexNode]] = Ord(tyAnsiString)) or
+                  (ASTTk[ASTLeft[indexNode]] = Ord(tyString))) and
+                 IsASTLValue(ASTLeft[indexNode]) then
+              begin
+                valNode := ASTLeft[indexNode];   { drop the AN_PTR_CAST wrapper }
+                Expect(tkAssign, ':=');
+                ParseExpr;
+                node := AllocNode(AN_ASSIGN);
+                ASTLeft[node] := valNode;
+                ASTRight[node] := CurASTNode;
+                ParseStatementAST := node;
+                Exit;
+              end;
               { Handle the ^ / .field / [i] suffix chain.
 
                 This walk was the LAGGARD of the six postfix pointer walks in

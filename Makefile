@@ -5419,6 +5419,20 @@ test-core: $(COMPILER)
 	# cast-deref (PChar(s)^) as by-ref method arg (bug-cast-deref-as-varparam-arg)
 	./$(COMPILER) test/test_cast_deref_varparam.pas $(TESTTMP)/test_cast_deref_varparam26
 	tools/expect_same.sh test_cast_deref_varparam26 "$$($(TESTTMP)/test_cast_deref_varparam26)" "$$(printf 'abc 3')"
+	# `TAlias(v) := x` for a NON-POINTER named alias. The statement-level
+	# alias-cast arm is entered on FindTypeAlias -- which finds EVERY alias --
+	# and then stamped AN_PTR_CAST/tyPointer unconditionally, so a managed
+	# string was stored through a pointer-shaped target: descriptor written
+	# raw, refcount release/addref skipped, length came back 1073741824 and
+	# reading it walked off into the heap, with NO diagnostic. fpc 3.2.2 is the
+	# oracle. The int and char rows went through that same arm and were already
+	# CORRECT, which is why the fix is scoped to managed strings rather than
+	# re-routing every non-pointer alias; they are the rows that must keep
+	# agreeing if anyone widens it. The pointer-alias rows are the other half
+	# of the guard. Control was RUN: with the guard disabled the file still
+	# compiles, prints the int and char rows, and then dies on the string row.
+	./$(COMPILER) test/test_alias_cast_assign_target.pas $(TESTTMP)/test_aliascast26
+	tools/expect_same.sh test_aliascast26 "$$($(TESTTMP)/test_aliascast26 | tail -n 1)" "ALIAS CAST TARGET OK"
 	# on-handler binder must not poison the next routine's params (stale SymBlockId)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_on_handler_next_proc_params.pas $(TESTTMP)/test_on_handler_npp26
 	tools/expect_same.sh test_on_handler_npp26 "$$($(TESTTMP)/test_on_handler_npp26)" "$$(printf 'purging\nTRUE 7')"
