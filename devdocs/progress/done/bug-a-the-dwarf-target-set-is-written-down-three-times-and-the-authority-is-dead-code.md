@@ -2,7 +2,7 @@
 track: A
 prio: 30
 type: bug
-status: working
+status: done
 found: 2026-08-30
 found-by: frank-optimize-b4
 summary: "DbgArchSupported states the DWARF Tier-1 target set correctly and is NEVER CALLED. The live gate is duplicated across three doDebug assignments in two ELF writers, and three comments said x86-64 only. Comments fixed; the duplication and the dead authority are not. Measured: -g emits debug sections on all four targets."
@@ -69,3 +69,6 @@ and this one has an extra twist: **the correct sentence is the dead one.**
 The comment half is done and byte-identical. The code half: `make
 compiler/pascal26` plus `-g` emitting the same section count on all four
 supported targets and none on xtensa/riscv32, across exec and shared output.
+
+## Log
+- 2026-09-01 — resolved, commit PENDING-COMMIT.

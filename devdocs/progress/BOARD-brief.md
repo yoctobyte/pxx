@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:4 unfinished:27 blocked:9 backlog:3 backlog-umbrella:5 backlog-core:134 backlog-nilpy:96 backlog-tools:69 backlog-pascal:52 backlog-decide:24 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:24 done-followup:3 decided:140 done:2972 rejected:72`
+`working:3 unfinished:27 blocked:9 backlog:3 backlog-umbrella:5 backlog-core:134 backlog-nilpy:96 backlog-tools:69 backlog-pascal:52 backlog-decide:24 backlog-libs:17 backlog-cfront:10 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:1 experimental:20 rainy-day:44 float:24 done-followup:3 decided:140 done:2973 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-the-dwarf-target-set-is-written-down-three-times-and-the-authority-is-dead-code` [A] — owner: frankA
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
