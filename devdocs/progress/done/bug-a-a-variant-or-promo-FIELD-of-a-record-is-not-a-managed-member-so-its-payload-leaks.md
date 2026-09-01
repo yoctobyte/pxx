@@ -2,8 +2,9 @@
 type: bug
 track: A
 prio: 6
-summary: one shape still leaks — a record whose ONLY member is a Variant, INSIDE A DYN ARRAY (live=7708); a plain local of it is clean (2) and so is the same record with a second managed member (5), because RecordHasManagedFields does not count a Variant. Variant half landed b2997a31b, PromoInt half as member kind 7 in f806993c8
+summary: FIXED across four commits — a Variant or promo FIELD of a record or class is now a descriptor member, scalar and fixed-array alike, and a record whose only managed members are of those kinds is now a managed record; every shape measured clean (was 1904-11398 leaked per 1000 trips)
 tags: [memory-leak, variant, promoint, rtti, records]
+status: done
 ---
 
 ## Status
@@ -20,7 +21,10 @@ retain/release/zero arms in builtinheap. Regression test
     local record {promo, string}   1904 -> 6      class field    1787 -> 7
     dyn array of that record       7685 -> 21     array[0..7]    7578 -> 18
 
-**ONE thing remains open and this ticket stays open for it:**
+**NOTHING REMAINS OPEN. All four shapes are fixed** — see "Closed out" at the
+end for the final tally. The section below is the history of the last one.
+
+Formerly open:
 
 - **A record whose ONLY member is a Variant, INSIDE A DYN ARRAY** (live=7708).
   `RecordHasManagedFieldsDepth2` counts AnsiString, dyn-array, COM-interface and
@@ -192,3 +196,77 @@ feeds DESCRIPTOR EMISSION and the other feeds CODEGEN PATH SELECTION, and they
 are deliberately not the same question. Collapsing them is a real design change
 with a real blast radius, not a tidy-up. It may still be right; it is not
 free, and it is not this ticket.
+
+
+## Closed out (2026-09-01)
+
+Four commits, each a different predicate, all of them saying "this field is not
+worth walking" for a different reason:
+
+    b2997a31b  RECORD descriptor never described a Variant member (kind 5)
+    f806993c8  a promo member had NO member kind at all (kind 7, + stride)
+    a544cab70  RecordHasManagedFieldsDepth2 counted neither, so a record whose
+               managed members were ALL of those kinds was never WALKED
+    2859efe06  the membership arms excluded FIXED ARRAYS of either
+
+Final tally, live blocks per 1000 trips:
+
+    local record {promo, string}                      1904 ->  6
+    class field {promo, string}                       1787 ->  7
+    dyn array of record with a promo member           7685 -> 21
+    record{v:Variant} in a dyn array                  7708 ->  4
+    record{p:PromoInt} in a dyn array                 7791 ->  7
+    record{v:Variant} nested in a managed record       936 ->  1
+    array[0..3] of Variant as a member                3799 ->  3
+    array[0..3] of PromoInt as a member               3860 ->  8
+    array[0..3] of Variant, in a dyn array           11398 -> 10
+    array[0..3] of PromoInt, in a dyn array          11110 -> 10
+
+### What this family was actually about
+
+**Four predicates, one concept, disagreeing.** `FieldIsManaged`,
+`RecordDescMember`, `ClassFieldNeedsFinal` and `RecordHasManagedFieldsDepth2`
+all answer some version of "does this field need managing", and each was written
+for its own caller. A field could satisfy one and fail another, and every leak
+here is a field that fell into a gap between two of them. Two of the fixes point
+in OPPOSITE directions — a544cab70 because a record was not managed enough for
+anything to walk it, 2859efe06 because a record became managed and thereby LOST
+the direct field-by-field scope-exit finalization it had been getting. That is
+the shape `root-cause-over-microfix.md` describes as a design flaw at three
+mechanisms; there are four.
+
+Not collapsed here, deliberately: they are genuinely different questions (who is
+described, who is walked, which codegen path, what the copy does), and the
+`ClassFieldNeedsFinal` header explains why widening `FieldIsManaged` in
+particular is a much broader change. But anyone touching one of them should
+assume the other three disagree until measured.
+
+### Every shape in this family had a probe that reported success
+
+Worth keeping, because it is why the family took four passes rather than one:
+
+- a promo/variant field as a record's ONLY member: clean, because the record is
+  not managed and scope exit finalizes the field directly
+- the same field, once a second managed member exists: LEAKS, because the record
+  is now walked and the walk did not describe it
+- a fixed array of Variant as the ONLY member: clean, same reason
+- the same array with a second managed member: LEAKS, 3799
+- the array as its own local, not a member: clean
+- a plain local record: clean; the same record inside a dyn array: LEAKS
+
+In every pair the obvious minimal probe is the clean one. A one-field test
+program reports success for all four bugs.
+
+### Regression tests
+
+`test_record_variant_member_leaks`, `test_record_promo_member_leaks`,
+`test_managed_record_gate_leaks`, `test_managed_member_array_leaks` — all wired
+with `expect_same` + `assert_no_leak` at bound 50. Each was negative-controlled:
+with its own fix reverted the leak row measures 7357 / 1904 / 4988 / 18967
+respectively, so none of them is a test that cannot fail. The correctness rows
+pass either way in every case, so the leak count is the load-bearing assertion —
+except for the retain halves, where reverting only the retain arm destroys
+survivors (3/6000) and segfaults under -dPXX_HEAP_DEBUG.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
