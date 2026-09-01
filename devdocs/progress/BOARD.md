@@ -8,11 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-dce-miscompiles-every-threaded-program-and-o3-turns-it-on | A | 80→85 | bug | `--dce` produces a broken binary for ANY program that starts a thread: segfault at -O0, infinite spin at -O2/-O3. Deterministic, 9-line repro, and `--no-dce` fixes it at every level — so it is the DCE pass alone, not an -O3 interaction. -O3 turns --dce on by default, which is the whole of why five optdiff shards went red. It is NOT fixed: d402a25b2 only stopped those programs COMPILING under optdiff, so the sweep will report green while the miscompile is live. | — |
 | bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386 | A | 45 | bug | PASCAL DONE AND PROVEN; NilPy, Rust and Zig still open. The four `fAlign := TypeAlign(fTk)` record-field sites in pasparser_decl.inc now call TypeFieldAlign, and a new mixed-link oracle (test-record-abi-mixed-link) judges the layout against gcc across a real link on x86_64 and i386, four shapes plus a value round trip through a `cvar` record global. The Track U fork this ticket flagged -- whether a Pascal record must match the C ABI -- dissolved on the first measurement: pxx's C frontend answered 12/4 and pxx's PASCAL frontend 16/8 for the same fields, same target, same compiler. It was not an FPC question, it was one compiler disagreeing with itself. N/R/Z have no export spelling and so no mixed link, and rustc/zig i686 are not on this box. | — |
+| bug-t-optdiff-cannot-see-any-threading-program-since-the-threadsafe-directive-became-an-error | T | 70→85 | bug | optdiff compiles with a bare `pascal26 -ON file`, so since d402a25b2 made `{$threadsafe on}` without `--threadsafe` a hard error, EVERY threading program in the corpus BUILD-FAILs and is counted as a skip. Five red shards will turn green on the next opt run with the -O3 miscompile they were reporting still live. The fix is to pass --threadsafe when the source carries the directive; land it AFTER the DCE bug, because a correct optdiff is red until then. | bug-a-dce-miscompiles-every-threaded-program-and-o3-turns-it-on |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
@@ -68,31 +70,32 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case | T | 55 | bug | gate.sh's stale_binary_hint asks a WORKING-TREE question (is this binary built from these sources) using GIT-HISTORY inputs (mtime vs the newest commit touching compiler/), so it can only ever see divergence that has been COMMITTED. Measured: an uncommitted edit under compiler/ leaves BOTH its inputs byte-identical, so its output is provably independent of the thing it detects -- it is blind to the entire uncommitted present, which includes every agent between a build and a commit. Three lanes read three stale-binary REDs as a master miscompile on 2026-08-31; the hint fired for one. | — |
-| regression-lib-test-crtl-reachability-7 | C | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py at 5d983997a05a in step 18/72, `python3 tools/crtl_reachability.py` (auto-filed by twatch) | — |
-| regression-test-core-c-crtl-enosys-stubs | T | 70 | regression | regression: test-core#src:test/c_crtl_enosys_stubs.c at 3f73ad2f6a08 in step 2/2, `tools/expect_same.sh c_crtl_enosys26 "$(/tmp/c_crtl_enosys26)" "$(printf 'fork: -1 1\nvfork: -1 1\nchroot: -1 1\nsetuid…` (auto-filed by twatch) | — |
+| regression-lib-test-crtl-reachability-7 | C | 70→85 | regression | regression: lib-test#src:tools/crtl_reachability.py at 5d983997a05a in step 18/72, `python3 tools/crtl_reachability.py` (auto-filed by twatch) | — |
+| regression-test-core-c-crtl-enosys-stubs | T | 70→85 | regression | regression: test-core#src:test/c_crtl_enosys_stubs.c at 3f73ad2f6a08 in step 2/2, `tools/expect_same.sh c_crtl_enosys26 "$(/tmp/c_crtl_enosys26)" "$(printf 'fork: -1 1\nvfork: -1 1\nchroot: -1 1\nsetuid…` (auto-filed by twatch) | — |
 | regression-test-core-crtl-tiny-regex-match | T | 70 | regression | regression: test-core#src:test/crtl_tiny_regex_match.c at 6e622be95680 in step 2/2, `tools/expect_same.sh crtl_tiny_regex_match26 "$(/tmp/crt` (auto-filed by twatch) | — |
 | regression-test-core-test-exception-unhandled-2 | T | 70 | regression | regression: test-core#src:test/test_exception_unhandled.pas@3 at f9e495823dce in step 53/47, `/tmp/next-test_multithreading26 \| grep -q "multithreadin` (auto-filed by twatch) | — |
-| regression-test-core-test-header-static-body | T | 70 | regression | regression: test-core#src:test/test_header_static_body.pas at f9e495823dce in step 14/33, `out=$(./compiler/pascal26 /tmp/cdiag_mod.c /tmp/cdiag_mo` (auto-filed by twatch) | — |
-| regression-test-core-test-interface-byval-param-no-leak | T | 70 | regression | regression: test-core#src:test/test_interface_byval_param_no_leak.pas at 3f73ad2f6a08 in step 2/2, `tools/expect_same.sh test_ifbyval26 "$(/tmp/test_ifbyval26 \| tail -1)" "total ok 25 / 25"` (auto-filed by twatch) | — |
-| regression-test-core-test-rtl-fpc-compat-helpers-2 | T | 70 | regression | regression: test-core#src:test/test_rtl_fpc_compat_helpers.pas at 970eabd8eadf in step 2/2, `tools/expect_same.sh test_rtl_fpc_compat_helpers26 "$(/tmp/test_rtl_fpc_compat_helpers26 \| tail -1)" "total ok 23 / 23"` (auto-filed by twatch) | — |
-| regression-test-core-test-thread-api-no-uses | P | 70 | regression | regression: test-core#src:test/test_thread_api_no_uses.pas at 970eabd8eadf in step 1/2, `./compiler/pascal26 test/test_thread_api_no_uses.pas /tmp/test_thread_api_no_uses26` (auto-filed by twatch) | — |
+| regression-test-core-test-header-static-body | T | 70→85 | regression | regression: test-core#src:test/test_header_static_body.pas at f9e495823dce in step 14/33, `out=$(./compiler/pascal26 /tmp/cdiag_mod.c /tmp/cdiag_mo` (auto-filed by twatch) | — |
+| regression-test-core-test-interface-byval-param-no-leak | T | 70→85 | regression | regression: test-core#src:test/test_interface_byval_param_no_leak.pas at 3f73ad2f6a08 in step 2/2, `tools/expect_same.sh test_ifbyval26 "$(/tmp/test_ifbyval26 \| tail -1)" "total ok 25 / 25"` (auto-filed by twatch) | — |
+| regression-test-core-test-rtl-fpc-compat-helpers-2 | T | 70→85 | regression | regression: test-core#src:test/test_rtl_fpc_compat_helpers.pas at 970eabd8eadf in step 2/2, `tools/expect_same.sh test_rtl_fpc_compat_helpers26 "$(/tmp/test_rtl_fpc_compat_helpers26 \| tail -1)" "total ok 23 / 23"` (auto-filed by twatch) | — |
+| regression-test-core-test-thread-api-no-uses | P | 70→85 | regression | regression: test-core#src:test/test_thread_api_no_uses.pas at 970eabd8eadf in step 1/2, `./compiler/pascal26 test/test_thread_api_no_uses.pas /tmp/test_thread_api_no_uses26` (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-compiler-srchash | T | 70 | regression | regression: test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh at fc9139c264df in step 2/2, `tools/run_sqlite_thread_test.sh aarch64 ./compiler/pasca` (auto-filed by twatch) | — |
-| regression-test-threads-test-exception-threads-race | A | 70 | regression | TRIAGED, do not bisect: this is not a compiler regression. decide-does-raise-of-an-existing-object-transfer-ownership settled that `raise` transfers ownership unconditionally (FPC oracle), so freeing at handler exit is the LANGUAGE and pxx is right. The test re-raises two objects created once, which is a use-after-free by that rule, and the test is what must change. Measured 2026-09-01 at 4a0dd77ef: it dies SINGLE-THREADED in phase 1 on the THIRD raise of the same object -- no threads, no TLS, no shadow chain. The rewrite needs each raise to construct, which is what walks into the blocker. | bug-a-two-threads-raising-object-exceptions-corrupt-the-heap |
-| regression-test-threads-test-threadsafe-refcount-lockfree | T | 70 | regression | regression: test-threads#src:test/test_threadsafe_refcount_lockfree.pas at 1e37a55f6748 in step 2/2, `tools/expect_same.sh test_threadsafe_refcount_lockfree26 "$(/tmp/test_threadsafe_refcount_lockfree26 \| tail -n 2)" "$(p…` (auto-filed by twatch) | — |
-| regression-test-xtensa-test-signal-default-revert-b336 | A+S | 70 | regression | regression: test-xtensa#src:test/test_signal_default_revert_b336.pas at 370170edaffe in step 1/2, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
-| regression-test-xtensa-test-signal-handler-callback-b336 | A+S | 70 | regression | regression: test-xtensa#src:test/test_signal_handler_callback_b336.pas at 370170edaffe in step 1/3, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
+| regression-test-threads-test-exception-threads-race | A | 70→85 | regression | TRIAGED, do not bisect: this is not a compiler regression. decide-does-raise-of-an-existing-object-transfer-ownership settled that `raise` transfers ownership unconditionally (FPC oracle), so freeing at handler exit is the LANGUAGE and pxx is right. The test re-raises two objects created once, which is a use-after-free by that rule, and the test is what must change. Measured 2026-09-01 at 4a0dd77ef: it dies SINGLE-THREADED in phase 1 on the THIRD raise of the same object -- no threads, no TLS, no shadow chain. The rewrite needs each raise to construct, which is what walks into the blocker. | bug-a-two-threads-raising-object-exceptions-corrupt-the-heap |
+| regression-test-threads-test-threadsafe-refcount-lockfree | T | 70→85 | regression | regression: test-threads#src:test/test_threadsafe_refcount_lockfree.pas at 1e37a55f6748 in step 2/2, `tools/expect_same.sh test_threadsafe_refcount_lockfree26 "$(/tmp/test_threadsafe_refcount_lockfree26 \| tail -n 2)" "$(p…` (auto-filed by twatch) | — |
+| regression-test-xtensa-test-signal-default-revert-b336 | A+S | 70→85 | regression | regression: test-xtensa#src:test/test_signal_default_revert_b336.pas at 370170edaffe in step 1/2, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
+| regression-test-xtensa-test-signal-handler-callback-b336 | A+S | 70→85 | regression | regression: test-xtensa#src:test/test_signal_handler_callback_b336.pas at 370170edaffe in step 1/3, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
 
 ## backlog_new (0)
 
 _none_
 
-## backlog-umbrella (5)
+## backlog-umbrella (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | umbrella-compile-and-run-dosbox | C | 90 | umbrella | GOAL, not a unit of work. The flagship real-program proof: a large real C/C++ codebase that either builds and runs or does not, with no partial credit to award ourselves. Owner named it first when stating the goal. Attach whatever the ATTEMPT breaks on -- do not pre-populate this from the backlog by guessing. | bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong, feature-c-corpus-busybox-multi-applet |
 | umbrella-cross-target-codegen-is-correct | A | 80 | umbrella | GOAL, not a unit of work. The owner's ranking: 'cross platform has way prio above look-if-I-do-this-on-platform-that-it-would-break-z'. A program that compiles right on one target and wrong on another is the defect this umbrella exists for; a hypothetical about an untried platform is not. Measured target clusters: xtensa 11, riscv 8, arm32 5, i386. | bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs, bug-a-i386-c-main-gets-argc-and-argv-swapped, feature-a-port-alloca-to-i386-arm32-and-riscv32 |
 | umbrella-managed-memory-is-correct | A | 75 | umbrella | GOAL, not a unit of work. The owner named memory management as ranking above float-bit and parity work. This is the axis a real program hits hardest and where a wrong answer is silent: a leak, a double free, a refcount that disagrees with itself. Correctness is the case here -- the perf profile is deliberately NOT the argument. | bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower, bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-string-release-has-two-implementations-that-already-disagree, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, feature-a-reentrant-heap-lock-and-per-thread-arenas |
+| umbrella-one-full-tier-run-with-no-red-tier | T | 85 | umbrella | GOAL, not a unit of work. `pin_is_green` needs a sha judged by a `full` run with no RED in any tier judged there; nothing has satisfied it for a PINNED sha since v354 on 2026-08-19, so the pin's only fully-verified rollback target is twelve days stale. A pin is NOT blocked — that was measured and settled — this repairs its RECOVERY leg. The umbrella ENDS when one such run comes back; it is not a standing triage desk. | bug-a-dce-miscompiles-every-threaded-program-and-o3-turns-it-on, bug-t-optdiff-cannot-see-any-threading-program-since-the-threadsafe-directive-became-an-error, regression-lib-test-crtl-reachability-7, regression-optdiff-shard4-12, regression-test-core-c-crtl-enosys-stubs, regression-test-core-test-header-static-body, regression-test-core-test-interface-byval-param-no-leak, regression-test-core-test-rtl-fpc-compat-helpers-2, regression-test-core-test-thread-api-no-uses, regression-test-threads-test-exception-threads-race, regression-test-threads-test-threadsafe-refcount-lockfree, regression-test-xtensa-test-signal-default-revert-b336, regression-test-xtensa-test-signal-handler-callback-b336, regression-tools-devtest-00-3 |
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
@@ -147,7 +150,7 @@ _none_
 | bug-a-threadsafe-builds-leak-every-variant-and-interface-element-of-a-dynamic-array | A | 5 | bug | under --threadsafe a dynamic array of Variants or of COM interfaces never releases its elements — 3848 live blocks per 1000 trips against 4 in a default build; deliberate (it prevents a deadlock) and correct as a choice, but the residual leak had no ticket and no number | — |
 | bug-a-two-copies-of-the-wasi-capability-model-one-in-the-pal-one-in-wasibackend | A | 25 | bug | compiler/builtin/wasibackend.pas copied the preopen-resolution and rights logic out of lib/rtl/platform/wasi/platform_backend.pas on purpose, so its landing commit changed no existing file, and said in its own header that the NEXT commit would make the PAL delegate and delete its copy. That commit was never written and no ticket was ever filed. Both copies work, so nothing fails — which is exactly why a capability model is the wrong thing to duplicate: the two drift into one path opening files the other refuses. The unit's self-reporting comment is what caught it. | — |
 | bug-a-two-deref-walk-guards-send-a-resolvable-shape-to-the-fallback | A | 40 | bug | ResolveDerefShapeAt has ten typed arms and two fallbacks that now just keep a default. Measured over a full tier with PXXDBG=a.derefwalk, the fallbacks take 1159 hits and only TWO node kinds ever reach them: AN_PTR_CAST 939 times, because the cast arm guards on `ASTIVal >= 0` and the adapter casts (ival -1/-2) fall past it; and AN_IDENT 220 times, because the ident arm answers tyUnknown for a pointer whose pointee it cannot name. Both then get tyInteger/tyUnknown, which is a GUESS in a walk whose whole job is to stop guessing -- the same family that produced five wrong-value tickets this week. Not urgent and not known to miscompile anything today: no test fails on it, which is exactly why it needs measuring rather than assuming. The counts come free from the probe, so the first job is to find out whether either default is ever WRONG. | — |
-| bug-a-two-threads-raising-object-exceptions-corrupt-the-heap | A | 75 | bug | Two threads raising object exceptions corrupt the heap (x86-64, --threadsafe) | — |
+| bug-a-two-threads-raising-object-exceptions-corrupt-the-heap | A | 75→85 | bug | Two threads raising object exceptions corrupt the heap (x86-64, --threadsafe) | — |
 | bug-a-tyunknown-is-both-untyped-pointer-and-i-read-garbage | A | 40 | bug | tyUnknown is simultaneously the legitimate 'untyped Pointer' pointee sentinel and the value every unwritten/recycled slot reads back as. A consumer cannot tell 'this parameter genuinely takes anything' from 'I read a slot that is not mine', and because the permissive answer is the shared one, every such guard fails OPEN. | — |
 | bug-a-wasm32-has-no-variant-ir-arms-so-any-variant-assignment-traps | A | 30 | bug | ANY Variant assignment traps on wasm32: `v := 42` in a bare program body, with no procedure in it, gives `wasm trap: wasm unreachable instruction executed`, exit 134. NOT a leak and NOT a scope-exit problem -- the compiler says so itself, in its own broken-body report: `main$0 - statement IR op 43`, which is IR_VAR_STORE. The whole Variant family is absent from this backend: grep counts IR_VAR_STORE 0, IR_VAR_BINOP 0, IR_VAR_BOX 0 in ir_codegen_wasm32.inc against 2, 2, 2 in ir_codegen_riscv32.inc. So this is not a bug in Variant handling, it is Variant not being lowered at all, and the trap is the backend's deliberate unsupported marker (WasmUnsupported -> WasmBodyUnreachable) doing exactly what it is for. Consequence beyond the trap: wasm32's scope-exit release now HAS a PXXVarClear arm (74e33af46) and nothing can reach it, so that arm is written and unverified until this lands -- do not read its presence as coverage. Scope is three IR ops ported from the riscv32 or aarch64 arm, plus whatever Variant RTL the wasi profile is missing; the descriptor-cell indirection this backend uses for record RTTI (WasmRecDescAddr) is the pattern for any blob address a Variant op needs, because wasm32 has no code->data fixups. | — |
 | bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc | A | 30 | bug | `Write` of a real renders at a width that depends on the TARGET: x86-64 prints `s1+s2` (Single+Single) in Double form where FPC and xtensa print Single, and xtensa prints `i/2` in Single form where FPC and x86-64 print Double. Two backends, opposite errors, same source and same compiler. The values are right; the width dispatch is not. | — |
@@ -416,13 +419,13 @@ _none_
 | meta-t-dev-throughput-and-track-a-t-integration | T | 30 | meta | META: development is wait-limited, not token-limited. Dev tracks stop running suites; T owns breadth and its report LATENCY becomes the product. Coordinates the tooling tickets that get us there. | — |
 | refactor-t-the-automated-pin-stages-the-stable-tree-by-a-hardcoded-path | T | 20 | refactor | NOT a present fault -- verified correct today. The automated pin path in tools/testmgr.py stages the stable tree with `git add -u <root>` plus an explicit `git add <root>/default/builtin`. The second call is what saves it, and it saves it by NAMING the one directory that has ever needed saving. `git add -u` stages tracked files only, so any FUTURE directory added under the stable root is silently left untracked in the pin commit, exactly as builtin/ was before that line existed. Correct by hardcoded path rather than by rule. | — |
 | regression-cascade-fc01c8094434 | T | 70 | regression | regression CASCADE: 38 jobs newly red in 5dbcc861e..fc01c8094 (87 commits) — auto-filed by twatch | — |
-| regression-optdiff-shard4-12 | T | 70 | regression | regression: optdiff#shard4/12 at d74c7fbe9ffe in step 1/1, `tools/optdiff.sh --shard 4/12` (auto-filed by twatch) | — |
+| regression-optdiff-shard4-12 | T | 70→85 | regression | regression: optdiff#shard4/12 at d74c7fbe9ffe in step 1/1, `tools/optdiff.sh --shard 4/12` (auto-filed by twatch) | — |
 | regression-test-core-test-setlen-in-parallel-for-body-2 | T | 70 | regression | regression: test-core#src:test/test_setlen_in_parallel_for_body.pas at 456361785e34 in step 2/2, `tools/expect_same.sh test_setlen_parfor26 "$(/tmp/test_s` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard0-6-4 | P | 45 | regression | regression: test-pascal-conformance#shard0/6 at aac20e75ed1f in step 1/1, `tools/run_pascal_conformance.sh ./compiler/pascal26 libr` (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard1-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard1/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard2-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard3-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 red at 27424c927b65 (auto-filed by twatch) | — |
-| regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | — |
+| regression-tools-devtest-00-3 | T | 70→85 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | — |
 | task-t-a-corpus-tree-absence-should-be-counted-not-just-echoed | T | 45 | task | A test row whose corpus tree is absent echoes SKIP and passes, and nothing counts how many did. Measured on this box: test-core's crtl_tiny_regex_match row was UNGUARDED, so a missing library_candidates/tiny-regex-c hard-errored and — because make stops at the first failing recipe line — took 844 of test-core's 1745 compile rows (48%) with it, with no indication in the log of how much had not run. Guarding it (2026-09-01) fixes that and buys the opposite failure: testmgr's own TIERS comment records test-fgl printing SKIP and PASSING for its entire life without running once. Both failure modes are live in this repo TODAY. The missing mechanism is the same one test-c-abi-mixed-link now has: count the skips and report `N of M measured, K skipped`, so a box quietly running half the suite is visible in the verdict instead of indistinguishable from a green one. | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
@@ -944,13 +947,24 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 90] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
+- [p 85] [A] bug-a-two-threads-raising-object-exceptions-corrupt-the-heap (unblocks 1)
+- [p 85] [C] regression-lib-test-crtl-reachability-7 (unblocks 1) [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 85] [T] regression-optdiff-shard4-12 (unblocks 1)
+- [p 85] [T] regression-test-core-c-crtl-enosys-stubs (unblocks 1)
+- [p 85] [T] regression-test-core-test-header-static-body (unblocks 1)
+- [p 85] [T] regression-test-core-test-interface-byval-param-no-leak (unblocks 1)
+- [p 85] [T] regression-test-core-test-rtl-fpc-compat-helpers-2 (unblocks 1)
+- [p 85] [P] regression-test-core-test-thread-api-no-uses (unblocks 1) [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 85] [T] regression-test-threads-test-threadsafe-refcount-lockfree (unblocks 1)
+- [p 85] [A+S] regression-test-xtensa-test-signal-default-revert-b336 (unblocks 1)
+- [p 85] [A+S] regression-test-xtensa-test-signal-handler-callback-b336 (unblocks 1)
+- [p 85] [T] regression-tools-devtest-00-3 (unblocks 1)
 - [p 85] [T] feature-t-grade-a-pin-instead-of-gating-it
 - [p 80] [A+S] bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable (unblocks 1)
 - [p 80] [A] feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 80] [A] umbrella-cross-target-codegen-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
-- [p 75] [A] bug-a-two-threads-raising-object-exceptions-corrupt-the-heap (unblocks 1)
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [A] umbrella-managed-memory-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -958,24 +972,13 @@ _none_
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [C] feature-c-corpus-busybox-userland-by-separate-compilation
 - [p 70] [T] regression-cascade-fc01c8094434
-- [p 70] [C] regression-lib-test-crtl-reachability-7 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [T] regression-optdiff-shard4-12
-- [p 70] [T] regression-test-core-c-crtl-enosys-stubs
 - [p 70] [T] regression-test-core-crtl-tiny-regex-match
 - [p 70] [T] regression-test-core-test-exception-unhandled-2
-- [p 70] [T] regression-test-core-test-header-static-body
-- [p 70] [T] regression-test-core-test-interface-byval-param-no-leak
-- [p 70] [T] regression-test-core-test-rtl-fpc-compat-helpers-2
 - [p 70] [T] regression-test-core-test-setlen-in-parallel-for-body-2
-- [p 70] [P] regression-test-core-test-thread-api-no-uses [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard3-6-2
 - [p 70] [T] regression-test-sqlite-threads-aarch64-compiler-srchash
-- [p 70] [T] regression-test-threads-test-threadsafe-refcount-lockfree
-- [p 70] [A+S] regression-test-xtensa-test-signal-default-revert-b336
-- [p 70] [A+S] regression-test-xtensa-test-signal-handler-callback-b336
-- [p 70] [T] regression-tools-devtest-00-3
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
@@ -1415,6 +1418,7 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **3** — feature-port-windows-pe
+- **2** — bug-a-dce-miscompiles-every-threaded-program-and-o3-turns-it-on
 - **2** — decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
@@ -1424,6 +1428,7 @@ _none_
 - **1** — bug-a-two-threads-raising-object-exceptions-corrupt-the-heap
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
+- **1** — bug-t-optdiff-cannot-see-any-threading-program-since-the-threadsafe-directive-became-an-error
 - **1** — bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
 - **1** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
@@ -1447,3 +1452,15 @@ _none_
 - **1** — feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host
 - **1** — feature-target-wasm
 - **1** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
+- **1** — regression-lib-test-crtl-reachability-7
+- **1** — regression-optdiff-shard4-12
+- **1** — regression-test-core-c-crtl-enosys-stubs
+- **1** — regression-test-core-test-header-static-body
+- **1** — regression-test-core-test-interface-byval-param-no-leak
+- **1** — regression-test-core-test-rtl-fpc-compat-helpers-2
+- **1** — regression-test-core-test-thread-api-no-uses
+- **1** — regression-test-threads-test-exception-threads-race
+- **1** — regression-test-threads-test-threadsafe-refcount-lockfree
+- **1** — regression-test-xtensa-test-signal-default-revert-b336
+- **1** — regression-test-xtensa-test-signal-handler-callback-b336
+- **1** — regression-tools-devtest-00-3

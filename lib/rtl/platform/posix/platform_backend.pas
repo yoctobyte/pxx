@@ -295,6 +295,11 @@ const
   PAL_NET_AF_INET = 2;
   PAL_NET_AF_INET6 = 10;
   PAL_NET_ENAMETOOLONG = -36;   { a socket path too long for sun_path }
+  { Linux ENOSYS, the portable "not here". Declared per backend rather than
+    shared: platform_types carries types only, and the esp and wasi backends
+    each already spell it out. posix needed it the moment the xtensa arms
+    below started REFUSING a syscall instead of guessing its number. }
+  PAL_ERR_UNSUPPORTED = -38;
   SOL_SOCKET = 1;
   SO_REUSEADDR = 2;
   SO_ERROR = 4;
