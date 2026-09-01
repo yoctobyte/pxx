@@ -1,11 +1,11 @@
 ---
 track: P
 prio: 60
-status: blocked
+status: backlog
 owner: ""
 type: perf
-blocked-by: [perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call]
-summary: "SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat."
+blocked-by: []
+summary: "RE-MEASURE FIRST, then decide if anything is left. The premise was twice-superseded: the 9.4% is NOT the 92-arm walk (frankB — CaseEqual bails at the first differing char, so 1.58M O(1) compares cannot be 9.4%), and the measured cause that replaced it — a string LITERAL passed to an AnsiString parameter copies every call — was itself filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call and then REJECTED as superseded, because 440c822e6 promoted EmitStaticLitHandle to -O2 and does that job at codegen. So the copy this ticket is waiting on may already be gone at the default -O. FIRST ACTION IS A MEASUREMENT, not an implementation: re-profile ParseFactorCore at -O2 at HEAD. If its share has dropped, close this. Traps banked in the body if it has not: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat."
 ---
 
 # `ParseFactorCore` walks a 92-arm name chain for every factor
@@ -149,3 +149,27 @@ carries a real correctness hazard (below) for a fraction of the win.
 `make compiler/pascal26` fixedpoint + `compiler.pas` in, `cmp` the two emitted
 binaries. That oracle is what makes the Track A fix safe to land, since a
 codegen change to literal marshalling must not alter a single emitted byte.
+
+## Unblocked 2026-09-01 — it was invisible to the ranker, not waiting on anything
+
+`tools/progress.sh check` had been reporting this for some time, in two
+independent classes at once:
+
+```
+STALE-EDGE-HIDDEN: ... is in blocked/ but every blocker it names is closed
+                   — ready/next never scan blocked/, so it is invisible
+BLOCKED-BY-REJECTED: ... blocked by '...ansistring-parameter-is-copied-every-call'
+                   which was rejected — it can never become ready
+```
+
+A **p60 that no path could ever surface.** The edge is dropped and the ticket is
+back in `backlog-pascal/`.
+
+**But do not read "unblocked" as "ready to implement."** The blocker was
+rejected as SUPERSEDED, not as wrong — the optimisation was real and measured
+(849ms → 84ms) and became worth nothing at `-O2` when `440c822e6` promoted
+`EmitStaticLitHandle` thirty-six minutes later. That means the mechanism this
+ticket blamed for the 9.4% is plausibly already handled at the default `-O`,
+**by a different change than the one it was waiting for.** Nobody has re-measured
+`ParseFactorCore` since. That measurement is the whole of the next step, and it
+may well close this ticket.

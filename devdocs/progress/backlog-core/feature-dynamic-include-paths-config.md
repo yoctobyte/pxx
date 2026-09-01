@@ -11,7 +11,7 @@ owner: frankS
 # Dynamic Include Paths, Configuration Files, and System Scanner
 
 - **Type:** feature
-- **Status:** working
+- **Status:** backlog
 - **Owner:** frankS
 - **Opened:** 2026-06-14 (from ESP-IDF auto-import analysis)
 

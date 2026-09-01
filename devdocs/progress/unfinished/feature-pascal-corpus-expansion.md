@@ -11,7 +11,7 @@ summary: "The Track P real-world-corpus ladder. Rungs 1-5 green; RUNG 6 (rtl-gen
 - **Type:** feature — umbrella (frontend stress corpus)
 - **Track:** P (Pascal frontend; shares `lexer.inc`/`parser.inc` with A, so bugs
   found land as Track P — A-gated — or Track A core)
-- **Status:** working
+- **Status:** unfinished (parked)
   The object blocker IS discharged: `decide-revisit-object-types-rtl-generics-fired-the-trigger`
   is in `decided/` as **option C** (`object` = a value type with a hard error on
   inheritance; **option B, "`object` becomes `TObject`", was explicitly
