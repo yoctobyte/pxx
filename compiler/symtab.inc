@@ -2831,6 +2831,32 @@ begin
       what decide-interface-members-in-aggregates-lock-strategy chose. }
     if inclIntf and RecIsComInterface(UFldRec_[base + i]) then
       begin Result := True; Exit; end;
+    { A Variant or a promotable int owns a heap AnsiString once its value
+      leaves the inline tier, so a copy must retain it and a finalization must
+      release it -- the same obligation an AnsiString field carries, through a
+      tagged slot instead of a bare handle.
+
+      They were absent here while the WALK already knew them: RecordDescMember
+      describes a Variant member (kind 5, b2997a31b) and a promo member (kind 7,
+      f806993c8), and PXXRecordRetain/Release/ZeroManaged have arms for both. So
+      the descriptor could describe these records correctly and this gate said
+      not to emit one. That gap is invisible in the shape everyone probes: a
+      plain local of record{v:Variant} is CLEAN, because a local is finalized by
+      its own scope-exit path, which knows a Variant directly. Only a route that
+      goes through the RECORD consults this predicate. Measured, 1000 trips:
+
+        record{v:Variant}   in a dyn array          7708 leaked
+        record{p:PromoInt}  in a dyn array          7791 leaked
+        record{v:Variant}   nested in a managed rec  936 leaked
+        (same records as a plain local, or in a fixed array: clean)
+
+      Scalar only, matching RecordDescMember: an ARRAY of Variant or of promo as
+      a member is not described there, so counting it here would make this gate
+      promise a walk the descriptor does not deliver. }
+    if (not UFldIsArray[base + i]) and
+       ((UFldTk[base + i] = Ord(tyVariant)) or
+        TypeIsPromoInt(IntToTypeKind(UFldTk[base + i]))) then
+      begin Result := True; Exit; end;
     if (UFldTk[base + i] = Ord(tyRecord)) and (UFldRec_[base + i] <> recId) and
        RecordHasManagedFieldsDepth2(UFldRec_[base + i], depth + 1, inclIntf) then
       begin Result := True; Exit; end;
