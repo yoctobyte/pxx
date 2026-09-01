@@ -1311,7 +1311,7 @@ var i, j, k, idx, sz, pw, pnWords, whi, xtInBias, xtVReg, xtVReg2: Integer;
     wlo, whiEnd: Integer;                { i386 arg-offset walk bounds }
     sIdx, nSlotsForParam, dstOff: Integer;  { x86-64 cdecl: slots OF one param }
     plR0, plR1, slotReg: Integer;           { ABISysVArgPlace: bank index per slot }
-    plMem, plS0, plS1, slotSse: Boolean;
+    plMem, plS0, plS1, slotSse, plAgg: Boolean;
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -2078,12 +2078,11 @@ begin
         is the same one the caller uses. }
       ABISysVArgPlace(Syms[idx].TypeKind, Syms[idx].IsRef, Syms[idx].IsArray,
                       Syms[idx].RecName, intIdx, sseIdx,
-                      nSlotsForParam, plMem, plS0, plS1, plR0, plR1);
+                      nSlotsForParam, plMem, plS0, plS1, plR0, plR1, plAgg);
       { An aggregate slot is a whole eightbyte whatever the record's size: the
         frame slot is rounded up to a multiple of 8 (ParamValueSize), so storing
         8 bytes for a 3-byte struct writes into that struct's own padding. }
-      if (Syms[idx].TypeKind = tyRecord) and (not Syms[idx].IsRef) and
-         (not Syms[idx].IsArray) then sz := 8;
+      if plAgg then sz := 8;
       for sIdx := 0 to nSlotsForParam - 1 do
       begin
         if sIdx = 0 then begin slotSse := plS0; slotReg := plR0; end
@@ -2135,7 +2134,15 @@ begin
         begin
           if sz = 1 then
           begin
-            if (intIdx = 0) or (intIdx = 1) then EmitB($40);  { REX for dil, sil }
+            { slotReg, NOT intIdx: the oracle has already advanced the bank
+              counter past this slot, so intIdx here named the NEXT argument's
+              register. dil/sil need the REX prefix to be addressable at all --
+              without it $88 /r with reg=6 is `mov %dh`, the high byte of rdx.
+              It assembles, it runs, and it writes the wrong byte from the wrong
+              register. This was the one reader of intIdx left behind by the
+              conversion; it survived because it is a nested `if` rather than a
+              branch condition or a case selector. }
+            if (slotReg = 0) or (slotReg = 1) then EmitB($40);  { REX for dil, sil }
             EmitB($88);
           end
           else if sz = 2 then begin EmitB($66); EmitB($89); end
@@ -5859,6 +5866,16 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     slotIsSse: array[0..127] of Boolean;
     slotIsStack: array[0..127] of Boolean;
     slotRegIdx: array[0..127] of Integer;
+    { STEP 2. slotIsAgg[k] marks a slot carrying one EIGHTBYTE of a by-value
+      aggregate, and slotSrcOff[k] says which one -- its byte offset inside the
+      record. Together they are what makes slotArg non-injective: two slots can
+      name the same argument and differ only here. }
+    slotIsAgg: array[0..127] of Boolean;
+    slotSrcOff: array[0..127] of Integer;
+    aggIsRef, aggIsArr: Boolean;
+    aggRec, sysvSlots, aggK: Integer;
+    apR0, apR1: Integer;
+    apMem, apS0, apS1, apAgg: Boolean;
 begin
   if node = -1 then Exit;
   
@@ -8721,25 +8738,44 @@ begin
                 as a float, and widening the condition on a guess would break a
                 working path.
                 bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse }
-              if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');
-              slotArg[nSlots] := i;
-              if TypeIsFloat(tk) and
-                 ((i >= Procs[procIdx].ParamCount) or
-                  (not Procs[procIdx].Params[i].IsRef)) then
+              { The signature's own view of the argument. Beyond ParamCount is a
+                variadic tail: no parameter to ask, and C default promotion has
+                already widened it, so it is a plain scalar of its node's type. }
+              if i < Procs[procIdx].ParamCount then
               begin
-                slotIsSse[nSlots] := True;
-                if sseIdx < 8 then
-                begin slotIsStack[nSlots] := False; slotRegIdx[nSlots] := sseIdx; Inc(sseIdx); end
-                else begin slotIsStack[nSlots] := True; Inc(mStack); end;
+                aggIsRef := Procs[procIdx].Params[i].IsRef;
+                aggIsArr := Procs[procIdx].Params[i].IsArray;
+                aggRec := ProcParamRecId[procIdx * MAX_PROC_PARAMS + i];
               end
               else
               begin
-                slotIsSse[nSlots] := False;
-                if intIdx < 6 then
-                begin slotIsStack[nSlots] := False; slotRegIdx[nSlots] := intIdx; Inc(intIdx); end
-                else begin slotIsStack[nSlots] := True; Inc(mStack); end;
+                aggIsRef := False; aggIsArr := False; aggRec := REC_NONE;
               end;
-              Inc(nSlots);
+              ABISysVArgPlace(tk, aggIsRef, aggIsArr, aggRec, intIdx, sseIdx,
+                              sysvSlots, apMem, apS0, apS1, apR0, apR1, apAgg);
+              for aggK := 0 to sysvSlots - 1 do
+              begin
+                if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');
+                slotArg[nSlots] := i;
+                slotIsAgg[nSlots] := apAgg;
+                slotSrcOff[nSlots] := aggK * 8;
+                if apMem then
+                begin
+                  slotIsSse[nSlots] := False;
+                  slotIsStack[nSlots] := True;
+                  Inc(mStack);
+                end
+                else
+                begin
+                  if aggK = 0 then
+                  begin slotIsSse[nSlots] := apS0; slotRegIdx[nSlots] := apR0; end
+                  else
+                  begin slotIsSse[nSlots] := apS1; slotRegIdx[nSlots] := apR1; end;
+                  slotIsStack[nSlots] := slotRegIdx[nSlots] < 0;
+                  if slotIsStack[nSlots] then Inc(mStack);
+                end;
+                Inc(nSlots);
+              end;
             end;
             { Align the stack and reserve the outgoing stack-arg area in one
               self-contained sequence (EmitCallProc's realign path cannot be
@@ -8766,6 +8802,24 @@ begin
               if slotIsStack[slotIdx] then
               begin
                 i := slotArg[slotIdx];
+                { A MEMORY aggregate, or a register-classified one the banks were
+                  too full to take: its eightbytes ARE the stack argument, pushed
+                  high->low so eightbyte 0 ends at the lowest address. Evaluated
+                  once at the argument's highest slot, exactly as in the register
+                  loop below -- the same rule, because it is the same hazard. }
+                if slotIsAgg[slotIdx] then
+                begin
+                  if (slotIdx < nSlots - 1) and (slotArg[slotIdx + 1] = i) then Continue;
+                  IREmitNode(argNodeArr[i]);          { rax = the record's address }
+                  aggK := slotSrcOff[slotIdx] div 8;
+                  while aggK >= 0 do
+                  begin
+                    if aggK = 0 then begin EmitB($FF); EmitB($30); end            { push [rax] }
+                    else begin EmitB($FF); EmitB($70); EmitB(aggK * 8); end;      { push [rax+n] }
+                    Dec(aggK);
+                  end;
+                  Continue;
+                end;
                 if i < Procs[procIdx].ParamCount then
                   tk := Procs[procIdx].Params[i].TypeKind
                 else
@@ -8801,6 +8855,26 @@ begin
               if not slotIsStack[slotIdx] then
               begin
                 i := slotArg[slotIdx];
+                { STEP 2, and the answer to the warning this loop carries above:
+                  an aggregate is evaluated ONCE, at its HIGHEST slot, and its
+                  eightbytes are pushed high->low -- exactly the order and count
+                  the remaining iterations for this argument would have produced,
+                  which is why they are then skipped rather than emitted. Doing
+                  it per slot would evaluate the argument twice and run any side
+                  effect inside it twice with it. }
+                if slotIsAgg[slotIdx] then
+                begin
+                  if (slotIdx < nSlots - 1) and (slotArg[slotIdx + 1] = i) then Continue;
+                  IREmitNode(argNodeArr[i]);          { rax = the record's address }
+                  aggK := slotSrcOff[slotIdx] div 8;
+                  while aggK >= 0 do
+                  begin
+                    if aggK = 0 then begin EmitB($FF); EmitB($30); end            { push [rax] }
+                    else begin EmitB($FF); EmitB($70); EmitB(aggK * 8); end;      { push [rax+n] }
+                    Dec(aggK);
+                  end;
+                  Continue;
+                end;
                 if i < Procs[procIdx].ParamCount then
                   tk := Procs[procIdx].Params[i].TypeKind
                 else

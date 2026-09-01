@@ -10612,7 +10612,8 @@ var
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
   sysvN, sysvC0, sysvC1: Integer; { PXXDBG=a.sysvcls readout only }
   plInt, plSse, plN, plR0, plR1: Integer;   { PXXDBG=a.sysvplace readout only }
-  plMem, plS0, plS1: Boolean;
+  plMem, plS0, plS1, plAgg: Boolean;
+  byValRec: Boolean;                        { step 2: register-classified struct param }
   retPtrElemTk, retPtrElemRec, retRecId, retProcSig: Integer;
   retPtrDepth, retPtrBaseTk, retPtrBaseRec: Integer;
   ptypes: array[0..31] of TTypeKind;
@@ -11131,7 +11132,17 @@ begin
       bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee }
     for i := 0 to nparams - 1 do
       if i < MAX_PROC_PARAMS then
+      begin
         ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := precid[i];
+        { And the signature's IsRef, which RegisterProc could only set from the
+          type kind. This is the CALLER's half of the same decision AllocParam
+          makes for the callee's half, so both ask ABICRecordParamByValue and
+          neither restates the rule. Note the caller reaches this for a
+          PROTOTYPE, where no param sym is ever allocated -- which is why the
+          fixup lives here and not next to AllocParam. }
+        if ptypes[i] = tyRecord then
+          Procs[procIdx].Params[i].IsRef := not ABICRecordParamByValue(precid[i]);
+      end;
   end;
   { A `<unit>_pas_<Name>` prototype selected a Pascal routine by signature. The
     C declaration keeps its OWN proc entry -- so C-side argument conversion
@@ -11271,7 +11282,7 @@ begin
     for i := 0 to nparams-1 do
     begin
       ABISysVArgPlace(ptypes[i], False, False, precid[i], plInt, plSse,
-                      plN, plMem, plS0, plS1, plR0, plR1);
+                      plN, plMem, plS0, plS1, plR0, plR1, plAgg);
       Write('PXXDBG a.sysvplace ', name, ' p', i, ' ');
       if plMem then WriteLn('MEMORY x', plN, ' slots')
       else
@@ -11321,7 +11332,16 @@ begin
           WriteLn;
         end;
       end;
-      idx := AllocParam(pnames[i], ptypes[i], True, False);
+      { STEP 2. A record the SysV classifier places in REGISTERS is a genuine
+        by-value parameter: its frame slot holds the struct's own bytes and the
+        prologue spills the eightbytes into it. Everything else keeps the
+        by-reference slot the C frontend has always used -- MEMORY aggregates,
+        which have no marshalling yet, and shapes the classifier REFUSES. This
+        is the one site that decides what the parameter IS, as distinct from
+        where it goes, so it asks the classifier and not the placement oracle.
+        bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee }
+      byValRec := ABICRecordParamByValue(precid[i]);
+      idx := AllocParam(pnames[i], ptypes[i], not byValRec, False);
       if PxxDbgEnabled('a.cparamslot') then
         WriteLn('PXXDBG a.cparamslot ', Procs[procIdx].Name, ' param ', pnames[i],
                 ' precid=', precid[i], ' RecName=', Syms[idx].RecName,

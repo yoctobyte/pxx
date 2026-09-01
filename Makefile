@@ -9065,6 +9065,15 @@ test-core: $(COMPILER)
 	# b201 (bug-crtl-printf-g-double-roundtrip): va_arg(T*) pointee width (scanf float)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cva_arg_pointer_pointee_b201.c $(TESTTMP)/cva_arg_pointer_pointee_b20126
 	$(TESTTMP)/cva_arg_pointer_pointee_b20126; tools/expect_same.sh cva_arg_pointer_pointee_b20126-rc "$$?" "42"
+	# A narrow (1/2-byte) parameter must be spilled from the register it arrived
+	# in. dil and sil need a REX prefix to be addressable; without it `mov %sil`
+	# assembles as `mov %dh`, a different register, so this is a wrong-register
+	# bug rather than a convention one and a pxx-only subject catches it. The
+	# file carries its own negative control: take_shifted keeps every narrow
+	# parameter in rdx/rcx/r8/r9 and must stay green when take_narrow fails.
+	# bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee
+	./$(COMPILER) test/c_abi_narrow_reg_params.c $(TESTTMP)/c_abi_narrow_reg_params26
+	$(TESTTMP)/c_abi_narrow_reg_params26; tools/expect_same.sh c_abi_narrow_reg_params26-rc "$$?" "42"
 	# b202 (bug-c-tag-redef-misfiles-field-selfref-segv): struct-tag redefinition no crash
 	./$(COMPILER) test/ctag_redef_no_selfref_crash_b202.c $(TESTTMP)/ctag_redef_no_selfref_crash_b20226
 	$(TESTTMP)/ctag_redef_no_selfref_crash_b20226; tools/expect_same.sh ctag_redef_no_selfref_crash_b20226-rc "$$?" "42"

@@ -276,6 +276,31 @@ begin
   end;
 end;
 
+{ Is a C record parameter of this type passed BY VALUE in registers?
+
+  THE ONE PREDICATE, because two sites must agree or the call desynchronises,
+  and they are in different files: cparser's AllocParam (what the parameter IS,
+  and so how the callee's body reads its fields) and the Params[].IsRef the
+  signature carries (what the CALLER marshals). RegisterProc sets the second
+  from `CProgramMode and (ptypes[i] = tyRecord)` and cannot do better -- it is
+  handed type kinds and no record ids, so it cannot classify. cparser fixes it
+  up right after, through this.
+
+  The ticket's own words for why this is not two decisions: the caller and the
+  callee must agree about what the slot CONTAINS. A disagreement here is not a
+  wrong value in one argument, it is every argument after it.
+  bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee }
+function ABICRecordParamByValue(recId: Integer): Boolean;
+var c0, c1: Integer;
+begin
+  ABICRecordParamByValue := False;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  { >= 0, not > 0: a MEMORY aggregate is passed BY VALUE as well -- as its own
+    bytes in the stack argument area, not as a pointer to them. Only a REFUSAL
+    (-1), a shape the classifier does not model, keeps the by-reference slot. }
+  ABICRecordParamByValue := ABISysVRecordEightbytes(recId, c0, c1) >= 0;
+end;
+
 { PLACEMENT: where does ONE cdecl argument go, given how much of each register
   bank is already spoken for? Classification (what class is it) and placement
   (does it fit) are one call because SysV couples them: an aggregate goes in
@@ -303,10 +328,11 @@ end;
 procedure ABISysVArgPlace(tk: TTypeKind; isRef, isArray: Boolean; recId: Integer;
                           var intIdx, sseIdx: Integer;
                           var nSlots: Integer; var isMem: Boolean;
-                          var sse0, sse1: Boolean; var reg0, reg1: Integer);
+                          var sse0, sse1: Boolean; var reg0, reg1: Integer;
+                          var isAgg: Boolean);
 var n, c0, c1, sz, needInt, needSse: Integer;
 begin
-  nSlots := 1; isMem := False;
+  nSlots := 1; isMem := False; isAgg := False;
   sse0 := False; sse1 := False; reg0 := -1; reg1 := -1;
 
   { An aggregate passed BY VALUE is the only case with more than one slot. }
@@ -327,7 +353,7 @@ begin
         if c1 = SYSV_CLS_SSE then Inc(needSse) else Inc(needInt);
       if (intIdx + needInt <= 6) and (sseIdx + needSse <= 8) then
       begin
-        nSlots := n;
+        nSlots := n; isAgg := True;
         if c0 = SYSV_CLS_SSE then
         begin sse0 := True; reg0 := sseIdx; Inc(sseIdx); end
         else begin reg0 := intIdx; Inc(intIdx); end;
@@ -344,7 +370,7 @@ begin
       sz := RecSize(recId);
       nSlots := (sz + 7) div 8;
       if nSlots < 1 then nSlots := 1;
-      isMem := True;
+      isMem := True; isAgg := True;
       Exit;
     end;
     if n = 0 then
@@ -352,7 +378,7 @@ begin
       sz := RecSize(recId);
       nSlots := (sz + 7) div 8;
       if nSlots < 1 then nSlots := 1;
-      isMem := True;
+      isMem := True; isAgg := True;
       Exit;
     end;
     { n < 0 -- the classifier REFUSED (a shape it does not model). Fall through
