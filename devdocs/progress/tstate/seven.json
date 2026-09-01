@@ -474,12 +474,12 @@
   "target": "f370bb08506ab2573b8ab5f1b33a618313cde44c"
  },
  "infra": {
-  "count": 1,
-  "last": "2026-09-01T02:46:00Z",
+  "count": 2,
+  "last": "2026-09-01T02:47:15Z",
   "reason": "compiler build failed (see log); no test was run",
   "sha": "3ed3e770ddf277147b7d612b8ee53608690f803e",
   "since": "2026-09-01T02:46:00Z",
-  "tier": "native"
+  "tier": "full"
  },
  "job_last_pass": {
   "demos#00": "266ed934b0a32a9e8240f2e60fcb8724fe1d50bd",
