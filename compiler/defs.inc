@@ -3107,6 +3107,23 @@ var
     is not in question (sizeof is correct) — only the C-level type identity.
     C-mode only: Pascal symbols keep rank 0 (AllocVar zeroes it). }
   SymCLongRank : array of Integer;
+  { C FILE-SCOPE LINKAGE, accumulated over EVERY declaration of the name in the
+    translation unit, for --emit-obj's data symbols.
+
+    Per name and not per declaration, because C 6.9.2 decides it that way:
+    `extern T n;` followed by a bare `T n;` is a DEFINITION -- the tentative
+    definition wins and the extern only supplied linkage. That is busybox's
+    dominant shape (libbb.h declares, appletlib.c defines, the header is
+    included), so a per-declaration rule emits UND for the one name every
+    translation unit imports and nothing defines: a clean compile and one
+    unresolved symbol at the final link.
+
+    SymCExternOnly stays True only while EVERY declaration seen said `extern`.
+    False is the safe default and is what AllocVar zeroes it to, which is also
+    exactly today's behaviour -- every global a definition.
+    bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong }
+  SymCExternOnly : array of Boolean;
+  SymCStaticLink : array of Boolean;   { `static` seen: internal linkage, LOCAL, never UND }
   ExternalProc   : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalGotOff : array[0..MAX_EXTERNAL-1] of Integer;
   ExternalCount  : Integer;

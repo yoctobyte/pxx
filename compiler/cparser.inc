@@ -57,6 +57,13 @@ function CBlockContinues: Boolean; forward;
 function ParseCStmtExprAST: Integer; forward;
 procedure SkipBraceBlock; forward;
 procedure ParseCSubroutine; forward;
+{ Both called from ParseCGlobalVarDecl ~2500 lines above their bodies, for the
+  same single-pass reason as CBlockContinues just above. CDeclSawStatic needs
+  the forward as much as its new sibling does: it had no caller above its body
+  until the global-variable path started asking the same question, and pxx
+  prescans headers where FPC does not, so only the seed canary sees it. }
+function CDeclSawExtern(typeIdx: Integer): Boolean; forward;
+function CDeclSawStatic(typeIdx: Integer): Boolean; forward;
 function ParseCExpr: Integer; forward;
 function ParseCCommaExpr: Integer; forward;
 function CEvalConstExpr: Int64; forward;
@@ -8265,7 +8272,14 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     fnCurTgt, fnRangeHi, fnMaxTgt: Integer; fnHadDesig: Boolean;
     clWrap, clSavedPos: Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
+    declSawExtern, declSawStatic, declSymIsNew: Boolean;
 begin
+  { Read the storage class BEFORE the type is consumed: both keywords are
+    skipped without being recorded, so the token stream is the only place the
+    answer still exists. Same scan, and the same reasoning, as the `static`
+    question ParseCSubroutine already asks. }
+  declSawExtern := CDeclSawExtern(TokPos - 1);
+  declSawStatic := CDeclSawStatic(TokPos - 1);
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 g` -> [4]), else -1 }
@@ -8733,6 +8747,7 @@ begin
       names are case-sensitive anyway. Shadow it with a fresh exact-case global
       (the exact-case FindSym pass then resolves uses to the variable). }
     if (idx >= 0) and (Syms[idx].Kind = skConst) then idx := -1;
+    declSymIsNew := idx < 0;
     if idx < 0 then
     begin
       if wasArr then
@@ -8741,6 +8756,30 @@ begin
         idx := AllocVar(name, baseTk);
     end
     else if wasArr then CGrowGlobalArray(idx, baseTk, arrLen);
+    { Accumulate the file-scope linkage for this NAME. Order matters and is the
+      whole point: a declaration WITHOUT `extern` is a tentative definition and
+      settles the question permanently, whichever way an earlier `extern` had
+      it -- `extern T n;` then `T n;` is a definition (C 6.9.2). An `extern`
+      only claims import-so-far, and only when nothing has claimed definition
+      yet, which is why it is guarded on the symbol being new. }
+    if idx >= 0 then
+    begin
+      if declSawStatic then SymCStaticLink[idx] := True;
+      if not declSawExtern then SymCExternOnly[idx] := False
+      else if declSymIsNew then SymCExternOnly[idx] := True;
+      if PxxDbgEnabled('a.clink') then
+      begin
+        Write('PXXDBG a.clink ', name, ' externOnly=');
+        if SymCExternOnly[idx] then Write('1') else Write('0');
+        Write(' static=');
+        if SymCStaticLink[idx] then Write('1') else Write('0');
+        Write(' sawExtern=');
+        if declSawExtern then Write('1') else Write('0');
+        Write(' new=');
+        if declSymIsNew then Write('1') else Write('0');
+        WriteLn;
+      end;
+    end;
     { Record a multidimensional array's shape so `a[i][j]` strides correctly and
       the init walker distributes nested braces per dimension. }
     if (idx >= 0) and wasArr and (dimCount >= 2) then
@@ -8807,6 +8846,11 @@ begin
     end;
     if CurTok.Kind = tkAssign then
     begin
+      { An initialiser is a DEFINITION even when the declaration said `extern`
+        -- `extern int x = 5;` defines x (gcc warns and defines). Rule 1 of the
+        three outranks the keyword, so settle it here rather than leaving the
+        extern claim standing. }
+      if idx >= 0 then SymCExternOnly[idx] := False;
       Next;
       initStartTok := TokPos - 1;   { first token of the initializer expression }
       { File-scope compound-literal initializer for a record var: `= (T){...}` or
@@ -10724,7 +10768,12 @@ end;
   shape this does not model makes it answer False, which keeps the caller on
   the pre-existing behaviour. A missed `static` is a bug that stays; a
   hallucinated one would compile a body that should have been imported. }
-function CDeclSawStatic(typeIdx: Integer): Boolean;
+function CDeclSawSpecifier(typeIdx: Integer; const want: AnsiString): Boolean;
+{ The body of CDeclSawStatic, parameterised, because `extern` needs exactly the
+  same backward scan and for exactly the same reason -- both keywords are
+  skipped without being recorded, by the same CIsTopLevelSkipIdent set, in the
+  same three loops. Two scanners would be two things to keep in step, and the
+  second one is the one that would stay broken. }
 var k: Integer; s: AnsiString;
 begin
   Result := False;
@@ -10732,7 +10781,7 @@ begin
   while (k >= 0) and (Tokens[k].Kind = tkIdent) do
   begin
     s := GetTokenStrFromRaw(Tokens[k].SOffset, Tokens[k].SLen);
-    if s = 'static' then
+    if s = want then
     begin
       Result := True;
       Exit;
@@ -10740,6 +10789,28 @@ begin
     if not CIsTopLevelSkipIdent(s) then Exit;
     Dec(k);
   end;
+end;
+
+function CDeclSawStatic(typeIdx: Integer): Boolean;
+begin
+  CDeclSawStatic := CDeclSawSpecifier(typeIdx, 'static');
+end;
+
+function CDeclSawExtern(typeIdx: Integer): Boolean;
+{ `extern` on a file-scope declaration. Needed because the keyword is otherwise
+  DISCARDED: the declaration-specifier loop consumes it "without affecting the
+  type" and the top-level walks skip it, so `extern int x;` and `int x;` compile
+  to byte-identical objects today and an object can neither import nor export a
+  data symbol
+  (bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong).
+
+  NOT sufficient on its own to decide import-vs-export, and must not be used
+  that way: `extern T n;` followed by a bare `T n;` in one TU is a DEFINITION
+  (C 6.9.2 -- the tentative definition wins and the extern only supplied
+  linkage), and that is busybox's dominant shape via libbb.h. The decision is
+  per NAME after the whole TU, not per declaration. }
+begin
+  CDeclSawExtern := CDeclSawSpecifier(typeIdx, 'extern');
 end;
 
 procedure ParseCSubroutine;
