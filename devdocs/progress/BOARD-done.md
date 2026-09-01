@@ -2828,6 +2828,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-header-static-body | T | 70→85 | regression | regression: test-core#src:test/test_header_static_body.pas at f9e495823dce in step 14/33, `out=$(./compiler/pascal26 /tmp/cdiag_mod.c /tmp/cdiag_mo` (auto-filed by twatch) | — |
 | regression-test-core-test-indexing-length-for-new-inc-positive | P | 70 | regression | regression: test-core#src:test/test_indexing_length_for_new_inc_positive.pas red at c59796cd1e1d (auto-filed by twatch) | — |
 | regression-test-core-test-integer-longint-overload | P | 70 | regression | regression: test-core#src:test/test_integer_longint_overload.pas red at 943c706936b3 (auto-filed by twatch) | — |
+| regression-test-core-test-interface-byval-param-no-leak | T | 70→85 | regression | regression: test-core#src:test/test_interface_byval_param_no_leak.pas at 3f73ad2f6a08 in step 2/2, `tools/expect_same.sh test_ifbyval26 "$(/tmp/test_ifbyval26 \| tail -1)" "total ok 25 / 25"` (auto-filed by twatch) | — |
 | regression-test-core-test-interface-mainbody-ascast-temp | T | 70 | regression | regression: test-core#src:test/test_interface_mainbody_ascast_temp.pas red at daf8d692af04 (auto-filed by twatch) | — |
 | regression-test-core-test-isas-open-world-b325 | P | 70 | regression | regression: test-core#src:test/test_isas_open_world_b325.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-length-dynarray-call | P | 70 | regression | regression: test-core#src:test/test_length_dynarray_call.pas red at b936d125601e (auto-filed by twatch) | — |
@@ -3020,6 +3021,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-threads-test-sched-reactor-exhaustion-5 | B | 70 | regression | regression: test-threads#src:test/test_sched_reactor_exhaustion.pas red at c687ffeecb1f (auto-filed by twatch) | — |
 | regression-test-threads-test-sched-reactor-exhaustion | P | 70 | regression | regression: test-threads#src:test/test_sched_reactor_exhaustion.pas red at a6698ac28e8b (auto-filed by twatch) | — |
 | regression-test-threads-test-static-string-literals | T | 70 | regression | regression: test-threads#src:test/test_static_string_literals.pas@2 red at 5bb3e120d3f7 (auto-filed by twatch) | — |
+| regression-test-threads-test-threadsafe-refcount-lockfree | T | 70→85 | regression | regression: test-threads#src:test/test_threadsafe_refcount_lockfree.pas at 1e37a55f6748 in step 2/2, `tools/expect_same.sh test_threadsafe_refcount_lockfree26 "$(/tmp/test_threadsafe_refcount_lockfree26 \| tail -n 2)" "$(p…` (auto-filed by twatch) | — |
 | regression-test-uforth-00 | T | 70 | regression | regression: test-uforth#00 red at 378295f7c218 (auto-filed by twatch) | — |
 | regression-test-uforth-core | T | 70 | regression | regression: test-uforth#core red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-xtensa-test-cross-managed-strings | A+S | 70 | regression | regression: test-xtensa#src:test/test_cross_managed_strings.pas at 6a38839c2f81 in step 18/32, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |

@@ -227,6 +227,33 @@ begin
   EmitB((12 shl 4) or 0);
 end;
 
+procedure xtensa_movsp(t, s: Integer);
+{ MOVSP at, as — the ONLY legal way to move a1 under the windowed ABI, besides
+  ENTRY's own immediate.
+
+  Why an instruction exists just for this: the caller's 16-byte register save
+  area lives at [a1-16], and window OVERFLOW and UNDERFLOW read it there. A
+  plain `sub a1, a1, aN` relocates sp and leaves that area behind, so the
+  handlers read whatever now occupies the address. MOVSP carries the area with
+  the pointer (raising an ALLOCA exception for the runtime to do the copy when
+  the caller's registers are still live in the register file).
+
+  RRR format, and the field layout is the same one every encoder in this file
+  uses: byte0 = t<<4 | op0, byte1 = r<<4 | s, byte2 = op2<<4 | op1. MOVSP is
+  op0=0, op1=0, op2=0, r=1 — so byte2 is 0 and byte1 carries the r=1 that
+  distinguishes it from the other op2=0 forms.
+
+  VERIFIED BY DISASSEMBLY, not derived: qemu-xtensa -d in_asm decodes the bytes
+  this emits as `movsp a1, a8` in a real windowed prologue. An encoding argued
+  from a manual and never decoded is how this file got
+  XtensaRelCheck (see its header) — a field that silently produced a valid
+  instruction pointing somewhere else. }
+begin
+  EmitB((t shl 4) or 0);
+  EmitB(($1 shl 4) or s);
+  EmitB(0);
+end;
+
 procedure xtensa_and(r, s, t: Integer);
 begin
   EmitB((t shl 4) or 0);

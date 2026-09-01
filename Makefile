@@ -16946,6 +16946,39 @@ test-xtensa: $(COMPILER)
 	    --xtensa-abi=call0 test/test_cross_managed_strings.pas $(TESTTMP)/xtc_mstr
 	tools/run_target.sh xtensa $(TESTTMP)/xtc_mstr > $(TESTTMP)/xtc_mstr.out; tools/expect_same.sh xtensa-call0/test_cross_managed_strings-rc "$$?" "0"
 	tools/expect_same.sh xtensa-call0/test_cross_managed_strings "$$(cat $(TESTTMP)/xtc_mstr.out)" "$$(cat $(TESTTMP)/xtw_mstr_x64.out)"
+	# MOVSP, and this row exists because NO BEHAVIOURAL TEST CAN GUARD IT.
+	# The windowed ABI lets only ENTRY's immediate and MOVSP move a1; the
+	# prologue moved it with a plain `sub a1,a1,a8` for months. Every windowed
+	# row above passed the whole time and still would -- the violation is
+	# latent, the reference compiler's own choice, not a value anyone can read.
+	# bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp
+	# tested the obvious mechanism (recursion deep enough to wrap the register
+	# file) and it came back NEGATIVE, twice.
+	#
+	# So the assertion is on the EMISSION, disassembled by qemu rather than
+	# derived: the windowed image must decode a `movsp`, and -- the positive
+	# control, from the population this is about -- the SAME PROGRAM built
+	# Call0 must decode NONE, because Call0 has no window to carry and moving
+	# sp arithmetically is correct there. A one-sided check would pass on a
+	# compiler that emitted movsp unconditionally, which is a different bug.
+	#
+	# `-d in_asm` only ever shows code that RAN, which is what makes it an
+	# honest instrument here: a movsp counted below is one a real prologue
+	# executed, not one sitting in an unreached branch.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_record.pas $(TESTTMP)/xtw_movsp
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=call0 test/test_cross_record.pas $(TESTTMP)/xtc_movsp
+	qemu-xtensa -d in_asm $(TESTTMP)/xtw_movsp > /dev/null 2> $(TESTTMP)/xtw_movsp.asm
+	qemu-xtensa -d in_asm $(TESTTMP)/xtc_movsp > /dev/null 2> $(TESTTMP)/xtc_movsp.asm
+	# Assert the instrument RAN before reading its answer: an empty log makes
+	# both counts 0, which passes the call0 row and fails the windowed one for
+	# entirely the wrong reason.
+	test -s $(TESTTMP)/xtw_movsp.asm && test -s $(TESTTMP)/xtc_movsp.asm
+	tools/expect_same.sh xtensa-windowed/prologue-uses-movsp \
+	    "$$(grep -c 'movsp' $(TESTTMP)/xtw_movsp.asm | awk '{print ($$1>0)?"yes":"no"}')" "yes"
+	tools/expect_same.sh xtensa-call0/prologue-has-no-movsp \
+	    "$$(grep -c 'movsp' $(TESTTMP)/xtc_movsp.asm | awk '{print ($$1>0)?"yes":"no"}')" "no"
 	# A BACKWARD JUMP PAST J'S +-128 KiB, both ABIs. J is an 18-bit BYTE offset,
 	# four times tighter than riscv32's JAL, and one body is enough to cross it:
 	# the pre-fix compiler refuses this file with `j displacement -395214 is

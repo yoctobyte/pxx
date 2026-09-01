@@ -11259,7 +11259,23 @@ begin
   patchPos := CodeLen;
   EmitI32(0);                            { frame-size literal, patched below }
   xtensa_l32r(rFrame, $FFFF);
-  xtensa_sub(reg_xtensa_sp, reg_xtensa_sp, rFrame);
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    { MOVSP, not a plain `sub a1,a1,a8`. The windowed ABI lets exactly two
+      things move a1: ENTRY's own immediate, and MOVSP. The reason is the
+      caller's 16-byte register save area at [a1-16], which the window
+      OVERFLOW/UNDERFLOW handlers read at that fixed offset -- relocating sp
+      arithmetically leaves it behind, so a spill lands on whatever now sits
+      there. MOVSP carries it along.
+
+      This does the subtraction into the scratch and moves the RESULT, because
+      MOVSP has no immediate and no second source: it is a register move with
+      the save-area copy attached. }
+    xtensa_sub(rFrame, reg_xtensa_sp, rFrame);
+    xtensa_movsp(reg_xtensa_sp, rFrame);
+  end
+  else
+    xtensa_sub(reg_xtensa_sp, reg_xtensa_sp, rFrame);
 end;
 
 function EmitProcPrologue: Integer;

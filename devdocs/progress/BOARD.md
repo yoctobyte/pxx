@@ -145,7 +145,7 @@ _none_
 | bug-a-write-picks-a-different-float-width-per-target-and-both-disagree-with-fpc | A | 30 | bug | `Write` of a real renders at a width that depends on the TARGET: x86-64 prints `s1+s2` (Single+Single) in Double form where FPC and xtensa print Single, and xtensa prints `i/2` in Single form where FPC and x86-64 print Double. Two backends, opposite errors, same source and same compiler. The values are right; the width dispatch is not. | — |
 | bug-a-xtensa-allocates-twice-per-virtual-call-returning-a-string-and-leaks-one | A+S | 45 | bug | xtensa allocates TWO managed strings per iteration where every other backend allocates one, for `s := o.Make(i)` with a virtual method returning AnsiString -- 7707 allocs against 3799 for the identical source. After the ownership-predicate fix in the same session, x86-64/arm32/riscv32 all settle at live=3 and xtensa settles at live=3856: the fix released one of the two, and the second allocation is never released by anything. So there are two distinct defects here, an EXTRA allocation and an unreleased one, and the extra allocation is the one to find first because the leak may simply be its shadow. Measured with -dPXX_ALLOC_CENSUS; the direct-call and indirect-call arms of the same predicate are clean on xtensa, so this is specific to IR_VIRTUAL_CALL. | — |
 | bug-a-xtensa-cannot-return-a-dynamic-array-from-a-function | A+S | 35 | bug | `function MakeArr(n: Integer): array of Integer` is refused outright on --target=xtensa with 'target xtensa: only ordinal/float/pointer/string function results supported yet' (symtab.inc:12364), while riscv32 -- which carries a refusal of the same shape at symtab.inc:12476 -- accepts it and runs it correctly. So the gap is xtensa's list being narrower than its sibling's, not a missing mechanism. It is why test/test_dynarray_ownership_leaks.pas has no xtensa row, and it means the two dyn-array ownership guards in ir_codegen_xtensa.inc are correct but currently unreachable through a function result. | — |
-| bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp | A+S | 45 | bug | Every windowed xtensa prologue emits `entry a1, 32` then moves sp again with a plain addi/addmi. The windowed ABI requires MOVSP for that, because the caller's 16-byte register save area sits at [a1-16] and a plain add relocates sp while leaving the area behind. Ten executed entry sites, all immediate 32. NOT known to cause a fault -- the obvious mechanism was tested and falsified. | — |
+| bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp | A+S | 45 | bug | FIXED (frankC, 2026-09-01): the windowed arm of EmitXtensaFrameReserve now emits `sub a8,a1,a8` + `movsp a1,a8`, the reference compiler's own dynamic-frame sequence; new xtensa_movsp encoder verified by qemu disassembly. Call0 keeps the plain sub. The ticket's addi/addmi citations were already stale — that path became a patched literal + sub, and the ABI violation survived the rewrite. Never caused a known fault, and still does not. | — |
 | bug-a-xtensa-windowed-refuses-ir-raise-because-unwind-needs-the-windows-spilled | A+S | 45 | bug | Under the xtensa windowed ABI, IR_RAISE and the unwind path refuse. The cause is a RUNTIME gap, not a prologue gap: a longjmp-style unwind must spill the register windows first and bare-metal has no handler for that. Filed to keep it OUT of the four-target cdecl prologue change, which would appear to fix it and would not. | — |
 | bug-c-a-pointer-to-a-typedefd-array-segfaults-while-the-direct-spelling-works | C | 45 | bug | In C, `typedef double TA[4]; TA *p = &a; (*p)[i] = v;` compiles clean and SEGFAULTS, while the identical program written `double (*p)[4] = &a;` is correct and matches gcc. Same declaration, two spellings, one of them loses the pointee's array shape. PRE-EXISTING, not a regression: reproduced on the Aug-27 pinned binary (stable_linux_amd64/default/pinned) as well as on tip. Found while fixing bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier, which is the same defect one frontend over -- there the carrier existed for a plain identifier and not for a field/call/element; here it is written for the direct declarator and not for the typedef'd one. | — |
 | bug-c-generic-selection-loses-an-array-elements-pointer-target-and-its-constness | A | 35 | bug | _Generic over an array controlling expression now decays correctly for scalar, record and multi-dim elements (measured equal to gcc), but two element shapes still select the wrong association: `int *p[2]` answers `default` where gcc answers `int **`, and `const int ci[2]` answers `int *` where gcc answers `const int *`. Both need a carrier the array symbol does not have — the element's POINTER TARGET and the element's CONSTNESS — so neither is fixable at the descriptor site. Two rows of a seven-row gcc differential; the other five match. | — |
@@ -853,9 +853,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3062)
+## done (3064)
 
-3062 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3064 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -938,11 +938,11 @@ _none_
 
 - [p 90] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 85] [T] regression-optdiff-shard4-12 (unblocks 1)
-- [p 85] [T] regression-test-core-test-interface-byval-param-no-leak (unblocks 1)
 - [p 85] [T] regression-test-core-test-rtl-fpc-compat-helpers-2 (unblocks 1)
-- [p 85] [T] regression-test-threads-test-threadsafe-refcount-lockfree (unblocks 1)
 - [p 85] [T] regression-tools-devtest-00-3 (unblocks 1)
 - [p 85] [T] feature-t-grade-a-pin-instead-of-gating-it
+- [p 85] [T] regression-test-core-test-interface-byval-param-no-leak
+- [p 85] [T] regression-test-threads-test-threadsafe-refcount-lockfree
 - [p 80] [A] feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
@@ -1432,7 +1432,5 @@ _none_
 - **1** — feature-target-wasm
 - **1** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
 - **1** — regression-optdiff-shard4-12
-- **1** — regression-test-core-test-interface-byval-param-no-leak
 - **1** — regression-test-core-test-rtl-fpc-compat-helpers-2
-- **1** — regression-test-threads-test-threadsafe-refcount-lockfree
 - **1** — regression-tools-devtest-00-3

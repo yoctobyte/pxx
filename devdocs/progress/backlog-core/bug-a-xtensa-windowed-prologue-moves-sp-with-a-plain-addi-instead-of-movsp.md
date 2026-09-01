@@ -3,10 +3,10 @@ slug: bug-a-xtensa-windowed-prologue-moves-sp-with-a-plain-addi-instead-of-movsp
 track: A+S
 type: bug
 prio: 45
-status: open
+status: done
 found: 2026-08-30
 found-by: frankS
-summary: "Every windowed xtensa prologue emits `entry a1, 32` then moves sp again with a plain addi/addmi. The windowed ABI requires MOVSP for that, because the caller's 16-byte register save area sits at [a1-16] and a plain add relocates sp while leaving the area behind. Ten executed entry sites, all immediate 32. NOT known to cause a fault -- the obvious mechanism was tested and falsified."
+summary: "FIXED (frankC, 2026-09-01): the windowed arm of EmitXtensaFrameReserve now emits `sub a8,a1,a8` + `movsp a1,a8`, the reference compiler's own dynamic-frame sequence; new xtensa_movsp encoder verified by qemu disassembly. Call0 keeps the plain sub. The ticket's addi/addmi citations were already stale — that path became a patched literal + sub, and the ABI violation survived the rewrite. Never caused a known fault, and still does not."
 ---
 
 # The windowed xtensa prologue moves `sp` with a plain `addi`, where the ABI requires `MOVSP`
@@ -172,3 +172,82 @@ frame in `entry`'s immediate** rather than emitting `entry` + `addi`. That is a
 noted as a direction, not a proposal, since whoever takes it must check
 `entry`'s 32760 ceiling and 8-byte granularity against `size + XtSpillMax`, and
 decide what happens above it (gcc's answer there is `movsp`).
+
+## FIXED 2026-09-01 (frankC) — `movsp`, and the ticket's own citations had gone stale first
+
+### The citations were stale, and correcting them is half the value here
+
+The ticket points at `compiler/symtab.inc:10779` / `:10784` emitting
+`EncodeXtensaAddi` / `EncodeXtensaAddmi`. **At HEAD that path does not exist.**
+It was replaced by `EmitXtensaFrameReserve` (`symtab.inc:11196`), which loads the
+frame size from a patchable 32-bit literal — precisely because `addi`/`addmi`
+cannot reach a 136448-byte frame. So a reader following the line numbers measures
+a function that no longer emits what the ticket says it emits, and both numbers
+still resolve to real lines that explain nothing.
+
+The **ABI violation survived the rewrite unchanged**, which is why the ticket was
+still right about the thing that matters: `sub a1, a1, a8` is a plain arithmetic
+move of `a1` exactly as `addi a1, a1, -112` was.
+
+### The fix
+
+`EmitXtensaFrameReserve`'s windowed arm now computes the new `sp` into the
+scratch and installs it with `MOVSP`, and Call0 keeps the plain `sub`:
+
+```
+l32r  a8, <literal>
+sub   a8, a1, a8
+movsp a1, a8
+```
+
+That is **the reference compiler's dynamic-frame sequence from the ORACLE RUN
+section above, instruction for instruction** — arrived at before re-reading that
+section, which is the corroboration this ticket asked for.
+
+New encoder `xtensa_movsp` in `compiler/xtensaenc.inc` (RRR, op0/op1/op2 = 0,
+r = 1). **Verified by disassembly, not derived:** `qemu-xtensa -d in_asm` on a
+windowed build decodes the emitted bytes as `movsp a1, a8` at five sites. An
+encoding argued from a manual and never decoded is the failure mode this file
+has already had once.
+
+### What was NOT done, deliberately
+
+gcc's *other* arm — putting the frame in `entry`'s immediate when it fits — is
+**not** adopted. `EmitXtensaFrameReserve`'s own header records the ADDMI chain
+being reverted for exactly this reason: a second mechanism for a rule the
+function already has, capped at an arbitrary bound (`entry` tops out at 32760,
+and `DelphiRewriteGenericUses` needs 136448). One mechanism, no cap.
+
+### The ALLOCA risk, and why it is not a new dependency
+
+`MOVSP` raises an **ALLOCA exception** when the caller's `a0-a3` are already
+spilled, so the handler can copy the 16 bytes to the new location. That needs a
+vector bare metal does not have — but `compiler.pas:1783` **already refuses**
+`--esp-profile=bare` with windowed, *"the windowed ABI needs window-overflow
+exception handlers + vecbase that bare-metal does not install"*. Every profile
+that can run windowed at all ships that vector set, and ALLOCA is one of it
+(ESP-IDF's `_xt_alloca_exc`, beside `_WindowOverflow4/8/12`). So this adds no
+dependency class that windowed did not already have.
+
+**Honest limit:** I could not observe the ALLOCA path firing. `qemu-xtensa -d int`
+logs nothing for window exceptions in linux-user, so "the deep-recursion program
+passes" is evidence that windowed still works, and **not** evidence that ALLOCA
+was exercised. Real IDF hardware remains unmeasured, as the Bound said.
+
+### Measured
+
+Compiler `3377a7541356`, `converged after 2 round(s)`. `gate.sh quick` GREEN with
+the FPC seed canary **PASS, not SKIP** (gated before committing).
+
+Windowed, against the x86-64 oracle — the five canary rows plus managed strings,
+all `rc` and value: `test_cross_record`, `test_cross_dynarray`, `test_interfaces`,
+`test_cross_sets`, `test_cross_variant`, `test_cross_managed_strings` — 6/6 OK.
+Call0 unchanged arm re-checked including the two the scratch-register bug once
+broke: `test_const_record_temp`, `test_cross_aggregate_return`, plus four — 6/6 OK.
+Deep recursion at depth 40 with 800-byte frames: windowed and call0 both `979900`,
+matching x86-64.
+
+**Not claimed: that this fixes an observed fault.** The ticket's falsified
+prediction stands — no windowed fault was ever attributed to this, and none was
+found now. This closes as an ABI-conformance fix that brings us onto the
+reference's own sequence.
