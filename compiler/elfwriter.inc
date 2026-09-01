@@ -3494,16 +3494,31 @@ begin
   for i := 0 to ExternalCount-1 do writeStrZ(f, ExternalLinkName(i));
   writePad(f, relTextOff - (strOff + strSize));
 
-  { .rel.text. Section syms: 1 = .text, 2 = .data, 3 = .bss. R_386_32 = 1
-    throughout -- on i386 every operand these sites hold is a 32-bit absolute
-    address, so there is only one relocation type in the whole object. }
+  { .rel.text. Section syms: 1 = .text, 2 = .data, 3 = .bss.
+
+    TWO types now: R_386_32 = 1 (absolute) and R_386_PC32 = 2 (relative to the
+    PC-anchored base in esi). A site is relative exactly when the emitter marked
+    it so, which is the SAME flag pair x86-64 already uses for its rip form --
+    reused rather than duplicated, because a second parallel notion of "this
+    fixup is relative" is how the two x86-64 arms came to disagree once already.
+
+    This reads False for every i386 site until the addressing conversion sets
+    it, so landing it is inert.
+    bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations }
   for i := 0 to FixCount-1 do
-    writeRel32(f, Fixups[i].CodePos, 2, 1);
+    if FixupPCRel[i] then writeRel32(f, Fixups[i].CodePos, 2, 2)
+    else                  writeRel32(f, Fixups[i].CodePos, 2, 1);
   for i := 0 to GlobFixCount-1 do
     if SymOffIsData(GlobFix[i].BSSoff) then
-      writeRel32(f, GlobFix[i].CodePos, 2, 1)
+    begin
+      if GlobFixPCRel[i] then writeRel32(f, GlobFix[i].CodePos, 2, 2)
+      else                    writeRel32(f, GlobFix[i].CodePos, 2, 1);
+    end
     else
-      writeRel32(f, GlobFix[i].CodePos, 3, 1);
+    begin
+      if GlobFixPCRel[i] then writeRel32(f, GlobFix[i].CodePos, 3, 2)
+      else                    writeRel32(f, GlobFix[i].CodePos, 3, 1);
+    end;
   { `call dword [abs32]`: the operand names OUR GOT slot in .data, not the
     callee. The slot's own relocation is in .rel.data below. }
   for i := 0 to DynCallCount-1 do
