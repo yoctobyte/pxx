@@ -67,4 +67,4 @@ second symptom.
 
 - 2026-09-01 — found by sweeping sibling seams rather than by a report; fixed,
   refactored the eight sites onto one helper, and closed in the same session,
-  commit PENDING-COMMIT.
+  commit b788c5865.
