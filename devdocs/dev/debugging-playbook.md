@@ -785,6 +785,50 @@ stderr (`PXXCensusPut` writes fd 2 throughout) while `expect_same` compares
 tail cannot be what failed the row. The diff you need is in the job log on the
 runner, and the report is not going to have it. Ask for it explicitly.
 
+### Worked instance: grepping a recipe by the SOURCE name hides the checks that name the BINARY
+
+Written two hours after the section above, by its author, while applying it.
+
+Asked what a test row actually asserts, I ran the obvious thing:
+
+```sh
+grep -rn 'test_managed_dynarray_field_leaks' Makefile     # 3 lines per target
+```
+
+Three lines came back per target — two compiles and an `expect_same.sh`. I
+concluded `expect_same` was the only check in the recipe, and reasoned onward
+from there for two messages. **The recipe also runs `tools/assert_no_leak.sh`
+at a threshold of 50, and that is what failed** — `grep -c assert_no_leak
+Makefile` returns **39**. Those lines were unreachable by that grep *by
+construction*: they name the built **binary** (`$(TESTTMP)/msol_a64`), never the
+`.pas`. The grep answered *"which lines mention this filename"*, which is not
+*"what does this recipe check"*, and it returned a clean, plausible, complete-
+looking three lines.
+
+**Read a RECIPE by its line range, never by grepping a name through it.** A
+build step's stages refer to different identifiers — source going in, binary
+coming out, label in between — so any single name matches a *subset* of the
+stages and nothing marks the subset as partial:
+
+```sh
+sed -n '14890,14900p' Makefile      # the recipe, whole
+```
+
+**The second half of the error is worth separating, because it is not about
+grep.** The fd-2 finding was correct: the census goes to stderr, so it cannot be
+in `expect_same`'s compared strings. That is sound, and it was used to conclude
+*therefore some compared counter must differ* — eliminating one candidate to
+identify the other, from an enumeration with **two** members where the recipe
+had **three**. **Ruling out one candidate identifies the remaining one only if
+the enumeration is complete**, and a correct elimination inside a short list
+inherits none of the list's incompleteness. The stronger the eliminating
+evidence, the more confidently it points at whatever else you happened to have
+written down.
+
+**The cost was three sessions reasoning about a diff that did not exist**, while
+the actual assertion sat in a log on the runner that nobody had opened. `live=111
+exceeds 50` — a threshold, not a comparison.
+
 
 ## Assert the PRECONDITION, not just the comparison
 
