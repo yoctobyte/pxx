@@ -5479,6 +5479,23 @@ end;
   devdocs/dev/normalise-dont-special-case.md is about, and the reason this is
   extracted rather than copied a fifth time.
   refactor-centralize-managed-string-pchar-conversion }
+{ THE POSITIVE CONTROL for the arm census below, and the reason its zeros mean
+  anything. Normally this is `ASTKind[node]`. Under PXXDBG=a.derefwalk:noarms it
+  answers a kind no arm tests for, so every node falls through the ten typed arms
+  to the final `else` -- which must then make DwElseHits and DwElseAns fire.
+
+  A counter that has never been observed nonzero is not evidence of absence; it
+  is an unaimed instrument printing a zero. This is what a run has to show before
+  a zero in the real column is worth acting on, and it is a runtime flag rather
+  than a second build precisely so that showing it costs one command, not twelve
+  seconds and a memory of having done it once.
+  refactor-a-collapse-nodeptrelem-into-the-deref-walk }
+function DwDispatchKind(node: Integer): Integer;
+begin
+  if DwArmsOff then DwDispatchKind := -1
+  else DwDispatchKind := ASTKind[node];
+end;
+
 procedure ResolveDerefShapeAt(node: Integer; var tk: TTypeKind; var recName: Integer;
                               var remDepth, ptrBaseTk, ptrBaseRec: Integer;
                               depth: Integer); forward;
@@ -5499,10 +5516,16 @@ procedure ResolveDerefShapeAt(node: Integer; var tk: TTypeKind; var recName: Int
 var baseNode, baseRec, fIdx: Integer;
     fieldName: AnsiString;
 begin
+  if DwTotalCalls = 0 then
+    { EXACT arg, not PxxDbgWants: that returns True for the `*` wildcard too, so
+      `a.derefwalk:*` silently armed the CONTROL and both columns of the first
+      run read 315/315. The instrument answered — about the control build. }
+    DwArmsOff := (PxxDbgArg('a.derefwalk') = 'noarms');   { read once, on first entry }
+  DwTotalCalls := DwTotalCalls + 1;   { PXXDBG=a.derefwalk — the denominator }
   remDepth := 0;
   ptrBaseTk := Ord(tyUnknown);
   ptrBaseRec := REC_NONE;
-      if ASTKind[node] = AN_IDENT then
+      if DwDispatchKind(node) = AN_IDENT then
       begin
         tk := Syms[ASTIVal[node]].PtrElemTk;
         recName := Syms[ASTIVal[node]].PtrElemRec;
@@ -5513,7 +5536,7 @@ begin
           ptrBaseRec := SymPtrBaseRec[ASTIVal[node]];
         end;
       end
-      else if ASTKind[node] = AN_FIELD then
+      else if DwDispatchKind(node) = AN_FIELD then
       begin
         baseNode := ASTLeft[node];
         baseRec := ResolveNodeRec(baseNode);
@@ -5544,7 +5567,7 @@ begin
           recName := REC_NONE;
         end;
       end
-      else if ASTKind[node] = AN_INDEX then
+      else if DwDispatchKind(node) = AN_INDEX then
       begin
         baseNode := ASTLeft[node];
         if ASTKind[baseNode] = AN_IDENT then
@@ -5602,7 +5625,7 @@ begin
           recName := REC_NONE;
         end;
       end
-      else if (ASTKind[node] = AN_BINOP) and
+      else if (DwDispatchKind(node) = AN_BINOP) and
               (TTokenKind(ASTIVal[node]) in [tkPlus, tkMinus]) and (depth < 8) then
       begin
         { Pointer ARITHMETIC, `(p + k)^`. Pointer arithmetic keeps the pointer's
@@ -5617,7 +5640,7 @@ begin
           ResolveDerefShapeAt(ASTRight[node], tk, recName, remDepth, ptrBaseTk,
                               ptrBaseRec, depth + 1);
       end
-      else if ASTKind[node] = AN_DEREF then
+      else if DwDispatchKind(node) = AN_DEREF then
       begin
         if ASTSOffset[node] > 0 then
         begin
@@ -5646,8 +5669,8 @@ begin
           recName := REC_NONE;
         end;
       end
-      else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
-              (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND) then
+      else if (DwDispatchKind(node) = AN_CALL) or (DwDispatchKind(node) = AN_VIRTUAL_CALL) or
+              (DwDispatchKind(node) = AN_INTF_CALL) or (DwDispatchKind(node) = AN_CALL_IND) then
       begin
         { `GetQ^` -- dereferencing a function RESULT. The callee's declaration
           records the returned pointer's whole triple (ProcRetPtrElemTk/Rec
@@ -5675,7 +5698,7 @@ begin
           recName := REC_NONE;
         end;
       end
-      else if (ASTKind[node] = AN_PTR_CAST) and (ASTIVal[node] >= 0) and
+      else if (DwDispatchKind(node) = AN_PTR_CAST) and (ASTIVal[node] >= 0) and
               (ASTIVal[node] < AliasCount) then
       begin
         { An inline typed pointer cast, `PPC(raw)^`. The alias row carries the
@@ -5713,11 +5736,14 @@ begin
           refactor-a-collapse-nodeptrelem-into-the-deref-walk }
         tk := tyInteger;
         recName := REC_NONE;
+        DwElseHits := DwElseHits + 1;
         if not NodePtrElem(node, tk, recName, 0) then
         begin
           tk := tyInteger;
           recName := REC_NONE;
-        end;
+        end
+        else
+          DwElseAns := DwElseAns + 1;
       end;
       { A node whose KIND an arm above recognised but whose pointee it could not
         answer: an AN_INDEX whose base is not a plain variable — which is what
@@ -5735,11 +5761,16 @@ begin
         procedure took the walk over.
         regression-test-core-test-cast-deref-chain-siblings }
       if tk = tyUnknown then
+      begin
+        DwBackHits := DwBackHits + 1;
         if not NodePtrElem(node, tk, recName, 0) then
         begin
           tk := tyUnknown;
           recName := REC_NONE;
-        end;
+        end
+        else
+          DwBackAns := DwBackAns + 1;
+      end;
       if remDepth >= 1 then
       begin
         tk := tyPointer;

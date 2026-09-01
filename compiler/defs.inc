@@ -5272,6 +5272,26 @@ var
   PxxDbgTopics : AnsiString;
   PxxDbgLoaded : Boolean;
 
+{ ===== a.derefwalk — arm census for ResolveDerefShapeAt ====================
+
+  Which ARM of the deref walk answered, per compile, under PXXDBG=a.derefwalk.
+  It exists for one decision: whether the two NodePtrElem fallbacks inside
+  ResolveDerefShapeAt still answer anything the ten typed arms do not, i.e.
+  whether NodePtrElem can be collapsed into the walk it is only reached from
+  (refactor-a-collapse-nodeptrelem-into-the-deref-walk).
+
+  Counting rather than reasoning because the previous attempt at this question
+  measured NO CHANGE twice and the instrument, not the hypothesis, was what was
+  wrong. A zero here is only worth something beside the arms-DISABLED control
+  build, which is the positive control: it must make these same counters fire.
+  A counter that has never been seen nonzero is not evidence of absence. }
+  DwElseHits   : Int64;   { the final `else` — no arm claimed the node kind }
+  DwElseAns    : Int64;   { …of those, how many NodePtrElem actually answered }
+  DwBackHits   : Int64;   { the `tk = tyUnknown` backstop — an arm claimed it and gave up }
+  DwBackAns    : Int64;   { …of those, how many NodePtrElem actually answered }
+  DwTotalCalls : Int64;   { every entry to the walk, so the hits have a denominator }
+  DwArmsOff    : Boolean; { PXXDBG=a.derefwalk:noarms — the positive control (see DwDispatchKind) }
+
 { The process environment, read ONCE from /proc/self/environ and kept as the
   raw NUL-separated block. sysopen/sysread/sysclose are compiler INTRINSICS, so
   this serves the FPC-bootstrap and self-hosted builds alike and needs no PAL
