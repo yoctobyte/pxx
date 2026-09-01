@@ -4627,10 +4627,20 @@ begin
     (bug-arm32-record-byvalue-over-4-bytes-abi-gap). Never smaller than
     TARGET_PTR_SIZE, matching the tiny-record (<=4-byte) case. }
   if (Syms[idx].TypeKind = tyRecord) and (not Syms[idx].IsRef) and
-     (not Syms[idx].IsArray) and (RecSize(Syms[idx].RecName) <= 8) then
+     (not Syms[idx].IsArray) then
   begin
+    { No `<= 8` cap. It read as a size rule and was really a CONVENTION rule:
+      8 is where every frontend switched a by-value record to by-reference, so
+      a bigger one could not reach here and the pointer-slot fallthrough below
+      was its answer. The C ABI work removes that switch for a
+      register-classified aggregate, and then the fallthrough hands a 16-byte
+      struct an 8-byte slot while the callee spill writes its second eightbyte
+      at Offset+8 -- into the next parameter. Round to whole slots instead: the
+      spill addresses eightbytes, so a partial one still owns its padding.
+      bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee }
     Result := RecSize(Syms[idx].RecName);
-    if Result < TARGET_PTR_SIZE then Result := TARGET_PTR_SIZE;
+    if Result < TARGET_PTR_SIZE then Result := TARGET_PTR_SIZE
+    else Result := ((Result + TARGET_PTR_SIZE - 1) div TARGET_PTR_SIZE) * TARGET_PTR_SIZE;
   end
   else if ABIParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef, Syms[idx].IsArray) then
     Result := TARGET_PTR_SIZE
