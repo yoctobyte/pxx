@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-a-static-array-of-managed-field-records-loses-its-length-as-an-open-array-argument | A | 45 | bug | A static array whose element is a record WITH A MANAGED FIELD, passed to an open-array param, arrives with no length header: High(items) is -1 (FPC: 1) and the callee's loop silently never runs. Both ir.inc copy-in paths exclude managed-field records by an explicit `not (tyRecord and RecordHasManagedFields)` guard, and the fall-through passes a bare address rather than refusing. Plain-record elements work; `const` and `var` both fail; pre-existing on pinned. | — |
 | bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations | A | 40→80 | bug | i386 --emit-obj output is POSITION-DEPENDENT: every .text relocation is absolute R_386_32, so linking gives `relocation in read-only section .text` and `creating DT_TEXTREL in a PIE`, and `-Wl,-z,text` refuses outright. It is the i386 twin of feature-a-x86-64-object-output-is-position-dependent (done) and the harder one, because i386 has no PC-relative data addressing. CENSUSED 2026-09-01 over three objects (C, Pascal, Pascal --threadsafe): 1482 sites, 24 distinct operand shapes, 0 unmatched, all targeting our OWN .data/.bss/.text -- there are no external symbol references in .text at all and intra-object calls already need no relocation. THE ADDRESSING HALF IS MECHANICAL: 12 of the 24 shapes are `mod=00 rm=101` and become [ebx+disp32] by `modrm := (modrm and $38) or $83`, one length-preserving expression covering 606 sites including the F0-prefixed lock cmpxchg; the rest are moffs (a1/a3, +1 byte), address-as-immediate (b8..bf -> lea, +1), push imm32 (-> push ebx; add [esp], +3, needs no scratch), and SIB-indexed (base 101 -> 011, same length). Every rewrite was assembled and disassembled, not reasoned about. WHAT REMAINS IS NOT ADDRESSING BUT THE BASE REGISTER: all 1482 rewrites assume ebx holds _GLOBAL_OFFSET_TABLE_, and today ebx is short-lived scratch (34 sites in IREmitNode386), is architecturally required by the int 0x80 helpers, and the census itself contains `mov ebx, <global>`. DECIDED: the base register is esi, on three measurements -- 0 R_386_PLT32 in any object (every external call goes through our own .data GOT slot, so ebx's only advantage, the PLT contract, is absent), esi is the least-used register in generated code (1292 vs ebx 3595), and decisively esi is NOT byte-addressable on i386, so it can never be wanted for the 360 `mov bl,[d32]` sites that reserving ebx would have had to relocate onto al/cl/dl. Four phases, with the test-emit-obj assertion row LAST. Four of the 24 shapes appear ONLY in the --threadsafe object -- a census over the C object alone reports 19 shapes and looks just as clean. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
@@ -825,9 +824,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3003)
+## done (3004)
 
-3003 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3004 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
