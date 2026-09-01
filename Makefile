@@ -10000,6 +10000,15 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_shd_types_rev26 "$$($(TESTTMP)/test_shd_types_rev26)" "$$(printf 'routine ROUTINE-A\nclass CLASS-A\nconst CONST-A\nalias 4\nrec 8\narr 4\nenum 1')"
 	./$(COMPILER) -Futest test/test_array_of_const_cross_unit_overload.pas $(TESTTMP)/test_aoc_xunit26
 	tools/expect_same.sh test_aoc_xunit26 "$$($(TESTTMP)/test_aoc_xunit26)" "$$(printf 'g-aoc:one n=1\ng-aoc:two n=2\ng-aoc:none n=0\ng-var:x\nk-set: dTue')"
+	# Variadic bracket-elision (feature-writeln-as-library phase 1). The
+	# same-as-brackets rows are the load-bearing ones: they pin the elided
+	# spelling and the `[...]` spelling to ONE AN_VARREC_ARRAY builder. Both
+	# controls were run rather than assumed -- with the hook disabled the file
+	# does not compile (recipe RED), and with the node hand-built without
+	# TVarRecId it compiles CLEANLY and prints `?` element tags, which is the
+	# silent shape this row exists for.
+	./$(COMPILER) test/test_variadic_bracket_elision.pas $(TESTTMP)/test_varelide26
+	tools/expect_same.sh test_varelide26 "$$($(TESTTMP)/test_varelide26 | tail -n 1)" "ELISION OK"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas $(TESTTMP)/test_aoc_types26
 	tools/expect_same.sh test_aoc_types26 "$$($(TESTTMP)/test_aoc_types26)" "$$(printf 'vt0: 42\nvt1: TRUE\nvt2: Q\nvt16: 5000000000\nvt3: 3.50\nvt3: 0.25\nvt11: hi')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas $(TESTTMP)/test_write_pchar26

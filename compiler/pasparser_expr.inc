@@ -8035,6 +8035,14 @@ begin
             Exit;
           end;
           procIdx := TryFillTrailingDefaults(name, qUnit, nArgs, argsHead, lastArg);
+          { Variadic bracket-elision: `f(a, b, c)` where f's last parameter is
+            `array of const`. LAST of the fallbacks -- an ordinary overload and
+            a defaulted one both win over it, which is how the ticket's "the
+            variadic form is a fallback" rule is enforced by placement rather
+            than by a rule. TWIN SITE in pasparser_stmt.inc; keep them in step.
+            feature-writeln-as-library }
+          if procIdx < 0 then
+            procIdx := TryElideVariadicBrackets(name, qUnit, nArgs, argsHead, lastArg, argTypes);
           if procIdx < 0 then
           begin
             { RECOVERABLE, and the value half of the statement site's recovery

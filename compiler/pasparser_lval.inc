@@ -3369,6 +3369,24 @@ begin
   Result := node;
 end;
 
+function MakeVarRecArrayFromArgs(elemHead: Integer): Integer;
+{ THE one place that decides what an AN_VARREC_ARRAY *is*. `elemHead` is an
+  AN_ARG chain of element expressions (-1 for `[]`).
+
+  Extracted from ParseVarRecLiteralAST so that the two ways of obtaining that
+  chain -- PARSING `[...]`, and ELIDING the brackets at a call whose trailing
+  arguments are already an AN_ARG chain -- cannot disagree about the node. The
+  tyRecord tag and TVarRecId are both load-bearing for overload matching (they
+  are what makes the node read as the open-array-of-record argument), and a
+  second hand-written copy that dropped either would fail only on elided calls
+  -- a shape no test before this one covered. feature-writeln-as-library }
+begin
+  Result := AllocNode(AN_VARREC_ARRAY);
+  ASTTk[Result]   := Ord(tyRecord);
+  ASTIVal[Result] := TVarRecId;
+  ASTLeft[Result] := elemHead;
+end;
+
 function ParseVarRecLiteralAST: Integer;
 { `[ e0, e1, ... ]` in an `array of const` argument position. Each element is a
   full expression; the element's static type picks its TVarRec tag at lowering
@@ -3376,10 +3394,7 @@ function ParseVarRecLiteralAST: Integer;
   tyRecord so overload matching sees it as the open-array-of-record argument. }
 var node, argNode, lastArg: Integer; done: Boolean;
 begin
-  node := AllocNode(AN_VARREC_ARRAY);
-  ASTTk[node]   := Ord(tyRecord);
-  ASTIVal[node] := TVarRecId;
-  ASTLeft[node] := -1;
+  node := MakeVarRecArrayFromArgs(-1);
   lastArg := -1;
   Expect(tkLBrack, '[');
   if CurTok.Kind <> tkRBrack then
@@ -6388,6 +6403,102 @@ begin
     end;
     currArg := ASTRight[currArg];
   end;
+end;
+
+function TryElideVariadicBrackets(const name: AnsiString; qUnit: Integer;
+  var nArgs, argsHead, lastArg: Integer;
+  const argTypes: array of TTypeKind): Integer;
+{ Variadic bracket-elision. `Log('x=', x, ' y=', y)` against
+  `procedure Log(const a: array of const)` becomes `Log(['x=', x, ' y=', y])`,
+  which is what makes ANY user-defined variadic routine ergonomic -- Log,
+  Format, Assert -- and not just a future library writeln.
+  Phase 1 of feature-writeln-as-library.
+
+  THE VARIADIC FORM IS A FALLBACK, and that is why this is called from the
+  `procIdx < 0` arm beside TryFillTrailingDefaults rather than from the
+  argument loop. Two things follow from the placement, and the second is the
+  one that matters:
+
+  1. It is the ticket's ambiguity rule for free. "Only elide when no
+     non-variadic overload matches; prefer an exact non-variadic match" IS
+     "run after MatchCallDelphiProcAddr has already failed".
+
+  2. IT CANNOT CHANGE THE MEANING OF A PROGRAM THAT COMPILES TODAY, by
+     construction rather than by care -- every call it can see is one that
+     errors without it. The case that would otherwise worry me is `array of
+     const` PASS-THROUGH (calling `Inner(a)` from inside
+     `Outer(const a: array of const)`), which must stay a forward of the same
+     vector and must never become `Inner([a])`. Checked by running it: it
+     resolves, so procIdx >= 0 and this is never reached.
+
+  The elided slot is picked LARGEST-FIRST -- most fixed parameters bound is the
+  most specific reading -- and each candidate slot is committed, re-resolved
+  through the real resolver, and rolled back on refusal. Nothing here decides
+  whether a call MATCHES; MatchCallDelphiProcAddr does, on a chain that has
+  been rewritten into the shape it already understands. So a candidate scan
+  that is too loose costs a rejected retry, never a wrong bind. }
+var i, vi, cand, prevNode, tailHead, newArg, k, n: Integer;
+    savedHead, savedLast, savedRight, savedN: Integer;
+    tryTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+begin
+  Result := -1;
+  { No builtinheap unit means no TVarRec to build, and the declaration site
+    (pasparser_proc.inc) has already refused the parameter. }
+  if (TVarRecId = REC_NONE) or (nArgs >= MAX_PROC_PARAMS) then Exit;
+
+  for vi := nArgs downto 0 do
+  begin
+    cand := -1;
+    for i := 0 to ProcCount - 1 do
+      if ((Procs[i].Name = name) or
+          ((not ProcCaseSensitive[i]) and CaseEqual(Procs[i].Name, name))) and
+         ((qUnit < 0) or (ProcUnitIdx[i] = qUnit)) and
+         (Procs[i].ParamCount = vi + 1) and ParamIsVarRecArrayAt(i, vi) then
+      begin
+        cand := i;
+        Break;
+      end;
+    if cand < 0 then Continue;
+
+    { walk to the splice point: prevNode = arg vi-1, tailHead = arg vi }
+    prevNode := -1;
+    n := argsHead;
+    for k := 0 to vi - 1 do
+    begin
+      prevNode := n;
+      n := ASTRight[n];
+    end;
+    tailHead := n;                 { -1 when vi = nArgs, i.e. an elided `[]` }
+
+    { Do not double-wrap an already-bracketed call. It should be unreachable --
+      such a call resolves and never gets here -- but a wrap of a wrap would be
+      silently accepted by the resolver, so it is refused where it is cheap. }
+    if (vi + 1 = nArgs) and (tailHead >= 0) and
+       ((ASTKind[ASTLeft[tailHead]] = AN_VARREC_ARRAY) or
+        (ASTKind[ASTLeft[tailHead]] = AN_ARRAY_CTOR)) then Continue;
+
+    savedHead := argsHead; savedLast := lastArg; savedN := nArgs;
+    savedRight := -1;
+    if prevNode >= 0 then savedRight := ASTRight[prevNode];
+
+    newArg := AllocNode(AN_ARG);
+    ASTLeft[newArg]  := MakeVarRecArrayFromArgs(tailHead);
+    ASTRight[newArg] := -1;
+    if prevNode >= 0 then ASTRight[prevNode] := newArg else argsHead := newArg;
+    lastArg := newArg;
+    nArgs := vi + 1;
+
+    for k := 0 to vi - 1 do tryTypes[k] := argTypes[k];
+    tryTypes[vi] := tyRecord;
+
+    Result := MatchCallDelphiProcAddr(name, qUnit, nArgs, argsHead, tryTypes);
+    if Result >= 0 then Exit;
+
+    { roll back -- the tail chain itself was never edited, only unlinked }
+    argsHead := savedHead; lastArg := savedLast; nArgs := savedN;
+    if prevNode >= 0 then ASTRight[prevNode] := savedRight;
+  end;
+  Result := -1;
 end;
 
 { Compile-time low/high bound of a built-in ordinal type. Returns False for a

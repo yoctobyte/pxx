@@ -1,6 +1,9 @@
 ---
 prio: 40
 track: A
+type: feature
+status: backlog
+summary: "PHASE 1 LANDED 2026-09-01: variadic bracket-elision -- `Log('x=', x)` against `procedure Log(const a: array of const)` now compiles, for BARE ROUTINE calls (procedure statement and function-in-expression). METHOD calls still require the brackets: they go through a signature-driven argument loop that never reaches the resolver this hooks, so `g.Log('a', 1)` is still `wrong number of parameters` -- that is the next slice. Phases 2 (`expr:w:p` via a vtFormatted tag) and 3 (the library write/writeln over array of const) are untouched. Do NOT replace the builtin writeln: compiler.pas self-hosts on it."
 ---
 
 # write/writeln as a library function (via `array of const` + variadic sugar)
@@ -112,3 +115,94 @@ this should treat it as a Track A ticket with a Track B tail.
 ## Lane correction (2026-07-20)
 
 Track re-labelled B -> A on 2026-07-20: phases 1 (variadic bracket-elision) and 2 (expr:w:p formatting) are parser work in compiler/**. Phase 3, the library write/writeln over array of const, is the only Track B part and in isolation is a strictly worse writeln nobody would call — the value is in the sugar, and the sugar is the compiler's.
+
+
+---
+
+## 2026-09-01 (frankH) — phase 1 landed for bare routines; methods are the next slice
+
+**Track A.** `Log('x=', x, ' y=', y)` against `procedure Log(const a: array of
+const)` now compiles. Verified absent before the change (*"no overload of Log
+matches these arguments: (ShortString, Integer)"*), verified present after.
+
+### Where it went, and why that placement is the whole design
+
+**Not in the argument loop — in the `procIdx < 0` arm beside
+`TryFillTrailingDefaults`**, in `pasparser_expr.inc` (function call in an
+expression) and `pasparser_stmt.inc` (procedure call statement). Two properties
+follow, and the second is worth more than the first:
+
+1. **The ticket's ambiguity rule is free.** *"Only elide when no non-variadic
+   overload matches; prefer an exact non-variadic match"* IS *"run after
+   `MatchCallDelphiProcAddr` has already failed"*. It is enforced by placement
+   rather than by a rule that can drift.
+2. **It cannot change the meaning of any program that compiles today, by
+   construction** — every call it can see is one that errors without it. The
+   case that would otherwise be dangerous is `array of const` PASS-THROUGH
+   (`Inner(a)` from inside `Outer(const a: array of const)`), which must stay a
+   forward of the same vector and must never become `Inner([a])`. **Checked by
+   running it, before and after:** it resolves, so `procIdx >= 0` and the
+   elision is never reached. There is a row for it in the test that fails if
+   the placement ever moves.
+
+Slots are tried **largest-first** (most fixed parameters bound is the most
+specific reading); each candidate is committed, re-resolved through the real
+resolver, and rolled back on refusal. **Nothing in the new code decides whether
+a call matches** — `MatchCallDelphiProcAddr` does, on a chain rewritten into a
+shape it already understood. So a candidate scan that is too loose costs a
+rejected retry, never a wrong bind.
+
+### `MakeVarRecArrayFromArgs` — extracted, not duplicated
+
+frankA's catch, and it was the real risk. There is exactly ONE place in the
+compiler that constructs an `AN_VARREC_ARRAY`: `ParseVarRecLiteralAST`. But it
+is a *parser* — `Expect(tkLBrack)`, loop, `Expect(tkRBrack)` — and at the
+elision hook the arguments are already an AN_ARG chain with no brackets left to
+consume, so it cannot be called. Hand-building the node there would have made
+this the second construction site, which is what
+`normalise-dont-special-case.md` is actually about.
+
+So the four lines that decide what the node IS were pulled out into
+`MakeVarRecArrayFromArgs(elemHead)` and both callers use it. They now differ
+only in how they obtained the element chain.
+
+### Gate, and both controls were RUN
+
+`make compiler/pascal26` — **`converged after 1 round(s)`**, the recompute verb,
+not the stamp. `tools/gate.sh quick` **GREEN**, with the FPC seed canary
+**PASS** rather than SKIP (the tree still had uncommitted `compiler/**`, which
+is the only condition under which that canary runs at all).
+
+`test/test_variadic_bracket_elision.pas`, 14 rows, registered in `test-core`.
+**The load-bearing rows are the `same-as-brackets` pairs** — they compare the
+elided call against the explicitly bracketed call of the same routine, which is
+what pins the two spellings to one builder. Everything else could be satisfied
+by an elision that builds a subtly wrong node and still prints something.
+
+| control | result |
+| --- | --- |
+| hook disabled (`procIdx := -1`) | the test file **does not compile**; recipe exits 1 |
+| node hand-built without `TVarRecId` | **compiles cleanly**, prints `?` element tags, 6 rows RED |
+
+The second is the one that matters: it is exactly the failure frankA predicted,
+it produces no diagnostic at all, and it would have been invisible to every
+test that existed before this one.
+
+### The boundary — stated because it is not obvious from the feature's name
+
+**Method calls are NOT covered.** `g.Log('a', 1, 2)` is still
+`wrong number of parameters in call to TLogger.Log`. The method paths parse
+arguments **driven by the signature**, slot by slot, and `ExpectCallRParen`
+fires on the leftover tokens — so they never reach `MatchCallDelphiProcAddr`
+and never reach this hook. Covering them means keeping parsing at the last slot
+when that slot is `array of const`, across the ~6 method argument loops that
+share `ExpectCallRParen`. That is a different mechanism in a different file and
+it is the next slice, not an oversight.
+
+**The NilPy sites are deliberately out of scope.** `MatchCallDelphiProcAddr`
+has four call sites, not two: `pyparser.inc:49079` and `:49097` are the other
+pair. Python has its own `*args` packing (`PyPackStarArgs`) and this is a
+Pascal-surface feature, so they were left alone **on purpose** — recorded here
+because the next person to touch elision will find four sites with two handled.
+
+Phases 2 and 3 are untouched.
