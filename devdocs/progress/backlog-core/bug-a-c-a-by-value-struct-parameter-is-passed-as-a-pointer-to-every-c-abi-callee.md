@@ -393,3 +393,58 @@ prerequisite held anyway** -- the id was never the binding constraint, and
 verifying the named suspect would have cleared the case. This is the
 `the-name-is-not-the-thing` pattern in a prerequisite rather than an
 identifier: the blocker was real, and it was filed under the wrong reason.
+
+## STEP 2 IS DONE FOR x86-64 (2026-09-01, frankC, `747d3479f`)
+
+`make test-c-abi-mixed-link` **PASSES for x86_64**: all 13 rows, both
+directions, every SysV boundary the subject was built around -- 1 eightbyte,
+2 eightbytes, INTEGER+SSE, all-SSE, MEMORY past 16 bytes, and a struct arriving
+after five integers so the bank ACCOUNTING is exercised and not just the
+classifier. It had segfaulted since the day it was written.
+
+**i386 is still RED and untouched.** It needs its own arm, and the note above
+about by-value records not existing there yet still stands. Landing x86-64
+alone is consistent with "whole per target, or not at all" -- the gate reports
+per target and nothing about i386 changed.
+
+What went in, in the order the code demanded:
+
+1. **`ParamValueSize` lost its `<= 8` cap** (`f64044118`) -- the convention rule
+   wearing a size rule's clothes, described in the section above.
+2. **`ProcParamRecId` populated from the C frontend** (`dbe2fcf72`). C was the
+   only frontend leaving it empty. It is the carrier the classifier needs, and
+   `Syms[Params[i].SymIdx].RecName` cannot substitute: a PROTOTYPE allocates no
+   param syms, which is exactly the `relay_*` direction.
+3. **`ABISysVArgPlace`** (`f39e158dd`), validated against `gcc -S` for all seven
+   shapes -- bank AND index, not just classification.
+4. **The callee spill reads it** (`6e622be95`), which introduced a regression
+   fixed in `747d3479f`; see `regression-test-core-cva-arg-pointer-pointee-b201`
+   in `done/`.
+5. **The caller emits eightbytes, and `ABICRecordParamByValue` decides**
+   (`747d3479f`).
+
+**The three hazards this ticket recorded all came true, and a fourth appeared.**
+`ParamValueSize`'s cap bound the C half after all. The caller's evaluate-once
+warning was real: the fix evaluates an aggregate at its HIGHEST slot and pushes
+high->low, because per-slot evaluation would run a side effect in the argument
+twice. The NSAA advance is still ahead, on aarch64. The fourth was not a
+present-tense quantity but a stale READER -- `intIdx` kept its name while the
+oracle took over its meaning.
+
+**Still open for this ticket:**
+
+- **i386**, the remaining gate row.
+- **`ABIA64CdeclArgSlot`'s fixed 8-byte NSAA advance** and its three readers,
+  for aarch64 -- unchanged, and now the only target where an aggregate
+  argument is still a pointer by construction rather than by classification.
+- **The INDIRECT cdecl arm still classifies inline** (`ir_codegen.inc`, the
+  `IR_CALL_IND` SysV arm): it keeps its own `intIdx < 6` / `sseIdx < 8` walk and
+  one slot per argument. So calling a struct-taking C function THROUGH A
+  FUNCTION POINTER is still marshalled as a pointer on x86-64. The mixed-link
+  subject does not contain that shape, which is why the gate is green with this
+  outstanding -- **that is a gap in the gate, not a passing grade**, and it is
+  the next thing to close.
+- `ABIParamSlotIsPointer` still answers True for every `tyRecord`. It is no
+  longer consulted for a register-classified C parameter (`ParamValueSize`
+  answers first), so it is stale rather than wrong -- but it is exactly the
+  kind of predicate the next reader will believe.

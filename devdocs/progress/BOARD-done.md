@@ -2722,6 +2722,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-cstatic-same-module-dup | C | 70 | regression | regression: test-core#src:test/cstatic_same_module_dup.c red at 99dcac2a2ade (auto-filed by twatch) | — |
 | regression-test-core-cstr-table-2d-rows | T | 70 | regression | regression: test-core#src:test/cstr_table_2d_rows.c red at 7eef29e052d2 (auto-filed by twatch) | — |
 | regression-test-core-csystem-libs-granular-libc-b113 | T | 70 | regression | regression: test-core#src:test/csystem_libs_granular_libc_b113.c red at b39ac8f02003 (auto-filed by twatch) | — |
+| regression-test-core-cva-arg-pointer-pointee-b201 | A | 70 | regression | regression: test-core#src:test/cva_arg_pointer_pointee_b201.c at 6e622be95680 in step 2/2, `/tmp/cva_arg_pointer_pointee_b20126; tools/expect_same.s` (auto-filed by twatch) | — |
 | regression-test-core-expect-same | T | 70 | regression | regression: test-core#src:tools/expect_same.sh@276 red at 9ced9bbc3e2d (auto-filed by twatch) | — |
 | regression-test-core-facade-and-paths | T | 70 | regression | regression: test-core#src:examples/tk/facade_and_paths.npy red at d64a5d6a97b4 (auto-filed by twatch) | — |
 | regression-test-core-field-class-identity | N | 70 | regression | regression: test-core#src:examples/tk/field_class_identity.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
