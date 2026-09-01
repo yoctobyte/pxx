@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: A
+blocked-by: [bug-a-two-threads-raising-object-exceptions-corrupt-the-heap]
+summary: "TRIAGED, do not bisect: this is not a compiler regression. decide-does-raise-of-an-existing-object-transfer-ownership settled that `raise` transfers ownership unconditionally (FPC oracle), so freeing at handler exit is the LANGUAGE and pxx is right. The test re-raises two objects created once, which is a use-after-free by that rule, and the test is what must change. Measured 2026-09-01 at 4a0dd77ef: it dies SINGLE-THREADED in phase 1 on the THIRD raise of the same object -- no threads, no TLS, no shadow chain. The rewrite needs each raise to construct, which is what walks into the blocker."
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 4 is `tools/expect_same.sh test_exception_threads_race26 "$(/tmp/test_exception_threads_race26)" "$(printf 'single hits=200000`. The job's own `src` (`test/test_exception_threads_race.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -225,3 +227,67 @@ The rewrite itself is scoped in the closed decide ticket, including the two
 things it must carry (the header sentence stops naming one mechanism, and the
 process-wide control has to fail at the SAME N — sensitivity is a hit rate, not
 a pass).
+
+
+## TRIAGE 2026-09-01 (frankC) — this is not a bisect, and the range above is a red herring
+
+`decide-does-raise-of-an-existing-object-transfer-ownership` is SETTLED for
+option (a): FPC frees a raised object it did not construct, so `raise` transfers
+ownership unconditionally, pxx's behaviour is the language's, and **this test is
+what must change.** Nothing below the named sha needs finding.
+
+### What it actually does now
+
+Measured on `compiler/pascal26` at `4a0dd77ef`, sha256 `4907c9f159d9…`,
+`--threadsafe`, three runs, deterministic:
+
+The failure is in **phase 1 — the SINGLE-THREADED control** — and the harness
+could not show that because the two `WriteLn`s are buffered into a pipe and lost
+on the fault. On a pty:
+
+```
+start
+created
+spinraw done hits=100000      <- 100k raises of an INTEGER, clean
+                              <- SpinAlpha faults here
+```
+
+Cut down to the object loop alone, printing per iteration, it is exact:
+
+```
+n=1     iter 1 ok    DONE
+n=2     iter 2 ok    DONE
+n=3     iter 1, iter 2, then SIGSEGV
+n=1000  iter 1, iter 2, then SIGSEGV
+```
+
+**It survives two raises of the same object and dies on the third**, with no
+thread ever created. So the test's own header — "phase 1 is that
+single-threaded control and it runs FIRST… a count from phase 2 means nothing
+without a run that cannot produce the failure" — is now describing a control
+that itself fails, which makes phase 2's number unreadable rather than merely
+absent.
+
+The fault is inside `PXXClassFinalizeManaged` (+119, `mov (%rax),%rax`, walking
+a freed link), reached from the handler-exit release. It is NOT `d402a25b2`:
+that commit landed 2026-09-01T21:29, hours AFTER the bad sha `e7be39f9a505`
+(13:24), and reverting its `ir.inc` hunk and rebuilding still faults 3/3. Checked
+rather than argued, because the crash is inside the routine that commit calls.
+
+### Why it stays open and blocked rather than being rewritten now
+
+The rewrite has to make each raise CONSTRUCT its object, since that is what the
+settled ownership rule requires. The test's header explains why it was written
+not to: "an exception that allocates takes the heap lock on every raise, which
+serialises the threads and hides the interleaving under test." So a correct
+rewrite either loses the race detector it exists to be, or allocates on two
+threads — which is precisely
+`bug-a-two-threads-raising-object-exceptions-corrupt-the-heap`. Wired as
+`blocked-by` for that reason.
+
+### For whoever picks it up
+
+Do not read the `bad e7be39f9a505 / last good 62e176c3c4e5` range as a lead. It
+is real but it dates the OWNERSHIP change's arrival, not a defect. And do not
+trust a run whose output is captured through a pipe: this program prints nothing
+on the way down, and "no output" reads identically to "crashed at line 1".

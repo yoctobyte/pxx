@@ -77,7 +77,7 @@ _none_
 | regression-test-core-test-rtl-fpc-compat-helpers-2 | T | 70 | regression | regression: test-core#src:test/test_rtl_fpc_compat_helpers.pas at 970eabd8eadf in step 2/2, `tools/expect_same.sh test_rtl_fpc_compat_helpers26 "$(/tmp/test_rtl_fpc_compat_helpers26 \| tail -1)" "total ok 23 / 23"` (auto-filed by twatch) | — |
 | regression-test-core-test-thread-api-no-uses | P | 70 | regression | regression: test-core#src:test/test_thread_api_no_uses.pas at 970eabd8eadf in step 1/2, `./compiler/pascal26 test/test_thread_api_no_uses.pas /tmp/test_thread_api_no_uses26` (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-compiler-srchash | T | 70 | regression | regression: test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh at fc9139c264df in step 2/2, `tools/run_sqlite_thread_test.sh aarch64 ./compiler/pasca` (auto-filed by twatch) | — |
-| regression-test-threads-test-exception-threads-race | A | 70 | regression | regression: test-threads#src:test/test_exception_threads_race.pas at e7be39f9a505 in step 2/4, `tools/expect_same.sh test_exception_threads_race26 "$(/t` (auto-filed by twatch) | — |
+| regression-test-threads-test-exception-threads-race | A | 70 | regression | TRIAGED, do not bisect: this is not a compiler regression. decide-does-raise-of-an-existing-object-transfer-ownership settled that `raise` transfers ownership unconditionally (FPC oracle), so freeing at handler exit is the LANGUAGE and pxx is right. The test re-raises two objects created once, which is a use-after-free by that rule, and the test is what must change. Measured 2026-09-01 at 4a0dd77ef: it dies SINGLE-THREADED in phase 1 on the THIRD raise of the same object -- no threads, no TLS, no shadow chain. The rewrite needs each raise to construct, which is what walks into the blocker. | bug-a-two-threads-raising-object-exceptions-corrupt-the-heap |
 | regression-test-threads-test-threadsafe-refcount-lockfree | T | 70 | regression | regression: test-threads#src:test/test_threadsafe_refcount_lockfree.pas at 1e37a55f6748 in step 2/2, `tools/expect_same.sh test_threadsafe_refcount_lockfree26 "$(/tmp/test_threadsafe_refcount_lockfree26 \| tail -n 2)" "$(p…` (auto-filed by twatch) | — |
 | regression-test-xtensa-test-signal-default-revert-b336 | A+S | 70 | regression | regression: test-xtensa#src:test/test_signal_default_revert_b336.pas at 370170edaffe in step 1/2, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
 | regression-test-xtensa-test-signal-handler-callback-b336 | A+S | 70 | regression | regression: test-xtensa#src:test/test_signal_handler_callback_b336.pas at 370170edaffe in step 1/3, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
@@ -949,7 +949,7 @@ _none_
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 80] [A] umbrella-cross-target-codegen-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
-- [p 75] [A] bug-a-two-threads-raising-object-exceptions-corrupt-the-heap
+- [p 75] [A] bug-a-two-threads-raising-object-exceptions-corrupt-the-heap (unblocks 1)
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [A] umbrella-managed-memory-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -971,7 +971,6 @@ _none_
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard3-6-2
 - [p 70] [T] regression-test-sqlite-threads-aarch64-compiler-srchash
-- [p 70] [A] regression-test-threads-test-exception-threads-race
 - [p 70] [T] regression-test-threads-test-threadsafe-refcount-lockfree
 - [p 70] [A+S] regression-test-xtensa-test-signal-default-revert-b336
 - [p 70] [A+S] regression-test-xtensa-test-signal-handler-callback-b336
@@ -1420,6 +1419,7 @@ _none_
 - **1** — bug-a-emitzeroframeslot-has-no-wasm32-arm
 - **1** — bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
+- **1** — bug-a-two-threads-raising-object-exceptions-corrupt-the-heap
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile

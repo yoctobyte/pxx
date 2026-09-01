@@ -56,7 +56,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 468, ranked
+## Ready — top 30 of 467, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
@@ -65,7 +65,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 80] [A]` umbrella-cross-target-codegen-is-correct
-- `[p 75] [A]` bug-a-two-threads-raising-object-exceptions-corrupt-the-heap
+- `[p 75] [A]` bug-a-two-threads-raising-object-exceptions-corrupt-the-heap (unblocks 1)
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [A]` umbrella-managed-memory-is-correct
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -87,6 +87,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
 - `[p 70] [T]` regression-test-sqlite-threads-aarch64-compiler-srchash
-- `[p 70] [A]` regression-test-threads-test-exception-threads-race
+- `[p 70] [T]` regression-test-threads-test-threadsafe-refcount-lockfree
 
-_438 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_437 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
