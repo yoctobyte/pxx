@@ -254,6 +254,15 @@ stale binary, a stale tree, a store-local `cat-file`, a truncated `tail`, a
 `grep -L` answering about a literal string. **None error. All answer.** So the
 guard cannot be "check for errors".
 
+**DO NOT TOUCH THE INSTRUMENT WHILE IT IS MEASURING.** Two runs lost on
+2026-09-02: a `git pull` mid-sweep left the binary snapshotted at one sha while
+the harness read test sources from a tree that had moved, and — worse —
+**editing a shell script that is currently RUNNING corrupts that run**, because
+`/bin/sh` reads a script INCREMENTALLY, not into memory. That one returned
+`rc=2` on three shards: a shell parse error wearing the shape of a verdict. The
+tell is an rc that no test in the harness can produce. Land the edit, then start
+a clean run from a tree equal to origin, and say which.
+
 **Do not ask "is it verified" — ask "what would this be if it were false", and go
 look at THAT.** A comment: read a caller. A slug: open the ticket. Twelve hex
 characters: `git merge-base --is-ancestor <sha> origin/master`, never
