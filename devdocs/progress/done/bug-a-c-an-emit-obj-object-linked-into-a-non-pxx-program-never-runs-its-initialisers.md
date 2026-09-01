@@ -140,4 +140,4 @@ now pins the opposite property and says why it changed, because a tripwire
 retired quietly is worse than none.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 0148feacf.
