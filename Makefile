@@ -6726,6 +6726,17 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_fresh_result_operand_leaks.pas $(TESTTMP)/test_dfro26
 	tools/expect_same.sh test_dfro26 "$$($(TESTTMP)/test_dfro26 | tail -n 2)" "$$(printf 'b=4 b0=n0 ib=4 ibsum=110\nDYNFRESHOPERAND OK')"
 	tools/assert_no_leak.sh dynarray_fresh_operand 50 $(TESTTMP)/test_dfro26
+	@# ...and the same ownership gap one call-shape over: a FRESH dyn-array result
+	@# passed to an OPEN-ARRAY param. The callee gets (data pointer, high) -- a raw
+	@# pointer -- and a dyn-array source already has the [len][data] layout, so it
+	@# went through with nothing owning it: allocs=921 frees=0, const and by-value
+	@# alike, both element kinds. test_open_array_no_leak does NOT cover this; it
+	@# passes NAMED STATIC arrays, which have an owner by construction. Again
+	@# assert_no_leak is the row that catches it -- the value assertions pass
+	@# either way (measured: live 1504 -> 7, "OPENARRAYFRESH OK" both times).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_open_array_fresh_result_leaks.pas $(TESTTMP)/test_oafr26
+	tools/expect_same.sh test_oafr26 "$$($(TESTTMP)/test_oafr26 | tail -n 2)" "$$(printf 'fail=0\nOPENARRAYFRESH OK')"
+	tools/assert_no_leak.sh open_array_fresh 50 $(TESTTMP)/test_oafr26
 	@# An `array of const` element built by an EXPRESSION had no owner: the
 	@# TVarRec slot is a bare pointer union with no finaliser, so the +1 was
 	@# unreachable to every scope-exit scan. 2977 -> 10 against this bound, with

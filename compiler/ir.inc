@@ -4491,6 +4491,30 @@ begin
     argAST := ASTRight[argAST];
   end;
 
+  { A FRESH dyn-array call result reaching an OPEN-ARRAY parameter has no owner.
+    The callee receives (data pointer, high) -- a RAW POINTER -- and a dyn-array
+    source already carries the [len][data] layout the param wants, so it is
+    passed straight through with nothing retaining or releasing it. `SumC(MkIA(i))`
+    measured allocs=921 frees=0: every array leaked whole, for `const` and
+    by-value alike and for both element kinds. The same ownership family as the
+    Copy/concat operands (ac02e5462) and the eight pointer seams before them.
+
+    Placed AFTER the comma unwrap so argAST is final, and after the STATIC-array
+    arms above, which build their own owned temp and must not take this path.
+
+    IRParkManagedDyn returns the value UNCHANGED unless it owns a fresh +1, so a
+    NAMED array, a literal `[1,2,3]` and an already-parked `Copy(...)` are all
+    untouched -- those three were measured clean before this and are kept as
+    controls in test_open_array_fresh_result_leaks.
+    bug-a-a-fresh-dyn-array-result-passed-to-an-open-array-param-is-never-freed }
+  if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     Procs[cpi].Params[pathIdx].IsArray and (not Procs[cpi].Params[pathIdx].IsRef) and
+     (NodeDynDepth(argAST) > 0) then
+  begin
+    Result := IRParkManagedDyn(IRLowerAST(argAST), argAST);
+    Exit;
+  end;
+
   argTk := IntToTypeKind(ASTTk[argAST]);
   needTemp := False;
   argRecId := REC_NONE;
