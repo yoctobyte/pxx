@@ -1309,6 +1309,7 @@ var i, j, k, idx, sz, pw, pnWords, whi, xtInBias, xtVReg, xtVReg2: Integer;
     a64Fp: Boolean;                      { AAPCS64 cdecl arm: this param is FP-bank }
     isEight: Boolean;                    { AAPCS soft-float 8-byte by-value param }
     wlo, whiEnd: Integer;                { i386 arg-offset walk bounds }
+    sIdx, nSlotsForParam, dstOff: Integer;  { x86-64 cdecl: slots OF one param }
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -2048,89 +2049,110 @@ begin
     intIdx := 0;
     sseIdx := 0;
     stackOff := 16;
+    { PARAM vs SLOT on the CALLEE side, the mirror of the caller split in the
+      SysV arms of IREmitNode. This walk advanced intIdx/sseIdx exactly once per
+      PARAMETER, which is the same conflation: a by-value aggregate arrives in 0,
+      1 or 2 registers and this could only ever consume one.
+
+      The caller needed slot ARRAYS because it pushes right-to-left and pops
+      left-to-right. This side walks parameters in order and consumes registers
+      in order, so the seam it needs is just an inner loop over the slots of one
+      parameter -- and at one iteration that is byte-identical AND semantically
+      identical, the early Continue included: a Continue in a one-trip inner loop
+      ends the same iteration it would have ended before.
+
+      dstOff is where step 2 puts the second eightbyte. Today sIdx is always 0,
+      so it is exactly Syms[idx].Offset and not a byte moves.
+      Step 1 of
+      bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee. }
     for i := 0 to nparams-1 do
     begin
       idx := Procs[procIdx].Params[i].SymIdx;
       sz := ParamSlotWordSize(idx);
-      if TypeIsFloat(Syms[idx].TypeKind) and
-         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+      nSlotsForParam := 1;   { step 2: the SysV classifier answers this }
+      for sIdx := 0 to nSlotsForParam - 1 do
       begin
-        if sseIdx < 8 then
+        dstOff := Syms[idx].Offset + sIdx * 8;
+        if TypeIsFloat(Syms[idx].TypeKind) and
+           (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
         begin
-          if Syms[idx].TypeKind = tySingle then EmitB($F3) else EmitB($F2);
-          EmitB($0F); EmitB($11);                    { movss/movsd [rbp+off], xmm[n] }
-          case sseIdx of
-            0: EmitB($85);  1: EmitB($8D);  2: EmitB($95);  3: EmitB($9D);
-            4: EmitB($A5);  5: EmitB($AD);  6: EmitB($B5);  7: EmitB($BD);
+          if sseIdx < 8 then
+          begin
+            if Syms[idx].TypeKind = tySingle then EmitB($F3) else EmitB($F2);
+            EmitB($0F); EmitB($11);                    { movss/movsd [rbp+off], xmm[n] }
+            case sseIdx of
+              0: EmitB($85);  1: EmitB($8D);  2: EmitB($95);  3: EmitB($9D);
+              4: EmitB($A5);  5: EmitB($AD);  6: EmitB($B5);  7: EmitB($BD);
+            end;
+            EmitI32(dstOff);
+            Inc(sseIdx);
+            Continue;
           end;
-          EmitI32(Syms[idx].Offset);
-          Inc(sseIdx);
+          { 9th+ float: the caller pushed it as double bits, so narrow a Single
+            here exactly as the internal all-stack arm does. }
+          EmitB($48); EmitB($8B); EmitB($85); EmitI32(stackOff);   { mov rax, [rbp+stackOff] }
+          Inc(stackOff, 8);
+          if Syms[idx].TypeKind = tySingle then
+          begin
+            EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
+            EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
+            EmitB($F3); EmitB($0F); EmitB($11); EmitB($85);
+            EmitI32(dstOff);                                 { movss [rbp+off], xmm0 }
+            Continue;
+          end;
+          EmitB($48); EmitB($89); EmitB($85); EmitI32(dstOff); { mov [rbp+off], rax }
           Continue;
         end;
-        { 9th+ float: the caller pushed it as double bits, so narrow a Single
-          here exactly as the internal all-stack arm does. }
-        EmitB($48); EmitB($8B); EmitB($85); EmitI32(stackOff);   { mov rax, [rbp+stackOff] }
-        Inc(stackOff, 8);
-        if Syms[idx].TypeKind = tySingle then
+
+        if intIdx >= 6 then
         begin
-          EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
-          EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
-          EmitB($F3); EmitB($0F); EmitB($11); EmitB($85);
-          EmitI32(Syms[idx].Offset);                                 { movss [rbp+off], xmm0 }
+          EmitB($48); EmitB($8B); EmitB($85); EmitI32(stackOff);   { mov rax, [rbp+stackOff] }
+          Inc(stackOff, 8);
+          if sz = 1 then begin EmitB($88); EmitB($85); end          { mov [rbp+off], al }
+          else if sz = 2 then begin EmitB($66); EmitB($89); EmitB($85); end
+          else if sz = 4 then begin EmitB($89); EmitB($85); end
+          else begin EmitB($48); EmitB($89); EmitB($85); end;
+          EmitI32(dstOff);
+          Inc(intIdx);
           Continue;
         end;
-        EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); { mov [rbp+off], rax }
-        Continue;
-      end;
 
-      if intIdx >= 6 then
-      begin
-        EmitB($48); EmitB($8B); EmitB($85); EmitI32(stackOff);   { mov rax, [rbp+stackOff] }
-        Inc(stackOff, 8);
-        if sz = 1 then begin EmitB($88); EmitB($85); end          { mov [rbp+off], al }
-        else if sz = 2 then begin EmitB($66); EmitB($89); EmitB($85); end
-        else if sz = 4 then begin EmitB($89); EmitB($85); end
-        else begin EmitB($48); EmitB($89); EmitB($85); end;
-        EmitI32(Syms[idx].Offset);
-        Inc(intIdx);
-        Continue;
-      end;
-
-      if intIdx < 4 then
-      begin
-        if sz = 1 then
+        if intIdx < 4 then
         begin
-          if (intIdx = 0) or (intIdx = 1) then EmitB($40);  { REX for dil, sil }
-          EmitB($88);
+          if sz = 1 then
+          begin
+            if (intIdx = 0) or (intIdx = 1) then EmitB($40);  { REX for dil, sil }
+            EmitB($88);
+          end
+          else if sz = 2 then begin EmitB($66); EmitB($89); end
+          else if sz = 4 then EmitB($89)
+          else begin EmitB($48); EmitB($89); end;
+          case intIdx of
+            0: EmitB($BD);   { rdi }
+            1: EmitB($B5);   { rsi }
+            2: EmitB($95);   { rdx }
+            3: EmitB($8D);   { rcx }
+          end;
+          EmitI32(dstOff);
         end
-        else if sz = 2 then begin EmitB($66); EmitB($89); end
-        else if sz = 4 then EmitB($89)
-        else begin EmitB($48); EmitB($89); end;
-        case intIdx of
-          0: EmitB($BD);   { rdi }
-          1: EmitB($B5);   { rsi }
-          2: EmitB($95);   { rdx }
-          3: EmitB($8D);   { rcx }
+        else if intIdx = 4 then
+        begin
+          if sz = 1 then begin EmitB($44); EmitB($88); EmitB($85); end
+          else if sz = 2 then begin EmitB($66); EmitB($44); EmitB($89); EmitB($85); end
+          else if sz = 4 then begin EmitB($44); EmitB($89); EmitB($85); end
+          else begin EmitB($4C); EmitB($89); EmitB($85); end;
+          EmitI32(dstOff);
+        end
+        else
+        begin
+          if sz = 1 then begin EmitB($44); EmitB($88); EmitB($8D); end
+          else if sz = 2 then begin EmitB($66); EmitB($44); EmitB($89); EmitB($8D); end
+          else if sz = 4 then begin EmitB($44); EmitB($89); EmitB($8D); end
+          else begin EmitB($4C); EmitB($89); EmitB($8D); end;
+          EmitI32(dstOff);
         end;
-        EmitI32(Syms[idx].Offset);
-      end
-      else if intIdx = 4 then
-      begin
-        if sz = 1 then begin EmitB($44); EmitB($88); EmitB($85); end
-        else if sz = 2 then begin EmitB($66); EmitB($44); EmitB($89); EmitB($85); end
-        else if sz = 4 then begin EmitB($44); EmitB($89); EmitB($85); end
-        else begin EmitB($4C); EmitB($89); EmitB($85); end;
-        EmitI32(Syms[idx].Offset);
-      end
-      else
-      begin
-        if sz = 1 then begin EmitB($44); EmitB($88); EmitB($8D); end
-        else if sz = 2 then begin EmitB($66); EmitB($44); EmitB($89); EmitB($8D); end
-        else if sz = 4 then begin EmitB($44); EmitB($89); EmitB($8D); end
-        else begin EmitB($4C); EmitB($89); EmitB($8D); end;
-        EmitI32(Syms[idx].Offset);
+        Inc(intIdx);
       end;
-      Inc(intIdx);
     end;
   end
   else
