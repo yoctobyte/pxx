@@ -186,7 +186,9 @@ one-line logbook pointer.
 - **D — verify snippets by compiling them.** Never touch `compiler/**` or `lib/**`.
 - **O — the levels:** `-O0` none · `-O1` debug-safe (intention, untested) · `-O2`
   the proven default · `-O3` experimental, **on track for `-O2`, it drains** ·
-  `-O4` research, never assumed. **Both must be CORRECT** — `-O4` is speculative
+  `-O4` research, never assumed — **RATIFIED (`54ba60170`) BUT NOT IMPLEMENTED:
+  the compiler answers `unknown option: -O4` and has never accepted it, so any
+  sweep or acceptance record naming `-O4` did not run that level.** **Both must be CORRECT** — `-O4` is speculative
   in value, never in correctness. **Trade-offs are a named flag, not a level**
   (`-Ofast`, `-Os`, `-funroll-loops` are sideways).
   **TWO gates, both required: PROMISE** (delivered value, measured — not
