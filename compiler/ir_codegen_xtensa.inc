@@ -1915,10 +1915,7 @@ begin
           riscv32 has all three (bug-a-riscv32-setlength-on-string-array-element-
           loses-length); arm32 has all three; xtensa had the first one's write
           arm alone. Ported verbatim rather than re-derived. }
-        if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
-            not Syms[IRA[left]].IsArray) or
-           (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
-            (IRTk[left] = Ord(tyAnsiString)) and ((elemSize = 1) or (elemSize = 2))) then
+        if IRIndexNeedsStrCOW(left, elemSize) then
         begin
           if InLValueWrite then
           begin

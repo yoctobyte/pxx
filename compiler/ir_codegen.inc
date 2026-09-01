@@ -3817,6 +3817,42 @@ begin
     ]);
 end;
 
+{ "is this indexed base a managed string, so an lvalue write to it needs
+  copy-on-write" — the ONE spelling of that rule. It was spelled independently
+  in all SEVEN backends, and the duplication had already gone wrong in the way
+  duplication does: six spelled the stride test `(elemSize = 1)`, aarch64
+  spelled it `(Integer(IRIVal[node]) = 1)` because it never hoisted the local,
+  so a grep for the common spelling returned SIX files and silently omitted the
+  seventh. A miss under a filter and a real absence look identical.
+
+  The copies had also drifted on SUBSTANCE, not only on spelling: this arm (the
+  x86-64 one) tested `symIdx >= 0` before reading `Syms[symIdx]`, and the other
+  six indexed `Syms[IRA[left]]` with no such guard. The guard is kept here, so
+  unifying can only ever remove a read of `Syms[-1]`, never add one — it is the
+  strictly safer of the two forms, which is what makes this a safe merge rather
+  than a vote.
+
+  Stride 8 is excluded on purpose: that is an `array of AnsiString`, whose IRTk
+  is tyAnsiString because the ELEMENT is a string, not the base. Strides 1 and 2
+  are the byte string and the UTF-16 string, and both need COW.
+  refactor-a-the-managed-string-index-cow-rule-is-spelled-seven-times }
+function IRIndexNeedsStrCOW(base, elemSize: Integer): Boolean;
+var
+  symIdx: Integer;
+begin
+  IRIndexNeedsStrCOW := False;
+  if base < 0 then Exit;
+  if IRKind[base] = IR_LEA then
+  begin
+    symIdx := IRA[base];
+    IRIndexNeedsStrCOW := (symIdx >= 0) and not Syms[symIdx].IsArray and
+                          (Syms[symIdx].TypeKind = tyAnsiString);
+  end
+  else if (IRKind[base] = IR_FIELD) or (IRKind[base] = IR_INDEX) then
+    IRIndexNeedsStrCOW := (IRTk[base] = Ord(tyAnsiString)) and
+                          ((elemSize = 1) or (elemSize = 2));
+end;
+
 { Does this IR node produce a managed string that is ALREADY owned (+1) by
   whoever receives it, so storing it MOVES rather than retains? A concat result
   and a user CALL result both are — and a call is a call whether it is direct,
@@ -6877,25 +6913,9 @@ begin
 
         IREmitNode(baseAddr);
 
-        { COW check for managed strings and dynamic arrays. }
-        isAnsiStr := False;
-        if IRKind[baseAddr] = IR_LEA then
-        begin
-          symIdx := IRA[baseAddr];
-          if (symIdx >= 0) and not Syms[symIdx].IsArray and
-             (Syms[symIdx].TypeKind = tyAnsiString) then
-            isAnsiStr := True;
-        end
-        else if ((IRKind[baseAddr] = IR_FIELD) or (IRKind[baseAddr] = IR_INDEX)) and
-                (IRTk[baseAddr] = Ord(tyAnsiString)) and ((elemSize = 1) or (elemSize = 2)) then
-        begin
-          { Char-indexing a scalar AnsiString field or array element (s[i]).
-            Stride 1 (byte string) or 2 (UTF-16) — both are a managed string
-            being indexed and both need copy-on-write. Stride 8 is excluded on
-            purpose: that is an `array of AnsiString`, whose IRTk is
-            tyAnsiString because the ELEMENT is a string, not the base. }
-          isAnsiStr := True;
-        end;
+        { COW check for managed strings and dynamic arrays — the rule itself
+          lives in IRIndexNeedsStrCOW, which all seven backends now ask. }
+        isAnsiStr := IRIndexNeedsStrCOW(baseAddr, elemSize);
 
         if isAnsiStr and InLValueWrite then
         begin

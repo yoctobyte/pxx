@@ -212,6 +212,16 @@ function CmpFusible(node: Integer): Boolean; forward;
   a second hand-rolled copy of "which stores may append in place" is how the
   guards get quietly weakened on one target and not another. }
 function IRIsSelfStrAppend(symIdx, valueNode: Integer): Boolean; forward;
+{ "is this indexed base a managed string, so an lvalue write needs COW" — the
+  ONE spelling of that rule, body in ir_codegen.inc, forwarded for the same
+  reason as the five above. Its history is the sharpest illustration yet of why
+  a hand-copied predicate is a hazard rather than a tidiness complaint: it was
+  written out in all SEVEN backends, six spelled the stride test one way and
+  aarch64 another, so grepping the common spelling found six files and silently
+  omitted the seventh — and separately, only the x86-64 copy guarded `>= 0`
+  before indexing Syms, so the other six could read Syms[-1]. Two independent
+  drifts in one rule, neither visible to a grep for the other. }
+function IRIndexNeedsStrCOW(base, elemSize: Integer): Boolean; forward;
 {$ifndef PXX_NO_AARCH64}{$include ir_codegen_aarch64.inc}{$endif}
 {$ifndef PXX_NO_I386}{$include ir_codegen386.inc}{$endif}
 {$ifndef PXX_NO_ARM32}{$include ir_codegen_arm32.inc}{$endif}

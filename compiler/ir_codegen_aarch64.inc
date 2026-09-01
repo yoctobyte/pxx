@@ -3836,10 +3836,7 @@ begin
             COW here either, matching the rest of this backend). }
           EmitI32($F9400000);                     { ldr x0, [x0] = data ptr }
         end
-        else if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
-            not Syms[IRA[left]].IsArray) or
-           (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
-            (IRTk[left] = Ord(tyAnsiString)) and ((Integer(IRIVal[node]) = 1) or (Integer(IRIVal[node]) = 2))) then
+        else if IRIndexNeedsStrCOW(left, Integer(IRIVal[node])) then
         begin
           if InLValueWrite then
           begin

@@ -1127,10 +1127,7 @@ begin
   left := IRA[node];
   lo := IRC[node];
   elemSize := Integer(IRIVal[node]);
-  isStr := ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString)
-            and not Syms[IRA[left]].IsArray)
-           or (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX))
-               and (IRTk[left] = Ord(tyAnsiString)) and ((elemSize = 1) or (elemSize = 2)));
+  isStr := IRIndexNeedsStrCOW(left, elemSize);
   savedLVW := InLValueWrite;
   WasmEmitValueAs(left, WT_I32, 'array base');
   if WasmBodyBroken then Exit;

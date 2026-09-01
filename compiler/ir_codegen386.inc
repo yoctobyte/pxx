@@ -4154,10 +4154,7 @@ begin
             COW here either, matching the rest of this backend). }
           EmitB($8B); EmitB($00);                     { mov eax, [eax] = data ptr }
         end
-        else if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
-            not Syms[IRA[left]].IsArray) or
-           (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
-            (IRTk[left] = Ord(tyAnsiString)) and ((elemSize = 1) or (elemSize = 2))) then
+        else if IRIndexNeedsStrCOW(left, elemSize) then
         begin
           if InLValueWrite then
           begin

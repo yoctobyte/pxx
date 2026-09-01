@@ -1829,10 +1829,7 @@ begin
           (which then segfaulted when scope-exit tried to release it).
           Mirrors the arm32 arm exactly.
           bug-a-riscv32-setlength-on-string-array-element-loses-length }
-        if ((IRKind[left] = IR_LEA) and (Syms[IRA[left]].TypeKind = tyAnsiString) and
-            not Syms[IRA[left]].IsArray) or
-           (((IRKind[left] = IR_FIELD) or (IRKind[left] = IR_INDEX)) and
-            (IRTk[left] = Ord(tyAnsiString)) and ((elemSize = 1) or (elemSize = 2))) then
+        if IRIndexNeedsStrCOW(left, elemSize) then
         begin
           if InLValueWrite then
           begin

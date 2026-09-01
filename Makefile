@@ -14164,6 +14164,15 @@ test-i386: $(COMPILER)
 	  if [ $$rc -ne 0 ]; then echo "i386/test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
 	  tools/expect_same.sh i386/test_i386_paramstr_long "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
 	@echo "i386 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + float-params + variant + variant-single + byref-params + setlen-str + setlen-varparam + in-operator + loadfile + sysopen-family + args + string-cow + frozen-strlen-deref + rec-arr-store + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + stackless-generator + proctype + scheduler + scheduler-exc + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin + paramstr-bounds ok (output identical to x86-64)"
+	# The indexed-managed-string COW rule, which lives in ONE predicate
+	# (IRIndexNeedsStrCOW) that all seven backends ask. Each line writes
+	# through one alias and reads back the other, so a predicate that stops
+	# firing yields a WRONG STRING rather than a crash. Compared against the
+	# x86-64 build of the same source rather than a .expected, so the two
+	# cannot drift apart.
+	./$(COMPILER) --target=i386 test/test_string_index_cow.pas $(TESTTMP)/tsic_i386
+	./$(COMPILER) test/test_string_index_cow.pas $(TESTTMP)/tsic_i386_x64
+	tools/expect_same.sh i386/test_string_index_cow "$$(tools/run_target.sh i386 $(TESTTMP)/tsic_i386)" "$$($(TESTTMP)/tsic_i386_x64)"
 
 test-aarch64: $(COMPILER)
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
@@ -14669,6 +14678,15 @@ test-aarch64: $(COMPILER)
 	  if [ $$rc -ne 0 ]; then echo "aarch64/test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
 	  tools/expect_same.sh aarch64/test_aarch64_paramstr_long "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
 	@echo "aarch64 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + variant + variant-single + setlen-str + setlen-varparam + str-length-index + in-operator + loadfile + sysopen-family + args + open-array-params + string-cow + frozen-strlen-deref + rec-arr-store + huge-frame + varrec-alloc + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin + paramstr-bounds ok (output identical to x86-64)"
+	# The indexed-managed-string COW rule, which lives in ONE predicate
+	# (IRIndexNeedsStrCOW) that all seven backends ask. Each line writes
+	# through one alias and reads back the other, so a predicate that stops
+	# firing yields a WRONG STRING rather than a crash. Compared against the
+	# x86-64 build of the same source rather than a .expected, so the two
+	# cannot drift apart.
+	./$(COMPILER) --target=aarch64 test/test_string_index_cow.pas $(TESTTMP)/tsic_a64
+	./$(COMPILER) test/test_string_index_cow.pas $(TESTTMP)/tsic_a64_x64
+	tools/expect_same.sh aarch64/test_string_index_cow "$$(tools/run_target.sh aarch64 $(TESTTMP)/tsic_a64)" "$$($(TESTTMP)/tsic_a64_x64)"
 
 test-riscv32: $(COMPILER)
 	# A `var` parameter of every scalar kind, plus var->var forwarding. The
@@ -15211,6 +15229,15 @@ test-riscv32: $(COMPILER)
 	  if [ $$rc -ne 0 ]; then echo "riscv32/test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
 	  tools/expect_same.sh riscv32/test_riscv32_paramstr_long "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
 	@echo "riscv32 c-entry + c-args + c-double-to-int + c-unsigned-arith + c-unsigned-div + hello + stackless-generator + readln + eof-stdin + exception + args + typed-const + global-init + set-param + inline-asm + record-byval-wide + bignum-ops + shared-pascal-battery + far-jump body + paramstr-bounds ok"
+	# The indexed-managed-string COW rule, which lives in ONE predicate
+	# (IRIndexNeedsStrCOW) that all seven backends ask. Each line writes
+	# through one alias and reads back the other, so a predicate that stops
+	# firing yields a WRONG STRING rather than a crash. Compared against the
+	# x86-64 build of the same source rather than a .expected, so the two
+	# cannot drift apart.
+	./$(COMPILER) --target=riscv32 test/test_string_index_cow.pas $(TESTTMP)/tsic_rv32
+	./$(COMPILER) test/test_string_index_cow.pas $(TESTTMP)/tsic_rv32_x64
+	tools/expect_same.sh riscv32/test_string_index_cow "$$(tools/run_target.sh riscv32 $(TESTTMP)/tsic_rv32)" "$$($(TESTTMP)/tsic_rv32_x64)"
 
 
 # ---------------------------------------------------------------------------
@@ -16098,6 +16125,15 @@ test-xtensa: $(COMPILER)
 	  if [ $$rc -ne 0 ]; then echo "xtensa/test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
 	  tools/expect_same.sh xtensa/test_xtensa_paramstr_long "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
 	@echo "hosted xtensa: 112 programs Call0 + 8 windowed, output identical to x86-64 (--xtensa-soft-mulhigh)"
+	# The indexed-managed-string COW rule, which lives in ONE predicate
+	# (IRIndexNeedsStrCOW) that all seven backends ask. Each line writes
+	# through one alias and reads back the other, so a predicate that stops
+	# firing yields a WRONG STRING rather than a crash. Compared against the
+	# x86-64 build of the same source rather than a .expected, so the two
+	# cannot drift apart.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_string_index_cow.pas $(TESTTMP)/tsic_xt
+	./$(COMPILER) test/test_string_index_cow.pas $(TESTTMP)/tsic_xt_x64
+	tools/expect_same.sh xtensa/test_string_index_cow "$$(tools/run_target.sh xtensa $(TESTTMP)/tsic_xt)" "$$($(TESTTMP)/tsic_xt_x64)"
 
 test-arm32: $(COMPILER)
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
@@ -16597,6 +16633,15 @@ test-arm32: $(COMPILER)
 	  if [ $$rc -ne 0 ]; then echo "arm32/test_paramstr_long_arg: FAIL rc=$$rc (124 = the argv overflow runaway is back)"; exit 1; fi; \
 	  tools/expect_same.sh arm32/test_arm32_paramstr_long "$$out" "$$(printf 'count=2\nexpr[1]len=5\nexpr[2]len=255\nmanaged=300\ndone')"
 	@echo "arm32 hello + arith + procs + loops + write + varparam + syscall + heap + string + record + dynarray + exception + float + args + variant + variant-single + strresult + setlen-str + setlen-varparam + str-length-index + in-operator + managed-aggregate-locals + loadfile + sysopen-family + string-cow + frozen-strlen-deref + rec-arr-store + var-string-param + openarray-string + stack-params + aggregate-stackargs + int64 + int64-byref + aoc-types + many-params + conformance2 + shortcircuit + ptr-arith + case-range + global-init + typed-const + multidim + named-array + record-2darray + param-2darray + multidim3d + const-alias + float-const + classes + method-pointers + aggregate-return + metaclass-rtti + rtti-typinfo + streaming + streaming-enumset + lfm + interfaces + dynarray-field + nested-dynarray-setlen + method-implicit-field + forin-implicit-field + dynarray-global-after-method + forin-member-access + call-result-member + collections + timer + reactor + asyncecho + extern-c + extern-c-float + c-entry + c-args + c-double-to-int + readln + eof-stdin + paramstr-bounds ok (output identical to x86-64)"
+	# The indexed-managed-string COW rule, which lives in ONE predicate
+	# (IRIndexNeedsStrCOW) that all seven backends ask. Each line writes
+	# through one alias and reads back the other, so a predicate that stops
+	# firing yields a WRONG STRING rather than a crash. Compared against the
+	# x86-64 build of the same source rather than a .expected, so the two
+	# cannot drift apart.
+	./$(COMPILER) --target=arm32 test/test_string_index_cow.pas $(TESTTMP)/tsic_a32
+	./$(COMPILER) test/test_string_index_cow.pas $(TESTTMP)/tsic_a32_x64
+	tools/expect_same.sh arm32/test_string_index_cow "$$(tools/run_target.sh arm32 $(TESTTMP)/tsic_a32)" "$$($(TESTTMP)/tsic_a32_x64)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,
