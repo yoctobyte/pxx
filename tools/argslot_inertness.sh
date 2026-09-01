@@ -120,6 +120,10 @@ exit 1
 #   direct SysV cdecl arm    -> 3 rows moved (c_abi_glibc_oracle, c_abi_pure_c_control,
 #                               c_abi_indirect_stackargs, all x86_64)
 #   indirect cdecl arm       -> 1 row moved (c_abi_indirect_stackargs.x86_64)
+#   x86-64 CALLEE spill      -> 2 rows moved (c_abi_indirect_stackargs.x86_64,
+#                               c_abi_pure_c_control.x86_64)
+# Two of the four x86_64 rows reach the callee arm, not all four -- recorded as
+# the number it is rather than rounded up to "the corpus covers it".
 # The indirect arm rests on a SINGLE source. That is real coverage and it is
 # thin; a second indirect-call source would be the cheapest strengthening here.
 # Neither proof is re-run automatically -- they are claims about the corpus, and
