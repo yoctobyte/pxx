@@ -2737,6 +2737,63 @@ bisect. This is the same asymmetry as `## Do not read a green as coverage`, one
 level up: there the green was empty, here the green was actively contradicted by
 its own log body. Both print PASS.
 
+### And the fourth case: the bisect is simply RIGHT
+
+**Read this one before the three above, because they are not a representative
+sample.** All three describe a named commit that is innocent -- propping up an
+older bug, retiring a stale expectation, un-swallowing a failure -- and three
+entries pointing the same way is a prior that will talk you out of a correct
+bisect result. Most bisects are just correct. The three cousins are written down
+because they are the expensive minority, not because innocence is the base rate.
+
+The discriminator is the one the un-swallowing entry already names, used in the
+other direction: **does the named commit's diff touch the SUBJECT?** frankC's
+`6e622be95`, measured 2026-09-01, does -- it changes parameter spilling in
+`ir_codegen.inc` and the failing test is parameter marshalling. Nothing to
+reinterpret; the refactor really did break it, and `747d3479f` fixed it.
+
+I guessed wrong about it, and the shape of the wrong guess is the lesson. The
+same peer had just told me about a size assumption that was correct only because
+8 happened to be where a convention switched, so when their next commit went red
+I reached for a boundary that had stopped coinciding -- a hypothesis arriving
+pre-confirmed off a streak, which is `## A diagnosis shaped like the last fix`.
+The actual cause was not a boundary, a width or an offset. It was a REGISTER:
+
+```
+if (intIdx = 0) or (intIdx = 1) then EmitB($40);   { REX for dil, sil }
+```
+
+The refactor made an oracle advance `intIdx` and converted every reader to
+`slotReg` -- except this one. `dil`/`sil` are unaddressable without a REX
+prefix, so with `intIdx` already advanced the prefix was dropped and
+`mov %sil, off(%rbp)` assembled as `mov %dh, off(%rbp)`: the high byte of RDX.
+
+**A RENAME IS NOT DONE WHEN THE COMPILER STOPS COMPLAINING.** Nothing complains
+here -- `intIdx` is still a perfectly good variable that now means something
+else, so the conversion is checked by grep and the grep is checked by nobody.
+Every other reader was a branch condition or a `case` selector; this one is a
+nested `if` inside the `sz=1` arm. The scan was pattern-matching on syntactic
+POSITION without knowing it, and the instance in a different position is exactly
+the one that survives. Same animal as the `@for` regex two sections up: correct
+about its pattern, wrong about its population.
+
+**And the inertness proof did not catch it** -- 15 byte-identical images across
+four targets plus six shapes compiled against a kept pre-change binary, all
+genuinely green, arms asserted to differ, subjects asserted present. Not one of
+them passed a narrow argument in `rdi` or `rsi`. The denominator discipline was
+aimed at "did the comparison run" and not at "can the corpus contain the
+defect". Those are two different questions and guarding the first makes the
+second feel handled -- see `## An instrument that reports a RESULT should report
+its DENOMINATOR`, and the A/B version of the same trap in the entry above.
+
+Its regression test (`test/c_abi_narrow_reg_params.c`) is worth reading for the
+control alone. First written as `(long w, char a, ...)`, which puts `a` in `sil`
+-- so it failed against the broken compiler exactly as the positive row did, a
+second positive wearing a control's label. Two WIDE parameters now hold `rdi`
+and `rsi` so every narrow one lands in `rdx` onward. It was caught by running
+the control against a deliberately re-broken compiler instead of trusting the
+arrangement, which is the only thing that ever catches this.
+
 ## When you are about to conclude something
 
 Check it against a second source before writing it down. Every wrong root cause
