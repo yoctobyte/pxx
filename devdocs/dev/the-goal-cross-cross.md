@@ -35,6 +35,20 @@ NOT demoted, because they are architectures under Linux rather than other
 kernels: `umbrella-cross-target-codegen-is-correct` (80 — xtensa, i386, arm32,
 riscv32) and `umbrella-managed-memory-is-correct` (75).
 
+**DEMOTED IS NOT FORBIDDEN, and this half is easy to lose.** The owner, same
+ruling: *"i didn't say do not do any wasm work at all, if the underlying cause
+is identical or similar, might as well fix it on the fly. memory leaks are
+indeed a high prio."* So a shared root cause is worked in full — you do not stop
+at the Linux arm of a bug whose other arm is wasm, and you do not file the
+remainder as a separate low ticket. **A CLASS OF DEFECT IS RANKED BY THE
+MECHANISM, NEVER BY THE PLATFORM IT SURFACES ON** — the same rule the F tag
+already states for float. What is demoted is *platform-shaped work*: a port, a
+runtime host, a capability model for one kernel.
+
+This is why `bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa` keeps
+its **75** from `umbrella-managed-memory-is-correct` although its remaining work
+is wasm32-only. It is a leak, and leaks rank as leaks.
+
 ## The goal is a matrix, and its cells are the only things worth rating
 
 **Languages** (what pxx compiles): Pascal, C, Nil-Python, Rust, Zig.

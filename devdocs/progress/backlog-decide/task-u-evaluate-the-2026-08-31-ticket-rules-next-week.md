@@ -85,3 +85,48 @@ quieter and the rules did nothing.
 moved 424 files, and `--diff-filter=A` counts every move as a birth. Next week's
 measurement is clean — use earliest-add-per-slug, and `git log --follow` for
 anything the split touched.
+
+## The umbrella instrument — measured 2026-09-01, one day in
+
+The owner asked whether the grouping/umbrella scheme is *measurable*. It is,
+with three numbers. All three are one script; recompute them on 09-07.
+
+| | metric | 08-31 | 09-01 |
+| --- | --- | --- | --- |
+| 1 | **edge coverage** — open tickets with a real `blocked-by` | 42/467 = **9.0%** | 50/561 = **8.9%** |
+| 2 | **lift rate** — ranked Track A rows whose position inheritance CHANGES | (n/a) | 4/136 = **3%** |
+| 3 | **steered share** — closed tickets that were under an umbrella | (n/a) | 5/42 = **11.9%** |
+
+**Metric 3 against metric 2 is the whole instrument, and it is the one that can
+come out false.** Umbrella-lifted rows are 3% of the queue and took 11.9% of the
+closed work — roughly **4x over-representation**. If the ranker were decoration,
+those two would be equal.
+
+**Why the RATIO and not metric 2 alone:** lift rate is trivially gamed by wiring
+every ticket to an umbrella. But wiring everything drives metric 2 toward 100%,
+which collapses the ratio to 1. The instrument corrects for its own gaming; a
+raw lift rate does not. **Read the ratio, never the lift rate by itself.**
+
+### What it says today
+
+**The mechanism works where it is wired; the wiring is the bottleneck.** Two of
+the four lifted rows are exactly the two that got worked last night. But edge
+coverage did not move at all — 9.0% to 8.9% — while the open backlog grew
+467 -> 561. Umbrellas cannot rank what has no edge, so 97% of Track A still
+ranks on a bare `prio:`, which is the number the owner called insufficient.
+
+### Confounds, stated so 09-07 does not read them as signal
+
+- **n = 42 closed, numerator 5.** Small.
+- **Part of metric 3 is me, not the ranker.** I pointed frankB at
+  `umbrella-managed-memory-is-correct` and asked it to wire its closed children.
+  A human pointing at an umbrella is not the ranker steering. On 09-07, prefer
+  work nobody was pointed at.
+- **One day.** The rules landed 08-31; this is the next morning.
+
+### The falsifier, written down in advance
+
+If on 09-07 **edge coverage is still ~9%**, the umbrella scheme has failed in
+practice regardless of what metric 3 says — because it will mean the only edges
+are the ones a human asked for by name, and the scheme's claim was that agents
+wire them while closing groups. Say that plainly rather than quoting the ratio.
