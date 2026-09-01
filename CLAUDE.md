@@ -279,7 +279,15 @@ from the cause.** A crash has a location and is the cheap case.
 `PXXDBG` exists because editing a probe into the compiler and self-compiling
 (~90s) is how a **wrong root cause got recorded**. Do not theorise about an
 inferred type; print it. **Check every conclusion against a second source before
-writing it into a ticket.**
+writing it into a ticket — but a second source only counts if it FAILS
+DIFFERENTLY. Two readings that can go wrong the same way are one reading.**
+Measured 2026-09-01: two sessions produced the same wrong count from the tstate
+archive at the same time, from different causes (guessed keys sorting as `None`;
+a job-name substring that swallowed all six shards), and the agreement read as
+corroboration. The wide match also **synthesised a structural finding that did
+not exist** — shards clearing in two groups reads exactly like one job flapping
+— so **a "finding" that falls out of a grep needs the same interrogation as one
+that falls out of a hypothesis.**
 
 **`devdocs/dev/debugging-playbook.md` has the tool for your case — LOOK UP THE
 SECTION.** 279KB, ~70k tokens, 72 sections; `grep '^## '` lists them free.
