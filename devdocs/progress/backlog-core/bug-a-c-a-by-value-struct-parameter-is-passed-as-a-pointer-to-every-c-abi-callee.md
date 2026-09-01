@@ -315,3 +315,26 @@ This is the same shape as frankA's NSAA note recorded above -- a quantity that
 is right today BECAUSE of the current convention and becomes wrong on the first
 commit that changes it. Two now, in one ticket, from two people, found the same
 way: by asking what a present-tense fact depends on.
+
+### How far that prerequisite actually reaches — READ, NOT EXECUTED
+
+The 41-of-52 figure is from **`compiler.pas`, which is Pascal**. On the C path
+the id looks resolved: `precid[nparams] := CTypeBaseRec` is set at parse time
+(`cparser.inc:10699`, commented "record id for a tyRecord param") and
+`LastTypeRecId := precid[i]` sits on the line immediately before the
+`AllocParam` call (`cparser.inc:11161`). `ParamValueSize` reads
+`Syms[idx].RecName`, which AllocParam fills from `LastTypeRecId`, so for a C
+record parameter it should be the real id rather than `REC_NONE`.
+
+**If that holds, the prerequisite blocks the PASCAL half of this change and not
+the C half** — and this ticket's gate (`test-c-abi-mixed-link`) is C-only. That
+would make step 2 for the C ABI reachable without fixing the sizing bug first,
+while leaving `blocked-by` correct for the ticket as a whole.
+
+**It is a conclusion from reading two lines, not from running anything.** No
+instrumented build was made and no slot size was observed; the two citations are
+what it rests on. Whoever takes step 2 should measure it before relying on it —
+the cheap way is to make one C record parameter non-`isRef` and check the frame
+slot is `RecSize` and not 8. Recorded at this strength on purpose rather than
+promoted to a finding.
+
