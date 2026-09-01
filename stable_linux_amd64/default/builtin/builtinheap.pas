@@ -154,6 +154,14 @@ function PXXStrConcat(lenA: NativeInt; srcA: Pointer; srcB: Pointer; lenB: Nativ
   silent-wrong-value bug (`t := s + 'x'` with a refcount-1 s would grow s); the
   slot is what removes the guess. }
 procedure PXXStrAppend(strSlot: Pointer; srcB: Pointer; lenB: NativeInt);
+{ The two shapes a backend actually needs for `s := s + x`, so that the work of
+  unpacking the right operand lives HERE, in Pascal, once -- rather than being
+  hand-encoded into each instruction set. x86-64 open-codes that unpacking in
+  EmitAnsiStrAppendToSym and predates these; every other backend calls these.
+  Both are plain 2-argument registered procedures, which is the whole point:
+  emitting a call is the one thing every backend already does. }
+procedure PXXStrAppendStr(strSlot: Pointer; srcH: Pointer);
+procedure PXXStrAppendChar(strSlot: Pointer; chCode: NativeInt);
 { Word-at-a-time forward block copy; answers $80 if any byte copied had its high
   bit set (the one bit PXXStrMeta reads), else 0. Word loop only when both ends
   are machine-word aligned — ARM32 faults otherwise. }
@@ -254,6 +262,30 @@ const
     reason. See bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython. }
   PXX_FLAG_APPENDABLE = $2000;
 
+  { The refcount a compiler-built static block is born with, and the floor that
+    identifies one at runtime. MUST equal MSTR_STATIC_RC in compiler/defs.inc —
+    the same deliberate duplication as the header constants above (that file is
+    included into the compiler; this one is COMPILED by it), pinned by
+    test_static_string_literals asserting a runtime VALUE rather than the
+    constants themselves, so a drift shows up as a wrong answer and not as a
+    silent agreement.
+
+    Read as a FLOOR, not as an equality, and the difference is what makes the
+    guard safe to roll out one site at a time. x86-64 hand-emits its retain and
+    release sequences and does not go through the two routines below, so for a
+    while some operations on a static block are guarded and some are not. That
+    cannot run away, because the guard un-arms itself: an unguarded decrement
+    takes rc to FLOOR-1, at which point every guarded increment stops being
+    skipped and behaves exactly as it does today. rc therefore oscillates just
+    under the floor instead of drifting toward zero — bounded by the number of
+    simultaneously live references, never by elapsed time.
+
+    That distinction is worth stating because this ticket's own motivation says
+    2^30 IS reachable: 2.5M literal stores a second for 400 seconds. True, and
+    it is about *removing the increment unconditionally*, which nets -1 per
+    store/overwrite cycle forever. A floor test is not that change. }
+  PXX_STATIC_RC_FLOOR = $40000000;
+
   { KindData0, bits 16-23: text encoding. A small enum, NOT a codepage —
     CP_UTF8 (65001) would not fit, and this is the field pxx actually wants. }
   PXX_ENC_BYTES = 0;
@@ -273,6 +305,16 @@ const
   VT_STRING_TAG = 6;
   VT_PROMO_FIRST = 8192;   { promo-block tags ride as a managed AnsiString of the decimal }
   VT_PROMO_LAST  = 8199;
+
+  { A PROMO SLOT (not a variant holding one) is {tag, payload}, two NATIVE
+    words, and its heap-tier payload is a managed AnsiString of the decimal --
+    the same representation the variant tags above already ride. promocore.pas
+    owns this constant; it is repeated here because a builtin unit cannot use
+    another one, and a drift would show up as the element walks below silently
+    releasing nothing. test_promoint_array_cleanup.pas is what makes that loud:
+    it asserts the array does not leak, so a wrong tag fails it rather than
+    quietly restoring the leak this was written to fix. }
+  PROMO_TAG_HEAP = 1;
 
   PXX_OBJ_MAGIC = $505942F1;   { low bits 001 — never an allocator size word }
   { RAW variant of the tag: a refcounted heap block that is NOT a class
@@ -310,6 +352,18 @@ var
                        then zero it so an expected halt(100) exits 0. }
   ExitCode: Longint;
 
+  { Set by pylib's INITIALIZATION section, so it is live for the whole run of
+    any NilPy program. Do not go back to installing it from a constructor: it
+    used to be set only by pylib/pyeval's CONTAINER constructors (pylist_new,
+    pydict_new, pybound_new, bytes, the iterators), and the name is what hid
+    that — "object finalize" reads as covering every object, while the
+    installation covered lists, dicts, bytes and iterators. A program that
+    built user-class instances and never a container therefore ran with this
+    nil, and PXXObjRelease freed each instance BLOCK at rc=0 without releasing
+    one managed field: 410 MB over 200k constructions, flat at 980 kB the
+    moment an unrelated `dummy = [1]` was added. The per-constructor installs
+    are kept as a belt on any profile whose unit initialization does not run.
+    feature-nilpy-object-reclamation }
   PXXObjFinalizeHook: TPXXObjFinalize;
 function PXXObjAlloc(size: NativeInt): Pointer;
 function PXXObjAllocRaw(size: NativeInt): Pointer;
@@ -428,6 +482,7 @@ function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarReleasePayload(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
+procedure PXXPromoRetainOne(p: Pointer);
 procedure PXXWriteVariant(v: Pointer);
 { Exact 17-significant-digit decimal expansion of a finite non-zero |Double|.
   Exposed so builtin.pas's `Str(F, S)` shares the ONE correct implementation
@@ -640,6 +695,15 @@ const
     the RARE big blocks only. 64 bins x one word = 512 bytes of BSS, which the
     ESP static-arena build can afford too. }
   HEAP_BIN_MAX   = 512;                     { largest size with its own bin }
+  CEN_BIG_MIN    = 65536;                   { -dPXX_ALLOC_BIG traces at or above this }
+  { Span at which `rep stosb` starts beating the word loop in PXXMemZero. Swept
+    on x86-64 (see the note there); a wrong value costs throughput, never
+    correctness -- both arms zero the same bytes. }
+  MEMZERO_REP_MIN = 64;
+  { Span below which PXXAlloc's bin path zeroes INLINE rather than calling
+    PXXMemZero. Not a rival implementation -- purely the call boundary; above it
+    PXXMemZero decides everything. Swept on x86-64. }
+  ALLOC_INLINE_ZERO_MAX = 64;
   HEAP_BIN_COUNT = HEAP_BIN_MAX div 8;      { 64: classes 8,16,...,512 }
   { -dPXX_HEAP_DEBUG only: how many freed blocks are held out of the free list
     before one is really reused. Big enough that a dangling read almost always
@@ -723,6 +787,26 @@ var
     holding the spinlock would deadlock the PXX_TS_SOFTLOCK build. }
   HeapDbgPend   : Integer;                 { 0 none, 1 double free, 2 write-after-free }
   HeapDbgAddr   : Int64;
+  { Provenance for a WRITE AFTER FREE, all of it already known at detection and
+    formerly discarded. The OFFSET is the useful one: it is relative to the
+    payload address, which for a managed block IS the block base, so it reads
+    straight off the header map -- 0 is PXX_HDR_META (and the free-list next
+    link, which share that word), 8 is PXX_HDR_RC, 16 is PXX_HDR_LEN, and
+    >= PXX_HDR_SIZE is the string/array payload. "Someone wrote here" and
+    "someone wrote the LENGTH of a freed string" are different bugs. }
+  HeapDbgSize   : Int64;                   { the victim's block size }
+  HeapDbgOff    : Int64;                   { first byte that was not poison }
+  HeapDbgVal    : Int64;                   { the machine word written there }
+  { A window of the victim's bytes from the first broken one. The single most
+    identifying field measured on this bug so far was a corrupt bin head that
+    decoded to `Char` -- the WRITER'S DATA, naming the compiler's own token
+    stream in one step. A freer PC says who let go; the payload says who
+    scribbled, and the scribbler is the one being hunted. Static storage: this
+    path may allocate nothing. }
+  HeapDbgBytes  : array[0..15] of Byte;
+  HeapDbgNBytes : Integer;
+  HeapDbgStack  : array[0..31] of Int64;
+  HeapDbgNStack : Integer;
 {$endif}
   { A single shared, read-only NUL byte. PChar of an empty managed string (a nil
     handle) returns its address so the C boundary sees a valid empty C string, as
@@ -1024,7 +1108,78 @@ end;
 { Defined after PXXSysWrite, which is what it writes through. Forward here
   because the trigger is inside PXXAlloc and the printer cannot be. }
 procedure PXXCensusReport; forward;
+{$ifdef PXX_ALLOC_BIG}
+procedure PXXCensusBig(size: NativeInt); forward;
 {$endif}
+{$endif}
+
+{ ---- out of memory, reported rather than faulted ----
+
+  A DELIBERATE REVERSAL of the decision stated at HeapMmap's terminal arm, and
+  it is narrower than that decision was. The comment there says PXXAlloc "does
+  NOT check the result (deliberately -- on a hosted target a failed mmap returns
+  a negative errno and the next access faults), so the returned value IS the
+  base of the heap". That rationale is about targets with NO PAGE PROTECTION,
+  where 0 is the value that fails silently -- which is how wasm32 shipped a heap
+  at address zero. It does not apply to a hosted target that has a real errno to
+  report, and there the cost was two sessions spent on an anonymous SIGSEGV:
+  pc in PXXAlloc, `STR r1,[r0]`, r0 = 0xfffffff4 = -12 = -ENOMEM, no diagnostic.
+  The terminal `Result := -1` arm keeps its meaning; it now reaches a message
+  instead of a fault. }
+
+function PXXSysWrite(fd, buf, count: NativeInt): Int64; forward;
+
+function HeapMmapFailed(p: Int64): Boolean;
+{ TEST THE ERRNO RANGE, NEVER THE SIGN, and this is the whole subtlety of the
+  fix. The kernel reserves [-4095,-1] for -errno and no successful call may
+  land there, but the 32-bit backends widen a syscall return to Int64 by two
+  DIFFERENT conventions:
+
+    i386   (ir_codegen386.inc)      errno range sign-extends NEGATIVE; every
+                                    other value, INCLUDING a high address with
+                                    bit31 set, zero-extends POSITIVE.
+    arm32  (ir_codegen_arm32.inc)   `mov r1, r0, asr #31` -- unconditional
+                                    sign-extend, so an address >= $80000000
+                                    also arrives NEGATIVE.
+
+  So `p < 0` would report out-of-memory for a perfectly good mapping on arm32 --
+  the exact target this bug was measured on, in the exact 3.5 GB address space
+  where high mappings are ordinary. The range test is correct under both
+  conventions, because a sign-extended high address is far BELOW -4095.
+
+  Zero is the other failure and it is not hosted-specific: the wasm/bare arena
+  is handed out once and HeapMmap returns 0 afterwards, and 0 is the value the
+  terminal arm's comment calls out as the one that fails silently where there is
+  no page protection. }
+begin
+  HeapMmapFailed := (p = 0) or ((p < 0) and (p >= -4095));
+end;
+
+const
+  OOM_MSG = 'pxx: out of memory (heap arena mmap failed)';
+
+procedure PXXHeapExhausted;
+{ Never returns. Writes BYTE AT A TIME through the raw syscall, exactly as
+  PXXDbgFlush's reporter does, because the one thing this path must not do is
+  allocate: it runs when the allocator has just failed, so `writeln` -- which
+  builds a string -- would re-enter PXXAlloc. Any spinlock still held is moot,
+  the process is ending.
+
+  203 is FPC's heap-overflow runtime error, so a caller testing ExitCode sees
+  the code it would see from FPC rather than a pxx invention. }
+var i: Integer; b: Byte; r: Int64;
+begin
+  r := 0;
+  for i := 1 to Length(OOM_MSG) do
+  begin
+    b := Byte(OOM_MSG[i]);
+    r := PXXSysWrite(2, Int64(@b), 1);
+  end;
+  b := 10;
+  r := PXXSysWrite(2, Int64(@b), 1);
+  Halt(203);
+end;
+
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var
   cur, prev, base, need, arena, i: Int64;
@@ -1045,6 +1200,15 @@ begin
   CensusBytes := CensusBytes + size;
   if size <= HEAP_BIN_MAX then
     CensusBins[Integer(size shr 3) - 1] := CensusBins[Integer(size shr 3) - 1] + 1;
+{$ifdef PXX_ALLOC_BIG}
+  { The census's bins stop at HEAP_BIN_MAX, so the allocations that actually
+    consume the arenas are the ones it cannot see: on a 32-bit host building
+    compiler.pas, 5931 of 19780 allocations are above the top bin and carry
+    essentially all of the 4.4 GB. This prints those individually, which turns
+    a total into a SEQUENCE -- a doubling series, a repeated constant and a
+    slow ramp are three different bugs and the total cannot tell them apart. }
+  if size >= CEN_BIG_MIN then PXXCensusBig(size);
+{$endif}
 {$endif}
 
   { Free-list nodes are payload addresses; the size header is at [cur-8] and the
@@ -1065,14 +1229,28 @@ begin
 {$ifdef PXX_ALLOC_CENSUS}
       CensusReuse := CensusReuse + 1;
 {$endif}
-      i := 0;
-      while i < size do
+      { Two arms, and the split is a CALL boundary, not a second zeroing
+        algorithm: PXXMemZero owns the policy (it picks word loop vs `rep
+        stosb` at MEMZERO_REP_MIN), and this arm exists only because a call to
+        it costs more than the whole job for a span of one or two words. The
+        loop that used to stand here unconditionally was the real defect --
+        it never reached `rep stosb` at ANY size, so the reuse path paid a
+        per-byte price that grew without bound. Measured, 3M allocs:
+        call-always is 0.91x at 8 bytes and 0.92x at 32 (a real regression,
+        old faster in 9 of 9 interleaved rounds) but 1.75x at 256 and 4.53x
+        at 2048. }
+      if size <= ALLOC_INLINE_ZERO_MAX then
       begin
-        PWord(cur + i)^ := 0;
-        i := i + SizeOf(NativeInt);        { PWord writes one machine word: 8 on
-                                             64-bit, 4 on 32-bit — must match the
-                                             step or half the span is skipped }
-      end;
+        i := 0;
+        while i < size do
+        begin
+          PWord(cur + i)^ := 0;
+          i := i + SizeOf(NativeInt);        { PWord writes one machine word: 8 on
+                                               64-bit, 4 on 32-bit — must match the
+                                               step or half the span is skipped }
+        end;
+      end
+      else PXXMemZero(Pointer(cur), size);
       Result := Pointer(cur);
 {$ifdef PXX_TS_SOFTLOCK}
       PXXHeapSpin := 0;
@@ -1098,12 +1276,15 @@ begin
 {$ifdef PXX_ALLOC_CENSUS}
         CensusList := CensusList + 1;
 {$endif}
-        i := 0;
-        while i < size do
-        begin
-          PWord(cur + i)^ := 0;
-          i := i + SizeOf(NativeInt);
-        end;
+        { PXXMemZero, not a hand-rolled word loop. The loop that used to be here
+          (and in the bin path above) is the SECOND spelling of a primitive this
+          unit already exports: PXXMemZero is `rep stosb` on x86-64 and falls
+          back to the same word/byte pair everywhere else, so the loop bought
+          nothing and cost the reuse path its whole per-byte budget. Measured:
+          the pxx/FPC ratio on `b := nil; SetLength(b, N)` grew with N --
+          1.32x at 32 bytes, 2.29x at 256, 4.62x at 2048 -- which is the
+          signature of a per-BYTE cost, not per-call overhead. }
+        PXXMemZero(Pointer(cur), size);
         Result := Pointer(cur);
 {$ifdef PXX_TS_SOFTLOCK}
         PXXHeapSpin := 0;
@@ -1136,6 +1317,9 @@ begin
     arena := need;
     if arena < HEAP_ARENA then arena := HEAP_ARENA;
     HeapPtr := HeapMmap(arena);
+    { The check the ticket is about. Without it the -errno BECOMES the heap base
+      and the `PWord(base)^ := size` below faults on it. }
+    if HeapMmapFailed(HeapPtr) then PXXHeapExhausted;
     HeapEnd := HeapPtr + arena;
 {$ifdef PXX_ALLOC_CENSUS}
     CensusArenas := CensusArenas + 1;
@@ -1186,6 +1370,40 @@ const
   DBG_M2 = 'pxx-heap: WRITE AFTER FREE in 0x';
   DBG_M3 = 'pxx-heap: RETAIN of a FREED object 0x';
   DBG_M4 = 'pxx-heap: RELEASE of a FREED object 0x';
+  { Suffix labels for the write-after-free report. Separate constants rather
+    than one formatted line for the same reason the four above are: this path
+    may allocate NOTHING, so there is no string to build. }
+  { A DECREF whose target refcount still reads as poison: the block was freed
+    and something is still releasing a handle into it. Caught AT THE WRITE,
+    where the HANDLE is known -- the eviction check can only report the victim
+    long afterwards, by which time the handle that did it is gone. The object
+    path has had this since DBG_M3/M4; strings never did, which is why 26 of
+    these were reported as anonymous write-after-frees. }
+  DBG_M8 = 'pxx-heap: DECREF of a FREED string 0x';
+  { The other direction. No RETAIN of a freed string has been OBSERVED -- every
+    one of the 26 arm32 reports was a decrement -- but the two guards in
+    PXXStrIncRef/PXXStrDecRef already carry a comment saying they must move
+    together, and guarding one arm while leaving the other to prose is how a
+    sibling stays broken. It also makes an absence meaningful: with both armed,
+    "only decrefs were reported" is a measurement rather than the shape of the
+    instrument. }
+  DBG_M9 = 'pxx-heap: RETAIN of a FREED string 0x';
+  { Kinds 10/11: the dynamic-array half of the same protocol. PXXDynArrayIncRef
+    and PXXDynArrayReleaseDepth decrement/increment the SAME [handle-16] slot
+    as the string routines and carried NO poison check and no static-floor
+    guard, which left them the only unguarded writer of a managed refcount
+    once the string and object paths were both instrumented and both silent. }
+  { Poor-man's backtrace: gdb on this box has no arm target and the guest
+    carries no unwind info anyway, so the report emits RAW STACK WORDS and the
+    resolving happens offline against the --map file. A word landing inside the
+    code segment is a return address; the rest is noise and is meant to be. }
+  DBG_M12 = ' stack=';
+  DBG_M13 = '????????';   { the size word is not a plausible block size -- see PXXDbgFlush }
+  DBG_M10 = 'pxx-heap: RELEASE of a FREED dynarray 0x';
+  DBG_M11 = 'pxx-heap: RETAIN of a FREED dynarray 0x';
+  DBG_M5 = '  size=0x';
+  DBG_M6 = ' off=0x';
+  DBG_M7 = ' val=0x';
 
 procedure PXXDbgPutConst(kind: Integer);
 { One byte at a time out of a string CONSTANT — no managed temp anywhere. }
@@ -1200,28 +1418,136 @@ begin
   else if kind = 3 then
     for i := 1 to Length(DBG_M3) do
     begin b := Byte(DBG_M3[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 5 then
+    for i := 1 to Length(DBG_M5) do
+    begin b := Byte(DBG_M5[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 6 then
+    for i := 1 to Length(DBG_M6) do
+    begin b := Byte(DBG_M6[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 7 then
+    for i := 1 to Length(DBG_M7) do
+    begin b := Byte(DBG_M7[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 8 then
+    for i := 1 to Length(DBG_M8) do
+    begin b := Byte(DBG_M8[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 9 then
+    for i := 1 to Length(DBG_M9) do
+    begin b := Byte(DBG_M9[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 10 then
+    for i := 1 to Length(DBG_M10) do
+    begin b := Byte(DBG_M10[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 11 then
+    for i := 1 to Length(DBG_M11) do
+    begin b := Byte(DBG_M11[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 12 then
+    for i := 1 to Length(DBG_M12) do
+    begin b := Byte(DBG_M12[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 13 then
+    for i := 1 to Length(DBG_M13) do
+    begin b := Byte(DBG_M13[i]); r := PXXSysWrite(2, Int64(@b), 1); end
   else
     for i := 1 to Length(DBG_M4) do
     begin b := Byte(DBG_M4[i]); r := PXXSysWrite(2, Int64(@b), 1); end;
 end;
 
+{ Hex, high nibble first, no leading-zero suppression so the width is constant
+  and greppable. `digits` is how many nibbles to emit. Factored out of
+  PXXDbgFlush, which had this loop inline and now needs it four times -- one
+  spelling, not five. }
+procedure PXXDbgPutHex(v: Int64; digits: Integer);
+var i: NativeInt; b: Byte; r: Int64; d: Integer;
+begin
+  i := (digits - 1) * 4;
+  while i >= 0 do
+  begin
+    d := Integer((v shr i) and 15);
+    if d < 10 then b := Byte(48 + d) else b := Byte(87 + d);
+    r := PXXSysWrite(2, Int64(@b), 1);
+    i := i - 4;
+  end;
+end;
+
+procedure PXXDbgGrabStack(anchor: Int64);
+{ Copy raw words upward from a local's address. The stack grows down, so higher
+  addresses are older frames. No unwind is attempted and none is needed: a
+  return address is recognised offline by falling inside the code segment. }
+var i: Integer;
+begin
+  HeapDbgNStack := 32;
+  for i := 0 to HeapDbgNStack - 1 do
+    HeapDbgStack[i] := PWord(anchor + i * SizeOf(Pointer))^;
+end;
+
 procedure PXXDbgFlush;
-var i: NativeInt; b: Byte; r: Int64; v: Int64; d: Integer; kind: Integer;
+var i: NativeInt; b: Byte; r: Int64; kind: Integer;
 begin
   if HeapDbgPend = 0 then Exit;
   kind := Integer(HeapDbgPend);
   HeapDbgPend := 0;
   PXXDbgPutConst(kind);
-  { address in hex, high nibble first, no leading-zero suppression so the width
-    is constant and greppable }
-  i := (SizeOf(Pointer) * 8) - 4;
-  while i >= 0 do
+  PXXDbgPutHex(HeapDbgAddr, SizeOf(Pointer) * 2);
+  { A WRITE AFTER FREE carries its provenance; the other three kinds have none
+    to carry, and printing empty fields for them would make a grep for `off=`
+    match reports that never measured one. }
+  { The stale-handle reports carry the victim's SIZE CLASS and nothing else:
+    it is the field that JOINS them to the write-after-free rows above, which
+    is the tie that was missing between a report naming a handle and a report
+    naming a victim. Free to obtain -- the caller is already at the block. }
+  if (kind = 8) or (kind = 9) or (kind = 10) or (kind = 11) then
   begin
-    v := HeapDbgAddr;
-    d := Integer((v shr i) and 15);
-    if d < 10 then b := Byte(48 + d) else b := Byte(87 + d);
-    r := PXXSysWrite(2, Int64(@b), 1);
-    i := i - 4;
+    { The size word only MEANS anything if the thing we were handed is a real
+      block. It is, for a genuinely stale handle whose block is still poisoned
+      in quarantine -- that is the case this field exists for, because it JOINS
+      these rows to the write-after-free rows by size class. It is NOT, for a
+      FABRICATED pointer, and that turned out to be the arm32 case: the reported
+      size read 0xdddddddd (the poison itself) and 0x44d95128. Printing those as
+      a size class invites exactly the reading they cannot support, so an
+      implausible word is reported as unknown instead of as a number.
+      Plausible = nonzero, 8-aligned, and not larger than any block this
+      allocator hands out in one piece. }
+    PXXDbgPutConst(5);
+    if (HeapDbgSize > 0) and (HeapDbgSize < $10000000) and
+       ((HeapDbgSize and 7) = 0) and (not PXXDbgIsPoisonWord(HeapDbgSize)) then
+      PXXDbgPutHex(HeapDbgSize, 8)
+    else
+      PXXDbgPutConst(13);
+  end;
+  if ((kind = 10) or (kind = 11)) and (HeapDbgNStack > 0) then
+  begin
+    PXXDbgPutConst(12);
+    for i := 0 to HeapDbgNStack - 1 do
+    begin
+      if i > 0 then begin b := 32; r := PXXSysWrite(2, Int64(@b), 1); end;
+      PXXDbgPutHex(HeapDbgStack[i], SizeOf(Pointer) * 2);
+    end;
+  end;
+  if kind = 2 then
+  begin
+    PXXDbgPutConst(5); PXXDbgPutHex(HeapDbgSize, 8);
+    PXXDbgPutConst(6); PXXDbgPutHex(HeapDbgOff, 8);
+    PXXDbgPutConst(7); PXXDbgPutHex(HeapDbgVal, SizeOf(Pointer) * 2);
+    { The bytes, hex then ASCII. This is the field that names the WRITER rather
+      than the victim: printable text here is the scribbler's own data. }
+    if HeapDbgNBytes > 0 then
+    begin
+      b := 32; r := PXXSysWrite(2, Int64(@b), 1);
+      b := 91; r := PXXSysWrite(2, Int64(@b), 1);          { '[' }
+      for i := 0 to HeapDbgNBytes - 1 do
+      begin
+        if i > 0 then begin b := 32; r := PXXSysWrite(2, Int64(@b), 1); end;
+        PXXDbgPutHex(Int64(HeapDbgBytes[i]), 2);
+      end;
+      b := 93; r := PXXSysWrite(2, Int64(@b), 1);          { ']' }
+      b := 32; r := PXXSysWrite(2, Int64(@b), 1);
+      b := 34; r := PXXSysWrite(2, Int64(@b), 1);          { '"' }
+      for i := 0 to HeapDbgNBytes - 1 do
+      begin
+        b := HeapDbgBytes[i];
+        if (b < 32) or (b > 126) then b := 46;             { '.' }
+        r := PXXSysWrite(2, Int64(@b), 1);
+      end;
+      b := 34; r := PXXSysWrite(2, Int64(@b), 1);
+    end;
   end;
   b := 10;
   r := PXXSysWrite(2, Int64(@b), 1);
@@ -1239,8 +1565,12 @@ begin
   PXXDbgIsPoisonWord := ok;
 end;
 
-{ TRUE when the whole payload still reads as poison. }
-function PXXDbgPoisonIntact(addr, sz: Int64): Boolean;
+{ The offset of the first byte that is no longer poison, or -1 when the whole
+  payload is intact. The offset is the diagnostic: relative to the payload
+  address, which for a managed block is the block base, it names the FIELD that
+  was written (0 = META and the free-list link, 8 = refcount, 16 = length,
+  >= PXX_HDR_SIZE = the data). }
+function PXXDbgPoisonFirstBad(addr, sz: Int64): Int64;
 var i: Int64;
 begin
   i := 0;
@@ -1248,19 +1578,26 @@ begin
   begin
     if PByte(addr + i)^ <> HEAP_POISON then
     begin
-      PXXDbgPoisonIntact := False;
+      PXXDbgPoisonFirstBad := i;
       Exit;
     end;
     i := i + 1;
   end;
-  PXXDbgPoisonIntact := True;
+  PXXDbgPoisonFirstBad := -1;
+end;
+
+{ TRUE when the whole payload still reads as poison. One scan, not two
+  spellings of it. }
+function PXXDbgPoisonIntact(addr, sz: Int64): Boolean;
+begin
+  PXXDbgPoisonIntact := PXXDbgPoisonFirstBad(addr, sz) < 0;
 end;
 
 { Poison `addr` and put it in quarantine. Returns the block EVICTED by that
   push (which the caller must really free), or 0 while the ring is filling.
   The caller holds the allocator lock. }
 function PXXDbgQuarantine(addr: Int64): Int64;
-var sz, vic, vsz, i: Int64; slot: Integer;
+var sz, vic, vsz, i, bad: Int64; slot: Integer;
 begin
   sz := PWord(addr - 8)^;
   { A header we cannot trust (never allocated here, or already corrupted):
@@ -1286,10 +1623,23 @@ begin
       wrote through a dangling pointer. }
     vsz := PWord(vic - 8)^;
     if (vsz < 8) or (vsz > (HeapHigh - HeapLow)) then vsz := 8;
-    if not PXXDbgPoisonIntact(vic, vsz) then
+    bad := PXXDbgPoisonFirstBad(vic, vsz);
+    if bad >= 0 then
     begin
       HeapDbgPend := 2;
       HeapDbgAddr := vic;
+      { Everything below was already known here and was being discarded. }
+      HeapDbgSize := vsz;
+      HeapDbgOff  := bad;
+      HeapDbgVal  := PWord(vic + bad)^;
+      HeapDbgNBytes := 0;
+      i := bad;
+      while (i < vsz) and (HeapDbgNBytes < 16) do
+      begin
+        HeapDbgBytes[HeapDbgNBytes] := PByte(vic + i)^;
+        HeapDbgNBytes := HeapDbgNBytes + 1;
+        i := i + 1;
+      end;
     end;
     HeapQuar[HeapQuarHead] := addr;
     HeapQuarHead := HeapQuarHead + 1;
@@ -1600,15 +1950,29 @@ end;
 
 { The high bit of every byte in a machine word — the word-wise form of the
   `orAll and $80` test PXXStrMeta does, so an ASCII scan folded into a word
-  copy answers exactly what the byte loop answered. }
-function PXXHighBits: Int64;
-var i, m: Int64;
-begin
-  m := 0;
-  for i := 0 to SizeOf(NativeInt) - 1 do
-    m := (m shl 8) or $80;
-  PXXHighBits := m;
-end;
+  copy answers exactly what the byte loop answered.
+
+  A CONST, not a function, and the difference was measured: this was an
+  eight-iteration `m := (m shl 8) or $80` loop in a function called once per
+  PXXBlockCopy, and a gdb-sampled profile of uforth put 5.1% of the program's
+  ENTIRE runtime inside it — the fifth-hottest routine in a 134-routine profile,
+  more than the whole compiled body of uforth.py. The loop was not folded and
+  could not be: it loads and stores `m` and `i` through memory eight times, and
+  our IR does not constant-fold a loop. bug-a-pxxhighbits-recomputes-a-compile-
+  time-constant-in-a-loop.
+
+  Keyed on CPU64/CPU32, which the lexer predefines for every target, rather than
+  on a list of target names — the ENUMERATION is what goes stale, and a mask one
+  word too wide is a silently wrong ASCII verdict rather than a build error. The
+  32-bit value is deliberately only 4 bytes: PWord on a 32-bit target reads 4
+  bytes, and a hardcoded 8-byte step in this same routine already copied every
+  other word once. }
+const
+{$ifdef CPU64}
+  PXX_HIGH_BITS = Int64($8080808080808080);
+{$else}
+  PXX_HIGH_BITS = Int64($80808080);
+{$endif}
 
 { Copy n bytes forward, words first. Returns the OR of every byte COLLAPSED to
   the one bit PXXStrMeta looks at: $80 when any byte had its high bit set, else
@@ -1626,7 +1990,7 @@ begin
       acc := acc or PWord(s + i)^;
       i := i + w;
     end;
-  if (acc and PXXHighBits) <> 0 then acc := $80 else acc := 0;
+  if (acc and PXX_HIGH_BITS) <> 0 then acc := $80 else acc := 0;
   while i < n do
   begin
     PByte(d + i)^ := PByte(s + i)^;
@@ -1643,6 +2007,7 @@ begin
   else
     PXXStrAppendAsciiBits := oldMeta and (PXX_FLAG_ASCII_KNOWN or PXX_FLAG_ASCII);
 end;
+
 
 procedure PXXStrAppend(strSlot: Pointer; srcB: Pointer; lenB: NativeInt);
 var
@@ -1708,6 +2073,29 @@ begin
   newH := Pointer(d);
   PWord(strSlot)^ := Int64(newH);
   PXXStrDecRef(Pointer(h));
+end;
+
+{ Append another managed string. The length is in the source's own header, so
+  the caller only has to produce the handle. A nil or empty source is a no-op,
+  which is what makes `s := s + t` safe for an unset t without the backend
+  emitting a branch for it. }
+procedure PXXStrAppendStr(strSlot: Pointer; srcH: Pointer);
+var len: Int64;
+begin
+  if srcH = nil then Exit;
+  len := PWord(Int64(srcH) - 8)^;
+  if len <= 0 then Exit;
+  PXXStrAppend(strSlot, srcH, len);
+end;
+
+{ Append one character, passed by CODE rather than by address: a backend has the
+  char in a register and would otherwise have to spill it somewhere addressable
+  to hand over a pointer. The byte to copy is this routine's own local. }
+procedure PXXStrAppendChar(strSlot: Pointer; chCode: NativeInt);
+var b: Byte;
+begin
+  b := Byte(chCode and 255);
+  PXXStrAppend(strSlot, @b, 1);
 end;
 
 { PChar/PAnsiChar of a managed string: the handle is already the NUL-terminated
@@ -1885,6 +2273,8 @@ const
   CEN_BUMP  = ' bump=';
   CEN_AREN  = ' arenas=';
   CEN_SIZES = 'pxx-census: sizes';
+  CEN_BIG   = 'pxx-big: ';
+  CEN_BIGAT = ' at alloc ';
 
 procedure PXXCensusPut(kind: Integer);
 { One byte at a time out of a string CONSTANT — no managed temp anywhere. }
@@ -1906,6 +2296,10 @@ begin
     for i := 1 to Length(CEN_BUMP) do begin b := Byte(CEN_BUMP[i]); r := PXXSysWrite(2, Int64(@b), 1); end
   else if kind = 8 then
     for i := 1 to Length(CEN_AREN) do begin b := Byte(CEN_AREN[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 10 then
+    for i := 1 to Length(CEN_BIG) do begin b := Byte(CEN_BIG[i]); r := PXXSysWrite(2, Int64(@b), 1); end
+  else if kind = 11 then
+    for i := 1 to Length(CEN_BIGAT) do begin b := Byte(CEN_BIGAT[i]); r := PXXSysWrite(2, Int64(@b), 1); end
   else
     for i := 1 to Length(CEN_SIZES) do begin b := Byte(CEN_SIZES[i]); r := PXXSysWrite(2, Int64(@b), 1); end;
 end;
@@ -1938,6 +2332,18 @@ begin
     i := i - 1;
   end;
 end;
+
+{$ifdef PXX_ALLOC_BIG}
+procedure PXXCensusBig(size: NativeInt);
+{ One line per allocation at or above CEN_BIG_MIN. Allocates nothing, for the
+  same reason PXXCensusReport does not -- it runs from inside PXXAlloc. }
+var b: Byte; r: Int64;
+begin
+  PXXCensusPut(10); PXXCensusNum(size);
+  PXXCensusPut(11); PXXCensusNum(CensusAllocs);
+  b := 10; r := PXXSysWrite(2, Int64(@b), 1);
+end;
+{$endif}
 
 procedure PXXCensusReport;
 var i: Integer; b: Byte; r: Int64;
@@ -2413,9 +2819,37 @@ var rcAddr: Int64;
 begin
   if p = nil then Exit;
   rcAddr := PXXHdrRC(p);
+{$ifdef PXX_HEAP_DEBUG}
+  { Mirror of the check in PXXStrDecRef -- see DBG_M9 for why this arm exists
+    with nothing yet observed on it. }
+  if PXXDbgIsPoisonWord(PWord(rcAddr)^) then
+  begin
+    HeapDbgPend := 9;
+    HeapDbgAddr := Int64(p);
+    { The allocator's size word sits immediately below the block it handed out,
+      and a managed block's base IS that payload -- so this is the same size
+      class the write-after-free rows report.
+      RAW arithmetic, NOT PXXHdrBase: under PXX_HEAP_DEBUG that helper Halt(204)s
+      on exactly the input we are here to report (a poisoned kind byte is > 
+      PXX_KIND_MAX), so routing through it killed the process one line before
+      PXXDbgFlush and this check read as SILENT on every target that calls the
+      routine at all. }
+    HeapDbgSize := PWord(Int64(p) - PXX_HDR_SIZE - 8)^;
+    PXXDbgFlush;
+    Exit;
+  end;
+{$endif}
+  { A static literal block must never be WRITTEN, not merely never freed: it
+    lives in the data section, so a store to it dirties a page shared with code
+    (1600x under qemu — see the parent ticket) and defeats ever placing these
+    blocks in a non-writable segment. The read below is already on this path;
+    the guard costs a compare and a branch and removes a store. }
+  if PWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
 {$ifdef PXX_TS_SOFTLOCK}
   { threadsafe: atomic increment of the low refcount word (the count never
-    approaches 2^32, so the 8-byte header's high dword stays zero). }
+    approaches 2^32, so the 8-byte header's high dword stays zero). The plain
+    read above is sound under contention for the one thing it decides: a
+    saturated block's count is immutable, and a real one cannot reach 2^30. }
   tsIgnore := __pxxatomic_add(Pointer(rcAddr), 1);
 {$else}
   PWord(rcAddr)^ := PWord(rcAddr)^ + 1;
@@ -2427,6 +2861,34 @@ var rcAddr, rc: Int64;
 begin
   if p = nil then Exit;
   rcAddr := PXXHdrRC(p);
+{$ifdef PXX_HEAP_DEBUG}
+  { The refcount still reads as poison, so this block is in quarantine and this
+    handle is stale. Report and DROP the write: decrementing would corrupt the
+    poison and turn a precise finding into an anonymous write-after-free found
+    much later, which is exactly how these first showed up.
+    Note the static guard below cannot catch this: poison is $DDDD..., which is
+    NEGATIVE as a signed machine word and so never >= PXX_STATIC_RC_FLOOR. }
+  if PXXDbgIsPoisonWord(PWord(rcAddr)^) then
+  begin
+    HeapDbgPend := 8;
+    HeapDbgAddr := Int64(p);
+    { The allocator's size word sits immediately below the block it handed out,
+      and a managed block's base IS that payload -- so this is the same size
+      class the write-after-free rows report.
+      RAW arithmetic, NOT PXXHdrBase: under PXX_HEAP_DEBUG that helper Halt(204)s
+      on exactly the input we are here to report (a poisoned kind byte is > 
+      PXX_KIND_MAX), so routing through it killed the process one line before
+      PXXDbgFlush and this check read as SILENT on every target that calls the
+      routine at all. }
+    HeapDbgSize := PWord(Int64(p) - PXX_HDR_SIZE - 8)^;
+    PXXDbgFlush;
+    Exit;
+  end;
+{$endif}
+  { Saturated: no write, and no free to consider. Same guard as PXXStrIncRef —
+    they must move together, because suppressing one direction only is what
+    would let a static block's count drift. }
+  if PWord(rcAddr)^ >= PXX_STATIC_RC_FLOOR then Exit;
 {$ifdef PXX_TS_SOFTLOCK}
   rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;   { returns the OLD value }
 {$else}
@@ -2701,6 +3163,7 @@ begin
     subDesc := Pointer(memberPtr + 12 + typeRef);
     if kind = 3 then memberSize := PInt32(Int64(subDesc) + 4)^
     else if kind = 5 then memberSize := 16   { Variant slot: [tag:8][payload:8] }
+    else if kind = 7 then memberSize := typeRef  { promo: width is per-target }
     else memberSize := SizeOf(Pointer);
     j := 0;
     while j < arrayCount do
@@ -2720,6 +3183,14 @@ begin
              end;
            end;
         6: PWord(itemAddr)^ := 0;                     { NilPy class reference }
+        7: begin                                      { promo: all-zero = inline 0 }
+             k := 0;
+             while k < memberSize do
+             begin
+               PByte(Int64(itemAddr) + k)^ := 0;
+               k := k + 1;
+             end;
+           end;
       end;
       j := j + 1;
     end;
@@ -3091,6 +3562,19 @@ var rcAddr: Int64;
 begin
   if p = nil then Exit;
   rcAddr := PXXHdrRC(p);
+{$ifdef PXX_HEAP_DEBUG}
+  { Same stale-handle check as PXXStrDecRef's. RAW arithmetic for the size word:
+    PXXHdrBase Halt(204)s on a poisoned kind byte, which is this input exactly. }
+  if PXXDbgIsPoisonWord(PWord(rcAddr)^) then
+  begin
+    HeapDbgPend := 11;
+    HeapDbgAddr := Int64(p);
+    HeapDbgSize := PWord(Int64(p) - PXX_HDR_SIZE - 8)^;
+    PXXDbgGrabStack(Int64(@rcAddr));
+    PXXDbgFlush;
+    Exit;
+  end;
+{$endif}
 {$ifdef PXX_TS_SOFTLOCK}
   tsIgnore := __pxxatomic_add(Pointer(rcAddr), 1);
 {$else}
@@ -3107,6 +3591,19 @@ var
 begin
   if arrData = nil then Exit;
   rcAddr := PXXHdrRC(arrData);            { refcount — NOT the block base }
+{$ifdef PXX_HEAP_DEBUG}
+  { Same stale-handle check as PXXStrDecRef's. RAW arithmetic for the size word:
+    PXXHdrBase Halt(204)s on a poisoned kind byte, which is this input exactly. }
+  if PXXDbgIsPoisonWord(PWord(rcAddr)^) then
+  begin
+    HeapDbgPend := 10;
+    HeapDbgAddr := Int64(arrData);
+    HeapDbgSize := PWord(Int64(arrData) - PXX_HDR_SIZE - 8)^;
+    PXXDbgGrabStack(Int64(@rcAddr));
+    PXXDbgFlush;
+    Exit;
+  end;
+{$endif}
 {$ifdef PXX_TS_SOFTLOCK}
   rc := __pxxatomic_add(Pointer(rcAddr), -1) - 1;   { returns the OLD value }
 {$else}
@@ -3177,6 +3674,40 @@ begin
           PXXIntfRelease(itemAddr, Int64(baseRecDesc));
           i := i + 1;
         end;
+      end
+      else if baseKind = 5 then
+      begin
+        { Promotable-int elements: release the heap-tier AnsiString payload of
+          each. Stride in baseRecDesc -- see PXXArrayReleaseImmediate. }
+        elSize := Int64(baseRecDesc);
+        if elSize > 0 then
+        begin
+          i := 0;
+          while i < len do
+          begin
+            itemAddr := Pointer(Int64(arrData) + i * elSize);
+            if PWord(itemAddr)^ = PROMO_TAG_HEAP then
+              PXXStrDecRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
+            i := i + 1;
+          end;
+        end;
+      end
+      else if baseKind = 6 then
+      begin
+        { Variant elements. Like kind 4 this may run a Destroy (a variant can
+          hold an object), which is why ManagedElemKindLocked refuses kind 6
+          under --threadsafe; this walk itself is always called unlocked. }
+        elSize := Int64(baseRecDesc);
+        if elSize > 0 then
+        begin
+          i := 0;
+          while i < len do
+          begin
+            itemAddr := Pointer(Int64(arrData) + i * elSize);
+            PXXVarClear(itemAddr);
+            i := i + 1;
+          end;
+        end;
       end;
     end;
     PXXFree(Pointer(PXXHdrBase(arrData)));
@@ -3244,6 +3775,42 @@ begin
         PXXIntfAddRef(itemAddr, Int64(baseRecDesc));
         i := i + 1;
       end;
+    end
+    else if baseKind = 5 then
+    begin
+      { The retain half of the promo element walk -- the mirror of the arm in
+        PXXArrayReleaseImmediate. A heap-tier payload is a managed AnsiString,
+        so retaining an element is an incref of that handle and nothing else.
+        Both halves exist in the SAME change on purpose: a release without its
+        retain turns SetLength shrink from a leak into a double free, which is
+        strictly worse than the bug being fixed. }
+      elSize := Int64(baseRecDesc);
+      if elSize > 0 then
+      begin
+        i := 0;
+        while i < len do
+        begin
+          PXXPromoRetainOne(Pointer(Int64(arrData) + i * elSize));
+          i := i + 1;
+        end;
+      end;
+    end
+    else if baseKind = 6 then
+    begin
+      { Variant elements. PXXVarRetain is the declared mirror of PXXVarClear, so
+        SetLength SHRINK nets to zero on a survivor and one release on a dropped
+        element, exactly as for kinds 1, 3 and 4. }
+      elSize := Int64(baseRecDesc);
+      if elSize > 0 then
+      begin
+        i := 0;
+        while i < len do
+        begin
+          itemAddr := Pointer(Int64(arrData) + i * elSize);
+          PXXVarRetain(itemAddr);
+          i := i + 1;
+        end;
+      end;
     end;
   end;
 end;
@@ -3303,6 +3870,41 @@ begin
       PXXIntfRelease(itemAddr, Int64(baseRecDesc));
       i := i + 1;
     end;
+  end
+  else if baseKind = 5 then
+  begin
+    { Promotable-int elements. The stride arrives in baseRecDesc as a plain
+      integer -- promoint32 is an 8-byte slot and promoint64 a 16-byte one, so
+      this is the one kind whose element size is not implied by the kind, and
+      the compiler's own TypeSlotSize is what it sends (ManagedElemRef). }
+    elSize := Int64(baseRecDesc);
+    if elSize > 0 then
+    begin
+      i := 0;
+      while i < len do
+      begin
+        itemAddr := Pointer(Int64(arrData) + i * elSize);
+        if PWord(itemAddr)^ = PROMO_TAG_HEAP then
+          PXXStrDecRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
+        i := i + 1;
+      end;
+    end;
+  end
+  else if baseKind = 6 then
+  begin
+    { Variant elements: PXXVarClear is the portable release the scalar arm
+      uses, payload plus a zeroed slot. }
+    elSize := Int64(baseRecDesc);
+    if elSize > 0 then
+    begin
+      i := 0;
+      while i < len do
+      begin
+        itemAddr := Pointer(Int64(arrData) + i * elSize);
+        PXXVarClear(itemAddr);
+        i := i + 1;
+      end;
+    end;
   end;
 end;
 
@@ -3334,6 +3936,15 @@ begin
       subDesc := Pointer(memberPtr + 12 + typeRef);
       memberSize := PInt32(Int64(subDesc) + 4)^;
     end
+    else if kind = 5 then
+      memberSize := 16                   { Variant slot: [tag:8][payload:8] }
+    else if kind = 7 then
+      { Promo slot, and its width is the one thing a constant cannot express
+        here: 16 bytes on a 64-bit target, 8 on a 32-bit one. The descriptor
+        carries the compiler's own TypeSlotSize answer in typeRef for exactly
+        this reason, so the runtime cannot disagree with the compiler about a
+        layout -- the argument ManagedElemRef makes for the array case. }
+      memberSize := typeRef
     else
     begin
       memberSize := SizeOf(Pointer);
@@ -3350,6 +3961,20 @@ begin
           PXXDynArrayIncRef(Pointer(PWord(itemAddr)^));
         3: { Record }
           PXXRecordRetain(itemAddr, subDesc);
+        5: { Variant member — the mirror of PXXRecordRelease's PXXVarClear arm.
+             There was no arm here while the release side had one, survivable
+             only because nothing emitted kind 5 for a RECORD member: a class
+             carries variant fields, but a class is FINALIZED and never copied
+             by value, so this side was never reached for one. The moment record
+             descriptors emit kind 5 that asymmetry becomes a double free on the
+             SetLength survivor path — the same release-without-retain shape that
+             made 9cb079528 segfault — so both halves land in one change. }
+          PXXVarRetain(itemAddr);
+        7: { Promo field — the mirror of the release arm's PXXStrDecRef, landing
+             with it because a release without its retain destroys SetLength
+             survivors instead of merely leaking them. }
+          if PWord(itemAddr)^ = PROMO_TAG_HEAP then
+            PXXStrIncRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
       end;
       j := j + 1;
     end;
@@ -3475,6 +4100,13 @@ begin
     end
     else if kind = 5 then
       memberSize := 16                   { Variant slot: [tag:8][payload:8] }
+    else if kind = 7 then
+      { Promo slot, and its width is the one thing a constant cannot express
+        here: 16 bytes on a 64-bit target, 8 on a 32-bit one. The descriptor
+        carries the compiler's own TypeSlotSize answer in typeRef for exactly
+        this reason, so the runtime cannot disagree with the compiler about a
+        layout -- the argument ManagedElemRef makes for the array case. }
+      memberSize := typeRef
     else
     begin
       memberSize := SizeOf(Pointer);
@@ -3501,6 +4133,11 @@ begin
         6: { NilPy class-typed field: drop the instance's ref on its child
              (magic-guarded — a Pascal instance stored here no-ops) }
           PXXObjRelease(Pointer(PWord(itemAddr)^));
+        7: { Promotable-int field. Only the HEAP tier owns anything: its payload
+             word is a managed AnsiString handle, and every other tag holds an
+             inline value that must not be touched. }
+          if PWord(itemAddr)^ = PROMO_TAG_HEAP then
+            PXXStrDecRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
       end;
       j := j + 1;
     end;
@@ -3518,6 +4155,38 @@ procedure __pxxTObjectDestroy(Inst: Pointer);
 begin
 end;
 
+procedure PXXClassFinalizeManaged(inst: Pointer);
+{ The kinds-1/2/3/5/6 half of PXXClassFinalize — string, dynarray, record,
+  variant and NilPy-object fields — split out because it is the half whose LOCK
+  DISCIPLINE differs from the kind-4 (COM interface) half above it, and the two
+  therefore cannot share a caller on every target.
+
+  Nothing here runs user code: the whole subtree is PXXStrDecRef,
+  PXXDynArrayRelease, PXXRecordRelease, PXXVarClear and PXXObjRelease, all
+  runtime, none of them taking a lock of its own on x86-64. That is what makes
+  it safe to call with the heap lock ALREADY HELD, which is how the x86-64
+  --threadsafe path reaches it: the lock there is the codegen BSS spinlock,
+  unreachable from Pascal, so the acquire is emitted at the CALL SITE
+  (ir_codegen.inc, HeapLockedCallProcIdx) rather than taken here.
+
+  The kind-4 half must NOT be under the lock — it runs the referenced object's
+  destructor chain and a self-locking FreeMem — which is the whole reason for
+  the split. It stays in PXXClassFinalize, unlocked, exactly as before.
+
+  It re-derives the descriptor from [inst] rather than taking it as a parameter
+  because the emitted call site has only the instance pointer. Two loads.
+  bug-a-threadsafe-on-x86-64-leaks-every-managed-class-field-and-it-is-not-benign }
+var
+  vmt, desc: Pointer;
+begin
+  if inst = nil then Exit;
+  vmt := Pointer(PWord(inst)^);
+  if vmt = nil then Exit;
+  desc := Pointer(PWord(Pointer(Int64(vmt) - 16))^);
+  if desc = nil then Exit;
+  PXXRecordRelease(inst, desc);
+end;
+
 procedure PXXClassFinalize(inst: Pointer);
 { Release a CLASS instance's managed fields on destruction, by its RUNTIME
   class: [inst] = VMT, [VMT-16] = the layout descriptor EmitLayoutRTTI emitted
@@ -3530,11 +4199,12 @@ procedure PXXClassFinalize(inst: Pointer);
     runs the referenced object's destructor chain and self-locking FreeMem, so
     doing it under a lock would deadlock (the reverted cb2ed843 hit exactly
     that on the record path).
-  - kinds 1-3 (string/dynarray/record): PXXRecordRelease, whose inner frees are
-    self-locking on softlock targets and lock-free single-threaded. On x86-64
-    --threadsafe the heap lock is the codegen BSS spinlock, unreachable from
-    Pascal — skip the pass there (pre-existing benign leak) rather than race
-    the allocator. PXXRecordRelease has no kind-4 case, so interfaces are not
+  - kinds 1-3 (string/dynarray/record): PXXClassFinalizeManaged, whose inner
+    frees are self-locking on softlock targets and lock-free single-threaded. On
+    x86-64 --threadsafe the heap lock is the codegen BSS spinlock, unreachable
+    from Pascal, so it is NOT reached from here — the Free desugar emits it as
+    a SECOND call, under the emitted lock, instead (ir.inc; and see that proc's
+    own comment). PXXRecordRelease has no kind-4 case, so interfaces are not
     double-released. }
 var
   vmt, desc: Pointer;
@@ -3565,7 +4235,7 @@ begin
   end;
 
 {$ifndef PXX_TS_HARDLOCK}
-  PXXRecordRelease(inst, desc);
+  PXXClassFinalizeManaged(inst);
 {$endif}
 end;
 
@@ -3590,6 +4260,13 @@ begin
       NEVER nil-guard a kind-4 arm on baseRecDesc: interface id 0 is a real id
       and would nil-check as "no descriptor". The kind-3 arms guard, kind 4
       must not. }
+    baseRecDesc := Pointer(baseTypeRef)
+  else if (baseKind = 5) or (baseKind = 6) then
+    { Kinds 5/6 ride the same slot, carrying the element STRIDE rather than an
+      id (ManagedElemRef). Unlike kind 4 these DO guard, and may: a stride of
+      zero is not a legal value for any element type, so `elSize > 0` in the
+      walks rejects a mis-emitted descriptor instead of walking with stride 0
+      and releasing element zero N times. }
     baseRecDesc := Pointer(baseTypeRef)
   else
     baseRecDesc := nil;
@@ -3641,6 +4318,8 @@ begin
     baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
   else if baseKind = 4 then
     baseRecDesc := Pointer(baseTypeRef)   { interface id, see PXXDynArrayRelease }
+  else if (baseKind = 5) or (baseKind = 6) then
+    baseRecDesc := Pointer(baseTypeRef)   { element STRIDE, see ManagedElemRef }
   else
     baseRecDesc := nil;
 
@@ -3675,8 +4354,19 @@ var d, i, w: Int64;
 begin
   d := Int64(dst);
 {$ifdef CPUX86_64}
-  bmR := __pxxblockfill(d, n, 0);   { rep stosb; a count <= 0 writes nothing }
-  Exit;
+  { `rep stosb` pays a fixed microcode startup of tens of cycles before it moves
+    a byte, so a SHORT span never earns it back -- the word loop below beats it
+    outright until the span is long enough to amortise the start. Measured on
+    `b := nil; SetLength(b, N)`, 3M iterations, rep-always against this
+    threshold: 8B 0.88x, 32B 0.91x (i.e. rep-always was SLOWER), 256B 1.69x,
+    2048B 4.59x. The dispatch lives HERE, in the one routine, rather than in
+    each caller -- PXXAlloc's reuse paths used to hand-roll their own word loop
+    for exactly this reason and thereby missed the large-span win entirely. }
+  if n > MEMZERO_REP_MIN then
+  begin
+    bmR := __pxxblockfill(d, n, 0);   { rep stosb; a count <= 0 writes nothing }
+    Exit;
+  end;
 {$endif}
   i := 0;
   w := SizeOf(NativeInt);
@@ -3720,6 +4410,8 @@ begin
     baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
   else if baseKind = 4 then
     baseRecDesc := Pointer(baseTypeRef)   { interface id, see PXXDynArrayRelease }
+  else if (baseKind = 5) or (baseKind = 6) then
+    baseRecDesc := Pointer(baseTypeRef)   { element STRIDE, see ManagedElemRef }
   else
     baseRecDesc := nil;
 
@@ -3772,9 +4464,10 @@ end;
 procedure PXXStrSetLen(strSlot: Pointer; newLen: NativeInt);
 var
   oldData, newBase, newData: Pointer;
-  oldLen, copyLen, i: Int64;
+  oldLen, copyLen, i, want: Int64;
 begin
   if strSlot = nil then Exit;
+  oldLen := 0;   { read below only when oldData <> nil; do not rely on short-circuit }
   oldData := Pointer(PWord(strSlot)^);
 
 {$ifdef PXX_NILPY_STR}
@@ -3789,8 +4482,61 @@ begin
     Exit;
   end;
 
-  newBase := PXXAlloc(newLen + PXX_HDR_SIZE + 1, 8);
+  { IN PLACE, on exactly the terms PXXStrAppend uses: sole owner, a block THIS
+    code allocated with spare capacity (so the allocator's size word means what
+    we think it means), and that capacity is enough. Both guards are load-bearing
+    and neither is redundant -- a static literal fails the refcount test on
+    PXX_STATIC_RC_FLOOR and the flag test on not being APPENDABLE.
+
+    Without this, `SetLength(s, Length(s) + 1)` reallocated and copied the WHOLE
+    string on every call, which is what AppendChar in lexer.inc does per
+    character on the self-hosted build. That made the compiler's own string
+    building O(n^2) on every backend that routes here -- i.e. every backend
+    except x86-64, which has an inline resize. The 32-bit hosted compiler wanted
+    4.4 GB and 13 arenas of 256 MiB to build compiler.pas and died at ENOMEM.
+    bug-o-the-in-place-string-append-is-x86-64-only-so-every-other-backend-is-quadratic
+
+    The meta ends up EXACTLY as the realloc path below leaves it -- LEGACY plus
+    APPENDABLE, both ASCII bits clear, i.e. "unknown". That is deliberate rather
+    than lazy: on a SHRINK a known-non-ASCII string can become all-ASCII, so
+    carrying the old answer forward would be wrong in a way no test would catch
+    quickly. Unknown is the state the old code already produced. }
+  if oldData <> nil then
+  begin
+    oldLen := PWord(Int64(oldData) - 8)^;
+    if (PWord(Int64(oldData) - 16)^ <= 1) and
+       ((PXXHdrMeta(oldData) and PXX_FLAG_APPENDABLE) <> 0) and
+       (PXXStrAllocSize(oldData) >= newLen + PXX_HDR_SIZE + 1) then
+    begin
+      if newLen > oldLen then
+        PXXMemZero(Pointer(Int64(oldData) + oldLen), newLen - oldLen);
+      PWord(Int64(oldData) - 8)^ := newLen;
+      PByte(Int64(oldData) + newLen)^ := 0;
+      PWord(Int64(oldData) - PXX_HDR_SIZE + PXX_HDR_META)^ :=
+        PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
+      Exit;
+    end;
+  end;
+
+  { GROW GEOMETRICALLY, but only when this is an existing string getting BIGGER
+    -- the append-loop signature. A first SetLength (oldData = nil) and a shrink
+    allocate exactly, so a one-shot `SetLength(buf, FileSize)` does not quietly
+    ask for twice the file. }
+  { Doubling by ADDITION rather than `* 2`, and the reason is NOT a defect --
+    an earlier version of this comment said it was and that was wrong. On a
+    32-bit target an Int64 multiply is a helper call where an add is inline, so
+    `want + want` is strictly cheaper on exactly the targets this path was made
+    geometric for, and the two forms are identical in value.
+    (The SIGILL that first sent me looking was qemu-xtensa, not us: no
+    qemu-xtensa core implements MUL32HIGH, so ANY 64-bit multiply -- and
+    therefore any numeric output, whose div-by-10 strength-reduces into one --
+    needs --xtensa-soft-mulhigh. tools/run_target.sh has carried that for
+    longer than this bug has existed. Real xtensa hardware has the instruction.) }
+  want := newLen + PXX_HDR_SIZE + 1;
+  if (oldData <> nil) and (newLen > oldLen) then want := want + want;
+  newBase := PXXAlloc(want, 8);
   PXXHdrInit(Int64(newBase));
+  PWord(Int64(newBase) + PXX_HDR_META)^ := PXX_KIND_LEGACY or PXX_FLAG_APPENDABLE;
   PWord(Int64(newBase) + PXX_HDR_RC)^ := 1;        { refcount }
   PWord(Int64(newBase) + PXX_HDR_LEN)^ := newLen;  { length }
   newData := Pointer(Int64(newBase) + PXX_HDR_SIZE);
@@ -3798,7 +4544,6 @@ begin
   copyLen := 0;
   if oldData <> nil then
   begin
-    oldLen := PWord(Int64(oldData) - 8)^;
     copyLen := oldLen;
     if newLen < copyLen then copyLen := newLen;
     { SetLength(s, n) on a string, on every target — the site this ticket's
@@ -4617,6 +5362,22 @@ begin
     PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^))
   else if (PWord(v)^ >= VT_OBJ_FIRST) and (PWord(v)^ <= VT_OBJ_LAST) then
     PXXObjRelease(Pointer(PWord(Int64(v) + 8)^));
+end;
+
+{ Retain ONE promo-int element in place: an inline-tier slot owns nothing, a
+  heap-tier slot's payload is a managed AnsiString and needs exactly one incref.
+
+  Exists because x86-64 INLINES SetLength rather than calling PXXDynSetLen, so
+  its element walk is emitted as machine code and cannot express this two-line
+  conditional without hand-emitting a branch at each of the two lowering sites.
+  A call it can make instead keeps the tag test in one place, which is the same
+  argument ManagedElemKind's own header makes about the policy it answers.
+  bug-a-x86-64-inline-setlength-never-retains-promo-or-variant-elements }
+procedure PXXPromoRetainOne(p: Pointer);
+begin
+  if p = nil then Exit;
+  if PWord(p)^ = PROMO_TAG_HEAP then
+    PXXStrIncRef(Pointer(PWord(Int64(p) + SizeOf(NativeInt))^));
 end;
 
 procedure PXXVarRetain(v: Pointer);

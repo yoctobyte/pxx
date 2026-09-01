@@ -280,6 +280,16 @@ var
 function Random(range: Int64): Int64;
 procedure Randomize;
 
+{ One reading of the wall/monotonic clock, mixed with the caller's stack
+  address, as an Int64. This is Randomize's entropy, EXTRACTED rather than
+  copied — pylib seeds NilPy's `random` from it at unit initialization
+  (decide-does-nilpy-random-seed-itself-at-import), and a second copy of the
+  per-arch syscall table is the thing that would have rotted. It is a SEED
+  source, not a CSPRNG: for cryptographic entropy the tiers live in
+  builtinentropy.pas and lib/rtl/random.pas. On a bare target with no clock it
+  degrades to the stack address alone — weak, but it still answers. }
+function PXXEntropy64: Int64;
+
 { Hardware entropy (tier 1) moved to builtinentropy.pas. It is pulled by name
   from pasparser_prog.inc and, unlike this unit, compiles on a bare ESP boot —
   which is the entire reason it was split out.
@@ -395,7 +405,7 @@ begin
   Result := v mod range;
 end;
 
-procedure Randomize;
+function PXXEntropy64: Int64;
 var
   ts: array[0..1] of Int64;
   r: Int64;
@@ -421,17 +431,25 @@ begin
     note at the InterLocked block): PXX_ESP is defined only inside
     builtinheap.pas. Its INTENT was real and is UNFULFILLED -- a bare ESP
     boot has no clock, and this raw clock_gettime64 is COMPILED INTO every
-    bare riscv32 build, reached whenever a program calls Randomize. (Compiled
-    in, not necessarily executed: Randomize is the only caller, so a program
-    that never randomizes never issues it.) Deleting the dead directive does
-    not change either fact; it stops the file claiming a protection it does
-    not provide.
+    bare riscv32 build, reached whenever anything asks for entropy. (Compiled
+    in, not necessarily executed — but the set of callers GREW when pylib
+    started seeding NilPy's `random` at unit initialization, which is not a
+    call the program has to make: it now issues on startup for any program
+    that pulls pylib. That cannot reach a bare ESP boot today, because pylib
+    `uses builtin` and builtin does not compile there; if that ever changes,
+    this is the line that fires.) Deleting the dead directive does not change
+    either fact; it stops the file claiming a protection it does not provide.
     Filed as bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing. }
   r := __pxxrawsyscall(403, 1, Int64(@ts[0]), 0, 0, 0, 0);  { clock_gettime64 }
 {$endif}
   { No clock on a bare target (PXX_ESP): ts stays zero and the stack address
-    below is the only entropy — Randomize is still callable, just weak there. }
-  RandSeed := Cardinal(ts[0] xor ts[1] xor r xor Int64(@ts[0]));
+    below is the only entropy — the call still answers, just weakly there. }
+  Result := ts[0] xor ts[1] xor r xor Int64(@ts[0]);
+end;
+
+procedure Randomize;
+begin
+  RandSeed := Cardinal(PXXEntropy64);
 end;
 
 function HexStr(Val: Int64; cnt: Integer): AnsiString;
