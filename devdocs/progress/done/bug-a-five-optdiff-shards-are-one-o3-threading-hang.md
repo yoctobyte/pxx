@@ -182,4 +182,4 @@ MATCH and refusing to judge without the `converged` verb is what kept a stale
 binary out of this, twice.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2112c18c5.

@@ -65,4 +65,4 @@ same bug as the five-shard hang — that one was
 (`rc 0 vs 124`) rather than an output divergence, which is exactly the
 distinction frank-user drew when it said shard4 was a name collision. It was
 right.
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 77d627edb.

@@ -58,4 +58,4 @@ rc=0   ok varcmp-i64   total ok 23 / 23
 `-Fulib/rtl` is load-bearing and belongs in any future repro of this one:
 without it the same source exits 0 and the SIGSEGV does not happen. The recipe
 passes it; a repro that drops it reports a false green.
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6b3b54ce4.

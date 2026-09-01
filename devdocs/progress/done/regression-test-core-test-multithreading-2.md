@@ -86,4 +86,4 @@ rebuilt to `76c8be9064e0`, 20 of 20 runs SIGSEGV; restored and rebuilt to
 What is NOT fixed is that the TLS block is not per-thread for a foreign thread
 at all — that reaches every `gs:` slot, not just the magazine, and it is a
 design question: [[bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine]].
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2112c18c5.

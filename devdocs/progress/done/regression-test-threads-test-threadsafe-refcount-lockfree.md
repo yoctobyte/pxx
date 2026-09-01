@@ -65,4 +65,4 @@ rc=0   fail=0   TSRCLOCKFREE OK
 The three `rc=1` rows that failed were reading the refcount through
 `PWord(Int64(Pointer(v)) - 16)^` — through the very pointer cast that was
 retaining. Re-laned from the `track: T` fallback to A on the way out.
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 361635aa2.
