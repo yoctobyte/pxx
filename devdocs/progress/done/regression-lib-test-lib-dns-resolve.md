@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: B
+status: done
 ---
 
 > **Track guessed as B from the FAILING STEP** — line 1 of 2, `stable_linux_amd64/default/pinned -Fulib/rtl/platform/posix test/lib_dns_resolve.pas /tmp/lib_dns_resolve`, which names `test/lib_dns_resolve.pas`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 2 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -39,3 +40,37 @@ pascal26:60: error: undefined variable (PalVfork)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+## 2026-09-01 (frankH) — resolved: one deliberate PAL rename, filed once per file
+
+`e2ba5a1e1` renamed the PAL entry `PalVfork` -> `PalFork` on purpose (the old
+name was false and had already cost a real conclusion in `lib/crtl/src/unistd.c`,
+which left `fork()` an ENOSYS stub by reasoning FROM the name, against a PAL
+whose body issued `SYS_fork` all along). The rename is right; ten call sites in
+`test/` were missed.
+
+**Track T filed eight tickets, one per failing file. They are one bug.** Fixed
+together in the commit subject `fix(B): eight DNS tests still called PalVfork,
+a name e2ba5a1e1 deliberately retired` — `lib_dns_{resolve,facade,spoof,tcp,
+multins,chase}.pas` plus `cache_facade` and `aaaa` with two sites each.
+
+Pure rename, same signature; `PalVforkAndExec` deliberately untouched.
+
+**Verified:** `make lib-test` EXIT=0 end to end against stable v399.
+
+Worth recording that the two instruments agreed while failing differently: a
+grep for the shape in the working tree found exactly the same eight files the
+watcher found by running them on seven. That is corroboration; two greps would
+not have been.
+
+### For whoever tunes the auto-filer
+
+Each of these tickets carries *"look at flakiness or box load, not at the named
+sha"*. It is the only actionable line on them and it is **wrong** — nothing was
+flaky. Dropping `compiler/` commits from a `$(PXX_STABLE)` job's bisect range is
+sound, but the fallback then assumes the residue is environmental. `lib/` and
+`test/` remain in range and are exactly where such a job's real regressions
+live; the advice should name them before it says "flakiness".
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
