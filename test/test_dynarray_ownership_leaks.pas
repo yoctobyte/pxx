@@ -32,11 +32,12 @@
   NOT covered here, deliberately: `array of AnsiString`. It leaked through an
   indirect call exactly like the arms below and is fixed by the same change
   (x86-64 allocs=3799 frees=0 -> 3799/3796), but i386, arm32 and riscv32 build
-  it with 5411 allocations against x86-64's and aarch64's 3799 -- a PRE-EXISTING
-  divergence, measured identical on the parent commit and unrelated to
-  ownership, so it fails nothing and leaks nothing. Wiring it into the
-  cross-target rows would pin that known-bad number as expected. It has its own
-  ticket: bug-a-array-of-ansistring-allocates-42-percent-more-on-i386-arm32-and-riscv32.
+  it with 5411 allocations against x86-64's and aarch64's 3799. That divergence
+  is PRE-EXISTING, measured identical on the parent commit, and reducing it
+  showed the array was a red herring: those backends heap-copy every string
+  LITERAL assignment, `s := 'yy'` included, because they have no
+  EmitStaticLitHandle. Wiring this arm would pin that number as expected. Ticket:
+  perf-a-every-string-literal-assignment-heap-copies-on-i386-arm32-riscv32-and-xtensa.
 
   The DIRECT arm is here as the in-program control: it did not leak before the
   fix and must not start. If every arm below ever reads the same as it did on a
