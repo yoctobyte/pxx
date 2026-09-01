@@ -221,3 +221,6 @@ PARSER across languages is deliberate policy
 GREEN, FPC seed canary PASS (run with `compiler/` dirty, so the canary was
 live). Not `make test` as this ticket's own `Gate:` line asked: CLAUDE.md's
 per-fix loop supersedes it, and the breadth is Track T's.
+
+## Log
+- 2026-09-01 — resolved, commit 51aef8e0f.

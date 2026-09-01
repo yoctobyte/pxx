@@ -348,3 +348,6 @@ compile: they made `pasparser_expr.inc` a fourth caller of
 agents on one TOPIC in two different FILES — the collision git cannot see, and
 neither author's own build could see it either. Fixed in `40942a4d6`, pushed as
 soon as it built rather than held for the gate.
+
+## Log
+- 2026-09-01 — resolved, commit cec0b94f2 (build fix 40942a4d6).

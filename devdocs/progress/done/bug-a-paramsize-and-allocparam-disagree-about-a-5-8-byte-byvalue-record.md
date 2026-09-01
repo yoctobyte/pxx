@@ -200,3 +200,6 @@ meaningless. Left as a note, not done.
 
 `make compiler/pascal26`: converged, `994bcc639fa0`. `tools/gate.sh quick`:
 GREEN, FPC seed canary PASS (run with `compiler/` dirty).
+
+## Log
+- 2026-09-01 — resolved, commit 65e43b519.
