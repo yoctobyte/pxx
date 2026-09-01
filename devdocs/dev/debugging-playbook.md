@@ -4937,6 +4937,69 @@ The tell: I wrote *"either it is reachable and ... or it is not and ..."*. A
 two-branch enumeration built from a one-token delta is a claim that the token
 is the only thing in play. Write the repro instead; it took two lines.
 
+## POISON AND DIFF — turn "is this reachable" into a byte count
+
+Named 2026-09-01 (frankA; caveats frankB). To find out whether a function's
+return value reaches emitted output, **replace it with a sentinel, rebuild, and
+diff the emitted bytes against a clean build.** `TypeSize`'s record arm became
+`Result := 12345`; compiling `compiler.pas` with the poisoned compiler differed
+from the clean one by exactly one 4-byte datum in the RW data segment.
+
+That is enormously better than grepping 319 call sites, and better than a counter
+too: a counter can be one column behind the carrier set, and a byte diff cannot
+be — it reports the emitted artefact itself.
+
+**Three things it does not tell you, all of which cost real probes to learn.**
+
+**1. Its output is a LOCATION, not a verdict.** It says which slot moved. It says
+nothing about whether anything READS that slot. Here the answer turned out to be
+"nothing currently does" — established by tracing every read of that descriptor
+field through `builtinheap.pas`, three further probes, and the observation that
+the poisoned compiler still self-hosted to a fixedpoint. A wrong value in a slot
+nobody reads is not a user-visible defect, and saying so plainly is better than
+letting a location imply a bug.
+
+**2. The diff is a claim about the CORPUS you compiled, not about the
+construct.** "Differs by two bytes over `compiler.pas`" is a fact about
+`compiler.pas` — which is a deliberately procedural subset, the same reason
+CLAUDE.md warns the self-host fixedpoint cannot see a construct the compiler
+never writes. If the poisoned site is a record FIELD's dynamic-array descriptor,
+the question "how many of those does `compiler.pas` contain" decides the count
+before the construct does.
+
+**3. The follow-up reachability probe can be IMMUNE BY COINCIDENCE.** Having
+found the site, the natural next step is a small program that exercises it. The
+first one here used a record of two Integers — exactly 8 bytes — so the poisoned
+constant *was* the right answer and the program printed correctly under both
+arms. The defect only appears once the element is not pointer-sized. **A probe
+built from the first example that comes to mind is disproportionately likely to
+be the one case the defect cannot reach**, because the memorable example is
+usually the simple one, and simple is what the wrong constant is tuned to.
+
+### When frequency is the wrong question, count COPIES
+
+The corpus caveat above dissolved rather than being answered, and how is worth
+more than the caveat. Instead of widening the corpus, frankA asked what the site
+would look like **if the value were wrong rather than merely unread** — and found
+the concept *"storage size of a value of this type"* written out BY HAND **20
+times** across seven files. **18 had the record arm. 2 did not.** One of the two
+had been fixed in its sibling file 2.5 months earlier, in a commit that touched
+one file.
+
+No corpus frequency could have produced that number. A count of COPIES did.
+**When you are about to argue from how often something happens, check first
+whether the real warrant is code identity** — how many places implement this
+concept, and do they agree. That converts an unfalsifiable "is it one datum or
+fifty" into a finite, checkable list.
+
+**And the collapse that follows has its own trap.** Merging 18 copies into one
+helper: the control for a pure refactor is byte-identity of emitted output (7/7
+here, with a positive control that two different programs compare UNEQUAL, so the
+7/7 is not a broken `cmp`). But the first collapse attempt swallowed an
+interleaved arm of an `else if` chain and produced code that would not compile —
+caught by reading the diff. **A mechanical rewrite whose only check is "it still
+builds" keeps whichever copies happened to stay syntactically valid.**
+
 ## NAME OR PIN YOUR INPUT — an inferred input is a lossy view of the real one
 
 Named 2026-09-01 (frankT and frankB). frankT's statement of it:
@@ -4956,16 +5019,50 @@ Three instances in two days, three different tools, one shape:
 sources that produced the binary; compare against `sys.argv`, which predates
 argparse's truncation; read the tree identity at both ends and say when it moved.
 
-This is *"An instrument that reports a RESULT should report its DENOMINATOR"*
-(frankS, 2026-08-31) generalised from COUNTS to INPUTS — the denominator must
-trace to a statement of intent that upstream truncation cannot reach, and so must
-any input an instrument reports on.
+**The chain this extends has two links, not one, and they are different claims:**
+
+1. **frankS, 2026-08-31 — report the denominator.** "Nothing found" and "nothing
+   looked at" must not print identically. (Its own section, below.)
+2. **frankC, 2026-09-01 — the denominator must not derive from the same source as
+   the numerator.** Upstream truncation then moves both, and the assertion
+   passes. Strictly stronger, and recorded here because it was recorded nowhere.
+
+**The `--job` row above is the proof they are distinct.** `testmgr --job A --job
+B` DID report its denominator — it printed `1/1`. It satisfies frankS's rule
+completely and is still the defect, because numerator and denominator both came
+from argparse's already-truncated value. So this section generalises **frankC's**
+link, from COUNTS to INPUTS: an input an instrument reports on must trace to
+something upstream truncation cannot reach.
+
+*This paragraph was wrong in its first version, which cited frankS for both
+links. The correction is itself an instance and is recorded under the rule below,
+because it went wrong in a way that looked like diligence.*
 
 **Why it is hard to see in review.** The `testmgr` case hid *because the adjacent
 problem was solved so well*: the run snapshots its compiler precisely so a
 mid-run rebuild is harmless, and a reader who knows the run owns the bytes it
 tested assumes it owns the sources too. A neighbouring guarantee reads as
 coverage.
+
+### An attribution checked against an ADJACENT fact
+
+The first version of the paragraph above credited frankS with both links. It was
+challenged, and the check made was: open frankS's section, read its attribution
+line, confirm it says frankS. That is a real fact, correctly read — and it cannot
+answer the question, because the disputed claim was about a DOWNSTREAM refinement
+that had never been written down. Absence from the file was read as absence from
+the world.
+
+This happened **one message after** the warning that names propagate uncorrected
+because nobody re-checks one that reads plausibly. The re-check happened; it was
+aimed at the nearest verifiable thing rather than at the claim.
+
+**So: when you verify a citation, verify the CLAIM, not the name.** "Does this
+person's section exist and carry this name" is a different question from "is this
+the rule that says what I am citing it for" — and only the second one is the
+question. The cheap test is to state the cited rule in your own words and ask
+whether the cited text actually entails it. Here it did not: `1/1` satisfies
+"report your denominator" and is still the bug.
 
 ### And the recursion: a quiet CONTROL is not a quiet subject
 
