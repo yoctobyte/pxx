@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: C
+status: done
 ---
 
 > **Track guessed as C from the FAILING STEP** — line 2 of 2, `if [ ! -f "library_candidates/cjson/src/cJSON.h" ]; then \ echo "test-cjson: SKIP — no cJSON tree at library_candidates/`, which names `test/cjson/runner.c`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 3 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -105,3 +106,31 @@ against an address below 4GB, and my first version used a `static` buffer and
 passed on a compiler I already knew was broken. Positive control measured — the
 unfixed compiler exits 3 with `void* callback returned 0x40a00008, want
 0x7dea40a00008`.
+- 2026-09-01 — resolved, commit PENDING-COMMIT.
+
+## SCOPE OF THE VERIFICATION — THIS ONE WAS NOT RUN
+
+**`test-cjson` was never executed against the fix.** There is no
+`library_candidates/cjson` tree on this box, so the row SKIPs here and reports
+success regardless of the compiler — it cannot tell me anything, and the box
+that filed this regression is not the box that fixed it.
+
+What IS verified:
+
+- the root cause, at the source, with a positive control (the unfixed compiler
+  exits 3 on `test/cfnptr_void_pointer_return.c`);
+- `test-lua`, which failed the identical way — six programs, no output at all —
+  and now passes 6/6;
+- all four declarator spellings of a `void *` fn-pointer.
+
+What is INFERRED: that cJSON's failure had this cause and only this cause.
+The inference is strong — cJSON's allocator hooks are
+`void *(*malloc_fn)(size_t)`, exactly the shape, and the reported failure was
+the same empty-output signature as lua's — but it is an inference, and a second
+cause hiding behind the first is precisely the pattern that produced three
+separate findings in this repo in two days.
+
+**Whoever next runs `test-cjson` on a box that HAS the tree owns the residual
+question.** If it is still red, this ticket closed early and the right move is
+to reopen it rather than to file a new one, because the two would describe the
+same symptom.

@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: C
+status: done
 ---
 
 > **Track guessed as C from the FAILING STEP** — line 2 of 2, `if [ ! -f "library_candidates/lua/src/lua.h" ]; then \ echo "test-lua-cross: SKIP — no lua tree at library_candidates/lu`, which names `test/lua/runner.c`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 4 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -111,3 +112,4 @@ against an address below 4GB, and my first version used a `static` buffer and
 passed on a compiler I already knew was broken. Positive control measured — the
 unfixed compiler exits 3 with `void* callback returned 0x40a00008, want
 0x7dea40a00008`.
+- 2026-09-01 — resolved, commit PENDING-COMMIT.

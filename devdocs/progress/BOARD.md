@@ -64,14 +64,12 @@ _none_
 | perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | SUPERSEDED PREMISE (frankB, 2026-08-30): the 9.4% is NOT the 92-arm walk. CaseEqual already compares lengths first and bails at the first differing char, so a miss is O(1) and 1.58M O(1) compares cannot be 9.4% of a run — the original ticket counted calls and inferred cost from the count. Measured cause: passing a string LITERAL to an AnsiString parameter allocates and copies it every call (543ms vs 30ms for a typed constant over 5M calls; cost scales with literal length), so each of the up-to-101 arms copies a string. Root cause filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call [A p70]; this ticket is blocked on it and is likely MOOT once it lands — re-measure before implementing anything here. Traps banked in the body: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (5)
+## backlog (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case | T | 55 | bug | gate.sh's stale_binary_hint asks a WORKING-TREE question (is this binary built from these sources) using GIT-HISTORY inputs (mtime vs the newest commit touching compiler/), so it can only ever see divergence that has been COMMITTED. Measured: an uncommitted edit under compiler/ leaves BOTH its inputs byte-identical, so its output is provably independent of the thing it detects -- it is blind to the entire uncommitted present, which includes every agent between a build and a commit. Three lanes read three stale-binary REDs as a master miscompile on 2026-08-31; the hint fired for one. | — |
-| regression-test-cjson-compiler-srchash | C | 70 | regression | regression: test-cjson#src:tools/compiler_srchash.sh at e5a21152b5d1 in step 2/2, `if [ ! -f "library_candidates/cjson/src/cJSON.h" ]; then` (auto-filed by twatch) | — |
 | regression-test-core-crtl-tiny-regex-match | T | 70 | regression | regression: test-core#src:test/crtl_tiny_regex_match.c at 6e622be95680 in step 2/2, `tools/expect_same.sh crtl_tiny_regex_match26 "$(/tmp/crt` (auto-filed by twatch) | — |
-| regression-test-lua-cross-compiler-srchash | C | 70 | regression | regression: test-lua-cross#src:tools/compiler_srchash.sh at e5a21152b5d1 in step 2/2, `if [ ! -f "library_candidates/lua/src/lua.h" ]; then \ e` (auto-filed by twatch) | — |
 | regression-test-threads-test-exception-threads-race | T | 70 | regression | regression: test-threads#src:test/test_exception_threads_race.pas at e7be39f9a505 in step 2/4, `tools/expect_same.sh test_exception_threads_race26 "$(/t` (auto-filed by twatch) | — |
 
 ## backlog_new (0)
@@ -326,7 +324,7 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 
-## backlog-tools (70)
+## backlog-tools (71)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -399,6 +397,7 @@ _none_
 | regression-test-pascal-conformance-shard2-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard2/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard3-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard3/6 red at 27424c927b65 (auto-filed by twatch) | — |
 | regression-tools-devtest-00-3 | T | 70 | regression | regression: tools-devtest#00 red at 0c99981669b7 (auto-filed by twatch) | — |
+| task-t-a-corpus-tree-absence-should-be-counted-not-just-echoed | T | 45 | task | A test row whose corpus tree is absent echoes SKIP and passes, and nothing counts how many did. Measured on this box: test-core's crtl_tiny_regex_match row was UNGUARDED, so a missing library_candidates/tiny-regex-c hard-errored and — because make stops at the first failing recipe line — took 844 of test-core's 1745 compile rows (48%) with it, with no indication in the log of how much had not run. Guarding it (2026-09-01) fixes that and buys the opposite failure: testmgr's own TIERS comment records test-fgl printing SKIP and PASSING for its entire life without running once. Both failure modes are live in this repo TODAY. The missing mechanism is the same one test-c-abi-mixed-link now has: count the skips and report `N of M measured, K skipped`, so a box quietly running half the suite is visible in the verdict instead of indistinguishable from a green one. | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
 ## backlog-pascal (52)
@@ -826,9 +825,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3001)
+## done (3003)
 
-3001 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3003 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -919,10 +918,8 @@ _none_
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [T] regression-cascade-fc01c8094434
 - [p 70] [T] regression-optdiff-shard4-12
-- [p 70] [C] regression-test-cjson-compiler-srchash [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-core-crtl-tiny-regex-match
 - [p 70] [T] regression-test-core-test-setlen-in-parallel-for-body-2
-- [p 70] [C] regression-test-lua-cross-compiler-srchash [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-pascal-conformance-shard0-6-4
 - [p 70] [T] regression-test-pascal-conformance-shard1-6-2
 - [p 70] [T] regression-test-pascal-conformance-shard2-6-2
@@ -1085,6 +1082,7 @@ _none_
 - [p 45] [N] refactor-n-two-import-handlers-are-twins
 - [p 45] [P] refactor-p-the-field-declaration-parser-exists-twice
 - [p 45] [P] refactor-p-the-overload-probe-cannot-see-the-argument-match-channels
+- [p 45] [T] task-t-a-corpus-tree-absence-should-be-counted-not-just-echoed
 - [p 45] [T] task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it (unblocks 1)
