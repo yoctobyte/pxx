@@ -2619,6 +2619,51 @@ begin
     if (Procs[procIdx].RetType = tyRecord) and
        RecordHasManagedFields(ProcRetRecId[procIdx]) then
       SymIsHiddenArgTemp[scratchSym] := True;
+    { AN INTERFACE-RETURNING CALL leaves its +1 in THIS TEMP and nobody owns it.
+      `MkIntf` hands back a reference; the argument path then RETAINS it into its
+      own temp and releases that one at end of statement, so the call site
+      reconciles and the sret temp does not — every reference the factory made
+      leaked. Measured 921 in 1000 trips, frees=0, on all three consumers that
+      never store the result: a `const` interface parameter (which stays a
+      by-ref alias and takes no reference, matching FPC), a by-VALUE parameter,
+      and a method call straight on the result. `g := MkIntf(i)` was clean
+      throughout, because the variable owned it — that is the control that says
+      this is the temp and not the call. FPC's heaptrc says 0 unfreed for the
+      same program.
+
+      Released end-of-statement on the queue the by-value argument temp already
+      uses, which is where FPC puts it, and NOT retained on the way in: the
+      value arrives owning one reference, so the temp MOVES it. That is what
+      keeps `g := MkIntf(i)` correct rather than over-released — the assignment
+      retains for g, this releases the factory's, and the net is the one
+      reference g holds.
+
+      Nil-init matters here for the same reason the managed-record arm above
+      gives: the slot is allocated mid-body, and IRFlushPostCallIntf's release
+      would otherwise dispatch on stack garbage on a branch the call never took.
+      bug-a-an-interface-returned-by-a-function-leaks-unless-it-is-assigned }
+    if (Procs[procIdx].RetType = tyRecord) and
+       (ProcRetRecId[procIdx] >= REC_UCLASS_BASE) and
+       UClsIsInterface[ProcRetRecId[procIdx] - REC_UCLASS_BASE] and
+       UClsIsComInterface[ProcRetRecId[procIdx] - REC_UCLASS_BASE] then
+    begin
+      SymIsHiddenArgTemp[scratchSym] := True;
+      if PostCallIntfCount > High(PostCallIntfSym) then
+        Error('too many pending interface-result temps');
+      PostCallIntfSym[PostCallIntfCount] := scratchSym;
+      PostCallIntfRec[PostCallIntfCount] := REC_NONE;
+      Inc(PostCallIntfCount);
+      { the same main-body backstop the argument temp keeps: a call site whose
+        statement never flushes has no scope exit either, and the flush nils the
+        slot so this can only ever release what the flush did not. }
+      if Syms[scratchSym].Kind = skGlobal then
+      begin
+        if MainBodyIntfTempCount > High(MainBodyIntfTempSym) then
+          Error('too many main-body interface result temps');
+        MainBodyIntfTempSym[MainBodyIntfTempCount] := scratchSym;
+        Inc(MainBodyIntfTempCount);
+      end;
+    end;
     { A variant hidden-dest call OVERWRITES the temp raw (the callee copies 16
       bytes into [dest]), so a managed payload from the temp's previous life —
       the SAME sym on every trip through a loop — leaked once per call: ~40
@@ -13182,8 +13227,26 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       IRLoopStackExceptionDepth[IRLoopStackDepth] := ExceptionCodegenDepth;
       Inc(IRLoopStackDepth);
       
+      { FLUSH PER ITERATION, for the reason AN_IF's arms give one statement
+        kind over: a loop is ONE statement, so a body that is not a BEGIN/END
+        block never reaches AN_SEQ and never flushed. Every by-value interface
+        or managed-record argument temp the body created was therefore finalized
+        ONCE, after the loop, on the slot's LAST occupant -- and every earlier
+        occupant was overwritten with no release at all.
+
+        Measured on `for k := 1 to 3 do TakeI(MkIntf(k))` with a printing
+        destructor: pxx destroyed only N=3, FPC destroyed all three. Adding
+        `begin ... end` around the identical body made pxx destroy all three,
+        which is the control that says this is the flush boundary and not the
+        temp. At 1000 trips the census read frees=0.
+
+        Base taken AFTER the loop's own setup, so the limit/init temps stay with
+        the enclosing statement where they are live across every iteration --
+        the same base-not-blanket discipline AN_IF and AN_SEQ use. }
+      pcBase := PostCallIntfCount;
       last := IRLowerAST(ASTRight[node]);
       IRMarkStatementNode(last);
+      IRFlushPostCallIntf(pcBase);
       
       Dec(IRLoopStackDepth);
       
@@ -13317,8 +13380,10 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       IRLoopStackExceptionDepth[IRLoopStackDepth] := ExceptionCodegenDepth;
       Inc(IRLoopStackDepth);
       
+      pcBase := PostCallIntfCount;
       bodyIRNode := IRLowerAST(bodyNode);
       IRMarkStatementNode(bodyIRNode);
+      IRFlushPostCallIntf(pcBase);   { per iteration — see AN_WHILE }
       
       Dec(IRLoopStackDepth);
       
@@ -13363,8 +13428,10 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
       IRLoopStackExceptionDepth[IRLoopStackDepth] := ExceptionCodegenDepth;
       Inc(IRLoopStackDepth);
       
+      pcBase := PostCallIntfCount;
       bodyIRNode := IRLowerAST(ASTLeft[node]);
       IRMarkStatementNode(bodyIRNode);
+      IRFlushPostCallIntf(pcBase);   { per iteration — see AN_WHILE }
       
       Dec(IRLoopStackDepth);
       

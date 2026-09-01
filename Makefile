@@ -6669,6 +6669,16 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_to_pointer_seam_leaks.pas $(TESTTMP)/test_dtp26
 	tools/expect_same.sh test_dtp26 "$$($(TESTTMP)/test_dtp26 | tail -1)" "last=3 head=1000"
 	tools/assert_no_leak.sh dynarray_to_pointer_seam 50 $(TESTTMP)/test_dtp26
+	@# An interface RETURNED by a function, and the flush boundary that hid it.
+	@# TWO defects, neither fix working alone (measured by building each on its
+	@# own): the sret temp had no owner, and a loop whose body is not a BEGIN/END
+	@# block never reached AN_SEQ, so IRFlushPostCallIntf ran once after the loop
+	@# on the slot's LAST occupant. 2503 -> 3 against this bound, allocs 4274
+	@# either way. All three loop kinds are in the program because the flush had
+	@# to be added to each separately.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_interface_result_temp_leaks.pas $(TESTTMP)/test_irt26
+	tools/expect_same.sh test_irt26 "$$($(TESTTMP)/test_irt26 | tail -1)" "sink=1003000"
+	tools/assert_no_leak.sh interface_result_temp 50 $(TESTTMP)/test_irt26
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_record_gate_leaks.pas $(TESTTMP)/test_mrg26
 	tools/expect_same.sh test_mrg26 "$$($(TESTTMP)/test_mrg26 | tail -1)" "managed-record-gate 9000/9000"
 	tools/assert_no_leak.sh managed_record_gate 50 $(TESTTMP)/test_mrg26
@@ -14577,6 +14587,11 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_string_to_pointer_seam_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/stps_i386)" "$$($(TESTTMP)/stps_i386_x64)"
 	tools/assert_no_leak.sh i386/string_to_pointer_seam 50 tools/run_target.sh i386 $(TESTTMP)/stps_i386
 	tools/assert_no_leak.sh x86-64/string_to_pointer_seam 50 $(TESTTMP)/stps_i386_x64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_interface_result_temp_leaks.pas $(TESTTMP)/irts_i386
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_interface_result_temp_leaks.pas $(TESTTMP)/irts_i386_x64
+	tools/expect_same.sh i386/test_interface_result_temp_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/irts_i386)" "$$($(TESTTMP)/irts_i386_x64)"
+	tools/assert_no_leak.sh i386/interface_result_temp 50 tools/run_target.sh i386 $(TESTTMP)/irts_i386
+	tools/assert_no_leak.sh x86-64/interface_result_temp 50 $(TESTTMP)/irts_i386_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
 	# NON-object raise must not be freed at all. Both arms live in one
 	# program because they failed in opposite directions: the leak fix that
@@ -15220,6 +15235,11 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_string_to_pointer_seam_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/stps_aarch64)" "$$($(TESTTMP)/stps_aarch64_x64)"
 	tools/assert_no_leak.sh aarch64/string_to_pointer_seam 50 tools/run_target.sh aarch64 $(TESTTMP)/stps_aarch64
 	tools/assert_no_leak.sh x86-64/string_to_pointer_seam 50 $(TESTTMP)/stps_aarch64_x64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_interface_result_temp_leaks.pas $(TESTTMP)/irts_aarch64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_interface_result_temp_leaks.pas $(TESTTMP)/irts_aarch64_x64
+	tools/expect_same.sh aarch64/test_interface_result_temp_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/irts_aarch64)" "$$($(TESTTMP)/irts_aarch64_x64)"
+	tools/assert_no_leak.sh aarch64/interface_result_temp 50 tools/run_target.sh aarch64 $(TESTTMP)/irts_aarch64
+	tools/assert_no_leak.sh x86-64/interface_result_temp 50 $(TESTTMP)/irts_aarch64_x64
 	@# Dyn-array seam. NO i386 SIBLING for this one, deliberately: i386 refuses
 	@# the program with "arrays not yet supported", so a row there would compare
 	@# against a file that was never built.
