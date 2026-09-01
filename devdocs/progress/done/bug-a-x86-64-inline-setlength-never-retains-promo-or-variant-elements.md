@@ -418,3 +418,32 @@ epistemic status.
 
 ## Log
 - 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 35e4e7c78.
+
+## Correction to this ticket's exoneration of the threads-race RED
+
+The commit message for the fix says the broad sweep's RED was not this change,
+and cites as control that the PINNED compiler fails the same test 3 of 3 with
+`rc=217`. **The conclusion holds; that control did not support it.**
+
+`rc=217` ("Unhandled exception") is a different symptom from the sweep's
+SIGSEGV, and the difference was explained away as variance of a test whose own
+ticket calls it a race. Track B has since measured it deterministic — 20/20 in
+isolation on a quiet box — which removes the explanation the control depended
+on. An error code is not a defect identity, and the convenient reading was taken
+because it pointed where the author already wanted to go.
+
+**The control that actually excludes it**, run afterwards: build the fix and its
+PARENT, and run the test 20 times against each.
+
+    5f3c7ed75 (parent)  compiler 73a9d172409b   pass=0 fail=20   all rc=139
+    84d428bec (the fix) compiler ad879855a65a   pass=0 fail=20   all rc=139
+
+Identical, deterministic, and the parent already carries the SIGSEGV — so the
+fix is neutral on this test and the cause lies earlier, in `785928f20..5f3c7ed75`.
+Both endpoints were built after removing the stamp and confirming `converged`
+rather than `verified`; the first `make` on the checked-out parent printed the
+stamp line, which reads as success and rebuilds nothing.
+
+Likely also why two agents disagreed about the pinned binary (20/20 green
+against 3/3 red): the red ran the pinned COMPILER against `lib/**` and a test
+source at a moving HEAD, so the two runs did not share a subject.
