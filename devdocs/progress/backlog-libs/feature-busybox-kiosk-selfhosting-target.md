@@ -40,8 +40,10 @@ qemu-user. Every existing corpus proves one layer. This proves they compose.
    Twelve applets (`cat echo ash mkdir rm cp mv pwd wc head sleep printf`),
    61 translation units, 114 cases, byte-identical to the gcc oracle on
    x86-64 AND aarch64. Repeatable: `tools/busybox_diff.sh --applets '...'`.
-   Cost sixteen compiler/runtime fixes, every one found by ATTEMPTING the
-   target. Successor:
+   Cost fifteen compiler/runtime fixes, every one found by ATTEMPTING the
+   target. (A sixteenth, the `x & 0` constant-branch fold `3056e214c`, came
+   out of the SEPARATE-compilation attempt afterwards and is not part of this
+   rung's cost.) Successor:
    `feature-c-corpus-busybox-userland-by-separate-compilation` [C], which
    drops the unity for busybox's own build model — the unity tops out on
    three files that assume they own their namespace, and gcc rejects it too.

@@ -33,6 +33,30 @@ namespace, and **gcc rejects the unity too**, so none of this is a pxx defect:
 The harness orders around the second, refuses the fourth, and can do nothing
 about the first or third. Every applet added from here meets more of them.
 
+**Measured at scale 2026-09-01, and this is the number that settles it.** A
+34-applet unity (the twelve plus `grep sed sort touch chmod ln du df sync env
+dd tr cut basename dirname readlink true false seq tee md5sum stat`) does not
+compile AT ALL, and every error is **gcc's**:
+
+```
+./coreutils/du.c:104:1     redefinition of struct or union 'struct globals'
+./findutils/grep.c:196:1   redefinition of struct or union 'struct globals'
+./editors/sed.c:172:1      redefinition of struct or union 'struct globals'
+include/common_bufsiz.h:1  redeclaration of enumerator 'COMMON_BUFSIZE'   (x8)
+./coreutils/dd.c:399       #define skip (Z.skip) -- expanded inside shell/ash.c
+./coreutils/cut.c:57       two or more data types; conflicts with /usr/include/regex.h
+./libbb/ptr_to_globals.c   conflicting types for 'ptr_to_globals'
+```
+
+`struct globals` is not an edge case — it is busybox's STANDARD pattern, one
+per applet, and a unity can hold exactly one. `dd.c` defining `skip` and having
+it expand inside `ash.c` is the ash-macro problem in the other direction, and
+no include order fixes a pair that each claim the other's identifiers.
+
+So the unity's limit is not twelve and not any number: it is one applet per
+namespace-claiming pattern, and busybox's whole design is that pattern. This
+is why the rung is separate compilation and not "more applets".
+
 ## Where this already is
 
 `tools/busybox_diff.sh --separate` exists and works. Measured 2026-09-01,
