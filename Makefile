@@ -11971,6 +11971,27 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-multi-applet
 	./$(COMPILER) test/c_short_circuit_const_folds.c $(TESTTMP)/c_scfold26
 	tools/expect_same.sh c_scfold26 "$$($(TESTTMP)/c_scfold26)" "$$(printf '11\n12\n13\n14\n15\nlit0&& 0 calls=0\nlit1&& 1 calls=1\nlit1|| 1 calls=0\nlit0|| 1 calls=1\nrun&&0 0 calls=1\nrun||1 1 calls=1')"
+	@echo "=== the four preprocessor shapes busybox's own build needs ==="
+	# Found by compiling busybox's 52 libbb/coreutils sources as SEPARATE
+	# OBJECTS with busybox's real command line: `, ##__VA_ARGS__` comma
+	# deletion, a `# if`/`# endif` INSIDE a macro invocation's argument list,
+	# `-include <file>`, and an absolute path in `#include "..."`. Every one of
+	# them is on every busybox translation unit, and none of them worked.
+	# The `line 88` row is the -include half that is easy to get wrong: a
+	# forced include must not shift the primary source's line numbers. It is a
+	# literal line number on purpose -- move code in that file and this row
+	# moves with it.
+	# The RELATIVE -include is deliberate and is itself the assertion: gcc
+	# resolves the operand against the WORKING DIRECTORY, not the source's
+	# directory, and resolving it the other way is invisible to any project
+	# that also passes `-I.` (busybox does, which is why this needs its own
+	# row). The second run passes the same header by ABSOLUTE path, which
+	# resolves through the include search's absolute-path arm.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) -include test/c_cpp_forced_include.h test/c_cpp_macro_arg_shapes.c $(TESTTMP)/c_cppargs26
+	tools/expect_same.sh c_cppargs26 "$$($(TESTTMP)/c_cppargs26)" "$$(printf 'swallow 10\nkeep    15\ndirfalse 20\ndirtrue 39\nmkdirshape 40\nforced 41\nline 88')"
+	./$(COMPILER) -include $(CURDIR)/test/c_cpp_forced_include.h test/c_cpp_macro_arg_shapes.c $(TESTTMP)/c_cppargsabs26
+	tools/expect_same.sh c_cppargsabs26 "$$($(TESTTMP)/c_cppargsabs26)" "$$(printf 'swallow 10\nkeep    15\ndirfalse 20\ndirtrue 39\nmkdirshape 40\nforced 41\nline 88')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The SIBLING defect, and it is not the const-branch one: a loop in dead code

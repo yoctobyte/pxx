@@ -819,6 +819,7 @@ begin
   WriteLn('  -Fu<dir>              add a Pascal unit search root');
   WriteLn('  -Fi<dir>              add a {$I} include search root');
   WriteLn('  -I<dir>               add a C include search root');
+  WriteLn('  -include <file>       preprocess <file> before the primary C source');
   WriteLn('  -d<NAME> -u<NAME>     define / undefine a conditional symbol');
   WriteLn('  -Mobjfpc              FPC objfpc mode by default');
   WriteLn('  --rtl-libc            reach the kernel through libc syscall(3) rather');
@@ -1651,6 +1652,37 @@ begin
       { -Fi<dir> (FPC-style): add a {$I file} include search root. }
       AddPasIncDir(PasOptionTail(option, 4));
       Inc(i);
+    end
+    else if (option = '-include') or
+            ((Length(option) > 8) and (Copy(option, 1, 8) = '-include')) then
+    begin
+      { -include <file> (gcc): preprocess <file> as if `#include "<file>"` were
+        the first line of the primary source, WITHOUT shifting its line numbers.
+        This is not a convenience: it is how kernel-style build systems inject
+        their generated config header, and busybox's Makefile.flags puts
+        `-include include/autoconf.h` on every one of its ~145 translation
+        units. Without it, not one of them compiles from its own build system.
+
+        Both spellings, because both are in the wild: `-include f` (a separate
+        argument, what gcc documents and what every Makefile writes) and
+        `-includef` / `-include=f` glued on. }
+      if option = '-include' then
+      begin
+        if i + 1 > ParamCount then
+          begin writeln(StdErr, '-include: expected a file name'); Halt(1); end;
+{$ifndef PXX_NO_CFRONT}
+        AddCmdInclude(ParamStr(i + 1));
+{$endif}
+        Inc(i, 2);
+      end
+      else
+      begin
+{$ifndef PXX_NO_CFRONT}
+        if option[9] = '=' then AddCmdInclude(PasOptionTail(option, 10))
+        else                    AddCmdInclude(PasOptionTail(option, 9));
+{$endif}
+        Inc(i);
+      end;
     end
     else if (Length(option) > 2) and (option[1] = '-') and (option[2] = 'I') then
     begin

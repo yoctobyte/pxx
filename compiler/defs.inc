@@ -288,6 +288,7 @@ const
   MAX_DECL_ITEMS = 32768;       { top-level subroutine items recorded by the declaration pre-scan }
   MAX_PAS_DEFINES = 1024;       { jedi.inc-grade compatibility headers define hundreds }
   MAX_C_CMD_DEFINES = 256;      { C `-D`/`-U` command-line predefines }
+  MAX_C_CMD_INCLUDES = 32;      { C `-include <file>` forced includes }
   MAX_PAS_DEFINE_CHARS = 32768;
   MAX_PAS_CONDS = 64;
   MAX_INC_DEPTH = 32;
@@ -2531,6 +2532,8 @@ var
   { C command-line `-D<name>[=<value>]` / `-U<name>` predefines, captured raw at
     arg-parse time and seeded into the C preprocessor in CPreprocess (the C side
     supports macro VALUES, which the Pascal name-only define table does not). }
+  CCmdIncludeFile  : array[0..MAX_C_CMD_INCLUDES-1] of AnsiString;
+  CCmdIncludeCount : Integer;
   CCmdDefRaw       : array[0..MAX_C_CMD_DEFINES-1] of AnsiString;
   CCmdDefCount     : Integer;
   CCmdUndefRaw     : array[0..MAX_C_CMD_DEFINES-1] of AnsiString;

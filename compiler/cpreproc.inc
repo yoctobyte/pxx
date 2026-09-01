@@ -1271,6 +1271,7 @@ procedure CPExpandFunction(mi: Integer; const src: AnsiString;
   argCount, level: Integer; var dst: AnsiString);
 var p, last, a, b, ai, argBase, argP, k, savedSlot, q: Integer;
     pasteNext: Boolean;   { previous body token was `##` — next operand is pasted }
+    vaEmpty: Boolean;     { `, ## __VA_ARGS__` with no variadic arguments }
 begin
   pasteNext := False;
   if DebugTrace then writeln('C preprocessor: expand function #', mi, ' level=', level);
@@ -1306,6 +1307,43 @@ begin
         SetLength(dst, Length(dst) - 1);
       p := p + 2;
       while (p <= last) and (CPrepChars[p] in [' ', #9]) do Inc(p);
+      { GNU `, ## __VA_ARGS__`: when the variadic arguments are OMITTED OR
+        EMPTY, the preceding comma is deleted. Not the C99 placemarker rule one
+        block down -- that one keeps the tokens either side and only stops them
+        gluing; this one removes a token that was already emitted, and nothing
+        else in the expander walks backwards over `dst`.
+
+        It is an extension, and it is not optional in practice: busybox's
+        include/libbb.h:1354 is
+
+            #define getopt32long(argv,optstring,longopts,...) \
+                    getopt32(argv,optstring,##__VA_ARGS__)
+
+        and `ls` and `mkdir` both call it with no trailing arguments, so
+        without this the expansion is `getopt32(argv,"m:pv",)` and the parser
+        stops at `expected C expression` -- pointing at the CALL SITE, several
+        hundred lines from the macro, which is why this reads as a busybox
+        oddity rather than a preprocessor gap until you reduce it.
+
+        OMITTED and EMPTY are two different states here and both must count:
+        `P("x")` gives argCount = the named count, while `P("x",)` gives one
+        more argument whose text is empty. gcc deletes the comma for both. }
+      if CPMVariadic[mi] and (p <= last) and CPIsIdentStart(CPrepChars[p]) then
+      begin
+        q := p;
+        while (q <= last) and CPIsIdentChar(CPrepChars[q]) do Inc(q);
+        if CPRangeIsVaArgs(p, q - 1) then
+        begin
+          vaEmpty := argCount <= CPMParamCount[mi];
+          if not vaEmpty then
+            vaEmpty := CPArgStart[argBase + CPMParamCount[mi]] >
+                       CPArgEnd[argBase + argCount - 1];
+          { The whitespace trim above already ran, so a comma is the last
+            character of dst if it is there at all. }
+          if vaEmpty and (Length(dst) > 0) and (dst[Length(dst)] = ',') then
+            SetLength(dst, Length(dst) - 1);
+        end;
+      end;
       { Right operand is a parameter with an EMPTY argument (C99 placemarker):
         `a ## <empty>` yields just `a`, and the NEXT body token must stay a
         SEPARATE token — emit a space so `A ## B+` with B empty gives `+ +`,
@@ -2160,6 +2198,15 @@ begin
   Inc(CIncludeDirCount);
 end;
 
+{ Register a `-include <file>` forced include. Order is preserved: gcc
+  preprocesses them in command-line order, before the primary source. }
+procedure AddCmdInclude(const path: AnsiString);
+begin
+  if CCmdIncludeCount >= MAX_C_CMD_INCLUDES then Error('too many -include files');
+  CCmdIncludeFile[CCmdIncludeCount] := path;
+  Inc(CCmdIncludeCount);
+end;
+
 { ---- the host system `<>` fallback search list ----------------------------
 
   Tier 4, below `-I` roots and below pxx's own crtl headers: the host's own
@@ -2458,6 +2505,22 @@ function CPSearchInclude(const nm, baseDir: AnsiString;
                          depth: Integer; probe, angled: Boolean): Boolean;
 var k: Integer;
 begin
+  { 0. An ABSOLUTE path is already a complete path: use it, search nothing.
+       `#include "/abs/x.h"` is legal C and every compiler resolves it
+       directly -- and it is not an exotic spelling, it is what a generated
+       build file writes when it knows where its config header lives. Without
+       this the name went through CPConcat2 against baseDir and became
+       `/dir//abs/x.h`, which does not exist, so the diagnostic reported the
+       absolute path as "not found" while listing search roots that could never
+       have contained it. Found via `-include /abs/cfg.h`, where the forced
+       include is the same code path. }
+  if (Length(nm) > 0) and (nm[1] = '/') then
+  begin
+    CPrepPath := nm;
+    CPLoadInclude(depth);
+    Result := CPIncludeLength(depth) > 0;
+    Exit;
+  end;
   { 1. The including file's own directory (baseDir is threaded as the resolved
        dir of each nested include via CPProcessInclude) -- for a QUOTED include
        only. C 6.10.2 gives `"..."` the including file's directory and `<...>`
@@ -2790,7 +2853,7 @@ begin
 end;
 
 procedure CPProcessText(const src, baseDir: AnsiString; depth: Integer);
-var pos, p, q: Integer; inComment, emitted: Boolean; cont: AnsiString;
+var pos, p, q: Integer; inComment: Boolean; cont: AnsiString;
     savedFileId, savedLine, savedDepth: Integer;
     savedPath, savedBaseDir: AnsiString;
 begin
@@ -2812,7 +2875,6 @@ begin
     CPReadLine(src, pos, inComment, CPrepLine);
     Inc(CPCurLine);
     CPStmtLine := CPCurLine;   { before any continuation join extends CPCurLine }
-    emitted := False;
     p := 1;
     while p <= Length(CPrepLine) do
     begin
@@ -2822,8 +2884,37 @@ begin
     { Join continuation physical lines while a call's parentheses stay unbalanced,
       so a function-macro invocation whose arguments span newlines (common in
       lua/sqlite) expands as a whole. Directives use `\` continuation, already
-      handled in CPReadLine, so skip them. }
-    if (p > Length(CPrepLine)) or (CPrepLine[p] <> '#') then
+      handled in CPReadLine, so skip them.
+
+      A DIRECTIVE INSIDE THE ARGUMENT LIST IS OBEYED AND THE COLLECTION
+      CONTINUES. It used to emit the half-collected line and give up, which
+      left the invocation's own `(` unclosed: the macro name was written out
+      with a truncated argument list and the parser stopped at
+      `expected C expression`, pointing at the CALL and never at the directive.
+      That is not an exotic shape -- busybox's coreutils/mkdir.c is
+
+          opt = getopt32long(argv, "m:pv" IF_SELINUX("Z:"),
+                          "mode\0"    Required_argument "m"
+          # if ENABLE_SELINUX
+                          "context\0" Required_argument "Z"
+          # endif
+                          , &smode IF_SELINUX(,&scontext)
+          );
+
+      and gcc, clang and tcc all take it. The standard leaves a directive
+      inside a macro invocation undefined (C 6.10.3/11), so this is a
+      compatibility choice and not a conformance one -- but it is the choice
+      every compiler real code is written against has made.
+
+      While a conditional is INACTIVE the skipped lines simply do not
+      accumulate, so the parenthesis depth cannot move under us and the removed
+      arm contributes nothing -- which is exactly what a real preprocessor
+      produces for `# if 0` here.
+
+      The join only runs while the region is ACTIVE. Inside a false conditional
+      each line is skipped on its own below, and joining there could splice text
+      from a dead region onto a live line once an `#endif` reopened it. }
+    if CPActive and ((p > Length(CPrepLine)) or (CPrepLine[p] <> '#')) then
       while (pos <= Length(src)) and (CPLineParenDepth(CPrepLine) > 0) do
       begin
         CPReadLine(src, pos, inComment, cont);
@@ -2835,26 +2926,11 @@ begin
           Inc(q);
         end;
         if (q <= Length(cont)) and (cont[q] = '#') then
-        begin
-          if CPActive then
-          begin
-            SetLength(CPrepLineExp, 0);
-            CPExpandRange(CPrepLine, 1, Length(CPrepLine), 0, CPrepLineExp);
-            CPrepOutAppendStr(CPrepLineExp);
-            CPrepOutAppendCh(#10);
-          end;
-          CPDirective(cont, q, Length(cont), depth, baseDir);
-          emitted := True;
-          Break;
-        end
-        else
+          CPDirective(cont, q, Length(cont), depth, baseDir)
+        else if CPActive then
           CPrepLine := CPrepLine + ' ' + cont;
       end;
-    if emitted then
-    begin
-      { Already emitted the source line and consumed one directive line. }
-    end
-    else if p <= Length(CPrepLine) then
+    if p <= Length(CPrepLine) then
     begin
       if CPrepLine[p] = '#' then
         CPDirective(CPrepLine, p, Length(CPrepLine), depth, baseDir)
@@ -2911,7 +2987,7 @@ begin
 end;
 
 procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString);
-var i: Integer;
+var i: Integer; cmdInc: AnsiString;
 begin
   SetLength(CPrepOut, 0);
   CPrepOutLen := 0;
@@ -3026,6 +3102,26 @@ begin
   CPPathAtDepth[0] := DbgSrcName;      { -g: the translation unit itself }
   CPOutLine := 1;
   CPMarkFile := -1; CPMarkLine := 0; CPMarkOutLine := 1;
+  { `-include <file>`: run each one as a real `#include "<file>"` line of its
+    OWN synthetic source, ahead of the primary one. Not prepended to `src` --
+    that is the obvious spelling and it is wrong, because it shifts every line
+    number in the translation unit and the compiler would then report each
+    diagnostic one line late per forced include. Here the primary source still
+    starts at line 1 of itself. }
+  for i := 0 to CCmdIncludeCount - 1 do
+    if CCmdIncludeFile[i] <> '' then
+    begin
+      cmdInc := '#include "' + CCmdIncludeFile[i] + '"' + #10;
+      { baseDir is EMPTY here, not the primary source's directory, because gcc
+        resolves a `-include` operand against the WORKING DIRECTORY first and
+        then the -I chain. The difference is not academic: a Makefile writes
+        `-include include/autoconf.h` while compiling `libbb/copy_file.c`, and
+        against the source's directory that is `libbb/include/autoconf.h`,
+        which does not exist. busybox happens to survive the wrong rule because
+        it also passes `-I.`; a project that does not would see the forced
+        include silently fail to resolve. }
+      CPProcessText(cmdInc, '', 0);
+    end;
   CPProcessText(src, baseDir, 0);
   if CPCondCount <> 0 then Error('unterminated C conditional');
   SetLength(CPrepOut, CPrepOutLen);   { trim geometric spare capacity to the live length }
