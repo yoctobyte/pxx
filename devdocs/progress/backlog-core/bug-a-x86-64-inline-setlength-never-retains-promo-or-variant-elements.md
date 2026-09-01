@@ -53,6 +53,34 @@ that has to land first.
     local `array of Variant`, 1500 trips
       allocs=4274 frees=1424 live=2850
 
+## Exactly which cells leak — the matrix
+
+4 element kinds x 4 container shapes, 1000 trips of 8 elements each, one
+program per cell, `-O2 -dPXX_ALLOC_CENSUS`, live blocks at exit:
+
+    element kind      local dyn   local fixed   record field   nested dyn
+    AnsiString                4             3              4            5
+    record + string           4             3              4            5
+    PromoInt               7820            11             12         7805
+    Variant                7708             3              4         7805
+
+Read it as three facts:
+
+- The leak is **kinds 5 and 6 in a DYNAMIC array only**. Two of four kinds, two
+  of four shapes. Everything else reclaims.
+- **Fixed arrays are clean** for promo and variant, so the element walk itself
+  and ManagedElemKind's kind 5/6 answers are right — this is the dyn-array
+  path alone, which is what points at the inline SetLength rather than at the
+  policy.
+- **Record fields are clean** for promo and variant, which is `2b70ff387` +
+  `9cb079528`'s descriptor-writer half doing its job. That half was KEPT when
+  `a584e8fef` reverted the stride; this row is the evidence it earns its place.
+
+`nested dyn` (`array of array of T`) leaks at the same rate, so the depth>1 arm
+needs the same treatment and is not covered by fixing the leaf case alone.
+
+Use this table as the acceptance test: every cell must land in single digits.
+
 ## The sibling — fix it in the SAME change
 
 `ir_codegen.inc` ~9889 (the copy-prefix retain on the symbol SetLength path)
