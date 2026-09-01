@@ -1393,8 +1393,20 @@ function IRPromoLValueAddr(node: Integer): Integer;
 begin
   IRPromoLValueAddr := -1;
   if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
-     TypeIsPromoInt(Syms[ASTIVal[node]].TypeKind) then
+     TypeIsPromoInt(Syms[ASTIVal[node]].TypeKind) and
+     (not Syms[ASTIVal[node]].IsArray) then
   begin
+    { `not IsArray` is the third time this same guard has been the fix in this
+      ticket -- an array's TypeKind IS its element kind, so every arm keyed on
+      the kind alone claims the whole ARRAY as if it were one element. Without
+      it `b := a` on two `array[0..N] of promoint64` reached the promo STORE arm
+      and emitted a single PXXPromoCopy on the base address: element 0 copied,
+      1..N left holding the destination's old values, silently and with no
+      diagnostic (measured: `100 999 999` for a 3-element copy, while the
+      identical `array of AnsiString` copy was correct). Falling through instead
+      reaches the ordinary whole-array assignment, which releases the
+      destination's elements and retains the source's through ManagedElemKind --
+      kind 5, which this commit adds. }
     if Syms[ASTIVal[node]].IsRef then
       { A promo PARAMETER is by-ref, like every other aggregate parameter: the
         slot lives in the caller's hidden temp and the cell here holds its

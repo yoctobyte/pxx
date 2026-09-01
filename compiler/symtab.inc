@@ -2896,6 +2896,8 @@ function ManagedElemKind(elemTk, elemRec: Integer): Integer;
     1 = AnsiString element      (PXXStrIncRef / PXXStrDecRef)
     3 = record with managed fields, walked via its layout descriptor
     4 = COM interface element   (PXXIntfAddRef / PXXIntfRelease)
+    5 = promotable int element  (the heap-tier payload IS a managed AnsiString)
+    6 = Variant element         (PXXVarRetain / PXXVarClear)
 
   It exists because that policy was spelled out NINE times — ir.inc's two
   whole-static-array copy branches, ir_codegen.inc's two descriptor allocators,
@@ -2911,10 +2913,30 @@ function ManagedElemKind(elemTk, elemRec: Integer): Integer;
   interface UCls, so the interface test must precede the managed-record test.
   It would answer False anyway (an interface UCls has no managed FIELDS) — which
   is precisely how these elements fell through every walk — but relying on that
-  is how the next kind gets mis-ordered. }
+  is how the next kind gets mis-ordered.
+
+  KINDS 5 AND 6 ARE THE TENTH AND ELEVENTH, and the note above predicted the
+  second one by name. Both answered 0 here, so every walk declined the array and
+  the SCALAR arm below claimed it — releasing element ZERO and leaking 1..N.
+  Measured over 200k calls with an 8-element local array, against the same
+  program using a scalar of the same type as the control:
+
+      scalar promoint64 (control)      392 KB      no leak
+      array[0..7] of promoint64      87.5 MB
+      array[0..7] of Variant          109 MB
+
+  Fixing it HERE and not in the scope-exit arm is what also reaches the unwind
+  path: SymNeedsManagedCleanup's last arm asks this function, so until now a
+  proc whose only managed local was such an array got no cleanup landing pad
+  either, and an exception unwinding past it leaked the same elements again.
+  bug-a-a-static-array-of-promo-ints-releases-only-element-zero }
 begin
   if elemTk = Ord(tyAnsiString) then
     ManagedElemKind := 1
+  else if TypeIsPromoInt(TTypeKind(elemTk)) then
+    ManagedElemKind := 5
+  else if elemTk = Ord(tyVariant) then
+    ManagedElemKind := 6
   else if elemTk <> Ord(tyRecord) then
     ManagedElemKind := 0
   else if RecIsComInterface(elemRec) then
@@ -2929,10 +2951,20 @@ function ManagedElemRef(elemTk, elemRec: Integer): Integer;
 { The second half of the (baseKind, ref) pair every element walk takes. Kind 3
   passes a descriptor ADDRESS (each emit site builds it from elemRec itself);
   kind 4 passes the INTERFACE ID as a plain integer, which is what this returns.
-  0 for every other kind, where the argument is unused. }
+  0 for every other kind, where the argument is unused.
+
+  Kinds 5 and 6 pass the element STRIDE. They have to: `promoint64` is a
+  16-byte slot and `promoint32` an 8-byte one, so unlike every kind above them
+  the ACTION is one thing and the size is not — splitting them into two kinds
+  would encode a width in a field that means "what to do". Sending the
+  compiler's own TypeSlotSize answer means the runtime cannot disagree with the
+  compiler about the layout, per target or ever. }
 begin
   if ManagedElemKind(elemTk, elemRec) = 4 then
     ManagedElemRef := elemRec - REC_UCLASS_BASE
+  else if (ManagedElemKind(elemTk, elemRec) = 5) or
+          (ManagedElemKind(elemTk, elemRec) = 6) then
+    ManagedElemRef := TypeSlotSize(TTypeKind(elemTk))
   else
     ManagedElemRef := 0;
 end;
@@ -2960,10 +2992,18 @@ function ManagedElemKindLocked(elemTk, elemRec: Integer): Integer;
 
   Lifting this is decide-interface-members-in-aggregates-lock-strategy (Track U):
   it needs a reentrant heap lock or a split unlocked interface pass, and that is
-  one decision covering records, classes and containers together. }
+  one decision covering records, classes and containers together.
+  KIND 6 (Variant) JOINS THE REFUSAL AND KIND 5 (promotable int) DOES NOT, and
+  the split is read off the mechanism named above rather than off caution. A
+  variant payload may be an OBJECT, so releasing one runs PXXObjRelease ->
+  Destroy -> FreeMem, which is exactly the re-entry that hangs. A promo slot's
+  heap payload is an AnsiString and nothing else, so releasing one is the same
+  PXXStrDecRef that kind 1 has performed under this lock since it shipped --
+  refusing kind 5 too would leak for a hazard it cannot have. }
 begin
   ManagedElemKindLocked := ManagedElemKind(elemTk, elemRec);
-  if (ManagedElemKindLocked = 4) and ThreadSafeMode then
+  if ((ManagedElemKindLocked = 4) or (ManagedElemKindLocked = 6)) and
+     ThreadSafeMode then
     ManagedElemKindLocked := 0;
 end;
 
@@ -11406,8 +11446,16 @@ begin
         x64_mov_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);   { mov rax, [rbp+off] }
         IREmitCodeCall(AnsiStrReleaseAddr);
       end
-      else if Syms[i].TypeKind = tyVariant then
+      else if (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
       begin
+        { The `not IsArray` guard is the AnsiString arm's, for the same reason
+          and eight lines further down: an array's TypeKind IS its element kind,
+          so `array[0..N] of Variant` was claimed HERE and cleared element ZERO,
+          leaking 1..N. The array now belongs to the general element walk above
+          (kind 6), and this guard is what keeps it there if that walk ever
+          declines again. Every other target already carried it except wasm32
+          and arm32; x86-64 was the outlier, exactly as it was for the
+          AnsiString arm. }
         { lea rax, [rbp + Offset] }
         x64_lea_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);
         EmitVariantClear;
@@ -11427,9 +11475,13 @@ begin
           EmitCallProc(procIdx);
         end;
       end
-      else if TypeIsPromoInt(Syms[i].TypeKind) then
+      else if TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
       begin
-        { Promotable-int local/temp: release a heap-tier payload at scope exit.
+        { `not IsArray` for the reason the Variant arm above and the AnsiString
+          arm below carry it: an array of promo ints was claimed here and got
+          PXXPromoClear on the SLOT ADDRESS, i.e. element zero only.
+
+          Promotable-int local/temp: release a heap-tier payload at scope exit.
           Without this every call that spilled a promo value to the bignum tier
           (e.g. the & 0xFFFFFFFFFFFFFFFF mask-constant temp) leaked its payload
           once per call (bug-a-runtime-variant-heap-grows-unbounded). }

@@ -12426,8 +12426,13 @@ begin
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyVariant) then
+                (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
         begin
+          { `not IsArray`: an array's TypeKind IS its element kind, so
+            `array[0..N] of Variant` was claimed here and cleared element ZERO.
+            i386, aarch64, xtensa and riscv32 already carried this guard; arm32
+            and x86-64 did not. The array belongs to the general element walk
+            above (kind 6). }
           { Variant local: clear (releases any managed payload). r0 = address. }
           EmitLoadVarAddrArm32(i);                     { r0 = variant address }
           EmitI32($E92D000E);                          { push {r1,r2,r3} }

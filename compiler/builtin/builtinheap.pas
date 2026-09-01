@@ -306,6 +306,16 @@ const
   VT_PROMO_FIRST = 8192;   { promo-block tags ride as a managed AnsiString of the decimal }
   VT_PROMO_LAST  = 8199;
 
+  { A PROMO SLOT (not a variant holding one) is {tag, payload}, two NATIVE
+    words, and its heap-tier payload is a managed AnsiString of the decimal --
+    the same representation the variant tags above already ride. promocore.pas
+    owns this constant; it is repeated here because a builtin unit cannot use
+    another one, and a drift would show up as the element walks below silently
+    releasing nothing. test_promoint_array_cleanup.pas is what makes that loud:
+    it asserts the array does not leak, so a wrong tag fails it rather than
+    quietly restoring the leak this was written to fix. }
+  PROMO_TAG_HEAP = 1;
+
   PXX_OBJ_MAGIC = $505942F1;   { low bits 001 — never an allocator size word }
   { RAW variant of the tag: a refcounted heap block that is NOT a class
     instance (no VMT at +0) — today only pybound_new's {code,recv} pairs.
@@ -3654,6 +3664,40 @@ begin
           PXXIntfRelease(itemAddr, Int64(baseRecDesc));
           i := i + 1;
         end;
+      end
+      else if baseKind = 5 then
+      begin
+        { Promotable-int elements: release the heap-tier AnsiString payload of
+          each. Stride in baseRecDesc -- see PXXArrayReleaseImmediate. }
+        elSize := Int64(baseRecDesc);
+        if elSize > 0 then
+        begin
+          i := 0;
+          while i < len do
+          begin
+            itemAddr := Pointer(Int64(arrData) + i * elSize);
+            if PWord(itemAddr)^ = PROMO_TAG_HEAP then
+              PXXStrDecRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
+            i := i + 1;
+          end;
+        end;
+      end
+      else if baseKind = 6 then
+      begin
+        { Variant elements. Like kind 4 this may run a Destroy (a variant can
+          hold an object), which is why ManagedElemKindLocked refuses kind 6
+          under --threadsafe; this walk itself is always called unlocked. }
+        elSize := Int64(baseRecDesc);
+        if elSize > 0 then
+        begin
+          i := 0;
+          while i < len do
+          begin
+            itemAddr := Pointer(Int64(arrData) + i * elSize);
+            PXXVarClear(itemAddr);
+            i := i + 1;
+          end;
+        end;
       end;
     end;
     PXXFree(Pointer(PXXHdrBase(arrData)));
@@ -3721,6 +3765,44 @@ begin
         PXXIntfAddRef(itemAddr, Int64(baseRecDesc));
         i := i + 1;
       end;
+    end
+    else if baseKind = 5 then
+    begin
+      { The retain half of the promo element walk -- the mirror of the arm in
+        PXXArrayReleaseImmediate. A heap-tier payload is a managed AnsiString,
+        so retaining an element is an incref of that handle and nothing else.
+        Both halves exist in the SAME change on purpose: a release without its
+        retain turns SetLength shrink from a leak into a double free, which is
+        strictly worse than the bug being fixed. }
+      elSize := Int64(baseRecDesc);
+      if elSize > 0 then
+      begin
+        i := 0;
+        while i < len do
+        begin
+          itemAddr := Pointer(Int64(arrData) + i * elSize);
+          if PWord(itemAddr)^ = PROMO_TAG_HEAP then
+            PXXStrIncRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
+          i := i + 1;
+        end;
+      end;
+    end
+    else if baseKind = 6 then
+    begin
+      { Variant elements. PXXVarRetain is the declared mirror of PXXVarClear, so
+        SetLength SHRINK nets to zero on a survivor and one release on a dropped
+        element, exactly as for kinds 1, 3 and 4. }
+      elSize := Int64(baseRecDesc);
+      if elSize > 0 then
+      begin
+        i := 0;
+        while i < len do
+        begin
+          itemAddr := Pointer(Int64(arrData) + i * elSize);
+          PXXVarRetain(itemAddr);
+          i := i + 1;
+        end;
+      end;
     end;
   end;
 end;
@@ -3779,6 +3861,41 @@ begin
       itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
       PXXIntfRelease(itemAddr, Int64(baseRecDesc));
       i := i + 1;
+    end;
+  end
+  else if baseKind = 5 then
+  begin
+    { Promotable-int elements. The stride arrives in baseRecDesc as a plain
+      integer -- promoint32 is an 8-byte slot and promoint64 a 16-byte one, so
+      this is the one kind whose element size is not implied by the kind, and
+      the compiler's own TypeSlotSize is what it sends (ManagedElemRef). }
+    elSize := Int64(baseRecDesc);
+    if elSize > 0 then
+    begin
+      i := 0;
+      while i < len do
+      begin
+        itemAddr := Pointer(Int64(arrData) + i * elSize);
+        if PWord(itemAddr)^ = PROMO_TAG_HEAP then
+          PXXStrDecRef(Pointer(PWord(Int64(itemAddr) + SizeOf(NativeInt))^));
+        i := i + 1;
+      end;
+    end;
+  end
+  else if baseKind = 6 then
+  begin
+    { Variant elements: PXXVarClear is the portable release the scalar arm
+      uses, payload plus a zeroed slot. }
+    elSize := Int64(baseRecDesc);
+    if elSize > 0 then
+    begin
+      i := 0;
+      while i < len do
+      begin
+        itemAddr := Pointer(Int64(arrData) + i * elSize);
+        PXXVarClear(itemAddr);
+        i := i + 1;
+      end;
     end;
   end;
 end;
@@ -4101,6 +4218,13 @@ begin
       and would nil-check as "no descriptor". The kind-3 arms guard, kind 4
       must not. }
     baseRecDesc := Pointer(baseTypeRef)
+  else if (baseKind = 5) or (baseKind = 6) then
+    { Kinds 5/6 ride the same slot, carrying the element STRIDE rather than an
+      id (ManagedElemRef). Unlike kind 4 these DO guard, and may: a stride of
+      zero is not a legal value for any element type, so `elSize > 0` in the
+      walks rejects a mis-emitted descriptor instead of walking with stride 0
+      and releasing element zero N times. }
+    baseRecDesc := Pointer(baseTypeRef)
   else
     baseRecDesc := nil;
 
@@ -4151,6 +4275,8 @@ begin
     baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
   else if baseKind = 4 then
     baseRecDesc := Pointer(baseTypeRef)   { interface id, see PXXDynArrayRelease }
+  else if (baseKind = 5) or (baseKind = 6) then
+    baseRecDesc := Pointer(baseTypeRef)   { element STRIDE, see ManagedElemRef }
   else
     baseRecDesc := nil;
 
@@ -4241,6 +4367,8 @@ begin
     baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
   else if baseKind = 4 then
     baseRecDesc := Pointer(baseTypeRef)   { interface id, see PXXDynArrayRelease }
+  else if (baseKind = 5) or (baseKind = 6) then
+    baseRecDesc := Pointer(baseTypeRef)   { element STRIDE, see ManagedElemRef }
   else
     baseRecDesc := nil;
 

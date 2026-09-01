@@ -6571,6 +6571,24 @@ test-core: $(COMPILER)
 	# heap-tier one does not. Expected digits are CPython's.
 	./$(COMPILER) test/test_promoint_lvalue_shapes.pas $(TESTTMP)/test_promolv26
 	tools/expect_same.sh test_promolv26 "$$($(TESTTMP)/test_promolv26 | tail -1)" "promoint-lvalue-shapes 12/12"
+	@# The CLEANUP half of the same family: ManagedElemKind answered 0 for a promo
+	@# element and 0 for a Variant element, so every element walk declined the
+	@# array and the SCALAR arm claimed it -- releasing element ZERO and leaking
+	@# 1..N, giving the proc no unwind landing pad, and (promo only) turning
+	@# `b := a` into one PXXPromoCopy on the base address. 39000 assertions
+	@# because retain and release landed together: a release without its retain
+	@# is a double free on SetLength shrink, which needs the heap to reuse the
+	@# block before it shows, so every row runs 3000 times.
+	./$(COMPILER) test/test_promoint_array_cleanup.pas $(TESTTMP)/test_promoac26
+	tools/expect_same.sh test_promoac26 "$$($(TESTTMP)/test_promoac26 | tail -1)" "promoint-array-cleanup 39000/39000"
+	@# ...and the RSS ceiling, because every assertion above passes on a build
+	@# that never frees anything: correctness and reclamation are different
+	@# claims. Measured on this program: 3.6 MB fixed, 54 MB with only the
+	@# element walks missing -- executed both ways, so the threshold sits
+	@# between two real numbers and not beside one. Unlike the older RSS guards
+	@# above, an unreadable rss FAILS here rather than passing: a guard that
+	@# cannot read its instrument must not report OK.
+	@if [ -x /usr/bin/time ]; then 	  /usr/bin/time -v $(TESTTMP)/test_promoac26 2>$(TESTTMP)/promoac.time >/dev/null; 	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' $(TESTTMP)/promoac.time | grep -oE '[0-9]+$$'); 	  if [ -z "$$rss" ]; then echo "promoint-array-cleanup: could not read RSS from /usr/bin/time -v"; exit 1; 	  elif [ "$$rss" -gt 20000 ]; then echo "promo/variant array element release regressed: RSS $${rss}KB (>20MB; fixed is ~3.6MB, pre-fix was ~54MB)"; exit 1; 	  else echo "promoint-array-cleanup: OK (RSS $${rss}KB)"; fi; 	else echo "/usr/bin/time absent; promo/variant array RSS leak guard skipped"; fi
 	# A record holding an interface field, both halves of the same design fault:
 	# RecordHasManagedFields excluded a COM interface field because FINALIZING one
 	# under the non-reentrant record heap lock deadlocks -- and that single
