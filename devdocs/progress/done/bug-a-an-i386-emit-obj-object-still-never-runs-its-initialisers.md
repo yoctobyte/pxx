@@ -91,4 +91,4 @@ refuses such a link outright, and the reason nobody noticed is that i386 has no
 equivalent of the x86-64 rows asserting `.text` carries no absolute relocation.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 3dd98fe32.
