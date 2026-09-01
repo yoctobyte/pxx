@@ -8,7 +8,7 @@ blocked-by: []
 status: working
 created: 2026-08-31
 owner: frankD
-summary: "Rung 2 of feature-busybox-kiosk-selfhosting-target. FIRST BAR MET 2026-09-01 (2789f87a7): a two-applet busybox byte-identical to gcc over 28 cases on x86-64 AND aarch64, agreeing with upstream's separately-linked binary. SECOND BAR (ash) IN PROGRESS: the 41-TU ash unity now gets all the way to getpwnam, having named and CLOSED eight defects on the way -- a C frontend parse bug (struct-typed local with a fn-pointer member), crtl's entire missing shell surface (fnmatch, full signal set + NSIG, strsignal, _SC_CLK_TCK, times, uname), a clock_t that was `long long` where glibc has `long` (right on 64-bit, silently wrong on every 32-bit target, and ash reads struct tms by byte offset through it), and crtl'''s own implementation being preprocessed in the PROGRAM'''s macro environment. NEXT: pwd.h/getpwnam. KNOWN CEILING: the unity cannot host ash and coreutils/test.c together in either order, so the `[` builtin needs separate compilation -- bug-a-an-object-neither-exports-nor-imports-data-symbols."
+summary: "Rung 2 of feature-busybox-kiosk-selfhosting-target. BOTH BARS MET 2026-09-01. First bar (2789f87a7): a two-applet busybox byte-identical to gcc over 28 cases on x86-64 AND aarch64, agreeing with upstream'''s separately-linked binary. SECOND BAR (ash) MET: tools/busybox_diff.sh --applets '''cat echo ash''' is GREEN -- the 41-TU ash unity is byte-identical to the gcc oracle over 62 cases on x86-64 AND aarch64, and the gcc unity agrees with upstream'''s own build. FIFTEEN defects were named and closed getting there, every one found by ATTEMPTING the target rather than by triaging the backlog: a C frontend parse bug (struct-typed local with a fn-pointer member); crtl'''s whole missing shell surface (fnmatch, full signal set + NSIG, strsignal, _SC_CLK_TCK, times, uname, pwd/getpwnam, a real execvp over a new execve, NAME_MAX/PATH_MAX, dprintf/vdprintf, getrlimit/setrlimit); a clock_t that was `long long` where glibc has `long`; crtl'''s own implementation being preprocessed in the PROGRAM'''s macro environment, and then the OPPOSITE error where crtl could not see its OWN header'''s macros; printf %m emitted verbatim, which blanked the reason on every busybox error at once; fork/vfork/wait/waitpid stubbed because a PAL entry issuing SYS_fork was NAMED PalVfork and three comments reasoned from the name; a compiler SEGFAULT with no diagnostic at -O0/-O1 (AN_PTR_CAST overloads ASTRight as a proc-signature index, not a child); sizeof(**p) answering the pointer size; a `**` declarator losing its pointee record unless it was FIRST in its declaration; pointer-minus-pointer tagged as a pointer so the next operator scaled (OPTIND became 9, getopts spun forever, hanging the harness twice for 39 and 22 minutes); and `void *` arithmetic scaling by FOUR (ash builds on `stackblock() + n`, uncast, beside a cast sibling that was always right). STILL OPEN, not blocking this ticket: the unity cannot host ash and coreutils/test.c together in EITHER order, measured, so the `[` builtin needs separate compilation -- bug-a-an-object-neither-exports-nor-imports-data-symbols."
 ---
 
 # busybox rung 2 — more than one applet, then `ash`
@@ -293,3 +293,57 @@ Three, and each was a cheap question that was correct about something else:
 ### Next
 
 `pwd.h` / `getpwnam` (ash's `~user` expansion). Then re-run and find the next one.
+
+## 2026-09-01 — second bar met: `ash`
+
+```
+busybox-diff: applets=cat echo ash  translation units=41
+  ORACLE  gcc unity build (62 cases)
+  ORACLE  busybox agrees with the gcc unity
+  PASS    x86_64   byte-identical to the gcc oracle over 62 cases
+  PASS    aarch64  byte-identical to the gcc oracle over 62 cases
+busybox-diff: GREEN
+```
+
+compiler sha256 `ea6833440ff8`, commit `52ad546b9` + the void-pointer fix.
+
+**Every defect on this list was found by ATTEMPTING THE TARGET.** None came
+from reading the backlog, and the order they appeared in is the order they
+actually block real-world usage — which is the point of growing an umbrella by
+attempt rather than by triage.
+
+Three of them are worth re-reading later because of HOW they hid, not what
+they were:
+
+- **`printf %m` emitted verbatim.** busybox writes essentially every
+  errno-carrying diagnostic through `bb_perror_msg`, so one missing conversion
+  blanked the reason on *every* failure in the corpus simultaneously. `can't
+  fork: %m` was hiding `ENOSYS`, a completely different investigation. Fixing
+  the instrument came first, and that ordering repeated twice more.
+- **The `-O0` compiler segfault.** `-O0` was the discriminator I wanted for a
+  *different* bug, and the instrument itself was broken. Same ordering again.
+- **`ptr - ptr` tagged as a pointer.** My first hypothesis was that the
+  subtraction returned an unscaled byte difference; I wrote a six-shape probe
+  to prove it and every row passed. It could not have found the bug, because
+  the subtraction was never the broken part — its RESULT TYPE was, so the
+  defect only appears once a SECOND operator consumes the difference.
+  Instrumenting ash's own `getopts` and seeing `diff=1` and `ind=9` printed
+  from the same expression is what named it.
+
+**Two hangs, 39 and 22 minutes, both with no output at all.** Both were
+`getopts` spinning on an `OPTIND` that never advanced. A wrong value in a loop
+condition presents as a hang, not as a wrong answer, and there is nothing to
+read while it happens — worth remembering the next time this harness stops
+producing output rather than failing.
+
+### What is NOT established by this
+
+- `ash` is built into the unity; it is not proven against a real interactive
+  session, only the 62 scripted cases.
+- The `[` builtin is still out (`ASH_TEST=n`): ash and `coreutils/test.c`
+  cannot coexist in the unity in EITHER order, measured both ways. That is the
+  unity model's ceiling, not a pxx defect, and it is a second independent
+  argument for `bug-a-an-object-neither-exports-nor-imports-data-symbols`.
+- LINUX ONLY, x86-64 and aarch64. Nothing here says anything about i386 or
+  arm32, where `feature-a-crtl-is-not-large-file-safe-at-ilp32` and
+  `bug-a-the-pin-cannot-build-any-c-program-for-i386-or-arm32` are both open.

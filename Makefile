@@ -12192,6 +12192,21 @@ test-core: $(COMPILER)
 	# feature-c-corpus-busybox-multi-applet
 	./$(COMPILER) test/cptrdiff_type.c $(TESTTMP)/c_ptrdiff26
 	tools/expect_same.sh c_ptrdiff26 "$$($(TESTTMP)/c_ptrdiff26)" "$$(printf '1 1\n2 1\n3 2\n4 2\n5 2\n6 2\n7 2\n8 2\n9 3\n10 4\n11 2\n12 1 7')"
+	# `void *' arithmetic steps ONE BYTE per unit (GNU: sizeof(void)==1, which
+	# gcc and clang both implement). pxx scaled by FOUR: `void' parses as a
+	# tyInteger PLACEHOLDER and the pointer suffix overrode the NODE's type
+	# while leaving the ELEMENT type holding the placeholder.
+	# Row 5 is why it hid: casting first, `(char*)v + n', was ALWAYS right, so
+	# a program using both idioms has half its pointer arithmetic land 4x too
+	# far. ash does exactly that -- `stackblock() + strloc' uncast, next to
+	# `(char*)stackblock() + startloc' cast -- so `${x:2:3}' read its POS:LEN
+	# spec 28 bytes off and looked like a PARSER bug.
+	# Row 8 is the other boundary: `void **' has a POINTER element and must
+	# keep stride 8, so a blanket "void means 1" fix passes 1-7 and breaks it.
+	# $(COMPILER), not $(PXX_STABLE): under the pin rows 1,2,4,6,7 are wrong.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/cvoid_ptr_arith.c $(TESTTMP)/c_voidptr26
+	tools/expect_same.sh c_voidptr26 "$$($(TESTTMP)/c_voidptr26)" "$$(printf '1 7\n2 7\n3 7\n4 1\n5 7\n6 3\n7 5\n8 8\n9 7')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The SIBLING defect, and it is not the const-branch one: a loop in dead code

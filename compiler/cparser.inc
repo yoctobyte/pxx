@@ -5096,9 +5096,37 @@ begin
       still resolve the callee (see CNodeProcSig). }
     if CTypeProcSig >= 0 then CTypePtrElemProcSig := CTypeProcSig;
     CTypeProcSig := -1;           { `FnPtrTypedef *` = pointer-to-fn-ptr, not directly callable }
-    CTypeElemTk := Ord(Result);   { the pointed-at scalar/typedef kind at depth 1 }
+    { `void' arrives here as the tyInteger PLACEHOLDER set where isVoid is read
+      (`Result := tyInteger { placeholder; pointer suffix overrides below }').
+      The suffix does override the NODE's own type to tyPointer -- but the
+      ELEMENT type was left holding the placeholder, so `void *' claimed a
+      4-byte pointee and ALL POINTER ARITHMETIC ON IT SCALED BY 4.
+      GNU C gives `void' a size of 1 for exactly this, and gcc/clang both step
+      `v + 7' by 7 bytes. Measured: pxx stepped 28.
+      busybox ash is built on that idiom -- `#define stackblock() ((void*)g_stacknxt)'
+      and then `stackblock() + strloc' all over the expansion code. With
+      strloc=7 it landed 28 bytes in, so `${x:2:3}' read its POS:LEN spec from
+      the wrong place and the substring expansion produced the variable, the
+      literal spec and a run of garbage as three separate words.
+      The sibling line two above it, `startp = (char *)stackblock() + startloc',
+      CASTS FIRST and was always correct -- which is why only some of ash's
+      stack arithmetic was wrong and the failure looked like a parser bug.
+      tyUnknown is the existing "stride 1" answer (IRPointerStride's own tail:
+      `else if elemTk = tyUnknown then Result := 1'), so this reuses that rather
+      than introducing a second spelling for the same idea. Depth >= 2 is
+      unaffected: `void **' has a POINTER element and keeps the 8-byte stride
+      from the tyPointer branch below. }
+    if isVoid then
+    begin
+      CTypeElemTk := Ord(tyUnknown);
+      CTypePtrBaseTk := Ord(tyUnknown);
+    end
+    else
+    begin
+      CTypeElemTk := Ord(Result);   { the pointed-at scalar/typedef kind at depth 1 }
+      CTypePtrBaseTk := Ord(Result);
+    end;
     CTypeElemRec := baseRec;      { ...and its record id, if it is a struct }
-    CTypePtrBaseTk := Ord(Result);
     CTypePtrBaseRec := baseRec;
     while CurTok.Kind = tkStar do
     begin
