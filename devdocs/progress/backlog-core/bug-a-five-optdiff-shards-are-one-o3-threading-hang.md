@@ -92,3 +92,30 @@ tools/testmgr.py --tier full --job 'optdiff#shard2/12'
 
 or, faster, compile `test/lib_criticalsection_blocking.pas` at `-O0` and `-O3`
 and run both; the `-O3` build should hang.
+
+## Correction 2026-09-01 — the baseline amnesty is TEMPORARY, not permanent
+
+The `chore(stable): pin v399` commit message says this defect "will stop
+registering as new in `pin_shadow`" once `seed_baseline()` carries it into
+v399's baseline. That is true only while the shards are still red, and the
+unqualified wording invites the stronger reading. Correcting it here because a
+commit message cannot be amended once pushed and this is where the defect lives.
+
+`tools/twatch.py:2673`:
+
+> *A baselined red that has since gone GREEN leaves the baseline for good, so a
+> later re-break counts as new. Amnesty is for the reds that are still there,
+> never a permanent pass for the job.*
+
+So: while these five shards stay red they are `inherited` and do not colour the
+pin grade. The moment they go green they drop out of the baseline permanently,
+and any later re-break registers as new again. **Fixing this does not need a pin
+or a baseline reset to become visible again — it self-cleans.**
+
+Same mechanism retires the concern that `test-pascal-conformance#shard0/6` was
+carried into v399's baseline because the pin was cut before a full tier could
+re-measure it: shard0/6 is green, so it leaves the baseline on the next shadow
+run without anyone doing anything.
+
+Note also that under `fcbfc02f5` a pin is **graded, never gated** — so nothing
+here is an argument against pinning at any point. It is a grade input.
