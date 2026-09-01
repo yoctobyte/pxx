@@ -3890,17 +3890,26 @@ var
                                 it now and the stale half of that sentence is
                                 what made the writer look narrower than it is. }
 
-  { Code offsets of the .so's DT_INIT and DT_FINI thunks, or -1 when there are
-    none (every non---shared build, and any --shared build whose frontend has
-    not emitted them yet). A shared library has no ELF entry point by design:
-    the loader is meant to be told about initialisers through the dynamic
-    section instead, and it was not being told, so every piece of pre-main state
-    stayed unset while the code to set it sat in the image unreachable.
+  { Code offsets of the init and fini thunks, or -1 when there are none (every
+    build whose frontend has not emitted them, which is every non---shared,
+    non---emit-obj one). A shared library has no ELF entry point by design and
+    an object has none either: in both cases the initialisers are compiled in
+    and nothing calls them unless the FILE says so, so every piece of pre-main
+    state stayed unset while the code to set it sat in the image unreachable.
     Offsets and not addresses, because the writer is the only thing that knows
     where .text lands.
-    bug-a-c-a-shared-library-never-runs-its-initialisation }
-  SharedInitOff  : Integer;
-  SharedFiniOff  : Integer;
+
+    ONE THUNK, TWO CARRIERS, AND THAT IS THE POINT. A .so is told through the
+    dynamic section (DT_INIT / DT_FINI); an object has no dynamic section and is
+    told through .init_array, which the LINKER aggregates and the host C runtime
+    walks. The thunk itself is identical because the two carriers agree on the
+    calling convention -- glibc calls a DT_INIT and an .init_array entry alike,
+    under the ordinary C ABI with (argc, argv, envp). Naming these `Shared*` was
+    accurate for one carrier and became wrong the moment the second arrived.
+    bug-a-c-a-shared-library-never-runs-its-initialisation
+    bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers }
+  InitThunkOff  : Integer;
+  FiniThunkOff  : Integer;
   EmitAsmTextMode : Boolean;  { -S: also write <outFile>.s, a best-effort x86-64
                                  disassembly of whatever codegen just produced
                                  (feature-asm-textual-emit-mode, head 2) }

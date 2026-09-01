@@ -2892,10 +2892,24 @@ end;
   any.
 
   File layout (written sequentially; the self-hosted writer cannot seek):
-  ehdr, .text, .data, .symtab, .strtab, .rela.text, .rela.data, .shstrtab,
-  section headers. Sections (9): 0 null, 1 .text, 2 .rela.text, 3 .data,
-  4 .rela.data, 5 .bss, 6 .symtab, 7 .strtab, 8 .shstrtab -- the same shape and
-  the same 66-byte .shstrtab blob as writeELF32Rel. }
+  ehdr, .text, .data, .symtab, .strtab, .rela.text, .rela.data,
+  [.init_array, .rela.init_array], [.fini_array, .rela.fini_array], .shstrtab,
+  section headers. Sections: 0 null, 1 .text, 2 .rela.text, 3 .data,
+  4 .rela.data, 5 .bss, 6 .symtab, 7 .strtab, 8 .shstrtab, then the array
+  sections if this object HAS initialisers.
+
+  THE ARRAY SECTIONS ARE APPENDED AFTER .shstrtab's INDEX, not inserted in file
+  order, and that is deliberate: every existing section keeps the index it had,
+  so e_shstrndx stays 8 and no link/info field in the eight headers below has to
+  move. Their CONTENT still lands before .shstrtab because the self-hosted
+  writer cannot seek and must write sequentially -- index order and file order
+  are independent, and only one of them was expensive to change.
+
+  The .shstrtab blob stays the 66-byte one writeELF32Rel uses when there are no
+  array sections, and grows 29 bytes per pair that exists -- so an object with no
+  initialisers is byte-identical to what this writer produced before the feature,
+  which is a claim the A/B actually checks.
+  bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers }
 
 function ObjProcIsDefined(procIdx: Integer): Boolean;
 { Has this proc entry a body in Code[]? False for an `external` declaration and
@@ -2984,6 +2998,10 @@ var
   textOff, dataOff, symOff, strOff, relaTextOff, relaDataOff: Integer;
   shstrOff, shOff, strSize: Integer;
   relaTextCount, relaDataCount: Integer;
+  initArrOff, relaInitArrOff, finiArrOff, relaFiniArrOff: Integer;
+  initArrSec, finiArrSec, numSects, shstrSize: Integer;
+  initArrNm, relaInitArrNm, finiArrNm, relaFiniArrNm: Integer;
+  hasInitArr, hasFiniArr: Boolean;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -3011,8 +3029,51 @@ begin
   strOff  := symOff + numSyms * 24;
   relaTextOff := AlignTo(strOff + strSize, 8);
   relaDataOff := relaTextOff + relaTextCount * 24;
-  shstrOff := relaDataOff + relaDataCount * 24;
-  shOff := AlignTo(shstrOff + 66, 8);            { 66 = .shstrtab blob size }
+
+  { .init_array / .fini_array exist only when a frontend emitted the thunks --
+    which today means --emit-obj on x86-64 through the C frontend. An object
+    with no pre-main state gets exactly the file it got before this feature,
+    which is what makes "no change" a checkable claim rather than a hope. }
+  hasInitArr := InitThunkOff >= 0;
+  hasFiniArr := FiniThunkOff >= 0;
+  initArrSec := -1;
+  finiArrSec := -1;
+  numSects := 9;
+  if hasInitArr then begin initArrSec := numSects; numSects := numSects + 2; end;
+  if hasFiniArr then begin finiArrSec := numSects; numSects := numSects + 2; end;
+
+  { Names are appended to the 66-byte base blob only for sections that EXIST, so
+    an object without initialisers is byte-for-byte the file it was before this
+    feature. That property is worth four conditional sums: the first version of
+    this wrote all four names unconditionally to keep the offsets constant, and
+    the A/B caught it -- every object grew 58 bytes and e_shoff moved, which is a
+    change to every consumer of every object for the benefit of objects that do
+    not use the feature. 12 = len('.init_array')+1, 17 = len('.rela.init_array')+1. }
+  shstrSize := 66;
+  initArrNm := 0; relaInitArrNm := 0; finiArrNm := 0; relaFiniArrNm := 0;
+  if hasInitArr then
+  begin
+    initArrNm := shstrSize; relaInitArrNm := shstrSize + 12;
+    shstrSize := shstrSize + 29;
+  end;
+  if hasFiniArr then
+  begin
+    finiArrNm := shstrSize; relaFiniArrNm := shstrSize + 12;
+    shstrSize := shstrSize + 29;
+  end;
+
+  { Every offset here is already 8-aligned: relaDataOff is, 24 and 8 preserve
+    it, so the array sections need no padding of their own. }
+  initArrOff     := relaDataOff + relaDataCount * 24;
+  relaInitArrOff := initArrOff;
+  if hasInitArr then relaInitArrOff := initArrOff + 8;
+  finiArrOff := relaInitArrOff;
+  if hasInitArr then finiArrOff := relaInitArrOff + 24;
+  relaFiniArrOff := finiArrOff;
+  if hasFiniArr then relaFiniArrOff := finiArrOff + 8;
+  shstrOff := relaFiniArrOff;
+  if hasFiniArr then shstrOff := relaFiniArrOff + 24;
+  shOff := AlignTo(shstrOff + shstrSize, 8);
 
 {$ifdef FPC}
   Assign(f, outPath); Rewrite(f, 1);
@@ -3030,7 +3091,7 @@ begin
   writeU64(f,0);writeU64(f,0);writeU64(f,shOff);        { entry, phoff, shoff }
   writeU32(f,0);                                        { e_flags }
   writeU16(f,ELF_HEADER_SIZE);writeU16(f,0);writeU16(f,0);
-  writeU16(f,64);writeU16(f,9);writeU16(f,8);   { shentsize, shnum, shstrndx }
+  writeU16(f,64);writeU16(f,numSects);writeU16(f,8); { shentsize, shnum, shstrndx }
 
 {$ifdef FPC}
   if CodeLen > 0 then Blockwrite(f,Code[0],CodeLen);
@@ -3136,17 +3197,45 @@ begin
   for i := 0 to ExternalCount-1 do
     writeRela64(f, ExternalGotOff[i], extSym0 + i, 1, 0);
 
-  { .shstrtab: fixed 66-byte blob; name offsets hardcoded in the shdrs below }
+  { .init_array / .fini_array: ONE 8-byte slot each, whose VALUE is supplied by
+    the relocation rather than by these bytes. The slot is written as zero
+    because an ET_REL object states addresses only through relocations -- .text
+    has no address yet, so "the address of the init thunk" can only be
+    (section .text) + InitThunkOff, which is exactly what an R_X86_64_64 against
+    the .text section symbol says. Symbol 1 is that section symbol, the same one
+    the method-slot fixups above relocate against. }
+  if hasInitArr then
+  begin
+    writeU64(f, 0);
+    writeRela64(f, 0, 1, 1, InitThunkOff);
+  end;
+  if hasFiniArr then
+  begin
+    writeU64(f, 0);
+    writeRela64(f, 0, 1, 1, FiniThunkOff);
+  end;
+
+  { .shstrtab: 66-byte base blob, plus 29 bytes per array pair that exists. }
   writeU8(f, 0);
-  writeStrZ(f, '.text');        { 1 }
-  writeStrZ(f, '.rela.text');   { 7 }
-  writeStrZ(f, '.data');        { 18 }
-  writeStrZ(f, '.rela.data');   { 24 }
-  writeStrZ(f, '.bss');         { 35 }
-  writeStrZ(f, '.symtab');      { 40 }
-  writeStrZ(f, '.strtab');      { 48 }
-  writeStrZ(f, '.shstrtab');    { 56 }
-  writePad(f, shOff - (shstrOff + 66));
+  writeStrZ(f, '.text');            { 1 }
+  writeStrZ(f, '.rela.text');       { 7 }
+  writeStrZ(f, '.data');            { 18 }
+  writeStrZ(f, '.rela.data');       { 24 }
+  writeStrZ(f, '.bss');             { 35 }
+  writeStrZ(f, '.symtab');          { 40 }
+  writeStrZ(f, '.strtab');          { 48 }
+  writeStrZ(f, '.shstrtab');        { 56 }
+  if hasInitArr then
+  begin
+    writeStrZ(f, '.init_array');
+    writeStrZ(f, '.rela.init_array');
+  end;
+  if hasFiniArr then
+  begin
+    writeStrZ(f, '.fini_array');
+    writeStrZ(f, '.rela.fini_array');
+  end;
+  writePad(f, shOff - (shstrOff + shstrSize));
 
   { shdrs. $40 = SHF_INFO_LINK on rela sections; 6 = ALLOC|EXEC, 3 = ALLOC|WRITE. }
   writeShdrA64(f, 0, 0, 0, 0, 0);
@@ -3165,8 +3254,25 @@ begin
   writeShdrB64(f, 7, firstGlobal, 8, 24);
   writeShdrA64(f, 48, 3, 0, strOff, strSize);
   writeShdrB64(f, 0, 0, 1, 0);
-  writeShdrA64(f, 56, 3, 0, shstrOff, 66);
+  writeShdrA64(f, 56, 3, 0, shstrOff, shstrSize);
   writeShdrB64(f, 0, 0, 1, 0);
+  { 14 = SHT_INIT_ARRAY, 15 = SHT_FINI_ARRAY, flags 3 = ALLOC|WRITE. entsize 8
+    because the linker concatenates these section-wise into one array. The rela
+    sections link to .symtab (6) and INFO to the array section they patch. }
+  if hasInitArr then
+  begin
+    writeShdrA64(f, initArrNm, 14, 3, initArrOff, 8);
+    writeShdrB64(f, 0, 0, 8, 8);
+    writeShdrA64(f, relaInitArrNm, 4, $40, relaInitArrOff, 24);
+    writeShdrB64(f, 6, initArrSec, 8, 24);
+  end;
+  if hasFiniArr then
+  begin
+    writeShdrA64(f, finiArrNm, 15, 3, finiArrOff, 8);
+    writeShdrB64(f, 0, 0, 8, 8);
+    writeShdrA64(f, relaFiniArrNm, 4, $40, relaFiniArrOff, 24);
+    writeShdrB64(f, 6, finiArrSec, 8, 24);
+  end;
 
 {$ifdef FPC}
   Close(f);
@@ -3714,8 +3820,8 @@ begin
     count that disagrees with the writes by one entry moves every following
     section by 16 bytes and the library loads with a shredded string table. }
   dynamicSize := (neededCount + 10) * 16;
-  if SharedInitOff >= 0 then Inc(dynamicSize, 16);
-  if SharedFiniOff >= 0 then Inc(dynamicSize, 16);
+  if InitThunkOff >= 0 then Inc(dynamicSize, 16);
+  if FiniThunkOff >= 0 then Inc(dynamicSize, 16);
 
   phOff := ELF_HEADER_SIZE;
   textOff := phOff + 3 * PROG_HEADER_SIZE;   { PT_LOAD + PT_DYNAMIC + PT_GNU_STACK }
@@ -3910,13 +4016,13 @@ begin
     nothing able to reach them (bug-a-c-a-shared-library-never-runs-its-
     initialisation). vaddr = file offset holds for everything IN the file in
     this layout, which is why a code offset plus textOff is the address. }
-  if SharedInitOff >= 0 then
+  if InitThunkOff >= 0 then
   begin
-    writeU64(f, 12); writeU64(f, textOff + SharedInitOff);   { DT_INIT }
+    writeU64(f, 12); writeU64(f, textOff + InitThunkOff);   { DT_INIT }
   end;
-  if SharedFiniOff >= 0 then
+  if FiniThunkOff >= 0 then
   begin
-    writeU64(f, 13); writeU64(f, textOff + SharedFiniOff);   { DT_FINI }
+    writeU64(f, 13); writeU64(f, textOff + FiniThunkOff);   { DT_FINI }
   end;
   writeU64(f, 0); writeU64(f, 0);                    { DT_NULL }
 

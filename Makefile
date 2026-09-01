@@ -17548,6 +17548,46 @@ test-emit-obj: $(COMPILER)
 	    echo "test-emit-obj: x86-64 .o links+runs under clang -pie (second linker)"; \
 	  else echo "clang not installed; second-linker PIE check skipped"; fi; \
 	else echo "gcc not installed; x86-64 .o link check skipped"; fi
+	# 4b-bis. AN OBJECT'S FILE-SCOPE INITIALISERS RUN IN A FOREIGN PROGRAM.
+	#    The rows above link a pxx object into a gcc program and call a
+	#    FUNCTION, which is the half that always worked. Nothing above reads a
+	#    value that had to be INITIALISED first, so an object whose pre-main
+	#    code never ran passed every one of them.
+	#
+	#    It never ran. The C frontend emits CompilePendingGlobalInits at the
+	#    start of `main`, and the initialisers rode pxx's own entry stub, which
+	#    a gcc program does not have -- so `static const char *n = "lit";` read
+	#    back NULL and `environ` read back NULL, in an object that linked and
+	#    ran and answered every other question correctly. The parent ticket
+	#    reasoned --emit-obj was safe "because that object is linked into a
+	#    program whose entry stub does run them", which is true exactly when the
+	#    consumer is pxx-built, and linking into foreign programs is what
+	#    --emit-obj is FOR.
+	#
+	#    The fix is .init_array/.fini_array, which the LINKER aggregates and the
+	#    host C runtime walks -- an object has no dynamic section to carry a
+	#    DT_INIT the way the .so half does.
+	#    bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers
+	rm -f $(TESTTMP)/test_emit_obj_cinit.o
+	./$(COMPILER) --emit-obj test/test_shared_lib.c $(TESTTMP)/test_emit_obj_cinit.o
+	readelf -SW $(TESTTMP)/test_emit_obj_cinit.o | grep -qE '\.init_array +INIT_ARRAY'
+	readelf -SW $(TESTTMP)/test_emit_obj_cinit.o | grep -qE '\.fini_array +FINI_ARRAY'
+	#    The relocation is the load-bearing half: the 8-byte slot is written as
+	#    zero and an ET_REL object can only say "address of the thunk" as
+	#    .text + offset, so a missing R_X86_64_64 leaves a null pointer that the
+	#    C runtime calls.
+	readelf -rW $(TESTTMP)/test_emit_obj_cinit.o | grep -qE 'R_X86_64_64 .*\.text'
+	#    NEGATIVE CONTROL, and it is why the three greps above mean anything: an
+	#    object with no pre-main state must NOT grow these sections. Without this
+	#    a writer that emitted .init_array unconditionally would pass every row
+	#    above. The Pascal object built earlier in this target is that case.
+	! readelf -SW $(TESTTMP)/test_emit_obj_x64.o | grep -qE 'INIT_ARRAY|FINI_ARRAY'
+	@if command -v gcc >/dev/null 2>&1; then \
+	  printf '#include <stdio.h>\nextern const char *shared_c_from_data(void);\nextern int shared_c_envcount(void);\nextern int shared_c_addup(int);\nint main(void){const char*d=shared_c_from_data();if(!d){printf("data=(null) -- .init_array did not run\\n");return 1;}if(shared_c_envcount()<1){printf("envcount=%%d -- environ was not filled\\n",shared_c_envcount());return 1;}printf("%%d %%s\\n",shared_c_addup(6),d);return 0;}\n' > $(TESTTMP)/test_emit_obj_cinit_host.c; \
+	  gcc $(TESTTMP)/test_emit_obj_cinit_host.c $(TESTTMP)/test_emit_obj_cinit.o -o $(TESTTMP)/test_emit_obj_cinit_host || { echo "test-emit-obj: cinit host FAILED to build"; exit 1; }; \
+	  tools/expect_same.sh test_emit_obj_cinit "$$($(TESTTMP)/test_emit_obj_cinit_host)" "42 pxx-c-data" || exit 1; \
+	  echo "test-emit-obj: an object's file-scope initialisers run under a gcc-built main"; \
+	else echo "gcc not installed; object initialiser check skipped"; fi
 	# 4c. A SHARED LIBRARY FROM A COMPILED SOURCE -- the other half of the same
 	#    backend work (feature-a-shared-library-output-for-compiled-sources).
 	#    --shared used to describe .asm-frontend output only: the writer built

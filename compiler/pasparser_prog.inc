@@ -590,14 +590,14 @@ begin
   { The program body falls into here. Return to the loader instead of exiting. }
   EmitB($C3);                                     { ret }
 
-  SharedInitOff := CodeLen;
+  InitThunkOff := CodeLen;
   EmitSharedThunkPrologue;
   EmitB($E8);                                     { call <code offset 0> }
   callSite := CodeLen;
   EmitI32(0 - (callSite + 4));
   EmitSharedThunkEpilogue;
 
-  SharedFiniOff := CodeLen;
+  FiniThunkOff := CodeLen;
   EmitSharedThunkPrologue;
   if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
     EmitCallProc(GetFiniRunnerProc);

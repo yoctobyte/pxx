@@ -9696,7 +9696,21 @@ function CNeedsEnvironInit: Boolean;
 var i: Integer;
 begin
   Result := False;
-  if EmitObjMode or CUseSystemLibs or NoDefaultRtl then Exit;
+  { EmitObjMode USED TO BAIL HERE, on the premise -- written into the parent
+    ticket -- that an object "is linked into a program whose entry stub does run
+    them". That is true only when the consumer is pxx-built, and linking into
+    foreign programs is what --emit-obj is FOR. Measured: test_shared_lib.c as an
+    object, `gcc host.c lib.o`, shared_c_envcount() returned -1 (environ NULL)
+    and shared_c_from_data() returned NULL, while the identical source as a pxx
+    PROGRAM is correct. The object does not even reach glibc's environ -- it
+    carries its own private storage that nothing filled.
+    Note the DIRECTION: the parent ticket warns against widening this predicate
+    to BAIL under EmitSharedMode, because that would delete the dead-code tell
+    while keeping the wrong value. This widens it the other way -- it makes the
+    predicate TRUE where it was falsely false -- and the code it pulls is now
+    reached by the .init_array thunk below.
+    bug-a-c-an-emit-obj-object-linked-into-a-non-pxx-program-never-runs-its-initialisers }
+  if CUseSystemLibs or NoDefaultRtl then Exit;
   if TargetArch = TARGET_XTENSA then Exit;
   if (TargetArch = TARGET_RISCV32) and EspBareBoot then Exit;
   for i := 0 to TokCount - 1 do
@@ -10433,17 +10447,22 @@ begin
     end;
   end;
 
-  { A SHARED LIBRARY'S INITIALISERS, which had nowhere to run.
+  { INITIALISERS WITH NOWHERE TO RUN -- for a shared library AND for an object.
 
     The C frontend emits CompilePendingGlobalInits at the start of `main` -- and
-    a library is precisely a translation unit with NO main, so a .so's
-    file-scope initialisers were never emitted anywhere at all. That is a
-    different cause from the one the ticket names (the missing entry stub) and a
+    a library is precisely a translation unit with NO main, so its file-scope
+    initialisers were never emitted anywhere at all. That is a different cause
+    from the one the shared-library ticket names (the missing entry stub) and a
     wider one: `static const char *n = "lit"; ... return n;` came back NULL from
-    a .so, and the same file as an --emit-obj object linked by GCC returns NULL
-    too, because the initialisers ride pxx's entry stub and a gcc program has
-    none. Only the .so half is fixed here -- a .so has DT_INIT to point at,
-    while the object case needs .init_array and is not this commit.
+    a .so, and from an --emit-obj object linked by GCC, for two different
+    reasons that look identical from outside.
+
+    BOTH HALVES ARE FIXED HERE NOW. The thunk is the same code; only the
+    carrier differs, and the carrier is the writer's business, not this
+    emitter's -- a .so gets DT_INIT/DT_FINI in the dynamic section, an object
+    gets a .init_array/.fini_array slot the linker aggregates. They agree on the
+    calling convention, which is why one thunk serves both: glibc calls a
+    DT_INIT and an .init_array entry alike, with (argc, argv, envp).
 
     ENVIRON WITHOUT A PROCESS STACK. __pxx_run_initializers derives envp from
     the Linux initial stack pointer, which a .so does not have: at DT_INIT time
@@ -10455,9 +10474,9 @@ begin
 
     Emitted BEFORE ApplyCallFixups because the call below is a forward like any
     other. bug-a-c-a-shared-library-never-runs-its-initialisation }
-  if EmitSharedMode and (TargetArch = TARGET_X86_64) then
+  if (EmitSharedMode or EmitObjMode) and (TargetArch = TARGET_X86_64) then
   begin
-    SharedInitOff := CodeLen;
+    InitThunkOff := CodeLen;
     EmitSharedThunkPrologue;
     if needInit then
     begin
@@ -10472,7 +10491,7 @@ begin
     CEmitDeferredCAggInits;
     EmitSharedThunkEpilogue;
 
-    SharedFiniOff := CodeLen;
+    FiniThunkOff := CodeLen;
     EmitSharedThunkPrologue;
     EmitCallProc(GetFiniRunnerProc);
     EmitSharedThunkEpilogue;
