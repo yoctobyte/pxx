@@ -5256,6 +5256,35 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== test-core: qemu-user not present, skipping cross const-array alignment ==="; \
 	fi
+	# bug-a-2d-array-row-as-a-const-array-param-still-segfaults
+	# A ROW of a fixed N-D array given to a parameter in a COPYING mode
+	# (const / by value / open array) SEGFAULTED on all five targets, while
+	# var and out on the same row were fine: the copying modes resolved their
+	# source through a helper that knew only whole identifiers and record
+	# fields, so a row fell past it and the argument became a scalar LOAD of
+	# the row's first element -- its VALUE where its address belonged.
+	#
+	# ALL FIVE TARGETS, not just the native oracle: the pre-fix binary was
+	# measured red on every one of them (i386/aarch64/arm32/riscv32 SIGSEGV
+	# under qemu, x86-64 SIGSEGV native), so a native-only row would have been
+	# a green that never spoke for the four targets the ticket names.
+	#
+	# The 3-D rows in the same file are the other half of the operation:
+	# `pb[1][2]` was a COMPILE ERROR ("wrong number of array subscripts"), and
+	# a compile error stops the run before the miscompiled 2-D row executes --
+	# which is why the two had to be fixed and wired together.
+	./$(COMPILER) test/test_nd_subarray_as_param.pas $(TESTTMP)/test_ndsub26
+	tools/expect_same.sh test_ndsub26 "$$($(TESTTMP)/test_ndsub26)" "ND SUBARRAY OK"
+	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1 \
+	   && command -v qemu-riscv32 >/dev/null 2>&1; then \
+	  for arch in i386 aarch64 arm32 riscv32; do \
+	    ./$(COMPILER) --target=$$arch test/test_nd_subarray_as_param.pas $(TESTTMP)/test_ndsub_$$arch >/dev/null; \
+	    tools/expect_same.sh $$arch/test_ndsub_$$arch "$$(tools/run_target.sh $$arch $(TESTTMP)/test_ndsub_$$arch)" "ND SUBARRAY OK" \
+	      || { echo "cross N-D sub-array param FAIL on $$arch"; exit 1; }; \
+	  done; echo "cross N-D sub-array param ok: i386 aarch64 arm32 riscv32"; \
+	else \
+	  echo "=== test-core: qemu-user not present, skipping cross N-D sub-array param ==="; \
+	fi
 	# bug-a-taking-the-address-of-a-float-array-element-is-a-float-operator-on-32-bit
 	# An IR_INDEX node's IRTk names the type AT the address, so `@V[0]` over an
 	# array of Double dispatched an ADDRESS computation into the float lowering.

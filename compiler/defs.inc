@@ -4571,6 +4571,35 @@ var
     producers are enumerable and testable at that point rather than silently
     live before it. }
   ASTStrElemTk : array of Integer;
+
+  { How many subscripts an AN_INDEX over a FIXED N-D array consumed, when that
+    is FEWER than the array has dimensions -- i.e. the node names a whole
+    SUB-ARRAY (a row of a 2-D array, a plane of a 3-D one) rather than an
+    element. 0 on every other node, including a FULLY subscripted N-D index.
+
+    Stamped rather than derived because the two are structurally identical
+    afterwards: both spellings collapse to one AN_INDEX whose Right is a
+    flattened element offset and whose Tk is the ELEMENT's kind, so `pa[0]` and
+    `pa[0,1]` differ only in the arithmetic inside Right. Sniffing that
+    arithmetic (the partial form's top node is a tkStar, the full form's a
+    tkPlus) is exactly the kind of name-shaped test that constant folding would
+    quietly invert.
+
+    ONE integer, not a copy of the row's shape: the base node is still at
+    ASTLeft, so NodeArrNDInfo re-derives dims/lo/span on demand and the row is
+    dims k..n-1. A copied shape would be a second set of columns to keep in
+    step with the array symbol's (the argument ArrTypeAliasOf makes for storing
+    a row index instead of six pointee fields).
+
+    Read by NDRowSourceInfo, which is what lets a row reach a COPYING parameter
+    mode. Without it the argument for `SumC(pa[0])` was lowered as a scalar --
+    IR_INDEX to the row's address, then an IR_LOAD_MEM of the first 8 bytes --
+    so the callee received element [0][0]'s VALUE where a pointer belonged and
+    read it as an address: NULL for a zeroed array, on all five targets.
+    `var`/`out` were unaffected because they never form a copy and so take
+    IRLowerAddress, which was right all along.
+    bug-a-2d-array-row-as-a-const-array-param-still-segfaults }
+  ASTNDRowSubs : array of Integer;
   ASTNodeCount : Integer;
   ASTCapacity : Integer;   { current allocated length of the per-node AST arrays (grown by EnsureASTCapacity) }
 

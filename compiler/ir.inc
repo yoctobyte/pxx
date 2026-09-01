@@ -3266,6 +3266,82 @@ begin
     and (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString);
 end;
 
+{ The STATIC-ARRAY SOURCE behind an argument that is about to be copied into a
+  length-headed temp for an array parameter: how many elements, of what kind,
+  and how wide one is.
+
+  ONE resolver, called from both the by-value/`const` arm and the `var`/`out`
+  arm below. It was two near-identical copies, and they had already drifted --
+  the value copy carried the dyn-array-HANDLE element-size correction inside
+  the shared body while the var copy re-tested `ASTKind = AN_IDENT` for it
+  afterwards. A third shape (the partial N-D row) would have had to be written
+  into both, and the one that got it second is the one that stays broken.
+
+  The partial-row arm is the new one: `SumC(pa[0])` on `pa: array[0..2] of TG`.
+  Its AN_INDEX node is tagged with the ELEMENT's kind, so without this it was
+  not recognised as an array source at all, fell past both arms to the scalar
+  tail, and the callee received `pa[0][0]`'s VALUE where the row's address
+  belonged.
+  bug-a-2d-array-row-as-a-const-array-param-still-segfaults }
+function StaticArraySourceInfo(argAST: Integer; var cnt: Integer;
+                               var elemTk: TTypeKind; var elemRec: Integer;
+                               var elemSz: Integer): Boolean;
+var sasSym, sasRec: Integer; sasField: AnsiString;
+begin
+  Result := False;
+  cnt := 0; elemTk := tyUnknown; elemRec := REC_NONE; elemSz := 0;
+  if argAST < 0 then Exit;
+  if ASTKind[argAST] = AN_IDENT then
+  begin
+    sasSym := ASTIVal[argAST];
+    if (sasSym < 0) or (sasSym >= SymCount) then Exit;
+    if not (Syms[sasSym].IsArray and (Syms[sasSym].ArrLen >= 0) and
+            (Syms[sasSym].Kind <> skParam) and (SymArrNDims[sasSym] <= 1)) then Exit;
+    elemTk := Syms[sasSym].ElemType;
+    elemRec := Syms[sasSym].ElemRecName;
+    cnt := Syms[sasSym].ArrLen;
+    Result := True;
+  end
+  else if ASTKind[argAST] = AN_FIELD then
+  begin
+    sasRec := ResolveNodeRec(ASTLeft[argAST]);
+    sasField := GetASTIdentName(argAST);
+    if not (RecFieldIsArray(sasRec, sasField) and
+            (RecFieldArrLen(sasRec, sasField) >= 0) and
+            (RecFieldDynDepth(sasRec, sasField) = 0) and
+            (RecFieldArrNDims(sasRec, sasField) <= 1)) then Exit;
+    elemTk := RecFieldType(sasRec, sasField);
+    elemRec := RecFieldRecId(sasRec, sasField);
+    cnt := RecFieldArrLen(sasRec, sasField);
+    Result := True;
+  end
+  else if ASTKind[argAST] = AN_INDEX then
+  begin
+    if not NDRowSourceInfo(argAST, cnt, elemTk, elemRec) then Exit;
+    Result := True;
+  end;
+  if not Result then Exit;
+  if elemTk = tyRecord then elemSz := RecSize(elemRec)
+  else elemSz := TypeSize(elemTk);
+  { ...unless the source array's elements are dyn-array HANDLES
+    (`array[0..1] of TRow`): ElemType is the row's BASE type, so TypeSize
+    answered 4 for an Integer row and only half the array was copied into the
+    open-array temp -- the callee saw a nil handle for m[1] and Length(m[1])
+    was 0 where fpc said 1.
+    bug-p-open-array-of-a-named-dynamic-array-reads-garbage }
+  if (ASTKind[argAST] = AN_IDENT) and (Integer(ASTIVal[argAST]) >= 0) and
+     (SymElemDynDepth[ASTIVal[argAST]] > 0) then
+    elemSz := TARGET_PTR_SIZE;
+  { cnt = 0 is left ALIVE deliberately: a zero-length static array was accepted
+    by the two blocks this replaced (their test was `ArrLen >= 0`), and turning
+    it into "not an array source" here would silently re-route it to the scalar
+    tail. Only an unresolvable element WIDTH disqualifies. }
+  if (cnt < 0) or (elemSz <= 0) then
+  begin
+    cnt := 0; elemSz := 0; Result := False;
+  end;
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -3275,10 +3351,10 @@ var argTk: TTypeKind;
     tmpAddr: Integer;
     srcAddr: Integer;
     value: Integer;
-    caCount, caElemRec, caElemSz, caSym, savedRec, caArgSym: Integer;
+    caCount, caElemRec, caElemSz, caSym, savedRec: Integer;
     caElemTk: TTypeKind;
     caIdent, caCountLit, caArg1, caArg2, caSlCall, caNone: Integer;
-    caRecName: Integer; caField: AnsiString; oaEligible: Boolean;
+    oaEligible: Boolean;
   coerceParamSym, coerceIntfCi, coerceCast: Integer;
   arcArg1, arcArg2, arcArg3, arcCall: Integer;
   isComIntfArg: Boolean;
@@ -3851,55 +3927,20 @@ begin
     nested indexing expressions below lost sign-extension inside this large hot
     function; re-testing whether the sign-extension fixes this cycle cured it.) }
   if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
-     Procs[cpi].Params[pathIdx].IsArray and (not Procs[cpi].Params[pathIdx].IsRef) and
-     ((ASTKind[argAST] = AN_IDENT) or (ASTKind[argAST] = AN_FIELD)) then
+     Procs[cpi].Params[pathIdx].IsArray and (not Procs[cpi].Params[pathIdx].IsRef) then
   begin
-    { Determine the static-array source — a whole 1-D static array, either a
-      simple var or a record/class FIELD (synacode's Transform(State, BufLong):
-      the field form used to fall through to a raw headerless address, so the
-      callee's High() read garbage — the MD5 stack smash). Mirrors the var-path
-      resolution below. }
-    caArgSym := -1; caCount := -1; caElemTk := tyUnknown; caElemRec := REC_NONE;
-    if ASTKind[argAST] = AN_IDENT then
-    begin
-      caArgSym := ASTIVal[argAST];
-      if (caArgSym >= 0) and (caArgSym < SymCount) and Syms[caArgSym].IsArray and
-         (Syms[caArgSym].ArrLen >= 0) and (Syms[caArgSym].Kind <> skParam) and
-         (SymArrNDims[caArgSym] <= 1) then
-      begin
-        caElemTk := Syms[caArgSym].ElemType;
-        caElemRec := Syms[caArgSym].ElemRecName;
-        caCount := Syms[caArgSym].ArrLen;
-      end;
-    end
-    else
-    begin
-      caRecName := ResolveNodeRec(ASTLeft[argAST]);
-      caField := GetASTIdentName(argAST);
-      if RecFieldIsArray(caRecName, caField) and
-         (RecFieldArrLen(caRecName, caField) >= 0) and
-         (RecFieldDynDepth(caRecName, caField) = 0) and
-         (RecFieldArrNDims(caRecName, caField) <= 1) then
-      begin
-        caElemTk := RecFieldType(caRecName, caField);
-        caElemRec := RecFieldRecId(caRecName, caField);
-        caCount := RecFieldArrLen(caRecName, caField);
-      end;
-    end;
-    if caCount >= 0 then
+    { Determine the static-array source — a whole 1-D static array (a simple
+      var, a record/class FIELD, or a partial N-D subscript naming a row).
+      The FIELD form used to fall through to a raw headerless address, so the
+      callee's High() read garbage (synacode's Transform(State, BufLong) — the
+      MD5 stack smash); the ROW form fell through to a scalar LOAD, so the
+      callee received an element VALUE as its pointer. Same resolver as the
+      var-path below, which is the point: the shapes are enumerated once.
+      bug-a-2d-array-row-as-a-const-array-param-still-segfaults }
+    if StaticArraySourceInfo(argAST, caCount, caElemTk, caElemRec, caElemSz) then
     begin
       if not ((caElemTk = tyRecord) and RecordHasManagedFields(caElemRec)) then
       begin
-        if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
-        else caElemSz := TypeSize(caElemTk);
-        { ...unless the source array's elements are dyn-array HANDLES
-          (`array[0..1] of TRow`): ElemType is the row's BASE type, so
-          TypeSize answered 4 for an Integer row and only half the array was
-          copied into the open-array temp — the callee saw a nil handle for
-          m[1] and Length(m[1]) was 0 where fpc said 1.
-          bug-p-open-array-of-a-named-dynamic-array-reads-garbage }
-        if (caArgSym >= 0) and (SymElemDynDepth[caArgSym] > 0) then
-          caElemSz := TARGET_PTR_SIZE;
         if caCount * caElemSz > MAX_OPEN_ARRAY_STACK_TEMP then
         begin
           { Large source array: a frame-local `[len:8][data]` buffer here would
@@ -3995,41 +4036,13 @@ begin
     path is not exercised there). }
   if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
      Procs[cpi].Params[pathIdx].IsArray and Procs[cpi].Params[pathIdx].IsRef and
-     ((ASTKind[argAST] = AN_IDENT) or (ASTKind[argAST] = AN_FIELD)) and
      (PendOAWBCount <= 63) then
   begin
-    { Determine the static-array source (a whole 1-D static array, either a
-      simple var or a record/class field). Dynamic arrays and open-array params
-      already carry a length header and are left alone. }
-    oaEligible := False; caCount := 0; caElemTk := tyUnknown; caElemRec := REC_NONE;
-    if ASTKind[argAST] = AN_IDENT then
-    begin
-      caArgSym := ASTIVal[argAST];
-      if (caArgSym >= 0) and (caArgSym < SymCount) and Syms[caArgSym].IsArray and
-         (Syms[caArgSym].ArrLen >= 0) and (Syms[caArgSym].Kind <> skParam) and
-         (SymArrNDims[caArgSym] <= 1) then
-      begin
-        caElemTk := Syms[caArgSym].ElemType;
-        caElemRec := Syms[caArgSym].ElemRecName;
-        caCount := Syms[caArgSym].ArrLen;
-        oaEligible := True;
-      end;
-    end
-    else
-    begin
-      caRecName := ResolveNodeRec(ASTLeft[argAST]);
-      caField := GetASTIdentName(argAST);
-      if RecFieldIsArray(caRecName, caField) and
-         (RecFieldArrLen(caRecName, caField) >= 0) and
-         (RecFieldDynDepth(caRecName, caField) = 0) and
-         (RecFieldArrNDims(caRecName, caField) <= 1) then
-      begin
-        caElemTk := RecFieldType(caRecName, caField);
-        caElemRec := RecFieldRecId(caRecName, caField);
-        caCount := RecFieldArrLen(caRecName, caField);
-        oaEligible := True;
-      end;
-    end;
+    { Determine the static-array source (a whole 1-D static array: a simple var,
+      a record/class field, or a partial N-D subscript naming a row). Dynamic
+      arrays and open-array params already carry a length header and are left
+      alone. }
+    oaEligible := StaticArraySourceInfo(argAST, caCount, caElemTk, caElemRec, caElemSz);
     { AnsiString elements ride the same copy-in/copy-out: the raw handle bytes
       move into the temp (no ARC — the temp is a byte buffer, so scope exit
       never DecRefs the elements), the callee assigns slots with normal ARC,
@@ -4041,13 +4054,6 @@ begin
     if oaEligible and
        not ((caElemTk = tyRecord) and RecordHasManagedFields(caElemRec)) then
     begin
-      if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
-      else caElemSz := TypeSize(caElemTk);
-      { dyn-array HANDLE elements are pointer-sized whatever the row's base type
-        is — same correction as the const/value path above. }
-      if (ASTKind[argAST] = AN_IDENT) and (Integer(ASTIVal[argAST]) >= 0) and
-         (SymElemDynDepth[ASTIVal[argAST]] > 0) then
-        caElemSz := TARGET_PTR_SIZE;
       if caCount * caElemSz > MAX_OPEN_ARRAY_STACK_TEMP then
       begin
         { Large source array: same reasoning as the const/value path above —

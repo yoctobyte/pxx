@@ -41150,7 +41150,7 @@ begin
         { Partial: a single leading subscript on an N-D fixed array names a whole
           row (sub-array). Scale it to the row's first-element flat index so the
           element-stride AN_INDEX yields the row base address. }
-        ASTRight[indexNode] := BuildPartialNDRowIndex(CurASTNode);
+        BuildPartialNDRowIndex(indexNode, CurASTNode);
         Expect(tkRBrack, ']');
       end
       else

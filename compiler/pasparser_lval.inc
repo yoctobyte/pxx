@@ -211,12 +211,24 @@ end;
 
 { The fixed N-D subscript TAIL, in both spellings: `[i, j]` and `[i][j]`.
 
-  Call it with `base` = the node being indexed and the FIRST subscript already
-  parsed into CurASTNode. On a fixed N-D array it consumes the remaining
-  subscripts AND the closing bracket(s) and returns the flattened index node;
-  otherwise it consumes NOTHING, returns -1, and the caller closes its own
-  bracket exactly as before. `isNDOut` reports what NodeArrNDInfo said, because
-  two callers need it afterwards for the partial-row (single subscript) case.
+  Call it with `indexNode` = the AN_INDEX node being built, `base` = the node
+  being indexed and the FIRST subscript already parsed into CurASTNode. On a
+  fixed N-D array it consumes the remaining subscripts AND the closing
+  bracket(s) and returns the flattened index node; otherwise it consumes
+  NOTHING, returns -1, and the caller closes its own bracket exactly as before.
+  `isNDOut` reports what NodeArrNDInfo said, because the callers need it
+  afterwards for the single-subscript case, which arrives here as no tail at
+  all.
+
+  FEWER subscripts than dimensions is not an error and no longer says it is.
+  `pb[1][2]` on a 3-D array names a PLANE exactly as `pa[0]` on a 2-D one names
+  a row, and it used to be rejected with `wrong number of array subscripts` --
+  untrue, and untrue in a way that hid the sibling defect: the 2-D row it does
+  accept was miscompiled rather than refused. One builder answers for every k
+  now (BuildPartialNDIndex), so the k=1 row and the k=2 plane cannot diverge.
+  `indexNode` is threaded in for that builder, which stamps ASTNDRowSubs on the
+  node it is composing.
+  bug-a-2d-array-row-as-a-const-array-param-still-segfaults
 
   EXTRACTED, not copied. ParseLValueAST was the only one of the three suffix
   walks that had this; ParseClassRecordSelectors and ApplyCallResultPtrSuffix
@@ -233,7 +245,7 @@ end;
   already -- nobody was asking it.
 
   bug-a-a-comma-indexed-multi-dim-subscript-is-not-parsed-through-a-cast-or-call-result }
-function ParseNDSubscriptTail(base: Integer; var isNDOut: Boolean): Integer;
+function ParseNDSubscriptTail(indexNode: Integer; base: Integer; var isNDOut: Boolean): Integer;
 var nIdx: Integer;
 begin
   ParseNDSubscriptTail := -1;
@@ -247,8 +259,7 @@ begin
       if nIdx >= NDInfoNDims then Error('too many subscripts for array');
       ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
     end;
-    if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
-    ParseNDSubscriptTail := BuildFlatNDIndex(nIdx);
+    ParseNDSubscriptTail := BuildPartialNDIndex(indexNode, nIdx);
     Expect(tkRBrack, ']');
   end
   { `[i][j]` -- the bounds check on TokPos is not in the ParseLValueAST original
@@ -266,8 +277,7 @@ begin
       ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
       Expect(tkRBrack, ']');
     end;
-    if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
-    ParseNDSubscriptTail := BuildFlatNDIndex(nIdx);
+    ParseNDSubscriptTail := BuildPartialNDIndex(indexNode, nIdx);
   end;
 end;
 
@@ -1475,7 +1485,7 @@ begin
         flattened 1-D index: m[i0,i1,..]/r.m[..] (commas) and m[i0][i1]..
         (consecutive brackets). Handled here so no bogus intermediate m[i0] is
         built. NodeArrNDInfo fills NDInfo* (dims) for the base. }
-      ndFlat := ParseNDSubscriptTail(node, isND);
+      ndFlat := ParseNDSubscriptTail(indexNode, node, isND);
       if ndFlat >= 0 then
         ASTRight[indexNode] := ndFlat
       else if CurTok.Kind = tkComma then
@@ -1515,7 +1525,7 @@ begin
         { Partial: a single leading subscript on an N-D fixed array names a whole
           row (sub-array). Scale it to the row's first-element flat index so the
           element-stride AN_INDEX yields the row base address. }
-        ASTRight[indexNode] := BuildPartialNDRowIndex(CurASTNode);
+        BuildPartialNDRowIndex(indexNode, CurASTNode);
         Expect(tkRBrack, ']');
       end
       else
@@ -4581,14 +4591,14 @@ begin
       sub := AllocNode(AN_INDEX);
       ASTLeft[sub] := node;
       ParseExpr;
-      ndFlat := ParseNDSubscriptTail(node, ndIsND);
+      ndFlat := ParseNDSubscriptTail(sub, node, ndIsND);
       if ndFlat >= 0 then
         ASTRight[sub] := ndFlat
       else
       begin
         { A single subscript on a fixed N-D array names a whole ROW; scale it to
           that row's first-element flat index, exactly as ParseLValueAST does. }
-        if ndIsND then ASTRight[sub] := BuildPartialNDRowIndex(CurASTNode)
+        if ndIsND then BuildPartialNDRowIndex(sub, CurASTNode)
         else ASTRight[sub] := CurASTNode;
         Expect(tkRBrack, ']');
       end;
@@ -4883,14 +4893,14 @@ begin
         sub := AllocNode(AN_INDEX);
         ASTLeft[sub] := node;
         ParseExpr;
-        ndFlat := ParseNDSubscriptTail(node, ndIsND);
+        ndFlat := ParseNDSubscriptTail(sub, node, ndIsND);
         if ndFlat >= 0 then
           ASTRight[sub] := ndFlat
         else
         begin
           { A single subscript on a fixed N-D array names a whole ROW; scale it to
             that row's first-element flat index, exactly as ParseLValueAST does. }
-          if ndIsND then ASTRight[sub] := BuildPartialNDRowIndex(CurASTNode)
+          if ndIsND then BuildPartialNDRowIndex(sub, CurASTNode)
           else ASTRight[sub] := CurASTNode;
           Expect(tkRBrack, ']');
         end;

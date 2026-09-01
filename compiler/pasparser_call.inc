@@ -456,17 +456,34 @@ end;
   index so the ordinary element-stride AN_INDEX lands on the row's first
   element; its address is then the row base (what a `var`/`const` array param or
   whole-row reference needs). NDInfo* must be filled (NodeArrNDInfo). }
-function BuildPartialNDRowIndex(rowIdxNode: Integer): Integer;
-var d, trailing, loLit, diff, spanLit: Integer;
+function BuildPartialNDIndex(indexNode: Integer; k: Integer): Integer;
+var d, trailing, spanLit, acc, flat: Integer;
 begin
+  flat := BuildFlatNDIndex(k);
   trailing := 1;
-  for d := 1 to NDInfoNDims - 1 do trailing := trailing * NDInfoSpan[d];
-  loLit := AllocNode(AN_INT_LIT); ASTIVal[loLit] := NDInfoLo[0]; ASTTk[loLit] := Ord(tyInteger);
-  diff := AllocNode(AN_BINOP); ASTIVal[diff] := Ord(tkMinus);
-  ASTLeft[diff] := rowIdxNode; ASTRight[diff] := loLit; ASTTk[diff] := Ord(tyInteger);
-  spanLit := AllocNode(AN_INT_LIT); ASTIVal[spanLit] := trailing; ASTTk[spanLit] := Ord(tyInteger);
-  Result := AllocNode(AN_BINOP); ASTIVal[Result] := Ord(tkStar);
-  ASTLeft[Result] := diff; ASTRight[Result] := spanLit; ASTTk[Result] := Ord(tyInteger);
+  for d := k to NDInfoNDims - 1 do trailing := trailing * NDInfoSpan[d];
+  acc := flat;
+  if trailing <> 1 then
+  begin
+    spanLit := AllocNode(AN_INT_LIT); ASTIVal[spanLit] := trailing; ASTTk[spanLit] := Ord(tyInteger);
+    acc := AllocNode(AN_BINOP); ASTIVal[acc] := Ord(tkStar);
+    ASTLeft[acc] := flat; ASTRight[acc] := spanLit; ASTTk[acc] := Ord(tyInteger);
+  end;
+  ASTRight[indexNode] := acc;
+  { The stamp and the index arithmetic are set TOGETHER, by one routine that
+    takes the index node, because they are one fact stated twice and every call
+    site is another chance to state only half of it. The row builder used to
+    return the arithmetic and let each caller assign it; a caller that then
+    forgot the stamp would build a sub-array that every consumer reads as an
+    element -- silently, which is precisely what this column exists to end. }
+  ASTNDRowSubs[indexNode] := k;
+  Result := acc;
+end;
+
+procedure BuildPartialNDRowIndex(indexNode: Integer; rowIdxNode: Integer);
+begin
+  NDIdxNode[0] := rowIdxNode;
+  BuildPartialNDIndex(indexNode, 1);
 end;
 
 { If `node` is an N-D fixed array reference (a SymArrNDims ident, an
@@ -523,6 +540,66 @@ begin
     end;
   end;
 end;
+{ A PARTIAL fixed N-D subscript -- `pa[0]` on `array[0..2] of TG`, `r2.rows[0]`,
+  `p^[0]` -- names a whole SUB-ARRAY. Answer True and describe it as a 1-D
+  array: how many elements it holds, and of what.
+
+  This is the reader ASTNDRowSubs exists for. The AN_INDEX node's own ASTTk
+  holds the ELEMENT's kind (there is nowhere else on an index node to put it),
+  so every consumer that dispatches on the tag reads `pa[0]` as one Int64 --
+  the same lie AN_DEREF tells for `p^` over a pointer-to-array, one node kind
+  out, and the reason IsNodeArray needed its DerefPtrArrayInfo arm.
+
+  Shape re-derived from the BASE through NodeArrNDInfo rather than copied onto
+  the index node at parse time: the base is one field away and the array's own
+  dim columns are the single source. Only dims 1..n-1 are read here because
+  only one leading subscript can be spelled today; when a k-subscript partial
+  index is accepted (the 3-D `b[0][0]` arm of the same ticket), the row is dims
+  k..n-1 and the count is the product over that range -- k is what
+  ASTNDRowSubs stores so that generalisation is a loop bound, not a new column.
+  bug-a-2d-array-row-as-a-const-array-param-still-segfaults }
+function NDRowSourceInfo(node: Integer; var rowCount: Integer;
+                         var rowElemTk: TTypeKind; var rowElemRec: Integer): Boolean;
+var nrBase, nrSym, d, nrStrCap, nrTk, nrRec: Integer; nrFld: AnsiString;
+begin
+  Result := False;
+  rowCount := 0; rowElemTk := tyUnknown; rowElemRec := REC_NONE;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_INDEX then Exit;
+  if ASTNDRowSubs[node] <= 0 then Exit;
+  nrBase := ASTLeft[node];
+  if nrBase < 0 then Exit;
+  if not NodeArrNDInfo(nrBase) then Exit;
+  if ASTNDRowSubs[node] >= NDInfoNDims then Exit;
+  rowCount := 1;
+  for d := ASTNDRowSubs[node] to NDInfoNDims - 1 do rowCount := rowCount * NDInfoSpan[d];
+  if rowCount <= 0 then begin rowCount := 0; Exit; end;
+  if ASTKind[nrBase] = AN_IDENT then
+  begin
+    nrSym := ASTIVal[nrBase];
+    if (nrSym < 0) or (nrSym >= SymCount) then begin rowCount := 0; Exit; end;
+    rowElemTk := Syms[nrSym].ElemType;
+    rowElemRec := Syms[nrSym].ElemRecName;
+  end
+  else if ASTKind[nrBase] = AN_FIELD then
+  begin
+    nrFld := GetASTIdentName(nrBase);
+    nrRec := ResolveNodeRec(ASTLeft[nrBase]);
+    rowElemTk := RecFieldType(nrRec, nrFld);
+    rowElemRec := RecFieldRecId(nrRec, nrFld);
+  end
+  else if ASTKind[nrBase] = AN_DEREF then
+  begin
+    if not DerefPtrArrayElem(nrBase, nrTk, nrRec, nrStrCap) then
+      begin rowCount := 0; Exit; end;
+    rowElemTk := IntToTypeKind(nrTk);
+    rowElemRec := nrRec;
+  end
+  else
+    begin rowCount := 0; Exit; end;
+  Result := True;
+end;
+
 
 { Parse an indexed-property subscript `[e1 {, e2}]` (bracket not yet consumed)
   into a chain of AN_ARG nodes. head = first arg, tail = last (so a setter's value

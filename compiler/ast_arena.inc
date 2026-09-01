@@ -33,6 +33,7 @@ begin
   SetLength(ASTNilChk, n);
   SetLength(ASTPyUser, n);
   SetLength(ASTStrElemTk, n);
+  SetLength(ASTNDRowSubs, n);
   ASTCapacity := n;
 end;
 
@@ -78,6 +79,9 @@ begin
   { 0 = tyUnknown = "narrow", the correct default for every existing string
     expression; only a wide-string PRODUCER overwrites it. feature-unicodestring-model }
   ASTStrElemTk[ASTNodeCount] := 0;
+  { 0 = "an element, not a sub-array" -- correct for every node but the
+    partial N-D index, which BuildPartialNDRowIndex stamps. }
+  ASTNDRowSubs[ASTNodeCount] := 0;
   { Stamped on EVERY node, not on a chosen few: the sites that read it are call
     nodes and deref nodes, and tagging both lists here would be the second place
     to keep in step with ir.inc. It is one byte. feature-a-emitted-nil-checks }
@@ -129,6 +133,7 @@ begin
   ASTNilChk[Result]   := ASTNilChk[node];
   ASTPyUser[Result]   := ASTPyUser[node];
   ASTStrElemTk[Result] := ASTStrElemTk[node];
+  ASTNDRowSubs[Result] := ASTNDRowSubs[node];
   ASTLeft[Result]     := CloneAST(ASTLeft[node]);
   ASTRight[Result]    := CloneAST(ASTRight[node]);
 end;
