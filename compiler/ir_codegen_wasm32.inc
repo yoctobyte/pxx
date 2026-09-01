@@ -75,6 +75,15 @@ var
                                         first use so a program without a raise
                                         emits a module without it }
   WasmExcSites      : Integer = 0;    { IR_EXC_ENTER sites in this body }
+  { The PROC CLEANUP FRAME: a handler frame this body pushes for itself, whose
+    pad releases the managed locals and re-raises. It is what runs when an
+    exception unwinds THROUGH this frame rather than being caught in it --
+    neither the epilogue nor the eventual handler's frame releases them, so
+    without it every managed local a raising call sees is leaked, silently.
+    -1 in both when this body does not need one, which is most of them.
+    bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa }
+  WasmCleanupSlot   : Integer = -1;   { its exception-frame slot, or -1 }
+  WasmCleanupBlk    : Integer = -1;   { its basic block number, or -1 }
   WasmExcHasHandler : Boolean = False;{ ... any at all }
   WasmExcTopLocal   : Integer = -1;   { scratch i32 holding the chain head }
 { ONE reusable spill local per value type per body, not one per call site. A
@@ -649,6 +658,13 @@ function WasmEmitLoadFile(node: Integer): Boolean; forward;
 function WasmEmitPathArg(valNode: Integer): Boolean; forward;
 function WasmWriteHelper(const nm: AnsiString): Integer; forward;
 procedure WasmEmitDynStore(dstSym, valNode: Integer); forward;
+{ The proc cleanup pad releases this body's managed locals, and the release pass
+  is defined with the epilogue that is its other caller -- well below the
+  exception machinery the pad belongs to. Forward rather than moved, and caught
+  by tools/check_forwards.sh the moment it was written: FPC compiles this file
+  top to bottom during the seed build, and PXX prescans headers, so the file
+  self-hosts cleanly either way and only FPC says which order is real. }
+procedure WasmEmitManagedLocals(release: Boolean; retSym: Integer); forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
   address of its slot. A var/out parameter's slot holds the CALLER's address,
@@ -3805,6 +3821,67 @@ begin
   end;
 end;
 
+{ Pop ONE exception frame. The idiom WasmEmitExcLeave unrolls, named once so the
+  proc cleanup frame's two exits cannot spell it differently from each other. }
+procedure WasmEmitExcPop;
+begin
+  WasmBssAddr(BSS_EXC_TOP);
+  WasmBssLoad(BSS_EXC_TOP);
+  WasmMemOp($28, 'i32.load', 2, WASM_EXCF_PREV);
+  WasmOp($AD, 'i64.extend_i32_u');
+  WasmMemOp($37, 'i64.store', 2, 0);
+end;
+
+{ Push this body's PROC CLEANUP FRAME. Structurally identical to
+  WasmEmitExcEnter -- prev, pad, fp, then publish -- because it IS a handler
+  frame; the only difference is that its pad number comes from the reservation
+  rather than from an IR label, and that nothing in the IR refers to it. }
+procedure WasmEmitProcCleanupEnter;
+begin
+  WasmExcFrameAddr(WasmCleanupSlot);
+  WasmBssLoad(BSS_EXC_TOP);
+  WasmMemOp($36, 'i32.store', 2, WASM_EXCF_PREV);
+
+  WasmExcFrameAddr(WasmCleanupSlot);
+  WasmI32Const(WasmCleanupBlk);
+  WasmMemOp($36, 'i32.store', 2, WASM_EXCF_PAD);
+
+  WasmExcFrameAddr(WasmCleanupSlot);
+  WasmLocalGet(WasmLocalFp);
+  WasmMemOp($36, 'i32.store', 2, WASM_EXCF_FP);
+
+  WasmBssAddr(BSS_EXC_TOP);
+  WasmExcFrameAddr(WasmCleanupSlot);
+  WasmOp($AD, 'i64.extend_i32_u');
+  WasmMemOp($37, 'i64.store', 2, 0);
+end;
+
+{ The pad: release, re-arm, leave. Reached only from WasmEmitUnwind, which has
+  already cleared the pending flag on the way in because it believes it found a
+  HANDLER -- this frame is not one, so the flag is set again below and the
+  exception carries on out of this function.
+
+  THE BRANCH ABOVE IT IS NOT OPTIONAL. The dispatch nests so that block k's code
+  is the last thing inside B(k+1); the pad is the last block, so its code sits
+  immediately after the last REAL block's, and normal completion would walk
+  straight into it and propagate an exception nothing raised. `br 2` from inside
+  the pad's own still-open block reaches $exit: depth 0 is that block, 1 the
+  dispatch loop, 2 the outer $exit block. Counting outward from where the branch
+  SITS is the whole delicacy of this scheme, as WasmDepthToLoop's header says.
+
+  The frame is popped BEFORE the release, so a release that raises -- a
+  destructor that throws -- cannot re-enter this same pad and loop. }
+procedure WasmEmitProcCleanupPad(retSym: Integer);
+begin
+  WasmBr(2);                          { last real block -> $exit, not into the pad }
+  WasmEnd;                            { closes B(pad); the pad's code follows }
+  WasmEmitExcPop;
+  WasmEmitManagedLocals(True, retSym);
+  WasmI32Const(1);
+  WasmGlobalSet(WasmExcPendGlobal);   { still pending: this frame did not handle it }
+  WasmEmitExcPropagate;               { restore $sp and return }
+end;
+
 { `raise E` — arm the status words and unwind. A bare `raise;` inside a handler
   arrives with IRA = -1 and re-arms from whatever is still in the slots, which
   is the same contract every other backend reads. }
@@ -5721,6 +5798,29 @@ begin
     whether this body branches. }
   Inc(WasmBodySerial);
   WasmWalkBody(False);
+  { RESERVE THE PROC CLEANUP FRAME, after the pre-pass and before anything reads
+    the counts it just set. A slot AND a block, because the pre-pass counts only
+    IR_EXC_ENTER nodes and this frame is not one: it is pushed by the body for
+    itself, and its pad is a block the IR contains no label for.
+
+    WasmExcHasHandler must go True as well -- it is what makes WasmEmitUnwind
+    emit the frame-matching test at all, so without it the frame would be pushed
+    and never consulted. Same predicate the frontend uses to decide the register
+    backends' version (pasparser_proc.inc), asked here because this backend
+    cannot use the parse-time hook: EmitProcCleanupFrameEnterForTarget writes
+    machine bytes into Code[] and returns a patch position, and wasm32 writes no
+    Code[] and patches nothing. }
+  WasmCleanupSlot := -1;
+  WasmCleanupBlk := -1;
+  if ExceptionUsed and (CurProc >= 0)
+     and ProcHasManagedLocalCleanup(CurProc, retSym) then
+  begin
+    WasmCleanupSlot := WasmExcSites;
+    Inc(WasmExcSites);
+    WasmExcHasHandler := True;
+    WasmCleanupBlk := WasmBlockCount;
+    Inc(WasmBlockCount);
+  end;
   WasmLocalPc := -1;
   WasmLocalSelf := -1;
   WasmStrLocN := -1;
@@ -5786,9 +5886,31 @@ begin
 
   if not WasmBodyBroken then WasmEmitManagedLocals(False, retSym);
 
+  { PUSH the proc cleanup frame -- AFTER the zero-init above, deliberately. Its
+    pad releases every managed local, so a pad reachable before the slots are
+    nil would release whatever the previous call left on the shadow stack. No
+    code between the zero-init and here can raise, so the window is empty, but
+    the ORDER is the reason it is empty and not luck. }
+  if (WasmCleanupSlot >= 0) and not WasmBodyBroken then
+    WasmEmitProcCleanupEnter;
+
   if WasmNeedDispatch then WasmOpenDispatch;
   WasmWalkBody(True);
+  { THE PAD ITSELF, the last block in the dispatch, emitted after every real
+    block's code and inside the one block WasmWalkBody left open for it.
+    WasmEmitProcCleanupPad also has to stop the last REAL block falling into it:
+    block k's code sits immediately after B(k)'s `end`, so the pad's code
+    directly follows the last real block's and would otherwise run on normal
+    completion, propagating an exception nothing raised. }
+  if (WasmCleanupBlk >= 0) and not WasmBodyBroken then
+    WasmEmitProcCleanupPad(retSym);
   if WasmNeedDispatch then WasmCloseDispatch;
+
+  { POP it on the normal path, before the epilogue's release below -- otherwise
+    the frame outlives the frame it points at and the caller's unwind matches a
+    dead $fp. The pad pops it too, on its own path. }
+  if (WasmCleanupSlot >= 0) and not WasmBodyBroken then
+    WasmEmitExcPop;
 
   { Released BEFORE $sp is restored and before the result is loaded: the slots
     are addressed through $fp either way, but the result must be read after
