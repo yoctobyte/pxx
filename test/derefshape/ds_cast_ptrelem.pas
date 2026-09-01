@@ -10,5 +10,7 @@ begin
   SetLength(a, 4);
   raw := @a;
   for i := 0 to 3 do TP(raw)^[i] := @nums[i];
-  WriteLn(a[0]^, ' ', a[3]^);
+  Write(a[0]^, ' ', a[3]^);
+  Write(' | ');
+  WriteLn(TP(raw)^[0]^, ' ', TP(raw)^[3]^);
 end.

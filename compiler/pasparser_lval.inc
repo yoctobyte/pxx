@@ -4800,6 +4800,8 @@ var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok, tmpN: Integer; fieldNam
     mcCi, mmi, mpi, mcallNode: Integer; mcFin: Boolean;
     arrAi, tmpSym, ndD, nIdx, ndFlat: Integer; isND, ndIsND: Boolean;
     remDepth, ptrBaseTk, ptrBaseRec: Integer;
+    dpeTk, dpeRec, dpeCap: Integer;            { `f()^[i]` element, from DerefPtrArrayElem }
+    epDepth, epBaseTk, epBaseRec: Integer;     { …and that element's OWN pointer levels }
 begin
   tk := Procs[procIdx].RetType;
   recId := REC_NONE;
@@ -4905,6 +4907,39 @@ begin
           else if ptrBaseTk <> Ord(tyUnknown) then
           begin
             tk := IntToTypeKind(ptrBaseTk); recId := ptrBaseRec;
+          end;
+        end;
+        { …and when the thing indexed is `f()^` over a pointer to an ARRAY, the
+          element is the ARRAY's, not the RESULT's pointee, and the loop's
+          running elemTk/remDepth must be re-aimed at it. They were not: every
+          later suffix kept answering from the PROC's constants, so the second
+          `^` of `GetP^[0]^` over a `^array of PInteger` typed the load as the
+          pointee of the RESULT (8 bytes) instead of an Integer (4) -- and it
+          read 8: 47244640266 = (nums[1] shl 32) or nums[0]. Silent, exit 0,
+          and only in a VALUE position: `v := GetP^[0]^` narrows on the store
+          and printed 10, so the bug was invisible to every spelling that
+          assigns before it prints.
+          DerefPtrArrayElem / DerefPtrArrayElemPtr are the shared readers for
+          exactly this pair of facts (symtab.inc), so this asks them rather than
+          growing a fifth private notion of what a `^` yields.
+          (DerefPtrArrayElemPtr had no caller at all before this one.) }
+        if DerefPtrArrayElem(ASTLeft[sub], dpeTk, dpeRec, dpeCap) then
+        begin
+          tk := IntToTypeKind(dpeTk); recId := dpeRec;
+          elemTk := dpeTk; elemRec := dpeRec;
+          remDepth := 0; ptrBaseTk := Ord(tyUnknown); ptrBaseRec := REC_NONE;
+          if DerefPtrArrayElemPtr(ASTLeft[sub], epDepth, epBaseTk, epBaseRec) and
+             (epDepth > 0) then
+          begin
+            remDepth := epDepth; ptrBaseTk := epBaseTk; ptrBaseRec := epBaseRec;
+            if epDepth >= 2 then
+            begin
+              elemTk := Ord(tyPointer); elemRec := epBaseRec;
+            end
+            else
+            begin
+              elemTk := epBaseTk; elemRec := epBaseRec;
+            end;
           end;
         end;
         ASTTk[sub] := StrValTk(tk);

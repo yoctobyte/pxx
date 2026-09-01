@@ -9,5 +9,7 @@ begin
   for i := 0 to 3 do nums[i] := 10 + i;
   SetLength(a, 4);
   for i := 0 to 3 do GetP^[i] := @nums[i];
-  WriteLn(a[0]^, ' ', a[3]^);
+  Write(a[0]^, ' ', a[3]^);
+  Write(' | ');
+  WriteLn(GetP^[0]^, ' ', GetP^[3]^);
 end.

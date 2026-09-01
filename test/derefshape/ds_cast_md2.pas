@@ -7,5 +7,7 @@ var
 begin
   raw := @a;
   for i := 0 to 3 do TP(raw)^[i div 2, i mod 2] := (i+1)*1.5;
-  WriteLn(a[0,0]:0:2, ' ', a[1,1]:0:2);
+  Write(a[0,0]:0:2, ' ', a[1,1]:0:2);
+  Write(' | ');
+  WriteLn(TP(raw)^[0,0]:0:2, ' ', TP(raw)^[1,1]:0:2);
 end.

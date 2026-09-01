@@ -7,5 +7,7 @@ var
 begin
   r.q := @a;
   for i := 0 to 3 do r.q^[i div 2, i mod 2] := (i+1)*1.5;
-  WriteLn(a[0,0]:0:2, ' ', a[1,1]:0:2);
+  Write(a[0,0]:0:2, ' ', a[1,1]:0:2);
+  Write(' | ');
+  WriteLn(r.q^[0,0]:0:2, ' ', r.q^[1,1]:0:2);
 end.

@@ -10,5 +10,7 @@ begin
   SetLength(a, 4);
   ap[0] := @a;
   for i := 0 to 3 do ap[0]^[i] := @nums[i];
-  WriteLn(a[0]^, ' ', a[3]^);
+  Write(a[0]^, ' ', a[3]^);
+  Write(' | ');
+  WriteLn(ap[0]^[0]^, ' ', ap[0]^[3]^);
 end.

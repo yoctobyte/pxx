@@ -9,8 +9,19 @@
 #
 # So the unit here is a ROW = (how the pointer is spelled) x (what the element
 # is), not a program. Every row writes the same values through a different
-# spelling and reads them back through the plain array, so a row's expected
-# output does not depend on the walk being tested.
+# spelling, then reads them back TWICE: through the plain array, and through
+# the spelling itself. The `a | b` in EXPECTED is those two halves.
+#
+# The second half was added 2026-09-01 and is not cosmetic. Until then every
+# row read back only through `a`, so the matrix was a full product on the two
+# axes it NAMED and blind on one it never named -- the read face of each
+# spelling. Turning it on found two failures immediately in rows that were
+# already green: `TP(raw)^[1,1]` was a hard PARSE ERROR in expression position
+# while the byte-identical store compiled and ran, and `GetP^[0]^` over an
+# `array of PInteger` read 8 bytes where the element is 4 and printed
+# 47244640266. A matrix can be complete on its axes and still be a partial
+# instrument; the axes are a claim about what was varied, never about what was
+# covered.
 #
 # THE PLAIN ROWS ARE THE POSITIVE CONTROL and must always pass: same
 # arithmetic, same element kind, the one spelling that works today. If a plain

@@ -7,5 +7,7 @@ function GetP: TP; begin GetP := @a; end;
 begin
   SetLength(a, 4);
   for i := 0 to 3 do GetP^[i] := 'v' + Chr(48+i);
-  WriteLn(a[0], ' ', a[3]);
+  Write(a[0], ' ', a[3]);
+  Write(' | ');
+  WriteLn(GetP^[0], ' ', GetP^[3]);
 end.

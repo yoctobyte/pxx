@@ -7,5 +7,7 @@ var
 begin
   p := @a;
   for i := 0 to 3 do p^[i] := (i+1)*1.5;
-  WriteLn(a[0]:0:2, ' ', a[3]:0:2);
+  Write(a[0]:0:2, ' ', a[3]:0:2);
+  Write(' | ');
+  WriteLn(p^[0]:0:2, ' ', p^[3]:0:2);
 end.

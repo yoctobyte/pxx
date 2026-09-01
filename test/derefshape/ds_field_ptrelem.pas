@@ -10,5 +10,7 @@ begin
   SetLength(a, 4);
   r.q := @a;
   for i := 0 to 3 do r.q^[i] := @nums[i];
-  WriteLn(a[0]^, ' ', a[3]^);
+  Write(a[0]^, ' ', a[3]^);
+  Write(' | ');
+  WriteLn(r.q^[0]^, ' ', r.q^[3]^);
 end.

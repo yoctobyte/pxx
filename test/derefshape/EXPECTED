@@ -1,30 +1,30 @@
-ds_plain_fixdbl 1.50 6.00
-ds_field_fixdbl 1.50 6.00
-ds_callres_fixdbl 1.50 6.00
-ds_arrayelem_fixdbl 1.50 6.00
-ds_cast_fixdbl 1.50 6.00
-ds_nested_fixdbl 1.50 6.00
-ds_plain_dyndbl 1.50 6.00
-ds_field_dyndbl 1.50 6.00
-ds_callres_dyndbl 1.50 6.00
-ds_arrayelem_dyndbl 1.50 6.00
-ds_cast_dyndbl 1.50 6.00
-ds_nested_dyndbl 1.50 6.00
-ds_plain_dynstr v0 v3
-ds_field_dynstr v0 v3
-ds_callres_dynstr v0 v3
-ds_arrayelem_dynstr v0 v3
-ds_cast_dynstr v0 v3
-ds_nested_dynstr v0 v3
-ds_plain_ptrelem 10 13
-ds_field_ptrelem 10 13
-ds_callres_ptrelem 10 13
-ds_arrayelem_ptrelem 10 13
-ds_cast_ptrelem 10 13
-ds_nested_ptrelem 10 13
-ds_plain_md2 1.50 6.00
-ds_field_md2 1.50 6.00
-ds_callres_md2 1.50 6.00
-ds_arrayelem_md2 1.50 6.00
-ds_cast_md2 1.50 6.00
-ds_nested_md2 1.50 6.00
+ds_plain_fixdbl 1.50 6.00 | 1.50 6.00
+ds_field_fixdbl 1.50 6.00 | 1.50 6.00
+ds_callres_fixdbl 1.50 6.00 | 1.50 6.00
+ds_arrayelem_fixdbl 1.50 6.00 | 1.50 6.00
+ds_cast_fixdbl 1.50 6.00 | 1.50 6.00
+ds_nested_fixdbl 1.50 6.00 | 1.50 6.00
+ds_plain_dyndbl 1.50 6.00 | 1.50 6.00
+ds_field_dyndbl 1.50 6.00 | 1.50 6.00
+ds_callres_dyndbl 1.50 6.00 | 1.50 6.00
+ds_arrayelem_dyndbl 1.50 6.00 | 1.50 6.00
+ds_cast_dyndbl 1.50 6.00 | 1.50 6.00
+ds_nested_dyndbl 1.50 6.00 | 1.50 6.00
+ds_plain_dynstr v0 v3 | v0 v3
+ds_field_dynstr v0 v3 | v0 v3
+ds_callres_dynstr v0 v3 | v0 v3
+ds_arrayelem_dynstr v0 v3 | v0 v3
+ds_cast_dynstr v0 v3 | v0 v3
+ds_nested_dynstr v0 v3 | v0 v3
+ds_plain_ptrelem 10 13 | 10 13
+ds_field_ptrelem 10 13 | 10 13
+ds_callres_ptrelem 10 13 | 10 13
+ds_arrayelem_ptrelem 10 13 | 10 13
+ds_cast_ptrelem 10 13 | 10 13
+ds_nested_ptrelem 10 13 | 10 13
+ds_plain_md2 1.50 6.00 | 1.50 6.00
+ds_field_md2 1.50 6.00 | 1.50 6.00
+ds_callres_md2 1.50 6.00 | 1.50 6.00
+ds_arrayelem_md2 1.50 6.00 | 1.50 6.00
+ds_cast_md2 1.50 6.00 | 1.50 6.00
+ds_nested_md2 1.50 6.00 | 1.50 6.00

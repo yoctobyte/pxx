@@ -10,5 +10,7 @@ begin
   p := @a;
   pp := @p;
   for i := 0 to 3 do pp^^[i] := 'v' + Chr(48+i);
-  WriteLn(a[0], ' ', a[3]);
+  Write(a[0], ' ', a[3]);
+  Write(' | ');
+  WriteLn(pp^^[0], ' ', pp^^[3]);
 end.

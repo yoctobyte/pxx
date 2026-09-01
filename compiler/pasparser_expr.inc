@@ -465,6 +465,8 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
     derefRem, derefBaseTk, derefBaseRec: Integer;   { `(x)^` pointer shape, from ResolveDerefShape }
     dpeTk, dpeRec, dpeCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
+    ndFlat: Integer;   { flattened N-D subscript tail from ParseNDSubscriptTail, or -1 }
+    ndIsND: Boolean;   { …and whether the base was N-D at all, for the partial-row case }
     lenSi: Integer;   { Length(v) — the SYMBOL, when the operand is a bare identifier }
     nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
     nestScanCi, nestScanPos, nestDepth, nestI: Integer;   { …walking N levels of it }
@@ -6925,8 +6927,24 @@ begin
               indexNode := AllocNode(AN_INDEX);
               ASTLeft[indexNode] := node;
               ParseExpr;
-              ASTRight[indexNode] := CurASTNode;
-              Expect(tkRBrack, ']');
+              { The N-D subscript tail, through the ONE helper the lvalue side
+                calls (ParseNDSubscriptTail in pasparser_lval.inc) rather than a
+                second copy of the comma walk. Without it this arm read the first
+                subscript and then demanded `]`, so `TP(raw)^[1, 1]` was a hard
+                `expected ']' before ','` in EXPRESSION position while the
+                byte-identical STORE compiled and ran correctly — one of two
+                faces of one spelling, and the write face is the one every
+                derefshape row exercised.
+                bug-a-a-comma-indexed-multi-dim-subscript-is-not-parsed-through-a-cast-or-call-result }
+              ndFlat := ParseNDSubscriptTail(node, ndIsND);
+              if ndFlat >= 0 then
+                ASTRight[indexNode] := ndFlat
+              else
+              begin
+                if ndIsND then ASTRight[indexNode] := BuildPartialNDRowIndex(CurASTNode)
+                else ASTRight[indexNode] := CurASTNode;
+                Expect(tkRBrack, ']');
+              end;
               if DerefPtrArrayElem(ASTLeft[indexNode], dpeTk, dpeRec, dpeCap) then
               begin
                 { `TP(raw)^[i]` where TP points at an ARRAY type. The alias row
@@ -6950,6 +6968,31 @@ begin
               begin
                 tk := IntToTypeKind(AliasElemTk[aliasIdx]);
                 recName := AliasElemRec[aliasIdx];
+              end
+              else if IsNodeArray(ASTLeft[indexNode]) then
+              begin
+                { The base is an ARRAY NODE, not a pointer -- `PR(raw)^.m[3]`,
+                  an array FIELD reached through the cast chain. The field
+                  builder above already left the ELEMENT kind in tk (UFldTk
+                  holds the element kind for an array field, defs.inc:4838), so
+                  the answer is the one already in hand and there is nothing to
+                  resolve. Falling into the `else` instead CLOBBERED it with
+                  tyUnknown: `WriteLn(PR(raw)^.m[3]:0:2)` printed
+                  4618441417868443648 -- the double's BIT PATTERN as an integer,
+                  format spec silently ignored -- while the identical `r.m[3]`
+                  and `pv^.m[3]` printed 6.00. Pre-dates the pinned compiler and
+                  is not ND-specific; found by probing the SIBLING arms of the
+                  N-D parse fix above rather than by any row of the matrix.
+                  bug-a-an-array-field-indexed-through-a-record-pointer-cast-loses-its-element-type }
+              end
+              else if TypeIsFrozenString(tk) or (tk = tyString) or (tk = tyAnsiString) then
+              begin
+                { …and the same clobber on the string face: `PR(raw)^.s[2]`
+                  printed 1869376613 (the bytes of "ello") where `r.s[2]` printed
+                  `e`. One index rule, stated once, exactly as
+                  ParseLValueAST states it. }
+                tk := tyChar;
+                recName := REC_NONE;
               end
               else
               begin

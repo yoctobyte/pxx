@@ -8,5 +8,7 @@ begin
   SetLength(a, 4);
   ap[0] := @a;
   for i := 0 to 3 do ap[0]^[i] := (i+1)*1.5;
-  WriteLn(a[0]:0:2, ' ', a[3]:0:2);
+  Write(a[0]:0:2, ' ', a[3]:0:2);
+  Write(' | ');
+  WriteLn(ap[0]^[0]:0:2, ' ', ap[0]^[3]:0:2);
 end.
