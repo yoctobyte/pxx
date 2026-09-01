@@ -3345,9 +3345,18 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     # a hand-typed regex fixture did not show it. Read the tool's own output.
     noun = "decision" if verb == "decided" else "resolve"
     if commit == PENDING_COMMIT:
+        # The sha must be preceded by the word `commit`, because CITATION_RE
+        # (line ~210) is `\bcommits?\s+...` and is what `check` uses to find
+        # citations at all. 29cecbc6c added the "which is not always..."
+        # clarification and left the sha after `the change: `, so every citation
+        # this branch wrote became INVISIBLE to the tool's own reader: sync.sh
+        # filled the placeholder and check could no longer see the result.
+        # Both constraints hold together only in this order -- the placeholder
+        # stays last (PENDING_RE wants `- ...PENDING-COMMIT[.\s]*$`) AND the
+        # word `commit` sits directly in front of it.
         text += (f"- {_dt.date.today().isoformat()} — {verb}; this names the commit "
                  f"that carried the {noun}, which is not always the one that carried "
-                 f"the change: {commit}.\n")
+                 f"the change — commit {commit}.\n")
     else:
         text += f"- {_dt.date.today().isoformat()} — {verb}, commit {commit}.\n"
     dst.write_text(text, encoding="utf-8")

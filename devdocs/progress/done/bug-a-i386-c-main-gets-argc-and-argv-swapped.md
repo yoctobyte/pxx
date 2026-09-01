@@ -140,4 +140,4 @@ stops. Unchanged here, and adding it on i386 alone would be a new asymmetry
 rather than a fix.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 67d82d732.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 67d82d732.

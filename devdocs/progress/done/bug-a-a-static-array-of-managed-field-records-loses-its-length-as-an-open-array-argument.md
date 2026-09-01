@@ -137,5 +137,5 @@ The fixed binary reproduced byte-for-byte (`aa86a9a3a88c`) across the round trip
   commit while `compiler/` was still dirty so the canary was not skipped.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 52f49bded.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 52f49bded.
 - 2026-09-01 — the FIX is d9a8fa192 (compiler/ir.inc, the test, the six Makefile rows), read off `git log origin/master` after the push. An earlier draft of this file cited `e7edc684e`, which the sync rebase renamed out of existence before it ever reached origin — the ghost rate here is ~100% by construction, so a sha typed into a ticket BEFORE the push is wrong by default.

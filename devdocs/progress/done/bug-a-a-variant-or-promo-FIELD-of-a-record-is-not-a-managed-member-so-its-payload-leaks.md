@@ -269,4 +269,4 @@ except for the retain halves, where reverting only the retain arm destroys
 survivors (3/6000) and segfaults under -dPXX_HEAP_DEBUG.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 7b84f7d9a.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7b84f7d9a.

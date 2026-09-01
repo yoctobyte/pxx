@@ -522,4 +522,4 @@ evidence for a guard it could not see.
   the unverified re-entry guard.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 293d3fac6.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 293d3fac6.

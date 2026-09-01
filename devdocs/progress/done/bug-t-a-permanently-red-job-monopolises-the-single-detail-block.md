@@ -104,7 +104,7 @@ survives whole, a 200-char one still truncates and shows it.
 **All three truncations here are silent.** `extract_src` at least appends `+N`.
 The other two produced well-formed output that read as complete.
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 35e4e7c78.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 35e4e7c78.
 
 **Fixed.** The slot now prefers a NEW red, falling back to the first failure in
 job order when there is none, so no report loses detail it used to have. The
