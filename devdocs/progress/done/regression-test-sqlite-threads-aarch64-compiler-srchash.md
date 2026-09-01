@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: T
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/run_sqlite_thread_test.sh aarch64 ./compiler/pascal26 library_candidates/sqlite`. The job's own `src` (`tools/compiler_srchash.sh`, 3 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -154,3 +155,23 @@ for this job either. It may still be true for this specific job, which has a
 Not reopening the exculpation — it never depended on this. Recording it because
 the next reader would otherwise inherit a citation that cannot support what it
 was cited for.
+
+## VERIFIED FIXED 2026-09-01 (frankC) — no longer reproduces at HEAD
+
+Swept as part of "which of the 12 open auto-filed regressions still
+reproduce?". Re-ran this ticket's OWN job recipe at `2d9878ac8`, compiler
+`6afb21f66d10` (built from the pin, self-host fixedpoint converged):
+
+```
+PXX_ALLOW_FULL_SUITE=1 tools/testmgr.py --tier full --job 'test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh'
+```
+
+**GREEN, twice.** Run a second time deliberately: a single green run on a
+regression that may be intermittent proves nothing, and this test's population
+includes at least one known race. Two independent runs, both green.
+
+**Cause NOT bisected, and this ticket does not claim one.** It no longer
+reproduces; which commit fixed it is unestablished. Recorded that way on purpose
+— an invented cause is worse than an absent one, and the bisect range in this
+ticket dates the window it was FILED in, not the window it was fixed in.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -2672,6 +2672,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-lib-test-crtl-reachability-4 | B | 70 | regression | NOT the crtl-reachability step, and NOT Track C. tools/lib_units_compile.py compiles every lib unit with NO include flags, so lib/pcl's <gtk/gtk.h> resolves to GTK2 and e8e006c38's version guard correctly #errors. EIGHT PCL units fail, not the three the log shows. Fix: pass the GTK3 include root (the Makefile already computes it as GTK3_INC). Second defect in the same file: failure output is truncated to 3 lines and all 3 are warnings, so the actual #error never reaches any report. | — |
 | regression-lib-test-crtl-reachability-5 | C | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py red at 7227f3e0f1f8 (auto-filed by twatch) | — |
 | regression-lib-test-crtl-reachability-6 | C | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py at 351c10608aae in step 23/66, `python3 tools/gen_crtl_map.py --check` (auto-filed by twatch) | — |
+| regression-lib-test-crtl-reachability-7 | C | 70→85 | regression | regression: lib-test#src:tools/crtl_reachability.py at 5d983997a05a in step 18/72, `python3 tools/crtl_reachability.py` (auto-filed by twatch) | — |
 | regression-lib-test-crtl-reachability | C | 70 | regression | compiler/crtl_names.inc is a GENERATED file left stale by d9c71b8b3 (313 -> 323 functions). The red is the crtl-map step, NOT the crtl-reachability step the job is named after. Fix: python3 tools/gen_crtl_map.py. | — |
 | regression-lib-test-lib-classes-tthread | T | 70 | regression | regression: lib-test#src:test/lib_classes_tthread.pas red at 459e96f985d1 (auto-filed by twatch) | — |
 | regression-lib-test-lib-dns-aaaa | B | 70 | regression | regression: lib-test#src:test/lib_dns_aaaa.pas at 021cd94f10a9 in step 1/2, `stable_linux_amd64/default/pinned -Fulib/rtl/platform/posix test/lib_dns_aaaa.pas /tmp/lib_dns_aaaa` (auto-filed by twatch) | — |
@@ -2766,6 +2767,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-compiler-3 | P | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 003d733936aa (auto-filed by twatch) | — |
 | regression-test-core-compiler-4 | A | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 57b9b7148d32 (auto-filed by twatch) | — |
 | regression-test-core-compiler | T | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 96cffaf08de5 (auto-filed by twatch) | — |
+| regression-test-core-crtl-tiny-regex-match | T | 70 | regression | regression: test-core#src:test/crtl_tiny_regex_match.c at 6e622be95680 in step 2/2, `tools/expect_same.sh crtl_tiny_regex_match26 "$(/tmp/crt` (auto-filed by twatch) | — |
 | regression-test-core-csocket-loopback-b88 | B | 70 | regression | csocket_loopback_b88.c includes \"socket.c\", which 8d7c47f8f moved to sys/socket.c — the test has not compiled since | — |
 | regression-test-core-cstatic-init-cast | T | 70 | regression | regression: test-core#src:test/cstatic_init_cast.c red at 6995a1a0d618 (auto-filed by twatch) | — |
 | regression-test-core-cstatic-same-module-dup-2 | C | 70 | regression | regression: test-core#src:test/cstatic_same_module_dup.c red at 7227f3e0f1f8 (auto-filed by twatch) | — |
@@ -2810,6 +2812,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-default-of-aggregate | P | 70 | regression | regression: test-core#src:test/test_default_of_aggregate.pas red at 203438d2cf63 (auto-filed by twatch) | — |
 | regression-test-core-test-delphi-bare-alldefaulted-arg | P | 70 | regression | regression: test-core#src:test/test_delphi_bare_alldefaulted_arg.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-dynarray-params | T | 70 | regression | regression: test-core#src:test/test_dynarray_params.pas red at 34670fe9b872 (auto-filed by twatch) | — |
+| regression-test-core-test-exception-unhandled-2 | T | 70 | regression | regression: test-core#src:test/test_exception_unhandled.pas@3 at f9e495823dce in step 53/47, `/tmp/next-test_multithreading26 \| grep -q "multithreadin` (auto-filed by twatch) | — |
 | regression-test-core-test-exception-unhandled | T | 70 | regression | regression: test-core#src:test/test_exception_unhandled.pas@1 red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-core-test-float-write | T | 70 | regression | regression: test-core#src:test/test_float_write.pas@1 red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-test-fortran-skeleton | T | 70 | regression | regression: test-core#src:test/test_fortran_skeleton.f90 red at ad8e212cf739 (auto-filed by twatch) | — |
@@ -2995,6 +2998,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-smoke-11 | T | 70 | regression | regression: test-smoke#11 red at 163ffea562fa (auto-filed by twatch) | — |
 | regression-test-smoke-compiler | T | 70 | regression | regression: test-smoke#src:compiler/compiler.pas red at b11e604f8043 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-00 | T | 70 | regression | regression: test-sqlite-threads-aarch64#00 red at 83006e927e35 (auto-filed by twatch) | — |
+| regression-test-sqlite-threads-aarch64-compiler-srchash | T | 70 | regression | regression: test-sqlite-threads-aarch64#src:tools/compiler_srchash.sh at fc9139c264df in step 2/2, `tools/run_sqlite_thread_test.sh aarch64 ./compiler/pasca` (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-run-sqlite-thread-test | T | 70 | regression | regression: test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh red at 8766dccbd2dd (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-arm32-00 | T | 70 | regression | regression: test-sqlite-threads-arm32#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-arm32-run-sqlite-thread-test | T | 70 | regression | regression: test-sqlite-threads-arm32#src:tools/run_sqlite_thread_test.sh red at 940b261f8678 (auto-filed by twatch) | — |
@@ -3014,6 +3018,8 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-uforth-00 | T | 70 | regression | regression: test-uforth#00 red at 378295f7c218 (auto-filed by twatch) | — |
 | regression-test-uforth-core | T | 70 | regression | regression: test-uforth#core red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-xtensa-test-cross-managed-strings | A+S | 70 | regression | regression: test-xtensa#src:test/test_cross_managed_strings.pas at 6a38839c2f81 in step 18/32, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
+| regression-test-xtensa-test-signal-default-revert-b336 | A+S | 70→85 | regression | regression: test-xtensa#src:test/test_signal_default_revert_b336.pas at 370170edaffe in step 1/2, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
+| regression-test-xtensa-test-signal-handler-callback-b336 | A+S | 70→85 | regression | regression: test-xtensa#src:test/test_signal_handler_callback_b336.pas at 370170edaffe in step 1/3, `./compiler/pascal26 --target=xtensa --platform=posix --x` (auto-filed by twatch) | — |
 | regression-test-zlib-00 | T | 70 | regression | regression: test-zlib#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-testmgr-conformance-shard-timeout-under-load | T | 60 | regression | Track T: c-conformance shards time out under full parallel load (false REDs) | — |
 | regression-tools-devtest-00-2 | N | 70 | regression | regression: tools-devtest#00 red at 8787cfe4235a — a new hardcoded /tmp path in a NilPy test | — |

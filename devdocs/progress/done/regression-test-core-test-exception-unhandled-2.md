@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: T
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 53 of 47 is `/tmp/next-test_multithreading26 | grep -q "multithreading test completed successfully"`. The job's own `src` (`test/test_exception_unhandled.pas`, 13 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -61,3 +62,23 @@ takes it from the repro line.*
 - 2026-09-01 — the seven watcher saw `test-core#src:test/test_exception_unhandled.pas@3` GREEN at 673fee7c2bd7 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-exception-unhandled-2`, not `regression-test-core-test-exception-unhandled`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-01 — the seven watcher saw `test-core#src:test/test_exception_unhandled.pas@3` GREEN at 039be8b4aa97 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-exception-unhandled-2`, not `regression-test-core-test-exception-unhandled`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-01 — the seven watcher saw `test-core#src:test/test_exception_unhandled.pas@3` GREEN at 9ea2dbbd05fe (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-exception-unhandled-2`, not `regression-test-core-test-exception-unhandled`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## VERIFIED FIXED 2026-09-01 (frankC) — no longer reproduces at HEAD
+
+Swept as part of "which of the 12 open auto-filed regressions still
+reproduce?". Re-ran this ticket's OWN job recipe at `2d9878ac8`, compiler
+`6afb21f66d10` (built from the pin, self-host fixedpoint converged):
+
+```
+PXX_ALLOW_FULL_SUITE=1 tools/testmgr.py --tier native --job 'test-core#src:test/test_exception_unhandled.pas@3'
+```
+
+**GREEN, twice.** Run a second time deliberately: a single green run on a
+regression that may be intermittent proves nothing, and this test's population
+includes at least one known race. Two independent runs, both green.
+
+**Cause NOT bisected, and this ticket does not claim one.** It no longer
+reproduces; which commit fixed it is unestablished. Recorded that way on purpose
+— an invented cause is worse than an absent one, and the bisect range in this
+ticket dates the window it was FILED in, not the window it was fixed in.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

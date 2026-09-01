@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: C
+status: done
 ---
 
 > **Track guessed as C from the FAILING STEP** — line 18 of 72, `python3 tools/crtl_reachability.py`, which names `tools/crtl_reachability.py`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 42 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -48,3 +49,23 @@ lib/crtl/src/sys/socket.c for the guard-order trap that shape has).
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## VERIFIED FIXED 2026-09-01 (frankC) — no longer reproduces at HEAD
+
+Swept as part of "which of the 12 open auto-filed regressions still
+reproduce?". Re-ran this ticket's OWN job recipe at `2d9878ac8`, compiler
+`6afb21f66d10` (built from the pin, self-host fixedpoint converged):
+
+```
+PXX_ALLOW_FULL_SUITE=1 tools/testmgr.py --tier full --job 'lib-test#src:tools/crtl_reachability.py'
+```
+
+**GREEN, twice.** Run a second time deliberately: a single green run on a
+regression that may be intermittent proves nothing, and this test's population
+includes at least one known race. Two independent runs, both green.
+
+**Cause NOT bisected, and this ticket does not claim one.** It no longer
+reproduces; which commit fixed it is unestablished. Recorded that way on purpose
+— an invented cause is worse than an absent one, and the bisect range in this
+ticket dates the window it was FILED in, not the window it was fixed in.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

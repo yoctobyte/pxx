@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: T
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/expect_same.sh crtl_tiny_regex_match26 "$(/tmp/crtl_tiny_regex_match26)" "tiny-regex: all cases pass"`. The job's own `src` (`test/crtl_tiny_regex_match.c`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -44,3 +45,23 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-01 — the seven watcher saw `test-core#src:test/crtl_tiny_regex_match.c` GREEN at 747d3479f74e (tier native) and did NOT close this: the job's class is `corpus`, which testmgr treats as runtime-nondeterministic (RUN_RETRY_CLASSES) — a single pass does not refute a red there. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## VERIFIED FIXED 2026-09-01 (frankC) — no longer reproduces at HEAD
+
+Swept as part of "which of the 12 open auto-filed regressions still
+reproduce?". Re-ran this ticket's OWN job recipe at `2d9878ac8`, compiler
+`6afb21f66d10` (built from the pin, self-host fixedpoint converged):
+
+```
+PXX_ALLOW_FULL_SUITE=1 tools/testmgr.py --tier native --job 'test-core#src:test/crtl_tiny_regex_match.c'
+```
+
+**GREEN, twice.** Run a second time deliberately: a single green run on a
+regression that may be intermittent proves nothing, and this test's population
+includes at least one known race. Two independent runs, both green.
+
+**Cause NOT bisected, and this ticket does not claim one.** It no longer
+reproduces; which commit fixed it is unestablished. Recorded that way on purpose
+— an invented cause is worse than an absent one, and the bisect range in this
+ticket dates the window it was FILED in, not the window it was fixed in.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
