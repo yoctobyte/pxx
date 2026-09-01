@@ -1497,6 +1497,32 @@ CORPUS_GUARD_RE = re.compile(r"\[\s+-[a-z]\s+library_candidates/")
 # Job.script); created in main(), world-unreadable is not needed — /tmp
 # hygiene only, the OS reaps it
 RUN_TMP = "%s/testmgr-scratch-%d" % (TESTTMP, os.getpid())
+def repo_tree_state():
+    """A short identity for the SOURCE TREE a run is testing against.
+
+    HEAD plus a digest of the working-tree status, so it moves for a pull, a
+    rebase, a commit AND an uncommitted edit — all four of which change what
+    tools/compiler_srchash.sh reads. Returns "" when git cannot answer, so the
+    caller compares two blanks and stays silent rather than warning about a
+    tarball checkout.
+
+    Deliberately NOT a content hash of compiler/**: this runs twice per tier and
+    has to be cheap, and the question is "did the input move", not "how".
+    """
+    try:
+        head = subprocess.run(["git", "rev-parse", "--short=12", "HEAD"],
+                              cwd=REPO, capture_output=True, text=True,
+                              timeout=10)
+        if head.returncode != 0:
+            return ""
+        st = subprocess.run(["git", "status", "--porcelain", "--", "compiler", "lib"],
+                            cwd=REPO, capture_output=True, text=True, timeout=20)
+        dirty = hashlib.sha256((st.stdout or "").encode()).hexdigest()[:8]
+        return "%s+%s" % (head.stdout.strip(), dirty)
+    except Exception:
+        return ""
+
+
 # The run's OWN copy of the compiler. `compiler/pascal26` is a single mutable
 # path and a prerequisite of every test target, so any unrelated make (a
 # `make pxx-debug` for a gdb build, say) can replace it mid-run: observed
@@ -5746,6 +5772,24 @@ def main():
     # this snapshot and the PXX_TMP split actually fixed the race.
     snap_path, snap_sha = snapshot_compiler()
     repo_sha0 = file_sha256(os.path.join(REPO, "compiler/pascal26"))
+    # …and the SOURCES, for the same reason and with the same shape.
+    #
+    # The snapshot above pins the BINARY so a mid-run rebuild is structurally
+    # harmless. Nothing pinned the TREE, and tools/compiler_srchash.sh reads the
+    # live one — so a `git pull --rebase` mid-run moves the sources out from
+    # under a stamp written before job one, and every srchash job fails. Measured
+    # 2026-09-01: seven job groups RED (test-nilpy, test-float-determinism,
+    # test-emit-obj, test-i386, test-aarch64, test-arm32, test-selfcompile-odiff),
+    # none of it real, and the failure text names a hash script rather than
+    # anything the author had changed — so it reads as a regression in whatever
+    # they just landed.
+    #
+    # The asymmetry was invisible precisely BECAUSE the binary case was solved so
+    # thoroughly: a reader who knows the run owns the bytes it tested assumes it
+    # owns the sources too. DETECTION, not prevention — pinning the tree would
+    # mean copying it, and the useful thing is that the run SAYS its input moved
+    # instead of leaving a human to recognise the fingerprint.
+    tree_state0 = repo_tree_state()
     if snap_path:
         print("testmgr: compiler snapshot %s (sha256 %s)"
               % (snap_path, (snap_sha or "?")[:12]), flush=True)
@@ -5984,6 +6028,19 @@ def main():
               "(%s -> %s)%s" % (repo_sha0[:12], repo_sha1[:12],
                                 " — jobs ran against the snapshot, results stand"
                                 if snap_path else ""), flush=True)
+    # The tree, re-read. Unlike the binary this is NOT harmless: the srchash
+    # jobs read the live tree and there is no snapshot standing between them
+    # and it, so a moved tree means their failures are about the move.
+    tree_state1 = repo_tree_state()
+    if tree_state0 and tree_state1 and tree_state0 != tree_state1:
+        print("testmgr: WARNING the source tree MOVED during this run "
+              "(%s -> %s)" % (tree_state0, tree_state1), flush=True)
+        print("testmgr:   Jobs running tools/compiler_srchash.sh compare the "
+              "live tree against a stamp written before job one, so any "
+              "srchash/self-compile failure in this run is about the move and "
+              "not about the code. Re-run on a frozen tree before believing a "
+              "RED. (A mid-run rebuild is harmless — the binary is snapshotted "
+              "— but a pull or commit is not.)", flush=True)
     # THE PIN, re-read. $(PXX_STABLE) is a symlink and `make pin` moves it, so
     # a pin landing mid-run splits the pin-built jobs across two stables while
     # the banner above states one version for all of them. lib-test reds are
