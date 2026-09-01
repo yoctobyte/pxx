@@ -12020,6 +12020,18 @@ test-core: $(COMPILER)
 	# bug-c-sizeof-of-a-dereferenced-pointer-to-array-answers-the-element-size
 	./$(COMPILER) test/c_sizeof_deref_ptr_to_array.c $(TESTTMP)/c_szderef26
 	tools/expect_same.sh c_szderef26 "$$($(TESTTMP)/c_szderef26)" "$$(printf 'A 16\nB 24\nC 7\nM 48\nS 4\nD 8\nE 16')"
+	# One operand, many spellings. sizeof(**p) answered 8 while sizeof **p
+	# answered 16 -- the same operand, wrong with parentheses and right without,
+	# because the parenthesised form ran token-pattern arms and the
+	# unparenthesised one ended in the general expression path. The arms were a
+	# PARALLEL implementation, not a fast path: the expression fallback required
+	# that no arm had consumed anything, so an arm that ate part of the operand
+	# and then failed left the pointer-size default in place. Eleven of seventeen
+	# spellings disagreed with gcc; seven were this one shape in different syntax.
+	# The paren-vs-no-paren row is the one a single-spelling test cannot have.
+	# bug-c-sizeof-reaches-a-pointee-through-one-spelling-only
+	./$(COMPILER) test/csizeof_pointee_spellings.c $(TESTTMP)/csizeof_spellings26
+	tools/expect_same.sh csizeof_spellings26 "$$($(TESTTMP)/csizeof_spellings26 | tail -1)" "SIZEOF OK"
 	./$(COMPILER) test/c_const_branch_dead_arm.c $(TESTTMP)/c_constbranch26
 	tools/expect_same.sh c_constbranch26 "$$($(TESTTMP)/c_constbranch26)" "$$(printf '42 42 42 42 42\n100 200 400 300 500 600')"
 	# An UNSIGNED constant guard must be decidable at compile time, like every

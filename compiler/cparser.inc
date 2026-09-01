@@ -3047,12 +3047,47 @@ begin
         if not CSizeofDescriptorWalk(si, sz) then ;   { False leaves sz at the default }
       end;
     end;
-    { General-expression operand none of the special cases consumed (e.g.
-      `sizeof(!a)`, `sizeof(a+b)`): parse it and size by its result type. C `!`
-      and comparisons yield int (4). }
-    if (sz = TARGET_PTR_SIZE) and (TokPos = savedPos) and
+    { General-expression operand: parse it and size by its result type. C `!`
+      and comparisons yield int (4).
+
+      THIS IS THE FALLBACK FOR EVERY SHAPE THE ARMS ABOVE DECLINE, not only for
+      shapes they never touched. It used to require `TokPos = savedPos` -- that
+      no arm had consumed anything -- and that is what made the arms a PARALLEL
+      implementation rather than a fast path over this one. An arm that consumed
+      part of the operand and then failed to recognise the rest left `sz` at the
+      pointer-size default, and this never ran, so the answer was confidently
+      wrong instead of merely unoptimised.
+
+      Measured before the change, `struct Big **p2` with sizeof(struct Big) 16:
+
+        sizeof(**p2)     8      sizeof **p2     16
+        sizeof(***p3)    8      sizeof ***p3    16
+
+      The SAME operand, right without parentheses and wrong with them, because
+      the unparenthesised spelling has always ended in this expression path
+      while the parenthesised one ran the token walk. The `*`-arm consumed one
+      star, required an identifier, found a second star, and gave up with the
+      default already in `sz`. Seven of the eleven spellings that disagreed with
+      gcc were that one shape wearing different syntax
+      (`*(*p2)`, `**&p2[0]`, `*p2[0]`, `*&*p1`, `*(p1+1)`, ...), which is why
+      the fix is to delete the condition rather than to add an eighth arm --
+      normalise-dont-special-case.md, "the second path is the one that stays
+      broken".
+
+      REWINDING IS SAFE WHERE sz IS STILL THE DEFAULT, and that is the whole
+      guard: an arm that genuinely sized a POINTER also leaves 8, and re-parsing
+      such an operand as an expression yields tyPointer and 8 again -- the same
+      answer by a different route. An arm that consumed the operand ENTIRELY
+      leaves CurTok on the `)` and is excluded. So the only operands that reach
+      the re-parse are ones no arm claimed a non-default size for. }
+    if (sz = TARGET_PTR_SIZE) and
        (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) then
     begin
+      if TokPos <> savedPos then
+      begin
+        { back to the first token inside the `(`, the position savedPos names }
+        TokPos := savedPos - 1; Next;
+      end;
       node := ParseCExpr;
       tk := IntToTypeKind(ASTTk[node]);
       if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
