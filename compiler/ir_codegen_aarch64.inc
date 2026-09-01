@@ -61,6 +61,31 @@ begin
   EmitCallProc(procIdx);                           { x0 = managed handle }
 end;
 
+{ AAPCS64 defines only W0 for a 32-bit `int` return -- the upper half of X0 is
+  unspecified -- while pxx's value model treats every result as full 64-bit. A
+  negative int used INLINE (rather than stored to an int first, where the tyInt32
+  load sign-extends anyway) therefore read as a large positive: `if f(a,b) != n`
+  compared a raw X0 against a sign-extended local and took the wrong branch,
+  silently, with no crash.
+
+  A SHARED HELPER on purpose, called from BOTH cdecl arms below. The x86-64
+  sibling of this fix was written inline at the direct arm and the indirect arm
+  was missed for months (bug-c-crtl-pulled-fn-inline-signed-compare fixed one of
+  two); one function that both call is the shape that cannot drift apart again.
+  Placed here, above every caller -- an aarch64 helper declared after its first
+  caller passed the fixedpoint and --tier quick and was caught only by the FPC
+  seed canary.
+
+  Measured 2026-09-01: aarch64 failed BOTH arms, arm32/i386/riscv32 neither
+  (32-bit targets have no upper half to be undefined).
+  Fixed on the fly 2026-09-01, no ticket; the x86-64 sibling's is
+  bug-c-crtl-pulled-fn-inline-signed-compare and LOGBOOK.md carries the line. }
+procedure EmitA64WidenSignedNarrowRet(rt: TTypeKind);
+begin
+  if TypeSigned(rt) and (TypeSlotSize(rt) = 4) then
+    EmitI32($93407C00);            { sxtw x0, w0 }
+end;
+
 procedure EmitLoadDataRefA64(rd, dataOff: Integer);
 { Load a data address (or descriptor sentinel) into x[rd]. EmitDataRef emits an
   8-byte slot on this 64-bit target, so use the 64-bit literal load and branch
@@ -3482,7 +3507,9 @@ begin
             if Procs[procIdx].RetType = tySingle then
               EmitI32($1E22C000);                { fcvt d0, s0 (widen single result) }
             EmitI32($9E660000);                  { fmov x0, d0 (bridge to GPR bits) }
-          end;
+          end
+          else
+            EmitA64WidenSignedNarrowRet(Procs[procIdx].RetType);
           Exit;
         end;
 
@@ -3636,7 +3663,9 @@ begin
             if Procs[procIdx].RetType = tySingle then
               EmitI32($1E22C000);                    { fcvt d0, s0 (widen single) }
             EmitI32($9E660000);                      { fmov x0, d0 (bridge to GPR) }
-          end;
+          end
+          else
+            EmitA64WidenSignedNarrowRet(Procs[procIdx].RetType);
           Exit;
         end;
         { Indirect call through a proc-typed value. Push the callee address first

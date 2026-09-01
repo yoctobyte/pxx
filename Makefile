@@ -9391,6 +9391,28 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cfn_return_fnptr_b10526; tools/expect_same.sh cfn_return_fnptr_b10526-rc "$$?" "42"
 	./$(COMPILER) test/cexternal_func_addr_b106.c $(TESTTMP)/cexternal_func_addr_b10626
 	$(TESTTMP)/cexternal_func_addr_b10626; tools/expect_same.sh cexternal_func_addr_b10626-rc "$$?" "42"
+	# The half b106 above cannot reach: b106's `puts` is DEFINED BY CRTL, so its
+	# object has no dynamic section at all and never touches a GOT slot, and it
+	# stops at a nil check besides. This one imports two names crtl lacks (hence
+	# --system-libs=c, deliberate here) and CALLS THROUGH the taken address.
+	# Positive control is recorded in the file's header.
+	./$(COMPILER) --system-libs=c test/cexternal_proc_addr_callable.c $(TESTTMP)/cexternal_proc_addr_callable26
+	$(TESTTMP)/cexternal_proc_addr_callable26; tools/expect_same.sh cexternal_proc_addr_callable26-rc "$$?" "42"
+	# aarch64 under qemu, because the native arm CANNOT see the aarch64 half of
+	# the defect this file was written for: measured 2026-09-01, aarch64 failed
+	# BOTH the direct and the indirect arm (AAPCS64 defines only W0 for an int
+	# return) while x86-64 failed only the indirect one. arm32/i386/riscv32 are
+	# 32-bit and have no upper half to be undefined, so they are not run here.
+	# The `else` branch says NOT VERIFIED out loud rather than passing quietly --
+	# a skipped target that reads as a pass is how a gate comes to measure
+	# something other than its name.
+	@if command -v qemu-aarch64 >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=aarch64 --system-libs=c test/cexternal_proc_addr_callable.c $(TESTTMP)/cexternal_proc_addr_callable_a64 >/dev/null 2>&1 || { echo "cexternal_proc_addr_callable aarch64 compile FAIL"; exit 1; }; \
+	  tools/run_target.sh aarch64 $(TESTTMP)/cexternal_proc_addr_callable_a64 >/dev/null 2>&1; \
+	  tools/expect_same.sh cexternal_proc_addr_callable_a64-rc "$$?" "42" || exit 1; \
+	else \
+	  echo "=== cexternal_proc_addr_callable: qemu-aarch64 absent, aarch64 arm NOT verified ==="; \
+	fi
 	./$(COMPILER) test/clocal_static_const_2d_init_b107.c $(TESTTMP)/clocal_static_const_2d_init_b10726
 	$(TESTTMP)/clocal_static_const_2d_init_b10726; tools/expect_same.sh clocal_static_const_2d_init_b10726-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include test/cva_arg_local_fnptr_typedef_b108.c $(TESTTMP)/cva_arg_local_fnptr_typedef_b10826

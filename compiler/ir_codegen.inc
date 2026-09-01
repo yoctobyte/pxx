@@ -6232,6 +6232,31 @@ begin
             if Procs[cpi].RetType = tySingle then
               begin EmitB($F3); EmitB($0F); EmitB($5A); EmitB($C0); end; { cvtss2sd xmm0,xmm0 }
             EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($C0); { movq rax, xmm0 }
+          end
+          else if TypeSigned(Procs[cpi].RetType) and
+                  (TypeSlotSize(Procs[cpi].RetType) = 4) then
+          begin
+            { THE SIBLING of the direct-call cdqe above (search this file for
+              bug-c-crtl-pulled-fn-inline-signed-compare): SysV defines only EAX
+              for a 32-bit `int` return, the upper half of RAX is undefined, and
+              the value model treats every result as full 64-bit. The direct arm
+              was fixed; this one was not, so the same negative return read as a
+              large positive whenever it was USED INLINE rather than stored to an
+              int first -- `if f("abc","abd") != dl` compared a raw RAX against a
+              movslq'd local and took the wrong branch, silently, with no crash.
+
+              UNCONDITIONAL here, where the direct arm asks ProcExternal first,
+              because `cpi` is the proc-TYPE signature and not the callee: an
+              indirect call cannot know whether it lands on a C extern or on a
+              pxx body compiled cdecl. That costs nothing -- a pxx body already
+              leaves a sign-extended RAX, and cdqe on an already-extended value
+              is idempotent. The guard that matters is the 4-byte SIGNED one,
+              which is exact for either producer.
+
+              Fixed on the fly 2026-09-01, no ticket; the sibling's is
+              bug-c-crtl-pulled-fn-inline-signed-compare and LOGBOOK.md carries the
+              line. }
+            EmitB($48); EmitB($98);                   { cdqe: sign-extend eax -> rax }
           end;
         end
         else
