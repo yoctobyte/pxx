@@ -71,4 +71,6 @@ int   strverscmp(const char *a, const char *b);
 #include <strings.h>
 #endif
 
+char *strsignal(int sig);
+
 #endif

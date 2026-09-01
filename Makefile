@@ -12012,6 +12012,17 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_cppargs26 "$$($(TESTTMP)/c_cppargs26)" "$$(printf 'swallow 10\nkeep    15\ndirfalse 20\ndirtrue 39\nmkdirshape 40\nforced 41\nline 88')"
 	./$(COMPILER) -include $(CURDIR)/test/c_cpp_forced_include.h test/c_cpp_macro_arg_shapes.c $(TESTTMP)/c_cppargsabs26
 	tools/expect_same.sh c_cppargsabs26 "$$($(TESTTMP)/c_cppargsabs26)" "$$(printf 'swallow 10\nkeep    15\ndirfalse 20\ndirtrue 39\nmkdirshape 40\nforced 41\nline 88')"
+	# A LOCAL whose type is a struct with a function-pointer member. The struct
+	# BODY's member declarator left CTypeFnPtrName set, and the LOCAL path had
+	# no `baseTk = tyPointer' guard (the GLOBAL path has carried one), so the
+	# declaration took the inline-fn-pointer branch, never consumed its own
+	# variable name, and the name parsed as an expression. Rows 4-5 pin the path
+	# the guard must NOT break -- a real fn-pointer local, scalar and array --
+	# since disabling that would also make rows 1-3 pass. Found building
+	# busybox's fnmatch [:class:] table, not by triage.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/c_struct_fnptr_member_local.c $(TESTTMP)/c_structfnptr26
+	tools/expect_same.sh c_structfnptr26 "$$($(TESTTMP)/c_structfnptr26)" "$$(printf '1 11\n2 a 11 b 20\n3 c 20\n4 11\n5 11 20')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The SIBLING defect, and it is not the const-branch one: a loop in dead code
@@ -21068,6 +21079,32 @@ endif
 	  echo 'cchown: identical to gcc'; \
 	fi; \
 	else echo 'cchown: SKIP (no gcc)'; echo cchown >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cchown) >/dev/null; fi
+	# fnmatch -- crtl had NO fnmatch.h at all, which is a hard error when cross
+	# compiling (no host header to fall back on), so busybox's ash could not be
+	# built for aarch64 at all. Compared against glibc over a MATRIX of flags
+	# rather than a list: FNM_PATHNAME and FNM_PERIOD interact, because PERIOD
+	# makes a leading '.' special at the start of each SEGMENT and what counts
+	# as a segment depends on PATHNAME -- testing them singly passes while the
+	# combination is broken. The trailing-backslash rows are the ones that
+	# caught the real defect: POSIX leaves it undefined, glibc never matches,
+	# and the plausible reading (it stands for itself) is what this
+	# implementation did first, disagreeing on all 18 such combinations.
+	# feature-c-corpus-busybox-multi-applet
+	$(PXX_STABLE) test/cfnmatch.c $(TESTTMP)/cfnmatch
+	@if command -v gcc >/dev/null 2>&1; then \
+	  if ! gcc -w -o $(TESTTMP)/cfnmatch_gcc test/cfnmatch.c 2> $(TESTTMP)/cfnmatch_oracle.err; then \
+	    echo "SKIP: cfnmatch (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cfnmatch_oracle.err))"; echo cfnmatch >> $(TESTTMP)/lib-test.skipped; \
+	    (cd $(TESTTMP) && $(TESTTMP)/cfnmatch) >/dev/null; \
+	  else \
+	  (cd $(TESTTMP) && $(TESTTMP)/cfnmatch_gcc) > $(TESTTMP)/cfnmatch_gcc.txt 2>&1; \
+	  (cd $(TESTTMP) && $(TESTTMP)/cfnmatch) > $(TESTTMP)/cfnmatch_pxx.txt 2>&1; \
+	  grep -q '^total=' $(TESTTMP)/cfnmatch_gcc.txt || \
+	    { echo 'FAIL: cfnmatch oracle produced no total line -- it did not run to completion, so a matching transcript would prove nothing'; exit 1; }; \
+	  diff $(TESTTMP)/cfnmatch_gcc.txt $(TESTTMP)/cfnmatch_pxx.txt || \
+	    { echo 'FAIL: cfnmatch differs from gcc'; exit 1; }; \
+	  echo "cfnmatch: identical to gcc ($$(sed -n 's/^total=\([0-9]*\) .*/\1/p' $(TESTTMP)/cfnmatch_gcc.txt) cases)"; \
+	fi; \
+	else echo 'cfnmatch: SKIP (no gcc)'; echo cfnmatch >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cfnmatch) >/dev/null; fi
 	# truncate (by PATH) and mknod/mkfifo -- the other half of the same gap as
 	# cchown above: crtl had ftruncate and no truncate, and no mknod at all,
 	# so busybox's libbb/copy_file.c did not compile. Unprivileged by

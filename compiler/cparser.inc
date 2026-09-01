@@ -5492,7 +5492,16 @@ begin
   ptrElemSig := CTypePtrElemProcSig;  { pointee sig if this is `ft *` (mutually exclusive with procSig) }
   paLen := CTypePtrElemArrLen; { pointer-to-array `(*name)[N]` row length, else 0 }
   arrLen := CTypeFnPtrArrLen;  { array-of-fn-ptr `(*name[N])(..)` dim, else -2 }
-  if CTypeFnPtrName <> '' then
+  { Guard on baseTk = tyPointer for the same reason ParseCGlobalVarDecl does: a
+    LOCAL whose type is a struct/union with a function-pointer member
+    (`struct { int (*f)(int); } t[] = {..};`) leaves CTypeFnPtrName set as
+    LEFTOVER from the member declarator, while baseTk is tyRecord. Without the
+    guard the declaration took the inline-fn-pointer path, never consumed the
+    variable name, and the name then parsed as an expression -- "undeclared
+    identifier 't' used as value (treated as 0)" and a hard error after it.
+    The global arm has carried this guard for a while; this is its sibling,
+    found by busybox's fnmatch [:class:] table. }
+  if (CTypeFnPtrName <> '') and (baseTk = tyPointer) then
   begin
     { Array-of-function-pointers local `RET (*name[N])(params) [= {f0,f1,..}]`
       (bug-c-local-fnptr-array-initializer). ParseCDeclType captured the name +

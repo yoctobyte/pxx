@@ -305,6 +305,16 @@ int rmdir(const char *path) {
 
 long sysconf(int name) {
   if (name == _SC_PAGESIZE) return 4096;
+  /* USER_HZ, not CONFIG_HZ: the kernel's internal tick rate is a build option,
+     but the one it reports through times(2) and /proc has been 100 on every
+     Linux ABI pxx targets since 2.6. A shell divides times() by this to print
+     `time' output, so a wrong value is a plausible wrong NUMBER rather than a
+     failure. */
+  if (name == _SC_CLK_TCK) return 100;
+  /* The default RLIMIT_NOFILE soft limit. Callers use it to size a descriptor
+     table or to bound a close-all loop, so answering -1 here is worse than
+     answering the conventional value. */
+  if (name == _SC_OPEN_MAX) return 1024;
   return -1;
 }
 

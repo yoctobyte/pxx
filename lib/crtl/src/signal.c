@@ -89,3 +89,72 @@ int kill(int pid, int sig) {
   if (r < 0) { errno = -r; return -1; }
   return 0;
 }
+
+/* strsignal: the human name of a signal.
+ *
+ * The strings are glibc's VERBATIM, read off the host rather than invented,
+ * because they are OUTPUT: a shell prints them for a killed child ("Segmentation
+ * fault", "Killed") and any differential test against a gcc-built binary
+ * compares them byte for byte. A plausible synonym would be a silent diff on
+ * every job that dies.
+ *
+ * Declared in <string.h>, which is where POSIX puts it, not in <signal.h>.
+ *
+ * The returned pointer is to storage the caller must not modify and that a
+ * later call may overwrite -- the same contract glibc has. Only the unknown
+ * branch actually uses the buffer; the named signals return string literals. */
+static char __strsignal_buf[32];
+
+char *strsignal(int sig) {
+  static const char *const names[] = {
+    /*  0 */ 0,
+    /*  1 */ "Hangup",
+    /*  2 */ "Interrupt",
+    /*  3 */ "Quit",
+    /*  4 */ "Illegal instruction",
+    /*  5 */ "Trace/breakpoint trap",
+    /*  6 */ "Aborted",
+    /*  7 */ "Bus error",
+    /*  8 */ "Floating point exception",
+    /*  9 */ "Killed",
+    /* 10 */ "User defined signal 1",
+    /* 11 */ "Segmentation fault",
+    /* 12 */ "User defined signal 2",
+    /* 13 */ "Broken pipe",
+    /* 14 */ "Alarm clock",
+    /* 15 */ "Terminated",
+    /* 16 */ "Stack fault",
+    /* 17 */ "Child exited",
+    /* 18 */ "Continued",
+    /* 19 */ "Stopped (signal)",
+    /* 20 */ "Stopped",
+    /* 21 */ "Stopped (tty input)",
+    /* 22 */ "Stopped (tty output)",
+    /* 23 */ "Urgent I/O condition",
+    /* 24 */ "CPU time limit exceeded",
+    /* 25 */ "File size limit exceeded",
+    /* 26 */ "Virtual timer expired",
+    /* 27 */ "Profiling timer expired",
+    /* 28 */ "Window changed",
+    /* 29 */ "I/O possible",
+    /* 30 */ "Power failure",
+    /* 31 */ "Bad system call"
+  };
+  if (sig > 0 && sig < (int)(sizeof(names) / sizeof(names[0])) && names[sig])
+    return (char *)names[sig];
+  /* glibc's exact wording for anything else, signal 0 included. */
+  {
+    char *p = __strsignal_buf;
+    const char *pre = "Unknown signal ";
+    int n = sig, neg = 0, i = 0;
+    char digits[16];
+    while (*pre) *p++ = *pre++;
+    if (n < 0) { neg = 1; n = -n; }
+    if (n == 0) digits[i++] = '0';
+    while (n > 0) { digits[i++] = (char)('0' + n % 10); n /= 10; }
+    if (neg) *p++ = '-';
+    while (i > 0) *p++ = digits[--i];
+    *p = '\0';
+  }
+  return __strsignal_buf;
+}

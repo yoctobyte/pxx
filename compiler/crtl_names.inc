@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  395 functions across 27 headers. }
+  397 functions across 28 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -41,7 +41,7 @@ begin
       ' fflush_unlocked:stdio.h fgetc:stdio.h fgetc_unlocked:stdio.h fgets:stdio.h ' +
       ' fgets_unlocked:stdio.h fileno:stdio.h fileno_unlocked:stdio.h flockfile:stdio.h ' +
       ' floor:math.h floorf:math.h fmax:math.h fmaxf:math.h fmin:math.h fminf:math.h fmod:math.h ' +
-      ' fmodf:math.h fopen:stdio.h fork:unistd.h fprintf:stdio.h fputc:stdio.h ' +
+      ' fmodf:math.h fnmatch:fnmatch.h fopen:stdio.h fork:unistd.h fprintf:stdio.h fputc:stdio.h ' +
       ' fputc_unlocked:stdio.h fputs:stdio.h fputs_unlocked:stdio.h fread:stdio.h ' +
       ' fread_unlocked:stdio.h free:stdlib.h freeaddrinfo:netdb.h freopen:stdio.h frexp:math.h ' +
       ' fseek:stdio.h fstat:sys/stat.h fsync:unistd.h ftell:stdio.h ftruncate:unistd.h ' +
@@ -110,10 +110,10 @@ begin
       ' strcpy:string.h strcspn:string.h strdup:stdlib.h strerror:string.h strerror_r:string.h ' +
       ' strftime:time.h strlen:string.h strncat:string.h strncmp:string.h strncpy:string.h ' +
       ' strndup:stdlib.h strnlen:string.h strpbrk:string.h strptime:time.h strrchr:string.h ' +
-      ' strsep:string.h strspn:string.h strstr:string.h strtod:stdlib.h strtoimax:inttypes.h ' +
-      ' strtok:string.h strtok_r:string.h strtol:stdlib.h strtold:stdlib.h strtoll:stdlib.h ' +
-      ' strtoul:stdlib.h strtoull:stdlib.h strtoumax:inttypes.h strverscmp:string.h ' +
-      ' strxfrm:string.h symlink:unistd.h sysconf:unistd.h system:stdlib.h ';
+      ' strsep:string.h strsignal:string.h strspn:string.h strstr:string.h strtod:stdlib.h ' +
+      ' strtoimax:inttypes.h strtok:string.h strtok_r:string.h strtol:stdlib.h strtold:stdlib.h ' +
+      ' strtoll:stdlib.h strtoul:stdlib.h strtoull:stdlib.h strtoumax:inttypes.h ' +
+      ' strverscmp:string.h strxfrm:string.h symlink:unistd.h sysconf:unistd.h system:stdlib.h ';
     't': Result :=
       ' tan:math.h tanf:math.h tanh:math.h tcdrain:termios.h tcflow:termios.h tcflush:termios.h ' +
       ' tcgetattr:termios.h tcsendbreak:termios.h tcsetattr:termios.h timegm:time.h ' +

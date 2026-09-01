@@ -48,6 +48,18 @@
 #define BB_VER "1.36.1"
 #endif
 #define BB_BT "0"
+/* The version banner is "BusyBox v" BB_VER BB_EXTRA_VERSION (libbb/messages.c:14),
+   and BB_EXTRA_VERSION defaults to " ("AUTOCONF_TIMESTAMP")" -- a string stamped
+   into include/autoconf.h when the tree is CONFIGURED. Unpinned it makes the
+   banner change on every reconfigure with identical sources, and it will not
+   match the separately-linked upstream binary, because busybox deliberately
+   does not rebuild the world when only that timestamp moves. Measured:
+   autoconf.h stamped 19:09:43 and busybox relinked at 19:09:53, while
+   libbb/messages.o stayed at 18:59:14 and kept the OLDER banner. Pinning it
+   makes the comparison about the program rather than about when it was
+   configured. `busybox --help' prints this string, so it is compared output,
+   not decoration. */
+#define BB_EXTRA_VERSION " (pxx-diff)"
 #define KBUILD_BASENAME "busybox"
 #define KBUILD_MODNAME "busybox"
 #include "include/autoconf.h"

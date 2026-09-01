@@ -10,6 +10,8 @@
 #define STDERR_FILENO 2
 #define _SC_PAGESIZE 30
 #define _SC_PAGE_SIZE _SC_PAGESIZE
+#define _SC_CLK_TCK 2
+#define _SC_OPEN_MAX 4
 
 /* access(2) mode bits (POSIX <unistd.h>). Match the Linux kernel values so a
    real access() syscall interprets them; without these sqlite's access(path,

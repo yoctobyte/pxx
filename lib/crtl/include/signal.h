@@ -8,16 +8,52 @@ typedef int sig_atomic_t;
 #define SIG_IGN ((void (*)(int))1)
 #define SIG_ERR ((void (*)(int))-1)
 
-#define SIGABRT 6
-#define SIGFPE 8
-#define SIGILL 4
-#define SIGINT 2
-#define SIGSEGV 11
-#define SIGTERM 15
-#define SIGQUIT 3
-#define SIGBUS 7
-#define SIGKILL 9
-#define SIGPIPE 13
+/* The Linux asm-generic signal numbers, which is every target pxx has: x86-64,
+   i386, aarch64, arm32, riscv and xtensa all use this set. (MIPS, SPARC and
+   Alpha renumber from SIGUSR1 up -- none of them is a pxx target, and adding
+   one means splitting this block per-arch rather than editing it in place.)
+   Read off the host with a generated program rather than typed from memory. */
+#define SIGHUP     1
+#define SIGINT     2
+#define SIGQUIT    3
+#define SIGILL     4
+#define SIGTRAP    5
+#define SIGABRT    6
+#define SIGIOT     6
+#define SIGBUS     7
+#define SIGFPE     8
+#define SIGKILL    9
+#define SIGUSR1    10
+#define SIGSEGV    11
+#define SIGUSR2    12
+#define SIGPIPE    13
+#define SIGALRM    14
+#define SIGTERM    15
+#define SIGSTKFLT  16
+#define SIGCHLD    17
+#define SIGCONT    18
+#define SIGSTOP    19
+#define SIGTSTP    20
+#define SIGTTIN    21
+#define SIGTTOU    22
+#define SIGURG     23
+#define SIGXCPU    24
+#define SIGXFSZ    25
+#define SIGVTALRM  26
+#define SIGPROF    27
+#define SIGWINCH   28
+#define SIGIO      29
+#define SIGPOLL    29
+#define SIGPWR     30
+#define SIGSYS     31
+#define SIGUNUSED  31
+
+/* NSIG is a COUNT, not a maximum: signals run 1..64 (32..64 are the realtime
+   ones), so `for (i = 1; i < NSIG; i++)' covers them all and `char t[NSIG]'
+   indexes safely by signal number. Getting it wrong is silent -- a shell sizes
+   its trap table with it. */
+#define _NSIG 65
+#define NSIG _NSIG
 
 #define SIG_BLOCK   0
 #define SIG_UNBLOCK 1
