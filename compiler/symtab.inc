@@ -210,6 +210,7 @@ begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
   AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
+  AliasPtrElemAlias[AliasCount] := -1;   { ...and pointee-is-a-named-pointer-alias, same rule }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := elemTk;
@@ -233,6 +234,7 @@ begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
   AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
+  AliasPtrElemAlias[AliasCount] := -1;   { ...and pointee-is-a-named-pointer-alias, same rule }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := tk;
   { `AliasElemTk := tk` is the shortcut this used to take for every alias, and it
@@ -265,6 +267,7 @@ begin
     AliasPtrBaseTk[AliasCount] := LastTypePointerBaseTk;
     AliasPtrBaseRec[AliasCount] := LastTypePointerBaseRec;
     AliasPtrElemArrAi[AliasCount] := LastTypePointerElemArrAi;
+    AliasPtrElemAlias[AliasCount] := LastTypePointerElemAlias;
   end
   else
   begin
@@ -273,6 +276,7 @@ begin
     AliasPtrDepth[AliasCount] := 0;
     AliasPtrBaseTk[AliasCount] := Ord(tyUnknown);
     AliasPtrBaseRec[AliasCount] := REC_NONE;
+    AliasPtrElemAlias[AliasCount] := -1;
   end;
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
@@ -312,6 +316,7 @@ begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
   AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
+  AliasPtrElemAlias[AliasCount] := -1;   { ...and pointee-is-a-named-pointer-alias, same rule }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := Ord(tyRecord);
   AliasElemTk[AliasCount] := Ord(tyRecord);
@@ -335,6 +340,7 @@ begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
   AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
+  AliasPtrElemAlias[AliasCount] := -1;   { ...and pointee-is-a-named-pointer-alias, same rule }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := Ord(tyUnknown);
@@ -419,6 +425,7 @@ begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
   AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
+  AliasPtrElemAlias[AliasCount] := -1;   { ...and pointee-is-a-named-pointer-alias, same rule }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := Ord(tySet);
   AliasElemTk[AliasCount] := elemEnumId;
@@ -455,6 +462,7 @@ begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
   AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
+  AliasPtrElemAlias[AliasCount] := -1;   { ...and pointee-is-a-named-pointer-alias, same rule }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := Ord(tyClass);
@@ -4104,7 +4112,7 @@ begin
   SetLength(SymStrElemTk, n);
   SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
-  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemArrAi, n);  SetLength(SymPtrElemStrCap, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
+  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemArrAi, n);  SetLength(SymPtrElemAlias, n);  SetLength(SymPtrElemStrCap, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymIsCtorResultTemp, n); SetLength(SymBlockId, n);
   SetLength(SymStaticLocal, n);   SetLength(SymAbsAliased, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
@@ -4217,7 +4225,9 @@ begin
             pointer-to-array symbols and was blind to the one slot that says the
             pointee is a DYNAMIC array, so a symbol carrying a stale dyn stamp
             printed as clean. Reader half, again. }
-          ' ptrElemDynDepth=', SymPtrElemDynDepth[si]);
+          ' ptrElemDynDepth=', SymPtrElemDynDepth[si],
+          ' ptrElemArrAi=', SymPtrElemArrAi[si],
+          ' ptrElemAlias=', SymPtrElemAlias[si]);
 end;
 
 { The pointee's SHAPE, recorded on the pointer symbol: `PFixed = ^TFixed` where
@@ -4308,6 +4318,7 @@ begin
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
   SymPtrElemArrAi[SymCount] := -1;   { -1, not 0: zero is a VALID ArrType row }
+  SymPtrElemAlias[SymCount] := -1;   { ...and zero is a VALID alias index }
   SymPtrElemNDims[SymCount] := 0;
   SymPtrElemStrCap[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
@@ -4347,6 +4358,7 @@ begin
     SymPtrElemStrTk[SymCount] := LastTypePointerStrElemTk;
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
     SymPtrDepth[SymCount] := LastTypePointerDepth;
+    SymPtrElemAlias[SymCount] := LastTypePointerElemAlias;
     SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
     SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
     { `PFixed = ^TFixed` — the pointee IS a fixed array, the same fact C's
@@ -4517,6 +4529,7 @@ begin
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
   SymPtrElemArrAi[SymCount] := -1;   { -1, not 0: zero is a VALID ArrType row }
+  SymPtrElemAlias[SymCount] := -1;   { ...and zero is a VALID alias index }
   SymPtrElemNDims[SymCount] := 0;
   SymPtrElemStrCap[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
@@ -4539,6 +4552,7 @@ begin
     SymPtrElemStrTk[SymCount] := LastTypePointerStrElemTk;
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
     SymPtrDepth[SymCount] := LastTypePointerDepth;
+    SymPtrElemAlias[SymCount] := LastTypePointerElemAlias;
     SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
     SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
     { `PFixed = ^TFixed` — the pointee IS a fixed array, the same fact C's
@@ -4848,6 +4862,7 @@ begin
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
   SymPtrElemArrAi[SymCount] := -1;   { -1, not 0: zero is a VALID ArrType row }
+  SymPtrElemAlias[SymCount] := -1;   { ...and zero is a VALID alias index }
   SymPtrElemNDims[SymCount] := 0;
   SymPtrElemStrCap[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
@@ -4884,6 +4899,7 @@ begin
     SymPtrElemStrTk[SymCount] := LastTypePointerStrElemTk;
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
     SymPtrDepth[SymCount] := LastTypePointerDepth;
+    SymPtrElemAlias[SymCount] := LastTypePointerElemAlias;
     SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
     SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
     { `PFixed = ^TFixed` — the pointee IS a fixed array, the same fact C's
@@ -4967,6 +4983,7 @@ begin
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
   SymPtrElemArrAi[SymCount] := -1;   { -1, not 0: zero is a VALID ArrType row }
+  SymPtrElemAlias[SymCount] := -1;   { ...and zero is a VALID alias index }
   SymPtrElemNDims[SymCount] := 0;
   SymPtrElemStrCap[SymCount] := 0;
   SymPtrElemDynDepth[SymCount] := 0;
@@ -5015,6 +5032,7 @@ begin
     SymPtrElemStrTk[SymCount] := LastTypePointerStrElemTk;
     Syms[SymCount].PtrElemRec := LastTypePointerElemRec;
     SymPtrDepth[SymCount] := LastTypePointerDepth;
+    SymPtrElemAlias[SymCount] := LastTypePointerElemAlias;
     SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
     SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
     { `PFixed = ^TFixed` — the pointee IS a fixed array, the same fact C's
@@ -14045,6 +14063,27 @@ begin
       mirror of UFldPtrAlias and exists for this arm. }
     if (ASTIVal[node] >= 0) and (ASTIVal[node] < ProcCount) then
       Result := ProcRetPtrAlias[ASTIVal[node]];
+  end
+  else if ASTKind[node] = AN_DEREF then
+  begin
+    { `pp^` -- the middle level of `pp^^[i]`. A deref has no symbol and no alias
+      of its own, so the chain is walked one caret at a time: whatever alias the
+      INNER pointer came from names its pointee's alias in turn. Both mirrors of
+      that fact exist for this arm and nothing else reads them -- SymPtrElemAlias
+      when the inner pointer is a variable, AliasPtrElemAlias when it is
+      anything the arms above can answer for. Depth-bounded by the recursion
+      through ASTLeft, which strictly descends. }
+    if ASTLeft[node] < 0 then Exit;
+    if ASTKind[ASTLeft[node]] = AN_IDENT then
+    begin
+      npaFi := ASTIVal[ASTLeft[node]];
+      if (npaFi >= 0) and (npaFi < SymCount) then Result := SymPtrElemAlias[npaFi];
+    end
+    else
+    begin
+      npaFi := NodePtrAlias(ASTLeft[node]);
+      if npaFi >= 0 then Result := AliasPtrElemAlias[npaFi];
+    end;
   end
   else if ASTKind[node] = AN_PTR_CAST then
   begin

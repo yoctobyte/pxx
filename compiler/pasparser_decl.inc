@@ -125,6 +125,7 @@ var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     tnHasAlias: Boolean;   { a source/RTL alias of this name beats every builtin name }
     childDepth, childBaseTk, childBaseRec: Integer;
     ptrArrAi: Integer;   { `^TFixed`: the pointee's ArrType index, else -1 }
+    childPtrAlias: Integer;   { `^TP`: the pointee's own pointer-alias index, else -1 }
     wasPacked: Boolean;
 begin
   LastTypeRecId := REC_NONE;
@@ -134,6 +135,7 @@ begin
   LastTypePointerElemRec := REC_NONE;
   LastTypePointerAlias := -1;
   LastTypePointerElemArrAi := -1;
+  LastTypePointerElemAlias := -1;
   LastTypePointerDepth := 0;
   LastTypePointerBaseTk := Ord(tyUnknown);
   LastTypePointerBaseRec := REC_NONE;
@@ -269,6 +271,14 @@ begin
       childDepth := LastTypePointerDepth;
       childBaseTk := LastTypePointerBaseTk;
       childBaseRec := LastTypePointerBaseRec;
+      { ...and, in the same one-statement window, WHICH named pointer alias the
+        pointee was: the ParseTypeKind that produced elemTk has just returned,
+        so LastTypePointerAlias still describes the POINTEE and is about to be
+        overwritten by this arm's own answer. `TPP = ^TP` is the shape, and
+        without this `pp^^[i]` had no way to learn that the middle level is a
+        TP -- it segfaulted for three element kinds and silently wrote the
+        wrong slot for the fourth. }
+      childPtrAlias := LastTypePointerAlias;
       LastTypePointerElemTk := elemTk;
       { The pointee's managed-string WIDTH, captured in the ONE window where it
         is knowable: the ParseTypeKind that produced elemTk has just returned,
@@ -299,6 +309,7 @@ begin
         LastTypePointerBaseRec := LastTypeRecId;
       end;
       LastTypePointerElemArrAi := ptrArrAi;
+      LastTypePointerElemAlias := childPtrAlias;
       Result := tyPointer;
       Exit;
     end;
@@ -717,6 +728,7 @@ begin
                   so a field declared here can be re-read then. }
                 LastTypePointerAlias := aliasIdx;
                 LastTypePointerElemArrAi := AliasPtrElemArrAi[aliasIdx];
+                LastTypePointerElemAlias := AliasPtrElemAlias[aliasIdx];
                 LastTypePointerDepth := AliasPtrDepth[aliasIdx];
                 LastTypePointerBaseTk := AliasPtrBaseTk[aliasIdx];
                 LastTypePointerBaseRec := AliasPtrBaseRec[aliasIdx];
@@ -6013,8 +6025,21 @@ begin
           fTk := ParseTypeKind;
           Dec(PtrElemDepth);
         end;
+        { WHICH alias the pointee was, captured before RegisterPtrAlias runs:
+          for `TPP = ^TP` the ParseTypeKind above has just resolved TP and left
+          its index in LastTypePointerAlias. Reading AliasPtrElemAlias[TP]
+          instead would answer about TP's OWN pointee, one level too deep --
+          which is what the alias arm in ParseTypeKind wants and this arm does
+          not. Two spellings of `^`, two different right answers. }
+        LastTypePointerElemAlias := LastTypePointerAlias;
         RegisterPtrAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId, targetNOff, targetNLen);
         AliasPtrElemArrAi[AliasCount-1] := aPtrArrAi;
+        { ...and AFTER the call, for the same reason the line above is:
+          RegisterPtrAlias clears both slots itself, so a value written before
+          it is thrown away. That is why the ArrAi line has always been here
+          rather than riding the LastTypePointer* channel like its siblings in
+          RegisterGeneralAlias. }
+        AliasPtrElemAlias[AliasCount-1] := LastTypePointerElemAlias;
         { The pointee's managed-string width rides with the alias -- and it comes
           from LastTypeStrElemTk, NOT LastTypePointerStrElemTk. Both arms above
           parse the POINTEE directly (`fTk := ParseTypeKind`, or the element of
