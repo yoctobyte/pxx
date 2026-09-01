@@ -6707,6 +6707,32 @@ test-core: $(COMPILER)
 	    exit 1; \
 	  fi; \
 	  echo "case_arm_finalize_shape: ok (IN-ARM)"
+	@# FOURTH statement kind with the same flush hole: an exception HANDLER arm.
+	@# A try/except is ONE statement, so a managed temp built in a handler had its
+	@# finalize emitted after the merge and ran on the NO-EXCEPTION path. 5M calls
+	@# of a try whose handler never runs: 0.52 0.54 0.51 s before, 0.08 0.07 0.08
+	@# after, and the SAME statement wrapped in `if k >= 0 then` — which supplies
+	@# AN_IF's flush and nothing else — was already 0.07 0.08 0.07 before.
+	@#
+	@# NO LEAK BOUND on the program below, and the number is on record rather than
+	@# absent: its Escaped arm reads live=979, which is
+	@# bug-a-an-exception-that-escapes-its-handler-or-is-bare-re-raised-still-
+	@# leaks-its-object, open and blocked on a Track U decision. A bound here
+	@# would measure that ticket. Add one when it closes. The arm stays because a
+	@# mis-placed finalize on a LEAVE path is what this program is for, and the
+	@# -dPXX_HEAP_DEBUG direction is covered whether or not a count moves.
+	./$(COMPILER) test/test_except_arm_temp_finalize.pas $(TESTTMP)/test_eat26
+	tools/expect_same.sh test_eat26 "$$($(TESTTMP)/test_eat26 | tail -1)" "sink=382926"
+	@shape=$$(PXXDBG=a.ir:Hot ./$(COMPILER) test/test_except_arm_finalize_shape.pas $(TESTTMP)/test_eafs26 2>&1 \
+	  | awk '/^[0-9]+: label /{L=NR} /^[0-9]+: copy_rec_managed/{C=NR} \
+	         END{ if (C==0) print "NO-FINALIZE-EMITTED"; else if (L==0) print "NO-LABEL"; \
+	              else if (C>L) print "AFTER-MERGE"; else print "IN-ARM" }'); \
+	  if [ "$$shape" != "IN-ARM" ]; then \
+	    echo "except-arm finalize placement: expected IN-ARM, got $$shape"; \
+	    echo "  NO-FINALIZE-EMITTED means the probe stopped exercising the path, not that it passed."; \
+	    exit 1; \
+	  fi; \
+	  echo "except_arm_finalize_shape: ok (IN-ARM)"
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_record_gate_leaks.pas $(TESTTMP)/test_mrg26
 	tools/expect_same.sh test_mrg26 "$$($(TESTTMP)/test_mrg26 | tail -1)" "managed-record-gate 9000/9000"
 	tools/assert_no_leak.sh managed_record_gate 50 $(TESTTMP)/test_mrg26

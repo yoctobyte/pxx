@@ -13806,8 +13806,23 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           excClsTmp := AllocVar('', tyInteger);
           last := IRAppend(IR_EXC_STORE, excClsTmp, -1, 6, 0, 0);
         end;
+        { FLUSH PER HANDLER ARM, the fourth statement kind to need it after
+          AN_IF's arms, the three loop bodies and AN_CASE's arms. A try/except is
+          ONE statement, so a by-value managed-record or interface temp built
+          inside a handler had its finalize emitted after the merge and ran on
+          the NORMAL path too -- the path where no exception was raised and the
+          handler never executed.
+
+          Measured with the control that spelling gives: 5M calls of a try whose
+          handler never runs, `on E: Exception do TakeR(MkR(k))` took 0.46-0.50s,
+          while wrapping the IDENTICAL statement in `if k >= 0 then` -- which
+          supplies AN_IF's per-arm flush and changes nothing else -- took
+          0.07-0.10s. Same output, sink=5000000 both.
+          bug-a-an-exception-handler-arm-finalizes-its-managed-temp-after-the-merge }
+        pcBase := PostCallIntfCount;
         last := IRLowerAST(ASTLeft[handlerNode]);
         IRMarkStatementNode(last);
+        IRFlushPostCallIntf(pcBase);
         if excOwnTmp >= 0 then
         begin
           excReleaseProc := FindProc('PXXObjFree');
