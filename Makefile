@@ -18227,6 +18227,26 @@ test-emit-obj: $(COMPILER)
 	  tools/expect_same.sh test_emit_obj_cinit386 "$$($(TESTTMP)/test_emit_obj_cinit386_host)" "42 pxx-c-data" || exit 1; \
 	  echo "test-emit-obj: an i386 object's file-scope initialisers run under a gcc -m32 main"; \
 	else echo "gcc -m32 (multilib) not installed; i386 object initialiser check skipped"; fi
+	# 4d2. THE i386 PC-RELATIVE DATA REFERENCE, EXECUTED. Every load of a global
+	#    that TryI386PcRelLoad converts becomes `mov dest,[ebp+picslot]` followed
+	#    by the original instruction with ModRM rebased on dest, and the operand
+	#    becomes R_386_PC32 with a per-site addend.
+	#
+	#    THIS ROW EXISTS BECAUSE THE ROWS ABOVE CANNOT FAIL ON IT. Measured
+	#    2026-09-01, against a compiler whose PC-relative addend was deliberately
+	#    +0x30000000: row 4b PASSED, row 4d PASSED, and test-c-abi-mixed-link
+	#    PASSED on both targets. They emit converted sites and never execute one.
+	#    The subject below, same corrupted compiler, segfaults -- so it is aimed.
+	#    The count assertion is the other half: a conversion that silently stopped
+	#    firing would leave every value correct and this row green.
+	rm -f $(TESTTMP)/i386_pcrel_globals.o
+	./$(COMPILER) --target=i386 --emit-obj test/i386_pcrel_globals.c $(TESTTMP)/i386_pcrel_globals.o
+	readelf -rW $(TESTTMP)/i386_pcrel_globals.o | grep -qE 'R_386_PC32' || { echo "test-emit-obj: i386 object carries NO R_386_PC32 -- the data-reference conversion did not fire, so the value assertions below prove nothing"; exit 1; }
+	@if command -v gcc >/dev/null 2>&1 && gcc -m32 -E - < /dev/null > /dev/null 2>&1; then \
+	  gcc -m32 -no-pie test/i386_pcrel_globals_host.c $(TESTTMP)/i386_pcrel_globals.o -o $(TESTTMP)/i386_pcrel_globals_exe || { echo "test-emit-obj: i386 pcrel subject FAILED to link"; exit 1; }; \
+	  tools/expect_same.sh i386_pcrel_globals "$$($(TESTTMP)/i386_pcrel_globals_exe)" "PCREL GLOBALS OK" || exit 1; \
+	  echo "test-emit-obj: i386 PC-relative global loads read the right values"; \
+	else echo "gcc -m32 (multilib) not installed; i386 pcrel global check skipped"; fi
 	# 4e. @ ON AN EXTERNAL ROUTINE, on i386. A function pointer initialised from
 	#    an extern -- syscall tables, sqlite's aSyscall[] idiom, vtable-style
 	#    dispatch. i386 REFUSED this outright until 2026-09-01 ("wrap it in a

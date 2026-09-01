@@ -3372,13 +3372,39 @@ begin
     and the values are the SAME ones the ELF64 writer passes as explicit
     r_addend, which is the property to preserve if either side is ever
     changed. }
+  { A PC-RELATIVE site needs a DIFFERENT addend from the absolute one beside it,
+    and it is not a constant. The linker stores S + A - P; the instruction wants
+    (S + symOffset) - anchorAddr, where anchorAddr is the address the body's
+    `call/pop` pushed. P is the field's own address, so
+
+        A = symOffset + (fieldPos - anchorPos)
+
+    and the backend recorded (fieldPos - anchorPos) per site as *PicDelta when it
+    rewrote the operand. It is per-SITE, not per-body: two references from the
+    same body sit at different distances past the one anchor. PicDelta is 0 on
+    every absolute site, so the two arms below could be one expression -- they
+    are kept apart because reading `+ PicDelta` on a row typed R_386_32 would
+    suggest the addend has a PC term there, and it must not. }
   for i := 0 to FixCount-1 do
-    Patch32(Fixups[i].CodePos, Fixups[i].DataOff);
+    if FixupPCRel[i] then
+      Patch32(Fixups[i].CodePos, Fixups[i].DataOff + FixupPicDelta[i])
+    else
+      Patch32(Fixups[i].CodePos, Fixups[i].DataOff);
   for i := 0 to GlobFixCount-1 do
     if SymOffIsData(GlobFix[i].BSSoff) then
-      Patch32(GlobFix[i].CodePos, SymOffDataPart(GlobFix[i].BSSoff))
+    begin
+      if GlobFixPCRel[i] then
+        Patch32(GlobFix[i].CodePos, SymOffDataPart(GlobFix[i].BSSoff) + GlobFixPicDelta[i])
+      else
+        Patch32(GlobFix[i].CodePos, SymOffDataPart(GlobFix[i].BSSoff));
+    end
     else
-      Patch32(GlobFix[i].CodePos, GlobFix[i].BSSoff);
+    begin
+      if GlobFixPCRel[i] then
+        Patch32(GlobFix[i].CodePos, GlobFix[i].BSSoff + GlobFixPicDelta[i])
+      else
+        Patch32(GlobFix[i].CodePos, GlobFix[i].BSSoff);
+    end;
   for i := 0 to DynCallCount-1 do
     Patch32(DynCallCodePos[i], ExternalGotOff[DynCallExtIdx[i]]);
   for i := 0 to ProcAddrFixCount-1 do

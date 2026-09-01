@@ -5384,13 +5384,32 @@ begin
     would corrupt the stack in every body at once.
 
     Gated on EmitObjMode: a freestanding image is loaded at a fixed address and
-    has no text-relocation problem to solve, so it pays nothing for this. }
+    has no text-relocation problem to solve, so it pays nothing for this.
+
+    AND GATED ON CurProc >= 0, BECAUSE THE SLOT NEEDS A FRAME. The main body is
+    emitted with no `push ebp; mov ebp,esp` at all, so `mov [ebp+slot], esi`
+    there writes through whatever ebp the loader left -- MEASURED: SIGSEGV at the
+    store itself, ebp=0x8073efc, in the body that starts `mov eax,2; call`. The
+    references in that body stay absolute, which costs position-independence and
+    not correctness.
+
+    This is also the phase where "verified inert" was claimed too widely. The
+    anchor was checked against test-c-abi-mixed-link, whose every row IS a
+    procedure -- a population with no frameless body in it, so the crash could
+    not appear. The claim scoped to what was run, and the sentence did not.
+    test-emit-obj is the row that has a main body. }
   X386PicAnchor := -1;
-  if EmitObjMode then
+  X386PicSlot := 0;
+  if EmitObjMode and (CurProc >= 0) then
   begin
     EmitB($E8); EmitI32(0);        { call .L  (displacement 0 = the next insn) }
     X386PicAnchor := CodeLen;      { .L is HERE: the address `call` pushed }
     EmitB($5E);                    { pop esi }
+    { Park it in the frame, and stop relying on esi immediately. Carved the
+      same way the alloca base is, so PatchProcPrologue sizes the frame. }
+    FrameSize := AlignTo(FrameSize + 4, 4);
+    X386PicSlot := -FrameSize;
+    EmitB($89); EmitB($B5); EmitI32(X386PicSlot);   { mov [ebp+slot], esi }
   end;
 
   { Carve this body's alloca base slot plus three scratch words, and record

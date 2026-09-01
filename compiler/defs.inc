@@ -2298,6 +2298,7 @@ var
   CsDepth : Integer;       { how many of r12/r13 currently hold a live left value (0 = r12 free, 1 = r12 live -> use r13, 2 = fall back to push/pop). }
   CsSaveOff12 : Integer;   { rbp offset of the caller-r12 save slot }
   CsSaveOff13 : Integer;   { rbp offset of the caller-r13 save slot }
+  X386PicSlot : Integer;        { i386 --emit-obj: ebp offset of the frame slot holding THIS body's anchor VALUE, or 0 when there is none. The anchor is kept in memory rather than pinned in a register on purpose: a reference then loads it into a register that is provably free AT THAT SITE -- its own destination for a load, a push/pop-wrapped scratch for a store -- so no sequence has to preserve anything across it and no liveness audit is needed for correctness. Pinning it in esi is the faster form and is a separate, later question. }
   X386PicAnchor : Integer;      { i386 --emit-obj: the .text offset of the `pop esi` that ends THIS body's PC-relative anchor, or -1 when the body has none. Every data reference in the body is then `esi + (sym - X386PicAnchor)`, recorded as R_386_PC32 with addend `fixupOffset - X386PicAnchor` -- both terms known at emit time, and MEASURED against the assembler rather than derived (see the ticket: as(1) stored 3 for a fixup at 8 with the anchor at 5). i386 has no [eip+disp32] addressing mode, which is why the anchor is an instruction rather than a mode; it does NOT need a GOT, because our .data/.bss symbols are section-local and cannot be preempted. bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations }
   X386AllocaBaseOff : Integer;  { i386: ebp offset of THIS body's alloca base, plus THREE scratch words at +4/+8/+12. 0 = this body contains no IR_ALLOCA. i386 is the ONE backend that also needs the saved-esp DELTA (see the park in the cdecl call arm): its `and esp,-16` makes the amount subtracted unknowable at compile time, so the restore cannot be a relative add. The scratch words exist because i386 has NO RED ZONE -- x86-64 spills its copy registers to [rsp-8..-24], which here would be memory the next signal frame may overwrite. }
   Arm32AllocaBaseOff : Integer;  { arm32: the same alloca base as X64AllocaBaseOff, fp(r11)-relative. 0 = this body contains no IR_ALLOCA. arm32 needs no saved-sp delta -- its AAPCS32 outgoing block is all relative (sub sp,#blk / add sp,#blk-16, no parked pointer), so nothing holds an absolute sp for an alloca to invalidate. }
@@ -2600,6 +2601,16 @@ var
     rip-relative displacement from a rewritten `movabs`, not an 8-byte
     absolute address. }
   FixupPCRel : array[0..MAX_FIXUPS-1] of Boolean;   { fixed, like Fixups itself }
+  { i386 --emit-obj: how far THIS fixup sits past its body's PC anchor. SHT_REL
+    has no addend field, so the addend lives in the four bytes being patched and
+    must be symOffset + (fixupPos - anchorPos) for the linker's S + A - P to come
+    out as (symbol - anchorValue). Kept per fixup rather than read from
+    X386PicAnchor at write time, because that global holds only the CURRENT
+    body's anchor and the writer runs long after every body is emitted -- the
+    same reason GlobFixTrail is per site rather than a constant. Zero for every
+    absolute fixup, so it is inert unless GlobFix/FixupPCRel is also set. }
+  FixupPicDelta : array[0..MAX_FIXUPS-1] of Integer;
+  GlobFixPicDelta : array of Integer;
   GlobFixCount : Integer;
   GlobFixCapacity : Integer;
 

@@ -245,6 +245,72 @@ begin
   Result := (TargetArch = TARGET_X86_64) and (not EncToAsmBuffer);
 end;
 
+function TryI386PcRelLoad: Boolean;
+{ Rewrite an absolute [disp32] LOAD, just emitted by the caller, into a load
+  through this body's PC anchor, and report whether it did.
+
+  Absolute is mod=00 rm=101. The anchor's VALUE lives in a frame slot, so the
+  form becomes
+
+      mov  dest, [ebp+picslot]      <- inserted
+      mov  dest, [dest+disp32]      <- the caller's instruction, ModRM rewritten
+
+  DEST IS ITS OWN BASE, and that is what makes this correct WITHOUT any liveness
+  analysis: the instruction is a load INTO dest, so dest is dead at this point by
+  construction. Nothing has to be preserved across anything, no sequence needs a
+  push/pop wrapper, and no register is pinned. An earlier plan for this ticket
+  pinned the anchor in esi and needed an audit of every sequence that clobbers
+  it; this needs none.
+
+  LOADS ONLY, AND ONLY THE LISTED OPCODES. A store (`89`/`88`/`C7`) must keep its
+  source, a `cmp` (`39`) reads both operands, and the moffs forms (`A1`/`A2`/`A3`)
+  have no ModRM to rewrite -- for all of those this returns False and the site
+  stays absolute, which loses position-independence and never correctness. That
+  is the same refusing posture GlobRefTrailingImm takes on this path.
+
+  0F BE / 0F BF (movsx) are included alongside 0F B6 / 0F B7 (movzx) although the
+  census did not observe them: the rewrite is identical for any `0F xx /r` load,
+  and this file's own history is that the unobserved sibling is the one that stays
+  broken. bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations }
+var modrm, opLen, dest, k: Integer;
+    saved: array[0..3] of Byte;
+begin
+  TryI386PcRelLoad := False;
+  if TargetArch <> TARGET_I386 then Exit;
+  if not EmitObjMode then Exit;
+  if X386PicSlot = 0 then Exit;          { no anchor in this body }
+  if CodeLen < 2 then Exit;
+
+  modrm := Code[CodeLen-1];
+  if (modrm and $C7) <> $05 then Exit;   { not absolute [disp32] }
+
+  opLen := 0;
+  if (Code[CodeLen-2] = $8B) or (Code[CodeLen-2] = $8A) then opLen := 2
+  else if (CodeLen >= 3) and (Code[CodeLen-3] = $0F) and
+          ((Code[CodeLen-2] = $B6) or (Code[CodeLen-2] = $B7) or
+           (Code[CodeLen-2] = $BE) or (Code[CodeLen-2] = $BF)) then opLen := 3;
+  if opLen = 0 then Exit;                { unlisted encoding: stay absolute }
+
+  dest := (modrm shr 3) and 7;
+  if dest = 4 then Exit;                 { esp as a base means SIB; refuse }
+  if dest = 5 then Exit;                 { ebp base: mod=10 rm=101 is fine but
+                                           collides with the form we just left,
+                                           so refuse rather than reason }
+
+  for k := 0 to opLen - 1 do saved[k] := Code[CodeLen - opLen + k];
+  CodeLen := CodeLen - opLen;
+
+  { mov dest, [ebp+picslot]  --  8B /r, mod=10 rm=101 (ebp+disp32) }
+  EmitB($8B);
+  EmitB(Byte($80 or (dest shl 3) or $05));
+  EmitI32(X386PicSlot);
+
+  { the caller's instruction, with ModRM mod=10 rm=dest }
+  for k := 0 to opLen - 2 do EmitB(saved[k]);
+  EmitB(Byte($80 or (dest shl 3) or dest));
+  TryI386PcRelLoad := True;
+end;
+
 procedure DbgI386RelocShape(const site: AnsiString);
 { PXXDBG=a.i386reloc — print the bytes that PRECEDE a 32-bit absolute fixup on
   i386, one line per site, so the set of operand shapes needing conversion for
@@ -294,11 +360,17 @@ var drRex, drOp, drReg: Byte;
 begin
   if FixCount >= MAX_FIXUPS then Error('fixup overflow');
   FixupPCRel[FixCount] := False;
+  FixupPicDelta[FixCount] := 0;
   if (TargetArch = TARGET_I386) or (TargetArch = TARGET_ARM32) or
      (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) or
      (TargetArch = TARGET_WASM32) then
   begin
     DbgI386RelocShape('EmitDataRef');
+    if TryI386PcRelLoad then
+    begin
+      FixupPCRel[FixCount] := True;
+      FixupPicDelta[FixCount] := CodeLen - X386PicAnchor;
+    end;
     Fixups[FixCount].CodePos := CodeLen; Fixups[FixCount].DataOff := dataOff;
     Inc(FixCount);
     EmitI32(0);
@@ -399,10 +471,12 @@ begin
     SetLength(GlobFix, gfN);
     SetLength(GlobFixPCRel, gfN);
     SetLength(GlobFixTrail, gfN);
+    SetLength(GlobFixPicDelta, gfN);
     GlobFixCapacity := gfN;
   end;
   GlobFixPCRel[GlobFixCount] := False;
   GlobFixTrail[GlobFixCount] := 0;
+  GlobFixPicDelta[GlobFixCount] := 0;
   { x86-64: rewrite the absolute [disp32] memory operand just emitted into the
     rip-relative form, so .text carries R_X86_64_PC32 and an object can be
     linked into a PIE (feature-a-x86-64-object-output-is-position-dependent).
@@ -464,7 +538,12 @@ begin
       displacement recorded, not rewritten. No collision with the branch above:
       that one requires BOTH a $25 SIB and a ModRM with rm=100, and $8D has
       rm=101. }
+    GlobFixPCRel[GlobFixCount] := True
+  else if TryI386PcRelLoad then
+  begin
     GlobFixPCRel[GlobFixCount] := True;
+    GlobFixPicDelta[GlobFixCount] := CodeLen - X386PicAnchor;
+  end;
   DbgI386RelocShape('EmitGlobRef');
   GlobFix[GlobFixCount].CodePos := CodeLen;
   GlobFix[GlobFixCount].BSSoff  := bssOff;
