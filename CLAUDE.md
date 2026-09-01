@@ -330,8 +330,8 @@ sync that pulled someone else's `compiler/**`. **Rebuild after any sync touching
 every number you report — and the COMMIT beside the sha.** A sha names the
 binary; it is not a source identity. `compiler/.pascal26.fixedpoint` holds
 exactly `rounds N` and `sha256 <hex>`, so `verified` can tell you *which* binary
-and never *what built it*; the `make pin` commit line (Makefile:18374) carries
-the same sha-without-commit. `git diff HEAD -- compiler/ lib/` is not the
+and never *what built it*; the `make pin` commit line (the `chore(stable): pin
+vN` echo) carries the same sha-without-commit. `git diff HEAD -- compiler/ lib/` is not the
 control it looks like: it proves the tree matches HEAD while saying nothing
 about where HEAD is, and **107 commits touched `compiler/` or `lib/` on
 2026-08-31, 11 in one hour.** Two agents on different commits legitimately hold
@@ -339,16 +339,24 @@ different binaries that both print `verified` — that is determinism, not
 nondeterminism, and it was reported as a bug once (`9d867ee4d`).
 
 **`make` has TWO success verbs and only one of them recomputed anything.**
-`converged after N round(s)` (Makefile:284) is the recompute. `self-host
-fixedpoint: verified — N round(s), <sha12>` (Makefile:317) is the STAMP path: it
-asserts only that the binary on disk is still the one some past stamp was written
-for, and its recipe never touches the binary. Seeing `verified` where you
-expected `converged` means **no fixedpoint ran this time** — treat the binary as
-unproven for your change, `rm` the stamp and re-run. Measured live 2026-08-31
+`converged after N round(s)` (the `$(COMPILER_STAMP)` recipe) is the recompute.
+`self-host fixedpoint: verified — N round(s), <sha12>` (the `$(COMPILER)`
+recipe) is the STAMP path: its recipe never touches the binary. Since
+`01dd27dd1` it also refuses outright when the stamp was written for DIFFERENT
+SOURCES than the tree has, so it can no longer print success for a tree it
+never saw — but it still does not mean anything was BUILT. Seeing `verified`
+where you expected `converged` means **no fixedpoint ran this time** — treat the
+binary as unproven for your change, `rm` the stamp and re-run. Measured live 2026-08-31
 (frankB): a pull brought someone's `compiler/**`, `make` printed `verified — 1
 round(s)`, and `gate.sh quick` went RED against the stale binary; removing the
 stamp and rebuilding was GREEN. **The verb is the tell** — both lines are green,
 both name a round count, and `tools/selfhost_stamp_devtest.sh` asserts each.
+**Cite recipes, not `Makefile:<n>`.** Measured when these three were replaced:
+all were correct when written (`9a0f3bad9`, the same day) and the `make pin` one
+had already drifted **142 lines by that evening** — to `fi; \`, which is a real
+line that explains nothing. A 20k-line Makefile that a dozen commits touch in a
+day cannot carry a line number for longer than a day, and a stale one does not
+error: it points somewhere.
 
 A **nonzero** exit deserves the same suspicion: grep
 the tree for the error string — if the source lacks it, the compiler that printed
