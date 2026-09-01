@@ -554,7 +554,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-s-exceptions-do-not-link-on-xtensa-the-raise-runtime-pulls-calloc | S | 45 | bug | try/except does not link on xtensa: the raise runtime pulls `calloc` | — |
+| bug-s-xtensa-cannot-link-any-program-that-uses-the-heap-runtime-calloc-is-external | S | 45 | bug | xtensa links no program that reaches the heap runtime: `calloc` is external | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 
 ## backlog-rust (0)
@@ -1045,7 +1045,7 @@ _none_
 - [p 45] [P] bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name
 - [p 45] [P] bug-p-a-stray-end-at-unit-implementation-top-level-is-silently-skipped
 - [p 45] [P] bug-p-a-user-type-whose-name-shadows-a-builtin-is-unusable
-- [p 45] [S] bug-s-exceptions-do-not-link-on-xtensa-the-raise-runtime-pulls-calloc
+- [p 45] [S] bug-s-xtensa-cannot-link-any-program-that-uses-the-heap-runtime-calloc-is-external
 - [p 45] [T] bug-t-36-ranked-tickets-have-no-track-field-and-their-lane-rests-on-the-filename
 - [p 45] [T] bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in
 - [p 45] [T] bug-t-a-fuzz-finding-cited-by-seed-alone-cannot-prove-a-fix

@@ -3,7 +3,7 @@ prio: 45
 track: S
 ---
 
-# try/except does not link on xtensa: the raise runtime pulls `calloc`
+# xtensa links no program that reaches the heap runtime: `calloc` is external
 
 - **Type:** bug — Track S (ESP), file lane A (`compiler/**`)
 - **Status:** backlog, diagnosed not attempted
@@ -11,7 +11,15 @@ track: S
 
 ## Summary
 
-Any program using `try ... except` fails to build for `--target=xtensa`:
+**RENAMED 2026-09-01** (was `bug-s-exceptions-do-not-link-on-xtensa-the-raise-
+runtime-pulls-calloc`). The original slug was measured from ONE program and
+named the wrong cause: I had only tried exceptions, so "the raise runtime" was
+the narrowest true statement I could make and it read as the finding. A program
+with NO exceptions at all — a record holding `array of AnsiString`, nothing
+else — fails identically. The common factor is the HEAP runtime, not `raise`.
+Renamed rather than edited in place because the slug is what routes this.
+
+Any program that reaches the heap runtime fails to build for `--target=xtensa`:
 
 ```
 $ ./compiler/pascal26 --target=xtensa test/test_cross_exception.pas /tmp/xt
@@ -20,9 +28,15 @@ on this target (first one: calloc); this backend emits no dynamic segment, so
 link the dependency in statically or build for a target that has one
 ```
 
-So exceptions are unavailable on the PRIMARY ESP target, and it is the whole
-feature, not a shape of it — `test_cross_exception.pas` raises plain Integers,
-uses no classes and no SysUtils.
+So this is not one feature missing on the PRIMARY ESP target — it is anything
+that allocates. Two independent programs, sharing no language feature:
+
+- `test/test_cross_exception.pas` — raises plain Integers, no classes, no
+  SysUtils. Fails.
+- `test/test_managed_dynarray_field_leaks.pas` — dynamic arrays and records, no
+  exceptions anywhere. Fails with the identical message.
+
+Whatever the real dependency is, both reach it, and neither is about `raise`.
 
 ## What is measured, and what is not
 
