@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -16,6 +16,7 @@ _none_
 | feature-c-corpus-busybox-multi-applet | C | 70→90 | feature | Rung 2 of feature-busybox-kiosk-selfhosting-target. FIRST BAR MET 2026-09-01 (2789f87a7): a two-applet busybox byte-identical to gcc over 28 cases on x86-64 AND aarch64, agreeing with upstream's separately-linked binary. SECOND BAR (ash) IN PROGRESS: the 41-TU ash unity now gets all the way to getpwnam, having named and CLOSED eight defects on the way -- a C frontend parse bug (struct-typed local with a fn-pointer member), crtl's entire missing shell surface (fnmatch, full signal set + NSIG, strsignal, _SC_CLK_TCK, times, uname), a clock_t that was `long long` where glibc has `long` (right on 64-bit, silently wrong on every 32-bit target, and ash reads struct tms by byte offset through it), and crtl'''s own implementation being preprocessed in the PROGRAM'''s macro environment. NEXT: pwd.h/getpwnam. KNOWN CEILING: the unity cannot host ash and coreutils/test.c together in either order, so the `[` builtin needs separate compilation -- bug-a-an-object-neither-exports-nor-imports-data-symbols. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
+| feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops | A | 45 | refactor | The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command but the target is NOT zero -- the census counts UNDEFINED symbols under the flag, so a NilPy arm whose helper lives in a shared file is invisible to it: `pasparser_proc.inc` carries nine real `isNilPy` arms and the census scores that file at ZERO. `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 209 now, after five steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), ParseFactor's NilPy head (34 sites, two hooks), and the two DEAD-ARM deletions -- the shared expression and statement call loops carried thirteen arms guarded by `isNilPy` where the question was `PyExprMode`, which could not fire at all (7314fab2b, 23c4552af). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead. | — |
 
 ## unfinished (28)
@@ -500,7 +501,7 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 5 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | task-u-evaluate-the-2026-08-31-ticket-rules-next-week | U | 60 | task | Owner asked to evaluate the new rules next week. Written as a ticket rather than a scheduled callback BECAUSE timed callbacks are one of the rules. Carries the 2026-08-31 baseline so the comparison is possible at all -- without it, next week's evaluation is an opinion. | — |
 
-## backlog-libs (16)
+## backlog-libs (15)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -519,7 +520,6 @@ _none_
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | feature-os-targets-bsd-mac |
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
-| feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 
 ## backlog-cfront (11)
 
@@ -1033,7 +1033,6 @@ _none_
 - [p 55] [P] refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins
 - [p 55] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
-- [p 53] [B] feature-tls-provider-abstraction
 - [p 50] [U] decide-release-signing-key-custody (unblocks 1)
 - [p 50] [U] decide-t-per-assertion-subjects-or-accept-the-file-level-label (unblocks 1)
 - [p 50] [C] bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently

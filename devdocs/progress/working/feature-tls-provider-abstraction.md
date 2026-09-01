@@ -6,8 +6,8 @@ blocked-by: []
 # TLS provider abstraction — pluggable backends (OpenSSL + handrolled)
 
 - **Type:** feature (library / architecture) — the TLS seam
-- **Status:** backlog
-- **Owner:** — (Track B — `lib/rtl`)
+- **Status:** working
+- **Owner:** frankH
 - **Opened:** 2026-06-24
 - **Relation:** the `https://` enabler for [[feature-own-net-http-lib]]. Umbrella
   over two backends: [[feature-tls13-from-scratch]] (native) and the OpenSSL
