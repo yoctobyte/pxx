@@ -99,3 +99,7 @@ before the change, not assumed.
 Not done, and deliberately: folding x86-64 onto the portable helper too. That
 needs `PXXWritePad`/`PXXWriteStrMW` to take an fd, which is an RTL signature
 change with its own blast radius.
+
+## Log
+- 2026-09-02 — resolved, commit 6ae8af59e. Fixes all three defects; the ticket
+  was filed on the first of them.
