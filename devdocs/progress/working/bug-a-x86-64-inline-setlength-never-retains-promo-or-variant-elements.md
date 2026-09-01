@@ -4,6 +4,8 @@ track: A
 prio: 6
 summary: x86-64 inlines SetLength and its retain chain stops at kind 4, so promo and variant array elements are never retained — which is why the descriptor stride for kinds 5/6 cannot be emitted
 tags: [O, memory-leak, promoint, variant, dynarray]
+status: working
+owner: frankA
 ---
 
 ## The fork in the road

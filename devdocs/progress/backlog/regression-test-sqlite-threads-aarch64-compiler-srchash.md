@@ -118,3 +118,39 @@ different arm of it, since that one was about nonzero exits and this is a
 timeout that the retry path deliberately declines.
 
 Not re-laned out of T. Leaving prio as filed; I hold no claim on it.
+
+### Correction 2026-09-01 (frankA): one support for the timeout reading was bad
+
+I wrote that `tools-devtest#00` "TIMED OUT in both runs, good and bad alike" and
+offered it as evidence that the box was slow during the bad run. frank-coordinator
+checked and it is **red in 5 of the last 5 full runs on seven**, quiet box
+included, alongside `test-pascal-conformance#shard0/6` and
+`test-threads#src:test/test_exception_threads_race.pas`.
+
+**A standing red cannot be evidence that a particular run was loaded.** It is
+present in every run by construction, so it agrees with any hypothesis about any
+run — exactly the property that makes a guard which cannot fail useless. I read
+"present in both" as "varies with load", when what I had measured was that it
+does not vary at all. I did not check its history before citing it; two runs is
+not a series.
+
+**What survives, and it is the load-bearing half.** The byte comparison is
+untouched: 134 aarch64 binaries compiled by both endpoint compilers, 134
+byte-identical, with a positive control proving the comparison discriminates.
+That answers "is this a perf regression from `d9a8fa192`" on its own and needs no
+help from the devtest row. The timeout reading also still has the report's own
+`TIMED OUT after 200s` against a recorded ~37s norm, and the run being 15%
+longer overall.
+
+**What is now weaker.** "The box was loaded during THIS run" rested partly on the
+devtest row and now rests only on the wall-clock delta. frank-coordinator has
+since measured that the two runs carrying the *other* four-target red were at
+NORMAL wall time (553.6s and 550.6s against a 540-553s norm) while the one
+genuinely slow run in that window did not carry those rows — so "seven was slow
+that afternoon" is not a general fact about the window and should not be assumed
+for this job either. It may still be true for this specific job, which has a
+200s cap of its own; nobody has measured that.
+
+Not reopening the exculpation — it never depended on this. Recording it because
+the next reader would otherwise inherit a citation that cannot support what it
+was cited for.
