@@ -470,3 +470,98 @@ instruction where x86-64 has `rip`; what it does NOT need is a GOT.
 3. **Convert family by family**, watching `.text` absolutes fall from 1450 and
    re-running the emitter probe after each so a 28th shape announces itself.
 4. **The `test-emit-obj` i386 row LAST**, scoped by relocation SECTION.
+
+## PHASE 3'S REAL PROBLEM IS KEEPING THE ANCHOR ALIVE, AND IT IS NOT SOLVED HERE (2026-09-01, frankC)
+
+The anchor is emitted and inert (`e1209443d`). Converting even ONE reference to
+use it requires `esi` to still hold the anchor at that point, and **that is the
+whole remaining difficulty** — the addressing rewrites are a table lookup, and
+this is not.
+
+`esi` appears in **13 procedures** of `ir_codegen386.inc`:
+
+```
+IREmitNode386          53      <- the problem
+EmitUDivMod64Core_386   6      EmitArgvToFixedString386  5
+EmitIoLockStubs386      4      EmitwriteIntW386          4
+EmitwriteUInt64_386     4      IREmitMachineCode386      4  (2 are the anchor itself)
+EmitArgvToAnsiString386 3      EmitIDivMod64Core_386     3
+EmitBinop64_386         3      EmitSignalRuntime386      2
+EmitWriteCStr386        2      EmitwriteUIntW386         1
+```
+
+The twelve helpers are self-contained emitted blocks: one `push esi` / `pop esi`
+per procedure and they are done. **`IREmitNode386` is not one block** — its 53
+uses are spread across expression arms, so the wrapper has to go per-arm, and
+the failure mode of missing one is a silently wrong ADDRESS, not a crash.
+
+### Three strategies, and none of them is obviously right
+
+1. **`push esi` / `pop esi` per clobbering sequence.** Local invariant: a
+   sequence restores what it found. Cheapest to review. Missing a site gives a
+   wrong address.
+2. **Re-anchor after each clobber** — re-emit `call/pop` and update
+   `X386PicAnchor`, since displacements are computed against whatever the
+   current anchor is and the emitter knows the new offset. No save/restore at
+   all. But correctness now depends on the emitter's MODEL matching the emitted
+   code, which is a worse thing to get wrong than a missing push.
+3. **Anchor in a frame slot, loaded before each reference.** Removes every
+   cross-sequence invariant — the anchor cannot be stale because it is reloaded.
+   **But it clobbers `esi` at the reference point**, which is inside whatever
+   sequence contains the reference, so it reintroduces the same problem one
+   level down. It only works if no `esi`-using sequence contains a data
+   reference, which is NOT established.
+
+**Strategy 3 looked like the clean answer for several minutes and is not**; it
+moves the conflict rather than removing it. That is recorded because it is the
+one a fresh reader will reach for.
+
+### What has to be measured before choosing
+
+Whether any of the 13 `esi`-using sequences CONTAINS a data reference — i.e.
+whether the sets overlap at all. If they are disjoint, strategy 3 is safe and
+is much the simplest. If they overlap, strategy 1 is the only one whose failure
+mode is bounded. **That is one measurement and it decides the phase**, which is
+exactly the shape of question this ticket has been answering by measuring rather
+than arguing; I am stopping at the boundary rather than picking on taste.
+
+`esi` is callee-saved in i386 SysV, so ordinary CALLS already preserve it. The
+problem is entirely our own emitted sequences.
+
+### THE DECIDING MEASUREMENT, TAKEN — and the answer is "both mechanisms, in 12 named places"
+
+**Do the `esi`-using sequences contain data references?** Yes, so **strategy 3
+is out**: reloading the anchor into `esi` at a reference point would clobber a
+live `esi` belonging to the sequence around it.
+
+Per PROCEDURE, 8 of the 13 do both. **That figure overstates the problem and I
+nearly stopped at it.** Refined to case-arm granularity inside `IREmitNode386`,
+where 53 of the 55 `esi` mentions live:
+
+```
+53 case arms:   7 esi only    16 data-ref only    5 BOTH
+```
+
+The five: `IR_STORE_SYM`, `IR_CALL`, `IR_STORE_MEM`, `IR_COPY_REC_MANAGED`,
+`IR_SET_BINOP`. So the interleaving problem is **12 places**, not 53 arms and
+not "the whole dispatcher":
+
+| where | treatment |
+| --- | --- |
+| 7 arms + 5 helpers using `esi` with NO data ref | `push esi`/`pop esi` wrapper, nothing else |
+| the 5 arms above + 7 helpers doing BOTH | per-site: the sequence must re-anchor before the reference it contains, or move its own use off `esi` |
+
+Helpers in the second group: `EmitArgvToFixedString386`, `EmitSignalRuntime386`,
+`EmitIoLockStubs386`, `EmitwriteIntW386`, `EmitwriteUIntW386`,
+`EmitIDivMod64Core_386`, `IREmitMachineCode386`.
+
+**So neither strategy 1 nor strategy 2 alone — both, and the boundary between
+them is this list.** Strategy 1 for the clean sequences because its failure mode
+is local; strategy 2 only inside the twelve, where a wrapper cannot help because
+the reference is INSIDE the sequence that repurposed the register.
+
+*Precision of this count*: the arm splitter matches `IR_xxx:` labels and counts
+a bare occurrence of `esi`, so comments mentioning `esi` inflate it and a nested
+case could be mis-split. It is a narrowing instrument, not an exact one — it
+takes the work from "53 arms, unknown" to "5 named arms, verify each". Verify
+each before wrapping it.
