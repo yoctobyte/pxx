@@ -4158,7 +4158,11 @@ begin
     end;
   end;
   if mem = '' then Exit;
-  if (ti >= TokCount) or (Tokens[ti].Kind <> tkSemicolon) then Exit;
+  { A hint directive may sit before that ';' -- `T = someunit.TClass deprecated;`.
+    Without this the qualified re-export declines and the general-alias path
+    keeps it, which is the dead-re-export failure this function exists to fix,
+    reintroduced for anyone who annotates the alias. }
+  if not TokAfterHintsIsSemicolon(ti) then Exit;
   u := PyFindUnitDotted(qn);
   if u < 0 then Exit;
   Result := FindUClassInUnit(mem, u);
@@ -5129,6 +5133,18 @@ begin
                 ' would be its own ancestor')
         else
           UClsParent[ci] := parentCi;
+        { `TFoo = class(TBase) deprecated;` -- a hint directive on a bodiless
+          class. Consumed here so both the forward test below and the
+          empty-body shorthand test further down see the ';' they ask for;
+          without it the member loop ran and answered `expected ':' before ';'`.
+
+          Guarded on a ';' actually following, and that guard is the whole
+          subtlety: `library`, `platform` and `experimental` are ORDINARY
+          identifiers, so `TFoo = class library: Integer; end;` is a class with
+          a field called `library` and must stay one. TokAfterHintsIsSemicolon
+          asks the question that separates the two, rather than assuming a
+          directive name is a directive. CurTok sits at TokPos - 1. }
+        if TokAfterHintsIsSemicolon(TokPos - 1) then SkipHintDirectives;
         { bare `class;` with no heritage = a forward declaration (FPC).
           `class(TBase);` stays the empty-body shorthand. }
         UClsForward[ci] := (not hadParens) and (CurTok.Kind = tkSemicolon);
@@ -6416,7 +6432,7 @@ begin
         AliasSubHi[AliasCount - 1] := subHiVal;
       end
       else if (CurTok.Kind = tkIdent) and IsClassType(CurTok.SVal) and
-              ((TokPos >= TokCount) or (Tokens[TokPos].Kind = tkSemicolon)) then
+              TokAfterHintsIsSemicolon(TokPos) then
       begin
         { Class-name alias: `TOptionList = TList;` (blcksock). Registered in
           the UClass alias table so FindUClass resolves the new name to the

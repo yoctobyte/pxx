@@ -80,6 +80,23 @@ begin
   end;
 end;
 
+{ Is the token at k, or the first token after any hint directives there, a ';'?
+
+  Four lookaheads in this compiler ask "is the next token a ';'" to recognise a
+  declaration that ends right here, and a hint directive sits exactly where they
+  look. Each one answered NO and fell through to a different branch -- and
+  falling through is why this was expensive: `TAlias = TBase deprecated;` did not
+  error, it registered TAlias as a SCALAR through RegisterGeneralAlias, so
+  `var a: TAlias` compiled and only `TAlias.Create` said anything, and what it
+  said was `undefined variable`. A lookahead that fails open does not announce
+  itself.
+  bug-p-a-hint-directive-defeats-the-declaration-ends-here-lookahead }
+function TokAfterHintsIsSemicolon(k: Integer): Boolean;
+begin
+  SkipHintDirectiveToks(k);
+  TokAfterHintsIsSemicolon := (k >= TokCount) or (Tokens[k].Kind = tkSemicolon);
+end;
+
 function FindSpecialization(const nm: AnsiString): Integer;
 { VISIBILITY-AWARE, and it has to be. The table is one flat global list, but a
   specialization is not a global fact: SpecializeStream declares an ordinary
@@ -862,6 +879,10 @@ begin
       Inc(k);
     end;
   end;
+  { ...and past a hint directive: `TB = class(TBase) deprecated;` is bodiless
+    and was read as opening a body. Non-generic sibling of the same omission in
+    the template capture's bodyless arm. }
+  SkipHintDirectiveToks(k);
   if (k < TokCount) and (Tokens[k].Kind = tkSemicolon) then
   begin
     bodilessEnd := k;
@@ -2103,6 +2124,7 @@ var
   templateName: AnsiString;
   depth, startTok, cur, finalCur, np, gi, scan, bEnd: Integer;
   hintLo, hintHi: Integer;   { the hint-directive span, excluded from the arena }
+  hLo: Integer;              { candidate span start, promoted only if the arm commits }
   dgenAt, dgenRounds, dgenBefore, dgenAtBefore, dgenT, dgenEmitted: Integer;   { the nested-specialize fixed point }
   pnames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   doneParams, bodyless: Boolean;
@@ -2302,11 +2324,20 @@ begin
         legal in between makes a BODYLESS declaration read as one with a body.
         Measured pre-fix on binary 39e033c85335: `class(TObject) deprecated;`
         swallowed to EOF and blamed the final '.'. }
-      hintLo := scan; SkipHintDirectiveToks(scan); hintHi := scan;
+      { The span is recorded ONLY if this arm commits. Setting it before the
+        test looked equivalent and was not: `TG<T> = class(TObject) library:
+        Integer; end;` is a class with a FIELD named `library` -- a hint
+        directive name is an ordinary identifier -- so the skip runs, the ';'
+        test fails, bodyless stays False, and a span covering that field would
+        then have been excluded from the arena and the field would vanish. It
+        survived only because the `end`-bodied arm overwrites both variables
+        further down, which is ordering luck rather than a guarantee. }
+      hLo := scan; SkipHintDirectiveToks(scan);
       if (scan < TokCount) and (Tokens[scan].Kind = tkSemicolon) then
       begin
         cur := scan;
         bodyless := True;
+        hintLo := hLo; hintHi := scan;
       end;
     end;
   end;
