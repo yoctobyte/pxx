@@ -3605,6 +3605,11 @@ var
   found: Boolean;
   textOff, dataOff, dynstrOff, dynsymOff, hashOff, relaDynOff, dynamicOff: Integer;
   dynstrSize, hashSize, dynamicSize, fileSize, phOff: Integer;
+  fromAsm: Boolean;
+  expCount, relCount, memSize, bssBase: Integer;
+  shstrOff, shstrSize, shOff, sIdx: Integer;
+  shName, shType, shFlags, shOffs, shSize, shLink, shInfo, shAlign, shEnt:
+    array[0..9] of Int64;
   strOffExport: array[0..MAX_ASM_GLOBALS-1] of Integer;
   strOffImport: array[0..MAX_EXTERNAL-1] of Integer;
   neededLibStr: array[0..MAX_EXTERNAL-1] of Integer;
@@ -3616,18 +3621,65 @@ var
 {$endif}
 begin
   if TargetArch <> TARGET_X86_64 then
-    ErrorNoPos('--shared: .asm frontend shared-library output is x86-64 only');
+    ErrorNoPos('--shared: shared-library output is x86-64 only');
 
-  dynCount := AsmGlobalSymCount + ExternalCount;
-  numDynSyms := dynCount + 1;   { + null symbol }
+  { WHICH FRONTEND PRODUCED THIS. AsmGlobalSymCount is nonzero only when
+    ParseAsmProgram populated it, so it is the .asm shape's own signature --
+    the same discriminator writeELFRelX64General uses to pick a writer, and
+    deliberately not TargetArch, which sent every compiled program into a
+    writer that could describe none of it.
+
+    The two differ in exactly three things -- where the export list comes
+    from, whether there is a .bss, and whether Data[] holds absolute pointers
+    needing R_X86_64_RELATIVE. Everything after this is written once, over an
+    export list built here, rather than branched at each use: the .asm and
+    compiled paths disagreeing about their own symbol table is precisely the
+    drift this writer cannot afford. }
+  fromAsm := AsmGlobalSymCount > 0;
 
   { .dynstr: 0 = empty, then export names, then import (extern) names }
   dynstrSize := 1;
-  for i := 0 to AsmGlobalSymCount - 1 do
+  expCount := 0;
+  if fromAsm then
+    for i := 0 to AsmGlobalSymCount - 1 do
+    begin
+      strOffExport[i] := dynstrSize;
+      dynstrSize := dynstrSize + Length(AsmGlobalSymName[i]) + 1;
+      Inc(expCount);
+    end
+  else
   begin
-    strOffExport[i] := dynstrSize;
-    dynstrSize := dynstrSize + Length(AsmGlobalSymName[i]) + 1;
+    { Same export surface as an object: the C-convention routines, under their
+      own names. ObjProcStrOff is reused as the per-proc name offset, so a
+      compiled .so and a compiled .o cannot disagree about who is exported. }
+    for i := 0 to ProcCount-1 do
+      ObjProcStrOff[i] := -1;
+    for i := 0 to ProcCount-1 do
+      if ObjProcIsDefined(i) and ObjProcIsExported(i) then
+      begin
+        ObjProcStrOff[i] := dynstrSize;
+        dynstrSize := dynstrSize + Length(Procs[i].Name) + 1;
+        Inc(expCount);
+      end;
+    if expCount = 0 then
+      ErrorNoPos('--shared: this library would export no symbol, so nothing could '
+          + 'ever link or dlopen against it. A pxx shared library exports the '
+          + 'routines declared with the C convention -- Pascal `cdecl`, or any '
+          + 'function of a .c translation unit. Mark what the library is for, '
+          + 'or build an executable instead');
+    ObjCheckProcAddrBodies;
   end;
+
+  dynCount := expCount + ExternalCount;
+  numDynSyms := dynCount + 1;   { + null symbol }
+
+  { Absolute pointers that live IN .data: data->data (DataPtrFix) and the
+    data->code method slots (MethodFixups). Code no longer contributes any --
+    it is all rip-relative since
+    feature-a-x86-64-object-output-is-position-dependent -- so these are the
+    only things whose stored value depends on the load address, and each needs
+    one R_X86_64_RELATIVE. The .asm frontend produces neither. }
+  if fromAsm then relCount := 0 else relCount := DataPtrFixCount + MethodFixCount;
   for i := 0 to ExternalCount - 1 do
   begin
     strOffImport[i] := dynstrSize;
@@ -3655,8 +3707,9 @@ begin
   { .hash word count: nbucket + nchain (2) + bucket[0] (1) + chain[0..dynCount] (dynCount+1) = dynCount+4 words. }
   hashSize := (dynCount + 4) * 4;
   { DT_NEEDED*, DT_HASH, DT_STRTAB, DT_STRSZ, DT_SYMTAB, DT_SYMENT, DT_RELA,
-    DT_RELASZ, DT_RELAENT, DT_NULL -- 9 fixed entries, Elf64_Dyn = 16 bytes. }
-  dynamicSize := (neededCount + 9) * 16;
+    DT_RELASZ, DT_RELAENT, DT_RELACOUNT, DT_NULL -- 10 fixed entries,
+    Elf64_Dyn = 16 bytes. }
+  dynamicSize := (neededCount + 10) * 16;
 
   phOff := ELF_HEADER_SIZE;
   textOff := phOff + 3 * PROG_HEADER_SIZE;   { PT_LOAD + PT_DYNAMIC + PT_GNU_STACK }
@@ -3665,8 +3718,32 @@ begin
   dynsymOff := AlignTo(dynstrOff + dynstrSize, 8);
   hashOff := dynsymOff + numDynSyms * 24;
   relaDynOff := AlignTo(hashOff + hashSize, 8);
-  dynamicOff := relaDynOff + ExternalCount * 24;
+  dynamicOff := relaDynOff + (relCount + ExternalCount) * 24;
   fileSize := dynamicOff + dynamicSize;
+
+  { .bss lives past the end of the file: the PT_LOAD's memsz exceeds its filesz
+    and the kernel zero-fills the difference. Placing it last is what keeps
+    vaddr = file offset for everything that IS in the file, which the rest of
+    this writer assumes everywhere (st_value, DT_*, every rip displacement).
+    The .asm frontend has no .bss, and BSSSize is 0 for it. }
+  { SECTION HEADERS. A running loader never reads them -- it works off program
+    headers, which is why the .asm --shared output has managed without any --
+    but `ld` REFUSES a shared object that has none: linking `prog.c ./lib.so`
+    gives "file in wrong format", while dlopen of the same file succeeds. So
+    they are what separates a dlopen-able artefact from a linkable library.
+    69 bytes of names, then ten Elf64_Shdr. }
+  shstrOff := fileSize;
+  shstrSize := 69;
+  shOff := AlignTo(shstrOff + shstrSize, 8);
+  fileSize := shOff + 10 * 64;
+
+  { .bss lives past the end of the file: the PT_LOAD's memsz exceeds its filesz
+    and the kernel zero-fills the difference. Placing it last is what keeps
+    vaddr = file offset for everything that IS in the file, which the rest of
+    this writer assumes everywhere (st_value, DT_*, every rip displacement).
+    The .asm frontend has no .bss, and BSSSize is 0 for it. }
+  bssBase := AlignTo(fileSize, 16);
+  memSize := bssBase + BSSSize;
 
   { resolve each --shared extern call's rip-relative GOT displacement, now
     that dataOff (the GOT region's vaddr, base 0 == file offset) is known --
@@ -3681,6 +3758,17 @@ begin
   for i := 0 to AsmSoCallCount - 1 do
     Patch32(AsmSoCallPos[i], (dataOff + ExternalGotOff[AsmSoCallExtIdx[i]]) - (textOff + AsmSoCallPos[i] + 4));
 
+  { A compiled source carries the backend's whole relocation inventory, so it
+    needs the same pass an executable gets -- with BASE-0 addresses, because
+    this image is loaded wherever the loader puts it and every rip-relative
+    displacement is a DIFFERENCE, unchanged by the base. The absolute values
+    this leaves in Data[] are the ones .rela.dyn then relocates.
+
+    codeVA and entry are both textOff: entry differs from the code base only
+    by AsmEntryOff, which belongs to the frontend that does not come here. }
+  if not fromAsm then
+    ApplyImageFixups(textOff, dataOff, bssBase, textOff);
+
 {$ifdef FPC}
   Assign(f, outPath); Rewrite(f, 1);
 {$else}
@@ -3694,16 +3782,17 @@ begin
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU8(f,0);writeU8(f,0);writeU8(f,0);writeU8(f,0);
   writeU16(f,3);writeU16(f,62);writeU32(f,1);           { ET_DYN, EM_X86_64 }
-  writeU64(f,0);writeU64(f,phOff);writeU64(f,0);        { entry=0, phoff, shoff=0 }
+  writeU64(f,0);writeU64(f,phOff);writeU64(f,shOff);    { entry=0, phoff, shoff }
   writeU32(f,0);                                        { e_flags }
   writeU16(f,ELF_HEADER_SIZE);writeU16(f,PROG_HEADER_SIZE);writeU16(f,3);
-  writeU16(f,0);writeU16(f,0);writeU16(f,0);   { shentsize/shnum/shstrndx = 0 }
+  writeU16(f,64);writeU16(f,10);writeU16(f,9);  { shentsize, shnum, shstrndx }
 
   { PT_LOAD: whole file, RWX (same single-segment simplification the ET_EXEC
     writer already uses). }
   writeU32(f,1);writeU32(f,7);
   writeU64(f,0);writeU64(f,0);writeU64(f,0);
-  writeU64(f,fileSize);writeU64(f,fileSize);writeU64(f,$200000);
+  { memsz > filesz: the tail is .bss, zero-filled by the kernel. }
+  writeU64(f,fileSize);writeU64(f,memSize);writeU64(f,$200000);
 
   { PT_DYNAMIC }
   writeU32(f,2);writeU32(f,6);
@@ -3733,7 +3822,11 @@ begin
 
   { .dynstr }
   writeU8(f, 0);
-  for i := 0 to AsmGlobalSymCount - 1 do writeStrZ(f, AsmGlobalSymName[i]);
+  if fromAsm then
+    for i := 0 to AsmGlobalSymCount - 1 do writeStrZ(f, AsmGlobalSymName[i])
+  else
+    for i := 0 to ProcCount-1 do
+      if ObjProcStrOff[i] >= 0 then writeStrZ(f, Procs[i].Name);
   for i := 0 to ExternalCount - 1 do writeStrZ(f, ExternalLinkName(i));
   for i := 0 to neededCount - 1 do writeStrZ(f, Strs[neededLibStr[i]].Text);
   writePad(f, dynsymOff - (dynstrOff + dynstrSize));
@@ -3744,8 +3837,18 @@ begin
     -- what matters for dynamic symbol resolution is shndx<>SHN_UNDEF and
     st_value), then import syms (UND). }
   writeSym64(f, 0, 0, 0, 0, 0);
-  for i := 0 to AsmGlobalSymCount - 1 do
-    writeSym64(f, strOffExport[i], $10, 1, textOff + AsmGlobalSymOff[i], 0);
+  if fromAsm then
+    for i := 0 to AsmGlobalSymCount - 1 do
+      writeSym64(f, strOffExport[i], $10, 1, textOff + AsmGlobalSymOff[i], 0)
+  else
+    { $12 = GLOBAL FUNC, where the .asm labels are $10 GLOBAL NOTYPE: these are
+      known to be routines and their size is known, so say so. A dlsym'd NOTYPE
+      resolves fine, but the type and st_size are what every disassembler and
+      profiler reads. }
+    for i := 0 to ProcCount-1 do
+      if ObjProcStrOff[i] >= 0 then
+        writeSym64(f, ObjProcStrOff[i], $12, 1,
+                   textOff + Procs[i].BodyAddr, ObjProcSize(i));
   for i := 0 to ExternalCount - 1 do
     writeSym64(f, strOffImport[i], $10, 0, 0, 0);
 
@@ -3764,8 +3867,22 @@ begin
     (already allocated by RegisterExternal in Data[]/ExternalGotOff) with
     the dynamic linker's resolved runtime address at load time. Import
     symbol index = 1 (null) + AsmGlobalSymCount (exports) + i. }
+  { R_X86_64_RELATIVE (type 8) FIRST, because DT_RELACOUNT below tells the
+    loader the first N entries are exactly these and it may take a fast path
+    over them. With RELA the loader stores (load_base + addend) and ignores
+    what is in the slot, so the addend is the base-0 address ApplyImageFixups
+    already computed. }
+  if not fromAsm then
+  begin
+    for i := 0 to DataPtrFixCount-1 do
+      writeRela64(f, dataOff + DataPtrFix[i].DataPos, 0, 8,
+                  dataOff + DataPtrFix[i].TargetOff);
+    for i := 0 to MethodFixCount-1 do
+      writeRela64(f, dataOff + MethodFixups[i].DataPos, 0, 8,
+                  textOff + Procs[MethodFixups[i].ProcIdx].BodyAddr);
+  end;
   for i := 0 to ExternalCount - 1 do
-    writeRela64(f, dataOff + ExternalGotOff[i], 1 + AsmGlobalSymCount + i, 6, 0);
+    writeRela64(f, dataOff + ExternalGotOff[i], 1 + expCount + i, 6, 0);
 
   { PT_DYNAMIC entries }
   for i := 0 to neededCount - 1 do
@@ -3778,9 +3895,51 @@ begin
   writeU64(f, 6); writeU64(f, dynsymOff);            { DT_SYMTAB }
   writeU64(f, 11); writeU64(f, 24);                  { DT_SYMENT }
   writeU64(f, 7); writeU64(f, relaDynOff);           { DT_RELA }
-  writeU64(f, 8); writeU64(f, ExternalCount * 24);   { DT_RELASZ }
+  writeU64(f, 8); writeU64(f, (relCount + ExternalCount) * 24); { DT_RELASZ }
   writeU64(f, 9); writeU64(f, 24);                   { DT_RELAENT }
+  writeU64(f, $6ffffff9); writeU64(f, relCount);     { DT_RELACOUNT }
   writeU64(f, 0); writeU64(f, 0);                    { DT_NULL }
+
+  { .shstrtab -- 69 bytes, and the offsets below are hand-counted against it.
+    Written as one literal rather than assembled, so the two cannot drift. }
+  writeU8(f, 0);
+  writeStrZ(f, '.text');      {  1 }
+  writeStrZ(f, '.data');      {  7 }
+  writeStrZ(f, '.bss');       { 13 }
+  writeStrZ(f, '.dynstr');    { 18 }
+  writeStrZ(f, '.dynsym');    { 26 }
+  writeStrZ(f, '.hash');      { 34 }
+  writeStrZ(f, '.rela.dyn');  { 40 }
+  writeStrZ(f, '.dynamic');   { 50 }
+  writeStrZ(f, '.shstrtab');  { 59 }
+  writePad(f, shOff - (shstrOff + shstrSize));
+
+  { Ten Elf64_Shdr. sh_addr = sh_offset throughout, which is the whole reason
+    this writer keeps vaddr equal to the file offset. .dynsym's sh_link is
+    .dynstr and its sh_info is the index of the first non-local symbol -- 1,
+    since only the null symbol is local; getting sh_info wrong makes ld treat
+    the exports as locals and refuse to bind them. }
+  shName[0]:=0;  shType[0]:=0;  shFlags[0]:=0; shOffs[0]:=0;          shSize[0]:=0;                          shLink[0]:=0; shInfo[0]:=0; shAlign[0]:=0;  shEnt[0]:=0;
+  shName[1]:=1;  shType[1]:=1;  shFlags[1]:=6; shOffs[1]:=textOff;    shSize[1]:=CodeLen;                    shLink[1]:=0; shInfo[1]:=0; shAlign[1]:=16; shEnt[1]:=0;
+  shName[2]:=7;  shType[2]:=1;  shFlags[2]:=3; shOffs[2]:=dataOff;    shSize[2]:=DataLen;                    shLink[2]:=0; shInfo[2]:=0; shAlign[2]:=8;  shEnt[2]:=0;
+  shName[3]:=13; shType[3]:=8;  shFlags[3]:=3; shOffs[3]:=bssBase;    shSize[3]:=BSSSize;                    shLink[3]:=0; shInfo[3]:=0; shAlign[3]:=16; shEnt[3]:=0;
+  shName[4]:=18; shType[4]:=3;  shFlags[4]:=2; shOffs[4]:=dynstrOff;  shSize[4]:=dynstrSize;                 shLink[4]:=0; shInfo[4]:=0; shAlign[4]:=1;  shEnt[4]:=0;
+  shName[5]:=26; shType[5]:=11; shFlags[5]:=2; shOffs[5]:=dynsymOff;  shSize[5]:=numDynSyms * 24;            shLink[5]:=4; shInfo[5]:=1; shAlign[5]:=8;  shEnt[5]:=24;
+  shName[6]:=34; shType[6]:=5;  shFlags[6]:=2; shOffs[6]:=hashOff;    shSize[6]:=hashSize;                   shLink[6]:=5; shInfo[6]:=0; shAlign[6]:=8;  shEnt[6]:=4;
+  shName[7]:=40; shType[7]:=4;  shFlags[7]:=2; shOffs[7]:=relaDynOff; shSize[7]:=(relCount+ExternalCount)*24;shLink[7]:=5; shInfo[7]:=0; shAlign[7]:=8;  shEnt[7]:=24;
+  shName[8]:=50; shType[8]:=6;  shFlags[8]:=3; shOffs[8]:=dynamicOff; shSize[8]:=dynamicSize;                shLink[8]:=4; shInfo[8]:=0; shAlign[8]:=8;  shEnt[8]:=16;
+  shName[9]:=59; shType[9]:=3;  shFlags[9]:=0; shOffs[9]:=shstrOff;   shSize[9]:=shstrSize;                  shLink[9]:=0; shInfo[9]:=0; shAlign[9]:=1;  shEnt[9]:=0;
+  for sIdx := 0 to 9 do
+  begin
+    writeU32(f, Integer(shName[sIdx])); writeU32(f, Integer(shType[sIdx]));
+    writeU64(f, shFlags[sIdx]);
+    { sh_addr: 0 for a non-allocated section, else the vaddr, which is the file
+      offset in this base-0 image. }
+    if shFlags[sIdx] = 0 then writeU64(f, 0) else writeU64(f, shOffs[sIdx]);
+    writeU64(f, shOffs[sIdx]); writeU64(f, shSize[sIdx]);
+    writeU32(f, Integer(shLink[sIdx])); writeU32(f, Integer(shInfo[sIdx]));
+    writeU64(f, shAlign[sIdx]); writeU64(f, shEnt[sIdx]);
+  end;
 
 {$ifdef FPC}
   Close(f);

@@ -17450,6 +17450,42 @@ test-emit-obj: $(COMPILER)
 	    echo "test-emit-obj: x86-64 .o links+runs under clang -pie (second linker)"; \
 	  else echo "clang not installed; second-linker PIE check skipped"; fi; \
 	else echo "gcc not installed; x86-64 .o link check skipped"; fi
+	# 4c. A SHARED LIBRARY FROM A COMPILED SOURCE -- the other half of the same
+	#    backend work (feature-a-shared-library-output-for-compiled-sources).
+	#    --shared used to describe .asm-frontend output only: the writer built
+	#    its export list from AsmGlobalSym*, which a compiled source never
+	#    populates, so it wrote a valid ET_DYN exporting nothing. -no-pie cannot
+	#    rescue a .so the way it rescued the .o -- a shared library IS relocated
+	#    at load -- so this row could not exist before .text went rip-relative.
+	./$(COMPILER) -Fulib/rtl --shared test/test_shared_lib.pas $(TESTTMP)/test_shared_lib26.so
+	readelf -hW $(TESTTMP)/test_shared_lib26.so | grep -q 'DYN (Shared object file)'
+	#    THE AIM CHECK, and it comes before every behavioural row below. Each of
+	#    those passes trivially on a library that needed no relocations, so a
+	#    source that had stopped containing an absolute data pointer would go on
+	#    reporting success -- the empty population that cost this ticket's
+	#    sibling two corrections. RELACOUNT is what says the file under test can
+	#    still fail. Control run when this landed: suppress the RELATIVE entries,
+	#    rebuild, and the dlopen host below segfaults.
+	readelf -dW $(TESTTMP)/test_shared_lib26.so | grep -q 'RELACOUNT'
+	@n=$$(readelf -dW $(TESTTMP)/test_shared_lib26.so | awk '/RELACOUNT/{print $$NF}'); \
+	  [ "$$n" -gt 0 ] || { echo "test-shared: RELACOUNT is $$n -- the .so needs no relocation, so every check below is vacuous"; exit 1; }; \
+	  echo "test-shared: $$n R_X86_64_RELATIVE, so the load-address checks can fail"
+	readelf -dW $(TESTTMP)/test_shared_lib26.so | grep -q 'NEEDED.*libc.so.6'
+	readelf --dyn-syms -W $(TESTTMP)/test_shared_lib26.so | grep -q 'FUNC    GLOBAL DEFAULT    1 so_virtual'
+	#    Section headers: a running loader never reads them, but ld REFUSES a
+	#    .so without them ("file in wrong format") while dlopen of the same file
+	#    succeeds. Both consumers are asserted below, so both are asserted here.
+	readelf -SW $(TESTTMP)/test_shared_lib26.so | grep -q '.dynsym *DYNSYM'
+	@if command -v gcc >/dev/null 2>&1; then \
+	  printf '#include <stdio.h>\n#include <string.h>\n#include <dlfcn.h>\nint main(int c,char**v){void*h=dlopen(v[1],RTLD_NOW);if(!h){printf("dlopen: %%s\\n",dlerror());return 1;}const char*(*vi)(void)=dlsym(h,"so_virtual");int(*da)(int)=dlsym(h,"so_dynarray");int(*sc)(int)=dlsym(h,"so_strcat");int(*lc)(void)=dlsym(h,"so_libc");const char*(*tg)(void)=dlsym(h,"so_tag");if(!vi||!da||!sc||!lc||!tg){printf("dlsym: %%s\\n",dlerror());return 1;}if(strcmp(vi(),"derived")){printf("virtual=%%s want derived\\n",vi());return 1;}if(da(5)!=30){printf("dynarray=%%d want 30\\n",da(5));return 1;}if(sc(100)!=200){printf("strcat=%%d want 200\\n",sc(100));return 1;}if(lc()!=11){printf("libc=%%d want 11\\n",lc());return 1;}printf("%%s\\n",tg());return 0;}\n' > $(TESTTMP)/test_shared_lib26_dlopen.c; \
+	  gcc $(TESTTMP)/test_shared_lib26_dlopen.c -o $(TESTTMP)/test_shared_lib26_dlopen -ldl || { echo "test-shared: dlopen host FAILED to build"; exit 1; }; \
+	  tools/expect_same.sh test_shared_lib26_dlopen "$$($(TESTTMP)/test_shared_lib26_dlopen $(TESTTMP)/test_shared_lib26.so)" "pxx-shared"; \
+	  echo "test-shared: dlopen/dlsym -- virtual dispatch, heap, strings, extern GOT ok"; \
+	  printf '#include <stdio.h>\nextern const char *so_tag(void);\nextern int so_dynarray(int);\nint main(void){ printf("%%d %%s\\n", so_dynarray(5), so_tag()); return 0; }\n' > $(TESTTMP)/test_shared_lib26_link.c; \
+	  gcc $(TESTTMP)/test_shared_lib26_link.c $(TESTTMP)/test_shared_lib26.so -o $(TESTTMP)/test_shared_lib26_link || { echo "test-shared: LINKING against the .so FAILED -- section headers are what ld needs and dlopen does not"; exit 1; }; \
+	  tools/expect_same.sh test_shared_lib26_link "$$(LD_LIBRARY_PATH=$(TESTTMP) $(TESTTMP)/test_shared_lib26_link)" "30 pxx-shared"; \
+	  echo "test-shared: ld links against the .so and it runs"; \
+	else echo "gcc not installed; shared-library checks skipped"; fi
 	# 4b. THE SAME OBJECT, ON i386 -- and this is the row the whole umbrella was
 	#    priced for. x86-64 NEVER diverged on the C-ABI convention, so an
 	#    x86-64 object proves the machinery and settles nothing; i386 did

@@ -93,10 +93,43 @@ into it — Pascal and C sources, integer and floating-point signatures, string
 work through the pxx heap, and pxx calling back out to a shared library
 (`sqrt` from `libm`) resolved by the system linker.
 
-Not yet: `--shared` for compiled sources (it serves the `.asm` frontend only), a
-Pascal `library` unit, and object output for arm32 and aarch64.
+Also a **shared library** — see below. Not yet: a Pascal `library` unit, and
+object output for arm32 and aarch64.
 
-One known defect, worth knowing before you link an i386 object: a pxx routine
-clobbers `EBX` on i386 and does not restore it, so a C caller keeping a live
-value there can crash *after* your function has returned the right answer.
-x86-64 is unaffected.
+## A shared library
+
+`--shared` (or an output path ending in `.so`) writes an `ET_DYN` shared
+library. x86-64 only.
+
+```
+pascal26 --shared mylib.pas mylib.so
+gcc main.c ./mylib.so -o prog      # link against it
+# ...or load it at run time with dlopen/dlsym
+```
+
+The export surface is the same as an object's — the C-convention routines, and
+nothing else — so the `cdecl` example above applies unchanged. A library that
+exports nothing is refused rather than written.
+
+What works inside one: the pxx heap, managed strings, dynamic arrays, classes
+with virtual methods, and calls out to `external` routines, which are resolved
+through the library's own GOT with a `DT_NEEDED` on the providing library.
+
+**No initialisation runs here either.** Loading the library does not run the
+Pascal main body, so an exported routine must not depend on a global having
+been assigned at startup — the same rule as for objects, and for the same
+reason.
+
+Before 2026-09-01 `--shared` served the `.asm` frontend only. A compiled source
+produced a valid `ET_DYN` that exported nothing, because the writer built its
+export list from the assembly frontend's label table. It was blocked on the
+backend rather than the writer: a shared library is relocated at load by
+definition, so the absolute address operands that `-no-pie` rescued in an
+object could not work here at all.
+
+## One known defect
+
+Worth knowing before you link an i386 object: a pxx routine clobbers `EBX` on
+i386 and does not restore it, so a C caller keeping a live value there can
+crash *after* your function has returned the right answer. x86-64 is
+unaffected.
