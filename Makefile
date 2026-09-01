@@ -21313,6 +21313,28 @@ endif
 	  echo 'crlimit: identical to gcc'; \
 	fi; \
 	else echo 'crlimit: SKIP (no gcc)'; echo crlimit >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/crlimit) >/dev/null 2>&1; fi
+	# printf %m -- strerror(errno), which crtl treated as an UNKNOWN conversion
+	# and emitted verbatim. busybox writes essentially every errno-carrying
+	# diagnostic through bb_perror_msg, so ash reported `can't fork: %m' and the
+	# real reason was unreadable: a bug whose cost is DIAGNOSING OTHER BUGS.
+	# Row 2 is the point -- %m consumes NO argument, and an implementation that
+	# reads one shifts every later specifier by one, which is a desync this file
+	# already carries two other comments about. gcc is the oracle so the
+	# strerror TEXT is asserted, not just that something was substituted.
+	# feature-c-corpus-busybox-multi-applet
+	$(PXX_STABLE) test/cprintf_errno.c $(TESTTMP)/cprintf_errno
+	@if command -v gcc >/dev/null 2>&1; then \
+	  if ! gcc -w -o $(TESTTMP)/cprintf_errno_gcc test/cprintf_errno.c 2> $(TESTTMP)/cprintf_errno_oracle.err; then \
+	    echo "SKIP: cprintf_errno (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cprintf_errno_oracle.err))"; echo cprintf_errno >> $(TESTTMP)/lib-test.skipped; \
+	    (cd $(TESTTMP) && $(TESTTMP)/cprintf_errno) >/dev/null 2>&1; \
+	  else \
+	  (cd $(TESTTMP) && $(TESTTMP)/cprintf_errno_gcc) > $(TESTTMP)/cprintf_errno_gcc.txt 2>&1; \
+	  (cd $(TESTTMP) && $(TESTTMP)/cprintf_errno) > $(TESTTMP)/cprintf_errno_pxx.txt 2>&1; \
+	  diff $(TESTTMP)/cprintf_errno_gcc.txt $(TESTTMP)/cprintf_errno_pxx.txt || \
+	    { echo 'FAIL: cprintf_errno differs from gcc'; exit 1; }; \
+	  echo 'cprintf_errno: identical to gcc'; \
+	fi; \
+	else echo 'cprintf_errno: SKIP (no gcc)'; echo cprintf_errno >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cprintf_errno) >/dev/null 2>&1; fi
 	# fnmatch -- crtl had NO fnmatch.h at all, which is a hard error when cross
 	# compiling (no host header to fall back on), so busybox's ash could not be
 	# built for aarch64 at all. Compared against glibc over a MATRIX of flags

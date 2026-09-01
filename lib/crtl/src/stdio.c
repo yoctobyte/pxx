@@ -31,6 +31,7 @@
    the static riscv32/xtensa image. */
 #include <stdlib.h>
 #include <ctype.h>
+#include <string.h>   /* strerror, for %m */
 
 #ifndef EOF
 #define EOF (-1)
@@ -613,6 +614,25 @@ static int __crtl_vformat(char *buf, size_t cap, const char *fmt, va_list ap) {
       if (s == 0) s = "(null)";
       while (s[nl]) nl++;
       if (prec >= 0 && prec < nl) nl = prec;   /* precision caps a string */
+    } else if (k == 'm') {
+      /* glibc's %m: strerror(errno), and it consumes NO ARGUMENT. That is the
+         load-bearing half. This conversion previously fell through to the
+         unknown-conversion path, which emits "%m" verbatim -- so every busybox
+         error message came out with a literal "%m" where the reason should be
+         (`can't fork: %m'), and busybox reaches it through bb_perror_msg, which
+         is how essentially EVERY errno-carrying diagnostic in that corpus is
+         written. Found attempting busybox ash for rung 2: the shell's real
+         failure was unreadable until this worked, so the bug was costing
+         diagnosis on OTHER bugs rather than costing output of its own.
+
+         Taking a vararg here would be the worse defect and is the reason this
+         sits beside %% rather than beside %s: errno is read from the global,
+         and consuming an argument would shift every later specifier by one --
+         the same desync this file already carries two other comments about. */
+      s = strerror(errno);
+      if (s == 0) s = "(null)";
+      while (s[nl]) nl++;
+      if (prec >= 0 && prec < nl) nl = prec;   /* width/precision as for %s */
     } else if (k == '%') {
       one[0] = '%'; one[1] = 0; s = one; nl = 1;
     } else if (k == 'a' || k == 'A') {
