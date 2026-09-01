@@ -61,10 +61,12 @@ examples/esp32/*/build/
 # Docs website build output (tools/build_docs_site.py assembles it each run;
 # published via the pages.yml workflow, never committed).
 /_site/
-# Stray top-level build outputs (e.g. a misfired `gcc -o` that wrote literal "-o",
-# a default `a.out`, or a leftover `--emit-obj.map`).
-/-o
-/-o.map
+# Stray top-level build outputs. `/-o` and `/-o.map` were here too and were
+# REMOVED 2026-09-01: pxx takes its output path positionally, so `pxx src -o out`
+# writes a binary literally named `-o`, and ignoring it kept `git status` clean
+# while a stale artefact sat in the repo root -- which is how two agents lost a
+# measurement to it in one day. The compiler now refuses a `-`-leading output
+# path outright, so the file cannot be created by that mistake any more.
 /a.out
 /--emit-obj.map
 /platform.info

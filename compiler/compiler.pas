@@ -1766,7 +1766,41 @@ begin
     Never the input itself — that overwrote the source with the binary. }
   outFile := GetFilePath(inFile) + GetFileBaseName(inFile);
 {$endif}
-  if ParamCount >= i + 1 then outFile := ParamStr(i + 1);
+  if ParamCount >= i + 1 then
+  begin
+    { An OUTPUT PATH that starts with `-` is a mistyped flag, not a filename.
+      pxx takes the output positionally (`pxx <source> [output]`), so
+      `pxx src.pas -o out` parsed `-o` as the output NAME and wrote a binary
+      called `-o` in the current directory: exit 0, an `ok:` line, and the
+      caller's harness then ran whatever `out` happened to be from a previous
+      run. Two agents lost a measurement to it on 2026-08-31/09-01 -- one
+      reported a real fix as "no change", the other reported 15 rows of
+      EXIT-127 -- and the reason neither saw it coming is that `/-o` had been
+      added to .gitignore, so `git status` stayed clean while the stray binary
+      sat in the repo root. Both halves are gone now: the ignore line, and the
+      silence here.
+
+      A file whose name begins with `-` is also awkward to delete (`rm -o`
+      parses as flags; it needs `rm ./-o`), which is exactly why ignoring it
+      was the path of least resistance the first time.
+
+      Refusing outright rather than warning: no working invocation writes an
+      output whose name starts with a dash, and `./-o` remains available for
+      anyone who genuinely wants one. }
+    outFile := ParamStr(i + 1);
+    { A LOCAL, not `ParamStr(i + 1)[1]` inline: indexing a call result inside a
+      parenthesised sub-expression is rejected by this compiler --
+      `(ParamStr(i)[1] = '-')` is "expected ')' before '['" while the same
+      expression unparenthesised, and `WriteLn(F(1)[2])`, both compile.
+      bug-a-indexing-a-call-result-inside-parentheses-is-rejected }
+    if (Length(outFile) > 0) and (outFile[1] = '-') then
+    begin
+      writeln(StdErr, 'output path may not start with "-": ', outFile);
+      writeln(StdErr, '  pxx takes the output POSITIONALLY: pxx <source> [output]');
+      writeln(StdErr, '  there is no -o flag; write  pxx ', inFile, ' <output>');
+      Halt(1);
+    end;
+  end;
   { Last-resort guard: refuse to write the binary over the source file. }
   if outFile = inFile then outFile := inFile + '.out';
   { A .o output name implies object emission (same as --emit-obj). }

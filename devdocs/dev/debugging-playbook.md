@@ -668,6 +668,45 @@ run the query against a file you know contains a hit; invert it (`grep -c ''`
 for a line count) and sanity-check the magnitude. A 244KB source file with zero
 conditional directives is a magnitude that should have failed a glance.
 
+### The sharpest form: a DUMP that omits the field it exists to expose
+
+**Three instances in one night (2026-09-01, frankA, the `p^[i]` family), all in
+the same instrument.** `PXXDBG=a.symptr` prints the pointer metadata a symbol
+was stamped with. It exists to diagnose pointer-to-array symbols. It did not
+print `SymPtrElemDynDepth` — the one slot that says *the pointee is a DYNAMIC
+array* — nor, later, `SymPtrElemArrAi` or `SymPtrElemAlias`.
+
+So a symbol carrying a **wrong** dyn stamp printed **clean**, in a dump whose
+whole purpose was to show that stamp. Nothing errored. Every field shown was
+correct.
+
+This is the "answered about something else" failure at its most compact,
+because the aperture is a field list rather than a question: the instrument
+answers *"here is the pointer metadata"* and means *"here is the subset of the
+pointer metadata that existed when this WriteLn was written"*. The carrier set
+grows one column per ticket; the dump does not grow with it. **It is
+systematically one column behind, and the column it is behind on is always the
+newest — which is the one the current bug is about.**
+
+Two consequences worth acting on:
+
+- **When a dump does not explain a bug it should explain, suspect its field
+  list before its values.** Compare what it prints against the carrier set it
+  claims to cover (`grep` the `array of Integer` declarations that share the
+  prefix). Twice that night, the missing field WAS the bug.
+- **Extend the dump before the third attempt, not after.** Two of the three
+  fixes measured as **NO CHANGE**, which is indistinguishable from a wrong
+  theory — see the note below on reading a negative result. Adding one field to
+  the WriteLn cost one rebuild and printed `ptrElemAlias=-1`, naming the
+  unwritten slot outright. Both preceding attempts had been theories about
+  which slot was wrong.
+
+The same shape appears in `SetPtrElemArrayInfo`'s own header, which warns that
+"a missing field reads as a confident 0 rather than an error" about the CARRIER
+copies. It is equally true of the READER, and the reader is the half nobody
+audits: a carrier that is never printed cannot be noticed to be missing.
+
+
 ## Assert the PRECONDITION, not just the comparison
 
 The section above says what goes wrong. This is the form of the fix, and it
