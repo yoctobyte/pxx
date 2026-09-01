@@ -13224,6 +13224,26 @@ end;
   bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa }
 
 function TargetHasProcCleanupFrame: Boolean;
+{ THIS ASKS WHETHER THE FRONTEND EMITS THE CLEANUP FRAME, NOT WHETHER THE TARGET
+  HAS ONE. The two questions had the same answer for every target until
+  2026-09-01 and the name still says the second.
+
+  wasm32 answers False here and HAS a proc cleanup frame
+  (WasmEmitProcCleanupEnter / WasmEmitProcCleanupPad, ir_codegen_wasm32.inc). It
+  cannot use this path: EmitProcCleanupFrameEnterForTarget writes machine bytes
+  into Code[] at PARSE time and hands back a position for
+  EmitProcCleanupFramePatchLanding to fill with a relative branch, and wasm32
+  writes no Code[], patches nothing, and works from IR at codegen time -- its
+  pad is a basic block number, not an address. So it builds the same frame out
+  of its own handler-frame machinery, which it already had.
+
+  Read this predicate as "goes through the parse-time hook". Reading it as "does
+  not leak on an unwind" is wrong for wasm32 and would be the expensive kind of
+  wrong, because an unwind leak prints nothing.
+
+  xtensa under the WINDOWED ABI is the target that genuinely has none, and that
+  is an ABI condition rather than a gap -- the unwind needs the register windows
+  spilled first. }
 begin
   Result := (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) or
             (TargetArch = TARGET_ARM32) or (TargetArch = TARGET_AARCH64) or

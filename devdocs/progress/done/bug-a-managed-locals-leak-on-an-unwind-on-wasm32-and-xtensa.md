@@ -3,9 +3,9 @@ track: A
 prio: 25
 type: bug
 blocked-by: []
-summary: "WASM32 ONLY NOW -- the xtensa half LANDED in af5d2b534 (Call0; windowed stays false, and that is the ABI condition, not a gap). A proc's managed locals are released by a proc CLEANUP FRAME, and TargetHasProcCleanupFrame today covers x86-64, i386, arm32, aarch64, riscv32 and xtensa-under-Call0 -- wasm32 is the only target left out, so an exception unwinding THROUGH a wasm32 frame still leaks everything that frame owned. Silent by construction: an unwind leak prints nothing and both sides of the native-vs-wasm differential produce identical OUTPUT. The stale source comment this ticket flagged is ALSO already fixed. NOT WIRING (measured 2026-09-01): all three shared hooks are register-shaped -- every arm of EmitProcCleanupFramePatchLanding is Patch32(landPatch, branch-to-CodeLen), assuming a linear code buffer, a two-return setjmp entry and a patchable relative branch. wasm32 has none of the three (its pad is a BASIC BLOCK NUMBER; propagation is a pending global checked after every call), so the hooks have nothing to return or patch there. The wasm32 SEMANTICS do fit -- WasmEmitUnwind already branches to a frame whose fp matches, so a cleanup frame is a handler frame whose pad releases and re-raises. Real job is a design choice: give wasm32 its own path around the shared hooks, or generalise the pad to an opaque token across six backends. Plus three named sub-tasks: reserve a shadow-frame slot (the pre-pass counts IR_EXC_ENTER nodes and a proc frame is not one), materialise the pad as a block and get its number into the frame, and re-raise out of it. Predicate arm still LAST."
+summary: "DONE (83018bb5e). wasm32 now has a proc cleanup frame, so an exception unwinding THROUGH a frame releases what that frame owned; the xtensa half landed earlier in af5d2b534 (Call0 only -- windowed stays false and that is the ABI condition, not a gap). Measured with an interface held across a raise, 20 iterations, node host: gone=0 of 20 -> 20 of 20, matching x86-64, and the shadow stack went from 16 bytes low to exactly balanced. THE DESIGN FORK THIS TICKET NAMED IS SETTLED THE FIRST WAY: wasm32 gets its own path rather than the shared hooks being generalised, because the hooks are not merely register-shaped, they run at PARSE time and write machine bytes into Code[] returning a patch position -- wasm32 writes no Code[], patches nothing, and its pad is a BASIC BLOCK NUMBER. That is not a second path for one concept: this backend already implements handler frames itself, and a cleanup frame IS a handler frame whose pad releases and re-raises, so it reuses that. All three named sub-tasks done: a reserved slot and block after the pre-pass (which counts only IR_EXC_ENTER, and this frame is not one) plus WasmExcHasHandler, the pad materialised as the last dispatch block, and the re-raise out of it. The subtle one was not on the list: the dispatch nests so block k code sits last inside B(k+1), so the pad follows the last REAL block and normal completion falls into it -- a `br 2` to $exit is what stops an exception nothing raised from being propagated. Guarded by test/wasm/check_unwindrel.sh, deliberately separate from check_scopeexit. TargetHasProcCleanupFrame still answers False for wasm32 and now says why: it asks whether the FRONTEND emits the frame, not whether the target has one."
 
-status: open
+status: done
 owner: unassigned
 ---
 
@@ -394,3 +394,51 @@ changes the (a)/(b) design choice, which stands exactly as frankB framed it.
 it by having held this for an hour: the wasm32 remainder has no owner, and a
 peer cannot put frankwasm back in rotation. Raised to the coordinator rather
 than left implicit.
+
+
+## 2026-09-01 — done. `83018bb5e`
+
+The fork this ticket left open — wasm32's own path, or generalise the pad to an
+opaque token across six backends — went the first way, and the deciding fact was
+sharper than "the hooks are register-shaped". They run at **parse time**:
+`EmitProcCleanupFrameEnterForTarget` writes machine bytes into `Code[]` while the
+procedure is still being parsed and returns a position for
+`EmitProcCleanupFramePatchLanding` to fill with a relative branch. wasm32 emits
+nothing during parsing, writes no `Code[]`, and lowers from IR afterwards. There
+is no token that makes those the same mechanism; generalising would mean moving
+the cleanup frame into the IR for all six, which is a different ticket and a
+much larger one.
+
+And it is not a second path for one concept. wasm32 already builds handler
+frames itself (`WasmEmitExcEnter`), and a cleanup frame is a handler frame whose
+pad releases and re-raises — so this reuses the mechanism that was already there
+rather than adding one beside it.
+
+### The part that was not in the plan
+
+The three sub-tasks listed here were all real and all straightforward. What
+would have shipped broken is the dispatch nesting: block k's code is the last
+thing inside B(k+1), so the pad — being the last block — sits immediately after
+the last REAL block's code, and a body that completes normally walks straight
+into it and propagates an exception nothing raised. `br 2` from inside the pad's
+own still-open block reaches `$exit`; the depth is a property of where the
+branch SITS, which is the delicacy `WasmDepthToLoop`'s own header warns about.
+
+`wasm-validate` would not have caught it — the module is structurally valid
+either way. The slice would have, because normal completion would have returned
+with `pending` set.
+
+### Two instruments earned their keep
+
+`tools/check_forwards.sh` caught a call placed above its declaration inside the
+same run: PXX prescans headers and FPC is single-pass, so the file self-hosts
+cleanly with the call unresolved and only FPC disagrees. Second time in this
+session the single-pass rule bit, both times caught by a linter rather than by
+reading.
+
+And the slice asserts `$sp`. The pre-fix build left the shadow stack 16 bytes
+low on the unwind path, which is reported rather than explained — it is balanced
+now, and the runner checks it every run.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.

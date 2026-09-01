@@ -87,7 +87,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (135)
+## backlog-core (134)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -111,7 +111,6 @@ _none_
 | bug-a-emitzeroframeslot-has-no-wasm32-arm | A | 25 | bug | EmitZeroFrameSlot (compiler/symtab.inc:10074) is the single owner of the zero-init contract and has TWO per-target chains, one per size class. The wide one (> pointer) ends in Error and fails loud — that is what this ticket originally described. The narrow one (<= pointer, which is EVERY managed scalar) ends in an UNGUARDED else that emits x86-64 bytes, so wasm32 falls open there and has been doing so since the managed-string phase. Measured 2026-08-28 with a probe build. Output is byte-identical with the fall-through removed, so Code[] is unread on this target and nothing wrong has been PRODUCED — it is latent, not active. Carries one open design question: the wasm32 backend now zeroes its own managed scalars in its prologue, so there are three mechanisms for one guarantee on this target. | — |
 | bug-a-help-does-not-advertise-flags-the-compiler-accepts | A | 35 | bug | `--strict-fpc` is accepted, documented at defs.inc:2189-2191, and demonstrably changes behaviour -- and does not appear in `--help`. 67 markdown files name flags `--help` does not advertise. The failure mode is not a missing line of text: an agent reasoning from `--help` concludes the flag DOES NOT EXIST and that whatever cites it named a fiction, which is a wrong conclusion reached by consulting the tool's own self-description. | — |
 | bug-a-irtoplevelstmt-parameter-is-a-node-index-named-k | A | 20 | bug | ir_codegen.inc:8813 declares IRTopLevelStmt(k: Integer) and its body is `case IRKind[k] of`, so the parameter is a node index. The name reads as a kind, and passing IRKind[i] compiles cleanly and indexes the IR array with an opcode number — a silently-wrong-value trap with no diagnostic, in a function every backend author will call. Rename plus a one-line comment closes the class. | — |
-| bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa | A | 25→75 | bug | WASM32 ONLY NOW -- the xtensa half LANDED in af5d2b534 (Call0; windowed stays false, and that is the ABI condition, not a gap). A proc's managed locals are released by a proc CLEANUP FRAME, and TargetHasProcCleanupFrame today covers x86-64, i386, arm32, aarch64, riscv32 and xtensa-under-Call0 -- wasm32 is the only target left out, so an exception unwinding THROUGH a wasm32 frame still leaks everything that frame owned. Silent by construction: an unwind leak prints nothing and both sides of the native-vs-wasm differential produce identical OUTPUT. The stale source comment this ticket flagged is ALSO already fixed. NOT WIRING (measured 2026-09-01): all three shared hooks are register-shaped -- every arm of EmitProcCleanupFramePatchLanding is Patch32(landPatch, branch-to-CodeLen), assuming a linear code buffer, a two-return setjmp entry and a patchable relative branch. wasm32 has none of the three (its pad is a BASIC BLOCK NUMBER; propagation is a pending global checked after every call), so the hooks have nothing to return or patch there. The wasm32 SEMANTICS do fit -- WasmEmitUnwind already branches to a frame whose fp matches, so a cleanup frame is a handler frame whose pad releases and re-raises. Real job is a design choice: give wasm32 its own path around the shared hooks, or generalise the pad to an opaque token across six backends. Plus three named sub-tasks: reserve a shadow-frame slot (the pre-pass counts IR_EXC_ENTER nodes and a proc frame is not one), materialise the pad as a block and get its number into the frame, and re-raise out of it. Predicate arm still LAST. | — |
 | bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets | A | 20 | bug |  | — |
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
 | bug-a-nilpy-under-threadsafe-still-leaks-every-class-field-and-it-cannot-ride-on-the-pascal-fix | A | 40 | bug | NilPy under --threadsafe on x86-64 leaks every managed field of every reclaimed instance: 1044 kB -> 399420 kB on 200k constructions, same shape and same size as the Pascal leak fixed 2026-08-31. It did NOT ride along on that fix, and cannot: the Pascal fix works by emitting the heap-lock acquire at a CALL SITE, and NilPy has no call site -- the finalize is reached from PXXObjRelease at rc=0, from Pascal, from a dozen places. Needs a lock-discipline design, not a repeat of the same patch. | — |
@@ -831,9 +830,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3008)
+## done (3009)
 
-3008 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3009 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -917,7 +916,6 @@ _none_
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 80] [A] meta-a-pxx-produces-linkable-code [meta — a standing index, never "done"; link work to it, do not claim it]
 - [p 80] [A] umbrella-cross-target-codegen-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
-- [p 75] [A] bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa (unblocks 1)
 - [p 75] [A+O] feature-a-reentrant-heap-lock-and-per-thread-arenas (unblocks 1)
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -1360,7 +1358,6 @@ _none_
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - **1** — bug-a-emitzeroframeslot-has-no-wasm32-arm
 - **1** — bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults
-- **1** — bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
