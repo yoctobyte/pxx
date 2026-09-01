@@ -57,3 +57,21 @@ and getting it wrong in the safe-looking direction produces a number that
 always reads zero. Track T owns the tool. Filed by Track A/C after tripping
 over the unguarded row while gating an unrelated C-frontend fix; the guard
 landed in the same commit, the counting did not.
+
+## The recovery, measured after the guard landed
+
+Same box, same tree, the only change being the guard:
+
+| | compile rows executed | `make` exit | MISMATCH |
+| --- | ---: | ---: | ---: |
+| unguarded | 901 | 2 | 0 |
+| guarded | **1744** | **0** | **0** |
+
+843 rows recovered, and **`0 MISMATCH` in both runs** — which is the whole
+point. The unguarded run was not red because anything was wrong; it was red
+because it stopped, and its zero mismatches covered barely half of what the
+green run's zero covers. **Two identical-looking zeros, one of them worth twice
+the other, and nothing in either log distinguishes them.**
+
+That is the number this ticket wants surfaced. `test-core` currently cannot say
+whether its green is a 1744-row green or a 901-row one.
