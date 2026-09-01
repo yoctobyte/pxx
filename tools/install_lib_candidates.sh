@@ -173,7 +173,7 @@ fetch_busybox() {
 Upstream: ${BUSYBOX_URL}
 Commit:   ${BUSYBOX_COMMIT} (1.36.1)
 Licence:  GPL-2.0
-Used by:  tools/busybox_cat_diff.sh -- builds the \`cat\` applet with pxx and
+Used by:  tools/busybox_diff.sh -- builds busybox applets with pxx and
           diffs its output against gcc's build of the same source, on x86-64
           and aarch64. That script also CONFIGURES this tree; do not expect
           \`make defconfig && make\` to work, it fails in networking/tc.c

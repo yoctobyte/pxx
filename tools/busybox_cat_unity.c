@@ -1,7 +1,20 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
  * busybox `cat` as ONE pxx translation unit -- the subject of
- * feature-c-corpus-busybox-applet, driven by tools/busybox_cat_diff.sh.
+ * feature-c-corpus-busybox-applet, driven by tools/busybox_diff.sh.
+ *
+ * TWO JOBS NOW, and the second is why this file is not merely historical.
+ * tools/busybox_diff.sh generates its unity from busybox_unstripped.map, so the
+ * include list below is no longer the only copy -- but the PREAMBLE is. That
+ * script reads everything down to and including the appletlib.c include out of
+ * THIS file, verbatim, because the three facts recorded there (BB_GLOBAL_CONST,
+ * NDEBUG/BB_VER provenance, and appletlib.c's load-bearing position) are the
+ * hard-won part and a second copy would be the one that goes stale. It also
+ * asserts, on every single-applet run, that the generated list equals the 24
+ * members listed below -- the POSITIVE CONTROL that keeps the generator honest
+ * against the translation unit rung 1's byte-identical claim was measured over.
+ * So: edit the preamble here and the generator follows; edit the include list
+ * here and the control will tell you whether you were right.
  *
  * This file is OURS; busybox's source is not vendored (library_candidates/ is
  * gitignored and gate.sh asserts nothing third-party is tracked). All it does
