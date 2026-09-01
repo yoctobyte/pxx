@@ -43,6 +43,8 @@ function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
+function PalBackendChown(path: PChar; owner, group: Integer): Integer;
+function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
 function PalBackendUmask(mask: Integer): Integer;
 function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
 function PalBackendAccess(path: PChar; mode: Integer): Integer;
@@ -136,7 +138,7 @@ const
   SYS_vfork = 58; SYS_fork = 57; SYS_execve = 59; SYS_pipe2 = 293; SYS_dup2 = 33; SYS_wait4 = 61; SYS_kill = 62;
   SYS_clock_gettime = 228;
   SYS_mmap = 9; SYS_munmap = 11; SYS_mprotect = 10; SYS_fchmod = 91; SYS_getpid = 39; SYS_nanosleep = 35; SYS_utimensat = 280;
-  SYS_fchmodat = 268; SYS_umask = 95;
+  SYS_fchmodat = 268; SYS_fchownat = 260; SYS_umask = 95;
   SYS_getcwd = 79; SYS_rt_sigaction = 13;
   SYS_ftruncate = 77; SYS_faccessat = 269; SYS_geteuid = 107; SYS_fchown = 93; SYS_readlinkat = 267;
   SYS_getuid = 102; SYS_getgid = 104; SYS_getegid = 108; SYS_getppid = 110;
@@ -156,7 +158,7 @@ const
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 331; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 265;
   SYS_mmap = 192; SYS_munmap = 91; SYS_mprotect = 125; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 320;
-  SYS_fchmodat = 306; SYS_umask = 60;
+  SYS_fchmodat = 306; SYS_fchownat = 298; SYS_umask = 60;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
   SYS_ftruncate = 93; SYS_faccessat = 307; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 305;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
@@ -174,7 +176,7 @@ const
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
   SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
-  SYS_fchmodat = 53; SYS_umask = 166;
+  SYS_fchmodat = 53; SYS_fchownat = 54; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
@@ -192,7 +194,7 @@ const
   SYS_vfork = 190; SYS_fork = 2; SYS_execve = 11; SYS_pipe2 = 359; SYS_dup2 = 63; SYS_wait4 = 114; SYS_kill = 37;
   SYS_clock_gettime = 263;
   SYS_mmap = 192; SYS_munmap = 91; SYS_mprotect = 125; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 348;
-  SYS_fchmodat = 333; SYS_umask = 60;
+  SYS_fchmodat = 333; SYS_fchownat = 325; SYS_umask = 60;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
   SYS_ftruncate = 93; SYS_faccessat = 334; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 332;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
@@ -230,7 +232,7 @@ const
   SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
   SYS_clock_gettime = 113;
   SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
-  SYS_fchmodat = 53; SYS_umask = 166;
+  SYS_fchmodat = 53; SYS_fchownat = 54; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
@@ -264,7 +266,7 @@ const
   SYS_clone = 116; SYS_execve = 117; SYS_pipe2 = 311; SYS_dup3 = 310; SYS_wait4 = 121; SYS_kill = 123;
   SYS_clock_gettime = 245;
   SYS_mmap = 80; SYS_munmap = 81; SYS_mprotect = 82; SYS_fchmod = 52; SYS_getpid = 120; SYS_nanosleep = 195; SYS_utimensat = 296;
-  SYS_fchmodat = 300; SYS_umask = 58;
+  SYS_fchmodat = 300; SYS_fchownat = 297; SYS_umask = 58;
   SYS_getcwd = 43; SYS_rt_sigaction = 226;
   SYS_ftruncate = 23; SYS_faccessat = 301; SYS_geteuid = 140; SYS_fchown = 53; SYS_readlinkat = 295;
   SYS_getuid = 137; SYS_getgid = 139; SYS_getegid = 141; SYS_getppid = 150;
@@ -688,6 +690,23 @@ end;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
 begin
   Result := Integer(__pxxrawsyscall(SYS_fchmodat, -100, Int64(path), mode, 0, 0, 0));
+end;
+
+{ chown / lchown, both through fchownat for the same reason chmod goes through
+  fchmodat: aarch64 and riscv have no legacy chown syscall at all. AT_FDCWD =
+  -100; AT_SYMLINK_NOFOLLOW = $100 is the ONLY difference between the two, and
+  it is the whole difference -- lchown must change the SYMLINK, not what it
+  points at, which is why busybox's libbb/copy_file.c calls it when preserving
+  ownership of a copied tree. Getting that flag wrong silently chowns the
+  wrong inode. }
+function PalBackendChown(path: PChar; owner, group: Integer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_fchownat, -100, Int64(path), owner, group, 0, 0));
+end;
+
+function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
+begin
+  Result := Integer(__pxxrawsyscall(SYS_fchownat, -100, Int64(path), owner, group, $100, 0));
 end;
 
 { umask always succeeds and returns the PREVIOUS mask — it has no error case,

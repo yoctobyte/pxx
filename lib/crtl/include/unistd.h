@@ -69,6 +69,8 @@ int rmdir(const char *path);
 int ftruncate(int fd, off_t length);
 int access(const char *path, int mode);
 int fchown(int fd, uid_t owner, gid_t group);
+int chown(const char *path, uid_t owner, gid_t group);
+int lchown(const char *path, uid_t owner, gid_t group);
 uid_t geteuid(void);
 ssize_t readlink(const char *path, char *buf, size_t bufsz);
 int execvp(const char *file, char *const argv[]);

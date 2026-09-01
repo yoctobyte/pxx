@@ -21026,6 +21026,28 @@ endif
 	  echo 'cfileops: identical to gcc'; \
 	fi; \
 	else echo 'cfileops: SKIP (no gcc)'; echo cfileops >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cfileops) >/dev/null; fi
+	# chown/lchown, the PATH-based pair. crtl had only fchown (by descriptor),
+	# so busybox's libbb/copy_file.c did not compile at all. Both go through
+	# fchownat for the same reason chmod goes through fchmodat: aarch64 and
+	# riscv have no legacy chown syscall. The DANGLING-LINK rows are what
+	# separate the two calls -- chown follows and must fail ENOENT, lchown
+	# changes the link itself and must succeed -- so an lchown that forgot
+	# AT_SYMLINK_NOFOLLOW passes every other row. Unprivileged by construction:
+	# (uid_t)-1 is POSIX's "leave unchanged".
+	# feature-c-corpus-busybox-multi-applet
+	$(PXX_STABLE) test/cchown.c $(TESTTMP)/cchown
+	@if command -v gcc >/dev/null 2>&1; then \
+	  if ! gcc -w -o $(TESTTMP)/cchown_gcc test/cchown.c 2> $(TESTTMP)/cchown_oracle.err; then \
+	    echo "SKIP: cchown (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cchown_oracle.err))"; echo cchown >> $(TESTTMP)/lib-test.skipped; \
+	    (cd $(TESTTMP) && $(TESTTMP)/cchown) >/dev/null; \
+	  else \
+	  (cd $(TESTTMP) && $(TESTTMP)/cchown_gcc) > $(TESTTMP)/cchown_gcc.txt 2>&1; \
+	  (cd $(TESTTMP) && $(TESTTMP)/cchown) > $(TESTTMP)/cchown_pxx.txt 2>&1; \
+	  diff $(TESTTMP)/cchown_gcc.txt $(TESTTMP)/cchown_pxx.txt || \
+	    { echo 'FAIL: cchown differs from gcc'; exit 1; }; \
+	  echo 'cchown: identical to gcc'; \
+	fi; \
+	else echo 'cchown: SKIP (no gcc)'; echo cchown >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cchown) >/dev/null; fi
 	# struct stat's fields: nlink/uid/gid/rdev and atime/ctime were hardcoded.
 	# Asserted through consequences — nlink rises with a hard link and falls
 	# when it is removed, a directory's nlink counts its subdirectories.

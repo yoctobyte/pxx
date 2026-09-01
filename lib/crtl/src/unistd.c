@@ -31,6 +31,8 @@ extern int __pxx_remove(const char *path);
 extern int __pxx_ftruncate(int fd, long length);
 extern int __pxx_access(const char *path, int mode);
 extern int __pxx_fchown(int fd, int owner, int group);
+extern int __pxx_chown(const char *path, int owner, int group);
+extern int __pxx_lchown(const char *path, int owner, int group);
 extern int __pxx_geteuid(void);
 extern int __pxx_readlink(const char *path, void *buf, int bufsz);
 extern int __pxx_rmdir(const char *path);
@@ -131,6 +133,26 @@ int access(const char *path, int mode) {
 
 int fchown(int fd, uid_t owner, gid_t group) {
   int rc = __pxx_fchown(fd, (int)owner, (int)group);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+/* chown follows a symlink, lchown changes the LINK itself. The pair is not
+   interchangeable and the difference is the reason lchown exists: busybox's
+   libbb/copy_file.c uses it to preserve ownership when copying a tree, where
+   following the link would chown whatever the link happens to point at --
+   possibly outside the tree being copied.
+
+   `owner`/`group` of (uid_t)-1 mean "leave unchanged", which survives the cast
+   to int as -1 and reaches the kernel as the same sentinel. */
+int chown(const char *path, uid_t owner, gid_t group) {
+  int rc = __pxx_chown(path, (int)owner, (int)group);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+int lchown(const char *path, uid_t owner, gid_t group) {
+  int rc = __pxx_lchown(path, (int)owner, (int)group);
   if (rc < 0) { errno = -rc; return -1; }
   return 0;
 }

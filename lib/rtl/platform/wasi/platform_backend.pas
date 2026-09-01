@@ -75,6 +75,8 @@ function PalBackendFcntl(handle, cmd: Integer; arg: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
+function PalBackendChown(path: PChar; owner, group: Integer): Integer;
+function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
 function PalBackendUmask(mask: Integer): Integer;
 function PalBackendFtruncate(handle: Integer; length: Int64): Integer;
 function PalBackendAccess(path: PChar; mode: Integer): Integer;
@@ -837,6 +839,18 @@ begin
 end;
 
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ Same refusal as chmod right above, and for the same reason: there is no
+  ownership model here to change. Refused loudly rather than faked. }
+function PalBackendChown(path: PChar; owner, group: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

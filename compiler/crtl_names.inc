@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  390 functions across 27 headers. }
+  392 functions across 27 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -26,10 +26,10 @@ begin
     'c': Result :=
       ' calloc:stdlib.h cbrt:math.h ceil:math.h ceilf:math.h cfgetispeed:termios.h ' +
       ' cfgetospeed:termios.h cfmakeraw:termios.h cfsetispeed:termios.h cfsetospeed:termios.h ' +
-      ' cfsetspeed:termios.h chdir:unistd.h chmod:sys/stat.h chroot:unistd.h clearerr:stdio.h ' +
-      ' clearerr_unlocked:stdio.h clock:time.h clock_gettime:time.h close:unistd.h ' +
-      ' closedir:dirent.h connect:sys/socket.h copysign:math.h cos:math.h cosf:math.h ' +
-      ' cosh:math.h creat:fcntl.h ctime:time.h ctime_r:time.h ';
+      ' cfsetspeed:termios.h chdir:unistd.h chmod:sys/stat.h chown:unistd.h chroot:unistd.h ' +
+      ' clearerr:stdio.h clearerr_unlocked:stdio.h clock:time.h clock_gettime:time.h ' +
+      ' close:unistd.h closedir:dirent.h connect:sys/socket.h copysign:math.h cos:math.h ' +
+      ' cosf:math.h cosh:math.h creat:fcntl.h ctime:time.h ctime_r:time.h ';
     'd': Result :=
       ' difftime:time.h dirfd:dirent.h dirname:libgen.h div:stdlib.h dup:unistd.h dup2:unistd.h ';
     'e': Result :=
@@ -68,10 +68,11 @@ begin
     'k': Result :=
       ' kill:signal.h ';
     'l': Result :=
-      ' labs:stdlib.h ldexp:math.h ldexpl:math.h ldiv:stdlib.h link:unistd.h listen:sys/socket.h ' +
-      ' llabs:stdlib.h lldiv:stdlib.h llrint:math.h llround:math.h localeconv:locale.h ' +
-      ' localtime:time.h localtime_r:time.h log:math.h log10:math.h log1p:math.h log2:math.h ' +
-      ' log2f:math.h logf:math.h lrint:math.h lround:math.h lseek:unistd.h lstat:sys/stat.h ';
+      ' labs:stdlib.h lchown:unistd.h ldexp:math.h ldexpl:math.h ldiv:stdlib.h link:unistd.h ' +
+      ' listen:sys/socket.h llabs:stdlib.h lldiv:stdlib.h llrint:math.h llround:math.h ' +
+      ' localeconv:locale.h localtime:time.h localtime_r:time.h log:math.h log10:math.h ' +
+      ' log1p:math.h log2:math.h log2f:math.h logf:math.h lrint:math.h lround:math.h ' +
+      ' lseek:unistd.h lstat:sys/stat.h ';
     'm': Result :=
       ' malloc:stdlib.h mallopt:malloc.h memccpy:string.h memchr:string.h memcmp:string.h ' +
       ' memcpy:string.h memmem:string.h memmove:string.h mempcpy:string.h memrchr:string.h ' +
