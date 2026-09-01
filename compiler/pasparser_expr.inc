@@ -464,6 +464,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
     derefRem, derefBaseTk, derefBaseRec: Integer;   { `(x)^` pointer shape, from ResolveDerefShape }
+    dpeTk, dpeRec, dpeCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
     lenSi: Integer;   { Length(v) — the SYMBOL, when the operand is a bare identifier }
     nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
     nestScanCi, nestScanPos, nestDepth, nestI: Integer;   { …walking N levels of it }
@@ -6926,7 +6927,26 @@ begin
               ParseExpr;
               ASTRight[indexNode] := CurASTNode;
               Expect(tkRBrack, ']');
-              if tk = tyPointer then
+              if DerefPtrArrayElem(ASTLeft[indexNode], dpeTk, dpeRec, dpeCap) then
+              begin
+                { `TP(raw)^[i]` where TP points at an ARRAY type. The alias row
+                  read below is the SCALAR alias table, and an array alias is not
+                  in it -- ParseTypeKind answers its unknown-name default for the
+                  pointee, which is the same hole AliasPtrElemArrAi was added to
+                  fill. So the element came out ordinal and an AnsiString store
+                  through this spelling wrote a handle into an untracked slot:
+                  exit 0 at the store, SIGSEGV at the read, while the identical
+                  store through a record field was correct.
+
+                  This is the FOURTH private notion of what a `^` yields that
+                  this loop has had to give up (see the ResolveDerefShape note
+                  in the tkCaret branch above); it is the same lesson one node
+                  kind further out.
+                  bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+                tk := IntToTypeKind(dpeTk);
+                recName := dpeRec;
+              end
+              else if tk = tyPointer then
               begin
                 tk := IntToTypeKind(AliasElemTk[aliasIdx]);
                 recName := AliasElemRec[aliasIdx];

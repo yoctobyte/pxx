@@ -567,7 +567,7 @@ var
   retIsDynArr : Boolean; retElemTk : TTypeKind; retElemRec : Integer;
   retFixedArrBytes : Integer;   { a FIXED-array result's byte size; 0 = not one }
   retArrAi : Integer;           { its ArrType index, so the Result slot can be shaped like the type; -1 = not one }
-  retPtrElemTk, retPtrElemRec : Integer;
+  retPtrElemTk, retPtrElemRec, retPtrAlias : Integer;
   retPtrStrElemTk : Integer;   { ...and that pointee's element width when it is a managed string }
   retStrElemTk : Integer;   { managed-string result: element width ord, 0 = not one }
   retEnumId : Integer;   { enum-typed result: its enum index, else -1 }
@@ -787,7 +787,7 @@ begin
   retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
   retDynDepth := 0;
   retFixedArrBytes := 0; retArrAi := -1;
-  retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE;
+  retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE; retPtrAlias := -1;
   retPtrStrElemTk := 0;
   retStrElemTk := 0;
   retEnumId := -1;
@@ -1176,6 +1176,7 @@ begin
         retPtrBaseTk := LastTypePointerBaseTk;
         retPtrBaseRec := LastTypePointerBaseRec;
         retPtrElemRec := LastTypePointerElemRec;
+        retPtrAlias := LastTypePointerAlias;
       end;
     end;
   end;
@@ -1421,6 +1422,7 @@ begin
     ProcRetElemTk[procIdx] := retElemTk;
     ProcRetElemRec[procIdx] := retElemRec;
     ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+    ProcRetPtrAlias[procIdx] := retPtrAlias;
     ProcRetPtrElemStrTk[procIdx] := retPtrStrElemTk;
     ProcRetStrElemTk[procIdx] := retStrElemTk;
     ProcRetEnumId[procIdx] := retEnumId;
@@ -1853,6 +1855,7 @@ begin
       ProcRetElemTk[procIdx] := retElemTk;
       ProcRetElemRec[procIdx] := retElemRec;
       ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+      ProcRetPtrAlias[procIdx] := retPtrAlias;
       ProcRetPtrElemStrTk[procIdx] := retPtrStrElemTk;
       ProcRetStrElemTk[procIdx] := retStrElemTk;
       ProcRetEnumId[procIdx] := retEnumId;
@@ -1890,6 +1893,7 @@ begin
   ProcRetElemTk[procIdx] := retElemTk;
   ProcRetElemRec[procIdx] := retElemRec;
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+  ProcRetPtrAlias[procIdx] := retPtrAlias;
   ProcRetPtrElemStrTk[procIdx] := retPtrStrElemTk;
   ProcRetStrElemTk[procIdx] := retStrElemTk;
   ProcRetEnumId[procIdx] := retEnumId;

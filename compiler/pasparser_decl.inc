@@ -3309,7 +3309,7 @@ var
   mnOff, mnLen, mpi, i, nP, startIdx, k: Integer;
   retPtrDepth, retPtrBaseTk, retPtrBaseRec: Integer;   { ...and the depth + ultimate base beside it: feature-a-typeref-migrate-consumers }
   retStrElemTk: Integer;   { managed-string RETURN: element width ord, 0 = not one }
-  retPtrElemTk, retPtrElemRec: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
+  retPtrElemTk, retPtrElemRec, retPtrAlias: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
     mRetRecId above it. Without it a DECL-only PChar method — abstract, or an
     interface method, the two shapes whose call resolves to the DECL's procIdx and
     never to an implementation's — leaves ProcRetPtrElemTk = tyUnknown, IsNodePChar
@@ -3446,6 +3446,7 @@ begin
   retTk := tyInteger;
   LastTypeRecId := REC_NONE;
   retPtrElemTk := Ord(tyUnknown);
+  retPtrAlias := -1;
   retPtrStrElemTk := 0;
   retPtrElemRec := REC_NONE;
   retStrElemTk := 0;
@@ -3467,6 +3468,7 @@ begin
       else retStrElemTk := Ord(tyChar);
     end;
     retPtrElemTk := Ord(LastTypePointerElemTk);
+    retPtrAlias := LastTypePointerAlias;
     retPtrStrElemTk := LastTypePointerStrElemTk;
     retPtrElemRec := LastTypePointerElemRec;
     retPtrDepth := LastTypePointerDepth;
@@ -3537,6 +3539,7 @@ begin
   if isFunc and (retTk = tyPointer) then
   begin
     ProcRetPtrElemTk[mpi] := retPtrElemTk;
+    ProcRetPtrAlias[mpi] := retPtrAlias;
     ProcRetPtrElemStrTk[mpi] := retPtrStrElemTk;
     ProcRetPtrElemRec[mpi] := retPtrElemRec;
     ProcRetPtrDepth[mpi] := retPtrDepth;
@@ -4171,6 +4174,7 @@ begin
       if mIsFunc and (mRetType = tyPointer) then
       begin
         ProcRetPtrElemTk[mpi] := Ord(LastTypePointerElemTk);
+        ProcRetPtrAlias[mpi] := LastTypePointerAlias;
         ProcRetPtrElemStrTk[mpi] := LastTypePointerStrElemTk;
         ProcRetPtrElemRec[mpi] := LastTypePointerElemRec;
         ProcRetPtrDepth[mpi] := LastTypePointerDepth;
@@ -4479,7 +4483,7 @@ var
   mRetRecId: Integer;      { the DECL's return-type class/record id (ProcRetRecId) }
   mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec: Integer;   { ...and the depth + ultimate base: feature-a-typeref-migrate-consumers }
   mRetStrElemTk: Integer;   { managed-string RETURN: element width ord, 0 = not one }
-  mRetPtrElemTk, mRetPtrElemRec: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
+  mRetPtrElemTk, mRetPtrElemRec, mRetPtrAlias: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
     mRetRecId above it. Without it a DECL-only PChar method — abstract, or an
     interface method, the two shapes whose call resolves to the DECL's procIdx and
     never to an implementation's — leaves ProcRetPtrElemTk = tyUnknown, IsNodePChar
@@ -4715,6 +4719,7 @@ begin
           end;
           mRetRecId := REC_NONE;
           mRetPtrElemTk := Ord(tyUnknown);
+          mRetPtrAlias := -1;
           mRetPtrStrElemTk := 0;
           mRetPtrElemRec := REC_NONE;
           mRetStrElemTk := 0;
@@ -4730,6 +4735,7 @@ begin
               else mRetStrElemTk := Ord(tyChar);
             end;
             mRetPtrElemTk := Ord(LastTypePointerElemTk);
+            mRetPtrAlias := LastTypePointerAlias;
             mRetPtrStrElemTk := LastTypePointerStrElemTk;
             mRetPtrElemRec := LastTypePointerElemRec;
             mRetPtrDepth := LastTypePointerDepth;
@@ -4769,6 +4775,7 @@ begin
           if mIsFunc and (mRetType = tyPointer) then
           begin
             ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
+            ProcRetPtrAlias[mpi] := mRetPtrAlias;
             ProcRetPtrElemStrTk[mpi] := mRetPtrStrElemTk;
             ProcRetPtrElemRec[mpi] := mRetPtrElemRec;
             ProcRetPtrDepth[mpi] := mRetPtrDepth;
@@ -5338,6 +5345,7 @@ begin
             end;
 
             mRetPtrElemTk := Ord(tyUnknown);
+            mRetPtrAlias := -1;
             mRetPtrStrElemTk := 0;
             mRetPtrElemRec := REC_NONE;
             mRetStrElemTk := 0;
@@ -5353,6 +5361,7 @@ begin
                 else mRetStrElemTk := Ord(tyChar);
               end;
               mRetPtrElemTk := Ord(LastTypePointerElemTk);
+              mRetPtrAlias := LastTypePointerAlias;
               mRetPtrStrElemTk := LastTypePointerStrElemTk;
               mRetPtrElemRec := LastTypePointerElemRec;
               mRetPtrDepth := LastTypePointerDepth;
@@ -5438,6 +5447,7 @@ begin
               if mIsFunc and (mRetType = tyPointer) then
               begin
                 ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
+                ProcRetPtrAlias[mpi] := mRetPtrAlias;
                 ProcRetPtrElemStrTk[mpi] := mRetPtrStrElemTk;
                 ProcRetPtrElemRec[mpi] := mRetPtrElemRec;
                 ProcRetPtrDepth[mpi] := mRetPtrDepth;

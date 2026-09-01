@@ -240,6 +240,7 @@ var
   isMethodPtr: Boolean;
   autoDeref, peRec: Integer;
   dpaCount, dpaLo, dpaFlat, dpaLoNode, dpaSubNode: Integer;   { `p^[i]` over a pointer to a named FIXED array }
+  dpeTk, dpeRec, dpeCap: Integer;   { ...and its ELEMENT, for any spelling of p }
   ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { qualified TClass.Const }
   keyNode: Integer;   { __getitem__/__setitem__ subscript key }
   pyInitCall: Boolean;   { NilPy `Base.__init__(self, ...)` — run the ctor BODY on self, never construct }
@@ -1490,6 +1491,20 @@ begin
         begin
           tk := Syms[ASTIVal[node]].ElemType;
           recName := Syms[ASTIVal[node]].ElemRecName;
+        end
+        else if DerefPtrArrayElem(node, dpeTk, dpeRec, dpeCap) then
+        begin
+          { `p^[i]` -- the element kind, asked of the predicate that knows every
+            spelling of p rather than read off the DEREF node's own tag. The tag
+            is right when the caret arm could resolve the pointee (a variable, a
+            field), and for `TP(raw)^` it holds what the CAST's scalar alias row
+            says, which for a pointer-to-ARRAY alias is nothing: the element came
+            out ordinal, so `TP(raw)^[i] := 'v'` stored an AnsiString handle into
+            an untracked slot and reading it back SEGFAULTED, while the identical
+            store through a field worked.
+            bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+          tk := IntToTypeKind(dpeTk);
+          recName := dpeRec;
         end
         else
           recName := ResolveNodeRec(node);
@@ -3996,6 +4011,7 @@ var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     cvIdx: Integer;
     thNode: Integer;   { a chained type-helper call on the value so far }
     mcCi: Integer; mcFin: Boolean;   { a metaclass-valued step in the chain }
+    dpsTk, dpsRec, dpsCap: Integer;   { `p^[i]` element shape, from DerefPtrArrayElem }
 begin
   { NilPy has its OWN copy of this routine (PyParseClassRecordSelectors,
     pyparser.inc), split out 2026-08-09 by
@@ -4526,7 +4542,19 @@ begin
       ParseExpr;
       ASTRight[sub] := CurASTNode;
       Expect(tkRBrack, ']');
-      if (tk = tyString) or (tk = tyAnsiString) then tk := tyChar;
+      { `TP(raw)^[i] := ...` -- indexing a DEREF whose pointee is an ARRAY. The
+        alias row deliberately records the ARRAY'S ELEMENT as the pointee kind
+        (pasparser_decl.inc's `PArr = ^TArr` arm, so that `p^[i]` yields it), so
+        `p^` arrives here tagged tyAnsiString and the string-index rule below
+        then made `p^[i]` a CHAR: `TP(raw)^[i] := 'v'` was refused as "cannot
+        assign ShortString to Char" for a literal, and for a computed string it
+        compiled and stored a handle into an untracked slot -- exit 0, SIGSEGV
+        on the read. Ask the array predicate first; it answers for every
+        spelling of p and returns the element the alias row is describing.
+        bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+      if DerefPtrArrayElem(node, dpsTk, dpsRec, dpsCap) then
+        tk := IntToTypeKind(dpsTk)
+      else if (tk = tyString) or (tk = tyAnsiString) then tk := tyChar;
       ASTTk[sub] := Ord(tk);
       node := sub;
     end;

@@ -169,10 +169,14 @@ begin
         read the DATA as a header: 0x900000000 -- the array's own elements 1 and
         0 packed into one 8-byte word -- where fpc says 5.
         bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one }
-      if (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_IDENT) and
-         (Integer(ASTIVal[ASTLeft[node]]) >= 0) and
-         (Integer(ASTIVal[ASTLeft[node]]) < SymCount) then
-        Result := SymPtrElemDynDepth[ASTIVal[ASTLeft[node]]];
+      { Widened past the plain-identifier base in 2026-09-01: the same `^TDyn`
+        held in a record FIELD, returned by a FUNCTION or read out of an array
+        ELEMENT answered 0 here, and the deref stopped being a dyn-array value
+        for exactly the reason above -- two SIGSEGVs and a HANG, one missing
+        answer. DerefPtrArrayDynDepth still asks the pointer SYMBOL first, so
+        the identifier spelling is byte-for-byte the path it was.
+        bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+      Result := DerefPtrArrayDynDepth(node);
     AN_FIELD:
       Result := RecFieldDynDepth(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
     AN_CALL, AN_VIRTUAL_CALL, AN_INTF_CALL, AN_CALL_IND:
@@ -224,6 +228,7 @@ end;
 function NodeDynBaseTk(node: Integer): TTypeKind;
 { Base element type of a (possibly nested) dynamic-array expression, walking to
   the root symbol or field. tyUnknown if not a dynamic array. }
+var ndbtTk, ndbtRec, ndbtCap: Integer;
 begin
   Result := tyUnknown;
   if node < 0 then Exit;
@@ -243,11 +248,15 @@ begin
        ProcRetIsDynArray[ASTIVal[node]] then
       Result := ProcRetElemTk[ASTIVal[node]];
   end
-  else if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
-          (ASTKind[ASTLeft[node]] = AN_IDENT) and
-          (SymPtrElemDynDepth[ASTIVal[ASTLeft[node]]] > 0) then
-    { `p^` over ^TDyn: the pointee's element type is the pointer's PtrElemTk. }
-    Result := IntToTypeKind(Ord(Syms[ASTIVal[ASTLeft[node]]].PtrElemTk))
+  else if (ASTKind[node] = AN_DEREF) and (DerefPtrArrayDynDepth(node) > 0) then
+  begin
+    { `p^` over ^TDyn: the pointee's element type. Read through the accessor
+      rather than off Syms[..].PtrElemTk so the field / call / element
+      spellings answer too — see NodeDynDepth's arm above. }
+    if not DerefPtrArrayElem(node, ndbtTk, ndbtRec, ndbtCap) then
+      ndbtTk := Ord(tyUnknown);
+    Result := IntToTypeKind(ndbtTk);
+  end
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
   else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) or
@@ -260,6 +269,7 @@ end;
 
 function NodeDynBaseRec(node: Integer): Integer;
 { Base element record id of a (possibly nested) dynamic-array expression. }
+var ndbrTk, ndbrRec, ndbrCap: Integer;
 begin
   Result := REC_NONE;
   if node < 0 then Exit;
@@ -272,10 +282,14 @@ begin
        ProcRetIsDynArray[ASTIVal[node]] then
       Result := ProcRetElemRec[ASTIVal[node]];
   end
-  else if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
-          (ASTKind[ASTLeft[node]] = AN_IDENT) and
-          (SymPtrElemDynDepth[ASTIVal[ASTLeft[node]]] > 0) then
-    Result := Syms[ASTIVal[ASTLeft[node]]].PtrElemRec
+  else if (ASTKind[node] = AN_DEREF) and (DerefPtrArrayDynDepth(node) > 0) then
+  begin
+    { ...and its element RECORD, through the same accessor and for the same
+      reason as NodeDynBaseTk's arm above. }
+    if not DerefPtrArrayElem(node, ndbrTk, ndbrRec, ndbrCap) then
+      ndbrRec := REC_NONE;
+    Result := ndbrRec;
+  end
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
   else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) or

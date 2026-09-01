@@ -143,8 +143,11 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 # 5 spellings x 3 element kinds, each a separate program because four of them
 # SEGV or HANG today. The ds_plain_* rows are the positive control and abort the
 # run if they fail, so a broken build reports nothing rather than 15 findings.
-# NOT part of `make test`: it is a control for a specific refactor, and it is
-# EXPECTED TO FAIL until the deref-shape family is fixed.
+# Was NOT part of `make test` while it was expected to fail. The family is fixed
+# as of bug-a-p-caret-index-...-plain-identifier (15/15, and 9/15 failing on the
+# binary before it), so it is now wired into `test` below and is the regression
+# guard for the whole family -- including the two spellings the ticket never
+# listed, the pointer CAST and the array ELEMENT.
 derefshape: compiler/pascal26
 	tools/derefshape_matrix.sh compiler/pascal26
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
@@ -3984,7 +3987,7 @@ test-nilpy-frozen: test-nilpy
 # `make test-fpc` (release/CI postcheck), and a cold checkout seeds the binary
 # with `make seed-from-stable` (also no FPC). Only a pure-source distro build
 # with no committed binary needs `make bootstrap`.
-test: test-core test-threads test-asm test-debug-g lib-fpc-clean
+test: test-core test-threads test-asm test-debug-g derefshape lib-fpc-clean
 
 # FPC-dependent postcheck, NOT part of the daily gate. Two checks that shell out
 # to FPC: (1) fpc-check -- FPC can still compile us and yields the same

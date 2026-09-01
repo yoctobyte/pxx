@@ -9914,7 +9914,7 @@ begin
   SetLength(ProcDbgMain, n);  SetLength(ProcGenElemTk, n);  SetLength(ProcGenElemRec, n);
   SetLength(ProcGenParamCnt, n);  SetLength(ProcGenInstSize, n);  SetLength(ProcRetElemTk, n);
   SetLength(ProcRetStrElemTk, n);
-  SetLength(ProcRetElemRec, n);  SetLength(ProcRetPtrElemTk, n);  SetLength(ProcRetProcSig, n);
+  SetLength(ProcRetElemRec, n);  SetLength(ProcRetPtrElemTk, n);  SetLength(ProcRetProcSig, n);  SetLength(ProcRetPtrAlias, n);
   SetLength(ProcRetPtrElemStrTk, n);
   SetLength(ProcRetEnumId, n);
   SetLength(ProcRetPtrDepth, n); SetLength(ProcRetPtrBaseTk, n); SetLength(ProcRetPtrBaseRec, n);
@@ -9986,6 +9986,7 @@ begin
   ProcRetPtrBaseTk[ProcCount]  := Ord(tyUnknown);
   ProcRetPtrBaseRec[ProcCount] := REC_NONE;
   ProcRetPtrElemRec[ProcCount] := REC_NONE;
+  ProcRetPtrAlias[ProcCount]   := -1;   { -1, not 0: zero is a VALID alias index }
   ProcRetProcSig[ProcCount]    := -1;
   CProcHasLocalDef[ProcCount]  := False;
   ProcInline[ProcCount]        := False;
@@ -13317,6 +13318,11 @@ end;
   the index site would be the second copy of the predicate this pair exists to
   prevent. One question, two answers built on it.
   bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
+{ The named pointer ALIAS a pointer-valued node's type came from, or -1. Body
+  below, after ResolveNodeRec, which its FIELD arm needs.
+  bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+function NodePtrAlias(node: Integer): Integer; forward;
+
 function DerefPtrArraySym(node: Integer): Integer;
 begin
   Result := -1;
@@ -13329,24 +13335,226 @@ begin
   if SymPtrElemArrLen[Result] <= 0 then Result := -1;
 end;
 
+{ ...and the same symbol when the pointee is an ARRAY AT ALL -- a fixed extent
+  or a dynamic one. DerefPtrArraySym above says no to `^TDyn` because it exists
+  to report an EXTENT and a dynamic pointee has none; the ELEMENT accessors
+  below need the symbol for both, and asking the extent question to answer an
+  element question is how `p^[i]` over an `array of Double` would have lost the
+  element kind it already gets right today.
+  bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+function DerefPtrArraySymAny(node: Integer): Integer;
+var dpaB: Integer;
+begin
+  Result := -1;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_DEREF then Exit;
+  dpaB := ASTLeft[node];
+  if dpaB < 0 then Exit;
+  if ASTKind[dpaB] = AN_INDEX then
+  begin
+    { `ap[0]^` -- the pointer is an ELEMENT of an array. An array symbol is not
+      itself a pointer, so AllocArray parks the ELEMENT's pointee metadata in
+      the symbol's own otherwise-unused SymPtrElem* slots (it calls
+      SetPtrElemArrayInfo for exactly this), and ResolveDerefShapeAt's AN_INDEX
+      arm already reads the depth/base half of that same set. So this spelling
+      needs no new carrier -- only a reader, which is what was missing: `ap[0]^`
+      over an `array of Double` SEGFAULTED where the identical `p^` did not.
+
+      DELIBERATELY NOT extended to DerefPtrArraySym / DerefPtrArrayInfo above.
+      Those answer the EXTENT, and an extent is read from SymArrDimLo, which on
+      an array symbol describes the ARRAY'S OWN dimensions and not the pointee's
+      -- the one slot in this set that means something different here. A reader
+      that ignored that would answer a confident wrong low bound rather than
+      -1, which is the failure mode this whole family is made of.
+      bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+    dpaB := ASTLeft[dpaB];
+    if dpaB < 0 then Exit;
+    if ASTKind[dpaB] <> AN_IDENT then Exit;
+    Result := ASTIVal[dpaB];
+    if (Result < 0) or (Result >= SymCount) then begin Result := -1; Exit; end;
+    if not Syms[Result].IsArray then begin Result := -1; Exit; end;
+  end
+  else
+  begin
+    if ASTKind[dpaB] <> AN_IDENT then Exit;
+    Result := ASTIVal[dpaB];
+    if (Result < 0) or (Result >= SymCount) then begin Result := -1; Exit; end;
+  end;
+  if (SymPtrElemArrLen[Result] <= 0) and (SymPtrElemDynDepth[Result] <= 0) then
+    Result := -1;
+end;
+
+{ ---- the same question, for a pointer that is not a plain variable ----
+
+  DerefPtrArraySym above answers off the pointer SYMBOL, and a symbol is the one
+  spelling of a pointer that carries the pointee's whole shape already. Name the
+  same pointer as a record FIELD, a function RESULT, an array ELEMENT or a typed
+  CAST and there is no symbol to read, so the pair above answered "not an array"
+  and the deref fell out of the array path onto whichever arm its element kind
+  collides with -- silent 0.00 for a field over a fixed pointee, SIGSEGV for a
+  field or an array element over a dynamic one, and a HANG for a function
+  result. Four faces, one missing answer.
+  bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier
+
+  The second carrier is the pointee's ArrType ROW, reached through the named
+  pointer ALIAS the node's type came from. One integer instead of a copy of
+  ArrLen/NDims/StrCap/DynDepth per spelling -- the argument ArrTypeAliasOf's own
+  comment makes ("a clone enumerates a field list that goes stale the day a 23rd
+  column is added"), and the argument SetPtrElemArrayInfo's header makes about
+  its five copied fields. A row cannot drift from the type it IS.
+
+  So every consumer below asks the SYMBOL first and the ROW second, and neither
+  consumer nor caller repeats the shape test. The symbol stays first because it
+  is the only route the C frontend has: cparser.inc writes SymPtrElemArrLen for
+  `elem (*p)[N]` directly and registers no ArrType row, so an alias-only
+  predicate would answer -1 for every C pointer-to-array. }
+function DerefPtrElemArrAi(node: Integer): Integer;
+var dpaA: Integer;
+begin
+  Result := -1;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_DEREF then Exit;
+  if ASTLeft[node] < 0 then Exit;
+  dpaA := NodePtrAlias(ASTLeft[node]);
+  if dpaA < 0 then Exit;
+  Result := AliasPtrElemArrAi[dpaA];
+end;
+
 function DerefPtrArrayInfo(node: Integer;
                            var elemCount, lowBound, flatCount: Integer): Boolean;
-var dpaSi: Integer;
+var dpaSi, dpaAi: Integer;
 begin
   Result := False;
   elemCount := 0;
   lowBound := 0;
   flatCount := 0;
   dpaSi := DerefPtrArraySym(node);
-  if dpaSi < 0 then Exit;
-  flatCount := SymPtrElemArrLen[dpaSi];
-  lowBound := SymArrDimLo[dpaSi * MAX_ARR_DIMS];
-  if SymPtrElemNDims[dpaSi] >= 2 then
-    elemCount := SymArrDimSpan[dpaSi * MAX_ARR_DIMS]
+  if dpaSi >= 0 then
+  begin
+    flatCount := SymPtrElemArrLen[dpaSi];
+    lowBound := SymArrDimLo[dpaSi * MAX_ARR_DIMS];
+    if SymPtrElemNDims[dpaSi] >= 2 then
+      elemCount := SymArrDimSpan[dpaSi * MAX_ARR_DIMS]
+    else
+      elemCount := flatCount;
+    Result := True;
+    Exit;
+  end;
+  dpaAi := DerefPtrElemArrAi(node);
+  if dpaAi < 0 then Exit;
+  { A DYNAMIC pointee has no compile-time extent -- ArrTypeLo/Hi are never
+    written for one -- so it is an array without an EXTENT and this predicate,
+    which exists to report one, must keep saying no. DerefPtrArrayDynDepth below
+    is the arm that answers for it. }
+  if ArrTypeIsDyn[dpaAi] then Exit;
+  flatCount := ArrTypeHi[dpaAi] - ArrTypeLo[dpaAi] + 1;
+  lowBound := ArrTypeLo[dpaAi];
+  if ArrTypeNDims[dpaAi] >= 2 then
+    elemCount := ArrTypeDimSpan[dpaAi * MAX_ARR_DIMS]
   else
     elemCount := flatCount;
   Result := True;
 end;
+
+{ The ELEMENT kind of the array `p^` is, plus the record id and the frozen
+  string capacity that go with it -- the three facts every INDEX site needs and
+  the reason DerefPtrArraySym returned a symbol at all. Asking here rather than
+  reading Syms[DerefPtrArraySym(node)].PtrElem* at the site is what lets the
+  field / call / element spellings work without teaching each site a second
+  carrier. }
+function DerefPtrArrayElem(node: Integer;
+                           var elemTk, elemRec, elemStrCap: Integer): Boolean;
+var dpaSi, dpaAi: Integer;
+begin
+  Result := False;
+  elemTk := Ord(tyUnknown);
+  elemRec := REC_NONE;
+  elemStrCap := 0;
+  dpaSi := DerefPtrArraySymAny(node);
+  if dpaSi >= 0 then
+  begin
+    elemTk := Ord(Syms[dpaSi].PtrElemTk);
+    elemRec := Syms[dpaSi].PtrElemRec;
+    elemStrCap := SymPtrElemStrCap[dpaSi];
+    Result := True;
+    Exit;
+  end;
+  dpaAi := DerefPtrElemArrAi(node);
+  if dpaAi < 0 then Exit;
+  elemTk := ArrTypeElemTk[dpaAi];
+  elemRec := ArrTypeElemRec[dpaAi];
+  elemStrCap := ArrTypeElemStrCap[dpaAi];
+  Result := True;
+end;
+
+{ ...and, when that element is itself a POINTER, the levels remaining over it
+  and the ultimate base. The depth is normalised to the ELEMENT's own -- a
+  pointer symbol parks the element's depth one level up in SymPtrDepth, an
+  ArrType row parks it as-is in ArrTypePtrDepth, and a caller that had to know
+  which is which would be the per-site copy this set exists to remove. }
+function DerefPtrArrayElemPtr(node: Integer;
+                              var elemPtrDepth, elemPtrBaseTk,
+                                  elemPtrBaseRec: Integer): Boolean;
+var dpaSi, dpaAi: Integer;
+begin
+  Result := False;
+  elemPtrDepth := 0;
+  elemPtrBaseTk := Ord(tyUnknown);
+  elemPtrBaseRec := REC_NONE;
+  dpaSi := DerefPtrArraySymAny(node);
+  if dpaSi >= 0 then
+  begin
+    if SymPtrDepth[dpaSi] < 1 then Exit;
+    elemPtrDepth := SymPtrDepth[dpaSi] - 1;
+    elemPtrBaseTk := SymPtrBaseTk[dpaSi];
+    elemPtrBaseRec := SymPtrBaseRec[dpaSi];
+    Result := True;
+    Exit;
+  end;
+  dpaAi := DerefPtrElemArrAi(node);
+  if dpaAi < 0 then Exit;
+  elemPtrDepth := ArrTypePtrDepth[dpaAi];
+  elemPtrBaseTk := ArrTypePtrBaseTk[dpaAi];
+  elemPtrBaseRec := ArrTypePtrBaseRec[dpaAi];
+  Result := True;
+end;
+
+{ The pointee's dynamic-array nesting, 0 when the pointee is not one. The twin
+  of DerefPtrArrayInfo for the shape that has no extent: `PDyn = ^TDyn` parks
+  the nesting on the symbol (SymPtrElemDynDepth) and on the ArrType row
+  (ArrTypeDynDepth), and the two dyn-depth walks -- DynArrayNodeDepth here and
+  NodeDynDepth in ast_arena.inc -- both had the symbol half and neither had the
+  row, which is why the dynamic faces SEGFAULTED where the fixed one merely
+  answered wrong. }
+function DerefPtrArrayDynDepth(node: Integer): Integer;
+var dpaAi: Integer;
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_DEREF then Exit;
+  dpaAi := DerefPtrArraySymAny(node);
+  if dpaAi >= 0 then
+  begin
+    Result := SymPtrElemDynDepth[dpaAi];
+    if Result > 0 then Exit;
+  end;
+  dpaAi := DerefPtrElemArrAi(node);
+  if dpaAi < 0 then Exit;
+  if not ArrTypeIsDyn[dpaAi] then Exit;
+  Result := ArrTypeDynDepth[dpaAi];
+  if Result < 1 then Result := 1;
+end;
+
+{ "Is `p^` an array at all" -- either half. The one question IsNodeArray and the
+  selector chain ask; it is deliberately the OR of the two above rather than a
+  third shape test. }
+function IsDerefPtrArray(node: Integer): Boolean;
+var dpaCount, dpaLo, dpaFlat: Integer;
+begin
+  Result := DerefPtrArrayInfo(node, dpaCount, dpaLo, dpaFlat) or
+            (DerefPtrArrayDynDepth(node) > 0);
+end;
+
 
 
 { The class index a SYMBOL's metaclass value refers to, or -1 when the symbol is
@@ -13735,6 +13943,48 @@ begin
     Result := REC_NONE;
 end;
 
+{ The named pointer ALIAS a pointer-valued node's type came from, or -1 when the
+  node is not pointer-valued, or is but was declared inline rather than through
+  an alias.
+
+  Five spellings answered from one predicate, for the reason NodeMetaclassCi's
+  header gives about its own five: a per-site copy knows the spelling its site
+  was written for and goes stale on the next one. The AN_IDENT case is
+  deliberately NOT here -- a pointer SYMBOL carries the resolved pointee shape
+  in its own SymPtrElem* columns, which is strictly more than the alias can say
+  (the C frontend fills them with no alias in sight), so every consumer asks the
+  symbol first and reaches this only when there is none.
+  bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+function NodePtrAlias(node: Integer): Integer;
+var npaRec, npaFi: Integer;
+begin
+  Result := -1;
+  if (node < 0) or (node >= ASTNodeCount) then Exit;
+  if ASTKind[node] = AN_FIELD then
+  begin
+    npaRec := ResolveNodeRec(ASTLeft[node]);
+    if npaRec < REC_UCLASS_BASE then Exit;
+    npaFi := FindUField(npaRec - REC_UCLASS_BASE, GetASTIdentName(node));
+    if npaFi < 0 then Exit;
+    Result := UFldPtrAlias[npaFi];
+  end
+  else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+          (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND) then
+  begin
+    { `GetP^` -- a POINTER-returning routine. ProcRetPtrAlias is the result
+      mirror of UFldPtrAlias and exists for this arm. }
+    if (ASTIVal[node] >= 0) and (ASTIVal[node] < ProcCount) then
+      Result := ProcRetPtrAlias[ASTIVal[node]];
+  end
+  else if ASTKind[node] = AN_PTR_CAST then
+  begin
+    { An inline typed pointer cast already IS an alias index -- except for the
+      two negative adapter markers (-2 = the PChar +8 skip, -1 = a widening
+      ordinal pun), which name no alias. NodePtrElem states the same rule. }
+    if ASTIVal[node] >= 0 then Result := ASTIVal[node];
+  end;
+end;
+
 function DynArrayNodeDepth(node: Integer): Integer;
 { Remaining dynamic-array nesting of an AST expression. Keep this parser-side
   helper here because selectors are typed before IR lowering runs. }
@@ -13757,10 +14007,15 @@ begin
       `array of AnsiString`, so the selector chain took the managed-STRING arm
       and `p^[0] := 'x'` was refused as "cannot assign ShortString to Char" --
       the exact face the fixed-array sibling was fixed for.
-      bug-a-a-pointer-to-a-dynamic-array-indexes-with-a-4-byte-stride }
-    if (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_IDENT) and
-       (ASTIVal[ASTLeft[node]] >= 0) and (ASTIVal[ASTLeft[node]] < SymCount) then
-      Result := SymPtrElemDynDepth[ASTIVal[ASTLeft[node]]];
+      bug-a-a-pointer-to-a-dynamic-array-indexes-with-a-4-byte-stride
+
+      Widened from "the base is a plain identifier" to every spelling of the
+      pointer in 2026-09-01: a `^TDyn` held in a record FIELD, returned from a
+      FUNCTION or sitting in an array ELEMENT answered 0 here, so IsNodeArray
+      said FALSE and `r.q^[i]` took the managed-string arm and SEGFAULTED. Same
+      arm, same cause, three more spellings.
+      bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+    Result := DerefPtrArrayDynDepth(node);
   end
   else if ASTKind[node] = AN_INDEX then
   begin
@@ -13825,8 +14080,13 @@ begin
       element crashed, an AnsiString element crashed, a `string[N]` element
       printed EMPTY and exited 0, and writing to one was rejected as "cannot
       assign ShortString to Char". One wrong answer here, four faces downstream.
-      bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
-    Result := DerefPtrArraySym(node) >= 0;
+      bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds
+
+      ...and it is only the PLAIN-IDENTIFIER spelling that this ever answered
+      for, which is the sibling ticket one node kind out: a field, a call result
+      or an array element holding the same pointer fell through to FALSE.
+      bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+    Result := IsDerefPtrArray(node);
 end;
 
 procedure ResolvePendingPointerAliases;
