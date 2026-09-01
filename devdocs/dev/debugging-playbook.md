@@ -5329,3 +5329,67 @@ grepped and found nothing" and "I grepped the wrong tree" are the same
 sentence. When a search comes back empty, report the size of what was searched
 in the same breath — and if you cannot state it, you have not run a search, you
 have run a script.
+
+## A FILTERED grep answers about your filter list, not about the repo — and an empty result looks identical either way
+
+Measured 2026-09-01 (frankB), triaging a red `test-xtensa` row whose failing
+step named a generated file, `/tmp/xt_backjump.pas`. To find what generated it:
+
+```
+grep -rn "backjump" --include=*.py --include=*.sh --include=*.pas --include=*.inc .
+  -> (nothing)
+grep -rn "backjump" --include=*.py --include=*.sh --include=*.pas --include=*.inc . ; echo $?
+  -> 1
+```
+
+Nothing, cleanly, with a legitimate exit code. The row is defined in the
+**Makefile** — a file none of those four patterns can match. The search was
+correct about the corpus it was given and silent about the corpus I meant.
+
+This is [[The instrument answered, correctly, about something else]] with a
+specific and very cheap trigger: **the filter that makes a search fast is the
+same filter that makes it wrong**, and the `--include` list is written from a
+guess about where the answer lives. If you already knew that, you would not be
+grepping.
+
+**The tell is that a filtered miss and a real absence are the same output.**
+`grep` does not say "I examined 400 files and skipped 9,000"; it says nothing,
+and exits 1, exactly as it would if the string genuinely did not exist. There is
+no error to check for, so "check for errors" cannot save you here.
+
+### The rule
+
+**Widen before you conclude, not after.** A miss under a filter is not a
+finding — it is a finding about the filter. Re-run unfiltered *before* you build
+anything on the zero:
+
+```
+git grep -ln "backjump"        # tracked files, no extension guess
+  -> Makefile                 # <- the generator, invisible to the filtered run
+  -> devdocs/progress/...      # (plus the tickets discussing it)
+```
+
+**Prefer `git grep` as the default instrument in this repo**, for a second
+reason that bites independently: it searches TRACKED files, which is the
+population everyone else shares. A plain `grep -rn foo compiler/` also reads
+untracked build artefacts — `compiler/pascal26-debug.map` is 3385 lines,
+gitignored (`.gitignore:35:*.map`), and **absent from other agents' checkouts**.
+So two agents grepping the same identifier get different counts with no signal
+that they disagree, and the one with the artefact reports a number nobody can
+reproduce.
+(Live case the same week: one rename was reported as 371 occurrences by the
+agent doing it, 356 by the coordinator checking it, and 351 by me — three
+counts of one identifier, from three agents, none of whom had stated which
+corpus they had searched. A `.map` artefact present in only one checkout
+accounts for part of the spread. Nobody was careless; the instrument simply
+never reports its population.)
+
+### Where this generalises
+
+Any instrument with a scope argument you supplied from memory: `--include`,
+`--exclude-dir`, a path prefix, a `--tier`, a `--job` filter, a date range. In
+the same session `--job 'test-xtensa#src:test/test_cross_managed_strings.pas'`
+returned `no jobs match` (exit 1) because the real name was `test-xtensa#122` —
+again a clean, correct, useless zero. **A zero from a scoped instrument owes you
+a positive control: run it scoped the same way against something you KNOW is
+there.** If that also returns nothing, the scope is the bug, not the subject.
