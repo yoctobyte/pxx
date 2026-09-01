@@ -1340,10 +1340,26 @@ begin
         that made SetLength on such a parameter corrupt its own slot on x86-64
         (the four symtab.inc string helpers) and double-deref on aarch64. Three
         sites, one narrow test; TypeIsFrozenString exists to be the one answer. }
+      { A by-value RECORD is now supported: i386 cdecl passes it as its own
+        bytes in the stack argument area, ceil(RecSize/4) slots, and the copy
+        below moves them into the frame slot. Gated on a KNOWN size -- an
+        unsized record still refuses rather than being counted as 4 bytes and
+        shifting every parameter after it. }
+      { GATED ON ProcCdecl, and the gate is the whole point. Pascal passes a
+        record of 8 bytes or less BY VALUE (IsRef stays False), so an ungated
+        test would accept those here too -- while the INTERNAL i386 caller still
+        pushes their address. That is a caller/callee disagreement about what
+        the slot contains, which is the exact failure this ticket exists to
+        prevent, and it would be silent. The internal convention keeps its old
+        refusal until its caller half is written. }
+      if ProcCdecl[procIdx] and (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+         (Syms[idx].TypeKind = tyRecord) and (RecSize(Syms[idx].RecName) <= 0) then
+        Error('target i386: by-value record parameter of unknown size');
       if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
          not (TypeIsOrdinal(Syms[idx].TypeKind) or
               TypeIsFloat(Syms[idx].TypeKind) or
               TypeIsFrozenString(Syms[idx].TypeKind) or
+              (ProcCdecl[procIdx] and (Syms[idx].TypeKind = tyRecord)) or
               (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant, tySet])) then
         Error('target i386: only ordinal/pointer parameters supported yet');
       { THE WHOLE i386 cdecl DIFFERENCE IS THE DIRECTION OF THIS WALK.
@@ -1378,7 +1394,16 @@ begin
           dword set, and why `array of Double` faulted outright. Ask the oracle
           here exactly as the caller now does in ir_codegen386.inc's IR_CALL.
           bug-a-an-open-array-of-double-segfaults-on-i386 }
-        if ABIParamSlotIsPointer(Procs[procIdx].Params[j].TypeKind,
+        { The by-value RECORD arm comes FIRST, because ABIParamSlotIsPointer
+          answers True for every tyRecord and would count this as one 4-byte
+          slot. Same ordering ParamValueSize uses, and for the same reason: the
+          pointer oracle is the answer only once the by-value case is ruled out.
+          bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee }
+        if ProcCdecl[procIdx] and (Procs[procIdx].Params[j].TypeKind = tyRecord) and
+           (not Procs[procIdx].Params[j].IsRef) and
+           (not Procs[procIdx].Params[j].IsArray) then
+          Inc(sz, ((RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + j]) + 3) div 4) * 4)
+        else if ABIParamSlotIsPointer(Procs[procIdx].Params[j].TypeKind,
                                  Procs[procIdx].Params[j].IsRef,
                                  Procs[procIdx].Params[j].IsArray) then
           Inc(sz, 4)
@@ -1393,7 +1418,20 @@ begin
         else
           Inc(sz, 4);
       end;
-      if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+      if ProcCdecl[procIdx] and (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+         (Syms[idx].TypeKind = tyRecord) then
+      begin
+        { By-value record: copy its whole stack argument into the frame slot,
+          a dword at a time. The slot is ParamValueSize-rounded to 4, so the
+          last partial dword of an odd-sized struct writes into its own
+          padding. }
+        for j := 0 to ((RecSize(Syms[idx].RecName) + 3) div 4) - 1 do
+        begin
+          EmitB($8B); EmitB($85); EmitI32(8 + sz + j * 4);        { mov eax, [ebp+disp] }
+          EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset + j * 4);
+        end;
+      end
+      else if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
          (Syms[idx].TypeKind = tySet) then
       begin
         for j := 0 to (TypeSlotSize(tySet) div 4) - 1 do

@@ -294,6 +294,16 @@ function ABICRecordParamByValue(recId: Integer): Boolean;
 var c0, c1: Integer;
 begin
   ABICRecordParamByValue := False;
+  { i386 cdecl has no register arguments and no eightbyte classification: EVERY
+    aggregate is passed as its own bytes in the stack argument area, rounded up
+    to a whole number of 4-byte slots. So the only question is whether the size
+    is known -- a REC_NONE id would size the argument from RecSize's fallback
+    and desynchronise the block, which is the one thing worse than a pointer. }
+  if TargetArch = TARGET_I386 then
+  begin
+    ABICRecordParamByValue := RecSize(recId) > 0;
+    Exit;
+  end;
   if TargetArch <> TARGET_X86_64 then Exit;
   { >= 0, not > 0: a MEMORY aggregate is passed BY VALUE as well -- as its own
     bytes in the stack argument area, not as a pointer to them. Only a REFUSAL

@@ -1392,6 +1392,8 @@ var
   argCls: Integer;   { Arg32Class of the argument being marshalled (A32_*) }
   classIdx, elemSize, lo, hi, itemNode, p1, p2, pNil386, pDone386: Integer;
   vaNvw, vaK, vaO1, vaO2: Integer;
+  k386, recDw386: Integer;   { by-value record argument: dword index and count }
+  argIsRec386: Boolean;
   vaTk: TTypeKind;   { holds IntToTypeKind(...) — keep it the enum so FPC's strict
                        enum/int boundary is satisfied (pxx erases it; FPC does not). }
   vaFwd: Boolean;
@@ -3397,17 +3399,29 @@ begin
             if nArgs < Procs[procIdx].ParamCount then
             begin
               tk := Procs[procIdx].Params[nArgs].TypeKind;
-              { A by-ref float/64-bit param is a pointer: one 4-byte slot — and
-                so is an OPEN ARRAY, whose TypeKind is its element's. The ABI
-                oracle answers both. }
-              if ABIParamSlotIsPointer(Procs[procIdx].Params[nArgs].TypeKind,
-                                       Procs[procIdx].Params[nArgs].IsRef,
-                                       Procs[procIdx].Params[nArgs].IsArray) then
-                tk := tyPointer;
-              if (tk = tyDouble) or (tk = tyExtended) or Is64Bit386(tk) then
-                Inc(argBytes, 8)
+              { A by-value RECORD is ceil(RecSize/4) slots of its own bytes, and
+                it is tested BEFORE the pointer oracle, which answers True for
+                every tyRecord and would count 4. This loop and the store loop
+                below must agree exactly -- argBytes is both the frame
+                reservation and the saved-esp slot offset. }
+              if (tk = tyRecord) and
+                 (not Procs[procIdx].Params[nArgs].IsRef) and
+                 (not Procs[procIdx].Params[nArgs].IsArray) then
+                Inc(argBytes, ((RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + nArgs]) + 3) div 4) * 4)
               else
-                Inc(argBytes, 4);
+              begin
+                { A by-ref float/64-bit param is a pointer: one 4-byte slot — and
+                  so is an OPEN ARRAY, whose TypeKind is its element's. The ABI
+                  oracle answers both. }
+                if ABIParamSlotIsPointer(Procs[procIdx].Params[nArgs].TypeKind,
+                                         Procs[procIdx].Params[nArgs].IsRef,
+                                         Procs[procIdx].Params[nArgs].IsArray) then
+                  tk := tyPointer;
+                if (tk = tyDouble) or (tk = tyExtended) or Is64Bit386(tk) then
+                  Inc(argBytes, 8)
+                else
+                  Inc(argBytes, 4);
+              end;
             end
             else
             begin
@@ -3458,9 +3472,18 @@ begin
           sz := 0;                                       { running arg offset }
           while argNode <> -1 do
           begin
+            argIsRec386 := False;
+            recDw386 := 0;
             if i < Procs[procIdx].ParamCount then
             begin
               tk := Procs[procIdx].Params[i].TypeKind;
+              if (tk = tyRecord) and (not Procs[procIdx].Params[i].IsRef) and
+                 (not Procs[procIdx].Params[i].IsArray) then
+              begin
+                argIsRec386 := True;
+                recDw386 := (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]) + 3) div 4;
+              end
+              else
               { `var d: Double` on a cdecl external is a `double*`: the address is
                 already in eax and goes in one 4-byte slot, exactly as the
                 argBytes accounting above now counts it. Same for an open array,
@@ -3479,7 +3502,22 @@ begin
               if TypeIsFloat(tk) then tk := tyDouble
               else if not Is64Bit386(tk) then tk := tyInteger;
             end;
-            if (tk = tyDouble) or (tk = tyExtended) then
+            if argIsRec386 then
+            begin
+              { By-value record: eax = its address (IRLowerCallArg already made
+                the private temp), copied dword by dword into the argument
+                block. Evaluated ONCE for the whole aggregate, which on i386 is
+                automatic rather than earned -- there is one arm per ARGUMENT
+                here, not one per slot, so the x86-64 split does not arise. }
+              IREmitNode386(IRA[argNode]);               { eax = record address }
+              for k386 := 0 to recDw386 - 1 do
+              begin
+                EmitB($8B); EmitB($90); EmitI32(k386 * 4);              { mov edx, [eax+k*4] }
+                EmitB($89); EmitB($94); EmitB($24); EmitI32(sz + k386 * 4); { mov [esp+off], edx }
+              end;
+              Inc(sz, recDw386 * 4);
+            end
+            else if (tk = tyDouble) or (tk = tyExtended) then
             begin
               IREmitNode386(IRA[argNode]);               { float -> xmm0 (double) }
               if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
@@ -3825,7 +3863,34 @@ begin
             `pS(1, [eA,eC,eD], 9)` through a proc-var pushed one address word and
             answered 838829819 instead of 139. }
           argCls := Arg32Class(procIdx, nArgs, IntToTypeKind(IRTk[IRA[argNode]]));
-          if argCls = A32_SET then
+          { A by-value RECORD through a cdecl signature, which Arg32Class does
+            not model: it answers A32_WORD, the right answer for every 32-bit
+            target still passing aggregates by reference (arm32, riscv32) and
+            for the Pascal convention here. Asked at this site rather than by
+            adding an A32_ class, because a new class would silently reach two
+            backends with no emit arm for it -- and ProcCdecl-gated for the same
+            reason the callee spill is: a small Pascal record is by-value too,
+            and its caller half does not exist yet.
+            bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee }
+          argIsRec386 := (procIdx >= 0) and ProcCdecl[procIdx] and
+                         (nArgs < Procs[procIdx].ParamCount) and
+                         (Procs[procIdx].Params[nArgs].TypeKind = tyRecord) and
+                         (not Procs[procIdx].Params[nArgs].IsRef) and
+                         (not Procs[procIdx].Params[nArgs].IsArray);
+          if argIsRec386 then
+          begin
+            { eax = the record's address; push its dwords HIGH FIRST, exactly as
+              the set case below does. disp32 rather than that arm's disp8: a
+              struct is not bounded by 32 bytes and disp8 would wrap past 127. }
+            recDw386 := (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + nArgs]) + 3) div 4;
+            for i := recDw386 - 1 downto 0 do
+            begin
+              EmitB($8B); EmitB($90); EmitI32(i * 4);  { mov edx, [eax+i*4] }
+              EmitB($52);                              { push edx }
+            end;
+            Inc(argBytes, recDw386 * 4);
+          end
+          else if argCls = A32_SET then
           begin
             { eax = the 32-byte set's address; push all 8 dwords, high first. }
             for i := 7 downto 0 do
@@ -3863,7 +3928,8 @@ begin
           end
           else
             EmitB($50);                              { push eax }
-          Inc(argBytes, Arg32Words(argCls) * 4);
+          if not argIsRec386 then
+            Inc(argBytes, Arg32Words(argCls) * 4);
           Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
         end;
         IREmitNode386(IRA[node]);                    { eax = callee addr }
