@@ -86,6 +86,24 @@ export PXX_TMP
 # So this default governs BARE `make` only -- which is exactly the exposure the
 # ticket measured, testmgr-driven runs having been per-PID private all along.
 TESTTMP ?= /tmp/pxx-testtmp-$(shell id -u)-$(notdir $(CURDIR))-$(shell printf '%s' '$(CURDIR)' | sha1sum | cut -c1-10)
+
+# Strips the WORD-SIZE-DEPENDENT half of a -dPXX_ALLOC_CENSUS dump so a
+# cross-target differential compares what is actually portable. allocs/frees/live
+# count EVENTS and are identical on every backend for one program -- they are the
+# leak signal and they stay compared. bytes/reuse/list/bump/arenas and the `sizes`
+# histogram are allocator bookkeeping in BYTES, so a record holding a pointer is a
+# 48-byte block on x86-64 and 40 on i386, and the two can never match.
+#
+# Without this the row is a gate that CANNOT PASS on a 32-bit target, and it reads
+# as a real regression: test_managed_dynarray_field_leaks and
+# test_exception_object_leaks were RED on i386/arm32/riscv32 across two
+# consecutive full tiers (aarch64 matched, being 64-bit) while their PROGRAM
+# output was byte-identical on all four. The two older census rows beside them,
+# test_managed_str_ownership_leaks and test_dynarray_ownership_leaks, pass
+# unfiltered only because they allocate string payloads, whose block size does not
+# depend on pointer width -- luck about the test's data, not a property of the check.
+CENSUS_PORTABLE = sed -e '/^pxx-census: sizes /d' -e 's/ bytes=[0-9]* reuse=[0-9]* list=[0-9]* bump=[0-9]* arenas=[0-9]*//'
+
 $(shell mkdir -p $(TESTTMP))
 export TESTTMP
 # Named with a -<pid> suffix on the ROOT so tools/testmgr.py's sweep can reap an
@@ -14307,7 +14325,7 @@ test-i386: $(COMPILER)
 	# is the same gap and is not exception-specific.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_i386_x64
-	tools/expect_same.sh i386/test_managed_dynarray_field_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/mdf_i386)" "$$($(TESTTMP)/mdf_i386_x64)"
+	tools/expect_same.sh i386/test_managed_dynarray_field_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/mdf_i386 | $(CENSUS_PORTABLE))" "$$($(TESTTMP)/mdf_i386_x64 | $(CENSUS_PORTABLE))"
 	tools/assert_no_leak.sh i386/managed_dynarray_field 50 tools/run_target.sh i386 $(TESTTMP)/mdf_i386
 	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_i386_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -14320,7 +14338,7 @@ test-i386: $(COMPILER)
 	# leaking every object, so only the absolute bound can see it.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_exception_object_leaks.pas $(TESTTMP)/teol_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_i386_x64
-	tools/expect_same.sh i386/test_exception_object_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/teol_i386)" "$$($(TESTTMP)/teol_i386_x64)"
+	tools/expect_same.sh i386/test_exception_object_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/teol_i386 | $(CENSUS_PORTABLE))" "$$($(TESTTMP)/teol_i386_x64 | $(CENSUS_PORTABLE))"
 	tools/assert_no_leak.sh i386/exception_object 50 tools/run_target.sh i386 $(TESTTMP)/teol_i386
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_i386_x64
 	# Is a string literal handed over WITHOUT a heap copy. A literal is already
@@ -14907,7 +14925,7 @@ test-aarch64: $(COMPILER)
 	# is the same gap and is not exception-specific.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_aarch64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_aarch64_x64
-	tools/expect_same.sh aarch64/test_managed_dynarray_field_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64)" "$$($(TESTTMP)/mdf_aarch64_x64)"
+	tools/expect_same.sh aarch64/test_managed_dynarray_field_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64 | $(CENSUS_PORTABLE))" "$$($(TESTTMP)/mdf_aarch64_x64 | $(CENSUS_PORTABLE))"
 	tools/assert_no_leak.sh aarch64/managed_dynarray_field 50 tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64
 	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_aarch64_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -14920,7 +14938,7 @@ test-aarch64: $(COMPILER)
 	# leaking every object, so only the absolute bound can see it.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_exception_object_leaks.pas $(TESTTMP)/teol_aarch64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_aarch64_x64
-	tools/expect_same.sh aarch64/test_exception_object_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/teol_aarch64)" "$$($(TESTTMP)/teol_aarch64_x64)"
+	tools/expect_same.sh aarch64/test_exception_object_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/teol_aarch64 | $(CENSUS_PORTABLE))" "$$($(TESTTMP)/teol_aarch64_x64 | $(CENSUS_PORTABLE))"
 	tools/assert_no_leak.sh aarch64/exception_object 50 tools/run_target.sh aarch64 $(TESTTMP)/teol_aarch64
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_aarch64_x64
 	# Is a string literal handed over WITHOUT a heap copy. A literal is already
@@ -15544,7 +15562,7 @@ test-riscv32: $(COMPILER)
 	# is the same gap and is not exception-specific.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_riscv32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_riscv32_x64
-	tools/expect_same.sh riscv32/test_managed_dynarray_field_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/mdf_riscv32)" "$$($(TESTTMP)/mdf_riscv32_x64)"
+	tools/expect_same.sh riscv32/test_managed_dynarray_field_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/mdf_riscv32 | $(CENSUS_PORTABLE))" "$$($(TESTTMP)/mdf_riscv32_x64 | $(CENSUS_PORTABLE))"
 	tools/assert_no_leak.sh riscv32/managed_dynarray_field 50 tools/run_target.sh riscv32 $(TESTTMP)/mdf_riscv32
 	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_riscv32_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -15557,7 +15575,7 @@ test-riscv32: $(COMPILER)
 	# leaking every object, so only the absolute bound can see it.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=riscv32 test/test_exception_object_leaks.pas $(TESTTMP)/teol_riscv32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_riscv32_x64
-	tools/expect_same.sh riscv32/test_exception_object_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/teol_riscv32)" "$$($(TESTTMP)/teol_riscv32_x64)"
+	tools/expect_same.sh riscv32/test_exception_object_leaks "$$(tools/run_target.sh riscv32 $(TESTTMP)/teol_riscv32 | $(CENSUS_PORTABLE))" "$$($(TESTTMP)/teol_riscv32_x64 | $(CENSUS_PORTABLE))"
 	tools/assert_no_leak.sh riscv32/exception_object 50 tools/run_target.sh riscv32 $(TESTTMP)/teol_riscv32
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_riscv32_x64
 	# Is a string literal handed over WITHOUT a heap copy. A literal is already
@@ -17073,7 +17091,7 @@ test-arm32: $(COMPILER)
 	# is the same gap and is not exception-specific.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_arm32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_arm32_x64
-	tools/expect_same.sh arm32/test_managed_dynarray_field_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/mdf_arm32)" "$$($(TESTTMP)/mdf_arm32_x64)"
+	tools/expect_same.sh arm32/test_managed_dynarray_field_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/mdf_arm32 | $(CENSUS_PORTABLE))" "$$($(TESTTMP)/mdf_arm32_x64 | $(CENSUS_PORTABLE))"
 	tools/assert_no_leak.sh arm32/managed_dynarray_field 50 tools/run_target.sh arm32 $(TESTTMP)/mdf_arm32
 	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_arm32_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -17089,7 +17107,7 @@ test-arm32: $(COMPILER)
 	# Verified against the clean-tree compiler, so it predates this test.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_exception_object_leaks.pas $(TESTTMP)/teol_arm32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_arm32_x64
-	tools/expect_same.sh arm32/test_exception_object_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/teol_arm32)" "$$($(TESTTMP)/teol_arm32_x64)"
+	tools/expect_same.sh arm32/test_exception_object_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/teol_arm32 | $(CENSUS_PORTABLE))" "$$($(TESTTMP)/teol_arm32_x64 | $(CENSUS_PORTABLE))"
 	tools/assert_no_leak.sh arm32/exception_object 50 tools/run_target.sh arm32 $(TESTTMP)/teol_arm32
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_arm32_x64
 	# Is a string literal handed over WITHOUT a heap copy. A literal is already
