@@ -1491,6 +1491,59 @@ program. For a move it is the emitted program too — not the compiler that emit
 it. Reaching for the compiler's own bytes is reaching for the artifact that is
 easiest to compare, not the one the claim is about.
 
+### A gate's PASS is about the shapes its SUBJECT contains, not about the change
+
+Measured 2026-09-01 (frankC), and it is the acceptance-gate end of the same
+question the bisect cousins ask at the diagnosis end. There: "is the named commit
+the real cause". Here: **"is this PASS about the thing I changed, or about the
+subset of it my subject happens to exercise"**.
+
+`test-c-abi-mixed-link` went from segfaulting since the day it was written to
+PASS -- all 13 rows, both directions, every SysV boundary including MEMORY past
+16 bytes and a struct arriving after five integers. It contains no struct passed
+through a FUNCTION POINTER. The indirect cdecl arm still classifies inline with
+its own `intIdx < 6` / `sseIdx < 8` walk, one slot per argument, so that shape is
+still marshalled as a pointer and still wrong. The gate is honest and cannot see
+it; only the reading of it would have been false.
+
+**The dangerous part is that stopping there was fully defensible.** Every visible
+instrument said done: the gate the ticket itself named as the acceptance
+criterion had gone green, the self-host fixedpoint held, Track T's red was fixed,
+and there was a clean line to write. Nothing would have contradicted it for
+months. What actually stood between that and a false claim was reading the
+SIBLING arm -- done as ritual, because `normalise-dont-special-case.md` says to
+grep for the sibling before closing a double case. (The two arms carry a comment
+recording that a 32-bit-return widening already sat half-applied across this exact
+pair for months. The rule had paid out here before.)
+
+**Say it as "the gate is green with a real hole under it", not as a to-do.**
+"Still open" and that sentence route differently to whoever picks the ticket up,
+and only one of them warns them off the green.
+
+### The corpus question is due every time a harness returns the answer you wanted
+
+The second-order form, and the reason the entry above is not just a note about
+one gate. Three instances landed within about six hours on 2026-09-01, and none
+of us recognised the later ones as the earlier one until they were written down:
+
+| harness | what it reported | what was wrong with the population |
+| --- | --- | --- |
+| an inertness proof (15 byte-identical images, 6 shapes) | no change, as intended | contained no narrow argument in `rdi`/`rsi` -- **empty** for the defect |
+| a byte-identity A/B, arms asserted to differ | unchanged, as claimed | compared a Pascal object against a change only C objects reach -- **empty** |
+| an acceptance gate, 13 rows both directions | PASS, as hoped | no struct through a function pointer -- **incomplete** |
+
+Same defect at three points in the pipeline: proof, control, gate. Two are empty
+populations and one is an incomplete one, which is why they did not look alike
+from inside. Every one had a real, aimed, self-checking instrument, and in two of
+the three the author had explicitly guarded the OTHER axis -- "the arms differ",
+"the subjects are present" -- which is exactly what made the corpus feel already
+handled.
+
+So the corpus question is not something you settle once when building a harness.
+**It is due again every time that harness returns the answer you were hoping
+for.** The cheapest form costs one run: before believing an absence, produce the
+phenomenon somewhere -- one input that makes the instrument say the other thing.
+
 ## Where is the time going — profiling on these boxes
 
 **`perf` is dead here** (`perf_event_paranoid=4`) and that is NOT the same as
