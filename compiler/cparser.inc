@@ -10562,6 +10562,8 @@ var
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
   sysvN, sysvC0, sysvC1: Integer; { PXXDBG=a.sysvcls readout only }
+  plInt, plSse, plN, plR0, plR1: Integer;   { PXXDBG=a.sysvplace readout only }
+  plMem, plS0, plS1: Boolean;
   retPtrElemTk, retPtrElemRec, retRecId, retProcSig: Integer;
   retPtrDepth, retPtrBaseTk, retPtrBaseRec: Integer;
   ptypes: array[0..31] of TTypeKind;
@@ -11209,6 +11211,33 @@ begin
   for gli := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[gli] := -1;
   Procs[procIdx].ScopeBase := SymCount;
   
+  { PXXDBG=a.sysvplace -- the placement oracle's answer for this whole
+    signature, printed so it can be diffed against `gcc -S` for the same
+    prototype BEFORE any codegen reads it. Classification was checked against
+    gcc's sizeof; that says nothing about which BANK each eightbyte lands in,
+    which is the half that desynchronises a call. }
+  if PxxDbgEnabled('a.sysvplace') then
+  begin
+    plInt := 0; plSse := 0;
+    for i := 0 to nparams-1 do
+    begin
+      ABISysVArgPlace(ptypes[i], False, False, precid[i], plInt, plSse,
+                      plN, plMem, plS0, plS1, plR0, plR1);
+      Write('PXXDBG a.sysvplace ', name, ' p', i, ' ');
+      if plMem then WriteLn('MEMORY x', plN, ' slots')
+      else
+      begin
+        if plS0 then Write('xmm', plR0) else if plR0 >= 0 then Write('int', plR0)
+        else Write('stack');
+        if plN = 2 then
+        begin
+          if plS1 then Write(' + xmm', plR1) else if plR1 >= 0 then Write(' + int', plR1)
+          else Write(' + stack');
+        end;
+        WriteLn;
+      end;
+    end;
+  end;
   { Allocate parameter slots }
   for i := 0 to nparams-1 do
   begin

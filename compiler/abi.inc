@@ -276,6 +276,100 @@ begin
   end;
 end;
 
+{ PLACEMENT: where does ONE cdecl argument go, given how much of each register
+  bank is already spoken for? Classification (what class is it) and placement
+  (does it fit) are one call because SysV couples them: an aggregate goes in
+  registers only if ALL of its eightbytes fit in what is LEFT, and otherwise it
+  goes on the stack ENTIRELY -- it is never split between the two. Written as
+  two functions, that rule has to be restated by every caller, and the caller
+  that restates it slightly differently is the one that desynchronises every
+  argument after it.
+
+  `intIdx`/`sseIdx` are IN OUT: the shared bank state each side already keeps.
+  This does not do the whole walk the way ABIA64CdeclArgSlot does, because both
+  x86-64 sides already have an accumulating loop of their own -- the caller
+  needs slot ARRAYS (it pushes right-to-left and pops left-to-right) and the
+  callee walks parameters in order. Handing them a per-argument step lets each
+  keep its own loop and share the only part that must not differ.
+
+  nSlots is what the argument OCCUPIES: 1 for a scalar, 1 or 2 for a
+  register-classified aggregate, ceil(size/8) for a MEMORY one. reg0/reg1 are
+  bank indices, or -1 when that slot is on the stack.
+
+  A by-REF or open-array parameter is a pointer and is INTEGER class whatever
+  its declared type -- the same rule, and the same reason, as the aarch64 walk
+  above states at length.
+  bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee }
+procedure ABISysVArgPlace(tk: TTypeKind; isRef, isArray: Boolean; recId: Integer;
+                          var intIdx, sseIdx: Integer;
+                          var nSlots: Integer; var isMem: Boolean;
+                          var sse0, sse1: Boolean; var reg0, reg1: Integer);
+var n, c0, c1, sz, needInt, needSse: Integer;
+begin
+  nSlots := 1; isMem := False;
+  sse0 := False; sse1 := False; reg0 := -1; reg1 := -1;
+
+  { An aggregate passed BY VALUE is the only case with more than one slot. }
+  if (tk = tyRecord) and (not isRef) and (not isArray) and
+     (TargetArch = TARGET_X86_64) then
+  begin
+    n := ABISysVRecordEightbytes(recId, c0, c1);
+    if n > 0 then
+    begin
+      { Count what this aggregate needs from each bank, then take all of it or
+        none. `needInt`/`needSse` rather than testing the banks one slot at a
+        time: a MIX (INTEGER,SSE) with one GP register left and eight SSE free
+        must go to the stack WHOLE, and a per-slot test would place its first
+        eightbyte and strand the second. }
+      needInt := 0; needSse := 0;
+      if c0 = SYSV_CLS_SSE then Inc(needSse) else Inc(needInt);
+      if n = 2 then
+        if c1 = SYSV_CLS_SSE then Inc(needSse) else Inc(needInt);
+      if (intIdx + needInt <= 6) and (sseIdx + needSse <= 8) then
+      begin
+        nSlots := n;
+        if c0 = SYSV_CLS_SSE then
+        begin sse0 := True; reg0 := sseIdx; Inc(sseIdx); end
+        else begin reg0 := intIdx; Inc(intIdx); end;
+        if n = 2 then
+        begin
+          if c1 = SYSV_CLS_SSE then
+          begin sse1 := True; reg1 := sseIdx; Inc(sseIdx); end
+          else begin reg1 := intIdx; Inc(intIdx); end;
+        end;
+        Exit;
+      end;
+      { Classifiable but the banks are too full: MEMORY, by the same rounding
+        as a natively-MEMORY aggregate below. }
+      sz := RecSize(recId);
+      nSlots := (sz + 7) div 8;
+      if nSlots < 1 then nSlots := 1;
+      isMem := True;
+      Exit;
+    end;
+    if n = 0 then
+    begin
+      sz := RecSize(recId);
+      nSlots := (sz + 7) div 8;
+      if nSlots < 1 then nSlots := 1;
+      isMem := True;
+      Exit;
+    end;
+    { n < 0 -- the classifier REFUSED (a shape it does not model). Fall through
+      to the one-pointer-slot answer, which is what the compiler did for every
+      aggregate before this existed. A refusal must not silently become a
+      guess about the ABI. }
+  end;
+
+  if TypeIsFloat(tk) and (not isRef) and (not isArray) then
+  begin
+    sse0 := True;
+    if sseIdx < 8 then begin reg0 := sseIdx; Inc(sseIdx); end;
+  end
+  else
+    if intIdx < 6 then begin reg0 := intIdx; Inc(intIdx); end;
+end;
+
 { ---------------------------------------------------------------------------
   RETURNS. `RetViaHiddenDest` is the oracle's `ReturnVia` query, and it was
   ALREADY a single shared function when this ticket was written — the ticket's
