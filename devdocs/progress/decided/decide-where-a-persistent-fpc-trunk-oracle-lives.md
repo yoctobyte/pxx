@@ -5,7 +5,7 @@ type: decide
 prio: 30
 status: decided
 blocked-by: []
-summary: "RULED 2026-09-01 (owner): option B — a persistent build at ~/src/fpc-trunk, refreshed ON REQUEST by tools/fpc_trunk.sh. Manual refresh is the ruling, not a shortcut: nightly-build testing is rare, and CLAUDE.md forbids anything timed. The script encodes the three traps from the recipe below. NOTE the recipe here is STALE in one line — ~/src/fpc-source does not exist and ~/src did not either; the script clones from GitLab when the mirror is absent. ORIGINAL: The FPC trunk oracle works but has nowhere to live: a trunk build is ~4 min and ~1GB, it must sit OUTSIDE the repo, and installing into ~ needs the owner's say-so. Three options with different refresh obligations. Filed because closing feature-t-fpc-probe-needs-a-trunk-oracle with item 3 undone would otherwise lose it."
+summary: "RULED 2026-09-01 (owner): option B — a persistent build at ~/src/fpc-trunk, refreshed ON REQUEST by tools/fpc_trunk.sh. Manual refresh is the ruling, not a shortcut: nightly-build testing is rare, and CLAUDE.md forbids anything timed. BUILT AND VERIFIED 2026-09-01: FPC 3.3.1 at da47439dd51b, compiling and RUNNING a program; `--check` reports currency. The script encodes FIVE traps, not the three in the recipe below — two more were found by running it (the compiler build leaves SEED-built RTL units so the rtl rebuild no-ops; and `--check` compared git HEAD, which `checkout` advances BEFORE the build, so it called a broken oracle CURRENT). NOTE the recipe here is STALE in one line — ~/src/fpc-source does not exist and ~/src did not either; the script clones from GitLab when the mirror is absent. ORIGINAL: The FPC trunk oracle works but has nowhere to live: a trunk build is ~4 min and ~1GB, it must sit OUTSIDE the repo, and installing into ~ needs the owner's say-so. Three options with different refresh obligations. Filed because closing feature-t-fpc-probe-needs-a-trunk-oracle with item 3 undone would otherwise lose it."
 ---
 
 # Where does a persistent FPC trunk oracle live, if anywhere?
@@ -181,3 +181,34 @@ refutation and was not: deleting `rtl/units` removes exactly the stale
 seed-built units whose presence IS the trap. **The test destroyed the evidence
 it was testing for.** Only `git clean -xfd` reproduces the state a fresh clone
 is in.
+
+## Built and verified — 2026-09-01
+
+The oracle exists: **FPC 3.3.1 at `da47439dd51b`**, `~/src/fpc-trunk`, verified
+by compiling *and running* a program rather than by the build exiting 0.
+
+```
+FPC_TRUNK="$(tools/fpc_trunk.sh --path)" tools/fpc_diff_probe.sh ...
+tools/fpc_trunk.sh --check      # CURRENT / BEHIND-by-N / UNVERIFIED / ABSENT
+```
+
+**Two traps beyond the recipe, both found by running it, neither guessable:**
+
+- **Trap 4.** `make -C compiler` builds the RTL **with the seed** — it needs an
+  RTL to compile the compiler at all. The units then post-date their sources, so
+  `make -C rtl PP=<new>` is a **no-op**: nothing printed, exit 0, seed-built
+  units left in place. The symptom arrives much later as `PPU Invalid Version
+  207 expecting 208`, which points squarely at `PP=` vs `FPC=` — and `PP=` was
+  right all along (`rtl/Makefile:106`, `ifdef PP` → `FPC=$(PP)`). `make -C rtl
+  clean` first.
+- **Trap 5.** `--check` compared **git HEAD**, but `checkout` advances HEAD
+  *before* the build. The run that failed the hello-world control exited 1 with
+  HEAD already moved, so `--check` would have answered **CURRENT** about a
+  compiler that could not compile hello-world. **HEAD is not the binary.** The
+  claim now rests on a stamp written only after both positive controls pass and
+  deleted before any rebuild. Asserted both ways.
+
+`--check` also splits the gap by whether it matters: today the tree is 22
+commits behind with **0** of them touching `compiler/` or `rtl/`, which is why
+the compiler binary is legitimately still stamped at the older tip. `make`'s
+no-op was correct, and the report can now say so instead of looking like rot.
