@@ -3,8 +3,7 @@
 - **Type:** bug (Track A — `compiler/ir.inc` exception lowering,
   `compiler/ir_codegen.inc` heap-lock discipline)
 - **prio:** 75
-- **Status:** open
-
+- **Status:** done
 ## Symptom
 Two threads, each raising a freshly constructed exception object in a loop,
 SIGSEGV. Nothing else is needed — no shared object, no shared class, no
@@ -103,3 +102,61 @@ family (process-wide status slots, the pre-fix world) fails the same program
 with rc=217 `Unhandled exception` rather than rc=139. Two distinguishable
 failure modes, so a fix for this bug cannot be mistaken for a fix of the
 shadow-chain bug the test was originally written for.
+
+## FIXED 2026-09-01 (frankC) — the proc split, as diagnosed
+
+The fix is the one this ticket specified: keep the finalize half unlocked and
+emit the plain free as `-Ord(tkFreeMem)`, which is a real spelling the lowering
+already dispatches on and which gets the codegen lock wrap AND the heap
+magazine for free.
+
+`compiler/ir.inc`, the exception handler-exit lowering, Pascal population only:
+
+```
+  before                              after
+  PXXClassFinalizeManaged (locked)    PXXClassFinalize          (unlocked)
+  PXXObjFree                          PXXClassFinalizeManaged   (locked)
+    -> PXXClassFinalize                 IR_CALL -Ord(tkFreeMem) (locked+magazine)
+    -> PXXFree            <-- BARE
+```
+
+This is the `.Free` desugar's shape reproduced, not a new one. The two paths
+destroy the same kind of object and had drifted into two mechanisms — the
+second one being the one that stayed broken, which is
+`normalise-dont-special-case.md` exactly. It also fixes a second, quieter
+disagreement: the old order ran the managed half BEFORE `PXXObjFree`'s inner
+finalize, i.e. reversed relative to the desugar.
+
+**The NilPy arm is unchanged and still calls `PXXObjFree`**, deliberately: a
+headered instance may still be referenced and only the refcount knows, so it
+must route to `PXXObjRelease`. The corpus has NO NilPy try/except test, so that
+arm is uncovered by the tier — I carried a 500-iteration `raise`/`except` probe
+by hand and it answers 3500 correctly.
+
+### Measured
+
+| | before | after |
+| --- | --- | --- |
+| `test_threadsafe_exception_two_threads.pas` | SIGSEGV 3/3 | OK 3/3, later 5/5 |
+| phase 1 (single thread, same lowering) | clean 20000/20000 | clean |
+| managed-field census (the d402a25b2 row) | allocs=10975 frees=10972 live=3 | **identical** |
+
+The census row is the guard against the reordering: `live=3` unchanged means no
+leak, and a NEGATIVE live would have been the double free that the first attempt
+at the sibling bug produced (live=-2740).
+
+`tools/gate.sh quick` GREEN, FPC seed canary PASS. Self-host fixedpoint
+converged, `d76644e0676b`.
+
+### The regression this unblocks
+
+`regression-test-threads-test-exception-threads-race` is still red and still
+correctly so: per `decide-does-raise-of-an-existing-object-transfer-ownership`
+that test must be rewritten to construct per raise, and it could not be until
+this was fixed. It can be now. That rewrite is NOT done here — it is a test
+change with its own reasoning about what phase 3 can still detect once every
+raise takes the heap lock, and the test's header says that serialisation is
+what it was avoiding.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

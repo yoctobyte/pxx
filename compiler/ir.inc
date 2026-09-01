@@ -13929,12 +13929,57 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
               object corrupt the free list --
               bug-a-two-threads-raising-object-exceptions-corrupt-the-heap.
               That one needs the proc split, not a wrap. }
-            if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+            if isNilPy then
             begin
-              cfPi := FindProc('PXXClassFinalizeManaged');
+              { HEADERED population keeps PXXObjFree, which routes to
+                PXXObjRelease and its refcount discipline. An instance here may
+                still be referenced, and only the rc knows. }
+              last := IRAppendCall(excReleaseProc,
+                        IRAppend(IR_ARG,
+                          IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),
+                          -1, -1, 0, Ord(tyPointer)),
+                        -1, Ord(tyUnknown));
+              IRIVal[last] := 1;   { statement: emit for effect, not a value }
+              IRMarkStatementNode(last);
+            end
+            else
+            begin
+              { PASCAL population: finalize, then free THROUGH THE tkFreeMem
+                SITE, which is the whole point of not calling PXXObjFree here.
+
+                PXXObjFree's plain arm is `PXXClassFinalize(p); PXXFree(p)`, and
+                on x86-64 the heap lock is emitted by CODEGEN at the tkGetMem /
+                tkFreeMem IR sites -- it is NOT taken inside the runtime
+                helpers. So a free reached by CALLING an RTL routine takes no
+                lock at all and mutates the free list bare. Two threads each
+                raising an object therefore corrupted the heap
+                (bug-a-two-threads-raising-object-exceptions-corrupt-the-heap):
+                MEASURED, 20000 raises per thread, single-threaded phase clean
+                20000/20000 and the two-thread phase SIGSEGV 3 of 3.
+
+                Emitting `-Ord(tkFreeMem)` instead gets the acquire/release wrap
+                AND the magazine fast path for free, because it is the same node
+                the `.Free` desugar falls through to. This is that desugar's
+                shape reproduced, not a new one -- the two paths destroy the
+                same kind of object and had drifted into two mechanisms, which
+                is what normalise-dont-special-case.md is about.
+
+                WHY NOT WRAP THE PXXObjFree CALL, the fix that looks smaller:
+                PXXObjFree runs PXXClassFinalize FIRST, whose kind-4 (COM) pass
+                runs a destructor chain and a self-locking free. Putting that
+                under the lock is precisely the deadlock the REVERTED cb2ed843
+                hit, and it is why PXXClassFinalize and PXXClassFinalizeManaged
+                are two procs with opposite lock requirements today. The halves
+                have to be separated before the free, not wrapped together.
+
+                ORDER IS THE DESUGAR'S: finalize (unlocked, COM chain safe),
+                then the managed half under the lock, then the memory. The
+                previous code here ran the managed half BEFORE PXXObjFree's
+                inner finalize, i.e. reversed, which is a second way these two
+                paths disagreed about one operation. }
+              cfPi := FindProc('PXXClassFinalize');
               if cfPi >= 0 then
               begin
-                HeapLockedCallProcIdx1 := cfPi + 1;
                 cfCall := IRAppendCall(cfPi,
                             IRAppend(IR_ARG,
                               IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),
@@ -13943,14 +13988,29 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
                 IRIVal[cfCall] := 1;   { statement: emit for effect }
                 IRMarkStatementNode(cfCall);
               end;
+              if ThreadSafeMode and (TargetArch = TARGET_X86_64) then
+              begin
+                cfPi := FindProc('PXXClassFinalizeManaged');
+                if cfPi >= 0 then
+                begin
+                  HeapLockedCallProcIdx1 := cfPi + 1;
+                  cfCall := IRAppendCall(cfPi,
+                              IRAppend(IR_ARG,
+                                IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),
+                                -1, -1, 0, Ord(tyPointer)),
+                              -1, Ord(tyNativeInt));
+                  IRIVal[cfCall] := 1;   { statement: emit for effect }
+                  IRMarkStatementNode(cfCall);
+                end;
+              end;
+              last := IRAppend(IR_CALL, -Ord(tkFreeMem),
+                        IRAppend(IR_ARG,
+                          IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),
+                          -1, -1, 0, Ord(tyPointer)),
+                        -1, 0, Ord(tyUnknown));
+              IRIVal[last] := 1;   { statement: emit for effect, not a value }
+              IRMarkStatementNode(last);
             end;
-            last := IRAppendCall(excReleaseProc,
-                      IRAppend(IR_ARG,
-                        IRAppend(IR_LOAD_SYM, excOwnTmp, -1, -1, 0, Ord(tyPointer)),
-                        -1, -1, 0, Ord(tyPointer)),
-                      -1, Ord(tyUnknown));
-            IRIVal[last] := 1;   { statement: emit for effect, not a value }
-            IRMarkStatementNode(last);
             last := IRAppend(IR_LABEL, -1, -1, -1, excSkipFreeLabel, 0);
           end;
         end;

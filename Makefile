@@ -4147,6 +4147,19 @@ test-threads: $(COMPILER)
 	./$(COMPILER) --threadsafe -dPXX_ALLOC_CENSUS test/test_threadsafe_exception_managed_fields.pas $(TESTTMP)/test_ts_exc_mgd26
 	tools/assert_no_leak.sh threadsafe_exc_managed 200 $(TESTTMP)/test_ts_exc_mgd26
 	tools/expect_same.sh test_ts_exc_mgd26 "$$($(TESTTMP)/test_ts_exc_mgd26 2>/dev/null | grep caught=)" "caught=3000"
+	# Two threads each CONSTRUCTING an exception per raise. Its sibling
+	# test_exception_threads_race.pas raises on two threads too and could not
+	# catch this: that one is deliberately allocation-free, so the heap lock
+	# never serialises it and the free path under test is never reached
+	# concurrently. On x86-64 the heap lock is emitted by CODEGEN at the
+	# tkGetMem/tkFreeMem sites, NOT inside the runtime helpers, so handler exit
+	# freeing via a CALL to PXXObjFree mutated the free list with no lock held.
+	# Phase 1 is single-threaded through the same lowering and must pass first,
+	# which is what separates "the free is wrong" from "wrong concurrently".
+	# Positive control, measured on this exact file: SIGSEGV 3/3 before the fix.
+	# bug-a-two-threads-raising-object-exceptions-corrupt-the-heap
+	./$(COMPILER) --threadsafe test/test_threadsafe_exception_two_threads.pas $(TESTTMP)/test_ts_exc_2t26
+	tools/expect_same.sh test_ts_exc_2t26 "$$($(TESTTMP)/test_ts_exc_2t26)" "TS EXC TWO THREADS OK"
 	./$(COMPILER) --threadsafe test/test_palthread.pas $(TESTTMP)/test_palthread26
 	tools/expect_same.sh test_palthread26 "$$($(TESTTMP)/test_palthread26)" "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nPALTHREAD OK')"
 	./$(COMPILER) --threadsafe test/test_atomic_counter.pas $(TESTTMP)/test_atomic_counter26
