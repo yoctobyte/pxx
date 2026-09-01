@@ -8,7 +8,7 @@ blocked-by: []
 owner: frankC
 created: 2026-09-01
 found-by: frankA (while adding .init_array to the i386 object writer; pre-existing, not caused by it)
-summary: "i386 --emit-obj output is POSITION-DEPENDENT: every .text relocation is absolute R_386_32, so `-Wl,-z,text` refuses the link and a PIE gets DT_TEXTREL. The i386 twin of feature-a-x86-64-object-output-is-position-dependent, and the harder one: i386 has no [eip+disp32] ADDRESSING MODE, so it needs an explicit call/pop anchor where x86-64 has rip -- but it does NOT need a GOT: our .data/.bss symbols are section-local, so a PC-relative anchor reaches them with a link-time-constant displacement. MEASURED: that form assembles to R_386_PC32, links under `gcc -m32 -pie -Wl,-z,text` (the exact link this ticket exists to unblock) and runs, with no GOT, no _GLOBAL_OFFSET_TABLE_ and no R_386_GOTPC. MEASURED, and the measuring is most of what is banked here. 27 operand shapes need conversion, from an EMITTER census (PXXDBG=a.i386reloc, 11645 sites) not an object census (1450) -- the emitter probe found three shapes no object held, including a family the object-based plan had no entry for: `c7 00`, `mov [eax], imm32` with the data address as the IMMEDIATE, 74 sites, the only shape needing a scratch register the emitter must find. Twelve shapes collapse to one length-preserving expression, `modrm := (modrm and $38) or $86`; the rest are moffs (a1/a2/a3, +1), address-as-immediate (b8..bf -> lea, +1), push imm32 (+3, no scratch needed, and still live in 9 source sites for RTTI and dyn-array descriptors even though it reads as ZERO in the newest object census), SIB-indexed (base 101 -> 011, same length) and the new c7 00. Every rewrite was assembled and disassembled. BASE REGISTER: esi, decided by measurement -- 0 R_386_PLT32 anywhere, so ebx's only advantage (the PLT contract) is absent, and esi is not byte-addressable on i386 so it can never be wanted for the 360 `mov bl,[d32]` sites. The technique is SAVE/RESTORE around the self-contained sequences that clobber it, NOT re-homing: 70 of the 91 esi sites are co-live with edi (byte-copy loops, the 64-bit divide), so treating the two as interchangeable spares -- which an earlier revision of this ticket did -- yields a backend that fails in string copies and division. Phases: emitter census (done, abc5b9979), anchor + R_386_PC32 with NOTHING converted (verified by the absolute count NOT moving), convert family by family, and the test-emit-obj assertion row LAST."
+summary: "i386 --emit-obj output is POSITION-DEPENDENT: .text relocations are absolute R_386_32, so `-Wl,-z,text` refuses the link and a PIE gets DT_TEXTREL. The i386 twin of feature-a-x86-64-object-output-is-position-dependent, and the harder one: i386 has no [eip+disp32] ADDRESSING MODE, so it needs an explicit call/pop anchor where x86-64 has rip -- but it does NOT need a GOT: our .data/.bss symbols are section-local, so a PC-relative anchor reaches them with a link-time-constant displacement (measured: assembles to R_386_PC32, links under `gcc -m32 -pie -Wl,-z,text`, runs, no GOT and no R_386_GOTPC). LANDED SO FAR: the per-body anchor (e1209443d), R_386_PC32 writer support (6ab85feb8), and the FIRST conversion family -- absolute [disp32] LOADS from a global, 8B/8A/0F B6/0F B7/0F BE/0F BF with mod=00 rm=101, rewritten to `mov dest,[ebp+picslot]` plus the same instruction rebased on dest (b64341130). 114 of 502 .text relocations in test_emit_obj now convert; 388 remain. THE BASE-REGISTER QUESTION IS CLOSED AND THE ANSWER IS NEITHER esi NOR ebx: the anchor is parked in a FRAME SLOT and each reference loads it into a register that is provably free AT THAT SITE -- its own destination for a load, a push/pop-wrapped scratch for a store -- so no sequence preserves anything across it and the 12-site esi liveness audit an earlier revision planned is not needed at all. REMAINING FAMILIES, from the emitter census (PXXDBG=a.i386reloc, 11645 sites, and it found three shapes no object census held): stores (89/88/C7), cmp (39), moffs (a1/a2/a3), address-as-immediate (b8..bf), push imm32, SIB-indexed, and `c7 00` mov [reg],imm32 with the data address as the IMMEDIATE (74 sites, the one shape needing a scratch the emitter must find). MEASURED GATE FINDING, and the reason a new subject exists: test-emit-obj rows 4b/4d and test-c-abi-mixed-link ALL PASS against a compiler whose PC-relative addend is deliberately wrong by 0x30000000 -- they emit converted sites and never EXECUTE one. test/i386_pcrel_globals.c segfaults against that compiler and is therefore the only aimed guard here."
 ---
 
 # An i386 object from the C frontend carries text relocations
@@ -565,3 +565,58 @@ a bare occurrence of `esi`, so comments mentioning `esi` inflate it and a nested
 case could be mis-split. It is a narrowing instrument, not an exact one — it
 takes the work from "53 arms, unknown" to "5 named arms, verify each". Verify
 each before wrapping it.
+
+
+## 2026-09-01 — phase 3, family 1: loads. Landed `b64341130`
+
+`TryI386PcRelLoad` in `emit.inc`, called from the i386 arm of `EmitDataRef` and
+from a new `else if` arm of `EmitGlobRef`. Converts an absolute `[disp32]` LOAD
+just emitted by the caller into
+
+```
+mov  dest, [ebp+picslot]
+mov  dest, [dest+disp32]        <- R_386_PC32, addend symOffset + (fieldPos - anchorPos)
+```
+
+**Dest is its own base**, which is what removes the liveness problem the earlier
+esi plan had: the instruction is a load *into* dest, so dest is dead at that
+point by construction. Refuses `esp` (SIB) and `ebp` (mod=10 rm=101 collides
+with the form being left) as bases, and refuses every opcode not on the list.
+
+Addend patching is in `elfwriter.inc`'s SHT_REL fill, split into a PC-relative
+and an absolute arm per fixup array. `PicDelta` is 0 on every absolute site so
+the arms could be one expression; they are kept apart because `+ PicDelta` on a
+row typed `R_386_32` would read as if the addend had a PC term there.
+
+### Two things this cost, both worth remembering
+
+**The anchor's "verified inert" claim was too wide.** It had been checked against
+`test-c-abi-mixed-link`, and *every row of that gate is a procedure*. The main
+body is emitted with no `push ebp; mov ebp,esp` at all, so `mov [ebp+slot], esi`
+there writes through whatever `ebp` the loader left — SIGSEGV at the store, at
+`0x807163d`, in the body that starts `mov eax,2; call`. The anchor is now gated
+on `CurProc >= 0`; the frameless body's references stay absolute, and the
+converted count did not move, so that body had no convertible site anyway.
+
+**Both existing gates pass against a deliberately corrupted compiler.** With
+every PC-relative addend shifted by `+0x30000000`, `test-emit-obj` rows 4b and
+4d PASS and `test-c-abi-mixed-link` PASSes on both targets. `+8` passes too.
+They are not blind because the construct is absent — the objects carry 114
+converted sites — but because *nothing on the executed path is one of them*.
+This is a distinct shape from an empty population: the census is right, the
+coverage is real, the execution is nil, and no assertion in either gate can tell.
+
+`test/i386_pcrel_globals.c` + `_host.c` is the answer: every global is read and
+its value asserted, one row per converted opcode with signed and unsigned kept
+apart, plus an assertion that the object carries a nonzero `R_386_PC32` count so
+a conversion that quietly stopped firing cannot pass. It segfaults against the
+`+0x30000000` compiler. Wired into `test-emit-obj` as row 4d2.
+
+### Next
+
+Family 2 is the stores (`89`, `88`, `C7`), the largest remaining group. Unlike a
+load they must keep their source operand, so the scratch has to be found rather
+than reused: `push`/`pop` around the pair is locally correct and costs 2 bytes.
+Re-run `PXXDBG=a.i386reloc` after each family so a 28th shape announces itself,
+and add the "no absolute relocations in .text" assertion LAST, scoped by
+relocation SECTION rather than by symbol name.
