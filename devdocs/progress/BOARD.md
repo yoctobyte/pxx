@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (4)
+## working (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations | A | 40→80 | bug | i386 --emit-obj output was POSITION-DEPENDENT: every .text relocation absolute R_386_32, so `-Wl,-z,text` refused the link and a PIE got DT_TEXTREL. DONE FOR THE C FRONTEND: an object from test/i386_pcrel_globals.c is 486 R_386_PC32 and ZERO R_386_32 in .rel.text, links under `gcc -m32 -pie -Wl,-z,text`, carries no DT_TEXTREL and runs correctly -- asserted in test-emit-obj, which also asserts the zero count and the PIE output as separate claims. i386 has no [eip+disp32] ADDRESSING MODE, so the anchor is an instruction: a per-body `call/pop` parked in a frame slot, or materialised inline as `call .L; pop reg` (also 6 bytes) in a body with no frame. NO GOT is needed -- our .data/.bss symbols are section-local, so the displacement is a link-time constant. A reference loads the anchor into a register provably free AT THAT SITE: its own destination for a load, a push/pop-wrapped scratch for a store, so no liveness audit exists anywhere in this work. Addend is symOffset + (fieldPos - anchorPos), per site. Shapes converted: ModRM loads (8B/8A/0F B6/B7/BE/BF), moffs loads (A0/A1), address-as-immediate (B8+r -> lea), stores (88/89/A2/A3 and the trail-0 arithmetic r/m forms), and the SIB form (base field filled with the anchor). C7 and 66 A3 could not be rewritten in place -- the instruction is split between the caller and EmitGlobRef -- so EmitMovGlobImm32 and EmitMovGlobAx16 emit the whole instruction instead. REMAINING, and it is a DIFFERENT problem: the Pascal subject still has 5 absolute .text relocations, in `ff 14 25 <d32>` (call through a .data slot) and `b8 <d32>` with a .text symbol (procedure address as an immediate). Those live in the DynCall and ProcAddrFix arrays, which never pass through EmitGlobRef or EmitDataRef, so no shape in emit.inc can reach them; they need their own conversion plus PC-relative support in writeELFRel386General for those two arrays. FF /2 and FF /3 are safe inside the scratch wrapper even though FF /6 is not (a call is balanced by the callee ret; a push is not). | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops | A | 45 | refactor | The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command and the target is zero: `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 209 now, after five steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), ParseFactor's NilPy head (34 sites, two hooks), and the two DEAD-ARM deletions -- the shared expression and statement call loops carried thirteen arms guarded by `isNilPy` where the question was `PyExprMode`, which could not fire at all (7314fab2b, 23c4552af). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead. | — |
@@ -830,9 +829,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3006)
+## done (3007)
 
-3006 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3007 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -915,6 +914,7 @@ _none_
 
 - [p 90] [C] feature-c-corpus-busybox-multi-applet (unblocks 1)
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
+- [p 80] [A] meta-a-pxx-produces-linkable-code [meta — a standing index, never "done"; link work to it, do not claim it]
 - [p 80] [A] umbrella-cross-target-codegen-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 75] [A] bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa (unblocks 1)
 - [p 75] [A+O] feature-a-reentrant-heap-lock-and-per-thread-arenas (unblocks 1)
@@ -1354,7 +1354,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-a-an-i386-object-from-the-c-frontend-carries-text-relocations
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - **1** — bug-a-emitzeroframeslot-has-no-wasm32-arm
 - **1** — bug-a-indexing-through-a-pointer-to-an-array-of-pointers-segfaults
