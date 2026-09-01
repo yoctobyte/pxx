@@ -137,6 +137,8 @@ function __pxx_getppid: Integer;
 function __pxx_pipe2(fds: Pointer; flags: Integer): Integer;
 function __pxx_execve(path: PChar; argv, envp: Pointer): Integer;
 function __pxx_kill(pid, sig: Integer): Integer;
+function __pxx_fork: Integer;
+function __pxx_wait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
 function __pxx_geteuid: Integer;
 function __pxx_readlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
 function __pxx_mkdir(path: PChar; mode: Integer): Integer;
@@ -692,6 +694,25 @@ end;
 function __pxx_kill(pid, sig: Integer): Integer;
 begin
   Result := PalKill(pid, sig);
+end;
+
+{ fork(2) for crtl. PalFork was called PalVfork until today and its body was
+  always a real fork -- see the note at PalBackendFork. crtl's fork() had been
+  an ENOSYS stub purely because the OLD NAME said the entry was a vfork, so
+  busybox ash reported `can't fork' against a PAL that could. }
+function __pxx_fork: Integer;
+begin
+  Result := PalFork;
+end;
+
+{ wait4(2), the syscall waitpid() is expressed over. PalWait4 already existed
+  and subprocess.pas already used it; nothing had bridged it to C, because
+  crtl's waitpid() returned ECHILD on the reasoning that "with fork()
+  unavailable there are no children" -- true when written and false the moment
+  fork works. The pair moves together. }
+function __pxx_wait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
+begin
+  Result := PalWait4(pid, wstatus, options, rusage);
 end;
 
 function __pxx_readlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;

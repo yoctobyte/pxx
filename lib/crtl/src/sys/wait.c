@@ -14,26 +14,30 @@
 #include <sys/wait.h>
 #include <errno.h>
 
-/* ECHILD, not ENOSYS: with fork() unavailable (lib/crtl/src/unistd.c) there are
-   no children to reap, and ECHILD is the code POSIX defines for "nothing to
-   wait for" — so a caller's existing error path handles it instead of meeting a
-   code it has never seen. The W* decode macros in the header ARE real; they
-   only take apart an int the kernel already produced.
+/* WIRED, and this comment used to say it was "a bridge away from being real
+   rather than a missing syscall ... worth wiring the moment there is something
+   to wait for". That moment is fork() becoming real in unistd.c; the two move
+   together and neither is useful alone. A fork() without a waitpid() is worse
+   than neither, because the caller then spawns children it cannot reap and
+   accumulates zombies rather than failing.
 
-   The PAL DOES have PalWait4, so this is a bridge away from being real rather
-   than a missing syscall, and it becomes worth wiring the moment there is
-   something to wait for. Recorded because the opposite claim — "no PAL entry"
-   — was written here first and was wrong. */
-int wait(int *status)
-{
-  (void)status;
-  errno = ECHILD;
-  return -1;
-}
+   ECHILD still reaches callers who have no children — but it now comes from
+   the KERNEL rather than from crtl asserting it, which is the whole difference:
+   the old stub returned ECHILD to a caller that DID have a child, and that is
+   indistinguishable from the child already being reaped. */
+
+extern int __pxx_wait4(int pid, void *wstatus, int options, void *rusage);
 
 int waitpid(int pid, int *status, int options)
 {
-  (void)pid; (void)status; (void)options;
-  errno = ECHILD;
-  return -1;
+  int rc = __pxx_wait4(pid, status, options, 0);
+  if (rc < 0) { errno = -rc; return -1; }
+  return rc;
+}
+
+/* wait() is waitpid(-1, status, 0) — POSIX defines it that way, so it is
+   expressed that way rather than given a second path to the same syscall. */
+int wait(int *status)
+{
+  return waitpid(-1, status, 0);
 }

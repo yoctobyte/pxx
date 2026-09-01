@@ -251,7 +251,7 @@ function PalAcceptIpv6(handle: Integer; var outAddr: TPalIn6Addr;
 function PalMonotonicMillis: Int64;
 procedure PalYield;
 
-function PalVfork: Integer;
+function PalFork: Integer;
 function PalExecve(path: PChar; argv, envp: Pointer): Integer;
 function PalPipe2(var pipefd: array of Integer; flags: Integer): Integer;
 function PalDup2(oldFd, newFd: Integer): Integer;
@@ -724,9 +724,9 @@ begin
   PalBackendYield;
 end;
 
-function PalVfork: Integer;
+function PalFork: Integer;
 begin
-  Result := PalBackendVfork;
+  Result := PalBackendFork;
 end;
 
 function PalExecve(path: PChar; argv, envp: Pointer): Integer;

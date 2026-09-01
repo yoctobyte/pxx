@@ -103,7 +103,7 @@ function PalBackendAcceptIpv6(handle: Integer; var outAddr: TPalIn6Addr;
 function PalBackendMonotonicMillis: Int64;
 procedure PalBackendYield;
 
-function PalBackendVfork: Integer;
+function PalBackendFork: Integer;
 function PalBackendExecve(path: PChar; argv, envp: Pointer): Integer;
 function PalBackendPipe2(var pipefd: array of Integer; flags: Integer): Integer;
 function PalBackendDup2(oldFd, newFd: Integer): Integer;
@@ -1050,7 +1050,7 @@ begin
 {$endif}
 end;
 
-function PalBackendVfork: Integer;
+function PalBackendFork: Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

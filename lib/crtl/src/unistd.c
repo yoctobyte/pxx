@@ -250,19 +250,46 @@ char *ttyname(int fd)
    never takes gets an error, not a lie.
 
    *** WHICH OF THESE THE PAL COULD ACTUALLY SERVE — because an earlier draft
-   of this comment got it wrong. *** chroot, setuid/setgid/seteuid/setegid and
-   setgroups have no PAL entry: those really are missing syscalls. `fork` is a
-   different case and the distinction matters: the PAL has PalVfork, and vfork
-   is NOT fork — the child shares the parent's memory and may do nothing but
-   exec or _exit — so wiring fork to it would be a silent corruption, not a
-   convenience. vfork() below is being given its real implementation over
-   PalVfork separately; fork() stays unavailable until there is a fork.
+   of this comment got it wrong, AND THEN A LATER ONE GOT IT WRONG AGAIN IN THE
+   OPPOSITE DIRECTION. *** chroot, setuid/setgid/seteuid/setegid and setgroups
+   have no PAL entry: those really are missing syscalls.
 
-   The general lesson, already recorded in <sys/ioctl.h> for the same mistake:
-   MEASURE the PAL before believing a line that says an entry is missing. */
+   fork() IS NOT ONE OF THEM, and it never was. The previous version of this
+   comment argued that the PAL offered only a `PalVfork', that vfork is not
+   fork (the child shares the parent's memory and may do nothing but exec or
+   _exit), and that wiring fork to it would therefore be a silent corruption.
+   Every sentence of that is true about VFORK and none of it was true about the
+   entry: PalVfork's body issued SYS_fork, or clone with SIGCHLD and no
+   CLONE_VM, which IS fork. The reasoning ran off the NAME and stopped there —
+   in a comment whose own closing line says to MEASURE the PAL before believing
+   that an entry is missing. busybox ash then failed with `can't fork' against
+   a PAL that had had fork since it was written.
+
+   The entry is now called PalFork (see the note at PalBackendFork for why
+   renaming it beat leaving it), and fork() below is real. */
 int chroot(const char *path)   { (void)path; errno = ENOSYS; return -1; }
-int fork(void)                 { errno = ENOSYS; return -1; }
-int vfork(void)                { errno = ENOSYS; return -1; }
+
+extern int __pxx_fork(void);
+
+pid_t fork(void) {
+  int rc = __pxx_fork();
+  if (rc < 0) { errno = -rc; return -1; }
+  return (pid_t)rc;
+}
+
+/* vfork is given fork's semantics, which is a DIVERGENCE worth naming rather
+   than a synonym. A program that honours vfork's contract — the child does
+   nothing but exec or _exit — cannot tell the two apart, and that is every
+   real caller including busybox. A program that VIOLATES the contract, by
+   having the child write a variable the parent then reads, gets the standard's
+   undefined behaviour and will read the old value here where a true vfork
+   would show the new one. Diverging in that direction is the safe one: the
+   child can no longer corrupt the parent's stack. The cost is that vfork's
+   performance reason for existing is gone, which is a fair trade for a
+   runtime that has no copy-on-write-free path to offer anyway. */
+pid_t vfork(void) {
+  return fork();
+}
 int setuid(uid_t uid)          { (void)uid; errno = ENOSYS; return -1; }
 int setgid(gid_t gid)          { (void)gid; errno = ENOSYS; return -1; }
 int seteuid(uid_t uid)         { (void)uid; errno = ENOSYS; return -1; }

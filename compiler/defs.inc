@@ -457,7 +457,18 @@ const
   AN_ASM          = 38;
   AN_PTR_CAST     = 39; { typed pointer cast PType(expr):
                             Left=inner expr, IVal=aliasIdx (AliasElemTk/Rec),
-                            Tk=Ord(tyPointer) }
+                            Tk=Ord(tyPointer),
+                            RIGHT = PROC-SIGNATURE INDEX, **NOT A CHILD NODE**
+                            (>=0 only for a cast to a function-pointer type;
+                            read by CNodeProcSig, written in cparser.inc).
+                            Spelled out because this comment used to list only
+                            the other three fields, and a generic tree walker
+                            that trusted it — IRLowerCSwitchDispatchScan — read
+                            Right as a node index and recursed into a signature
+                            id, segfaulting the compiler with no diagnostic on
+                            busybox's ash. If you add another overload of Left
+                            or Right, say so HERE: this comment is what a walker
+                            author reads instead of the write site. }
   AN_RTTI_REG     = 40; { __rttireg() intrinsic returning pointer to RTTI registry }
   AN_RESOURCES    = 41; { __resources() intrinsic returning pointer to resource table }
   AN_READLN       = 42; { Left = AN_ARG chain of lvalue targets (consumes a line) }

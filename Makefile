@@ -12115,6 +12115,27 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_crtlmacros26 "$$($(TESTTMP)/c_crtlmacros26)" "$$(printf 'print 1\ndigit 1 0\nmine 12345\nfeaturetest 1\ncrtlmacro 1')"
 	./$(COMPILER) test/c_struct_fnptr_member_local.c $(TESTTMP)/c_structfnptr26
 	tools/expect_same.sh c_structfnptr26 "$$($(TESTTMP)/c_structfnptr26)" "$$(printf '1 11\n2 a 11 b 20\n3 c 20\n4 11\n5 11 20')"
+	# sizeof through MORE THAN ONE dereference. The operand path consumed one
+	# `*' and then required an identifier, so `sizeof(**p)' matched no branch
+	# and kept the pointer-size default: gcc 16, pxx 8. It lands on an
+	# ALLOCATION -- ash's stzalloc(sizeof(**nlpp)) reserved 8 bytes for a
+	# 16-byte struct and the next allocation's header ate the previous node.
+	# Rows 6-8 are fewer-stars-than-depth and must stay at the POINTER size:
+	# a fix that always returns the base size passes rows 1-5 and breaks those.
+	# $(COMPILER), not $(PXX_STABLE): the fix is IN the compiler, so the pin
+	# cannot see it -- under the pin rows 2,3,5 print 8 (that is the control).
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/csizeof_deref.c $(TESTTMP)/c_szderef26
+	tools/expect_same.sh c_szderef26 "$$($(TESTTMP)/c_szderef26)" "$$(printf '1 16 16\n2 16 16\n3 16 16\n4 40 40\n5 40 40\n6 8 8\n7 8 8\n8 8 8')"
+	# A `**' declarator that is not FIRST in its declaration lost its pointee
+	# record, so `(*b)->n = v' wrote at OFFSET 0 -- into `next', not `n'.
+	# POSITION decided it: row 7's `struct nl *m1, **m2;' broke only m2, so a
+	# fix keyed on the declaration being uniformly double-star passes rows 4-5
+	# and still fails 7. The first-declarator arm of this same bug was fixed
+	# earlier with a lua repro; these three sibling sites were left behind.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/cdeclarator_ptrptr.c $(TESTTMP)/c_declptrptr26
+	tools/expect_same.sh c_declptrptr26 "$$($(TESTTMP)/c_declptrptr26)" "$$(printf '1 n=1 next=0\n2 n=2 next=0\n3 n=3 next=0\n4 n=4 next=0\n5 n=5 next=0\n6 n=6 next=0\n7 n=7 next=0')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The SIBLING defect, and it is not the const-branch one: a loop in dead code
@@ -21615,6 +21636,30 @@ endif
 	  echo 'cprintf_errno: identical to gcc'; \
 	fi; \
 	else echo 'cprintf_errno: SKIP (no gcc)'; echo cprintf_errno >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cprintf_errno) >/dev/null 2>&1; fi
+	# fork/vfork/wait/waitpid -- all four were stubs (ENOSYS / ECHILD) and NOT
+	# because a syscall was missing: the PAL entry issuing SYS_fork was NAMED
+	# PalVfork, and three crtl comments then reasoned from the name and agreed
+	# with each other. busybox ash failed on `can't fork' against a PAL that
+	# had fork. Row 2 is the load-bearing one: the child's store must NOT be
+	# visible in the parent, which is what separates a real fork from the vfork
+	# the old name claimed -- asserting only "a child ran and exited 7" passes
+	# equally well over a vfork. Output is ordered by construction (the parent
+	# blocks in waitpid, the child reports only via exit status), so this does
+	# not race between runs or between the two compilers.
+	# feature-c-corpus-busybox-multi-applet
+	$(PXX_STABLE) test/cfork.c $(TESTTMP)/cfork
+	@if command -v gcc >/dev/null 2>&1; then \
+	  if ! gcc -w -o $(TESTTMP)/cfork_gcc test/cfork.c 2> $(TESTTMP)/cfork_oracle.err; then \
+	    echo "SKIP: cfork (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cfork_oracle.err))"; echo cfork >> $(TESTTMP)/lib-test.skipped; \
+	    (cd $(TESTTMP) && $(TESTTMP)/cfork) >/dev/null 2>&1; \
+	  else \
+	  (cd $(TESTTMP) && $(TESTTMP)/cfork_gcc) > $(TESTTMP)/cfork_gcc.txt 2>&1; \
+	  (cd $(TESTTMP) && $(TESTTMP)/cfork) > $(TESTTMP)/cfork_pxx.txt 2>&1; \
+	  diff $(TESTTMP)/cfork_gcc.txt $(TESTTMP)/cfork_pxx.txt || \
+	    { echo 'FAIL: cfork differs from gcc'; exit 1; }; \
+	  echo 'cfork: identical to gcc'; \
+	fi; \
+	else echo 'cfork: SKIP (no gcc)'; echo cfork >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cfork) >/dev/null 2>&1; fi
 	# fnmatch -- crtl had NO fnmatch.h at all, which is a hard error when cross
 	# compiling (no host header to fall back on), so busybox's ash could not be
 	# built for aarch64 at all. Compared against glibc over a MATRIX of flags

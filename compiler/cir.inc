@@ -374,6 +374,21 @@ begin
     defaultLabel := ASTSOffset[node];
     Exit;
   end;
+  { AN_PTR_CAST OVERLOADS ASTRight AS A PROC-SIGNATURE INDEX, NOT A CHILD
+    (cparser.inc, `ASTRight[node] := castProcSig'). Walking it as a node is how
+    this scan drove the compiler into a SEGFAULT WITH NO DIAGNOSTIC while
+    building busybox's ash at -O0/-O1: it recursed into AST index 1745, which is
+    a signature id and not a node, whose own Left and Right read 0 — and node 0's
+    Left is 0, so the recursion had a FIXED POINT and ran until the stack died.
+    The guard below is `node < 0', so 0 sails through it.
+
+    The operand is still walked: a case label can legitimately sit inside the
+    cast's subexpression, and only the Right field is not a tree. }
+  if ASTKind[node] = AN_PTR_CAST then
+  begin
+    IRLowerCSwitchDispatchScan(ASTLeft[node], selTmp, selTk, defaultLabel);
+    Exit;
+  end;
   IRLowerCSwitchDispatchScan(ASTLeft[node], selTmp, selTk, defaultLabel);
   IRLowerCSwitchDispatchScan(ASTRight[node], selTmp, selTk, defaultLabel);
 end;

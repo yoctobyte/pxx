@@ -96,13 +96,12 @@ char *ttyname(int fd);
    note in the sibling unistd.c. A caller that does take the path gets
    -1/ENOSYS, never a silent no-op.
 
-   chroot and the set*id family have no PAL entry at all. `fork` is a different
-   case: the PAL has vfork, and vfork is NOT fork — the child shares the
-   parent's memory — so pointing fork at it would corrupt silently rather than
-   fail. It stays unavailable until there is a real fork. */
+   chroot and the set*id family have no PAL entry at all. fork/vfork ARE real
+   now: the entry they needed existed the whole time under the name PalVfork
+   while its body issued SYS_fork. See lib/crtl/src/unistd.c. */
 int chroot(const char *path);
-int fork(void);
-int vfork(void);
+pid_t fork(void);
+pid_t vfork(void);
 int setuid(uid_t uid);
 int setgid(gid_t gid);
 int seteuid(uid_t uid);

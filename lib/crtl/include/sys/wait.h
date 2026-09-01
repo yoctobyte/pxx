@@ -4,13 +4,15 @@
 
 /* Process reaping. The MACROS here are real and exact — they only decode an
    int the kernel already produced, so they are correct wherever the status
-   came from. The CALLS are ENOSYS stubs: the PAL exposes no wait4/waitid, and
-   with fork() also unavailable there is nothing to reap.
+   came from.
 
-   Kept as a pair on purpose: real code writes `if (waitpid(...) > 0 &&
-   WIFEXITED(st))`, and it must be able to COMPILE that against us even where
-   it will never take the branch. See the note beside the other ENOSYS stubs
-   in lib/crtl/src/unistd.c. */
+   THE CALLS ARE NOW REAL TOO. This comment used to say "the PAL exposes no
+   wait4/waitid", which was the third place in crtl to state a version of that
+   claim and, like the other two, it was false when written: PalWait4 existed
+   and subprocess.pas was already calling it. The stubs were downstream of
+   fork() being stubbed, and fork() was stubbed because a PAL entry that issued
+   SYS_fork was NAMED PalVfork. One misleading name, three comments that agreed
+   with each other, and busybox ash failing on `can't fork'. */
 
 #include <sys/types.h>
 
@@ -27,10 +29,9 @@
 #define WIFCONTINUED(s) ((s) == 0xffff)
 #define WCOREDUMP(s)    ((s) & 0x80)
 
-/* Both fail with -1/ECHILD: there are no children, because fork() is itself
-   an ENOSYS stub. ECHILD rather than ENOSYS is deliberate — it is the answer
-   POSIX defines for "nothing to wait for", so a caller's existing error path
-   handles it correctly instead of meeting a code it has never seen. */
+/* Both are wait4(2) underneath. ECHILD still reaches the caller when there is
+   genuinely nothing to reap — it is now the KERNEL saying so rather than crtl
+   asserting it, which is the difference that matters. */
 int wait(int *status);
 int waitpid(int pid, int *status, int options);
 

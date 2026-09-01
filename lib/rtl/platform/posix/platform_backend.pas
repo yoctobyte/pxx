@@ -108,7 +108,7 @@ function PalBackendAcceptIpv6(handle: Integer; var outAddr: TPalIn6Addr;
 function PalBackendMonotonicMillis: Int64;
 procedure PalBackendYield;
 
-function PalBackendVfork: Integer;
+function PalBackendFork: Integer;
 function PalBackendExecve(path: PChar; argv, envp: Pointer): Integer;
 function PalBackendPipe2(var pipefd: array of Integer; flags: Integer): Integer;
 function PalBackendDup2(oldFd, newFd: Integer): Integer;
@@ -1390,7 +1390,24 @@ procedure PalBackendYield;
 begin
 end;
 
-function PalBackendVfork: Integer;
+{ WAS CALLED PalBackendVfork, AND THE BODY WAS NEVER A VFORK. Both arms give the
+  child its OWN copy-on-write address space: SYS_fork directly, or clone with
+  SIGCHLD and no CLONE_VM, which is precisely what fork(2) is. Nothing shares the
+  parent's memory and nothing constrains the child to exec-or-_exit.
+
+  The old name cost a real conclusion, which is why it is being corrected rather
+  than left alone. lib/crtl/src/unistd.c reasoned FROM THE NAME -- "the PAL has
+  PalVfork, and vfork is NOT fork, so wiring fork to it would be a silent
+  corruption" -- and left fork() as an ENOSYS stub on that basis. The comment
+  even ends by telling the reader to MEASURE the PAL before believing a line
+  that says an entry is missing, which is exactly the step it skipped. busybox
+  ash then failed with `can't fork', against a PAL that had had fork all along.
+  An 80%-accurate name is worse than no name: the half that reads true is what
+  stops you looking.
+
+  PalVforkAndExec keeps its name for now -- it has real callers in
+  subprocess.pas -- but its body forks too, and says so at its own head. }
+function PalBackendFork: Integer;
 begin
 {$ifdef PAL_GENERIC_SYSCALLS}
   Result := Integer(__pxxrawsyscall(SYS_clone, $11, 0, 0, 0, 0, 0)); { SIGCHLD only -> fork (own COW address space) }

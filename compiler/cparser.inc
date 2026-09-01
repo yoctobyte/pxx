@@ -2860,7 +2860,7 @@ begin
 end;
 
 function ParseCSizeof: Integer;
-var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen: Integer;
+var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen, starCount: Integer;
     cNDims, cDim, cSpanSym: Integer;
     cFldRec: Integer; cFldName: AnsiString;   { the record field the descriptor walk is inside, for its dim spans }
     vlaSz: Integer;   { VLA operand: its `$vlasz$` companion local, else -1 }
@@ -2955,8 +2955,29 @@ begin
         this the operand fell through to the default pointer size, so e.g. lua's
         `memcpy(ra+4, ra, 3*sizeof(*ra))` (ra a StackValue*) copied 3*8 instead
         of 3*16 bytes and dropped the generic-for state/control values. }
-      Next;  { consume '*' }
-      if CurTok.Kind = tkIdent then
+      { COUNT the stars: `sizeof(**pp)` is not `sizeof(*pp)`. Only one was
+        consumed here, so a second `*` left CurTok on tkStar, no branch below
+        matched, and sz kept the DEFAULT POINTER SIZE. That is a silent wrong
+        VALUE, and where it lands is an allocation: busybox ash's
+        `stzalloc(sizeof(**nlpp))` reserved 8 bytes for a 16-byte struct, so
+        writing the node pointer through it ran off the end of the block and the
+        next allocation's header overwrote the previous node. The visible symptom
+        was a command substitution running a command whose NAME was garbage,
+        three layers away from sizeof. Measured: gcc 16, pxx 8. }
+      starCount := 0;
+      while CurTok.Kind = tkStar do begin Inc(starCount); Next; end;
+      if (starCount > 1) and (CurTok.Kind = tkIdent) then
+      begin
+        si := FindSym(CurTok.SVal);
+        { SymPtrDepth/SymPtrBaseTk exist for exactly this — defs.inc says "pair
+          them with PtrDepth to recover the pointee (depth > 1)". Fewer stars
+          than the depth still leaves a POINTER, whose size is the default sz
+          already sitting in the variable, so only the full-depth case moves. }
+        if (si >= 0) and (Syms[si].TypeKind = tyPointer) and
+           (SymPtrDepth[si] > 1) and (starCount = SymPtrDepth[si]) then
+          sz := TypeStorageSize(IntToTypeKind(SymPtrBaseTk[si]), SymPtrBaseRec[si]);
+      end
+      else if CurTok.Kind = tkIdent then
       begin
         si := FindSym(CurTok.SVal);
         { `sizeof(*s.field)` / `sizeof(*s->field)` — deref of a pointer-typed
@@ -5649,7 +5670,16 @@ begin
       declTk := tyPointer; declPtrDepth := declPtr;
       declBaseTk := Ord(scalarTk); declBaseRec := scalarRec;
       if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
-      else begin declElemTk := Ord(tyPointer); declElemRec := REC_NONE; end;
+      { KEEP the base record at depth >= 2, exactly as the FIRST declarator's path
+        does (CTypeElemRec := baseRec under `if CTypePtrDepth >= 2'). That arm was
+        already fixed once, with a lua repro, and its comment even says "Was REC_NONE,
+        which dropped the struct" -- but the SIBLING declarators were left behind. So
+        `T **a, **b;' gave `a' the record and `b' REC_NONE; ResolveNodeRec then could
+        not find the field and `(*b)->fld = v' wrote at OFFSET 0. busybox ash's
+        nodelist tail-append stored the parsed command into ->next instead of ->n and
+        a command substitution ran a command whose NAME was garbage. Position in the
+        declarator list decided it, which is why `T *m1, **m2;' broke only m2. }
+      else begin declElemTk := Ord(tyPointer); declElemRec := scalarRec; end;
     end
     else
     begin
@@ -5718,7 +5748,7 @@ begin
           declTk := tyPointer; declPtrDepth := declPtr;
           declBaseTk := Ord(scalarTk); declBaseRec := scalarRec;
           if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
-          else begin declElemTk := Ord(tyPointer); declElemRec := REC_NONE; end;
+          else begin declElemTk := Ord(tyPointer); declElemRec := scalarRec; end;   { keep the base rec at depth>=2 — see the note at the first of these three }
           declProcSig := -1; declPtrElemSig := -1;
         end
         else if hadStar then
@@ -6360,7 +6390,7 @@ begin
         declBaseTk := Ord(scalarTk);
         declBaseRec := scalarRec;
         if declPtr = 1 then begin declElemTk := Ord(scalarTk); declElemRec := scalarRec; end
-        else begin declElemTk := Ord(tyPointer); declElemRec := REC_NONE; end;
+        else begin declElemTk := Ord(tyPointer); declElemRec := scalarRec; end;   { keep the base rec at depth>=2 — see the note at the first of these three }
         declProcSig := -1; declPtrElemSig := -1;
       end
       else if hadStar then
