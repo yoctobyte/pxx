@@ -108,7 +108,13 @@ right instrument and has not been built.
 
 ## Not in scope, found on the way
 
-`--target=i386` ignores a field width on strings entirely: `WriteLn(s:9)` for
-`s = 'abcdef'` prints `abcdef` where x86-64 and FPC print `   abcdef`. Verified
-pre-existing (the i386 artefacts are byte-identical across this change), so it
-is a separate defect and not a regression here.
+Chasing the i386 control turned up a second, unrelated defect, now
+[[bug-a-three-backends-drop-the-field-width-on-a-string-variable]]: `WriteLn(s:9)`
+for `s = 'abcdef'` prints `abcdef` on i386, aarch64 AND arm32, where x86-64,
+riscv32 and FPC print `   abcdef`. Pre-existing here -- the i386 artefacts are
+byte-identical across this change -- so it is not a regression from it.
+
+The first reading of that said "i386 only", from an A/B whose cross-target rows
+had silently all executed the same stale i386 artefact: the filename was built
+by a `$(...)` that failed, so every target wrote to and ran one path. Distinct
+output names and qemu gave the real answer, which is three targets.
