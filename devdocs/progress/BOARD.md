@@ -550,10 +550,11 @@ _none_
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 | bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep | D | 35 | bug | A THIRD population of docs-vs-compiler defect, which no existing check can see: the flag exists, the docs name it, and the docs are wrong about WHICH TARGETS OR SOURCES it applies to. Measured instance fixed here -- `--emit-obj` was documented as working `on any target` and is refused on 3 of 6 backends. A grep of docs against the parser's flag table cannot detect this class, because the flag is in both lists and the page still lies. | — |
 
-## backlog-esp (1)
+## backlog-esp (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-s-exceptions-do-not-link-on-xtensa-the-raise-runtime-pulls-calloc | S | 45 | bug | try/except does not link on xtensa: the raise runtime pulls `calloc` | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 
 ## backlog-rust (0)
@@ -1044,6 +1045,7 @@ _none_
 - [p 45] [P] bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name
 - [p 45] [P] bug-p-a-stray-end-at-unit-implementation-top-level-is-silently-skipped
 - [p 45] [P] bug-p-a-user-type-whose-name-shadows-a-builtin-is-unusable
+- [p 45] [S] bug-s-exceptions-do-not-link-on-xtensa-the-raise-runtime-pulls-calloc
 - [p 45] [T] bug-t-36-ranked-tickets-have-no-track-field-and-their-lane-rests-on-the-filename
 - [p 45] [T] bug-t-a-campaign-umbrella-has-no-safe-status-to-sit-in
 - [p 45] [T] bug-t-a-fuzz-finding-cited-by-seed-alone-cannot-prove-a-fix
