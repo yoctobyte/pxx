@@ -15989,9 +15989,16 @@ test-xtensa: $(COMPILER)
 	# same arm builds, at the SAME code size (622444B both ways) -- 4419e1aa7
 	# reordered the image rather than growing it, which is why a commit that
 	# changed no size moved the body 36618 bytes out of reach.
-	# The WINDOWED arm keeps no flag deliberately: it lays out at 556908B and
-	# still builds, so the "a large image builds without being told" coverage
-	# lives on there rather than being lost with this line.
+	# The WINDOWED arm keeps no flag deliberately -- it still builds -- so the
+	# "a large image builds without being told" coverage lives on there rather
+	# than being lost with this line. Do NOT read that as headroom, and do not
+	# read it as "windowed is smaller so it is safer" (frankS, 2026-09-01): the
+	# windowed image is 556908B and PASSES while the call0 image is 622444B and
+	# FAILS, and both are over 524288. The LARGER image is the one that builds.
+	# Size is not the condition. Max caller->callee DISTANCE is, and size is
+	# only a proxy for it -- which is exactly why a zero-byte reorder flips it.
+	# A windowed build passing tells you THAT LAYOUT keeps every call in range,
+	# nothing more.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls $(TESTTMP)/xt_backjump.pas $(TESTTMP)/xt_backjump
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-abi=windowed $(TESTTMP)/xt_backjump.pas $(TESTTMP)/xt_backjump_w
 	./$(COMPILER) $(TESTTMP)/xt_backjump.pas $(TESTTMP)/xt_backjump_x64

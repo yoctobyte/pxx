@@ -83,6 +83,43 @@ Both arms ran and answered differently, so the comparison is not vacuous. The
 windowed arm builds with NO flag at 556908B -- the two ABIs lay the image out
 differently and only call0 is over.
 
+## Size is NOT the condition — distance is
+
+Sharpened by frankS, 2026-09-01, from the numbers above, and it inverts the
+obvious reading:
+
+| ABI | code size | verdict |
+| --- | --- | --- |
+| call0 | 622444 B | **FAILS** |
+| windowed | 556908 B | **builds** |
+
+Both are over CALL8's 524288. **The larger image is the one that builds.** So
+image size is not what decides this; **max caller->callee distance** is, and
+size is only a proxy for it. That is precisely why a commit which changed no
+bytes could flip it: `4419e1aa7` moved the callee, not the byte count.
+
+Two consequences worth carrying:
+
+- **A passing build on one ABI is not headroom.** It says THAT LAYOUT keeps
+  every call in range. Read as "we are comfortably under", it is wrong.
+- **An image-size watch would not catch this** — it would have stayed green
+  straight through this regression. The number worth watching is closest
+  approach to +-512 KiB across all call sites, which the backend already
+  computes in order to emit the refusal at all. That is cheaper than either
+  candidate below and changes no codegen; filed separately as
+  [[idea-t-watch-the-closest-call-approach-not-the-image-size]].
+
+Also from frankS, against my own argument: **do not justify this prio with an
+"ESP images are trending large" story.** Empty bare-profile xtensa is 43428 B
+and `uses softfloat` adds ~54 KB (see
+[[bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss]]), so
+bare ESP has 5-12x headroom and several doublings to go. The population that
+actually hits this is **hosted** xtensa, which is growing deliberately as
+frontends lean on it as a differential oracle — every new program compiled for
+it is another chance to land a RED whose diff looks nothing like a size change.
+That, not ESP, is the cost curve that justifies 50. Revisit upward if hosted
+xtensa sweeps start hitting it repeatedly.
+
 ## What this does NOT change
 
 The two candidates below are unaffected; nothing here argues for one over the

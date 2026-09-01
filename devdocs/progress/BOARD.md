@@ -322,7 +322,7 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 
-## backlog-tools (68)
+## backlog-tools (69)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -383,6 +383,7 @@ _none_
 | feature-t-uforth-bench-restore-the-elfhash-outlier | T | 15 | feature | blocktest-elfhash SKIPs in the uforth bench: blocktest.fth needs uforth's block-word preamble (FIRST-TEST-BLOCK / LIMIT-TEST-BLOCK / [?IF]) that tester.fr alone does not supply. It is the tracked ~100x-slow outlier, so while it skips the harness has no visibility on the worst case. | — |
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-twatch-full-tier-coverage-age | T | 35 | feature | No signal distinguishes "full tier is lagging" from "full tier never completes" | — |
+| idea-t-watch-the-closest-call-approach-not-the-image-size | T | 40 | idea | The obvious guard against xtensa reach failures is a watch on image size, and it would NOT WORK: measured 2026-09-01, the 622444B call0 image FAILS and the 556908B windowed image BUILDS, both over CALL8's 524288 -- the larger one is the one that builds, because the condition is max caller->callee distance and size is only a proxy. Watch closest approach to +-512 KiB across call sites instead; the xtensa backend already computes it to emit its refusal, so this is a report, not a new analysis, and it changes no codegen. | — |
 | meta-t-dev-throughput-and-track-a-t-integration | T | 30 | meta | META: development is wait-limited, not token-limited. Dev tracks stop running suites; T owns breadth and its report LATENCY becomes the product. Coordinates the tooling tickets that get us there. | — |
 | refactor-t-the-automated-pin-stages-the-stable-tree-by-a-hardcoded-path | T | 20 | refactor | NOT a present fault -- verified correct today. The automated pin path in tools/testmgr.py stages the stable tree with `git add -u <root>` plus an explicit `git add <root>/default/builtin`. The second call is what saves it, and it saves it by NAMING the one directory that has ever needed saving. `git add -u` stages tracked files only, so any FUTURE directory added under the stable root is silently left untracked in the pin commit, exactly as builtin/ was before that line existed. Correct by hardcoded path rather than by rule. | — |
 | regression-cascade-fc01c8094434 | T | 70 | regression | regression CASCADE: 38 jobs newly red in 5dbcc861e..fc01c8094 (87 commits) — auto-filed by twatch | — |
@@ -903,7 +904,7 @@ _none_
 - [p 90] [C] feature-c-corpus-busybox-multi-applet (unblocks 1)
 - [p 85] [U] decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual (unblocks 2)
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
-- [p 80] [A] meta-a-pxx-produces-linkable-code
+- [p 80] [A] meta-a-pxx-produces-linkable-code [meta — a standing index, never "done"; link work to it, do not claim it]
 - [p 80] [A] umbrella-cross-target-codegen-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 75] [A] bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa (unblocks 1)
 - [p 75] [A+O] feature-a-reentrant-heap-lock-and-per-thread-arenas (unblocks 1)
@@ -1130,6 +1131,7 @@ _none_
 - [p 40] [T] feature-t-check-flags-a-lane-blocker-that-has-no-in-edges
 - [p 40] [W] feature-web-machine-readable-project-metadata
 - [p 40] [A] feature-writeln-as-library
+- [p 40] [T] idea-t-watch-the-closest-call-approach-not-the-image-size [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p 40] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 40] [A] refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering
 - [p 40] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
@@ -1226,7 +1228,7 @@ _none_
 - [p 30] [T] feature-t-pasmith-rung-selftest
 - [p 30] [A] feature-toolchain-cli-ux
 - [p 30] [W] feature-web-syndication-feeds
-- [p 30] [T] meta-t-dev-throughput-and-track-a-t-integration
+- [p 30] [T] meta-t-dev-throughput-and-track-a-t-integration [meta — a standing index, never "done"; link work to it, do not claim it]
 - [p 30] [A] refactor-a-nodearrndinfo-is-a-symtab-query-living-in-a-pascal-parser-file
 - [p 30] [A] refactor-a-two-dyn-array-depth-functions-that-drift [parked — re-claim, do not duplicate]
 - [p 25] [U] decide-posix-master-vs-fpc-named-master-for-the-socket-facades (unblocks 1)
@@ -1293,7 +1295,7 @@ _none_
 - [p 20] [T] feature-t-record-host-cpu-features-in-tstate
 - [p 20] [M] feature-t-windows-wine-harness
 - [p 20] [A] feature-typeinfo-last-categories
-- [p 20] [A] meta-constant-normalisation
+- [p 20] [A] meta-constant-normalisation [meta — a standing index, never "done"; link work to it, do not claim it]
 - [p 20] [T] refactor-t-the-automated-pin-stages-the-stable-tree-by-a-hardcoded-path
 - [p 18] [S] feature-c-esp-conformance-coverage
 - [p 18] [A] refactor-a-search-path-helpers-live-in-the-c-preprocessor
@@ -1323,7 +1325,7 @@ _none_
 - [p  5] [N] feature-nilpy-nested-def-as-value
 - [p  5] [A] idea-a-auto-enable-threadsafe-by-restarting-the-compile [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
 - [p  5] [A] idea-adaptive-heap-growth [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
-- [p  5] [A] meta-dialect-extensions-and-fpc-strict [!! DO NOT CLAIM — the ticket says so; read it]
+- [p  5] [A] meta-dialect-extensions-and-fpc-strict [!! DO NOT CLAIM — the ticket says so; read it] [meta — a standing index, never "done"; link work to it, do not claim it]
 - [p  0] [R] feature-rust-option-type [parked — re-claim, do not duplicate]
 
 ## Leverage (tickets each one unblocks)

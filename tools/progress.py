@@ -508,6 +508,32 @@ class Ticket:
                 or self.fm.get("type", "").strip().strip('"').lower() == "umbrella")
 
     @property
+    def is_meta(self) -> bool:
+        """A STANDING INDEX, not a unit of work — same dispatch semantics again.
+
+        A meta ticket exists so related work has somewhere to link itself, and
+        it is never "done": meta-constant-normalisation says so in as many words
+        ("standing index -- never \"done\""), and meta-a-pxx-produces-linkable-code
+        calls itself a "Standing umbrella" in its own summary while being typed
+        `meta`. That last one is why this predicate exists. It sits at p80 --
+        the highest-ranked thing in Track A -- so `next --track A` handed it to
+        three different agents in one day, each of whom had to work out
+        independently that its concrete children were already claimed by frankA
+        and put it back. The third one wrote this (frankB, 2026-09-01).
+
+        The `is_umbrella` docstring already has the argument: the priority is
+        HONEST -- linkable output really is what Track A should be pushing on --
+        and lowering it to stop the misdispatch would corrupt the ranker to fix
+        a dispatch bug. It is the TYPE that is wrong to hand over. So meta stays
+        ranked and visible in `ready`, annotated, and only `next` declines.
+
+        Measured before adding: 3 meta tickets across the ranked buckets, all
+        three self-describing as indexes or coordination, none a unit of work.
+        """
+        return (self.slug.startswith("meta-")
+                or self.fm.get("type", "").strip().strip('"').lower() == "meta")
+
+    @property
     def guessed_track(self) -> str:
         """The lane letter twatch GUESSED, when that guess is still standing.
 
@@ -960,6 +986,9 @@ class Board:
             if t.is_idea:
                 extra += (" [idea — a brainstorm parent, not a unit of work; "
                           "spin out a concrete ticket instead of claiming it]")
+            if t.is_meta:
+                extra += (" [meta — a standing index, never \"done\"; "
+                          "link work to it, do not claim it]")
             if t.guessed_track:
                 extra += (" [track GUESSED from the test path — the defect may "
                           "be in another lane; verify before claiming]")
@@ -973,8 +1002,10 @@ class Board:
         # Drop tickets that declare themselves unclaimable. `next` prints a
         # paste-ready `claim` line, so offering one of these is an invitation;
         # `ready` still lists them (flagged) because seeing them is useful.
-        skipped = [t for t in rt if t.not_dispatchable or t.is_idea or t.is_umbrella]
-        rt = [t for t in rt if not (t.not_dispatchable or t.is_idea or t.is_umbrella)]
+        skipped = [t for t in rt
+                   if t.not_dispatchable or t.is_idea or t.is_umbrella or t.is_meta]
+        rt = [t for t in rt
+              if not (t.not_dispatchable or t.is_idea or t.is_umbrella or t.is_meta)]
         if not rt:
             scope = f" for Track {track_filter}" if track_filter else ""
             return f"no ready ticket{scope} (all blocked or none in urgent/backlog/unfinished)\n"
@@ -1001,7 +1032,7 @@ class Board:
         if skipped:
             lines.append(
                 f"  (skipped {len(skipped)} higher-ranked ticket(s) — "
-                f"do-not-claim, brainstorm-parent or umbrella: "
+                f"do-not-claim, brainstorm-parent, umbrella or meta-index: "
                 f"{', '.join(t.slug for t in skipped)})")
         if t.guessed_track:
             lines.append(
