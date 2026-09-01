@@ -11068,6 +11068,19 @@ begin
       if TypeIsFloat(ptypes[i]) then Inc(nfpNamed) else Inc(ngpNamed);
     ProcNamedGP[procIdx] := ngpNamed;
     ProcNamedFP[procIdx] := nfpNamed;
+    { The record id per parameter, on the DURABLE carrier. The C frontend was
+      the only one not filling this: Pascal writes it from three sites and
+      ir_codegen{,_arm32,_riscv32,_xtensa}.inc read it to decide a by-value
+      record's slot, so on the C path they were all reading REC_NONE and
+      RecSize's 8-byte fallback. Harmless while every C record parameter is
+      forced by-reference, and the first thing an aggregate classifier needs.
+      Syms[Params[i].SymIdx].RecName cannot serve: a PROTOTYPE never allocates
+      param syms at all, which is exactly the `relay_*` direction of the mixed
+      link -- pxx calling a gcc callee it has only seen declared.
+      bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee }
+    for i := 0 to nparams - 1 do
+      if i < MAX_PROC_PARAMS then
+        ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := precid[i];
   end;
   { A `<unit>_pas_<Name>` prototype selected a Pascal routine by signature. The
     C declaration keeps its OWN proc entry -- so C-side argument conversion
