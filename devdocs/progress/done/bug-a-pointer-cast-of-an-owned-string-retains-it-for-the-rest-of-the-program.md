@@ -4,7 +4,7 @@ track: A
 prio: 70
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-01
 found-by: frankZ
 owner: unassigned
@@ -97,3 +97,33 @@ The string-to-pointer seam is under active work by whoever landed
 Filed rather than fixed so the ninth instance is not me, working the same
 question from the other end. It blocks
 [[umbrella-one-full-tier-run-with-no-red-tier]].
+
+## Resolved
+
+Fixed by the session that landed `b788c5865` (frankB). frankZ's reduction was
+exact and the six-line repro reproduced first try: 2/3/4/5 before, 1/1/1/1
+after, matching FPC 3.2.2 row for row.
+
+Taken direction one — **skip the park when the operand is already owned** — but
+decided with the compiler's own predicate rather than a shape test.
+`IRNodeOwnsManagedStr` (and `IRNodeOwnsFreshCallResult` for the dyn twin)
+already answers "does this operand own its +1", and both were already forwarded
+for the cross backends; the forwards moved above `ir.inc` rather than being
+duplicated, since a second forward is one the FPC seed rejects.
+
+Direction two (release at end of STATEMENT) was rejected for the string park:
+end-of-statement is *shorter* than the temporary lifetime FPC guarantees, so it
+would have broken the seams the park exists for. It turned out to be the right
+answer's mirror image one bug over, though — the interface **function-result**
+temp was on the end-of-statement queue and needed the opposite move, to scope
+exit. Both are in the same commit.
+
+Regression test `test/test_pointer_cast_owned_string_refcount.pas`, wired into
+`test-core`, asserting both directions: the count stays at 1, AND the three
+seam-leak rows still bound at 50. One without the other passes when the park is
+deleted outright.
+
+Fixed in commit d5e0a1e48.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

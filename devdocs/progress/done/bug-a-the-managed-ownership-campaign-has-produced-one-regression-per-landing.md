@@ -4,7 +4,7 @@ track: A
 prio: 85
 type: bug
 blocked-by: [bug-a-pointer-cast-of-an-owned-string-retains-it-for-the-rest-of-the-program]
-status: backlog
+status: done
 found: 2026-09-01
 found-by: frankZ
 owner: unassigned
@@ -98,3 +98,35 @@ judgement for whoever owns the seam, not for me.
 Filed, not fixed. The seam is under active generalisation by one session and a
 second pair of hands in it would be the tenth instance of the shape rather
 than a fix. Blocks [[umbrella-one-full-tier-run-with-no-red-tier]].
+
+## Resolved — all four green
+
+All four reproduced at HEAD exactly as filed, and all four are green at
+`d5e0a1e48`:
+
+| program | before | after |
+| --- | --- | --- |
+| `test_rtl_fpc_compat_helpers` | SIGSEGV | 23 / 23 |
+| `test_threadsafe_refcount_lockfree` | fail=3 | fail=0 |
+| `test_interface_byval_param_no_leak` | 24 / 25 | 25 / 25 |
+| `test_exception_threads_race` | SIGSEGV | rc=0 |
+
+Two causes, not four. Three of them were one: the park fired on already-owned
+values, whose release lands at the enclosing scope's exit. The fourth was the
+interface function-result temp sitting on the end-of-statement queue when FPC
+holds it to scope exit.
+
+**The verification claim is the part worth keeping, and it was right.** An
+ownership change reaches every managed type, and `make compiler/pascal26` plus
+one repro cannot see it — `compiler.pas` exercises almost none of the managed
+surface. Five landings, five green gates, four reds. CLAUDE.md already says the
+fixedpoint cannot see a construct the compiler never writes; the commits that
+caused this quoted that rule and still did not run four programs costing under a
+minute between them. `-Fulib/rtl` being load-bearing on the first is exactly the
+kind of thing that makes a repro set worth writing down rather than
+reconstructing.
+
+Fixed in commit d5e0a1e48.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:7 unfinished:28 blocked:7 backlog:8 backlog-umbrella:6 backlog-core:142 backlog-nilpy:97 backlog-tools:77 backlog-pascal:56 backlog-decide:26 backlog-libs:15 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3059 rejected:72`
+`working:7 unfinished:28 blocked:7 backlog:8 backlog-umbrella:6 backlog-core:140 backlog-nilpy:97 backlog-tools:77 backlog-pascal:56 backlog-decide:26 backlog-libs:15 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3061 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -58,10 +58,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 463, ranked
+## Ready — top 30 of 462, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
-- `[p 85] [A]` bug-a-pointer-cast-of-an-owned-string-retains-it-for-the-rest-of-the-program (unblocks 1)
 - `[p 85] [T]` regression-optdiff-shard4-12 (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-interface-byval-param-no-leak (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-rtl-fpc-compat-helpers-2 (unblocks 1)
@@ -90,5 +89,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
+- `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
 
-_433 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_432 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
