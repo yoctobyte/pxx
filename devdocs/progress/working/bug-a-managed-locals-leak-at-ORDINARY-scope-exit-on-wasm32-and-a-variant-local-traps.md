@@ -3,11 +3,12 @@ slug: bug-a-managed-locals-leak-at-ORDINARY-scope-exit-on-wasm32-and-a-variant-l
 track: A
 prio: 25
 type: bug
-status: open
+status: working
 found: 2026-09-01
 found-by: frankA
 blocked-by: []
 summary: "MEASURED, not inferred. wasm32's scope-exit release covers scalar AnsiString and dynamic arrays and NOTHING else, so on the ORDINARY path -- no exception, no unwind -- a COM interface local is never released (freed=0 of 1), a record with managed fields leaks (live=269 vs x86-64's 2), and a static array of AnsiString leaks (live=543 vs 3). A Variant local does not leak, it TRAPS: `wasm unreachable`, exit 134, on a program x86-64 runs clean. Alloc counts are IDENTICAL on both sides in every row, so only the frees differ and the comparison is not confounded. wasm32 wires exactly two release helpers, PXXStrDecRef and PXXDynArrayRelease -- no interface, Variant or record-finalize path exists -- so this is the same one-kind-to-seven campaign frankS ran for xtensa in e1d7977a2 + 3a1c1dc73, not a predicate widening. Found while measuring bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, which is a DIFFERENT and much rarer defect."
+owner: frankC
 ---
 
 # Managed locals leak at ORDINARY scope exit on wasm32, and a Variant local traps

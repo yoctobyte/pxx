@@ -5446,7 +5446,7 @@ end;
   them is still refused by name elsewhere on this target — so the honest scope
   is what can actually be stored. }
 procedure WasmEmitManagedLocals(release: Boolean; retSym: Integer);
-var i, hp, hpDyn, mz, nz: Integer;
+var i, hp, hpDyn, hpK, mek, mz, nz: Integer;
 begin
   if CurProc < 0 then Exit;    { a program-body chunk: its variables are BSS,
                                  which the module's own memory image zeroes }
@@ -5471,21 +5471,124 @@ begin
     this backend knows how to release" is precisely what hid the gap below. }
   if release then
   begin
+    { ONE ARM PER MANAGED KIND, IN riscv32's ORDER AND WITH riscv32's PREDICATES.
+
+      This half used to ask its own two-line question -- scalar AnsiString or
+      dynamic array -- while the zero half below asked the shared table. The
+      comment above says why the two predicates legitimately differ; it does not
+      license this one being a hand-written list, and it was. MEASURED against
+      x86-64 with -dPXX_ALLOC_CENSUS, allocation counts identical on both sides
+      so only the frees differed: a COM interface local was released 0 times of
+      1, a record with managed fields left live=269 against 2, a static array of
+      AnsiString left live=543 against 3, and a Variant local did not leak at all
+      -- it TRAPPED, `wasm unreachable`, exit 134, on a program x86-64 runs
+      clean. Five kinds, one missing dispatch.
+
+      The predicates are copied from the riscv32 arm of
+      EmitManagedLocalCleanupForTarget rather than rewritten, because the set of
+      managed kinds is a SHARED fact and a seventh backend restating it is how
+      six of them end up agreeing and one does not. When a kind is added there,
+      it has to be added here; the arms are in the same order so the diff lines
+      up. bug-a-managed-locals-leak-at-ORDINARY-scope-exit-on-wasm32-and-a-variant-local-traps }
     for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-      if (Syms[i].Kind = skLocal) and not Syms[i].IsRef
-         and (((Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray)
-              or (Syms[i].IsArray and (Syms[i].ArrLen = -1))) then
+      if (Syms[i].Kind = skLocal) and not Syms[i].IsRef and (i <> retSym) then
       begin
-        if i = retSym then Continue;
-        WasmSlotAddr(i);
-        WasmMemOp($28, 'i32.load', 2, 0);
-        if Syms[i].IsArray then
+        if SymIsComInterface(i) then
         begin
+          { COM/ARC interface local: _Release the held reference (nil-safe).
+            PXXIntfRelease is a FUNCTION, so its result has to be dropped --
+            wasm validates the operand stack and a leftover value is a module
+            that will not load, which is at least a loud failure. }
+          hpK := WasmWriteHelper('PXXIntfRelease');
+          if hpK >= 0 then
+          begin
+            WasmSlotAddr(i);                    { the SLOT ADDRESS, not the handle }
+            WasmWriteConstArg(hpK, 1, SymTR[i].RecId - REC_UCLASS_BASE);
+            WasmCall(WasmSlotForProc(hpK), 'PXXIntfRelease');
+            WasmOp($1A, 'drop');
+          end;
+        end
+        else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
+                (SymElemDynDepth[i] = 0) and
+                (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
+        begin
+          { STATIC array with MANAGED ELEMENTS: release every element. }
+          hpK := WasmWriteHelper('PXXArrayReleaseImmediate');
+          if hpK >= 0 then
+          begin
+            mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
+            WasmSlotAddr(i);                                  { &arr }
+            WasmWriteConstArg(hpK, 1, Syms[i].ArrLen);
+            WasmWriteConstArg(hpK, 2, mek);
+            if mek = 3 then
+              WasmRecDescAddr(SymTR[i].ElemRec)               { record elements }
+            else
+              WasmWriteConstArg(hpK, 3,
+                ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
+            WasmCall(WasmSlotForProc(hpK), 'PXXArrayReleaseImmediate');
+          end;
+        end
+        else if (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+        begin
+          WasmSlotAddr(i);
+          WasmMemOp($28, 'i32.load', 2, 0);     { the handle }
+          WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
+        end
+        else if (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+        begin
+          { Variant local: clear, which releases any managed payload. This is
+            the row that TRAPPED rather than leaked. }
+          hpK := WasmWriteHelper('PXXVarClear');
+          if hpK >= 0 then
+          begin
+            WasmSlotAddr(i);
+            WasmCall(WasmSlotForProc(hpK), 'PXXVarClear');
+          end;
+        end
+        else if TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+        begin
+          { Promotable-int local: release a heap-tier payload. Optional by
+            profile -- WasmWriteHelper answers -1 where promocore is absent,
+            exactly as FindProc does for the register backends. }
+          hpK := WasmWriteHelper('PXXPromoClear');
+          if hpK >= 0 then
+          begin
+            WasmSlotAddr(i);
+            WasmCall(WasmSlotForProc(hpK), 'PXXPromoClear');
+          end;
+        end
+        else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+                RecordHasManagedFields(SymTR[i].RecId) then
+        begin
+          { Record with managed fields. COM interface members go through their
+            own pass FIRST, as on every other backend. The descriptor is reached
+            through WasmRecDescAddr -- this backend has no code->data fixups, so
+            the address is loaded from a Data[] cell rather than relocated in. }
+          if RecordHasComIntfFields(SymTR[i].RecId) then
+          begin
+            hpK := WasmWriteHelper('PXXRecordReleaseIntf');
+            if hpK >= 0 then
+            begin
+              WasmSlotAddr(i);
+              WasmRecDescAddr(SymTR[i].RecId);
+              WasmCall(WasmSlotForProc(hpK), 'PXXRecordReleaseIntf');
+            end;
+          end;
+          hpK := WasmWriteHelper('PXXRecordRelease');
+          if hpK >= 0 then
+          begin
+            WasmSlotAddr(i);
+            WasmRecDescAddr(SymTR[i].RecId);
+            WasmCall(WasmSlotForProc(hpK), 'PXXRecordRelease');
+          end;
+        end
+        else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+        begin
+          WasmSlotAddr(i);
+          WasmMemOp($28, 'i32.load', 2, 0);     { the handle }
           WasmDataAddr(GetOrAllocSymRTTI(i));
           WasmCall(WasmSlotForProc(hpDyn), 'PXXDynArrayRelease');
-        end
-        else
-          WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
+        end;
       end;
     Exit;
   end;
