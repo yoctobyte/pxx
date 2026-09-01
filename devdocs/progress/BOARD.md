@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386 | A | 45 | bug | PASCAL DONE AND PROVEN; NilPy, Rust and Zig still open. The four `fAlign := TypeAlign(fTk)` record-field sites in pasparser_decl.inc now call TypeFieldAlign, and a new mixed-link oracle (test-record-abi-mixed-link) judges the layout against gcc across a real link on x86_64 and i386, four shapes plus a value round trip through a `cvar` record global. The Track U fork this ticket flagged -- whether a Pascal record must match the C ABI -- dissolved on the first measurement: pxx's C frontend answered 12/4 and pxx's PASCAL frontend 16/8 for the same fields, same target, same compiler. It was not an FPC question, it was one compiler disagreeing with itself. N/R/Z have no export spelling and so no mixed link, and rustc/zig i686 are not on this box. | — |
-| feature-c-corpus-busybox-multi-applet | C | 70→90 | feature | Rung 2 of feature-busybox-kiosk-selfhosting-target. BOTH BARS MET 2026-09-01. First bar (2789f87a7): a two-applet busybox byte-identical to gcc over 28 cases on x86-64 AND aarch64, agreeing with upstream'''s separately-linked binary. SECOND BAR (ash) MET: tools/busybox_diff.sh --applets '''cat echo ash''' is GREEN -- the 41-TU ash unity is byte-identical to the gcc oracle over 62 cases on x86-64 AND aarch64, and the gcc unity agrees with upstream'''s own build. FIFTEEN defects were named and closed getting there, every one found by ATTEMPTING the target rather than by triaging the backlog: a C frontend parse bug (struct-typed local with a fn-pointer member); crtl'''s whole missing shell surface (fnmatch, full signal set + NSIG, strsignal, _SC_CLK_TCK, times, uname, pwd/getpwnam, a real execvp over a new execve, NAME_MAX/PATH_MAX, dprintf/vdprintf, getrlimit/setrlimit); a clock_t that was `long long` where glibc has `long`; crtl'''s own implementation being preprocessed in the PROGRAM'''s macro environment, and then the OPPOSITE error where crtl could not see its OWN header'''s macros; printf %m emitted verbatim, which blanked the reason on every busybox error at once; fork/vfork/wait/waitpid stubbed because a PAL entry issuing SYS_fork was NAMED PalVfork and three comments reasoned from the name; a compiler SEGFAULT with no diagnostic at -O0/-O1 (AN_PTR_CAST overloads ASTRight as a proc-signature index, not a child); sizeof(**p) answering the pointer size; a `**` declarator losing its pointee record unless it was FIRST in its declaration; pointer-minus-pointer tagged as a pointer so the next operator scaled (OPTIND became 9, getopts spun forever, hanging the harness twice for 39 and 22 minutes); and `void *` arithmetic scaling by FOUR (ash builds on `stackblock() + n`, uncast, beside a cast sibling that was always right). STILL OPEN, not blocking this ticket: the unity cannot host ash and coreutils/test.c together in EITHER order, measured, so the `[` builtin needs separate compilation -- bug-a-an-object-neither-exports-nor-imports-data-symbols. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
@@ -541,7 +540,7 @@ _none_
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 
-## backlog-cfront (13)
+## backlog-cfront (14)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -552,6 +551,7 @@ _none_
 | bug-c-sizeof-reaches-a-pointee-through-one-spelling-only | C | 40 | bug | C: sizeof of a subscript through a pointer-to-pointer answers the pointer size | — |
 | bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet | C | 35 | bug | LATENT, with a named trigger. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]` tests pick the 4-byte-slot va_arg helper; everything else falls to an else whose comment says `Cross (aarch64)` but whose condition is `<> TARGET_X86_64`, i.e. the 8-byte-slot path. xtensa and wasm32 are 32-bit and absent from the set -- the set is correct TODAY only because neither can compile a C program at all (`C program entry stub not implemented for this target yet`). The day either gains an entry stub it silently gets 64-bit varargs slots. Fix the set in the SAME commit as the stub. | — |
 | bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently | C | 50 | bug | C: two conflicting typedefs for one name are accepted silently, last wins | — |
+| feature-c-corpus-busybox-userland-by-separate-compilation | C | 70 | feature | Rung 2's successor. The unity build tops out at twelve applets for reasons that are not pxx's -- three busybox files assume they own their namespace and gcc rejects the unity too. Separate compilation removes all of them and is busybox's OWN model: measured 2026-09-01, all 41 TUs compile to objects and link into a working multiplexer. It is NOT correct yet: crtl state is object-local, so errno and optind split per object and the binary diverges from the gcc oracle while still linking and running. Blocked on the crtl linkage ticket; `tools/busybox_diff.sh --separate` is the harness and already exists. | bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link |
 | feature-c-crtl-stdio-buffering-and-setvbuf | C | 55 | feature | lib/crtl/src/stdio.c is entirely unbuffered — fputc is one write() syscall per character — and setvbuf at :1051 is a stub that ignores its arguments and returns SUCCESS, which is the dishonest-stub shape the SetTextBuf ruling exists to reject, and worse here because C callers check the return. Add FILE write buffering under C99 7.19.3p7's policy, make setvbuf real, and share a flush registry with lib/rtl so mixed WriteLn/printf output keeps its order. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | S | 18 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -863,9 +863,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3031)
+## done (3032)
 
-3031 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3032 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -946,6 +946,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 90] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 80] [A] meta-a-pxx-produces-linkable-code [meta — a standing index, never "done"; link work to it, do not claim it]
@@ -953,8 +954,8 @@ _none_
 - [p 75] [A] bug-a-two-threads-raising-object-exceptions-corrupt-the-heap
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [A] umbrella-managed-memory-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
+- [p 70] [A] bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link (unblocks 1)
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- [p 70] [A] bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link
 - [p 70] [C] bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [T] regression-cascade-fc01c8094434
@@ -1425,6 +1426,7 @@ _none_
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - **1** — bug-a-emitzeroframeslot-has-no-wasm32-arm
+- **1** — bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
@@ -1440,7 +1442,6 @@ _none_
 - **1** — decide-the-utf16-payload-fact-is-spelled-twice-kind-widestr-and-enc-ucs2
 - **1** — decide-tobject-classinfo-blob-or-refusal
 - **1** — decide-which-gtk-a-bare-gtk-gtk-h-means
-- **1** — feature-c-corpus-busybox-multi-applet
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-os-targets-bsd-mac
 - **1** — feature-pal-esp-posix-fd-semantics

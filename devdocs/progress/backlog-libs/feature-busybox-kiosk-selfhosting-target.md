@@ -36,7 +36,16 @@ qemu-user. Every existing corpus proves one layer. This proves they compose.
    upstream's own separately-linked `busybox_CAT`. Repeatable:
    `tools/busybox_diff.sh --applets cat`. Cost three compiler fixes and the aarch64
    `IR_ALLOCA` port; see the resolved ticket.
-2. **busybox multi-applet + `ash`** — the shell half.
+2. **busybox multi-applet + `ash`** — the shell half. **DONE 2026-09-01.**
+   Twelve applets (`cat echo ash mkdir rm cp mv pwd wc head sleep printf`),
+   61 translation units, 114 cases, byte-identical to the gcc oracle on
+   x86-64 AND aarch64. Repeatable: `tools/busybox_diff.sh --applets '...'`.
+   Cost sixteen compiler/runtime fixes, every one found by ATTEMPTING the
+   target. Successor:
+   `feature-c-corpus-busybox-userland-by-separate-compilation` [C], which
+   drops the unity for busybox's own build model — the unity tops out on
+   three files that assume they own their namespace, and gcc rejects it too.
+   The old rung text follows.
    `feature-c-corpus-busybox-multi-applet` [C]. **FIRST BAR MET 2026-09-01**
    (`2789f87a7`): cat+echo+the multiplexer, `NUM_APPLETS 2` with the dispatch
    table compiled IN, byte-identical to gcc over 28 cases on x86-64 and

@@ -5,7 +5,7 @@ track: C
 prio: 70
 type: feature
 blocked-by: []
-status: working
+status: done
 created: 2026-08-31
 owner: frankD
 summary: "Rung 2 of feature-busybox-kiosk-selfhosting-target. BOTH BARS MET 2026-09-01. First bar (2789f87a7): a two-applet busybox byte-identical to gcc over 28 cases on x86-64 AND aarch64, agreeing with upstream'''s separately-linked binary. SECOND BAR (ash) MET: tools/busybox_diff.sh --applets '''cat echo ash''' is GREEN -- the 41-TU ash unity is byte-identical to the gcc oracle over 62 cases on x86-64 AND aarch64, and the gcc unity agrees with upstream'''s own build. FIFTEEN defects were named and closed getting there, every one found by ATTEMPTING the target rather than by triaging the backlog: a C frontend parse bug (struct-typed local with a fn-pointer member); crtl'''s whole missing shell surface (fnmatch, full signal set + NSIG, strsignal, _SC_CLK_TCK, times, uname, pwd/getpwnam, a real execvp over a new execve, NAME_MAX/PATH_MAX, dprintf/vdprintf, getrlimit/setrlimit); a clock_t that was `long long` where glibc has `long`; crtl'''s own implementation being preprocessed in the PROGRAM'''s macro environment, and then the OPPOSITE error where crtl could not see its OWN header'''s macros; printf %m emitted verbatim, which blanked the reason on every busybox error at once; fork/vfork/wait/waitpid stubbed because a PAL entry issuing SYS_fork was NAMED PalVfork and three comments reasoned from the name; a compiler SEGFAULT with no diagnostic at -O0/-O1 (AN_PTR_CAST overloads ASTRight as a proc-signature index, not a child); sizeof(**p) answering the pointer size; a `**` declarator losing its pointee record unless it was FIRST in its declaration; pointer-minus-pointer tagged as a pointer so the next operator scaled (OPTIND became 9, getopts spun forever, hanging the harness twice for 39 and 22 minutes); and `void *` arithmetic scaling by FOUR (ash builds on `stackblock() + n`, uncast, beside a cast sibling that was always right). STILL OPEN, not blocking this ticket: the unity cannot host ash and coreutils/test.c together in EITHER order, measured, so the `[` builtin needs separate compilation -- bug-a-an-object-neither-exports-nor-imports-data-symbols."
@@ -424,3 +424,6 @@ something no other row would notice.
   not pxx defects.
 - x86-64 and aarch64, Linux. Nothing here says anything about i386 or arm32.
 - The scripted cases only. `ash` is not proven against an interactive session.
+
+## Log
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
