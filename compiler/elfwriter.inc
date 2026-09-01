@@ -32,7 +32,7 @@ end;
 
 procedure DataPutB(v: Byte);
 begin
-  if DataLen >= MAX_DATA then Error('data overflow');
+  if DataLen >= MAX_DATA then ErrorNoPos('data overflow');
   Data[DataLen] := v;
   Inc(DataLen);
 end;
@@ -775,7 +775,7 @@ begin
     the old 1 MiB cap was being missed by 2,339 bytes -- not by an order of
     magnitude -- took a measurement pass instead of a read. }
   if DbgLen >= MAX_DWARF then
-    Error('DWARF buffer overflow (-g): emitted ' + AIntToStr(DbgLen) +
+    ErrorNoPos('DWARF buffer overflow (-g): emitted ' + AIntToStr(DbgLen) +
           ' bytes of .debug_* content, ceiling MAX_DWARF is ' + AIntToStr(MAX_DWARF) +
           '. Debug info scales with program size; raise MAX_DWARF in defs.inc.');
   if DbgCapacity = 0 then n := 65536 else n := DbgCapacity * 2;
@@ -1688,7 +1688,7 @@ end;
 procedure CheckDataBaseAligned(dataBase: Int64);
 begin
   if (dataBase mod ELF_DATA_ALIGN) <> 0 then
-    Error('internal: data section base is not 8-byte aligned -- xtensa l32i '
+    ErrorNoPos('internal: data section base is not 8-byte aligned -- xtensa l32i '
           + 'will fault on it');
 end;
 
@@ -1759,7 +1759,7 @@ begin
     loads, every address it reports is off by 56, and nothing fails. Checked
     here because this file keeps two parallel copies of this writer. }
   if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE then
-    Error('internal: CODE_OFFSET disagrees with the program-header count');
+    ErrorNoPos('internal: CODE_OFFSET disagrees with the program-header count');
   AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
@@ -1833,7 +1833,7 @@ begin
       it through a Tk callback registered 500 widgets earlier). Say so at LINK
       time instead. }
     if Procs[ProcAddrFix[i].ProcIdx].BodyAddr < 0 then
-      Error('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
+      ErrorNoPos('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
             ': the address of a routine with no body was taken');
     addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
     PatchAddr8(ProcAddrFix[i].CodePos, addr);
@@ -1927,7 +1927,7 @@ begin
     loads, every address it reports is off by 56, and nothing fails. Checked
     here because this file keeps two parallel copies of this writer. }
   if codeOffset <> ELF_HEADER_SIZE + phCount * PROG_HEADER_SIZE then
-    Error('internal: CODE_OFFSET disagrees with the program-header count');
+    ErrorNoPos('internal: CODE_OFFSET disagrees with the program-header count');
   AlignCodeForData(codeOffset);   { the invariant; the page pad below only implies it }
   PadCodeToPageBoundary(codeOffset);
   dataBase := LOAD_ADDR + codeOffset + CodeLen;
@@ -2012,7 +2012,7 @@ begin
       it through a Tk callback registered 500 widgets earlier). Say so at LINK
       time instead. }
     if Procs[ProcAddrFix[i].ProcIdx].BodyAddr < 0 then
-      Error('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
+      ErrorNoPos('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
             ': the address of a routine with no body was taken');
     addr := entry + Procs[ProcAddrFix[i].ProcIdx].BodyAddr;
     PatchAddr8(ProcAddrFix[i].CodePos, addr);
@@ -2115,7 +2115,7 @@ begin
       (softfloat.pas) with nothing to grep for; and it did not say what to do.
       bug-a-a-riscv32-diagnostic-names-the-wrong-target }
     if ExternalCount > 0 then
-      Error('target ' + TargetDisplayName + ': external (dynamic) symbols are '
+      ErrorNoPos('target ' + TargetDisplayName + ': external (dynamic) symbols are '
             + 'not supported on this target (first one: '
             + Procs[ExternalProc[0]].Name + '); this backend emits no dynamic '
             + 'segment, so link the dependency in statically or build for a '
@@ -2152,7 +2152,7 @@ begin
   { See the same check in writeELF: the constant and the header count are one
     fact spelled twice, and drift produces an image that loads and lies. }
   if codeOffset <> ELF32_HEADER_SIZE + phnum * PROG32_HEADER_SIZE then
-    Error('internal: CODE_OFFSET32 disagrees with the program-header count');
+    ErrorNoPos('internal: CODE_OFFSET32 disagrees with the program-header count');
   { Bare-metal ESP image loads into the SoC SRAM (one RWX region under qemu);
     everything else uses the classic i386 ET_EXEC base. }
   if EspBareBoot then
@@ -2664,7 +2664,7 @@ begin
     that would otherwise emit a silently wrong ELF32 object.
     bug-a-the-emit-obj-refusal-names-a-target-set-that-excludes-x86-64 }
   if (TargetArch <> TARGET_XTENSA) and (TargetArch <> TARGET_RISCV32) then
-    Error('internal: writeELF32Rel serves --target=xtensa and --target=riscv32 '
+    ErrorNoPos('internal: writeELF32Rel serves --target=xtensa and --target=riscv32 '
         + 'only, but was dispatched for --target=' + TargetArchName(TargetArch));
   { Programs with `iram;` procedures need the two-text-section writer, which also
     handles @proc (ProcAddrFix) relocs — dispatch BEFORE the guard below. }
@@ -2947,7 +2947,7 @@ begin
     strSize := strSize + Length(ExternalLinkName(i)) + 1;
   end;
   if numExportProcs = 0 then
-    Error('--emit-obj: this object would define no linkable symbol, so nothing '
+    ErrorNoPos('--emit-obj: this object would define no linkable symbol, so nothing '
         + 'could ever link against it. A pxx object exports the routines '
         + 'declared with the C convention -- Pascal `cdecl`, or any function of '
         + 'a .c translation unit. Mark what the object is for, or build an '
@@ -2962,7 +2962,7 @@ var i: Integer;
 begin
   for i := 0 to ProcAddrFixCount-1 do
     if Procs[ProcAddrFix[i].ProcIdx].BodyAddr < 0 then
-      Error('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
+      ErrorNoPos('@' + Procs[ProcAddrFix[i].ProcIdx].Name +
             ': the address of a routine with no body was taken');
 end;
 
@@ -2980,7 +2980,7 @@ var
 {$endif}
 begin
   if TargetArch <> TARGET_X86_64 then
-    Error('--emit-obj: the general ELF64 object writer is x86-64 only; '
+    ErrorNoPos('--emit-obj: the general ELF64 object writer is x86-64 only; '
         + 'xtensa and riscv32 use the ELF32 one, and i386, arm32 and aarch64 '
         + 'have no object writer yet');
 
@@ -3194,7 +3194,7 @@ var
 {$endif}
 begin
   if TargetArch <> TARGET_I386 then
-    Error('--emit-obj: the general ELF32/i386 object writer is i386 only');
+    ErrorNoPos('--emit-obj: the general ELF32/i386 object writer is i386 only');
 
   ObjCheckProcAddrBodies;
   ObjPlanHostedSymbols(strSize, numLocalProcs, numExportProcs);
@@ -3387,7 +3387,7 @@ var
 {$endif}
 begin
   if TargetArch <> TARGET_X86_64 then
-    Error('--emit-obj: .asm frontend object output is x86-64 only');
+    ErrorNoPos('--emit-obj: .asm frontend object output is x86-64 only');
 
   { THIS WRITER IS THE .asm FRONTEND'S, AND THE DISPATCH SENDS IT EVERYTHING.
 
@@ -3418,13 +3418,13 @@ begin
     bug-a-emit-obj-on-x86-64-produces-an-object-with-no-symbols-data-or-relocations }
   if (BSSSize > 0) or (FixCount > 0) or (GlobFixCount > 0) or
      (DataPtrFixCount > 0) or (MethodFixCount > 0) or (ProcAddrFixCount > 0) then
-    Error('--emit-obj: this program needs a general relocatable object (data, '
+    ErrorNoPos('--emit-obj: this program needs a general relocatable object (data, '
         + 'bss or backend relocations) and the x86-64 object writer only '
         + 'handles .asm-frontend output (text, global labels, extern calls). '
         + 'Emitting one would silently drop them. Build an executable instead, '
         + 'or use --target=xtensa/riscv32 --platform=esp for object output');
   if (AsmGlobalSymCount = 0) and (ProcCount > 0) then
-    Error('--emit-obj: the x86-64 object writer exports symbols only for .asm '
+    ErrorNoPos('--emit-obj: the x86-64 object writer exports symbols only for .asm '
         + '`global` labels, so this object would define nothing and could not '
         + 'be linked against');
 
@@ -3574,7 +3574,7 @@ var
 {$endif}
 begin
   if TargetArch <> TARGET_X86_64 then
-    Error('--shared: .asm frontend shared-library output is x86-64 only');
+    ErrorNoPos('--shared: .asm frontend shared-library output is x86-64 only');
 
   dynCount := AsmGlobalSymCount + ExternalCount;
   numDynSyms := dynCount + 1;   { + null symbol }
@@ -4000,7 +4000,7 @@ begin
           else if not isAbs then
           begin
             { relative path climbing above its start: keep the '..' }
-            if depth >= 128 then Error('NormalizePath: path too deep');
+            if depth >= 128 then ErrorNoPos('NormalizePath: path too deep');
             keptStart[depth] := segStart; keptLen[depth] := segLen;
             Inc(depth);
           end;
@@ -4008,7 +4008,7 @@ begin
         end
         else
         begin
-          if depth >= 128 then Error('NormalizePath: path too deep');
+          if depth >= 128 then ErrorNoPos('NormalizePath: path too deep');
           keptStart[depth] := segStart; keptLen[depth] := segLen;
           Inc(depth);
         end;
@@ -4159,8 +4159,8 @@ begin
               else AppendChar(body, src[j]);
               Inc(j);
             end;
-            if j > n then Error('unterminated text-macro define directive');
-            if mCount >= 32 then Error('too many text macros in one unit');
+            if j > n then ErrorNoPos('unterminated text-macro define directive');
+            if mCount >= 32 then ErrorNoPos('too many text macros in one unit');
             mNames[mCount] := w;
             mBodies[mCount] := body;
             Inc(mCount);
@@ -4396,12 +4396,12 @@ begin
       end;
       closePos := j;
       while (closePos <= Length(src)) and (src[closePos] <> '}') do Inc(closePos);
-      if closePos > Length(src) then Error('unterminated Pascal directive during include expansion');
+      if closePos > Length(src) then ErrorNoPos('unterminated Pascal directive during include expansion');
 
       if CaseEqual(command, 'ifdef') or CaseEqual(command, 'ifndef') or
          CaseEqual(command, 'if') or CaseEqual(command, 'ifopt') then
       begin
-        if condCount >= MAX_PAS_CONDS then Error('include conditional nesting overflow');
+        if condCount >= MAX_PAS_CONDS then ErrorNoPos('include conditional nesting overflow');
         cond := False;
         if CaseEqual(command, 'ifopt') then
           cond := False { compiler option switches are not modelled; branch off }
@@ -4429,7 +4429,7 @@ begin
       end
       else if CaseEqual(command, 'elseif') then
       begin
-        if condCount = 0 then Error('unexpected elseif directive during include expansion');
+        if condCount = 0 then ErrorNoPos('unexpected elseif directive during include expansion');
         k := condCount - 1;
         cond := False;
         { Evaluate only when this branch could fire (parent active, no branch
@@ -4447,7 +4447,7 @@ begin
       end
       else if CaseEqual(command, 'else') then
       begin
-        if condCount = 0 then Error('unexpected else directive during include expansion');
+        if condCount = 0 then ErrorNoPos('unexpected else directive during include expansion');
         k := condCount - 1;
         condActive[k] := condParent[k] and not condTaken[k];
         condTaken[k] := True;
@@ -4455,7 +4455,7 @@ begin
       end
       else if CaseEqual(command, 'endif') or CaseEqual(command, 'ifend') then
       begin
-        if condCount = 0 then Error('unexpected endif directive during include expansion');
+        if condCount = 0 then ErrorNoPos('unexpected endif directive during include expansion');
         Dec(condCount);
         if condCount = 0 then active := True
         else active := condActive[condCount - 1];
@@ -4521,7 +4521,7 @@ begin
           if Length(IncIncluded) = 0 then
           begin
             ErrorIdent := fname;
-            Error('cannot open include file');
+            ErrorNoPos('cannot open include file');
           end;
           { Expand the includes INSIDE this file before splicing it in. The
             recursive call reuses IncExpanded/IncIncluded (they are module-level
@@ -4540,7 +4540,7 @@ begin
           if IncExpandDepth > MAX_INC_DEPTH then
           begin
             ErrorIdent := fname;
-            Error('include nesting too deep (circular include?)');
+            ErrorNoPos('include nesting too deep (circular include?)');
           end;
           if wantMarkers then
             ExpandIncludes(incNested, incDir, fullPath)
@@ -4641,7 +4641,7 @@ begin
       i := k;
     end;
   end;
-  if condCount <> 0 then Error('unterminated conditional directive during include expansion');
+  if condCount <> 0 then ErrorNoPos('unterminated conditional directive during include expansion');
   PasDefineCount := savedDefineCount;
   PasDefineCharLen := savedDefineCharLen;
   for k := 0 to MAX_PAS_DEFINES - 1 do

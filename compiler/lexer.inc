@@ -105,6 +105,36 @@ begin
   Halt(1);
 end;
 
+procedure ErrorNoPos(const msg: AnsiString);
+{ A WHOLE-PROGRAM diagnostic: one that is true of the output as a unit and has
+  no source position at all. Every check in `elfwriter.inc` is one of these,
+  because the writer runs after the parse has finished.
+
+  Plain `Error` was wrong for them in a way that reads as CORRECT, which is why
+  it survived: `ErrorPrint` passes withContext=True, so the `in:` path and the
+  `near:` window are read off the LEXER's position -- and at that point the
+  lexer is standing wherever it stopped, which is inside the last builtin unit
+  it parsed. So `--emit-obj` on a plain program refused with
+
+    pascal26:2: error: --emit-obj: this object would define no linkable symbol...
+      in: ./compiler/builtin/builtinheap.pas
+      near: ( 'hi' ) ; end . >>> unit builtinheap ;
+
+  The MESSAGE is right and its COORDINATES are not, which is the expensive
+  combination: it names a real file the user never wrote, and a `near:` window
+  splicing their tokens onto a builtin's. Two agents read it as "the frontend
+  cannot parse this" and one spent a probe on it before checking.
+
+  `line` is 1 rather than absent because the first line is a PARSED INTERFACE --
+  garin's builder.pas keys jump-to-error off the number between the first two
+  colons (see WriteDiagSourceFile below), so dropping it would make these
+  invisible to the IDE. 1 opens the user's main file at the top, which is the
+  right place to stand for a diagnostic about the program as a whole. }
+begin
+  ErrorPrintAt(1, msg, False);
+  Halt(1);
+end;
+
 procedure ErrorAtRecover(line: Integer; const msg: AnsiString);
 { ErrorAt's recovering twin, and ErrorRecover's out-of-position twin: same
   contract as ErrorRecover -- a SEMANTIC failure whose caller leaves something
