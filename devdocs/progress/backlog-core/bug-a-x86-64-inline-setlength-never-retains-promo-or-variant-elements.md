@@ -257,11 +257,23 @@ caused, and it names the exit: **widen it on the day `ir_codegen.inc` grows kind
 So `live=111` against a threshold of 50 is the **intended** trade, landing on an
 assertion that does not know about it.
 
-**Corrected routing:** `PXXDynSetLen`'s release arm is **correct and declines** —
-`baseTypeRef` is 0 for kinds 5/6, so the walk reads stride 0 and `elSize > 0`
-turns it away. Nobody should go looking for a broken release arm. **The work is
-the kind 5/6 retain arms in `ir_codegen.inc`**, after which `a584e8fef` can be
-un-reverted. (Credit: frank-coordinator, from the commit record.)
+**Corrected routing — and this replaces a narrower version that was wrong.**
+Nothing is broken; it is **unreachable**. Verified in
+`compiler/builtin/builtinheap.pas`: `PXXDynArrayRetainImmediate` **already
+carries both arms** — `baseKind = 5` and `baseKind = 6` — each gated
+`if elSize > 0` with `elSize := Int64(baseRecDesc)`. They are not missing and
+they are not new work. What they lack is a **stride**: `baseTypeRef` is 0, so
+`elSize` is 0, so the gate turns the walk away and **both halves decline, on
+every cross backend at once**.
+
+**Re-widening the descriptor is what wakes them** — which is why aarch64 goes
+111 → 3 with nothing changing in the native backend at all.
+
+So the pairing is wider than "descriptor + x86-64 inline arms": the descriptor
+arm and the cross retain arms are **one change with two authors about six weeks
+apart**, and the x86-64 inline arms are a **third** piece that only matters on
+the native row. **"The cross release arm was broken" is false and should not be
+repeated** — an earlier revision of this section said something close to it.
 
 **Falsifiable prediction, recorded before the next tier.** `321271fc9`'s
 `CENSUS_PORTABLE` strips the `sizes` lines and the `bytes=/reuse=/list=/bump=/
@@ -270,6 +282,14 @@ arenas=` tail, and **keeps `allocs=`, `frees=`, `live=`** — verified in the di
 run.** If they do, nothing new is wrong: the census fix was aimed at a real but
 different defect, and "all eight rows verified SAME" is `expect_same`'s verdict,
 not this assertion's.
+
+**PREDICTION VOIDED — its premise was reverted.** `321271fc9` is undone by
+`386a90aaa` (verified an ancestor of origin/master; `CENSUS_PORTABLE` now has 0
+occurrences in the Makefile). The rows staying red therefore confirms nothing
+about the prediction, because the change it was about is no longer in the tree.
+**Recorded rather than deleted** so a later reader does not find four red rows
+and score this as a hit. The rows do stay red at origin/master, and that is
+`a584e8fef`'s deliberate leak, not the census.
 
 ### Falsified: the reds are NOT one x86-64 binary asserted four times
 
