@@ -97,4 +97,4 @@ needs an absolute assertion (`frees` within N of `allocs`) until x86-64 is fixed
 That asymmetry is the reason this ticket exists separately from the test.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 47dd31066.
