@@ -352,15 +352,35 @@ against the failing run's `live=111, allocs=28165 frees=28054`. Identical
 `allocs` on both sides is what makes this the same subject rather than a similar
 one: the workload did not move, 108 more frees did.
 
-**What that measurement does NOT settle.** Each of the four rows carries three
-assertions and *two* of them are x86-64 — the cross binary, and the same source
-built for the native backend:
+**The caveat this section used to carry is WRONG, and the correction is the
+interesting half.** It read: four identical `live=111` values are more cheaply
+explained by one x86-64 binary asserted four times than by four backends
+coinciding, so the ticket must not claim the cross release arm was implicated.
+The ordering refutes it. Each row runs the CROSS assert first and the native one
+second:
 
     tools/assert_no_leak.sh aarch64/managed_dynarray_field 50 tools/run_target.sh aarch64 $(TESTTMP)/mdf_aarch64
     tools/assert_no_leak.sh x86-64/managed_dynarray_field  50 $(TESTTMP)/mdf_aarch64_x64
 
-So four *identical* `live=111` values have a cheaper explanation than four
-backends coinciding on a number: one x86-64 binary asserted four times. Until
-the literal label is read off the failing logs, this ticket should not claim the
-cross backends' release arm was implicated — the fix is the same either way, but
-the claim is not. Asked for verbatim; unanswered at the time of writing.
+and `assert_no_leak.sh` exits nonzero on a leak, so `make` aborts the recipe at
+the cross assert and the native one never runs. Checked here rather than read:
+against a bound of 0, my own aarch64 binary reports `LEAK — live=3 exceeds 0`
+and `rc=1`. Under the alternative I proposed, the cross assert would have PASSED
+first and all four labels would have read `x86-64/`; the logs carry four
+distinct cross labels, one per row. So the four `111`s are four real cross
+leaks, and identical counts are what a deterministic leak over one shared
+`PXXDynSetLen` source is supposed to produce.
+
+**Which makes the cross half of this fix load-bearing rather than incidental.**
+`PXXDynArrayRetainImmediate` already had correct kind 5 and 6 arms — they are
+not new here, and this change only factors the kind-5 body out into
+`PXXPromoRetainOne` so the x86-64 emitter can call the same two-line tag test
+instead of hand-emitting a branch at each lowering site. What those arms lacked
+was a stride: with `baseTypeRef` 0 the `elSize > 0` guard turned the walk away,
+on every cross backend at once. Re-widening the descriptor is what wakes them,
+and the measured aarch64 `live` going 111 -> 3 is that waking, not anything
+emitted by the native backend.
+
+That is the same "both halves are only correct together" shape the rest of this
+ticket describes, seen from the cross side: the descriptor arm and the retain
+arms are one change with two authors and about six weeks between them.
