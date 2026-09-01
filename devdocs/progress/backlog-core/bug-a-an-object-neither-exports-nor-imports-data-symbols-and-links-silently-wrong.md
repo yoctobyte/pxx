@@ -87,8 +87,69 @@ variable. The first thing to share one was busybox.
 - Both frontends, since Pascal `cdecl` units have the same exposure, and every
   target `--emit-obj` supports (x86-64, i386, xtensa, riscv32).
 
+## LAND BOTH HALVES TOGETHER — the intermediate state can be WORSE
+
+frankA, 2026-09-01, from a same-shaped bug he had to revert that afternoon: a
+descriptor field written as 0 made **both** the retain and release halves
+decline, so it merely leaked; widening the field woke the release half alone
+and turned the leak into a double free. Asymmetric repair of a symmetric defect.
+
+Worked out for this one, because the risk is real and it is not symmetric:
+
+- **Export half alone.** A *tentative* definition (`int x;`, no initialiser)
+  in two TUs currently produces two silent local slots. Export them both as
+  `GLOBAL OBJECT` and the linker now sees a duplicate definition and **fails a
+  link that used to succeed** — a new loud failure where there was a quiet
+  wrong answer. This is why the tentative-definition/`COMMON` question in the
+  acceptance list is load-bearing rather than tidy.
+- **Import half alone.** Every `extern int x;` becomes `UND` with nothing
+  anywhere exporting it, so **every** existing object build fails to link.
+
+Neither half is shippable on its own. Land them as one change.
+
+## THE INSTRUMENT, AND ITS "BEFORE" — measured 2026-09-01, not remembered
+
+frankA's other point, from the same afternoon: an object that links cleanly and
+reads the wrong memory has a detection problem, because a probe that reads
+values back can print OK against a live defect. His first useful instrument was
+an allocation census, not an assertion. The equivalent here is a **symbol-table
+diff against gcc for the same translation unit**, and it exists now so the
+"before" is a recorded measurement:
+
+```c
+int defined_initialised = 7;      /* .data, GLOBAL OBJECT */
+int defined_tentative;            /* tentative definition (C 6.9.2) */
+static int file_local = 3;        /* must stay LOCAL */
+extern int imported_elsewhere;    /* must become UND */
+int a_function(void) { return defined_initialised + defined_tentative + file_local + imported_elsewhere; }
+```
+
+`readelf -sW`, OBJECT/NOTYPE/FUNC rows only, at compiler binary sha256
+`73a9d172409b`:
+
+```
+gcc -c -O0                        pxx --emit-obj
+FUNC    GLOBAL 1   a_function     FUNC GLOBAL 1 a_function
+OBJECT  GLOBAL 3   defined_initialised          (nothing)
+OBJECT  GLOBAL 4   defined_tentative            (nothing)
+OBJECT  LOCAL  3   file_local                   (nothing)
+NOTYPE  GLOBAL UND imported_elsewhere           (nothing)
+```
+
+Five rows to one. **The fix is done when those two columns match** — including
+`file_local` staying `LOCAL`, which is the control that catches an export pass
+that simply exports everything.
+
 ## Coordination
 
-`elfwriter.inc`'s object writer is under active work by frankA/frankC (i386
-PIE objects, SysV argument placement) as of 2026-08-31 — message them before
-starting rather than after.
+**Not frankA** — he confirmed on 2026-09-01 that he has not touched
+`elfwriter.inc`; his day was `ir_codegen.inc`, `rtti_emit.inc`,
+`builtinheap.pas` and `symtab.inc`. An earlier version of this section named
+him, wrongly: I read the **lane tags** on the object-writer commits (`feat(A)`,
+`fix(A,C)`) as agent names, which they are not.
+
+What is true is about the FILE, measured: `compiler/elfwriter.inc` has ten
+recent commits on `origin/master` — i386 PC-relative data loads, `R_386_PC32`,
+`--emit-obj` initialisers, hardened PIE objects (`ca4197115`, `b64341130`,
+`6ab85feb8`, `3dd98fe32`). It is actively moving. Ask on the channel who is in
+it now rather than inferring an owner from a commit tag.

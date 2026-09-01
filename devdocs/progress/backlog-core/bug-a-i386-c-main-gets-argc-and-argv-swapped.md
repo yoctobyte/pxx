@@ -67,7 +67,14 @@ print `argc=3 argv0=<path>`.
 
 ## Coordination
 
-i386 C is under active work by frankA/frankC (i386 objects as hardened PIEs,
-SysV argument placement) as of 2026-08-31. This is almost certainly in the
-argument-placement code they are already in; message them rather than editing
-in parallel.
+**Not frankA** — he confirmed on 2026-09-01 that his day was `ir_codegen.inc`,
+`rtti_emit.inc`, `builtinheap.pas` and `symtab.inc`, with no i386 or object
+work. An earlier version of this section named him, wrongly: I read the **lane
+tags** on the i386 commits (`feat(A)`, `feat(A,C)`) as agent names.
+
+What is true is about the CODE, measured: the i386 C path moved several times
+this week — `b392fd5d0` (i386 object links as a hardened PIE), `f39e158dd` (the
+SysV argument PLACEMENT oracle, checked against gcc's register choices),
+`747d3479f` (struct-by-value across a real gcc link). Argument placement is
+exactly this defect's neighbourhood, so ask who is in it before starting rather
+than inferring an owner from a commit tag.
