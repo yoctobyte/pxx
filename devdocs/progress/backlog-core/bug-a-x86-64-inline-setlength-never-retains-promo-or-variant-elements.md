@@ -230,7 +230,43 @@ identically on four ISAs.
 **So the premise IS in question, and now for a stated reason.** This ticket says
 the cross backends delegate to `PXXDynSetLen` and are correct. On this test they
 leak 111 live blocks where x86-64 leaks 3. Whoever works this should start from
-`PXXDynSetLen`'s release arm, not from the x86-64 inlining path.
+`PXXDynSetLen`'s release arm, not from the x86-64 inlining path. *(Refined below:
+the release arm is correct and DECLINES — see the next section.)*
 
 The local green remains true and remains scoped to x86-64: `live=3` passes a
 threshold of 50, so a local run cannot see this at all.
+
+### The four rows are red BY DESIGN, and the routing above is one step off
+
+Verified from the run archive: the four jobs were **green in four consecutive
+full runs** — 14:48, 15:01, 15:13, 15:27, `red=0` and not unreached — then red at
+15:42, 15:55 and 16:07. A threshold that cannot pass cannot be green four times,
+so neither the threshold nor word size is the cause.
+
+Exactly three code commits land in that window, and only one can redden all four
+targets: **`a584e8fef`** (`compiler/rtti_emit.inc`, `baseKind = 4/5/6` →
+`baseKind = 4`). `5131e9cea` is a Pascal frontend check; `4924f1524` is i386
+PC-relative and cannot touch aarch64/arm32/riscv32.
+
+**Its own commit message states the trade**: *"both halves declined and the array
+merely leaked"*, and *"the cost of reverting is a known leak, not a regression"*.
+The revert deliberately chose a leak over the double free the widening had
+caused, and it names the exit: **widen it on the day `ir_codegen.inc` grows kind
+5 and 6 retain arms, not before.**
+
+So `live=111` against a threshold of 50 is the **intended** trade, landing on an
+assertion that does not know about it.
+
+**Corrected routing:** `PXXDynSetLen`'s release arm is **correct and declines** —
+`baseTypeRef` is 0 for kinds 5/6, so the walk reads stride 0 and `elSize > 0`
+turns it away. Nobody should go looking for a broken release arm. **The work is
+the kind 5/6 retain arms in `ir_codegen.inc`**, after which `a584e8fef` can be
+un-reverted. (Credit: frank-coordinator, from the commit record.)
+
+**Falsifiable prediction, recorded before the next tier.** `321271fc9`'s
+`CENSUS_PORTABLE` strips the `sizes` lines and the `bytes=/reuse=/list=/bump=/
+arenas=` tail, and **keeps `allocs=`, `frees=`, `live=`** — verified in the diff.
+`assert_no_leak` reads `live=`. **So the four rows must stay red on the next full
+run.** If they do, nothing new is wrong: the census fix was aimed at a real but
+different defect, and "all eight rows verified SAME" is `expect_same`'s verdict,
+not this assertion's.
