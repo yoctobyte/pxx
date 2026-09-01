@@ -81,31 +81,78 @@ variable. The first thing to share one was busybox.
 - The `numExportProcs = 0` refusal counts data symbols too, so a data-only TU
   emits. Keep the refusal for a genuinely empty object.
 - `static` file-scope data stays LOCAL and must NOT become an export.
-- A common one to get wrong: a tentative definition (`int x;` at file scope
-  with no initialiser, C 6.9.2) is a definition here, not an import — the
-  distinction from `extern int x;` is the whole bug.
+- A tentative definition (`int x;` at file scope with no initialiser,
+  C 6.9.2) is a definition here, not an import — the distinction from
+  `extern int x;` is the whole bug. It is emitted in `.bss` as `GLOBAL OBJECT`,
+  **not** as `SHN_COMMON`: `-fno-common` semantics, matching gcc 10+.
+- **POSITIVE CONTROL, asserted:** two TUs each containing a bare `int x;` must
+  **fail** to link, with a duplicate-definition diagnostic. This is a case the
+  export pass must REJECT, and it is the counterpart of the `file_local` row —
+  one guards against exporting too much, this one against exporting too little
+  or reviving `-fcommon` by accident. gcc's exit status for the same pair is 1;
+  measured, not recalled.
 - Both frontends, since Pascal `cdecl` units have the same exposure, and every
   target `--emit-obj` supports (x86-64, i386, xtensa, riscv32).
 
-## LAND BOTH HALVES TOGETHER — the intermediate state can be WORSE
+## `-fno-common` IS THE SEMANTICS, and the duplicate-definition failure is REQUIRED
 
-frankA, 2026-09-01, from a same-shaped bug he had to revert that afternoon: a
-descriptor field written as 0 made **both** the retain and release halves
-decline, so it merely leaked; widening the field woke the release half alone
-and turned the leak into a double free. Asymmetric repair of a symmetric defect.
+An earlier cut of this section listed "export half alone makes a link that used
+to succeed start failing" as a **risk to mitigate**. That was right about the
+mechanism and **wrong about its sign** (frankA, 2026-09-01; re-measured here
+with the exit status his own reading did not capture):
 
-Worked out for this one, because the risk is real and it is not symmetric:
+```
+$ gcc --version | head -1
+gcc (Ubuntu 15.2.0-16ubuntu1) 15.2.0
 
-- **Export half alone.** A *tentative* definition (`int x;`, no initialiser)
-  in two TUs currently produces two silent local slots. Export them both as
-  `GLOBAL OBJECT` and the linker now sees a duplicate definition and **fails a
-  link that used to succeed** — a new loud failure where there was a quiet
-  wrong answer. This is why the tentative-definition/`COMMON` question in the
-  acceptance list is load-bearing rather than tidy.
-- **Import half alone.** Every `extern int x;` becomes `UND` with nothing
-  anywhere exporting it, so **every** existing object build fails to link.
+$ cat ta.c            $ cat tb.c
+int x;                int x;
+int a(void){return x;}      int b(void){return x;}
 
-Neither half is shippable on its own. Land them as one change.
+$ gcc -c ta.c && readelf -sW ta.o | awk '$8=="x"'
+     3: 0000000000000000     4 OBJECT  GLOBAL DEFAULT    4 x      <- section 4 (.bss), NOT COM
+
+$ gcc ta.o tb.o tm.c -o /dev/null
+ld.bfd: tb.o:(.bss+0x0): multiple definition of `x'; ta.o:(.bss+0x0): first defined here
+link exit=1
+
+$ gcc -fcommon -c ta.c && readelf -sW tac.o | awk '$8=="x"'
+     3: 0000000000000004     4 OBJECT  GLOBAL DEFAULT  COM x      <- COMMON, and the link SUCCEEDS
+```
+
+**gcc has defaulted to `-fno-common` since GCC 10**, so `int x;` in two
+translation units is a genuine duplicate definition and gcc's own toolchain
+refuses to link it. Producing that failure is **conformance, not collateral
+damage** — and the link succeeding today is the defect, not a property to
+preserve: two TUs are silently getting private slots for what the C source says
+is one object.
+
+**So it belongs in the acceptance list as required behaviour with a test that
+asserts the failure**, and that is the positive control this ticket was missing.
+`file_local` staying `LOCAL` guards against exporting too MUCH; nothing pinned
+that the loud failure appears when it should.
+
+**Decide it explicitly rather than inherit it:** pxx implements `-fno-common`
+semantics. The old merge-into-one-slot behaviour is `-fcommon`, which is a
+different symbol type (`SHN_COMMON`), not a variation on this one. Saying so
+here is what stops the next person reading `multiple definition` as a bug in
+the new pass.
+
+## Still land both halves together — for a different reason than first written
+
+Not because export-only regresses (it does not; see above), but:
+
+- **Import half alone** makes every `extern int x;` an `UND` with nothing
+  exporting it, so **every** existing object build fails to link. Unusable.
+- **Export half alone** looks like progress while leaving the dangerous
+  behaviour entirely intact: an `extern` reference is still a private `.bss`
+  slot, so the silent wrong READ — the thing this ticket is named for — is
+  untouched. The half that gets fixed is the half that was already loud.
+
+The precedent for the general worry is frankA's own afternoon: a descriptor
+field written as 0 made both the retain and release halves decline, so it merely
+leaked; widening the field woke release alone and turned the leak into a double
+free, and had to be reverted. Symmetric defect, asymmetric repair.
 
 ## THE INSTRUMENT, AND ITS "BEFORE" — measured 2026-09-01, not remembered
 
@@ -153,3 +200,11 @@ recent commits on `origin/master` — i386 PC-relative data loads, `R_386_PC32`,
 `--emit-obj` initialisers, hardened PIE objects (`ca4197115`, `b64341130`,
 `6ab85feb8`, `3dd98fe32`). It is actively moving. Ask on the channel who is in
 it now rather than inferring an owner from a commit tag.
+
+**And there is no way to read the author off the log, which is why the tag is
+so tempting.** Measured over the last 200 commits on `origin/master`: **200 of
+200 have the same `%an`**, and only **89** carry a `Claude-Session:` trailer,
+across **7** distinct sessions. So the trailer is the only discriminator that
+exists, it is present on well under half the history, and **its absence means
+UNKNOWN, not "someone else"** (frankA, 2026-09-01). Attribute from a message or
+from that trailer, or do not attribute.
