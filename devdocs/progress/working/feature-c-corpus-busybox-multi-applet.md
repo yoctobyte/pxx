@@ -347,3 +347,48 @@ producing output rather than failing.
 - LINUX ONLY, x86-64 and aarch64. Nothing here says anything about i386 or
   arm32, where `feature-a-crtl-is-not-large-file-safe-at-ilp32` and
   `bug-a-the-pin-cannot-build-any-c-program-for-i386-or-arm32` are both open.
+
+## 2026-09-01, later — separate compilation, and what it retires
+
+Rung 2's bars were met on the unity. The unity is not the interesting build
+model, and two things changed on the same day that make it worth leaving
+behind.
+
+**First, a correction, because I logged the opposite and it was wrong.** I
+reported that the unity could not hold a fourth applet — *any* fourth applet —
+on twelve identical failures. It can. Nine of the twelve build fine
+(`mkdir rm cp mv pwd wc head sleep printf`). The twelve identical failures were
+one applet measured twelve times: `busybox_diff.sh`'s "is the tree already
+configured?" test asked the applet COUNT and the ash knobs and never asked
+WHICH applets, so every `cat echo ash <X>` matched the tree the first iteration
+had built. Fixed in `e20a2ca56`, with a positive control in both directions.
+The tell was there before the check: twelve *byte-identical* error texts is not
+what twelve independent measurements look like.
+
+What is true about the unity is narrower and still real. Three separate files
+break it, all the same way — a file that assumes it owns its namespace:
+
+| file | what it claims | who it breaks |
+| --- | --- | --- |
+| `include/common_bufsiz.h` | `enum { COMMON_BUFSIZE = 1024 }`, no include guard | `ls`, `tail` |
+| `shell/ash.c` | 40 `#define`s of ordinary names (`optlist`, `eflag`) | whatever follows it |
+| `coreutils/uname.c:112` | `#define options "snrvmpioa"` | whatever follows it |
+| `coreutils/test.c` | globals macros over ordinary identifiers | `ash`, in BOTH orders |
+
+The harness orders around the second, refuses the fourth, and cannot do
+anything about the first or third. None of them is a pxx defect and gcc rejects
+the unity too.
+
+**Second: separate compilation now works**, which makes every row of that table
+moot rather than ordered around. It became attemptable when frankA landed
+[[bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong]],
+and attempting it named exactly one compiler defect — `x & 0` never folded to a
+literal, so a constant-false branch kept its dead arm and
+`make_human_readable_str` became a real external reference in `coreutils/ls.c`
+(`3056e214c`). That was the ONLY undefined symbol across all 41 units.
+
+`tools/busybox_diff.sh --separate` is the mode. x86_64 only, because
+`--emit-obj` has no aarch64 object writer yet. It still needs `-Wl,-z,muldefs`
+for [[bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link]],
+which is now the one thing between pxx and separately compiling a real C
+project.

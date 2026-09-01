@@ -743,7 +743,11 @@ for t in $TARGETS; do
            "$t" "$NCASES"
   else
     printf '  FAIL    %-8s differs from the gcc oracle\n' "$t"
-    diff "$WORK/oracle_gcc.out" "$WORK/pxx_$t.out" | head -30
+    # -a, like the oracle-vs-upstream diff above: a `cat bin.dat` case puts
+    # NUL bytes in both transcripts, and without it this prints
+    # "Binary files ... differ" and no divergence at all -- a FAIL you cannot
+    # read is barely better than no FAIL.
+    diff -a "$WORK/oracle_gcc.out" "$WORK/pxx_$t.out" | head -30
     RC=1
   fi
 done
