@@ -2,10 +2,10 @@
 track: A
 prio: 60
 type: bug
-status: new
+status: working
 found: 2026-08-31
 found-by: frankB
-owner: ""
+owner: frankA
 blocked-by: []
 summary: "`make compiler/pascal26` prints `self-host fixedpoint: verified — 2 round(s), <sha>` and exits 0 WITHOUT REBUILDING whenever a CONSISTENT binary+stamp pair carries an mtime newer than the sources. Reproduced deliberately, twice independently (frankB and frank-coordinator): plant f92c42a69850 plus a stamp naming it, touch both, run make against a tree whose real fixedpoint is 3d5308a75742 — success line, round count, sha, binary unchanged. THE DEFECT IS THAT THE REPLAY LINE IS CONFUSABLE WITH A RESULT, NOT THAT THE CHECK IS INADEQUATE: a genuine build prints `converged after N round(s)` AND `verified — N`, a replay prints only `verified`, so CLAUDE.md's existing rule (do not accept the build until you have seen `converged after N round(s)`) CATCHES THIS CLEANLY and is not defeated — two agents simply pattern-matched on the `verified` line instead of following it. Fix is small: make the replay line not look like a result. The round count is a stored stamp field and cannot separate a replay from a build. Sibling: bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case."
 ---

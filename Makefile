@@ -17,6 +17,20 @@ COMPILER     := compiler/pascal26
 # so a copied-in seed cannot satisfy the gate by being NEWER than the sources.
 # bug-a-the-selfhost-rule-is-a-no-op-when-the-seed-is-newer-than-its-sources
 COMPILER_STAMP := compiler/.pascal26.fixedpoint
+# THE hash of everything the fixedpoint is a fixedpoint OF. Written into the
+# stamp and re-derived on every verify, because the stamp's mtime answers "was
+# this written after the sources were touched", which is a DIFFERENT question
+# from "was this written FOR these sources" -- and the second one is the one
+# that was going unasked. ~0.22s over 210 files / 14MB.
+#
+# It is a script rather than an inline expression because `make -n` echoes a
+# recipe verbatim, and inlining $(COMPILER_SRC) $(COMPILER_INC) put ~45KB of
+# file names into every dry run (measured: +53 lines and three 15KB expansions
+# on `make -n test-core`). The script names the set a second time and
+# tools/selfhost_stamp_devtest.sh asserts the two lists match in both
+# directions, which is a declared duplicate with a check rather than a copy.
+# bug-a-the-mandatory-fixedpoint-step-reports-success-from-a-stale-stamp
+COMPILER_SRCHASH = tools/compiler_srchash.sh
 COMPILER_MANAGED := compiler/pascal26-managed
 COMPILER_SRC := compiler/compiler.pas
 COMPILER_INC := $(wildcard compiler/*.inc) $(wildcard compiler/builtin/*.pas) $(wildcard lib/rtl/*.pas) $(wildcard lib/asmcore/*.pas)
@@ -263,6 +277,29 @@ bootstrap-managed: bootstrap-check
 # reports `converged after 2 round(s)`. Telling people to touch would be cargo
 # from before that fix, and it would print a $(COMPILER_INC) expansion that runs
 # to 200 file names.
+# WHY THERE IS NO WITNESS FILE HERE, measured and rejected rather than not
+# thought of. The obvious completion of this fix is a witness whose mtime tracks
+# "the sources last actually differed", so make's own graph re-runs the loop for
+# a stamp written for OTHER sources. Two shapes were built and both cost more
+# than they bought:
+#
+#   * detect in the verify recipe and recurse with $(MAKE): GNU make EXECUTES a
+#     recipe line containing $$(MAKE) even under -n, so `make -n
+#     compiler/pascal26` DELETED THE STAMP and exited 2. `make -n` is
+#     load-bearing -- testmgr's make_dry_run() builds its job list from it and
+#     .claude/hooks/no-full-suite.sh exempts it precisely because it runs
+#     nothing.
+#   * a .PHONY-backed witness file: correct in a real run (measured: the honest
+#     no-op stays 0.7s and does NOT rebuild), but under -n make must assume a
+#     PHONY prerequisite updates its target, so `make -n compiler/pascal26`
+#     ALWAYS reports the loop as planned. tools/selfhost_stamp_devtest.sh has
+#     the row that catches it.
+#
+# So the stamp records the source hash and the verify -- which already runs
+# unconditionally -- REFUSES on a mismatch with the one-line recovery. That
+# turns the silent false success this ticket is about into a loud stop, without
+# touching what `make -n` reports. The automatic rebuild is a separate change
+# with a real trade-off behind it, and it is written up rather than half-landed.
 $(COMPILER_STAMP): $(COMPILER_SRC) $(COMPILER_INC)
 	@test -x $(COMPILER) || ( \
 	  echo "self-hosted compiler seed missing: $(COMPILER)"; \
@@ -284,7 +321,9 @@ $(COMPILER_STAMP): $(COMPILER_SRC) $(COMPILER_INC)
 	    echo "converged after $$r round(s)"; \
 	    mv "$$a" $(COMPILER); \
 	    rm -f "$$b"; \
-	    printf 'rounds %s\nsha256 %s\n' "$$r" "$$(sha256sum $(COMPILER) | cut -d' ' -f1)" \
+	    printf 'rounds %s\nsha256 %s\nsrchash %s\n' "$$r" \
+	      "$$(sha256sum $(COMPILER) | cut -d' ' -f1)" \
+	      "$$($(COMPILER_SRCHASH))" \
 	      > $(COMPILER_STAMP); \
 	    exit 0; \
 	  fi; \
@@ -301,11 +340,35 @@ $(COMPILER_STAMP): $(COMPILER_SRC) $(COMPILER_INC)
 # one level up. A PHONY prerequisite is the only thing that makes the check run
 # regardless of any timestamp. It costs one sha256sum, and every target that
 # depends on $(COMPILER) is itself PHONY, so nothing cascades.
+# Prints the set the fixedpoint is taken over, one per line. Exists so
+# tools/selfhost_stamp_devtest.sh can compare make's list against
+# tools/compiler_srchash.sh's -- the declared duplicate needs a comparison, and
+# recovering the list by grepping `make -n` stopped working the moment the
+# recipe stopped inlining it (which was the point).
+.PHONY: print-compiler-sources
+print-compiler-sources:
+	@printf '%s\n' $(COMPILER_SRC) $(COMPILER_INC) | sort
+
 .PHONY: selfhost-verify
 selfhost-verify: $(COMPILER_STAMP)
 
 $(COMPILER): $(COMPILER_SRC) $(COMPILER_INC) $(COMPILER_STAMP) selfhost-verify
-	@have=$$(sha256sum $(COMPILER) | cut -d' ' -f1); \
+	@livesrc=$$($(COMPILER_SRCHASH)); \
+	 stampsrc=$$(sed -n 's/^srchash //p' $(COMPILER_STAMP)); \
+	 if [ "$$livesrc" != "$$stampsrc" ]; then \
+	   echo "$(COMPILER_STAMP) was written for DIFFERENT SOURCES than the tree has."; \
+	   if [ -z "$$stampsrc" ]; then \
+	     echo "  stamp sources: <none — written before the stamp carried a source hash>"; \
+	   else \
+	     echo "  stamp sources: $$stampsrc"; \
+	   fi; \
+	   echo "  tree sources:  $$livesrc"; \
+	   echo "A stamp NEWER than sources it does not describe is how this step"; \
+	   echo "printed 'verified' three times in one day without building anything."; \
+	   echo "Recover with:  rm -f $(COMPILER_STAMP) && make $(COMPILER)"; \
+	   exit 1; \
+	 fi; \
+	 have=$$(sha256sum $(COMPILER) | cut -d' ' -f1); \
 	 want=$$(sed -n 's/^sha256 //p' $(COMPILER_STAMP)); \
 	 if [ "$$have" != "$$want" ]; then \
 	   echo "$(COMPILER) is not the binary $(COMPILER_STAMP) proves a fixedpoint for."; \
@@ -314,7 +377,7 @@ $(COMPILER): $(COMPILER_SRC) $(COMPILER_INC) $(COMPILER_STAMP) selfhost-verify
 	   echo "Something replaced the binary without rebuilding. Delete $(COMPILER_STAMP) and re-run make."; \
 	   exit 1; \
 	 fi; \
-	 echo "self-host fixedpoint: verified — $$(sed -n 's/^rounds //p' $(COMPILER_STAMP)) round(s), $$(echo $$want | cut -c1-12)"
+	 echo "self-host fixedpoint: verified — $$(sed -n 's/^rounds //p' $(COMPILER_STAMP)) round(s), $$(echo $$want | cut -c1-12) (stamp read back; sources match it)"
 
 $(COMPILER_MANAGED): $(COMPILER_SRC) $(COMPILER_INC)
 	@test -x $(COMPILER_MANAGED) || \
