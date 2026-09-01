@@ -67,4 +67,4 @@ in `88e1ab536` was precisely that the shape stops describing what the lowering
 produced. Ask what the lowering emitted, not what the source looked like.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change: 95ca8fa22.
