@@ -21,3 +21,11 @@ t_rw*
 # construction. Became visible on 2026-09-01 only because the --threadsafe
 # retry let it build at all; before that it was a silent BUILD-FAIL skip.
 test_thread_writeln_interleave*
+# four foreign threads each writing 50 lines: the ORDER is nondeterministic by
+# design and the program's own header says so. Its property is ATOMICITY -- no
+# torn line -- which raw stdout comparison cannot express, and which the
+# Makefile row asks instead (200 whole lines plus `done`). Measured
+# 2026-09-01 at -O0/-O1/-O2/-O3, five runs each: 200 done every time, while
+# three runs of ONE binary give three different byte streams. Skipped because
+# the question is wrong here, not because the answer is inconvenient.
+test_threadsafe_io_lock_foreign*

@@ -5,13 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:7 unfinished:27 blocked:7 backlog:9 backlog-umbrella:6 backlog-core:140 backlog-nilpy:97 backlog-tools:79 backlog-pascal:57 backlog-decide:26 backlog-libs:16 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3070 rejected:72`
+`working:5 unfinished:27 blocked:7 backlog:5 backlog-umbrella:6 backlog-core:141 backlog-nilpy:97 backlog-tools:77 backlog-pascal:57 backlog-decide:26 backlog-libs:16 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3077 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-dce-miscompiles-every-threaded-program-and-o3-turns-it-on` [A] — owner: frankZ
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
-- `bug-t-optdiff-cannot-see-any-threading-program-since-the-threadsafe-directive-became-an-error` [T] — owner: frankZ
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
@@ -57,15 +55,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 465, ranked
+## Ready — top 30 of 460, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
-- `[p 85] [T]` regression-optdiff-shard4-12 (unblocks 1)
-- `[p 85] [T]` regression-test-core-test-rtl-fpc-compat-helpers-2 (unblocks 1)
-- `[p 85] [T]` regression-tools-devtest-00-3 (unblocks 1)
+- `[p 85] [A]` bug-a-a-refcount-test-passes-at-o2-and-fails-at-o0-and-o1 (unblocks 1)
 - `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
-- `[p 85] [T]` regression-test-core-test-interface-byval-param-no-leak
-- `[p 85] [T]` regression-test-threads-test-threadsafe-refcount-lockfree
 - `[p 80] [A]` feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -81,13 +75,17 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [B]` regression-lib-test-lib-synapse-ssl
 - `[p 70] [B]` regression-lib-test-lib-synapse-transitive-unit
 - `[p 70] [T]` regression-test-core-test-exception-unhandled-3
-- `[p 70] [P]` regression-test-core-test-multithreading-2
 - `[p 70] [T]` regression-test-core-test-setlen-in-parallel-for-body-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard3-6-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
+- `[p 65] [A]` bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
+- `[p 65] [N]` bug-n-yield-from-is-not-implemented
+- `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
+- `[p 65] [A]` feature-a-fold-the-consensus-dead-branch-core-at-every-level
+- `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 
-_435 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_430 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

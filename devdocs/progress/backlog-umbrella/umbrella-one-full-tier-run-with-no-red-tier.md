@@ -3,7 +3,7 @@ slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
 prio: 85
 type: umbrella
-blocked-by: [regression-lib-test-crtl-reachability-7, regression-test-core-c-crtl-enosys-stubs, regression-test-core-test-header-static-body, regression-test-core-test-interface-byval-param-no-leak, regression-test-core-test-rtl-fpc-compat-helpers-2, regression-test-core-test-thread-api-no-uses, regression-test-threads-test-exception-threads-race, regression-test-threads-test-threadsafe-refcount-lockfree, regression-test-xtensa-test-signal-default-revert-b336, regression-test-xtensa-test-signal-handler-callback-b336, regression-tools-devtest-00-3, regression-optdiff-shard4-12, bug-a-dce-miscompiles-every-threaded-program-and-o3-turns-it-on, bug-t-optdiff-cannot-see-any-threading-program-since-the-threadsafe-directive-became-an-error]
+blocked-by: [bug-a-a-refcount-test-passes-at-o2-and-fails-at-o0-and-o1]
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
@@ -64,32 +64,53 @@ track guessed from the failing STEP) as a FALLBACK, not a finding, at a prio
 nobody set. T owns the TOOL, never the BUG. Thirteen of these accumulated with
 nobody on them for exactly that reason.
 
-## The groups, from the 2026-09-01 sweep
+## The groups — state at 2026-09-02, binary b9fd008f89ef, commit cdefc55e1
 
-Report by group. A count of tickets is not a count of causes.
+Report by group. A count of tickets is not a count of causes. **Thirteen of the
+fourteen tickets wired here at the start are resolved, and they were six
+causes.**
 
-1. **`-O3` DCE miscompiles every threaded program** — five optdiff shards, one
-   bug. [[bug-a-dce-miscompiles-every-threaded-program-and-o3-turns-it-on]].
-   Currently MASKED: those programs no longer compile under optdiff, so the
-   shards will report green while the miscompile is live —
-   [[bug-t-optdiff-cannot-see-any-threading-program-since-the-threadsafe-directive-became-an-error]]
-   is the other half and must land, even though a correct optdiff is red until
-   the DCE bug is fixed.
-2. **Threading correctness in the RTL** — `test_threadsafe_refcount_lockfree`,
-   `test_exception_threads_race`, `test_thread_api_no_uses`. Distinct from
-   group 1: these are red at the default `-O`, with no DCE anywhere near them.
-3. **crtl / C headers** — `crtl_reachability` (a `clock_t` stray token in
-   `lib/crtl/src/sys/time.c` reached through the PINNED compiler, so this one
-   is pin lag as much as a source bug), `c_crtl_enosys_stubs`,
-   `test_header_static_body`.
-4. **xtensa PAL** — both b336 signal tests, one error:
-   `undefined variable (PAL_ERR_UNSUPPORTED)`.
-5. **Managed memory** — `test_interface_byval_param_no_leak` (24/25),
-   `test_rtl_fpc_compat_helpers` (segfault).
-6. **`optdiff#shard4`** — a NAME COLLISION with group 1, not a member of it:
-   output divergence (`rc 0 vs 0`) rather than a timeout, fires at -O1/-O2/-O3
-   rather than -O3 only, and its last pass is two days older. Already ticketed.
-7. **`tools-devtest#00`.**
+1. **`-O3` DCE miscompiles every threaded program** — five optdiff shards, ONE
+   bug. FIXED (`dce.inc`'s `GlobFix[]` compaction dropped the three arrays
+   parallel by index to it). The masking half — optdiff could not build any
+   threading program — is fixed too, and it turned out to be two harness holes
+   rather than one: the `-O2` arm was comparing `-O2` against `-O2` and could
+   not fail. Both closed.
+2. **Threading correctness in the RTL** — `thread_api_no_uses` was a missing
+   `--threadsafe` on its recipe. `refcount_lockfree` and
+   `exception_threads_race` belonged to group 5, not here.
+3. **crtl / C headers** — all three fixed.
+4. **xtensa PAL** — one missing constant (`PAL_ERR_UNSUPPORTED`), both fixed.
+5. **Managed memory / the ownership campaign** — four reds, **two causes**, not
+   four: the park firing on already-owned values, and an interface
+   function-result temp on the wrong queue. frankB's `d5e0a1e48`. Re-derived
+   here at `c9602d5ce` rather than inherited; all four green.
+6. **`optdiff#shard4`** — never the same bug as group 1, as frank-user said.
+   Not a bug at all: the program's output order is nondeterministic by design
+   and its property is atomicity, which raw stdout cannot express. Skiplisted;
+   the invariant verified at all four levels, 20 runs.
+7. **`tools-devtest#00`** — three faults, and the third only existed once the
+   first two were fixed: a devtest whose verdict depended on the developer's
+   own tree, a Makefile row that put the pinned compiler in the NATIVE tier,
+   and then a 90s budget against 207s of work, because the job had been red
+   long enough that no green pass had ever been measured.
+
+**Two causes found by attempting the target rather than by triage**, which is
+what this umbrella is for:
+
+- **The heap magazine, shared by every thread pxx did not create.** A libc
+  pthread never runs the clone stub, so it inherits its creator's `gs` —
+  `gs_base = 0x411f98` (BSS_TLS_MAIN) on all five threads of
+  `test_multithreading`. The guard was a plain load-test-store. 18 SIGSEGV in
+  100 runs, 0 in 100 with `-dPXX_NO_HEAP_MAG`. Fixed (`ba2682d2f`); the design
+  residual is
+  [[bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine]].
+  **Not a regression** — the pinned v399 compiler builds a byte-identical
+  program that crashes the same way.
+- **The one still open:**
+  [[bug-a-a-refcount-test-passes-at-o2-and-fails-at-o0-and-o1]] — FAILED at
+  -O0/-O1, OK at -O2/-O3, `rc=0` throughout. Found by the fixed sweep on its
+  first run that could see the program at all.
 
 ## The count is not falling on its own
 
