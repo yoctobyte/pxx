@@ -4,7 +4,7 @@ track: A
 prio: 80
 type: bug
 blocked-by: []
-status: working
+status: done
 found: 2026-09-01
 found-by: frankZ
 owner: frankZ
@@ -198,3 +198,45 @@ differential sweep entirely. A guard that cannot fail is not a guard. See
 `make compiler/pascal26` cannot see this: `compiler.pas` starts no threads, and
 the fixedpoint runs at the default `-O` where DCE is off. Carry the nine-line
 repro above at `-O0 --dce` as the probe.
+
+## Fixed — 2026-09-01, frankZ
+
+`compiler/dce.inc` compacted `GlobFix[]` copying only `CodePos` and `BSSoff`,
+and left the three arrays PARALLEL BY INDEX to it — `GlobFixPCRel`,
+`GlobFixTrail`, `GlobFixPicDelta` — where they were. Every fixup that MOVED
+therefore inherited the flags of whoever previously occupied its new index. The
+same applied one loop up to `Fixups[]` / `FixupPCRel` / `FixupPicDelta`.
+
+Concretely: `EmitReleaseHeapLock` emits `mov dword [@glob], 0` = `C7 05 disp32
+imm32`, whose trail is 4, so the rip correction must be `-(4 + 4)`. Byte scan:
+
+```
+without DCE   11 acquires   11 releases   all naming 0x4170f8
+with    DCE   11 acquires    6 releases   five moved ones naming 0x4070fc
+```
+
+`0x4070fc` is the lock word plus four. The release wrote PAST the lock instead
+of clearing it, so the next acquire spun forever on a lock nobody held.
+Single-thread self-deadlock: no crash, no diagnostic, and threads are not
+required to reach it — the guard has none.
+
+`-O3` turns DCE on (`compiler.pas:1799`), which is why this read as an
+optimiser bug and sent two days of bisecting into `-O3` codegen. It is neither:
+`-O0 --dce` reproduces it exactly. The owner's lead was right and the reason it
+was right is now measured — DCE is a lowering step that runs at any level a
+flag asks for, so the level was the wrong axis.
+
+`EmitGlobRef`'s own header already documented this failure from an earlier
+occasion. The emitter derives the addend correctly; DCE threw the answer away
+afterwards.
+
+The guard is `test/test_dce_threadsafe_heaplock.pas`, wired into `test-quick`,
+because `--dce` had **no row anywhere in the Makefile** before tonight: the
+pass was reachable only through `-O3`, i.e. only from Track T's `opt` tier,
+which is not in the quick<native<limited<full chain. Positive control run the
+hard way — reverted `dce.inc`, rebuilt, watched the row fail with `exit=124`,
+restored with `git apply` and rebuilt to the identical binary
+`fb30f90f2d455b07`.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

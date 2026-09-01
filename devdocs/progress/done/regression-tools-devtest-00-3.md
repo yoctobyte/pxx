@@ -2,6 +2,7 @@
 prio: 70
 track: T
 blocked-by: []
+status: done
 ---
 
 > **Track T by default: no lane could be inferred** (the job reported no test source). This is a FALLBACK, not a finding — nothing here says the defect is Track T's, only that the test source did not name an owner. Re-lane it before working it.
@@ -186,3 +187,54 @@ exception is his call, not this ticket's — noted here only because it is the
 shape of the window and it changes how you bisect it.
 
 Credit: frank-coordinator for the window and the method.
+
+## Fixed at HEAD — 2026-09-01, frankZ. Three faults, and the third only existed once the first two were fixed.
+
+Green: `tools-devtest#00 PASS guards 240.8s`, `testmgr: GREEN`, at binary
+`b9fd008f89ef`.
+
+**1. `tools/devtest_sync_fold.py` — the verdict depended on the developer's own
+tree.** `sync.sh` runs its git half in `$ROOT` (`git rev-parse
+--show-toplevel`) and its ticket half through `$(dirname "$0")/progress.py`,
+which finds tickets relative to ITS OWN location. Invoked by absolute path from
+a sandbox repo — which is exactly what this devtest does — it pushed THERE and
+listed pending tickets from HERE, then failed with
+`fill: no such file: devdocs/progress/done/...`. The check it failed was
+`exits 0`. So the devtest was RED for me and green for anyone with no ticket
+owing a citation.
+
+Fixed by asserting the precondition — `[ ! -f "$f" ]` skips a path that is not
+in the tree we are about to commit — rather than by re-rooting `progress.py`.
+The re-rooting version was written first and is instructive: it turned all ten
+of `tools/sync_citation_guard_devtest.py`'s guards into no-ops that still
+printed PASS, because that devtest lifts `verify_citations_landed` out of
+`sync.sh` and runs it against a stub `progress.py` in cwd, which only works
+while the path is `$(dirname "$0")`-relative. One fix, two devtests, and the
+second one caught the first.
+
+**2. `tools/testmgr_pin_built_devtest.py` — one row put the pin in the native
+tier.** `test/c_clearenv.c` was compiled with `$(PXX_STABLE)` under a note
+saying "a crtl-source fix, so the pin compiles it from the tree" — true of
+`./$(COMPILER)` as well, since either reads `lib/crtl` from the working tree,
+so the pin bought nothing. What it cost is the invariant behind "a pin taken
+during a native window is safe": `test-core` runs in native. Swapped to
+`./$(COMPILER)` after verifying byte-for-byte identical output.
+
+**3. The job then TIMED OUT, and that is the finding worth keeping.** The
+runner counts failures and keeps going, so a red suite finishes in whatever
+time it takes. `tools-devtest#00` had been red long enough that nobody had ever
+measured a GREEN pass, and it was classed `unit` — a 90s budget against 207s of
+real work. The hour the last failing guard was fixed, the job went from RED to
+TIMEOUT. **A budget calibrated against a broken run punishes the fix.**
+
+New `guards` class, 600s (207s tripled, the headroom `selfhost` uses), matched
+on the `tools/*devtest*` glob rather than the target name so
+`tools-devtest-sh` and the next one of that shape are classed right before
+anyone notices. Adding it to `CLASSES` alone produced a `KeyError: 'guards'`
+out of `write_live()` a minute into the run, because `CLASS_WEIGHT` is a second
+table keyed by class — there is now a module-level assert that the two agree,
+which costs nothing at import and names the cause instead of the symptom.
+
+Re-laned from the `track: T` fallback: 1 and 3 really are Track T's tools, 2
+was a Makefile row.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

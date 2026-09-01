@@ -4,7 +4,7 @@ track: T
 prio: 70
 type: bug
 blocked-by: [bug-a-dce-miscompiles-every-threaded-program-and-o3-turns-it-on]
-status: working
+status: done
 found: 2026-09-01
 found-by: frankZ
 owner: frankZ
@@ -71,3 +71,39 @@ precisely because five reds turning into five skips reads as an improvement.
 
 Landing this before the DCE fix is correct and will show `opt` RED for a true
 reason. Say so in the commit; do not land it silently.
+
+## Fixed — 2026-09-01, frankZ, and my own diagnosis in this ticket was wrong
+
+`baae75b6b`. Two blind spots, and the second one was not in the ticket at all.
+
+**The predicate I proposed here does not work and I measured it failing.** This
+ticket said to grep the source for `{$threadsafe`. I wrote that, ran shard 2,
+and all seven of its threading build-fails still build-failed: they carry the
+directive **zero** times. The refusal is raised inside `lib/rtl/palthread.pas`,
+by any program that reaches `__pxxclone` — through palthread, classes, TThread
+or the parallel-for lowering — not by a directive in the test. A source-text
+predicate would have read as a fix and reinstated the same blind spot. The
+landed version RETRIES the build with `--threadsafe` and keeps the flag if that
+succeeds, which asks the only oracle that cannot go stale, and distinguishes
+the eight `*_fail.pas` that must keep failing for free.
+
+**The second hole, found on the way: optdiff's baseline was not -O0.** The
+header says -O0, the temp file is named `d0`, and the comment added with the
+-O1 arm says "skipped straight from the -O0 baseline to -O2" — but the code
+passed no `-O` flag at all, and the default is -O2 (`compiler.pas:908`). So the
+`for L in 1 2 3` loop compared **-O2 against -O2**. That arm could not report a
+difference for any program in the corpus, ever. A guard that cannot fail is not
+a guard, and this one printed PASS.
+
+Positive control, stated before the change and then checked:
+`test_threadsafe_refcount_lockfree` is FAILED at -O0/-O1 and OK at -O2/-O3, all
+with rc=0. Before: DIFF at -O1 only. After: DIFF at -O2 and -O3 — the two arms
+that could not speak. Filed as
+[[bug-a-a-refcount-test-passes-at-o2-and-fails-at-o0-and-o1]].
+
+shard 2/12, same binary throughout: pass 151 -> 156, skip 24 -> 18, diff
+0 -> 1, and the one diff is real. `test_thread_writeln_interleave` went to
+`optdiff.skip` — six runs of ONE -O0 binary gave five distinct outputs.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

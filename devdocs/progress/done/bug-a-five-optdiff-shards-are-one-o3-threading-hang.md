@@ -2,7 +2,7 @@
 track: A
 prio: 50
 type: bug
-status: backlog
+status: done
 found: 2026-09-01
 found-by: claude-T
 owner: ""
@@ -161,3 +161,25 @@ Owner: frankZ holds this. The `owner:` field was EMPTY, which is what let frankC
 reach it sideways from the v399 commit message and get a fair way in before
 anyone noticed — a real collision, caught only because the human spotted two
 sessions on "threading". Claim it.
+
+## Fixed — 2026-09-01, frankZ
+
+Not `-O3` codegen; `compiler/dce.inc`, which `-O3` turns on. The compaction of
+`GlobFix[]` dropped the three arrays parallel by index to it, so every moved
+fixup inherited the trailing-immediate width of whoever used to sit at its new
+index — and `EmitReleaseHeapLock`'s `mov dword [@glob], 0` needs a
+`-(4 + trail)` correction, so five of eleven releases wrote to lock+4. The lock
+was acquired and never cleared: a single-threaded self-deadlock with no crash
+and no diagnostic, which is why all five shards reported `rc 0 vs 124`.
+
+All five corpus programs pass at `-O3` after the fix. Full write-up on
+[[bug-a-dce-miscompiles-every-threaded-program-and-o3-turns-it-on]]; the
+harness half that was masking it is
+[[bug-t-optdiff-cannot-see-any-threading-program-since-the-threadsafe-directive-became-an-error]].
+
+Thank you for the sequencing instruction — building the parents under srchash
+MATCH and refusing to judge without the `converged` verb is what kept a stale
+binary out of this, twice.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

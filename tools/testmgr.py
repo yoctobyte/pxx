@@ -343,6 +343,19 @@ CLASSES = {
     "corpus":      {"est_mem": 400 << 20,  "timeout": 1200},
     "conformance": {"est_mem": 256 << 20,  "timeout": 1200},
     "opt":         {"est_mem": 800 << 20,  "timeout": 900},
+    # T's own guard sweep: one recipe that runs ~130 devtest scripts in series.
+    # Small (peak RSS 37 MB measured), but nowhere near unit-sized in TIME.
+    # 600 = the 207s a full green pass took on plexus on 2026-09-01, tripled,
+    # the same headroom the selfhost row uses.
+    #
+    # IT FIT IN 90s ONLY WHILE IT WAS RED, and that is the reason this class
+    # exists rather than a bumped number. The runner counts failures and keeps
+    # going, so a red suite finishes in whatever time it takes -- but the job
+    # had been red for long enough that nobody had measured a GREEN pass, and
+    # the hour the last failing guard was fixed the job went from RED to
+    # TIMEOUT. A budget calibrated against a broken run is a budget that
+    # punishes the fix.
+    "guards":      {"est_mem": 550 << 20,  "timeout": 600},
 }
 # Runtime-nondeterministic classes: they RUN a program whose scheduling/socket/
 # thread timing can flake under a loaded full-matrix run (asyncecho = qemu,
@@ -811,7 +824,16 @@ HEARTBEAT_PERIOD = 10.0         # beat interval; must be << HEARTBEAT_STALE
 # default work-weights for jobs with no learned duration yet, per class —
 # used only for the progress estimate, never for scheduling
 CLASS_WEIGHT = {"unit": 1.0, "qemu": 2.0, "selfhost": 60.0,
-                "corpus": 45.0, "conformance": 90.0, "opt": 30.0}
+                "corpus": 45.0, "conformance": 90.0, "opt": 30.0,
+                "guards": 20.0}
+# TWO TABLES KEYED BY CLASS, AND ADDING A CLASS TO ONE IS NOT AN ERROR ANYWHERE
+# UNTIL A JOB OF THAT CLASS RUNS. Adding `guards` to CLASSES alone on
+# 2026-09-01 got a KeyError out of write_live() a minute into the run -- after
+# the compiler snapshot, after the probe, with the job already started. The
+# assert costs nothing at import and names the cause instead of the symptom.
+assert set(CLASS_WEIGHT) == set(CLASSES), (
+    "CLASSES and CLASS_WEIGHT disagree: %s"
+    % sorted(set(CLASS_WEIGHT) ^ set(CLASSES)))
 
 
 def pid_alive(pid):
@@ -2457,6 +2479,13 @@ def classify(lines):
         return "corpus"
     if "run_target.sh" in text or "qemu" in text:
         return "qemu"
+    # A sweep over T's own devtest scripts. Matched on the GLOB the recipe
+    # loops over rather than on the target name, for the reason the
+    # conformance arm above gives: tools-devtest and tools-devtest-sh are two
+    # targets of one shape today and the next one should be classed right
+    # before anyone notices.
+    if re.search(r"tools/\*devtest\*", text) or "*_devtest.py" in text:
+        return "guards"
     return "unit"
 
 

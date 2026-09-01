@@ -298,6 +298,25 @@ fill_pending_commits() {
     filled=""
     while IFS="$(printf '\t')" read -r f sha; do
         [ -n "$f" ] || continue
+        # THE FILE HAS TO BE IN THIS TREE. progress.py finds its ticket
+        # directory relative to its OWN location, while every git command above
+        # runs in $ROOT -- so invoking tools/sync.sh by absolute path from
+        # another repository pushes THERE and lists tickets from HERE. Not
+        # hypothetical: tools/devtest_sync_fold.py does exactly that, and on
+        # 2026-09-01 it went RED with `fill: no such file:` because the person
+        # running it happened to have three tickets owing a citation. The
+        # devtest's verdict was a function of the developer's own tree.
+        #
+        # Guarding the PRECONDITION rather than re-rooting progress.py: the
+        # stub-in-cwd mechanism that tools/sync_citation_guard_devtest.py uses
+        # to test verify_citations_landed for real depends on `$(dirname "$0")`
+        # resolving to `.`, and re-rooting silently turned all ten of its
+        # guards into no-ops that still printed PASS. A path that is not in the
+        # tree we are about to commit is not ours to fill, whatever the reason.
+        if [ ! -f "$f" ]; then
+            echo "sync: $f owes a citation but is not in this tree — not ours to fill" >&2
+            continue
+        fi
         if [ -z "$sha" ]; then
             echo "sync: $f owes a citation but its resolve commit could not be determined — left alone" >&2
             continue
@@ -553,6 +572,13 @@ verify_citations_landed() {
     # bug lives only where a file has both.
     still_owed=$(python3 "$(dirname "$0")/progress.py" pending 2>/dev/null \
                  | cut -f1 || true)
+    # Same reason as the `[ ! -f "$f" ]` guard in fill_pending_commits: a
+    # ticket path progress.py reports from a DIFFERENT tree cannot be judged
+    # here, and counting it would make this function's verdict depend on
+    # whoever is running it. Filtered rather than skipped wholesale, so a real
+    # repo with real tickets is unaffected and the guards that exercise this
+    # function with a stub progress.py still see everything they write.
+    still_owed=$(for _f in $still_owed; do [ -f "$_f" ] && printf '%s\n' "$_f"; done)
     # TWO QUESTIONS, TWO CANDIDATE SETS. The first cut walked one list for both
     # and that was the calibration bug: `manifest_tickets` is every ticket the
     # push TOUCHED, and the family index is touched on most pushes while being a

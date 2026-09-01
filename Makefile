@@ -12454,9 +12454,17 @@ test-core: $(COMPILER)
 	# there, and that read warmed the buffer -- every row then passed against a
 	# deliberately naive clearenv, verified. Row 1 now prints `1 0 0' fixed and
 	# `1 0 1' naive.
-	# $(PXX_STABLE): a crtl-source fix, so the pin compiles it from the tree.
+	# $(COMPILER), NOT $(PXX_STABLE), and the reason is the tier not the fix.
+	# The original note here read "a crtl-source fix, so the pin compiles it
+	# from the tree" -- true of both compilers, since either one reads
+	# lib/crtl from the working tree, so the pin was buying nothing this row
+	# needed. What it cost is real: test-core runs in the NATIVE tier, and
+	# tools/testmgr_pin_built_devtest.py asserts that no job below `full` is
+	# pin-built, which is the measurement behind "a pin taken during a native
+	# window is safe". This single row made that false. Verified identical
+	# output under ./compiler/pascal26 before the swap.
 	# feature-c-corpus-busybox-multi-applet
-	$(PXX_STABLE) test/c_clearenv.c $(TESTTMP)/c_clearenv26
+	./$(COMPILER) test/c_clearenv.c $(TESTTMP)/c_clearenv26
 	tools/expect_same.sh c_clearenv26 "$$($(TESTTMP)/c_clearenv26)" "$$(printf '1 0 0\n2 back\n3 0 0\n4 ok')"
 	# The crtl surface a 79-applet busybox userland needed, every row measured
 	# against glibc rather than reasoned about. The file failing to COMPILE is
