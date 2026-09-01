@@ -13,7 +13,7 @@
 #
 # Then:  FPC_TRUNK="$(tools/fpc_trunk.sh --path) -Fu<rtl units>" tools/fpc_diff_probe.sh ...
 #
-# THREE TRAPS, measured 2026-08-16, encoded here so nobody rediscovers them:
+# FIVE TRAPS -- 1..3 measured 2026-08-16, 4 and 5 on 2026-09-01, encoded here so nobody rediscovers them:
 #  1. `make -C rtl FPC=<new>` silently builds the RTL with the INSTALLED compiler.
 #     The only symptom is `PPU Invalid Version 207 expecting 208` at USE time,
 #     long after the build said OK. The rtl makefile wants PP=, not FPC=.
@@ -23,6 +23,11 @@
 #     later `make -C rtl PP=<new>` is a NO-OP -- newer units, nothing to do,
 #     exit 0 -- and you keep seed-built units whose symptom is trap 1's symptom.
 #     `make -C rtl clean` first. Not in the recipe; found 2026-09-01 by running it.
+#  5. `--check` must compare the STAMP, not HEAD. `checkout` advances HEAD before
+#     the build runs, so HEAD reads "new" whether or not anything was built and
+#     whether or not it WORKS. Measured 2026-09-01: the run that failed control 2
+#     exited 1 with HEAD already advanced, and `--check` would have called that
+#     broken oracle CURRENT. The stamp is written only after both controls pass.
 #  3. Read the remote tip with %cd, NOT %ad. FPC trunk showed author date
 #     2025-01-23 against commit date 2026-08-15; trusting %ad is what produced a
 #     wrong "no fix found in trunk" conclusion off a 247-commit-stale mirror.
@@ -34,6 +39,7 @@ MIRROR="$HOME/src/fpc-source"          # the owner's checkout: clone FROM it, ne
 GL=https://gitlab.com/freepascal.org/fpc/source.git
 UNITS="$TRUNK/rtl/units/x86_64-linux"
 PPC="$TRUNK/compiler/ppcx64"
+STAMP="$TRUNK/.oracle-verified-sha"   # written ONLY after both controls pass -- see trap 5
 mode="${1:-build}"
 
 say() { [ "$mode" = --path ] || echo "$@" >&2; }
@@ -44,12 +50,22 @@ remote_tip() {  # %cd, never %ad -- trap 3
 
 if [ "$mode" = --check ]; then
   [ -x "$PPC" ] || { echo "fpc-trunk: ABSENT ($TRUNK)"; exit 1; }
+  # TRAP 5: read the STAMP, never HEAD. `checkout` moves HEAD BEFORE the build,
+  # so HEAD says "new" the moment we look at the tip -- whether or not anything
+  # was built, and whether or not it works. Measured 2026-09-01: a run whose
+  # compiler could not compile hello-world exited 1 with HEAD already advanced,
+  # and this check would have answered CURRENT about it. The stamp is written
+  # only after both positive controls PASS, so its presence is a verified claim.
+  [ -f "$STAMP" ] || { echo "fpc-trunk: UNVERIFIED -- a build exists but no run ever passed the controls"; exit 1; }
+  have=$(cat "$STAMP")
   git -C "$TRUNK" fetch --depth=200 -q gl main 2>/dev/null || true
-  have=$(git -C "$TRUNK" rev-parse HEAD)
   want=$(git -C "$TRUNK" rev-parse gl/main 2>/dev/null || echo "$have")
-  echo "fpc-trunk: $("$PPC" -iV) at ${have%${have#????????????}}  built $(date -r "$PPC" +%F)"
+  echo "fpc-trunk: $("$PPC" -iV) verified at ${have%${have#????????????}}  built $(date -r "$PPC" +%F)"
   [ "$have" = "$want" ] && { echo "fpc-trunk: CURRENT with gl/main"; exit 0; }
-  echo "fpc-trunk: BEHIND gl/main by $(git -C "$TRUNK" rev-list --count HEAD..gl/main) commit(s) -- re-run without --check"
+  n=$(git -C "$TRUNK" rev-list --count "$have..gl/main" 2>/dev/null || echo '?')
+  c=$(git -C "$TRUNK" rev-list --count "$have..gl/main" -- compiler/ rtl/ 2>/dev/null || echo '?')
+  echo "fpc-trunk: BEHIND gl/main by $n commit(s), $c of them in compiler/ or rtl/ -- re-run without --check"
+  echo "fpc-trunk: (0 in compiler/ or rtl/ means the oracle is unaffected by the gap)"
   exit 2
 fi
 
@@ -79,6 +95,7 @@ after=$(git -C "$TRUNK" rev-parse HEAD)
 say "fpc-trunk: tip $(remote_tip)"
 
 if [ "$before" != "$after" ] || [ ! -x "$PPC" ]; then
+  rm -f "$STAMP"   # trap 5: a stamp must never survive a build it did not witness
   say "fpc-trunk: building compiler (trap 2: -C compiler only, never whole-tree)"
   make -C "$TRUNK/compiler" -j"$(nproc)" ppcx64 FPC="$SEED" >/dev/null
   # TRAP 4, found 2026-09-01 and NOT in the recipe the ticket recorded:
@@ -116,6 +133,8 @@ if ! "$PPC" -Fu"$UNITS" -FE"$t" "$t/p.pas" >"$t/cc.log" 2>&1; then
 fi
 out=$("$t/p") || { echo "fpc-trunk: FAIL -- compiled, but the program did not run" >&2; exit 1; }
 [ "$out" = "42" ] || { echo "fpc-trunk: FAIL -- ran but printed '$out', not 42" >&2; exit 1; }
+
+echo "$after" > "$STAMP"   # trap 5: only now, with both controls green
 
 if [ "$mode" = --path ]; then echo "$PPC"; else
   say "fpc-trunk: OK -- FPC $v, verified by compiling and RUNNING a program"
