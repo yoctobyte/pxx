@@ -58,6 +58,16 @@ ALLOWED_FILES = {
     "lib/rtl/sysutils.pas":
         "RTL implementation, not a test — it names /tmp as the default temp "
         "directory, which is the thing under test rather than a scratch file",
+    "lib/crtl/include/paths.h":
+        "The C-side counterpart of the sysutils entry above, and the same "
+        "argument. <paths.h> is the POSIX header whose ENTIRE PURPOSE is to "
+        "define _PATH_TMP \"/tmp/\" (and _PATH_UTMP, _PATH_WTMP, "
+        "_PATH_VARTMP). The literal is the standard's, not a scratch file a "
+        "test writes: privatising it would make the header wrong. Added by "
+        "a11f28a92 on 2026-08-31, which is when this guard went red and took "
+        "tools-devtest#00 with it. FILE-scoped on purpose — putting \"/tmp/\" "
+        "in ALLOWED_PATHS would exempt the bare prefix everywhere and gut the "
+        "guard for every real test.",
 }
 ALLOWED_PATHS = {
     "/tmp/test_nilpy_sqlite_crud.db":
