@@ -110,6 +110,35 @@ is the same lesson one node-kind further out.
 hang, which is the worst outcome: the crash that was pointing at the design
 would be gone.
 
+## Independently re-measured 2026-09-01 (frankB) — all four faces confirmed
+
+Reproduced from scratch at compiler `c4a89282faa6` (commit `9b9e762d8`), each
+program compiled `-O2` and run under `timeout 10`. **The table above is exactly
+right**, including the two that are easy to get wrong: the record-field/fixed
+case really does exit 0 with wrong values, and the function-result case really
+hangs rather than crashing.
+
+| face | pxx | rc |
+| --- | --- | --- |
+| plain `p^[i]`, fixed | `1.50 6.00` | 0 |
+| record field, fixed | `0.00 0.00` | 0 — **silent** |
+| record field, dynamic | — | 139 |
+| function result `GetP^[i]` | — | 124 (**hang**, killed at 10s) |
+| array element `ap[0]^[i]` | — | 139 |
+
+**The plain-identifier row is the positive control and it is worth keeping as
+one.** Same semantics, same arithmetic, different spelling, correct answer — so
+"what should this print" needs no external oracle and no FPC run. A fix that
+breaks that row has broken the working path, and a harness without it can pass
+on a build where nothing compiled at all.
+
+Not claiming this ticket — frankA registered the surrounding topic (aggregate
+indexing and the record-vs-array type distinction) before I picked it up, and
+they hold three neighbouring tickets that may share the cause. Recording the
+confirmation because it is worth more than the hour it would cost the next
+person to redo, and because a re-measurement on today's compiler is the thing
+that decides whether a ticket found on 08-31 is still live. It is.
+
 ## Repro
 
 ```pascal
