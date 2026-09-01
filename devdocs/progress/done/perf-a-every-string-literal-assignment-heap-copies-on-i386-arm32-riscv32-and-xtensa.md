@@ -3,7 +3,7 @@ slug: perf-a-every-string-literal-assignment-heap-copies-on-i386-arm32-riscv32-a
 track: A
 prio: 55
 type: perf
-status: working
+status: done
 found: 2026-09-01
 found-by: frankA
 owner: frankA
@@ -97,3 +97,6 @@ a second variable holding the same literal still prints `yy`. Run it on the
 backend under change BEFORE the port too — if it passes on the broken binary it
 is not testing the COW path. `test/test_string_index_cow.pas` already exists
 (added by `ad5559ff0`) and is the place to look first.
+
+## Log
+- 2026-09-01 — resolved, commit PENDING-COMMIT.
