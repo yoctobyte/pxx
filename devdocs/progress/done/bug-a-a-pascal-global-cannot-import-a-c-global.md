@@ -90,4 +90,4 @@ wasted space, never a wrong value, and the same currency as the crtl
 duplication ticket.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7b7ab0ed2.
