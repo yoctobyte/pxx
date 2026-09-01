@@ -67,4 +67,4 @@ crtl-map: compiler/crtl_names.inc is STALE — run: python3 tools/gen_crtl_map.p
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit adcaaaf7c.
