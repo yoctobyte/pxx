@@ -99,7 +99,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (140)
+## backlog-core (141)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -118,6 +118,7 @@ _none_
 | bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 | A | 45 | bug | aarch64 is the last target where a by-value aggregate argument occupies one pointer-sized slot by CONSTRUCTION rather than by classification: ABIA64CdeclArgSlot advances the NSAA by a fixed 8 bytes per argument, so an aggregate of any size gets exactly one slot and its three readers inherit that. x86-64 and i386 were converted by bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee; this is the same defect, in the one place with NO ORACLE. There is no gcc cross for aarch64 on this box, so no mixed link is constructible and the only available verification is pxx-against-pxx -- which is exactly the self-consistency the parent ticket exists to show is worthless for a calling convention. So the FIRST deliverable here is an oracle, not a fix. | — |
 | bug-a-an-exception-that-escapes-its-handler-or-is-bare-re-raised-still-leaks-its-object | A | 5 | bug | raising a NEW exception from inside a handler still leaks the original (live=1997/1000 trips, re-measured 2026-09-01) — the bare `raise;` re-raise half of this ticket is now CLEAN (937 -> 3) and is no longer part of it | decide-does-raise-of-an-existing-object-transfer-ownership |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
+| bug-a-c-a-global-initialised-with-a-function-address-is-not-exported | A | 40 | bug | `fp_t F = helper;` is the ONE file-scope form the --emit-obj data work does not export. Swept seven shapes in one translation unit -- scalar with and without an initialiser, array, data pointer `int *P = &A;`, string pointer, struct -- and six get `OBJECT GLOBAL`; the function-pointer one gets no symbol at all. So another object referencing F links against its own private .bss and reads NULL, which is the silent-wrong-value shape the data work was filed to remove, surviving in one shape. Measured on x86-64 and riscv32 alike, so it is frontend, not writer. | — |
 | bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it | A | 40 | bug | A C diagnostic can now print `in: <the .c module>` (CModRange*, ungated), but an error inside an INCLUDED HEADER prints nothing: the header-accurate per-token file table is DbgRange*, which returns early without -g. Pascal has an ungated twin for exactly this reason (PasMarkTokFile); C does not. | — |
 | bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only | A | 35 | bug | Storing a `char` into a `string[N]` through a pointer compiles on x86-64 only | — |
 | bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together | A | 35 | bug | arm32/riscv32/xtensa take NO PXXObjRetain when boxing an object into a variant, and none of the five cross arms of EmitManagedLocalCleanupForTarget releases a NilPy tyClass local at scope exit. The two errors cancel, so the observable today is bounded at one object per scope — but FIXING EITHER HALF ALONE turns that bounded leak into a use-after-free. They move together or not at all. Filed so the next person to 'add the missing retain' reads this first. | — |
@@ -586,11 +587,10 @@ _none_
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 | bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep | D | 35 | bug | A THIRD population of docs-vs-compiler defect, which no existing check can see: the flag exists, the docs name it, and the docs are wrong about WHICH TARGETS OR SOURCES it applies to. Measured instance fixed here -- `--emit-obj` was documented as working `on any target` and is refused on 3 of 6 backends. A grep of docs against the parser's flag table cannot detect this class, because the flag is in both lists and the page still lies. | — |
 
-## backlog-esp (3)
+## backlog-esp (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable | A+S | 35→80 | bug | --emit-obj for xtensa/riscv32 emits exactly ONE global symbol, `app_main`. Every proc is LOCAL FUNC and no data symbol is planned at all, so a `cdecl` routine and a `cvar` global that both link on x86-64 and i386 are invisible in an ESP object. The x86-64/i386 writers gained data groups in 72000d1e1 and d402147d6; writeELF32Rel and writeELF32RelIram have a different symbol model and gained nothing. | — |
 | bug-s-xtensa-cannot-link-any-program-that-uses-the-heap-runtime-calloc-is-external | S | 45 | bug | xtensa links no program that reaches the heap runtime: `calloc` is external | — |
 | feature-esp-hardware-flash-validation | S | 25 | feature | ESP32 real-hardware flash + boot validation (S2/S3, C3) | — |
 
@@ -862,9 +862,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3045)
+## done (3046)
 
-3045 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3046 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -959,7 +959,6 @@ _none_
 - [p 85] [A+S] regression-test-xtensa-test-signal-handler-callback-b336 (unblocks 1)
 - [p 85] [T] regression-tools-devtest-00-3 (unblocks 1)
 - [p 85] [T] feature-t-grade-a-pin-instead-of-gating-it
-- [p 80] [A+S] bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable (unblocks 1)
 - [p 80] [A] feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
@@ -1152,6 +1151,7 @@ _none_
 - [p 40] [A] bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help (unblocks 1)
 - [p 40] [A+S] bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing
 - [p 40] [A] bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized
+- [p 40] [A] bug-a-c-a-global-initialised-with-a-function-address-is-not-exported
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse
 - [p 40] [A] bug-a-nilpy-on-cross-targets-four-remaining-walls [parked — re-claim, do not duplicate]
 - [p 40] [A] bug-a-nilpy-under-threadsafe-still-leaks-every-class-field-and-it-cannot-ride-on-the-pascal-fix
@@ -1422,7 +1422,6 @@ _none_
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - **1** — bug-a-emitzeroframeslot-has-no-wasm32-arm
-- **1** — bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate

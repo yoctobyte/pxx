@@ -18958,6 +18958,52 @@ test-emit-obj: $(COMPILER)
 	  tools/expect_same.sh rtst_shared_runtime "$$($(TESTTMP)/rtst_pxx)" "$$($(TESTTMP)/rtst_gcc)" || exit 1; \
 	  echo "test-emit-obj: two objects share one heap, one errno and one optind, matching gcc"; \
 	else echo "gcc not installed; two-object runtime-state check skipped"; fi
+	# 4b-octies. THE ESP OBJECT EXPORTS WHAT THE PROGRAMMER MARKED, not just
+	#    app_main. writeELF32Rel emitted exactly ONE global symbol -- app_main --
+	#    with every proc LOCAL FUNC and no data symbol planned at all, so a
+	#    `cdecl` routine and a `cvar` global that both link on x86-64 and i386
+	#    were invisible here. That was the ESP-IDF component shape, and the
+	#    LOCAL-FUNC choice is a deliberate collision guard rather than an
+	#    omission, so what changed is narrow: only MARKED names join the global
+	#    group. An unmarked program's object is unchanged, which was measured
+	#    byte-for-byte across the change on both targets, not argued.
+	#
+	#    BOTH WRITERS, because `iram;` routes to writeELF32RelIram and that is
+	#    the path an ESP program is more likely to take. Their symbol-index
+	#    arithmetic is separate, and in both the externals sit AFTER the exported
+	#    symbols -- so an index short by the export count names the wrong callee
+	#    and still links.
+	rm -f $(TESTTMP)/espx_*.o
+	@for t in riscv32 xtensa; do \
+	  ./$(COMPILER) --emit-obj --target=$$t --platform=esp test/c_obj_esp_export.c $(TESTTMP)/espx_c_$$t.o >/dev/null || { echo "test-emit-obj: the C ESP fixture FAILED to build for $$t"; exit 1; }; \
+	  readelf -sW $(TESTTMP)/espx_c_$$t.o | grep -qE "FUNC +GLOBAL +DEFAULT +[0-9]+ esp_helper$$" || { echo "test-emit-obj: $$t object does not export the cdecl routine esp_helper"; exit 1; }; \
+	  readelf -sW $(TESTTMP)/espx_c_$$t.o | grep -qE "OBJECT +GLOBAL +DEFAULT +[0-9]+ EspVal$$" || { echo "test-emit-obj: $$t object does not export the file-scope global EspVal"; exit 1; }; \
+	  n=$$(readelf -sW $(TESTTMP)/espx_c_$$t.o | grep -cE "GLOBAL +DEFAULT +[0-9]+ app_main$$"); \
+	  [ "$$n" = 1 ] || { echo "test-emit-obj: $$t object has $$n GLOBAL app_main definitions -- the writer's entry symbol and the source's own proc collide"; exit 1; }; \
+	 done; echo "test-emit-obj: an ESP object exports a cdecl routine and a global, with exactly one app_main (riscv32, xtensa)"
+	@for t in riscv32 xtensa; do \
+	  ./$(COMPILER) -Fulib/rtl --emit-obj --target=$$t --platform=esp test/esp_obj_export.pas $(TESTTMP)/espx_p_$$t.o >/dev/null || { echo "test-emit-obj: the Pascal ESP fixture FAILED to build for $$t"; exit 1; }; \
+	  readelf -SW $(TESTTMP)/espx_p_$$t.o | grep -q '\.iram1\.text' || { echo "test-emit-obj: $$t Pascal ESP object has no .iram1.text -- it went through the PLAIN writer, so this row re-tested the one above instead of the two-text-section one"; exit 1; }; \
+	  readelf -sW $(TESTTMP)/espx_p_$$t.o | grep -qE "OBJECT +GLOBAL +DEFAULT +[0-9]+ EspCount$$" || { echo "test-emit-obj: the two-text-section $$t writer does not export the cvar global"; exit 1; }; \
+	  readelf -rW $(TESTTMP)/espx_p_$$t.o | grep -qE ' free( |$$)' || { echo "test-emit-obj: no relocation in the $$t iram object names free -- the external symbol base did not move past the exported symbols, so the calls name the wrong callee"; exit 1; }; \
+	 done; echo "test-emit-obj: the two-text-section ESP writer exports a cvar global and still resolves its externals"
+	#    THE NEGATIVE CONTROL, and it is the one that says the surface did not
+	#    widen on its own. An UNMARKED ESP program must still export app_main and
+	#    nothing else defined -- every other global in the object is an UND
+	#    import. Without this row the assertions above pass equally on a writer
+	#    that exported everything it had.
+	@./$(COMPILER) -Fulib/rtl --emit-obj --target=riscv32 --platform=esp test/test_esp_hello.pas $(TESTTMP)/espx_bare.o >/dev/null
+	@n=$$(readelf -sW $(TESTTMP)/espx_bare.o | awk '$$5=="GLOBAL" && $$7!="UND"' | wc -l); \
+	 [ "$$n" = 1 ] || { echo "test-emit-obj: an UNMARKED ESP program exports $$n defined globals, not 1 -- the export surface widened without a marker"; readelf -sW $(TESTTMP)/espx_bare.o | awk '$$5=="GLOBAL" && $$7!="UND"'; exit 1; }; \
+	 echo "test-emit-obj: an unmarked ESP program still exports app_main and nothing else"
+	#    AND AN IMPORT IS REFUSED, not silently given local storage. These
+	#    writers relocate every global reference against the .bss section sym, so
+	#    an `external` variable would read zero -- the exact silent-wrong-value
+	#    shape this family exists to prevent. Asserted on the message, because
+	#    any compile failure would satisfy a bare nonzero exit.
+	@printf 'program eimp;\nvar Shared: Integer; external;\nfunction f: Integer; begin f := Shared; end;\nbegin end.\n' > $(TESTTMP)/espx_imp.pas
+	@! ./$(COMPILER) -Fulib/rtl --emit-obj --target=riscv32 --platform=esp $(TESTTMP)/espx_imp.pas $(TESTTMP)/espx_imp.o >$(TESTTMP)/espx_imp.err 2>&1 || { echo "test-emit-obj: an imported variable was ACCEPTED for an ESP object -- it reads zero"; exit 1; }
+	@grep -q 'imported variable' $(TESTTMP)/espx_imp.err || { echo "test-emit-obj: the ESP import build failed for some OTHER reason, so the row above proves nothing"; head -3 $(TESTTMP)/espx_imp.err; exit 1; }
 	# 4c. A SHARED LIBRARY FROM A COMPILED SOURCE -- the other half of the same
 	#    backend work (feature-a-shared-library-output-for-compiled-sources).
 	#    --shared used to describe .asm-frontend output only: the writer built

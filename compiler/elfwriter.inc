@@ -2398,6 +2398,16 @@ begin
     end;
 end;
 
+{ Bodies below, after the Obj*Is* predicates they call -- pxx prescans headers
+  and the FPC seed does not, so a body placed here would build fine and fail
+  only in the seed canary. }
+procedure ObjPlanEspSymbols(numSectionSyms: Integer;
+                            var strSize, numLocalProcs, numExportProcs,
+                                numExportData, appMainOff, firstGlobal,
+                                extSym0: Integer); forward;
+procedure ObjRefuseEspDataImports; forward;
+function ObjEspProcIsExported(procIdx: Integer): Boolean; forward;
+
 procedure writeELF32RelIram(const outPath: AnsiString);
 { Extended ET_REL writer used when the program has `iram;` procedures: emits a
   second executable section `.iram1.text` (the IDF linker script routes it to
@@ -2410,7 +2420,8 @@ procedure writeELF32RelIram(const outPath: AnsiString);
   6 .rela.data,7 .bss,8 .symtab,9 .strtab,10 .shstrtab. }
 var
   i, machine, iramSize, mapped: Integer;
-  numProcSyms, numSyms, firstGlobal, symIdx: Integer;
+  numLocalProcs, numExportProcs, numExportData, extSym0: Integer;
+  numSyms, firstGlobal, symIdx: Integer;
   textOff, iramOff, dataOff, symOff, strOff: Integer;
   relaTextOff, relaIramOff, relaDataOff, shstrOff, shOff, strSize: Integer;
   relaTextCount, relaIramCount, relaDataCount, appMainOff: Integer;
@@ -2431,30 +2442,10 @@ begin
       iramSize := iramSize + (ProcBodyEnd[i] - Procs[i].BodyAddr);
     end;
 
-  { .strtab: 0 empty, proc names, app_main, external names. Also assign each
-    proc's .symtab index (section syms occupy 1..4). }
-  strSize := 1;
-  numProcSyms := 0;
-  for i := 0 to ProcCount-1 do
-    if (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
-    begin
-      ObjProcStrOff[i] := strSize;
-      strSize := strSize + Length(Procs[i].Name) + 1;
-      ObjProcSymIdx[i] := 5 + numProcSyms;
-      Inc(numProcSyms);
-    end
-    else
-      ObjProcStrOff[i] := -1;
-  appMainOff := strSize;
-  strSize := strSize + 9;
-  for i := 0 to ExternalCount-1 do
-  begin
-    ObjExtStrOff[i] := strSize;
-    strSize := strSize + Length(ExternalLinkName(i)) + 1;
-  end;
-
-  firstGlobal := 5 + numProcSyms;        { null + 4 section syms + procs }
-  numSyms := firstGlobal + 1 + ExternalCount;
+  ObjRefuseEspDataImports;
+  ObjPlanEspSymbols(4, strSize, numLocalProcs, numExportProcs, numExportData,
+                    appMainOff, firstGlobal, extSym0);
+  numSyms := extSym0 + ExternalCount;
 
   { Partition relocation counts by which text section their CodePos lands in. }
   relaTextCount := 0; relaIramCount := 0;
@@ -2529,7 +2520,7 @@ begin
   writeSym32(f, 0, 0, 0, 3, 5);   { .data }
   writeSym32(f, 0, 0, 0, 3, 7);   { .bss }
   for i := 0 to ProcCount-1 do
-    if ObjProcStrOff[i] >= 0 then
+    if (ObjProcStrOff[i] >= 0) and (not ObjEspProcIsExported(i)) then
     begin
       if ProcIram[i] then
         writeSym32(f, ObjProcStrOff[i], ObjProcIramOff[i], 0, 2, 3)  { LOCAL FUNC in .iram1.text }
@@ -2537,14 +2528,29 @@ begin
         writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, 2, 1); { LOCAL FUNC in .text }
     end;
   writeSym32(f, appMainOff, 0, 0, $12, 1);
+  { The MARKED surface, and only it: a cdecl routine keeps its section -- an
+    iram proc stays in .iram1.text -- so exporting it does not move its code. }
+  for i := 0 to ProcCount-1 do
+    if (ObjProcStrOff[i] >= 0) and ObjEspProcIsExported(i) then
+    begin
+      if ProcIram[i] then
+        writeSym32(f, ObjProcStrOff[i], ObjProcIramOff[i], 0, $12, 3)
+      else
+        writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, $12, 1);
+    end;
+  for i := 0 to SymCount-1 do
+    if ObjDataStrOff[i] >= 0 then
+      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $11, 7);
   for i := 0 to ExternalCount-1 do
     writeSym32(f, ObjExtStrOff[i], 0, 0, $10, 0);
 
-  { .strtab }
+  { .strtab -- proc names in INDEX order, not symbol order (see the planner). }
   writeU8(f, 0);
   for i := 0 to ProcCount-1 do
     if ObjProcStrOff[i] >= 0 then writeStrZ(f, Procs[i].Name);
   writeStrZ(f, 'app_main');
+  for i := 0 to SymCount-1 do
+    if ObjDataStrOff[i] >= 0 then writeStrZ(f, Syms[i].Name);
   for i := 0 to ExternalCount-1 do
     writeStrZ(f, ExternalLinkName(i));
   writePad(f, relaTextOff - (strOff + strSize));
@@ -2559,7 +2565,7 @@ begin
       writeRela32(f, GlobFix[i].CodePos, 4, 1, GlobFix[i].BSSoff);
   for i := 0 to DynCallCount-1 do
     if CodePosToIramOff(DynCallCodePos[i]) < 0 then
-      writeRela32(f, DynCallCodePos[i], firstGlobal + 1 + DynCallExtIdx[i], 1, 0);
+      writeRela32(f, DynCallCodePos[i], extSym0 + DynCallExtIdx[i], 1, 0);
   for i := 0 to IramCallFixCount-1 do
     if CodePosToIramOff(IramCallFix[i].CodePos) < 0 then
       writeRela32(f, IramCallFix[i].CodePos, ObjProcSymIdx[IramCallFix[i].ProcIdx], 1, 0);
@@ -2582,7 +2588,7 @@ begin
   for i := 0 to DynCallCount-1 do
   begin
     mapped := CodePosToIramOff(DynCallCodePos[i]);
-    if mapped >= 0 then writeRela32(f, mapped, firstGlobal + 1 + DynCallExtIdx[i], 1, 0);
+    if mapped >= 0 then writeRela32(f, mapped, extSym0 + DynCallExtIdx[i], 1, 0);
   end;
   for i := 0 to IramCallFixCount-1 do
   begin
@@ -2653,7 +2659,8 @@ procedure writeELF32Rel(const outPath: AnsiString);
   GLOBAL as app_main, externals as UNDEF GLOBAL. }
 var
   i, machine: Integer;
-  numProcSyms, numSyms, firstGlobal: Integer;
+  numLocalProcs, numExportProcs, numExportData, extSym0: Integer;
+  numSyms, firstGlobal: Integer;
   textOff, dataOff, symOff, strOff, relaTextOff, relaDataOff: Integer;
   shstrOff, shOff, strSize: Integer;
   relaTextCount, relaDataCount, appMainOff: Integer;
@@ -2697,28 +2704,10 @@ begin
   end;
   if TargetArch = TARGET_XTENSA then machine := 94 else machine := 243;
 
-  { .strtab layout: 0 = empty, then proc names, app_main, external names }
-  strSize := 1;
-  numProcSyms := 0;
-  for i := 0 to ProcCount-1 do
-    if (Procs[i].BodyAddr >= 0) and (not ProcExternal[i]) then
-    begin
-      ObjProcStrOff[i] := strSize;
-      strSize := strSize + Length(Procs[i].Name) + 1;
-      Inc(numProcSyms);
-    end
-    else
-      ObjProcStrOff[i] := -1;
-  appMainOff := strSize;
-  strSize := strSize + 9;  { 'app_main' + NUL }
-  for i := 0 to ExternalCount-1 do
-  begin
-    ObjExtStrOff[i] := strSize;
-    strSize := strSize + Length(ExternalLinkName(i)) + 1;
-  end;
-
-  firstGlobal := 4 + numProcSyms;  { null + .text/.data/.bss section syms + procs }
-  numSyms := firstGlobal + 1 + ExternalCount;
+  ObjRefuseEspDataImports;
+  ObjPlanEspSymbols(3, strSize, numLocalProcs, numExportProcs, numExportData,
+                    appMainOff, firstGlobal, extSym0);
+  numSyms := extSym0 + ExternalCount;
   relaTextCount := FixCount + GlobFixCount + DynCallCount;
   relaDataCount := DataPtrFixCount + MethodFixCount;
 
@@ -2766,17 +2755,25 @@ begin
   writeSym32(f, 0, 0, 0, 3, 3);   { STT_SECTION .data }
   writeSym32(f, 0, 0, 0, 3, 5);   { STT_SECTION .bss }
   for i := 0 to ProcCount-1 do
-    if ObjProcStrOff[i] >= 0 then
+    if (ObjProcStrOff[i] >= 0) and (not ObjEspProcIsExported(i)) then
       writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, 2, 1); { LOCAL FUNC }
   writeSym32(f, appMainOff, 0, 0, $12, 1);  { GLOBAL FUNC app_main = entry }
+  for i := 0 to ProcCount-1 do
+    if (ObjProcStrOff[i] >= 0) and ObjEspProcIsExported(i) then
+      writeSym32(f, ObjProcStrOff[i], Procs[i].BodyAddr, 0, $12, 1); { GLOBAL FUNC }
+  for i := 0 to SymCount-1 do
+    if ObjDataStrOff[i] >= 0 then
+      writeSym32(f, ObjDataStrOff[i], Syms[i].Offset, SymAllocSize[i], $11, 5);
   for i := 0 to ExternalCount-1 do
     writeSym32(f, ObjExtStrOff[i], 0, 0, $10, 0); { GLOBAL NOTYPE UNDEF }
 
-  { .strtab }
+  { .strtab -- proc names in INDEX order, not symbol order (see the planner). }
   writeU8(f, 0);
   for i := 0 to ProcCount-1 do
     if ObjProcStrOff[i] >= 0 then writeStrZ(f, Procs[i].Name);
   writeStrZ(f, 'app_main');
+  for i := 0 to SymCount-1 do
+    if ObjDataStrOff[i] >= 0 then writeStrZ(f, Syms[i].Name);
   for i := 0 to ExternalCount-1 do
     writeStrZ(f, ExternalLinkName(i));
   writePad(f, relaTextOff - (strOff + strSize));
@@ -2788,7 +2785,7 @@ begin
   for i := 0 to GlobFixCount-1 do
     writeRela32(f, GlobFix[i].CodePos, 3, 1, GlobFix[i].BSSoff);
   for i := 0 to DynCallCount-1 do
-    writeRela32(f, DynCallCodePos[i], firstGlobal + 1 + DynCallExtIdx[i], 1, 0);
+    writeRela32(f, DynCallCodePos[i], extSym0 + DynCallExtIdx[i], 1, 0);
 
   { .rela.data: data->data pointers and data->code method slots. Slots are 8
     bytes wide (layout shared with 64-bit targets); the reloc patches the low
@@ -3144,6 +3141,120 @@ function ObjDataRelocIsSymbolic(bssOff: Integer): Boolean;
 begin
   ObjDataRelocIsSymbolic := (ObjDataSymIndexForOff(bssOff) >= 0) or
                             (ObjDataExportSymForOff(bssOff) >= 0);
+end;
+
+function ObjEspProcIsExported(procIdx: Integer): Boolean;
+{ ObjProcIsExported, minus the one name this writer already owns.
+
+  The entry symbol is emitted as GLOBAL `app_main` at the program entry,
+  because that is the name the IDF calls. A C source that DEFINES `app_main`
+  therefore has a proc of that name too -- pxx's entry stub runs the
+  initialisers and calls it -- and exporting that proc as well puts two GLOBAL
+  definitions of `app_main` in one object, at different values. Measured when
+  the export loop was first written: symbol 8 at 0 and symbol 10 at 0x134.
+  The entry symbol wins; the user's own stays LOCAL, exactly as it was before
+  any of this. }
+begin
+  Result := ObjProcIsExported(procIdx) and
+            (not CaseEqual(Procs[procIdx].Name, 'app_main'));
+end;
+
+procedure ObjPlanEspSymbols(numSectionSyms: Integer;
+                            var strSize, numLocalProcs, numExportProcs,
+                                numExportData, appMainOff, firstGlobal,
+                                extSym0: Integer);
+{ One symbol plan for both ELF32 object writers.
+
+  WHY THE ESP OBJECT EXPORTED ONLY `app_main` until now, and why widening it is
+  not a policy change: the writer was built for the ESP-IDF component shape --
+  the SDK calls one entry point -- and every proc was LOCAL FUNC deliberately,
+  as a guard against name collisions inside an IDF build. That guard is worth
+  keeping, and it is kept: what appears in the global group is exactly what the
+  programmer MARKED. A `cdecl` routine and a `cvar`/`public` global are explicit
+  requests to be linkable by name; an unmarked program's object is unchanged
+  byte for byte, which the test asserts rather than assumes.
+
+  So the divergence being removed is not "ESP objects become chatty". It is that
+  the SAME source exported on x86-64 and i386 and silently did not here -- the
+  marker meant something on four targets and nothing on two.
+
+  STRTAB ORDER IS DELIBERATELY NOT THE SYMBOL ORDER. Proc names stay in index
+  order, exactly where they were, so an unmarked object's .strtab is unchanged;
+  only the symbol SLOT a name is referenced from moves. Data names go after
+  app_main and before the externals.
+
+  ObjProcSymIdx is computed in a second pass because a proc's index depends on
+  how many procs stayed local, which the first pass is still counting. The Iram
+  writer relocates @proc literals against it, so getting this wrong is a wild
+  code pointer rather than a link error. }
+var i, n: Integer;
+begin
+  strSize := 1;
+  numLocalProcs := 0;
+  numExportProcs := 0;
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) then
+    begin
+      ObjProcStrOff[i] := strSize;
+      strSize := strSize + Length(Procs[i].Name) + 1;
+      if ObjEspProcIsExported(i) then Inc(numExportProcs) else Inc(numLocalProcs);
+    end
+    else
+      ObjProcStrOff[i] := -1;
+
+  appMainOff := strSize;
+  strSize := strSize + 9;                   { 'app_main' + NUL }
+
+  numExportData := 0;
+  for i := 0 to SymCount-1 do
+    if ObjDataIsExport(i) then
+    begin
+      ObjDataStrOff[i] := strSize;
+      strSize := strSize + Length(Syms[i].Name) + 1;
+      Inc(numExportData);
+    end
+    else
+      ObjDataStrOff[i] := -1;
+
+  for i := 0 to ExternalCount-1 do
+  begin
+    ObjExtStrOff[i] := strSize;
+    strSize := strSize + Length(ExternalLinkName(i)) + 1;
+  end;
+
+  firstGlobal := 1 + numSectionSyms + numLocalProcs;
+  extSym0 := firstGlobal + 1 + numExportProcs + numExportData;
+
+  n := 0;
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and (not ObjEspProcIsExported(i)) then
+    begin
+      ObjProcSymIdx[i] := 1 + numSectionSyms + n;
+      Inc(n);
+    end;
+  n := 0;
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and ObjEspProcIsExported(i) then
+    begin
+      ObjProcSymIdx[i] := firstGlobal + 1 + n;
+      Inc(n);
+    end;
+end;
+
+procedure ObjRefuseEspDataImports;
+{ An IMPORT has no route through these writers -- every GlobFix relocates
+  against the .bss section sym -- so an `external` variable would take local
+  storage and read zero, which is the silent-wrong-value shape the whole data
+  work exists to prevent. Refused rather than emitted, until someone needs it.
+  bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable }
+var i: Integer;
+begin
+  for i := 0 to SymCount-1 do
+    if ObjDataIsImport(i) then
+      ErrorNoPos('--emit-obj: an imported variable (' + Syms[i].Name
+        + ') is not supported for xtensa/riscv32 objects: the reference would '
+        + 'relocate into this object''s own .bss and read zero. Export an '
+        + 'accessor from the defining side instead');
 end;
 
 function ObjDataImportOrdinal(symIdx: Integer): Integer;

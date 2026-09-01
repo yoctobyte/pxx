@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:7 unfinished:28 blocked:7 backlog:14 backlog-umbrella:6 backlog-core:140 backlog-nilpy:97 backlog-tools:77 backlog-pascal:56 backlog-decide:25 backlog-libs:15 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:3 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3045 rejected:72`
+`working:7 unfinished:28 blocked:7 backlog:14 backlog-umbrella:6 backlog-core:141 backlog-nilpy:97 backlog-tools:77 backlog-pascal:56 backlog-decide:25 backlog-libs:15 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:24 done-followup:3 decided:144 done:3046 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -74,7 +74,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [A+S]` regression-test-xtensa-test-signal-handler-callback-b336 (unblocks 1)
 - `[p 85] [T]` regression-tools-devtest-00-3 (unblocks 1)
 - `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
-- `[p 80] [A+S]` bug-a-the-esp-object-writer-exports-only-app-main-so-no-cdecl-routine-or-global-is-linkable (unblocks 1)
 - `[p 80] [A]` feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -90,5 +89,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-core-test-exception-unhandled-2
 - `[p 70] [T]` regression-test-core-test-setlen-in-parallel-for-body-2
 - `[p 70] [T]` regression-test-pascal-conformance-shard1-6-2
+- `[p 70] [T]` regression-test-pascal-conformance-shard2-6-2
 
 _438 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
