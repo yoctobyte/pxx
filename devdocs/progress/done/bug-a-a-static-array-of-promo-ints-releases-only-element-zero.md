@@ -83,7 +83,7 @@ today, which is why neither half was noticed.
 `a[1..N]`, RSS asserted flat) + `tools/gate.sh quick`.
 
 ## Log
-- 2026-09-01 — resolved, commit PENDING-COMMIT.
+- 2026-09-01 — resolved, commit 25d4756e4.
 
 
 ## Resolved
