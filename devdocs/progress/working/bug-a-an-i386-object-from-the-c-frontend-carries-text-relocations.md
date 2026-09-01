@@ -292,3 +292,47 @@ alone reports 19 shapes; three objects report 24; three objects after an
 unrelated string-literal change report 23 — and the true count is whatever the
 emitter can produce, which none of them measured. Every one of those numbers
 would have read as complete.
+
+## CORRECTION: THE COST I RECORDED FOR `esi` WAS WRONG (2026-09-01, frankC)
+
+The register decision above says the cost is *"91 esi sequences ... all
+short-lived, none live across an IR node ... each needs re-homing onto `edi` or
+a spill"*, and calls it the smallest of the three options.
+
+**The choice survives. The cost sentence does not, and it was the load-bearing
+half.** Measured: **70 of the 91 `esi` lines have `edi` within ±6 lines**, and
+they are genuinely co-live, not merely adjacent —
+
+```
+mov al, [esi] / mov [edi], al / inc esi / inc edi      a byte-copy loop
+{ Clobbers ebx, ecx, esi, edi. }                       the 64-bit divide's own comment
+```
+
+So *"re-home onto `edi`"* is unavailable for the large majority of sites, and I
+wrote it as though the two registers were interchangeable spares. **There is no
+free register on i386 here at all**: `eax` `ecx` `edx` `ebx` `esi` `edi` are all
+in the working set and `ebp`/`esp` are fixed. Any choice of base register costs
+real code motion; `esi` is still the cheapest and the byte-addressability
+argument is untouched.
+
+### The technique is SAVE/RESTORE, not re-homing
+
+Re-homing was the wrong shape to reach for. The sequences that clobber the base
+register are **self-contained emitted blocks** — a copy loop, a divide core, a
+formatting helper — so each one wraps itself:
+
+```
+push esi   ...the existing sequence, unchanged...   pop esi
+```
+
+Local, mechanical, and it leaves the platonic code alone instead of rewriting 70
+working sequences into a register they were not written for. Cost is two bytes
+and two memory accesses per clobbering sequence, paid only where the clobber
+happens. It is also what makes the sequences reviewable: the diff is a wrapper,
+not a rewrite.
+
+**This is the correction that matters for whoever implements phase 1**, because
+"rename esi to edi in 91 places" is a plausible-looking day of work that
+produces a backend which fails wherever both were live — and the failures would
+be in string copies and 64-bit division, i.e. everywhere, but only in programs
+that reach those paths.
