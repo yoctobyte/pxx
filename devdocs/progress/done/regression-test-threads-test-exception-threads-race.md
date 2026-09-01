@@ -335,4 +335,4 @@ ticket's sibling documents — a compiler with `StatusSlotTlsIndex` forced to -1
 which fails with rc=217 rather than rc=139. I did not build it. The test's
 sensitivity to the shadow-chain bug is therefore inherited from its history, not
 re-measured today.
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 590bd83bc.
