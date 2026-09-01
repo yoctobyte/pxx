@@ -2,7 +2,7 @@
 type: bug
 track: A
 prio: 8
-summary: a fresh dyn-array call result used as a Copy() or `+` operand is never released — the whole array leaks, one per operand per evaluation, and the obvious park fix segfaults on non-managed element types
+summary: "FIXED. A fresh dyn-array call result used as a Copy() or `+` operand was never released — the whole array leaked, one per operand per evaluation, for managed AND non-managed element types, so it was the HANDLE that had no owner. Three spills in ir.inc (AN_DYN_COPY's source, AN_DYN_INSERT's source, AN_DYN_INSERT's array-SPLICE value, which is the arm `a + b` goes through) now run IRParkManagedDyn. What blocked this for a day: the park itself handed the handle back with IR_LOAD_SYM, which routes through EmitLoadVar, whose width comes from Syms[].TypeKind — and AllocDynArray stamps that with the ELEMENT kind, with no IsArray check on that path. So an `array of Integer` handle was loaded 4-byte SIGN-EXTENDED and the release read [data-8] off it and died, while `array of AnsiString` survived on a pointer-sized element kind — which is exactly why it read as 'the park works for strings and segfaults for integers'. IR_LEA is the handle read (every AN_IDENT arm beside these spills already used it). 64-bit only. Measured: Copy rows 2004 live -> 6, concat rows 5006 -> 11."
 owner: frankB
 ---
 
@@ -109,3 +109,85 @@ for i := 1 to 1000 do begin b := Copy(nv);       Inc(sink, Length(b)); end;   { 
 Found while sweeping managed seams after `4af4645ba`. Not fixed: the working
 tree was reverted to HEAD and re-verified (`converged after 1 round(s)`, all
 rows produce correct output with the leaks present).
+
+
+## Root cause — found 2026-09-02, and it was not in these arms at all
+
+The five hypotheses above are all still correct and all still refuted. The thing
+none of them reached is that **the park's own handle read was truncating**, and
+the giveaway was in the faulting instruction rather than in the IR:
+
+```
+0x4086c6: mov %r14,%rax      ; r14 = the "data pointer"
+0x4086c9: add $0x0,%rax
+0x4086cf: sub $0x8,%rax      ; [data-8] = the array header
+0x4086d5: mov (%rax),%rax    ; SIGSEGV
+rax = 0xffffffffe7e00018
+```
+
+`0xffffffff...` is a **sign-extended 32-bit value**, not a heap address. The
+handle was already truncated before the release ever saw it.
+
+`IRParkManagedDyn` ended with
+
+```pascal
+IRParkManagedDyn := IRAppend(IR_LOAD_SYM, pdSym, -1, -1, 0, Ord(tyPointer));
+```
+
+The node is tagged `tyPointer`, which is why hypothesis 1's IR dump looked
+identical for both element types — the tag is not what picks the width.
+`IR_LOAD_SYM` emits `EmitLoadVar` (symtab.inc:5400), which opens with
+
+```pascal
+tk := Syms[idx].TypeKind;
+sz := TypeSlotSize(tk);
+sgn := TypeSigned(tk);
+```
+
+and has **no `IsArray` check anywhere on that path**, while `AllocDynArray`
+(symtab.inc) sets `Syms[].TypeKind := elemType`. So for an `array of Integer`
+temp: `sz=4, sgn=True` → a 4-byte sign-extending load of an 8-byte handle. For
+`array of AnsiString` the element kind is pointer-sized and the wrong width is
+accidentally the right one.
+
+That single fact explains every split in the tables above: managed vs
+non-managed, and why the same helper is clean at the pointer-cast seam (a cast
+stores the address and the ticket's check read the ORIGINAL array, so a
+truncated handle there was silently wrong rather than fatal).
+
+**The fix is `IR_LEA`, not `IR_LOAD_SYM`** — reading a dyn-array HANDLE out of
+its slot is what IR_LEA does in read context, and the `AN_IDENT` arm sitting
+beside each of these three spills already used it. That is also why a named
+variable in the same position was always clean.
+
+**64-bit only.** On i386 / arm32 / riscv32 a handle is 4 bytes, so the 4-byte
+load was correct by accident; the i386 row in the new test is kept as exactly
+that control.
+
+## Measured
+
+Negative control on this tree, same program both times:
+
+| | allocs | frees | live |
+| --- | --- | --- | --- |
+| `Copy` rows, 3000 trips, without the park | 4809 | 2805 | **2004** |
+| `Copy` rows, with it | 4809 | 4803 | **6** |
+| concat rows, 5000 trips, without | 9755 | 4749 | **5006** |
+| concat rows, with | 9755 | 9744 | **11** |
+
+Allocation counts are identical — the park changes only frees.
+
+Regression test `test/test_dynarray_fresh_result_operand_leaks`, wired into
+test-core plus i386 and aarch64 rows. Positive control: **live=4506** with the
+fix reverted, **15** with it, bound 50. Note the value assertions pass EITHER
+WAY — `assert_no_leak.sh` is the row that catches this, so the expect_same row
+alone would have certified the leak.
+
+## Residual — an owner for "then what?"
+
+`EmitLoadVar` truncating a dyn-array handle is a live trap for the next caller
+that reaches an array symbol through `IR_LOAD_SYM`; nothing rejects it and it
+fails silently and element-type-dependently. Filed separately as
+[[bug-a-emitloadvar-truncates-a-dynarray-handle-to-its-element-width]] rather
+than fixed here, because it is a hot shared path and this fix is already
+measured and controlled.

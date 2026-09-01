@@ -3580,7 +3580,15 @@ begin
   LastTypeRecId := pdSaved;
   SymIsHiddenArgTemp[pdSym] := True;
   IRAppend(IR_STORE_SYM, pdSym, val, -1, 0, Ord(tyPointer));
-  IRParkManagedDyn := IRAppend(IR_LOAD_SYM, pdSym, -1, -1, 0, Ord(tyPointer));
+  { IR_LEA, not IR_LOAD_SYM. Reading a dyn-array HANDLE out of its slot is what
+    IR_LEA does in read context; IR_LOAD_SYM goes through EmitLoadVar, which
+    takes its width from Syms[].TypeKind -- and AllocDynArray stamps that with
+    the ELEMENT kind. So the handle of an `array of Integer` was loaded as a
+    4-byte SIGN-EXTENDED value (measured: data pointer 0xffffffffe7e00020) and
+    the release then read [data-8] off it. `array of AnsiString` survived only
+    because a pointer-sized element kind makes the wrong width the right one.
+    bug-a-a-fresh-array-result-has-no-owner-as-a-copy-or-concat-operand }
+  IRParkManagedDyn := IRAppend(IR_LEA, pdSym, -1, -1, 0, Ord(tyPointer));
 end;
 
 { The STATIC-ARRAY SOURCE behind an argument that is about to be copied into a
@@ -7450,7 +7458,7 @@ begin
           IRAppend(IR_LEA, dcSrcSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
       end
       else
-        IRAppend(IR_STORE_SYM, dcSrcTmp, IRLowerAST(dcSrcAst), -1, 0, Ord(tyPointer));
+        IRAppend(IR_STORE_SYM, dcSrcTmp, IRParkManagedDyn(IRLowerAST(dcSrcAst), dcSrcAst), -1, 0, Ord(tyPointer));
       dcIdxTmp := AllocVar('', tyInteger);
       IRAppend(IR_STORE_SYM, dcIdxTmp, IRLowerAST(dcIdxAst), -1, 0, Ord(tyInteger));
 
@@ -7635,7 +7643,7 @@ begin
         IRAppend(IR_STORE_SYM, dcSrcTmp,
           IRAppend(IR_LEA, ASTIVal[dcSrcAst], -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer))
       else
-        IRAppend(IR_STORE_SYM, dcSrcTmp, IRLowerAST(dcSrcAst), -1, 0, Ord(tyPointer));
+        IRAppend(IR_STORE_SYM, dcSrcTmp, IRParkManagedDyn(IRLowerAST(dcSrcAst), dcSrcAst), -1, 0, Ord(tyPointer));
       dcIdxTmp := AllocVar('', tyInteger);
       IRAppend(IR_STORE_SYM, dcIdxTmp, IRLowerAST(dcIdxAst), -1, 0, Ord(tyInteger));
       dcCntTmp := AllocVar('', tyInteger);
@@ -7775,7 +7783,7 @@ begin
           because nothing is stored into a gap; PXXDynInsArrFill lays the
           source's elements straight into the fresh buffer. }
         dcValTmp := AllocVar('', tyPointer);
-        IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAST(dcCntAst), -1, 0, Ord(tyPointer));
+        IRAppend(IR_STORE_SYM, dcValTmp, IRParkManagedDyn(IRLowerAST(dcCntAst), dcCntAst), -1, 0, Ord(tyPointer));
       end
       else if dcDepth > 1 then
       begin
@@ -7812,7 +7820,7 @@ begin
         IRAppend(IR_STORE_SYM, dcSrcTmp,
           IRAppend(IR_LEA, ASTIVal[dcSrcAst], -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer))
       else
-        IRAppend(IR_STORE_SYM, dcSrcTmp, IRLowerAST(dcSrcAst), -1, 0, Ord(tyPointer));
+        IRAppend(IR_STORE_SYM, dcSrcTmp, IRParkManagedDyn(IRLowerAST(dcSrcAst), dcSrcAst), -1, 0, Ord(tyPointer));
       dcIdxTmp := AllocVar('', tyInteger);
       IRAppend(IR_STORE_SYM, dcIdxTmp, IRLowerAST(dcIdxAst), -1, 0, Ord(tyInteger));
 

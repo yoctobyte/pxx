@@ -6715,6 +6715,17 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_record_promo_member_leaks.pas $(TESTTMP)/test_rpm26
 	tools/expect_same.sh test_rpm26 "$$($(TESTTMP)/test_rpm26 | tail -1)" "record-promo-member 4000/4000"
 	tools/assert_no_leak.sh record_promo_member 50 $(TESTTMP)/test_rpm26
+	@# A FRESH dyn-array call result as a Copy()/`+` operand had no owner: three
+	@# spills in ir.inc kept a RAW POINTER to it. The integer rows are the ones
+	@# that matter -- IRParkManagedDyn handed the handle back with IR_LOAD_SYM,
+	@# whose width comes from Syms[].TypeKind (the ELEMENT kind), so an
+	@# `array of Integer` handle was loaded 4-byte SIGN-EXTENDED and the release
+	@# died on it, while `array of AnsiString` survived on a pointer-sized
+	@# element kind. assert_no_leak is what catches this: the value assertions
+	@# pass either way (measured -- live went 4506 -> 15, output identical).
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_fresh_result_operand_leaks.pas $(TESTTMP)/test_dfro26
+	tools/expect_same.sh test_dfro26 "$$($(TESTTMP)/test_dfro26 | tail -n 2)" "$$(printf 'b=4 b0=n0 ib=4 ibsum=110\nDYNFRESHOPERAND OK')"
+	tools/assert_no_leak.sh dynarray_fresh_operand 50 $(TESTTMP)/test_dfro26
 	@# An `array of const` element built by an EXPRESSION had no owner: the
 	@# TVarRec slot is a bare pointer union with no finaliser, so the +1 was
 	@# unreachable to every scope-exit scan. 2977 -> 10 against this bound, with
@@ -14990,6 +15001,12 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_i386_x64
 	tools/expect_same.sh i386/test_dynarray_ownership_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/dao_i386)" "$$($(TESTTMP)/dao_i386_x64)"
+	@# i386 is the CONTROL for the fresh-operand park: a dyn-array handle is
+	@# 4 bytes here, so the IR_LOAD_SYM width bug this test covers was invisible
+	@# on 32-bit and only ever bit on 64-bit targets.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_dynarray_fresh_result_operand_leaks.pas $(TESTTMP)/dfro_i386
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_fresh_result_operand_leaks.pas $(TESTTMP)/dfro_i386_x64
+	tools/expect_same.sh i386/test_dynarray_fresh_result_operand_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/dfro_i386)" "$$($(TESTTMP)/dfro_i386_x64)"
 	./$(COMPILER) --target=i386 test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_i386
 	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_i386_x64
 	tools/expect_same.sh i386/test_open_array_managed_field_record "$$(tools/run_target.sh i386 $(TESTTMP)/oamfr_i386)" "$$($(TESTTMP)/oamfr_i386_x64)"
@@ -15664,6 +15681,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a64
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a64_x64
 	tools/expect_same.sh aarch64/test_dynarray_ownership_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/dao_a64)" "$$($(TESTTMP)/dao_a64_x64)"
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_dynarray_fresh_result_operand_leaks.pas $(TESTTMP)/dfro_a64
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_fresh_result_operand_leaks.pas $(TESTTMP)/dfro_a64_x64
+	tools/expect_same.sh aarch64/test_dynarray_fresh_result_operand_leaks "$$(tools/run_target.sh aarch64 $(TESTTMP)/dfro_a64)" "$$($(TESTTMP)/dfro_a64_x64)"
 	./$(COMPILER) --target=aarch64 test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_a64
 	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_a64_x64
 	tools/expect_same.sh aarch64/test_open_array_managed_field_record "$$(tools/run_target.sh aarch64 $(TESTTMP)/oamfr_a64)" "$$($(TESTTMP)/oamfr_a64_x64)"
