@@ -1,7 +1,34 @@
 ---
 prio: 70
 track: C
+status: done
+owner: frankC
 ---
+
+> **RESOLVED 2026-09-01 by `25d604bbf` (frankC), which was not filed against
+> this ticket — it was found from the other end.** The failing step is
+> `python3 tools/gen_crtl_map.py --check`, and the cause was simply that
+> `compiler/crtl_names.inc` had gone stale: 381 functions / 24 headers recorded
+> against 390 / 27 actually declared. I hit the same step in the tstate FULL
+> report at `45dde855b34d` (`lib-test#src:tools/crtl_reachability.py` -- "STALE
+> -- run: python3 tools/gen_crtl_map.py"), regenerated it, and only afterwards
+> found this auto-filed ticket describing the identical step.
+>
+> Verified at current HEAD `a2f326734`, fully synced: `crtl-map: OK -- 390 crtl
+> functions mapped to 27 headers`, exit 0. Reachability itself was never broken
+> -- 56 headers, every declared function reachable from its own header; only the
+> generated map lagged.
+>
+> **The staleness was NOT mine and not this ticket's named sha.** The delta is
+> `a11f28a92` (libgen, dirent and the cross-target header set) and `d74c7fbe9`
+> (busybox cat), which added `basename`, `closedir` and friends without
+> regenerating. The ticket's own header already says the named sha cannot be the
+> cause and that the bisect is unsound here; that was right, and the real cause
+> was two header-adding commits below it.
+>
+> **The `track: C` guess was correct**, for the record -- the defect really was
+> in the C frontend's header set, though it was a generated-file lag rather than
+> a code defect.
 
 > **Track guessed as C from the FAILING STEP** — line 23 of 66, `python3 tools/gen_crtl_map.py --check`, which names `tools/gen_crtl_map.py`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 39 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
 
@@ -40,3 +67,4 @@ crtl-map: compiler/crtl_names.inc is STALE — run: python3 tools/gen_crtl_map.p
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-09-01 — resolved, commit PENDING-COMMIT.
