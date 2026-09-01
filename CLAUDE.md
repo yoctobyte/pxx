@@ -402,9 +402,15 @@ line says so (superseded), not because an older doc says so.
 (`tools/twatch.py --follow`). T samples the tip every ~8 commits and bisects
 backwards — a persistent regression is caught within ~8 commits. It does NOT
 cover anything transient or masked. **Widening your own gate spends the machine
-that produces the 8.** The one exception: **T is PROVEN down** (`twatch.py
---status` exit 1, or `trackt.py health` DOWN — `git fetch` first). Slow or stale
-is not proven.
+that produces the 8.** The one exception: **T is PROVEN down** — and the
+proof is **`twatch.py --status` exiting 1** after a `git fetch`. It is **NOT**
+`trackt.py health`, which asks whether a watcher daemon runs on the **LOCAL**
+host: **T runs on seven, and plexus deliberately does not run it** (owner,
+2026-09-01), so on plexus it answers `DOWN — no watcher daemon is running` every
+single time, correctly, about the wrong machine. Measured 2026-09-01: `health`
+said DOWN on plexus while `trackt-watcher.service` was `active` on seven with a
+fresh archive — and read literally, that would have handed every lane a
+permanent licence to widen its gate. Slow or stale is not proven either.
 
 **Precedence: CLAUDE.md wins.** Handoffs, resolved tickets and `done/` write-ups
 are historical records of what a past session ran — not instructions, not
