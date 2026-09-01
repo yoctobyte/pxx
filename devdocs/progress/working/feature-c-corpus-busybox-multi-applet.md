@@ -141,11 +141,11 @@ compile.** Six defects, in the order the attempt hit them:
 
 | | what | where it was fixed |
 | --- | --- | --- |
-| 1 | `-include <file>` did not exist — on every one of busybox's ~145 TUs | `36619c519` |
-| 2 | `, ##__VA_ARGS__` comma deletion not implemented — `ls`, `mkdir` | `36619c519` |
-| 3 | a directive INSIDE a macro argument list abandoned the call — `mkdir` | `36619c519` |
-| 4 | an absolute path in `#include "..."` was never resolved | `36619c519` |
-| 5 | crtl had no `lchown`, then no `mknod`, then no `truncate` | `b433471db`, `e55fd43d5` |
+| 1 | `-include <file>` did not exist — on every one of busybox's ~145 TUs | `ef937b2f9` |
+| 2 | `, ##__VA_ARGS__` comma deletion not implemented — `ls`, `mkdir` | `ef937b2f9` |
+| 3 | a directive INSIDE a macro argument list abandoned the call — `mkdir` | `ef937b2f9` |
+| 4 | an absolute path in `#include "..."` was never resolved | `ef937b2f9` |
+| 5 | crtl had no `lchown`, then no `mknod`, then no `truncate` | `d86bb32fe`, `ca918c6ab` |
 | 6 | **objects carry no DATA symbols** | filed, not fixed |
 
 Note the shape of 1-4: **four preprocessor defects, and the first one hid the

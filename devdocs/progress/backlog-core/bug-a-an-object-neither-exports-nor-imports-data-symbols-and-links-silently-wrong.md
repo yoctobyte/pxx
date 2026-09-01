@@ -16,7 +16,7 @@ summary: "--emit-obj emits NO data symbols. A global defined in a .c gets no OBJ
 Found attempting busybox's own build model — 52 translation units compiled as
 separate objects rather than as a unity — for
 [[feature-c-corpus-busybox-multi-applet]]. Compiler binary sha256
-`0e1ed8c673bc`, at commit `b433471db`.
+`0e1ed8c673bc`, at commit `d86bb32fe`.
 
 ## The measurement
 

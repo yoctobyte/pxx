@@ -13,7 +13,7 @@ summary: "On --target=i386 a C main() receives argc and argv SWAPPED: argv holds
 
 # i386: a C `main` gets argc and argv swapped
 
-Compiler binary sha256 `0e1ed8c673bc`, at commit `b433471db`. Found while
+Compiler binary sha256 `0e1ed8c673bc`, at commit `d86bb32fe`. Found while
 testing crtl `chown`/`lchown` across every runnable target for
 [[feature-c-corpus-busybox-multi-applet]] — the i386 run segfaulted where the
 other five passed, and the cause was not chown.
