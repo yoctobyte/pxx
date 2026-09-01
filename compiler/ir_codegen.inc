@@ -5767,9 +5767,27 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     raiseClass: Integer;
     intIdx, sseIdx, nArgs, mStack, padBytes, extIdx, restoreOff, vaPopN: Integer;
     argIsSse: array[0..127] of Boolean;
-    argIsStack: array[0..127] of Boolean;
-    argRegIdx: array[0..127] of Integer;
     argNodeArr: array[0..127] of Integer;
+    { ARGUMENT vs ABI SLOT. `argIsSse`/`argNodeArr` above are indexed by
+      ARGUMENT; the `slot*` arrays here are indexed by ABI SLOT, and slotArg[k]
+      names the argument feeding slot k. slotArg is the IDENTITY today, because
+      every argument occupies exactly one slot under the current convention --
+      and that identity is precisely why a by-value aggregate cannot be passed
+      correctly: SysV needs an argument to occupy 0, 1 or 2 register slots, or
+      ceil(size/8) stack slots for MEMORY, which is not expressible while the two
+      concepts share one index.
+      Step 1 of
+      bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee,
+      and deliberately INERT -- proven by byte-identical emitted images
+      (tools/argslot_inertness.sh), not by a passing suite.
+      argIsStack[] and argRegIdx[] were deleted rather than left beside these:
+      after the conversion they were declarations with no readers (grep-verified,
+      not assumed), and a stale parallel array is what the next reader updates. }
+    nSlots, slotIdx: Integer;
+    slotArg: array[0..127] of Integer;
+    slotIsSse: array[0..127] of Boolean;
+    slotIsStack: array[0..127] of Boolean;
+    slotRegIdx: array[0..127] of Integer;
 begin
   if node = -1 then Exit;
   
@@ -6138,20 +6156,35 @@ begin
           { Register/stack split, the two classes counted independently — same
             scheme as the direct C call above; args past rdi..r9 / xmm0..7
             spill to the outgoing stack area (quickjs's 8-arg fn pointers). }
-          mStack := 0;
+          { Slot assignment, the INDIRECT sibling of the direct arm's loop. Note
+            the division the direct arm makes in one pass: argIsSse[i] above is a
+            property of the ARGUMENT (which class its type belongs to), while
+            slotIsSse/slotRegIdx/slotIsStack describe the SLOTS it occupies. One
+            each today; that is the convention, not SysV.
+            Converted together with the direct arm rather than after it: a change
+            applied to one of these two and not the other is exactly how the
+            32-bit-return widening sat half-applied for months, in these same two
+            arms. }
+          mStack := 0; nSlots := 0;
           for i := 0 to nArgs - 1 do
+          begin
+            if nSlots >= MAX_CALL_ARGS then Error('cdecl indirect call: too many argument slots');
+            slotArg[nSlots] := i;
+            slotIsSse[nSlots] := argIsSse[i];
             if argIsSse[i] then
             begin
               if sseIdx < 8 then
-              begin argIsStack[i] := False; argRegIdx[i] := sseIdx; Inc(sseIdx); end
-              else begin argIsStack[i] := True; Inc(mStack); end;
+              begin slotIsStack[nSlots] := False; slotRegIdx[nSlots] := sseIdx; Inc(sseIdx); end
+              else begin slotIsStack[nSlots] := True; Inc(mStack); end;
             end
             else
             begin
               if intIdx < 6 then
-              begin argIsStack[i] := False; argRegIdx[i] := intIdx; Inc(intIdx); end
-              else begin argIsStack[i] := True; Inc(mStack); end;
+              begin slotIsStack[nSlots] := False; slotRegIdx[nSlots] := intIdx; Inc(intIdx); end
+              else begin slotIsStack[nSlots] := True; Inc(mStack); end;
             end;
+            Inc(nSlots);
+          end;
           IREmitNode(IRA[node]); EmitB($50);       { push callee; P = &this slot }
           { Align + reserve, saving P (= rsp, pointing at the callee slot) below
             the arg area: after `push r11` rsp = aligned-8, so the saved-P slot
@@ -6167,33 +6200,36 @@ begin
             padBytes := 0;
           { Stack args, right-to-left (leftmost ends at the lowest address, at
             rsp when the call happens — SysV). }
-          for i := nArgs - 1 downto 0 do
-            if argIsStack[i] then
+          for slotIdx := nSlots - 1 downto 0 do
+            if slotIsStack[slotIdx] then
             begin
-              IREmitNode(argNodeArr[i]);
+              IREmitNode(argNodeArr[slotArg[slotIdx]]);
               EmitB($50);                           { push arg }
             end;
           { Register args: push right-to-left, pop left-to-right into the ABI
-            registers (each arg evaluated once, no register clobber). }
-          for i := nArgs - 1 downto 0 do
-            if not argIsStack[i] then
+            registers. As in the direct arm, "each arg evaluated once" holds
+            because slotArg is injective TODAY, not because this loop enforces
+            it -- it evaluates once per SLOT. }
+          for slotIdx := nSlots - 1 downto 0 do
+            if not slotIsStack[slotIdx] then
             begin
-              IREmitNode(argNodeArr[i]);
+              IREmitNode(argNodeArr[slotArg[slotIdx]]);
               EmitB($50);                           { push arg }
             end;
-          for i := 0 to nArgs - 1 do
-            if not argIsStack[i] then
+          for slotIdx := 0 to nSlots - 1 do
+            if not slotIsStack[slotIdx] then
             begin
-              if argIsSse[i] then
+              i := slotArg[slotIdx];
+              if slotIsSse[slotIdx] then
               begin
                 EmitB($58);                          { pop rax }
-                EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0 + argRegIdx[i] * 8); { movq xmm[n], rax }
+                EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0 + slotRegIdx[slotIdx] * 8); { movq xmm[n], rax }
                 if (i >= IRC[node]) and ((i - IRC[node]) < Procs[cpi].ParamCount) and
                    (Procs[cpi].Params[i - IRC[node]].TypeKind = tySingle) then
-                  begin EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0 + argRegIdx[i] * 9); end; { cvtsd2ss xmm,xmm }
+                  begin EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0 + slotRegIdx[slotIdx] * 9); end; { cvtsd2ss xmm,xmm }
               end
               else
-                case argRegIdx[i] of
+                case slotRegIdx[slotIdx] of
                   0: EmitB($5F);                      { pop rdi }
                   1: EmitB($5E);                      { pop rsi }
                   2: EmitB($5A);                      { pop rdx }
@@ -8602,7 +8638,12 @@ begin
               argNodeArr[nArgs] := IRA[argNode]; Inc(nArgs);
               argNode := IRB[argNode];
             end;
-            intIdx := 0; sseIdx := 0; mStack := 0;
+            intIdx := 0; sseIdx := 0; mStack := 0; nSlots := 0;
+            { ONE SLOT PER ARGUMENT is established here rather than assumed
+              downstream: each iteration appends exactly one slot, so nSlots =
+              nArgs on exit. That equality is the current CONVENTION, not SysV.
+              The emit loops below iterate SLOTS, so giving an argument more of
+              them is a change here and nowhere else. }
             for i := 0 to nArgs - 1 do
             begin
               if i < Procs[procIdx].ParamCount then
@@ -8625,22 +8666,25 @@ begin
                 as a float, and widening the condition on a guess would break a
                 working path.
                 bug-a-a-by-ref-float-param-through-a-cdecl-fnptr-is-classified-sse }
+              if nSlots >= MAX_CALL_ARGS then Error('C call: too many argument slots');
+              slotArg[nSlots] := i;
               if TypeIsFloat(tk) and
                  ((i >= Procs[procIdx].ParamCount) or
                   (not Procs[procIdx].Params[i].IsRef)) then
               begin
-                argIsSse[i] := True;
+                slotIsSse[nSlots] := True;
                 if sseIdx < 8 then
-                begin argIsStack[i] := False; argRegIdx[i] := sseIdx; Inc(sseIdx); end
-                else begin argIsStack[i] := True; Inc(mStack); end;
+                begin slotIsStack[nSlots] := False; slotRegIdx[nSlots] := sseIdx; Inc(sseIdx); end
+                else begin slotIsStack[nSlots] := True; Inc(mStack); end;
               end
               else
               begin
-                argIsSse[i] := False;
+                slotIsSse[nSlots] := False;
                 if intIdx < 6 then
-                begin argIsStack[i] := False; argRegIdx[i] := intIdx; Inc(intIdx); end
-                else begin argIsStack[i] := True; Inc(mStack); end;
+                begin slotIsStack[nSlots] := False; slotRegIdx[nSlots] := intIdx; Inc(intIdx); end
+                else begin slotIsStack[nSlots] := True; Inc(mStack); end;
               end;
+              Inc(nSlots);
             end;
             { Align the stack and reserve the outgoing stack-arg area in one
               self-contained sequence (EmitCallProc's realign path cannot be
@@ -8659,10 +8703,14 @@ begin
             end
             else
               padBytes := 0;
-            { Stack args, right-to-left (leftmost ends at the lowest address). }
-            for i := nArgs - 1 downto 0 do
-              if argIsStack[i] then
+            { Stack args, right-to-left (leftmost ends at the lowest address).
+              Iterates SLOTS; `i` is the argument the slot carries. While slotArg
+              is the identity this walks arguments in the same order and emits
+              the same bytes. }
+            for slotIdx := nSlots - 1 downto 0 do
+              if slotIsStack[slotIdx] then
               begin
+                i := slotArg[slotIdx];
                 if i < Procs[procIdx].ParamCount then
                   tk := Procs[procIdx].Params[i].TypeKind
                 else
@@ -8677,8 +8725,8 @@ begin
                   IREmitNode(argNodeArr[i]);
                 { C: a float value passed to an integer parameter (dest is an int
                   slot, not SSE) truncates double->int (cvttsd2si). Variadic floats
-                  land in SSE (argIsSse) and stay double, so this skips them. }
-                if CProgramMode and (not argIsSse[i]) and
+                  land in SSE (slotIsSse) and stay double, so this skips them. }
+                if CProgramMode and (not slotIsSse[slotIdx]) and
                    TypeIsFloat(IntToTypeKind(IRTk[argNodeArr[i]])) and
                    (IRKind[argNodeArr[i]] <> IR_LEA) then
                 begin
@@ -8688,10 +8736,16 @@ begin
                 EmitB($50); { push rax }
               end;
             { Register args: push right-to-left, then pop left-to-right into the
-              target registers (each arg evaluated once, no register clobber). }
-            for i := nArgs - 1 downto 0 do
-              if not argIsStack[i] then
+              target registers.
+              "EACH ARG EVALUATED ONCE" IS A PROPERTY OF slotArg BEING INJECTIVE,
+              not of this loop -- it evaluates once per SLOT. The moment an
+              argument occupies two slots (step 2) this must evaluate the argument
+              once and split the result, or side effects inside it happen twice.
+              Stated because the loop looks unchanged and is not. }
+            for slotIdx := nSlots - 1 downto 0 do
+              if not slotIsStack[slotIdx] then
               begin
+                i := slotArg[slotIdx];
                 if i < Procs[procIdx].ParamCount then
                   tk := Procs[procIdx].Params[i].TypeKind
                 else
@@ -8705,7 +8759,7 @@ begin
                 else
                   IREmitNode(argNodeArr[i]);
                 { C float->integer-parameter truncation (see the stack-arg loop). }
-                if CProgramMode and (not argIsSse[i]) and
+                if CProgramMode and (not slotIsSse[slotIdx]) and
                    TypeIsFloat(IntToTypeKind(IRTk[argNodeArr[i]])) and
                    (IRKind[argNodeArr[i]] <> IR_LEA) then
                 begin
@@ -8714,18 +8768,19 @@ begin
                 end;
                 EmitB($50); { push rax }
               end;
-            for i := 0 to nArgs - 1 do
-              if not argIsStack[i] then
+            for slotIdx := 0 to nSlots - 1 do
+              if not slotIsStack[slotIdx] then
               begin
+                i := slotArg[slotIdx];
                 if i < Procs[procIdx].ParamCount then
                   tk := Procs[procIdx].Params[i].TypeKind
                 else
                   tk := IntToTypeKind(IRTk[argNodeArr[i]]);
-                if argIsSse[i] then
+                if slotIsSse[slotIdx] then
                 begin
                   EmitB($58); { pop rax }
                   EmitB($66); EmitB($48); EmitB($0F); EmitB($6E);
-                  EmitB($C0 + argRegIdx[i] * 8);           { movq xmm[n], rax }
+                  EmitB($C0 + slotRegIdx[slotIdx] * 8);    { movq xmm[n], rax }
                   { Narrow to single ONLY for a named `float` parameter. A single
                     passed through `...` undergoes C default argument promotion to
                     double, so a variadic arg (i >= ParamCount) must stay double —
@@ -8733,11 +8788,11 @@ begin
                   if (i < Procs[procIdx].ParamCount) and (tk = tySingle) then
                   begin
                     EmitB($F2); EmitB($0F); EmitB($5A);
-                    EmitB($C0 + argRegIdx[i] * 9);          { cvtsd2ss xmm[n],xmm[n] }
+                    EmitB($C0 + slotRegIdx[slotIdx] * 9);   { cvtsd2ss xmm[n],xmm[n] }
                   end;
                 end
                 else
-                  case argRegIdx[i] of
+                  case slotRegIdx[slotIdx] of
                     0: EmitB($5F); { pop rdi }
                     1: EmitB($5E); { pop rsi }
                     2: EmitB($5A); { pop rdx }
@@ -8831,6 +8886,15 @@ begin
               if (argNode = -1) and (nArgs = Procs[procIdx].ParamCount) then
               begin
                 skipAllArgs := True;
+                { NOTE, because the name says otherwise: in THIS arm argIsSse[]
+                  does not mean "SSE class". It is reused as scratch for "this
+                  argument is DEFERRABLE" (-O3 regcall). The SysV arms above no
+                  longer touch it -- they carry slotIsSse[], indexed by slot --
+                  so the two meanings can no longer collide at a call site, but
+                  the NAME still lies here and a reader arriving from the cdecl
+                  arms will read it wrong. Flagged as text rather than renamed:
+                  the rename is a different change from the argument/slot split
+                  and would bury that diff. }
                 for i := 0 to nArgs - 1 do
                 begin
                   argIsSse[i] := CallArgDeferrable(IRA[argNodeArr[i]]) and
