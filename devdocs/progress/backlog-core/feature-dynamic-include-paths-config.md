@@ -3,7 +3,7 @@ track: A
 prio: 25
 type: feature
 blocked-by: []
-summary: "Get host paths out of the compiler and into config. FOUR slices landed: -I/-Fu search roots (2026-06-20), pxx.cfg tier 3 (2026-08-21), the /usr/include fallback as a discovered TABLE (2026-08-26), and per-directory library manifests -- pxxlib.cfg supplying define/undef/mode to units under one tree and nothing else (2026-08-31), which was the load-bearing one and is what makes PasApplyMimicDefines's NEVER-during-a-self-build landmine structural. DEMOTED 55 -> 25 on 2026-08-31: all three remaining bullets lack a named consumer and two are partly superseded by work that landed AFTER they were written (soname DISCOVERY is done; the /usr/include table is now discovered, not hardcoded). Do not take this for its title - the big half is landed."
+summary: "Get host paths out of the compiler and into config. FOUR slices landed: -I/-Fu search roots (2026-06-20), pxx.cfg tier 3 (2026-08-21), the /usr/include fallback as a discovered TABLE (2026-08-26), and per-directory library manifests -- pxxlib.cfg supplying define/undef/mode to units under one tree and nothing else (2026-08-31), which was the load-bearing one and is what makes PasApplyMimicDefines's NEVER-during-a-self-build landmine structural. DEMOTED 55 -> 25 on 2026-08-31 and RE-MEASURED 2026-09-01: none of the three remaining bullets has a consumer, and two are near-zero value as specified -- the soname fallback table is UNREACHABLE on a normal Linux host (all nine stems resolve from ld.so.cache, which is asked first), and an xtensa build needs no generated config. The only open question is intent, filed as [[decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one]]. Do not take this for its title - the big half is landed."
 status: backlog
 owner: frankS
 ---
@@ -355,3 +355,56 @@ checked rather than assumed:
 **None of this says the remaining work is wrong — it says it is worth 25.** If a
 consumer appears (an IDF build that actually needs generated paths, a library
 whose headers need a scoped `incpath`), raise it back and say which.
+
+
+---
+
+## 2026-09-01 (frankH) — the three "no named consumer" bullets, measured instead of asserted
+
+Reached as the OLDEST open ticket in the tree. It is not stale: the four landed
+slices are real and `pxx --where` still resolves every tier. What follows only
+turns the 2026-08-31 demotion's three assertions into measurements, at
+`fe54f86f7` / binary `feb2e703acba`, so the next reader inherits facts with a
+date on them rather than a judgement.
+
+**1. `tools/pxx-scan`'s host half — re-verified, not inherited.** The point of
+that claim is that a hardcoded version expires, so a claim about discovery is
+exactly the kind that must be re-run rather than quoted. `pxx --where` prints
+`/usr/lib/gcc/x86_64-linux-gnu/15/include/` and
+`/usr/lib/llvm-21/lib/clang/21/include/` — both discovered, on a box where the
+formerly hardcoded `13` and `18` are gone. Still redundant.
+
+**Its ESP half has no job either, which the 2026-08-31 note did not check:**
+`--esp-profile=bare --target=xtensa` builds `test/test_esp_bare.pas` green with
+no generated config and `IDF_PATH` unset. Nothing in the tree references
+`pxx-scan` — zero hits outside this ticket family.
+
+**2. The soname fallback table does not execute on this host.**
+`CSonameForStem` asks `/etc/ld.so.cache` first; all nine of its stems (`c`, `m`,
+`pthread`, `gtk-3`, `gtk-x11-2.0`, `dl`, `rt`, `z`, `sqlite3`) resolve from the
+cache to exactly the soname the table would have guessed. Moving it into config
+would relocate a fallback that only runs when the host is already degraded, and
+give it a new way to be absent.
+
+**3. Exactly one `pxxlib.cfg` exists in the tree, and it is a test fixture**
+(`test/libmanifest/pxxlib.cfg`). No `external/`, no `lib/synapse/`. Nothing
+requests `incpath`/`unitpath`, so nothing would consume it.
+
+### One anomaly checked rather than explained away
+
+`pxx --where` marks two roots `[MISSING]`:
+`compiler/../../lib/rtl/platform/posix/` and `compiler/../../lib/crtl/include/`.
+Both resolve one directory ABOVE the repo, which looks wrong. It is not: each
+list carries three roots — dev-tree (`../`), **installed** (`../../`, for an exe
+at `<prefix>/bin`), and cwd-relative. In a dev tree the installed root correctly
+does not exist, and `[MISSING]` is the 2026-08-21 slice's label doing precisely
+the job it was added for. Recorded because it reads as a defect on first sight
+and the next reader should not have to re-derive it.
+
+### Outcome
+
+No code changed — there was nothing here to fix. The remaining scope is a fork
+of intent, filed as
+[[decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one]]
+(recommendation: close this ticket, keep the scanner as its own item with a
+stated justification). Nothing is blocked on the answer.
