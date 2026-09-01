@@ -375,10 +375,29 @@ int getpagesize(void) { return 4096; }
  */
 char **environ;
 
+/* The half that knows what `environ` IS, split out from the half that knows
+ * where a PROCESS keeps it.
+ *
+ * A shared library has no Linux initial stack to read: at DT_INIT time the
+ * stack pointer is somewhere inside ld.so, and reading argc off it yields
+ * whatever happens to be there. What a .so DOES get is the loader's own
+ * (argc, argv, envp) arguments, so the shared-library init thunk calls this
+ * one directly with envp and never touches sp.
+ *
+ * Two callers, one fact: the stack layout stays in __pxx_run_initializers
+ * alone, and the assignment stays here alone, so neither can drift into the
+ * other. A .so that read `environ` got (nil) before this existed.
+ * bug-a-c-a-shared-library-never-runs-its-initialisation
+ */
+void __pxx_set_environ(char **envp)
+{
+  environ = envp;
+}
+
 void __pxx_run_initializers(long *sp)
 {
   long argc = sp[0];
-  environ = (char **)(sp + argc + 2);
+  __pxx_set_environ((char **)(sp + argc + 2));
 }
 
 /* ---------------------------------------------------------------------------

@@ -21,8 +21,15 @@
 
 /* POSIX declares the environment here. It is defined in unistd.c and filled
    before main by __pxx_run_initializers, which the C entry stub calls with the
-   initial stack pointer (feature-c-entry-stub-must-run-initializers-for-environ). */
+   initial stack pointer (feature-c-entry-stub-must-run-initializers-for-environ).
+
+   A SHARED LIBRARY has no initial stack to read -- at DT_INIT time the stack
+   pointer is inside ld.so -- so the .so init thunk calls __pxx_set_environ with
+   the envp the loader passes it instead. Declared here because the compiler
+   emits the call and must find the row.
+   bug-a-c-a-shared-library-never-runs-its-initialisation */
 extern char **environ;
+void __pxx_set_environ(char **envp);
 
 int close(int fd);
 ssize_t read(int fd, void *buf, size_t count);

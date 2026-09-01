@@ -30,3 +30,23 @@ const char *shared_c_tag(void) { return "pxx-c-shared"; }
 static const char *shared_c_name = "pxx-c-data";
 
 const char *shared_c_from_data(void) { return shared_c_name; }
+
+/* environ, which is the symptom this bug was REPORTED as (frankC, measured
+   against a gcc dlopen host). It is a different mechanism from the static
+   pointer above and fails separately: that one needs the file-scope
+   initialisers to run at all, this one needs the ENVIRONMENT, and a .so has no
+   Linux initial stack for __pxx_run_initializers to read -- at DT_INIT time rsp
+   is inside ld.so. The loader passes (argc, argv, envp) instead, so the init
+   thunk hands rdx to __pxx_set_environ.
+
+   Returns the COUNT rather than a string: the host cannot know which variables
+   are set, but "more than zero, and environ is not NULL" is checkable anywhere,
+   and it was exactly (nil) before. */
+extern char **environ;
+
+int shared_c_envcount(void) {
+  int n = 0;
+  if (!environ) return -1;
+  while (environ[n]) n++;
+  return n;
+}

@@ -9895,6 +9895,7 @@ var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     cNeedsHeap, cNeedsAnsi, cNeedsDiv: Boolean;   { shared pre-scan; only cNeedsAnsi is read }
     cWantsSoftFloat: Boolean;   { ESP-class on-demand softfloat pull }
     cSfI: Integer;
+    envPi: Integer;   { __pxx_set_environ, for the --shared init thunk }
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
@@ -10430,6 +10431,51 @@ begin
       else
         Next;
     end;
+  end;
+
+  { A SHARED LIBRARY'S INITIALISERS, which had nowhere to run.
+
+    The C frontend emits CompilePendingGlobalInits at the start of `main` -- and
+    a library is precisely a translation unit with NO main, so a .so's
+    file-scope initialisers were never emitted anywhere at all. That is a
+    different cause from the one the ticket names (the missing entry stub) and a
+    wider one: `static const char *n = "lit"; ... return n;` came back NULL from
+    a .so, and the same file as an --emit-obj object linked by GCC returns NULL
+    too, because the initialisers ride pxx's entry stub and a gcc program has
+    none. Only the .so half is fixed here -- a .so has DT_INIT to point at,
+    while the object case needs .init_array and is not this commit.
+
+    ENVIRON WITHOUT A PROCESS STACK. __pxx_run_initializers derives envp from
+    the Linux initial stack pointer, which a .so does not have: at DT_INIT time
+    rsp is inside ld.so. What the loader DOES pass is (argc, argv, envp), so rdx
+    holds envp on entry and still does after EmitSharedThunkPrologue, which
+    touches only callee-saved registers. __pxx_set_environ is the half of the
+    shell that knows what environ IS, split from the half that knows where a
+    PROCESS keeps it, so neither can drift into the other.
+
+    Emitted BEFORE ApplyCallFixups because the call below is a forward like any
+    other. bug-a-c-a-shared-library-never-runs-its-initialisation }
+  if EmitSharedMode and (TargetArch = TARGET_X86_64) then
+  begin
+    SharedInitOff := CodeLen;
+    EmitSharedThunkPrologue;
+    if needInit then
+    begin
+      envPi := FindProc('__pxx_set_environ');
+      if envPi < 0 then
+        Error('compiler error: --shared needs environ but __pxx_set_environ ' +
+              'was not pulled; the header sweep and this emitter disagree');
+      EmitB($48); EmitB($89); EmitB($D7);   { mov rdi, rdx  (envp, from ld.so) }
+      EmitCallProc(envPi);
+    end;
+    CompilePendingGlobalInits;
+    CEmitDeferredCAggInits;
+    EmitSharedThunkEpilogue;
+
+    SharedFiniOff := CodeLen;
+    EmitSharedThunkPrologue;
+    EmitCallProc(GetFiniRunnerProc);
+    EmitSharedThunkEpilogue;
   end;
 
   CProgramMode := False;

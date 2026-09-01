@@ -10226,6 +10226,57 @@ end;
   (unit finalizers in reverse init order, behind a run-once BSS guard) is
   emitted by EmitFinalizerRunnerBody in pasparser_proc.inc
   (bug-unit-finalization-not-executed). }
+{ The two ABI-critical halves of a shared library's DT_INIT / DT_FINI thunk.
+
+  A .so has no ELF entry point: the loader is told about initialisers through
+  the dynamic section, and it CALLS them under the ordinary C ABI. So a thunk
+  must preserve what a C function preserves and leave the stack where it found
+  it -- and that requirement is identical for every frontend, while the BODY
+  between these two halves is not (Pascal calls its entry stub, C emits its
+  file-scope initialisers inline). Splitting it here rather than duplicating the
+  register sequence per frontend is the whole point: the half that must not
+  drift is shared, the half that legitimately differs is not.
+
+  THE SAVES ARE NOT A FIX FOR AN OBSERVED CLOBBER, and claiming otherwise would
+  be inventing a defect. I tried to construct a program body that clobbers rbx
+  or r12..r15 and could not: with these removed and rebuilt, a host holding
+  values in all five across a dlopen got every one back intact, on a body doing
+  40 iterations of arithmetic and AnsiString concatenation. Top-level bodies use
+  caller-saved scratch and memory, and the procs they call preserve their own.
+  They stay because "no case I could build" describes a search and not the
+  language, because nothing gives that code a contract to preserve anything, and
+  because the asymmetry is stark: fourteen bytes once per library against a
+  corruption of ld.so that would surface in a caller which did nothing wrong.
+
+  rdx still holds the loader's envp after the prologue -- nothing here touches
+  it -- which is what lets the C init body reach the environment without a
+  process stack to read.
+  bug-a-c-a-shared-library-never-runs-its-initialisation }
+procedure EmitSharedThunkPrologue;
+begin
+  EmitB($53);                                     { push rbx }
+  EmitB($55);                                     { push rbp }
+  EmitB($41); EmitB($54);                         { push r12 }
+  EmitB($41); EmitB($55);                         { push r13 }
+  EmitB($41); EmitB($56);                         { push r14 }
+  EmitB($41); EmitB($57);                         { push r15 }
+  { Six pushes leave rsp 8 mod 16, the same as at entry, so one more 8 makes it
+    16-aligned -- what the SysV ABI requires AT a call site. }
+  EmitB($48); EmitB($83); EmitB($EC); EmitB($08); { sub rsp, 8 }
+end;
+
+procedure EmitSharedThunkEpilogue;
+begin
+  EmitB($48); EmitB($83); EmitB($C4); EmitB($08); { add rsp, 8 }
+  EmitB($41); EmitB($5F);                         { pop r15 }
+  EmitB($41); EmitB($5E);                         { pop r14 }
+  EmitB($41); EmitB($5D);                         { pop r13 }
+  EmitB($41); EmitB($5C);                         { pop r12 }
+  EmitB($5D);                                     { pop rbp }
+  EmitB($5B);                                     { pop rbx }
+  EmitB($C3);                                     { ret }
+end;
+
 function GetFiniRunnerProc: Integer;
 var dummyNames: array[0..0] of AnsiString;
     dummyTypes: array[0..0] of TTypeKind;

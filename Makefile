@@ -17580,8 +17580,17 @@ test-emit-obj: $(COMPILER)
 	#    one makes it pass against the broken compiler.
 	./$(COMPILER) -Fulib/crtl --shared test/test_shared_lib.c $(TESTTMP)/test_shared_libc26.so
 	readelf --dyn-syms -W $(TESTTMP)/test_shared_libc26.so | grep -q 'FUNC    GLOBAL DEFAULT    1 shared_c_addup'
+	# The C frontend emits file-scope initialisers at the start of `main`, and a
+	# library is a translation unit with NO main -- so a .so ran none of them and
+	# shared_c_from_data() came back NULL. A separate mechanism from environ,
+	# which needs the ENVIRONMENT and cannot read it off a process stack the .so
+	# does not have. Both assert below; both were broken; the host checks
+	# d()==NULL explicitly rather than strcmp'ing it, because strcmp(NULL) is a
+	# segfault and a segfault is the LOUD failure that hid the quiet one.
+	readelf -dW $(TESTTMP)/test_shared_libc26.so | grep -q '(INIT)'
+	readelf -dW $(TESTTMP)/test_shared_libc26.so | grep -q '(FINI)'
 	@if command -v gcc >/dev/null 2>&1; then \
-	  printf '#include <stdio.h>\n#include <string.h>\n#include <dlfcn.h>\nint main(int c,char**v){void*h=dlopen(v[1],RTLD_NOW);if(!h){printf("dlopen: %%s\\n",dlerror());return 1;}int(*a)(int)=dlsym(h,"shared_c_addup");const char*(*t)(void)=dlsym(h,"shared_c_tag");const char*(*d)(void)=dlsym(h,"shared_c_from_data");if(!a||!t||!d){printf("dlsym: %%s\\n",dlerror());return 1;}if(a(6)!=42){printf("addup=%%d want 42\\n",a(6));return 1;}if(strcmp(t(),"pxx-c-shared")){printf("tag=%%s\\n",t());return 1;}if(strcmp(d(),"pxx-c-data")){printf("data=%%s want pxx-c-data\\n",d());return 1;}printf("%%s\\n",t());return 0;}\n' > $(TESTTMP)/test_shared_libc26_dlopen.c; \
+	  printf '#include <stdio.h>\n#include <string.h>\n#include <dlfcn.h>\nint main(int c,char**v){void*h=dlopen(v[1],RTLD_NOW);if(!h){printf("dlopen: %%s\\n",dlerror());return 1;}int(*a)(int)=dlsym(h,"shared_c_addup");const char*(*t)(void)=dlsym(h,"shared_c_tag");const char*(*d)(void)=dlsym(h,"shared_c_from_data");int(*e)(void)=dlsym(h,"shared_c_envcount");if(!a||!t||!d||!e){printf("dlsym: %%s\\n",dlerror());return 1;}if(a(6)!=42){printf("addup=%%d want 42\\n",a(6));return 1;}if(strcmp(t(),"pxx-c-shared")){printf("tag=%%s\\n",t());return 1;}if(d()==0){printf("data=(null) -- file-scope initialisers did not run\\n");return 1;}if(strcmp(d(),"pxx-c-data")){printf("data=%%s want pxx-c-data\\n",d());return 1;}if(e()<1){printf("envcount=%%d -- environ was not filled\\n",e());return 1;}printf("%%s\\n",t());return 0;}\n' > $(TESTTMP)/test_shared_libc26_dlopen.c; \
 	  gcc $(TESTTMP)/test_shared_libc26_dlopen.c -o $(TESTTMP)/test_shared_libc26_dlopen -ldl || { echo "test-shared: C dlopen host FAILED to build"; exit 1; }; \
 	  tools/expect_same.sh test_shared_libc26_dlopen "$$($(TESTTMP)/test_shared_libc26_dlopen $(TESTTMP)/test_shared_libc26.so)" "pxx-c-shared" && \
 	  echo "test-shared: a C translation unit with no main builds and loads as a .so"; \
