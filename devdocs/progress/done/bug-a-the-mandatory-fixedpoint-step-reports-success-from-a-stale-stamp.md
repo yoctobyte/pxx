@@ -2,7 +2,7 @@
 track: A
 prio: 60
 type: bug
-status: working
+status: done
 found: 2026-08-31
 found-by: frankB
 owner: frankA
@@ -136,3 +136,6 @@ Two things this pins down that the constructed repro could not:
 2. **The verb tell is sufficient in practice**, which was asserted here and is
    now used. `converged` absent was the whole diagnosis, and the fix was one
    `rm` — against a RED gate that otherwise reads as a miscompile on master.
+
+## Log
+- 2026-09-01 — resolved, commit PENDING-COMMIT.
