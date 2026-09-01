@@ -12044,7 +12044,7 @@ test-core: $(COMPILER)
 	# No gcc oracle: gcc's libc cannot have this property. See the file header.
 	# feature-c-corpus-busybox-multi-applet
 	./$(COMPILER) test/c_crtl_impl_ignores_program_macros.c $(TESTTMP)/c_crtlmacros26
-	tools/expect_same.sh c_crtlmacros26 "$$($(TESTTMP)/c_crtlmacros26)" "$$(printf 'print 1\ndigit 1 0\nmine 12345\nfeaturetest 1')"
+	tools/expect_same.sh c_crtlmacros26 "$$($(TESTTMP)/c_crtlmacros26)" "$$(printf 'print 1\ndigit 1 0\nmine 12345\nfeaturetest 1\ncrtlmacro 1')"
 	./$(COMPILER) test/c_struct_fnptr_member_local.c $(TESTTMP)/c_structfnptr26
 	tools/expect_same.sh c_structfnptr26 "$$($(TESTTMP)/c_structfnptr26)" "$$(printf '1 11\n2 a 11 b 20\n3 c 20\n4 11\n5 11 20')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
@@ -21224,6 +21224,95 @@ endif
 	  echo 'cuname: identical to gcc'; \
 	fi; \
 	else echo 'cuname: SKIP (no gcc)'; echo cuname >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cuname) >/dev/null; fi
+	# getpwnam/getpwuid -- crtl had no pwd.h, so busybox's libbb/bb_pwd.c,
+	# libbb/get_shell_name.c and ash's `~user' expansion did not compile. Only
+	# the `root' row is value-compared against gcc: crtl reads /etc/passwd and
+	# nothing else, while glibc consults nsswitch.conf and may answer from a
+	# directory service, so they agree only for users really in the file. root
+	# is the one entry that always is. The getpwuid(getuid()) row prints
+	# STRUCTURAL facts only, so a host that resolves its own users through LDAP
+	# does not fail this for a reason that is not a defect. Not-found rows
+	# assert NULL rather than a stale pointer to the previous entry.
+	# feature-c-corpus-busybox-multi-applet
+	$(PXX_STABLE) test/cpwd.c $(TESTTMP)/cpwd
+	@if command -v gcc >/dev/null 2>&1; then \
+	  if ! gcc -w -o $(TESTTMP)/cpwd_gcc test/cpwd.c 2> $(TESTTMP)/cpwd_oracle.err; then \
+	    echo "SKIP: cpwd (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cpwd_oracle.err))"; echo cpwd >> $(TESTTMP)/lib-test.skipped; \
+	    (cd $(TESTTMP) && $(TESTTMP)/cpwd) >/dev/null; \
+	  else \
+	  (cd $(TESTTMP) && $(TESTTMP)/cpwd_gcc) > $(TESTTMP)/cpwd_gcc.txt 2>&1; \
+	  (cd $(TESTTMP) && $(TESTTMP)/cpwd) > $(TESTTMP)/cpwd_pxx.txt 2>&1; \
+	  diff $(TESTTMP)/cpwd_gcc.txt $(TESTTMP)/cpwd_pxx.txt || \
+	    { echo 'FAIL: cpwd differs from gcc'; exit 1; }; \
+	  echo 'cpwd: identical to gcc'; \
+	fi; \
+	else echo 'cpwd: SKIP (no gcc)'; echo cpwd >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cpwd) >/dev/null; fi
+	# execve/execvp -- crtl declared no execve and execvp was a LINK-ONLY STUB
+	# that set ENOENT unconditionally, telling callers a program did not exist
+	# when it did. A shell cannot run anything without this. The rows are the
+	# PATH-walk rules that are easy to get wrong and still pass a naive test:
+	# a name with '/' bypasses PATH; ENOENT mid-walk is not fatal; EACCES beats
+	# a trailing ENOENT (the /tmp row -- a directory is found-but-not-executable,
+	# which is a different answer from found-nothing).
+	# feature-c-corpus-busybox-multi-applet
+	$(PXX_STABLE) test/cexec.c $(TESTTMP)/cexec
+	@if command -v gcc >/dev/null 2>&1; then \
+	  if ! gcc -w -o $(TESTTMP)/cexec_gcc test/cexec.c 2> $(TESTTMP)/cexec_oracle.err; then \
+	    echo "SKIP: cexec (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cexec_oracle.err))"; echo cexec >> $(TESTTMP)/lib-test.skipped; \
+	    (cd $(TESTTMP) && $(TESTTMP)/cexec) >/dev/null 2>&1; \
+	  else \
+	  (cd $(TESTTMP) && $(TESTTMP)/cexec_gcc) > $(TESTTMP)/cexec_gcc.txt 2>&1; \
+	  (cd $(TESTTMP) && $(TESTTMP)/cexec) > $(TESTTMP)/cexec_pxx.txt 2>&1; \
+	  diff $(TESTTMP)/cexec_gcc.txt $(TESTTMP)/cexec_pxx.txt || \
+	    { echo 'FAIL: cexec differs from gcc'; exit 1; }; \
+	  echo 'cexec: identical to gcc'; \
+	fi; \
+	else echo 'cexec: SKIP (no gcc)'; echo cexec >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cexec) >/dev/null 2>&1; fi
+	# dprintf/vdprintf -- crtl had neither, so ash did not compile
+	# (shell/ash.c:10475 traces through it, where a FILE would interleave with
+	# the shell's own buffered writes). The 2000-char row is the point of the
+	# test: vsnprintf reports the length it WOULD have written, and an
+	# implementation that ignores that TRUNCATES -- output that looks right and
+	# is short. It differs from gcc on that row and nowhere else.
+	# feature-c-corpus-busybox-multi-applet
+	$(PXX_STABLE) test/cdprintf.c $(TESTTMP)/cdprintf
+	@if command -v gcc >/dev/null 2>&1; then \
+	  if ! gcc -w -o $(TESTTMP)/cdprintf_gcc test/cdprintf.c 2> $(TESTTMP)/cdprintf_oracle.err; then \
+	    echo "SKIP: cdprintf (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/cdprintf_oracle.err))"; echo cdprintf >> $(TESTTMP)/lib-test.skipped; \
+	    (cd $(TESTTMP) && $(TESTTMP)/cdprintf) >/dev/null 2>&1; \
+	  else \
+	  (cd $(TESTTMP) && $(TESTTMP)/cdprintf_gcc) > $(TESTTMP)/cdprintf_gcc.txt 2>&1; \
+	  (cd $(TESTTMP) && $(TESTTMP)/cdprintf) > $(TESTTMP)/cdprintf_pxx.txt 2>&1; \
+	  diff $(TESTTMP)/cdprintf_gcc.txt $(TESTTMP)/cdprintf_pxx.txt || \
+	    { echo 'FAIL: cdprintf differs from gcc'; exit 1; }; \
+	  echo 'cdprintf: identical to gcc'; \
+	fi; \
+	else echo 'cdprintf: SKIP (no gcc)'; echo cdprintf >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/cdprintf) >/dev/null 2>&1; fi
+	# getrlimit/setrlimit -- busybox's `ulimit' (shell/shell_common.c:616) needs
+	# both. They go through prlimit64 and CONVERT rather than aliasing the user's
+	# struct: rlim_t is `unsigned long', so a kernel writing two __u64 into a
+	# two-rlim_t object writes sixteen bytes into eight on i386/arm32/riscv32/
+	# xtensa and is correct on exactly the two targets anyone tests on.
+	# The `bogus' row is the one gcc and pxx could disagree on quietly -- an
+	# invalid resource must be EINVAL, not a zeroed success.
+	# NOTE: this runs under $(PXX_STABLE), which has no crtl macro isolation, so
+	# it does NOT cover the RLIM_INFINITY-visible-inside-the-impl property that
+	# this same work fixed. That is row 5 of c_crtl_impl_ignores_program_macros,
+	# which is built with $(COMPILER) precisely so it can see it.
+	# feature-c-corpus-busybox-multi-applet
+	$(PXX_STABLE) test/crlimit.c $(TESTTMP)/crlimit
+	@if command -v gcc >/dev/null 2>&1; then \
+	  if ! gcc -w -o $(TESTTMP)/crlimit_gcc test/crlimit.c 2> $(TESTTMP)/crlimit_oracle.err; then \
+	    echo "SKIP: crlimit (gcc cannot build the oracle: $$(head -1 $(TESTTMP)/crlimit_oracle.err))"; echo crlimit >> $(TESTTMP)/lib-test.skipped; \
+	    (cd $(TESTTMP) && $(TESTTMP)/crlimit) >/dev/null 2>&1; \
+	  else \
+	  (cd $(TESTTMP) && $(TESTTMP)/crlimit_gcc) > $(TESTTMP)/crlimit_gcc.txt 2>&1; \
+	  (cd $(TESTTMP) && $(TESTTMP)/crlimit) > $(TESTTMP)/crlimit_pxx.txt 2>&1; \
+	  diff $(TESTTMP)/crlimit_gcc.txt $(TESTTMP)/crlimit_pxx.txt || \
+	    { echo 'FAIL: crlimit differs from gcc'; exit 1; }; \
+	  echo 'crlimit: identical to gcc'; \
+	fi; \
+	else echo 'crlimit: SKIP (no gcc)'; echo crlimit >> $(TESTTMP)/lib-test.skipped; (cd $(TESTTMP) && $(TESTTMP)/crlimit) >/dev/null 2>&1; fi
 	# fnmatch -- crtl had NO fnmatch.h at all, which is a hard error when cross
 	# compiling (no host header to fall back on), so busybox's ash could not be
 	# built for aarch64 at all. Compared against glibc over a MATRIX of flags

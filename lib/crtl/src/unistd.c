@@ -7,6 +7,9 @@
 
 #include <unistd.h>
 #include <errno.h>
+#include <limits.h>
+#include <string.h>
+#include <stdlib.h>
 
 extern long long __pxx_read(int fd, void *buf, long long n);
 extern long long __pxx_write(int fd, void *buf, long long n);
@@ -30,6 +33,7 @@ extern int __pxx_getcwd(char *buf, unsigned long size);
 extern int __pxx_remove(const char *path);
 extern int __pxx_ftruncate(int fd, long length);
 extern int __pxx_truncate(const char *path, long long length);
+extern int __pxx_execve(const char *path, void *argv, void *envp);
 extern int __pxx_access(const char *path, int mode);
 extern int __pxx_fchown(int fd, int owner, int group);
 extern int __pxx_chown(const char *path, int owner, int group);
@@ -279,11 +283,74 @@ char *getcwd(char *buf, size_t size) {
   return buf;
 }
 
-/* Link-only stub: no PATH walk / PalExecve bridge yet. Callers see a failed
-   exec (tcc's -run re-exec corner) and carry on. */
+/* execve: replace the process image. On SUCCESS IT DOES NOT RETURN, so every
+   return here is a failure -- there is no rc==0 path to write. */
+int execve(const char *path, char *const argv[], char *const envp[]) {
+  int rc = __pxx_execve(path, (void *)argv, (void *)envp);
+  errno = -rc;
+  return -1;
+}
+
+/* execvp: search PATH for `file' and exec it.
+ *
+ * This was a LINK-ONLY STUB that always set ENOENT and returned -1. That is
+ * worse than it looks: ENOENT means "no such file", so a caller was told the
+ * program did not exist when it did, and the two cases are indistinguishable
+ * to it. Now that there is an execve bridge the real thing is short, so the
+ * stub is gone rather than documented.
+ *
+ * Semantics that are easy to get subtly wrong and are deliberate here:
+ *   - a `file' containing '/' is NOT searched; it is used as given, per POSIX.
+ *   - an empty PATH entry means the current directory ("::" and a leading or
+ *     trailing ':'), which is historical POSIX behaviour real scripts rely on.
+ *   - ENOENT while walking is not fatal: keep trying later entries and report
+ *     the LAST meaningful error, so a name present in the second PATH entry is
+ *     found even though the first missed.
+ *   - EACCES anywhere is remembered and preferred over a trailing ENOENT,
+ *     because "found but not executable" is the more useful diagnosis and is
+ *     what execvp is specified to report.
+ */
+extern char **environ;
+
 int execvp(const char *file, char *const argv[]) {
-  (void)file; (void)argv;
-  errno = 2; /* ENOENT */
+  const char *path;
+  char buf[PATH_MAX];
+  int sawEaccess = 0;
+  size_t flen;
+
+  if (!file || !*file) { errno = ENOENT; return -1; }
+
+  if (strchr(file, '/')) {
+    execve(file, argv, environ);
+    return -1;                      /* errno already set by execve */
+  }
+
+  path = getenv("PATH");
+  if (!path) path = "/bin:/usr/bin";
+
+  flen = strlen(file);
+  while (*path) {
+    const char *seg = path;
+    size_t seglen;
+    while (*path && *path != ':') path++;
+    seglen = (size_t)(path - seg);
+    if (*path == ':') path++;
+
+    /* An empty entry is the current directory. */
+    if (seglen == 0) { seg = "."; seglen = 1; }
+    if (seglen + 1 + flen + 1 > sizeof buf) continue;   /* cannot fit; skip */
+
+    memcpy(buf, seg, seglen);
+    buf[seglen] = '/';
+    memcpy(buf + seglen + 1, file, flen);
+    buf[seglen + 1 + flen] = '\0';
+
+    execve(buf, argv, environ);
+    if (errno == EACCES) sawEaccess = 1;
+    else if (errno != ENOENT) return -1;   /* a real error: stop here */
+  }
+
+  errno = sawEaccess ? EACCES : ENOENT;
   return -1;
 }
 

@@ -1306,3 +1306,55 @@ void perror(const char *msg) {
   fputs(e, stderr);
   fputs("\n", stderr);
 }
+
+
+/* dprintf / vdprintf: format to a DESCRIPTOR, with no FILE buffering in the way.
+ *
+ * A fixed buffer, and a LONG result is formatted twice rather than truncated:
+ * vsnprintf reports the length it WOULD have written, so an overlong line is
+ * re-formatted into a heap buffer of exactly that size. Truncating instead
+ * would silently drop the tail of a trace line, which is the failure this whole
+ * area keeps producing -- output that looks right and is short.
+ *
+ * The write is retried on a short count, because write(2) is permitted to
+ * transfer fewer bytes than asked on a pipe, and a shell's trace fd usually IS
+ * a pipe. Returns the number of bytes written, or -1.
+ */
+int vdprintf(int fd, const char *fmt, va_list ap) {
+  char stackbuf[512];
+  char *buf = stackbuf;
+  char *heap = 0;
+  int n, off, total;
+  va_list ap2;
+
+  va_copy(ap2, ap);
+  n = vsnprintf(stackbuf, sizeof stackbuf, fmt, ap);
+  if (n < 0) { va_end(ap2); return -1; }
+  if ((size_t)n >= sizeof stackbuf) {
+    heap = (char *)malloc((size_t)n + 1);
+    if (!heap) { va_end(ap2); return -1; }
+    n = vsnprintf(heap, (size_t)n + 1, fmt, ap2);
+    if (n < 0) { free(heap); va_end(ap2); return -1; }
+    buf = heap;
+  }
+  va_end(ap2);
+
+  off = 0;
+  total = n;
+  while (off < total) {
+    long w = write(fd, buf + off, (size_t)(total - off));
+    if (w <= 0) { if (heap) free(heap); return -1; }
+    off += (int)w;
+  }
+  if (heap) free(heap);
+  return total;
+}
+
+int dprintf(int fd, const char *fmt, ...) {
+  va_list ap;
+  int r;
+  va_start(ap, fmt);
+  r = vdprintf(fd, fmt, ap);
+  va_end(ap);
+  return r;
+}

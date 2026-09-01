@@ -18,15 +18,25 @@
  * <fnmatch.h> BEFORE poisoning is unaffected -- which is the first shape I
  * tried, and it passed. Reversing the two lines is what reproduces it.
  *
- * THREE directions are asserted, and the third is the one the first attempt at
- * this fix got wrong. crtl must use its own ctype (rows 1-2); the program must
- * still get its own macro in its own code (row 3); and a FEATURE-TEST macro
- * must still reach the shared headers even from inside a crtl pull (row 4).
- * Hiding _GNU_SOURCE too made crtl's <string.h> skip its forward to
+ * FOUR directions are asserted across five rows, and each of the last two is a
+ * successive attempt at this fix getting it wrong in the OPPOSITE direction
+ * from the one before. crtl must use its own ctype (rows 1-2); the program must
+ * still get its own macro in its own code (row 3); a FEATURE-TEST macro must
+ * still reach the shared headers even from inside a crtl pull (row 4); and
+ * crtl's OWN header macros must reach its OWN impl (row 5).
+ *
+ * Row 4: hiding _GNU_SOURCE too made crtl's <string.h> skip its forward to
  * <strings.h>, and because that header is include-guarded the narrower decision
  * became PERMANENT -- the program's own later #include expanded to nothing and
  * strncasecmp was undeclared in the PROGRAM, two steps away from the change.
  * A fix that hides the program's macros too far passes rows 1-3 alone.
+ *
+ * Row 5: hiding by macro INDEX cannot tell crtl's macros from the program's,
+ * because the program's #include of a crtl header is what defines them and the
+ * index lands in the hidden range either way. ORIGIN is the discriminator, not
+ * index and not spelling -- the name-based rule that makes row 4 pass gets row
+ * 5 wrong (RLIM_INFINITY has no leading underscore) and vice versa, so both
+ * rules are live and neither subsumes the other.
  *
  * NO GCC ORACLE, deliberately. This asserts a property only a libc distributed
  * as SOURCE can have or lose; gcc's libc is already compiled and cannot be
@@ -53,6 +63,14 @@
 #include <fnmatch.h>
 #include <ctype.h>
 
+/* Row 5's setup, and the ORDER is again the whole point. Including this HERE,
+   from the program, is what puts RLIM_INFINITY inside the hidden window: the
+   window is "every macro defined after the command-line -D", and a macro does
+   not stop being crtl's because the program's #include is what caused it to be
+   defined. sys/resource.c's own `#include <sys/resource.h>' re-resolves to a
+   guarded, empty header, so the impl never gets a second chance to see it. */
+#include <sys/resource.h>
+
 int main(void) {
   /* 1: crtl's fnmatch resolved [:print:] with crtl's isprint, not the poison. */
   printf("print %d\n", fnmatch("[[:print:]]", "x", 0) == 0);
@@ -65,5 +83,20 @@ int main(void) {
         If a crtl pull got there first with the macro hidden, this is
         "call to undeclared function: strncasecmp". */
   printf("featuretest %d\n", strncasecmp("AB", "ab", 2) == 0);
+  /* 5: the OPPOSITE direction from rows 1-2. Those assert the program's macros
+        do NOT reach crtl; this asserts crtl's OWN header macros DO. A fix that
+        hides by macro INDEX alone passes rows 1-4 and fails here, because
+        RLIM_INFINITY was defined while the program was including a crtl header
+        and so lands in the hidden range with everything else.
+        Measured before the fix: `narrow()' saw RLIM_INFINITY as 0 (the
+        frontend warned "undeclared identifier ... treated as 0" pointing INSIDE
+        sys/resource.c), so `if (v >= 0) return RLIM_INFINITY;' returned 0 for
+        every limit and RLIMIT_NOFILE came back as zero. Hence >0, not just
+        rc==0: the bug returned success with a nonsense value. */
+  {
+    struct rlimit rl;
+    int ok = getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_max > 0;
+    printf("crtlmacro %d\n", ok);
+  }
   return 42;
 }

@@ -4284,6 +4284,18 @@ var
   CPMParamCount : array[0..MAX_CPREP_MACROS-1] of Integer;
   CPMFunction   : array[0..MAX_CPREP_MACROS-1] of Boolean;
   CPMVariadic   : array[0..MAX_CPREP_MACROS-1] of Boolean;   { `...` / __VA_ARGS__ }
+  { True when the #define was read from a file under `crtl/include/`. Such a
+    macro is crtl's OWN and stays visible while a crtl impl is pulled, even
+    though the program's #include is what caused it to be defined and its index
+    therefore lands inside the hidden window. Without this, sys/resource.c could
+    not see the RLIM_INFINITY its own header defines: the program had already
+    included <sys/resource.h>, so the entry sat above CPMUserBase and
+    `narrow()' compared against a 0 that the frontend warned about and then
+    used. Origin, not spelling, is what separates crtl's macros from the
+    program's -- CPMacroVisibleInCrtl's name rule is the SECOND, independent
+    reason an entry can stay visible and covers the opposite direction (a
+    feature-test macro the PROGRAM defines and crtl's headers gate on). }
+  CPMFromCrtl   : array[0..MAX_CPREP_MACROS-1] of Boolean;
   CPMCount      : Integer;
   { crtl's OWN implementation must not be preprocessed in the user program's
     macro environment. A libc shipped as source is still a separate translation

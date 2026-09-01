@@ -13,11 +13,17 @@
  * which is the worst of both. Without the declaration the call is a compile
  * error naming the function, which is the honest answer.
  *
- * That is enough for real code, because programs include this header far more
- * often than they call into it -- busybox pulls it unconditionally from
- * include/libbb.h and include/platform.h and the cat closure never touches a
- * limit. Adding the calls is PAL work (prlimit64 / getrusage), not header
- * work.
+ * UPDATE 2026-09-01: getrlimit/setrlimit ARE declared now, because the PAL work
+ * the paragraph above names has been done -- PalPrlimit sits on prlimit64, one
+ * syscall serving both. The reasoning above still stands for everything NOT
+ * listed here: getrusage and the priority calls have no PAL entry, so they stay
+ * undeclared and a call to one is a compile error naming the function, which is
+ * the honest answer rather than a silent DT_NEEDED on glibc.
+ *
+ * prlimit64 rather than the legacy getrlimit/ugetrlimit pair: the legacy calls
+ * use a 32-bit rlim_t on 32-bit targets and saturate at 4GB, so they would need
+ * a per-word-size path AND would answer wrongly for a large limit. prlimit64 is
+ * 64-bit on every target and exists on every kernel pxx builds for.
  *
  * The constants are the asm-generic set, which is what every target this
  * runtime builds for uses (x86-64, i386, aarch64, arm32, riscv32, xtensa).
@@ -86,5 +92,12 @@ struct rusage {
   long ru_nvcsw;             /* voluntary context switches */
   long ru_nivcsw;            /* involuntary context switches */
 };
+
+/* Both operate on the CALLING process. Return 0, or -1 with errno.
+
+   RLIM_INFINITY is (rlim_t)~0UL and is what the kernel actually stores for an
+   unlimited resource, so it round-trips rather than being translated. */
+int getrlimit(int resource, struct rlimit *rlim);
+int setrlimit(int resource, const struct rlimit *rlim);
 
 #endif

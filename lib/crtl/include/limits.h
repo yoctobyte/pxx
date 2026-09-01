@@ -34,4 +34,13 @@
 
 #define _POSIX2_RE_DUP_MAX 255
 
+/* POSIX/Linux path limits. Values are the kernel's, read off the host
+   (linux/limits.h): NAME_MAX excludes the terminating NUL, PATH_MAX includes
+   it. Both are constants on Linux rather than pathconf() answers, which is why
+   a header can carry them at all. busybox's ash sizes a filename buffer with
+   NAME_MAX, and an undeclared NAME_MAX was being treated as 0 -- a zero-length
+   buffer rather than a compile error. */
+#define NAME_MAX 255
+#define PATH_MAX 4096
+
 #endif

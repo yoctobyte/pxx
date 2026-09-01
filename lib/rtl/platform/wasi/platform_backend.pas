@@ -77,6 +77,7 @@ function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
 function PalBackendChown(path: PChar; owner, group: Integer): Integer;
 function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
+function PalBackendPrlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
 function PalBackendUname(buf: Pointer): Integer;
 function PalBackendTimes(buf: Pointer): Int64;
 function PalBackendTruncate(path: PChar; length: Int64): Integer;
@@ -874,6 +875,13 @@ end;
 { WASI deliberately does not expose host identity. Refused rather than
   inventing a sysname. }
 function PalBackendUname(buf: Pointer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ WASI exposes no resource limits. Refused rather than answering
+  RLIM_INFINITY, which is a specific and wrong promise. }
+function PalBackendPrlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

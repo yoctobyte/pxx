@@ -159,6 +159,7 @@ function PalFchmod(handle, mode: Integer): Integer;
 function PalChmod(path: PChar; mode: Integer): Integer;
 function PalChown(path: PChar; owner, group: Integer): Integer;
 function PalLchown(path: PChar; owner, group: Integer): Integer;
+function PalPrlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
 function PalUname(buf: Pointer): Integer;
 function PalTimes(buf: Pointer): Int64;
 function PalTruncate(path: PChar; length: Int64): Integer;
@@ -463,6 +464,11 @@ end;
 function PalUname(buf: Pointer): Integer;
 begin
   Result := PalBackendUname(buf);
+end;
+
+function PalPrlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
+begin
+  Result := PalBackendPrlimit(resource, newLim, oldLim);
 end;
 
 function PalMknod(path: PChar; mode: Integer; dev: Int64): Integer;

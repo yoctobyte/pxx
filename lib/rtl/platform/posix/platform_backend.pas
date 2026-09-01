@@ -45,6 +45,7 @@ function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
 function PalBackendChown(path: PChar; owner, group: Integer): Integer;
 function PalBackendLchown(path: PChar; owner, group: Integer): Integer;
+function PalBackendPrlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
 function PalBackendUname(buf: Pointer): Integer;
 function PalBackendTimes(buf: Pointer): Int64;
 function PalBackendTruncate(path: PChar; length: Int64): Integer;
@@ -144,7 +145,7 @@ const
   SYS_mmap = 9; SYS_munmap = 11; SYS_mprotect = 10; SYS_fchmod = 91; SYS_getpid = 39; SYS_nanosleep = 35; SYS_utimensat = 280;
   SYS_fchmodat = 268; SYS_fchownat = 260; SYS_umask = 95;
   SYS_getcwd = 79; SYS_rt_sigaction = 13;
-  SYS_truncate = 76; SYS_mknodat = 259; SYS_times = 100; SYS_uname = 63;
+  SYS_truncate = 76; SYS_mknodat = 259; SYS_times = 100; SYS_uname = 63; SYS_prlimit64 = 302;
   SYS_ftruncate = 77; SYS_faccessat = 269; SYS_geteuid = 107; SYS_fchown = 93; SYS_readlinkat = 267;
   SYS_getuid = 102; SYS_getgid = 104; SYS_getegid = 108; SYS_getppid = 110;
   SYS_exit = 60;
@@ -165,7 +166,7 @@ const
   SYS_mmap = 192; SYS_munmap = 91; SYS_mprotect = 125; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 320;
   SYS_fchmodat = 306; SYS_fchownat = 298; SYS_umask = 60;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
-  SYS_truncate = 92; SYS_mknodat = 297; SYS_times = 43; SYS_uname = 122;
+  SYS_truncate = 92; SYS_mknodat = 297; SYS_times = 43; SYS_uname = 122; SYS_prlimit64 = 340;
   SYS_ftruncate = 93; SYS_faccessat = 307; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 305;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
   SYS_exit = 1;
@@ -184,7 +185,7 @@ const
   SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_fchmodat = 53; SYS_fchownat = 54; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
-  SYS_truncate = 45; SYS_mknodat = 33; SYS_times = 153; SYS_uname = 160;
+  SYS_truncate = 45; SYS_mknodat = 33; SYS_times = 153; SYS_uname = 160; SYS_prlimit64 = 261;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
   SYS_exit = 93;
@@ -203,7 +204,7 @@ const
   SYS_mmap = 192; SYS_munmap = 91; SYS_mprotect = 125; SYS_fchmod = 94; SYS_getpid = 20; SYS_nanosleep = 162; SYS_utimensat = 348;
   SYS_fchmodat = 333; SYS_fchownat = 325; SYS_umask = 60;
   SYS_getcwd = 183; SYS_rt_sigaction = 174;
-  SYS_truncate = 92; SYS_mknodat = 324; SYS_times = 43; SYS_uname = 122;
+  SYS_truncate = 92; SYS_mknodat = 324; SYS_times = 43; SYS_uname = 122; SYS_prlimit64 = 369;
   SYS_ftruncate = 93; SYS_faccessat = 334; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 332;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
   SYS_exit = 1;
@@ -242,7 +243,7 @@ const
   SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_fchmodat = 53; SYS_fchownat = 54; SYS_umask = 166;
   SYS_getcwd = 17; SYS_rt_sigaction = 134;
-  SYS_truncate = 45; SYS_mknodat = 33; SYS_times = 153; SYS_uname = 160;
+  SYS_truncate = 45; SYS_mknodat = 33; SYS_times = 153; SYS_uname = 160; SYS_prlimit64 = 261;
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
   SYS_exit = 93;
@@ -808,6 +809,32 @@ begin
   Result := PAL_ERR_UNSUPPORTED;
 {$else}
   Result := Integer(__pxxrawsyscall(SYS_uname, Int64(buf), 0, 0, 0, 0, 0));
+{$endif}
+end;
+
+{ prlimit64: the ONE syscall behind both getrlimit and setrlimit.
+  prlimit64(pid, resource, newLimit, oldLimit) with pid 0 meaning "me". The
+  legacy getrlimit/setrlimit/ugetrlimit calls use a 32-bit rlim_t on 32-bit
+  targets and saturate at 4GB; prlimit64 is 64-bit everywhere and exists on
+  every kernel pxx targets, so there is one code path instead of a per-word-size
+  pair. Either pointer may be nil: nil newLimit is a pure query, nil oldLimit a
+  pure set.
+
+  Numbers: x86-64 302 and i386 340 from the host's asm/unistd_{64,32}.h;
+  aarch64 and riscv32 261 from asm-generic. ARM32 369 is the legacy table's
+  slot and is the one number here I could not read off a header on this box, so
+  it is VERIFIED BY RUNNING rather than asserted -- test/crlimit.c is executed
+  under qemu-arm by the arm32 row, and a wrong number would answer with an
+  error or with garbage instead of the host's real RLIMIT_NOFILE.
+  XTENSA REFUSES: bespoke table, and its numbers are measured under
+  qemu-xtensa -strace, never inferred. }
+function PalBackendPrlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_prlimit64, 0, resource,
+                                    Int64(newLim), Int64(oldLim), 0, 0));
 {$endif}
 end;
 

@@ -202,6 +202,32 @@ begin
   Result := h;
 end;
 
+{ 1-based index of `sub' in `s', or 0. Lives up here rather than beside its
+  other callers because CPDefine needs it -- see CPDefinedInCrtlHeader. }
+function CPFindSub(const s, sub: AnsiString): Integer;
+var i, j, n, m: Integer; ok: Boolean;
+begin
+  Result := 0;
+  n := Length(s); m := Length(sub);
+  if (m = 0) or (m > n) then Exit;
+  for i := 1 to n - m + 1 do
+  begin
+    ok := True;
+    for j := 1 to m do
+      if s[i + j - 1] <> sub[j] then begin ok := False; Break; end;
+    if ok then begin Result := i; Exit; end;
+  end;
+end;
+
+{ Is the file currently being preprocessed one of crtl's own headers? Stamped
+  onto every macro at #define time (CPMFromCrtl) because the ANSWER CHANGES and
+  the question cannot be asked later: by the time a crtl impl is pulled, the
+  path that defined a macro is long gone. }
+function CPDefinedInCrtlHeader: Boolean;
+begin
+  CPDefinedInCrtlHeader := CPFindSub(CPCurPath, 'crtl/include/') > 0;
+end;
+
 { Link macro mi onto its name bucket, newest-first (call right after its
   CPMNameOff/CPMNameLen are set). }
 procedure CPHashAddMacro(mi: Integer);
@@ -254,7 +280,7 @@ begin
   while i >= 0 do
   begin
     if ((CPMHideHi <= CPMHideLo) or (i < CPMHideLo) or (i >= CPMHideHi) or
-        CPMacroVisibleInCrtl(i)) and
+        CPMFromCrtl[i] or CPMacroVisibleInCrtl(i)) and
        CPPoolEquals(CPMNameOff[i], CPMNameLen[i], src, a, b) then
     begin
       Result := i;    { newest-first chain → first live match wins; a tombstoned
@@ -275,7 +301,7 @@ begin
   while i >= 0 do
   begin
     if ((CPMHideHi <= CPMHideLo) or (i < CPMHideLo) or (i >= CPMHideHi) or
-        CPMacroVisibleInCrtl(i)) and
+        CPMFromCrtl[i] or CPMacroVisibleInCrtl(i)) and
        CPPoolNameEquals(CPMNameOff[i], CPMNameLen[i], off, len) then
     begin
       Result := i;
@@ -311,6 +337,7 @@ begin
   Inc(CPMCount);
   CPMNameOff[mi] := CPStoreLiteral(name);
   CPMNameLen[mi] := Length(name);
+  CPMFromCrtl[mi] := CPDefinedInCrtlHeader;
   CPMValueOff[mi] := CPStoreLiteral(value);
   CPMValueLen[mi] := Length(value);
   CPMFunction[mi] := False;
@@ -334,6 +361,7 @@ begin
   Inc(CPMCount);
   CPMNameOff[mi] := CPStoreRange(line, nameStart, nameEnd);
   CPMNameLen[mi] := nameEnd - nameStart + 1;
+  CPMFromCrtl[mi] := CPDefinedInCrtlHeader;
   CPHashAddMacro(mi);
   CPMParamBase[mi] := CPPCount;
   CPMParamCount[mi] := 0;
@@ -496,6 +524,8 @@ begin
   ni := CPMCount; Inc(CPMCount);
   CPMNameOff[ni]    := CPStoreRange(line, nameA, nameB);
   CPMNameLen[ni]    := nameB - nameA + 1;
+  { a restore re-registers mi's definition, so it carries mi's ORIGIN too }
+  CPMFromCrtl[ni]   := CPMFromCrtl[mi];
   CPHashAddMacro(ni);
   CPMValueOff[ni]   := CPMValueOff[mi];
   CPMValueLen[ni]   := CPMValueLen[mi];
@@ -2407,21 +2437,6 @@ end;
 
 
 { 1-based index of the first occurrence of `sub` in `s`, else 0. }
-function CPFindSub(const s, sub: AnsiString): Integer;
-var i, j, n, m: Integer; ok: Boolean;
-begin
-  Result := 0;
-  n := Length(s); m := Length(sub);
-  if (m = 0) or (m > n) then Exit;
-  for i := 1 to n - m + 1 do
-  begin
-    ok := True;
-    for j := 1 to m do
-      if s[i + j - 1] <> sub[j] then begin ok := False; Break; end;
-    if ok then begin Result := i; Exit; end;
-  end;
-end;
-
 { If `hdr` is a crtl include header (path contains `crtl/include/` and ends
   `.h`), build the sibling impl path `crtl/src/<name>.c` into `src` and return
   True. The auto-pull "link" target — see CrtlSrcPulled in defs.inc. }

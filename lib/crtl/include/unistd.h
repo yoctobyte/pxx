@@ -76,6 +76,7 @@ int chown(const char *path, uid_t owner, gid_t group);
 int lchown(const char *path, uid_t owner, gid_t group);
 uid_t geteuid(void);
 ssize_t readlink(const char *path, char *buf, size_t bufsz);
+int execve(const char *path, char *const argv[], char *const envp[]);
 int execvp(const char *file, char *const argv[]);
 long sysconf(int name);
 

@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  399 functions across 30 headers. }
+  409 functions across 32 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -31,9 +31,11 @@ begin
       ' close:unistd.h closedir:dirent.h connect:sys/socket.h copysign:math.h cos:math.h ' +
       ' cosf:math.h cosh:math.h creat:fcntl.h ctime:time.h ctime_r:time.h ';
     'd': Result :=
-      ' difftime:time.h dirfd:dirent.h dirname:libgen.h div:stdlib.h dup:unistd.h dup2:unistd.h ';
+      ' difftime:time.h dirfd:dirent.h dirname:libgen.h div:stdlib.h dprintf:stdio.h ' +
+      ' dup:unistd.h dup2:unistd.h ';
     'e': Result :=
-      ' execvp:unistd.h exit:stdlib.h exp:math.h exp2:math.h expf:math.h expm1:math.h ';
+      ' endpwent:pwd.h execve:unistd.h execvp:unistd.h exit:stdlib.h exp:math.h exp2:math.h ' +
+      ' expf:math.h expm1:math.h ';
     'f': Result :=
       ' fabs:math.h fabsf:math.h fchdir:unistd.h fchmod:sys/stat.h fchown:unistd.h ' +
       ' fclose:stdio.h fcntl:fcntl.h fdopen:stdio.h fdopendir:dirent.h feof:stdio.h ' +
@@ -51,8 +53,9 @@ begin
       ' getchar:stdio.h getchar_unlocked:stdio.h getcwd:unistd.h getegid:unistd.h ' +
       ' getenv:stdlib.h geteuid:unistd.h getgid:unistd.h gethostbyaddr:netdb.h ' +
       ' gethostbyname:netdb.h getopt:unistd.h getpagesize:unistd.h getpid:unistd.h ' +
-      ' getppid:unistd.h getsockname:sys/socket.h getsockopt:sys/socket.h ' +
-      ' gettimeofday:sys/time.h getuid:unistd.h gmtime:time.h gmtime_r:time.h ';
+      ' getppid:unistd.h getpwent:pwd.h getpwnam:pwd.h getpwuid:pwd.h getrlimit:sys/resource.h ' +
+      ' getsockname:sys/socket.h getsockopt:sys/socket.h gettimeofday:sys/time.h getuid:unistd.h ' +
+      ' gmtime:time.h gmtime_r:time.h ';
     'h': Result :=
       ' htonl:netinet/in.h htons:netinet/in.h hypot:math.h ';
     'i': Result :=
@@ -99,21 +102,22 @@ begin
     's': Result :=
       ' scalbn:math.h send:sys/socket.h sendmsg:sys/socket.h sendto:sys/socket.h setbuf:stdio.h ' +
       ' setegid:unistd.h setenv:stdlib.h seteuid:unistd.h setgid:unistd.h setgroups:unistd.h ' +
-      ' setlocale:locale.h setsockopt:sys/socket.h settimeofday:sys/time.h setuid:unistd.h ' +
-      ' setvbuf:stdio.h shutdown:sys/socket.h sigaction:signal.h sigaddset:signal.h ' +
-      ' sigaltstack:signal.h sigdelset:signal.h sigemptyset:signal.h sigfillset:signal.h ' +
-      ' sigismember:signal.h signal:signal.h signbit:math.h sigprocmask:signal.h ' +
-      ' sigsuspend:signal.h sin:math.h sinf:math.h sinh:math.h sleep:unistd.h snprintf:stdio.h ' +
-      ' socket:sys/socket.h sprintf:stdio.h sqrt:math.h sqrtf:math.h srand:stdlib.h ' +
-      ' sscanf:stdio.h stat:sys/stat.h stpcpy:string.h stpncpy:string.h strcasestr:string.h ' +
-      ' strcat:string.h strchr:string.h strchrnul:string.h strcmp:string.h strcoll:string.h ' +
-      ' strcpy:string.h strcspn:string.h strdup:stdlib.h strerror:string.h strerror_r:string.h ' +
-      ' strftime:time.h strlen:string.h strncat:string.h strncmp:string.h strncpy:string.h ' +
-      ' strndup:stdlib.h strnlen:string.h strpbrk:string.h strptime:time.h strrchr:string.h ' +
-      ' strsep:string.h strsignal:string.h strspn:string.h strstr:string.h strtod:stdlib.h ' +
-      ' strtoimax:inttypes.h strtok:string.h strtok_r:string.h strtol:stdlib.h strtold:stdlib.h ' +
-      ' strtoll:stdlib.h strtoul:stdlib.h strtoull:stdlib.h strtoumax:inttypes.h ' +
-      ' strverscmp:string.h strxfrm:string.h symlink:unistd.h sysconf:unistd.h system:stdlib.h ';
+      ' setlocale:locale.h setpwent:pwd.h setrlimit:sys/resource.h setsockopt:sys/socket.h ' +
+      ' settimeofday:sys/time.h setuid:unistd.h setvbuf:stdio.h shutdown:sys/socket.h ' +
+      ' sigaction:signal.h sigaddset:signal.h sigaltstack:signal.h sigdelset:signal.h ' +
+      ' sigemptyset:signal.h sigfillset:signal.h sigismember:signal.h signal:signal.h ' +
+      ' signbit:math.h sigprocmask:signal.h sigsuspend:signal.h sin:math.h sinf:math.h ' +
+      ' sinh:math.h sleep:unistd.h snprintf:stdio.h socket:sys/socket.h sprintf:stdio.h ' +
+      ' sqrt:math.h sqrtf:math.h srand:stdlib.h sscanf:stdio.h stat:sys/stat.h stpcpy:string.h ' +
+      ' stpncpy:string.h strcasestr:string.h strcat:string.h strchr:string.h strchrnul:string.h ' +
+      ' strcmp:string.h strcoll:string.h strcpy:string.h strcspn:string.h strdup:stdlib.h ' +
+      ' strerror:string.h strerror_r:string.h strftime:time.h strlen:string.h strncat:string.h ' +
+      ' strncmp:string.h strncpy:string.h strndup:stdlib.h strnlen:string.h strpbrk:string.h ' +
+      ' strptime:time.h strrchr:string.h strsep:string.h strsignal:string.h strspn:string.h ' +
+      ' strstr:string.h strtod:stdlib.h strtoimax:inttypes.h strtok:string.h strtok_r:string.h ' +
+      ' strtol:stdlib.h strtold:stdlib.h strtoll:stdlib.h strtoul:stdlib.h strtoull:stdlib.h ' +
+      ' strtoumax:inttypes.h strverscmp:string.h strxfrm:string.h symlink:unistd.h ' +
+      ' sysconf:unistd.h system:stdlib.h ';
     't': Result :=
       ' tan:math.h tanf:math.h tanh:math.h tcdrain:termios.h tcflow:termios.h tcflush:termios.h ' +
       ' tcgetattr:termios.h tcsendbreak:termios.h tcsetattr:termios.h timegm:time.h ' +
@@ -124,8 +128,8 @@ begin
       ' umask:sys/stat.h uname:sys/utsname.h ungetc:stdio.h unlink:unistd.h unsetenv:stdlib.h ' +
       ' usleep:unistd.h utimes:sys/time.h ';
     'v': Result :=
-      ' vasprintf:stdio.h vfork:unistd.h vfprintf:stdio.h vprintf:stdio.h vsnprintf:stdio.h ' +
-      ' vsprintf:stdio.h vsscanf:stdio.h ';
+      ' vasprintf:stdio.h vdprintf:stdio.h vfork:unistd.h vfprintf:stdio.h vprintf:stdio.h ' +
+      ' vsnprintf:stdio.h vsprintf:stdio.h vsscanf:stdio.h ';
     'w': Result :=
       ' wait:sys/wait.h waitpid:sys/wait.h wcslen:wchar.h wctype:wctype.h write:unistd.h ';
   else Result := '';
@@ -146,9 +150,9 @@ begin
     'b': Result := 400;
     'c': Result := 143352;
     'd': Result := 440;
-    'e': Result := 120;
+    'e': Result := 376;
     'f': Result := 64240;
-    'g': Result := 81360;
+    'g': Result := 81872;
     'h': Result := 32;
     'i': Result := 992;
     'k': Result := 16;

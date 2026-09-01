@@ -115,6 +115,7 @@ function __pxx_fchmod(fd, mode: Integer): Integer;
 function __pxx_chmod(path: PChar; mode: Integer): Integer;
 function __pxx_chown(path: PChar; owner, group: Integer): Integer;
 function __pxx_lchown(path: PChar; owner, group: Integer): Integer;
+function __pxx_prlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
 function __pxx_uname(buf: Pointer): Integer;
 function __pxx_times(buf: Pointer): Int64;
 function __pxx_truncate(path: PChar; length: Int64): Integer;
@@ -134,6 +135,7 @@ function __pxx_getgid: Integer;
 function __pxx_getegid: Integer;
 function __pxx_getppid: Integer;
 function __pxx_pipe2(fds: Pointer; flags: Integer): Integer;
+function __pxx_execve(path: PChar; argv, envp: Pointer): Integer;
 function __pxx_kill(pid, sig: Integer): Integer;
 function __pxx_geteuid: Integer;
 function __pxx_readlink(path: PChar; buf: Pointer; bufsz: Integer): Integer;
@@ -162,6 +164,13 @@ type
 function __pxx_write(fd: Integer; buf: Pointer; n: Int64): Int64;
 begin
   Result := PalWrite(fd, buf, Integer(n));
+end;
+
+{ execve replaces the process image; on SUCCESS it does not return at all, so
+  every return is a failure and carries a negative errno. }
+function __pxx_execve(path: PChar; argv, envp: Pointer): Integer;
+begin
+  Result := PalExecve(path, argv, envp);
 end;
 
 function __pxx_read(fd: Integer; buf: Pointer; n: Int64): Int64;
@@ -554,6 +563,11 @@ end;
 function __pxx_uname(buf: Pointer): Integer;
 begin
   Result := PalUname(buf);
+end;
+
+function __pxx_prlimit(resource: Integer; newLim, oldLim: Pointer): Integer;
+begin
+  Result := PalPrlimit(resource, newLim, oldLim);
 end;
 
 function __pxx_mknod(path: PChar; mode: Integer; dev: Int64): Integer;

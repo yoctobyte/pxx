@@ -42,6 +42,12 @@ int vsprintf(char *s, const char *fmt, va_list ap);
 int asprintf(char **strp, const char *fmt, ...);
 int vasprintf(char **strp, const char *fmt, va_list ap);
 int vsnprintf(char *s, size_t n, const char *fmt, va_list ap);
+
+/* POSIX: formatted output straight to a DESCRIPTOR, bypassing FILE buffering.
+   busybox's ash uses it for its trace output, where going through a FILE would
+   interleave with the shell's own buffered writes. */
+int dprintf(int fd, const char *fmt, ...);
+int vdprintf(int fd, const char *fmt, va_list ap);
 int sscanf(const char *s, const char *fmt, ...);
 int vsscanf(const char *s, const char *fmt, va_list ap);
 int puts(const char *s);
