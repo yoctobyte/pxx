@@ -253,4 +253,4 @@ found now. This closes as an ABI-conformance fix that brings us onto the
 reference's own sequence.
 
 ## Log
-- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-01 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4cac68da5.
