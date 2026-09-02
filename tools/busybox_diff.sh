@@ -79,8 +79,20 @@
 #               STRICTLY STRONGER claim than the unity: it needs no include
 #               ordering, no ASH_TEST exclusion, and no preamble tricks, so it
 #               is the configuration that scales past the handful of applets a
-#               unity can hold. It currently needs -Wl,-z,muldefs; see
+#               unity can hold. It NO LONGER needs -Wl,-z,muldefs -- the link
+#               at line ~1083 is a plain `gcc -o out obj/*.o'. Added in
+#               3056e214c and REMOVED in 9e7c4cf8c -- the same commit that made
+#               `static' emit LOCAL, which is what stopped the duplicate strong
+#               definitions it was hiding; see
 #               bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link.
+#               CONSEQUENCE, measured 2026-09-02: --separate --pinned now FAILS
+#               to link (v399, 954adef93a7b), on `multiple definition of abort,
+#               abs, accept, ...' -- crtl's public surface, not the internals.
+#               That is not a harness bug: the flag was dropped on the strength
+#               of a compiler change, so a compiler from BELOW that change
+#               cannot build this mode. A --separate size from an old compiler
+#               is therefore not obtainable here, and any size compared across
+#               that boundary is comparing two different link modes.
 # env:
 #   PXX_BUSYBOX_DIR   use this tree instead of library_candidates/busybox
 #
