@@ -1565,11 +1565,69 @@ begin
       b := p - 1;
       if CPMVariadic[mi] and CPRangeIsVaArgs(a, b) then
       begin
-        { __VA_ARGS__ -> the raw comma-joined tail arguments (indices
-          namedCount..argCount-1). Copied raw; the caller rescans and expands. }
+        { __VA_ARGS__ -> the comma-joined tail arguments (indices
+          namedCount..argCount-1), MACRO-EXPANDED, exactly as a named parameter
+          is a few lines below. C99 6.10.3.1p1 makes no distinction between the
+          two: every argument is fully expanded before substitution unless it is
+          an operand of # or ##.
+
+          It used to be copied RAW, with "the caller rescans and expands" as the
+          reason -- and the rescan does expand it, EXCEPT where the substituted
+          text lands inside an invocation of the macro's own name. There the
+          rescan paints the name and copies the whole `name(args)' through
+          verbatim, so the arguments are never looked at again. That is the
+          shape of the C idiom for wrapping a function in a same-named macro:
+
+              static BC_STATUS zbc_parse_stmt_allow_NLINE_before(const char *s);
+              #define zbc_parse_stmt_allow_NLINE_before(...) \
+                  (zbc_parse_stmt_allow_NLINE_before(__VA_ARGS__) COMMA_SUCCESS)
+
+          busybox's miscutils/bc.c, which called it as
+          `zbc_parse_stmt_allow_NLINE_before(STRING_if)' where STRING_if is
+          `(bc_lex_kws[9].name8)'. STRING_if reached the parser unexpanded, and
+          the diagnostic was "undeclared identifier passed as argument 1" --
+          pointing at the call site, with nothing wrong there. The same file with
+          a NAMED parameter compiled, and so did the same body with the call
+          written `(name)(__VA_ARGS__)': two spellings of one construct, one of
+          them broken.
+
+          The blue-paint copy is a second defect and is left alone: with the
+          argument already expanded here, the tokens it copies are final, and
+          fixing it means expanding INSIDE a painted invocation, which is a
+          change to the rescan rather than to substitution. }
         if argCount > CPMParamCount[mi] then
-          for k := CPArgStart[argBase + CPMParamCount[mi]] to CPArgEnd[argBase + argCount - 1] do
-            AppendChar(dst, src[k]);
+        begin
+          { ## exemption, same look-ahead the named-parameter path does below.
+            pasteNext is already True when a `##' preceded (the GNU
+            `, ## __VA_ARGS__' branch above leaves it set), so this only has to
+            catch __VA_ARGS__ as the LEFT operand of a following `##'. }
+          if not pasteNext then
+          begin
+            q := p;
+            while (q < last) and (CPrepChars[q] in [' ', #9]) do Inc(q);
+            if (q < last) and (CPrepChars[q] = '#') and (CPrepChars[q + 1] = '#') then
+              pasteNext := True;
+          end;
+          if pasteNext then
+            for k := CPArgStart[argBase + CPMParamCount[mi]] to CPArgEnd[argBase + argCount - 1] do
+              begin if src[k] <> #1 then AppendChar(dst, src[k]); end
+          else
+          begin
+            CPSetExpandedArgLength(level, 0);
+            { mi de-activated across the expansion, for the reason the named
+              path states: a macro's arguments are expanded OUTSIDE its own
+              replacement, so a nested call to the same macro in an argument
+              must expand. }
+            savedSlot := -1;
+            for k := CPActiveMacroCount - 1 downto 0 do
+              if CPActiveMacros[k] = mi then begin savedSlot := k; CPActiveMacros[k] := -1; Break; end;
+            CPExpandRangeForArgLevel(level, src,
+              CPArgStart[argBase + CPMParamCount[mi]],
+              CPArgEnd[argBase + argCount - 1]);
+            if savedSlot >= 0 then CPActiveMacros[savedSlot] := mi;
+            CPAppendExpandedArgToDst(level, dst);
+          end;
+        end;
         pasteNext := False;
         Continue;
       end;

@@ -32,6 +32,17 @@
 #define LLONG_MAX 9223372036854775807LL
 #define ULLONG_MAX 18446744073709551615ULL
 
+/* SSIZE_MAX -- the largest value an ssize_t holds, which is LONG_MAX because
+   ssize_t is `long' here as it is in glibc. Written in terms of LONG_MAX rather
+   than spelled out, so the 32-bit/64-bit split above is stated once.
+
+   Not decoration: it is a BOUND, and a missing one does not fail to compile --
+   pxx turns an undeclared identifier used as a value into 0 with a warning
+   (bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning-not-an-error).
+   busybox's miscutils/bc.c compiled with SSIZE_MAX = 0, which makes every
+   `len > SSIZE_MAX' check fire on the first byte. */
+#define SSIZE_MAX LONG_MAX
+
 #define _POSIX2_RE_DUP_MAX 255
 
 /* POSIX/Linux path limits. Values are the kernel's, read off the host

@@ -13030,6 +13030,23 @@ test-core: $(COMPILER)
 	# have meant pinning one width and skipping the other.
 	./$(COMPILER) test/c_crtl_cmsg_and_socket_levels.c $(TESTTMP)/c_cmsg26
 	tools/expect_same.sh c_cmsg26 "$$($(TESTTMP)/c_cmsg26)" "$$(printf '1 0 2 17 16\n2 17 16 2\n3 1 0 263 270\n4 255\n5 8 1\n6 16 16 8\n7 16 16 17 24\n8 1 1 111\n8 263 8 222\n9 2\n10 1\n11 1 0')"
+	# __VA_ARGS__ is macro-EXPANDED before substitution, like every other
+	# argument (C99 6.10.3.1p1). It used to be substituted raw, on the reasoning
+	# that the caller's rescan would expand it -- and the rescan does, except
+	# where the text lands inside an invocation of the macro's OWN name, which it
+	# paints and copies through verbatim. That is the C idiom for wrapping a
+	# function in a same-named macro, and busybox's miscutils/bc.c is built on
+	# it. Rows 1 and 3 are the broken shape; rows 2 and 4 are the two spellings
+	# that worked (named parameter, and the self-call parenthesised so it is not
+	# an invocation) and are why this reads as a busybox oddity until reduced.
+	# Row 6 is the ## exemption, which must still see the RAW argument -- a fix
+	# that pre-expands unconditionally passes every other row and fails that one.
+	# CORE ONLY, no cross rows: preprocessing happens before any target is
+	# chosen, so a cross row here would assert the same expansion four more times
+	# and pin nothing new.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_preproc_va_args_expansion.c $(TESTTMP)/c_vaargs26
+	tools/expect_same.sh c_vaargs26 "$$($(TESTTMP)/c_vaargs26)" "$$(printf '1 1042\n2 1043\n3 1044\n4 1045\n5 5141\n6 7\n7 41\n8 no varargs')"
 	./$(COMPILER) test/c_crtl_bits_and_fdatasync.c $(TESTTMP)/c_bits26
 	tools/expect_same.sh c_bits26 "$$($(TESTTMP)/c_bits26)" "$$(printf '1 1 2 0\n2 1\n3 1\n4 0 0\n5 1\n6 1\n7 5\n8 0\n9 -1 1')"
 	./$(COMPILER) test/c_crtl_netdb_and_exec.c $(TESTTMP)/c_netdb26
