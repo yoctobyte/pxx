@@ -41,6 +41,27 @@ two readings differ only when the program is already wrong — FPC's answer is
 write. Evidence that settles it is real source that wants the behaviour;
 absent that, prefer the answer that leaves the mistake visible.
 
+**"COMPATIBLE WITH FPC" MEANS THE VALUE, NOT THE INTERMEDIATE'S TYPE** (owner,
+2026-09-02): *"if we keep nitpicking like this, we get nowhere ... the outcome is
+just correct."* **DOUBLE IS THE NATIVE EVALUATION TYPE** — we do not compute in
+`Single` at all unless softfloat forces it; `Single` is a STORAGE type. An
+expression being typed or evaluated at double width is therefore **the
+architecture, not a defect**, and no ticket may report it as one.
+
+**The test, and it is the only one: store the result in its DECLARED type and
+compare THAT.** Match there and we are compatible. Every divergence in the
+intermediate — `SizeOf(expr)`, which overload an intermediate selects, the
+expression's static type — is **implementation latitude**. Measured 2026-09-02
+(`50117fa6e`): for `a, b: Single`, `s := a + b` gives FPC's exact bytes while
+`SizeOf(a+b)` answers 8 against FPC's 4 and `P(a+b)` picks the `Double` overload.
+**The first row is the claim; the other two are not.** Matching them would mean
+rounding to single and widening — discarding precision we already have to
+reproduce another compiler's rounding.
+
+Reopening one needs **real source, not a probe**, that is correct under FPC and
+wrong under pxx *because of an intermediate's type*. A program that prints
+`SizeOf` of an expression is not that.
+
 ## Umbrellas — the goal is the ranking
 
 An **umbrella** is a GOAL: a real program that must work. `backlog-umbrella/`,
