@@ -2984,6 +2984,35 @@ begin
     end;
 end;
 
+{ May a reference that names a PROC BY INDEX -- @proc's address, a VMT slot --
+  become a relocation against that proc's own symbol, instead of `.text` plus a
+  baked body offset?
+
+  The same substitution ObjCallFixIsRelocatable makes for calls, and needed for
+  the same reason: a `.text + <offset>` addend is computed for THIS object's
+  copy of the callee, so a linker that drops or replaces that copy leaves the
+  slot pointing at whatever moved in. It is also STRICTLY WORSE than a baked
+  call displacement, because a VMT slot is data the program dereferences rather
+  than a jump the linker could at least be told about.
+
+  Simpler than the call predicate by exactly one clause: there is no target
+  snapshot to disagree with. CallFixTarget exists because a call site records
+  which body it was aimed at and a later same-named static can overwrite the
+  row; ProcAddrFix and MethodFixups carry no such snapshot, so there is nothing
+  here to compare and nothing to refuse on. That is a difference in the DATA,
+  not a relaxation -- if either grows a target snapshot, this predicate needs
+  the clause too. }
+function ObjProcRefIsRelocatable(p: Integer): Boolean;
+begin
+  ObjProcRefIsRelocatable := False;
+  if not FunctionSections then Exit;
+  if not EmitObjMode then Exit;
+  if (p < 0) or (p >= ProcCount) then Exit;
+  if not ObjProcIsDefined(p) then Exit;
+  if ObjProcSymIdx[p] < 0 then Exit;
+  ObjProcRefIsRelocatable := True;
+end;
+
 function ObjCallFixIsRelocatable(i: Integer): Boolean;
 var p: Integer;
 begin
@@ -3025,6 +3054,7 @@ end;
   accounted for the other 1044. }
 procedure ObjReportFunctionSections;
 var i, reloc, tgtPinned, undef, noSym: Integer;
+    firstBaked: AnsiString;
 begin
   if not FunctionSections then Exit;
   reloc := 0; tgtPinned := 0; undef := 0; noSym := 0;
@@ -3041,6 +3071,36 @@ begin
           '  pinned-target ', tgtPinned,
           '  undefined ', undef,
           '  no-symbol ', noSym);
+  { The other two families that name a proc by index, counted for the same
+    reason: what blocks per-function sections is the number still BAKED, and
+    a VMT slot left baked is worse than a baked call because the program
+    dereferences it. Reported even when both are zero -- a zero here means
+    "this program has no @proc and no virtual method", which is a fact about
+    the PROGRAM, and reading a silent line as "nothing left to do" is how a
+    census of one shape gets mistaken for a census of all of them. }
+  reloc := 0; noSym := 0;
+  for i := 0 to ProcAddrFixCount-1 do
+    if ObjProcRefIsRelocatable(ProcAddrFix[i].ProcIdx) then Inc(reloc) else Inc(noSym);
+  writeln(StdErr, 'function-sections: ProcAddrFix ', ProcAddrFixCount,
+          '  relocated ', reloc, '  baked ', noSym);
+  reloc := 0; noSym := 0; firstBaked := '';
+  for i := 0 to MethodFixCount-1 do
+    if ObjProcRefIsRelocatable(MethodFixups[i].ProcIdx) then Inc(reloc)
+    else
+    begin
+      Inc(noSym);
+      { NAME the first one. A bare count says work remains and gives nothing to
+        grep for, and these are precisely the entries that will block
+        per-function sections -- the reader's next question is always "which",
+        and answering it costs one string. }
+      if (firstBaked = '') and (MethodFixups[i].ProcIdx >= 0)
+         and (MethodFixups[i].ProcIdx < ProcCount) then
+        firstBaked := Procs[MethodFixups[i].ProcIdx].Name;
+    end;
+  write(StdErr, 'function-sections: MethodFix ', MethodFixCount,
+        '  relocated ', reloc, '  baked ', noSym);
+  if noSym > 0 then write(StdErr, '  (first: ', firstBaked, ')');
+  writeln(StdErr, '');
 end;
 
 
@@ -3789,9 +3849,18 @@ begin
   { @proc: `lea rax,[rip+disp32]` against .text -- PC32 (rtype 2), addend
     carrying the -4 to the end of the instruction. It was R_X86_64_64 against
     an absolute code address, the last absolute relocation .text emitted. }
+  { --function-sections names the CALLEE'S symbol with the standard rel32 bias
+    instead, so the linker computes S + (-4) - P. RELA carries its addend
+    explicitly and ignores the bytes already in .text, so both spellings resolve
+    to the same address in a link that keeps this object's copy -- which is what
+    makes the byte-identity check below a real test rather than a tautology. }
   for i := 0 to ProcAddrFixCount-1 do
-    writeRela64(f, ProcAddrFix[i].CodePos, 1, 2,
-                Procs[ProcAddrFix[i].ProcIdx].BodyAddr - 4);
+    if ObjProcRefIsRelocatable(ProcAddrFix[i].ProcIdx) then
+      writeRela64(f, ProcAddrFix[i].CodePos,
+                  ObjProcSymIdx[ProcAddrFix[i].ProcIdx], 2, -4)
+    else
+      writeRela64(f, ProcAddrFix[i].CodePos, 1, 2,
+                  Procs[ProcAddrFix[i].ProcIdx].BodyAddr - 4);
 
   { --function-sections: the internal calls, LAST in .rela.text so the entries
     above keep the file offsets they had. addend -4 is the standard rel32 bias,
@@ -3811,9 +3880,16 @@ begin
     R_X86_64_64 per external GOT slot against that extern's UND symbol. }
   for i := 0 to DataPtrFixCount-1 do
     writeRela64(f, DataPtrFix[i].DataPos, 2, 1, DataPtrFix[i].TargetOff);
+  { A VMT slot is R_X86_64_64 -- an absolute address, addend 0 against the
+    method's own symbol under --function-sections, where it was `.text` plus the
+    body offset. }
   for i := 0 to MethodFixCount-1 do
-    writeRela64(f, MethodFixups[i].DataPos, 1, 1,
-                Procs[MethodFixups[i].ProcIdx].BodyAddr);
+    if ObjProcRefIsRelocatable(MethodFixups[i].ProcIdx) then
+      writeRela64(f, MethodFixups[i].DataPos,
+                  ObjProcSymIdx[MethodFixups[i].ProcIdx], 1, 0)
+    else
+      writeRela64(f, MethodFixups[i].DataPos, 1, 1,
+                  Procs[MethodFixups[i].ProcIdx].BodyAddr);
   for i := 0 to ExternalCount-1 do
     writeRela64(f, ExternalGotOff[i], extSym0 + i, 1, 0);
 

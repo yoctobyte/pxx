@@ -19889,6 +19889,56 @@ test-emit-obj: $(COMPILER)
 	  cmp -s $(TESTTMP)/cfs_off $(TESTTMP)/cfs_on || { echo "c_function_sections: the linked binaries DIFFER. A relocated call resolved to something other than the baked displacement -- compare .text before believing the addend."; exit 1; }; \
 	  echo "c_function_sections: internal calls relocate; the linked binary is byte-identical"; \
 	else echo "gcc not installed; --function-sections link check skipped"; fi
+	# 4a-ter. --function-sections: VMT SLOTS AND @proc RELOCATE TOO.
+	#    4a-bis covers CallFix. Two other families name a proc BY INDEX and were
+	#    still emitted as `.text` plus a baked body offset: ProcAddrFix (@proc's
+	#    address) and MethodFixups (a VMT slot in .data). A baked VMT slot is
+	#    STRICTLY WORSE than a baked call displacement -- it is data the program
+	#    dereferences, so a linker that drops or replaces this object's copy of
+	#    the method leaves the slot pointing at whatever moved in, with no jump
+	#    for the linker to have been told about.
+	#
+	#    Same claim and same shape as 4a-bis: with one .text there is no
+	#    observable effect, so what is asserted is that the LINKED BINARY IS
+	#    BYTE-IDENTICAL with the flag on and off. ONE OBJECT PATH, for the
+	#    STT_FILE reason 4a-bis records -- and it bites harder here, because the
+	#    first version of this row compared eo_off.o against eo_on.o and read
+	#    the one character of filename as a real difference twice, once in each
+	#    direction.
+	rm -f $(TESTTMP)/fsm.o $(TESTTMP)/fsm_plain.o
+	./$(COMPILER) -Fulib/rtl --emit-obj test/test_emit_obj.pas $(TESTTMP)/fsm.o
+	cp $(TESTTMP)/fsm.o $(TESTTMP)/fsm_plain.o
+	./$(COMPILER) -Fulib/rtl --emit-obj --function-sections test/test_emit_obj.pas $(TESTTMP)/fsm.o
+	#    AIMED, and in BOTH directions. The plain object's .rela.data must name
+	#    `.text' (that is the defect) and the flagged one must name fewer of
+	#    them. A one-directional check passes on an object that has no VMT slots
+	#    at all, which is most of them.
+	@test $$(readelf -r -W $(TESTTMP)/fsm_plain.o | sed -n "/Relocation section '.rela.data'/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* \.text') -gt 0 \
+	  || { echo "test_emit_obj: the PLAIN object has no .text-relative .rela.data entry -- this fixture cannot show the flag doing anything"; exit 1; }
+	@test $$(readelf -r -W $(TESTTMP)/fsm.o | sed -n "/Relocation section '.rela.data'/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* \.text') \
+	     -lt $$(readelf -r -W $(TESTTMP)/fsm_plain.o | sed -n "/Relocation section '.rela.data'/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* \.text') \
+	  || { echo "test_emit_obj: --function-sections left every VMT slot relocating against .text"; exit 1; }
+	#    NAMED, not merely counted: a specific method symbol has to appear.
+	@readelf -r -W $(TESTTMP)/fsm.o | sed -n "/Relocation section '.rela.data'/,/^$$/p" | grep -qE '^[0-9a-f]{8,}.* __pxxTObjectToString' \
+	  || { echo "test_emit_obj: no VMT slot relocates against a method's own symbol"; exit 1; }
+	@if command -v gcc >/dev/null 2>&1; then \
+	  printf 'int captured;\nvoid ext_notify(int v) { captured = v; }\nvoid ext_aliased_link(int v) { (void)v; }\nextern int emit_obj_addup(int);\nextern const char *emit_obj_tag(void);\n#include <stdio.h>\nint main(void){ printf("%%d %%s\\n", emit_obj_addup(9), emit_obj_tag()); return 0; }\n' > $(TESTTMP)/fsm_caller.c; \
+	  ./$(COMPILER) -Fulib/rtl --emit-obj test/test_emit_obj.pas $(TESTTMP)/fsm.o >/dev/null; \
+	  gcc $(TESTTMP)/fsm.o $(TESTTMP)/fsm_caller.c -o $(TESTTMP)/fsm_off || { echo "test_emit_obj: plain object failed to link"; exit 1; }; \
+	  ./$(COMPILER) -Fulib/rtl --emit-obj --function-sections test/test_emit_obj.pas $(TESTTMP)/fsm.o >/dev/null; \
+	  gcc $(TESTTMP)/fsm.o $(TESTTMP)/fsm_caller.c -o $(TESTTMP)/fsm_on || { echo "test_emit_obj: --function-sections object failed to link"; exit 1; }; \
+	  tools/expect_same.sh fsm_off "$$($(TESTTMP)/fsm_off)" "done99 pxx-emit-obj" || exit 1; \
+	  tools/expect_same.sh fsm_on "$$($(TESTTMP)/fsm_on)" "done99 pxx-emit-obj" || exit 1; \
+	  cmp -s $(TESTTMP)/fsm_off $(TESTTMP)/fsm_on || { echo "test_emit_obj: the linked binaries DIFFER -- a relocated VMT slot or @proc resolved to something other than the baked address."; exit 1; }; \
+	  echo "test_emit_obj: VMT slots and @proc relocate; the linked binary is byte-identical"; \
+	else echo "gcc not installed; --function-sections VMT link check skipped"; fi
+	#    NOTE, measured rather than assumed: the two `expect_same' rows above are
+	#    VACUOUS FOR THIS FAMILY and are kept only as a crash check. Poisoning
+	#    the new addend (0 -> 8, so every relocated slot points 8 bytes into its
+	#    method) makes the linked binary DIFFER -- the control fires -- while
+	#    both programs still print `done99 pxx-emit-obj', because this fixture's
+	#    exported surface never dispatches through those slots. The byte-compare
+	#    is the discriminating instrument here; the output assertion is not.
 	# 4b-bis. AN OBJECT'S FILE-SCOPE INITIALISERS RUN IN A FOREIGN PROGRAM.
 	#    The rows above link a pxx object into a gcc program and call a
 	#    FUNCTION, which is the half that always worked. Nothing above reads a
