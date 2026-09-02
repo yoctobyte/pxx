@@ -90,7 +90,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (139)
+## backlog-core (138)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -203,7 +203,6 @@ _none_
 | feature-opt-a-wide-string-literal-should-be-a-static-block-not-a-runtime-transcode | A+O | 30 | feature | `w := 'lit'` on a WideString calls PXXWideFromStr at runtime and allocates, where the narrow `s := 'lit'` is a bare pointer store into a static block InternStr already laid down complete with [meta][rc][len]. The wide literal could be the same — transcoded at compile time, zero allocation — but InternStr unconditionally stamps MSTR_FLAG_ASCII\|MSTR_FLAG_ASCII_KNOWN, which builtinwide.pas DELIBERATELY refuses to stamp on a wide block, so a folded literal would carry a flag its runtime twin rejects, marked KNOWN so nothing rescans. Needs a wide-aware intern entry point and an MSTR_KIND_WIDESTR constant in defs.inc. | — |
 | feature-opt-alloc-intent-hint | A+O | 10 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
 | feature-opt-arch-level-and-dispatch | A+O | 25 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | — |
-| feature-opt-dynarray-grows-in-place | A+O | 40 | feature | A growing dynamic array leaves its whole geometric series behind as garbage | — |
 | feature-opt-inline-float-and-record-returning-leaves | A+O | 45 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
 | feature-opt-o3-register-pressure | A+O | 20 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-rtti-emit-on-use | A+O | 32 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
@@ -858,9 +857,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3114)
+## done (3115)
 
-3114 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3115 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -1182,7 +1181,6 @@ _none_
 - [p 40] [O] feature-inline-nonleaf-and-branch-locals
 - [p 40] [N] feature-nilpy-map-over-several-iterables
 - [p 40] [N] feature-nilpy-str-surface-gaps-2026-08-09
-- [p 40] [A+O] feature-opt-dynarray-grows-in-place
 - [p 40] [A+O] feature-opt-static-literal-blocks-should-never-be-written-to [parked — re-claim, do not duplicate]
 - [p 40] [P] feature-p-a-pascal-library-unit-does-not-parse
 - [p 40] [A] feature-rtl-libc-frontend-sites-and-thread-errno
