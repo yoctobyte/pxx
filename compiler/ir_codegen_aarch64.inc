@@ -2413,10 +2413,10 @@ begin
         end;
 
         if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
-           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString, tyChar, tyPointer]) and
-            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString, tyChar, tyPointer])) and
-           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) or
-            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString])) then
+           (((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyChar, tyPointer]) or TypeIsFrozenString(IntToTypeKind(IRTk[left]))) and
+            ((IntToTypeKind(IRTk[right]) in [tyAnsiString, tyChar, tyPointer]) or TypeIsFrozenString(IntToTypeKind(IRTk[right])))) and
+           (((IntToTypeKind(IRTk[left]) = tyAnsiString) or TypeIsFrozenString(IntToTypeKind(IRTk[left]))) or
+            ((IntToTypeKind(IRTk[right]) = tyAnsiString) or TypeIsFrozenString(IntToTypeKind(IRTk[right])))) then
         begin
           { String/char equality via PXXStrEq(lenA, srcA, lenB, srcB). At least one
             operand is a string (managed handle or frozen inline); the other may be
@@ -2466,8 +2466,8 @@ begin
         end;
 
         if ((op = Ord(tkLt)) or (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe))) and
-           (IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) and
-           (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString]) then
+           ((IntToTypeKind(IRTk[left]) = tyAnsiString) or TypeIsFrozenString(IntToTypeKind(IRTk[left]))) and
+           ((IntToTypeKind(IRTk[right]) = tyAnsiString) or TypeIsFrozenString(IntToTypeKind(IRTk[right]))) then
         begin
           { ORDERED string compare -> PXXStrCmp3 -> -1/0/1. This arm did not
             exist on ANY cross backend: only =/<> were special-cased, so `a < b`

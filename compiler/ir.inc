@@ -8302,15 +8302,33 @@ begin
         Result := IRLowerBitFieldRead(node, left,
                                       RecFieldType(ResolveNodeRec(ASTLeft[node]),
                                                    GetASTIdentName(node)))
-      else if (IntToTypeKind(ASTTk[node]) = tyString) or (IntToTypeKind(ASTTk[node]) = tySet) then
+      else if TypeIsFrozenString(IntToTypeKind(ASTTk[node])) or
+              (IntToTypeKind(ASTTk[node]) = tySet) then
       begin
         { A frozen-string / set value IS its address (no load). Present the
           address node with the value's frozen-string tag, mirroring the AN_IDENT
           path above: otherwise it carries IRLowerAddress's tyPointer tag and a
           consumer (e.g. `m := p^` into a managed string) misreads the address as
-          a raw pointer instead of a frozen inline string. }
+          a raw pointer instead of a frozen inline string.
+
+          TypeIsFrozenString, NOT `= tyString`. The bare equality was correct
+          while tyString was the only inline string kind, and under
+          -dPXX_SHORTSTRING a `string[10]` FIELD is tyShortString, failed this
+          test, and fell through to the IR_LOAD_MEM below -- which loaded eight
+          bytes OF THE STRING and handed them on as an address. Measured:
+          `r.f = 'hello'` segfaulted with rax = $6F6C6C656805, which is the
+          length byte 5 followed by `hello`. The prefix widths around it were
+          already right (`lea 0x1(%rax)` for the field against `lea 0x8(%rcx)`
+          for the literal), which is why this read as a width bug for a day and
+          is not one.
+
+          The field is why it surfaced here and not on a variable: an AN_IDENT
+          frozen string takes the address path above and never reaches this
+          arm at all. That asymmetry is the whole reason `s = 'hello'` was green
+          beside `r.f = 'hello'` in the same program.
+          bug-a-comparing-a-frozen-record-field-to-a-literal-crashes-or-answers-false }
         Result := left;
-        if IntToTypeKind(ASTTk[node]) = tyString then
+        if TypeIsFrozenString(IntToTypeKind(ASTTk[node])) then
           IRTk[Result] := ASTTk[node];
       end
       else if NodeDynDepth(node) > 0 then

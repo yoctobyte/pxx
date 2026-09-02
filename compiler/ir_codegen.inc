@@ -3750,8 +3750,16 @@ begin
   lt := IntToTypeKind(IRTk[IRA[node]]);
   rt := IntToTypeKind(IRTk[IRB[node]]);
   if TypeIsFloat(lt) or TypeIsFloat(rt) then Exit;
-  if (lt = tyAnsiString) or (lt = tyString) or
-     (rt = tyAnsiString) or (rt = tyString) then Exit;
+  { TypeIsFrozenString, not `= tyString`. The bare equality was complete while
+    tyString was the only inline string kind; under -dPXX_SHORTSTRING a
+    tyShortString operand passed this exclusion and got FUSED into a scalar
+    `cmp` + `setcc`, so `r.f = r.g` compared the two field ADDRESSES as integers
+    and answered FALSE for two identical strings. -O0 was correct and -O1/-O2
+    were not, which is the tell that an OPTIMISER predicate and not the compare
+    arm was the one that had not been widened.
+    bug-a-comparing-a-frozen-record-field-to-a-literal-crashes-or-answers-false }
+  if (lt = tyAnsiString) or TypeIsFrozenString(lt) or
+     (rt = tyAnsiString) or TypeIsFrozenString(rt) then Exit;
   if (lt = tyVariant) or (rt = tyVariant) then Exit;
   CmpFusible := True;
 end;
@@ -8998,8 +9006,8 @@ begin
                 if strCmpRel then IREmitStrCmpReleaseOperands(left, right);
               end
               else if ((op = tkEq) or (op = tkNeq)) and
-                  ((IntToTypeKind(IRTk[left]) = tyString) or
-                   (IntToTypeKind(IRTk[right]) = tyString)) then
+                  (TypeIsFrozenString(IntToTypeKind(IRTk[left])) or
+                   TypeIsFrozenString(IntToTypeKind(IRTk[right]))) then
               begin
                 { No release pair here, and it is a proof rather than an
                   oversight: this is the ELSE-IF after the tyAnsiString block,
@@ -9056,9 +9064,9 @@ begin
               end
               else if ((op = tkLt) or (op = tkLe) or (op = tkGt) or (op = tkGe)) and
                   ((IntToTypeKind(IRTk[left]) = tyAnsiString) or
-                   (IntToTypeKind(IRTk[left]) = tyString)) and
+                   TypeIsFrozenString(IntToTypeKind(IRTk[left]))) and
                   ((IntToTypeKind(IRTk[right]) = tyAnsiString) or
-                   (IntToTypeKind(IRTk[right]) = tyString)) then
+                   TypeIsFrozenString(IntToTypeKind(IRTk[right]))) then
               begin
                 strCmpRel := IRStrCmpNeedsRelease(left, right);
                 if strCmpRel then IREmitStrCmpSaveOperands;
