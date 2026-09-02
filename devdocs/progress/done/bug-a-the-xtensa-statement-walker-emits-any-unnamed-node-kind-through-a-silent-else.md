@@ -3,7 +3,7 @@ slug: bug-a-the-xtensa-statement-walker-emits-any-unnamed-node-kind-through-a-si
 track: A+S
 prio: 45
 type: bug
-status: open
+status: done
 created: 2026-09-02
 found-by: frankC
 owner: ""
@@ -250,3 +250,6 @@ absence, and xtensa is not in that number at all — it has no qemu row here and
 is the backend with the **most** unnamed kinds (24). Its coverage is the
 existing xtensa Makefile rows plus the fact that the change can only ever
 narrow what reaches the emitter.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
