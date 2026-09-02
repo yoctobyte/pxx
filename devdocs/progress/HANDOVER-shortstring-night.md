@@ -13,7 +13,7 @@ the tree and cannot go stale. **xtensa needs `--platform=posix
 --xtensa-soft-mulhigh`**; bare `--target=xtensa` is the ESP profile and refuses
 by design, which misled four sessions before `ac0a2016d` rewrote the message.
 
-## The bug that was four bugs
+## The bug that was at least five bugs
 
 Modelled all evening as one shared-walker defect. **It was a CLASS of four
 causes** (frankb-a9, `764dc3a30` + `64f230d12`) — a walker-only fix would have
@@ -29,6 +29,28 @@ closed one of four:
 **Verified independently at HEAD, x86-64 under the flag:** `Length(p^) = 5`,
 store bytes `1 88 98 99 100 101 0` (FPC's exact bytes), both comparison shapes
 TRUE. All four previously wrong.
+
+**TWO READERS SURVIVE THE FIX — phase 2 is NOT all green.** frankh-15's matrix
+(`40646620c`) ran before wiring and named them; I reproduced both on x86-64:
+
+```
+s[1]    = [h]      r.f[1]  = [h]      p^[1]   = [ ]      <- blank, same run
+s=lit   = TRUE     p^=lit  = TRUE     r.f=lit = SEGFAULT
+```
+
+- **`p^[1]` reads blank** on all four converted backends, while `s[1]` and
+  `r.f[1]` are correct beside it. The index origin follows the width wherever the
+  symbol is reachable and **not through a bare pointer whose value IS the buffer
+  address** — the same shape that made `Length(p^)` wrong before the fix. Blank
+  rather than garbage fits reading at base+8 when chars start at base+1.
+- **`r.f = 'hello'` segfaults on x86-64 and riscv32, returns FALSE on aarch64 and
+  arm32**, while `s = 'hello'` and `p^ = 'hello'` are green beside it. The compare
+  arm now resolves a variable and a deref and **still not a FIELD**. One defect at
+  two word sizes: a wrong-width field length is a count in the hundreds of
+  millions, which the comparison either walks off or short-circuits on.
+
+**That is a fifth cause, not a remnant of the four.** Both ticketed. The matrix did
+exactly what it was built for — it named the readers the fix does not reach.
 
 What separated the layers was **franks-ab's falsifiable prediction** — that the
 walker fix would NOT repair comparison. It didn't; comparison needed (2) and (3).
@@ -111,3 +133,9 @@ yours to release.
   explanation was true or false, *and the script echoed the conclusion as if it
   were a result*. The real one varied the commit and printed DIFFERS with the
   changed blob hash. **Never let a script echo a conclusion.**
+- **Row ordering is a HARNESS property, not one file's quirk.** A row that ends
+  the process costs every row behind it, so **a crashing test reports LESS the
+  worse the state is** — backwards from what a diagnostic should do. Re-check it
+  whenever a fix moves which row crashes; it already moved once (first killer was
+  `assign from field`, now `compare field to literal`), and that single row is
+  currently hiding the verdict of eleven rows behind it on two backends.
