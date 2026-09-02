@@ -171,14 +171,29 @@ Half 1 is a property of your change and is stable. Half 2 is a property of the
 world and goes stale without erroring — the control keeps running and keeps
 printing a verdict, about a different compiler.
 
-**Checked 2026-09-02 against pin v401 (`766b99f98`), and all three still hold
-— as of that moment and no longer:**
+**CHECK THE PINNED TREE, NOT THE PIN COMMIT — they are different commits and
+the gap is not empty.** A pin commit is always a DESCENDANT of the tree it
+pins, so `chore(stable): pin v401` (`766b99f98`) is not the tree the pinned
+binary was built from; that is `07d196aa4`, and **four commits separate them**.
+Ancestry against the pin record therefore answers about a tree slightly ahead
+of the binary. This is the same defect Track T filed as
+`bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names` (prio 70)
+— `verify_pin()` has it too, which is why every pin grade in tstate history
+grades the OUTGOING binary under the INCOMING one's name. The coordinator made
+the identical mistake writing the first version of this table.
 
-| control | fix commit | in v401? |
+**Checked 2026-09-02 against the pinned TREE `07d196aa4` (v401, binary
+`1eec4dc5e0a7`), and all three hold — as of that moment and no longer:**
+
+| control | fix commit | in the pinned tree? |
 | --- | --- | --- |
 | method-pointer, pinned i386 2 rows FAIL | `9eaca27ca` | no — control valid |
 | char-into-shortstring, pinned refuses on 3 targets | `e4cba526a` | no — control valid |
 | frankB's record-field stride/guard rows go 0 | `ir.inc` fix, unlanded | no — control valid |
+
+(The conclusions were unchanged by the correction — none of the three sits in
+the four-commit gap — but the reference point was wrong and would have given a
+false VALID for anything that did.)
 
 **That table is a timestamp, not a property.** The next `make pin` can
 invalidate any row in it without touching this file, and the ticket quoting the

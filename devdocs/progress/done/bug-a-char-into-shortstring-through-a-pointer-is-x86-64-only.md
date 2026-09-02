@@ -248,8 +248,30 @@ changed nothing on the backend that was already right.
 Removing it in the same commit was the instruction and it cannot be followed
 here: the only `--shorts 0` in the tree is a comment in `pasmith_run.py`
 describing the **historic** dodge as fixed, and no invocation in `tools/`,
-`Makefile` or `tstate/` passes it. Track T's dodge lives in how its daemon
-invokes the slice on `seven` — T's own infra.
+`Makefile` or `tstate/` passes it.
+
+**CORRECTED 2026-09-02 by Track T, measured on seven — the dodge is not there
+either. It is GONE, everywhere.** This section originally concluded "Track T's
+dodge lives in how its daemon invokes the slice on `seven`", which the
+coordinator inferred and was wrong: `grep -n 'shorts' tools/twatch.py` returns
+nothing, the systemd `ExecStart` is `python3 tools/twatch.py --clone
+/home/seven/trackt-watch` with no further flags, and seven's fuzz ledger — the
+actual argv of every slice that ran there — records **55 runs at `--shorts 2`
+against one at `--shorts 0`**. `WIDE_DEFAULTS` already sets `shorts: 2`, so
+`--wide` gives the rung by default. The single `--shorts 0` row is one historic
+invocation, not a standing configuration.
+
+**The reasoning error is worth more than the fact.** "Not in the repo,
+therefore in seven's invocation" is a two-branch elimination over a
+three-branch space; the unchecked branch was *it exists nowhere any more*, and
+it was the true one. An elimination is only as sound as the completeness of the
+alternatives, and a missing branch does not announce itself — the conclusion
+arrives with the full confidence of the argument's form.
+
+Also relevant and not ours to reverse: **the fuzz lane is off on seven by the
+owner's instruction** (`idle_fuzz = False` in `twatch.conf`, set 2026-09-02
+when he said to stop running csmith and pasmith — tooling kept, lane
+disabled). So there is no slice to widen regardless.
 
 So this ticket cannot close that loop, and per the section above a follow-up
 ticket is the one nobody picks up. **What is provided instead is the evidence
@@ -273,8 +295,12 @@ absence: the earlier `--shorts 0` run was 294 programs and 0 divergences, so a
 clean 60 here is consistent with the cross dimension simply not being very
 productive at this grammar, which is the ticket's own reading.
 
-**Track T: this is the evidence to drop the dodge on.** It is not removable from
-this repo (see above), so it needs whoever holds the daemon invocation.
+**Track T: no action needed — there is nothing to drop.** Routed and answered
+2026-09-02: the dodge is gone everywhere (see the correction above), the
+default already gives the rung, and seven's fuzz lane is off by the owner's
+instruction anyway. The evidence above stands as the record that the refusal
+which gated the rung is gone; that is the claim it supports, and it is a
+narrower one than "the rung is clean".
 
 ## Log
 - 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e4cba526a.
