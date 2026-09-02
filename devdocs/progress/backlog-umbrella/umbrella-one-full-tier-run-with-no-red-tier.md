@@ -64,7 +64,15 @@ track guessed from the failing STEP) as a FALLBACK, not a finding, at a prio
 nobody set. T owns the TOOL, never the BUG. Thirteen of these accumulated with
 nobody on them for exactly that reason.
 
-## The groups — state at 2026-09-02, binary b9fd008f89ef, commit cdefc55e1
+## The groups — state at 2026-09-02, binary sha256 `b9fd008f89ef`, commit `77d627edb`
+
+{ `77d627edb` replaces the pre-rebase ghost `cdefc55e1`, which was on no remote
+  ref. Derived rather than guessed: that string was introduced BY `77d627edb`
+  (`git log -S`), so the ghost was this commit's own local id before the rebase
+  that landed it. The usual self-versus-parent ambiguity is immaterial here —
+  `77d627edb` touches no `compiler/` or `lib/` file, so its tree and its
+  parent's are identical for every build input, and the binary above was built
+  from both. A binary sha256 is not a commit, so it is now labelled as one. }
 
 Report by group. A count of tickets is not a count of causes. **Thirteen of the
 fourteen tickets wired here at the start are resolved, and they were six

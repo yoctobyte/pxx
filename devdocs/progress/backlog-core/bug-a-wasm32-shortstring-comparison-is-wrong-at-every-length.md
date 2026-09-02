@@ -87,4 +87,15 @@ settle here. A wrong settled cause is more expensive than an open one.
 `s = 'hello'` fails on exactly x86-64 and arm32 (frankh-15, under
 `-dPXX_SHORTSTRING`) — a LITERAL comparison, which is the row that PASSES here.
 Different partition, so presumed different cause. See
-[[bug-a-frozen-compare-operand-decomposition-is-per-backend]].
+[[bug-a-frozen-compare-feeds-inttotypekind-where-irstrtkof-is-required]].
+
+**Both sentences above are superseded, 2026-09-02, and left in place because
+the reasoning from them is still sound.** The link previously named
+`bug-a-frozen-compare-operand-decomposition-is-per-backend`, a ticket that was
+never filed because the slug encodes an INFERENCE that turned out wrong — mine,
+from this partition. There are two causes, not one, and neither is a missing
+operand decomposition: arm32 HAS the width-aware layer and merely passed the
+wrong kind expression, and x86-64 does not call `PXXStrEq` at all. Both are
+fixed and both compare green now, so the partition this paragraph reasons from
+no longer exists either. **A partition is evidence that causes differ, never
+evidence of what they are** — which is exactly the step the dead slug took.
