@@ -54,3 +54,6 @@ ast_slot_overloads: the slot-write census has CHANGED. If a new kind parks a non
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-02 — auto-closed by the seven watcher: `test-core#src:test/c_asm_in_inline_body.c@2` passes at 6f6ec7b36e0f (tier native); it was red at 2d6e7d5c26db. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
