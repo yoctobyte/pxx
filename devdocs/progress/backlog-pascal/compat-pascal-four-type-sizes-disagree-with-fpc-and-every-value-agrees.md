@@ -1,5 +1,5 @@
 ---
-summary: "set (32 vs 4), subrange (4 vs 1) and string[N] (8 vs 21) all store wider or narrower than FPC; every VALUE agrees, only SizeOf and record layout differ -- one layout family, four filed measurements"
+summary: "NOT one layout family -- THREE separate issues bundled (owner, 2026-09-02), and none is known-incompat. Re-measured at 27e983d24, compiler 468194333634: subranges are 4 bytes where FPC is 1 (TSmall 0..255 and TNeg -128..127 both 4; a record of two is 8 vs 2); `set of 0..7` is 32 bytes where FPC is 1, i.e. NOT BITPACKED, a 32x waste that is an efficiency defect in its own right; and `string[10]` is 8 -- POINTER SIZE, not the 11 inline bytes FPC gives, so a short string is not stored inline at all. That last one is NOT fixed, contrary to a reasonable assumption. Blocks feature-pascal-typed-and-untyped-files [p70]: `file of T` writes record layout to DISK, where layout stops being an intermediate and becomes the value, so this must be settled BEFORE an on-disk format."
 type: bug
 track: P
 prio: 25
@@ -404,3 +404,43 @@ Flagging it as the thing to decide, because it is what is putting a prio-25
 compat item at the head of Track P.
 
 No files touched outside this note.
+
+## Re-measured 2026-09-02 — and it is three issues, not one family
+
+Owner, reading the original bundle: *"we dont define TSmall and TNeg as byte
+sized. that's indeed an issue. and sets not being bitpacked is also inefficient
+... those are actually OTHER issues."*
+
+Measured at `27e983d24`, compiler sha256 `468194333634`:
+
+```
+TSmall = 0..255      SizeOf 4    fpc 1
+TNeg   = -128..127   SizeOf 4    fpc 1
+set of 0..7          SizeOf 32   fpc 1     <- not bitpacked
+string[10]           SizeOf 8    fpc 11    <- POINTER size
+record of 2 subrange SizeOf 8    fpc 2
+```
+
+**These do not share a cause and should not share a ticket:**
+
+1. **Subranges are not narrowed to their range.** A type declared `0..255` is
+   stored in 4 bytes. Wasteful, and it makes every record containing one wider
+   than the language implies.
+2. **Sets are not bitpacked.** `set of 0..7` takes 32 bytes where one suffices —
+   a 32x waste that is an efficiency defect on its own terms, independent of any
+   FPC comparison.
+3. **`string[10]` is 8 bytes: POINTER SIZE.** So a short string is not stored
+   inline at all. **This is NOT fixed** — worth stating plainly, because assuming
+   it was is the natural reading of "SizeOf reports pointer size" appearing
+   beside two genuine layout choices. It is a different animal from (1) and (2):
+   they are widths chosen too generously, this is the wrong REPRESENTATION.
+
+**Why none of them is `known-incompat/`.** The folder needs no program to observe
+a wrong value. `file of T` writes record layout to disk, so here the layout IS
+the value — and (3) means writing a pointer where FPC writes eleven characters.
+The original body already reached this conclusion by a different route: settle
+sizes before an on-disk format, or silently invalidate written data.
+
+**Splitting is left to whoever takes it**, deliberately: this ticket carries the
+`blocked-by` edge from `feature-pascal-typed-and-untyped-files`, and re-wiring
+that graph half-done is worse than a bundle that says it is a bundle.
