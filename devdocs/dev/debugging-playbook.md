@@ -6517,6 +6517,28 @@ something else" failure, but occurring INSIDE the instrument built to hunt that
 failure. A byte dump feels like ground truth precisely because it is raw, which
 is what suppresses the question "raw according to which layout?"
 
+**THE PRE-REGISTRATION THAT WOULD HAVE CAUGHT BOTH: before running a control,
+say what it PRINTS IF YOUR EXPLANATION IS WRONG.** franks-ab's own retraction
+the same night, and it is the general form of everything above. Explaining an
+arm32 size delta as shared-RTL growth, it built a control comparing xtensa
+across "full" vs "backend-reverted" — **both at the same commit, hence the same
+builtinheap.pas.** The only thing varying was a file that cannot affect xtensa,
+so the control was going to print IDENTICAL whether the RTL explanation was
+true or false. The script's echo text had the conclusion baked in, so it
+printed *"xtensa: IDENTICAL -- so the RTL is NOT what moved arm32"*: an
+inference the experiment could not support, rendered as a result.
+
+A guard that could not fail, printing PASS, built by the person running a sweep
+to check other people's proofs — caught only by asking why the control agreed
+so conveniently. **The question is not "did the control pass" but "could this
+control have printed anything else".** Same shape as the config point above:
+the output looked like evidence, and the thing that made it evidence — there
+the flag, here whether the variable actually varied — appeared nowhere in it.
+
+The isolation form (hold the commit fixed, revert ONLY the backend file) has no
+such limit and is what to use. The parent-vs-commit form is valid only when the
+diff under test touches no shared runtime.
+
 **A related and worse shape, from the same episode.** `arm32` HAS the
 width-aware operand normaliser and DOES call it at its compare arm — it simply
 passes `IntToTypeKind(IRTk[n])` where the normaliser's own comment requires
