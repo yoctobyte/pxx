@@ -46,8 +46,17 @@ function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
 function PalBackendGetPriority(which, who: Integer): Integer;
 function PalBackendSetPriority(which, who, prio: Integer): Integer;
 function PalBackendGetSid(pid: Integer): Integer;
+function PalBackendRawSyscall(num, a1, a2, a3, a4, a5, a6: NativeInt): NativeInt;
+function PalBackendSetPgid(pid, pgid: Integer): Integer;
+function PalBackendGetPgid(pid: Integer): Integer;
+function PalBackendAlarm(seconds: LongWord): Integer;
+function PalBackendSetHostname(name: PChar; len: Integer): Integer;
+function PalBackendSetGroups(count: Integer; list: Pointer): Integer;
+function PalBackendSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
+function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalBackendFsync(handle: Integer): Integer;
+function PalBackendFdatasync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
 function PalBackendChown(path: PChar; owner, group: Integer): Integer;
@@ -146,8 +155,11 @@ const
   SYS_sync = 162;      { /usr/include/.../asm/unistd_64.h __NR_sync }
   SYS_setsid = 112; SYS_getgroups = 115;   { asm/unistd_64.h }
   SYS_getpriority = 140; SYS_setpriority = 141; SYS_getsid = 124;   { asm/unistd_64.h }
+  SYS_setpgid = 109; SYS_getpgid = 121;    { asm/unistd_64.h }
+  SYS_setitimer = 38; SYS_sethostname = 170; SYS_setgroups = 116; SYS_rt_sigtimedwait = 128;  { asm/unistd_64.h }
+  SYS_rt_sigprocmask = 14;                 { asm/unistd_64.h }
   SYS_clock_settime = 227;                 { asm/unistd_64.h }
-  SYS_fsync = 74; SYS_openat = 257; SYS_mkdirat = 258; SYS_getdents64 = 217; SYS_statx = 332;
+  SYS_fsync = 74; SYS_fdatasync = 75; SYS_openat = 257; SYS_mkdirat = 258; SYS_getdents64 = 217; SYS_statx = 332;
   SYS_chdir = 80; SYS_linkat = 265; SYS_symlinkat = 266;
   SYS_unlinkat = 263; SYS_renameat = 264;
   SYS_socket=41; SYS_connect=42; SYS_accept4=288; SYS_bind=49; SYS_listen=50;
@@ -169,8 +181,11 @@ const
   SYS_sync = 36;       { asm/unistd_32.h __NR_sync }
   SYS_setsid = 66; SYS_getgroups = 205;    { asm/unistd_32.h: getgroups32, NOT the 16-bit-gid getgroups(80) -- the same *32 choice this file already makes for getuid }
   SYS_getpriority = 96; SYS_setpriority = 97; SYS_getsid = 147;      { asm/unistd_32.h }
+  SYS_setpgid = 57; SYS_getpgid = 132;     { asm/unistd_32.h }
+  SYS_setitimer = 104; SYS_sethostname = 74; SYS_setgroups = 206; SYS_rt_sigtimedwait = 177;  { asm/unistd_32.h -- setgroups32(206), the same *32 choice this file makes for getgroups }
+  SYS_rt_sigprocmask = 175;                { asm/unistd_32.h }
   SYS_clock_settime = 264;                 { asm/unistd_32.h, one below clock_gettime(265) }
-  SYS_fsync = 118; SYS_openat = 295; SYS_mkdirat = 296; SYS_getdents64 = 220; SYS_statx = 383;
+  SYS_fsync = 118; SYS_fdatasync = 148; SYS_openat = 295; SYS_mkdirat = 296; SYS_getdents64 = 220; SYS_statx = 383;
   SYS_chdir = 12; SYS_linkat = 303; SYS_symlinkat = 304;
   SYS_unlinkat = 301; SYS_renameat = 302;
   SYS_socketcall=102; SYS_fcntl=55;
@@ -194,8 +209,11 @@ const
   SYS_sync = 81;       { asm-generic: sync(81) sits directly below fsync(82) }
   SYS_setsid = 157; SYS_getgroups = 158;   { asm-generic/unistd.h }
   SYS_getpriority = 141; SYS_setpriority = 140; SYS_getsid = 156;    { asm-generic/unistd.h -- note get/set are SWAPPED relative to the x86 tables }
+  SYS_setpgid = 154; SYS_getpgid = 155;    { asm-generic/unistd.h }
+  SYS_setitimer = 103; SYS_sethostname = 161; SYS_setgroups = 159; SYS_rt_sigtimedwait = 137;  { asm-generic/unistd.h }
+  SYS_rt_sigprocmask = 135;                { asm-generic/unistd.h }
   SYS_clock_settime = 112;                 { asm-generic, one below clock_gettime(113) }
-  SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
+  SYS_fsync = 82; SYS_fdatasync = 83; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
   SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
   SYS_unlinkat = 35; SYS_renameat = 38;
   SYS_socket=198; SYS_connect=203; SYS_accept4=242; SYS_bind=200; SYS_listen=201;
@@ -217,8 +235,11 @@ const
   SYS_sync = 36;       { arm EABI keeps the legacy low numbers, as i386 does }
   SYS_setsid = 66; SYS_getgroups = 205;    { arm EABI, getgroups32 as on i386 }
   SYS_getpriority = 96; SYS_setpriority = 97; SYS_getsid = 147;      { arm EABI, the legacy numbers as on i386 }
+  SYS_setpgid = 57; SYS_getpgid = 132;     { arm EABI, the legacy numbers as on i386 }
+  SYS_setitimer = 104; SYS_sethostname = 74; SYS_setgroups = 206; SYS_rt_sigtimedwait = 177;  { arm EABI, the legacy numbers as on i386 }
+  SYS_rt_sigprocmask = 175;                { arm EABI, as i386 }
   SYS_clock_settime = 262;                 { arm EABI, one below this table's own clock_gettime(263) -- the same -1 relation i386 and asm-generic show, read off this file rather than recalled }
-  SYS_fsync = 118; SYS_openat = 322; SYS_mkdirat = 323; SYS_getdents64 = 217; SYS_statx = 397;
+  SYS_fsync = 118; SYS_fdatasync = 148; SYS_openat = 322; SYS_mkdirat = 323; SYS_getdents64 = 217; SYS_statx = 397;
   SYS_chdir = 12; SYS_linkat = 330; SYS_symlinkat = 331;
   SYS_unlinkat = 328; SYS_renameat = 329;
   SYS_socket=281; SYS_connect=283; SYS_accept4=366; SYS_bind=282; SYS_listen=284;
@@ -260,8 +281,11 @@ const
   SYS_sync = 81;       { asm-generic, the same table aarch64 uses }
   SYS_setsid = 157; SYS_getgroups = 158;   { asm-generic, the same table aarch64 uses }
   SYS_getpriority = 141; SYS_setpriority = 140; SYS_getsid = 156;    { asm-generic, the same table aarch64 uses }
+  SYS_setpgid = 154; SYS_getpgid = 155;    { asm-generic, the same table aarch64 uses }
+  SYS_setitimer = 103; SYS_sethostname = 161; SYS_setgroups = 159; SYS_rt_sigtimedwait = 137;  { asm-generic, the same table aarch64 uses }
+  SYS_rt_sigprocmask = 135;                { asm-generic, the same table aarch64 uses }
   SYS_clock_settime = 112;                 { asm-generic; rv32's time calls keep the legacy generic numbers qemu implements, as the note above says of clock_gettime }
-  SYS_fsync = 82; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
+  SYS_fsync = 82; SYS_fdatasync = 83; SYS_openat = 56; SYS_mkdirat = 34; SYS_getdents64 = 61; SYS_statx = 291;
   SYS_chdir = 49; SYS_linkat = 37; SYS_symlinkat = 36;
   SYS_unlinkat = 35; SYS_renameat = 38;
   SYS_socket=198; SYS_connect=203; SYS_accept4=242; SYS_bind=200; SYS_listen=201;
@@ -750,6 +774,27 @@ begin
   Result := Integer(__pxxrawsyscall(SYS_fsync, handle, 0, 0, 0, 0, 0));
 end;
 
+function PalBackendFdatasync(handle: Integer): Integer;
+{ fdatasync(2): flush the DATA, and only as much metadata as a later read needs
+  to find it. Distinct from fsync because the difference is the whole point --
+  a caller that wanted the timestamps flushed too would have called fsync, and
+  aliasing this onto fsync makes it correct and slow rather than wrong, which
+  is why the alias is tempting and still not what the name says.
+
+  NO XTENSA NUMBER, deliberately. That table's own comment says its values were
+  MEASURED under qemu-xtensa one syscall per process, and adding a recalled
+  number to it would put a guess under someone else's provenance claim -- where
+  the next reader would inherit the measurement's credibility for a value
+  nobody checked. A refusal here is recoverable; a wrong syscall number on a
+  file descriptor is not. Measure it and this arm goes away. }
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_fdatasync, handle, 0, 0, 0, 0, 0));
+{$endif}
+end;
+
 { sync(2) -- flush ALL filesystem buffers. busybox's `sync' applet is the
   caller that wanted it.
 
@@ -824,6 +869,142 @@ begin
 {$else}
   Result := Integer(__pxxrawsyscall(SYS_getsid, PtrUInt(pid), 0, 0, 0, 0, 0));
 {$endif}
+end;
+
+function PalBackendSetPgid(pid, pgid: Integer): Integer;
+{ setpgid(2). Both zeros mean "the caller, into its own new group" -- which is
+  what the BSD setpgrp() spelling reduces to. }
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_setpgid, PtrUInt(pid), PtrUInt(pgid), 0, 0, 0, 0));
+{$endif}
+end;
+
+function PalBackendGetPgid(pid: Integer): Integer;
+{ getpgid(2). pid=0 asks about the caller. }
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_getpgid, PtrUInt(pid), 0, 0, 0, 0, 0));
+{$endif}
+end;
+
+function PalBackendAlarm(seconds: LongWord): Integer;
+{ alarm(2), over SETITIMER rather than over the alarm syscall.
+
+  THERE IS NO alarm SYSCALL ON EVERY TARGET. x86-64, i386 and arm32 have one;
+  the asm-generic table aarch64 and riscv32 use dropped it, and glibc
+  implements alarm over setitimer there. Using setitimer EVERYWHERE means one
+  path instead of two, and the two would not have been equivalent: the
+  remaining-seconds result has to be ROUNDED UP from the old timer's
+  microseconds, and a second implementation is a second place to get that
+  rounding wrong. alarm(2) says a fractional second left rounds up to 1, never
+  down to 0 -- 0 means "no alarm was pending", which is a different answer.
+
+  struct itimerval is FOUR native words (two timevals), not four Int64s: on a
+  32-bit target the kernel's timeval is two 32-bit fields. }
+var
+  newv, oldv: array[0..3] of NativeInt;
+  rc: Int64;
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  newv[0] := 0; newv[1] := 0;                 { it_interval: one-shot }
+  newv[2] := NativeInt(seconds); newv[3] := 0;{ it_value }
+  oldv[0] := 0; oldv[1] := 0; oldv[2] := 0; oldv[3] := 0;
+  rc := __pxxrawsyscall(SYS_setitimer, 0 { ITIMER_REAL }, PtrUInt(@newv[0]), PtrUInt(@oldv[0]), 0, 0, 0);
+  if rc < 0 then
+  begin
+    Result := Integer(rc);
+    Exit;
+  end;
+  Result := Integer(oldv[2]);
+  if oldv[3] > 0 then Inc(Result);            { round a part-second UP, per alarm(2) }
+{$endif}
+end;
+
+function PalBackendSetHostname(name: PChar; len: Integer): Integer;
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_sethostname, PtrUInt(name), PtrUInt(len), 0, 0, 0, 0));
+{$endif}
+end;
+
+function PalBackendSetGroups(count: Integer; list: Pointer): Integer;
+{ setgroups(2). i386 and arm32 take setgroups32, NOT the 16-bit-gid
+  setgroups(81) -- the same *32 choice this file already makes for getgroups
+  and getuid. Passing 32-bit gids to the 16-bit call truncates every gid above
+  65535 to a DIFFERENT existing group. }
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_setgroups, PtrUInt(count), PtrUInt(list), 0, 0, 0, 0));
+{$endif}
+end;
+
+function PalBackendSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
+{ sigtimedwait(2) with a NULL siginfo -- returns the signal number, or -EAGAIN
+  on timeout.
+
+  THE FOURTH ARGUMENT IS THE SIGSET SIZE IN BYTES and the kernel REJECTS a
+  wrong one with EINVAL rather than reading what it was given, which is the one
+  mercy in the rt_sig* family. It is the caller's sizeof(sigset_t), passed in
+  rather than assumed here, because crtl's sigset_t and the kernel's need not
+  agree in width and the caller is the one that knows.
+
+  A negative `sec' means "no timeout": a NULL timespec pointer, which blocks. }
+var
+  ts: array[0..1] of NativeInt;
+  tsp: PtrUInt;
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  ts[0] := NativeInt(sec);
+  ts[1] := NativeInt(nsec);
+  if sec < 0 then tsp := 0 else tsp := PtrUInt(@ts[0]);
+  Result := Integer(__pxxrawsyscall(SYS_rt_sigtimedwait, PtrUInt(setPtr), 0, tsp,
+                                    PtrUInt(setSize), 0, 0));
+{$endif}
+end;
+
+function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
+{ rt_sigprocmask(2). `setSize' is the KERNEL's sigset width in bytes -- 8 on
+  every Linux architecture, because _NSIG is 64 -- and the kernel REJECTS any
+  other value with EINVAL rather than reading what it was handed. The caller
+  passes it because the caller's own sigset_t need not be that width, and it is
+  the caller that knows which eight bytes to point at. }
+begin
+{$ifdef CPU_XTENSA}
+  Result := PAL_ERR_UNSUPPORTED;
+{$else}
+  Result := Integer(__pxxrawsyscall(SYS_rt_sigprocmask, PtrUInt(how), PtrUInt(setPtr),
+                                    PtrUInt(oldSetPtr), PtrUInt(setSize), 0, 0));
+{$endif}
+end;
+
+function PalBackendRawSyscall(num, a1, a2, a3, a4, a5, a6: NativeInt): NativeInt;
+{ THE RAW SYSCALL BRIDGE, and it is deliberately the only place in this file
+  that does not name what it is doing. Everything else here is a PAL entry with
+  a contract the non-Linux backends can refuse in terms of; this one hands the
+  caller the kernel interface directly, which is what a C program spelling
+  syscall(2) is asking for -- busybox's ionice and modutils issue ioprio_get
+  and finit_module that way, and the alternative is a bespoke PAL entry per
+  exotic call, each one used once.
+
+  It returns the kernel's answer UNTRANSLATED: negative is -errno, as for every
+  other entry here, and the C wrapper converts. There is no argument checking
+  and none is possible -- the number decides what the six words mean. }
+begin
+  Result := NativeInt(__pxxrawsyscall(PtrUInt(num), PtrUInt(a1), PtrUInt(a2),
+                                      PtrUInt(a3), PtrUInt(a4), PtrUInt(a5), PtrUInt(a6)));
 end;
 
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;

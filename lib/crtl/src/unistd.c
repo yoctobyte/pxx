@@ -11,16 +11,25 @@
 #include <string.h>
 #include <stdlib.h>
 #include <pwd.h>
+#include <grp.h>
+#include <sys/utsname.h>
+#include <stdarg.h>
 
 extern long long __pxx_read(int fd, void *buf, long long n);
 extern long long __pxx_write(int fd, void *buf, long long n);
 extern int __pxx_close(int fd);
 extern long long __pxx_seek(int fd, long long offset, int whence);
 extern int __pxx_fsync(int fd);
+extern int __pxx_fdatasync(int fd);
 extern int __pxx_sync(void);
 extern int __pxx_setsid(void);
 extern int __pxx_getgroups(int count, void *list);
 extern int __pxx_getsid(int pid);
+extern int __pxx_setpgid(int pid, int pgid);
+extern int __pxx_getpgid(int pid);
+extern int __pxx_alarm(unsigned int seconds);
+extern int __pxx_sethostname(const char *name, int len);
+extern int __pxx_setgroups(int count, void *list);
 extern int __pxx_dup(int oldFd);
 extern int __pxx_chdir(const char *path);
 extern int __pxx_getuid(void);
@@ -124,6 +133,18 @@ static int sysret(int rc) {
 }
 
 int fsync(int fd) { return sysret(__pxx_fsync(fd)); }
+
+/* fdatasync(2): the DATA, and only the metadata a later read needs to find it.
+   Not an alias for fsync -- the difference is the whole reason the call
+   exists, and aliasing it gives a correct-but-slower answer under a name that
+   promised a faster one. busybox's coreutils/shred.c and `sync -d' are the
+   callers; busybox ASSUMES it exists (include/platform.h: HAVE_FDATASYNC 1 is
+   the default), so there is no fallback path for it to take. */
+int fdatasync(int fd) {
+  int rc = __pxx_fdatasync(fd);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
 
 /* sync(2) returns void in POSIX, so there is nothing to report and nothing to
    check -- the PAL's status is deliberately discarded here rather than
@@ -263,8 +284,11 @@ char *ttyname(int fd)
 
    *** WHICH OF THESE THE PAL COULD ACTUALLY SERVE — because an earlier draft
    of this comment got it wrong, AND THEN A LATER ONE GOT IT WRONG AGAIN IN THE
-   OPPOSITE DIRECTION. *** chroot, setuid/setgid/seteuid/setegid and setgroups
-   have no PAL entry: those really are missing syscalls.
+   OPPOSITE DIRECTION. *** chroot and setuid/setgid/seteuid/setegid have no PAL
+   entry: those really are missing syscalls. setgroups DID belong on that list
+   and no longer does -- PalSetGroups arrived with the busybox userland work,
+   so its body below is real and this sentence was corrected rather than left
+   to become the third wrong version of it.
 
    fork() IS NOT ONE OF THEM, and it never was. The previous version of this
    comment argued that the PAL offered only a `PalVfork', that vfork is not
@@ -306,7 +330,18 @@ int setuid(uid_t uid)          { (void)uid; errno = ENOSYS; return -1; }
 int setgid(gid_t gid)          { (void)gid; errno = ENOSYS; return -1; }
 int seteuid(uid_t uid)         { (void)uid; errno = ENOSYS; return -1; }
 int setegid(gid_t gid)         { (void)gid; errno = ENOSYS; return -1; }
-int setgroups(size_t n, const gid_t *list) { (void)n; (void)list; errno = ENOSYS; return -1; }
+
+/* setgroups(2) IS REAL NOW -- PalSetGroups sits on setgroups32 where the target
+   needs it (i386, arm32), which is the same *32 choice getgroups already makes.
+   It is left here among the privilege calls rather than moved, because the
+   sentence above about which of these the PAL could serve is the thing that has
+   to stay true, and moving the body would leave that list naming a function
+   that is no longer on it. */
+int setgroups(size_t n, const gid_t *list) {
+  int rc = __pxx_setgroups((int)n, n == 0 ? 0 : (void *)list);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
 
 
 ssize_t readlink(const char *path, char *buf, size_t bufsz) {
@@ -796,4 +831,167 @@ int getsid(pid_t pid) {
   int rc = __pxx_getsid((int)pid);
   if (rc < 0) { errno = -rc; return -1; }
   return rc;
+}
+
+/* setpgid(2). pid 0 is the caller; pgid 0 is "the pid's own value", so
+   setpgid(0, 0) makes the caller a process-group leader. */
+int setpgid(pid_t pid, pid_t pgid) {
+  int rc = __pxx_setpgid((int)pid, (int)pgid);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+pid_t getpgid(pid_t pid) {
+  int rc = __pxx_getpgid((int)pid);
+  if (rc < 0) { errno = -rc; return -1; }
+  return (pid_t)rc;
+}
+
+/* setpgrp(): POSIX's zero-argument form, which IS setpgid(0, 0). The BSD
+   two-argument setpgrp(pid, pgid) is a different function with the same name
+   and is NOT provided -- a program written against it would compile here and
+   silently ignore both arguments, which is worse than not compiling. */
+int setpgrp(void) {
+  return setpgid(0, 0);
+}
+
+/* alarm(2). RETURNS THE OLD ALARM'S REMAINING SECONDS, not an error code --
+   there is no error case a caller can act on, and a `return 0' stub would be
+   indistinguishable from "no alarm was pending", which is a real answer. The
+   part-second rounding happens in the PAL, next to the timer values it read. */
+unsigned int alarm(unsigned int seconds) {
+  int rc = __pxx_alarm(seconds);
+  if (rc < 0) return 0;
+  return (unsigned int)rc;
+}
+
+int gethostname(char *name, size_t len) {
+  struct utsname u;
+  size_t n;
+  if (!name) { errno = EFAULT; return -1; }
+  if (uname(&u) < 0) return -1;
+  n = strlen(u.nodename);
+  /* ENAMETOOLONG rather than a truncated copy: `n + 1 > len' counts the
+     terminator, because a name that exactly fills the buffer has nowhere to
+     put it and POSIX leaves that case unspecified -- refusing is the answer
+     that cannot hand back an unterminated string. */
+  if (n + 1 > len) { errno = ENAMETOOLONG; return -1; }
+  memcpy(name, u.nodename, n + 1);
+  return 0;
+}
+
+int sethostname(const char *name, size_t len) {
+  int rc;
+  if (!name) { errno = EFAULT; return -1; }
+  rc = __pxx_sethostname((char *)name, (int)len);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+/* initgroups(3): the supplementary groups of `user', plus `group' itself.
+
+   THE PRIMARY GROUP IS INCLUDED and that is not an accident of the interface:
+   POSIX has the caller pass it separately because /etc/group's member lists do
+   NOT name a user in their own primary group. Dropping it drops exactly the
+   group most likely to matter. getgrouplist already applies that rule, so this
+   is a size-then-fill over it rather than a second walk of the file. */
+int initgroups(const char *user, gid_t group) {
+  gid_t stackbuf[64];
+  gid_t *list = stackbuf;
+  int n = (int)(sizeof stackbuf / sizeof stackbuf[0]);
+  int rc;
+
+  if (!user) { errno = EINVAL; return -1; }
+  if (getgrouplist(user, group, list, &n) < 0) {
+    /* getgrouplist wrote the TRUE count into n on failure (glibc's contract),
+       so the retry is sized rather than doubled blindly. */
+    if (n <= 0) { errno = EINVAL; return -1; }
+    list = (gid_t *)malloc((size_t)n * sizeof(gid_t));
+    if (!list) { errno = ENOMEM; return -1; }
+    if (getgrouplist(user, group, list, &n) < 0) { free(list); errno = EINVAL; return -1; }
+  }
+  rc = setgroups(n, list);
+  if (list != stackbuf) free(list);
+  return rc;
+}
+
+/* ---- the `l' forms of exec, plus execv ------------------------------------
+ *
+ * All four are wrappers -- there is one syscall (execve) and execvp's PATH
+ * search sits above it. What is worth care here is the TERMINATOR and the
+ * BOUND, because both failure modes are silent:
+ *
+ *  - The variadic list ends at a NULL argument. A caller that forgets it makes
+ *    the loop read past the arguments actually passed, and the program is
+ *    exec'd with garbage argv entries rather than failing. Nothing can detect
+ *    that from inside; the terminator IS the contract.
+ *  - The list is capped at PXX_EXEC_MAXARGS. Over that, E2BIG -- NOT a
+ *    truncated argv, which would run the program with fewer arguments than the
+ *    source wrote and look like success.
+ *
+ * execle's envp comes AFTER the terminating NULL, which is the one genuinely
+ * surprising part of the family's shape and why it fetches one more argument
+ * once the loop has ended.
+ *
+ * Found attempting busybox rung 2: init/halt.c and miscutils/crontab.c call
+ * execlp; init/init.c and shell/ash.c call execl and execv.
+ */
+#define PXX_EXEC_MAXARGS 63
+
+/* Collect the variadic list into `out'. Returns the count, or -1 if the list
+   ran past the cap. `*envp_out', when asked for, receives the argument that
+   follows the terminating NULL (execle's environment). */
+static int exec_collect(const char *arg, va_list ap, char **out,
+                        char ***envp_out) {
+  int n = 0;
+  out[n++] = (char *)arg;
+  if (arg != 0) {
+    for (;;) {
+      char *a;
+      if (n > PXX_EXEC_MAXARGS) return -1;
+      a = va_arg(ap, char *);
+      out[n++] = a;
+      if (a == 0) break;
+    }
+  }
+  if (envp_out) *envp_out = va_arg(ap, char **);
+  return n;
+}
+
+int execv(const char *path, char *const argv[]) {
+  return execve(path, argv, environ);   /* environ is declared in <unistd.h> */
+}
+
+int execl(const char *path, const char *arg, ...) {
+  char *argv[PXX_EXEC_MAXARGS + 2];
+  va_list ap;
+  int n;
+  va_start(ap, arg);
+  n = exec_collect(arg, ap, argv, 0);
+  va_end(ap);
+  if (n < 0) { errno = E2BIG; return -1; }
+  return execv(path, argv);
+}
+
+int execlp(const char *file, const char *arg, ...) {
+  char *argv[PXX_EXEC_MAXARGS + 2];
+  va_list ap;
+  int n;
+  va_start(ap, arg);
+  n = exec_collect(arg, ap, argv, 0);
+  va_end(ap);
+  if (n < 0) { errno = E2BIG; return -1; }
+  return execvp(file, argv);
+}
+
+int execle(const char *path, const char *arg, ...) {
+  char *argv[PXX_EXEC_MAXARGS + 2];
+  char **envp = 0;
+  va_list ap;
+  int n;
+  va_start(ap, arg);
+  n = exec_collect(arg, ap, argv, &envp);
+  va_end(ap);
+  if (n < 0) { errno = E2BIG; return -1; }
+  return execve(path, argv, envp);
 }

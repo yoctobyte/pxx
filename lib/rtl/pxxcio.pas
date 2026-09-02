@@ -40,6 +40,7 @@ function __pxx_recvfrom_ipv4(fd: Integer; buf: Pointer; len: Integer; outHost, o
 function __pxx_shutdown(fd, how: Integer): Integer;
 function __pxx_socket_close(fd: Integer): Integer;
 function __pxx_getsockname_ipv4(fd: Integer; outHost, outPort: Pointer): Integer;
+function __pxx_getpeername_ipv4(fd: Integer; outHost, outPort: Pointer): Integer;
 function __pxx_getsockerror(fd: Integer): Integer;
 
 { C heap bridge: malloc/free/realloc ride the same mmap-backed pool as Pascal
@@ -108,11 +109,20 @@ function __pxx_getgroups(count: Integer; list: Pointer): Integer;
 function __pxx_getpriority(which, who: Integer): Integer;
 function __pxx_setpriority(which, who, prio: Integer): Integer;
 function __pxx_getsid(pid: Integer): Integer;
+function __pxx_syscall(num, a1, a2, a3, a4, a5, a6: NativeInt): NativeInt;
+function __pxx_setpgid(pid, pgid: Integer): Integer;
+function __pxx_getpgid(pid: Integer): Integer;
+function __pxx_alarm(seconds: LongWord): Integer;
+function __pxx_sethostname(name: PChar; len: Integer): Integer;
+function __pxx_setgroups(count: Integer; list: Pointer): Integer;
+function __pxx_sigtimedwait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
+function __pxx_sigprocmask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
 function __pxx_clock_settime(clockId: Integer; sec, nsec: Int64): Integer;
 function __pxx_utimensat(dirFd: Integer; path: PChar;
                          aSec, aNsec, mSec, mNsec: Int64;
                          flags: Integer): Integer;
 function __pxx_fsync(fd: Integer): Integer;
+function __pxx_fdatasync(fd: Integer): Integer;
 { dup/dup2 for crtl. PalDup2 already existed; dup(oldFd) is expressed as
   "lowest free descriptor", which the PAL has no primitive for, so it is
   fcntl(F_DUPFD, 0) — the same thing dup() is defined to be. }
@@ -291,6 +301,20 @@ function __pxx_getsockname_ipv4(fd: Integer; outHost, outPort: Pointer): Integer
 var host: LongWord; port: Integer;
 begin
   Result := PalGetSockNameIpv4(fd, host, port);
+  if Result >= 0 then
+  begin
+    PLongWord(outHost)^ := host;
+    PInteger(outPort)^ := port;
+  end;
+end;
+
+function __pxx_getpeername_ipv4(fd: Integer; outHost, outPort: Pointer): Integer;
+{ The peer side of the pair above. PalGetPeerNameIpv4 has been here all along;
+  only the C bridge was missing, which is why libbb/xconnect.c's get_peer_lsa
+  had no getpeername to name. }
+var host: LongWord; port: Integer;
+begin
+  Result := PalGetPeerNameIpv4(fd, host, port);
   if Result >= 0 then
   begin
     PLongWord(outHost)^ := host;
@@ -514,6 +538,11 @@ begin
   Result := PalFsync(fd);
 end;
 
+function __pxx_fdatasync(fd: Integer): Integer;
+begin
+  Result := PalFdatasync(fd);
+end;
+
 function __pxx_sync: Integer;
 begin
   Result := PalSync;
@@ -542,6 +571,46 @@ end;
 function __pxx_getsid(pid: Integer): Integer;
 begin
   Result := PalGetSid(pid);
+end;
+
+function __pxx_syscall(num, a1, a2, a3, a4, a5, a6: NativeInt): NativeInt;
+begin
+  Result := PalRawSyscall(num, a1, a2, a3, a4, a5, a6);
+end;
+
+function __pxx_setpgid(pid, pgid: Integer): Integer;
+begin
+  Result := PalSetPgid(pid, pgid);
+end;
+
+function __pxx_getpgid(pid: Integer): Integer;
+begin
+  Result := PalGetPgid(pid);
+end;
+
+function __pxx_alarm(seconds: LongWord): Integer;
+begin
+  Result := PalAlarm(seconds);
+end;
+
+function __pxx_sethostname(name: PChar; len: Integer): Integer;
+begin
+  Result := PalSetHostname(name, len);
+end;
+
+function __pxx_setgroups(count: Integer; list: Pointer): Integer;
+begin
+  Result := PalSetGroups(count, list);
+end;
+
+function __pxx_sigtimedwait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
+begin
+  Result := PalSigTimedWait(setPtr, setSize, sec, nsec);
+end;
+
+function __pxx_sigprocmask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
+begin
+  Result := PalSigProcMask(how, setPtr, oldSetPtr, setSize);
 end;
 
 function __pxx_clock_settime(clockId: Integer; sec, nsec: Int64): Integer;

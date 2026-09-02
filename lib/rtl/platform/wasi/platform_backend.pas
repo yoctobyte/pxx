@@ -78,11 +78,20 @@ function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
 function PalBackendGetPriority(which, who: Integer): Integer;
 function PalBackendSetPriority(which, who, prio: Integer): Integer;
 function PalBackendGetSid(pid: Integer): Integer;
+function PalBackendRawSyscall(num, a1, a2, a3, a4, a5, a6: NativeInt): NativeInt;
+function PalBackendSetPgid(pid, pgid: Integer): Integer;
+function PalBackendGetPgid(pid: Integer): Integer;
+function PalBackendAlarm(seconds: LongWord): Integer;
+function PalBackendSetHostname(name: PChar; len: Integer): Integer;
+function PalBackendSetGroups(count: Integer; list: Pointer): Integer;
+function PalBackendSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
+function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalBackendUtimensat(dirFd: Integer; path: PChar;
                              aSec, aNsec, mSec, mNsec: Int64;
                              flags: Integer): Integer;
 function PalBackendFsync(handle: Integer): Integer;
+function PalBackendFdatasync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
 function PalBackendChown(path: PChar; owner, group: Integer): Integer;
@@ -848,6 +857,15 @@ begin
 {$endif}
 end;
 
+function PalBackendFdatasync(handle: Integer): Integer;
+{ WASI has fd_datasync, but this backend has no binding for it yet, and
+  answering with fd_sync would flush MORE than asked -- correct output, wrong
+  call, and a caller measuring the difference would measure nothing. Refuse
+  until the binding exists. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
 { WASI has no whole-system sync: fd_sync is per-descriptor only, and inventing a loop over every open fd would be a different operation wearing this name. }
 function PalBackendSync: Integer;
 begin
@@ -880,6 +898,13 @@ end;
 
 function PalBackendGetSid(pid: Integer): Integer;
 { No process model, so no sessions -- as setsid above. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendRawSyscall(num, a1, a2, a3, a4, a5, a6: NativeInt): NativeInt;
+{ WASI is a set of named host imports, not a numbered trap interface. There is
+  nothing a number could select. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
@@ -1254,6 +1279,48 @@ begin
 end;
 
 function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+
+function PalBackendSetPgid(pid, pgid: Integer): Integer;
+{ No process model at all; there is nothing to group. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendGetPgid(pid: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+
+function PalBackendAlarm(seconds: LongWord): Integer;
+{ WASI has clocks and a poll_oneoff timeout, but no asynchronous delivery into
+  a running module -- there is nothing for an alarm to interrupt. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendSetHostname(name: PChar; len: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendSetGroups(count: Integer; list: Pointer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+
+function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
+{ No POSIX signals here, so there is no mask to change. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

@@ -42,11 +42,20 @@ function PalBackendGetGroups(count: Integer; list: Pointer): Integer;
 function PalBackendGetPriority(which, who: Integer): Integer;
 function PalBackendSetPriority(which, who, prio: Integer): Integer;
 function PalBackendGetSid(pid: Integer): Integer;
+function PalBackendRawSyscall(num, a1, a2, a3, a4, a5, a6: NativeInt): NativeInt;
+function PalBackendSetPgid(pid, pgid: Integer): Integer;
+function PalBackendGetPgid(pid: Integer): Integer;
+function PalBackendAlarm(seconds: LongWord): Integer;
+function PalBackendSetHostname(name: PChar; len: Integer): Integer;
+function PalBackendSetGroups(count: Integer; list: Pointer): Integer;
+function PalBackendSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
+function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalBackendUtimensat(dirFd: Integer; path: PChar;
                              aSec, aNsec, mSec, mNsec: Int64;
                              flags: Integer): Integer;
 function PalBackendFsync(handle: Integer): Integer;
+function PalBackendFdatasync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
 function PalBackendChmod(path: PChar; mode: Integer): Integer;
 function PalBackendChown(path: PChar; owner, group: Integer): Integer;
@@ -532,6 +541,15 @@ begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 
+function PalBackendFdatasync(handle: Integer): Integer;
+{ ESP-IDF's VFS has no data-only sync: a SPIFFS/FAT flush is all-or-nothing.
+  Aliasing this onto PalBackendFsync would be a different call wearing this
+  name, so it refuses -- POSIX-shaped code meets PAL_ERR_UNSUPPORTED rather
+  than a wrong answer, which is this platform's whole contract. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
 { FreeRTOS has no sync(2): there is no global buffer cache to flush, so this joins the deliberate-refusal set rather than pretending to succeed. }
 function PalBackendSync: Integer;
 begin
@@ -567,6 +585,14 @@ end;
 
 function PalBackendGetSid(pid: Integer): Integer;
 { No sessions -- the same reason setsid refuses just above. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendRawSyscall(num, a1, a2, a3, a4, a5, a6: NativeInt): NativeInt;
+{ FreeRTOS has no syscall interface at all: the PAL entries above reach IDF
+  functions, not a kernel trap table, so there is no number to pass on. A
+  program asking for syscall(2) here has assumed a kernel that is not present. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
@@ -1144,6 +1170,51 @@ begin
 end;
 
 function PalBackendVforkAndExec(path: PChar; argv, envp: Pointer; stdinReadFd, stdinWriteFd, stdoutReadFd, stdoutWriteFd: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+
+function PalBackendSetPgid(pid, pgid: Integer): Integer;
+{ No process groups -- the same absence setsid and getsid refuse for. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendGetPgid(pid: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+
+function PalBackendAlarm(seconds: LongWord): Integer;
+{ No SIGALRM to deliver -- FreeRTOS has no POSIX signals, so a timer that could
+  be armed would have nothing to raise. Refusing says so; returning 0 would
+  claim an alarm was set. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendSetHostname(name: PChar; len: Integer): Integer;
+{ No kernel-wide hostname; the IDF network stack carries its own per-interface
+  name, which is a different thing under the same word. }
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendSetGroups(count: Integer; list: Pointer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
+begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+
+function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
+{ No POSIX signals here, so there is no mask to change. }
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

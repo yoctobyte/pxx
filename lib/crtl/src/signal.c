@@ -8,8 +8,11 @@
 
 #include <signal.h>
 #include <errno.h>
+#include <time.h>
 
 extern int __pxx_kill(int pid, int sig);
+extern int __pxx_sigprocmask(int how, void *set, void *oldset, int setSize);
+extern int __pxx_sigtimedwait(void *set, int setSize, int sec, int nsec);
 
 #define __SIGSET_NWORDS 16
 #define __SIGSET_WORDBITS (8 * (int)sizeof(unsigned long))
@@ -53,9 +56,70 @@ int raise(int sig) {
   return 0;
 }
 
+/* THE KERNEL'S SIGSET IS EIGHT BYTES, NOT sizeof(sigset_t). _NSIG is 64 on
+   every Linux architecture, so rt_sigprocmask takes a size of 8 and REJECTS
+   anything else with EINVAL. crtl's sigset_t is deliberately wider (16 words,
+   glibc-shaped) so that a program's `sigset_t' is layout-compatible with the
+   one it might have been compiled against elsewhere; the low eight bytes hold
+   signals 1..64 in exactly the kernel's bit order, on 32- and 64-bit alike,
+   because both spell the bit as (sig-1) counted from __val[0]. So the pointer
+   handed to the kernel is &set->__val[0] and the size is the constant below --
+   passing sizeof(sigset_t) makes every call fail. */
+#define PXX_KERNEL_SIGSETSIZE 8
+
+/* sigprocmask IS REAL, unlike its neighbours above, and the difference is
+   worth stating: BLOCKING a signal needs no handler and no return trampoline,
+   which is the part this runtime cannot yet do. A blocked signal simply stays
+   pending, and sigtimedwait below collects it -- that pair is how busybox's
+   init waits for SIGCHLD without ever installing a handler, and it is why
+   these two are implemented while sigaction is still a no-op. */
 int sigprocmask(int how, const sigset_t *set, sigset_t *oldset) {
-  (void)how; (void)set;
+  int rc;
   if (oldset) sigemptyset(oldset);
+  rc = __pxx_sigprocmask(how,
+                         set ? (void *)&((sigset_t *)set)->__val[0] : 0,
+                         oldset ? (void *)&oldset->__val[0] : 0,
+                         PXX_KERNEL_SIGSETSIZE);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}
+
+/* sigtimedwait(2): wait for one of `set' to become pending, up to `timeout'.
+
+   `info' IS IGNORED AND THAT IS DECLARED, not hidden: this passes NULL to the
+   kernel, so a caller asking for siginfo gets its struct untouched rather than
+   filled with a stale or invented one. busybox's init calls it with NULL, and
+   the alternative -- marshalling a 128-byte siginfo whose layout this runtime
+   has not verified against the kernel's -- is exactly the plausible-wrong-value
+   shape this codebase spends its time on. When a caller needs it, the check is
+   a field-by-field diff against a gcc build, not a guess.
+
+   A NULL timeout blocks forever, which the PAL spells as a negative seconds
+   rather than a second pointer argument. Returns the signal number, or -1 with
+   EAGAIN on timeout. */
+int sigtimedwait(const sigset_t *set, siginfo_t *info,
+                 const struct timespec *timeout) {
+  int rc;
+  if (!set) { errno = EINVAL; return -1; }
+  (void)info;
+  if (timeout)
+    rc = __pxx_sigtimedwait((void *)&((sigset_t *)set)->__val[0],
+                            PXX_KERNEL_SIGSETSIZE,
+                            (int)timeout->tv_sec, (int)timeout->tv_nsec);
+  else
+    rc = __pxx_sigtimedwait((void *)&((sigset_t *)set)->__val[0],
+                            PXX_KERNEL_SIGSETSIZE, -1, 0);
+  if (rc < 0) { errno = -rc; return -1; }
+  return rc;
+}
+
+/* sigwait(3) is sigtimedwait with no timeout, and it reports through *sig with
+   a POSITIVE errno return rather than -1/errno -- a different convention in
+   the same family, which is why it is spelled out rather than aliased. */
+int sigwait(const sigset_t *set, int *sig) {
+  int rc = sigtimedwait(set, 0, 0);
+  if (rc < 0) return errno;
+  if (sig) *sig = rc;
   return 0;
 }
 

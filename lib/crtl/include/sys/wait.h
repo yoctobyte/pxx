@@ -35,4 +35,19 @@
 int wait(int *status);
 int waitpid(int pid, int *status, int options);
 
+/* wait4/wait3: the same reap, with the child's resource usage written into
+   *rusage when it is not NULL. `struct rusage' comes from <sys/resource.h>,
+   which this header does NOT include -- glibc does not either, and a program
+   that wants the rusage form includes it itself. The pointer is declared void*
+   here for exactly that reason: it keeps the declaration usable in a TU that
+   has never seen the struct, which is what wait4(pid, st, opt, NULL) callers
+   are, and the kernel is the only thing that reads through it.
+
+   wait3(st, opt, ru) is wait4(-1, st, opt, ru) -- BSD's older spelling, still
+   the default busybox assumes (include/platform.h: HAVE_WAIT3 1) and still
+   published by glibc, which is why it is here rather than left to the
+   program's own fallback. */
+int wait4(int pid, int *status, int options, void *rusage);
+int wait3(int *status, int options, void *rusage);
+
 #endif

@@ -35,5 +35,71 @@ struct sockaddr_in {
 #define INADDR_ANY 0x00000000U
 #define INADDR_LOOPBACK 0x7F000001U
 #define INADDR_BROADCAST 0xFFFFFFFFU
+#define INADDR_NONE 0xFFFFFFFFU
+
+#define IPPROTO_ICMP   1
+#define IPPROTO_IGMP   2
+#define IPPROTO_IPIP   4
+#define IPPROTO_EGP    8
+#define IPPROTO_PUP   12
+#define IPPROTO_IDP   22
+#define IPPROTO_TP    29
+#define IPPROTO_IPV6  41
+#define IPPROTO_ROUTING 43
+#define IPPROTO_FRAGMENT 44
+#define IPPROTO_RSVP  46
+#define IPPROTO_GRE   47
+#define IPPROTO_ESP   50
+#define IPPROTO_AH    51
+#define IPPROTO_ICMPV6 58
+#define IPPROTO_NONE  59
+#define IPPROTO_DSTOPTS 60
+#define IPPROTO_SCTP 132
+#define IPPROTO_UDPLITE 136
+#define IPPROTO_RAW  255
+
+/* IPv6 ADDRESSES ARE TYPES HERE, NOT A CLAIM THAT v6 SOCKETS WORK. The socket
+   layer under <sys/socket.h> parses AF_INET only -- getsockname on a v6 peer
+   answers 0.0.0.0. These exist because programs that never open a v6 socket
+   still need the struct: busybox's networking/route.c passes a struct
+   in6_rtmsg to an ioctl, and libbb sizes its address union by the larger of
+   the two. Declaring the type is what lets those compile honestly; a v6
+   connect() still fails, which is the truthful outcome and not a silent one. */
+struct in6_addr {
+  union {
+    uint8_t  __u6_addr8[16];
+    uint16_t __u6_addr16[8];
+    uint32_t __u6_addr32[4];
+  } __in6_u;
+};
+#define s6_addr   __in6_u.__u6_addr8
+#define s6_addr16 __in6_u.__u6_addr16
+#define s6_addr32 __in6_u.__u6_addr32
+
+struct sockaddr_in6 {
+  sa_family_t sin6_family;
+  in_port_t   sin6_port;
+  uint32_t    sin6_flowinfo;
+  struct in6_addr sin6_addr;
+  uint32_t    sin6_scope_id;
+};
+
+extern const struct in6_addr in6addr_any;
+extern const struct in6_addr in6addr_loopback;
+#define IN6ADDR_ANY_INIT      { { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } } }
+#define IN6ADDR_LOOPBACK_INIT { { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 } } }
+
+#define INET_ADDRSTRLEN  16
+#define INET6_ADDRSTRLEN 46
+
+struct ipv6_mreq {
+  struct in6_addr ipv6mr_multiaddr;
+  unsigned int ipv6mr_interface;
+};
+
+struct ip_mreq {
+  struct in_addr imr_multiaddr;
+  struct in_addr imr_interface;
+};
 
 #endif

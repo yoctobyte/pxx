@@ -2,6 +2,8 @@
 #ifndef PXX_CRTL_SIGNAL_H
 #define PXX_CRTL_SIGNAL_H 1
 
+#include <time.h>   /* struct timespec, for sigtimedwait */
+
 typedef int sig_atomic_t;
 
 #define SIG_DFL ((void (*)(int))0)
@@ -70,6 +72,12 @@ typedef int sig_atomic_t;
 
 typedef void (*__sighandler_t)(int);
 __sighandler_t signal(int sig, __sighandler_t func);
+/* The unprefixed spelling, which is what programs actually write. glibc
+   publishes both; busybox's include/platform.h defines it for itself ONLY
+   under !HAVE_SIGHANDLER_T, and HAVE_SIGHANDLER_T is its DEFAULT -- so a libc
+   that publishes only the __-prefixed name gets neither, and shell/hush.c
+   fails on a type it was told existed. */
+typedef __sighandler_t sighandler_t;
 int raise(int sig);
 int kill(int pid, int sig);
 
@@ -110,13 +118,28 @@ int sigfillset(sigset_t *set);
 int sigaddset(sigset_t *set, int sig);
 int sigdelset(sigset_t *set, int sig);
 int sigismember(const sigset_t *set, int sig);
+/* sigprocmask IS REAL -- see the note in src/signal.c. Blocking needs no
+   handler and no return trampoline, so it works where sigaction cannot yet. */
 int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+/* Collect a pending signal from `set'. `info' is IGNORED (NULL is passed to
+   the kernel), so a caller that needs siginfo gets its struct untouched rather
+   than filled with something unverified. Returns the signal number, or -1 with
+   EAGAIN on timeout; a NULL timeout blocks. */
+int sigtimedwait(const sigset_t *set, siginfo_t *info,
+                 const struct timespec *timeout);
+/* sigwait(3): the same wait with no timeout, reporting through *sig and
+   returning a POSITIVE errno -- a different convention in the same family. */
+int sigwait(const sigset_t *set, int *sig);
 int sigaction(int sig, const struct sigaction *act, struct sigaction *oact);
 
-/* sigsuspend FAILS with ENOSYS, unlike sigaction/sigprocmask above which
-   return 0. With no rt_sigaction bridge no handler can fire, so a faithful
-   sigsuspend would block forever; failing is the only non-lying answer that
-   also does not hang. */
+/* sigsuspend FAILS with ENOSYS, unlike sigaction above which returns 0 without
+   doing anything. With no rt_sigaction bridge no handler can fire, so a
+   faithful sigsuspend would block forever; failing is the only non-lying
+   answer that also does not hang.
+   (sigprocmask used to be in that same sentence and no longer belongs there:
+   it is real now. sigtimedwait is the reason the distinction matters -- a
+   caller that blocks a signal and then waits for it needs no handler, and that
+   pair works, while anything needing a handler to RUN still does not.) */
 int sigsuspend(const sigset_t *mask);
 int sigaltstack(const stack_t *ss, stack_t *oss);
 

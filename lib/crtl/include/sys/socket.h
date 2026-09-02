@@ -5,7 +5,8 @@
 #include <stddef.h>
 #include <sys/types.h>
 
-typedef unsigned int socklen_t;
+#include <sys/_types.h>
+typedef __socklen_t socklen_t;
 typedef unsigned short sa_family_t;
 
 struct sockaddr {
@@ -30,11 +31,118 @@ struct sockaddr {
 #define SOCK_RAW 3
 
 #define SOL_SOCKET 1
-#define SO_DEBUG 1
-#define SO_REUSEADDR 2
-#define SO_TYPE 3
-#define SO_ERROR 4
-#define SO_KEEPALIVE 9
+
+/* THE SO_ NAMES, transcribed from this box's asm-generic/socket.h BY SCRIPT.
+   Eighty-one numbers is the population where one recalled digit sets a
+   DIFFERENT option, and setsockopt does not reject an unknown-to-you-but-real
+   name -- SO_BROADCAST(6) mistyped as SO_DONTROUTE(5) succeeds and the
+   broadcast send then fails much later with EACCES.
+
+   asm-generic is the table every target pxx builds for uses; only alpha,
+   mips, parisc and sparc renumber these, and pxx targets none of them. Five of
+   these names were here already, hand-written and correct; the rest were
+   simply absent, so SO_BROADCAST in libbb/xconnect.c became an undeclared
+   identifier treated as 0 -- which is not an option at all, and setsockopt
+   would have been asked to set option zero.
+
+   The _OLD/_NEW pairs are the kernel's own y2038 split; SO_RCVTIMEO and
+   SO_SNDTIMEO below resolve to whichever the target's word size wants, as
+   glibc does. */
+#define SO_DEBUG                         1
+#define SO_REUSEADDR                     2
+#define SO_TYPE                          3
+#define SO_ERROR                         4
+#define SO_DONTROUTE                     5
+#define SO_BROADCAST                     6
+#define SO_SNDBUF                        7
+#define SO_RCVBUF                        8
+#define SO_SNDBUFFORCE                   32
+#define SO_RCVBUFFORCE                   33
+#define SO_KEEPALIVE                     9
+#define SO_OOBINLINE                     10
+#define SO_NO_CHECK                      11
+#define SO_PRIORITY                      12
+#define SO_LINGER                        13
+#define SO_BSDCOMPAT                     14
+#define SO_REUSEPORT                     15
+#define SO_PASSCRED                      16
+#define SO_PEERCRED                      17
+#define SO_RCVLOWAT                      18
+#define SO_SNDLOWAT                      19
+#define SO_RCVTIMEO_OLD                  20
+#define SO_SNDTIMEO_OLD                  21
+#define SO_SECURITY_AUTHENTICATION       22
+#define SO_SECURITY_ENCRYPTION_TRANSPORT 23
+#define SO_SECURITY_ENCRYPTION_NETWORK   24
+#define SO_BINDTODEVICE                  25
+#define SO_ATTACH_FILTER                 26
+#define SO_DETACH_FILTER                 27
+#define SO_PEERNAME                      28
+#define SO_ACCEPTCONN                    30
+#define SO_PEERSEC                       31
+#define SO_PASSSEC                       34
+#define SO_MARK                          36
+#define SO_PROTOCOL                      38
+#define SO_DOMAIN                        39
+#define SO_RXQ_OVFL                      40
+#define SO_WIFI_STATUS                   41
+#define SO_PEEK_OFF                      42
+#define SO_NOFCS                         43
+#define SO_LOCK_FILTER                   44
+#define SO_SELECT_ERR_QUEUE              45
+#define SO_BUSY_POLL                     46
+#define SO_MAX_PACING_RATE               47
+#define SO_BPF_EXTENSIONS                48
+#define SO_INCOMING_CPU                  49
+#define SO_ATTACH_BPF                    50
+#define SO_ATTACH_REUSEPORT_CBPF         51
+#define SO_ATTACH_REUSEPORT_EBPF         52
+#define SO_CNX_ADVICE                    53
+#define SO_MEMINFO                       55
+#define SO_INCOMING_NAPI_ID              56
+#define SO_COOKIE                        57
+#define SO_PEERGROUPS                    59
+#define SO_ZEROCOPY                      60
+#define SO_TXTIME                        61
+#define SO_BINDTOIFINDEX                 62
+#define SO_TIMESTAMP_OLD                 29
+#define SO_TIMESTAMPNS_OLD               35
+#define SO_TIMESTAMPING_OLD              37
+#define SO_TIMESTAMP_NEW                 63
+#define SO_TIMESTAMPNS_NEW               64
+#define SO_TIMESTAMPING_NEW              65
+#define SO_RCVTIMEO_NEW                  66
+#define SO_SNDTIMEO_NEW                  67
+#define SO_DETACH_REUSEPORT_BPF          68
+#define SO_PREFER_BUSY_POLL              69
+#define SO_BUSY_POLL_BUDGET              70
+#define SO_NETNS_COOKIE                  71
+#define SO_BUF_LOCK                      72
+#define SO_RESERVE_MEM                   73
+#define SO_TXREHASH                      74
+#define SO_RCVMARK                       75
+#define SO_PASSPIDFD                     76
+#define SO_PEERPIDFD                     77
+#define SO_DEVMEM_LINEAR                 78
+#define SO_DEVMEM_DMABUF                 79
+#define SO_DEVMEM_DONTNEED               80
+#define SO_RCVPRIORITY                   82
+#define SO_PASSRIGHTS                    83
+#define SO_INQ                           84
+
+/* The y2038 aliases. On a 64-bit target the _OLD forms already carry a 64-bit
+   timeval, so they ARE the current ones; on a 32-bit target the kernel offers
+   _NEW for the 64-bit struct. This runtime marshals timeouts as native words,
+   so it follows the same rule glibc does. */
+#if defined(__LP64__) || defined(_LP64)
+# define SO_RCVTIMEO SO_RCVTIMEO_OLD
+# define SO_SNDTIMEO SO_SNDTIMEO_OLD
+# define SO_TIMESTAMP SO_TIMESTAMP_OLD
+#else
+# define SO_RCVTIMEO SO_RCVTIMEO_NEW
+# define SO_SNDTIMEO SO_SNDTIMEO_NEW
+# define SO_TIMESTAMP SO_TIMESTAMP_NEW
+#endif
 
 #define MSG_OOB 1
 #define MSG_PEEK 2
@@ -78,6 +186,11 @@ int shutdown(int sockfd, int how);
 int setsockopt(int sockfd, int level, int optname, const void *optval, socklen_t optlen);
 int getsockopt(int sockfd, int level, int optname, void *optval, socklen_t *optlen);
 int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+/* getpeername(2). Same shape as getsockname and, like it, IPv4 only for now:
+   the PAL entry behind it parses an AF_INET sockaddr, so a v6 peer comes back
+   as 0.0.0.0:0 rather than as an error. That limit is the socket layer's, not
+   this declaration's. */
+int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 ssize_t sendmsg(int sockfd, const struct msghdr *msg, int flags);
 ssize_t recvmsg(int sockfd, struct msghdr *msg, int flags);
 

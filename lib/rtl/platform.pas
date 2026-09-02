@@ -160,11 +160,20 @@ function PalGetGroups(count: Integer; list: Pointer): Integer;
 function PalGetPriority(which, who: Integer): Integer;
 function PalSetPriority(which, who, prio: Integer): Integer;
 function PalGetSid(pid: Integer): Integer;
+function PalRawSyscall(num, a1, a2, a3, a4, a5, a6: NativeInt): NativeInt;
+function PalSetPgid(pid, pgid: Integer): Integer;
+function PalGetPgid(pid: Integer): Integer;
+function PalAlarm(seconds: LongWord): Integer;
+function PalSetHostname(name: PChar; len: Integer): Integer;
+function PalSetGroups(count: Integer; list: Pointer): Integer;
+function PalSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
+function PalSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
 function PalClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalUtimensat(dirFd: Integer; path: PChar;
                       aSec, aNsec, mSec, mNsec: Int64;
                       flags: Integer): Integer;
 function PalFsync(handle: Integer): Integer;
+function PalFdatasync(handle: Integer): Integer;
 function PalFchmod(handle, mode: Integer): Integer;
 function PalChmod(path: PChar; mode: Integer): Integer;
 function PalChown(path: PChar; owner, group: Integer): Integer;
@@ -446,6 +455,11 @@ begin
   Result := PalBackendFsync(handle);
 end;
 
+function PalFdatasync(handle: Integer): Integer;
+begin
+  Result := PalBackendFdatasync(handle);
+end;
+
 function PalSync: Integer;
 begin
   Result := PalBackendSync;
@@ -476,6 +490,46 @@ end;
 function PalGetSid(pid: Integer): Integer;
 begin
   Result := PalBackendGetSid(pid);
+end;
+
+function PalRawSyscall(num, a1, a2, a3, a4, a5, a6: NativeInt): NativeInt;
+begin
+  Result := PalBackendRawSyscall(num, a1, a2, a3, a4, a5, a6);
+end;
+
+function PalSetPgid(pid, pgid: Integer): Integer;
+begin
+  Result := PalBackendSetPgid(pid, pgid);
+end;
+
+function PalGetPgid(pid: Integer): Integer;
+begin
+  Result := PalBackendGetPgid(pid);
+end;
+
+function PalAlarm(seconds: LongWord): Integer;
+begin
+  Result := PalBackendAlarm(seconds);
+end;
+
+function PalSetHostname(name: PChar; len: Integer): Integer;
+begin
+  Result := PalBackendSetHostname(name, len);
+end;
+
+function PalSetGroups(count: Integer; list: Pointer): Integer;
+begin
+  Result := PalBackendSetGroups(count, list);
+end;
+
+function PalSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
+begin
+  Result := PalBackendSigTimedWait(setPtr, setSize, sec, nsec);
+end;
+
+function PalSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
+begin
+  Result := PalBackendSigProcMask(how, setPtr, oldSetPtr, setSize);
 end;
 
 function PalClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;

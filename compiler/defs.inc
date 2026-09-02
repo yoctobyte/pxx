@@ -1003,6 +1003,20 @@ const
   IR_LABEL     = 12;
   IR_JUMP      = 13;
   IR_JUMP_IF_FALSE = 14;
+  { How far IRCondOperandIsZero walks a chain of ANDs looking for a literal
+    zero. The recursion terminates without it -- an operand is always a lower
+    node index than its consumer -- so this is a statement of intent, not a
+    guard: the shape it exists for is two levels deep (an unsigned width mask
+    over a feature-flag mask) and eight leaves room for a nest nobody writes.
+
+    NOT SPELLED `IR_...`, deliberately: tools' iropname lint reads every IR_<x>
+    constant in this file as an IR OP and requires an IROpName arm for it, and
+    it was right to -- an op with no name reports itself as `unknown` in the
+    "unsupported node in IR codegen" error on every target. A tuning constant
+    wearing the op prefix is the name not being the thing, and the gate caught
+    it within a minute of it being written. }
+  ZERO_CHAIN_MAX_DEPTH = 8;
+
   IR_NEG       = 15;
   IR_NOT       = 16;
   IR_LEA       = 17;
@@ -1102,6 +1116,7 @@ const
                            this op. }
 
   IR_FPU_MASK      = 72; { float-exception MASK control (feature-float-exception-mask-control).
+
                            IRC selects the direction: 0 = read the current mask, 1 = IRA is the
                            new mask and the PREVIOUS one is returned. The value is a 6-bit set in
                            FPC's TFPUException order (bit 0 = exInvalidOp, 1 = exDenormalized,
@@ -3133,6 +3148,18 @@ var
   CTypePtrBaseRec : Integer; { ultimate pointed-at base record id when CTypePtrDepth>0 }
   CTypeBaseRec : Integer;    { record id of the base type before any pointer suffix, else REC_NONE }
   CTypeProcSig : Integer;    { fn-pointer typedef signature Procs[] index of the last ParseCDeclType (CTypePtrDepth=0), else -1 }
+  { CParseFnSigGroup's outputs. A fn-pointer's PARAMETER LIST is parsed in
+    exactly one place now and reached from two declarator shapes -- `ret
+    (*name)(params)` and a parameter written with FUNCTION type, `ret
+    name(params)`, which C 6.7.5.3p8 adjusts to the same pointer. They are
+    globals rather than var-parameters because the caller in ParseCDeclType
+    needs them AFTER the call, to register a second signature when the pointee
+    itself returns a function pointer. }
+  CFnSigNParams : Integer;
+  CFnSigVariadic : Boolean;
+  CFnSigPTypes : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  CFnSigPNames : array[0..MAX_PROC_PARAMS-1] of AnsiString;
+  CFnSigPRecIds : array[0..MAX_PROC_PARAMS-1] of Integer;
   CTypePtrElemProcSig : Integer; { POINTER-to-fn-ptr (`ft *`): sig of the pointee fn-pointer, so `(*pf)()`/`(**(ft*)x)()` can find the callee sig CTypeProcSig drops. -1 = pointee not a fn-ptr }
   CTypeTypedefArrLen : Integer; { array-typedef (`typedef float v4[4]`) inherent length of the last ParseCDeclType, else -1 }
   CTypeFnPtrName : AnsiString; { fn-pointer declarator name `ret (*Name)(..)` captured by the last ParseCDeclType, else '' }

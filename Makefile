@@ -12632,6 +12632,108 @@ test-core: $(COMPILER)
 	# source prints `9 [/mnt/back\slash] [ro] 1 0', and pxx's output is identical
 	# to gcc's on all ten rows. The compiler and the crtl were right.
 	tools/expect_same.sh c_mntprio26 "$$($(TESTTMP)/c_mntprio26)" "$$(printf '1 1 1\n2 -1 1\n3 3 0\n4 -1 1\n5 0\n6 0\n7 [/dev/sda1] [/mnt/my disk] [ext4] 0 2\n8 0 1\n9 [/mnt/back\\slash] [ro] 1 0\n10 1')"
+	# A FUNCTION-TYPED PARAMETER, `void f(int cb(int))', which C says is a
+	# function POINTER parameter exactly as `void f(int (*cb)(int))' is. The two
+	# spellings went down two different paths: the pointer form through
+	# ParseCDeclType, the bare form through ParseCSubroutine's own parameter loop,
+	# which had an array-decay arm and no function arm at all -- so the parameter
+	# became a plain pointer with no signature and the call through it was
+	# rejected. Both now share one parser (CParseFnSigGroup); rows 5 and 6 are the
+	# positive control that they really do, repeating rows 1 and 2 through the
+	# pointer spelling. Row 3 pins a parameter list that is not just (int).
+	# All six rows were diffed against gcc by compiling this same file with it.
+	# feature-c-corpus-busybox-multi-applet
+	# A branch on `opt & ZERO' where opt is UNSIGNED -- the feature-flag idiom in
+	# the shape real C produces it. The frontend wraps an unsigned result in its
+	# width mask, so the condition arrives as and(and(opt,0),0xFFFFFFFF) and the
+	# one-level `x and 0' identity looked at the OUTER node, whose operands are a
+	# binop and a NONZERO literal. Nothing folded, the arm stayed live, and the
+	# call inside it became a real external reference to a symbol the config
+	# defines nowhere -- busybox's `if (opt & OPT_2COMMAND)' in archival/tar.c
+	# kept data_extract_to_command, the last undefined symbol in the 141-applet
+	# link. gcc drops it at every -O level, -O0 included.
+	# ROWS 3/4 ARE THE POSITIVE CONTROL AND THEY ASSERT WHAT MUST SURVIVE: C
+	# evaluates both operands of `&', so `bump() & 0' is a dead arm with a LIVE
+	# call and the counter must reach 1 then 2. Every "the arm is gone" row
+	# passes while a fold is deleting a call the program was supposed to make.
+	# If the fold does not fire the missing symbol says so -- the program will
+	# not link or dies before main -- so a clean run is itself the assertion.
+	# Diffed against gcc by compiling this same file with it.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/c_const_and_chain_dead_arm.c $(TESTTMP)/c_andchain26
+	tools/expect_same.sh c_andchain26 "$$($(TESTTMP)/c_andchain26)" "$$(printf '1 0\n2 1\n3 1\n4 2\n5 done')"
+	./$(COMPILER) test/c_fn_typed_parameter.c $(TESTTMP)/c_fnparam26
+	tools/expect_same.sh c_fnparam26 "$$($(TESTTMP)/c_fnparam26)" "$$(printf '1 42\n2 10\n3 u7\nv9\n4 1\n5 42\n6 10')"
+	# sigprocmask/sigtimedwait/sigwait and wait4/wait3 -- see the file's header for
+	# why waiting works where sigaction still cannot. sigprocmask USED TO RETURN 0
+	# AND DO NOTHING, so rows 2-4 read the mask back out rather than trusting the
+	# return value; with a fake one, row 5's kill terminates the process and rows
+	# 6+ never print, which shows up here as a short output.
+	# Row 18 is the positive control on wait4's fourth argument: ru_maxrss cannot
+	# legitimately be 0 for a process that ran.
+	# All 22 rows were diffed against glibc by compiling this same file with gcc.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/c_crtl_signal_and_wait.c $(TESTTMP)/c_sigwait26
+	tools/expect_same.sh c_sigwait26 "$$($(TESTTMP)/c_sigwait26)" "$$(printf '1 0\n2 0\n3 1\n4 0\n5 0\n6 10\n7 -1 1\n8 0\n9 0 10\n10 0\n11 0\n12 0\n13 -1 1\n14 1\n15 1\n16 1\n17 7\n18 1\n19 1\n20 1\n21 3\n22 -1 1')"
+	# The tty and socket ioctl numbers, and struct sysinfo's layout. A wrong ioctl
+	# number is not an error -- it is a DIFFERENT CALL -- and TIOCSCTTY was
+	# reaching busybox's init as an undeclared identifier treated as 0. Rows 1-21
+	# name the ones busybox issues; row 22 is a position-weighted digest over all
+	# 144, so one wrong or reordered constant anywhere moves it.
+	# Rows 23-26 are sysinfo OFFSETS, because the kernel writes that struct and a
+	# skewed field makes `free' print the buffer count as total RAM. Rows 27-33 are
+	# plausibility, not equality: freeram moves between two runs, totalram must not.
+	# All rows were diffed against glibc by compiling this same file with gcc.
+	# feature-c-corpus-busybox-multi-applet
+	# The /etc/services walk, h_errno/hstrerror, inet_ntoa, getpgid and execl's
+	# variadic list. Every row checks a VALUE, not a return code, because each of
+	# these has a plausible wrong answer: s_port is in NETWORK order (rows 3/4
+	# together pin the byte order -- a wrapper that forgets returns 5380 for 80,
+	# in range and no error), and rows 7-9 need THREE codes to give THREE strings
+	# because hstrerror returned the default for every one of them when the
+	# HOST_NOT_FOUND constants were declared below netdb.h's own includes.
+	# Row 12 reads the CHILD's exit status: a successful exec does not return, so
+	# execl's own return value proves nothing about the argument list.
+	# The fflush before the fork is deliberate -- without it the row order is a
+	# test of the buffering mode, not of exec. See the file.
+	# All rows were diffed against glibc by compiling this same file with gcc.
+	# feature-c-corpus-busybox-multi-applet
+	# getaddrinfo/getnameinfo, the NUMERIC contract. crtl has no DNS and no NSS,
+	# so a hostname is EAI_NONAME and a reverse lookup never happens -- but a
+	# dotted quad, a NULL node under AI_PASSIVE, a numeric or /etc/services port
+	# and the sockaddr-to-string direction must all work, because that is every
+	# path libbb/xconnect.c takes with an address it was handed literally.
+	# ROW 1 IS THE ROW THAT WAS FAILING: the old body returned EAI_NONAME for
+	# everything while its comment claimed dotted quads resolved. Rows 2-3 read
+	# the resulting sockaddr, because a getaddrinfo that returns 0 and fills
+	# nothing passes row 1 by itself -- and the struct really was skewed, so
+	# 10.1.2.3:80 came back as 2.0.0.0:0 with no error at all.
+	# Row 12: NI_NAMEREQD asks for a name and would rather have nothing than a
+	# number, so handing back the dotted quad answers a DIFFERENT question while
+	# looking like success. Rows 7/8 pin the AI_PASSIVE asymmetry -- backwards
+	# binds a server to the loopback and it answers only itself.
+	# All rows were diffed against glibc by compiling this same file with gcc.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/c_crtl_getaddrinfo_numeric.c $(TESTTMP)/c_gai26
+	tools/expect_same.sh c_gai26 "$$($(TESTTMP)/c_gai26)" "$$(printf '1 0\n2 1\n3 80 10.1.2.3\n4 16\n5 0\n6 80\n7 0.0.0.0\n8 127.0.0.1\n9 1\n10 1\n11 0 10.11.12.13 22\n12 1\n13 0 ssh\n14 1\n15 1')"
+	# The BSD bit macros, the unprefixed sighandler_t, and fdatasync -- three
+	# entries in busybox's HAVE_* default table (include/platform.h:403-433) that
+	# crtl lacked. busybox defines its own fallback ONLY under the matching #undef,
+	# so a missing one is a compile error with no path around it.
+	# ROW 1 IS THE ONE WITH A WRONG ANSWER AVAILABLE: setbit indexes BYTES while
+	# its bit number runs across the array, so bit 9 is bit 1 of a[1]. A macro
+	# that gets the halves inconsistent still sets A bit, in range, no error.
+	# The row prints three bytes so the bit's PLACE is checked, not its presence.
+	# Row 9 is the negative control that fdatasync is a real syscall and not an
+	# alias for fsync: EBADF from the kernel on a closed fd, not a silent 0.
+	# All rows were diffed against glibc by compiling this same file with gcc.
+	# feature-c-corpus-busybox-multi-applet
+	./$(COMPILER) test/c_crtl_bits_and_fdatasync.c $(TESTTMP)/c_bits26
+	tools/expect_same.sh c_bits26 "$$($(TESTTMP)/c_bits26)" "$$(printf '1 1 2 0\n2 1\n3 1\n4 0 0\n5 1\n6 1\n7 5\n8 0\n9 -1 1')"
+	./$(COMPILER) test/c_crtl_netdb_and_exec.c $(TESTTMP)/c_netdb26
+	tools/expect_same.sh c_netdb26 "$$($(TESTTMP)/c_netdb26)" "$$(printf '1 1\n2 0\n3 80\n4 1\n5 1\n6 1\n7 1\n8 1\n9 0\n10 127.0.0.1\n11 1\na b c\n12 0')"
+	./$(COMPILER) test/c_crtl_ioctl_and_sysinfo.c $(TESTTMP)/c_ioctlsi26
+	tools/expect_same.sh c_ioctlsi26 "$$($(TESTTMP)/c_ioctlsi26)" "$$(printf '1 0x5401\n2 0x5402\n3 0x5404\n4 0x541B\n5 0x540E\n6 0x5422\n7 0x540F\n8 0x5410\n9 0x5413\n10 0x5414\n11 0x5429\n12 0x5412\n13 0x541D\n14 0x541C\n15 0x5415\n16 0x5418\n17 0x8912\n18 0x8913\n19 0x8916\n20 0x890B\n21 0x8927\n22 0x7CF441\n23 112 0 8\n24 32 40 48 56\n25 64 72 80 82\n26 88 96 104 16\n27 0\n28 1\n29 1\n30 1\n31 1\n32 0\n33 1')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The SIBLING defect, and it is not the const-branch one: a loop in dead code

@@ -25,6 +25,9 @@
  */
 
 #include <errno.h>
+#include <stdio.h>   /* snprintf, for inet_ntoa */
+#include <stdlib.h>  /* malloc/free/strtol, for the getaddrinfo result block */
+#include <string.h>  /* memcpy/strlen/strncpy */
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/socket.h>
@@ -46,6 +49,7 @@ extern long __pxx_recvfrom_ipv4(int fd, void *buf, int len, unsigned long *outHo
 extern int __pxx_shutdown(int fd, int how);
 extern int __pxx_socket_close(int fd);
 extern int __pxx_getsockname_ipv4(int fd, unsigned long *outHost, int *outPort);
+extern int __pxx_getpeername_ipv4(int fd, unsigned long *outHost, int *outPort);
 extern int __pxx_getsockerror(int fd);
 
 uint16_t htons(uint16_t v) { return (uint16_t)(((v & 0x00ffU) << 8) | ((v & 0xff00U) >> 8)); }
@@ -201,10 +205,44 @@ int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   return 0;
 }
 
+int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
+  unsigned long host;
+  int port;
+  int rc = __pxx_getpeername_ipv4(sockfd, &host, &port);
+  if (rc < 0) return __crtl_sock_fail(rc);
+  __crtl_fill_sockaddr_in(addr, addrlen, host, port);
+  return 0;
+}
+
 /* ---- textual IPv4 conversion (arpa/inet.h) -------------------------------- */
 /* Pure string<->uint32 parsing — no resolver, no allocation. Added for the
    ENet candidate (game-library ladder); AF_INET only, matching the rest of
    this IPv4-only socket layer. */
+
+/* inet_ntoa(3): the dotted quad for an address held BY VALUE.
+
+   ONE STATIC BUFFER, invalidated by the next call, because that is glibc's
+   contract and callers are written against it -- busybox's route.c prints one
+   address per printf for exactly this reason. Returning a per-call buffer
+   would be kinder and would also be a different function: code that saves the
+   pointer and calls again expects the FIRST string to change, and some of it
+   compares the two pointers.
+
+   The bytes come out in NETWORK order, low byte first in memory, which is
+   what makes this a memcpy-free read of s_addr rather than an ntohl. */
+/* The two addresses <netinet/in.h> declares. They are DEFINED here rather than
+   left as macros because programs take their address and compare against them
+   by pointer; a macro-only spelling compiles and then links against nothing. */
+const struct in6_addr in6addr_any = IN6ADDR_ANY_INIT;
+const struct in6_addr in6addr_loopback = IN6ADDR_LOOPBACK_INIT;
+
+char *inet_ntoa(struct in_addr in) {
+  static char buf[16];
+  const unsigned char *p = (const unsigned char *)&in.s_addr;
+  snprintf(buf, sizeof buf, "%u.%u.%u.%u",
+           (unsigned)p[0], (unsigned)p[1], (unsigned)p[2], (unsigned)p[3]);
+  return buf;
+}
 
 int inet_aton(const char *s, struct in_addr *out) {
   unsigned long parts[4];
@@ -261,18 +299,204 @@ struct hostent *gethostbyaddr(const void *addr, socklen_t len, int type) {
   (void)addr; (void)len; (void)type; return 0;
 }
 
-/* getaddrinfo: numeric-host only (no DNS). Callers that pass a dotted-quad
-   `node` still resolve; a hostname reports EAI_NONAME. Kept minimal — a real
-   resolver is the DNS-library track. */
+/* ---- getaddrinfo / getnameinfo -------------------------------------------
+   NUMERIC ONLY, AND THAT IS THE WHOLE CONTRACT. There is no DNS client in this
+   runtime and no NSS to load one from, so a hostname is EAI_NONAME here and a
+   reverse lookup never happens. What DOES work is everything busybox's
+   libbb/xconnect.c needs to reach an address it was handed literally: a dotted
+   quad, a NULL node under AI_PASSIVE, a numeric or /etc/services port name,
+   and the sockaddr-to-string direction.
+
+   THE PREVIOUS BODY RETURNED EAI_NONAME FOR EVERYTHING while its comment said
+   "callers that pass a dotted-quad node still resolve". The comment described
+   the intent and the code never did it; the two disagreed and the comment was
+   the one worth keeping, so this implements it. Anything that called
+   getaddrinfo with an IP literal -- which is every busybox networking applet
+   under `-n', and every one of them when given an address rather than a name
+   -- got "bad address" from a resolver that had not looked.
+
+   IPv4 ONLY. An AF_INET6 hint is EAI_FAMILY rather than a v6 sockaddr this
+   socket layer could not then connect. Declaring the type is not a claim that
+   it works, and returning a struct nothing can use would be exactly that. */
+
+/* One malloc per result: the addrinfo, its sockaddr and its canonname live in
+   a single block, so freeaddrinfo frees one pointer per node and cannot
+   half-free a partially built list. */
+struct pxx_ai_block {
+  struct addrinfo ai;
+  struct sockaddr_in sa;
+  char canon[256];
+};
+
+static int ai_port(const char *service, const struct addrinfo *hints,
+                   unsigned short *out) {
+  const char *q;
+  long v;
+  struct servent *se;
+  int numeric_only, dgram;
+
+  *out = 0;
+  if (!service || !*service) return 0;
+
+  /* all digits -> a port number, whatever the flags say */
+  for (q = service; *q; q++)
+    if (*q < '0' || *q > '9') break;
+  if (*q == 0) {
+    v = strtol(service, 0, 10);
+    if (v < 0 || v > 65535) return EAI_SERVICE;
+    *out = (unsigned short)v;
+    return 0;
+  }
+
+  numeric_only = hints && (hints->ai_flags & AI_NUMERICSERV);
+  if (numeric_only) return EAI_NONAME;
+
+  dgram = hints && hints->ai_socktype == SOCK_DGRAM;
+  se = getservbyname(service, dgram ? "udp" : "tcp");
+  if (!se) return EAI_SERVICE;
+  /* s_port is ALREADY in network order -- see src/netdb.c. Converting it back
+     here rather than storing it swapped is the one place this is easy to get
+     wrong twice and have it cancel out. */
+  *out = ntohs((unsigned short)se->s_port);
+  return 0;
+}
+
 int getaddrinfo(const char *node, const char *service,
                 const struct addrinfo *hints, struct addrinfo **res) {
-  (void)service; (void)hints;
-  if (res) *res = 0;
-  (void)node;
-  return -2; /* EAI_NONAME — no resolver; numeric paths use inet_pton directly */
+  struct pxx_ai_block *b;
+  struct in_addr addr;
+  unsigned short port;
+  int fam, rc;
+
+  if (!res) return EAI_SYSTEM;
+  *res = 0;
+  if (!node && !service) return EAI_NONAME;
+
+  fam = hints ? hints->ai_family : AF_UNSPEC;
+  if (fam != AF_UNSPEC && fam != AF_INET) return EAI_FAMILY;
+
+  rc = ai_port(service, hints, &port);
+  if (rc != 0) return rc;
+
+  if (!node) {
+    /* AI_PASSIVE means "an address to bind to": the wildcard. Without it the
+       caller wants a destination, and the destination for "no host" is the
+       loopback -- that asymmetry is getaddrinfo's, not ours. */
+    addr.s_addr = (hints && (hints->ai_flags & AI_PASSIVE))
+                    ? htonl(INADDR_ANY) : htonl(INADDR_LOOPBACK);
+  } else if (inet_pton(AF_INET, node, &addr) != 1) {
+    return EAI_NONAME;    /* a NAME, and there is no resolver -- see above */
+  }
+
+  b = (struct pxx_ai_block *)malloc(sizeof(*b));
+  if (!b) return EAI_MEMORY;
+  memset(b, 0, sizeof(*b));
+
+  b->sa.sin_family = AF_INET;
+  b->sa.sin_port = htons(port);
+  b->sa.sin_addr = addr;
+
+  b->ai.ai_family = AF_INET;
+  b->ai.ai_socktype = hints ? hints->ai_socktype : 0;
+  b->ai.ai_protocol = hints ? hints->ai_protocol : 0;
+  b->ai.ai_flags = hints ? hints->ai_flags : 0;
+  b->ai.ai_addrlen = (socklen_t)sizeof(b->sa);
+  b->ai.ai_addr = (struct sockaddr *)&b->sa;
+  b->ai.ai_next = 0;
+  if (hints && (hints->ai_flags & AI_CANONNAME) && node) {
+    /* The canonical name of a numeric address is the numeric address. Nothing
+       here can produce anything better, and leaving it NULL makes a caller
+       that prints it print nothing. */
+    strncpy(b->canon, node, sizeof(b->canon) - 1);
+    b->ai.ai_canonname = b->canon;
+  }
+  *res = &b->ai;
+  return 0;
 }
-void freeaddrinfo(struct addrinfo *res) { (void)res; }
-const char *gai_strerror(int errcode) { (void)errcode; return "resolver unavailable"; }
+
+void freeaddrinfo(struct addrinfo *res) {
+  struct addrinfo *next;
+  /* Every node in a list this file built is the head of its own block, so the
+     addrinfo pointer IS the malloc pointer. A list from anywhere else would
+     not be, which is why nothing else builds one. */
+  while (res) {
+    next = res->ai_next;
+    free(res);
+    res = next;
+  }
+}
+
+const char *gai_strerror(int errcode) {
+  switch (errcode) {
+    case 0:             return "Success";
+    case EAI_BADFLAGS:  return "Bad value for ai_flags";
+    case EAI_NONAME:    return "Name or service not known";
+    case EAI_AGAIN:     return "Temporary failure in name resolution";
+    case EAI_FAIL:      return "Non-recoverable failure in name resolution";
+    case EAI_FAMILY:    return "ai_family not supported";
+    case EAI_SOCKTYPE:  return "ai_socktype not supported";
+    case EAI_SERVICE:   return "Servname not supported for ai_socktype";
+    case EAI_MEMORY:    return "Memory allocation failure";
+    case EAI_SYSTEM:    return "System error";
+    case EAI_OVERFLOW:  return "Argument buffer overflow";
+    default:            return "Unknown error";
+  }
+}
+
+int getnameinfo(const struct sockaddr *sa, socklen_t salen,
+                char *host, socklen_t hostlen,
+                char *serv, socklen_t servlen, int flags) {
+  const struct sockaddr_in *in = (const struct sockaddr_in *)sa;
+  char buf[INET_ADDRSTRLEN];
+  struct servent *se;
+  unsigned short port;
+  size_t n;
+
+  if (!sa) return EAI_FAMILY;
+  if (sa->sa_family != AF_INET) return EAI_FAMILY;
+  if (salen < (socklen_t)sizeof(struct sockaddr_in)) return EAI_FAMILY;
+
+  if (host && hostlen > 0) {
+    /* NI_NAMEREQD MUST FAIL. A caller that asked for a name and would rather
+       have nothing than a number is asking a question this runtime cannot
+       answer, and handing back the dotted quad answers a DIFFERENT question
+       while looking like success -- busybox's xmalloc_sockaddr2host wants the
+       NULL. */
+    if (flags & NI_NAMEREQD) return EAI_NONAME;
+    if (!inet_ntop(AF_INET, &in->sin_addr, buf, sizeof(buf))) return EAI_FAIL;
+    n = strlen(buf);
+    if (n + 1 > (size_t)hostlen) return EAI_OVERFLOW;
+    memcpy(host, buf, n + 1);
+  }
+
+  if (serv && servlen > 0) {
+    port = ntohs(in->sin_port);        /* for printing: host order */
+    se = 0;
+    /* getservbyport takes NETWORK order -- the same convention servent.s_port
+       stores -- so the field goes in unconverted rather than round-tripped
+       through `port'. Writing htons(ntohs(x)) here would be correct and would
+       also read as if one of the two were the fix for something. */
+    if (!(flags & NI_NUMERICSERV))
+      se = getservbyport((int)in->sin_port, (flags & NI_DGRAM) ? "udp" : "tcp");
+    if (se && se->s_name) {
+      n = strlen(se->s_name);
+      if (n + 1 > (size_t)servlen) return EAI_OVERFLOW;
+      memcpy(serv, se->s_name, n + 1);
+    } else {
+      /* snprintf would be the obvious spelling, but it TRUNCATES, and a
+         truncated port is a different port. Format into a local and check. */
+      char pbuf[8];
+      int k = 0, i;
+      unsigned short v = port;
+      if (v == 0) pbuf[k++] = '0';
+      while (v) { pbuf[k++] = (char)('0' + v % 10); v = (unsigned short)(v / 10); }
+      if ((size_t)k + 1 > (size_t)servlen) return EAI_OVERFLOW;
+      for (i = 0; i < k; i++) serv[i] = pbuf[k - 1 - i];
+      serv[k] = 0;
+    }
+  }
+  return 0;
+}
 
 /* sendmsg/recvmsg: scatter/gather over the PAL's single-buffer send/recv.
    The PAL has no native iovec syscall, so concatenate: sendmsg walks the iovec

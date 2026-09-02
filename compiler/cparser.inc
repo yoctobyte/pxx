@@ -92,6 +92,7 @@ function CNodeArrayShape(node: Integer; var elemSz, elemRec: Integer;
 function CTypedefNameAt(idx: Integer): AnsiString; forward;
 function CSuggestTypeName(const name: AnsiString): AnsiString; forward;
 function ParseCDeclType: TTypeKind; forward;
+function CParseFnSigGroup(fpRet: TTypeKind; fpRetElemTk, fpRetElemRec: Integer): Integer; forward;
 function ParseCCommaStmt: Integer; forward;
 function ParseCSwitchAST: Integer; forward;
 function CNodeIsPointer(node: Integer): Boolean; forward;
@@ -4963,6 +4964,109 @@ end;
   global CTypeIsVoid when the result is bare `void` (no pointer). Width and
   signedness are preserved: long/long long -> 8-byte on LP64, short -> 2,
   any pointer -> untyped Pointer (8). }
+{ ONE PLACE THAT PARSES A FUNCTION-POINTER'S PARAMETER LIST, reached from two
+  declarator shapes that C says mean the same thing:
+
+    ret (*name)(params)     -- the pointer spelling, from ParseCDeclType
+    ret name(params)         -- a PARAMETER declared with FUNCTION type, which
+                                C 6.7.5.3p8 adjusts to pointer-to-function
+
+  The second is not a curiosity: busybox's libbb/procps.c writes
+  `static char* get_cached(int ug, uid_t id, char* FAST_FUNC x2x_utoa(uid_t))`
+  and lua and sqlite use it too. It used to parse as far as the name and then
+  leave the parameter list unconsumed, so the body's `x2x_utoa(id)` was a call
+  to an undeclared function.
+
+  Duplicating the forty lines below for the second shape is the shape this repo
+  keeps paying for -- the second copy is the one that stays broken -- so both
+  callers come here. The results that the caller still needs afterwards
+  (parameter types, names, record ids, count, variadic) are left in the
+  CFnSig* globals, because ParseCDeclType registers a SECOND signature from
+  them when the pointee itself returns a function pointer.
+
+  `fpRet' is the return type already parsed by the caller; fpRetElemTk/Rec are
+  its pointed-at kind/record when it is a struct pointer. Returns the Procs[]
+  index of the registered signature, and sets CTypeProcSig to it. }
+function CParseFnSigGroup(fpRet: TTypeKind; fpRetElemTk, fpRetElemRec: Integer): Integer;
+var
+  fpPType: TTypeKind;
+  fpSig, fpRi: Integer;
+begin
+  CFnSigNParams := 0;
+  CFnSigVariadic := False;
+  if CurTok.Kind = tkLParen then
+  begin
+    Next;                           { consume the parameter-list '(' }
+    while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
+    begin
+      if IsCTypeTok then
+      begin
+        { NB parens REQUIRED: bare `ParseCDeclType` would read this function's
+          own Result (pxx bare-funcname rule), not recurse -> infinite loop. }
+        fpPType := ParseCDeclType();
+        if CTypeIsVoid then
+        begin
+          { (void) — no parameter }
+        end
+        else if CFnSigNParams < MAX_PROC_PARAMS then
+        begin
+          CFnSigPTypes[CFnSigNParams] := fpPType;
+          CFnSigPNames[CFnSigNParams] := 'a';
+          { ParseCDeclType leaves the record id here, the same source
+            precid[] reads for a named function's parameters. Without it a
+            fn-pointer signature cannot classify a by-value struct argument
+            and the indirect call marshals a pointer. }
+          CFnSigPRecIds[CFnSigNParams] := CTypeBaseRec;
+          Inc(CFnSigNParams);
+        end;
+        if CurTok.Kind = tkIdent then Next;  { optional parameter name }
+      end
+      else
+      begin
+        { `...` varargs marker (lexes to three tkDot) — record it so the fn-ptr
+          signature is marked variadic; the indirect-call marshalling then
+          applies C default-argument promotion + the correct cdecl arg order
+          (bug-c-i386-indirect-variadic-fnptr-00189). }
+        if CurTok.Kind = tkDot then CFnSigVariadic := True;
+        Next;
+      end;
+      Eat(tkComma);
+    end;
+    Eat(tkRParen);
+  end;
+  { Register the call signature whether or not the declarator carried a name.
+    A NAMED form `ret (*name)(params)` threads CTypeFnPtrName onto the
+    typedef/var/field/param; an ABSTRACT form `ret (*)(params)` has no name but
+    still needs CTypeProcSig set so a cast to a function-pointer type
+    (`((int(*)(const char*,int,int))p)(args)` — sqlite's osOpen syscall-table
+    idiom) yields a callable value. }
+  fpSig := RegisterProc('$cfnptr', True, fpRet, CFnSigNParams, CFnSigPNames, CFnSigPTypes);
+  Procs[fpSig].BodyAddr := -1;
+  ProcCdecl[fpSig] := True;          { C ABI (System V) for the indirect call }
+  { The record ids and the by-value decision, exactly as a named C function's
+    declaration does them. A fn-pointer signature is a CALLER-ONLY signature --
+    there is no body and no param sym anywhere -- so this is the only place
+    the indirect arm can learn that an argument is a register-classified
+    struct rather than a pointer. }
+  for fpRi := 0 to CFnSigNParams - 1 do
+    if fpRi < MAX_PROC_PARAMS then
+    begin
+      ProcParamRecId[fpSig * MAX_PROC_PARAMS + fpRi] := CFnSigPRecIds[fpRi];
+      if CFnSigPTypes[fpRi] = tyRecord then
+        Procs[fpSig].Params[fpRi].IsRef := not ABICRecordParamByValue(CFnSigPRecIds[fpRi]);
+    end;
+  ProcVariadic[fpSig] := CFnSigVariadic; { `...` in the fn-ptr signature }
+  CTypeProcSig := fpSig;             { caller threads this onto the typedef/var/field/cast }
+  { A struct-pointer return (`struct S *(*)()`) carries its pointed-at record on
+    the signature so an indirect call's result resolves field access. }
+  if (fpRet = tyPointer) and (fpRetElemRec >= REC_UCLASS_BASE) then
+  begin
+    ProcRetPtrElemTk[fpSig] := fpRetElemTk;
+    ProcRetPtrElemRec[fpSig] := fpRetElemRec;
+  end;
+  Result := fpSig;
+end;
+
 function ParseCDeclType: TTypeKind;
 var
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef, isAggBase: Boolean;
@@ -5408,78 +5512,18 @@ begin
       end;
       Next;
     until (depth = 0) or (CurTok.Kind = tkEOF);
-    { second group `(params)` — capture param types to build a call signature }
-    fpNParams := 0;
-    fpVariadic := False;
-    if CurTok.Kind = tkLParen then
-    begin
-      Next;                           { consume the parameter-list '(' }
-      while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
-      begin
-        if IsCTypeTok then
-        begin
-          { NB parens REQUIRED: bare `ParseCDeclType` would read this function's
-            own Result (pxx bare-funcname rule), not recurse -> infinite loop. }
-          fpPType := ParseCDeclType();
-          if CTypeIsVoid then
-          begin
-            { (void) — no parameter }
-          end
-          else if fpNParams < MAX_PROC_PARAMS then
-          begin
-            fpPTypes[fpNParams] := fpPType;
-            fpPNames[fpNParams] := 'a';
-            { ParseCDeclType leaves the record id here, the same source
-              precid[] reads for a named function's parameters. Without it a
-              fn-pointer signature cannot classify a by-value struct argument
-              and the indirect call marshals a pointer. }
-            fpPRecIds[fpNParams] := CTypeBaseRec;
-            Inc(fpNParams);
-          end;
-          if CurTok.Kind = tkIdent then Next;  { optional parameter name }
-        end
-        else
-        begin
-          { `...` varargs marker (lexes to three tkDot) — record it so the fn-ptr
-            signature is marked variadic; the indirect-call marshalling then
-            applies C default-argument promotion + the correct cdecl arg order
-            (bug-c-i386-indirect-variadic-fnptr-00189). }
-          if CurTok.Kind = tkDot then fpVariadic := True;
-          Next;
-        end;
-        Eat(tkComma);
-      end;
-      Eat(tkRParen);
-    end;
-    { Register the call signature whether or not the declarator carried a name.
-      A NAMED form `ret (*name)(params)` threads CTypeFnPtrName onto the
-      typedef/var/field/param; an ABSTRACT form `ret (*)(params)` has no name but
-      still needs CTypeProcSig set so a cast to a function-pointer type
-      (`((int(*)(const char*,int,int))p)(args)` — sqlite's osOpen syscall-table
-      idiom) yields a callable value. }
-    fpSig := RegisterProc('$cfnptr', True, fpRet, fpNParams, fpPNames, fpPTypes);
-    Procs[fpSig].BodyAddr := -1;
-    ProcCdecl[fpSig] := True;          { C ABI (System V) for the indirect call }
-    { The record ids and the by-value decision, exactly as a named C function's
-      declaration does them. A fn-pointer signature is a CALLER-ONLY signature --
-      there is no body and no param sym anywhere -- so this is the only place
-      the indirect arm can learn that an argument is a register-classified
-      struct rather than a pointer. }
+    { The parameter list, and the signature it registers, come from
+      CParseFnSigGroup -- the same routine a function-TYPED parameter uses. Its
+      outputs land in the CFnSig* globals; the pointee-returns-a-fn-pointer arm
+      below reads them to register its second signature. }
+    fpSig := CParseFnSigGroup(fpRet, fpRetElemTk, fpRetElemRec);
+    fpNParams := CFnSigNParams;
+    fpVariadic := CFnSigVariadic;
     for fpRi := 0 to fpNParams - 1 do
-      if fpRi < MAX_PROC_PARAMS then
-      begin
-        ProcParamRecId[fpSig * MAX_PROC_PARAMS + fpRi] := fpPRecIds[fpRi];
-        if fpPTypes[fpRi] = tyRecord then
-          Procs[fpSig].Params[fpRi].IsRef := not ABICRecordParamByValue(fpPRecIds[fpRi]);
-      end;
-    ProcVariadic[fpSig] := fpVariadic; { `...` in the fn-ptr signature }
-    CTypeProcSig := fpSig;             { caller threads this onto the typedef/var/field/cast }
-    { A struct-pointer return (`struct S *(*)()`) carries its pointed-at record on
-      the signature so an indirect call's result resolves field access. }
-    if (fpRet = tyPointer) and (fpRetElemRec >= REC_UCLASS_BASE) then
     begin
-      ProcRetPtrElemTk[fpSig] := fpRetElemTk;
-      ProcRetPtrElemRec[fpSig] := fpRetElemRec;
+      fpPTypes[fpRi] := CFnSigPTypes[fpRi];
+      fpPNames[fpRi] := CFnSigPNames[fpRi];
+      fpPRecIds[fpRi] := CFnSigPRecIds[fpRi];
     end;
     { Pointee returns a fn-pointer (`ret (* (*name)(pP))(rP)`, 00124): the trailing
       `(rP)`/fpRet group captured above IS the RETURNED fn's signature. Register a
@@ -11342,6 +11386,33 @@ begin
           begin
             pnames[nparams] := 'arg0';
             pnames[nparams][4] := Chr(Ord('0') + nparams);
+          end;
+          { C FUNCTION parameter `RET name(params)` is adjusted to
+            POINTER-to-function (C 6.7.5.3p8) -- the same adjustment the array
+            case just below performs for `T name[]`, and it was the missing arm
+            of that pair. Without it the parameter list was left unconsumed
+            after the name, the parameter kept the RETURN type, and every call
+            through it in the body was "call to undeclared function".
+            busybox libbb/procps.c declares
+              get_cached(int ug, uid_t id, char* FAST_FUNC x2x_utoa(uid_t id))
+            which is the ordinary way to write a callback parameter without a
+            typedef. The signature comes from CParseFnSigGroup, the SAME routine
+            `RET (*name)(params)` uses, so there is one parser for the list and
+            not two. }
+          if CurTok.Kind = tkLParen then
+          begin
+            pprocsig[nparams] := CParseFnSigGroup(ptypes[nparams],
+                                                  pelemtk[nparams], pelemrec[nparams]);
+            ptypes[nparams] := tyPointer;
+            pdepths[nparams] := 0;        { a fn-pointer, as the `(*name)` form }
+            pbasetk[nparams] := Ord(tyUnknown);
+            pbaserec[nparams] := REC_NONE;
+            pelemtk[nparams] := Ord(tyUnknown);
+            pelemrec[nparams] := REC_NONE;
+            precid[nparams] := REC_NONE;
+            pptrelemsig[nparams] := -1;
+            pptrarrlen[nparams] := 0;
+            pptrndims[nparams] := 0;
           end;
           { C array parameter `T name[...]` decays to a pointer `T *name` (lua
             ltable `computesizes(unsigned int nums[], ...)`). Consume the bracket

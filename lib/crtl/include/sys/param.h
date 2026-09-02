@@ -42,6 +42,17 @@
    scaled back; powerof2 is true for zero as well, which is what the BSD
    original does and what callers that guard a mask rely on. */
 #define howmany(x, y)   (((x) + ((y) - 1)) / (y))
+
+/* THE BSD BIT-ARRAY MACROS, which live in <sys/param.h> on every system that
+   has them and which busybox assumes are here (include/platform.h defines its
+   own only under !HAVE_SETBIT, and HAVE_SETBIT is the default). The array is
+   addressed in BYTES and the bit index is global across it, so bit 9 is bit 1
+   of a[1]; getting the two halves of that consistent is the only content here.
+   util-linux/fsck_minix.c and mkfs_minix.c are the callers. */
+#define setbit(a, i)    (((unsigned char *)(a))[(i) >> 3] |= (unsigned char)(1 << ((i) & 7)))
+#define clrbit(a, i)    (((unsigned char *)(a))[(i) >> 3] &= (unsigned char)~(1 << ((i) & 7)))
+#define isset(a, i)     (((const unsigned char *)(a))[(i) >> 3] & (1 << ((i) & 7)))
+#define isclr(a, i)     ((((const unsigned char *)(a))[(i) >> 3] & (1 << ((i) & 7))) == 0)
 #define roundup(x, y)   ((((x) + ((y) - 1)) / (y)) * (y))
 #define powerof2(x)     ((((x) - 1) & (x)) == 0)
 

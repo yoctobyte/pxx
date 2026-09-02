@@ -14815,20 +14815,96 @@ begin
     (IRKind[i] = IR_JUMP) or (IRKind[i] = IR_TERMINATE) or (IRKind[i] = IR_RAISE);
 end;
 
-function IRCondOperandIsPure(n: Integer): Boolean;
+function IRCondOperandIsPure(n, depth: Integer): Boolean;
 { May this operand be discarded without changing what the program DOES?
 
   An allowlist, not a blocklist, and that direction is the whole safety
   argument: an IR kind nobody has thought about answers False and the fold
   simply does not fire, where a blocklist would answer True for every kind
-  added after this was written. Two entries, because two are what the case
-  this serves needs -- busybox's `opt & OPT_h` is a variable read against a
-  literal zero. Widen it with a measurement, never with an assumption; the
-  thing being risked is a call the program was supposed to make. }
+  added after this was written. Widen it with a measurement, never with an
+  assumption; the thing being risked is a call the program was supposed to
+  make.
+
+  Two leaf entries -- a literal and a variable read -- because busybox's
+  `opt & OPT_h` is a variable read against a literal zero.
+
+  PLUS `and` OF TWO PURE OPERANDS, and that arm is not a generalisation for
+  its own sake: it is the C frontend's own width mask. `unsigned x` makes
+  every result arrive as and(x, 0xFFFFFFFF), so refusing to see through it
+  would leave exactly the hole this fold exists to close, one level further
+  out -- `(opt & OPT_OFF) & (unsigned)n` has a discarded sibling that is a
+  MASK over a variable read, not a variable read. The arm stays an allowlist:
+  and(call(), 0xFFFFFFFF) is still impure, because the call is. }
+var
+  leftPure: Boolean;
 begin
   IRCondOperandIsPure := False;
-  if (n < 0) or (n >= IRCount) then Exit;
-  IRCondOperandIsPure := (IRKind[n] = IR_CONST_INT) or (IRKind[n] = IR_LOAD_SYM);
+  if (depth <= 0) or (n < 0) or (n >= IRCount) then Exit;
+  if (IRKind[n] = IR_CONST_INT) or (IRKind[n] = IR_LOAD_SYM) then
+  begin
+    IRCondOperandIsPure := True;
+    Exit;
+  end;
+  if IRKind[n] <> IR_BINOP then Exit;
+  if IRC[n] <> Ord(tkAnd) then Exit;
+  if (IRA[n] < 0) or (IRA[n] >= IRCount) or (IRB[n] < 0) or (IRB[n] >= IRCount) then Exit;
+  { via a local: a bare function name reads Result in this dialect, and the
+    two recursive calls below must both be CALLS. }
+  leftPure := IRCondOperandIsPure(IRA[n], depth - 1);
+  if not leftPure then Exit;
+  IRCondOperandIsPure := IRCondOperandIsPure(IRB[n], depth - 1);
+end;
+
+function IRCondOperandIsZero(n, depth: Integer): Boolean;
+{ Is this operand PROVABLY the integer zero, with everything the fold would
+  discard on the way pure?
+
+  This exists because the one-level `x and 0' test below missed the shape real
+  C actually produces. busybox writes the feature-flag idiom against an
+  `unsigned' option word:
+
+      unsigned opt = getopt32(...);        /* OPT_2COMMAND is a 0 enum member */
+      if (opt & OPT_2COMMAND) { ... data_extract_to_command ... }
+
+  and the C frontend wraps every unsigned-int result in its width mask, so the
+  branch condition arrives as
+
+      binop and( binop and( load_sym opt, const 0 ), const 0xFFFFFFFF )
+
+  The OUTER node is the one the jump reads, and neither of its operands is a
+  literal zero -- so the identity never fired, the arm stayed live, and
+  `data_extract_to_command' was a real external reference to a translation unit
+  the configuration leaves out of the build. gcc drops it at every -O level,
+  -O0 included. Measured 2026-09-02: it was the only undefined symbol left in
+  the 141-applet busybox link once getnameinfo landed.
+
+  The recursion is deliberately narrow, and narrower than the general purity
+  walk the note below holds back: it descends ONLY through `and', and every
+  sibling it discards must still pass the two-entry allowlist. So
+  `(sideeffect() & 0) & 0xFFFFFFFF' does NOT fold -- the inner node's discarded
+  operand is a CALL, which is not pure, so the inner node is not provably zero
+  and neither is the outer. The claim being made is exactly "a chain of ANDs
+  one of whose leaves is zero, discarding only literals and variable reads",
+  which is a shape, not a judgement.
+
+  Terminates on its own -- an operand is always a LOWER node index than its
+  consumer -- and the depth cap is there to say so out loud rather than to
+  make it true. }
+begin
+  IRCondOperandIsZero := False;
+  if (depth <= 0) or (n < 0) or (n >= IRCount) then Exit;
+  if IRKind[n] = IR_CONST_INT then
+  begin
+    IRCondOperandIsZero := IRIVal[n] = 0;
+    Exit;
+  end;
+  if IRKind[n] <> IR_BINOP then Exit;
+  if IRC[n] <> Ord(tkAnd) then Exit;
+  if (IRA[n] < 0) or (IRA[n] >= IRCount) or (IRB[n] < 0) or (IRB[n] >= IRCount) then Exit;
+  if IRCondOperandIsZero(IRA[n], depth - 1) and IRCondOperandIsPure(IRB[n], depth) then
+    IRCondOperandIsZero := True
+  else if IRCondOperandIsZero(IRB[n], depth - 1) and IRCondOperandIsPure(IRA[n], depth) then
+    IRCondOperandIsZero := True;
 end;
 
 function IRConstCondValue(n: Integer; var val: Boolean): Boolean;
@@ -14917,20 +14993,17 @@ begin
   end;
   if (IRKind[n] <> IR_BINOP) then Exit;
   if (IRA[n] < 0) or (IRA[n] >= IRCount) or (IRB[n] < 0) or (IRB[n] >= IRCount) then Exit;
-  { `x and 0` -- one side a literal zero, and the OTHER side pure, so that
-    folding the condition cannot delete work the program must still do. Tested
-    before the both-const gate below because the other side is by definition
-    not a constant in the case this exists for. }
-  if IRC[n] = Ord(tkAnd) then
-    if ((IRKind[IRA[n]] = IR_CONST_INT) and (IRIVal[IRA[n]] = 0)
-        and IRCondOperandIsPure(IRB[n])) or
-       ((IRKind[IRB[n]] = IR_CONST_INT) and (IRIVal[IRB[n]] = 0)
-        and IRCondOperandIsPure(IRA[n])) then
-    begin
-      val := False;
-      IRConstCondValue := True;
-      Exit;
-    end;
+  { `x and 0` -- a literal zero somewhere in a chain of ANDs, with every
+    discarded sibling pure, so that folding the condition cannot delete work
+    the program must still do. Tested before the both-const gate below because
+    the other side is by definition not a constant in the case this exists
+    for. IRCondOperandIsZero above has the shape and why it is a chain. }
+  if IRCondOperandIsZero(n, ZERO_CHAIN_MAX_DEPTH) then
+  begin
+    val := False;
+    IRConstCondValue := True;
+    Exit;
+  end;
   if (IRKind[IRA[n]] <> IR_CONST_INT) or (IRKind[IRB[n]] <> IR_CONST_INT) then Exit;
   if IRC[n] = Ord(tkEq) then
   begin

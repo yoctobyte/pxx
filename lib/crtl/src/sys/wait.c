@@ -41,3 +41,20 @@ int wait(int *status)
 {
   return waitpid(-1, status, 0);
 }
+
+/* wait4(2) is the PAL entry itself; waitpid above is this call with a NULL
+   rusage. It is spelled out rather than made the primitive because waitpid is
+   the one every program uses and a wrapper-of-a-wrapper buys nothing. */
+int wait4(int pid, int *status, int options, void *rusage)
+{
+  int rc = __pxx_wait4(pid, status, options, rusage);
+  if (rc < 0) { errno = -rc; return -1; }
+  return rc;
+}
+
+/* wait3(2): BSD's older spelling of "reap any child, with usage". */
+int wait3(int *status, int options, void *rusage)
+{
+  return wait4(-1, status, options, rusage);
+}
+

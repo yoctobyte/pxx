@@ -8,6 +8,13 @@
 
 typedef __off_t off_t;
 typedef __ssize_t ssize_t;
+
+/* caddr_t: the BSD "core address" typedef, `char *'. It survives because
+   <sys/ioctl.h> users still spell it -- busybox's networking/ifconfig.c casts
+   its ifreq payload through it -- and glibc still publishes it from here.
+   char*, not void*: the whole point of the older name was pointer arithmetic,
+   and a program that does `p + n' on it must keep compiling. */
+typedef char *caddr_t;
 typedef __time_t time_t;
 typedef long pid_t;
 typedef unsigned int mode_t;

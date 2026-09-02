@@ -6,5 +6,10 @@ typedef long __off_t;
 typedef unsigned long __size_t;
 typedef long __ssize_t;
 typedef long __time_t;
+/* socklen_t's underlying type. It lives HERE, in the leaf header that pulls no
+   implementation, so that <netdb.h> can spell `struct addrinfo' without first
+   including <sys/socket.h> -- whose completion splices src/sys/socket.c and,
+   through it, src/netinet/in.c, in the middle of netdb.h. See netdb.h. */
+typedef unsigned int __socklen_t;
 
 #endif
