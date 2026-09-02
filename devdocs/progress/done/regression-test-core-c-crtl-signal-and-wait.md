@@ -87,3 +87,6 @@ a question about the host and the harness, not about the compiler. The next
 gives it a second data point, a pass clears it. Deliberately NOT resolved —
 resolving it on 208 green runs somewhere else would be exactly the exculpation
 that names no owner for "then what?".
+
+## Log
+- 2026-09-02 — auto-closed by the seven watcher: `test-core#src:test/c_crtl_signal_and_wait.c` passes at be58f71f713a (tier native); it was red at 0affa5fa87f4. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
