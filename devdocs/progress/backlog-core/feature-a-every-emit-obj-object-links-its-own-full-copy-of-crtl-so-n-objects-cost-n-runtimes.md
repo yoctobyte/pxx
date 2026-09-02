@@ -229,3 +229,62 @@ one unidentified.
 target, and `-g`. The busybox 13.7MB number is C, so this does not move it —
 wiring the C frontend into DCE is the next step for that consumer and is not
 this change.
+
+## 2026-09-02 (frankC) — the C half, and it is NOT this ticket's title
+
+DCE now runs for the C frontend too (`60edd4853`), so `--emit-obj --dce` is
+available to the consumer this ticket was really about. **It barely helps, and
+the reason is a different bug.**
+
+One C translation unit, two exported functions plus a `static` helper, using
+`snprintf`/`malloc`/`strlen`:
+
+| | bodies live | bytes |
+| --- | --- | --- |
+| `--emit-obj --dce` | **529 of 804** | 291416 |
+| the SAME code as an executable, `-O3` | **78 of 805** | 78488 |
+
+Same source, same pass, same reachability algorithm. The object keeps **6.8x
+more code** than the executable, and the difference is entirely the ROOT SET.
+
+### Every crtl function is an export root, and the predicate cannot tell
+
+`ObjProcIsExported` is `ProcCdecl and not ProcCStaticLink`. **Every crtl routine
+satisfies it** — `malloc`, `qsort`, `strtod`, the float formatting, all of it —
+because crtl is C and C functions are cdecl and non-static. So a one-line
+translation unit roots 288 exported FUNC symbols, of which two are the user's.
+
+The predicate is not wrong about export policy; it is being asked a question it
+was never designed for. "What must this object make link-visible" and "what
+must survive so this object works" were the same set until a pass started
+deleting things.
+
+### What that means for the three options above
+
+The **third step (per-object DCE) is landed and blocked, not spent.** It cuts a
+PASCAL object 4.3x (`6a084d569`) because a Pascal object exports only its
+explicit `cdecl` routines and the RTL is on the internal convention. A C object
+exports its whole runtime and so keeps it.
+
+The prerequisite for the C consumer is therefore **not** the relocation change
+this ticket identified for options (1) and (2). It is smaller and prior to all
+three: **distinguish this translation unit's own functions from the crtl pulled
+in behind them.** The C frontend already knows — `ParseCProgram` holds
+`crtlStart`, the token index the crtl pull begins at, and uses it to bound two
+loops. Nothing carries that distinction onto the `Procs[]` row.
+
+Rough arithmetic on the busybox number, on these measurements: 41 TUs at ~78KB
+of reachable code rather than ~335KB is single-digit MB rather than 13.7MB —
+before any cross-object dedup at all.
+
+### The interface question that has to be answered first, and it is real
+
+Dropping unreached crtl from an object CHANGES ITS LINK SURFACE: the symbol
+goes, not just the bytes. Today an object exports its whole runtime weakly, and
+`test-emit-obj` block 4b-septies asserts two objects share one heap, one `errno`
+and one `optind` against a gcc oracle. That row should survive — it pins DATA
+symbols, and code DCE does not touch `.bss` — but "should" is not "measured",
+and the honest reading is that this moves an object toward option (1)'s
+semantics (a pxx object stops being a self-contained runtime) without the
+archive that makes that deliberate. Worth deciding rather than assuming:
+whether a pxx object is a self-contained runtime or a translation unit.
