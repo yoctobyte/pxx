@@ -132,3 +132,33 @@ would be the fifth oracle the umbrella exists to prevent.
 **Both known INSTANCES of the pattern are closed**; what is left is this
 sizing-model question. Whoever takes it should decide whether this ticket is
 still the right home or whether the residue belongs directly under the umbrella.
+
+### Corroborated independently, with an instrument that fails differently (frankB)
+
+Measured the same five names the same day without having seen the above, at
+`a979184e2972`, and got the identical values — so this is corroboration rather
+than one reading repeated. The instruments differ where it matters: the table
+above reads `SizeOf(v)` of a VARIABLE, which is the operator under repair, so I
+took the values off the physical element STRIDE of an array instead
+(`@a[1] - @a[0]`). `ShortString` 263 and `TextFile` 4128 are real storage, not
+just what `SizeOf` claims about it.
+
+**Do not "fix" these toward fpc's numbers**, which the table above does not
+list and which are the obvious wrong target: fpc says 256 for `ShortString`
+(1-byte prefix, where ours is a 255-cap `tyFixedString` with an 8-byte length
+word) and 888 for `TextFile` (a smaller `Text` record). Ours are 263 and 4128
+and they are correct about our own storage. That is the same distinction
+be76fab5a turned on.
+
+`SizeOf(ShortString)` = 263 now falls out of `SizeOfSlot(tk, cap)` for free:
+`SizeOfSlot(tyFixedString, DEFAULT_STR_CAP)` is exactly 263. So the carrier the
+fix needs already exists for the string case; what is missing is that the NAME
+never reaches a sizing call.
+
+Where the declaration arms live, for whoever factors the resolver:
+`pasparser_decl.inc:506` (textfile, and it needs `IsRecordType('text')`),
+`:519` (shortstring, sets `LastTypeStrCap`), `:636` (pchar/pansichar). Each sets
+something a kind cannot carry, which is why `BuiltinTypeNameTk`'s header states
+the rule that only side-effect-free names live in the shared table — these five
+are precisely the names that break it, and `TextFile` proves a width table alone
+would not be enough.
