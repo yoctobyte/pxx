@@ -3485,6 +3485,42 @@ PROGRESS_BUCKETS = ("urgent", "working", "unfinished", "backlog",
                     "blocked", "done", "rejected")
 
 
+# The buckets a stub can sit in while STILL UNCLAIMED. `backlog/` is where the
+# watcher files, but a ticket is routinely sorted afterwards into a per-lane
+# folder (`backlog-tools/`, `backlog-core/`, … — the 2026-08-31 split) or is a
+# straggler in the superseded `backlog_new/`. All of those are RANKED exactly
+# like `backlog/` by progress.py, so the sort is FILING, not a claim, and the
+# close path must follow it.
+#
+# It did not. `close_stub_tickets` looked only at `backlog/<slug>.md`, and a
+# stub sorted into `backlog-tools/` matched neither that nor any
+# PROGRESS_BUCKETS folder — so it fell out of the loop with NO message, which
+# the function's own docstring promises never happens ("Neither case is a
+# silent skip ... is how a tool loses trust"). Measured 2026-09-02:
+# regression-test-core-test-setlen-in-parallel-for-body-2 sat at the TOP of
+# `ready --track T` at p85 with its job green, which is the exact incident
+# close_stub_tickets was written to prevent, recurring one folder over.
+def backlog_dirs(pdir):
+    """Every unclaimed-backlog folder under `pdir`, `backlog/` first."""
+    out, seen = [], set()
+    for name in ["backlog", "backlog_new"] + sorted(
+            n for n in os.listdir(pdir) if n.startswith("backlog-")):
+        d = os.path.join(pdir, name)
+        if name not in seen and os.path.isdir(d):
+            out.append(d)
+            seen.add(name)
+    return out
+
+
+def stub_backlog_path(pdir, slug):
+    """Path to `slug` in whichever unclaimed-backlog folder holds it, else None."""
+    for d in backlog_dirs(pdir):
+        p = os.path.join(d, slug + ".md")
+        if os.path.exists(p):
+            return p
+    return None
+
+
 # A sweep that turns MORE than this many jobs newly red is a cascade — one
 # root cause (a broken compiler build, a red fpc-bootstrap taking every
 # FPC-dependent job down with it), not N independent regressions.  Filing a
@@ -4870,8 +4906,8 @@ def close_stub_tickets(clone, host, closed, sha, report):
         # so closing must look for the variant that is actually live rather
         # than for the bare slug, whose file is the RESOLVED predecessor.
         slug = live_stub_slug(pdir, base) or base
-        src = os.path.join(pdir, "backlog", slug + ".md")
-        if not os.path.exists(src):
+        src = stub_backlog_path(pdir, slug)
+        if src is None:
             held = next((b for b in PROGRESS_BUCKETS
                          if b != "backlog"
                          and os.path.exists(os.path.join(pdir, b, slug + ".md"))),
@@ -4879,6 +4915,12 @@ def close_stub_tickets(clone, host, closed, sha, report):
             if held:
                 print("twatch: %s is in %s/ — its owner closes it, not me"
                       % (slug, held), flush=True)
+            else:
+                # Say so. A stub that exists nowhere I look is indistinguishable
+                # from one I declined to touch unless I print the difference.
+                print("twatch: %s is in no backlog folder and no bucket I know "
+                      "— not closing it, and saying so rather than skipping"
+                      % slug, flush=True)
             continue
         with open(src, errors="replace") as f:
             body = f.read()

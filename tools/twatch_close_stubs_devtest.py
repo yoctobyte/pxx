@@ -10,6 +10,7 @@ Cases:
   2. stub CLAIMED into working/       -> untouched
   3. stub body rewritten by a triager -> untouched (marker gone)
   4. cascade closes only when every swept job is green (reg_open, no I/O)
+  7. stub SORTED into a per-lane backlog-*/ folder -> still closed
 """
 import json, os, subprocess, sys, tempfile, shutil
 
@@ -57,6 +58,10 @@ def setup():
     git("config", "user.name", "gate")
     for b in twatch.PROGRESS_BUCKETS:
         os.makedirs(os.path.join(CLONE, "devdocs/progress", b), exist_ok=True)
+    # Case 5's home: the watcher files into backlog/, but tickets are sorted
+    # into per-lane folders afterwards and that sort is filing, not a claim.
+    os.makedirs(os.path.join(CLONE, "devdocs/progress", "backlog-tools"),
+                exist_ok=True)
     os.makedirs(os.path.join(CLONE, twatch.TSTATE_REL), exist_ok=True)
     # tickets, one per case
     def put(bucket, slug, body):
@@ -71,6 +76,9 @@ def setup():
     put("backlog", "regression-test-core-gamma",
         "---\nprio: 70\ntrack: N\n---\n\n# gamma: root-caused by a triager\n\n"
         "Real analysis lives here now; the stub text is gone.\n")
+    put("backlog-tools", "regression-test-core-delta",
+        STUB % ("test-core#src:test/delta.pas", "test/delta.pas",
+                "test-core#src:test/delta.pas"))
     open(os.path.join(CLONE, twatch.TSTATE_REL, "keep"), "w").write("x\n")
     git("add", "-A")
     git("commit", "--quiet", "-m", "gate fixture")
@@ -119,6 +127,7 @@ def main():
         {"job": "test-core#src:test/beta.pas", "bad": "bbbbbbbbbbbb2222"},
         {"job": "test-core#src:test/gamma.pas", "bad": "cccccccccccc3333"},
         {"job": "test-core#src:test/never-filed.pas", "bad": "dddddddddddd4444"},
+        {"job": "test-core#src:test/delta.pas", "bad": "eeeeeeeeeeee5555"},
     ]
     # A production report always carries "jobs" (testmgr writes it, run_gate
     # passes it straight through), and close_stub_tickets came to depend on it
@@ -138,6 +147,26 @@ def main():
     check("1. log line cites the passing sha and the tier",
           "ffff5555ffff" in body and "tier full" in body)
     check("1. log line cites the sha it was red at", "aaaaaaaaaaaa" in body)
+
+    # A stub sorted into a per-lane backlog folder is still unclaimed, so the
+    # watcher must close it. Before 2026-09-02 close_stub_tickets looked only
+    # at backlog/ and this fell through with NO message at all.
+    check("7. stub in backlog-tools/ closed -> done",
+          bucket_of("regression-test-core-delta") == "done",
+          "is in %s" % bucket_of("regression-test-core-delta"))
+    check("7. it did not stay behind in backlog-tools/",
+          not os.path.exists(os.path.join(
+              CLONE, "devdocs/progress/backlog-tools",
+              "regression-test-core-delta.md")))
+    # Read defensively: when this case regresses the file is simply absent, and
+    # a guard that raises FileNotFoundError reports nothing about the other
+    # cases behind it. A guard must FAIL, not crash.
+    dpath = os.path.join(CLONE, "devdocs/progress/done",
+                         "regression-test-core-delta.md")
+    dbody = open(dpath).read() if os.path.exists(dpath) else ""
+    check("7. its log line cites the passing sha and tier",
+          "ffff5555ffff" in dbody and "tier full" in dbody,
+          "done/ ticket absent" if not dbody else "log line missing")
     check("1. progress.sh check's commit rule satisfied",
           __import__("re").search(r"commit|[0-9a-f]{7,40}", body, 2) is not None)
 
