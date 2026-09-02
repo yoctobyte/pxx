@@ -331,6 +331,19 @@ are correct after a fetch; anything reading a PATH is not.
 claim travelling beside it inherits that credibility. Name the facts you checked,
 or claim none.
 
+**HEDGE THE PREMISE, NOT JUST THE INFERENCE — a careful-sounding caveat on the
+CONCLUSION makes an unmeasured NUMBER more credible, not less.** Measured
+2026-09-02, this file's coordinator: a ticket claimed *"eight open tickets name
+shortstring, several cross-target"* and added *"I have not established that any
+share a cause, and it would be wrong to claim it from a grep."* The inference
+was properly hedged and **the count was simply wrong** — `ls
+devdocs/progress/*/` globs every folder, `done/` included, so seven of the eight
+were closed and exactly one was open. The instrument did not error; it answered
+a different question. The visible caution made the number read as the checked
+part, and a peer spent a census establishing that the premise was false. **When
+you hedge, name which half you are hedging** — and count open tickets by
+FOLDER, never by a glob across all of them.
+
 **"NOTHING OBSERVABLY DIFFERS" IS A CLAIM ABOUT ONE TARGET, AND IT IS HOW REAL
 BUGS GET RANKED AS REFACTORS.** Measured 2026-09-02, twice in one hour by one
 session: `refactor-a-the-const-cast-width-table-is-the-third-copy` was filed at

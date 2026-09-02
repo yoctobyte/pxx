@@ -82,86 +82,31 @@ common than sets in records**, so the same argument is worth more here.
 Blocks-relation: [[feature-pascal-typed-and-untyped-files]] — this is the
 difference between `file of T` blitting and marshalling for the common case.
 
-## A cluster worth checking against this, NOT a claim
+## THE CLUSTER WAS NOT A CLUSTER — my count was wrong (corrected 2026-09-02)
 
-Eight open tickets name shortstring, several cross-target:
-`bug-a-a-shortstring-write-on-xtensa-corrupts-a-neighbouring-variable`,
-`bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only`,
-`bug-a-set-and-shortstring-value-params-alias-the-caller`,
-`bug-cross-pointer-store-record-with-shortstring-field`,
-`bug-p-a-shortstring-function-result-prints-as-a-pointer`,
-`bug-pascal-shortstring-no-truncation-buffer-overrun`,
-`bug-pascal-writeln-shortstring-param`,
-`regression-test-core-test-operator-implicit-shortstring-b356`.
+This ticket said *"eight open tickets name shortstring, several cross-target"*
+and offered it as a lead. **Seven of the eight are in `done/`. One is open.**
+frankc-af's census (`586eae2f8`) established it; the count came from an
+`ls devdocs/progress/*/` that globbed EVERY folder, `done/` included, and I read
+the result as open tickets. **The instrument did not error — it answered a
+different question.**
 
-**I have not established that the interim mapping causes any of them** and it
-would be the wrong kind of claim to make from a grep. But whoever takes this
-should read them first: if several are the interim layout rather than eight
-independent defects, that changes both the priority and the design. Per
-`root-cause-over-microfix`, counting how many tickets one change closes is the
-measure — and this is the cheap moment to count.
+Worse in a specific way: I hedged the *inference* (*"I have not established the
+interim mapping causes any of them"*) and not the *premise*. The hedge made the
+claim read as careful, which made the unmeasured number MORE credible rather
+than less, and a peer spent a census on it.
 
-## CENSUS DONE, 2026-09-02 (frankC) — the cluster does not support this feature
+**The one survivor is not a layout question and this feature would not close
+it.** `bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only` is a
+missing EMITTER ARM — three explicit `Error()` arms beside working code, at
+exactly one intersection (char VALUE + string DEST + POINTER store); a literal
+through a pointer works everywhere, a char without a pointer works everywhere.
+Under either layout each backend still needs the arm written; the byte prefix
+makes them marginally simpler and removes none. riscv32 now passes, so a
+non-x86-64 reference already exists.
 
-Counted, and the honest answer reduces the argument above rather than
-strengthening it. **Seven of the eight are already closed**, and the one that
-remains is not the interim layout.
-
-| slug | state |
-| --- | --- |
-| `...shortstring-write-on-xtensa-corrupts-a-neighbouring-variable` | done |
-| `...set-and-shortstring-value-params-alias-the-caller` | done |
-| `bug-cross-pointer-store-record-with-shortstring-field` | done (`7716bd2a`) |
-| `...shortstring-function-result-prints-as-a-pointer` | done |
-| `...shortstring-no-truncation-buffer-overrun` | done |
-| `...writeln-shortstring-param` | done |
-| `regression-...-operator-implicit-shortstring-b356` | done |
-| **`bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only`** | **open** |
-
-So "eight open tickets, several cross-target" was one open ticket. The count
-that `root-cause-over-microfix` asks for is **one**, and this feature does not
-close it either — see below.
-
-### The one open ticket is a missing EMITTER ARM, not a layout question
-
-Measured on `0c487458fa67`, six shapes across five targets:
-
-| | shape | x86-64 | i386 | aarch64 | arm32 | riscv32 |
-| --- | --- | --- | --- | --- | --- | --- |
-| a | `p^ := c` char into `string[8]` via pointer | ok | **REFUSED** | **REFUSED** | **REFUSED** | ok |
-| b | `p^ := 'abc'` literal via pointer | ok | ok | ok | ok | ok |
-| c | `p^.a := 1` longint field, string field present | ok | ok | ok | ok | ok |
-| d | `p^.s := 'abc'` string field via pointer | ok | ok | ok | ok | ok |
-| e | `p^.s := ch` char into string FIELD via pointer | ok | **REFUSED** | **REFUSED** | **REFUSED** | ok |
-| f | `s := ch` char into string, NO pointer | ok | ok | ok | ok | ok |
-
-**The refusal is exactly one intersection: char VALUE + string DEST + POINTER
-store.** Row f says it is not the char-to-string conversion; row b says it is
-not the pointer store; rows c/d confirm `7716bd2a` landed and holds. Rows a and
-e are the same defect in two spellings.
-
-It is three explicit `Error(...)` arms sitting beside working code —
-`ir_codegen386.inc`, `ir_codegen_aarch64.inc`, `ir_codegen_arm32.inc`, each
-`char-to-inline-string store through pointer not yet supported`. The x86-64 arm
-is `IREmitStoreCharAsString`, two instructions. **riscv32 now passes**, which
-the ticket predates, so a non-x86-64 reference implementation already exists.
-
-### Why this feature would NOT subsume it
-
-The emitter writes `[len][char]`. Under the interim layout that is an 8-byte
-length word plus a byte; under the byte prefix it is two bytes. **Either way the
-arm has to be written**, on each of the three backends. The byte-prefix layout
-makes each emitter marginally simpler and removes none of them.
-
-So the cluster is **not evidence for this feature**. That does not argue against
-doing it — the `file of T` blitting case in the section above stands on its own
-and is untouched by this census — but the "eight tickets" line should not be
-carried forward as support, and this section replaces it.
-
-### One thing the census did establish
-
-`bug-cross-pointer-store-record-with-shortstring-field` (the record spelling)
-was fixed and `bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only`
-(the direct spelling) was not — the same store, two shapes, one arm fixed. That
-is `normalise-dont-special-case`'s *"fixed one arm of a double case? grep for
-the sibling before closing"*, visible only once both are on one page.
+**So: strike the cluster as support for this feature.** What survives untouched
+is the `file of T` argument, which stands on its own and was always the real
+one — a record containing a `string[10]` is 18 bytes in memory and 11 on disk,
+plus the record padding (offset 112 vs 101) that the byte prefix also removes.
+**The justification is narrower, not weaker in kind.**
