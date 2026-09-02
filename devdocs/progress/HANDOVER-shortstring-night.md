@@ -177,22 +177,48 @@ four callers moved to `IRStrTkOf`. **Re-measured independently** at `c8375f3e7`:
 `var=var`, `var=lit` and `lit=var` all TRUE on x86-64, arm32, aarch64 and
 riscv32.
 
-**What survives is a different defect, not a remnant** — the record-FIELD operand
-and the pointer-deref INDEX fail on *opposite* operand shapes, and are separately
+**What survived was ONE defect, not two — see the section below, which supersedes
+this paragraph.** At the time it read as two: the record-FIELD operand and the
+pointer-deref INDEX failed on *opposite* operand shapes, and were separately
 ticketed:
 `bug-a-comparing-a-frozen-record-field-to-a-literal-crashes-or-answers-false`
 and `bug-a-indexing-a-frozen-string-through-a-pointer-deref-reads-the-wrong-byte`.
 
-**The deref one may be landing, and its SLUG may understate it.** frankb-a9 holds
-`f9104a0cb` (22:01), *"indexing a frozen string through a pointer deref read AND
-WROTE the wrong byte"* — **committed in its checkout and not yet on origin when I
-wrote this, so it is a subject line I read, not a fix I measured.** Every
-description in this file, and the ticket slug itself, says *reads*; if the write
-side is real then this is a silent-corruption path and not a display bug, which
-is a different severity. **I have deliberately not rewritten the sections above
-from a commit subject** — frankb-a9 owns the correction and has been asked for
-one line in its own words. Treat the read-only framing as unconfirmed, not as
-established. The FIELD compare still segfaults (exit 139) at `bc0307b4e`.
+### BOTH SURVIVORS ARE CLOSED (`0dd5858e6`, frankb-a9, 22:01)
+
+**One commit, 38 lines across `compiler/ir.inc` and `compiler/symtab.inc`, closed
+both.** They were never two defects — frankb-a9's `ddc4d3d51` had already said the
+field compare *"is not a kind bug"*, and the shared cause is why the two failed on
+opposite operand shapes. **The "opposite shapes therefore two mechanisms"
+inference in the sections above was wrong**, and it is left standing there
+deliberately: it was the reasoning that split the work, and it reads as sound.
+
+**Measured independently, not taken from the author.** Rebuilt at `51b80e55b`
+(`converged after 1 round(s)` — the recompute verb, not the stamp), compiler
+sha `a09992a1c33f`:
+
+```
+s[1]=[h]   r.f[1]=[h]   p^[1]=[h]      <- the deref index, was blank
+s=lit TRUE  p^=lit TRUE  r.f=lit TRUE  <- the field compare, was exit 139
+```
+
+Widened to eleven rows — deref-to-record-field index `q^.f[1]`, array element
+index, `Length(q^.f)` = 5, and **a negative control: `r.f = 'nope'` returns
+FALSE**, so the compare is not stuck-TRUE. Exit 0.
+
+**Read `Length` = 5 as the probe that could have failed and didn't.** 5 is not
+the old 8-byte prefix, not a type default and not a pointer width — an expected
+value that collides with the failure value would have certified nothing.
+
+**A measurement I reported earlier tonight was vacuous, and this is how.** I ran
+the repro with `-o`, which pxx does not accept — it takes the output path
+POSITIONALLY. The compiler said so and exited 1. A `surv` binary from an earlier
+compile in the same scratchpad was still on disk, so it **ran, printed, and
+segfaulted**, and I read `exit 139` off a tree that no longer existed. Compile
+failure and stale success are not distinguishable downstream: the run produced
+plausible, formatted, WRONG output. **Assert that the binary was rebuilt this
+minute, and branch on the compile's rc — `[ $rc -eq 0 ] || exit`, not a bare
+`;`.** The `rm -f` before the compile is the part that makes the assert real.
 
 One population note that was resolved along the way: **riscv32 IS in the
 population.** The "riscv32 refuses the flag" figure was TRUE when measured and
