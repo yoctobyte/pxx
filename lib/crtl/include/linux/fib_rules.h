@@ -1,0 +1,109 @@
+/* SPDX-License-Identifier: Zlib */
+/*
+ * C runtime: <linux/fib_rules.h> -- struct fib_rule_hdr and the FRA_*
+ * attributes for policy routing.
+ *
+ * FR_ACT_UNSPEC IS 0 AND FR_ACT_TO_TBL IS 1, so a zeroed fib_rule_hdr is not
+ * "look up the table" -- it is a rule the kernel will reject or ignore. Every
+ * `ip rule add' builds one of these by hand.
+ *
+ * Transcribed whole from this box's copy by a script.
+ *
+ * Found attempting busybox on i386, via the libiproute files.
+ * feature-c-corpus-busybox-i386-the-second-architecture
+ */
+#ifndef _CRTL_LINUX_FIB_RULES_H
+#define _CRTL_LINUX_FIB_RULES_H
+
+#include <linux/types.h>
+#include <linux/rtnetlink.h>
+
+/* rule is permanent, and cannot be deleted */
+#define FIB_RULE_PERMANENT	0x00000001
+#define FIB_RULE_INVERT		0x00000002
+#define FIB_RULE_UNRESOLVED	0x00000004
+#define FIB_RULE_IIF_DETACHED	0x00000008
+#define FIB_RULE_DEV_DETACHED	FIB_RULE_IIF_DETACHED
+#define FIB_RULE_OIF_DETACHED	0x00000010
+
+/* try to find source address in routing lookups */
+#define FIB_RULE_FIND_SADDR	0x00010000
+
+struct fib_rule_hdr {
+	__u8		family;
+	__u8		dst_len;
+	__u8		src_len;
+	__u8		tos;
+
+	__u8		table;
+	__u8		res1;   /* reserved */
+	__u8		res2;	/* reserved */
+	__u8		action;
+
+	__u32		flags;
+};
+
+struct fib_rule_uid_range {
+	__u32		start;
+	__u32		end;
+};
+
+struct fib_rule_port_range {
+	__u16		start;
+	__u16		end;
+};
+
+enum {
+	FRA_UNSPEC,
+	FRA_DST,	/* destination address */
+	FRA_SRC,	/* source address */
+	FRA_IIFNAME,	/* interface name */
+#define FRA_IFNAME	FRA_IIFNAME
+	FRA_GOTO,	/* target to jump to (FR_ACT_GOTO) */
+	FRA_UNUSED2,
+	FRA_PRIORITY,	/* priority/preference */
+	FRA_UNUSED3,
+	FRA_UNUSED4,
+	FRA_UNUSED5,
+	FRA_FWMARK,	/* mark */
+	FRA_FLOW,	/* flow/class id */
+	FRA_TUN_ID,
+	FRA_SUPPRESS_IFGROUP,
+	FRA_SUPPRESS_PREFIXLEN,
+	FRA_TABLE,	/* Extended table id */
+	FRA_FWMASK,	/* mask for netfilter mark */
+	FRA_OIFNAME,
+	FRA_PAD,
+	FRA_L3MDEV,	/* iif or oif is l3mdev goto its table */
+	FRA_UID_RANGE,	/* UID range */
+	FRA_PROTOCOL,   /* Originator of the rule */
+	FRA_IP_PROTO,	/* ip proto */
+	FRA_SPORT_RANGE, /* sport */
+	FRA_DPORT_RANGE, /* dport */
+	FRA_DSCP,	/* dscp */
+	FRA_FLOWLABEL,	/* flowlabel */
+	FRA_FLOWLABEL_MASK,	/* flowlabel mask */
+	FRA_SPORT_MASK,	/* sport mask */
+	FRA_DPORT_MASK,	/* dport mask */
+	FRA_DSCP_MASK,	/* dscp mask */
+	__FRA_MAX
+};
+
+#define FRA_MAX (__FRA_MAX - 1)
+
+enum {
+	FR_ACT_UNSPEC,
+	FR_ACT_TO_TBL,		/* Pass to fixed table */
+	FR_ACT_GOTO,		/* Jump to another rule */
+	FR_ACT_NOP,		/* No operation */
+	FR_ACT_RES3,
+	FR_ACT_RES4,
+	FR_ACT_BLACKHOLE,	/* Drop without notification */
+	FR_ACT_UNREACHABLE,	/* Drop with ENETUNREACH */
+	FR_ACT_PROHIBIT,	/* Drop with EACCES */
+	__FR_ACT_MAX,
+};
+
+#define FR_ACT_MAX (__FR_ACT_MAX - 1)
+
+#endif

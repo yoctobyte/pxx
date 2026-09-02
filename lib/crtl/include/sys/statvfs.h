@@ -14,6 +14,12 @@
  * where the maximum filename length should be. Measured against glibc,
  * 2026-09-02: 112 bytes on x86-64 and 72 on i386.
  *
+ * The arm is spelled `__SIZEOF_LONG__ < 8' AND NOT AS A LIST OF ARCHITECTURE
+ * MACROS. A list is the version that goes quietly wrong: it is right for the
+ * targets whose names are on it and silently takes the 32-bit arm for the next
+ * 64-bit target added, which is the one case nobody tests. pxx defines
+ * __SIZEOF_LONG__ on every target (verified x86-64, i386, aarch64).
+ *
  * THE COUNTS ARE `unsigned long', SO THEY ARE 32 BITS ON i386, which caps
  * f_blocks at 16TB there for a 4K block size. That is glibc's default too (its
  * 64-bit arm is __USE_FILE_OFFSET64, a feature-test macro crtl does not
@@ -43,8 +49,7 @@ struct statvfs {
   fsfilcnt_t    f_ffree;    /* free inodes */
   fsfilcnt_t    f_favail;   /* free inodes for unprivileged users */
   unsigned long f_fsid;
-#if !defined(__x86_64__) && !defined(__aarch64__) && !defined(__riscv64) \
-    && !(defined(__riscv) && __riscv_xlen == 64)
+#if __SIZEOF_LONG__ < 8
   int           __f_unused;   /* 32-bit only -- see the note above */
 #endif
   unsigned long f_flag;     /* ST_* */

@@ -13305,6 +13305,25 @@ test-core: $(COMPILER)
 	# All rows diffed against gcc.
 	./$(COMPILER) test/c_crtl_input_hdreg_i2c_mtio_statvfs.c $(TESTTMP)/c_inhims26
 	tools/expect_same.sh c_inhims26 "$$($(TESTTMP)/c_inhims26)" "$$(printf '1 0 1 2 4 | 1 2 5 8\n2 20 | 0 8 12 16 18\n3 18 16 8000\n4 24 | 0 16 18 20\n5 0 1 2 3 5 | 1 1 1 2\n6 80044501 80084502 80404506 80604521\n7 116 142 0 3 | 10001\n8 8 24 40 16\n9 301 30d 304 31f 31c\n10 321 326 32d 31a | ec ef\n11 512 16 | 20 54 164\n12 701 702 703 706 705 707 720\n13 1 0 | 1 10 400 | 1 1000000\n14 0 1 5 12 13 14 | 20 34\n15 8 48 8 48\n16 40086d01 80306d02 80086d03 | /dev/tape\n17 112 | 16 64 72 80\n18 0 4096 255 1 1 0')"
+	# <linux/rtnetlink.h> and the four it drags in -- if_link.h, if_addr.h,
+	# neighbour.h -- plus fib_rules.h. ROWS 3 AND 4 ARE THE POINT: every
+	# rtnetlink reply is walked with RTA_OK/RTA_NEXT/RTA_DATA over RTA_ALIGNTO=4,
+	# so the macros ARE the interface, and an RTA_LENGTH that forgot the align
+	# walks a real message off by a few bytes and reads a plausible wrong
+	# attribute out of it. RTA_LENGTH(5) is 9, not 8: the align applies to the
+	# HEADER and not the payload, which is the mistake that looks right. Row 4
+	# builds a real rtattr and evaluates the whole walk. Row 8 is IFA_ADDRESS
+	# against IFA_LOCAL -- on a point-to-point link one is this end and the other
+	# is the PEER, and on ordinary interfaces the kernel sends both the same, so
+	# the wrong one works until it meets a tunnel. ROW 13 IS WHY if_link.h IS
+	# TRANSCRIBED WHOLE: the IFLA_* spaces are NESTED and each numbered from 1,
+	# so IFLA_VLAN_EGRESS_QOS and IFLA_MACVLAN_MACADDR_MODE are BOTH 3 while
+	# IFLA_BR_HELLO_TIME is 2 and IFLA_MTU (outer space) is 4 -- only the
+	# enclosing IFLA_INFO_DATA says which space is in force, and a value from the
+	# wrong one is a legal attribute id the kernel accepts.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_rtnetlink.c $(TESTTMP)/c_rtnl26
+	tools/expect_same.sh c_rtnl26 "$$($(TESTTMP)/c_rtnl26)" "$$(printf '1 12 4 16 8 12\n2 24 25 26 | 16 20 28\n3 4 4 9\n4 1 8 4 4\n5 1 2 4 5 15\n6 254 255 0 253\n7 1 2 2 4\n8 1 2 3 | 1 128\n9 1 2 3 | 2 80 40\n10 3 4 7 23\n11 96 200\n12 12 0 | 1 1 15\n13 1 2 | 2 3 3')"
 	# <mtd/mtd-user.h>, <sys/timex.h>, <sys/kd.h>, <linux/capability.h>. Row 1 is
 	# mtd_info_user's LAYOUT: a __u8 then five __u32 then a __u64 is 32 bytes with
 	# two holes, and a transcription that tidied them still compiles -- MEMGETINFO
