@@ -65,6 +65,14 @@
 #   --targets   space-separated target list (default: x86_64 aarch64)
 #   --applets   space-separated applet list (default: cat echo -- rung 2).
 #               A single applet reproduces rung 1 exactly.
+#   --dce       add --dce to each per-TU compile in --separate mode. OPT-IN, and a
+#               measurement switch rather than a default: --dce under --emit-obj
+#               roots the pass at the object's EXPORTED symbols, and a C object
+#               exports the whole crtl runtime WEAK (which is what lets two
+#               objects link at all), so the pass can only drop what no export
+#               reaches. Measured on a 3-TU C program at 39c7042211a7: 624856 ->
+#               336016 linked, and the cost of separate compilation 242568 ->
+#               42176. Ignored outside --separate: there are no objects to prune.
 #   --separate  build busybox the way BUSYBOX does -- one object per translation
 #               unit and a real link -- instead of as a unity. x86_64 only,
 #               because --emit-obj has no aarch64 object writer yet. This is a
@@ -89,6 +97,7 @@ TARGETS="x86_64 aarch64"
 APPLETS="cat echo"
 KEEP=0
 SEPARATE=0
+OBJFLAGS=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -97,6 +106,7 @@ while [ $# -gt 0 ]; do
     --targets) TARGETS="$2"; shift 2 ;;
     --applets) APPLETS="$2"; shift 2 ;;
     --separate) SEPARATE=1; shift ;;
+    --dce)     OBJFLAGS="--dce"; shift ;;
     *) printf 'busybox-diff: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
 done
@@ -1048,7 +1058,7 @@ for t in $TARGETS; do
       # causes (inline asm, a >256-byte local string array, statfs, tcsetpgrp)
       # appeared nowhere against a filename. Reading that report, you fix bc.c
       # seven times.
-      if ( cd "$BB" && "$COMPILER" --emit-obj $INC "$WORK/wrap/$tag.c" "$WORK/obj/$tag.o" ) \
+      if ( cd "$BB" && "$COMPILER" --emit-obj $OBJFLAGS $INC "$WORK/wrap/$tag.c" "$WORK/obj/$tag.o" ) \
            > "$WORK/tu/$tag.log" 2>&1; then
         nobj=$((nobj+1))
       else
@@ -1088,7 +1098,12 @@ for t in $TARGETS; do
       grep -a -E "^[^ ].*: (error|fatal)" "$WORK/build_$t.log" | sort -u | head -5
       RC=1; continue
     fi
-    printf '  note    %-8s %d objects linked separately (%d bytes)\n' "$t" "$nobj" "$(stat -c%s "$out")"
+    # The FLAGS are printed beside the size because this number is what the
+    # crtl-per-object ticket is ranked on and `--dce' moves it by a factor. A
+    # size reported without the flags that produced it is not comparable to the
+    # next one anybody takes.
+    printf '  note    %-8s %d objects linked separately (%d bytes, per-TU flags: --emit-obj%s)\n' \
+      "$t" "$nobj" "$(stat -c%s "$out")" "${OBJFLAGS:+ $OBJFLAGS}"
   elif ! ( cd "$BB" && "$COMPILER" $targflag $INC "$UNITY" "$out" ) > "$WORK/build_$t.log" 2>&1; then
     printf '  FAIL    %-8s pxx could not build the unity\n' "$t"
     grep -v '^ok:' "$WORK/build_$t.log" | head -10

@@ -9,7 +9,7 @@ created: 2026-09-01
 found-by: frankA
 owner: 
 blocked-by: []
-summary: "Two --emit-obj objects now link and share one runtime (bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link), but WEAK only picks a winner among duplicate symbols -- the losing objects' sections are still linked in whole. Measured: two objects that each contain crtl produce a 580088-byte binary against 310544 for one, and busybox's 41-TU separate build came out at 13.7MB for the same reason. Needs section-granular deduplication: a crtl archive the linker pulls members from, or function/data sections plus COMDAT groups. STEP 1 IS IN: --function-sections turns internal calls into relocations against the callee symbol (1078 of 1084 sites in a C object; the 6 left are the duplicate-static shape and need a per-BODY symbol), verified by the linked binary being BYTE-IDENTICAL with the flag on and off. It shrinks nothing on its own -- the payoff needs per-function sections + --gc-sections, which is a restructuring of writeELFRelX64General's fixed 9-section layout, and ProcAddrFix relocates against the .text SECTION symbol so it breaks there too."
+summary: "Two --emit-obj objects now link and share one runtime (bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link), but WEAK only picks a winner among duplicate symbols -- the losing objects' sections are still linked in whole. Measured: two objects that each contain crtl produce a 580088-byte binary against 310544 for one, and busybox's 41-TU separate build came out at 13.7MB for the same reason. Needs section-granular deduplication: a crtl archive the linker pulls members from, or function/data sections plus COMDAT groups. STEP 1 IS IN: --function-sections turns internal calls into relocations against the callee symbol (1078 of 1084 sites in a C object; the 6 left are the duplicate-static shape and need a per-BODY symbol), verified by the linked binary being BYTE-IDENTICAL with the flag on and off. It shrinks nothing on its own -- the payoff needs per-function sections + --gc-sections, which is a restructuring of writeELFRelX64General's fixed 9-section layout, and ProcAddrFix relocates against the .text SECTION symbol so it breaks there too. PARKED AFTER STEP 1 (533858cce, --function-sections: internal calls become relocations). MEASURED ON THE PARKED TREE AT 39c7042211a7, two things the next session needs: (a) --function-sections DOES NOT PRODUCE FUNCTION SECTIONS -- the object still has one .text and 13 sections, so -Wl,--gc-sections drops 168 bytes of 624888 (0.03%) in every combination; the flag does what its help text says and its NAME asserts a property step 2 has not built yet. (b) Step (3), DCE under --emit-obj, is now on for BOTH frontends (60edd4853 wired the C one in; passages above saying it is off for C are stale) and its residual is PINNED BY BEING EXPORTED, not unpruned: a C object exports 286 crtl entry points WEAK, --dce drops 269 LOCAL bodies and exactly ZERO weak ones, and those 286 hold 52% of the pruned object's .text. No compile-time pass may contradict an export contract, which is a second independent argument for option (4)'s COMDAT group. Cost of separation for a 3-TU C program: 242568 without --dce, 42176 with it. tools/busybox_diff.sh takes an opt-in --dce so the 149-object number can be retaken; unrun here, no busybox tree on this box."
 ---
 
 # N objects cost N runtimes
@@ -506,3 +506,93 @@ the busybox consumer and for Track T.
 step 1 (--function-sections, internal calls become relocations) landed at 533858cce. Parked before step 2: the remaining work is an emission reorder plus COMDAT group sections (option 4, measured and written up in the ticket), which changes where every proc lands and would destabilise --emit-obj for busybox and Track T if landed half-verified.
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## 2026-09-02 (frankA) — measured on the parked tree: `--gc-sections` drops 0.03%, and the reason is the export surface
+
+Two measurements taken after step 1 landed, at `bc8fa306b`, compiler
+`39c7042211a7`. Neither changes the park; both change what the next session
+should expect from step 2, and one of them is a name-is-not-the-thing trap
+sitting in the tree right now.
+
+### `--function-sections` does not produce function sections
+
+The flag does exactly what its help text says — *"relocate internal calls
+against the callee's symbol"* — and that is step 1 and it works: `CallFix 497
+relocated 497 pinned-target 0 undefined 0 no-symbol 0`. But the object it emits
+still has **one `.text`**, 13 sections in total, no `.text.*` at all. So the
+name asserts a property the artifact does not have, and the obvious next thing
+anyone tries measures as nothing:
+
+| per-TU flags | plain link | `-Wl,--gc-sections` |
+| --- | --- | --- |
+| none | 624856 | 624680 |
+| `--dce` | 336016 | 335848 |
+| `--function-sections` | 624888 | 624720 |
+| `--function-sections --dce` | 336064 | 335896 |
+
+**168 bytes, 0.03%, in every row.** `--gc-sections` has nothing to collect
+because section granularity has not changed yet. That is not a defect in step 1
+— it is step 2 not being built — but the flag name will be read as the mechanism
+being in place, by exactly the person who reaches for `--gc-sections` next.
+Worth renaming when step 2 lands and the name becomes true, not before; worth
+knowing about now. All eight binaries print `8`.
+
+### Why option (4)'s COMDAT is the one that can work, measured rather than argued
+
+Step (3), DCE under `--emit-obj`, is now on for both frontends (`60edd4853`
+wired the C one in; the section above this still says it is off, which is
+stale). It prunes a C object far less than a Pascal one, and the ratio names the
+mechanism. One C source, one compiler, three builds differing only in root set:
+
+| build | root set | live bodies | `.text` |
+| --- | --- | --- | --- |
+| executable, `--dce` | the entry point | 73 | 62181 |
+| `--emit-obj --dce` | entry **+ 286 weak crtl exports** | 528 | 236656 |
+| `--emit-obj`, no dce | — | 803 | 312412 |
+
+**The export surface costs 174475 bytes per object — 2.8x the whole reachable
+program — and it is the same 174KB in every object.** The pass drops 269 LOCAL
+bodies and **exactly zero WEAK ones**:
+
+```
+                     GLOBAL      WEAK           LOCAL
+  C object, base       2/7693B   286/121946B    515/173823B
+  C object, --dce      2/7693B   286/121946B    246/98067B     <- WEAK unchanged
+  Pascal object        3         0              241            <- no weak surface
+```
+
+52% of the pruned C object's `.text` sits in those 286 WEAK symbols, and most of
+the surviving LOCAL bytes are reachable *from* them. Pascal prunes 78% and C
+prunes 24% for one reason: the Pascal object exports three symbols and the C
+object exports the runtime.
+
+**This is `243137302` being paid for.** Exporting crtl WEAK is what made two
+objects link and share one `errno`. It is also a contract saying "any of these
+286 may be called from outside this object", and no compile-time pass may
+contradict it. So the ~21KB per object that `--dce` leaves behind is not
+unpruned code — it is **pinned, correctly**, and the only thing that can reach
+it is a mechanism that runs where the weak winner is known. That is option (4)'s
+COMDAT group, and it is a second, independent argument for the recommendation
+already recorded above.
+
+Cost of separation today, 3-TU C program, gcc linking:
+
+| | unity (1 object) | 3 objects | cost of separation |
+| --- | --- | --- | --- |
+| no `--dce` | 382288 | 624856 | **242568** |
+| `--dce` | 293840 | 336016 | **42176** |
+
+~121KB per extra object down to ~21KB, and a leaf object 135232 -> 23496.
+
+### `tools/busybox_diff.sh --dce`, opt-in
+
+The harness compiles each TU with a bare `--emit-obj`, so none of the above
+reaches the 149-object build the 13.7MB number came from. It now takes `--dce`
+(separate mode only, default off), and the note line prints the per-TU flags
+beside the byte count, because the number this ticket is ranked on moves by a
+factor with them.
+
+**Not run here: there is no busybox tree on this box** and fetching one is a
+network act. The switch is for whoever holds the tree, and the correctness
+question it answers — does `--dce` survive 149 real translation units — is worth
+more than the size.
