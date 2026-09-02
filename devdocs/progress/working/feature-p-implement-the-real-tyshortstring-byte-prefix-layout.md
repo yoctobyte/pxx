@@ -4,14 +4,224 @@ title: "Implement the real `tyShortString` byte-length-prefix layout — the kin
 track: P
 prio: 100
 type: feature
-status: backlog
+status: working
 created: 2026-09-02
 found-by: owner (raised 2026-09-02), measured by frankuser
-owner: "frankb-a9"
-summary: "MEASURED at bf92c45a7, binary sha256 `5f275966bf50`: we are `cap+8` and FPC is `cap+1`, uniformly — ShortString 263 vs 256, string[10] 18 vs 11, string[255] 263 vs 256. The ENTIRE divergence is the length-word width (8-byte NativeInt vs 1 byte), and it is a documented INTERIM: `pasparser_decl.inc:540` maps the name `shortstring` to a 255-cap `tyFixedString` with the comment *'the true byte-length-prefix tyShortString (FPC ABI) is a later codegen slice'*. THE KIND IS ALREADY PLUMBED — `tyShortString` has 63 sites across 18 files including EVERY backend (i386, wasm32, arm32, aarch64), `abi.inc` and `rtti_emit.inc`, against `tyFixedString`'s 79; `FrozenStrSlotSize` already returns `cap+1` for it. What is missing is the byte-prefix codegen, not the type. WHY IT MATTERS BEYOND SizeOf: unlike sets, a fixed string is NOT a zero-extension of FPC's — the length word is at the FRONT and a different width — so there is NO truncating-copy trick, and every fixed string in a typed file is a genuine conversion. Implementing this makes `string[N]` for N<=255 byte-identical to FPC, which makes records containing one BLIT instead of marshal. Note pxx accepts `string[256]` (264) and `string[1000]` (1008) where FPC rejects both: frozenstring is a strict SUPERSET, and the 1-byte prefix IS the 255 ceiling, so the wide kind must stay for N>255."
+owner: frankB
+summary: "P1 AUDIT DONE (frankB, 2026-09-02, binary `b1b8ca4d5435`). We are `cap+8` and FPC is `cap+1` uniformly (ShortString 263 vs 256, string[10] 18 vs 11); the whole divergence is the length-word width and it is a documented interim at `pasparser_decl.inc:540`. THE AUDIT MOVED THE SURFACE RATHER THAN CONFIRMING IT, in three ways that change how P2 is scoped. (a) `tyShortString`'s 63 sites are a NAME count and it points the wrong way: riscv32 and xtensa mention the kind ZERO times and handle frozen strings fully, i386 REFUSES both frozen kinds outright, and the rest are kind lists and comments. The backends look ready because `TypeIsFrozenString` -- 128 sites, whose own comment says it exists to route the new kinds 'without 250 new arms' -- ERASES the very distinction the byte prefix creates. Scope by those 128 (28 touch a layout number), never by the 63. (b) `EmitStoreStrLen`/`EmitLoadStrLen` is not a width abstraction: it is an x86-64 helper TRIO in symtab.inc (the third member, `EmitLeaStrDataRdi`, computes the data offset) that hardcodes 8 itself; the other backends reference it only in COMMENTS, so six have no equivalent. (c) SELF-HOST RISK LARGELY DISSOLVED: the fixedpoint builds in MANAGED mode (`FROZEN_PXXFLAGS` is only on the `-frozen` targets), so bare `string` in `compiler/**` is a tyAnsiString handle and the 69 declarations are not in this feature's domain at all -- and even under `-frozen` they are tyString, which the flip does not re-type. The ENTIRE build-input exposure was ONE declaration, `lib/rtl/typinfo.pas`'s `TRttiStr = string[255]` sitting exactly on the N<=255 boundary; it is now `string[256]` (a kind selector, not a length -- the type is never instantiated), which was a provable no-op pre-flip and takes lib/rtl out of the flip commit entirely. STILL TRUE AND UNCHANGED: `tyFixedString` stays as-is for N>255, this is additive, and P4 remains the serialising step."
 ---
 
 # The real `tyShortString`, and why it is cheaper than it looks
+
+## PHASE 1 — THE AUDIT. It moves the surface rather than confirming it
+
+Measured 2026-09-02 by frankB, binary `b1b8ca4d5435`, `converged after 1
+round(s)`. **Headline: the deliverable this phase asked for — "sites assuming an
+8-byte prefix without going through the named emit pair" — is not the right
+query. The named emit pair is not an abstraction, and the plumbing count is a
+name count that points the wrong way.** Both corrected below, with what to use
+instead.
+
+### F1 — the emit "pair" is ONE BACKEND'S HELPER TRIO, and it hardcodes 8 itself
+
+Defined at `symtab.inc:6907/6926/6945` — and there is a third member nobody has
+named, `EmitLeaStrDataRdi`, which is the one that computes the DATA ADDRESS.
+All three emit **raw x86-64 machine code**: `mov [P], rax` is a 64-bit store,
+`add rdi, 8` is the data offset. The trio is not a width abstraction; it *is*
+the 8.
+
+Of its 15 references, the three outside x86-64 are **comments**:
+
+    ir_codegen386.inc:3098      "Mirrors x86-64 EmitStoreStrLen."
+    ir_codegen_aarch64.inc:2993 "Mirrors x86-64 EmitStoreStrLen."
+    ir_codegen_arm32.inc:2534   "Mirrors x86-64 EmitStoreStrLen."
+
+`riscv32`, `xtensa` and `wasm32` do not mention it at all. So "route it through
+the named emit pair" is not a small step: **P2 must first make the trio
+width-aware, then build an equivalent in six backends that have none.** The
+phrase describes a concentration that does not exist.
+
+### F2 — THE KIND IS NOT PLUMBED IN THE BACKENDS; IT IS *ERASED*. That inverts the risk.
+
+`tyShortString`'s 63 mentions are the reassuring number. Per backend:
+
+| backend | mentions | what they actually are |
+| --- | --- | --- |
+| x86-64 `ir_codegen.inc` | 1 | a comment |
+| i386 | 2 | **an explicit refusal** (F3) + one kind list |
+| aarch64 | 1 | a kind list, beside `tyFixedString` |
+| arm32 | 1 | a kind list, beside `tyFixedString` |
+| wasm32 | 1 | a debug type-NAME string |
+| riscv32 | **0** | — |
+| xtensa | **0** | — |
+
+**And yet riscv32 (11 sites) and xtensa (12) handle frozen strings fully.** They
+reach them through `TypeIsFrozenString`, whose own comment states the purpose:
+*"Widen existing `= tyString` codegen checks to this predicate so the new kinds
+route through the frozen-string path without 250 new arms."*
+
+That predicate is **an abstraction over exactly the distinction the byte prefix
+must create.** True for `tyString`, `tyFixedString` and `tyShortString` alike,
+asked at **128 sites across 17 files** — `symtab` 25, `wasm32` 15, `xtensa` 12,
+`riscv32` 11, `ir.inc` 10, `ir_codegen` 10, `pasparser_expr` 10, `arm32` 7,
+`pasparser_stmt` 7, `aarch64` 6, `pasparser_lval` 4, `386` 3, `pyparser` 3,
+`abi` 2, one each in `pasparser_name`, `pasparser_proc`, `compiler.pas`.
+
+**So the audit surface is 128 `TypeIsFrozenString` sites, not 63 `tyShortString`
+ones — and the two counts point in OPPOSITE directions.** A grep for the kind
+says the backends are ready. They are ready precisely *because* they cannot tell
+the two kinds apart. This is the 80%-accurate name: every site you sample
+confirms it.
+
+Not all 128 are layout-sensitive. A first pass flags **28** carrying a literal 8
+or a sizing constant within ten lines (9 of those reach a sizer); they are the
+P2 worklist. The recurring shapes are
+`TypeIsFrozenString(Syms[si].TypeKind) and not Syms[si].IsArray` — the
+char-into-string store arm, present in every backend, which is the eight
+hardcoded arms already in this ticket — and
+`ProcExternal[procIdx] and TypeIsFrozenString(...)`, the `+8` skip that hands a
+Pascal string to a C callee as a `char*`.
+
+### F3 — i386 REFUSES BOTH FROZEN KINDS OUTRIGHT
+
+`ir_codegen386.inc:857`, in `IREmit386CheckScalarSym`:
+
+    else if Syms[symIdx].TypeKind = tyShortString then
+      Error('target i386: ' + whoSym + ' is a SHORTSTRING, not supported yet')
+    else if Syms[symIdx].TypeKind = tyFixedString then
+      Error('target i386: ' + whoSym + ' is a string[N], not supported yet')
+
+A `string[N]` variable does not compile for i386 today. That is one fewer
+backend for P2 — and it is a constraint on how P4 gets MEASURED: an i386 run
+cannot observe this shape before or after, so it cannot serve as the
+cross-target evidence the plan asks for. Use aarch64 or arm32.
+
+### F4 — most of the literal-8 noise is the STRING POOL, and it is out of scope
+
+Sweeping for a literal 8 on a line mentioning a string-layout concept returns
+**254 candidates — of which 55 are `Strs[...].Offset + 8`**, the interned
+literal pool that `emit.inc` writes once as `[len:8][chars][NUL]`. **Literals
+stay `tyString` by the plan's own rule, so the pool keeps its 8-byte prefix and
+all 55 are correct and must not be touched.**
+
+**Scope by what the 8 is a displacement ON, not by the presence of an 8.**
+`Strs[].Offset + 8` is the pool (out of scope); a displacement on a symbol slot
+or a runtime base register is a variable's frozen string (in scope). Worth
+stating because "grep for +8" is how the next person will scope P2, and it comes
+back four times too big.
+
+### F5 — SETTLED: the self-host build is **MANAGED**, and the 69 bare `string`s are not in this feature's domain
+
+The open question this phase was told to close. It closes off the build recipe,
+not by inference:
+
+- `util.inc:107` — `if PasDefineExists('PXX_MANAGED_STRING') then BareStringKind
+  := tyAnsiString`.
+- `bparser.inc:722` — *"PasApplyDefaults defines PXX_MANAGED_STRING
+  unconditionally — so for EVERY program, in every frontend, it returns True.
+  It is not a discriminator; it is a constant."*
+- `Makefile:134` — `FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING`, referenced by
+  **only** `bootstrap-frozen`, `test-frozen`, `test-nilpy-frozen`,
+  `stabilize-frozen` (lines 240, 3977, 3984, 22247).
+- The fixedpoint recipe `$(COMPILER_STAMP)` passes plain `$(PXXFLAGS)` — empty.
+
+**So `compiler.pas` self-hosts in MANAGED mode: bare `string` inside
+`compiler/**` is a `tyAnsiString` handle, exactly as in user code.** `defs.inc`'s
+*"tyString, the self-host model"* describes the `-frozen` OPT-OUT — a true
+sentence about a build nobody runs by default, and the sentence P4's risk
+paragraph was resting on.
+
+Two consequences, both shrinking P4:
+
+1. The 69 bare-`string` declarations are **not "left alone by choice" — they are
+   not in the domain.** They are managed handles; this feature does not touch
+   `tyAnsiString`.
+2. Even under `-uPXX_MANAGED_STRING`, bare `string` is `tyString`, the legacy
+   frozen kind — **which the flip also does not re-type.** The flip is
+   `string[N]`, N <= 255, and nothing else.
+
+**P4's remaining self-host risk is therefore not "the layout of strings the
+compiler itself uses."** It was F6, and F6 is now closed.
+
+### F6 — the whole build-input exposure was ONE DECLARATION, and it is now DECOUPLED (landed this phase)
+
+`compiler/**` has zero `string[N]` declarations (frank-coordinator-2c, verified).
+Extending the grep to the rest of the build input: **all of `lib/` contains
+exactly one**, and it is the one already flagged —
+
+    lib/rtl/typinfo.pas:19   TRttiStr = string[255];
+
+Nothing else in `lib/rtl`, `lib/pcl` or `lib/crtl` declares a `string[N]` or a
+`ShortString`. The two-ended ABI contract *was* the entire exposure.
+
+**Taken out of P4.** `TRttiStr` is now `string[256]`, reasoning in the
+declaration's own comment: the number is a **kind selector, not a length**. The
+type is never instantiated — only `^TRttiStr` exists, so no slot is allocated
+and the cap bounds nothing — while N > 255 can only ever be `tyFixedString`,
+because a 1-byte prefix cannot count past 255. `string[255]` sat on exactly the
+boundary where the re-type would reach it.
+
+**Why now rather than in the flip commit: pre-flip, `string[255]` and
+`string[256]` are the SAME KIND, so the change is a no-op today and cannot be
+one later.** It converts "the emitter and the RTL unit are only correct as a
+whole" into two independent commits. The stale `^string[255]` cross-reference at
+`sysutils.pas:225` was corrected in the same commit — load-bearing prose
+explaining why `PString` is not `^string`.
+
+**Verified with the control the claim needs.** Nine RTTI/typinfo tests are
+byte-identical across the change — but identical output only means something if
+the tests OBSERVE the path, so that was established separately:
+perturbing `GetClassName`'s deref by one byte moves
+`test_rtti_field_get_by_name` (`48258e01f694` -> `0348e0728008`), while a
+cap-only change (256 -> 257) leaves every row untouched. So the no-op is aimed,
+and the second control confirms the cap is not read. Note the other eight rows
+did NOT move under the off-by-one — they do not reach that reader, and quoting
+"nine tests green" as coverage of the name path would have been the mistake.
+
+### F7 — the permissive default will re-fire at ELEVEN sites at once, and the fix pattern already exists twenty lines away
+
+frankA's finding, relayed and then corrected by the coordinator; I confirmed the
+correction in the source. Every clamp helper opens
+`if cap <= 0 then cap := DEFAULT_STR_CAP` — seven backend helpers
+(`ir_codegen.inc:4758`, `386:1438`, `aarch64:595`, `arm32:1287`, `riscv32:445`,
+`xtensa:629`, `wasm32:4616`), three in `pasparser_decl.inc` (3334, 4134, 5982),
+and `FrozenStrSlotSize` at `symtab.inc:3636`. **Eleven, not twelve** — the
+twelfth match was prose inside a doc comment, and `grep -c` cannot see that.
+
+**A MISSING capacity reads as a PERMISSIVE one**, so an unwired arm is a silent
+overrun and never a diagnostic. `DEFAULT_STR_CAP = 255` substitutes 255+8 = 263,
+aligning to 264 — **which is the 264 from
+`bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes`.** That
+bug was one firing of this mechanism, and `FrozenStrSlotSize:3636` is the site
+that performed the substitution in it. Under a byte prefix the same absence
+substitutes 256 instead: **same shape, different wrong number, equally
+plausible** — the concrete reason the capacity thread was sequenced ahead of
+this feature, now confirmed rather than assumed.
+
+**`SizeOfSlot` (`symtab.inc`, eleven lines below `FrozenStrSlotSize`) is the
+counterexample and the model, not one of the eleven.** It has no permissive
+default; it does the opposite —
+
+    if TypeIsFrozenString(tk) and (cap > 0) then Result := FrozenStrSlotSize(tk, cap)
+    else Result := TypeSlotSize(tk);
+
+— reading `cap <= 0` as *"none was recorded"* and declining to guess, because
+widening it there *"would be a guess dressed as a fix."* One site in this tree
+can already tell "unset" from a real answer; eleven cannot, and the one that can
+sits in the same file as the one that started the 264.
+
+**This is NOT a call to change all eleven.** Each has to be asked what its caller
+can actually know — which is exactly the question `SizeOfSlot` asks and answers
+honestly. Doing that once, against a pattern already in the file, is the
+tractable version; a blanket edit is not.
+
+### What P2 should be scoped by, in one line
+
+Not `grep tyShortString` (63, and it lies in the reassuring direction), not
+`grep '+ 8'` (254, four-fifths of it the literal pool): **the 128
+`TypeIsFrozenString` sites, filtered to the 28 that touch a layout number, plus
+the four-backend x86-64 helper trio that has no equivalent elsewhere.**
+
 
 > **OWNER: HIGHEST PRIORITY, PHASED, frankb-a9 HOLDS IT (2026-09-02).**
 > `prio: 100` — **TOP OF THE BOARD, set by the owner.** Above every

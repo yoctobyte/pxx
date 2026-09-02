@@ -15,8 +15,31 @@ type
     Under the managed-string default `string` is a refcounted handle, so a name
     pointer must be a FROZEN string pointer to read the inline [len][chars] blob
     correctly — `^string` would misread the length word as a managed handle and
-    crash. string[255] is the frozen (tyFixedString) word-prefix kind. }
-  TRttiStr = string[255];
+    crash.
+
+    THE CAP IS 256 AND THAT IS THE WHOLE POINT: it is not a length, it is a
+    KIND SELECTOR. This type is never instantiated -- only `^TRttiStr` exists,
+    so no slot is ever allocated and the number bounds nothing. What it does is
+    name the WORD-prefixed kind. `string[N]` for N <= 255 is on course to bind
+    to the byte-prefixed tyShortString (the FPC ABI layout), while N > 255 can
+    only ever be tyFixedString, because a 1-byte length prefix cannot count past
+    255. `string[255]` sat exactly on that boundary -- the one value where the
+    re-type would reach this declaration and silently change what it reads.
+
+    It would have changed it in the WORST WAY. The blob prefix is written
+    little-endian (emit.inc: the length low dword, then an explicit zero high
+    dword), so a byte-prefix reader takes byte 0 -- the LOW BYTE of the true
+    length -- and is CORRECT for every name under 256 characters, while the
+    chars it then reads at offset 1 are the prefix's own remaining zero bytes.
+    Length right, name empty, no crash. Measured on the sibling shape at
+    bug-p-a-pshortstring-deref-reads-chars-at-the-wrong-prefix-offset.
+
+    Moving to 256 NOW, while both spellings are still tyFixedString, is a
+    provable no-op and it takes lib/rtl out of the re-type commit entirely: the
+    emitter and this reader no longer have to change together. Do not "tidy"
+    this back to 255.
+    feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+  TRttiStr = string[256];
   PString = ^TRttiStr;
   { Managed-string pointer for live instance string FIELDS (Get/SetStrProp): a
     `string` property field holds a managed handle under the default model. }

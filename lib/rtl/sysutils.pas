@@ -222,7 +222,9 @@ type
     reintroduce the two-layouts-one-name bug this replaced. }
   { Delphi's PResStringRec. FPC spells the same parameter `PString`; this unit
     does NOT, because `lib/rtl/typinfo.pas` already exports a `PString` that is
-    `^string[255]` — a FROZEN string pointer for reading RTTI name blobs — and a
+    a pointer to the WORD-prefixed frozen string kind, for reading RTTI name
+    blobs (typinfo spells it `string[256]`, and the 256 is a kind selector, not
+    a length — see the comment there) — and a
     program doing `uses typinfo, sysutils` would silently get whichever came
     last. Two incompatible meanings for one name in one RTL is the kind of thing
     that produces a wrong answer rather than an error, so the Delphi spelling is

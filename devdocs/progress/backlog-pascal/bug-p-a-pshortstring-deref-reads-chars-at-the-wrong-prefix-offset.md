@@ -6,7 +6,7 @@ blocked-by: []
 found: 2026-09-02
 found-by: frankB
 owner: —
-summary: "`PShortString` is the ONE spelling that reaches tyShortString from ordinary source, and it already mixes the two prefix conventions: `var s: ShortString; p := @s; WriteLn(p^)` prints garbage where FPC 3.2.2 prints the string. `Length(p^)` is correct (5), so the deref reads the LENGTH right and the CHARS wrong. Cause: `ShortString` the type name maps to tyFixedString (8-byte length word, measured byte0=5 byte8='h', SizeOf 263), but `PShortString` maps its POINTEE to tyShortString, whose slot rule is cap+1 -- so the deref looks for chars at offset 1 while the storage has them at offset 8. Matters beyond itself: it is a LIVE, reachable instance of the exact hazard feature-p-implement-the-real-tyshortstring-byte-prefix-layout's step-1 audit is looking for, which makes it a positive control that already exists rather than one that has to be built."
+summary: "`PShortString` is the one spelling that reaches tyShortString from ordinary source, and it already mixes the two prefix conventions -- but ONLY on the direct-write path, which is the part that makes it survive review. Measured 2026-09-02 against FPC 3.2.2: for `var s: ShortString; p := @s`, `WriteLn(p^)` prints ~1000 NUL bytes where FPC prints `hello`, while `t := p^` (the COPY path) and `Length(p^)` are both CORRECT. Storage dumped: `05 00 00 00 00 00 00 00 h e l l o` -- so `ShortString` the TYPE NAME is tyFixedString (8-byte length word, SizeOf 263 vs FPC 256), while `PShortString` maps its POINTEE to tyShortString (`pasparser_lval.inc:6742`), whose slot rule is cap+1. Two names for one type disagreeing about the prefix width. MATTERS BEYOND ITSELF: this is the live, reachable instance of the exact failure predicted for `lib/rtl/typinfo.pas`'s RTTI name reader after the byte-prefix flip -- a correct Length beside empty content, arriving far from the cause -- so it is a ready-made positive control for feature-p-implement-the-real-tyshortstring-byte-prefix-layout rather than one that has to be built. Note the copy path being correct means an assertion on `t := p^` cannot see this bug; assert the CHARS on the direct path."
 ---
 
 # `PShortString` derefs a `ShortString` at the wrong prefix offset
@@ -18,8 +18,15 @@ var s: ShortString; p: PShortString;
 begin s := 'hello'; p := @s; WriteLn('[', p^, '] len=', Length(p^)); end.
 ```
 
-    pxx   [<252 spaces>] len=5     SizeOf(s)=263
-    fpc   [hello]        len=5     SizeOf(s)=256
+                          pxx                    fpc
+    WriteLn(p^)           ~1000 NUL bytes        hello
+    Length(p^)            5                      5
+    t := p^; WriteLn(t)   hello                  hello
+    SizeOf(s)             263                    256
+
+**The copy path is CORRECT and only the direct write is wrong**, which is what
+makes this survive a casual test. `t := p^` reads the chars from offset 8 and
+gets them right; `WriteLn(p^)` does not.
 
 Raw bytes of `s` confirm the storage: byte 0 = 5, byte 8 = 104 (`'h'`). That is
 the `tyFixedString` layout, an 8-byte NativeInt length word followed by chars.
