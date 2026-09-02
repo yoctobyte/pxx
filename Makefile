@@ -9099,6 +9099,17 @@ test-core: $(COMPILER)
 	# the system C library -- so the guard's tell is the loader, not the linker.
 	./$(COMPILER) test/c_builtin_constant_p.c $(TESTTMP)/c_builtin_constant_p26
 	$(TESTTMP)/c_builtin_constant_p26; tools/expect_same.sh c_builtin_constant_p26-rc "$$?" "42"
+	# The dead-arm prune keeps any arm holding a LABEL, because a label is an
+	# entry point and the arm is only dead to a reader who ignores it. Its guard
+	# enumerated AN_LABEL / AN_LABELADDR / AN_GOTO_INDIRECT and missed AN_CASE /
+	# AN_DEFAULT, so a `case` inside `if (0)` went with the arm while AN_SWITCH's
+	# dispatch still jumped to it -- `invalid IR conditional jump target (label
+	# not defined)`, which took out c-testsuite 00213.c on ALL FIVE conformance
+	# targets at once. The corpus is not in the quick tier; this row is.
+	# Rows 5-6 are the control: `if (1)` and a bare block never pruned and must
+	# not start now. gcc agrees on all six.
+	./$(COMPILER) test/c_dead_arm_holds_a_case_label.c $(TESTTMP)/c_dead_arm_case26
+	$(TESTTMP)/c_dead_arm_case26; tools/expect_same.sh c_dead_arm_case26-rc "$$?" "42"
 	./$(COMPILER) test/cfnptr_deref_call_b15.c $(TESTTMP)/cfnptr_deref_call_b1526
 	$(TESTTMP)/cfnptr_deref_call_b1526; tools/expect_same.sh cfnptr_deref_call_b1526-rc "$$?" "42"
 	./$(COMPILER) test/caddr_array_field_b16.c $(TESTTMP)/caddr_array_field_b1626

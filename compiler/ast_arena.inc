@@ -159,6 +159,28 @@ end;
   the only shape Pascal can hurt itself with. And the cheap answer is the safe
   one: over-keeping costs bytes in dead code, under-keeping miscompiles.
 
+  AN_CASE AND AN_DEFAULT ARE LABELS TOO, and leaving them out is what
+  c-testsuite 00213.c caught -- on all five conformance targets at once, with
+  `invalid IR conditional jump target (label not defined)`:
+
+      switch (i) { if (0) { case 41: printf("caseok\n"); } }
+
+  The `case` sits inside a constant-false `if`, so the arm went; but AN_SWITCH
+  lowers to a DISPATCH that jumps to each case's label, and that dispatch is
+  outside the arm. The jump survived its target. gcc prints `caseok`, and
+  00213.c exists precisely to test "dead code inside if statements where there
+  are non-obvious ways of how the code is actually not dead due to reachable by
+  labels" -- its own header comment.
+
+  It is the same hazard as the `goto` above wearing a third spelling, which is
+  the tell: `goto`, `&&label` and `case` are three ways to name an entry point,
+  and a guard that enumerates spellings will keep missing the next one. The
+  boundary measured 2026-09-02: `if (1)`, a bare `{ }` block and a top-level
+  `case` are all fine; `if (0)` and `while (0)` are not. So the discriminator
+  was never the nesting, it was the pruning -- which means every future entry
+  point kind has to be added HERE, and the header of AN_SWITCH in defs.inc says
+  where the dispatch that needs them lives.
+
   THE BUDGET IS PART OF THE GUARD, not a performance tweak. A statement list
   chains through ASTRight, so a thousand-statement arm is a thousand-deep walk;
   exhausting the budget answers TRUE -- keep the arm -- because a guard that
@@ -170,7 +192,8 @@ begin
   if budget <= 0 then begin ASTSubtreeHasLabel := True; Exit; end;
   Dec(budget);
   if (ASTKind[node] = AN_LABEL) or (ASTKind[node] = AN_LABELADDR) or
-     (ASTKind[node] = AN_GOTO_INDIRECT) then
+     (ASTKind[node] = AN_GOTO_INDIRECT) or
+     (ASTKind[node] = AN_CASE) or (ASTKind[node] = AN_DEFAULT) then
   begin
     ASTSubtreeHasLabel := True;
     Exit;
