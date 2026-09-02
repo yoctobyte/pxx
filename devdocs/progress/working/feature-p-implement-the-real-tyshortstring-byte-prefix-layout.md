@@ -773,7 +773,7 @@ Same discipline CLAUDE.md already applies to self-host fixedpoint versus
 | i386 | open | `qemu-i386` (or native ia32) — runner exists |
 | riscv32 | open | `qemu-riscv32` — runner exists |
 | wasm32 | open | **`wasmtime` runs it — measured, see below** |
-| xtensa | open | **NOTHING. Converts blind.** |
+| xtensa | open | `qemu-xtensa`, with `--platform=posix --xtensa-soft-mulhigh` |
 
 **wasm32 IS RUNNABLE, and the earlier claim in this ticket's own reporting that
 it was not is WRONG.** It was inferred from `tools/run_target.sh` having no
@@ -784,13 +784,43 @@ genuinely missing is tooling, not capability — a `wasm32)` arm in
 not an open question about what a green would mean.** The instrument answered a
 question about the harness and was read as a question about the platform.
 
-**XTENSA IS THE ONE THAT IS ACTUALLY BLIND, and it is worse than "no runner":
-it cannot compile a frozen-string program at all today** — `target xtensa:
-external (dynamic) symbols are not supported on this target`. So xtensa's
-converter cannot run its own conversion even in principle, cannot write a
-failing test first, and cannot find by running any of the bugs the other five
-found that way. **Record it as converted-unexecuted and never let it into the
-same number as the rest.** It is also the argument for xtensa going LAST.
+**XTENSA CAN RUN, AND THE CLAIM ABOVE THAT IT COULD NOT WAS MINE AND WAS
+FALSE — NOT JUST NOW, BUT EVER.** I wrote that xtensa *"cannot compile a
+frozen-string program at all today"* from one observation: bare
+`--target=xtensa` refusing with `external (dynamic) symbols are not supported
+on this target`. That refusal is the **ESP platform default** — bare-metal /
+FreeRTOS, no libc, no dynamic segment, deliberately — and not a property of the
+backend. Measured:
+
+```
+--target=xtensa                                       refuses (ESP default)
+--target=xtensa --platform=posix --xtensa-soft-mulhigh builds, and
+                                        qemu-xtensa prints hello|5|h
+```
+
+Those two flags are the standard xtensa invocation on dozens of Makefile rows
+from :17920; `run_target.sh:88-100` documents both and names the misread
+outright; **two frozen-string programs already compiled for xtensa in the suite
+before phase 2 existed** (`test_cross_frozen_strlen_deref` Makefile:17975,
+`test_frozen_string_cross_b305` :18065); and `symtab.inc:11541` records the
+compiler itself built that way. Four corroborations, all sitting in the tree,
+none of which anyone checked before the claim had re-sequenced a session.
+
+**TWICE IN ONE EVENING I TURNED A DEFAULT'S REFUSAL INTO A PLATFORM'S
+INCAPABILITY, AND THAT IS THE DURABLE PART OF THIS ENTRY.** First wasm32 —
+`run_target.sh` has no `wasm32)` arm, which is a fact about the HARNESS, and I
+reported it as "no runner exists". Then xtensa — a default profile refuses,
+which is a fact about the PROFILE, and I reported it as "the backend cannot
+compile this". **Neither instrument errored. Both answered correctly about
+something narrower than the claim I drew from it**, which is exactly the
+failure mode CLAUDE.md describes, committed by the session quoting it. The
+guard that would have caught both is the same one line: *before writing "X
+cannot", try the second invocation.*
+
+**Do NOT write "seven verified" until xtensa's rows have actually run.** It is
+a plan, not a result. The floor is no longer "six verified, xtensa
+converted-unexecuted" — but the replacement is "six verified, xtensa in
+progress", not seven.
 
 **The three that were found by RUNNING, none of which a reading would have
 caught** — this is the estimate for how many remain per backend:
@@ -835,6 +865,21 @@ re-earns the same green that was wrong.
 this reason. **Wire that file, do not hand-write a width-0 suite.** The
 positive control is recorded: `pad` collapses to `<>` with the fix reverted.
 
+**AND THE WIDTH-0 BYPASS IS NOT UNIFORM ACROSS BACKENDS, which makes the row
+MORE necessary rather than less** (franks-ab, 2026-09-02): **xtensa calls the
+shared helper at EVERY width including 0, where arm32 calls it only at
+`wid > 0`.** So "every test used width 0" is a *masking* explanation on some
+targets and cannot be the explanation on others — on xtensa a width-0 test
+already exercises the helper, and a bug there would have shown up without any
+field width at all.
+
+That cuts both ways and both are worth knowing: a backend in the xtensa shape
+gets helper coverage for free from rows it already has, and a backend in the
+arm32 shape has a whole path that no existing row can reach. **Do not reason
+about the coverage of the OTHER backends from your own.** The reason the
+aarch64 defect survived is specific to aarch64's dispatch, not a general
+property of the tests.
+
 **CALL SITES OF THE SHARED WRITE HELPER — AND THE FIRST COUNT WAS INFLATED,
 WHICH POINTED FOUR BRIEFS AT THE SMALLEST PART OF THE JOB.**
 
@@ -860,6 +905,14 @@ Same reason `IR_INDEX`'s `AN_STR_LIT` arm keeps its `-7` permanently.
 *a finding that falls out of a grep needs the same interrogation as one that
 falls out of a hypothesis*.** I relayed the table without opening a single
 site. It did not merely overstate a number — it aimed four sessions' attention.
+
+**The inflation was SYSTEMATIC, not random, which is why it looked plausible.**
+Every `FindProc` in this codebase is followed by an `if procIdx < 0 then
+Error(...)` guard naming the same string, so a name grep counts every real call
+site TWICE by construction, and comment references add more on top. A count of
+helper call sites taken by grep is therefore roughly double the truth
+*everywhere*, and the ratios between backends survive — which is exactly what
+makes it read as a real distribution rather than an artefact.
 
 **WHERE THE REAL wasm32 EXPOSURE IS, and no grep of the helper name reaches
 any of it:** the width-8 assumptions spread through the backend — `Length`
