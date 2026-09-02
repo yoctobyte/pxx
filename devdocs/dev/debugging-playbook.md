@@ -907,6 +907,55 @@ The positive control is free and it is the one to run before believing any of
 these: issue the same query with the target definitely stopped. A query that
 still answers "running" is answering about itself.
 
+## `git log -S` is blind to the commit that documents its own change
+
+**`git log -S<string>` finds commits where the NUMBER OF OCCURRENCES of the
+string changed.** Not commits that touch it. Two consequences, and the second
+is the one that cost time.
+
+**It cannot tell you DIRECTION.** An addition and a removal are the same hit,
+because both change the count. Reading the sole hit for a flag as "the commit
+that removed it" is a coin flip, and it comes up wrong exactly as often as the
+flag was added in the window you searched.
+
+**It goes BLIND when a commit conserves the count** — and the commit most
+likely to conserve it is the one you are looking for. Measured 2026-09-02 on
+`tools/busybox_diff.sh`: `9e7c4cf8c` removed `-Wl,-z,muldefs` from the link
+line and, in the same diff, added a comment saying *"the exact failure
+-Wl,-z,muldefs used to hide"*. One line removed, one added, net zero — so
+`git log -S'muldefs' -- tools/busybox_diff.sh` does not list it at all. The
+only hit is `3056e214c`, which ADDED the flag an hour earlier. Read literally,
+the pickaxe says the flag was introduced and never removed, while the file in
+front of you does not pass it.
+
+**So the better a removal is documented, the more likely `-S` hides it.**
+Replacing a use with a comment about the use is an extremely common commit
+shape — a deprecation note, a "why this is gone" line, a pointer to the ticket.
+Every one of them is invisible to the pickaxe.
+
+The fix, in order:
+
+1. **`git log -G<regex>`** matches the DIFF CONTENT rather than a count, so it
+   sees any commit whose added or removed lines mention the string. On the case
+   above it returns three commits where `-S` returned one.
+2. **Read the direction off the diff, never off the log:**
+   `git show <sha> -- <path> | grep -E '^[+-].*<string>'`. Two seconds, and it
+   is the only thing that distinguishes an addition from a removal.
+3. **Search the exact line, not the token,** when you want one specific use:
+   `-S'-Wl,-z,muldefs -o'` does find `9e7c4cf8c`, because that longer string
+   really did go from 1 to 0. A more specific needle restores the count signal
+   the comment destroyed.
+
+The positive control is free and it is the one to run before trusting a
+pickaxe result: search for a string you KNOW was added in the window. If the
+output looks identical to the one you are reading as a removal, the tool is
+not answering your question.
+
+Same family as the sections above: **the instrument does not error, and it is
+correct about something adjacent** — here, about occurrence counts, when you
+asked about edits.
+
+
 ## Assert the PRECONDITION, not just the comparison
 
 The section above says what goes wrong. This is the form of the fix, and it
