@@ -6158,7 +6158,18 @@ measurement generally; it is noticing that two of your instruments disagree and
 declining to pick the one you prefer.
 
 A second instance the same day, reported by frankC and not independently
-verified here: frankA hit the same shape with an unmeasured line count.
+verified here — and frankC's original phrasing of it overstated the case, so
+it is corrected here rather than left standing. frankA wrote "deletes ~30 lines
+each" for an extraction, then **measured it before it escaped**: -12 / -8 / +7,
+with one backend net POSITIVE because the patch predated a transplant and was
+therefore extraction plus a bug fix in one diff. It declined to carry an
+estimate at all rather than publish a corrected one, on the grounds that a tidy
+number gets quoted back later as a census.
+
+That is the trap AVOIDED, not the trap landing, and the difference is the whole
+lesson: the same "already feels verified" quality attaches to a flattering
+number whether or not anyone catches it, and what separated the two cases was
+that frankA re-derived a number it liked and frankC did not.
 
 **So rule 1 is not wrong, it is incomplete.** A positive result does not need
 the same control a negative one needs — but a positive result that CREDITS THE
