@@ -100,6 +100,12 @@ STATUSES = [
     # ranker. Kept rather than deleted so it is not refiled from scratch, and so
     # one can be pulled back if it becomes relevant. Loaded, never ranked.
     "low-prio",
+    # The ticket's FINDING IS TRUE and reproducible, and it is still not a
+    # defect: both behaviours are correct about their own implementation and
+    # ours is the chosen one. Distinct from rejected/ (which says the report is
+    # WRONG) — filing a true measurement there misrepresents it and invites a
+    # refile. Loaded, never ranked.
+    "divergence",
     # Track F parks here. Listed so the folder is LOADED (board, check, blocker
     # resolution see it) — NOT so it is ranked: ready/next read only
     # RANKED_STATUSES (urgent/backlog/backlog_new/unfinished), which is the

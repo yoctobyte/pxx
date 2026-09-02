@@ -614,12 +614,22 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   `PENDING-COMMIT` and `sync.sh` fills it in. Recover a ghost by matching the
   commit **subject** on origin/master.
 - **Tickets live in** `devdocs/progress/{urgent,working,unfinished,blocked,done,
-  rejected}/` and, for open unclaimed work, **per-lane backlogs**:
+  rejected,low-prio,divergence}/` and, for open unclaimed work, **per-lane
+  backlogs**:
   `backlog-core` (A), `-nilpy` (N), `-tools` (T), `-pascal` (P), `-decide` (U),
   `-libs` (B/E), `-cfront` (C), `-web` (W), `-windows` (M), `-docs` (D),
   `-esp` (S), `-umbrella`. All ranked identically; the win is that `ready --track
   N` reads one folder. Bugs vs features stay on the slug prefix. Regenerate
   `BOARD.md` after moving anything.
+  **Four terminal folders, and they say DIFFERENT things** — putting a ticket in
+  the wrong one is how it gets refiled. `rejected/`: the report is **WRONG**
+  (unreachable observable, false premise, not a goal). `divergence/`: the
+  measurement is **TRUE and reproducible** and still not a defect — both
+  behaviours are correct about their own implementation and ours is **chosen**,
+  never merely tolerated. `low-prio/`: real, probably correct, and not worth
+  ranker attention — no plan to do it, no claim it is wrong. `rainy-day/`: real,
+  intended, **deferred** — a future plan. All are loaded (so citations resolve
+  and `check` sees them) and none are ranked.
   **Auto-filed regressions carry `track: T` as a FALLBACK, not a finding** —
   re-lane before working, and do not guess the lane from the failing step.
 - **`working/` is a status hint, not a lock; `owner:` is ATTRIBUTION, not a

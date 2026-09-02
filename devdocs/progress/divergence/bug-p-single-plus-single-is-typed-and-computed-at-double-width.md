@@ -3,10 +3,10 @@ slug: bug-p-single-plus-single-is-typed-and-computed-at-double-width
 track: P
 prio: 40
 type: bug
-status: rejected
+status: divergence
 owner: ""
 blocked-by: []
-summary: "REJECTED 2026-09-02 (owner): not a bug. Evaluating `Single + Single` at double width is a legitimate implementation choice and is strictly MORE accurate, and a program that stores the result in a Single gets FPC's exact bytes -- measured, `s := a + b` gives 0.300000012 on both. Nobody computes a wrong value. Two behaviours are CHOSEN, not tolerated, and neither compiler is wrong:  `SizeOf(a+b)` is 8 where FPC says 4, and an overloaded `P(a+b)` picks the Double arm where FPC picks Single -- both are TRUE statements about a pxx expression, exactly as FPC's answers are true about an FPC one; SizeOf reported correctly about the actual type, which is why the operator exists. A caller needing the narrow type writes `Single(a+b)`. Matching FPC would mean discarding precision we already have to reproduce its rounding, which is FPC-parity chasing rather than language conformance."
+summary: "KNOWN DIVERGENCE, not a bug (owner, 2026-09-02). The measurement in this ticket is TRUE and reproducible; it is not a defect. Evaluating `Single + Single` at double width is a legitimate implementation choice and is strictly MORE accurate, and a program that stores the result in a Single gets FPC's exact bytes -- measured, `s := a + b` gives 0.300000012 on both. Nobody computes a wrong value. Two behaviours are CHOSEN, not tolerated, and neither compiler is wrong:  `SizeOf(a+b)` is 8 where FPC says 4, and an overloaded `P(a+b)` picks the Double arm where FPC picks Single -- both are TRUE statements about a pxx expression, exactly as FPC's answers are true about an FPC one; SizeOf reported correctly about the actual type, which is why the operator exists. A caller needing the narrow type writes `Single(a+b)`. Matching FPC would mean discarding precision we already have to reproduce its rounding, which is FPC-parity chasing rather than language conformance."
 ---
 
 # Pascal `Single + Single` is typed Double
@@ -65,7 +65,7 @@ byte-identical on x86-64, i386, aarch64, arm32 and riscv32).
   frontends are *supposed* to answer this separately; that they answer it
   differently is not itself the defect, the wrong answer is.
 
-## REJECTED 2026-09-02 — owner decision, with the measurement that settles it
+## KNOWN DIVERGENCE 2026-09-02 — the measurement is right, the conclusion is not
 
 This ticket asked the right question — *"settle the TYPE RULE"* — and the owner
 has now settled it: **`Single + Single` evaluating at double width is correct,
