@@ -397,3 +397,4 @@
 2026-08-30T16:30:59Z  v397  faf762981c3c1d683c8f4f26fe1395e74d94923420aa436afd3e341eb5446145  00779811b91295da6269e441d8a2800d34f278e6  docs(progress): record the shas the resolves landed as
 2026-08-30T17:33:59Z  v398  992065f21f333a2c35a566c0f9fcc99016f5c4f8a4c06aaa8764f613bd74d5bb  c8e132a02b9279707213d41c970c00f96dfaddf5  roster: third instance of a sample stated as a population -- the busybox cap
 2026-09-01T20:29:58Z  v399  954adef93a7b0e9ecec62b070b2e5727a075f52d52c0dde73bd207b354e0d64e  86c71828cd1eb8d74709bf531f3a5061621a9fa8  docs(A): bisect and settle the cdecl PChar correction, at frankA's request
+2026-09-02T09:29:42Z  v400  6c184b4bcc37f80dfad90ac158a511cd7f61e3c577c1ded86e62ac138b94e7a7  67ae9a62d567be6bddbb6c609db7c79c1d2005ff  docs(A): correct my own residual figure — 65682 was the delta, 173823 is the total

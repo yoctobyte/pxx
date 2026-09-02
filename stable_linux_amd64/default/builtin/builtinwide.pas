@@ -58,17 +58,26 @@ implementation
 uses builtinheap;
 
 { Pointer aliases, declared here exactly as builtinheap declares them in ITS
-  implementation -- they are not exported, and exporting them would put PWord
-  and PByte into every program that uses builtinheap, where a user's own PWord
-  would be silently re-typed (the trap CLAUDE.md names). Duplicating a type
-  alias is not a second code path; getting PWord wrong is. }
+  implementation. Duplicating a type alias is not a second code path; getting the
+  machine-word width wrong is.
+
+  These are NOT private, whatever the section says. Measured 2026-09-02: pxx has
+  no interface/implementation visibility boundary at all -- a unit's
+  implementation-section types, consts AND routines are visible to every
+  importer (FPC rejects all four; see
+  bug-p-a-units-implementation-section-is-visible-to-its-importers). So this
+  block lands in every program that reaches builtinwide, and the name it uses
+  must be one no user program would spell. That is why the machine word is
+  `PMachineWord` and not `PWord`: while it was spelled `PWord` it shadowed the
+  builtin `PWord = ^UInt16` in USER code, and `PWord(p)^` silently read eight
+  bytes instead of two -- and `PWord(p)^ := x` silently WROTE eight. }
 type
-  PWord = ^NativeInt;  { pointer-sized machine word -- 8 bytes on 64-bit, 4 on
+  PMachineWord = ^NativeInt;  { pointer-sized machine word -- 8 bytes on 64-bit, 4 on
                          32-bit. MUST NOT be ^Int64: on i386 that writes 8
                          bytes into a 4-byte slot and corrupts its neighbour.
                          Matches builtinheap. }
   PByte = ^Byte;
-  PU16  = ^Word;   { 2-byte access for UTF-16 code units. NOT PWord -- that name
+  PU16  = ^Word;   { 2-byte access for UTF-16 code units. NOT PMachineWord -- that name
                      means ^NativeInt above, which is the single easiest mistake
                      to make in this file. }
 
@@ -85,8 +94,8 @@ begin
   end;
   nbytes := Int64(units) * 2;
   base := Int64(PXXAlloc(nbytes + PXX_HDR_SIZE + 2, 8));   { +2 = wide NUL }
-  PWord(base + PXX_HDR_RC)^  := 1;
-  PWord(base + PXX_HDR_LEN)^ := nbytes;    { BYTES, as everywhere else }
+  PMachineWord(base + PXX_HDR_RC)^  := 1;
+  PMachineWord(base + PXX_HDR_LEN)^ := nbytes;    { BYTES, as everywhere else }
   d := base + PXX_HDR_SIZE;
   i := 0;
   while i < nbytes do
@@ -96,7 +105,7 @@ begin
   end;
   PByte(d + nbytes)^ := 0;
   PByte(d + nbytes + 1)^ := 0;
-  PWord(base + PXX_HDR_META)^ := PXX_KIND_WIDESTR;
+  PMachineWord(base + PXX_HDR_META)^ := PXX_KIND_WIDESTR;
   Result := Pointer(d);
 end;
 
@@ -113,14 +122,14 @@ begin
     Exit;
   end;
   base := Int64(PXXAlloc(total + PXX_HDR_SIZE + 2, 8));
-  PWord(base + PXX_HDR_RC)^  := 1;
-  PWord(base + PXX_HDR_LEN)^ := total;
+  PMachineWord(base + PXX_HDR_RC)^  := 1;
+  PMachineWord(base + PXX_HDR_LEN)^ := total;
   d := base + PXX_HDR_SIZE;
   PXXBlockCopy(d, Int64(srcA), bytesA);
   PXXBlockCopy(d + bytesA, Int64(srcB), bytesB);
   PByte(d + total)^ := 0;
   PByte(d + total + 1)^ := 0;
-  PWord(base + PXX_HDR_META)^ := PXX_KIND_WIDESTR;
+  PMachineWord(base + PXX_HDR_META)^ := PXX_KIND_WIDESTR;
   Result := Pointer(d);
 end;
 
@@ -145,7 +154,7 @@ begin
     Exit;
   end;
   base := Int64(PXXAlloc(Int64(byteLen) * 2 + PXX_HDR_SIZE + 2, 8));
-  PWord(base + PXX_HDR_RC)^ := 1;
+  PMachineWord(base + PXX_HDR_RC)^ := 1;
   d := base + PXX_HDR_SIZE;
   s := Int64(src);
   i := 0;
@@ -209,10 +218,10 @@ begin
     Result := nil;
     Exit;
   end;
-  PWord(base + PXX_HDR_LEN)^ := units * 2;
+  PMachineWord(base + PXX_HDR_LEN)^ := units * 2;
   PByte(d + units * 2)^ := 0;
   PByte(d + units * 2 + 1)^ := 0;
-  PWord(base + PXX_HDR_META)^ := PXX_KIND_WIDESTR;
+  PMachineWord(base + PXX_HDR_META)^ := PXX_KIND_WIDESTR;
   Result := Pointer(d);
 end;
 
@@ -235,7 +244,7 @@ begin
     Exit;
   end;
   base := Int64(PXXAlloc(units * 3 + PXX_HDR_SIZE + 1, 8));
-  PWord(base + PXX_HDR_RC)^ := 1;
+  PMachineWord(base + PXX_HDR_RC)^ := 1;
   d := base + PXX_HDR_SIZE;
   s := Int64(src);
   i := 0;
@@ -297,9 +306,9 @@ begin
     Result := nil;
     Exit;
   end;
-  PWord(base + PXX_HDR_LEN)^ := out_;
+  PMachineWord(base + PXX_HDR_LEN)^ := out_;
   PByte(d + out_)^ := 0;
-  PWord(base + PXX_HDR_META)^ := PXX_KIND_BYTESTR;
+  PMachineWord(base + PXX_HDR_META)^ := PXX_KIND_BYTESTR;
   Result := Pointer(d);
 end;
 
@@ -314,7 +323,7 @@ begin
   if h = nil then
     Result := 0
   else
-    Result := PWord(Int64(h) - 8)^;
+    Result := PMachineWord(Int64(h) - 8)^;
 end;
 
 { UTF-8 handle -> UTF-16 handle. Under the compiler's width lowering this is

@@ -95,31 +95,47 @@ const
 
   { Which cursor a TPyIter is — see TPyIter. The kind decides where the next
     value comes from, so it is the whole of the object's behaviour; there is no
-    per-kind subclass, because the frontend has to name ONE class in the AST. }
-  PYITER_LIST   = 0;   { a list, walked forward, LIVE (mutation is visible) }
-  PYITER_STR    = 1;
-  PYITER_REV    = 2;   { reversed(list) }
-  PYITER_REVSTR = 3;
-  PYITER_MAP    = 4;
-  PYITER_FILTER = 5;
-  PYITER_ENUM   = 6;
-  PYITER_ZIP    = 7;
+    per-kind subclass, because the frontend has to name ONE class in the AST.
+
+    THE `_K_` IN THESE NAMES IS LOAD-BEARING; do not drop it when adding a kind.
+    They used to be PYITER_MAP / PYITER_FILTER / PYITER_ZIP / PYITER_ENUM, and
+    Pascal is CASE-INSENSITIVE, so each of those four was THE SAME IDENTIFIER as
+    the constructor function beside it — `pyiter_map` the function and
+    `PYITER_MAP` the tag are one name with two meanings. pxx resolved the call
+    `pyiter_map(key, v)` to the CONST and threw the arguments away: it answered
+    4. Silently, on every target; only i386 noticed, because it alone refuses to
+    load a const symbol and so turned a wrong answer into a build error. FPC
+    rejects the declaration pair outright ("overloaded identifier isn't a
+    function"), which is why this could not have been caught by parity either.
+
+    The prefix is the fix rather than four renames, because the trap is
+    STRUCTURAL: any kind added later whose name matches its constructor's would
+    walk into it again, and the failure is a plausible small integer.
+    bug-a-a-const-and-a-routine-of-the-same-name-silently-resolve-to-the-const }
+  PYITER_K_LIST   = 0;   { a list, walked forward, LIVE (mutation is visible) }
+  PYITER_K_STR    = 1;
+  PYITER_K_REV    = 2;   { reversed(list) }
+  PYITER_K_REVSTR = 3;
+  PYITER_K_MAP    = 4;
+  PYITER_K_FILTER = 5;
+  PYITER_K_ENUM   = 6;
+  PYITER_K_ZIP    = 7;
   { a RANGE cursor holds no source object at all — FStart is the next value,
     FStep the stride and FPos the number of values left, which is why a
     range of a billion costs the same as a range of three. }
-  PYITER_RANGE  = 8;
+  PYITER_K_RANGE  = 8;
   { a USER object implementing the iterator protocol — `__iter__` once, then
     `__next__` per step, terminating on StopIteration. FObj holds the object
     `__iter__` answered (which for the ordinary `return self` IS the source).
     bug-nilpy-iterator-protocol-on-a-user-class }
-  PYITER_USEROBJ = 9;
+  PYITER_K_USEROBJ = 9;
   { an N-WAY zip, whose stream count is a RUN-TIME fact: `zip(*rows)`, the
     transpose idiom. FSrc holds the cursors (object-tagged variants) instead of
     a leaf list, because four FUp fields cannot hold a count nobody knows until
     the call runs. The fixed two/three/four-way forms above are unchanged — a
     pair still yields a PAIR, and the common case pays nothing for this.
     bug-nilpy-star-unpack-into-a-fixed-arity-builtin }
-  PYITER_ZIPN   = 10;
+  PYITER_K_ZIPN   = 10;
   { a STACKLESS GENERATOR instance — what `gen()` evaluates to when it is not
     consumed on the spot by a `for`. FGenInst is the slgen heap instance and
     FGenStep its step function; advancing is one indirect call, and the yielded
@@ -129,7 +145,7 @@ const
     generator value needs — `for x in g`, `next(g)`, `list(g)`, unpacking —
     already works on a cursor. Adding the kind is the whole feature on this
     side. See feature-nilpy-a-generator-as-a-first-class-value. }
-  PYITER_SLGEN  = 11;
+  PYITER_K_SLGEN  = 11;
   { The OLD-STYLE sequence protocol: a class with `__getitem__` and no
     `__iter__`, walked by INDEX from 0 and stopping on `__len__` (or on the
     IndexError `__getitem__` raises, when there is no `__len__`). CPython has
@@ -137,7 +153,7 @@ const
     a plain `class Box` with `__getitem__`/`__len__` is iterable there and why
     `list(b)` answering [] was a SILENT wrong value rather than a missing
     feature. bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop }
-  PYITER_SEQOBJ = 12;
+  PYITER_K_SEQOBJ = 12;
 
 type
   TPyVarRec = record
@@ -152,12 +168,12 @@ type
     that knows all four callable representations. See that variable. }
   TPyIterCall = function(key: Pointer; const a0: Variant): Variant;
   { A stackless generator's step function: `function(instance): Boolean`,
-    has-next. See PYITER_SLGEN. }
+    has-next. See PYITER_K_SLGEN. }
   TPyGenStep = function(inst: Pointer): Boolean;
   PInt64 = ^Int64;
   { pylib's own name for a variant pointer — pyeval declares one too, but this
     unit is compiled before it. Used to read a generator's yielded element out
-    of its instance (PYITER_SLGEN). }
+    of its instance (PYITER_K_SLGEN). }
   PPyVariant = ^Variant;
   PPyAnsiString = ^AnsiString;
   PPyDouble = ^Double;
@@ -841,7 +857,7 @@ type
       every site that tests FKind, and the one that got missed is where the bug
       would live. }
     FIsGen: Boolean;
-    { PYITER_SLGEN: the stackless generator instance and its step function.
+    { PYITER_K_SLGEN: the stackless generator instance and its step function.
       Kept as raw words rather than typed fields because pylib must not depend
       on lib/rtl/slgen — the layout it needs is two offsets, and the compiler
       is what guarantees they agree. }
@@ -12941,7 +12957,7 @@ end;
 function pygen_iter_new(inst: Pointer; step: Pointer): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_SLGEN;
+  Result.FKind := PYITER_K_SLGEN;
   Result.FGenInst := inst;
   Result.FGenStep := step;
   Result.FIsGen := True;
@@ -12950,7 +12966,7 @@ end;
 function pyiter_of_list(l: TPyList): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_LIST;
+  Result.FKind := PYITER_K_LIST;
   Result.FSrc := l;
   PXXObjRetain(Pointer(l));
 end;
@@ -12958,7 +12974,7 @@ end;
 function pyiter_of_str(const s: AnsiString): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_STR;
+  Result.FKind := PYITER_K_STR;
   Result.FStr := s;
 end;
 
@@ -12971,7 +12987,7 @@ end;
 function pyiter_rev_list(l: TPyList): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_REV;
+  Result.FKind := PYITER_K_REV;
   Result.FSrc := l;
   PXXObjRetain(Pointer(l));
   { CPython's list_reverseiterator holds a DESCENDING index seeded at
@@ -12983,7 +12999,7 @@ end;
 function pyiter_rev_str(const s: AnsiString): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_REVSTR;
+  Result.FKind := PYITER_K_REVSTR;
   Result.FStr := s;
   Result.FPos := Length(s);      { 1-based, walked down to 1 }
 end;
@@ -13032,7 +13048,7 @@ end;
 function pyiter_enum(const v: Variant; start: Int64): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_ENUM;
+  Result.FKind := PYITER_K_ENUM;
   Result.FUp := pyiter_v(v);
   PXXObjRetain(Pointer(Result.FUp));
   Result.FStart := start;
@@ -13041,7 +13057,7 @@ end;
 function pyiter_enum_i(up: TPyIter; start: Int64): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_ENUM;
+  Result.FKind := PYITER_K_ENUM;
   Result.FUp := up;
   PXXObjRetain(Pointer(up));
   Result.FStart := start;
@@ -13050,7 +13066,7 @@ end;
 function pyiter_zip_ii(a: TPyIter; b: TPyIter): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_ZIP;
+  Result.FKind := PYITER_K_ZIP;
   Result.FUp := a;
   PXXObjRetain(Pointer(a));
   Result.FUp2 := b;
@@ -13075,7 +13091,7 @@ function pyiter_zip_n(items: TPyList): TPyIter;
 var i, n: Integer; cur: TPyIter; pv: Variant;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_ZIPN;
+  Result.FKind := PYITER_K_ZIPN;
   Result.FSrc := TPyList.Create;
   PXXObjRetain(Pointer(Result.FSrc));
   n := 0;
@@ -13097,7 +13113,7 @@ end;
 function pyiter_zip(const a: Variant; const b: Variant): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_ZIP;
+  Result.FKind := PYITER_K_ZIP;
   Result.FUp := pyiter_v(a);
   PXXObjRetain(Pointer(Result.FUp));
   Result.FUp2 := pyiter_v(b);
@@ -13107,7 +13123,7 @@ end;
 function pyiter_map(key: Pointer; const v: Variant): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_MAP;
+  Result.FKind := PYITER_K_MAP;
   Result.FUp := pyiter_v(v);
   PXXObjRetain(Pointer(Result.FUp));
   Result.FKey := key;
@@ -13118,7 +13134,7 @@ end;
 function pyiter_map_conv(conv: Int64; const v: Variant): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_MAP;
+  Result.FKind := PYITER_K_MAP;
   Result.FUp := pyiter_v(v);
   PXXObjRetain(Pointer(Result.FUp));
   Result.FKey := nil;        { no callable — the code in FStart says what to do }
@@ -13128,7 +13144,7 @@ end;
 function pyiter_map_i(key: Pointer; up: TPyIter): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_MAP;
+  Result.FKind := PYITER_K_MAP;
   Result.FUp := up;
   PXXObjRetain(Pointer(up));
   Result.FKey := key;
@@ -13138,7 +13154,7 @@ end;
 function pyiter_filter_i(key: Pointer; up: TPyIter): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_FILTER;
+  Result.FKind := PYITER_K_FILTER;
   Result.FUp := up;
   PXXObjRetain(Pointer(up));
   Result.FKey := key;
@@ -13154,7 +13170,7 @@ end;
 function pyiter_filter(key: Pointer; const v: Variant): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_FILTER;
+  Result.FKind := PYITER_K_FILTER;
   Result.FUp := pyiter_v(v);
   PXXObjRetain(Pointer(Result.FUp));
   Result.FKey := key;    { nil is filter(None, xs) — Python's own shorthand }
@@ -13166,10 +13182,10 @@ end;
   CONDITION. Every source is consulted LIVE — a list that grows during the
   loop is seen, exactly as the eager index loop saw it. }
 function pyiter_has(it: TPyIter): Boolean;
-var genStep: TPyGenStep; genCur: Pointer;   { PYITER_SLGEN }
+var genStep: TPyGenStep; genCur: Pointer;   { PYITER_K_SLGEN }
     l: TPyList; pair: TPyList; ev, mv: Variant; pv: Variant; kept: Boolean;
     zc: TPyIter; zi, zn: Integer;   { the N-way zip's cursor walk }
-    lenv, idxv: Variant; nilo: TObject;   { PYITER_SEQOBJ's __len__ / __getitem__ }
+    lenv, idxv: Variant; nilo: TObject;   { PYITER_K_SEQOBJ's __len__ / __getitem__ }
     b0, b1: Integer;                { the str cursors' UTF-8 character span }
 begin
   Result := False;
@@ -13178,7 +13194,7 @@ begin
   { exhaustion is PERMANENT — a CPython iterator never restarts, and this is
     what makes a second pass over a bound cursor yield the remainder }
   if it.FEnd then Exit;
-  if it.FKind = PYITER_SLGEN then
+  if it.FKind = PYITER_K_SLGEN then
   begin
     { One indirect call to the step function. It returns has-next and, when
       True, has published the yielded value's ADDRESS in the instance's CURRENT
@@ -13200,7 +13216,7 @@ begin
     Result := True;
     Exit;
   end;
-  if it.FKind = PYITER_LIST then
+  if it.FKind = PYITER_K_LIST then
   begin
     l := it.FSrc;
     if (l = nil) or (it.FPos >= l.count) then begin it.FEnd := True; Exit; end;
@@ -13210,7 +13226,7 @@ begin
     Result := True;
     Exit;
   end;
-  if it.FKind = PYITER_STR then
+  if it.FKind = PYITER_K_STR then
   begin
     { FPos stays a BYTE cursor and steps over a whole UTF-8 character, so this
       yields what `for c in s` and `list(s)` yield — one CHARACTER — instead of
@@ -13227,7 +13243,7 @@ begin
     Result := True;
     Exit;
   end;
-  if it.FKind = PYITER_REV then
+  if it.FKind = PYITER_K_REV then
   begin
     l := it.FSrc;
     if (l = nil) or (it.FPos < 0) then begin it.FEnd := True; Exit; end;
@@ -13240,7 +13256,7 @@ begin
     Result := True;
     Exit;
   end;
-  if it.FKind = PYITER_REVSTR then
+  if it.FKind = PYITER_K_REVSTR then
   begin
     { …and backwards, over the same character span: `reversed("aÃ©â¢z")` handed
       back the bytes of the multi-byte characters one at a time. }
@@ -13254,7 +13270,7 @@ begin
     Result := True;
     Exit;
   end;
-  if it.FKind = PYITER_MAP then
+  if it.FKind = PYITER_K_MAP then
   begin
     if not pyiter_has(it.FUp) then begin it.FEnd := True; Exit; end;
     ev := pyiter_take(it.FUp);
@@ -13286,7 +13302,7 @@ begin
     Result := True;
     Exit;
   end;
-  if it.FKind = PYITER_FILTER then
+  if it.FKind = PYITER_K_FILTER then
   begin
     while pyiter_has(it.FUp) do
     begin
@@ -13309,7 +13325,7 @@ begin
     it.FEnd := True;
     Exit;
   end;
-  if it.FKind = PYITER_ENUM then
+  if it.FKind = PYITER_K_ENUM then
   begin
     if not pyiter_has(it.FUp) then begin it.FEnd := True; Exit; end;
     ev := pyiter_take(it.FUp);
@@ -13326,7 +13342,7 @@ begin
     Result := True;
     Exit;
   end;
-  if it.FKind = PYITER_USEROBJ then
+  if it.FKind = PYITER_K_USEROBJ then
   begin
     { the user iterator protocol: `__next__` per step, terminating on
       StopIteration. The exception is caught HERE and never reaches the loop —
@@ -13352,7 +13368,7 @@ begin
     Result := True;
     Exit;
   end;
-  if it.FKind = PYITER_SEQOBJ then
+  if it.FKind = PYITER_K_SEQOBJ then
   begin
     { The old-style sequence walk: `obj[0]`, `obj[1]`, ... CPython stops on the
       IndexError the subscript raises; when the class also declares `__len__`
@@ -13385,7 +13401,7 @@ begin
     Result := True;
     Exit;
   end;
-  if it.FKind = PYITER_RANGE then
+  if it.FKind = PYITER_K_RANGE then
   begin
     if it.FPos <= 0 then begin it.FEnd := True; Exit; end;
     it.FBox.put(0, it.FStart);
@@ -13395,7 +13411,7 @@ begin
     Result := True;
     Exit;
   end;
-  if it.FKind = PYITER_ZIPN then
+  if it.FKind = PYITER_K_ZIPN then
   begin
     { Same shortest-wins rule and same left-to-right consumption order as the
       fixed forms: each stream is asked in turn and the first exhausted one ends
@@ -13427,7 +13443,7 @@ begin
     Result := True;
     Exit;
   end;
-  if it.FKind = PYITER_ZIP then
+  if it.FKind = PYITER_K_ZIP then
   begin
     { the LEFT element is consumed before the right is even asked for, which is
       CPython's order and is observable when the two sides have side effects }
@@ -14080,7 +14096,7 @@ begin
     Exit;
   end;
   Result := TPyIter.Create;
-  Result.FKind := PYITER_USEROBJ;
+  Result.FKind := PYITER_K_USEROBJ;
   if o = nil then begin Result.FEnd := True; Exit; end;
   if not PyUserObjHasDunder(ito, '__next__') then
   begin
@@ -14095,7 +14111,7 @@ begin
       bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop }
     if PyUserObjHasDunder(ito, '__getitem__') then
     begin
-      Result.FKind := PYITER_SEQOBJ;
+      Result.FKind := PYITER_K_SEQOBJ;
       Result.FPos := 0;
       Result.FObj := ito;
       PXXObjRetain(Pointer(ito));
@@ -14111,7 +14127,7 @@ end;
 function pyiter_of_range(r: TPyRange): TPyIter;
 begin
   Result := TPyIter.Create;
-  Result.FKind := PYITER_RANGE;
+  Result.FKind := PYITER_K_RANGE;
   if r = nil then Exit;
   Result.FStart := r.FStart;
   Result.FStep := r.FStep;
@@ -14148,15 +14164,15 @@ begin
   Result := 'iterator';
   if it = nil then Exit;
   if it.FIsGen then begin Result := 'generator'; Exit; end;
-  if it.FKind = PYITER_LIST then Result := 'list_iterator'
-  else if it.FKind = PYITER_STR then Result := 'str_iterator'
-  else if it.FKind = PYITER_REV then Result := 'list_reverseiterator'
-  else if it.FKind = PYITER_REVSTR then Result := 'reversed'
-  else if it.FKind = PYITER_MAP then Result := 'map'
-  else if it.FKind = PYITER_FILTER then Result := 'filter'
-  else if it.FKind = PYITER_ENUM then Result := 'enumerate'
-  else if (it.FKind = PYITER_ZIP) or (it.FKind = PYITER_ZIPN) then Result := 'zip'
-  else if it.FKind = PYITER_RANGE then Result := 'range_iterator';
+  if it.FKind = PYITER_K_LIST then Result := 'list_iterator'
+  else if it.FKind = PYITER_K_STR then Result := 'str_iterator'
+  else if it.FKind = PYITER_K_REV then Result := 'list_reverseiterator'
+  else if it.FKind = PYITER_K_REVSTR then Result := 'reversed'
+  else if it.FKind = PYITER_K_MAP then Result := 'map'
+  else if it.FKind = PYITER_K_FILTER then Result := 'filter'
+  else if it.FKind = PYITER_K_ENUM then Result := 'enumerate'
+  else if (it.FKind = PYITER_K_ZIP) or (it.FKind = PYITER_K_ZIPN) then Result := 'zip'
+  else if it.FKind = PYITER_K_RANGE then Result := 'range_iterator';
 end;
 
 function pyiter_repr(it: TPyIter): AnsiString;
