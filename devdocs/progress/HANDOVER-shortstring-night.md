@@ -290,6 +290,23 @@ element passes; `a[0]` reports the RIGHT length beside corrupt data, so a probe
 asserting `Length` passes. It surfaced from a widened repro's negative-control
 row, not from the repro's own assertions.
 
+**Narrowed at `4def5ca66` — measurement only, frankb-a9's files untouched.**
+Byte-identical at `-O0` through `-O3`, so this is a layout/codegen arm and **not**
+an optimiser predicate; the `CmpFusible` tell does not fire here. Default mode at
+`-O2` on the same harness gives the right answer, so the rows are live.
+
+**And a third trap, the worst of the three.** `2199023255554` is `0x20000000002`,
+whose **low 32 bits are exactly 2** — the correct length. So x86-64 and aarch64
+report the garbage while **i386, arm32 and riscv32 report `len=2` and look
+clean**, with `a[1] = 'one'` still FALSE on all five. A `Length()` probe passes
+on three targets with the bug fully present, **on exactly the targets where
+anyone hunting a width bug would look first.** Assert the VALUE, never the
+length.
+
+The register-width reading of that constant is the obvious explanation and is
+**deliberately not in the ticket as a diagnosis** — nobody has read the emitted
+load. It is where to point gdb, nothing more.
+
 ## BOTH SURVIVORS ARE CLOSED (`0dd5858e6`, frankb-a9, 22:01)
 
 **One commit, 38 lines across `compiler/ir.inc` and `compiler/symtab.inc`, closed
