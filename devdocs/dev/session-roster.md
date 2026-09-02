@@ -123,62 +123,39 @@ entry is a live claim, not litter — ask before absorbing it.**
 
 ## Relay the WHY, or the instruction is not weighable
 
-**Measured 2026-09-02, and it cost a worker's compliance.** I relayed "all
-other tracks should finish what they are doing — they have some time, but then
-idle" and supplied my own rationale to make it legible (don't destabilise the
-tree), flagged as my construction. frankD weighed it against its user's
-standing goal to work busybox all night, and **resumed** — correctly, because a
-peer message is not its user's instruction and it cannot verify a relay the way
-it can verify its user.
+I relayed "finish what you are doing, then idle" with a rationale I had
+constructed to make it legible (flagged as mine). frankD weighed it against its
+user's standing goal and **resumed** — correctly: a peer message is not its
+user's instruction. **The relay did not lack force, it lacked the WHY.** The
+owner's sentence, which is the one to carry: *"that big flip should be _last_.
+and likely, we dont want any other work done at that point since this affects
+our self-compile capability."* The hazard is **concurrent landings during the
+flip, whose correctness is judged against the tree it lands on.**
 
-**The gap was not that the relay lacked force. It lacked the WHY**, and my
-substitute was weaker than the real one. The owner's actual sentence, which is
-the one to carry: *"the only danger here. on the big flip (from tyString to
-either short or fixed string).. that big flip should be _last_. and likely, we
-dont want any other work done at that point since this affects our self-compile
-capability."* The hazard is **concurrent landings during the flip, whose
-correctness is judged against the tree it lands on** — which my "don't
-destabilise" gestured at and did not name.
+- Carry the instruction AND its reason, both verbatim; if you lack the reason,
+  get it rather than supply one. Label any framing you add as yours.
+- **Never let your word stand as the authority for another session's
+  user-directed work.** Asserting a relay harder does not make it verifiable.
+- **A carve-out is not yours to grant.** For judging whether a proposed one is
+  aimed right: **`lib/rtl` IS a compiler build input**, `lib/crtl` and `docs/`
+  are not.
 
-- **Carry the instruction AND its reason, both verbatim.** If you do not have
-  the reason, say so and get it, rather than supplying one.
-- **Label any framing you add as yours.** That part worked; do it every time.
-- **Do not let your word stand as the authority for another session's
-  user-directed work.** frankD offered to take a stop "as read from" me and
-  declining was right: asserting a relay harder does not make it verifiable, and
-  a coordinator is not a source of authority over someone else's user.
-- **A carve-out is never yours to grant.** For the record when one is requested:
-  **`lib/rtl` IS a compiler build input** (CLAUDE.md's stale-binary section says
-  so); `lib/crtl` and `docs/` are not. That tells you whether a proposed
-  constraint is aimed correctly. It does not make granting it your call.
+## Flagging a ticket is what makes it collide — and `working/` is blindest then
 
-## Flagging a ticket is what makes it collide — and `working/` is blindest exactly then
+I cleared a collision from `working/`; frankA was mid-edit in that exact ticket
+and found the duplicate only at push. **The flag caused it**: frankC named the
+ticket publicly, I ranked it to frankC, frankA picked it up citing that same
+flag. So **a just-flagged ticket is at peak collision risk in exactly the window
+where `working/` is least informative — nobody has claimed it yet.** Not an
+argument against flagging; the alternative is sitting on work silently.
+frankA: **"unclaimed is a snapshot, and the collision only surfaces at push."**
 
-I cleared a topic collision by reading `working/`, and frankA was mid-edit in
-that exact ticket; it found the duplicate only at push, reset to the landed
-version and kept the delta. An evening lost.
-
-**The cause I could not see, supplied by frankC afterwards: the flag created the
-collision.** frankC named that ticket publicly as worth doing and asked to be
-ranked rather than assume; I ranked it to frankC; frankA independently picked it
-up citing *"the char-into-shortstring ticket you flagged"*. So **a ticket that
-has just been publicly named is at ELEVATED collision risk for exactly the
-window in which it is most likely to be picked up — and that is the window where
-`working/` is least informative, because nobody has claimed it yet. The
-instrument is weakest precisely when the risk is highest.**
-
-This is not an argument against flagging; the alternative is silently sitting on
-work. frankA's generalisation, verbatim: **"unclaimed is a snapshot, and the
-collision only surfaces at push."**
-
-**The instrument rule, in frankC's sharper framing:** this was not a bad
-instrument, it was a good instrument aimed at a different question.
-**`working/` and `owner:` measure INTENT; commits grouped by `Claude-Session`
-trailer measure ACTIVITY**, and only the second answers "is someone typing in
-this file right now" (the author is always `yoctobyte` and cannot distinguish
-agents). When you clear a collision, **name the instrument you used in the
-clearance**, so a wrong one is auditable instead of authoritative — and when you
-have just flagged something, prefer asking the agent outright.
+**Not a bad instrument — a good one aimed at a different question.** `working/`
+and `owner:` measure INTENT; commits grouped by `Claude-Session` trailer measure
+ACTIVITY, and only that answers "is someone typing here now" (the author is
+always `yoctobyte`). **Name the instrument in the clearance**, so a wrong one is
+auditable rather than authoritative — and having just flagged something, ask the
+agent outright.
 
 ## Standing constraints
 
