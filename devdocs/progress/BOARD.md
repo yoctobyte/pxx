@@ -82,7 +82,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| umbrella-compile-and-run-dosbox | C | 90 | umbrella | GOAL, not a unit of work. The flagship real-program proof: a large real C/C++ codebase that either builds and runs or does not, with no partial credit to award ourselves. Owner named it first when stating the goal. Attach whatever the ATTEMPT breaks on -- do not pre-populate this from the backlog by guessing. | bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong, feature-c-corpus-busybox-multi-applet |
+| umbrella-compile-and-run-dosbox | C | 50 | umbrella | GOAL, not a unit of work. The flagship real-program proof: a large real C/C++ codebase that either builds and runs or does not, with no partial credit to award ourselves. Owner named it first when stating the goal. Attach whatever the ATTEMPT breaks on -- do not pre-populate this from the backlog by guessing. | bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong, feature-c-corpus-busybox-multi-applet |
 | umbrella-cross-target-codegen-is-correct | A | 80 | umbrella | GOAL, not a unit of work. The owner's ranking: 'cross platform has way prio above look-if-I-do-this-on-platform-that-it-would-break-z'. A program that compiles right on one target and wrong on another is the defect this umbrella exists for; a hypothetical about an untried platform is not. Measured target clusters: xtensa 11, riscv 8, arm32 5, i386. | bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs, bug-a-i386-c-main-gets-argc-and-argv-swapped, feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross, feature-a-port-alloca-to-i386-arm32-and-riscv32 |
 | umbrella-managed-memory-is-correct | A | 75 | umbrella | GOAL, not a unit of work. The owner named memory management as ranking above float-bit and parity work. This is the axis a real program hits hardest and where a wrong answer is silent: a leak, a double free, a refcount that disagrees with itself. Correctness is the case here -- the perf profile is deliberately NOT the argument. | bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower, bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-string-release-has-two-implementations-that-already-disagree, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, feature-a-reentrant-heap-lock-and-per-thread-arenas |
 | umbrella-one-full-tier-run-with-no-red-tier | T | 85 | umbrella | GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk. | regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2 |
@@ -955,7 +955,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p100] [P] feature-p-implement-the-real-tyshortstring-byte-prefix-layout (unblocks 1)
-- [p 90] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 85] [T] umbrella-one-full-tier-run-with-no-red-tier [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 80] [T] bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
@@ -1060,6 +1059,7 @@ _none_
 - [p 50] [U] decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-a-a-private-clause-for-parallel-for
+- [p 50] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] bug-a-a-c-headers-variadic-tail-is-dropped-on-import
 - [p 45] [A] bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64
