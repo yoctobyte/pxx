@@ -267,6 +267,39 @@ found it; the repro did not.
 Verified by me in BOTH modes at `ba90811d3` / `a81084690bac`: six rows correct,
 exit 0, default and `-dPXX_SHORTSTRING` alike.
 
+### FLIP BLOCKER #2, and it is the bigger one: concat segfaults on x86-64
+
+`bug-a-string-concat-segfaults-on-x86-64-under-the-byte-prefix-mode`
+(`335a5604e`, prio 85). No array, no record, no pointer, no index — six lines:
+
+```pascal
+var s: string[10];
+s := 'ab';                 { before: len=2 [ab], correct }
+s := s + 'cd';             { SIGSEGV under -dPXX_SHORTSTRING }
+```
+
+| target | default | `-dPXX_SHORTSTRING` |
+| --- | --- | --- |
+| **x86-64** | `[abcd]` | **SIGSEGV (139)** |
+| i386 / arm32 / aarch64 / riscv32 | `[abcd]` | `[abcd]` |
+
+**x86-64 is the ONLY broken target** — the inverse of the shape we fought all
+night, and it is the default target: the dev loop's, `gate.sh quick`'s, and the
+first one the flip meets. `-O` invariant. In a longer program the same statement
+died as `out of memory (heap arena mmap failed)`, exit 203, instead of SIGSEGV.
+
+**HOW IT WAS MISSED IS THE FINDING.** Concat is exercised constantly — **only in
+the default mode.** The overhaul's own repros are string *comparison* and
+*indexing*, so **the commonest string operation in Pascal was never in the
+population.** frankb-a9's 17/17 could not have caught it: that is a gap in what
+was ASKED, not in how well it was asked. **Nothing sweeps `-dPXX_SHORTSTRING`
+broadly, and until tonight nobody had diffed the two modes over ordinary
+constructs.** The two blockers below and above both came out of one such sweep,
+in about ten minutes.
+
+**The generalisation for the flip: a mode that is only ever exercised by the
+repros written to test it has been tested against its own authors' hypotheses.**
+
 ### FLIP BLOCKER: arrays of shortstrings are corrupt under the flag
 
 `bug-a-an-array-of-shortstrings-is-corrupt-under-the-byte-prefix-mode`
@@ -284,6 +317,12 @@ neighbouring bytes dragged into a 64-bit load; the narrower declared width
 corrupts harder, which is what an element-stride disagreement looks like. **A
 `Length()` of 7.2e16 is an overrun, not a display defect** — and the flip turns
 this mode on globally.
+
+**Direct evidence of the mechanism, which plain output hid:** under `cat -v`,
+`a[0]` reads **`[z^C^@^@]`** — the byte after `z` is `0x03`, which is **the
+length of `a[1]` (`'one'`)**. `a[1]`'s prefix is sitting inside `a[0]`'s data:
+a stride overlap, visible without a debugger. Printed normally that byte looks
+like whitespace, which is why it read as "padding" for an hour.
 
 **Two guard traps in it:** `a[2]` reads CORRECTLY, so a probe checking the last
 element passes; `a[0]` reports the RIGHT length beside corrupt data, so a probe
