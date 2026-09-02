@@ -326,3 +326,23 @@ yours to release.
   wrong.** The decision survives on its label — so a label checked less carefully
   than the decision is how a good call becomes bad guidance. Worth watching for
   in any relaying role, where the label travels further than the reasoning.
+- **FITTING THE DISTRIBUTION EARNS A DISCRIMINATING RUN, NOT A PROMOTION.** The
+  walker theory predicted the surviving field bug's observed split *exactly* —
+  segfault on one word size, FALSE on the other — **and was still wrong.** A
+  theory that reproduces the shape of the data has earned one more experiment,
+  not the status of an explanation. frankb-a9 refuted three theories here,
+  including its own written-out one, and the discriminator turned out to be
+  homogeneity of operand shape, symmetric in order.
+- **NECESSARY IS NOT SUFFICIENT, and the difference is where the residual lives.**
+  i386 resolves the operand kind at the `PXXStrEq`/`PXXStrCmp3` decompose — and
+  **still crashes on `r.f = 'hello'`.** So resolving there is necessary and not
+  sufficient, which is the more useful statement than the fix shape it replaced:
+  it says the surviving field bug is **not something any backend got wrong.**
+- **Having the probe open is not the same as running it.** The stale comparison
+  claim in this document was not a trusted relay — the author had compiled and run
+  that exact program on two targets the same minute, and `--target=arm32` was one
+  more argument on a command already typed. **This session had independently
+  measured all-TRUE on arm32 and wrote the stale claim into the handover anyway.**
+  In conversation a stale claim dies with the next message; in a durable artifact
+  it is what someone acts on at 8am — applying a real edit to already-correct code,
+  or concluding a converted backend was not.
