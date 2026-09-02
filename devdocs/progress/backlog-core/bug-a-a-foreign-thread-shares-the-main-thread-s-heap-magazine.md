@@ -85,3 +85,37 @@ linking SDL, GTK or a threaded C library will create threads pxx never sees.
 Filed rather than fixed. The crash is gone; what remains is a design decision
 about `gs:` ownership, and taking it while holding the regression umbrella
 would be the wrong hands.
+
+## 2026-09-02 (frankC) — the option analysis above is STALE about its own hardest half
+
+Option 1 is dismissed here on detection: *"the block's self-pointer at slot 0
+does not work ... A gettid comparison needs a syscall or a cached value with the
+same bootstrap problem."*
+
+**Detection was solved and shipped.**
+`feature-a-io-lock-owner-from-tls-not-gettid` established the one test
+inheritance cannot fake — the reader's own `rsp` against the bounds the block's
+owner recorded — and it is live at `ir_codegen.inc:1099-1118`, guarding the I/O
+lock's cached tid. `defs.inc`'s note at `TLS_SLOT_STACK_LO` states the reasoning
+in the same words this ticket uses to say it is impossible. Two correct
+documents, written days apart, disagreeing.
+
+So the residual is narrower than three options: not *whether* a foreign thread
+can be detected, but **where a lazily-installed block comes from and what bounds
+go in it** — filed as
+[[decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part]].
+The bounds are genuinely hard, and for a reason this ticket could not have seen:
+`HI = 0` ("no bounds") is the documented FAIL-SAFE for the fast path and the
+UNSAFE answer for an idempotence test, so a block installed that way is
+reinstalled on the next check, zeroing a live exception chain.
+
+### And one slot is not a design question, it is a crash
+
+[[bug-a-the-exception-chain-fix-is-defeated-by-a-libc-pthread]]. Measured:
+main thread and one `pthread_create`d thread each doing 300k `try/except`, 3
+runs of 3 print `Unhandled exception`; the identical 600k of work on ONE thread
+in the SAME binary is 3 of 3 clean. `TLS_SLOT_EXC_TOP` was moved into the block
+precisely to fix that class, and its own note says the other half of the fix is
+"a fresh thread gets a ZEROED block from the clone stub" — which a libc pthread
+never runs. So the exception fix covers pxx-created threads and is defeated for
+the kind DOSBox will make.
