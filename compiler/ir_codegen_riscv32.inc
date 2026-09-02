@@ -299,6 +299,68 @@ begin
   end;
 end;
 
+{ ===== FROZEN-STRING LENGTH PREFIX, riscv32 =====
+  The width-aware quartet, so the prefix size is decided by a KIND rather than
+  spelled as a literal 8 at each site. Same shape as arm32's and aarch64's, and
+  it is the ARM32 one this follows: riscv32 is 32-bit, so the WIDE prefix is
+  TWO stores -- the low word and an explicit zero high word -- exactly as
+  EmitFrozenStoreRISCV32 already wrote it by hand. A copyist working from the
+  aarch64 helper would emit ONE store here and leave the high word holding
+  whatever the slot had, which on a reused frame is a length in the billions.
+
+  Where riscv32 is SIMPLER than arm32: it has a zero register, so the wide
+  store needs no scratch register to hold the zero and no caller has to reserve
+  one. That is why this quartet's store takes no zeroReg parameter and arm32's
+  does.
+
+  The byte forms use LBU and SB. LBU ZERO-EXTENDS (funct3=4), which is what
+  makes a loaded length safe to use directly as a byte count; LB would
+  sign-extend and turn any string longer than 127 into a negative count.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+
+procedure EmitStoreStrLenRISCV32(lenReg, bufReg: Integer; dstTk: TTypeKind);
+{ [r<bufReg>] := r<lenReg>, at dstTk's prefix width. Pass reg_zero as lenReg to
+  write a 0 length, which is how the empty-string arms do it. }
+begin
+  if FrozenStrPrefixSize(dstTk) = 1 then
+    rv32_sb(lenReg, bufReg, 0)
+  else
+  begin
+    rv32_sw(lenReg, bufReg, 0);
+    rv32_sw(reg_zero, bufReg, 4);        { the high half of the 8-byte word }
+  end;
+end;
+
+procedure EmitLoadStrLenRISCV32(lenReg, bufReg: Integer; srcTk: TTypeKind);
+{ r<lenReg> := [r<bufReg>], at srcTk's prefix width, zero-extended. The wide
+  form reads only the LOW word, as every existing reader in this backend
+  already did -- a 32-bit target cannot hold a length that needs the high one. }
+begin
+  if FrozenStrPrefixSize(srcTk) = 1 then
+    rv32_lbu(lenReg, bufReg, 0)
+  else
+    rv32_lw(lenReg, bufReg, 0);
+end;
+
+procedure EmitLeaStrDataRISCV32(dstReg, srcReg: Integer; tk: TTypeKind);
+{ r<dstReg> := r<srcReg> + tk's prefix size -- the address of the first
+  CHARACTER. The offset and the prefix width are ONE number; a site that adds 8
+  after storing a 1-byte length puts the chars seven bytes too far in, which is
+  why this shares FrozenStrPrefixSize with the length helpers rather than
+  spelling the number itself. dstReg = srcReg steps a pointer in place. }
+begin
+  rv32_addi(dstReg, srcReg, FrozenStrPrefixSize(tk));
+end;
+
+procedure EmitStoreCharAtStrDataRISCV32(charReg, bufReg: Integer; tk: TTypeKind);
+{ [r<bufReg> + prefix] := r<charReg> as a byte -- the single character of a
+  one-char string, written where tk says the chars begin. Shares its width with
+  EmitStoreStrLenRISCV32 by construction, which is the point: these two are the
+  pair that has to agree. }
+begin
+  rv32_sb(charReg, bufReg, FrozenStrPrefixSize(tk));
+end;
+
 procedure EmitStrOperandRISCV32(operandTk: TTypeKind; slotOff, lenReg, srcReg: Integer);
 { Decompose a string-valued operand sitting at [sp+slotOff] into (len -> lenReg,
   src -> srcReg) for PXXStrConcat / PXXStrEq. A handle gives len [h-8] (nil->0)
@@ -314,8 +376,11 @@ begin
   end
   else if TypeIsFrozenString(operandTk) then
   begin
-    rv32_lw(lenReg, srcReg, 0);              { len = [buf] }
-    rv32_addi(srcReg, srcReg, 8);            { src = buf+8 }
+    { The length read and the data offset are ONE number -- operandTk's prefix
+      width. Callers must pass a kind resolved through IRStrTkOf, not
+      IntToTypeKind of a node, or every frozen string looks 8 bytes wide here. }
+    EmitLoadStrLenRISCV32(lenReg, srcReg, operandTk);
+    EmitLeaStrDataRISCV32(srcReg, srcReg, operandTk);
   end
   else
   begin
@@ -363,8 +428,8 @@ begin
   else
   begin
     IREmitNodeRISCV32(valNode);                  { a0 = frozen buffer }
-    rv32_lw(reg_a2, reg_a0, 0);                  { len = [buf] }
-    rv32_addi(reg_a1, reg_a0, 8);                { arg1 = buf+8 }
+    EmitLoadStrLenRISCV32(reg_a2, reg_a0, IRStrTkOf(valNode));   { len = [buf] }
+    EmitLeaStrDataRISCV32(reg_a1, reg_a0, IRStrTkOf(valNode));   { arg1 = chars }
     rv32_addi(reg_a0, reg_a2, 0);                { arg0 = len }
     EmitCallProc(procIdx);
   end;
@@ -409,7 +474,7 @@ procedure EmitFrozenStoreRISCV32(si, valNode: Integer);
   Three source shapes, as everywhere else: a char ordinal, a MANAGED handle (length at
   [h-8], chars at h, nil = empty), or another frozen/literal buffer (length at [b], chars
   at b+8). The length is clamped to the slot capacity (truncating string[N] semantics). }
-var srcTk: TTypeKind; cap: Integer;
+var srcTk, srcFrozenTk: TTypeKind; cap: Integer;
 begin
   IREmitNodeRISCV32(valNode);                  { a0 = source }
   rv32_addi(reg_t2, reg_a0, 0);                { t2 = src }
@@ -419,9 +484,8 @@ begin
   if srcTk = tyChar then
   begin
     rv32_addi(reg_t0, reg_zero, 1);
-    rv32_sw(reg_t0, reg_t1, 0);                { len = 1 }
-    rv32_sw(reg_zero, reg_t1, 4);              { high half of the 8-byte length word }
-    rv32_sb(reg_t2, reg_t1, 8);                { the char }
+    EmitStoreStrLenRISCV32(reg_t0, reg_t1, Syms[si].TypeKind);   { len = 1 }
+    EmitStoreCharAtStrDataRISCV32(reg_t2, reg_t1, Syms[si].TypeKind);
     Exit;
   end;
 
@@ -434,8 +498,15 @@ begin
   end
   else
   begin
-    rv32_lw(reg_t3, reg_t2, 0);                { frozen/literal: len = [src] }
-    rv32_addi(reg_t2, reg_t2, 8);              { chars = src+8 }
+    { FROZEN -> FROZEN, and the two sides can have DIFFERENT prefix widths, so
+      this is a conversion rather than a copy. The source width must come from
+      IRFrozenKindOfAddr and NOT from IRTk[valNode], which the IR tags tyString
+      generically for every frozen string -- reading a 1-byte prefix as a word
+      gives a length in the billions. Measured on x86-64, where the identical
+      mistake printed 255 blanks. }
+    srcFrozenTk := IRFrozenKindOfAddr(valNode);
+    EmitLoadStrLenRISCV32(reg_t3, reg_t2, srcFrozenTk);   { len = [src] }
+    EmitLeaStrDataRISCV32(reg_t2, reg_t2, srcFrozenTk);   { src chars }
   end;
 
   { Truncating `string[N]` assignment: clamp the length to the slot capacity
@@ -448,9 +519,8 @@ begin
   rv32_beq(reg_t4, reg_zero, 8);               { cap >= len -> keep }
   rv32_addi(reg_t3, reg_t0, 0);                { len = cap }
 
-  rv32_sw(reg_t3, reg_t1, 0);                  { publish the length }
-  rv32_sw(reg_zero, reg_t1, 4);
-  rv32_addi(reg_t1, reg_t1, 8);                { dst chars }
+  EmitStoreStrLenRISCV32(reg_t3, reg_t1, Syms[si].TypeKind);   { publish the length }
+  EmitLeaStrDataRISCV32(reg_t1, reg_t1, Syms[si].TypeKind);    { dst chars }
   EmitCopyBytesRISCV32(reg_t1, reg_t2, reg_t3);
 end;
 
@@ -1390,6 +1460,8 @@ var
                              and then the ctor, so it cannot also count params }
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   tk: TTypeKind;
+  srcFrozenTk: TTypeKind;   { frozen kind of a copy's SOURCE -- its prefix width may differ from the dest's }
+  memFrozenTk: TTypeKind;   { frozen kind of a store-through-a-pointer DESTINATION }
   sgn, savedLVW: Boolean;
   sVal: AnsiString;
 begin
@@ -1661,8 +1733,8 @@ begin
           else if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) then
           begin
             IREmitNodeRISCV32(valNode);                       { a0 = inline buffer addr }
-            rv32_lw(reg_a2, reg_a0, 0);                       { len = [buf] }
-            rv32_addi(reg_a1, reg_a0, 8);                     { arg1 = buf+8 }
+            EmitLoadStrLenRISCV32(reg_a2, reg_a0, IRStrTkOf(valNode));   { len = [buf] }
+            EmitLeaStrDataRISCV32(reg_a1, reg_a0, IRStrTkOf(valNode));   { arg1 = chars }
             rv32_addi(reg_a0, reg_a2, 0);                     { arg0 = len }
             procIdx := FindProc('PXXStrFromLit'); EmitCallProc(procIdx);
           end
@@ -2045,15 +2117,24 @@ begin
       begin
         tk := IntToTypeKind(IRTk[node]);
         sz := TypeSlotSize(tk);
-        if tk = tyString then
+        if TypeIsFrozenString(tk) then
         begin
           { Frozen inline-string store through an address (string[N] record
             field / deref): copy [len][chars] with the length clamped to the
             destination capacity (IR ival; truncating string[N] semantics).
             Mirrors EmitFrozenStoreRISCV32's three source shapes. Without this
             the generic word store below dropped the source ADDRESS into the
-            field (bug-pascal-shortstring-no-truncation-buffer-overrun). }
+            field (bug-pascal-shortstring-no-truncation-buffer-overrun).
+
+            The GUARD is TypeIsFrozenString and not `tk = tyString`, because a
+            tyShortString destination is a frozen string too and would otherwise
+            fall past this arm into the scalar store below -- which drops the
+            source ADDRESS into the slot rather than copying it. Widening is a
+            no-op for the kinds that reached here before, since tyString
+            satisfies it. }
           valNode := IRB[node];
+          memFrozenTk := IRFrozenKindOfAddr(IRA[node]);
+          srcFrozenTk := IRStrTkOf(valNode);
           IREmitNodeRISCV32(valNode);                { a0 = source (or char) }
           rv32_addi(reg_sp, reg_sp, -4);
           rv32_sw(reg_a0, reg_sp, 0);                { spill source }
@@ -2067,9 +2148,8 @@ begin
           if IntToTypeKind(IRTk[valNode]) = tyChar then
           begin
             rv32_addi(reg_t0, reg_zero, 1);
-            rv32_sw(reg_t0, reg_t1, 0);              { len = 1 }
-            rv32_sw(reg_zero, reg_t1, 4);
-            rv32_sb(reg_t2, reg_t1, 8);              { the char }
+            EmitStoreStrLenRISCV32(reg_t0, reg_t1, memFrozenTk);   { len = 1 }
+            EmitStoreCharAtStrDataRISCV32(reg_t2, reg_t1, memFrozenTk);
             Exit;
           end;
           if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
@@ -2081,8 +2161,10 @@ begin
           end
           else
           begin
-            rv32_lw(reg_t3, reg_t2, 0);              { frozen/literal: len = [src] }
-            rv32_addi(reg_t2, reg_t2, 8);            { chars = src+8 }
+            { Source and destination widths are INDEPENDENT here -- see the
+              same arm in EmitFrozenStoreRISCV32. }
+            EmitLoadStrLenRISCV32(reg_t3, reg_t2, srcFrozenTk);   { len = [src] }
+            EmitLeaStrDataRISCV32(reg_t2, reg_t2, srcFrozenTk);   { src chars }
           end;
           i := Integer(IRIVal[node]);                { dest capacity }
           if i <= 0 then i := DEFAULT_STR_CAP;
@@ -2090,9 +2172,8 @@ begin
           rv32_slt(reg_t4, reg_t0, reg_t3);          { t4 = cap < len }
           rv32_beq(reg_t4, reg_zero, 8);             { cap >= len -> keep }
           rv32_addi(reg_t3, reg_t0, 0);              { len = cap }
-          rv32_sw(reg_t3, reg_t1, 0);                { publish the length }
-          rv32_sw(reg_zero, reg_t1, 4);
-          rv32_addi(reg_t1, reg_t1, 8);              { dst chars }
+          EmitStoreStrLenRISCV32(reg_t3, reg_t1, memFrozenTk);   { publish the length }
+          EmitLeaStrDataRISCV32(reg_t1, reg_t1, memFrozenTk);    { dst chars }
           EmitCopyBytesRISCV32(reg_t1, reg_t2, reg_t3);
           Exit;
         end;
@@ -2229,8 +2310,8 @@ begin
           else if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) then
           begin
             IREmitNodeRISCV32(valNode);                         { a0 = inline buffer addr }
-            rv32_lw(reg_a2, reg_a0, 0);                         { len = [buf] }
-            rv32_addi(reg_a1, reg_a0, 8);                       { arg1 = buf+8 }
+            EmitLoadStrLenRISCV32(reg_a2, reg_a0, IRStrTkOf(valNode));   { len = [buf] }
+            EmitLeaStrDataRISCV32(reg_a1, reg_a0, IRStrTkOf(valNode));   { arg1 = chars }
             rv32_addi(reg_a0, reg_a2, 0);                       { arg0 = len }
             procIdx := FindProc('PXXStrFromLit');
             if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
@@ -2302,8 +2383,8 @@ begin
             [sp]=rhs, [sp+4]=lhs. }
           IREmitNodeRISCV32(left);  rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
           IREmitNodeRISCV32(right); rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
-          EmitStrOperandRISCV32(IntToTypeKind(IRTk[right]), 0, reg_t1, reg_t2);  { lenB, srcB }
-          EmitStrOperandRISCV32(IntToTypeKind(IRTk[left]),  4, reg_a0, reg_a1);  { lenA, srcA }
+          EmitStrOperandRISCV32(IRStrTkOf(right), 0, reg_t1, reg_t2);  { lenB, srcB }
+          EmitStrOperandRISCV32(IRStrTkOf(left),  4, reg_a0, reg_a1);  { lenA, srcA }
           rv32_addi(reg_a2, reg_t2, 0);    { a2 = srcB }
           rv32_addi(reg_a3, reg_t1, 0);    { a3 = lenB }
           procIdx := FindProc('PXXStrConcat');
@@ -2336,8 +2417,8 @@ begin
             ParamStr(1) = '--selftest') compared ADDRESSES. }
           IREmitNodeRISCV32(left);  rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
           IREmitNodeRISCV32(right); rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
-          EmitStrOperandRISCV32(IntToTypeKind(IRTk[right]), 0, reg_t1, reg_t2);  { lenB, srcB }
-          EmitStrOperandRISCV32(IntToTypeKind(IRTk[left]),  4, reg_a0, reg_a1);  { lenA, srcA }
+          EmitStrOperandRISCV32(IRStrTkOf(right), 0, reg_t1, reg_t2);  { lenB, srcB }
+          EmitStrOperandRISCV32(IRStrTkOf(left),  4, reg_a0, reg_a1);  { lenA, srcA }
           rv32_addi(reg_a2, reg_t1, 0);    { a2 = lenB }
           rv32_addi(reg_a3, reg_t2, 0);    { a3 = srcB }
           procIdx := FindProc('PXXStrEq');
@@ -2376,8 +2457,8 @@ begin
             and the result tail changed. }
           IREmitNodeRISCV32(left);  rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
           IREmitNodeRISCV32(right); rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
-          EmitStrOperandRISCV32(IntToTypeKind(IRTk[right]), 0, reg_t1, reg_t2);  { lenB, srcB }
-          EmitStrOperandRISCV32(IntToTypeKind(IRTk[left]),  4, reg_a0, reg_a1);  { lenA, srcA }
+          EmitStrOperandRISCV32(IRStrTkOf(right), 0, reg_t1, reg_t2);  { lenB, srcB }
+          EmitStrOperandRISCV32(IRStrTkOf(left),  4, reg_a0, reg_a1);  { lenA, srcA }
           rv32_addi(reg_a2, reg_t1, 0);    { a2 = lenB }
           rv32_addi(reg_a3, reg_t2, 0);    { a3 = srcB }
           procIdx := FindProc('PXXStrCmp3');
@@ -2743,7 +2824,7 @@ begin
             The frozen operand does not arrive tagged: `f` lowers to an IR_LEA of its
             symbol (the buffer ADDRESS), and `pf^` to a bare pointer load whose value IS
             the buffer. Same predicate aarch64 uses. }
-          if (IntToTypeKind(IRTk[valNode]) = tyString) or
+          if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) or
              ((IRKind[valNode] = IR_LEA) and
               TypeIsFrozenString(Syms[IRA[valNode]].TypeKind) and
               not Syms[IRA[valNode]].IsArray) or
@@ -2751,7 +2832,16 @@ begin
               (IntToTypeKind(IRTk[valNode]) = tyPointer)) then
           begin
             IREmitNodeRISCV32(valNode);       { a0 = frozen buffer addr }
-            rv32_lw(reg_a0, reg_a0, 0);
+            { IRFrozenKindOfAddr and NOT IRStrTkOf: this arm deliberately
+              accepts a POINTER-typed node (the `ps^` / `rec.pf^` deref shape in
+              the guard above), and IRStrTkOf answers about the node's own kind
+              FIRST -- for a tyPointer LEA it returns tyPointer and never
+              consults the symbol, so the width comes back 8. That was the last
+              bug on aarch64 under the flag: Length answered 0x6F6C6C654805,
+              the length byte followed by the characters of 'hello'. The
+              address walker reads the SYMBOL, which is the only thing that
+              knows the width here. }
+            EmitLoadStrLenRISCV32(reg_a0, reg_a0, IRFrozenKindOfAddr(valNode));
             Exit;
           end;
           { Length(arr) / Length(managed): a0 = handle; count at [handle-8], nil -> 0. }
@@ -3214,7 +3304,7 @@ begin
               length prefix + NUL-terminated chars; pass the char data so the
               callee sees a const char*. }
             if ProcExternal[procIdx] and TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
-              rv32_addi(reg_a0, reg_a0, 8);
+              EmitLeaStrDataRISCV32(reg_a0, reg_a0, IRStrTkOf(argNode));
             rv32_addi(reg_sp, reg_sp, -4);
             rv32_sw(reg_a0, reg_sp, 0);
             Inc(nArgs, 1);
@@ -3423,10 +3513,19 @@ begin
             end
             else if TypeIsFrozenString(tk) then
             begin
+              { PXXWriteFrozenW IS SHARED RUNTIME and hardcodes a machine-word
+                prefix, so a shortstring needs its one-byte twin. The field
+                width's pad is max(0, wid - len), a RUNTIME quantity, which is
+                why the helper reads the prefix at all -- and why at width 0 it
+                is never called and the hole hid. arm32 found this on aarch64,
+                a backend already called complete. }
               IREmitNodeRISCV32(valNode);              { a0 = buffer addr }
               EmitLoadImmRISCV32(reg_a1, j);
-              procIdx := FindProc('PXXWriteFrozenW');
-              if procIdx < 0 then Error('compiler error: PXXWriteFrozenW not found');
+              if FrozenStrPrefixSize(IRStrTkOf(valNode)) = 1 then
+                procIdx := FindProc('PXXWriteFrozenBW')
+              else
+                procIdx := FindProc('PXXWriteFrozenW');
+              if procIdx < 0 then Error('compiler error: PXXWriteFrozen[B]W not found');
               EmitCallProc(procIdx);
             end
             else if Is64BitRISCV32(tk) or TypeIsOrdinal(tk) or (tk = tyUnknown) then

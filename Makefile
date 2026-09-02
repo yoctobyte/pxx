@@ -17813,6 +17813,32 @@ test-riscv32: $(COMPILER)
 	tools/assert_alloc_ceiling.sh riscv32/static_string_literal 600 tools/run_target.sh riscv32 $(TESTTMP)/ssl_rv32
 	tools/assert_alloc_ceiling.sh x86-64/static_string_literal 600 $(TESTTMP)/ssl_rv32_x64
 	tools/expect_same.sh riscv32/test_static_string_literal "$$(tools/run_target.sh riscv32 $(TESTTMP)/ssl_rv32 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_rv32_x64 | grep -v '^pxx-census')"
+	# tyShortString's ONE-BYTE length prefix on riscv32 (phase 2 backend four).
+	# riscv32 is 32-bit like arm32, so the WIDE prefix is TWO stores -- the low
+	# word plus an explicit zero high word -- and a helper copied from a 64-bit
+	# backend would emit one and leave garbage in the high half. Unlike arm32 it
+	# has a zero register, so the store helper needs no scratch parameter.
+	# Expected values DERIVED, not transplanted: the slot is cap + prefix, so
+	# sizeof is 10+8=18 by default and 10+1=11 under the flag (FPC 3.2.2's
+	# answer), and `layout` reads the first six raw bytes -- a little-endian
+	# 8-byte word shows `5 0 0 0 0 0`, the byte prefix shows 5 then 'hello'.
+	./$(COMPILER) --target=riscv32 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_rv32_ssbp_d
+	tools/expect_same.sh riscv32/ssbp_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_rv32_ssbp_s
+	tools/expect_same.sh riscv32/ssbp_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	# The cross-width conversion, carrying the NONZERO FIELD WIDTH rows from the
+	# start. aarch64 was certified complete while `WriteLn(s:9)` was broken,
+	# because the pad is max(0, wid - len) -- a runtime quantity the SHARED
+	# helper reads the prefix for -- and every test had width 0.
+	# MEASURED DIFFERENCE ON RISCV32: that hiding mechanism does not apply here.
+	# This backend routes EVERY frozen write through the helper, width 0
+	# included, so forcing the wide helper collapses w2n and trunc as well as
+	# pad. Positive control run: with PXXWriteFrozenBW's selection reverted,
+	# pad/w2n/trunc all print <> and the other rows stay green.
+	./$(COMPILER) --target=riscv32 test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_rv32_ssmw_d
+	tools/expect_same.sh riscv32/ssmw_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
+	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_rv32_ssmw_s
+	tools/expect_same.sh riscv32/ssmw_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 
 
 # ---------------------------------------------------------------------------
