@@ -150,6 +150,41 @@ aggregate. frankB's `guard` and `tail` rows are that instrument — a declared
 neighbour, written before and read after, which fails when the stride walks past
 the end regardless of what the values say.
 
+### A PINNED CONTROL IS ONLY A CONTROL UNTIL THE NEXT PIN
+
+Three members of this umbrella rest on a pinned-compiler positive control, and
+frankB hit the failure mode directly (2026-09-02): it re-ran its own pinned
+control and the bug showed as GONE. Nothing had regressed. `make pin` had run,
+**v401 landed carrying frankB's own `SizeOf` fix**, and the "old" compiler it
+was controlling against was now a new one. **Nothing in the invocation names
+which version answered.**
+
+So the precondition has two halves, and the second one expires:
+
+1. `git diff --stat` touches only what the pin freezes. A pin freezes the
+   BINARY, not `lib/rtl/**` or `lib/crtl/**`, which it reads live from the
+   working tree.
+2. **Re-assert `git merge-base --is-ancestor <your fix> <the pin commit>` at
+   the moment you QUOTE the control**, not when you first ran it.
+
+Half 1 is a property of your change and is stable. Half 2 is a property of the
+world and goes stale without erroring — the control keeps running and keeps
+printing a verdict, about a different compiler.
+
+**Checked 2026-09-02 against pin v401 (`766b99f98`), and all three still hold
+— as of that moment and no longer:**
+
+| control | fix commit | in v401? |
+| --- | --- | --- |
+| method-pointer, pinned i386 2 rows FAIL | `9eaca27ca` | no — control valid |
+| char-into-shortstring, pinned refuses on 3 targets | `e4cba526a` | no — control valid |
+| frankB's record-field stride/guard rows go 0 | `ir.inc` fix, unlanded | no — control valid |
+
+**That table is a timestamp, not a property.** The next `make pin` can
+invalidate any row in it without touching this file, and the ticket quoting the
+control will still read as verified. Re-run the ancestry check rather than
+citing this table.
+
 **So, for any member of this umbrella still open or being verified:** a green
 built only from `SizeOf == stride` rows is evidence about agreement between two
 numbers, not about either being right. Add one absolute row. This is CLAUDE.md's
