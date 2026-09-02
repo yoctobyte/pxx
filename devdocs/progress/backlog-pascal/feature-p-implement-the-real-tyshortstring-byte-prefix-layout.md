@@ -2,7 +2,7 @@
 slug: feature-p-implement-the-real-tyshortstring-byte-prefix-layout
 title: "Implement the real `tyShortString` byte-length-prefix layout — the kind is already plumbed, the codegen is not"
 track: P
-prio: 85
+prio: 100
 type: feature
 status: backlog
 created: 2026-09-02
@@ -14,9 +14,33 @@ summary: "MEASURED at bf92c45a7, binary sha256 `5f275966bf50`: we are `cap+8` an
 # The real `tyShortString`, and why it is cheaper than it looks
 
 > **OWNER: HIGHEST PRIORITY, PHASED, frankb-a9 HOLDS IT (2026-09-02).**
-> `prio: 85` — above every actionable ticket on the board; only
-> `umbrella-compile-and-run-dosbox` [p90] outranks it and that is a goal, not
-> work.
+> `prio: 100` — **TOP OF THE BOARD, set by the owner.** Above every
+> umbrella. All other tracks finish what they are holding and then idle.
+>
+> ### CORRECTION to this ticket's own exposure count, and a REAL hit it exposed
+>
+> frank-coordinator-2c falsified the "10 declarations in `compiler/`" figure
+> (`9714d1652`): **`compiler/**` has ZERO explicit `string[N]` declarations.**
+> All 21 `string[N]` and 37 `ShortString` occurrences are prose inside comment
+> blocks — bug write-ups quoting code in backticks. My grep counted comment text
+> as declarations. Verified: all three of my hits are inside `{ }`.
+>
+> **But the falsifying branch it named — a fixed string reached through an alias
+> defined OUTSIDE `compiler/**` — has a hit, and it is the real exposure:**
+>
+> ```
+> lib/rtl/typinfo.pas:19:  TRttiStr = string[255];
+> lib/rtl/typinfo.pas:20:  PString  = ^TRttiStr;
+> ```
+>
+> `defs.inc:5588` records that the compiler EMITS `{NamePtr:PString;
+> DataPtr:Pointer}` which `typinfo.pas` READS. So this is a **cross-component
+> ABI contract containing a fixed string at exactly the 255 boundary**, in
+> `lib/rtl` — which is itself a compiler build input. At `cap = 255` the flip
+> changes it from 263 bytes/8-byte prefix to 256/1-byte. **The emitter and the
+> RTL unit must change together; it is only correct as a whole.** This belongs
+> in Phase 1's audit output and is the strongest single argument for the owner's
+> quiet-tree instruction — stronger than the declaration count ever was.
 >
 > ## THE PHASES — land each one green, push, and report before starting the next
 >
