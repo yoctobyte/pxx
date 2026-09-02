@@ -1,0 +1,399 @@
+REFERENCE ONLY — DOES NOT APPLY, DO NOT `git apply`. Re-derive.
+
+Cut against the PRE-transplant tree (before e4cba526a). Trimmed here to the
+three files that carry the extraction; the test and the Makefile cross rows
+that were in the original patch have since landed independently via that
+commit, and the ticket/BOARD churn is gone.
+
+Because it predates the transplant, each backend below had the tyChar arm only
+ONCE, so this diff is extraction AND the char fix together:
+    ir_codegen386.inc     +51 -63   net -12
+    ir_codegen_aarch64.inc +55 -63   net  -8
+    ir_codegen_arm32.inc   +38 -31   net  +7
+Against today's tree the deletion is larger, because the transplant added a
+second full copy of the arm per file — but that number is NOT measured; do not
+quote one until the re-derivation produces it.
+
+diff --git a/compiler/ir_codegen386.inc b/compiler/ir_codegen386.inc
+index 7ad344304..62886b35f 100644
+--- a/compiler/ir_codegen386.inc
++++ b/compiler/ir_codegen386.inc
+@@ -1471,6 +1471,57 @@ begin
+   EmitB($81); EmitB($C4); EmitI32(8);             { add esp, 8 }
+ end;
+ 
++procedure EmitFrozenStrStoreBody386(srcTk: TTypeKind; strCap: Integer);
++{ ONE lowering for "write a value into a frozen `string[N]` buffer", with the
++  destination address already in edi and the source already in esi -- a char
++  ordinal, a managed handle, or a frozen-string address, per srcTk. Writes
++  [len:8][chars] at edi, clamped to strCap. Clobbers eax, ecx, esi, edi.
++
++  See EmitFrozenStrStoreBodyA64 for why this is shared rather than duplicated:
++  this body existed twice, in IR_STORE_SYM and IR_STORE_MEM, and the copies had
++  drifted -- only the SYM one handled a tyChar source, so `s := c` compiled and
++  `p^ := c` did not
++  (bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only). }
++var pNil386, pDone386: Integer;
++begin
++  if srcTk = tyChar then
++  begin
++    { esi = char ordinal -> [len=1][char] }
++    EmitB($C7); EmitB($07); EmitI32(1);       { mov dword [edi], 1 }
++    EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
++    EmitB($89); EmitB($F0);                   { mov eax, esi }
++    EmitB($88); EmitB($47); EmitB($08);       { mov byte [edi+8], al }
++    Exit;
++  end;
++  if srcTk = tyAnsiString then
++  begin
++    { Managed source -> frozen dest: esi = handle (char pointer), 32-bit length
++      at [esi-8]; nil handle -> empty. }
++    EmitB($85); EmitB($F6);                   { test esi, esi }
++    EmitB($74); pNil386 := CodeLen; EmitB(0); { jz empty }
++    EmitB($8B); EmitB($4E); EmitB($F8);       { mov ecx, [esi-8] (len) }
++    EmitClampEcxToStrCap386(strCap);          { truncate to string[N] capacity }
++    EmitB($89); EmitB($0F);                   { mov [edi], ecx (len lo) }
++    EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
++    EmitB($83); EmitB($C7); EmitB($08);       { add edi, 8 }
++    EmitB($F3); EmitB($A4);                   { rep movsb (esi already at chars) }
++    EmitB($EB); pDone386 := CodeLen; EmitB(0); { jmp done }
++    PatchRel8(pNil386);  { empty: }
++    EmitB($C7); EmitB($07); EmitI32(0);       { mov dword [edi], 0 }
++    EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
++    PatchRel8(pDone386); { done: }
++    Exit;
++  end;
++  { frozen -> frozen: copy the length prefix, clamp, then the chars. }
++  EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (len lo) }
++  EmitClampEcxToStrCap386(strCap);            { truncate to string[N] capacity }
++  EmitB($89); EmitB($0F);                     { mov [edi], ecx (len lo = clamped) }
++  EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 (len hi) }
++  EmitB($83); EmitB($C6); EmitB($08);         { add esi, 8 }
++  EmitB($83); EmitB($C7); EmitB($08);         { add edi, 8 }
++  EmitB($F3); EmitB($A4);                     { rep movsb }
++end;
++
+ procedure IREmitNode386(node: Integer);
+ var
+   valNode, si, left, right, op, procIdx, argNode, nArgs, argBytes, wid, sz, i, j, base: Integer;
+@@ -1934,41 +1985,7 @@ begin
+             begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end; { lea eax, [ebp+off] }
+           EmitB($89); EmitB($C7);                     { mov edi, eax (dst) }
+           EmitB($5E);                                 { pop esi (src/char) }
+-          if IntToTypeKind(IRTk[valNode]) = tyChar then
+-          begin
+-            { esi = char ordinal -> [len=1][char] }
+-            EmitB($C7); EmitB($07); EmitI32(1);       { mov dword [edi], 1 }
+-            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+-            EmitB($89); EmitB($F0);                   { mov eax, esi }
+-            EmitB($88); EmitB($47); EmitB($08);       { mov byte [edi+8], al }
+-            Exit;
+-          end;
+-          if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
+-          begin
+-            { Managed source -> frozen sym (s := managedStr): esi = handle
+-              (char pointer), 32-bit length at [esi-8]; nil handle -> empty. }
+-            EmitB($85); EmitB($F6);                   { test esi, esi }
+-            EmitB($74); pNil386 := CodeLen; EmitB(0); { jz empty }
+-            EmitB($8B); EmitB($4E); EmitB($F8);       { mov ecx, [esi-8] (len) }
+-            EmitClampEcxToStrCap386(SymStrCap[si]);   { truncate to string[N] capacity }
+-            EmitB($89); EmitB($0F);                   { mov [edi], ecx (len lo) }
+-            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+-            EmitB($83); EmitB($C7); EmitB($08);       { add edi, 8 }
+-            EmitB($F3); EmitB($A4);                   { rep movsb (esi already at chars) }
+-            EmitB($EB); pDone386 := CodeLen; EmitB(0); { jmp done }
+-            PatchRel8(pNil386);  { empty: }
+-            EmitB($C7); EmitB($07); EmitI32(0);       { mov dword [edi], 0 }
+-            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+-            PatchRel8(pDone386); { done: }
+-            Exit;
+-          end;
+-          EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (len lo) }
+-          EmitClampEcxToStrCap386(SymStrCap[si]);     { truncate to string[N] capacity }
+-          EmitB($89); EmitB($0F);                     { mov [edi], ecx (len lo = clamped) }
+-          EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 (len hi) }
+-          EmitB($83); EmitB($C6); EmitB($08);         { add esi, 8 }
+-          EmitB($83); EmitB($C7); EmitB($08);         { add edi, 8 }
+-          EmitB($F3); EmitB($A4);                     { rep movsb }
++          EmitFrozenStrStoreBody386(IntToTypeKind(IRTk[valNode]), SymStrCap[si]);
+           Exit;
+         end;
+         if Syms[IRA[node]].IsArray and (Syms[IRA[node]].ArrLen = -1) then
+@@ -4643,34 +4660,7 @@ begin
+           InLValueWrite := savedLValueWrite;
+           EmitB($89); EmitB($C7);                     { mov edi, eax }
+           EmitB($5E);                                 { pop esi }
+-          if IntToTypeKind(IRTk[valNode]) = tyChar then
+-            Error('target i386: char-to-inline-string store through pointer not yet supported');
+-          if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
+-          begin
+-            { Managed source -> frozen dest (r.s := managedStr): esi = handle
+-              (char pointer), 32-bit length at [esi-8]; nil handle -> empty. }
+-            EmitB($85); EmitB($F6);                   { test esi, esi }
+-            EmitB($74); pNil386 := CodeLen; EmitB(0); { jz empty }
+-            EmitB($8B); EmitB($4E); EmitB($F8);       { mov ecx, [esi-8] (len) }
+-            EmitClampEcxToStrCap386(Integer(IRIVal[node]));
+-            EmitB($89); EmitB($0F);                   { mov [edi], ecx (len lo) }
+-            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+-            EmitB($83); EmitB($C7); EmitB($08);       { add edi, 8 }
+-            EmitB($F3); EmitB($A4);                   { rep movsb (esi already at chars) }
+-            EmitB($EB); pDone386 := CodeLen; EmitB(0); { jmp done }
+-            PatchRel8(pNil386);  { empty: }
+-            EmitB($C7); EmitB($07); EmitI32(0);       { mov dword [edi], 0 }
+-            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+-            PatchRel8(pDone386); { done: }
+-            Exit;
+-          end;
+-          EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (len lo) }
+-          EmitClampEcxToStrCap386(Integer(IRIVal[node])); { truncate to string[N] capacity }
+-          EmitB($89); EmitB($0F);                     { mov [edi], ecx (len lo = clamped) }
+-          EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 (len hi) }
+-          EmitB($83); EmitB($C6); EmitB($08);         { add esi, 8 }
+-          EmitB($83); EmitB($C7); EmitB($08);         { add edi, 8 }
+-          EmitB($F3); EmitB($A4);                     { rep movsb }
++          EmitFrozenStrStoreBody386(IntToTypeKind(IRTk[valNode]), Integer(IRIVal[node]));
+           Exit;
+         end;
+         if tk = tyAnsiString then
+diff --git a/compiler/ir_codegen_aarch64.inc b/compiler/ir_codegen_aarch64.inc
+index f05ad647b..971b4e4be 100644
+--- a/compiler/ir_codegen_aarch64.inc
++++ b/compiler/ir_codegen_aarch64.inc
+@@ -599,6 +599,61 @@ begin
+   EmitI32($AA0A03E0 or lenReg);           { mov x[len], x10 }
+ end;
+ 
++procedure EmitFrozenStrStoreBodyA64(srcTk: TTypeKind; strCap: Integer);
++{ ONE lowering for "write a value into a frozen `string[N]` buffer", with the
++  destination address already in x6 and the source already in x5 -- a char
++  ordinal, a managed handle, or a frozen-string address, per srcTk. Writes
++  [len:8][chars] at x6, clamped to strCap. Clobbers x4, x9, x10.
++
++  It exists because this body was DUPLICATED between IR_STORE_SYM (`s := v`) and
++  IR_STORE_MEM (`p^ := v`), identical instruction for instruction and differing
++  only in where the capacity comes from -- SymStrCap[si] against
++  Integer(IRIVal[node]). The two copies had drifted: the SYM copy handled a
++  tyChar source and the MEM copy raised
++  "char-to-inline-string store through pointer not yet supported", so `s := c`
++  compiled and `p^ := c` did not, on this backend and on i386 and arm32 alike
++  (bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only). Sharing the
++  body is what makes that unrepresentable rather than fixed: there is no longer
++  a second arm to leave behind. normalise-dont-special-case.md. }
++var pNilPos, pDonePos: Integer;
++begin
++  if srcTk = tyChar then
++  begin
++    { x5 = char ordinal -> [len=1][char] }
++    EmitLoadImmA64(9, 1);
++    EmitI32($F90000C9);                    { str x9, [x6] (len=1) }
++    EmitI32($390020C5);                    { strb w5, [x6,#8] }
++    Exit;
++  end;
++  if srcTk = tyAnsiString then
++  begin
++    { Managed source -> frozen dest: x5 = handle (char pointer), length at
++      [x5,#-8]; nil handle -> empty. }
++    pNilPos := CodeLen;
++    EmitI32($B4000005);                    { cbz x5, empty (patched) }
++    EmitI32($F85F80A9);                    { ldur x9, [x5,#-8] (len) }
++    EmitClampLenToStrCapA64(9, strCap);
++    EmitI32($F90000C9);                    { str x9, [x6] (length word) }
++    EmitI32($AA0903E4);                    { mov x4, x9 (count) }
++    EmitI32($910020C6);                    { add x6, x6, #8 }
++    EmitA64CopyBytes(4, 5, 6);
++    pDonePos := CodeLen;
++    EmitI32($14000000);                    { b done (patched) }
++    Patch32(pNilPos, $B4000005 or ((((CodeLen - pNilPos) div 4) and $7FFFF) shl 5));
++    EmitI32($F90000DF);                    { empty: str xzr, [x6] (len=0) }
++    Patch32(pDonePos, $14000000 or (((CodeLen - pDonePos) div 4) and $3FFFFFF));
++    Exit;
++  end;
++  { frozen -> frozen: copy the length prefix, clamp, then the chars. }
++  EmitI32($F94000A9);                      { ldr x9, [x5] (len prefix) }
++  EmitClampLenToStrCapA64(9, strCap);      { truncate to string[N] capacity }
++  EmitI32($F90000C9);                      { str x9, [x6] }
++  EmitI32($AA0903E4);                      { mov x4, x9 (count) }
++  EmitI32($910020A5);                      { add x5, x5, #8 }
++  EmitI32($910020C6);                      { add x6, x6, #8 }
++  EmitA64CopyBytes(4, 5, 6);
++end;
++
+ procedure EmitWriteCStrA64;
+ { x0 = PChar (NUL-terminated) -> strlen + write to stdout. Mirrors x86-64
+   EmitWriteCStr so write(PChar) prints the string, not the pointer value. }
+@@ -1931,41 +1986,7 @@ begin
+             EmitLoadVarAddrA64(si);                { x0 = global/local buffer addr }
+           EmitI32($AA0003E6);                      { mov x6, x0 (dst) }
+           EmitI32($F84107E5);                      { ldr x5, [sp],#16 (src) }
+-          if IntToTypeKind(IRTk[valNode]) = tyChar then
+-          begin
+-            { x5 = char ordinal -> [len=1][char] }
+-            EmitLoadImmA64(9, 1);
+-            EmitI32($F90000C9);                    { str x9, [x6] (len=1) }
+-            EmitI32($390020C5);                    { strb w5, [x6,#8] }
+-          end
+-          else if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
+-          begin
+-            { Managed source -> frozen sym (s := managedStr): x5 = handle
+-              (char pointer), length at [x5,#-8]; nil handle -> empty. }
+-            pNilPos := CodeLen;
+-            EmitI32($B4000005);                    { cbz x5, empty (patched) }
+-            EmitI32($F85F80A9);                    { ldur x9, [x5,#-8] (len) }
+-            EmitClampLenToStrCapA64(9, SymStrCap[si]);
+-            EmitI32($F90000C9);                    { str x9, [x6] (length word) }
+-            EmitI32($AA0903E4);                    { mov x4, x9 (count) }
+-            EmitI32($910020C6);                    { add x6, x6, #8 }
+-            EmitA64CopyBytes(4, 5, 6);
+-            pDonePos := CodeLen;
+-            EmitI32($14000000);                    { b done (patched) }
+-            Patch32(pNilPos, $B4000005 or ((((CodeLen - pNilPos) div 4) and $7FFFF) shl 5));
+-            EmitI32($F90000DF);                    { empty: str xzr, [x6] (len=0) }
+-            Patch32(pDonePos, $14000000 or (((CodeLen - pDonePos) div 4) and $3FFFFFF));
+-          end
+-          else
+-          begin
+-            EmitI32($F94000A9);                    { ldr x9, [x5] (len prefix) }
+-            EmitClampLenToStrCapA64(9, SymStrCap[si]); { truncate to string[N] capacity }
+-            EmitI32($F90000C9);                    { str x9, [x6] }
+-            EmitI32($AA0903E4);                    { mov x4, x9 (count) }
+-            EmitI32($910020A5);                    { add x5, x5, #8 }
+-            EmitI32($910020C6);                    { add x6, x6, #8 }
+-            EmitA64CopyBytes(4, 5, 6);
+-          end;
++          EmitFrozenStrStoreBodyA64(IntToTypeKind(IRTk[valNode]), SymStrCap[si]);
+           Exit;
+         end;
+         { -O3 W2: `x := x <op> y` with x resident does the ALU on the resident
+@@ -4023,34 +4044,7 @@ begin
+           InLValueWrite := savedLValueWrite;
+           EmitI32($AA0003E6);                      { mov x6, x0 (dst) }
+           EmitI32($F84107E5);                      { ldr x5, [sp],#16 (src) }
+-          if IntToTypeKind(IRTk[valNode]) = tyChar then
+-            Error('target aarch64: char-to-inline-string store through pointer not yet supported');
+-          if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
+-          begin
+-            { Managed source -> frozen dest (r.s := managedStr): x5 = handle
+-              (char pointer), length at [x5,#-8]; nil handle -> empty. }
+-            pNilPos := CodeLen;
+-            EmitI32($B4000005);                    { cbz x5, empty (patched) }
+-            EmitI32($F85F80A9);                    { ldur x9, [x5,#-8] (len) }
+-            EmitClampLenToStrCapA64(9, Integer(IRIVal[node]));
+-            EmitI32($F90000C9);                    { str x9, [x6] (length word) }
+-            EmitI32($AA0903E4);                    { mov x4, x9 (count) }
+-            EmitI32($910020C6);                    { add x6, x6, #8 }
+-            EmitA64CopyBytes(4, 5, 6);
+-            pDonePos := CodeLen;
+-            EmitI32($14000000);                    { b done (patched) }
+-            Patch32(pNilPos, $B4000005 or ((((CodeLen - pNilPos) div 4) and $7FFFF) shl 5));
+-            EmitI32($F90000DF);                    { empty: str xzr, [x6] (len=0) }
+-            Patch32(pDonePos, $14000000 or (((CodeLen - pDonePos) div 4) and $3FFFFFF));
+-            Exit;
+-          end;
+-          EmitI32($F94000A9);                      { ldr x9, [x5] (len prefix) }
+-          EmitClampLenToStrCapA64(9, Integer(IRIVal[node])); { truncate to string[N] capacity }
+-          EmitI32($F90000C9);                      { str x9, [x6] }
+-          EmitI32($AA0903E4);                      { mov x4, x9 (count) }
+-          EmitI32($910020A5);                      { add x5, x5, #8 }
+-          EmitI32($910020C6);                      { add x6, x6, #8 }
+-          EmitA64CopyBytes(4, 5, 6);
++          EmitFrozenStrStoreBodyA64(IntToTypeKind(IRTk[valNode]), Integer(IRIVal[node]));
+           Exit;
+         end;
+         if tk = tyAnsiString then
+diff --git a/compiler/ir_codegen_arm32.inc b/compiler/ir_codegen_arm32.inc
+index 1e7714fcc..eafb6e6aa 100644
+--- a/compiler/ir_codegen_arm32.inc
++++ b/compiler/ir_codegen_arm32.inc
+@@ -1368,6 +1368,45 @@ begin
+   end;
+ end;
+ 
++procedure EmitFrozenStrStoreBodyArm32(srcTk: TTypeKind; strCap: Integer);
++{ ONE lowering for "write a value into a frozen `string[N]` buffer", with the
++  destination address already in r6 and the source already in r5 -- a char
++  ordinal, a managed handle, or a frozen-string address, per srcTk. Writes
++  [len:8][chars] at r6, clamped to strCap. Clobbers r4, r5, r6, r9.
++
++  See EmitFrozenStrStoreBodyA64 for why this is shared rather than duplicated:
++  this body existed twice, in IR_STORE_SYM and IR_STORE_MEM, and the copies had
++  drifted -- only the SYM one handled a tyChar source, so `s := c` compiled and
++  `p^ := c` did not
++  (bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only).
++
++  The tyChar case is written out here rather than deferred to
++  EmitArm32StringParts, which does handle tyChar but wants the char's address as
++  a STACK OFFSET (charStackOff). Both callers have already popped the value into
++  a register by this point, so there is no stack slot to name -- and both passed
++  -1 for exactly that reason. }
++begin
++  if srcTk = tyChar then
++  begin
++    { r5 = char ordinal -> [len=1][char] }
++    EmitLoadImmArm32(9, 1);
++    EmitI32($E5869000);                       { str r9, [r6] (len=1) }
++    EmitLoadImmArm32(9, 0);
++    EmitI32($E5869004);                       { str r9, [r6,#4] }
++    EmitI32($E5C65008);                       { strb r5, [r6,#8] }
++    Exit;
++  end;
++  { (src,len) via the nil-safe normalizer: frozen source -> len=[r5], src=r5+8;
++    managed source -> len=[r5,#-8], src=r5 (nil -> len 0). }
++  EmitArm32StringParts(5, 5, 4, srcTk, -1);
++  EmitClampLenToStrCapArm32(4, strCap);       { truncate to string[N] capacity }
++  EmitI32($E5864000);                         { str r4, [r6] (len lo = clamped) }
++  EmitLoadImmArm32(9, 0);
++  EmitI32($E5869004);                         { str r9, [r6,#4] (len hi = 0) }
++  EmitI32($E2866008);                         { add r6, r6, #8 }
++  EmitArm32CopyBytes(4, 5, 6);
++end;
++
+ procedure IREmitNodeArm32(node: Integer);
+ var
+   valNode, si, left, right, op, procIdx, argNode, nArgs, i, j, wid, sz: Integer;
+@@ -1668,26 +1707,7 @@ begin
+             EmitI32($E08B6009);                       { add r6, fp, r9 (local buffer) }
+           end;
+           EmitI32($E8BD0020);                         { pop {r5} (src/char) }
+-          if IntToTypeKind(IRTk[valNode]) = tyChar then
+-          begin
+-            { r5 = char ordinal -> [len=1][char] }
+-            EmitLoadImmArm32(9, 1);
+-            EmitI32($E5869000);                       { str r9, [r6] (len=1) }
+-            EmitLoadImmArm32(9, 0);
+-            EmitI32($E5869004);                       { str r9, [r6,#4] }
+-            EmitI32($E5C65008);                       { strb r5, [r6,#8] }
+-            Exit;
+-          end;
+-          { (src,len) via the nil-safe normalizer: frozen source -> len=[r5],
+-            src=r5+8; managed source -> len=[r5,#-8], src=r5 (nil -> len 0).
+-            Previously a managed source misread its char data as the length. }
+-          EmitArm32StringParts(5, 5, 4, IntToTypeKind(IRTk[valNode]), -1);
+-          EmitClampLenToStrCapArm32(4, SymStrCap[si]); { truncate to string[N] capacity }
+-          EmitI32($E5864000);                         { str r4, [r6] (len lo = clamped) }
+-          EmitLoadImmArm32(9, 0);
+-          EmitI32($E5869004);                         { str r9, [r6,#4] (len hi = 0) }
+-          EmitI32($E2866008);                         { add r6, r6, #8 }
+-          EmitArm32CopyBytes(4, 5, 6);
++          EmitFrozenStrStoreBodyArm32(IntToTypeKind(IRTk[valNode]), SymStrCap[si]);
+           Exit;
+         end;
+         tk := Syms[si].TypeKind;
+@@ -3906,17 +3926,7 @@ begin
+           InLValueWrite := savedLValueWrite;
+           EmitI32($E1A06000);                      { mov r6, r0 (dst) }
+           EmitI32($E8BD0020);                      { pop {r5} (src) }
+-          if IntToTypeKind(IRTk[valNode]) = tyChar then
+-            Error('target arm32: char-to-inline-string store through pointer not yet supported');
+-          { (src,len) via the nil-safe normalizer: frozen or managed source
+-            (managed previously misread its char data as the length). }
+-          EmitArm32StringParts(5, 5, 4, IntToTypeKind(IRTk[valNode]), -1);
+-          EmitClampLenToStrCapArm32(4, Integer(IRIVal[node])); { truncate to string[N] capacity }
+-          EmitI32($E5864000);                      { str r4, [r6] (len lo = clamped) }
+-          EmitLoadImmArm32(9, 0);
+-          EmitI32($E5869004);                      { str r9, [r6,#4] (len hi = 0) }
+-          EmitI32($E2866008);                      { add r6, r6, #8 }
+-          EmitArm32CopyBytes(4, 5, 6);
++          EmitFrozenStrStoreBodyArm32(IntToTypeKind(IRTk[valNode]), Integer(IRIVal[node]));
+           Exit;
+         end;
+         if tk = tyAnsiString then
