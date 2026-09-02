@@ -113,4 +113,4 @@ BUILD-refused to matching, so the instrument does discriminate the state this
 ticket is about rather than passing everything put in front of it.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 18b3ec2a6.
