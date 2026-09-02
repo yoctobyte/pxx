@@ -11130,13 +11130,13 @@ test-core: $(COMPILER)
 	# tyString is also the fallback both readers use, so a single-width test
 	# cannot see this at all.
 	./$(COMPILER) test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_dm26
-	tools/expect_same.sh test_ssmw_dm26 "$$($(TESTTMP)/test_ssmw_dm26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\nchars    120 121 ')"
+	tools/expect_same.sh test_ssmw_dm26 "$$($(TESTTMP)/test_ssmw_dm26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_ds26
-	tools/expect_same.sh test_ssmw_ds26 "$$($(TESTTMP)/test_ssmw_ds26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\nchars    120 121 ')"
+	tools/expect_same.sh test_ssmw_ds26 "$$($(TESTTMP)/test_ssmw_ds26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_fm26
-	tools/expect_same.sh test_ssmw_fm26 "$$($(TESTTMP)/test_ssmw_fm26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\nchars    120 121 ')"
+	tools/expect_same.sh test_ssmw_fm26 "$$($(TESTTMP)/test_ssmw_fm26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_fs26
-	tools/expect_same.sh test_ssmw_fs26 "$$($(TESTTMP)/test_ssmw_fs26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\nchars    120 121 ')"
+	tools/expect_same.sh test_ssmw_fs26 "$$($(TESTTMP)/test_ssmw_fs26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26
@@ -16306,9 +16306,9 @@ test-aarch64: $(COMPILER)
 	# backend: Length() read the prefix at a fixed 8 and answered
 	# 0x6F6C6C654805 -- the length byte followed by the characters of 'hello'.
 	./$(COMPILER) --target=aarch64 test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a64_ssmw_d
-	tools/expect_same.sh aarch64/ssmw_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\nchars    120 121 ')"
+	tools/expect_same.sh aarch64/ssmw_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a64_ssmw_s
-	tools/expect_same.sh aarch64/ssmw_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\nchars    120 121 ')"
+	tools/expect_same.sh aarch64/ssmw_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
 	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
 	# correct throughout and is the control that the fix changed nothing there.
@@ -18814,6 +18814,24 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/test_static_string_literal "$$(tools/run_target.sh xtensa $(TESTTMP)/ssl_xt | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_xt_x64 | grep -v '^pxx-census')"
 
 test-arm32: $(COMPILER)
+	# THE BYTE PREFIX ON A 32-BIT TARGET, which is the row that is structurally
+	# invisible everywhere else: arm32 writes the WIDE prefix as two stores (low
+	# word plus an explicit zero high word), so it is the one backend whose
+	# store helper has a shape the 64-bit ones do not. The DEFAULT rows matter
+	# most -- every helper encoding was checked against the literal it replaced
+	# and against clang, so default arm32 must be unchanged by the conversion.
+	./$(COMPILER) --target=arm32 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a32_ssbp_d
+	tools/expect_same.sh arm32/ssbp_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a32_ssbp_s
+	tools/expect_same.sh arm32/ssbp_short "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	# The cross-width conversion, including the FIELD WIDTH rows -- the padding
+	# is a runtime quantity, so four backends hand it to a shared helper that
+	# reads the length prefix itself, and that helper hardcoded a machine word.
+	# Verified as a positive control: `pad` collapses to <> without the fix.
+	./$(COMPILER) --target=arm32 test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a32_ssmw_d
+	tools/expect_same.sh arm32/ssmw_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
+	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a32_ssmw_s
+	tools/expect_same.sh arm32/ssmw_short "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
 	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
 	# correct throughout and is the control that the fix changed nothing there.

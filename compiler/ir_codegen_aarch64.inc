@@ -4647,8 +4647,10 @@ begin
                 EmitwriteIntA64;
             end;
           end
-          else if tk = tyString then
+          else if TypeIsFrozenString(tk) then
           begin
+            { TypeIsFrozenString, not `tk = tyString`: a tyShortString operand
+              would otherwise reach the catch-all Error below. }
             if wid > 0 then
             begin
               { A field width is a MINIMUM, and the pad is max(0, wid - len) --
@@ -4658,11 +4660,20 @@ begin
                 the second copy is the one that stays broken, and this arm IS
                 that: it ignored the width entirely while the string-LITERAL
                 arm above honoured it.
-                bug-a-three-backends-drop-the-field-width-on-a-string-variable }
+                bug-a-three-backends-drop-the-field-width-on-a-string-variable
+
+                The helper reads the prefix ITSELF, so the string's width picks
+                which helper rather than changing the call: PXXWriteFrozenBW is
+                the one-byte sibling. Two procedures rather than a width
+                argument because the caller knows it at compile time -- see
+                PXXWriteFrozenBW's own comment. }
               IREmitNodeAarch64(valNode);          { x0 = struct addr }
               EmitLoadImmA64(1, wid);              { x1 = field width }
-              procIdx := FindProc('PXXWriteFrozenW');
-              if procIdx < 0 then Error('compiler error: PXXWriteFrozenW not found');
+              if FrozenStrPrefixSize(IRStrTkOf(valNode)) = 1 then
+                procIdx := FindProc('PXXWriteFrozenBW')
+              else
+                procIdx := FindProc('PXXWriteFrozenW');
+              if procIdx < 0 then Error('compiler error: PXXWriteFrozen[B]W not found');
               EmitCallProc(procIdx);
             end
             else

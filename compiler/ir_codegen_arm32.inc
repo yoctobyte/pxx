@@ -18,6 +18,57 @@ begin
   end;
 end;
 
+{ ===== FROZEN-STRING LENGTH PREFIX, arm32 =====
+  Declared at the TOP of the file, above every use, because PXX prescans
+  headers and FPC is single-pass: helpers added next to their first caller
+  build fine here and fail the FPC seed canary. That happened on aarch64 —
+  `make compiler/pascal26` and --tier quick both passed while it was broken.
+
+  arm32 is 32-bit, so the WIDE prefix is TWO stores: the low word and an
+  explicit zero high word. That is the asymmetry the other backends do not
+  have, and it is why the store helper needs a scratch register to hold the
+  zero — ARM has no zero register.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+
+procedure EmitStoreStrLenArm32(lenReg, bufReg, zeroReg: Integer; dstTk: TTypeKind);
+{ [r<bufReg>] := r<lenReg>, at dstTk's prefix width. The 8-byte form writes the
+  low word then a zero high word and CLOBBERS r<zeroReg> to do it; the 1-byte
+  form writes one byte and leaves the scratch alone. }
+begin
+  if FrozenStrPrefixSize(dstTk) = 1 then
+    EmitI32($E5C00000 or (bufReg shl 16) or (lenReg shl 12))       { strb len, [buf] }
+  else
+  begin
+    EmitI32($E5800000 or (bufReg shl 16) or (lenReg shl 12));      { str  len, [buf] }
+    EmitLoadImmArm32(zeroReg, 0);
+    EmitI32($E5800004 or (bufReg shl 16) or (zeroReg shl 12));     { str  0, [buf,#4] }
+  end;
+end;
+
+procedure EmitLoadStrLenArm32(lenReg, bufReg: Integer; srcTk: TTypeKind);
+{ r<lenReg> := [r<bufReg>], at srcTk's prefix width. LDRB zero-extends, which
+  is what makes the result safe as a byte count; the wide form reads only the
+  low word, as every existing reader here already did (lengths are < 4GB). }
+begin
+  if FrozenStrPrefixSize(srcTk) = 1 then
+    EmitI32($E5D00000 or (bufReg shl 16) or (lenReg shl 12))       { ldrb len, [buf] }
+  else
+    EmitI32($E5900000 or (bufReg shl 16) or (lenReg shl 12));      { ldr  len, [buf] }
+end;
+
+procedure EmitLeaStrDataArm32(dstReg, srcReg: Integer; tk: TTypeKind);
+{ r<dstReg> := r<srcReg> + tk's prefix size — the first CHARACTER's address. }
+begin
+  EmitI32($E2800000 or (srcReg shl 16) or (dstReg shl 12) or FrozenStrPrefixSize(tk));
+end;
+
+procedure EmitStoreCharAtStrDataArm32(charReg, bufReg: Integer; tk: TTypeKind);
+{ [r<bufReg> + prefix] := r<charReg> as a byte — the one character of a
+  one-char string, at the offset tk's own length prefix implies. }
+begin
+  EmitI32($E5C00000 or (bufReg shl 16) or (charReg shl 12) or FrozenStrPrefixSize(tk));
+end;
+
 procedure EmitLoadVarArm32(idx: Integer);
 var tk: TTypeKind; sz: Integer; sgn: Boolean;
 begin
@@ -1231,8 +1282,8 @@ begin
   begin
     IREmitNodeArm32(valNode);       { r0 = inline string buffer }
     EmitI32($E1A02000);             { mov r2, r0 }
-    EmitI32($E5920000);             { ldr r0, [r2] (len) }
-    EmitI32($E2821008);             { add r1, r2, #8 (src) }
+    EmitLoadStrLenArm32(0, 2, IRStrTkOf(valNode));   { r0 = len }
+    EmitLeaStrDataArm32(1, 2, IRStrTkOf(valNode));   { r1 = chars }
     procIdx := FindProc('PXXStrFromLit');
     if procIdx < 0 then Error('compiler error: PXXStrFromLit not found');
     EmitCallProc(procIdx);
@@ -1263,8 +1314,11 @@ begin
   end
   else if TypeIsFrozenString(tk) then
   begin
-    EmitI32($E5900000 or (valueReg shl 16) or (lenReg shl 12)); { ldr len, [value] }
-    EmitI32($E2800008 or (valueReg shl 16) or (srcReg shl 12)); { add src, value, #8 }
+    { The length read and the data offset are ONE number — tk's prefix width.
+      Callers must pass a kind resolved through IRStrTkOf/IRFrozenKindOfAddr,
+      not IntToTypeKind of a node, or every frozen string looks 8 wide here. }
+    EmitLoadStrLenArm32(lenReg, valueReg, tk);
+    EmitLeaStrDataArm32(srcReg, valueReg, tk);
   end
   else
   begin
@@ -1378,6 +1432,7 @@ var
   vaRevM, vaRevP, vaRevO1, vaRevO2: Integer;
   itemNode, hi, p1, p2: Integer;
   lhsTk, rhsTk: TTypeKind;
+  memFrozenTkArm32: TTypeKind;  { frozen kind of a store-through-a-pointer DESTINATION }
   sVal: AnsiString;
   tk: TTypeKind;
   sgn, savedLValueWrite: Boolean;
@@ -1672,21 +1727,17 @@ begin
           begin
             { r5 = char ordinal -> [len=1][char] }
             EmitLoadImmArm32(9, 1);
-            EmitI32($E5869000);                       { str r9, [r6] (len=1) }
-            EmitLoadImmArm32(9, 0);
-            EmitI32($E5869004);                       { str r9, [r6,#4] }
-            EmitI32($E5C65008);                       { strb r5, [r6,#8] }
+            EmitStoreStrLenArm32(9, 6, 9, Syms[si].TypeKind);
+            EmitStoreCharAtStrDataArm32(5, 6, Syms[si].TypeKind);
             Exit;
           end;
           { (src,len) via the nil-safe normalizer: frozen source -> len=[r5],
             src=r5+8; managed source -> len=[r5,#-8], src=r5 (nil -> len 0).
             Previously a managed source misread its char data as the length. }
-          EmitArm32StringParts(5, 5, 4, IntToTypeKind(IRTk[valNode]), -1);
+          EmitArm32StringParts(5, 5, 4, IRStrTkOf(valNode), -1);
           EmitClampLenToStrCapArm32(4, SymStrCap[si]); { truncate to string[N] capacity }
-          EmitI32($E5864000);                         { str r4, [r6] (len lo = clamped) }
-          EmitLoadImmArm32(9, 0);
-          EmitI32($E5869004);                         { str r9, [r6,#4] (len hi = 0) }
-          EmitI32($E2866008);                         { add r6, r6, #8 }
+          EmitStoreStrLenArm32(4, 6, 9, Syms[si].TypeKind);
+          EmitLeaStrDataArm32(6, 6, Syms[si].TypeKind);
           EmitArm32CopyBytes(4, 5, 6);
           Exit;
         end;
@@ -2542,9 +2593,7 @@ begin
           EmitI32($E92D0001);          { push {r0} buffer addr }
           IREmitNodeArm32(IRA[valNode]); { r0 = new length }
           EmitI32($E8BD0002);          { pop {r1} buffer addr }
-          EmitI32($E5810000);          { str r0, [r1] (len lo) }
-          EmitI32($E3A02000);          { mov r2, #0 }
-          EmitI32($E5812004);          { str r2, [r1, #4] (len hi) }
+          EmitStoreStrLenArm32(0, 1, 2, Syms[si].TypeKind);
           Exit;
         end;
         if procIdx = -Ord(tkLength) then
@@ -2552,19 +2601,26 @@ begin
           { Length(arr): IR_LEA auto-loaded the data pointer; count at [handle-8]. }
           argNode := IRB[node];
           valNode := IRA[argNode];
-          if (IntToTypeKind(IRTk[valNode]) = tyString) or
+          if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) or
              ((IRKind[valNode] = IR_LEA) and
               TypeIsFrozenString(Syms[IRA[valNode]].TypeKind) and
               not Syms[IRA[valNode]].IsArray) or
              (((IRKind[valNode] = IR_LOAD_SYM) or (IRKind[valNode] = IR_LOAD_MEM)) and
               (IntToTypeKind(IRTk[valNode]) = tyPointer)) then
           begin
-            { Frozen inline string: length is the 8-byte prefix at [buffer+0]. A
-              frozen string reached through a pointer deref (`ps^`, `rec.pf^`)
-              lowers to a bare pointer load whose value IS the buffer address;
-              read the prefix there, mirroring x86-64's else catch-all. }
+            { Frozen inline string: the length is the prefix at [buffer+0], read
+              at the STRING'S OWN WIDTH. A frozen string reached through a
+              pointer deref (`ps^`, `rec.pf^`) lowers to a bare pointer load
+              whose value IS the buffer address; read the prefix there,
+              mirroring x86-64's else catch-all.
+
+              IRFrozenKindOfAddr and NOT IRStrTkOf, because this arm knowingly
+              accepts a POINTER-typed node and IRStrTkOf answers about the
+              node's own kind first — for a tyPointer LEA it returns tyPointer
+              and never consults the symbol. Measured on aarch64, where that
+              made Length answer the length byte followed by the characters. }
             IREmitNodeArm32(valNode);    { r0 = frozen buffer addr }
-            EmitI32($E5900000);          { ldr r0, [r0] }
+            EmitLoadStrLenArm32(0, 0, IRFrozenKindOfAddr(valNode));
             Exit;
           end;
           IREmitNodeArm32(valNode);      { r0 = handle (or 0) }
@@ -3893,11 +3949,17 @@ begin
     IR_STORE_MEM:
       begin
         tk := IntToTypeKind(IRTk[node]);
-        if tk = tyString then
+        if TypeIsFrozenString(tk) then
         begin
           { Frozen inline-string store through a pointer (PString(p)^ := s): copy
-            the 8-byte length prefix, then the `length` chars. Mirrors i386. }
+            the length prefix, then the `length` chars. Mirrors i386.
+
+            TypeIsFrozenString rather than `tk = tyString`, so a tyShortString
+            destination does not fall past this arm into the scalar store below
+            — which drops the source ADDRESS into the slot. No-op for the kinds
+            that reached here before. }
           valNode := IRB[node];
+          memFrozenTkArm32 := IRFrozenKindOfAddr(IRA[node]);
           IREmitNodeArm32(valNode);                { r0 = source string addr }
           EmitI32($E92D0001);                      { push {r0} (src) }
           savedLValueWrite := InLValueWrite;
@@ -3912,20 +3974,16 @@ begin
               IR_STORE_SYM arm above emits for `s := c`; r6/r5 already hold
               dest/char here. }
             EmitLoadImmArm32(9, 1);
-            EmitI32($E5869000);                      { str r9, [r6] (len=1) }
-            EmitLoadImmArm32(9, 0);
-            EmitI32($E5869004);                      { str r9, [r6,#4] }
-            EmitI32($E5C65008);                      { strb r5, [r6,#8] }
+            EmitStoreStrLenArm32(9, 6, 9, memFrozenTkArm32);
+            EmitStoreCharAtStrDataArm32(5, 6, memFrozenTkArm32);
             Exit;
           end;
           { (src,len) via the nil-safe normalizer: frozen or managed source
             (managed previously misread its char data as the length). }
-          EmitArm32StringParts(5, 5, 4, IntToTypeKind(IRTk[valNode]), -1);
+          EmitArm32StringParts(5, 5, 4, IRStrTkOf(valNode), -1);
           EmitClampLenToStrCapArm32(4, Integer(IRIVal[node])); { truncate to string[N] capacity }
-          EmitI32($E5864000);                      { str r4, [r6] (len lo = clamped) }
-          EmitLoadImmArm32(9, 0);
-          EmitI32($E5869004);                      { str r9, [r6,#4] (len hi = 0) }
-          EmitI32($E2866008);                      { add r6, r6, #8 }
+          EmitStoreStrLenArm32(4, 6, 9, memFrozenTkArm32);
+          EmitLeaStrDataArm32(6, 6, memFrozenTkArm32);
           EmitArm32CopyBytes(4, 5, 6);
           Exit;
         end;
@@ -4502,22 +4560,29 @@ begin
               Patch32(j, $0A000000 or ((((CodeLen - j) div 4) - 2) and $00ffffff));
             end;
           end
-          else if tk = tyString then
+          else if TypeIsFrozenString(tk) then
           begin
+            { TypeIsFrozenString, not `tk = tyString`: a tyShortString operand
+              would otherwise reach the catch-all Error below. }
             if wid > 0 then
             begin
-              { Frozen spelling of the same rule -- see the tyAnsiString arm. }
-              IREmitNodeArm32(valNode);            { r0 = [len:8][data] }
+              { Frozen spelling of the same rule -- see the tyAnsiString arm.
+                The runtime helper reads the prefix itself, so the WIDTH picks
+                which helper: PXXWriteFrozenBW is the one-byte sibling. }
+              IREmitNodeArm32(valNode);            { r0 = [len][data] }
               EmitLoadImmArm32(1, wid);            { r1 = field width }
-              procIdx := FindProc('PXXWriteFrozenW');
-              if procIdx < 0 then Error('compiler error: PXXWriteFrozenW not found');
+              if FrozenStrPrefixSize(IRStrTkOf(valNode)) = 1 then
+                procIdx := FindProc('PXXWriteFrozenBW')
+              else
+                procIdx := FindProc('PXXWriteFrozenW');
+              if procIdx < 0 then Error('compiler error: PXXWriteFrozen[B]W not found');
               EmitCallProc(procIdx);
             end
             else
             begin
-              IREmitNodeArm32(valNode);            { r0 = [len:8][data] }
-              EmitI32($E5902000);                  { ldr r2, [r0] }
-              EmitI32($E2801008);                  { add r1, r0, #8 }
+              IREmitNodeArm32(valNode);            { r0 = [len][data] }
+              EmitLoadStrLenArm32(2, 0, IRStrTkOf(valNode));   { r2 = len }
+              EmitLeaStrDataArm32(1, 0, IRStrTkOf(valNode));   { r1 = chars }
               EmitI32($E3A00001);                  { mov r0, #1 }
               EmitI32($E3A07004);                  { mov r7, #4 }
               EmitI32($EF000000);                  { svc #0 }

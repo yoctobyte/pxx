@@ -65,6 +65,17 @@ begin
   s := b;
   WriteLn('emptyw2n ', Length(s));
 
+  { A FIELD WIDTH on a frozen write. This row exists because the padding is a
+    RUNTIME quantity (pad = max(0, wid - len)), so four backends hand it to a
+    shared runtime helper that reads the length prefix ITSELF — and that helper
+    hardcoded a machine word. Without this row the write path is only ever
+    exercised at width 0, where the helper is never called, and the gap was
+    invisible on every backend that uses it. }
+  s := 'world';
+  WriteLn('pad      <', s:9, '>');
+  b := s;
+  WriteLn('padw     <', b:9, '>');
+
   { Indexing after a cross-width assignment: s[i] is where a prefix width and a
     char OFFSET disagree, and the two are decided by the same number. }
   s := 'xy';

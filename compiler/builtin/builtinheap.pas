@@ -2664,6 +2664,26 @@ begin
   if len > 0 then r := PXXSysWrite(1, Int64(p) + 8, len);
 end;
 
+{ The same, for a frozen string with a ONE-BYTE length prefix (tyShortString).
+
+  TWO PROCEDURES RATHER THAN A WIDTH PARAMETER, because the caller knows the
+  prefix width at COMPILE time. Passing it would put a runtime branch inside
+  every single write, and a wrong value would not be a slightly wrong number —
+  reading a 1-byte prefix as a machine word gives a length in the billions,
+  which is a write() of the whole address space rather than a misformatted
+  field.
+
+  Both survive phase 4: bare `string` stays tyString with its machine-word
+  prefix, so the wide form is not scaffolding.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+procedure PXXWriteFrozenBW(p: Pointer; wid: NativeInt);
+var len: Int64; r: Int64;
+begin
+  len := PByte(p)^;
+  if wid > len then PXXWritePad(wid - len);
+  if len > 0 then r := PXXSysWrite(1, Int64(p) + 1, len);
+end;
+
 { NUL-terminated C string (PChar), nil-safe. }
 procedure PXXWriteCStr(p: Pointer);
 var len: Int64; r: Int64;
