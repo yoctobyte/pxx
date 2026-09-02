@@ -11098,6 +11098,18 @@ test-core: $(COMPILER)
 	# go 0 when built with the pinned compiler; `openvals` and `guard` do not, and
 	# the test says why.
 	./$(COMPILER) test/test_string_n_container_strides.pas $(TESTTMP)/test_strn_container26
+	# THE BYTE-PREFIX LAYOUT, compiled BOTH ways, because the flag is the only
+	# thing that can produce a tyShortString today and untested machine code is
+	# not reviewable. Default must stay the 8-byte word (layout row `5 0 0 0 0 0`,
+	# sizeof 18); -dPXX_SHORTSTRING must be BYTE-IDENTICAL TO FPC 3.2.2, layout
+	# row included -- every observable matches and only `sizeof` legitimately
+	# differs between the two modes. The layout row is the only one that sees the
+	# prefix directly: an implementation can pass every other row by being
+	# self-consistently wrong.
+	./$(COMPILER) test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_ssbp_default26
+	tools/expect_same.sh test_ssbp_default26 "$$($(TESTTMP)/test_ssbp_default26)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_ssbp_short26
+	tools/expect_same.sh test_ssbp_short26 "$$($(TESTTMP)/test_ssbp_short26)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
 	tools/expect_same.sh test_strn_container26 "$$($(TESTTMP)/test_strn_container26)" "$$(printf 'openp1     1\nopenp2     1\nopenp20    1\nopenvals   1\ndyn1d      1\ndyn2d      1\ndyn2dvals  1\nguard      1')"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"

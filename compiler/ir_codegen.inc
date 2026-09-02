@@ -4748,6 +4748,67 @@ begin
   end;
 end;
 
+{ ===== FROZEN-STRING LENGTH PREFIX, x86-64 =====
+  Three one-liners so the WIDTH is decided by a kind rather than spelled as a
+  literal 8 at each site. rdi is the destination buffer and rsi the source, by
+  the convention every caller here already uses.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+
+function IRFrozenKindOfAddr(node: Integer): TTypeKind;
+{ The FROZEN STRING KIND an address node points at, so a reader can pick the
+  right prefix width. tyString when it cannot be determined, which is the
+  8-byte answer and therefore the pre-existing behaviour -- this must never
+  GUESS narrow, because reading an 8-byte prefix as 1 byte truncates a length
+  while reading a 1-byte prefix as 8 gives a length in the billions. Wrong-wide
+  is the recoverable direction and wrong-narrow is not.
+
+  The IR is why this exists: a frozen string's ARG node is tagged tyString
+  generically (measured -- `Length(s)` on a `string[10]` produces
+  `arg ... tk=4`), so the width is not recoverable from the node's own kind and
+  has to be walked back to the symbol.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+begin
+  Result := tyString;
+  if node < 0 then Exit;
+  if (IRKind[node] = IR_LEA) or (IRKind[node] = IR_SLOTADDR) then
+  begin
+    if (IRA[node] >= 0) and (IRA[node] < SymCount) and
+       TypeIsFrozenString(Syms[IRA[node]].TypeKind) then
+      Result := Syms[IRA[node]].TypeKind;
+  end
+  else if TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
+    Result := IntToTypeKind(IRTk[node]);
+end;
+
+procedure EmitStoreRcxAsStrLen(dstTk: TTypeKind);
+{ [rdi] := rcx, at dstTk's prefix width. The byte form writes cl. }
+begin
+  if FrozenStrPrefixSize(dstTk) = 1 then
+    begin EmitB($88); EmitB($0F); end                    { mov [rdi], cl }
+  else
+    begin EmitB($48); EmitB($89); EmitB($0F); end;       { mov [rdi], rcx }
+end;
+
+procedure EmitLoadRcxStrLenFromRsi(srcTk: TTypeKind);
+{ rcx := [rsi], at srcTk's prefix width. ZERO-EXTENDING for the byte form --
+  callers use rcx as a full 64-bit rep-movsb count, so a stale upper half is a
+  length in the billions rather than a slightly wrong number. }
+begin
+  if FrozenStrPrefixSize(srcTk) = 1 then
+    begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($0E); end   { movzx rcx, byte [rsi] }
+  else
+    begin EmitB($48); EmitB($8B); EmitB($0E); end;              { mov rcx, [rsi] }
+end;
+
+procedure EmitZeroStrLen(dstTk: TTypeKind);
+{ [rdi] := 0, at dstTk's prefix width — the empty-string case. }
+begin
+  if FrozenStrPrefixSize(dstTk) = 1 then
+    begin EmitB($C6); EmitB($07); EmitB($00); end               { mov byte [rdi], 0 }
+  else
+    begin EmitB($48); EmitB($C7); EmitB($07); EmitI32(0); end;  { mov qword [rdi], 0 }
+end;
+
 procedure EmitClampRcxToStrCap(cap: Integer);
 { rcx = source string length about to be copied into a frozen inline buffer.
   Clamp it to the destination's capacity — a `string[N]` (or plain frozen
@@ -4761,15 +4822,29 @@ begin
   EmitB($48); EmitB($C7); EmitB($C1); EmitI32(cap);  { mov rcx, cap }
 end;
 
-procedure IREmitStoreCharAsString;
+procedure IREmitStoreCharAsString(dstTk: TTypeKind);
 { rdi = destination string buffer, rsi = char ordinal. Writes a 1-char string
-  ([len:8=1][char]) directly into the destination, so a tyChar value can be
-  assigned to a tyString slot. No allocation — the target buffer already exists.}
+  directly into the destination, so a tyChar value can be assigned to a string
+  slot. No allocation — the target buffer already exists.
+
+  dstTk decides the LENGTH PREFIX WIDTH, and therefore also where the character
+  goes: [len:8=1][char at +8] for tyString/tyFixedString, [len:1=1][char at +1]
+  for tyShortString. It has to be a parameter rather than a constant because
+  this is one of the eight arms the phase-1 audit found writing the 8-byte
+  length word as a literal, none of which called any sizing oracle -- which is
+  why "grep the sizing oracles" scopes this feature short by all eight.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
 begin
-  EmitAsmX64([
-    'mov qword [rdi], %', 1,
-    'mov byte [rdi+8], sil'
-  ]);
+  if FrozenStrPrefixSize(dstTk) = 1 then
+    EmitAsmX64([
+      'mov byte [rdi], %', 1,
+      'mov byte [rdi+1], sil'
+    ])
+  else
+    EmitAsmX64([
+      'mov qword [rdi], %', 1,
+      'mov byte [rdi+8], sil'
+    ]);
 end;
 
 procedure EmitReadLine;
@@ -6315,6 +6390,7 @@ end;
 
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
+    wrFrozenPfx: Integer;   { length-prefix width of the frozen string being written }
     scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
     allocaLoop, allocaDone: Integer;  { IR_ALLOCA's relocation loop: back edge, and the forward rel8 out of it }
     op: TTokenKind;
@@ -7270,7 +7346,7 @@ begin
             EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
             EmitB($5E);                         { pop rsi }
             if IntToTypeKind(IRTk[valueNode]) = tyChar then
-              IREmitStoreCharAsString          { rsi = char ordinal -> [len=1][char] }
+              IREmitStoreCharAsString(Syms[symIdx].TypeKind)  { rsi = char ordinal -> [len=1][char] }
             else if IntToTypeKind(IRTk[valueNode]) = tyAnsiString then
             begin
               { Managed source -> frozen inline dest (e.g. fx: string[N] := managedStr):
@@ -7280,21 +7356,33 @@ begin
               EmitB($74); pNil := CodeLen; EmitB(0);            { jz empty }
               EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);  { mov rcx, [rsi-8] = len }
               EmitClampRcxToStrCap(SymStrCap[symIdx]);          { truncate to string[N] capacity }
-              EmitB($48); EmitB($89); EmitB($0F);              { mov [rdi], rcx (length word) }
-              EmitB($48); EmitB($83); EmitB($C7); EmitB($08);  { add rdi, 8 (dest chars) }
+              EmitStoreRcxAsStrLen(Syms[symIdx].TypeKind);      { [rdi] := len, at the DEST's width }
+              EmitB($48); EmitB($83); EmitB($C7);
+              EmitB(FrozenStrPrefixSize(Syms[symIdx].TypeKind)); { add rdi, prefix (dest chars) }
               EmitB($F3); EmitB($A4);                           { rep movsb (rsi already at chars) }
               EmitB($EB); pDone := CodeLen; EmitB(0);           { jmp done }
               PatchRel8(pNil);         { empty: }
-              EmitB($48); EmitB($C7); EmitB($07); EmitI32(0);  { mov qword [rdi], 0 }
+              EmitZeroStrLen(Syms[symIdx].TypeKind);            { [rdi] := 0, at the DEST's width }
               PatchRel8(pDone);       { done: }
             end
             else
             begin
-              EmitB($48); EmitB($8B); EmitB($0E); { mov rcx, [rsi] }
+              { FROZEN -> FROZEN, and once tyShortString exists THE TWO SIDES CAN
+                HAVE DIFFERENT PREFIX WIDTHS -- a copy becomes a CONVERSION.
+                The source width comes from the value's kind (a string LITERAL
+                stays tyString and keeps its 8-byte prefix permanently, so
+                `s := 'hello'` into a shortstring is 8 -> 1 and is the common
+                case, not an exotic one); the destination width from the
+                symbol's. Reading with the wrong one gives a length in the
+                billions; writing with the wrong one puts the chars at the
+                wrong offset. }
+              EmitLoadRcxStrLenFromRsi(IntToTypeKind(IRTk[valueNode]));
               EmitClampRcxToStrCap(SymStrCap[symIdx]); { truncate to string[N] capacity }
-              EmitB($48); EmitB($89); EmitB($0F); { mov [rdi], rcx }
-              EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
-              EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
+              EmitStoreRcxAsStrLen(Syms[symIdx].TypeKind);
+              EmitB($48); EmitB($83); EmitB($C6);
+              EmitB(FrozenStrPrefixSize(IntToTypeKind(IRTk[valueNode])));  { add rsi, srcPrefix }
+              EmitB($48); EmitB($83); EmitB($C7);
+              EmitB(FrozenStrPrefixSize(Syms[symIdx].TypeKind));           { add rdi, dstPrefix }
               EmitB($F3); EmitB($A4);             { rep movsb }
             end;
           end;
@@ -7769,7 +7857,7 @@ begin
           EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
           EmitB($5E);                         { pop rsi }
           if IntToTypeKind(IRTk[valueNode]) = tyChar then
-            IREmitStoreCharAsString          { rsi = char ordinal -> [len=1][char] }
+            IREmitStoreCharAsString(Syms[symIdx].TypeKind)  { rsi = char ordinal -> [len=1][char] }
           else if IntToTypeKind(IRTk[valueNode]) = tyAnsiString then
           begin
             { Managed source -> frozen field/deref dest (r.s := managedStr):
@@ -9218,6 +9306,7 @@ begin
             what TypeIsFrozenString exists for (see its own note in symtab.inc).
             bug-p-a-shortstring-function-result-prints-as-a-pointer }
           IREmitNode(valNode);
+          wrFrozenPfx := FrozenStrPrefixSize(IRFrozenKindOfAddr(valNode));
           if wid > 0 then
           begin
             { Field width: pad with max(0, wid - len) spaces first. Every OTHER
@@ -9228,15 +9317,25 @@ begin
               tyAnsiString arm above; rax is preserved across the pad syscall
               on the stack, since the syscall clobbers it. }
             EmitB($50);                                      { push rax (the struct) }
-            EmitB($48); EmitB($8B); EmitB($08);              { mov rcx, [rax] = len }
+            if wrFrozenPfx = 1 then
+              begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($08); end  { movzx rcx, byte [rax] }
+            else
+              begin EmitB($48); EmitB($8B); EmitB($08); end;             { mov rcx, [rax] = len }
             MovRaxImm(wid);
             EmitB($48); EmitB($29); EmitB($C8);              { sub rax, rcx }
             EmitPadSpacesFromRax;
             EmitB($58);                                      { pop rax }
           end;
+          { The prefix width decides BOTH the count and where the chars start:
+            rdx is the byte count read from the prefix, rsi the data address.
+            Getting one right and the other wrong prints the correct number of
+            bytes from the wrong place, which is the silent shape. }
           EmitB($48); EmitB($89); EmitB($C6);              { mov rsi, rax }
-          EmitB($48); EmitB($8B); EmitB($10);              { mov rdx, [rax] }
-          EmitB($48); EmitB($83); EmitB($C6); EmitB($08);  { add rsi, 8 }
+          if wrFrozenPfx = 1 then
+            begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($10); end    { movzx rdx, byte [rax] }
+          else
+            begin EmitB($48); EmitB($8B); EmitB($10); end;               { mov rdx, [rax] }
+          EmitB($48); EmitB($83); EmitB($C6); EmitB(wrFrozenPfx);        { add rsi, prefix }
           MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
         end
         else
@@ -10016,8 +10115,14 @@ begin
              end
             else
             begin
+              { FROZEN INLINE STRING: the length is the prefix at [addr], and its
+                WIDTH follows the kind -- 8 bytes for tyString/tyFixedString, one
+                zero-extended byte for tyShortString. }
               IREmitNode(val1Node); { evaluates address -> rax }
-              EmitB($48); EmitB($8B); EmitB($00); { mov rax, [rax] }
+              if FrozenStrPrefixSize(IRFrozenKindOfAddr(val1Node)) = 1 then
+                begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($00); end  { movzx rax, byte [rax] }
+              else
+                begin EmitB($48); EmitB($8B); EmitB($00); end;             { mov rax, [rax] }
             end;
           end
           else if specialId = 210 then

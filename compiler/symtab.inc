@@ -6932,101 +6932,157 @@ end;
   been widened to the predicate. A LOCAL `string[20]` is correct everywhere --
   only the parameter arm was narrow, which is why nothing caught it. }
 procedure EmitStoreStrLen(idx: Integer);
+{ Store rax (the length) into the symbol's length prefix, at the WIDTH its kind
+  declares: a 64-bit word for tyString/tyFixedString, a single byte for
+  tyShortString. The byte form writes `al`, which is rax's low byte, so the
+  value needs no separate narrowing -- and a shortstring's length cannot exceed
+  255 by construction, which is the same fact that caps its capacity. }
+var pfx: Integer;
 begin
+  pfx := FrozenStrPrefixSize(Syms[idx].TypeKind);
   if (Syms[idx].Kind = skParam) and TypeIsFrozenString(Syms[idx].TypeKind) then
   begin
-    { param slot holds pointer P; store rax (length) into [P] }
+    { param slot holds pointer P; store the length into [P] }
     EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset); { mov rcx, [rbp+off] = P }
-    EmitB($48); EmitB($89); EmitB($01);                              { mov [P], rax }
+    if pfx = 1 then
+      begin EmitB($88); EmitB($01); end                              { mov [rcx], al }
+    else
+      begin EmitB($48); EmitB($89); EmitB($01); end;                 { mov [rcx], rax }
   end
   else
   begin
     case Syms[idx].Kind of
       skLocal, skParam:
-        begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;
+        if pfx = 1 then
+          begin EmitB($88); EmitB($85); EmitI32(Syms[idx].Offset); end            { mov [rbp+off], al }
+        else
+          begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset); end;
       skGlobal:
-        begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+        if pfx = 1 then
+          begin EmitB($88); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end  { mov [abs], al }
+        else
+          begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
     end;
   end;
 end;
 
 procedure EmitLoadStrLen(idx: Integer);
-{ Load length of string variable into rcx }
+{ Load length of string variable into rcx, at the width its kind declares.
+  The byte form is a ZERO-EXTENDING load (movzx), not a byte mov: rcx is used as
+  a full 64-bit count by every caller, so leaving the upper 56 bits as whatever
+  happened to be in rcx would give a length in the billions from a correct
+  prefix. }
+var pfx: Integer;
 begin
+  pfx := FrozenStrPrefixSize(Syms[idx].TypeKind);
   if (Syms[idx].Kind = skParam) and TypeIsFrozenString(Syms[idx].TypeKind) then
   begin
     EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[idx].Offset); { mov rax, [rbp+off] = P }
-    EmitB($48); EmitB($8B); EmitB($08);                              { mov rcx, [rax] }
+    if pfx = 1 then
+      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($08); end      { movzx rcx, byte [rax] }
+    else
+      begin EmitB($48); EmitB($8B); EmitB($08); end;                 { mov rcx, [rax] }
   end
   else
   begin
     case Syms[idx].Kind of
       skLocal, skParam:
-        begin EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset); end; { mov rcx, [rbp+off] }
+        if pfx = 1 then
+          begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($8D); EmitI32(Syms[idx].Offset); end
+        else
+          begin EmitB($48); EmitB($8B); EmitB($8D); EmitI32(Syms[idx].Offset); end;
       skGlobal:
-        begin EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset); end; { mov rcx, [abs] }
+        if pfx = 1 then
+          begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+        else
+          begin EmitB($48); EmitB($8B); EmitB($0C); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
     end;
   end;
 end;
 
 procedure EmitLeaStrDataRdi(idx: Integer);
+{ Address of the symbol's CHARACTER DATA into rdi -- the slot base plus its
+  length prefix. The third member of this trio and the one nobody had named
+  before the phase-1 audit, which matters because it is the one that decides
+  where the chars START: the two above only decide how wide the count is. }
+var pfx: Integer;
 begin
+  pfx := FrozenStrPrefixSize(Syms[idx].TypeKind);
   if (Syms[idx].Kind = skParam) and TypeIsFrozenString(Syms[idx].TypeKind) then
   begin
-    { param slot holds pointer P; data at P+8 }
+    { param slot holds pointer P; data at P + prefix }
     EmitB($48); EmitB($8B); EmitB($BD); EmitI32(Syms[idx].Offset); { mov rdi, [rbp+off] = P }
-    EmitB($48); EmitB($83); EmitB($C7); EmitB($08);                  { add rdi, 8 → P+8 }
+    EmitB($48); EmitB($83); EmitB($C7); EmitB(pfx);                  { add rdi, pfx }
   end
   else
   begin
     case Syms[idx].Kind of
       skLocal, skParam:
-        begin EmitB($48); EmitB($8D); EmitB($BD); EmitI32(Syms[idx].Offset + 8); end;
+        begin EmitB($48); EmitB($8D); EmitB($BD); EmitI32(Syms[idx].Offset + pfx); end;
       skGlobal:
-        begin EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[idx].Offset + 8); end;
+        begin EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(Syms[idx].Offset + pfx); end;
     end;
   end;
 end;
 
 procedure EmitLeaStrDataRsi(idx: Integer);
+{ The rsi twin of EmitLeaStrDataRdi -- so the trio the phase-1 audit named is
+  really a QUARTET, and this is the member that was missed twice: once by the
+  original audit brief, which spoke of a "named emit pair", and once by my own
+  correction of it to a trio. Both data-address helpers must follow the kind. }
+var pfx: Integer;
 begin
+  pfx := FrozenStrPrefixSize(Syms[idx].TypeKind);
   if (Syms[idx].Kind = skParam) and TypeIsFrozenString(Syms[idx].TypeKind) then
   begin
-    { param slot holds pointer P; data at P+8 }
+    { param slot holds pointer P; data at P + prefix }
     EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[idx].Offset); { mov rsi, [rbp+off] = P }
-    EmitB($48); EmitB($83); EmitB($C6); EmitB($08);                  { add rsi, 8 → P+8 }
+    EmitB($48); EmitB($83); EmitB($C6); EmitB(pfx);                  { add rsi, prefix }
   end
   else
   begin
     case Syms[idx].Kind of
       skLocal, skParam:
-        begin EmitB($48); EmitB($8D); EmitB($B5); EmitI32(Syms[idx].Offset + 8); end;
+        begin EmitB($48); EmitB($8D); EmitB($B5); EmitI32(Syms[idx].Offset + pfx); end;
       skGlobal:
-        begin EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset + 8); end;
+        begin EmitB($48); EmitB($8D); EmitB($34); EmitB($25); EmitGlobRef(Syms[idx].Offset + pfx); end;
     end;
   end;
 end;
 
 procedure EmitwriteStrVar(idx: Integer);
-{ sys_write the string variable at Syms[idx] }
+{ sys_write the string variable at Syms[idx]. rdx = length, rsi = char data --
+  and BOTH follow the symbol's prefix width. Reading the count at one width and
+  the data at another prints the right number of bytes from the wrong place. }
+var pfx: Integer;
 begin
+  pfx := FrozenStrPrefixSize(Syms[idx].TypeKind);
   if (Syms[idx].Kind = skParam) and TypeIsFrozenString(Syms[idx].TypeKind) then
   begin
-    { param slot holds pointer P; length at [P], data at P+8. ALL frozen
+    { param slot holds pointer P; length at [P], data at P+prefix. ALL frozen
       string kinds — the `= tyString` key missed tyFixedString/tyShortString
       params, which then read the slot as an inline string and dumped wild
       memory (bug-pascal-writeln-shortstring-param). }
     EmitB($48); EmitB($8B); EmitB($B5); EmitI32(Syms[idx].Offset); { mov rsi, [rbp+off] = P }
-    EmitB($48); EmitB($8B); EmitB($16);                              { mov rdx, [P] = length }
-    EmitB($48); EmitB($83); EmitB($C6); EmitB($08);                  { add rsi, 8 → P+8 }
+    if pfx = 1 then
+      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($16); end     { movzx rdx, byte [rsi] }
+    else
+      begin EmitB($48); EmitB($8B); EmitB($16); end;                { mov rdx, [rsi] = length }
+    EmitB($48); EmitB($83); EmitB($C6); EmitB(pfx);                 { add rsi, prefix }
   end
   else
   begin
     case Syms[idx].Kind of
       skLocal, skParam:
-        begin EmitB($48); EmitB($8B); EmitB($95); EmitI32(Syms[idx].Offset); end;
+        if pfx = 1 then
+          begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($95); EmitI32(Syms[idx].Offset); end
+        else
+          begin EmitB($48); EmitB($8B); EmitB($95); EmitI32(Syms[idx].Offset); end;
       skGlobal:
-        begin EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
+        if pfx = 1 then
+          begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($14); EmitB($25); EmitGlobRef(Syms[idx].Offset); end
+        else
+          begin EmitB($48); EmitB($8B); EmitB($14); EmitB($25); EmitGlobRef(Syms[idx].Offset); end;
     end;
     EmitLeaStrDataRsi(idx);
   end;
@@ -7504,10 +7560,13 @@ begin
 end;
 
 procedure EmitStringCharLoad(strIdx: Integer);
+{ s[i] for a GLOBAL frozen string. The `+ prefix` is where the chars begin, so
+  it follows the kind like every other data-address computation here. }
 begin
   { On entry: rax = Pascal string index (1-based). On exit: rax = byte value. }
   EmitB($48); EmitB($FF); EmitB($C8);                 { dec rax }
-  EmitB($48); EmitB($05); EmitGlobRef(Syms[strIdx].Offset + 8);
+  EmitB($48); EmitB($05);
+  EmitGlobRef(Syms[strIdx].Offset + FrozenStrPrefixSize(Syms[strIdx].TypeKind));
   EmitB($48); EmitB($0F); EmitB($B6); EmitB($00);     { movzx rax, byte [rax] }
 end;
 

@@ -2248,6 +2248,11 @@ begin
         the handle. Pascal is unchanged: its base is still the handle and it is
         1-based, so s[1] -> data[0] is lo=-7.
         refactor-c-string-literal-decay-belongs-at-the-producer }
+      { The -7 here is CORRECT PERMANENTLY and is not an unconverted site: a
+        string LITERAL is tyString and keeps its 8-byte prefix even after
+        `string[N]` re-types (the feature's own rule -- literals never change,
+        they convert at use). Do not route it through FrozenStrPrefixSize; the
+        blob it indexes really is word-prefixed. }
       if CProgramMode then
         Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, 1, Ord(tyChar))
       else
@@ -2427,7 +2432,11 @@ begin
     end
     else if TypeIsFrozenString(tk) and not isArr then
     begin
-      lo := -7;
+      { IR_INDEX addresses base + (i - lo), and Pascal's s[1] must land on the
+        first CHARACTER -- which sits at base + prefix. So lo = -(prefix - 1):
+        -7 for the 8-byte word, 0 for tyShortString's single byte. It was
+        spelled -7 because one width existed. }
+      lo := -(FrozenStrPrefixSize(tk) - 1);
       { …but `s[0]` is the classic shortstring LENGTH BYTE, not a character.
         FPC's own compiler sources build strings with it — cutils.pas:1429 is
         `inc(minilzw_encode[0])` — and it read and wrote pure garbage here:
