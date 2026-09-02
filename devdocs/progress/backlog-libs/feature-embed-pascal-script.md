@@ -3,7 +3,7 @@ prio: 45  # auto
 track: B
 type: feature
 status: backlog
-summary: "ATTEMPTED 2026-09-01, wall MAPPED rather than guessed at, and TWO OF THE THREE ARE NOW DOWN. uPSUtils compiles CLEAN on the pinned stable, first try, no flags beyond -Mobjfpc. uPSCompiler hit three walls: (1) missing PByteArray -- FIXED, a System-level FPC type, now in lib/rtl/sysutils.pas; (2) a value cast to a string alias dropped a following INDEX -- FIXED 2026-09-02 (9339d6661), so `tbtwidestring(p^.twidestring)[1]`, the shape that file uses 13 times, compiles and runs; (3) `SetLength(tbtstring(p^.tstring), n)` (line 2753) -- FIXED 2026-09-02, a DIFFERENT arm from (2) (the lowering wants an IR_LEA and a cast is not one), and worse than reported: all THREE spellings failed, including the builtin `SetLength(AnsiString(s), n)`, which died at PARSE time. ALL THREE WALLS ARE NOW DOWN and the next step is to re-run the real attempt against a fresh clone, which is not in the tree. uPSRuntime has not been reached: it stops earlier on a `{$IF}` comparison. NOT vendored -- probed against a clone outside the repo, which is the reversible half of the ticket's own two options."
+summary: "ATTEMPTED 2026-09-01, wall MAPPED rather than guessed at, and TWO OF THE THREE ARE NOW DOWN. uPSUtils compiles CLEAN on the pinned stable, first try, no flags beyond -Mobjfpc. uPSCompiler hit three walls: (1) missing PByteArray -- FIXED, a System-level FPC type, now in lib/rtl/sysutils.pas; (2) a value cast to a string alias dropped a following INDEX -- FIXED 2026-09-02 (9339d6661), so `tbtwidestring(p^.twidestring)[1]`, the shape that file uses 13 times, compiles and runs; (3) STILL OPEN, and it is NOT what the ticket described: `tstring` is declared `10: (tstring: Pointer)` in a variant record, so `tbtstring(vari^.tstring)` is a POINTER SLOT REINTERPRETED AS A MANAGED STRING -- a real reinterpret, not the value-level no-op that was fixed on 2026-09-02. That idiom appears 93 times in uPSCompiler.pas alone and is how this codebase stores every string; it is the whole remaining wall. RE-RUN AGAINST THE REAL FILE, not against repros: the clone is outside the repo and the attempt now stops at 2753 with `SetLength expects a string variable in IR codegen`. uPSRuntime has not been reached: it stops earlier on a `{$IF}` comparison. NOT vendored -- probed against a clone outside the repo, which is the reversible half of the ticket's own two options."
 ---
 
 # RemObjects Pascal Script — compile under pxx (embeddable scripting)
@@ -273,3 +273,56 @@ walking, not by predicting.
 step on this ticket and it needs network access the fixing sessions did not use.
 Until someone does it, the honest claim is "the three known walls are gone", not
 "Pascal Script compiles".
+
+
+---
+
+## 2026-09-02 (frankH, corrected by re-running the REAL file) — wall 3 is still up, and it is a different animal
+
+**The claim in the entry above that "all three walls are down" was wrong, and
+the thing that caught it was re-running the attempt against `uPSCompiler.pas`
+itself instead of against my repro of it.** Recorded rather than quietly edited,
+because the way it was wrong is the reusable part.
+
+`1fd4e7f22` is a real fix — `SetLength(AnsiString(s), n)` and
+`SetLength(TS(p^.s), n)` are three spellings fpc 3.2.2 accepts and pxx rejected,
+and they now work. **They are just not this file's shape.** The repro was built
+from the ticket's own description of line 2753, and the description omitted the
+one fact that decides it:
+
+```pascal
+  TIfRVariant = record ... case Byte of
+    10: (tstring: Pointer);        { uPSCompiler.pas:147 }
+  ...
+  SetLength(tbtstring(vari^.tstring), TPSSetType(FType).ByteSize);
+```
+
+`tstring` is a **Pointer**, not a string. `tbtstring(vari^.tstring)` is therefore
+a genuine REINTERPRET — take the 8-byte slot and use it as a managed-string
+handle — and not the value-level no-op that a cast over a string lvalue is. My
+fix correctly declines it (its guard reads the operand's kind), so the attempt
+still stops at 2753, now for the honest reason rather than the parse one.
+
+### The size of the real wall, measured
+
+`tbtstring(` appears **93 times** in `uPSCompiler.pas`, 67 of them wrapping a
+plain lvalue. This is not a corner: **it is how this codebase stores every
+string**, and `uPSRuntime.pas` does the same (`tbtstring(dest^) := ...`,
+`tbtstring(temp.Dta^)[i] := ...`, `tbtstring(cp^) := ...`). So the capability
+needed is one thing stated once:
+
+> a POINTER-typed lvalue cast to a managed-string type is a string VARIABLE —
+> readable, indexable, assignable, and resizable — with the refcount protocol
+> applying to that slot.
+
+FPC supports it and this is the standard Delphi idiom for a string inside a
+variant record. It is a Track A/P feature, not a parser patch, and it is the
+whole remaining distance to phase 1.
+
+### The lesson, which is this repo's own rule
+
+A repro built from a ticket's PROSE is a repro of the prose. The ticket said
+*"`SetLength(tbtstring(vari^.tstring), n)`"* and I reproduced exactly that text
+with `tstring` declared as a string — the one substitution that made it a
+different bug. **The file was three commands away the whole time.** Re-run the
+target, not the description of it.
