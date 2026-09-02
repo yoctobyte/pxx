@@ -36,11 +36,13 @@ walker fix would NOT repair comparison. It didn't; comparison needed (2) and (3)
 ## Open, with owners
 
 - **i386** — frankA. Last backend.
-- **arm32 two-build byte-identity** — franks-ab, confounded, not a finding.
-  aarch64 and riscv32 came back CLEAN (proven no-op, not asserted). arm32
-  differs by ~115KB because its conversion added `PXXWriteFrozenBW` to shared
-  RTL, so every address moved. Isolation + control running. **Do not read
-  "arm32 regressed" from the raw number.**
+- **Default-path no-op sweep — CLOSED, nothing regressed.** aarch64 CLEAN
+  (direct), riscv32 CLEAN (direct), arm32 CLEAN (isolated). Three backends
+  upgraded from *asserted* to *proven*, no code touched. arm32's raw
+  parent-vs-commit run differed by ~115KB; that is the shared RTL growing
+  (`PXXWriteFrozenBW` added to `builtinheap.pas`), demonstrated by compiling an
+  untouched target across the same pair — xtensa moved 123936 bytes with the
+  blob hash visibly changing.
 - **`IntToTypeKind`-where-`IRStrTkOf`-required guard** — frankc-af, Track T.
   Lands green (the violation it fences was just fixed).
 - **Reader matrix** — frankh-15, `7d0ef7553`, 28 rows. Flag rows being wired now.
@@ -49,6 +51,21 @@ walker fix would NOT repair comparison. It didn't; comparison needed (2) and (3)
   builtin (101) — one builtin, `Pos`/`Copy` compile; wasm32 comparison wrong at
   length 1..8 and `SetLength` trapping (both reproduce on the pin); `r.f = s`
   segfaults riscv32; `Copy(p^,1,3)` OOMs x86-64 under the flag.
+
+## One caveat before anyone acts on the walker prediction
+
+**The partition the prediction rests on is not pinned down.** frankc-af's ticket
+places riscv32/xtensa/wasm32 outside the population; frankh-15 and franks-ab each
+reported their own backend correct, and the coordinator relayed that as a widened
+three-to-two. **Those were two sessions self-reporting on backends they had just
+landed — two readings that can go wrong the same way are one reading**, and the
+conversions post-date the diagnosis, so both may be true of different trees.
+
+A partition whose membership is uncertain cannot falsify anything. **Whoever runs
+the prediction must re-derive the population from the tree at that moment**, not
+cite the ticket, the summary, or either commit. That instruction is in
+`d23178788`, which also holds the compare-fix ticket out of `ready --track A` —
+it was the ranked HEAD and the tool was actively handing it to the next session.
 
 ## The one decision waiting for you
 
@@ -87,3 +104,10 @@ yours to release.
   procedure. Where the answer is "the reader, if they remember", expect it to
   miss — the moment you reach for an instrument is the moment you are confident,
   and confidence is the state the rule exists to interrupt.
+- **A control must VARY the thing it controls for, and say in advance what it
+  prints if you are WRONG.** Two controls tonight had the same description —
+  "compile an untouched target" — and opposite evidentiary value. The vacuous one
+  held both arms at the same commit, so it printed IDENTICAL whether the
+  explanation was true or false, *and the script echoed the conclusion as if it
+  were a result*. The real one varied the commit and printed DIFFERS with the
+  changed blob hash. **Never let a script echo a conclusion.**
