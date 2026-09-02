@@ -126,3 +126,15 @@ test/test_heapdbg_control_stale_dynarray.pas  positive control for the dynarray 
 # the acceptance test for it.
 test/c_abi_struct_byval_main.c  probe for step 2 of the C by-value struct ABI (a struct RETURNED by value), which has not landed: measured 2026-09-01, take_pair is correct and make_pair segfaults. Blocked on bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized; wire it when step 2 lands
 test/c_abi_struct_byval_pxx.c  the pxx-compiled half of the pair above; same reason
+
+# MEASURED 2026-09-02 before exempting, and it is the reason the file exists:
+# main thread + one pthread_create'd thread, 300k `try/except` each, 3 runs of 3
+# print `Unhandled exception`. The control is in the same binary -- the identical
+# 600k of work with the worker called DIRECTLY instead of through
+# pthread_create is 3 of 3 clean -- so this is the thread, not the loop. At 2k
+# each, one run of three produced no output at all.
+# A libc pthread never runs the clone stub that zeroes the TLS block, so it
+# inherits its creator's exception chain head. Wire this the day
+# decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part
+# is answered and the install lands -- it is already the acceptance test for it.
+test/test_foreign_thread_exception_chain.pas  a libc pthread inherits its creator's exception chain and an exception escapes its own try; measured failing 3 of 3. Blocked on bug-a-the-exception-chain-fix-is-defeated-by-a-libc-pthread and the decide- it names; wire it when a foreign thread gets its own TLS block
