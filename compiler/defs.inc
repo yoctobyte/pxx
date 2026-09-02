@@ -462,6 +462,20 @@ const
   AN_VIRTUAL_CALL = 32;
   AN_LABEL        = 33; { ASTSOffset/SLen = label name in TokChars }
   AN_GOTO         = 34; { ASTSOffset/SLen = label name in TokChars }
+  { GNU labels-as-values, the two halves of one construct.
+
+    AN_LABELADDR is `&&label' -- the label's CODE address as a Pointer, which C
+    itself has no way to spell. Named by SOffset/SLen exactly as AN_LABEL and
+    AN_GOTO are, so all three resolve through the same GotoLabel* table and a
+    forward reference costs nothing: the whole body is parsed before it lowers.
+
+    AN_GOTO_INDIRECT is `goto *expr'. ASTLeft is the address expression. It is a
+    SEPARATE kind rather than an AN_GOTO carrying a sentinel offset, because the
+    two differ in what they name -- one names a label, the other consumes a
+    value -- and IRVerify reads the label-naming kinds as a set. A sentinel
+    would have put a value-consuming node inside that set. }
+  AN_LABELADDR    = 101; { ASTSOffset/SLen = label name in TokChars; &&label -> its code address }
+  AN_GOTO_INDIRECT = 102; { ASTLeft = address expression; goto *expr }
   AN_ADDR         = 35;
   AN_DEREF        = 36;
   AN_SET_LIT      = 37;
@@ -1105,6 +1119,26 @@ const
                            Pascal. x86-64 ONLY -- the frontend refuses the intrinsic
                            elsewhere, so no other backend sees this op (same arrangement
                            as IR_MULHI and IR_TLSBASE). }
+
+  IR_LABELADDR     = 75; { GNU `&&label': the label's CODE ADDRESS into the accumulator.
+                           IRA = the IR label id, the SAME id IR_LABEL defines and IR_JUMP
+                           names -- which is what makes this free on x86-64: LabelPositions
+                           and CodeLen are already absolute offsets into one module-wide code
+                           buffer, so the emission is a RIP-relative `lea' patched by the very
+                           fixup pass that patches a forward `jmp'. No object-writer relocation
+                           is involved, and none is needed: a static initialiser naming an
+                           address is lowered to a RUNTIME STORE in the declaring body
+                           (cparser's PendingInit -> pasparser_prog's AN_PROCADDR assignment),
+                           so the store for a function-local table sits in the same body as
+                           the labels it names. Measured 2026-09-02; see
+                           bug-c-labels-as-values-is-the-whole-of-the-lua-regression. }
+  IR_JUMP_INDIRECT = 76; { GNU `goto *expr': jump to the address in IRA's value.
+                           AN UNCONDITIONAL TRANSFER, and IRIsUncondTransfer must say so, or
+                           the block after it is read as fallen-into. It names NO label, which
+                           is exactly why IR_LABELADDR must mark its own label reachable
+                           unconditionally: there is no edge here for a control-flow walk to
+                           follow, and a reachability pass that only follows edges would prune
+                           every arm of a dispatch table. }
 
   IR_TLSBASE       = 73; { __pxxTlsBase: load the calling thread's TLS base into the
                            accumulator. No operands. x86-64 = `mov rax, gs:[0]` (the base
@@ -3660,6 +3694,14 @@ var
 
   LabelFixupPos : array[0..MAX_IR-1] of Integer;
   LabelFixupTarget : array[0..MAX_IR-1] of Integer;
+  { How many of the two arrays above are live. It was a LOCAL of the codegen
+    body loop until 2026-09-02, which was fine while only that loop appended to
+    it; IR_LABELADDR is a VALUE node, emitted from IREmitNode, and needs the
+    same list -- a forward `&&label' is patched by the same pass that patches a
+    forward `jmp'. A count living apart from the arrays it indexes is the split
+    that goes stale, so it moved here rather than being passed around. Still
+    reset per body, in the same place it always was. }
+  LabelFixupCount : Integer;
   { Xtensa only. A forward jump reserves its slot before the label exists, so
     the slot's WIDTH is a guess: -1 here means the guess was the three-byte J
     and LabelFixupPos points at the J; anything else is the anchor PC of a

@@ -12660,6 +12660,19 @@ test-core: $(COMPILER)
 	# not link or dies before main -- so a clean run is itself the assertion.
 	# Diffed against gcc by compiling this same file with it.
 	# feature-c-corpus-busybox-multi-applet
+	# GNU labels-as-values: `&&label' as a void*, `goto *expr'. Lua 5.4 turns its
+	# whole interpreter loop on with a bare `#if defined(__GNUC__)', so once the C
+	# frontend announced GNU C 2.7 (00ab464bf) this construct became the entire
+	# distance to a green `make test-lua'.
+	# Rows 2 and 3 are deliberately BOTH halves of the codegen: a backward &&label
+	# reads LabelPositions directly, a forward one goes on the fixup list, and
+	# those are different lines. Rows 5/6 are the control that &&label is a real
+	# address -- same label compares equal, different labels do not -- so an
+	# implementation returning a plausible constant fails here rather than
+	# printing the right total by luck. All 8 rows diffed against gcc.
+	# bug-c-labels-as-values-is-the-whole-of-the-lua-regression
+	./$(COMPILER) test/c_labels_as_values.c $(TESTTMP)/c_labelval26
+	tools/expect_same.sh c_labelval26 "$$($(TESTTMP)/c_labelval26)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
 	./$(COMPILER) test/c_const_and_chain_dead_arm.c $(TESTTMP)/c_andchain26
 	tools/expect_same.sh c_andchain26 "$$($(TESTTMP)/c_andchain26)" "$$(printf '1 0\n2 1\n3 1\n4 2\n5 done')"
 	./$(COMPILER) test/c_fn_typed_parameter.c $(TESTTMP)/c_fnparam26

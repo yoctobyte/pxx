@@ -355,6 +355,8 @@ begin
     IR_SET_SIGNAL: Result := 'set_signal';
     IR_IO_LOCK: Result := 'io_lock';
     IR_IO_UNLOCK: Result := 'io_unlock';
+    IR_LABELADDR: Result := 'labeladdr';
+    IR_JUMP_INDIRECT: Result := 'jump_indirect';
   else
     Result := 'unknown';
   end;
@@ -663,6 +665,24 @@ begin
           Error('invalid IR conditional jump target (label not defined)');
         IRRequireNode(IRB[i], 'jump condition');
       end;
+
+      IR_LABELADDR:
+      begin
+        { Validated exactly as IR_JUMP's target is, because it IS the same id --
+          that identity is the whole reason this needs no new relocation. The
+          `label not defined' arm matters more here than for a jump: a jump to a
+          missing label is a compile error the frontend already catches, while
+          an address is a VALUE, and an unvalidated one would flow into a table
+          and be jumped to at run time. }
+        lblId := IRA[i];
+        if (lblId < 0) or (lblId >= IRLabelCount) then
+          Error('invalid IR label-address target out of bounds');
+        if not IRScratchFlag[lblId] then
+          Error('invalid IR label-address target (label not defined)');
+      end;
+
+      IR_JUMP_INDIRECT:
+        IRRequireNode(IRA[i], 'indirect jump target');
 
       IR_NEG, IR_NOT:
         IRRequireNode(IRA[i], 'unary operand');
@@ -14617,6 +14637,32 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         Result := IRAppend(IR_JUMP, lbId, -1, -1, 0, 0);
       end;
     end;
+    AN_LABELADDR:
+    begin
+      { `&&label' -- resolved through the SAME GotoLabel* table AN_LABEL and
+        AN_GOTO use, so a forward reference costs nothing: the whole body is
+        parsed before any of it lowers, which is what lets lua's dispatch table
+        name labels that appear later in the function. }
+      off := ASTSOffset[node];
+      len := ASTSLen[node];
+      lbId := -1;
+      for i := GotoLabelBase to GotoLabelCount - 1 do
+        if TokSlicesMatch(GotoLabelNOff[i], GotoLabelNLen[i], off, len) then
+        begin
+          if GotoLabelIRId[i] = -1 then
+            GotoLabelIRId[i] := IRNewLabel;
+          lbId := GotoLabelIRId[i];
+          Break;
+        end;
+      if lbId = -1 then Error('AN_LABELADDR: undefined label in &&label');
+      Result := IRAppend(IR_LABELADDR, lbId, -1, -1, 0, Ord(tyPointer));
+    end;
+    AN_GOTO_INDIRECT:
+    begin
+      { `goto *expr'. The address is an ordinary value, so the operand lowers
+        the ordinary way; the transfer is what is new. }
+      Result := IRAppend(IR_JUMP_INDIRECT, IRLowerAST(ASTLeft[node]), -1, -1, 0, 0);
+    end;
     AN_PAIR, AN_SEQ:
     begin
       { A statement list is a RIGHT-LEANING cons chain, and lowering it by
@@ -14809,10 +14855,20 @@ end;
 function IRIsUncondTransfer(i: Integer): Boolean;
 { Nothing falls through these: control leaves and can only re-enter at a label.
   exit / return-from-proc lower to IR_TERMINATE, goto / break / continue /
-  structured control-flow tails to IR_JUMP, raise to IR_RAISE. }
+  structured control-flow tails to IR_JUMP, raise to IR_RAISE, and GNU
+  `goto *expr' to IR_JUMP_INDIRECT.
+
+  THE INDIRECT ONE IS THE EASY HALF TO FORGET, and forgetting it is not a
+  missed optimisation: the block after it would be read as fallen-into, so a
+  dispatch loop's first arm would look reachable from the dispatch itself and
+  the region between them would never be pruned. The HARD half is that it names
+  no label, so nothing here can tell a reachability walk where control goes --
+  IR_LABELADDR carries that, and IRMarkReachableLabels marks its label
+  unconditionally for exactly this reason. }
 begin
   IRIsUncondTransfer :=
-    (IRKind[i] = IR_JUMP) or (IRKind[i] = IR_TERMINATE) or (IRKind[i] = IR_RAISE);
+    (IRKind[i] = IR_JUMP) or (IRKind[i] = IR_TERMINATE) or (IRKind[i] = IR_RAISE) or
+    (IRKind[i] = IR_JUMP_INDIRECT);
 end;
 
 function IRCondOperandIsPure(n, depth: Integer): Boolean;
@@ -15115,6 +15171,16 @@ begin
         case IRKind[i] of
           IR_JUMP, IR_JUMP_IF_FALSE,
           IR_EXC_ENTER, IR_EXC_MATCH, IR_EXC_MATCH_HIT: lbl := IRA[i];
+          { GNU `&&label'. It is not a control transfer -- it is a VALUE -- but
+            it is the only place the walk can learn that a label is entered,
+            because `goto *expr' names nothing. Reaching an IR_LABELADDR
+            therefore marks its label reachable, and that is deliberately
+            CONSERVATIVE: taking a label's address here means the address can be
+            jumped to from anywhere in the body, so the label must survive even
+            when no edge in this graph points at it. A walk that only followed
+            edges would prune every arm of a dispatch table and the binary would
+            jump into whatever the pruning left behind. }
+          IR_LABELADDR: lbl := IRA[i];
         end;
         if (lbl >= 0) and (lbl < IRLabelCount) and not IRScratchFlag[lbl] then
         begin

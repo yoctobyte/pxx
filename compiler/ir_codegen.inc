@@ -6290,6 +6290,34 @@ begin
         IREmitCodeCall(SigSetHookAddr);
       end;
 
+    IR_LABELADDR:
+      begin
+        { GNU `&&label` -> the label's code address as a value.
+
+          `lea rax, [rip + disp32]` -- 48 8D 05 disp32 -- for the same reason
+          IR_PROCADDR below uses one rather than a 64-bit immediate: an absolute
+          code address in .text is an R_X86_64_64 that forces DT_TEXTREL and
+          keeps the object out of a clean PIE.
+
+          THE SAME FIXUP AS A FORWARD JUMP, and that is not a convenience, it is
+          why this construct needs no relocation at all: LabelPositions holds an
+          ABSOLUTE offset into the one module-wide code buffer, and a
+          RIP-relative displacement is target - (here + 4) -- exactly the
+          arithmetic IR_JUMP does. A backward reference resolves now, a forward
+          one joins the same fixup list and is patched by the same pass. }
+        EmitB($48); EmitB($8D); EmitB($05);
+        if LabelPositions[IRA[node]] <> -1 then
+          EmitI32(LabelPositions[IRA[node]] - (CodeLen + 4))
+        else
+        begin
+          if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+          LabelFixupPos[LabelFixupCount] := CodeLen;
+          LabelFixupTarget[LabelFixupCount] := IRA[node];
+          Inc(LabelFixupCount);
+          EmitI32(0);
+        end;
+      end;
+
     IR_PROCADDR:
       begin
         { @proc -> load a function-pointer value. Internal routines use a
@@ -11563,7 +11591,6 @@ end;
 
 procedure IREmitMachineCode;
 var i, lblId, pos, targetOffset, f, procIdx, excSkip: Integer;
-    LabelFixupCount: Integer;
     condNode, cLeft, cRight: Integer;
     cOp: TTokenKind;
     cmpUns, fused, cmpImmOk: Boolean;
@@ -11708,6 +11735,16 @@ begin
           lblId := Integer(IRIVal[i]);
           if (lblId >= 0) and (lblId < MAX_IR) then
             LabelPositions[lblId] := CodeLen;
+        end;
+
+      IR_JUMP_INDIRECT:
+        begin
+          { `goto *expr': evaluate the address into rax, then `jmp rax` (FF E0).
+            No fixup and no label -- which is the half that makes the
+            reachability walk in ir.inc load-bearing, since nothing here records
+            where control went. }
+          IREmitNode(IRA[i]);
+          EmitB($FF); EmitB($E0);
         end;
 
       IR_JUMP:

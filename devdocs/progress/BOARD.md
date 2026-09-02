@@ -8,11 +8,12 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (5)
+## working (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386 | A | 45 | bug | PASCAL DONE AND PROVEN; NilPy, Rust and Zig still open. The four `fAlign := TypeAlign(fTk)` record-field sites in pasparser_decl.inc now call TypeFieldAlign, and a new mixed-link oracle (test-record-abi-mixed-link) judges the layout against gcc across a real link on x86_64 and i386, four shapes plus a value round trip through a `cvar` record global. The Track U fork this ticket flagged -- whether a Pascal record must match the C ABI -- dissolved on the first measurement: pxx's C frontend answered 12/4 and pxx's PASCAL frontend 16/8 for the same fields, same target, same compiler. It was not an FPC question, it was one compiler disagreeing with itself. N/R/Z have no export spelling and so no mixed link, and rustc/zig i686 are not on this box. | — |
+| bug-c-labels-as-values-is-the-whole-of-the-lua-regression | C | 70→85 | bug | GNU labels-as-values (`&&label` as a void*, `goto *expr`) is the ONLY thing between HEAD and a green test-lua. Lua 5.4 turns its computed-goto interpreter loop on with a BARE `#if defined(__GNUC__)` — no version test — so 00ab464bf's GNU C 2.7 claim reaches it, ljumptab.h's `&&L_OP_MOVE` initializer fails, and lvm.c does not compile. Proved both directions: `-DLUA_USE_JUMPTABLE=0` and `-U__GNUC__` each build the runner, and the resulting binary passes 6/6 lua programs. So the gap is one C-frontend feature and nothing downstream of it. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
@@ -532,14 +533,13 @@ _none_
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 
-## backlog-cfront (16)
+## backlog-cfront (15)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero | C | 60 | bug | x86-64, C frontend: a struct returned through a FUNCTION POINTER reads its third int back as its first when the field is used directly as a call argument. `struct P v = fp(3); printf(\"%d %d %d\", v.x, v.y, v.z)` prints `7 11 7` where gcc prints `7 11 13`. The struct in memory is CORRECT — copying the fields to locals first prints 7 11 13 — so this is the field READ in argument position, not the return. Needs an INDIRECT call: a plain local struct and a DIRECT call are both right. Silent wrong value, rc=0. Reproduces on the v399 pin, so it is not new. | — |
 | bug-c-a-file-scope-pointer-to-array-crashes-on-indexing | C | 70 | bug | A file-scope pointer-to-array SEGFAULTS on indexing; the identical local is correct | — |
 | bug-c-including-stdio-h-refuses-to-compile-for-xtensa | C+S | 45 | bug | `#include <stdio.h>` refuses to compile for --target=xtensa: `__pxx_read is a pxx-internal runtime symbol and cannot be imported dynamically`, raised in lib/crtl/src/unistd.c at `ssize_t write`. The identical two-line file compiles for x86-64. Reduced to `#include <stdio.h>` plus one trivial function -- nothing in the user code touches read/write. A C file with NO include compiles for xtensa fine, so this is the crtl pull, not the xtensa C backend generally. The guard is correct in what it says (the symbol needs a Pascal bridge that is not visible); what is target-specific is why the bridge is missing on xtensa and present on x86-64. | — |
-| bug-c-labels-as-values-is-the-whole-of-the-lua-regression | C | 70→85 | bug | GNU labels-as-values (`&&label` as a void*, `goto *expr`) is the ONLY thing between HEAD and a green test-lua. Lua 5.4 turns its computed-goto interpreter loop on with a BARE `#if defined(__GNUC__)` — no version test — so 00ab464bf's GNU C 2.7 claim reaches it, ljumptab.h's `&&L_OP_MOVE` initializer fails, and lvm.c does not compile. Proved both directions: `-DLUA_USE_JUMPTABLE=0` and `-U__GNUC__` each build the runner, and the resulting binary passes 6/6 lua programs. So the gap is one C-frontend feature and nothing downstream of it. | — |
 | bug-c-long-double-is-8-bytes-in-pxx-and-16-in-gcc | C | 35 | bug | C `long double` is mapped to double (clexer.inc:342), so it is 8 bytes where gcc's is 16. MEASURED both sides: `struct { long double x; }` is sizeof 16 under gcc and 8 under pxx. Any such struct crossing a real C boundary therefore disagrees about its own SIZE before any calling-convention question is reached, and psABI puts an x87 member in MEMORY class where pxx would see one SSE eightbyte. Found by writing the NEGATIVE control for the new SysV classifier: the classifier's tyExtended refusal is unreachable from C because the frontend erases the distinction first, so a guard that looks like it covers long double cannot fire. Pre-existing and independent of the aggregate-classification work. | — |
 | bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size | C | 40 | bug | `sizeof(*s.fp)` where `fp` is a struct member of type `int (*)[4]` answers 8 -- the POINTER size, i.e. the arm never fired at all -- where gcc says 16. The VARIABLE spelling of the same construct is fixed; this is the field spelling, and it is NOT the same one-line gap: 8 rather than 4 says `RecFieldType(recId, 'fp') = tyPointer` is false or the pointee type is unrecorded, so the field arm declines before any extent could be applied. INDEXING through the same field is CORRECT -- `(*s.fp)[1]` reads and writes fine -- so the field carries enough to address and not enough to size, and a fix needs the pointee's extent on the FIELD (there is no UFldPtrElemArrLen; the symbol side has SymPtrElemArrLen). | — |
 | bug-c-sizeof-reaches-a-pointee-through-one-spelling-only | C | 40 | bug | C: sizeof of a subscript through a pointer-to-pointer answers the pointer size | — |
@@ -941,7 +941,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 90] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
-- [p 85] [C] bug-c-labels-as-values-is-the-whole-of-the-lua-regression (unblocks 3)
 - [p 85] [P] regression-lib-test-lib-synapse-3 (unblocks 1)
 - [p 85] [P] regression-lib-test-lib-synapse-ssl (unblocks 1)
 - [p 85] [P] regression-lib-test-lib-synapse-transitive-unit (unblocks 1)

@@ -3,7 +3,7 @@ slug: bug-c-labels-as-values-is-the-whole-of-the-lua-regression
 track: C
 type: bug
 prio: 70
-status: backlog
+status: working
 found: 2026-09-02
 found-by: frankZ
 owner: frankD
@@ -120,3 +120,65 @@ here so the next reader does not re-derive it:
 Not started immediately — a large batch lands first — and deliberately costed
 before being touched rather than started and stalled. Nothing here is blocked on
 me; the two lua tickets are `blocked-by` this one and will follow it.
+
+## The scoping above is WRONG, measured 2026-09-02 — it is much smaller
+
+Both the ticket's estimate and frankD's own three bullets were reasoned, not
+measured. Measuring them changes the shape of the job. Three corrections, each
+from a probe rather than from reading:
+
+**1. Address-of-label needs NO object-writer relocation.** The claim was that a
+`&&label` in a static initialiser wants a link-time relocation into `.rodata`.
+It does not, because *pxx does not emit link-time relocations for address
+initialisers at all*. A static initialiser naming an address is lowered to a
+**runtime store**: `cparser.inc`'s `PendingInit*` arrays become AST assignments
+(`AN_PROCADDR`, `AN_ADDR`) in `pasparser_prog.inc:302`, executed as ordinary
+code. Probe: a file-scope `static int (*const tab[2])(void) = { a, b };` builds
+and runs under pxx today and matches gcc.
+
+**2. And the store lands in the RIGHT BODY.** This was the part that looked
+expensive: `LabelPositions` is reset per body (`ir_codegen.inc:11626`) and label
+ids are per body, so a fill running in the program's init code could not name a
+label inside `luaV_execute`. Measured — it does not run there. For a
+FUNCTION-LOCAL static, the address stores are emitted **inside the declaring
+body**:
+
+```
+$ PXXDBG=a.ir:main pascal26 localstatic.c        # static tab[] inside main()
+0: procaddr a=806 ...
+6: procaddr a=807 ...
+$ PXXDBG=a.ir:PXXMAIN pascal26 localstatic.c     # the init body: none
+0
+```
+
+lua's `disptab` is exactly that shape — `ljumptab.h` is `#include`d *inside*
+`luaV_execute`'s body, so its table is a function-local static and its labels
+are in the same body as the stores that fill it. **So the existing per-body
+`LabelPositions` + `LabelFixupPos/Target` machinery covers the whole feature,
+and no module-scoped (proc, label) table is needed.** `CodeLen` is already an
+absolute offset into one module-wide code buffer, so the `lea` is a RIP-relative
+displacement patched by the same fixup pass that patches a forward `jmp`.
+
+**3. The reachability point stands, and needs sharpening.** A label whose
+address is taken must be marked reachable UNCONDITIONALLY, because
+`IRMarkReachableLabels` walks control-flow edges and there is no edge to see —
+the jump goes through a value. Reading the label set off `IRVerify`'s
+label-operand kinds (the discipline that function's comment describes) keeps
+this honest: adding `IR_LABELADDR` as a label-consuming kind is what makes the
+walk mark it, and the verifier is what forces the arm to exist.
+
+### What it actually needs, then
+
+- `clexer.inc`: **nothing.** `&&` already lexes as `tkAnd` (clexer.inc:834).
+- `cparser.inc`: prefix `tkAnd` before an identifier in a unary expression ->
+  a label-address node; `goto *expr` -> an indirect-goto statement; one more
+  arm in the static-initialiser element parser beside `arrKind = 3`.
+- `ir.inc`: two node kinds (`IR_LABELADDR`, `IR_JUMP_INDIRECT`), their
+  `IRVerify` and `IROpName` arms, `IRIsUncondTransfer` extended, and
+  `IRMarkReachableLabels` marking address-taken labels.
+- `ir_codegen.inc` (x86-64): `lea rax, [rip+disp32]` reusing the label fixup,
+  and `jmp rax` (`FF /4`).
+- The other six backends: a clear refusal is honest to land first, but
+  `regression-test-lua-cross-compiler-srchash-2` is a CROSS job, so aarch64 is
+  needed before both tickets go green. Do not claim the cross one on the x86-64
+  arm alone.

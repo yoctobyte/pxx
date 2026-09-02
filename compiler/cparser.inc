@@ -3921,6 +3921,24 @@ begin
         ASTIVal[node] := CNodePtrElemRec(operand);
       Result := node;
     end;
+    tkAnd:    { `&&label` -- GNU labels-as-values, NOT a logical and }
+    begin
+      { `&&` lexes as one token (clexer.inc), and in PREFIX position it cannot
+        be the binary operator -- a logical and needs a left operand and this
+        parser is only reached where an operand is expected. So the shape is
+        unambiguous and needs no lookahead beyond the label name. }
+      Next;
+      if CurTok.Kind <> tkIdent then
+        Error('expected a label name after && (GNU labels-as-values)');
+      Result := AllocNode(AN_LABELADDR);
+      { CurTok is Tokens[TokPos - 1] -- the same spelling AN_GOTO and AN_LABEL
+        use to capture a label name, so all three name it identically. }
+      ASTSOffset[Result] := Tokens[TokPos - 1].SOffset;
+      ASTSLen[Result] := Tokens[TokPos - 1].SLen;
+      ASTTk[Result] := Ord(tyPointer);
+      Next;
+      Exit;
+    end;
     tkAmp:    { &x address-of }
     begin
       Next;
@@ -7098,6 +7116,19 @@ begin
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'goto') then
   begin
     Next;
+    if CurTok.Kind = tkStar then
+    begin
+      { GNU `goto *expr' -- the other half of labels-as-values. lua 5.4's
+        interpreter loop is built on it (`vmdispatch(x)' is `goto *disptab[x]'),
+        selected by a BARE `#if defined(__GNUC__)' with no version test, so any
+        compiler announcing GNU C at all is expected to have it. }
+      Next;
+      node := AllocNode(AN_GOTO_INDIRECT);
+      ASTLeft[node] := ParseCUnary();
+      Eat(tkSemicolon);
+      Result := node;
+      Exit;
+    end;
     if CurTok.Kind <> tkIdent then Error('expected label name after goto');
     node := AllocNode(AN_GOTO);
     ASTSOffset[node] := Tokens[TokPos - 1].SOffset;
