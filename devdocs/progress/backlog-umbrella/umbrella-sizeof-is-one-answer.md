@@ -16,7 +16,6 @@ blocked-by:
   - bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386
   - bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets
   - bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes
-  - bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so
   - bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more
 summary: "GOAL: a program can trust SizeOf. `FillChar(x, SizeOf(x), 0)` and `Move(a, b, SizeOf(a))` are correct for EVERY type in every frontend, and `file of T` can write a layout that reads back. Today they are not: SizeOf answers 8 for every `string[N]` while pxx's OWN layout engine gives that type 18, so `FillChar` on an `array[0..2] of string[10]` clears 24 of 54 bytes and leaves a[2] intact -- silent, and correct under FPC so no differential probe sees it. Root cause is measured and structural: FOUR functions answer `how big is this type`, each adding one more parameter because the kind alone was not enough -- TypeSlotSize(tk) at 363 sites, TypeStorageSize(tk, recId), SizeOfSlot(tk, cap), FrozenStrSlotSize(tk, cap). SizeOfSlot's own comment says it: `A FROZEN STRING'S SIZE IS NOT A FUNCTION OF ITS KIND`. Two is a smell, three is a design flaw; this is four, plus duplicated builtin type tables in A, N and P that disagree with each other."
 ---
@@ -124,6 +123,17 @@ One new column was needed: `UFldPtrElemArrLen`, the field twin of
 cannot express "array pointee of extent N", so the extent had to be threaded to
 the caller instead. **A fifth oracle was NOT added**; the existing readers were
 given the parameter they were missing.
+
+## One member was removed, deliberately
+
+`bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so` was
+wired here and is **unwired as of 2026-09-02**, parked to `rainy-day/` by the
+owner. It was always the odd member — the one case where the size oracle is
+NOT the defect, since `TypeSlotSize(tySet)` is honest about what we build.
+With the width chosen, it cannot be delivered by fixing the oracles, so
+leaving it as a blocker would make this umbrella permanently unreachable.
+**A parked member blocks the goal forever; that is why the edge is gone rather
+than merely annotated.**
 
 ## Notes
 

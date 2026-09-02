@@ -188,6 +188,52 @@ accept an honest `SizeOf` divergence plus a marshalling `file of T`; or
 **narrow** and take FPC's `SizeOf`, blittable records and ESP memory together,
 paying the ABI change once.
 
+## THE OWNER'S DECISION, 2026-09-02 — and the mechanism that could reverse it
+
+**Decision: sets are 32 bytes, always, for now.** *"let's park it for now. i'd
+say, for now, our sets are just always 32 byte. and advise against using records
+with sets for file-io or document it."* The work is parked to `rainy-day/`
+(real, intended, deferred) — **not** rejected and **not** low-prio. What parking
+costs is measured and accepted: a record containing a small set cannot blit to a
+typed file, so `file of T` marshals field-by-field there and the docs must warn
+about it. What it does not cost is bare-set file IO, which needs nothing.
+
+**Then the owner proposed the mechanism:** *"it IS solvable. if we have another
+(hidden) internal type — 'smallset'. same set keyword, but actual type (big or
+small set) depends."*
+
+**This is materially cheaper than the variable-width set this decide was costing,
+and the reason is worth stating: a small set is a DWORD.** It rides scalar
+machinery that already exists — register passing, a plain `mov` instead of
+`IR_SET_COPY`, an existing ABI class. Variable width would make the width a
+PARAMETER at every site, which is the four-oracle disease this umbrella exists to
+cure. Two kinds with fixed widths is not that.
+
+**Measured 2026-09-02, the 115 `tySet` sites broken down:**
+
+| shape | count | what it costs |
+| --- | --- | --- |
+| bare kind-equality (`= tySet`, `in [.. tySet ..]`) | 54 | mechanical |
+| size or copy decisions | 9 | real thought |
+| declaration / parse plumbing | rest | follows the kind |
+
+Concentrated in `ir.inc` (26), `symtab.inc` (14), `pyparser.inc` and
+`pasparser_expr.inc` (10 each). Only 4 in `abi.inc` and 13 across all backends.
+
+**THE TRAP, and design around it from the start.** Turning 54 scattered
+`= tySet` tests into 54 scattered `= tySet or = tySmallSet` is precisely
+`normalise-dont-special-case.md`: miss one and the second path stays broken
+SILENTLY, because big sets keep working and only small ones go wrong. **Do not
+do that. Introduce ONE `IsSetKind(tk)` predicate, sweep the 54 into it once, and
+then there is no second predicate that can go stale.** It is the umbrella's own
+one-oracle end condition, one level down — and it is what makes the 54 a
+one-time sweep instead of a permanent liability.
+
+**Still parked** — the owner said park, and this is a refinement of the
+mechanism, not a reversal of the decision. Unparking is his call. But the cost
+estimate this decide was parked on was too high, and that is recorded here so
+the next reader does not inherit it.
+
 ## Consequence that lands under EVERY option
 
 **If any type's on-disk form differs from its in-memory form, `file of T` is a

@@ -8,6 +8,26 @@ blocked-by: [compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agr
 
 # `file of T` and untyped `file` are not supported
 
+> **SETS: A CONSTRAINT AND A DOC OBLIGATION, settled by the owner 2026-09-02.**
+> Sets stay 32 bytes in memory. Measured: our mask is a byte-exact ZERO-EXTENSION
+> of FPC's, so **a bare set writes with no conversion** — put down 4 bytes when
+> the declared high bound is <= 31, else 32, read back and zero-extend, and the
+> file is byte-identical to FPC's.
+>
+> **But a RECORD containing a small set cannot blit**: the set is 32 bytes in
+> memory and 4 on disk, so every field after it shifts. That record must be
+> marshalled field-by-field. The owner's instruction: *"advise against using
+> records with sets for file-io or document it."* — so this ticket owes a
+> **Track D doc note**, not just an implementation.
+>
+> And the trap to document beside it: `SizeOf(s)` answers **32** while the typed
+> write puts 4 bytes down, so `BlockWrite(f, s, SizeOf(s))` writes 32 and
+> desynchronises the file. The 32 is TRUE about our representation (the
+> 2026-09-02 `SizeOf` rule) — the hazard is the gap, not the number.
+>
+> Background and the parked `smallset` mechanism that would remove all of this:
+> [[decide-a-what-a-set-costs-bits-bytes-bounds-and-what-file-of-t-writes-to-disk]].
+
 - **Type:** feature (Pascal frontend + RTL file layer). Track P; the RTL half
   (`Seek`/`FileSize`/`BlockRead`/`BlockWrite` over a typed handle) is Track B
   ground once the frontend accepts the type.
