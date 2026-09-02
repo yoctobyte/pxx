@@ -638,3 +638,13 @@ NUM_APPLETS, and it dies rather than naming applets if not; the first version
 counted the "\0" separator as an applet, which that control catches.
 BOOKKEEPING: these 75 lines landed inside 2148d95fa, whose message describes
 only the cparser fix. Recorded here because the commit does not say it.
+
+2026-09-02 | frankD (Track C) | tools/busybox_diff.sh | The gcc oracle now
+compiles with `-std=gnu99`, which is what busybox's own Makefile.flags puts on
+every object in the tree. WHY: the oracle was using the compiler's default
+standard, and on a modern gcc that is C23, where `nullptr` is a keyword.
+`miscutils/bc.c` uses it as an ORDINARY IDENTIFIER, so the oracle refused a file
+that busybox's own build of the identical source had compiled three minutes
+earlier in the same run. Not a relaxation to let a subject pass — pxx never saw
+that file; the oracle simply was not building the same program. Control: rung 2
+is still GREEN on x86_64 and aarch64, byte-identical over 29 cases, unchanged.

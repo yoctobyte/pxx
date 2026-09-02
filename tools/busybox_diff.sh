@@ -893,6 +893,17 @@ make_wrappers() {
   done < "$WORK/tulist.txt"
 }
 
+# -std=gnu99 because BUSYBOX SAYS SO. Its own Makefile.flags carries
+# `CPPFLAGS += $(call cc-option,-std=gnu99,)', so every object in the tree's own
+# build is compiled that way, and an oracle that uses the compiler's default
+# standard is not building the same program. On a modern gcc the default is C23,
+# where `nullptr' is a keyword: miscutils/bc.c uses it as an ORDINARY IDENTIFIER
+# and the oracle refused the file ("expected identifier or `(' before
+# `nullptr'") while busybox's own build of the identical source succeeded during
+# configure, three minutes earlier in the same run. Measured 2026-09-02 at 258
+# applets. This is not relaxing the oracle to let a subject pass -- pxx never
+# saw the file, and the fix is to compile the program the way the program says
+# it must be compiled.
 command -v gcc >/dev/null 2>&1 || die "gcc is the oracle and is not installed"
 
 if [ "$SEPARATE" -eq 1 ]; then
@@ -908,7 +919,7 @@ if [ "$SEPARATE" -eq 1 ]; then
   rm -rf "$WORK/objg"; mkdir -p "$WORK/objg"
   while read -r src; do
     tag="$(printf '%s' "$src" | tr / _ | sed 's/\.c$//')"
-    ( cd "$BB" && gcc -w -O2 -D_GNU_SOURCE -DBB_VER="\"$BBVER\"" $INC \
+    ( cd "$BB" && gcc -w -O2 -std=gnu99 -D_GNU_SOURCE -DBB_VER="\"$BBVER\"" $INC \
         -c "$WORK/wrap/$tag.c" -o "$WORK/objg/$tag.o" ) >> "$WORK/oracle_sep.log" 2>&1 \
       || die "gcc could NOT compile $src separately -- no oracle, so no result. See $WORK/oracle_sep.log"
   done < "$WORK/tulist.txt"
@@ -919,7 +930,7 @@ if [ "$SEPARATE" -eq 1 ]; then
   ORACLE_KIND="gcc separate build, $ngobj objects ("
 else
   # ---- oracle: gcc on the same unity ----------------------------------------
-  ( cd "$BB" && gcc -w -O2 -D_GNU_SOURCE -DBB_VER="\"$BBVER\"" $INC -o "$WORK/oracle_gcc" "$UNITY" ) \
+  ( cd "$BB" && gcc -w -O2 -std=gnu99 -D_GNU_SOURCE -DBB_VER="\"$BBVER\"" $INC -o "$WORK/oracle_gcc" "$UNITY" ) \
     || die "gcc could NOT build the unity -- no oracle, so no result"
   ORACLE_KIND="gcc unity build ("
 fi
