@@ -132,6 +132,7 @@ begin
   if arch = TARGET_RISCV32 then Result := True;
   if arch = TARGET_XTENSA  then Result := True;
   if arch = TARGET_WASM32  then Result := True;
+  if arch = TARGET_I386    then Result := True;
 end;
 
 function TargetIsEspClass: Boolean;

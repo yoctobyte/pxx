@@ -130,6 +130,138 @@ begin
   EmitStaticLitHandle386 := True;
 end;
 
+{ ===== FROZEN-STRING LENGTH PREFIX, i386 =====
+  The width-aware set, so a prefix size is decided by a KIND rather than spelled
+  as a literal 8 at each site. i386 is 32-bit, so THE WIDE PREFIX IS TWO STORES:
+  the low dword and an explicit zero high dword. A reader takes only the low
+  dword -- lengths are < 4GB and every existing reader here already did that.
+
+  That asymmetry is the whole reason these are procedures. A 64-bit backend
+  writes the wide prefix with one instruction and the byte prefix with one, so
+  its store helper is a two-line if; here the wide arm is two instructions and
+  the byte arm is one, and the pair that must agree (the length write and the
+  character offset) is spread across both. Anyone porting a 64-bit helper to
+  i386 writes one store and leaves garbage in the high half -- arm32 hit exactly
+  this and needed a scratch register for the zero, which x86 does not because it
+  can store an immediate straight to memory.
+
+  ALL SEVEN WIDE FORMS REPRODUCE THE LITERAL THEY REPLACE BIT FOR BIT, checked
+  against GNU as: 89 0F / C7 47 04 .. / C7 07 .. / 8B 0E / 83 C6 08 / 8D 70 08 /
+  88 47 08. That makes the default i386 path a PROVEN no-op rather than an
+  asserted one. The six byte forms were derived the same way and assembled
+  independently.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+
+procedure EmitStrModRM386(regField, baseReg: Integer);
+{ ModRM for [baseReg] with no displacement, mod=00. ESP (4) means a SIB byte
+  follows and EBP (5) means disp32-no-base, so neither can be spelled this way
+  and no frozen-string site uses them -- this is a guard that CAN fire rather
+  than a comment saying it cannot. }
+begin
+  if (baseReg = 4) or (baseReg = 5) then
+    Error('compiler error: i386 frozen-string helper cannot address [esp]/[ebp] with mod=00');
+  EmitB((regField shl 3) or baseReg);
+end;
+
+procedure EmitStrModRMDisp8_386(regField, baseReg, disp: Integer);
+{ ModRM for [baseReg + disp8], mod=01. ESP still needs a SIB byte. }
+begin
+  if baseReg = 4 then
+    Error('compiler error: i386 frozen-string helper cannot address [esp+d] without a SIB');
+  EmitB($40 or (regField shl 3) or baseReg);
+  EmitB(disp);
+end;
+
+procedure EmitStoreStrLen386(lenReg, bufReg: Integer; dstTk: TTypeKind);
+{ [bufReg] := lenReg, at dstTk's prefix width. The wide form also zeroes the
+  high dword; the byte form must not, because those bytes are the STRING. }
+begin
+  if FrozenStrPrefixSize(dstTk) = 1 then
+  begin
+    if lenReg > 3 then
+      Error('compiler error: i386 byte length store needs a byte-addressable register (eax..ebx)');
+    EmitB($88); EmitStrModRM386(lenReg, bufReg);              { mov byte [buf], lenReg8 }
+  end
+  else
+  begin
+    EmitB($89); EmitStrModRM386(lenReg, bufReg);              { mov [buf], lenReg }
+    EmitB($C7); EmitStrModRMDisp8_386(0, bufReg, 4); EmitI32(0); { mov dword [buf+4], 0 }
+  end;
+end;
+
+procedure EmitStoreStrLenImm386(imm, bufReg: Integer; dstTk: TTypeKind);
+{ [bufReg] := a constant length. Used by the one-char and empty-string arms. }
+begin
+  if FrozenStrPrefixSize(dstTk) = 1 then
+  begin
+    EmitB($C6); EmitStrModRM386(0, bufReg); EmitB(imm and 255); { mov byte [buf], imm8 }
+  end
+  else
+  begin
+    EmitB($C7); EmitStrModRM386(0, bufReg); EmitI32(imm);        { mov dword [buf], imm32 }
+    EmitB($C7); EmitStrModRMDisp8_386(0, bufReg, 4); EmitI32(0); { mov dword [buf+4], 0 }
+  end;
+end;
+
+procedure EmitLoadStrLen386(lenReg, bufReg: Integer; srcTk: TTypeKind);
+{ lenReg := [bufReg], at srcTk's prefix width. MOVZX zero-extends, which is what
+  makes the byte result safe to use directly as a count; a sign-extending load
+  would give a negative length for anything past 127. }
+begin
+  if FrozenStrPrefixSize(srcTk) = 1 then
+  begin
+    EmitB($0F); EmitB($B6); EmitStrModRM386(lenReg, bufReg);   { movzx lenReg, byte [buf] }
+  end
+  else
+  begin
+    EmitB($8B); EmitStrModRM386(lenReg, bufReg);               { mov lenReg, [buf] (low dword) }
+  end;
+end;
+
+procedure EmitLeaStrData386(reg: Integer; tk: TTypeKind);
+{ Step reg from the buffer base to the first CHARACTER, in place. }
+begin
+  EmitB($83); EmitB($C0 or reg); EmitB(FrozenStrPrefixSize(tk));  { add reg, prefix }
+end;
+
+procedure EmitLeaStrDataTo386(dstReg, srcReg: Integer; tk: TTypeKind);
+{ dstReg := srcReg + prefix, leaving srcReg alone. }
+begin
+  EmitB($8D); EmitStrModRMDisp8_386(dstReg, srcReg, FrozenStrPrefixSize(tk));
+end;
+
+procedure EmitStoreCharAtStrData386(charReg, bufReg: Integer; tk: TTypeKind);
+{ [bufReg + prefix] := charReg as a byte. Shares its offset with the length
+  helpers by construction: a site that writes a 1-byte length and then puts the
+  character at +8 is the bug this pairing exists to make unspellable. }
+begin
+  if charReg > 3 then
+    Error('compiler error: i386 char store needs a byte-addressable register (eax..ebx)');
+  EmitB($88); EmitStrModRMDisp8_386(charReg, bufReg, FrozenStrPrefixSize(tk));
+end;
+
+procedure EmitCmpStrLenImm386(bufReg, imm: Integer; tk: TTypeKind);
+{ cmp [bufReg], imm at tk's prefix width -- the `is this a one-character
+  string` test in the equality arms. The byte form must compare a BYTE: a dword
+  compare against a 1-byte prefix reads three characters of the string as part
+  of the length. }
+begin
+  if FrozenStrPrefixSize(tk) = 1 then
+  begin
+    EmitB($80); EmitStrModRM386(7, bufReg); EmitB(imm and 255);  { cmp byte [buf], imm8 }
+  end
+  else
+  begin
+    EmitB($83); EmitStrModRM386(7, bufReg); EmitB(imm);          { cmp dword [buf], imm8 }
+  end;
+end;
+
+procedure EmitLoadCharAtStrData386(dstReg, bufReg: Integer; tk: TTypeKind);
+{ dstReg := the first character, zero-extended -- the `s = c` / `c = s` arms. }
+begin
+  EmitB($0F); EmitB($B6); EmitStrModRMDisp8_386(dstReg, bufReg, FrozenStrPrefixSize(tk));
+end;
+
 procedure EmitArgvToFixedString386(dstIdx: Integer);
 { On entry eax = argv index. Copy argv[index] into fixed string dstIdx. }
 var loopStart, donePos, capDone, copyLoop, copyDone, nilPos: Integer;
@@ -160,9 +292,8 @@ begin
     begin EmitB($BF); EmitGlobRef(Syms[dstIdx].Offset); end
   else
     begin EmitB($8D); EmitB($BD); EmitI32(Syms[dstIdx].Offset); end;
-  EmitB($89); EmitB($0F);                    { mov [edi], ecx }
-  EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
-  EmitB($83); EmitB($C7); EmitB($08);        { add edi, 8 }
+  EmitStoreStrLen386(1, 7, Syms[dstIdx].TypeKind);  { [edi] := ecx at the dest's width }
+  EmitLeaStrData386(7, Syms[dstIdx].TypeKind);      { edi = chars }
   copyLoop := CodeLen;
   EmitB($85); EmitB($C9);                    { test ecx, ecx }
   EmitB($0F); EmitB($84); copyDone := CodeLen; EmitI32(0);
@@ -1441,6 +1572,7 @@ begin
   EmitB($B9); EmitI32(cap);               { mov ecx, cap }
 end;
 
+
 { `s := s + x` appended into s's own block instead of built fresh from both
   halves — the difference between an append loop being O(n) and O(n^2). The
   recogniser IRIsSelfStrAppend is shared (forwarded in compiler.pas); the work
@@ -1482,6 +1614,8 @@ var
   argIsRec386: Boolean;
   vaTk: TTypeKind;   { holds IntToTypeKind(...) — keep it the enum so FPC's strict
                        enum/int boundary is satisfied (pxx erases it; FPC does not). }
+  srcFrozenTk386: TTypeKind;  { frozen kind of a copy's SOURCE — its prefix width may differ from the dest's }
+  memFrozenTk386: TTypeKind;  { frozen kind of a store-through-a-pointer DESTINATION }
   vaFwd: Boolean;
   vaOrder: array[0..127] of Integer;
   sVal: AnsiString;
@@ -1854,12 +1988,12 @@ begin
             EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
             EmitB($59);                                 { pop ecx (restore stack) }
           end
-          else if IntToTypeKind(IRTk[valNode]) = tyString then
+          else if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) then
           begin
             IREmitNode386(valNode);                     { eax = inline string buffer address }
             EmitB($50);                                 { push eax }
-            EmitB($8B); EmitB($08);                     { mov ecx, [eax] (len) }
-            EmitB($83); EmitB($C0); EmitB($08);         { add eax, 8 (src) }
+            EmitLoadStrLen386(1, 0, IRStrTkOf(valNode));   { ecx = len }
+            EmitLeaStrData386(0, IRStrTkOf(valNode));      { eax = chars }
             EmitB($51);                                 { push ecx (len) }
             EmitB($50);                                 { push eax (src) }
             procIdx := FindProc('PXXStrFromLit');
@@ -1936,11 +2070,10 @@ begin
           EmitB($5E);                                 { pop esi (src/char) }
           if IntToTypeKind(IRTk[valNode]) = tyChar then
           begin
-            { esi = char ordinal -> [len=1][char] }
-            EmitB($C7); EmitB($07); EmitI32(1);       { mov dword [edi], 1 }
-            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+            { esi = char ordinal -> [len=1][char], at the DESTINATION's width }
+            EmitStoreStrLenImm386(1, 7, Syms[si].TypeKind);
             EmitB($89); EmitB($F0);                   { mov eax, esi }
-            EmitB($88); EmitB($47); EmitB($08);       { mov byte [edi+8], al }
+            EmitStoreCharAtStrData386(0, 7, Syms[si].TypeKind);
             Exit;
           end;
           if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
@@ -1949,25 +2082,30 @@ begin
               (char pointer), 32-bit length at [esi-8]; nil handle -> empty. }
             EmitB($85); EmitB($F6);                   { test esi, esi }
             EmitB($74); pNil386 := CodeLen; EmitB(0); { jz empty }
+            { The SOURCE here is the managed header and stays 8 -- [esi-8] is
+              an AnsiString's own length word, not a frozen prefix. Only the
+              frozen DESTINATION follows its kind. }
             EmitB($8B); EmitB($4E); EmitB($F8);       { mov ecx, [esi-8] (len) }
             EmitClampEcxToStrCap386(SymStrCap[si]);   { truncate to string[N] capacity }
-            EmitB($89); EmitB($0F);                   { mov [edi], ecx (len lo) }
-            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
-            EmitB($83); EmitB($C7); EmitB($08);       { add edi, 8 }
+            EmitStoreStrLen386(1, 7, Syms[si].TypeKind);
+            EmitLeaStrData386(7, Syms[si].TypeKind);
             EmitB($F3); EmitB($A4);                   { rep movsb (esi already at chars) }
             EmitB($EB); pDone386 := CodeLen; EmitB(0); { jmp done }
             PatchRel8(pNil386);  { empty: }
-            EmitB($C7); EmitB($07); EmitI32(0);       { mov dword [edi], 0 }
-            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+            EmitStoreStrLenImm386(0, 7, Syms[si].TypeKind);
             PatchRel8(pDone386); { done: }
             Exit;
           end;
-          EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (len lo) }
+          { FROZEN -> FROZEN, and the two sides can have DIFFERENT prefix widths,
+            so this is a conversion and not a copy. The source width must come
+            from IRFrozenKindOfAddr and NOT from IRTk[valNode], which the IR tags
+            tyString generically for every frozen string. }
+          srcFrozenTk386 := IRFrozenKindOfAddr(valNode);
+          EmitLoadStrLen386(1, 6, srcFrozenTk386);    { ecx = source length }
           EmitClampEcxToStrCap386(SymStrCap[si]);     { truncate to string[N] capacity }
-          EmitB($89); EmitB($0F);                     { mov [edi], ecx (len lo = clamped) }
-          EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 (len hi) }
-          EmitB($83); EmitB($C6); EmitB($08);         { add esi, 8 }
-          EmitB($83); EmitB($C7); EmitB($08);         { add edi, 8 }
+          EmitStoreStrLen386(1, 7, Syms[si].TypeKind);
+          EmitLeaStrData386(6, srcFrozenTk386);       { src chars }
+          EmitLeaStrData386(7, Syms[si].TypeKind);    { dst chars }
           EmitB($F3); EmitB($A4);                     { rep movsb }
           Exit;
         end;
@@ -2347,10 +2485,10 @@ begin
             EmitB($74); EmitB($03);                    { jz +3 }
             EmitB($8B); EmitB($4A); EmitB($F8);        { mov ecx, [edx-8] }
           end
-          else if IntToTypeKind(IRTk[right]) = tyString then
+          else if TypeIsFrozenString(IntToTypeKind(IRTk[right])) then
           begin
-            EmitB($8B); EmitB($0A);                    { mov ecx, [edx] (len) }
-            EmitB($83); EmitB($C2); EmitB($08);        { add edx, 8 (data) }
+            EmitLoadStrLen386(1, 2, IRStrTkOf(right));    { ecx = len }
+            EmitLeaStrData386(2, IRStrTkOf(right));       { edx = chars }
           end
           else
           begin
@@ -2368,10 +2506,10 @@ begin
             EmitB($74); EmitB($03);                    { jz +3 }
             EmitB($8B); EmitB($4A); EmitB($F8);        { mov ecx, [edx-8] }
           end
-          else if IntToTypeKind(IRTk[left]) = tyString then
+          else if TypeIsFrozenString(IntToTypeKind(IRTk[left])) then
           begin
-            EmitB($8B); EmitB($0A);                    { mov ecx, [edx] (len) }
-            EmitB($83); EmitB($C2); EmitB($08);        { add edx, 8 (data) }
+            EmitLoadStrLen386(1, 2, IRStrTkOf(left));    { ecx = len }
+            EmitLeaStrData386(2, IRStrTkOf(left));       { edx = chars }
           end
           else
           begin
@@ -2406,8 +2544,15 @@ begin
 
         if (tk = tyString) and (op = Ord(tkPlus)) then
         begin
-          lhsTk := IntToTypeKind(IRTk[left]);
-          rhsTk := IntToTypeKind(IRTk[right]);
+          { IRStrTkOf, not IntToTypeKind: the IR tags every frozen string
+            tyString generically, so the node cannot say how wide its prefix is.
+            THE TESTS BELOW HAD TO WIDEN TO TypeIsFrozenString AT THE SAME TIME
+            -- IRStrTkOf resolves a `string[8]` to tyFixedString even with no
+            flag in play, so `lhsTk = tyString` would go FALSE on the DEFAULT
+            path and drop a frozen operand into the single-character arm. That
+            is a default-path break, not a shortstring one. }
+          lhsTk := IRStrTkOf(left);
+          rhsTk := IRStrTkOf(right);
 
           IREmitNode386(left);  EmitB($50);            { push lhs value }
           IREmitNode386(right); EmitB($50);            { push rhs value }
@@ -2415,14 +2560,12 @@ begin
           EmitB($81); EmitB($EC); EmitI32(272);         { sub esp, 272 }
           EmitB($89); EmitB($E3);                      { mov ebx, esp }
 
-          if lhsTk = tyString then
+          if TypeIsFrozenString(lhsTk) then
           begin
             { mov eax, [ebx+276] (lhs) }
             EmitB($8B); EmitB($83); EmitI32(276);
-            { mov edx, [eax] (len) }
-            EmitB($8B); EmitB($10);
-            { lea esi, [eax+8] }
-            EmitB($8D); EmitB($70); EmitB($08);
+            EmitLoadStrLen386(2, 0, lhsTk);            { edx = lhs length }
+            EmitLeaStrDataTo386(6, 0, lhsTk);          { esi = lhs chars }
             { lea edi, [ebx+8] }
             EmitB($8D); EmitB($7B); EmitB($08);
             { mov ecx, edx (len) }
@@ -2451,15 +2594,13 @@ begin
             EmitB($88); EmitB($43); EmitB($08);
           end;
 
-          if rhsTk = tyString then
+          if TypeIsFrozenString(rhsTk) then
           begin
             { mov eax, [ebx+272] (rhs) }
             EmitB($8B); EmitB($83); EmitI32(272);
-            { mov ecx, [eax] (len) }
-            EmitB($8B); EmitB($08);
+            EmitLoadStrLen386(1, 0, rhsTk);            { ecx = rhs length }
             EmitB($51);                                { push ecx }
-            { lea esi, [eax+8] }
-            EmitB($8D); EmitB($70); EmitB($08);
+            EmitLeaStrDataTo386(6, 0, rhsTk);          { esi = rhs chars }
             { lea edi, [ebx+8] }
             EmitB($8D); EmitB($7B); EmitB($08);
             { add edi, edx }
@@ -2518,8 +2659,12 @@ begin
            ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) or
             (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString])) then
         begin
-          lhsTk := IntToTypeKind(IRTk[left]);
-          rhsTk := IntToTypeKind(IRTk[right]);
+          { Resolved kinds, so the two one-character arms below read the length
+            and the character at the operand's own prefix width. The GUARD above
+            still asks IntToTypeKind, which is correct: it is asking "is this a
+            string at all", and the IR's generic tyString tag answers that. }
+          lhsTk := IRStrTkOf(left);
+          rhsTk := IRStrTkOf(right);
           IREmitNode386(left);  EmitB($50);            { push lhs value }
           IREmitNode386(right); EmitB($50);            { push rhs value }
 
@@ -2585,18 +2730,16 @@ begin
             if op = Ord(tkNeq) then begin EmitB($B8); EmitI32(1); end else begin EmitB($B8); EmitI32(0); end;
             Patch32(falseJmp, CodeLen - (falseJmp + 4));
           end
-          else if (lhsTk = tyString) and (rhsTk = tyChar) then
+          else if TypeIsFrozenString(lhsTk) and (rhsTk = tyChar) then
           begin
             { mov ecx, [esp] }
             EmitB($8B); EmitB($0C); EmitB($24);
             { mov eax, [esp+4] }
             EmitB($8B); EmitB($44); EmitB($24); EmitB($04);
-            { cmp dword [eax], 1 }
-            EmitB($83); EmitB($38); EmitB($01);
+            EmitCmpStrLenImm386(0, 1, lhsTk);          { is it one character? }
             { jne .not_equal }
             EmitB($0F); EmitB($85); nextJmp := CodeLen; EmitI32(0);
-            { movzx edx, byte [eax+8] }
-            EmitB($0F); EmitB($B6); EmitB($50); EmitB($08);
+            EmitLoadCharAtStrData386(2, 0, lhsTk);     { edx = that character }
             { cmp edx, ecx }
             EmitB($39); EmitB($CA);
             { sete/setne al }
@@ -2611,26 +2754,20 @@ begin
             if op = Ord(tkNeq) then begin EmitB($B8); EmitI32(1); end else begin EmitB($B8); EmitI32(0); end;
             Patch32(falseJmp, CodeLen - (falseJmp + 4));
           end
-          else if (lhsTk = tyChar) and (rhsTk = tyString) then
+          else if (lhsTk = tyChar) and TypeIsFrozenString(rhsTk) then
           begin
             { mov ecx, [esp] }
             EmitB($8B); EmitB($0C); EmitB($24);
             { mov eax, [esp+4] }
             EmitB($8B); EmitB($44); EmitB($24); EmitB($04);
-            { cmp dword [ecx], 1 -- ModRM $39, NOT $09. $83 is group-1 and the
-              REG FIELD picks the operation: 7 = CMP, 1 = OR. This read $09 for
-              years, i.e. `or dword [ecx], 1`, which did two wrong things at
-              once: OR's ZF is set from `len or 1`, never zero, so the `jne`
-              below always took the not-equal arm and `'a' = s` answered False
-              for every s; and it WROTE, setting bit 0 of the length prefix, so
-              Length(s) went 2 -> 3 with a garbage char exposed. The sibling arm
-              nine lines up (`str = char`) had it right with $38 on eax, which
-              is why only one of the two directions was broken. }
-            EmitB($83); EmitB($39); EmitB($01);
+            { Was hand-written as `EmitB($83); EmitB($09)` -- ModRM reg=1 is OR,
+              not CMP ($39). It answered False for every `'a' = s` AND set bit 0
+              of the length prefix. Fixed in 4c44ebb79; the helper now picks the
+              width, so the encoding cannot be spelled by hand here again. }
+            EmitCmpStrLenImm386(1, 1, rhsTk);          { is it one character? }
             { jne .not_equal }
             EmitB($0F); EmitB($85); nextJmp := CodeLen; EmitI32(0);
-            { movzx edx, byte [ecx+8] }
-            EmitB($0F); EmitB($B6); EmitB($51); EmitB($08);
+            EmitLoadCharAtStrData386(2, 1, rhsTk);     { edx = that character }
             { cmp edx, eax }
             EmitB($39); EmitB($C2);
             { sete/setne al }
@@ -2657,7 +2794,11 @@ begin
             end
             else
             begin
-              EmitB($8B); EmitB($0A); EmitB($83); EmitB($C2); EmitB($08);
+              { Frozen operand: length then chars at ITS OWN prefix width. This is
+                the decompose `s = 'hello'` takes, where a wide literal (it lives
+                in Strs[]) can meet a narrow variable in one comparison. }
+              EmitLoadStrLen386(1, 2, IRStrTkOf(right));   { ecx = len }
+              EmitLeaStrData386(2, IRStrTkOf(right));      { edx = chars }
             end;
             EmitB($89); EmitB($D6);                      { mov esi, edx }
             EmitB($89); EmitB($CF);                      { mov edi, ecx }
@@ -2670,7 +2811,11 @@ begin
             end
             else
             begin
-              EmitB($8B); EmitB($0A); EmitB($83); EmitB($C2); EmitB($08);
+              { Frozen operand: length then chars at ITS OWN prefix width. This is
+                the decompose `s = 'hello'` takes, where a wide literal (it lives
+                in Strs[]) can meet a narrow variable in one comparison. }
+              EmitLoadStrLen386(1, 2, IRStrTkOf(left));   { ecx = len }
+              EmitLeaStrData386(2, IRStrTkOf(left));      { edx = chars }
             end;
             EmitB($51);                                  { push ecx (lenA) }
             EmitB($52);                                  { push edx (srcA) }
@@ -2712,8 +2857,11 @@ begin
             managed or frozen string); a Char operand is wrapped into a string by
             the AN_BINOP lowering before it reaches any backend. The operand
             decomposition below is the equality arm's PXXStrEq branch verbatim. }
-          lhsTk := IntToTypeKind(IRTk[left]);
-          rhsTk := IntToTypeKind(IRTk[right]);
+          { Resolved, so the decompose arms below read each operand at its own
+            prefix width -- see the concat arm for why the tests that consume
+            these had to widen to TypeIsFrozenString at the same time. }
+          lhsTk := IRStrTkOf(left);
+          rhsTk := IRStrTkOf(right);
           IREmitNode386(left);  EmitB($50);            { push lhs value }
           IREmitNode386(right); EmitB($50);            { push rhs value }
           { rhs at [esp] -> esi=srcB, edi=lenB }
@@ -2725,7 +2873,11 @@ begin
           end
           else
           begin
-            EmitB($8B); EmitB($0A); EmitB($83); EmitB($C2); EmitB($08);
+            { Frozen operand: length then chars at ITS OWN prefix width. This is
+              the decompose `s = 'hello'` takes, where a wide literal (it lives
+              in Strs[]) can meet a narrow variable in one comparison. }
+            EmitLoadStrLen386(1, 2, rhsTk);   { ecx = len }
+            EmitLeaStrData386(2, rhsTk);      { edx = chars }
           end;
           EmitB($89); EmitB($D6);                      { mov esi, edx }
           EmitB($89); EmitB($CF);                      { mov edi, ecx }
@@ -2738,7 +2890,11 @@ begin
           end
           else
           begin
-            EmitB($8B); EmitB($0A); EmitB($83); EmitB($C2); EmitB($08);
+            { Frozen operand: length then chars at ITS OWN prefix width. This is
+              the decompose `s = 'hello'` takes, where a wide literal (it lives
+              in Strs[]) can meet a narrow variable in one comparison. }
+            EmitLoadStrLen386(1, 2, lhsTk);   { ecx = len }
+            EmitLeaStrData386(2, lhsTk);      { edx = chars }
           end;
           EmitB($51);                                  { push ecx (lenA) }
           EmitB($52);                                  { push edx (srcA) }
@@ -3118,8 +3274,7 @@ begin
             begin EmitB($B9); EmitGlobRef(Syms[si].Offset); end          { mov ecx, buffer addr }
           else
             begin EmitB($8D); EmitB($8D); EmitI32(Syms[si].Offset); end; { lea ecx, [ebp+off] }
-          EmitB($89); EmitB($01);                          { mov [ecx], eax (len lo) }
-          EmitB($C7); EmitB($41); EmitB($04); EmitI32(0);  { mov dword [ecx+4], 0 (len hi) }
+          EmitStoreStrLen386(0, 1, Syms[si].TypeKind);     { [ecx] := eax at the string's width }
           Exit;
         end;
         if procIdx = -Ord(tkLength) then
@@ -3128,7 +3283,7 @@ begin
             element count lives at [handle-8] (0 when nil). }
           argNode := IRB[node];
           valNode := IRA[argNode];
-          if (IntToTypeKind(IRTk[valNode]) = tyString) or
+          if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) or
              ((IRKind[valNode] = IR_LEA) and
               TypeIsFrozenString(Syms[IRA[valNode]].TypeKind) and
               not Syms[IRA[valNode]].IsArray) or
@@ -3140,7 +3295,13 @@ begin
               lowers to a bare pointer load whose value IS the buffer address;
               read the prefix there, mirroring x86-64's else catch-all. }
             IREmitNode386(valNode);      { eax = frozen buffer addr }
-            EmitB($8B); EmitB($00);      { mov eax, [eax] }
+            { IRFrozenKindOfAddr and NOT IRStrTkOf: this arm deliberately accepts
+              a POINTER-typed node (the `ps^` / `rec.pf^` deref shape in the
+              guard above), and IRStrTkOf answers about the node's own kind
+              first -- for a tyPointer LEA it returns tyPointer, never consults
+              the symbol, and the width comes back 8. The address walker reads
+              the SYMBOL, which is the only thing that knows the width. }
+            EmitLoadStrLen386(0, 0, IRFrozenKindOfAddr(valNode));
             Exit;
           end;
           IREmitNode386(valNode);        { eax = handle (data ptr) or 0 }
@@ -3957,11 +4118,11 @@ begin
                 EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
                 EmitB($59);                                 { pop ecx }
               end
-              else if IntToTypeKind(IRTk[argNode]) = tyString then
+              else if TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
               begin
                 EmitB($50);                                 { push eax }
-                EmitB($8B); EmitB($08);                     { mov ecx, [eax] (len) }
-                EmitB($83); EmitB($C0); EmitB($08);         { add eax, 8 (src) }
+                EmitLoadStrLen386(1, 0, IRStrTkOf(argNode));   { ecx = len }
+                EmitLeaStrData386(0, IRStrTkOf(argNode));      { eax = chars }
                 EmitB($51);                                 { push ecx (len) }
                 EmitB($50);                                 { push eax (src) }
                 j := FindProc('PXXStrFromLit');
@@ -4637,12 +4798,19 @@ begin
     IR_STORE_MEM:
       begin
         tk := IntToTypeKind(IRTk[node]);
-        if tk = tyString then
+        if TypeIsFrozenString(tk) then
         begin
           { Frozen inline-string store through a pointer (e.g. PString(p)^ := s):
-            copy the 8-byte length prefix, then rep movsb the `length` chars.
-            Mirrors the x86-64 path. }
+            copy the length prefix, then rep movsb the `length` chars.
+
+            The GUARD is TypeIsFrozenString and not `tk = tyString`: a
+            tyShortString destination is a frozen string too and would otherwise
+            fall past this arm into the scalar store below, which drops the
+            source ADDRESS into the slot rather than copying the string. A no-op
+            for the kinds that reached here before, since tyString satisfies it. }
           valNode := IRB[node];
+          memFrozenTk386 := IRFrozenKindOfAddr(IRA[node]);
+          srcFrozenTk386 := IRStrTkOf(valNode);
           IREmitNode386(valNode);                     { eax = source string addr }
           EmitB($50);                                 { push eax (source) }
           savedLValueWrite := InLValueWrite;
@@ -4657,10 +4825,9 @@ begin
               IR_STORE_SYM arm above emits for `s := c`: edi/esi already hold
               dest/char here, so the two paths lower one concept identically.
               `mov eax, esi` is not convention -- 32-bit mode has no `sil`. }
-            EmitB($C7); EmitB($07); EmitI32(1);       { mov dword [edi], 1 }
-            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+            EmitStoreStrLenImm386(1, 7, memFrozenTk386);
             EmitB($89); EmitB($F0);                   { mov eax, esi }
-            EmitB($88); EmitB($47); EmitB($08);       { mov byte [edi+8], al }
+            EmitStoreCharAtStrData386(0, 7, memFrozenTk386);
             Exit;
           end;
           if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
@@ -4671,23 +4838,20 @@ begin
             EmitB($74); pNil386 := CodeLen; EmitB(0); { jz empty }
             EmitB($8B); EmitB($4E); EmitB($F8);       { mov ecx, [esi-8] (len) }
             EmitClampEcxToStrCap386(Integer(IRIVal[node]));
-            EmitB($89); EmitB($0F);                   { mov [edi], ecx (len lo) }
-            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
-            EmitB($83); EmitB($C7); EmitB($08);       { add edi, 8 }
+            EmitStoreStrLen386(1, 7, memFrozenTk386);
+            EmitLeaStrData386(7, memFrozenTk386);
             EmitB($F3); EmitB($A4);                   { rep movsb (esi already at chars) }
             EmitB($EB); pDone386 := CodeLen; EmitB(0); { jmp done }
             PatchRel8(pNil386);  { empty: }
-            EmitB($C7); EmitB($07); EmitI32(0);       { mov dword [edi], 0 }
-            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+            EmitStoreStrLenImm386(0, 7, memFrozenTk386);
             PatchRel8(pDone386); { done: }
             Exit;
           end;
-          EmitB($8B); EmitB($0E);                     { mov ecx, [esi] (len lo) }
+          EmitLoadStrLen386(1, 6, srcFrozenTk386);    { ecx = source length }
           EmitClampEcxToStrCap386(Integer(IRIVal[node])); { truncate to string[N] capacity }
-          EmitB($89); EmitB($0F);                     { mov [edi], ecx (len lo = clamped) }
-          EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 (len hi) }
-          EmitB($83); EmitB($C6); EmitB($08);         { add esi, 8 }
-          EmitB($83); EmitB($C7); EmitB($08);         { add edi, 8 }
+          EmitStoreStrLen386(1, 7, memFrozenTk386);
+          EmitLeaStrData386(6, srcFrozenTk386);       { src chars }
+          EmitLeaStrData386(7, memFrozenTk386);       { dst chars }
           EmitB($F3); EmitB($A4);                     { rep movsb }
           Exit;
         end;
@@ -4732,12 +4896,12 @@ begin
             EmitB($81); EmitB($C4); EmitI32(8);         { add esp, 8 }
             EmitB($59);                                 { pop ecx (restore stack) }
           end
-          else if IntToTypeKind(IRTk[valNode]) = tyString then
+          else if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) then
           begin
             IREmitNode386(valNode);                     { eax = inline string buffer address }
             EmitB($50);                                 { push eax }
-            EmitB($8B); EmitB($08);                     { mov ecx, [eax] (len) }
-            EmitB($83); EmitB($C0); EmitB($08);         { add eax, 8 (src) }
+            EmitLoadStrLen386(1, 0, IRStrTkOf(valNode));   { ecx = len }
+            EmitLeaStrData386(0, IRStrTkOf(valNode));      { eax = chars }
             EmitB($51);                                 { push ecx (len) }
             EmitB($50);                                 { push eax (src) }
             procIdx := FindProc('PXXStrFromLit');
@@ -5334,22 +5498,40 @@ begin
           begin
             if wid > 0 then
             begin
-              { Frozen spelling of the same rule -- see the tyAnsiString arm. }
+              { Frozen spelling of the same rule -- see the tyAnsiString arm.
+                The runtime helper reads the prefix ITSELF, so the WIDTH picks
+                which helper rather than changing the call: PXXWriteFrozenBW is
+                the one-byte sibling. Both live in builtinheap.pas and both
+                survive phase 4, because bare `string` keeps its machine word.
+
+                THIS IS THE ARM A WIDTH-0 SUITE CANNOT REACH. The pad is
+                max(0, wid - len), a RUNTIME quantity, so the helper is what
+                reads the prefix -- and i386 only calls it when wid > 0 (the
+                `if wid > 0` above), so every field-width-0 test skips it
+                entirely. aarch64 was certified complete with this arm broken
+                for exactly that reason. The acceptance rows carry a nonzero
+                width deliberately. }
               IREmitNode386(valNode);                    { eax = address }
               EmitB($50);                                { push eax (arg0 = p) }
               EmitB($68); EmitI32(wid);                  { push wid (arg1) }
-              procIdx := FindProc('PXXWriteFrozenW');
-              if procIdx < 0 then Error('compiler error: PXXWriteFrozenW not found');
+              if FrozenStrPrefixSize(IRStrTkOf(valNode)) = 1 then
+                procIdx := FindProc('PXXWriteFrozenBW')
+              else
+                procIdx := FindProc('PXXWriteFrozenW');
+              if procIdx < 0 then Error('compiler error: PXXWriteFrozen[B]W not found');
               EmitCallProc(procIdx);
               EmitB($83); EmitB($C4); EmitB($08);        { add esp, 8 }
             end
             else
             begin
-              { String-valued expression (address of a [len:8][chars] struct in eax) }
+              { String-valued expression (address of a [len][chars] struct in eax).
+                THIS is the width-0 write arm -- the one a field-width suite
+                never reaches, and the one that was still reading a wide prefix
+                after every other site was converted. }
               IREmitNode386(valNode);                      { eax = address }
               EmitB($89); EmitB($C1);                      { mov ecx, eax }
-              EmitB($83); EmitB($C1); EmitB($08);          { add ecx, 8 }
-              EmitB($8B); EmitB($10);                      { mov edx, [eax] }
+              EmitLeaStrData386(1, IRStrTkOf(valNode));    { ecx = chars }
+              EmitLoadStrLen386(2, 0, IRStrTkOf(valNode)); { edx = len }
               EmitB($BB); EmitI32(STDOUT);                 { mov ebx, STDOUT }
               EmitB($B8); EmitI32(4);                      { mov eax, 4 (write) }
               EmitB($CD); EmitB($80);                      { int 0x80 }
@@ -5418,8 +5600,8 @@ begin
           begin
             IREmitNode386(IRB[node]);                { eax = inline string buffer }
             EmitB($50);                              { push eax }
-            EmitB($8B); EmitB($08);                  { mov ecx, [eax] (len) }
-            EmitB($83); EmitB($C0); EmitB($08);      { add eax, 8 (src) }
+            EmitLoadStrLen386(1, 0, IRStrTkOf(IRB[node]));   { ecx = len }
+            EmitLeaStrData386(0, IRStrTkOf(IRB[node]));      { eax = chars }
             EmitB($51);                              { push ecx (len) }
             EmitB($50);                              { push eax (src) }
             procIdx := FindProc('PXXStrFromLit');
@@ -5508,8 +5690,8 @@ begin
         begin
           IREmitNode386(IRB[node]);                  { eax = inline string buffer }
           EmitB($50);
-          EmitB($8B); EmitB($08);                    { mov ecx, [eax] (len) }
-          EmitB($83); EmitB($C0); EmitB($08);        { add eax, 8 (src) }
+          EmitLoadStrLen386(1, 0, IRStrTkOf(IRB[node]));   { ecx = len }
+          EmitLeaStrData386(0, IRStrTkOf(IRB[node]));      { eax = chars }
           EmitB($51);                                { push ecx (len) }
           EmitB($50);                                { push eax (src) }
           procIdx := FindProc('PXXStrFromLit');

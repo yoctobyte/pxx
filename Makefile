@@ -15454,6 +15454,24 @@ test-i386: $(COMPILER)
 	# encoding was i386-only, so this is the arm that fails on the pre-fix binary.
 	./$(COMPILER) --target=i386 test/test_char_string_equality_both_directions.pas $(TESTTMP)/test_i386_chareq
 	tools/expect_same.sh i386/chareq "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_chareq)" "$$(cat test/test_char_string_equality_both_directions.expected)"
+	# PHASE 2 BACKEND SIX: the byte length prefix on i386.
+	# Four configurations. The DEFAULT rows are the no-op control -- every wide
+	# form the helpers emit was derived against the literal it replaced and
+	# checked with GNU as, and the whole module was proved unchanged by building
+	# the same HEAD twice and comparing emitted i386 binaries: 11/11 identical.
+	./$(COMPILER) --target=i386 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_i386_ssbp_d
+	tools/expect_same.sh i386/ssbp_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_i386_ssbp_s
+	tools/expect_same.sh i386/ssbp_short "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	# The mixed-width rows carry `s:9` -- a NONZERO field width, deliberately.
+	# The pad is max(0, wid - len), a RUNTIME quantity, so the shared helper is
+	# what reads the prefix; at width 0 i386 never calls it (the `if wid > 0`
+	# gate) and this whole arm is unreachable. aarch64 was certified complete
+	# with it broken because width 0 was all any test had.
+	./$(COMPILER) --target=i386 test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_i386_ssmw_d
+	tools/expect_same.sh i386/ssmw_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
+	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_i386_ssmw_s
+	tools/expect_same.sh i386/ssmw_short "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	# The cross half of the statement-vs-value classification guard, and the half
 	# that can fail: x86-64 has no statement-level catch-all, so only a target
 	# that HAS one can regress. Exits 81 if a value kind is mis-classified.
