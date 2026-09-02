@@ -5909,19 +5909,78 @@ end;
 function ASTCharArrayCap(node: Integer): Integer;
 { The element count if `node` denotes a STATIC Char array, else -1. A DYNAMIC
   array (ArrLen = -1) is a managed handle and a different animal; an array of
-  anything but Char is not a string at all. }
-var sym: Integer;
+  anything but Char is not a string at all.
+
+  THREE node shapes, because this is the ONE oracle the char-array-is-a-string
+  conversion asks -- both directions, every site. It used to answer only for
+  AN_IDENT and its name did not say so, which is the whole defect: a Char array
+  reached through a record FIELD or a pointer DEREF answered -1, the conversion
+  in ir.inc's AN_ASSIGN arm never fired, and the store fell through to the
+  scalar type check, which correctly refused to put a string into a Char.
+
+    r.szDescription := 'Synsock - ...';   { <- rejected }
+    a := 'Synsock - ...';                 { <- the SAME assignment, accepted }
+
+  That is `--mimic-fpc -Fuexternal/synapse`: two lines of synapse's ssfpc.inc
+  (a `with WSData do` over `szDescription`/`szSystemStatus`, both
+  `array[0..N] of Char`), one construct, and it took out all three lib_synapse
+  jobs. Five of six lvalue shapes were refused and only the plain variable
+  worked -- the exact mirror of the under-check AssignSideKind's own header
+  records, where five of six were UNCHECKED. Same function, same six shapes,
+  opposite sign: a predicate that answers about an IDENT while its name says
+  NODE is wrong in whichever direction its caller happens to face.
+
+  Reached through the accessors that already know each shape rather than by
+  re-deriving the layout here -- IsNodeArray is the sibling predicate and asks
+  exactly these three, for exactly this reason (its own header names
+  `cannot assign ShortString to Char` as one of the four faces of one wrong
+  answer). Multi-dimensional stays -1 in every shape: `array[0..2] of
+  array[0..15] of Char` is not a flat string and the row extent is not the
+  capacity. bug-p-a-char-array-is-not-a-string-in-any-direction }
+var sym, rec, ec, lo, flat: Integer; fld: AnsiString;
 begin
   Result := -1;
   if (node < 0) or (node >= ASTNodeCount) then Exit;
-  if ASTKind[node] <> AN_IDENT then Exit;
-  sym := ASTIVal[node];
-  if (sym < 0) or (sym >= SymCount) then Exit;
-  if not Syms[sym].IsArray then Exit;
-  if Syms[sym].ArrLen < 0 then Exit;
-  if SymElemDynDepth[sym] <> 0 then Exit;
-  if Syms[sym].ElemType <> tyChar then Exit;
-  Result := Syms[sym].ArrLen;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    sym := ASTIVal[node];
+    if (sym < 0) or (sym >= SymCount) then Exit;
+    if not Syms[sym].IsArray then Exit;
+    if Syms[sym].ArrLen < 0 then Exit;
+    if SymElemDynDepth[sym] <> 0 then Exit;
+    if Syms[sym].ElemType <> tyChar then Exit;
+    Result := Syms[sym].ArrLen;
+  end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    { A record/class FIELD. UFldTk holds the ELEMENT kind for an array field --
+      defs.inc says so at UFldEnumId and makes the same demand of its readers:
+      check IsArray FIRST, or a scalar Char field answers as a 1-char string. }
+    rec := ResolveNodeRec(ASTLeft[node]);
+    if rec = REC_NONE then Exit;
+    fld := GetASTIdentName(node);
+    if not RecFieldIsArray(rec, fld) then Exit;
+    if RecFieldDynDepth(rec, fld) <> 0 then Exit;
+    if RecFieldArrNDims(rec, fld) > 1 then Exit;
+    if RecFieldType(rec, fld) <> tyChar then Exit;
+    flat := RecFieldArrLen(rec, fld);
+    if flat < 0 then Exit;                 { dynamic, or a builtin record }
+    Result := flat;
+  end
+  else if ASTKind[node] = AN_DEREF then
+  begin
+    { `p^` where p: ^array[0..N] of Char. The deref node's own ASTTk is the
+      ELEMENT kind -- a deref has nowhere else to put it -- so tyChar here is
+      the element, and DerefPtrArrayInfo is what knows there is an array at
+      all. It already answers False for a DYNAMIC pointee, which has no
+      compile-time extent. }
+    if IntToTypeKind(ASTTk[node]) <> tyChar then Exit;
+    if not IsDerefPtrArray(node) then Exit;
+    if not DerefPtrArrayInfo(node, ec, lo, flat) then Exit;
+    if flat <= 0 then Exit;
+    if ec <> flat then Exit;               { multi-dimensional pointee }
+    Result := flat;
+  end;
 end;
 
 function WrapCharArrayToStringExpr(node: Integer): Integer;

@@ -10512,6 +10512,18 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_char_array_is_a_string.pas $(TESTTMP)/test_chararrstr26
 	tools/expect_same.sh test_chararrstr26.1 "$$($(TESTTMP)/test_chararrstr26 | head -1)" "total ok 86 / 86"
 	tools/expect_same.sh test_chararrstr26.2 "$$($(TESTTMP)/test_chararrstr26 | tail -1)" "write [hi]"
+	# ...and the SAME conversion through a record FIELD or a pointer DEREF, which
+	# is where it stopped: ASTCharArrayCap answered only for AN_IDENT while its
+	# name said NODE, so `r.a := 'abc'` fell through to the scalar type check and
+	# was refused as "cannot assign ShortString to Char" -- five of six lvalue
+	# shapes rejected, the plain variable above the only one that worked. Two
+	# lines of synapse's ssfpc.inc are that shape and they took out all three
+	# lib_synapse jobs plus the TLS loopback. 14 assertions, all matched against
+	# FPC 3.2.2 by running this same file under it; the padding and truncation
+	# rows are the half a compile-only test would miss.
+	# bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string
+	./$(COMPILER) test/test_char_array_field_is_a_string.pas $(TESTTMP)/test_chararrfield26
+	tools/expect_same.sh test_chararrfield26 "$$($(TESTTMP)/test_chararrfield26 | tail -1)" "CHARARRFIELD OK"
 	# `(p + k)^` resolved its pointee only for a bare ident or `arr[i]`; a BINOP
 	# defaulted to Integer, which is right for a ^Integer and a wrong SPAN for
 	# every other pointer. `(pc + 2)^` read four bytes (1717920867 = 'dcef') where

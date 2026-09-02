@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:7 backlog:13 backlog-umbrella:6 backlog-core:140 backlog-nilpy:97 backlog-tools:73 backlog-pascal:58 backlog-decide:26 backlog-libs:16 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3088 rejected:72`
+`working:5 unfinished:27 blocked:7 backlog:13 backlog-umbrella:6 backlog-core:140 backlog-nilpy:97 backlog-tools:73 backlog-pascal:60 backlog-decide:26 backlog-libs:16 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3088 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -55,13 +55,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 464, ranked
+## Ready — top 30 of 466, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [T]` regression-cascade-fc01c8094434 (unblocks 1)
-- `[p 85] [B]` regression-lib-test-lib-synapse-3 (unblocks 1)
-- `[p 85] [B]` regression-lib-test-lib-synapse-ssl (unblocks 1)
-- `[p 85] [B]` regression-lib-test-lib-synapse-transitive-unit (unblocks 1)
+- `[p 85] [P]` regression-lib-test-lib-synapse-3 (unblocks 1)
+- `[p 85] [P]` regression-lib-test-lib-synapse-ssl (unblocks 1)
+- `[p 85] [P]` regression-lib-test-lib-synapse-transitive-unit (unblocks 1)
 - `[p 85] [N]` regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-exception-unhandled-3 (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-setlen-in-parallel-for-body-2 (unblocks 1)
@@ -76,6 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [C]` bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
+- `[p 70] [P]` bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
 - `[p 70] [T]` regression-test-core-c-crtl-mount-and-prio
 - `[p 70] [P]` regression-test-core-test-c-gtk-2
@@ -86,6 +87,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [C]` regression-test-lua-compiler-srchash
 - `[p 70] [C]` regression-test-lua-cross-compiler-srchash-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
-- `[p 68] [N]` feature-nilpy-user-defined-decorators
 
-_434 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_436 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
