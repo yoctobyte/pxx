@@ -13212,6 +13212,18 @@ test-core: $(COMPILER)
 	# reason than to keep __GLIBC__ undefined -- libbb/makedev.c takes glibc's
 	# arm under it -- and agreeing with gcc here would mean the host's copy had
 	# been reached. Every other row is diffed against gcc.
+	# <linux/netlink.h>, found the same way. THE MACROS ARE THE POINT: every
+	# netlink walk is NLMSG_OK/NLMSG_NEXT arithmetic over NLMSG_ALIGNTO=4, and
+	# an NLMSG_HDRLEN that is sizeof-without-the-align does not fail to
+	# compile -- it walks the kernel's reply off by a few bytes and reads a
+	# plausible wrong message out of a real one. Rows 4-8 EVALUATE the macros,
+	# NLMSG_NEXT's pointer walk included. Row 9 is the flag block, where
+	# NLM_F_ROOT/MATCH/ATOMIC and NLM_F_REPLACE/EXCL/CREATE reuse the same
+	# three bits with different meanings, so a value taken from the wrong half
+	# is still a legal flag.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_netlink.c $(TESTTMP)/c_netlink26
+	tools/expect_same.sh c_netlink26 "$$($(TESTTMP)/c_netlink26)" "$$(printf '1 12 16\n2 0 2 4 8\n3 0 4 6 8 12\n4 4 16 16 16\n5 16 29 16 32\n6 16 20\n7 1\n8 36 28\n9 1 2 4 300 400 800\n10 1 2 3 4 16\n11 0 15 16 20')"
 	./$(COMPILER) test/c_crtl_telnet_and_prctl.c $(TESTTMP)/c_telprctl26
 	tools/expect_same.sh c_telprctl26 "$$($(TESTTMP)/c_telprctl26)" "$$(printf '1 255 254 253 252 251 250\n2 240 241 242 246 249\n3 0 1 3 24 31\n4 33 0 1 2\n5 15 16 23 38 39 47\n6 20 | 0 2 4 8 10 11 12\n7 1 2 4 8 4\n8 not-glibc\n9 0 pxxprobe')"
 	./$(COMPILER) test/c_crtl_net_headers.c $(TESTTMP)/c_nethdr26
