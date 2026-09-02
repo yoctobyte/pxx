@@ -20,6 +20,36 @@
 
 procedure ParseFactor; forward;
 
+{ Is this node a Boolean LITERAL, and which one?
+
+  Deliberately AN_BOOL_LIT only. A `const B = False` is NOT folded, for the same
+  reason the C side does not fold `const int z = 0`: gcc and tcc both keep
+  propagation-through-a-variable and clang prunes it, so nothing portable may
+  rely on either answer, and
+  decided/decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0
+  puts it explicitly outside the consensus core. }
+function PasBoolLit(n: Integer; var v: Boolean): Boolean;
+begin
+  PasBoolLit := False;
+  if (n < 0) or (n >= ASTNodeCount) then Exit;
+  if ASTKind[n] <> AN_BOOL_LIT then Exit;
+  v := ASTIVal[n] <> 0;
+  PasBoolLit := True;
+end;
+
+{ The folded result of a logical operator, as a literal the NEXT fold can read.
+  Returning a literal rather than the surviving operand is what makes a CHAIN
+  collapse: `(False or False) or (not True)` is left-associative, so the first
+  `or` hands its result to the second AS AN OPERAND, and an unfolded binop there
+  stops the chain one step in. }
+function PasMakeBoolLit(b: Boolean): Integer;
+begin
+  Result := AllocNode(AN_BOOL_LIT);
+  if b then ASTIVal[Result] := 1 else ASTIVal[Result] := 0;
+  ASTTk[Result] := Ord(tyBoolean);
+end;
+
+
 { The real factor parser. ParseFactor below wraps it to apply NilPy's str-method
   suffix uniformly — this body has 67 Exit points, so a suffix loop written at
   its tail would silently miss most of them (it missed str(t).upper(), the exact
@@ -483,6 +513,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     helperPi, sci: Integer;
     isLiftedCall: Boolean;
     bitNot: Boolean; notOrdTk: TTypeKind; notConstV: Int64;
+    notBlv: Boolean;              { `not` over a Boolean LITERAL — folded, see the site }
     unOvl: Integer;   { unary operator overload on a record/class operand }
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec, szQUnit: Integer;
     szNestCi, szHops, szI: Integer; szNestName: AnsiString;   { SizeOf(TOuter.TInner) — the SCOPED nested row }
@@ -1470,6 +1501,18 @@ begin
 
         Do not re-add a node-kind arm here. If a shape is wrong, the tag is
         wrong; fix the tag. }
+      { `not` OVER A BOOLEAN LITERAL answers itself. Folded here and not only at
+        the `and`/`or` sites, for the same reason the C side folds its truthy
+        helper: a chain is left-associative, so `(False or False) or (not True)`
+        hands the second `or` an operand that must ALREADY be a literal or the
+        chain stops one step in. Measured on exactly that line.
+        feature-a-fold-the-consensus-dead-branch-core-at-every-level }
+      if PasBoolLit(left, notBlv) then
+      begin
+        CurASTNode := PasMakeBoolLit(not notBlv);
+        LastExprTk := tyBoolean;
+        Exit;
+      end;
       node := AllocNode(AN_NOT); ASTLeft[node] := left;
       { `not` over an aggregate is only ever a user overload -- see the AN_NEG
         arm above; same guard, same reason. Ahead of the bitwise/logical split
@@ -8981,6 +9024,7 @@ end;
 procedure ParseTerm;
 var op: TTokenKind; left, right, node, opSOffset, opSLen, opci: Integer;
     ixTry: Integer;   { a repeat count coerced through __index__ }
+    blv: Boolean;                 { a constant left operand of `and` }
     shiftLitLeft: Boolean;        { shift over an operand with no DECLARED width }
     shiftPromoS, shiftPromoU: TTypeKind;
 begin
@@ -9011,6 +9055,25 @@ begin
     left := CurASTNode;
     ParseFactor;
     right := CurASTNode;
+    { A CONSTANT LEFT OPERAND OF `and`, folded HERE because it is LOWERING and
+      not an optimisation. Pascal `and`/`or` short-circuit -- this compiler has
+      no {$BOOLEVAL} and measured 0 calls for `False and Bump` -- so dropping
+      the right operand is the language's own rule rather than a liberty.
+
+      What it costs to skip: the right arm is still EMITTED, so a call in it to
+      a declared-but-never-defined external becomes a real reference and the
+      binary dies before main with `undefined symbol`. MEASURED on
+      `if False and (NeverDefinedP = 0)` at -O0, -O2 AND -O3 -- IROptConstBranch
+      cannot rescue it, because the and/or lowering materialises its result in a
+      boolean temp and the branch RELOADS it, so the operand feeding the jump is
+      a load_sym. The C sibling of this is 88ef1232f; the parser is duplicated
+      per language by design, so this is its own fold and not a shared helper.
+      feature-a-fold-the-consensus-dead-branch-core-at-every-level }
+    if (op = tkAnd) and (ASTTk[right] = Ord(tyBoolean)) and PasBoolLit(left, blv) then
+    begin
+      if blv then CurASTNode := right else CurASTNode := PasMakeBoolLit(False);
+      continue;
+    end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     ASTSOffset[node] := opSOffset; ASTSLen[node] := opSLen;
     { {$Q+} region: * is overflow-checked (feature-pascal-overflow-checks-q-plus) }
@@ -9333,6 +9396,7 @@ end;
 
 procedure ParseSimpleExpr;
 var op: TTokenKind; neg: Boolean; left, right, node, opci: Integer;
+    blv: Boolean;                 { a constant left operand of `or` }
 begin
   { Unary minus binds TIGHTER than the multiplicative level in EVERY frontend
     here — Pascal included. It used to be treated as an additive-level sign for
@@ -9461,6 +9525,16 @@ begin
         ASTTk[left] := StrValTk(IntToTypeKind(ASTTk[left]));
       if TypeIsFrozenString(IntToTypeKind(ASTTk[right])) then
         ASTTk[right] := StrValTk(IntToTypeKind(ASTTk[right]));
+    end;
+    { A CONSTANT LEFT OPERAND OF `or` -- the mirror of the `and` fold in
+      ParseTerm, and see its comment for why this is lowering. `xor` is
+      DELIBERATELY NOT FOLDED here: it does not short-circuit, so both operands
+      are evaluated whatever the left one is, and dropping the right would
+      remove side effects the language promises to run. }
+    if ((op = tkOr) and (ASTTk[right] = Ord(tyBoolean)) and PasBoolLit(left, blv)) then
+    begin
+      if blv then CurASTNode := PasMakeBoolLit(True) else CurASTNode := right;
+      continue;
     end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     { {$Q+} region: + and - are overflow-checked (feature-pascal-overflow-checks-q-plus) }

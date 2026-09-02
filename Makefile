@@ -12736,6 +12736,34 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_andchain26 "$$($(TESTTMP)/c_andchain26)" "$$(printf '1 0\n2 1\n3 1\n4 2\n5 done')"
 	./$(COMPILER) test/c_fn_typed_parameter.c $(TESTTMP)/c_fnparam26
 	tools/expect_same.sh c_fnparam26 "$$($(TESTTMP)/c_fnparam26)" "$$(printf '1 42\n2 10\n3 u7\nv9\n4 1\n5 42\n6 10')"
+	# A CONSTANT LEFT OPERAND OF `and`/`or`, AND `not` OVER A BOOLEAN LITERAL,
+	# fold in the PARSER, because Pascal short-circuits and that is the language's
+	# rule rather than an optimisation. The C sibling landed in 88ef1232f; the
+	# parser is duplicated per language by design, so Pascal needed its own.
+	# feature-a-fold-the-consensus-dead-branch-core-at-every-level
+	#
+	# TWO files and they test different things. The semantics file carries a HIT
+	# COUNT beside every value, because a fold that drops an operand it should
+	# have kept still yields the right VALUE here -- `True and T1` is True either
+	# way -- so the count is the only column that separates folding from
+	# mis-folding. Rows that must NOT fold are in it on purpose: xor does not
+	# short-circuit, bitwise and/or/not on integers is a different operator with
+	# the same spelling, and a RUNTIME-false left operand short-circuits without
+	# being folded. Whole-file output verified byte-identical to fpc 3.2.2.
+	./$(COMPILER) test/test_pascal_const_logic_folds.pas $(TESTTMP)/pas_constlogic
+	tools/expect_same.sh pas_constlogic "$$($(TESTTMP)/pas_constlogic | tail -1)" "CONSTLOGIC OK"
+	$(TESTTMP)/pas_constlogic | grep -q FAIL && { echo "test_pascal_const_logic_folds: a row FAILED -- see its output"; exit 1; } || true
+	# The link-time half, at ALL THREE levels, because that is where it failed:
+	# the dead arm's call to a declared-but-never-defined external became a real
+	# reference and the binary died before main with `undefined symbol` at -O0,
+	# -O2 AND -O3. It cannot pass by accident -- a regression does not print the
+	# wrong thing, it fails to start.
+	./$(COMPILER) -O0 test/test_pascal_dead_arm_ext.pas $(TESTTMP)/pas_deadarm_o0
+	tools/expect_same.sh pas_deadarm_o0 "$$($(TESTTMP)/pas_deadarm_o0)" "DEADARM OK"
+	./$(COMPILER) -O2 test/test_pascal_dead_arm_ext.pas $(TESTTMP)/pas_deadarm_o2
+	tools/expect_same.sh pas_deadarm_o2 "$$($(TESTTMP)/pas_deadarm_o2)" "DEADARM OK"
+	./$(COMPILER) -O3 test/test_pascal_dead_arm_ext.pas $(TESTTMP)/pas_deadarm_o3
+	tools/expect_same.sh pas_deadarm_o3 "$$($(TESTTMP)/pas_deadarm_o3)" "DEADARM OK"
 	# DCE MUST NOT DELETE A C PROGRAM'S main. The C entry stub's call to main is
 	# hand-patched with an absolute address, never through CallFix, so the call
 	# graph has no edge to it -- the pass dropped main and the program SIGSEGVed

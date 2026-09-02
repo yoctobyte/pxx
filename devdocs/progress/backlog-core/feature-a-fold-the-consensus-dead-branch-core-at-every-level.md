@@ -121,3 +121,53 @@ error is defensible and costs no real code.
 ## Unblocks
 
 [[feature-c-corpus-busybox-applet]] — the corpus this was found closing.
+
+## 2026-09-02 (frankC) — THE PASCAL SHORT-CIRCUIT HALF IS DONE
+
+The arm this ticket called "measured open" is closed. `pasparser_expr.inc` now
+folds a constant LEFT operand of `and` (ParseTerm) and of `or`
+(ParseSimpleExpr), and `not` over a Boolean literal (the `tkNot` factor), each
+returning a literal so a chain collapses.
+
+It was worse than recorded here: the repro failed at **-O3 too**, not only at
+-O0 and -O2 — the same mechanism the C half found, and for the same reason.
+
+```
+before:  -O0 rc=127  -O2 rc=127  -O3 rc=127   undefined symbol: never_defined_P
+after:   -O0 alive   -O2 alive   -O3 alive
+```
+
+Semantics verified row by row with a HIT COUNT beside every value, because a
+fold that drops an operand it should have kept still yields the right value for
+these shapes — `True and T1` is True either way. Rows that must NOT fold are in
+the test on purpose: `xor` does not short-circuit; bitwise `and`/`or`/`not` on
+integers is a different operator with the same spelling; a RUNTIME-false left
+operand short-circuits without being folded. Whole-file output is **byte-identical
+to fpc 3.2.2**. `test/test_pascal_const_logic_folds.pas` (semantics) and
+`test/test_pascal_dead_arm_ext.pas` (link-time, wired at all three levels).
+
+Deliberately not folded: `const B = False`, matching the C side and the ruling —
+gcc and tcc keep propagation-through-a-variable, clang prunes it, so nothing
+portable may rely on either answer.
+
+## What REMAINS, measured at the same tree
+
+**Part 1's dead-ARM prune, and it is still the larger half.** With the condition
+now folded, the arm behind it is still emitted at `-O0`:
+
+```
+if False then WriteLn(NeverArm);     { never_arm_P declared, never defined }
+
+-O0 rc=127  undefined symbol: never_arm_P
+-O2 alive   -O3 alive
+```
+
+So `-O0` is now the ONLY level that fails, where before the fold every level
+did. `IROptConstBranch` catches it from `-O1` up, which is exactly why this
+belongs in lowering and why the `OptLevel >= 1` gate at `ir_codegen.inc` must
+stay where it is.
+
+Also untouched, all still open: **part 2** the address-escape guard (a dead arm
+holding a label whose address is taken is kept by gcc/clang/tcc at every level —
+and Pascal has no computed goto, so this is a C-frontend obligation), **part 3**
+`-OO`, and **part 4** the charter amendment.
