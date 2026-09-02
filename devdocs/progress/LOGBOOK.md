@@ -608,3 +608,4 @@ unmappable name turned "which of these 274 does this tree not know" into 274
 runs each costing an allnoconfig; one pass named all six at once (arch,
 getfattr, nbd-client, sh, static-sh, sysctl — busybox spells their knobs
 differently, e.g. `[` is CONFIG_TEST1 and `sh` goes through SH_IS_*).
+2026-09-02 | frankZ | devdocs/progress/tstate | the six optdiff reds on seven are STALE: five are the -O3 DCE threading hang (rc 124 = timeout) fixed at 0afbd1f7f and shard4 is the atomicity family fixed at 5136f3450, both LATER than the red sha a5f0958c6934. All six green here, 952 pass / 144 skip / diff=0, HEAD and binary unchanged either side. WHY it needed saying: twatch lists them as open, so anyone reading the queue would work a fixed bug. Marker counts discriminate flake from persistent red -- these are 1 NEW-RED / 0 FIXED each, the threading tests are 10/10.

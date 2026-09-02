@@ -410,3 +410,116 @@ references, because the `x and 0` identity read the OUTER binop while the C
 frontend wraps unsigned results in a width mask — so the real shape is
 `and(and(x,0),0xFFFFFFFF)` and nothing folded), and busybox rung 3 going green
 at 141 applets / 265 objects, byte-identical to gcc over 387 cases.
+
+## THE TARGET IS PARTLY A LOTTERY — two of the blockers FLAP
+
+2026-09-02, frankZ, from Track T's own archive rather than from any run of mine.
+Counting every tstate commit subject that names each test:
+
+| test | NEW-RED-bearing | FIXED-bearing | total markers | concentrated in |
+|---|---|---|---|---|
+| `test_exception_unhandled.pas@3` | 10 | 11 | 24 | 18 of them on 2026-09-01 |
+| `test_setlen_in_parallel_for_body.pas` | 10 | 10 | 20 | **all 20 on 2026-08-31** |
+| `test_multithreading.pas@1` | 3 | 3 | 6 | all on 2026-09-01 |
+
+**A regression cannot be fixed and re-broken ten times in one day.** That needs
+ten fixes and ten breakages, on one host, across shas that mostly touch docs and
+tickets. The verdicts are nondeterministic and the watcher is faithfully
+reporting a coin.
+
+This is a **second source that fails differently** from the local
+non-reproduction already recorded above. 0-in-40 here is equally consistent with
+"rare flake" and with "host-specific bug" and cannot separate them; alternating
+markers on the SAME host can, because a host-specific bug is stable on its host.
+
+### What it means for this umbrella's own goal
+
+The target is *one* `full` run with no RED in any tier. Two of the remaining
+blockers decide their own verdict on each run. **So the target is not reachable
+by fixing alone** — the arrival rate can lose to the fix rate and the run still
+comes back red, at odds nobody has measured. Recorded because it changes what
+"done" means here: either the two are stabilised (a real race in the program is
+the likely cause and would be a far more valuable ticket than these two), or
+they are quarantined with a citation the way `pin-allowlist.tsv` is designed
+for — and I have argued AGAINST casual allowlisting elsewhere on this umbrella,
+so I will say plainly that a MEASURED flake is the one case the mechanism is
+actually for.
+
+Neither is mine to decide: it is Track T's tool and Track T's call, and the
+residual is named on both tickets. What was missing was the measurement, and it
+is no longer missing.
+
+**Do not bisect either of them.** There is no cause in any commit range; the
+auto-filed range is not unnarrowed, it is meaningless.
+
+## The six `optdiff` reds on seven are STALE — they predate fixes already landed
+
+2026-09-02, frankZ. `twatch --status` lists five `optdiff#shard{0,1,2,3,5}/12`
+reds, and seven's own run archive adds a sixth (`shard4/12`) that the summary
+does not list. **All six are already fixed. Seven has simply not re-run the
+`opt` tier since 2026-09-01T10:08Z.**
+
+### Not a flake — the archive says so, and the method has a control
+
+The same marker count that proved the threading tests flap says the opposite
+here: each of the five has **one NEW-RED and zero FIXED**. Went red once,
+stayed red. `optdiff#shard4/12` has zero markers, which is the negative control
+— the method distinguishes, rather than answering "flake" for everything.
+
+### What they actually were, from seven's own report
+
+`tstate/reports/20260901T071328Z-a5f0958-seven.md`, one shape in every shard:
+
+```
+OPT DIFF -O3: test/test_thread_api_no_uses.pas          (rc 0 vs 124)
+OPT DIFF -O3: test/test_threadsafe_heap_lock_release.pas (rc 0 vs 124)
+OPT DIFF -O3: test/test_threadsafe_layout_rtti.pas       (rc 0 vs 124)
+OPT DIFF -O3: test/lib_criticalsection_blocking.pas      (rc 0 vs 124)
+OPT DIFF -O3: test/lib_fpc_thread_surface.pas            (rc 0 vs 124)
+OPT DIFF -O3: test/lib_classes_tthread.pas               (rc 0 vs 124)
+```
+
+**`rc 124` is a TIMEOUT: threading programs HANG at `-O3`.** That is
+`bug-a-five-optdiff-shards-are-one-o3-threading-hang` — group 1 at the top of
+this ticket — the DCE `GlobFix[]` compaction dropping the three arrays parallel
+to it. Fixed at `0afbd1f7f`. And `shard4/12`'s STILL-RED is
+`test_threadsafe_io_lock_foreign.pas`, the atomicity family, `5136f3450`.
+
+Both fixes are **later than the red**: the red sha `a5f0958c6934` is
+2026-09-01T07:13Z, `0afbd1f7f` is 21:42Z and `5136f3450` is 2026-09-02. `git
+merge-base --is-ancestor` says NO for both.
+
+### Measured here, all six shards, provenance either side
+
+```
+shard 0  pass=170 skip=19 diff=0      shard 3  pass=154 skip=22 diff=0
+shard 1  pass=163 skip=26 diff=0      shard 4  pass=169 skip=26 diff=0
+shard 2  pass=159 skip=18 diff=0      shard 5  pass=137 skip=33 diff=0
+                                      TOTAL   pass=952 skip=144 diff=0
+HEAD_BEFORE == HEAD_AFTER == 9df0058fe    BIN unchanged == 056bf9cd55f97e41
+```
+
+**The guard is aimed, not just read.** Six of the seven named programs were
+proven COMPARED, all six through the `--threadsafe` retry arm — which is itself
+`1b65bac9e`, the fix that made them visible at all; before it they were
+BUILD-FAIL skips and no sweep could have seen the hang.
+
+### Two scope limits, stated rather than implied
+
+1. **`shard4` is green because the program is SKIPLISTED, by me.** That is not
+   "the divergence is fixed". Its property is atomicity and raw stdout cannot
+   express it; the invariant was verified separately at all four `-O` levels
+   over 20 runs. Do not read that row as a repair.
+2. **Three programs this box cannot build are compared on seven and skipped
+   here** — `cquickjs_prereq.c`, `csqlite_layout_probe.c`,
+   `csqlite_extended_test.c` — so this green does not cover them.
+
+### An error of mine, in the check itself
+
+My first pass "verified" all seven named programs were compared. One,
+`test_threadsafe_io_lock_foreign.pas`, lives in **shard4, which I had not run** —
+so "no skip row names it" meant *the shard never executed*, and I read it as
+*the program was compared*. **Absence of a skip row is not evidence of
+comparison.** Caught by asking which shard the file hashes into; fixed by
+running shard4, where it duly appears as a SKIPLIST row. Same family as the two
+instrument errors above, and the third today.

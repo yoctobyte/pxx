@@ -86,3 +86,50 @@ What would settle it, and what I am NOT claiming to have done: the same job on
 seven, under load, at this sha. Left open and wired to the umbrella rather than
 resolved, because a red nobody can reproduce is still a red in the tier that
 decides whether a pin is green.
+
+## MEASURED: this is a FLAKE, and the tstate archive says so outright (frankZ, 2026-09-02)
+
+The earlier entry on this ticket said the failure does not reproduce here on
+either compiler and named seven's full-matrix parallelism as the likeliest
+difference. That was half a finding. Here is the other half, and it does not
+depend on reproducing anything.
+
+**Track T's own markers alternate.** Counting every tstate commit subject that
+names `test_exception_unhandled`:
+
+```
+NEW-RED-bearing commits : 10
+FIXED-bearing commits   : 11
+total markers           : 24
+18 of the 24 markers land on 2026-09-01 alone
+```
+
+**A regression cannot be fixed and re-broken 10 times in one day.** That would
+need 10 fixes and 10 breakages, on one host, across shas that mostly touch
+docs and tickets. The only reading left is that the job's verdict is
+**nondeterministic**, and the NEW-RED / FIXED pairs are the watcher faithfully
+reporting a coin landing differently.
+
+This is a second source that FAILS DIFFERENTLY from the local non-reproduction:
+0-in-40 here is consistent with "rare flake" AND with "host-specific bug", and
+cannot separate them. The alternating markers separate them — a host-specific
+bug is stable on its host, and this is not stable on its host.
+
+## What changes because of it
+
+- **It is not a regression, so there is no cause in any commit range**, and the
+  auto-filed range is not merely unnarrowed, it is meaningless. Nobody should
+  bisect this.
+- **The right work is to stabilise or quarantine the test, not to find a
+  breaking commit** — and if the nondeterminism is a real race in the program
+  under test rather than in the harness, that race is the ticket, at a much
+  higher value than this one.
+- **The residual owner does not change**: Track T, named above, now with a
+  measurement instead of a hypothesis.
+
+## Why it matters to the umbrella specifically
+
+[[umbrella-one-full-tier-run-with-no-red-tier]] wants ONE full run with no RED
+in any tier. **A test that flips on its own makes that a lottery** rather than a
+consequence of fixing things: every arrival can be beaten by the fix rate and
+the run still comes back red. Recorded there too.
