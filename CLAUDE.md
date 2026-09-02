@@ -345,6 +345,32 @@ It does not pick tickets, fill queues, treat an idle session as available, or
 start a worker the owner has not started. **It sets up no timed callbacks** — it
 is the session most tempted, because polling looks like coordinating.
 
+**HEALTH CHECKS ARE READ-ONLY. NEVER SEND KEYS INTO A PEER'S PANE.** Not Escape,
+not "No", not a cancel — **not even the deny direction.** "Declining grants
+nothing" is the reasoning that gets you there and it is wrong: you cannot tell a
+pending dialog from running work, so the same keystroke either cancels one tool
+call or **destroys a sweep in progress**, and the two look identical from
+outside. If a session looks stuck, **ask it** — that costs one message and it is
+the session's own state to report.
+
+**A PANE IS NOT A SESSION, AND IT LEAVES NO RECEIPT.** `capture-pane` returns
+committed scrollback plus the live screen; a Claude Code permission dialog is
+drawn in the **redraw region and never commits**, so afterwards it is
+unfalsifiable in both directions — a full-history grep finding nothing is not
+evidence it was never there. Measured 2026-09-02: this session read a
+`Dangerous rm ... $T/$n` dialog off frankA's pane, declared it "idle-blocked
+since 01:10", and sent Escape; frankA was mid-sweep and reported no prompt
+pending. **The peer's transcript is the only instrument that fails
+differently** — it records a rejected call or an interrupt; the pane records
+neither.
+
+**A DISCARDED SHA READS EXACTLY LIKE A STALLED SESSION.** The whole false alarm
+started by taking `361896c48` — a commit frankA had deliberately abandoned after
+a peer landed the same root cause first — as "last activity". An agent that
+resets to origin after losing a race leaves a local tip that is behind, recent,
+and meaningless. **Never convert a sha's timestamp into a claim about a session**;
+that question has an owner who can answer it for free.
+
 **Relay stays, and is the valuable part** — workers cannot see each other. They
 should also message each other directly; peer-to-peer beat routing every time.
 **Sequence the few things that genuinely serialise:** `make pin`, and landing
