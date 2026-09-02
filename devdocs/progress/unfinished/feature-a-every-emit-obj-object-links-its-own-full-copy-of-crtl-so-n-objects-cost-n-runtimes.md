@@ -112,3 +112,54 @@ positive-controlled against names that must hit (`main` 33 TUs, `bb_error_msg`
 1) and one that must not (`cmp_cb` 0), cross-checked with a looser pattern whose
 four extra hits were all comments. The stated limit is that a regex cannot see a
 definition produced by macro expansion.
+
+## 2026-09-02 (frankA) — step 2's prerequisite is down to FIVE named relocations
+
+`b098c63c6` closed the third of the three open questions above (`ProcAddrFix`
+relocating against the `.text` section symbol, which was true for options (2)
+and (4) alike). With calls, `@proc` and VMT slots all naming symbols, the
+question "what still binds `.text` together" is now answerable by enumeration
+rather than by reading, and the answer is small. Measured at `89cf8ea39628`,
+`--emit-obj --function-sections`:
+
+| | `.rela.text` | `.rela.data` | `.rela.init_array` | `.rela.fini_array` |
+| --- | --- | --- | --- | --- |
+| `test_emit_obj.pas` | **0** of 624 | 3 of 84 | 1 of 1 | 1 of 1 |
+| a one-line C program | **0** of 2782 | 0 of 5 | 1 of 1 | 1 of 1 |
+
+counting entries that name the `.text` SECTION symbol. **Code-to-code references
+are fully relocated: zero in `.rela.text`, in both frontends.** Five entries
+remain in the Pascal object and two in the C one, and they are these:
+
+```
+.rela.data        R_X86_64_64  .text - 1        (x3)
+.rela.init_array  R_X86_64_64  .text + 1aae4
+.rela.fini_array  R_X86_64_64  .text + 1ab06
+```
+
+- **The init and fini thunks** are the two the park already names, and the park
+  also records why they are not a clean tail: both fall INSIDE the removable
+  range of whatever proc precedes them, which is a different proc in every
+  program. They are already registered as DCE stub targets, so the machinery to
+  track them exists; what they need is a symbol to relocate against.
+- **The three `.text - 1` entries are VMT slots for interface methods with no
+  body in this object** (`MethodFix ... baked 3 (first: IInterface.QueryInterface)`).
+  The addend is `BodyAddr = -1`, so these slots do not merely resist relocation
+  — they name `.text` minus one byte. Harmless today only because nothing
+  dispatches through them here; worth its own look before anyone relies on the
+  count being three.
+
+**A fourth blocker the table does not show, because it is not a relocation.**
+The C object reports `CallFix 1087 relocated 1081 pinned-target 6`. Those six
+are the shape `ObjCallFixIsRelocatable` deliberately refuses — a call site whose
+recorded target disagrees with its proc row, which happens when a C file has two
+same-named file-scope statics and the later body overwrites the row. They stay
+baked, and a baked displacement is computed for this object's own copy of the
+callee, so **per-function sections cannot land while any of them do.** They are
+counted rather than assumed absent, which is what makes them findable; six is a
+number to attack, not a footnote.
+
+So the honest statement of the remaining work for step 2's first half is: give
+the init/fini thunks symbols, decide what an interface-method VMT slot should
+relocate against, and eliminate the six pinned-target call sites. None of those
+is a design question.
