@@ -40,3 +40,6 @@ expect_same: MISMATCH [test_anontype26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-02 — auto-closed by the seven watcher: `test-core#src:test/test_anonymous_enum_and_subrange_types.pas` passes at c58f2c1bc326 (tier native); it was red at 5be4c0665c1e. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
