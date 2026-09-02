@@ -19,7 +19,9 @@ phase 2.** The gap is now larger than when six were in:
 - **the walker store-side defect — all seven targets, unfixed**, frankb-a9 sole owner
 - **two surviving readers** after the four-cause fix, plus a **fifth cause**
 - `p^[1]` reads a blank while `s[1]` and `r.f[1]` read `h` in the same run
-- `r.f = 'hello'` **segfaults** on x86-64/riscv32, FALSE on aarch64/arm32
+- `r.f = 'hello'` **segfaults** on x86-64/riscv32/**i386**, FALSE on aarch64/arm32
+  (i386 measured at `c8375f3e7`; it reaches `PXXStrEq` like arm32, so the field
+  case is a third shape rather than either of the two already known)
 - compare deliberately unowned; its flag rows deliberately unwired
 
 **Seven converted, ZERO of the three defect classes closed.** Every backend now
@@ -120,7 +122,27 @@ for whoever closes the two survivor tickets** — not a task to hand anyone now.
 
 ## Open, with owners
 
-- **i386** — frankA. Last backend.
+- **i386 — LANDED, `c8375f3e7`.** Six configurations under qemu (byte_prefix
+  and mixed_widths at default and `-dPXX_SHORTSTRING`, plus both frozen modes),
+  gate GREEN with the FPC canary PASS, self-host converged. Default path proved
+  by ISOLATION: only `ir_codegen386.inc` reverted, **10/10 emitted i386 binaries
+  byte-identical**, two genuinely different compilers (`4ba5c77aacc7` vs
+  `6d8211360923`), positive control **5 of 8 differ in flag mode** so the
+  comparison can fail. **Comparison is CORRECT on i386** — `s = 'hello'` is TRUE,
+  matching FPC, where x86-64 and arm32 are FALSE; what does it is resolving the
+  kind at the `PXXStrEq`/`PXXStrCmp3` **decompose**, which is the shape arm32
+  needs at its four call sites and which x86-64 cannot use at all (it inlines
+  through `EmitStrCmpReg`).
+  Three things that did NOT copy from the 64-bit spec and would bite a copyist:
+  the wide prefix is **two stores** on 32-bit; the concat **scratch buffer** must
+  KEEP its wide prefix (written unconditionally, returned as a `tyString` value);
+  and `lhsTk := IRStrTkOf(...)` breaks the **default** path, not the shortstring
+  one, because it resolves `string[8]` to `tyFixedString` with no flag in play —
+  the `= tyString` tests had to widen to `TypeIsFrozenString` in the same edit.
+  Unrelated i386 bug found while reading and landed separately as `4c44ebb79`:
+  `or dword [ecx], 1` emitted where `cmp` was meant (`$83` group-1, ModRM reg=1
+  is OR, reg=7 is CMP) — `'a' = s` answered False for every s **and** set bit 0
+  of the length prefix. 142 sibling sites swept; exactly one mismatch.
 - **Default-path no-op sweep — CLOSED, nothing regressed.** aarch64 CLEAN
   (direct), riscv32 CLEAN (direct), arm32 CLEAN (isolated). Three backends
   upgraded from *asserted* to *proven*, no code touched. arm32's raw
