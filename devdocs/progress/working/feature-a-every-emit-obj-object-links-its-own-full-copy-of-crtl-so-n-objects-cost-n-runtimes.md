@@ -915,3 +915,13 @@ the parent from `ready`.
 
 A minimal C TU with no crtl pull is at `pinned-target 0`, and so is a Pascal
 object, so nothing else in the tree is known to be in this shape.
+
+### Independently verified off-box
+
+Track T rebuilt at `68950b03b` on host seven (`converged after 2 round(s)`,
+`srchash MATCH`) and ran `test/test_rtti_bodiless_method_code_is_nil.pas`
+unprompted, getting the same five rows including both controls. So the
+bodiless-slot fix is confirmed on a second machine, from a second build, by
+someone who did not write it — and `test_typinfoovl26`, the RTTI job converted
+to `expect_same.sh` in `22fe29814` an hour earlier, is GREEN, which separates
+the two adjacent changes before a sweep could make them look entangled.
