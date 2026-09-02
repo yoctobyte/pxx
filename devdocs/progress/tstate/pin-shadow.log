@@ -460,3 +460,4 @@
 2026-09-02T14:02:40Z	seven	dc018685fd56c718b66181aecc5c5ec00077bbc6	would NOT pin dc018685fd56 — 4 red(s) the current pin does not have, 1 inherited from the current pin: lib-test#src:tools/crtl_reachability.py, test-core#src:test/test_nilpy_c_pointer.npy, test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy, test-threads#src:test/test_nilpy_thread_clone.npy
 2026-09-02T14:48:21Z	seven	0da8a0ae4200b2b4583dedbc1dcb529dccc1bef5	would-pin PENDING 0da8a0ae4200 — qualifies, streak 1/2
 2026-09-02T15:03:59Z	seven	8476a51575575eb0dace4c162f7b1ff5d94444f6	WOULD PIN 8476a5157557 — 1 red(s), none new, 1 inherited from the current pin, self-host clean, streak 2/2
+2026-09-02T16:04:07Z	seven	08f7de0715a8a9cf5f2e739231b7ac7d2b18177f	would NOT pin 08f7de0715a8 — 1 red(s) the current pin does not have, 1 inherited from the current pin: test-threads#src:test/test_nilpy_thread_clone.npy
