@@ -48,20 +48,28 @@ begin
     Result := tyInteger;
     Exit;
   end;
-  if lo >= 0 then
-  begin
-    if hi <= 255 then Result := tyUInt8
-    else if hi <= 65535 then Result := tyUInt16
-    else if hi <= 4294967295 then Result := tyUInt32
-    else Result := tyUInt64;
-  end
-  else
-  begin
-    if (lo >= -128) and (hi <= 127) then Result := tyInt8
-    else if (lo >= -32768) and (hi <= 32767) then Result := tyInt16
-    else if (lo >= -2147483648) and (hi <= 2147483647) then Result := tyInt32
-    else Result := tyInt64;
-  end;
+  { The SIGNED-FIRST LADDER: the first rung that spans [lo, hi] wins. Measured
+    off FPC 3.2.2's RTTI, not assumed -- `1..10` is otSByte there and `0..256`
+    is otSWord, so "unsigned whenever lo >= 0" is NOT the rule. That shortcut
+    picks the same WIDTH on every range -- which is why a size-only test passes
+    with it -- and a different SIGNEDNESS. What that changes is the ordinal type
+    TypeInfo reports, and matching FPC there costs nothing.
+
+    It does NOT make a {$R-} store of an out-of-range value agree, and we are
+    not trying to: measured, `d: 1..10; {$R-} d := 200` gives 200 under FPC and
+    -56 here, because FPC labels the type otSByte and still loads it unsigned.
+    That observable is reachable only by a program that has already stored
+    outside the range its own declaration describes, so FPC's answer is not a
+    specification -- on par with the LANGUAGE, not with FPC. No correct program
+    can tell the two choices apart by value; TypeInfo is the one place it
+    shows, and that is the one place we match. }
+  if (lo >= -128) and (hi <= 127) then Result := tyInt8
+  else if (lo >= 0) and (hi <= 255) then Result := tyUInt8
+  else if (lo >= -32768) and (hi <= 32767) then Result := tyInt16
+  else if (lo >= 0) and (hi <= 65535) then Result := tyUInt16
+  else if (lo >= -2147483648) and (hi <= 2147483647) then Result := tyInt32
+  else if (lo >= 0) and (hi <= 4294967295) then Result := tyUInt32
+  else Result := tyInt64;
 end;
 
 { Parse the element spec of `set of <X>` — CurTok is the token after `of`.

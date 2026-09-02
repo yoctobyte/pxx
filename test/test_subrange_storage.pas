@@ -40,6 +40,7 @@ type
   TMid   = 0..70000;
   TBig   = -3000000000..3000000000;
   TChr   = 'a'..'z';
+  TSgn   = -1..1;        { the lib/rtl TValueRelationship shape }
   TPk    = packed record a: TSmall; b: TNeg; c: 0..255; end;
   TArr   = array[0..3] of TSmall;
 var
@@ -49,6 +50,11 @@ var
 
 procedure BumpVar(var v: TSmall);
 begin v := v + 1; end;
+
+function Sgn(v: LongInt): TSgn;
+begin
+  if v < 0 then Sgn := -1 else if v > 0 then Sgn := 1 else Sgn := 0;
+end;
 
 begin
   { sizes — FPC 3.2.2's column, and every one of these moved with the fix }
@@ -75,4 +81,20 @@ begin
   inl := 240; inl := inl + 10; WriteLn(inl, ' ', SizeOf(inl));
   inlN := -90; inlN := inlN - 5; WriteLn(inlN, ' ', SizeOf(inlN));
   c := 'q'; WriteLn(c, ' ', Ord(c));
+
+  { SIGNEDNESS is deliberately NOT asserted by a value row here. It is real --
+    we pick the same rung FPC does, so TypeInfo reports the same ordinal type
+    (test_typeinfo_typedata covers that) -- but no CORRECT program can see it:
+    every value inside the declared range reads back the same signed or
+    unsigned. The only thing that separates them is a {$R-} store of a value
+    outside the type, and FPC's answer there is not a specification we chase.
+    Measured 2026-09-02: `d: 1..10; {$R-} d := 200` gives 200 under FPC and -56
+    here, and that divergence is CHOSEN -- the program already made the mistake
+    the declared range exists to describe. }
+
+  { a subrange as a FUNCTION RESULT -- the shape lib/rtl actually uses, in
+    TValueRelationship (-1..1) and TRoundToRange (-37..37), and the one shape
+    the rest of this test misses: it exercises var and value parameters but
+    never a narrowed RETURN slot. }
+  WriteLn(Sgn(-9), ' ', Sgn(9), ' ', Sgn(0), ' ', Sgn(-9) * 10);
 end.

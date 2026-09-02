@@ -8,8 +8,8 @@
   front of it and not without. ParseTypeKind already had anonymous arms for
   record, procedural, pointer, array and set -- these were the two missing.
 
-  Expected values are fpc 3.2.2 -Mobjfpc -O1's, with one documented exception
-  noted at the SizeOf row. }
+  Expected values are fpc 3.2.2 -Mobjfpc -O1's. The SizeOf row used to be a
+  documented exception and no longer is. }
 program test_anonymous_enum_and_subrange_types;
 
 type
@@ -88,11 +88,15 @@ begin
   for i := Low(n) to High(n) do Inc(trips);
   Chk('loop.trips', trips, 5);
 
-  { SizeOf of a subrange is 4 here and 1 in fpc -- our subranges are stored at
-    the base type's width. compat-pascal-subrange-storage-size, unrelated to
-    this ticket; asserted at the pxx value so a change to THAT rule shows up
-    here rather than drifting. }
-  Chk('sub.sizeof-dialect', SizeOf(n), 4);
+  { SizeOf of a subrange was 4 here and 1 in fpc, because our subranges were
+    stored at the base type's width; they are now stored in the narrowest
+    ordinal that spans the declared range, so this agrees with fpc like every
+    other row. THIS ROW DID ITS JOB: it was asserted at the pxx value expressly
+    so that a change to the storage rule would surface here instead of
+    drifting, and it is what caught the change.
+    compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
+    (the slug the note used to cite has never existed). }
+  Chk('sub.sizeof', SizeOf(n), 1);
   Chk('enum.sizeof', SizeOf(c), 4);
 
   if fails = 0 then WriteLn('ALL OK') else WriteLn('FAILURES ', fails);
