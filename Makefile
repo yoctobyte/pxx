@@ -11142,6 +11142,21 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_ssmw_fm26 "$$($(TESTTMP)/test_ssmw_fm26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_fs26
 	tools/expect_same.sh test_ssmw_fs26 "$$($(TESTTMP)/test_ssmw_fs26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
+	# THE TWO READERS THAT SURVIVED THE FOUR-CAUSE FIX, and every row has a
+	# NEGATIVE partner. This family fails by answering a CONSTANT -- the
+	# pre-fix field-vs-field compare answered TRUE for every input because it
+	# compared two loaded words -- so a suite of must-be-TRUE rows certifies
+	# it as correct. The `ff` row is the one CmpFusible fused into a scalar
+	# address compare: right at -O0 and FALSE at -O1+, so the DEFAULT -O is
+	# the level that catches it and -O0 is the level that hides it.
+	./$(COMPILER) test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/test_ffdr_dm26
+	tools/expect_same.sh test_ffdr_dm26 "$$($(TESTTMP)/test_ffdr_dm26)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\nhello')"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/test_ffdr_ds26
+	tools/expect_same.sh test_ffdr_ds26 "$$($(TESTTMP)/test_ffdr_ds26)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\nhello')"
+	./$(COMPILER) -uPXX_MANAGED_STRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/test_ffdr_fm26
+	tools/expect_same.sh test_ffdr_fm26 "$$($(TESTTMP)/test_ffdr_fm26)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\nhello')"
+	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/test_ffdr_fs26
+	tools/expect_same.sh test_ffdr_fs26 "$$($(TESTTMP)/test_ffdr_fs26)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\nhello')"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26
@@ -16332,6 +16347,10 @@ test-aarch64: $(COMPILER)
 	# ... and the cross-width conversion, which is what actually broke on this
 	# backend: Length() read the prefix at a fixed 8 and answered
 	# 0x6F6C6C654805 -- the length byte followed by the characters of 'hello'.
+	./$(COMPILER) --target=aarch64 test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/a64_ffdr_d
+	tools/expect_same.sh aarch64/ffdr_d "$$(tools/run_target.sh aarch64 $(TESTTMP)/a64_ffdr_d)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\nhello')"
+	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/a64_ffdr_s
+	tools/expect_same.sh aarch64/ffdr_s "$$(tools/run_target.sh aarch64 $(TESTTMP)/a64_ffdr_s)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\nhello')"
 	./$(COMPILER) --target=aarch64 test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a64_ssmw_d
 	tools/expect_same.sh aarch64/ssmw_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a64_ssmw_s
@@ -17868,6 +17887,10 @@ test-riscv32: $(COMPILER)
 	# included, so forcing the wide helper collapses w2n and trunc as well as
 	# pad. Positive control run: with PXXWriteFrozenBW's selection reverted,
 	# pad/w2n/trunc all print <> and the other rows stay green.
+	./$(COMPILER) --target=riscv32 test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/rv32_ffdr_d
+	tools/expect_same.sh riscv32/ffdr_d "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_ffdr_d)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\nhello')"
+	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/rv32_ffdr_s
+	tools/expect_same.sh riscv32/ffdr_s "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_ffdr_s)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\nhello')"
 	./$(COMPILER) --target=riscv32 test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_rv32_ssmw_d
 	tools/expect_same.sh riscv32/ssmw_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_rv32_ssmw_s
@@ -18170,6 +18193,10 @@ test-xtensa: $(COMPILER)
 	# The cross-width conversion, with the NONZERO-field-width rows (`pad`,
 	# `padw`) that certified aarch64 complete by their absence. On xtensa these
 	# share the helper with the plain writes above rather than reaching new code.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/xt_ffdr_d
+	tools/expect_same.sh xtensa/ffdr_d "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_ffdr_d)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\nhello')"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/xt_ffdr_s
+	tools/expect_same.sh xtensa/ffdr_s "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_ffdr_s)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\nhello')"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_xt_ssmw_d
 	tools/expect_same.sh xtensa/ssmw_default "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_xt_ssmw_s
@@ -19088,6 +19115,10 @@ test-arm32: $(COMPILER)
 	# is a runtime quantity, so four backends hand it to a shared helper that
 	# reads the length prefix itself, and that helper hardcoded a machine word.
 	# Verified as a positive control: `pad` collapses to <> without the fix.
+	./$(COMPILER) --target=arm32 test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/a32_ffdr_d
+	tools/expect_same.sh arm32/ffdr_d "$$(tools/run_target.sh arm32 $(TESTTMP)/a32_ffdr_d)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\nhello')"
+	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/a32_ffdr_s
+	tools/expect_same.sh arm32/ffdr_s "$$(tools/run_target.sh arm32 $(TESTTMP)/a32_ffdr_s)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\nhello')"
 	./$(COMPILER) --target=arm32 test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a32_ssmw_d
 	tools/expect_same.sh arm32/ssmw_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a32_ssmw_s
