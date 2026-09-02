@@ -315,6 +315,18 @@ look at THAT.** A comment: read a caller. A slug: open the ticket. Twelve hex
 characters: `git merge-base --is-ancestor <sha> origin/master`, never
 `git cat-file -e`, which answers about your own object store.
 
+**`git fetch` MOVES REFS AND NOT YOUR TREE — so a `find`, `grep` or `ls` right
+after one reads a tree you have just convinced yourself is current.** It does not
+error; it answers about your last pull. Measured twice in one session
+(2026-09-02, this file's own author): a `find` for a ticket reported it in
+`working/` when origin had had it in `done/` for three commits, and the claim
+went to the agent who had just resolved it. **The observation is identical to a
+real defect** — `bug-t-check-has-no-aperture-for-a-ticket-whose-body-records-its-own-completion`
+produces the same "finished ticket still open", so the reading misroutes rather
+than merely being wrong. **The discriminator is a `pull`, not anything about the
+ticket.** Ref-level checks (`merge-base --is-ancestor`, `ls-tree origin/master`)
+are correct after a fetch; anything reading a PATH is not.
+
 **A verification claim scopes to exactly what was checked**, and an unlabelled
 claim travelling beside it inherits that credibility. Name the facts you checked,
 or claim none.
