@@ -4,19 +4,19 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 3d3h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `dc018685fd56` | 2026-09-02T13:51:05Z | RED (native) | 182.9s | `6f6ec7b36e0f` RED |
+| seven | `dc018685fd56` | 2026-09-02T14:02:40Z | RED (full) | 639.1s | `dc018685fd56` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `6f6ec7b36e0f` on seven, 2026-09-02T13:22:23Z (28m ago).**
+**Newest full tier in the fleet: `dc018685fd56` on seven, 2026-09-02T14:02:40Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `6f6ec7b36e0f` | RED | 28m | — (newest) |
-| plexus | `27424c927b65` | RED | 3d3h | 3d2h |
+| seven | `dc018685fd56` | RED | 0m | — (newest) |
+| plexus | `27424c927b65` | RED | 3d3h | 3d3h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -46,6 +46,7 @@ Reading a staler host's map for a cross-target job answers a question about an O
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +48 (seven): bad `cdae8cf6580b`, last good `2d6e7d5c26db`, 2 commit(s) in range
 - **test-core#src:test/test_nilpy_c_pointer.npy** — test/test_nilpy_c_pointer.npy tools/expect_same.sh (seven): bad `fca437d4daaf`, last good `cdae8cf6580b`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy** — test/test_nilpy_import_c_header_still_works.npy tools/expect_same.sh (seven): bad `fca437d4daaf`, last good `cdae8cf6580b`, 1 commit(s) in range
+- **test-threads#src:test/test_nilpy_thread_clone.npy** — test/test_nilpy_thread_clone.npy tools/expect_same.sh +2 (seven): bad `dc018685fd56`, last good `6f6ec7b36e0f`, 1 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
