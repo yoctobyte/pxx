@@ -8,7 +8,7 @@ blocked-by: []
 found: 2026-09-02
 found-by: frankC
 owner:
-summary: "SetLength on a shortstring traps on wasm32 (`wasm trap: unreachable`, rc=134). Correct on riscv32 and x86-64; reproduced under the PINNED compiler, so it predates the phase-2 shortstring work. This is the cause of three of the five rows excluded from test-wasm32 -- test_cross_sets, test_frozen_string_cross_b305 and test_static_string_literal all die at 134 through this path, so it is not a corner case reached only by a probe."
+summary: "CAUSE KNOWN (frankwasm): WasmEmitSetLenStr unconditionally calls the managed-string RTL routine PXXStrSetLen with the slot address -- there is NO frozen arm at all, so this is a MISSING FEATURE failing loud, not a width bug, and it is unaffected by the phase-2 conversion in either direction. SetLength on a shortstring traps on wasm32 (`wasm trap: unreachable`, rc=134). Correct on riscv32 and x86-64; reproduced under the PINNED compiler, so it predates the phase-2 shortstring work. This is the cause of three of the five rows excluded from test-wasm32 -- test_cross_sets, test_frozen_string_cross_b305 and test_static_string_literal all die at 134 through this path, so it is not a corner case reached only by a probe."
 ---
 
 # SetLength on a shortstring traps on wasm32
@@ -37,6 +37,13 @@ It is on the ordinary path, not a shape only a probe produces.
 
 - PINNED compiler reproduces -> predates phase 2 and any local tree.
 - riscv32 and x86-64 correct -> wasm32-only.
+
+## Cause (frankwasm, 2026-09-02)
+
+`WasmEmitSetLenStr` unconditionally calls `PXXStrSetLen` -- the managed-string
+RTL routine -- with the slot address. There is no frozen arm. So the fix is to
+add one, not to adjust a width: this is a missing feature that fails loudly,
+which is the good kind, and it is orthogonal to the byte-prefix work.
 
 ## Related
 
