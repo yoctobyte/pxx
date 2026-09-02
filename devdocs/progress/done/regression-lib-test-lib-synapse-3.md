@@ -115,4 +115,4 @@ Track T measured both directions — v400 builds the trio clean, v399 cannot.
 Found by running the one-line grep that
 [[bug-t-check-has-no-aperture-for-a-ticket-whose-body-records-its-own-completion]]
 proposes, over every open folder. These three were its true positives.
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7001c95b6.
