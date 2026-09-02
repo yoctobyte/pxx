@@ -83,7 +83,7 @@ end;
 procedure DetectPascalRuntimeNeeds(var needsHeap, needsAnsiRuntime, needsDivStub: Boolean);
 { Conservative pre-scan for optional emitted runtime support. Imported units
   are treated as opaque: keep the support bundle if uses is present. }
-var i: Integer; name: AnsiString;
+var i, j, depth: Integer; name: AnsiString;
 begin
   needsHeap := False;
   needsAnsiRuntime := PasDefineExists('PXX_MANAGED_STRING');
@@ -118,6 +118,48 @@ begin
       Shimming moved the dependency; this is where it has to be paid. }
     if Tokens[i].Kind in [tkFloat, tkSlash] then
       needsHeap := True;
+    { A FROZEN STRING WRITTEN WITH A FIELD WIDTH pulls the unit too, for exactly
+      the reason the float paragraph above gives — the dependency was moved and
+      this is where it has to be paid.
+
+      Five of the seven backends hand `write(s:9)` to PXXWriteFrozenW rather
+      than emitting the padding themselves, because the pad is max(0, wid-len)
+      and the length is a RUNTIME quantity; only x86-64 emits it inline. So on
+      those five the helper must be present, and it lives in the block under
+      needHeapUnit. Under -uPXX_MANAGED_STRING nothing else pulls that block in,
+      and `WriteLn(s:9)` for `s: string[10]` failed to build with "compiler
+      error: PXXWriteFrozenW not found". Confirmed pre-existing against the
+      PINNED compiler, so this is not fallout from the byte-prefix work — it is
+      a build combination nothing wired, found by adding a nonzero-field-width
+      row to the phase-2 tests.
+
+      The scan is narrow deliberately. A bare tkColon is in every var
+      declaration and would pull the heap unit into every program on five
+      targets; the field width is a colon INSIDE a write's argument list, so
+      that is what this looks for.
+      feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+    if (Tokens[i].Kind in [tkwrite, tkwriteln]) and
+       (TargetArch <> TARGET_X86_64) then
+    begin
+      j := i + 1;
+      depth := 0;
+      while j < TokCount do
+      begin
+        if Tokens[j].Kind = tkLParen then Inc(depth)
+        else if Tokens[j].Kind = tkRParen then
+        begin
+          Dec(depth);
+          if depth <= 0 then Break;
+        end
+        else if (Tokens[j].Kind = tkColon) and (depth >= 1) then
+        begin
+          needsHeap := True;
+          Break;
+        end
+        else if (depth = 0) and (Tokens[j].Kind <> tkLParen) then Break;
+        Inc(j);
+      end;
+    end;
     if Tokens[i].Kind = tkUses then
       needsAnsiRuntime := True;
     if Tokens[i].Kind = tkIdent then

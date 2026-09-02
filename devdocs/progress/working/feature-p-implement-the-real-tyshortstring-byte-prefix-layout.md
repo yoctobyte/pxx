@@ -835,22 +835,38 @@ re-earns the same green that was wrong.
 this reason. **Wire that file, do not hand-write a width-0 suite.** The
 positive control is recorded: `pad` collapses to `<>` with the fix reverted.
 
-**Call sites of the shared write helper, counted by frankc-af 2026-09-02** —
-this is how much of each backend the pick-don't-add rule actually touches:
+**CALL SITES OF THE SHARED WRITE HELPER — AND THE FIRST COUNT WAS INFLATED,
+WHICH POINTED FOUR BRIEFS AT THE SMALLEST PART OF THE JOB.**
 
-| backend | `PXXWriteFrozenW` | `PXXWriteFrozenBW` | |
-| --- | --- | --- | --- |
-| aarch64 | 2 | 3 | converted, calls both |
-| arm32 | 1 | 2 | converted, calls both |
-| i386 | 2 | 0 | |
-| riscv32 | 2 | 0 | |
-| xtensa | 1 | 0 | |
-| **wasm32** | **6** | 0 | **three times any other backend** |
+A grep of the helper NAME gave wasm32 6 against every other backend's 1-2, and
+that number went into four briefs, led with, as the reason wasm32 was hardest.
+**frankwasm re-counted by opening them: three of the six are comments, and two
+of the three code lines are ONE site (`WasmWriteHelper` then `WasmCall`).** The
+aarch64 row was inflated the same way (one comment, one call), as was riscv32's
+(the call and its own `if procIdx < 0` guard).
 
-**wasm32 has six sites to decide and therefore six chances to reach for a third
-sibling instead of picking between the two that exist.** It is also the backend
-whose codegen is least like the others — a stack VM with helper calls, not
-machine code — so it is the one where "apply the worked example" is least true.
+| backend | real W/BW decision sites |
+| --- | --- |
+| wasm32 | 2, and only **1** is a genuine W-vs-BW choice |
+| all others | 1 |
+
+**The literal path must KEEP `PXXWriteFrozenW` and is not a choice at all:** an
+interned literal is laid out in `Data[]` with an 8-byte prefix by construction
+(`ir_codegen_wasm32.inc` states it at 2596 and relies on it at 2612 and 6281
+via `Strs[si].Offset + 8`), and a literal is never a tyShortString variable.
+Same reason `IR_INDEX`'s `AN_STR_LIT` arm keeps its `-7` permanently.
+
+**This is CLAUDE.md's own rule, broken by the person quoting it all evening:
+*a finding that falls out of a grep needs the same interrogation as one that
+falls out of a hypothesis*.** I relayed the table without opening a single
+site. It did not merely overstate a number — it aimed four sessions' attention.
+
+**WHERE THE REAL wasm32 EXPOSURE IS, and no grep of the helper name reaches
+any of it:** the width-8 assumptions spread through the backend — `Length`
+loading the prefix as an `i32.load` at offset 0 and treating it as the low word
+of an 8-byte field (4305), the frozen store and copy paths (4588, 4683), and
+several `+ 8` address computations. **"Pick, don't add a third" still stands
+and is still cheap; it was simply never the hard part.**
 
 ### The per-target guard is ONE ROW PER TARGET so parallel work does not collide
 
