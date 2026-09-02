@@ -507,12 +507,13 @@ _none_
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-t-windows-wine-harness | M | 20 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
 
-## backlog-docs (2)
+## backlog-docs (3)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-d-claude-md-still-prescribes-a-touch-the-stamp-fix-made-unnecessary | D | 45 | bug | CLAUDE.md's per-fix-loop section tells readers to `touch` the sources after seeding a tree from outside, because a copied-in binary's mtime made `make compiler/pascal26` a no-op that exits 0. The $(COMPILER_STAMP) mechanism closed that hole; measured 2026-08-30, a cp'd seed newer than every source still builds and converges. The instruction is now cargo, and it sits in the one section that is the single source of truth for gating. | — |
 | bug-d-docs-scope-claims-about-a-flag-are-invisible-to-a-flag-existence-sweep | D | 35 | bug | A THIRD population of docs-vs-compiler defect, which no existing check can see: the flag exists, the docs name it, and the docs are wrong about WHICH TARGETS OR SOURCES it applies to. Measured instance fixed here -- `--emit-obj` was documented as working `on any target` and is refused on 3 of 6 backends. A grep of docs against the parser's flag table cannot detect this class, because the flag is in both lists and the page still lies. | — |
+| feature-d-a-representation-contract-because-there-is-no-spec-to-appeal-to | D | 60 | feature | OWNER'S FRAMING, and it is the reason this is not ordinary doc work: *'there is no formal OOP specification. delphi just does as they see fit, FPC did the same, trying to emulate delphi.. and we take (most of) their design decisions as FPC is de-facto standard in 2026.'* So for representation questions THERE IS NOTHING TO APPEAL TO, and our documentation IS the specification for pxx. NOT starting from zero: `docs/language/types.md` (393 lines) already documents sets as a 32-byte bitset and `Real` per target — and the `Real` section is the MODEL to copy, because it states size, STRIDE and the file/wire consequence together. The gap is that the contract is scattered and never separates GUARANTEED from incidental. What to add: fixed strings (`cap+8` today, `cap+1` for `string[N<=255]` once the byte-prefix work lands — hence the blocker), plain `string` as a managed handle, record padding and packing (measured to match FPC exactly), and what `file of T` can blit versus must marshal. Plus a named list of deliberate divergences from FPC with the reason, since `known-incompat/` is internal and a user never sees it. | feature-p-implement-the-real-tyshortstring-byte-prefix-layout |
 
 ## backlog-esp (2)
 
@@ -1354,6 +1355,7 @@ _none_
 - **2** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
 - **2** — decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part
 - **2** — decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
+- **2** — feature-p-implement-the-real-tyshortstring-byte-prefix-layout
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
 - **1** — bug-a-emitzeroframeslot-has-no-wasm32-arm
@@ -1378,7 +1380,6 @@ _none_
 - **1** — feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-os-targets-bsd-mac
-- **1** — feature-p-implement-the-real-tyshortstring-byte-prefix-layout
 - **1** — feature-pal-esp-posix-fd-semantics
 - **1** — feature-pcl-win32-widgetset
 - **1** — feature-port-freebsd-native
