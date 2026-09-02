@@ -9,7 +9,7 @@ created: 2026-09-02
 found-by: frankD
 owner:
 blocked-by:
-summary: "`mv A B` on the i386 build RENAMES A TO B SUCCESSFULLY and then prints `mv: can't stat 'B/A': Not a directory` and exits 1. The move happens; the error is an EXTRA LOOP ITERATION after it. So the suspect is not the destination check and not stat -- it is the do-loop terminator at coreutils/mv.c:188, `while (*++argv && *argv != last)`, which ends the loop by POINTER IDENTITY against `last = argv[argc - 1]` (line 82). The gcc -m32 build of the identical source ends the loop after one pass. stat/lstat/S_ISDIR/errno are measured out across four builds. Reproduces at `--applets "mv cp"` -- 34 objects, 14 cases, a few minutes -- so the 140-applet run is NOT needed to work on it. One-line repro in the body."
+summary: "`mv A B` on the i386 build RENAMES A TO B and THEN errors with `can't stat 'B/A'`, exit 1. Sharp boundary: every command that reaches mv.c's `goto DO_MOVE` (destination not a directory -- including `-T`, which is a SECOND such goto) fails this way, and every command that enters the loop normally (`mv A DIR`, `mv -t DIR A`) is correct. On the extra pass `*argv` is still the FIRST argument -- the message says `B/A`, not `B/B` -- so the `++` in `while (*++argv && *argv != last)` did not take effect for that pass. REFUTED by measurement, all four builds identical: argc/argv pointer identity, the terminator itself, a goto into a do-while body, the same under register pressure at -O0 and -O2, and stat/lstat/S_ISDIR/errno. Not optimiser-dependent (-O1 and -O2 both). Reproduces at `--applets "mv cp"` (34 objects) and a single TU can be swapped and relinked in seconds -- rig in the body. Next step is instrumenting mv_main, which will most likely re-lane this to A."
 ---
 
 # The case
@@ -134,3 +134,83 @@ not an `mv` bug at all and the ticket re-lanes to A.
 The title and summary above were rewritten on this pass. The originals said mv
 "treats a plain-file destination as a directory", which is what the message
 looks like and is not what happens.
+
+# 2026-09-02, night — the argv hypothesis is REFUTED, and the boundary is sharp
+
+Everything in the section above about `coreutils/mv.c:188` and pointer identity
+is **wrong**, and it is left standing only because the measurement that killed
+it is the useful part. Each row below is a separate probe, all four builds
+(`gcc`, `gcc -m32`, `pxx`, `pxx --target=i386`) unless stated.
+
+| probe | result |
+| --- | --- |
+| `argc`, every `argv[i]` slot and value, and `last = argv[argc-1]` | **identical** on all four |
+| the terminator `do {} while (*++argv && *argv != last)`, 1 and 2 passes | **identical** on all four |
+| a `goto` from outside INTO a `do-while` body, skipping the statements above the label | **identical** on all four |
+| the same, with eight extra live locals for register pressure, at `-O0` and `-O2` | **identical** on all four |
+
+So the loop shape, the jump into it, and the argv it walks are all exonerated at
+C level on i386. The bug is not where the first two versions of this ticket said.
+
+## What the applet actually does — the sharp boundary
+
+Against the built `p_i386/mv`, one temp dir per row:
+
+| command | result |
+| --- | --- |
+| `mv A NEW` (dest does not exist) | **moves, then** `can't stat 'NEW/A'` |
+| `mv A EXIST` (dest is a plain file) | **moves, then** `can't stat 'EXIST/A'` |
+| `mv -T A NEW` | **moves, then** `can't stat 'NEW/A'` |
+| `mv A DIR` (dest is a directory) | **correct, silent** |
+| `mv -t DIR A` | **correct, silent** |
+
+**Every failing row is one that reaches `goto DO_MOVE`; every correct row enters
+the loop normally.** `-T` failing with it matters: that is the second, separate
+`goto DO_MOVE` at line ~102, so this is about the jump, not about one branch.
+
+**And `'NEW/A'` is the sharpest fact in the ticket.** The concatenation is
+`concat_path_file(last, bb_get_last_path_component_strip(*argv))`. On a genuine
+second pass `*argv` would be `NEW` and the string would be `NEW/NEW`. It is
+`NEW/A`, so **on the extra pass `*argv` is still the FIRST argument** -- the
+increment in `*++argv` did not take effect for that pass, and then did on the
+next one, which is why it terminates instead of spinning.
+
+Not optimiser-dependent: `-O1` and `-O2` reproduce identically.
+
+## The measurement rig, which is the reusable part
+
+Two things make this cheap now, and both were expensive to find:
+
+1. **It reproduces at `--applets "mv cp"`** -- 34 objects, 14 cases, a few
+   minutes. The 140-applet run is not needed.
+2. **One TU can be swapped without rebuilding anything else.** With
+   `--separate --keep`, recompile the single wrapper and relink:
+
+   ```
+   cd $WORK
+   ( cd $BB && pascal26 --emit-obj -O2 --target=i386 -I. -Iinclude -Ilibbb \
+       $WORK/wrap/coreutils_mv.c $WORK/obj/coreutils_mv.o )
+   gcc -m32 -o /tmp/t/busybox obj/*.o && ln -sf busybox /tmp/t/mv
+   tools/run_target.sh i386 /tmp/t/mv A NEW
+   ```
+
+   busybox dispatches on `argv[0]`, so the symlink is required -- invoking the
+   binary by any other name answers `applet not found`, which reads like a build
+   failure and is not one.
+
+**`-O0` is NOT available for this bisection**, and the reason is busybox's, not
+ours: `obj/coreutils_mv.o:(.data+0x600): undefined reference to
+`BUG_xatou32_unimplemented'`. That symbol is a deliberate link-time assertion
+which only disappears when the compiler folds a provably-dead branch, so an
+unoptimised busybox TU cannot link. Do not read it as an i386 regression.
+
+## Next measurement
+
+Instrument `mv_main` itself -- print `argc` and `optind` immediately after
+`argv += optind`, then `last`, `*argv` and `argv` at the top of the body and
+again at the `while` -- using the single-TU swap above. That distinguishes the
+two survivors: `argv` being re-read from a stale location after the inbound
+jump, versus the `++` being applied to a copy. Both are backend concerns, so
+**this most likely re-lanes to A**; it has not been re-laned yet because no
+measurement has yet put the fault below the C level, and the four probes above
+each failed to.
