@@ -150,6 +150,46 @@ aggregate. frankB's `guard` and `tail` rows are that instrument — a declared
 neighbour, written before and read after, which fails when the stride walks past
 the end regardless of what the values say.
 
+### VARY THE CAPACITY BETWEEN NEIGHBOURING DECLARATIONS — a same-cap neighbour hides the bug
+
+Third instrument failure for this umbrella, from frankB closing
+`bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes`
+(2026-09-02), and the sharpest of the three because the test looks thorough.
+
+`P(var a: array of string[10])` was CORRECT. `P(var a: array of string[10];
+t: LongInt)` strode 263. **The FOLLOWING parameter's type decided the
+PRECEDING one's layout** — `AllocParam` reads `LastTypeStrCap`, a parse-window
+return channel, from the ALLOCATION loop, which runs only after every
+parameter's type has been parsed.
+
+**The hazard: with `t: string[10]` following, the wrong answer and the right
+answer COINCIDE.** A test that puts a same-capacity frozen-string neighbour
+after the array is green against the bug. So a test does not merely need a
+frozen string present — it must **VARY the capacity between neighbouring
+declarations**, or the parse-window carry-over is invisible.
+
+That generalises past this bug to anything in this umbrella tested with
+neighbouring declarations: two fields, two parameters, two locals of the same
+capacity cannot distinguish "each read its own" from "the second's value was
+used for both."
+
+**Checked for siblings, and the parameter path is clean.** The `LastType*`
+parse-window family has **27 members**; `pasparser_proc.inc` stages **11** into
+per-param `ptypes*` columns (Rec, SetEnum, Enum, StrElemTk, PtrElemTk,
+PtrElemRec, PtrDepth, PtrBaseTk, PtrBaseRec, ProcSig, and now StrCap). Of the
+remaining 16, **none is read in the parameter allocation loop** — the only
+other appearance in that file is `LastTypePointerStrElemTk` at line 1205, which
+is the RETURN type, parsed once rather than per-parameter. So capacity was the
+last unstaged member on the PARAMETER path, and there is no fifth instance
+waiting there.
+
+**Residual, and it has an owner: this checked ONE path.** The bug shape is
+"read a parse-window global outside its window", and parameters are one site
+among several — frankB found three distinct causes across four sites for this
+one ticket. Record fields, array elements and the pointer-element carriers were
+not swept. Whoever next touches a `LastType*` reader outside `pasparser_proc.inc`
+owns that question.
+
 ### A PINNED CONTROL IS ONLY A CONTROL UNTIL THE NEXT PIN
 
 Three members of this umbrella rest on a pinned-compiler positive control, and
