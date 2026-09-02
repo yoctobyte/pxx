@@ -97,4 +97,4 @@ unity is impossible for gcc too, measured.
 
 ## Log
 - 2026-09-02 — GREEN: 400 translation units, 400 objects, one real link, all 619 cases byte-identical to the gcc oracle, at compiler 20953dc0444e.
-- 2026-09-02 — resolved, commit PENDING-COMMIT.
+- 2026-09-02 — resolved, commit bc030527e.
