@@ -89,6 +89,21 @@ an extracted body shows up as a real cross-target failure rather than as a
 silent shape change. Run them, and pair them with the byte-identity control
 above, which is the check that catches a change that is wrong but still passes.
 
+**Use the Makefile rows, not a sweep harness.** Verified 2026-09-02 at both
+layers: lines 15394/16238/16950/18727 delegate to `tools/run_target.sh`, and
+neither that script nor `tools/expect_same.sh` imposes a timeout — it is a bare
+`exec qemu-<arch>`. frankC's own sweep harness wraps the same rows in a
+**10-second** limit and produced a dozen "differences" in one day that were all
+that timeout firing under qemu contention; every one was identical at 90s. **Do
+not read a timeout as a verdict.**
+
+The inverse is the cost of the same property, and it is worth knowing before
+you run these under contention: with no limit, a HANG in an extracted body
+blocks instead of failing. That is the deliberate trade the nilpy rows make in
+the other direction (see the Makefile's own comment at ~3082, *"the failure mode
+is a HANG, and a runner that waits forever"*). For a wrong-value regression,
+which is what this refactor risks, unbounded is the right choice.
+
 ## Position of the transplant's author
 
 Recorded because it is the thing that would otherwise be lost in a message
