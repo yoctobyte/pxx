@@ -364,6 +364,21 @@ assertion is PHYSICALLY able to observe before trusting it**; a positive control
 drawn from the right population still passes if the instrument reads the wrong
 quantity.
 
+**AND CHOOSE A PROBE WHOSE RIGHT ANSWER DIFFERS FROM THE DEFAULT — an expected
+value that COLLIDES with the failure value is a guard that cannot fail, even
+when the assertion class is right and the control is drawn from the right
+population.** Measured 2026-09-02 (frankc-af, closing the C members of
+`umbrella-sizeof-is-one-answer`): `sizeof(*s.fp)` for `int (*p)[4]` answered
+**4**, and 4 is not the element size — it is `TypeStorageSize(tyUnknown)`,
+i.e. *nothing was recorded*. **The `int` spelling cannot tell a correct answer
+from a blank one**, because the unknown default equals `sizeof(int)`. Only
+`double (*dp)[4]` answering 4 rather than 8 separated them, and the umbrella's
+own example had asserted that row for a day while it was already stale. So the
+question is not only "can this guard fail" but **"if the machinery did nothing
+at all, would this row still pass?"** — wherever a type's default, a zero, a
+`sizeof(int)` or a pointer width is also the expected value, the answer is yes.
+Re-derive any size row expecting 4 or `sizeof(void*)` before trusting it.
+
 ## Debugging — measure, do not reason
 
 **The expensive bugs here do not crash; they produce a plausible wrong value far
