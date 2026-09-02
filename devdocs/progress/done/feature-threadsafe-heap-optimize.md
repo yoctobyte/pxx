@@ -2,15 +2,15 @@
 track: A
 prio: 53  # auto
 owner: frankA
+summary: "DONE 2026-09-02. Acceptance met: the multi-thread alloc benchmark scales instead of cliffing, `--threadsafe` is accepted and correct on x86-64/i386/aarch64/arm32 (riscv32 refuses deliberately — ESP32-C3 is FreeRTOS, not clone(2)), single-thread alloc is faster not slower, and the self-host fixedpoint holds. DELIVERED BY THE OWNER, not by this ticket''s plan: 250fdc6bd added a lock-free per-thread magazine for GetMem/FreeMem (size-class bins in the thread''s TLS block, fast path emitted at the tkGetMem/tkFreeMem sites) and went AROUND the lock split rather than through it. Re-measured here with an interleaved A/B against a live -dPXX_NO_HEAP_MAG control: the control RISES with threads (vs1x100 100 -> ~170 -> ~250 -> ~400) and the magazine FALLS (100 -> ~140 -> ~75 -> ~36). Also closed out the 2026-08-31 two-lock/ABA design thread by running the falsifier it named: EmitDynArrayUnique had ZERO call sites and PXXDynArrayUnique none either — the copy-on-write path was deleted when dynamic arrays were settled as reference types — so both the obstacle and the argument dissolving it were about code that no longer runs. Both routines deleted (67 lines), verified dead rather than believed dead, and DCE was NOT stripping them: test_dynarray''s executable segment dropped a page with identical output. WHAT REMAINS is split out as feature-a-o-the-refcount-lock-is-still-global-but-nobody-has-measured-that-it-costs, deliberately NOT as a continuation, because its promise is an instruction census and not a measurement."
 ---
 
 # Threadsafe heap — optimize + cross-target (M5)
 
 - **Type:** feature (codegen / runtime — optimization) — Track A
-- **Status:** unfinished (parked 2026-08-31 — nothing is applied; the 04:40
-  note ends "Still parked". Moved out of `working/` by frankA, who is not on
-  it: the last code landed 2026-08-20 and the folder was claiming otherwise.
-  Free to take.)
+- **Status:** done (2026-09-02 — acceptance met and independently re-measured;
+  see the closing section. It was parked 2026-08-31 as "nothing is applied",
+  which was true then.)
 - **Opened:** 2026-06-30
 - **Umbrella:** [[meta-multithreading]]. Follows the M0 contract
   [[feature-threadsafe-heap-contract]] (correctness) — this is the *speed* half.
@@ -439,3 +439,110 @@ about, so it does not get to be self-certifying. Before any code:
 Still parked. Nothing here is applied; this replaces the obstacle in the
 morning's note rather than clearing the ticket.
 
+
+## 2026-09-02 (frankA) — RESOLVED. The acceptance is met, and the obstacle above was about code that had already been deleted.
+
+Took this off `next --track A` and re-measured before doing anything, because
+every note above is dated and this one names counts. Two things had changed
+underneath it, and neither was recorded here.
+
+### 1. The magazine landed — the owner wrote it, on 2026-09-01
+
+`250fdc6bd`: a lock-free per-thread magazine for `GetMem`/`FreeMem`, size-class
+bins in the thread's TLS block, fast path emitted at the `tkGetMem`/`tkFreeMem`
+sites. Not per-thread ARENAS — the census showed bump=3 against 1955448 reuse,
+so privatising the arena would have moved three allocations out of two million.
+That is the "step 2" of the 2026-08-21 plan, reached without step 1.
+
+**Verified independently rather than taken from the commit message**, because
+this ticket is being closed on it. `make benchmark-threadsafe-heap`'s program
+built both ways, interleaved A/B, three rounds, on this box:
+
+| `vs1x100` | 1 | 2 | 4 | 8 |
+| --- | --- | --- | --- | --- |
+| `-dPXX_NO_HEAP_MAG` | 100 | 168–210 | 162–258 | 281–410 |
+| default (magazine) | 100 | 127–156 | 66–82 | 35–38 |
+
+**The shape is the result.** The control RISES with threads — that is the
+single-lock cliff this ticket was filed for — and the magazine FALLS below 100,
+which is constant total work actually being done in parallel. Positive control
+on the arms themselves: the two binaries differ by 136782 bytes, so
+`-dPXX_NO_HEAP_MAG` is live and not a no-op flag.
+
+### 2. The 2026-08-31 obstacle, and the argument that dissolved it, are BOTH about deleted code
+
+The morning note priced step 1 around `EmitDynArrayUnique` needing two locks.
+The evening note dissolved that with a careful copy-on-write immutability
+argument, and — to its credit — named exactly what would falsify it:
+
+> The claim "another thread wishing to write must call `Unique` first" is a claim
+> about **codegen** … It needs checking against `EmitDynArrayUnique`'s call
+> sites — every mutating path on a dyn array must route through it.
+
+**Ran that check. There are no call sites.** `EmitDynArrayUnique` had zero
+callers, and `PXXDynArrayUnique` had none either — its only would-be caller was
+the `FindProc` inside the dead emitter. The COW path was removed when
+`decide-dynamic-array-value-vs-reference-semantics` settled dynamic arrays as
+REFERENCE types (`bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing`):
+`IR_DYNUNIQUE` is now a bare deref "at every depth", and the node survives only
+because four backends emit it and it carries element metadata.
+
+So the whole two-lock/ABA thread was reasoning about a routine that no longer
+runs. Neither note was wrong when written; both were about a shape the tree had
+already lost. **Checking the falsifier the argument named would have ended it in
+one grep, and the argument is the thing that made the grep feel unnecessary.**
+
+### Deleted, verified rather than believed
+
+`EmitDynArrayUnique` (`ir_codegen.inc`, 12 lines) and `PXXDynArrayUnique`
+(`builtin/builtinheap.pas`, 55 lines + its forward). Verified dead by an
+exhaustive repo grep for both names outside `devdocs/`, `.map` artefacts and the
+frozen `stable_linux_amd64/` copy — nothing resolves either by name, and
+`IR_DYNUNIQUE`'s own arm reads as a bare deref.
+
+**DCE was not stripping it.** `test_dynarray`'s executable segment dropped a
+full page (73728 → 69632 bytes; the segments are page-aligned so this is a
+lower-bound reading, not the routine's exact size) while its output stayed
+identical, so every dyn-array-using binary had been carrying the dead
+copy-on-write routine. 46/47 of the dynarray corpus green (the 1 is
+`test_dynarray_concat_rejected`, a negative test that must fail to compile), and
+because `builtinheap.pas` is SHARED runtime rather than an x86-64 file,
+`test_dynarray` + `test_cross_dynarray` were re-run on i386, aarch64, arm32 and
+riscv32 — all eight match the native output.
+
+Also corrected `ir_codegen_arm32.inc:3729`, which still told its reader that
+"x86-64 reaches the same data pointer via a full COW-aware `PXXDynArrayUnique`
+call". That has been false since the clone was deleted, and it is the kind of
+comment that sends the next reader looking for a backend difference that no
+longer exists.
+
+### Against the acceptance
+
+- *"Multi-thread alloc benchmark scales (no single-lock cliff)"* — **met**, table above.
+- *"`--threadsafe` accepted + correct on the cross targets"* — **met**: x86-64,
+  i386, aarch64, arm32. riscv32 still refuses and that is deliberate — it is the
+  ESP32-C3 target, FreeRTOS rather than `clone(2)`.
+- *"single-thread alloc unchanged"* — the 1-thread column is the magazine's own
+  fast path and is faster, not slower.
+- *"self-host byte-identical"* — `converged after 1 round(s)`; `tools/gate.sh
+  quick` GREEN with the FPC seed canary PASS (run dirty, so not the SKIP path).
+
+### What is NOT closed, and it is deliberately a separate ticket
+
+The refcount critical sections still take the global heap lock —
+`EmitManagedLocalCleanupForTarget` (5), `EmitDynArrayRetain`/`ReleaseForSym`/
+`ReleaseForNode` (3), `symtab.inc` (2), plus `EmitAnsiStringRuntime`'s 7 mixed
+sites. Step 1 of the 2026-08-21 plan, and it survives this ticket's closure
+because the magazine went around it rather than through it.
+
+**It is not filed as a continuation of this one, because its PROMISE is
+unmeasured.** This ticket's benchmark is alloc/free-heavy and the magazine
+already flattened it; nobody has shown that the refcount lock is a bottleneck in
+any workload. Filed as
+[[feature-a-o-the-refcount-lock-is-still-global-but-nobody-has-measured-that-it-costs]]
+with the measurement that would establish the promise named in it — per the
+O-lane rule that a level or an optimisation needs delivered value measured, not
+opportunity inferred from an instruction census.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

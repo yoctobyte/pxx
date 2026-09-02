@@ -3724,11 +3724,15 @@ begin
             pointer -- correct for THAT caller, but indexing always needs to
             read the array's own handle to use as a base; the real write
             happens at the computed element address further down, not to the
-            array's handle slot. Deref once more to reach it (v1: no COW here
-            either, matching the rest of this backend -- x86-64 reaches the
-            same data pointer via a full COW-aware PXXDynArrayUnique call
-            instead of a bare deref, but nothing on this backend tracks array
-            aliasing to make that distinction matter yet). }
+            array's handle slot. Deref once more to reach it -- no COW, which
+            is now the rule on EVERY backend rather than this one lagging.
+            This comment used to say x86-64 reached the same data pointer via a
+            COW-aware PXXDynArrayUnique call; that stopped being true when
+            decide-dynamic-array-value-vs-reference-semantics settled dynamic
+            arrays as REFERENCE types and the clone was deleted at every depth
+            (bug-a-x86-64-dynarray-assignment-copies-instead-of-aliasing). The
+            emitter and its runtime half are gone; a bare deref is the whole
+            story here and on x86-64 alike. SetLength still detaches. }
           EmitI32($E5900000);  { ldr r0, [r0] = data ptr }
         end
         else if IRIndexNeedsStrCOW(left, elemSize) then

@@ -834,18 +834,6 @@ begin
   EmitReleaseHeapLock;
 end;
 
-procedure EmitDynArrayUnique(symIdx: Integer; elemSize: Integer);
-var procIdx: Integer;
-begin
-  procIdx := FindProc('PXXDynArrayUnique');
-  if procIdx < 0 then Error('compiler error: PXXDynArrayUnique not found');
-
-  EmitAcquireHeapLock;
-  EmitAsmX64(['mov rdi, rax', 'mov rsi, @data', GetOrAllocSymRTTI(symIdx)]);
-  EmitCallProc(procIdx);
-  EmitReleaseHeapLock;
-end;
-
 procedure EmitAnsiStrFromLiteral;
 var procIdx: Integer;
 begin
