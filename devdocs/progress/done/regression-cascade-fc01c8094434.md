@@ -1,5 +1,8 @@
 ---
 prio: 70
+track: T
+summary: "RESOLVED — all 38 jobs green at 9c6b216aa. Verified by running each one through `testmgr --job`, which owns the recipe, never by a hand-rolled comparison. Six of the 38 were already closed elsewhere (five conformance shards and tools-devtest#00); the other 32 ran here, 32/32 GREEN, row count asserted against the job list and an unmatched-job control run to prove a GREEN means a job ran. No cause is named and none is guessed: the 87-commit range was never bisected, the watcher skips cascades by design, and by the time anyone looked the reds were gone."
+status: done
 ---
 
 > **origin/master has advanced 8 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -123,3 +126,57 @@ indistinguishable in the filing.
 whether plexus's gap has a cause of its own — a box that stops sweeping for six
 hours is its own finding, and it is the one nobody files because the reports it
 did not write are not in `tstate/` to be counted.
+
+## RESOLVED (frankZ, plexus, 2026-09-02) — 38/38 green, and no cause named
+
+**Binary `23e9a1d6a3775ac2`, commit `9c6b216aa`, tier `limited`, one job per
+invocation.** `BIN_AFTER` equals `BIN_BEFORE`: nothing moved under the sweep.
+
+| set | how it was checked | verdict |
+|---|---|---|
+| 30 `test-nilpy` + `test-core#test_opt_store_reload` + `test-asm#test_asm_emit_rv32` | `testmgr --job` per job, 32 invocations | **32/32 GREEN** |
+| `test-pascal-conformance#shard{1..5}/6` | all six shards run at `922dfa971` | 0 fail |
+| `tools-devtest#00` | resolved earlier on this umbrella (three faults) | closed |
+
+**The GREENs were controlled, not assumed.** Two independent checks, because a
+sweep that ran nothing reports identically to a sweep that passed:
+
+1. The job list was asserted at **32 rows** before the loop started and the
+   verdict file asserted at 32 rows after. That check exists because an earlier
+   attempt at this same sweep read from a file the hook had refused to create,
+   iterated **zero** times, and exited 0.
+2. **Unmatched-job control:** `--job 'test-nilpy#src:test/test_nilpy_THIS_DOES_NOT_EXIST.npy'`
+   prints `no jobs match` and exits 1. It does not print GREEN. So each of the
+   32 GREENs is a job that actually ran.
+
+## The harness lesson, and it is mine
+
+The first pass at these 30 NilPy jobs compared each program's output against
+`test/<name>.expected` and reported **11 failures**. All eleven were exactly the
+tests that have **no `.expected` file** — the Makefile compares those against an
+inline `printf` string. `diff` against a missing file errors, and the loop read
+that as a failing test. `test_nilpy_optional_param`, one of the eleven, then
+passed in 2.1s under the real recipe.
+
+`d27c304e1`'s rule generalises straight onto it: **an instrument that answers
+about something else does not error, it answers.** The fix was not a better
+`diff` — it was to stop hand-rolling the comparison and call the thing that owns
+the recipe. `PXX_ALLOW_FULL_SUITE=1` is what one job past the quick tier costs,
+taken autonomously; it is a SPEED guardrail.
+
+## No cause is named, and that is the honest answer
+
+This was filed as ONE root cause across 38 jobs, 87 commits in range, with
+`No idle bisect will happen — the watcher skips cascades deliberately`. Nobody
+narrowed it by hand, and three days later every job is green. The range is still
+87 commits wide and bisecting a cascade that no longer reproduces would buy
+nothing. **Naming a plausible commit from the range would be attribution by
+topic**, which this repo has been burned by twice; the range stays on the record
+above for anyone who ever needs it.
+
+The residual worth keeping is structural rather than about these 38 jobs: a
+cascade filing gets no bisect, so it can only ever be closed by someone
+re-running it. That is Track T's to decide on, and it is not a regression.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

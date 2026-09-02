@@ -91,7 +91,7 @@ _none_
 | umbrella-compile-and-run-dosbox | C | 90 | umbrella | GOAL, not a unit of work. The flagship real-program proof: a large real C/C++ codebase that either builds and runs or does not, with no partial credit to award ourselves. Owner named it first when stating the goal. Attach whatever the ATTEMPT breaks on -- do not pre-populate this from the backlog by guessing. | bug-a-an-object-neither-exports-nor-imports-data-symbols-and-links-silently-wrong, feature-c-corpus-busybox-multi-applet |
 | umbrella-cross-target-codegen-is-correct | A | 80 | umbrella | GOAL, not a unit of work. The owner's ranking: 'cross platform has way prio above look-if-I-do-this-on-platform-that-it-would-break-z'. A program that compiles right on one target and wrong on another is the defect this umbrella exists for; a hypothetical about an untried platform is not. Measured target clusters: xtensa 11, riscv 8, arm32 5, i386. | bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs, bug-a-i386-c-main-gets-argc-and-argv-swapped, bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket, feature-a-a-stackful-generator-is-x86-64-only-so-examples-chess-cannot-target-anything-else, feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build, feature-a-port-alloca-to-i386-arm32-and-riscv32 |
 | umbrella-managed-memory-is-correct | A | 75 | umbrella | GOAL, not a unit of work. The owner named memory management as ranking above float-bit and parity work. This is the axis a real program hits hardest and where a wrong answer is silent: a leak, a double free, a refcount that disagrees with itself. Correctness is the case here -- the perf profile is deliberately NOT the argument. | bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower, bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-string-release-has-two-implementations-that-already-disagree, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, feature-a-reentrant-heap-lock-and-per-thread-arenas |
-| umbrella-one-full-tier-run-with-no-red-tier | T | 85 | umbrella | GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk. | regression-cascade-fc01c8094434, regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2 |
+| umbrella-one-full-tier-run-with-no-red-tier | T | 85 | umbrella | GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk. | regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2 |
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
@@ -239,7 +239,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (97)
+## backlog-nilpy (96)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -339,9 +339,8 @@ _none_
 | perf-nilpy-remaining-perbyte-string-builders | N | 40 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-n-two-import-handlers-are-twins | N | 45 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
-| regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60→85 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 
-## backlog-tools (73)
+## backlog-tools (72)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -414,7 +413,6 @@ _none_
 | idea-t-watch-the-closest-call-approach-not-the-image-size | T | 40 | idea | The obvious guard against xtensa reach failures is a watch on image size, and it would NOT WORK: measured 2026-09-01, the 622444B call0 image FAILS and the 556908B windowed image BUILDS, both over CALL8's 524288 -- the larger one is the one that builds, because the condition is max caller->callee distance and size is only a proxy. Watch closest approach to +-512 KiB across call sites instead; the xtensa backend already computes it to emit its refusal, so this is a report, not a new analysis, and it changes no codegen. | — |
 | meta-t-dev-throughput-and-track-a-t-integration | T | 30 | meta | META: development is wait-limited, not token-limited. Dev tracks stop running suites; T owns breadth and its report LATENCY becomes the product. Coordinates the tooling tickets that get us there. | — |
 | refactor-t-the-automated-pin-stages-the-stable-tree-by-a-hardcoded-path | T | 20 | refactor | NOT a present fault -- verified correct today. The automated pin path in tools/testmgr.py stages the stable tree with `git add -u <root>` plus an explicit `git add <root>/default/builtin`. The second call is what saves it, and it saves it by NAMING the one directory that has ever needed saving. `git add -u` stages tracked files only, so any FUTURE directory added under the stable root is silently left untracked in the pin commit, exactly as builtin/ was before that line existed. Correct by hardcoded path rather than by rule. | — |
-| regression-cascade-fc01c8094434 | T | 70→85 | regression | regression CASCADE: 38 jobs newly red in 5dbcc861e..fc01c8094 (87 commits) — auto-filed by twatch | — |
 | regression-test-core-test-setlen-in-parallel-for-body-2 | T | 70→85 | regression | regression: test-core#src:test/test_setlen_in_parallel_for_body.pas at 456361785e34 in step 2/2, `tools/expect_same.sh test_setlen_parfor26 "$(/tmp/test_s` (auto-filed by twatch) | — |
 | task-t-a-corpus-tree-absence-should-be-counted-not-just-echoed | T | 45 | task | A test row whose corpus tree is absent echoes SKIP and passes, and nothing counts how many did. Measured on this box: test-core's crtl_tiny_regex_match row was UNGUARDED, so a missing library_candidates/tiny-regex-c hard-errored and — because make stops at the first failing recipe line — took 844 of test-core's 1745 compile rows (48%) with it, with no indication in the log of how much had not run. Guarding it (2026-09-01) fixes that and buys the opposite failure: testmgr's own TIERS comment records test-fgl printing SKIP and PASSING for its entire life without running once. Both failure modes are live in this repo TODAY. The missing mechanism is the same one test-c-abi-mixed-link now has: count the skips and report `N of M measured, K skipped`, so a box quietly running half the suite is visible in the verdict instead of indistinguishable from a green one. | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
@@ -859,9 +857,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3089)
+## done (3091)
 
-3089 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3091 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -943,11 +941,9 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 90] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
-- [p 85] [T] regression-cascade-fc01c8094434 (unblocks 1)
 - [p 85] [P] regression-lib-test-lib-synapse-3 (unblocks 1)
 - [p 85] [P] regression-lib-test-lib-synapse-ssl (unblocks 1)
 - [p 85] [P] regression-lib-test-lib-synapse-transitive-unit (unblocks 1)
-- [p 85] [N] regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native (unblocks 1)
 - [p 85] [T] regression-test-core-test-exception-unhandled-3 (unblocks 1)
 - [p 85] [T] regression-test-core-test-setlen-in-parallel-for-body-2 (unblocks 1)
 - [p 85] [T] feature-t-grade-a-pin-instead-of-gating-it
@@ -1442,10 +1438,8 @@ _none_
 - **1** — feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host
 - **1** — feature-target-wasm
 - **1** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
-- **1** — regression-cascade-fc01c8094434
 - **1** — regression-lib-test-lib-synapse-3
 - **1** — regression-lib-test-lib-synapse-ssl
 - **1** — regression-lib-test-lib-synapse-transitive-unit
-- **1** — regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native
 - **1** — regression-test-core-test-exception-unhandled-3
 - **1** — regression-test-core-test-setlen-in-parallel-for-body-2

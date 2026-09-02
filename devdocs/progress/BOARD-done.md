@@ -2680,6 +2680,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-cascade-b45c759f9e65 | T | 70 | regression | regression CASCADE: 15 jobs newly red at b45c759f9e65 (auto-filed by twatch) | — |
 | regression-cascade-d24df3f09efb | T | 70 | regression | regression CASCADE: 24 jobs newly red in fc9e258e1..d24df3f09 (22 commits) — auto-filed by twatch | — |
 | regression-cascade-d9f02bdc6240 | T | 70 | regression | regression CASCADE: 14 jobs newly red in 7acd2315e..d9f02bdc6 (3 commits) — auto-filed by twatch | — |
+| regression-cascade-fc01c8094434 | T | 70 | regression | RESOLVED — all 38 jobs green at 9c6b216aa. Verified by running each one through `testmgr --job`, which owns the recipe, never by a hand-rolled comparison. Six of the 38 were already closed elsewhere (five conformance shards and tools-devtest#00); the other 32 ran here, 32/32 GREEN, row count asserted against the job list and an unmatched-job control run to prove a GREEN means a job ran. No cause is named and none is guessed: the 87-commit range was never bisected, the watcher skips cascades by design, and by the time anyone looked the reds were gone. | — |
 | regression-cfront-stmt-expr-25c1dded | C | 75 | regression | regression: 25c1dded (GNU statement expressions) — 150x cfront slowdown on GTK headers + cJSON/lua corpus breakage | — |
 | regression-demos-00-2 | T | 40 | regression | advisory: demos#00 red at b26e7ed366f3 (auto-filed by twatch) | — |
 | regression-demos-00 | T | 40 | regression | advisory: demos#00 red at 98ed38202254 (auto-filed by twatch) | — |
@@ -2710,6 +2711,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-lib-test-lib-synapse-2 | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at ee62e6dc0582 (auto-filed by twatch) | — |
 | regression-lib-test-lib-synapse | B | 70 | regression | regression: lib-test#src:test/lib_synapse.pas red at c52fc389fd97 (auto-filed by twatch) | — |
 | regression-lib-test-lib-tls | T | 70 | regression | regression: lib-test#src:test/lib_tls.pas red at 459e96f985d1 (auto-filed by twatch) | — |
+| regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-nilpy-a-literal-str-receiver-with-key-reaches-no-keyed-overload | N | 50 | regression | regression: a LITERAL str receiver with `key=` reaches no keyed overload | — |
 | regression-nilpy-dataclass-dict-factory-test-core-red | N | 70 | regression | test-core RED: `test_nilpy_dataclass_dict_factory.npy` | — |
 | regression-op-overload-class-eq-strict-operator | A | 50 | regression | regression: test_op_overload.pas red — b369 made class = / <> rejection unconditional | — |

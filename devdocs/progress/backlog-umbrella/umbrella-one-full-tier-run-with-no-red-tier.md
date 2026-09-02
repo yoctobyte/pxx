@@ -3,7 +3,7 @@ slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
 prio: 85
 type: umbrella
-blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, regression-cascade-fc01c8094434]
+blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2]
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
@@ -303,3 +303,34 @@ error, it answers.** The fix was to stop hand-rolling the comparison and run
 `testmgr --job` — the thing that owns the recipe. `PXX_ALLOW_FULL_SUITE=1` is
 what a single-job run past the quick tier costs, and it is a SPEED guardrail,
 taken autonomously.
+
+## The cascade is green — 38/38, and nothing named it
+
+`regression-cascade-fc01c8094434` resolved. 32 jobs run here through
+`testmgr --job` (32/32 GREEN, binary `23e9a1d6a3775ac2` unchanged across the
+sweep), five conformance shards already green above, `tools-devtest#00` closed
+earlier on this umbrella. **Two controls**, because a sweep that ran nothing
+reports like a sweep that passed: the row count asserted at 32 both sides, and
+an unmatched `--job` proven to print `no jobs match` and exit 1 rather than
+GREEN.
+
+No cause named. The 87-commit range was never bisected — the watcher skips
+cascades by design — and picking a plausible commit out of it would be
+attribution by topic.
+
+## What is left, and it is two kinds of nothing-to-do
+
+Five blockers remain and **none of them is work anyone can perform here**:
+
+- **Three `lib_synapse` jobs** — cause found and FIXED in tree (`9c6b216aa`),
+  but they build with `$(PXX_STABLE)` and the pin still carries the bug. They
+  go green on the next pin and not before. Not resolved, deliberately:
+  resolving would claim a verdict the job cannot return.
+- **`test_exception_unhandled` and `test_setlen_in_parallel_for_body`** — do not
+  reproduce here on EITHER compiler (0 in 40 at HEAD, 0 in 30 under the pin,
+  byte-different programs). Half a finding, and Track T owns the residual,
+  which is named on both tickets.
+
+So the umbrella's own condition — *"no wired blockers and the causes are
+fixed"* — is met for everything a session on this box can reach. The green
+`full` run is evidence that arrives from seven, not work performed here.
