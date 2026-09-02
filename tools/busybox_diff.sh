@@ -527,8 +527,18 @@ gen_includes() {   # archive members -> #include lines, appletlib/crt* removed
   # members had collapsed into one. It failed the only way this class fails:
   # silently, and then as `undefined reference to bb_uuencode' at link time,
   # in GCC's OWN build -- a name standing in for the thing it names.
+  #
+  # SECOND INSTANCE OF THE SAME CLASS, measured 2026-09-02: the member pattern
+  # was `[a-z_0-9]+\.o', which does not match a HYPHEN. busybox has exactly two
+  # such objects -- `loginutils/lib.a(add-remove-shell.o)' and
+  # `networking/lib.a(ether-wake.o)' -- so both were dropped from the TU list,
+  # silently, and the 394-applet run died as `undefined reference to
+  # add_remove_shell_main' in the GCC ORACLE's link. No busybox source with a
+  # hyphen was in any earlier applet set, which is the only reason this survived
+  # 141- and 265-applet runs. The directory part of the pattern already allowed
+  # `-' (console-tools/ needs it); only the member part did not.
   local mem src n
-  grep -oE '[a-zA-Z0-9_/.+-]+\.a\([a-z_0-9]+\.o\)' "$MAP" | sort -u \
+  grep -oE '[a-zA-Z0-9_/.+-]+\.a\([A-Za-z0-9_.+-]+\.o\)' "$MAP" | sort -u \
     | sed 's|/lib\.a(|/|; s|\.o)$|.c|' \
     | grep -vE '/(crtbegin|crtend|crti|crtn|appletlib)\.c$' \
     | while read -r src; do
@@ -543,11 +553,21 @@ gen_includes > "$WORK/includes.txt.raw" || die "could not map every archive memb
 # generator that silently merges two members produces a shorter list and a
 # build that is missing a translation unit, which shows up much later as an
 # undefined reference blaming an applet that did nothing wrong.
-nmem=$(grep -oE '[a-zA-Z0-9_/.+-]+\.a\([a-z_0-9]+\.o\)' "$MAP" | sort -u \
+nmem=$(grep -oE '[a-zA-Z0-9_/.+-]+\.a\([A-Za-z0-9_.+-]+\.o\)' "$MAP" | sort -u \
        | sed 's|/lib\.a(|/|; s|\.o)$|.c|' \
        | grep -vcE '/(crtbegin|crtend|crti|crtn|appletlib)\.c$')
 ninc=$(wc -l < "$WORK/includes.txt.raw")
 [ "$nmem" -eq "$ninc" ] || die "the map has $nmem archive members but the include list has $ninc entries -- some member was dropped or merged, and the build below would be missing a translation unit"
+
+# AND THE GUARD ABOVE CANNOT SEE A MEMBER THE PATTERN NEVER MATCHED, because
+# both of its sides are built from that same pattern. That is how the hyphen
+# case got through: nmem and ninc agreed exactly, both wrong by the same two.
+# So count the members again with a pattern that FAILS DIFFERENTLY -- anything
+# at all inside `.a(...)' -- and require the two to agree. This one is about
+# the pattern; the one above is about the mapping.
+nany=$(grep -oE '\.a\([^)]*\.o\)' "$MAP" | sort -u | wc -l)
+nmatched=$(grep -oE '\.a\([A-Za-z0-9_.+-]+\.o\)' "$MAP" | sort -u | wc -l)
+[ "$nany" -eq "$nmatched" ] || die "the map names $nany archive members but the member pattern matches only $nmatched -- these are unreadable to it: $(grep -oE '\.a\([^)]*\.o\)' "$MAP" | sort -u | grep -vE '\.a\([A-Za-z0-9_.+-]+\.o\)$' | tr '\n' ' ')"
 
 # SECOND ORDERING CONSTRAINT, and it is the mirror of appletlib.c's "must come
 # FIRST": shell/*.c must come LAST.
