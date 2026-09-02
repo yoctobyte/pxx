@@ -189,4 +189,4 @@ not sufficient*. What it could not have known is that the insufficiency was not
 a parse-order problem at all.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9208ba108.
