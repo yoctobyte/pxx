@@ -11065,6 +11065,14 @@ test-core: $(COMPILER)
 	# ever changed from an 8-byte length word to fpc's 1-byte shortstring.
 	./$(COMPILER) test/test_sizeof_stringn_matches_storage.pas $(TESTTMP)/test_sizeof_stringn26
 	tools/expect_same.sh test_sizeof_stringn26 "$$($(TESTTMP)/test_sizeof_stringn26)" "$$(printf 'alias      1\nvar        1\ninline     1\narrtype    1\narrvar     1\nelement    1\nfield      1\nrecord     1\nplainstr   1\nfillchar   111\nmove       111\ntruncate   11')"
+	# ...and the same capacity one container deeper: an `array of string[N]` as a
+	# record FIELD strode by LOCAL_STR_CAP+8 = 264 rather than 18, putting
+	# element 1 past the END of the record. The value rows below PASS with the
+	# bug present -- the write and the read share the wrong stride, so they
+	# agree with each other 224 bytes outside the record -- which is why the
+	# stride and guard rows exist and why a value-only test certified it.
+	./$(COMPILER) -Fulib/rtl test/test_string_n_array_field_stride.pas $(TESTTMP)/test_strn_fieldstride26
+	tools/expect_same.sh test_strn_fieldstride26 "$$($(TESTTMP)/test_strn_fieldstride26)" "$$(printf 'stride   1\nfits     1\nguard    1\ntail     1\nvalues   11')"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26

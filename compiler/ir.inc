@@ -2433,7 +2433,34 @@ begin
     begin
       if tk = tyString then
       begin
-        if (ASTKind[baseNode] = AN_IDENT) and (Syms[ASTIVal[baseNode]].Kind = skGlobal) then
+        { A `string[N]` FIELD is stored as tyString with its capacity in
+          UFldStrCap -- ParseRecordFields does that deliberately, because the
+          read/write codegen is identical and only the slot SIZE differs. So
+          RecFieldType answers tyString here and the bare-string stride below
+          is wrong for it: LOCAL_STR_CAP+8 = 264 for an 18-byte slot.
+
+          This is the THIRD base kind of one case. The array-symbol arm and the
+          `p^[i]` arm above both handle it, and the comment on the latter
+          describes this exact 264-byte stride. Only a record FIELD base was
+          left, which is the shape devdocs/dev/normalise-dont-special-case.md
+          is about -- the arm nobody wrote is the one that stays broken.
+
+          And it is worse here than in either sibling. Those read outside an
+          array; a record field's array is only ArrLen*slot bytes inside the
+          record, so element 1 lands PAST THE RECORD -- measured, `record inner:
+          array[0..1] of string[10]; tail: LongInt` is 40 bytes and `@inner[1]`
+          is 224 bytes beyond its end, so `r.inner[1] := s` WRITES over whatever
+          follows. It clobbered five words of an unrelated local in the repro.
+
+          RecFieldStrCap answers 0 for a genuine bare `string` field, so that
+          keeps the existing stride. }
+        if (ASTKind[baseNode] = AN_FIELD) and
+           (RecFieldStrCap(ResolveNodeRec(ASTLeft[baseNode]),
+                           GetASTIdentName(baseNode)) > 0) then
+          elemSize := FrozenStrSlotSize(tyFixedString,
+                        RecFieldStrCap(ResolveNodeRec(ASTLeft[baseNode]),
+                                       GetASTIdentName(baseNode)))
+        else if (ASTKind[baseNode] = AN_IDENT) and (Syms[ASTIVal[baseNode]].Kind = skGlobal) then
           elemSize := STRING_CAP + 8
         else
           elemSize := LOCAL_STR_CAP + 8;
