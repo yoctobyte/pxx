@@ -13436,6 +13436,16 @@ test-core: $(COMPILER)
 	# which may move with the width. Diffed against gcc.
 	./$(COMPILER) test/c_crtl_floppy.c $(TESTTMP)/c_floppy26
 	tools/expect_same.sh c_floppy26 "$$($(TESTTMP)/c_floppy26)" "$$(printf '1 32 24\n2 80200204 40200242 40200243\n3 1 2 4 1020\n4 4 56 64\n5 128 80\n6 24b 254')"
+	# <regex.h>. THE TEST CARRIES ITS OWN EXPECTATIONS because there are 81 of
+	# them and each was measured against this box's glibc with the same source
+	# built by gcc; two rows deliberately do not match and say so at the row.
+	# It is NOT a breadth check -- 147 real patterns harvested from busybox's
+	# own sed/grep/awk testsuites, 4527 cases, agree with glibc and did not
+	# move when the accept was changed from leftmost-LONGEST to leftmost-first.
+	# Rows A01-A06 and D20 are the ones that see that, and the budget row is
+	# the positive control for a guard nothing else here can make fire.
+	./$(COMPILER) test/c_crtl_regex.c $(TESTTMP)/c_regex26
+	tools/expect_same.sh c_regex26 "$$($(TESTTMP)/c_regex26)" "regex ok"
 	# <mtd/mtd-user.h>, <sys/timex.h>, <sys/kd.h>, <linux/capability.h>. Row 1 is
 	# mtd_info_user's LAYOUT: a __u8 then five __u32 then a __u64 is 32 bytes with
 	# two holes, and a transcription that tidied them still compiles -- MEMGETINFO
@@ -15421,6 +15431,14 @@ test-i386: $(COMPILER)
 	# that must stay put. Diffed against gcc -m32.
 	./$(COMPILER) --target=i386 test/c_crtl_floppy.c $(TESTTMP)/test_i386_floppy
 	tools/expect_same.sh i386/floppy "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_floppy)" "$$(printf '1 28 24\n2 801c0204 401c0242 401c0243\n3 1 2 4 1020\n4 4 56 64\n5 88 52\n6 24b 254')"
+	# The regex engine is pointer-heavy in a way the header tests are not: the
+	# program is an array of three-int structs reached through realloc'd
+	# storage, and the memo is a bitmap indexed by a long that overflows an int
+	# at a subject length i386 can still reach. Same expectations as the core
+	# run -- the engine has no width-dependent behaviour and a DIFFERENCE here
+	# would be the finding.
+	./$(COMPILER) --target=i386 test/c_crtl_regex.c $(TESTTMP)/test_i386_regex
+	tools/expect_same.sh i386/regex "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_regex)" "regex ok"
 	./$(COMPILER) --target=i386 test/c_crtl_select.c $(TESTTMP)/test_i386_select
 	tools/expect_same.sh i386/select "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
 	./$(COMPILER) --target=i386 test/c_crtl_fallocate.c $(TESTTMP)/test_i386_fallocate
