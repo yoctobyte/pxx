@@ -526,3 +526,29 @@ measured again here, and the ticket's ORIGINAL table (2026-08-20) says 4 in
 every row too. The 32x figure in the prose is right; the `fpc 1` is a typo that
 would send whoever implements bitpacking after a one-byte target FPC does not
 use. FPC sizes a set by its element range **with a 4-byte floor**.
+
+#### It was not a typo, and the distinction is the point (frankuser, 2026-09-02)
+
+It was an **unmeasured assumption printed in a measured column.** The probe that
+produced that block was a pxx program whose expectation strings were typed by
+hand:
+
+```pascal
+WriteLn('set of 0..7     ', SizeOf(TS), '   fpc 1  (bitpacked)');
+```
+
+`SizeOf(TS)` was measured. `fpc 1` was **written into a WriteLn** by someone who
+had not run FPC, and it came out of the same program, in the same column, in the
+same font as the number that was real. Then it went into this ticket's summary as
+fact. **FPC was never run at any point.**
+
+A typo is a slip that proofreading catches. This is the failure CLAUDE.md already
+names — *a verification claim scopes to exactly what was checked, and an
+unlabelled claim travelling beside it inherits that credibility* — and the
+correction is not "be careful", it is **do not put a number you did not measure
+in the same output as one you did.** If an oracle column cannot be produced by
+running the oracle, it must be left blank or marked `assumed`.
+
+The two subrange rows in that block have the same defect and were right by luck.
+The `string[10] fpc 11` row is the same and is still unverified against FPC.
+
