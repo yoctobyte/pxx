@@ -246,4 +246,4 @@ through a real link and the build agrees with gcc; it does not re-measure the
 is verified numerically against gcc in `test/casm_gnu_operands.c`.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8a9c0f7c7.
