@@ -35,9 +35,18 @@ program test_shortstring_through_a_pointer;
   -dPXX_SHORTSTRING: `r.f = s` segfaults on riscv32, and `Copy(p^,1,3)` reaches
   the allocator with that length and dies as `out of memory (heap arena mmap
   failed)` on x86-64. A crash truncates every row after it, so the rows are
-  ordered safest-first and the two known killers are LAST. Today's output is
-  then the longest diagnostic the broken state can produce, and after the fix
-  the ordering costs nothing.
+  ordered safest-first and the known killers are LAST. Today's output is then
+  the longest diagnostic the broken state can produce, and after the fix the
+  ordering costs nothing.
+
+  THIS IS A PROPERTY OF THE HARNESS AND NOT OF THIS FILE, so the next author
+  should not have to rediscover it: a row that ends the process costs every row
+  BEHIND it, which means a crashing test reports less the worse the state is --
+  exactly backwards from what you want from a diagnostic. Any layout test whose
+  failure mode is a length in the hundreds of millions has to be ordered, and
+  the ordering has to be re-checked whenever a fix moves which row crashes. It
+  moved once already: before 764dc3a30 the first killer was `assign from
+  field`; after it, it is `compare field to literal`.
 
   Verified against FPC 3.2.2, which prints `total ok 28 / 28`.
   feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
@@ -118,22 +127,39 @@ begin
   Chk('length array-element pointer', Length(pa^) = Length(arr[1]));
 
   { ---- READER: indexing. The chars begin at base+prefix, so the index origin
-    moves with the width; -7 was the spelling for the 8-byte word. ---- }
+    moves with the width; -7 was the spelling for the 8-byte word.
+
+    `index deref` STILL FAILS on all four converted backends at 764dc3a30 --
+    `p^[1]` reads a blank where the direct and field spellings both read 'h'.
+    Measured, not inferred: the direct and field rows beside it are green in
+    the same run, which is what makes this the index path through a DEREF
+    rather than the index origin in general.
+    bug-a-indexing-a-frozen-string-through-a-pointer-deref-reads-the-wrong-byte ---- }
   Chk('index direct', s[1] = 'h');
   Chk('index deref', p^[1] = s[1]);
   Chk('index field', r.f[1] = s[1]);
 
   { ---- READER: comparison against a LITERAL.
 
-    THESE ROWS ARE EXPECTED TO STAY RED ON x86-64 AND arm32 AFTER THE WALKER
-    FIX, AND THAT IS NOT AN INCOMPLETE FIX. No backend resolves the frozen kind
-    at its comparison arm at all, so the walker is not on that path anywhere.
-    The partition is three-to-two: correct on aarch64, riscv32 and xtensa,
-    failing on x86-64 and arm32 -- and frankwasm narrowed the cause away from
-    width entirely, since a LITERAL operand is correct where a VARIABLE operand
-    is not. That is operand selection, and the two failing backends are exactly
-    the two with no named operand normaliser. A red row with a stated reason is
-    worth more than a missing one, so each spelling keeps its own row. ---- }
+    THE ANNOTATION HERE WAS WRONG TWICE AND BOTH CORRECTIONS ARE THE POINT.
+
+    It first said these rows would stay red on x86-64 and arm32 because the
+    cause was OPERAND SELECTION -- a literal operand correct, a variable
+    operand not, on the two backends with no named operand normaliser. That
+    inference was sound-looking and false: "literal right, variable wrong" is
+    exactly what a WIDTH bug produces, because variable-vs-literal IS the
+    cross-width pair. A width-only fix turned both spellings green on both
+    backends. The observation was good; the cause read off it was not.
+
+    Measured at 764dc3a30 under -dPXX_SHORTSTRING, all four converted backends:
+    `compare direct to literal` and `compare deref to literal` are GREEN.
+
+    BUT `compare field to literal` IS NOT, AND IT IS A SEPARATE READER. Same
+    command, same run: `r.f = 'hello'` SEGFAULTS on x86-64 and riscv32 and
+    returns FALSE on aarch64 and arm32. A record FIELD compared against a
+    literal reaches the comparison arm by a path the four-cause fix does not
+    cover, so this is a fifth cause and not a leftover of the four.
+    bug-a-comparing-a-frozen-record-field-to-a-literal-crashes-or-answers-false ---- }
   Chk('compare direct to literal', s = 'hello');
   Chk('compare deref to literal', p^ = 'hello');
   Chk('compare field to literal', r.f = 'hello');
