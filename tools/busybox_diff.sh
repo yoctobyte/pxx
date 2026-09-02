@@ -215,6 +215,17 @@ configure_tree() {
         sed -i "s/^CONFIG_$f=y\$/# CONFIG_$f is not set/" .config
       done
     fi
+    # USE_BB_CRYPT: busybox's own DES/MD5/SHA crypt, instead of libcrypt's.
+    # su/login/passwd/chpasswd/sulogin/mkpasswd call crypt(), and with this off
+    # the LINK needs -lcrypt -- which the gcc oracle can be given and pxx cannot,
+    # because lib/crtl has no crypt. Linking the two sides against different
+    # libraries would make the comparison meaningless even where it passed, and
+    # dropping six applets to avoid one symbol would shrink the corpus for no
+    # reason. Turning it on makes BOTH sides self-contained and adds busybox's
+    # own crypt sources to the C the frontend has to compile, which is the point
+    # of the corpus. Measured 2026-09-02: at 258 applets `crypt' was the ONLY
+    # undefined symbol in the gcc oracle's 400-object link.
+    sed -i 's/^# CONFIG_USE_BB_CRYPT is not set$/CONFIG_USE_BB_CRYPT=y/' .config
     yes '' | make oldconfig >/dev/null 2>&1 || exit 1
     make -j"$(nproc 2>/dev/null || echo 4)"
   ) > "$log" 2>&1
@@ -301,6 +312,18 @@ applet_table_matches() {
   [ "$e" = "$r" ]
 }
 
+# Knobs this harness turns on for EVERY run, independent of the applet list.
+# They need their own staleness test: a tree configured before one of them was
+# added has the right applets and the wrong build, and the applet comparison
+# above cannot see that.
+REQUIRED_ON="USE_BB_CRYPT"
+required_knobs_ok() {
+  local f
+  [ -f "$BB/.config" ] || return 1
+  for f in $REQUIRED_ON; do grep -qxF "CONFIG_$f=y" "$BB/.config" || return 1; done
+  return 0
+}
+
 ash_features_ok() {
   local f
   printf '%s\n' $APPLETS | grep -qx ash || return 0
@@ -312,6 +335,7 @@ ash_features_ok() {
 
 if [ ! -f "$BB/include/applet_tables.h" ] \
    || ! applet_table_matches \
+   || ! required_knobs_ok \
    || ! ash_features_ok \
    || ! grep -qx "$(printf '#define ENABLE_BUSYBOX %s' "$([ "$NAPPLETS" -gt 1 ] && echo 1 || echo 0)")" "$BB/include/autoconf.h"; then
   CFGLOG="${TMPDIR:-/tmp}/bbdiff-configure.log"
@@ -347,6 +371,14 @@ fi
 # `make oldconfig` resolves dependencies and will silently drop a knob whose
 # deps are unmet, so asking for CONFIG_FEATURE_SH_MATH is not the same as
 # getting it -- and the symptom would be a GREEN run over a stub shell.
+# oldconfig resolves dependencies and drops what it cannot satisfy, so asking
+# for a knob is not getting it -- and a dropped USE_BB_CRYPT comes back as an
+# undefined `crypt' at LINK time, 400 objects later.
+for f in $REQUIRED_ON; do
+  grep -qxF "CONFIG_$f=y" "$BB/.config" \
+    || die "oldconfig dropped CONFIG_$f -- without it the link needs -lcrypt, which the gcc oracle can be given and pxx cannot (lib/crtl has no crypt), so the two sides would not be the same program"
+done
+
 if printf '%s\n' $APPLETS | grep -qx ash; then
   for f in $ASH_ON; do
     grep -qxF "CONFIG_$f=y" "$BB/.config" \
@@ -550,7 +582,20 @@ install_bin() {   # $1 = dir, $2 = binary
   local a
   mkdir -p "$1"
   cp "$2" "$1/busybox"
-  for a in $APPLETS; do ln -sf busybox "$1/$a"; done
+  # `busybox' is skipped: it is already there as the REAL binary, and
+  # `ln -sf busybox $1/busybox' replaces it with a symlink to itself. Every
+  # other applet then resolves through that loop, so the whole run dies with
+  # "Too many levels of symbolic links" on every case -- 595 of them, measured
+  # 2026-09-02, the first time an applet list contained the multiplexer's own
+  # name. The self-link is the one input this loop cannot be given.
+  for a in $APPLETS; do
+    [ "$a" = busybox ] && continue
+    ln -sf busybox "$1/$a"
+  done
+  # Positive control: the thing every symlink points at has to be the binary.
+  # A test for "the symlinks exist" passes on the broken layout.
+  [ -f "$1/busybox" ] && [ ! -L "$1/busybox" ] && [ -x "$1/busybox" ] \
+    || die "install_bin left $1/busybox as something other than the real executable"
 }
 
 run_one() {   # $1 = runner ("" native), $2 = argv[0] path, rest = args
