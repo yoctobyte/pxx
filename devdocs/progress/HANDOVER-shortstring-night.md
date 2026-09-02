@@ -20,7 +20,8 @@ phase 2.** The gap is now larger than when six were in:
 - **two surviving readers** after the four-cause fix, plus a **fifth cause**
 - `p^[1]` reads a blank while `s[1]` and `r.f[1]` read `h` in the same run
 - `r.f = 'hello'` **segfaults** on x86-64/riscv32/**i386**, FALSE on aarch64/arm32
-  (i386 measured at `c8375f3e7`; it reaches `PXXStrEq` like arm32, so the field
+  (i386 measured at `c8375f3e7`; it resolves the kind at the decompose and
+  crashes anyway, so resolving there is necessary and not sufficient — the field
   case is a third shape rather than either of the two already known)
 - compare deliberately unowned; its flag rows deliberately unwired
 
@@ -130,9 +131,9 @@ for whoever closes the two survivor tickets** — not a task to hand anyone now.
   `6d8211360923`), positive control **5 of 8 differ in flag mode** so the
   comparison can fail. **Comparison is CORRECT on i386** — `s = 'hello'` is TRUE,
   matching FPC, where x86-64 and arm32 are FALSE; what does it is resolving the
-  kind at the `PXXStrEq`/`PXXStrCmp3` **decompose**, which is the shape arm32
-  needs at its four call sites and which x86-64 cannot use at all (it inlines
-  through `EmitStrCmpReg`).
+  kind at the `PXXStrEq`/`PXXStrCmp3` **decompose**. (An earlier draft added
+  that arm32 still needed this at four call sites — it does not, they read
+  `IRStrTkOf` since `764dc3a30`; see the corrected comparison section.)
   Three things that did NOT copy from the 64-bit spec and would bite a copyist:
   the wide prefix is **two stores** on 32-bit; the concat **scratch buffer** must
   KEEP its wide prefix (written unconditionally, returned as a `tyString` value);
@@ -206,17 +207,38 @@ frankb-a9's own ready-for-P4 condition: **i386 landed and reviewed against the
 three classes, PLUS the wasm32 rows wired.** It messages the coordinator at that
 point rather than proceeding.
 
-## A concrete fix shape for the comparison defect (from i386)
+## Comparison against a literal: GREEN EVERYWHERE (corrected)
 
-**Comparison is CORRECT on i386** — `s = 'hello'` answers TRUE, matching FPC,
-where x86-64 and arm32 answer FALSE. **What does it is resolving the kind at the
-`PXXStrEq`/`PXXStrCmp3` DECOMPOSE**, because i386 calls those helpers rather than
-inlining them.
+**`s = 'hello'` answers TRUE on all five runnable targets** — x86-64, i386,
+arm32, aarch64, riscv32 — measured together at HEAD with one freshly built
+binary. frankb-a9's four-cause fix closed it; nothing is outstanding here.
 
-**arm32 reaches the same helpers and passes `IntToTypeKind` at its call sites.**
-So arm32's half of the comparison defect has a working model in the tree, on a
-backend that landed tonight. x86-64 remains the different one — it inlines and
-has no kind in `EmitStrCmpReg`'s signature to substitute.
+**CORRECTION, and it was mine.** An earlier version of this section said
+comparison was still FALSE on x86-64 and arm32, and offered i386's mechanism as
+a ready-to-apply fix shape for arm32's "four call sites passing
+`IntToTypeKind`". **Those four sites read `IRStrTkOf` and have since
+`764dc3a30`** — which was already an ancestor of the tree I measured i386 on. I
+carried a relayed ledger into a written artifact without re-running it against
+the tree, while running exactly that probe for my own backend. A reader could
+have applied the edit to already-correct code, or concluded arm32 was
+unconverted. Caught by frankb-a9; verified here by reading
+`ir_codegen_arm32.inc:2049/2085/2126/2184` and by running all five targets.
+
+**The mechanism finding itself stands and is still worth having:** i386's
+comparison works because it resolves the operand kind at the
+`PXXStrEq`/`PXXStrCmp3` **decompose**, and that is the correct account of the
+helper-calling backends. x86-64 genuinely is the different animal — it inlines
+through `EmitStrCmpReg`, which is why that one needed a signature change rather
+than a substitution.
+
+**It is necessary and NOT sufficient**, which is the useful half now: i386
+resolves at the decompose and **still crashes on `r.f = 'hello'`**. So the
+surviving field bug is not something a backend got wrong. frankb-a9 measured
+the discriminator as HOMOGENEITY of operand shape — `r.f = r.f` is TRUE while
+`r.f = s` and `r.f = 'hello'` both crash, symmetric in order — which points at
+a clobber or sequencing mismatch between two decompose arms, not at a missing
+`IR_FIELD` arm in the walker (`Length(r.f)` = 5 and `r.f[1]` = `h` in the same
+binary as the crash). Banked at `ddc4d3d51`, unclaimed.
 
 **And a trap i386 hit that a copyist would not survive:** i386's concat and
 compare arms branch on `lhsTk = tyString`. Setting `lhsTk := IRStrTkOf(left)`
