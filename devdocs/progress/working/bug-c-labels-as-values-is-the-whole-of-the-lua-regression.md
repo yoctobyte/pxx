@@ -182,3 +182,47 @@ walk mark it, and the verifier is what forces the arm to exist.
   `regression-test-lua-cross-compiler-srchash-2` is a CROSS job, so aarch64 is
   needed before both tickets go green. Do not claim the cross one on the x86-64
   arm alone.
+
+## Landed, 2026-09-02 — x86-64 `6eea46f7c`, aarch64 in the commit after it
+
+Both halves of the construct, on both targets the lua jobs need.
+
+**x86-64**: `&&label` -> `AN_LABELADDR` -> `IR_LABELADDR` -> `lea rax,[rip+disp32]`
+on the existing label fixup list; `goto *expr` -> `AN_GOTO_INDIRECT` ->
+`IR_JUMP_INDIRECT` -> `jmp rax`. `LabelFixupCount` had to move from a local of
+the body loop to unit scope: `&&label` is a VALUE node, emitted from
+`IREmitNode`, which is a different procedure.
+
+**aarch64**: `adr x0, #imm21` — PC-relative, so unlike the `IR_PROCADDR` arm
+directly above it, it needs neither a relocation nor an 8-byte literal. Forward
+references share the branch fixup list and the patch loop recognises the
+placeholder by its top byte (`$10`), which no other fixup shape there emits.
+`EncodeAdrX0A64` errors above +/-1MB rather than wrapping — that guard is
+UNTESTED (a >1MB span is expensive to construct); it is a refusal, not a claim.
+
+**Results, both measured here:**
+
+| | build | 6 lua programs |
+| --- | --- | --- |
+| native x86-64 | ok | 6/6 |
+| cross aarch64 (qemu) | ok | 6/6 |
+
+**The control that matters.** The lua suite does NOT discriminate the two
+interpreter paths — a `-DLUA_USE_JUMPTABLE=0` build passes all six as well. What
+proves the computed-goto arm is the one that compiled is a binary comparison, on
+each target: the default build is byte-identical to `-DLUA_USE_JUMPTABLE=1` and
+differs from `-DLUA_USE_JUMPTABLE=0`. Quoted without that, "6/6" would be a true
+sentence about the wrong claim.
+
+`test/c_labels_as_values.c` is 8 rows diffed against gcc, wired into `test-core`
+and `test-aarch64`. Rows 2 and 3 are backward (immediate) and forward (fixup)
+`&&label` separately, because those are different lines of codegen. Rows 5/6 are
+the address-identity control, so an implementation returning a plausible
+constant fails rather than adding up to the right total by luck.
+
+**Still open here:** i386, arm32 and riscv32 refuse `IR_LABELADDR` by name —
+[[feature-c-labels-as-values-on-i386-arm32-riscv32]], prio 30. Nothing measured
+is blocked on them: `test-lua-cross`'s other three targets already build-fail on
+their variadic ABI, so implementing this there moves the failure without moving
+a verdict.
+

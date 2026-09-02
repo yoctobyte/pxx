@@ -533,7 +533,7 @@ _none_
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 
-## backlog-cfront (15)
+## backlog-cfront (16)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -549,6 +549,7 @@ _none_
 | feature-c-crtl-stdio-buffering-and-setvbuf | C | 55 | feature | lib/crtl/src/stdio.c is entirely unbuffered — fputc is one write() syscall per character — and setvbuf at :1051 is a stub that ignores its arguments and returns SUCCESS, which is the dishonest-stub shape the SetTextBuf ruling exists to reject, and worse here because C callers check the return. Add FILE write buffering under C99 7.19.3p7's policy, make setvbuf real, and share a flush registry with lib/rtl so mixed WriteLn/printf output keeps its order. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | S | 18 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
+| feature-c-labels-as-values-on-i386-arm32-riscv32 | C | 30 | feature | GNU labels-as-values (`&&label`, `goto *expr`) is implemented on x86-64 and aarch64 only. i386, arm32 and riscv32 refuse IR_LABELADDR by name; xtensa and wasm32 cannot compile a C program at all yet, so they are out of scope. Nothing measured is blocked on this — `test-lua-cross`'s other three targets already build-fail on their variadic ABI — so it is a gap worth a number, not a gap worth a session. | — |
 | feature-c-package-namespace-decision | A | 35 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | idea-c-realworld-test-targets | C | 60 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 25 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
@@ -1277,6 +1278,7 @@ _none_
 - [p 30] [A] feature-a-one-argv-to-frozen-filler-instead-of-x86-64s-inline-copy
 - [p 30] [A] feature-a-the-fixedpoint-stamp-could-rebuild-itself-but-every-shape-costs-make-n
 - [p 30] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive
+- [p 30] [C] feature-c-labels-as-values-on-i386-arm32-riscv32
 - [p 30] [E] feature-demo-nilpy-ide
 - [p 30] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised
 - [p 30] [A] feature-nilpy-collections-and-string-methods

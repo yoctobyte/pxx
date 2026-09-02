@@ -15297,6 +15297,16 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_frozen_string_param_setlength.pas $(TESTTMP)/test_a64_frozenparam
 	tools/expect_same.sh aarch64/frozenparam "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozenparam)" "$$(cat test/test_frozen_string_param_setlength.expected)"
 	./$(COMPILER) --target=aarch64 test/hello.pas $(TESTTMP)/test_aarch64_hello
+	# GNU labels-as-values on the cross target. aarch64 reaches a label address
+	# with `adr x0, #imm21' -- PC-relative, so no relocation and no literal pool,
+	# unlike IR_PROCADDR right next to it. The forward case shares the branch
+	# fixup list and is recognised in the patch loop by its top byte ($10), so
+	# this row is what proves that dispatch is not colliding with `b'/`cbz'.
+	# The .expected here is gcc's own output for the same file, x86-64 -- the
+	# point of a cross row is that the answer does not depend on the target.
+	# bug-c-labels-as-values-is-the-whole-of-the-lua-regression
+	./$(COMPILER) --target=aarch64 test/c_labels_as_values.c $(TESTTMP)/test_a64_labelval
+	tools/expect_same.sh aarch64/labelval "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_labelval)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
 	tools/expect_same.sh aarch64/test_aarch64_hello "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_hello)" "Hello, World!"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
 	# were x86-64-only gaps, so every target must print the same line

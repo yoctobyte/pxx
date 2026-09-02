@@ -544,3 +544,17 @@ scope beside the arrays it indexes, because `&&label` is a VALUE node emitted
 from IREmitNode and needs the same forward-fixup list. The other six backends
 keep their own locals and will refuse IR_LABELADDR by name. aarch64 next — the
 CROSS lua ticket cannot go green without it.
+
+2026-09-02 | frankD (Track C) | compiler/ir_codegen_aarch64.inc, Makefile |
+Labels-as-values on aarch64: `adr x0, #imm21` for `&&label`, `br x0` for
+`goto *expr`. WHY: `regression-test-lua-cross-compiler-srchash-2` is a CROSS
+job, so the x86-64 arm alone could not turn it green. adr is PC-relative, so
+unlike the IR_PROCADDR arm right above it this needs neither a relocation nor an
+8-byte literal; forward references share the branch fixup list, which the patch
+loop dispatches on by top byte ($10, unused by the other placeholders there).
+Its own LabelFixupCount local removed for the same reason x86-64's was — the
+value emitter is a different procedure. Cross lua is 6/6 under qemu, and the
+default build is byte-identical to -DLUA_USE_JUMPTABLE=1 and differs from
+-DLUA_USE_JUMPTABLE=0, which is what makes "6/6" a statement about the
+computed-goto path rather than about lua. i386/arm32/riscv32 still refuse it by
+name — ticketed at prio 30, nothing measured is blocked on them.

@@ -86,6 +86,20 @@ begin
     EmitI32($93407C00);            { sxtw x0, w0 }
 end;
 
+{ `adr x0, #delta' -- the label-address instruction behind GNU `&&label'.
+  PC-relative over +/-1MB and therefore needs neither a relocation nor a
+  literal pool: the code buffer is loaded contiguously, so (target - here) is
+  the same number at build time and at run time. imm21 is a BYTE offset split
+  low-2-bits-high-19, which is why immlo lands at bit 29 and not next to immhi. }
+function EncodeAdrX0A64(delta: Integer): LongWord;
+begin
+  if (delta < -1048576) or (delta > 1048575) then
+    Error('target aarch64: &&label is more than 1MB from its use -- adr cannot reach it');
+  EncodeAdrX0A64 := $10000000
+                    or (LongWord(delta and 3) shl 29)
+                    or (LongWord((delta shr 2) and $7FFFF) shl 5);
+end;
+
 procedure EmitLoadDataRefA64(rd, dataOff: Integer);
 { Load a data address (or descriptor sentinel) into x[rd]. EmitDataRef emits an
   8-byte slot on this 64-bit target, so use the 64-bit literal load and branch
@@ -3777,6 +3791,23 @@ begin
         EmitI32($94000000 or (((SigSetHookAddr - CodeLen) div 4) and $03FFFFFF));  { bl sethook }
       end;
 
+    IR_LABELADDR:
+      begin
+        { &&label -> x0 = the label's runtime address. Same forward-fixup list
+          as the branches; the patch loop recognises the placeholder by its
+          top byte ($10), which no other fixup shape emits. }
+        if LabelPositions[IRA[node]] <> -1 then
+          EmitI32(EncodeAdrX0A64(LabelPositions[IRA[node]] - CodeLen))
+        else
+        begin
+          if LabelFixupCount >= MAX_IR then Error('label fixup overflow');
+          LabelFixupPos[LabelFixupCount] := CodeLen;
+          LabelFixupTarget[LabelFixupCount] := IRA[node];
+          Inc(LabelFixupCount);
+          EmitI32($10000000);                        { adr x0, #0 (patched) }
+        end;
+      end;
+
     IR_PROCADDR:
       begin
         { @proc -> x0 = absolute code address, via a PC-relative load of an
@@ -4812,7 +4843,6 @@ end;
 
 procedure IREmitMachineCodeAarch64;
 var i, lblId, pos, targetOffset, f, si, classIdx, procIdx, excSkip, sz: Integer;
-    LabelFixupCount: Integer;
 begin
   { Clear only this body's labels ([0, IRLabelCount) — see IREmitMachineCode). }
   for i := 0 to IRLabelCount - 1 do
@@ -4881,6 +4911,12 @@ begin
           lblId := Integer(IRIVal[i]);
           if (lblId >= 0) and (lblId < MAX_IR) then
             LabelPositions[lblId] := CodeLen;
+        end;
+
+      IR_JUMP_INDIRECT:
+        begin
+          IREmitNodeAarch64(IRA[i]);                 { x0 = target address }
+          EmitI32($D61F0000);                        { br x0 }
         end;
 
       IR_JUMP:
@@ -5155,7 +5191,9 @@ begin
     pos := LabelFixupPos[f];
     targetOffset := LabelPositions[lblId];
     if targetOffset = -1 then Error('Unresolved forward jump in AArch64 IR codegen');
-    if Code[pos+3] = $14 then
+    if Code[pos+3] = $10 then
+      Patch32(pos, EncodeAdrX0A64(targetOffset - pos))   { adr x0, label }
+    else if Code[pos+3] = $14 then
       Patch32(pos, $14000000 or (((targetOffset - pos) div 4) and $03ffffff))
     else if Code[pos+3] = $B4 then
       Patch32(pos, $B4000000 or (((targetOffset - pos) div 4) and $7ffff) shl 5)
