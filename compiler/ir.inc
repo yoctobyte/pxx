@@ -15703,6 +15703,32 @@ begin
        TypeIsFrozenString(Syms[IRA[node]].TypeKind) then
       Result := Syms[IRA[node]].TypeKind;
   end
+  else if ((IRKind[node] = IR_LOAD_SYM) or (IRKind[node] = IR_LOAD_MEM)) and
+          (IRA[node] >= 0) and (IRA[node] < SymCount) and
+          TypeIsFrozenString(Syms[IRA[node]].PtrElemTk) then
+    { THROUGH A TYPED POINTER. `p^` for `p: ^string[10]` lowers to a bare
+      pointer LOAD whose VALUE is the buffer address, so the node is tagged
+      tyPointer and neither arm above matches — it fell through to the tyString
+      default and every reader took the 8-byte width.
+
+      The pointee's kind was never missing; it is on the pointer's own symbol
+      as PtrElemTk and nothing asked. Measured: for `p: ^string[10]` under
+      -dPXX_SHORTSTRING the walker saw IR_LOAD_SYM / IRTk=tyPointer /
+      PtrElemTk=tyShortString and answered tyString, so `Length(p^)` returned
+      122511465736197 — 0x6F6C6C654805, the length byte followed by the
+      characters of 'hello'.
+
+      THIS IS THE ARM THAT MAKES THE THREE UNCONVERTED BACKENDS INHERIT THE FIX
+      RATHER THAN THE HOLE. i386, xtensa and wasm32 become callers of this
+      function the moment their conversions land; answering correctly here
+      means they never see the defect, where fixing it at each reader would
+      have left three backends to rediscover it in code they had just written.
+
+      Note the WIDE default above is not a safe fallback for this shape — for a
+      deref it is simply wrong, not conservatively wrong. The "wrong-wide is
+      recoverable" reasoning is about a truncated length, and here the wrong
+      width produces a length in the billions. }
+    Result := Syms[IRA[node]].PtrElemTk
   else if TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
     Result := IntToTypeKind(IRTk[node]);
 end;

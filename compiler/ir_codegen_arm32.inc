@@ -2046,8 +2046,8 @@ begin
 
         if (tk = tyAnsiString) and (op = Ord(tkPlus)) then
         begin
-          lhsTk := IntToTypeKind(IRTk[left]);
-          rhsTk := IntToTypeKind(IRTk[right]);
+          lhsTk := IRStrTkOf(left);
+          rhsTk := IRStrTkOf(right);
           IREmitNodeArm32(left);  EmitI32($E92D0001); { push lhs }
           IREmitNodeArm32(right); EmitI32($E92D0001); { push rhs }
 
@@ -2082,8 +2082,8 @@ begin
 
         if (tk = tyString) and (op = Ord(tkPlus)) then
         begin
-          lhsTk := IntToTypeKind(IRTk[left]);
-          rhsTk := IntToTypeKind(IRTk[right]);
+          lhsTk := IRStrTkOf(left);
+          rhsTk := IRStrTkOf(right);
           IREmitNodeArm32(left);  EmitI32($E92D0001); { push lhs }
           IREmitNodeArm32(right); EmitI32($E92D0001); { push rhs }
 
@@ -2123,8 +2123,8 @@ begin
            ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString, tyChar, tyPointer]) and
             (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString, tyChar, tyPointer])) then
         begin
-          lhsTk := IntToTypeKind(IRTk[left]);
-          rhsTk := IntToTypeKind(IRTk[right]);
+          lhsTk := IRStrTkOf(left);
+          rhsTk := IRStrTkOf(right);
           { A frozen-string operand reached through a pointer deref or a pointer
             field (`pstr^`, `rec.pstrField^`) is tagged tyPointer, but its value is
             the buffer address — decode it as a frozen string. The condition above
@@ -2181,8 +2181,8 @@ begin
             managed or frozen string); a Char operand is wrapped into a string
             by the AN_BINOP lowering before it reaches any backend. Otherwise a
             byte-for-byte clone of the equality arm above. }
-          lhsTk := IntToTypeKind(IRTk[left]);
-          rhsTk := IntToTypeKind(IRTk[right]);
+          lhsTk := IRStrTkOf(left);
+          rhsTk := IRStrTkOf(right);
           IREmitNodeArm32(left);  EmitI32($E92D0001); { push lhs }
           IREmitNodeArm32(right); EmitI32($E92D0001); { push rhs }
 

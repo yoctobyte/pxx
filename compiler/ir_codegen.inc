@@ -6386,6 +6386,7 @@ procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     wrFrozenPfx: Integer;   { length-prefix width of the frozen string being written }
     srcFrozenTk: TTypeKind; { frozen kind of a copy's SOURCE — its prefix width may differ from the dest's }
+    memFrozenTk: TTypeKind; { frozen kind of a store-through-an-address DESTINATION }
     scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
     allocaLoop, allocaDone: Integer;  { IR_ALLOCA's relocation loop: back edge, and the forward rel8 out of it }
     op: TTokenKind;
@@ -7853,8 +7854,22 @@ begin
         tk := IntToTypeKind(IRTk[node]);
         size := TypeSlotSize(tk);
 
-        if tk = tyString then
+        if TypeIsFrozenString(tk) then
         begin
+          { TypeIsFrozenString, not `tk = tyString`, so a tyShortString
+            destination cannot fall past this arm into the scalar store below.
+
+            THE DESTINATION KIND COMES FROM THE ADDRESS NODE. It used to read
+            `Syms[symIdx].TypeKind`, and symIdx is a STALE LOCAL left over from
+            another arm — it has nothing to do with this store's destination.
+            That was latent before a second width existed, because every frozen
+            kind answered 8; with tyShortString it wrote the length at the
+            narrow width and the character at the wide offset, so
+            `p^ := c` for `p: ^string[10]` left [1,0,0,0,0,0,0] and printed a
+            blank. Found by franks-ab on four backends at once; the cross ones
+            were fixed by teaching IRFrozenKindOfAddr the pointer route, and
+            x86-64 needed this as well because it never asked the walker. }
+          memFrozenTk := IRFrozenKindOfAddr(addressNode);
           IREmitNode(valueNode); { rax = source string address (or char ordinal) }
           EmitB($50); { push source }
 
@@ -7866,7 +7881,7 @@ begin
           EmitB($48); EmitB($89); EmitB($C7); { mov rdi, rax }
           EmitB($5E);                         { pop rsi }
           if IntToTypeKind(IRTk[valueNode]) = tyChar then
-            IREmitStoreCharAsString(Syms[symIdx].TypeKind)  { rsi = char ordinal -> [len=1][char] }
+            IREmitStoreCharAsString(memFrozenTk)  { rsi = char ordinal -> [len=1][char] }
           else if IntToTypeKind(IRTk[valueNode]) = tyAnsiString then
           begin
             { Managed source -> frozen field/deref dest (r.s := managedStr):
@@ -7876,21 +7891,27 @@ begin
             EmitB($74); pNil := CodeLen; EmitB(0);            { jz empty }
             EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);  { mov rcx, [rsi-8] = len }
             EmitClampRcxToStrCap(Integer(IRIVal[node]));      { truncate to string[N] capacity }
-            EmitB($48); EmitB($89); EmitB($0F);              { mov [rdi], rcx (length word) }
-            EmitB($48); EmitB($83); EmitB($C7); EmitB($08);  { add rdi, 8 (dest chars) }
+            EmitStoreRcxAsStrLen(memFrozenTk);
+            EmitB($48); EmitB($83); EmitB($C7);
+            EmitB(FrozenStrPrefixSize(memFrozenTk));          { add rdi, dest prefix }
             EmitB($F3); EmitB($A4);                           { rep movsb (rsi already at chars) }
             EmitB($EB); pDone := CodeLen; EmitB(0);           { jmp done }
             PatchRel8(pNil);         { empty: }
-            EmitB($48); EmitB($C7); EmitB($07); EmitI32(0);  { mov qword [rdi], 0 }
+            EmitZeroStrLen(memFrozenTk);
             PatchRel8(pDone);       { done: }
           end
           else
           begin
-            EmitB($48); EmitB($8B); EmitB($0E); { mov rcx, [rsi] }
+            { Frozen -> frozen through an address: a CONVERSION, since the two
+              sides may differ in width. Same shape as the IR_STORE_SYM arm. }
+            srcFrozenTk := IRFrozenKindOfAddr(valueNode);
+            EmitLoadRcxStrLenFromRsi(srcFrozenTk);
             EmitClampRcxToStrCap(Integer(IRIVal[node])); { truncate to string[N] capacity }
-            EmitB($48); EmitB($89); EmitB($0F); { mov [rdi], rcx }
-            EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
-            EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
+            EmitStoreRcxAsStrLen(memFrozenTk);
+            EmitB($48); EmitB($83); EmitB($C6);
+            EmitB(FrozenStrPrefixSize(srcFrozenTk));   { add rsi, src prefix }
+            EmitB($48); EmitB($83); EmitB($C7);
+            EmitB(FrozenStrPrefixSize(memFrozenTk));   { add rdi, dst prefix }
             EmitB($F3); EmitB($A4);             { rep movsb }
           end;
         end
@@ -9028,7 +9049,10 @@ begin
                   Patch32(falseJmp, CodeLen - (falseJmp + 4));
                 end
                 else
-                  EmitStrCmpReg(op = tkEq);
+                  { The two sides can differ in width — see EmitStrCmpReg. The
+                    kinds come from IRStrTkOf, not IRTk, because the IR tags
+                    every frozen string tyString generically. }
+                  EmitStrCmpReg(op = tkEq, IRStrTkOf(left), IRStrTkOf(right));
               end
               else if ((op = tkLt) or (op = tkLe) or (op = tkGt) or (op = tkGe)) and
                   ((IntToTypeKind(IRTk[left]) = tyAnsiString) or

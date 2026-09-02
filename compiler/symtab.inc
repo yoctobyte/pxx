@@ -7246,21 +7246,43 @@ begin
   Patch32(skipJmp, CodeLen - (skipJmp + 4));
 end;
 
-procedure EmitStrCmpReg(eq: Boolean);
+procedure EmitStrCmpReg(eq: Boolean; lhsTk, rhsTk: TTypeKind);
+{ rax = LHS frozen buffer, rcx = RHS frozen buffer.
+
+  A COMPARISON IS A CROSS-WIDTH OPERATION for the same reason a copy is, and it
+  is the SHAPE THAT HITS FIRST: `s = 'hello'` for `s: string[10]` has a
+  tyShortString on the left and a LITERAL on the right, and literals stay
+  tyString with their 8-byte pool prefix permanently. So the two sides
+  genuinely differ in width in the most ordinary comparison anyone writes, not
+  in some exotic one.
+
+  This read both lengths at 8 and stepped both pointers by 8. Measured under
+  -dPXX_SHORTSTRING before the fix: `s = 'hello'` answered FALSE while
+  `s <> 'world'` answered TRUE, so it was not obviously broken — it was
+  comparing the length byte plus seven bytes of characters against a real
+  length, which fails every equality and passes most inequalities.
+
+  The lengths can no longer be compared memory-to-memory, because they are read
+  at different widths; r11 holds the LHS length for the compare. It is already
+  used as a scratch elsewhere in this file's emitters. }
 var skipJmp, okJmp: Integer;
 begin
-  { mov rsi, rcx }
-  EmitB($48); EmitB($89); EmitB($CE);
-  { add rsi, 8 }
-  EmitB($48); EmitB($83); EmitB($C6); EmitB($08);
-  { mov rdi, rax }
-  EmitB($48); EmitB($89); EmitB($C7);
-  { add rdi, 8 }
-  EmitB($48); EmitB($83); EmitB($C7); EmitB($08);
-  { mov rcx, [rcx] }
-  EmitB($48); EmitB($8B); EmitB($09);
-  { cmp rcx, [rax] }
-  EmitB($48); EmitB($3B); EmitB($08);
+  { lea rsi, [rcx + rhs prefix] — RHS chars }
+  EmitB($48); EmitB($8D); EmitB($71); EmitB(FrozenStrPrefixSize(rhsTk));
+  { lea rdi, [rax + lhs prefix] — LHS chars }
+  EmitB($48); EmitB($8D); EmitB($78); EmitB(FrozenStrPrefixSize(lhsTk));
+  { rcx := RHS length, at the RHS's width }
+  if FrozenStrPrefixSize(rhsTk) = 1 then
+    begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($09); end   { movzx rcx, byte [rcx] }
+  else
+    begin EmitB($48); EmitB($8B); EmitB($09); end;              { mov rcx, [rcx] }
+  { r11 := LHS length, at the LHS's width }
+  if FrozenStrPrefixSize(lhsTk) = 1 then
+    begin EmitB($4C); EmitB($0F); EmitB($B6); EmitB($18); end   { movzx r11, byte [rax] }
+  else
+    begin EmitB($4C); EmitB($8B); EmitB($18); end;              { mov r11, [rax] }
+  { cmp rcx, r11 }
+  EmitB($4C); EmitB($39); EmitB($D9);
 
   { jne not_equal }
   EmitB($0F); EmitB($85); skipJmp := CodeLen; EmitI32(0);
