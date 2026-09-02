@@ -3949,7 +3949,11 @@ begin
                          (not Procs[procIdx].Params[nArgs].IsArray);
           if argIsRec386 then
           begin
-            { eax = the record's address; push its dwords HIGH FIRST, exactly as
+            { CDECL record, decided above and taking precedence over A32_RECORD:
+              cdecl passes a record of ANY size by value in its own bytes, so it
+              needs the general address copy rather than the 5..8-byte register
+              pair the class below covers.
+              eax = the record's address; push its dwords HIGH FIRST, exactly as
               the set case below does. disp32 rather than that arm's disp8: a
               struct is not bounded by 32 bytes and disp8 would wrap past 127. }
             recDw386 := (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + nArgs]) + 3) div 4;
@@ -3959,6 +3963,15 @@ begin
               EmitB($52);                              { push edx }
             end;
             Inc(argBytes, recDw386 * 4);
+          end
+          else if argCls = A32_RECORD then
+          begin
+            { By-value record of 5..8 bytes on the INTERNAL convention: the VALUE
+              in edx:eax, pushed hi then lo so lo lands lower -- the A32_PAIR64
+              emission. NOT the set arm's address copy just below.
+              bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend }
+            EmitB($52);                              { push edx (hi) }
+            EmitB($50);                              { push eax (lo) }
           end
           else if argCls = A32_SET then
           begin
@@ -3999,7 +4012,7 @@ begin
           else
             EmitB($50);                              { push eax }
           if not argIsRec386 then
-            Inc(argBytes, Arg32Words(argCls) * 4);
+            Inc(argBytes, Arg32Words(argCls, procIdx, nArgs) * 4);
           Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
         end;
         IREmitNode386(IRA[node]);                    { eax = callee addr }
@@ -4083,7 +4096,15 @@ begin
             emission below is i386-specific. }
           IREmitNode386(IRA[argNode]);   { eax / edx:eax / xmm0 = arg value }
           argCls := Arg32Class(procIdx, nArgs, IntToTypeKind(IRTk[IRA[argNode]]));
-          if argCls = A32_SET then
+          if argCls = A32_RECORD then
+          begin
+            { By-value record of 5..8 bytes: VALUE in edx:eax, hi then lo. See
+              the indirect path's identical arm.
+              bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend }
+            EmitB($52);                              { push edx (hi) }
+            EmitB($50);                              { push eax (lo) }
+          end
+          else if argCls = A32_SET then
           begin
             { By-value set: eax is the 32-byte set's ADDRESS; push all 8 dwords
               inline so the callee's spill can rebuild the set in its own slot.
@@ -4129,7 +4150,7 @@ begin
           end
           else
             EmitB($50);                              { push eax }
-          Inc(argBytes, Arg32Words(argCls) * 4);
+          Inc(argBytes, Arg32Words(argCls, procIdx, nArgs) * 4);
           Inc(nArgs);
           argNode := IRB[argNode];
         end;

@@ -3702,11 +3702,34 @@ const
   A32_DOUBLE = 2;   { two words — a Double by value; the value is in the arch float reg }
   A32_SINGLE = 3;   { one word — narrow the double-valued register to single first }
   A32_SET    = 4;   { eight words — copied inline from the set's address }
+  A32_RECORD = 5;   { ceil(RecSize/4) words — a by-value RECORD, copied inline
+                      from its address exactly as A32_SET is. Ask Arg32Words for
+                      the count; it is the only class whose width depends on the
+                      PARAMETER rather than on the class alone, which is why
+                      that function takes procIdx/paramIdx.
+                      bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend }
 
-function Arg32Words(cls: Integer): Integer;
-{ Words occupied by an argument of the given class on a 32-bit target. }
+function Arg32Words(cls, procIdx, paramIdx: Integer): Integer;
+{ Words occupied by an argument of the given class on a 32-bit target.
+
+  TAKES THE PARAMETER, not just the class, since A32_RECORD was added: a
+  record's width is its own and no class constant can carry it. The signature
+  changed rather than a second function being added on purpose -- every existing
+  call site had to be revisited, and a site that kept asking the old question
+  would have gone on answering 1 for a record without failing to compile. }
 begin
-  if cls = A32_SET then Arg32Words := TypeSlotSize(tySet) div 4
+  if cls = A32_RECORD then
+  begin
+    { procIdx/paramIdx are guaranteed valid HERE because Arg32Class only returns
+      A32_RECORD after checking them; the guard is against a future caller
+      passing the class in from somewhere else. }
+    if (procIdx < 0) or (paramIdx < 0) or (paramIdx >= Procs[procIdx].ParamCount) then
+      Arg32Words := 1
+    else
+      Arg32Words := (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + paramIdx]) + 3) div 4;
+    if Arg32Words < 1 then Arg32Words := 1;
+  end
+  else if cls = A32_SET then Arg32Words := TypeSlotSize(tySet) div 4
   else if (cls = A32_PAIR64) or (cls = A32_DOUBLE) then Arg32Words := 2
   else Arg32Words := 1;
 end;
@@ -3743,7 +3766,33 @@ begin
   if Procs[procIdx].Params[paramIdx].IsRef and
      (not Procs[procIdx].Params[paramIdx].IsArray) then Exit;
   ptk := Procs[procIdx].Params[paramIdx].TypeKind;
-  if (ptk = tySet) and (not Procs[procIdx].Params[paramIdx].IsArray) then
+  { A by-value RECORD of 5..8 bytes, and THE BAND IS THE WHOLE RULE rather than
+    a shortcut. Outside it the old A32_WORD answer is right for a reason:
+
+      <= 4 bytes  one word IS the record, so A32_WORD was correct.
+      5..8 bytes  the slot ParamValueSize hands the callee is EIGHT bytes, so
+                  the callee reads two words -- and A32_WORD pushed one. This is
+                  the band that was broken, and it had a correct case on either
+                  side of it, which is why a spot check never found it.
+      > 8 bytes   the frontend sets IsRef, so the argument is an ADDRESS and the
+                  by-ref return above already answered one word, correctly.
+
+    So classifying the whole of tyRecord here would change behaviour outside the
+    measured defect -- on i386 cdecl, where a >8-byte record IS passed by value
+    in its own bytes by a path that already handles it. Narrowing to the band
+    keeps this change to exactly what was wrong.
+
+    Both 32-bit backends that got the direct path right agree on the emission,
+    and it is NOT the set arm's address copy: IREmitNode yields the record's
+    VALUE in the register pair (IR_LOAD_SYM was widened for exactly this), so
+    the arms below push lo then hi like an Int64.
+    bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend }
+  if (ptk = tyRecord) and (not Procs[procIdx].Params[paramIdx].IsArray) and
+     (paramIdx < MAX_PROC_PARAMS) and
+     (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + paramIdx]) > 4) and
+     (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + paramIdx]) <= 8) then
+    Arg32Class := A32_RECORD
+  else if (ptk = tySet) and (not Procs[procIdx].Params[paramIdx].IsArray) then
     Arg32Class := A32_SET
   else if (ptk = tyInt64) or (ptk = tyUInt64) then
     Arg32Class := A32_PAIR64

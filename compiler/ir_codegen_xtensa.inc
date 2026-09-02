@@ -1582,6 +1582,8 @@ var
                       frame pointer. See XtensaMarshalReg4. }
   argFree: Integer;   { Call0: bytes of argument block to pop AFTER the call
                         (0 = the block was already freed before it) }
+  argCls: Integer;    { Arg32Class of the argument being pushed on the virtual /
+                        indirect ladders -- see those arms }
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   tk: TTypeKind;
   sgn, savedLVW: Boolean;
@@ -4232,6 +4234,14 @@ begin
 
     IR_CALL_IND:
       begin
+        { The signature's proc index, or -1 when the callee's shape is unknown.
+          This arm did not read it until the argument classifier below needed it,
+          so `procIdx` here held whatever the PREVIOUS case arm had left in it --
+          a shared local across a 3000-line case statement. Reading it segfaulted
+          the compiler the first time anything asked (Procs[garbage].ParamCount),
+          which is the good failure; the same stale read guarded by a plausible
+          bound would have miscompiled quietly. }
+        procIdx := Integer(IRIVal[node]);
         { AGGREGATE / FROZEN-STRING RESULT. THE TWO ABIS DISAGREE ABOUT WHAT THE
           HIDDEN DESTINATION IS, and this is the whole difficulty: on Call0 it
           is NOT an argument -- it rides in a8 and the callee prologue stashes
@@ -4274,11 +4284,38 @@ begin
           nArgs := 1;
         end;
         argNode := IRB[node];
+        i := 0;   { PARAMETER index -- nArgs counts WORDS and the two diverge
+                    the moment one argument occupies two of them }
         while argNode <> -1 do
         begin
-          IREmitNodeXtensa(IRA[argNode]);
-          XtensaPushA2;
-          Inc(nArgs);
+          { Only A32_RECORD is branched on here, deliberately. This ladder pushes
+            one word for every other class and that is what it did before; a
+            by-value Int64 or Double through a proc pointer is a SEPARATE defect
+            on this backend, and folding its fix in would make this change
+            unattributable if either regressed. What the classifier buys today is
+            that the record case can no longer be reached without an arm.
+            bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend }
+          argCls := Arg32Class(procIdx, i, IntToTypeKind(IRTk[IRA[argNode]]));
+          if argCls = A32_RECORD then
+          begin
+            { The even-word pad first, for the reason the DIRECT path states: the
+              callee spill runs one shared 64-bit branch for Int64, Double and
+              this record, so it skips an odd word on its side too. Both sides
+              apply the rule or neither does. }
+            XtensaPadTo64Xtensa(procIdx, nArgs);
+            IREmitNodeXtensa(IRA[argNode]);        { a2=lo, a3=hi }
+            XtensaPushA2;                          { lo }
+            xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+            XtensaPushA2;                          { hi }
+            Inc(nArgs, 2);
+          end
+          else
+          begin
+            IREmitNodeXtensa(IRA[argNode]);
+            XtensaPushA2;
+            Inc(nArgs);
+          end;
+          Inc(i);
           argNode := IRB[argNode];
         end;
         if XtensaABI = XTENSA_ABI_WINDOWED then
@@ -4352,12 +4389,32 @@ begin
           XtensaPushA2;                         { argument word 0; Self becomes word 1 }
           nArgs := 1;
         end;
+        procIdx := IRC[node];
         argNode := IRA[node];
+        i := 0;   { PARAMETER index; Self is parameter 0, so the counter starts
+                    there exactly as the direct path's does. nArgs counts WORDS
+                    and additionally carries the windowed hidden-dest word, which
+                    is why the two cannot be one variable. }
         while argNode <> -1 do
         begin
-          IREmitNodeXtensa(IRA[argNode]);
-          XtensaPushA2;
-          Inc(nArgs);
+          { See the IR_CALL_IND arm: A32_RECORD only, on purpose. }
+          argCls := Arg32Class(procIdx, i, IntToTypeKind(IRTk[IRA[argNode]]));
+          if argCls = A32_RECORD then
+          begin
+            XtensaPadTo64Xtensa(procIdx, nArgs);
+            IREmitNodeXtensa(IRA[argNode]);        { a2=lo, a3=hi }
+            XtensaPushA2;                          { lo }
+            xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+            XtensaPushA2;                          { hi }
+            Inc(nArgs, 2);
+          end
+          else
+          begin
+            IREmitNodeXtensa(IRA[argNode]);
+            XtensaPushA2;
+            Inc(nArgs);
+          end;
+          Inc(i);
           argNode := IRB[argNode];
         end;
         if XtensaABI = XTENSA_ABI_WINDOWED then

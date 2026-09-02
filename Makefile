@@ -15183,6 +15183,11 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_ctor_string_literal_arg.pas $(TESTTMP)/test_aarch64_ctorstrlit
 	tools/expect_same.sh aarch64/test_aarch64_ctorstrlit "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_ctorstrlit)" "$$(printf 'field:hello\nc1\nafter1\nc2\nafter2\nc3\nc4\nafter3\nmsg:hello\nafter4')"
 	./$(COMPILER) --target=aarch64 test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_aarch64_recwide
+	# aarch64 is the CONTROL: it was right before the 32-bit fix and must stay
+	# right after it. A row that only covers the broken backends cannot tell a
+	# fix from a convention change.
+	./$(COMPILER) --target=aarch64 test/test_byvalue_record_param_every_call_shape.pas $(TESTTMP)/test_aarch64_bvrparam
+	tools/expect_same.sh aarch64/test_aarch64_bvrparam "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_bvrparam)" "$$(printf 'fail=0\nBYVALRECPARAM OK')"
 	tools/expect_same.sh aarch64/test_aarch64_recwide "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_recwide)" "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
 	./$(COMPILER) --target=aarch64 test/test_single_in_aggregate.pas $(TESTTMP)/test_aarch64_singleagg
 	tools/expect_same.sh aarch64/test_aarch64_singleagg "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_singleagg)" "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"
@@ -16007,6 +16012,12 @@ test-riscv32: $(COMPILER)
 	# (they silently truncated to word 1 -- bug-riscv32-byval-record-param-one-word)
 	./$(COMPILER) --target=riscv32 test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_riscv32_recwide
 	tools/expect_same.sh riscv32/test_riscv32_recwide "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_recwide)" "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
+	# ...and the same record through the OTHER THREE call shapes. recwide above
+	# covers the DIRECT call only, which is why it went on passing here for
+	# months while a virtual or indirect call lost the record's second word
+	# (bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend).
+	./$(COMPILER) --target=riscv32 --platform=posix test/test_byvalue_record_param_every_call_shape.pas $(TESTTMP)/test_riscv32_bvrparam
+	tools/expect_same.sh riscv32/test_riscv32_bvrparam "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_bvrparam)" "$$(printf 'fail=0\nBYVALRECPARAM OK')"
 	# managed-record operator chain (TBigInt: Boolean + dynarray = 8 bytes byval)
 	./$(COMPILER) --target=riscv32 -Fulib/rtl test/lib_bignum_ops.pas $(TESTTMP)/test_riscv32_bignum
 	tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_bignum > $(TESTTMP)/test_riscv32_bignum.out
@@ -17036,6 +17047,9 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_xtensa_recwide
 	./$(COMPILER) test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_xtensa_recwide_x64
 	tools/expect_same.sh xtensa/test_xtensa_recwide "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_recwide; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_recwide_x64; echo "exit=$$?")"
+	# The other three call shapes for the same record -- see the riscv32 row.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_byvalue_record_param_every_call_shape.pas $(TESTTMP)/test_xtensa_bvrparam
+	tools/expect_same.sh xtensa/test_xtensa_bvrparam "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_bvrparam)" "$$(printf 'fail=0\nBYVALRECPARAM OK')"
 	# SysOpen/SysRead/SysWrite/SysClose/SysFchmod. xtensa's syscall numbers are
 	# its OWN table (read=12, write=13, close=9, fchmod=52, openat=288) -- neither
 	# x86-64's nor asm-generic's, and a number from the wrong table is not a
@@ -17574,6 +17588,8 @@ test-arm32: $(COMPILER)
 	# net lib cross matrix: httpdemo builds on arm32 (feature-net-lib-cross-target)
 	./$(COMPILER) --target=arm32 -Fulib/rtl/platform/posix examples/net/httpdemo.pas $(TESTTMP)/test_arm32_httpdemo
 	./$(COMPILER) --target=arm32 test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_arm32_recwide
+	./$(COMPILER) --target=arm32 test/test_byvalue_record_param_every_call_shape.pas $(TESTTMP)/test_arm32_bvrparam
+	tools/expect_same.sh arm32/test_arm32_bvrparam "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_bvrparam)" "$$(printf 'fail=0\nBYVALRECPARAM OK')"
 	tools/expect_same.sh arm32/test_arm32_recwide "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_recwide)" "$$(printf '1 2\n1 2\n111 222\n1 7 8 2\n1 2 3 4 7 8\n1 2 3 7 8\n1 2 3 4 5 7 8\n200 7\ndone')"
 	./$(COMPILER) --target=arm32 test/test_single_in_aggregate.pas $(TESTTMP)/test_arm32_singleagg
 	tools/expect_same.sh arm32/test_arm32_singleagg "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_singleagg)" "$$(printf '1.5 2.5 3.5\n9.500 8.250 7.125\n2.0 4.0 6.0\n10.0')"

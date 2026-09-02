@@ -1015,7 +1015,26 @@ procedure EmitCallArgWordsRISCV32(procIdx, paramIdx, argNode: Integer; var nWord
 var cls, i: Integer;
 begin
   cls := Arg32Class(procIdx, paramIdx, IntToTypeKind(IRTk[IRA[argNode]]));
-  if cls = A32_SET then
+  if cls = A32_RECORD then
+  begin
+    { By-value record of 5..8 bytes: the VALUE, not the address. IREmitNode
+      yields a0:a1 for one (IR_LOAD_SYM was widened for exactly this), so this
+      is the Int64 emission -- lo then hi -- and it is character for character
+      what the DIRECT path a few hundred lines down already does. Copied from
+      there deliberately rather than reinvented from the set arm below, whose
+      address-copy shape is the wrong one here and would have pushed the first
+      two words of the record's ADDRESS.
+
+      Before this arm a record classified as A32_WORD and ONE word was pushed,
+      so an 8-byte record's second word was whatever the stack held. The direct
+      path was right and only these two shapes were wrong, which is why nothing
+      caught it.
+      bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend }
+    IREmitNodeRISCV32(IRA[argNode]);                { a0=lo, a1=hi }
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { lo }
+    rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi }
+  end
+  else if cls = A32_SET then
   begin
     { By-value set: a0 is the 32-byte set's ADDRESS; push all 8 words inline so
       the callee's spill can rebuild it. One address word left the callee reading
@@ -1050,7 +1069,7 @@ begin
     IREmitNodeRISCV32(IRA[argNode]);
     rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
   end;
-  nWords := nWords + Arg32Words(cls);
+  nWords := nWords + Arg32Words(cls, procIdx, paramIdx);
 end;
 
 procedure EmitStackTailToPsABIOrderRISCV32(nArgs: Integer);

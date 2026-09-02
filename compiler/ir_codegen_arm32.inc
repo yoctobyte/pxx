@@ -3345,11 +3345,26 @@ begin
         nArgs := 0;
         while argNode <> -1 do
         begin
-          if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
-             ((Procs[procIdx].Params[nArgs].TypeKind = tyInt64) or
-              (Procs[procIdx].Params[nArgs].TypeKind = tyUInt64)) and
-             (not Procs[procIdx].Params[nArgs].IsRef) and
-             (not Procs[procIdx].Params[nArgs].IsArray) then
+          { The class decision is Arg32Class, shared with the direct and virtual
+            paths. This ladder used to hand-roll its own Int64/Double tests — two
+            of the five classes — so every class it did not name silently became
+            one word: a by-value RECORD of 5..8 bytes lost its second word, and a
+            Single was pushed as whatever r0 held. Naming the classifier is what
+            makes an unhandled class impossible rather than quiet.
+            bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend }
+          argCls := Arg32Class(procIdx, nArgs, IntToTypeKind(IRTk[IRA[argNode]]));
+          { arm32 passes a by-value SET by ADDRESS on every path — see the virtual
+            ladder's note. The helper decides the class; the backend keeps its ABI. }
+          if argCls = A32_SET then argCls := A32_WORD;
+          if argCls = A32_RECORD then
+          begin
+            { The record's VALUE in r0:r1, pushed lo then hi — the Int64 emission
+              below, and what arm32's direct and virtual paths both do. }
+            IREmitNodeArm32(IRA[argNode]);             { r0=lo, r1=hi }
+            EmitI32($E92D0001);                        { push {r0} (lo) }
+            EmitI32($E92D0002);                        { push {r1} (hi) }
+          end
+          else if argCls = A32_PAIR64 then
           begin
             { 64-bit by-value param = two words (lo then hi), as the direct call
               does — sqlite's VFS xRead/xWrite take an sqlite_int64 offset; pushing
@@ -3357,24 +3372,29 @@ begin
             EmitNode64Arm32(IRA[argNode]);             { r0=lo, r1=hi }
             EmitI32($E92D0001);                        { push {r0} (lo) }
             EmitI32($E92D0002);                        { push {r1} (hi) }
-            Inc(j, 2);
           end
-          else if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
-                  (Procs[procIdx].Params[nArgs].TypeKind = tyDouble) and
-                  (not Procs[procIdx].Params[nArgs].IsRef) then
+          else if argCls = A32_DOUBLE then
           begin
             IREmitNodeArm32(IRA[argNode]);             { d0 }
             if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[IRA[argNode]]));
             EmitI32($EC510B10);                        { vmov r0, r1, d0 }
             EmitI32($E92D0001); EmitI32($E92D0002);    { push lo, hi }
-            Inc(j, 2);
+          end
+          else if argCls = A32_SINGLE then
+          begin
+            IREmitNodeArm32(IRA[argNode]);             { d0 }
+            if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+              EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[IRA[argNode]]));
+            EmitI32($EEB70BC0);                        { vcvt.f32.f64 s0, d0 }
+            EmitI32($EE100A10);                        { vmov r0, s0 }
+            EmitI32($E92D0001);                        { push {r0} }
           end
           else
           begin
             IREmitNodeArm32(IRA[argNode]);
             EmitI32($E92D0001);                        { push {r0} }
-            Inc(j, 1);
           end;
+          Inc(j, Arg32Words(argCls, procIdx, nArgs));
           Inc(nArgs);
           argNode := IRB[argNode];
         end;
@@ -3456,7 +3476,21 @@ begin
             inline 8-word copy: the shared helper decides the CLASS, each backend
             still owns its ABI. }
           if argCls = A32_SET then argCls := A32_WORD;
-          if argCls = A32_PAIR64 then
+          if argCls = A32_RECORD then
+          begin
+            { By-value record of 5..8 bytes: the VALUE in r0:r1, pushed lo then
+              hi -- the Int64 emission below, and exactly what arm32's DIRECT
+              path already does (IREmitNodeArm32 yields the pair for one; see
+              bug-arm32-record-byvalue-over-4-bytes-abi-gap, which fixed the
+              direct path alone). This is NOT the set arm's convention: arm32
+              passes a by-value SET by address on every path, which is why the
+              set bug missed this backend and this one did not.
+              bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend }
+            IREmitNodeArm32(IRA[argNode]);             { r0=lo, r1=hi }
+            EmitI32($E92D0001);                        { push {r0} (lo) }
+            EmitI32($E92D0002);                        { push {r1} (hi) }
+          end
+          else if argCls = A32_PAIR64 then
           begin
             EmitNode64Arm32(IRA[argNode]);             { r0=lo, r1=hi }
             EmitI32($E92D0001);                        { push {r0} (lo) }
@@ -3488,7 +3522,7 @@ begin
             IREmitNodeArm32(IRA[argNode]);
             EmitI32($E92D0001);                        { push {r0} }
           end;
-          Inc(wid, Arg32Words(argCls));
+          Inc(wid, Arg32Words(argCls, procIdx, nArgs));
           Inc(nArgs);
           argNode := IRB[argNode];
         end;

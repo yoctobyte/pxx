@@ -4293,6 +4293,20 @@ begin
       begin
         Procs[mpi].Params[i].IsArray := mPArr[i];
         Procs[mpi].Params[i].IsRef := mPByRef[i];
+        { ...and the parameter's class/record id, which this path COMPUTED into
+          mPTypesRec above and then dropped -- the same dropped-field pattern as
+          the return type just above and as the interface-method path. It was
+          invisible while nothing asked a signature what record a parameter is,
+          and it stopped being invisible the moment Arg32Class started asking:
+          an unwritten ProcParamRecId is not an error, it is a leftover, so the
+          band test `RecSize(...) in 5..8` answered about SOME OTHER record.
+          MEASURED on riscv32 before this line existed: every by-value record
+          argument through an indirect call classified as the 8-byte pair, so
+          the 4-, 12- and 16-byte rows of
+          test_byvalue_record_param_every_call_shape each lost the argument
+          after the record -- all three exactly one word out of place. }
+        if i < MAX_PROC_PARAMS then
+          ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := mPTypesRec[i];
       end;
   Result := mpi;
 end;

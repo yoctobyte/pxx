@@ -3,10 +3,10 @@ slug: feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convent
 track: A
 prio: 50
 type: feature
-status: open
+status: working
 found: 2026-09-02
 found-by: frankC
-owner: ""
+owner: frankC
 blocked-by: []
 summary: "i386 accepts a by-value RECORD parameter only for cdecl; on the internal convention it still refuses, because the internal CALLER pushes the address for records of 8 bytes or less and the callee half would read bytes — a silent caller/callee disagreement. The refusal is therefore CORRECT and load-bearing, and the work is the caller half. Cost: lib/rtl/image.pas declares ImageSetPixel(...; c: TRGBA), so the unit does not build for i386 and neither do examples/fm or examples/raytracer, both of which build for arm32, aarch64, riscv32 and xtensa."
 ---
