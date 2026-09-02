@@ -756,6 +756,111 @@ Recovery if the flip does break the fixedpoint: reseed from the pin and `touch`
 the sources — the pinned binary predates the flip by construction, so it is
 always a valid seed. Say which pin in the commit.
 
+### PHASE 2 STATUS — SAY IT AS "N VERIFIED", NEVER AS "SEVEN CONVERTED"
+
+**The count and the qualification must be ONE phrase, because the count is the
+repeatable part and the caveat is not.** "Seven backends converted, with a
+caveat on xtensa" loses its second half in one hop; "six verified, xtensa
+converted-unexecuted" cannot be halved without becoming obviously incomplete.
+Same discipline CLAUDE.md already applies to self-host fixedpoint versus
+"zlib matches the gcc oracle" — two claims that must never be conflated.
+
+| backend | codegen | how it is verified |
+| --- | --- | --- |
+| x86-64 | done | native, and the FPC 3.2.2 oracle directly |
+| aarch64 | done | `qemu-aarch64`, six configurations vs the oracle |
+| arm32 | done | `qemu-arm`, four configurations vs the oracle |
+| i386 | open | `qemu-i386` (or native ia32) — runner exists |
+| riscv32 | open | `qemu-riscv32` — runner exists |
+| wasm32 | open | **`wasmtime` runs it — measured, see below** |
+| xtensa | open | **NOTHING. Converts blind.** |
+
+**wasm32 IS RUNNABLE, and the earlier claim in this ticket's own reporting that
+it was not is WRONG.** It was inferred from `tools/run_target.sh` having no
+wasm32 arm and never measured. `wasmtime` is installed and runs a frozen-string
+probe correctly today: `string[10] := 'hello'` prints `hello|5|h`. What is
+genuinely missing is tooling, not capability — a `wasm32)` arm in
+`run_target.sh` and a `test-wasm32` target. **That is an afternoon of tooling,
+not an open question about what a green would mean.** The instrument answered a
+question about the harness and was read as a question about the platform.
+
+**XTENSA IS THE ONE THAT IS ACTUALLY BLIND, and it is worse than "no runner":
+it cannot compile a frozen-string program at all today** — `target xtensa:
+external (dynamic) symbols are not supported on this target`. So xtensa's
+converter cannot run its own conversion even in principle, cannot write a
+failing test first, and cannot find by running any of the bugs the other five
+found that way. **Record it as converted-unexecuted and never let it into the
+same number as the rest.** It is also the argument for xtensa going LAST.
+
+**The three that were found by RUNNING, none of which a reading would have
+caught** — this is the estimate for how many remain per backend:
+1. `Length`'s arm accepts a POINTER-typed node, so `IRStrTkOf` short-circuits
+   on the node's own kind and only `IRFrozenKindOfAddr` consults the symbol.
+2. arm32's WIDE prefix is TWO stores, so a helper copied from a 64-bit backend
+   writes garbage into the high half of the length.
+3. `PXXWriteFrozenW` is SHARED RUNTIME, not backend code — see below.
+
+### `compiler/builtin/builtinheap.pas` IS SHARED SURFACE FOR THIS FEATURE
+
+**Not obvious, and it broke a backend that had already been called complete.**
+`PXXWriteFrozenW` hardcoded a machine-word prefix and is called by aarch64,
+arm32, riscv32, xtensa and wasm32 — only x86-64 emits the padding inline. A
+frozen write with a FIELD WIDTH was therefore wrong on aarch64 after its
+conversion was declared done.
+
+It survived because the pad is `max(0, wid - len)`, a RUNTIME quantity, so the
+HELPER is what reads the prefix — and at width 0 the helper is never called.
+Width 0 was all the tests had. `test_shortstring_mixed_widths` now carries
+`pad`/`padw` rows; positive control confirmed, `pad` collapses to `<>` with the
+fix reverted.
+
+`PXXWriteFrozenBW` is the one-byte sibling. **Two procedures rather than a
+width parameter, deliberately:** the caller knows the width at COMPILE time, so
+a parameter would put a runtime branch inside every write, and a wrong value
+there is not a misformatted field — reading a 1-byte prefix as a machine word
+is a `write()` of the address space. Both survive phase 4, since bare `string`
+stays tyString with its machine-word prefix. **A backend picks between them; it
+does not add a third.**
+
+### A BACKEND'S ACCEPTANCE ROWS MUST INCLUDE A NONZERO FIELD WIDTH, FROM THE START
+
+frankc-af's point, 2026-09-02, and it is the right generalisation of the
+`PXXWriteFrozenW` hole: **at width 0 the runtime helper is never called, so a
+suite made entirely of width-0 rows certifies a backend as complete while its
+width path is broken.** That is exactly what happened to aarch64. If each
+backend writes its own acceptance rows from the aarch64 example, each one
+re-earns the same green that was wrong.
+
+`test_shortstring_mixed_widths.pas` carries `pad` and `padw` (both `:9`) for
+this reason. **Wire that file, do not hand-write a width-0 suite.** The
+positive control is recorded: `pad` collapses to `<>` with the fix reverted.
+
+**Call sites of the shared write helper, counted by frankc-af 2026-09-02** —
+this is how much of each backend the pick-don't-add rule actually touches:
+
+| backend | `PXXWriteFrozenW` | `PXXWriteFrozenBW` | |
+| --- | --- | --- | --- |
+| aarch64 | 2 | 3 | converted, calls both |
+| arm32 | 1 | 2 | converted, calls both |
+| i386 | 2 | 0 | |
+| riscv32 | 2 | 0 | |
+| xtensa | 1 | 0 | |
+| **wasm32** | **6** | 0 | **three times any other backend** |
+
+**wasm32 has six sites to decide and therefore six chances to reach for a third
+sibling instead of picking between the two that exist.** It is also the backend
+whose codegen is least like the others — a stack VM with helper calls, not
+machine code — so it is the one where "apply the worked example" is least true.
+
+### The per-target guard is ONE ROW PER TARGET so parallel work does not collide
+
+`TargetHasByteStrPrefixCodegen` (`util.inc`). It was a chain of
+`TargetArch <> X` in a single condition, which meant every session converting a
+backend edits the SAME LINE to enable its own target — five conflicts in one
+expression, each of them a correct change, and a merge that resolves them by
+keeping one. A row conflicts only with itself. **Add your row; do not touch the
+others.** The whole function goes at phase 4 with the flag.
+
 ### P4's DEFINITION OF DONE INCLUDES DELETING `-dPXX_SHORTSTRING` (added 2026-09-02, phase 2)
 
 **Phase 2 introduced an opt-in define, `-dPXX_SHORTSTRING`, and P4 is not done
