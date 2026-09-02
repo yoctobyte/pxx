@@ -43,3 +43,6 @@ test-emit-obj: data-import object FAILED to link
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-02 — auto-closed by the seven watcher: `test-emit-obj#src:test/c_obj_data_import.c` passes at be58f71f713a (tier full); it was red at 68a99471d25c. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
