@@ -146,8 +146,7 @@ I cleared a collision from `working/`; frankA was mid-edit in that exact ticket
 and found the duplicate only at push. **The flag caused it**: frankC named the
 ticket publicly, I ranked it to frankC, frankA picked it up citing that same
 flag. So **a just-flagged ticket is at peak collision risk in exactly the window
-where `working/` is least informative — nobody has claimed it yet.** Not an
-argument against flagging; the alternative is sitting on work silently.
+where `working/` is least informative — nobody has claimed it yet.**
 frankA: **"unclaimed is a snapshot, and the collision only surfaces at push."**
 
 **The window does not contain an unowned ticket — the flag IS the claim**, and
@@ -163,11 +162,10 @@ reply that ranks it says *claim it now, before you start*; if they cannot claim
 immediately, record the intent in the ticket yourself. One action, and it closes
 the hole without asking `working/` to be something it is not.
 
-**And when you do read an instrument: not a bad one — a good one aimed at a
-different question.** `working/` and `owner:` measure INTENT; commits grouped by
-`Claude-Session` trailer measure ACTIVITY, and only that answers "is someone
-typing here now" (the author is always `yoctobyte`). **Name the instrument in
-the clearance**, so a wrong one is auditable rather than authoritative.
+**When you do read an instrument: not a bad one — a good one aimed at a
+different question.** `working/` measures INTENT; commits by `Claude-Session`
+trailer measure ACTIVITY (the author is always `yoctobyte`). **Name the
+instrument in the clearance**, so a wrong one is auditable, not authoritative.
 
 ## Standing constraints
 
