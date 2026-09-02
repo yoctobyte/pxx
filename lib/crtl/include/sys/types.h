@@ -41,4 +41,16 @@ typedef unsigned int id_t;
 typedef unsigned long long dev_t;
 typedef unsigned long long ino_t;
 
+/* <sys/select.h> AT THE END, as glibc's <sys/types.h> does (line 179 of the
+   host's copy). fd_set and the FD_* macros are reached that way far more often
+   than by including <sys/select.h> directly -- busybox's telnetd.c gets them
+   through libbb.h and nothing else, and it failed with
+   `call to undeclared function: FD_ZERO' after <sys/select.h> already existed
+   here, because nobody includes it by name.
+
+   LAST, and not at the top: <sys/select.h> needs the typedefs above (and pulls
+   <sys/time.h>), so it has to see a finished file. Both headers are
+   guard-wrapped, so the cycle terminates. */
+#include <sys/select.h>
+
 #endif

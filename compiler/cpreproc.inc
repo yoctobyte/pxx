@@ -2659,11 +2659,52 @@ end;
 { Record a crtl impl path as pulled (dedup register). }
 procedure CPMarkCrtlSrcPulled(const src: AnsiString);
 begin
-  if CrtlSrcPulledCount < MAX_C_INCLUDE_DIRS then
+  if CrtlSrcPulledCount < MAX_CRTL_PULLS then
   begin
     CrtlSrcPulled[CrtlSrcPulledCount] := src;
     Inc(CrtlSrcPulledCount);
   end;
+end;
+
+{ Is `hdr` an OUTER include of a header whose body we are still inside? True
+  means the current include of it was skipped by its guard, so its macros are
+  incomplete and its impl must not be pulled yet -- see CrtlHdrInFlight. }
+function CPCrtlHdrInFlight(const hdr: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  for i := 0 to CrtlHdrInFlightCount - 1 do
+    if CrtlHdrInFlight[i] = hdr then begin Result := True; Exit; end;
+end;
+
+{ Push/pop the header whose body is about to be / has just been processed. The
+  push is unconditional so the pop is too; overflow simply stops recording (the
+  include depth limit fires first, at MAX_CPREP_INCLUDES). }
+procedure CPPushCrtlHdrInFlight(const hdr: AnsiString);
+begin
+  if CrtlHdrInFlightCount < MAX_CPREP_INCLUDES then
+    CrtlHdrInFlight[CrtlHdrInFlightCount] := hdr;
+  Inc(CrtlHdrInFlightCount);
+end;
+
+procedure CPPopCrtlHdrInFlight;
+begin
+  if CrtlHdrInFlightCount > 0 then Dec(CrtlHdrInFlightCount);
+end;
+
+{ Queue a header whose impl pull must wait for the outermost header to finish
+  -- see CrtlPendingPull. Deduped: the same header re-included while the queue
+  is still pending would otherwise ask twice, and the second ask is a no-op
+  only because CPCrtlSrcPulled catches it later. }
+procedure CPQueuePendingPull(const hdr: AnsiString);
+var i: Integer;
+begin
+  for i := 0 to CrtlPendingPullCount - 1 do
+    if CrtlPendingPull[i] = hdr then Exit;
+  if CrtlPendingPullCount >= MAX_CRTL_PULLS then
+    Error('too many deferred crtl impl pulls');
+  CrtlPendingPull[CrtlPendingPullCount] := hdr;
+  Inc(CrtlPendingPullCount);
 end;
 
 { After a crtl `<header>` is processed, auto-pull its sibling `src/<name>.c`
@@ -2680,6 +2721,8 @@ begin
   if CPCrtlHeaderName(hdrPath, hdrName) and CHeaderUsesSystemLib(hdrName) then Exit;
   if not CPCrtlSrcOf(hdrPath, src) then Exit;
   if CPCrtlSrcPulled(src) then Exit;
+  { Re-entered through its own guard: the outer instance owns this pull. }
+  if CPCrtlHdrInFlight(hdrPath) then Exit;
   CPrepPath := src;
   CPLoadInclude(depth);
   if CPIncludeLength(depth) = 0 then Exit;   { no sibling impl — pure-header module }
@@ -2700,6 +2743,24 @@ begin
   CPProcessInclude(depth, srcDir);
   CPMHideLo := savedLo;
   CPMHideHi := savedHi;
+end;
+
+{ Run the queued pulls, in request order, now that no header is in flight.
+  A pull can queue nothing further (its own includes run with CrtlHdrInFlight
+  back at zero and pull directly), but the count is re-read each round anyway
+  so a future change cannot lose an entry appended mid-drain. }
+procedure CPDrainPendingPulls(depth: Integer);
+var i: Integer;
+    hdr: AnsiString;
+begin
+  i := 0;
+  while i < CrtlPendingPullCount do
+  begin
+    hdr := CrtlPendingPull[i];
+    Inc(i);
+    CPAutoPullCrtlImpl(depth, hdr);
+  end;
+  CrtlPendingPullCount := 0;
 end;
 
 { Does the `#include` operand spanning line[a..e] name a PASCAL UNIT, i.e. end
@@ -2844,7 +2905,7 @@ end;
 
 procedure CPInclude(const line: AnsiString; p, last, depth: Integer;
   const baseDir: AnsiString);
-var a, b, k: Integer; hdrResolved, incName, searchList: AnsiString;
+var a, b, k: Integer; hdrResolved, incName, searchList, pendSrc: AnsiString;
 begin
   { The buffers ARE an array now, so the sixteen-slot guard that used to sit
     below this line is gone — it was written to be the only line to delete once
@@ -2928,9 +2989,23 @@ begin
     end
     else
     begin
+      CPPushCrtlHdrInFlight(hdrResolved);
       CPProcessInclude(depth, GetFilePath(CPrepPath));
-      { pxx has no link step: a crtl `<header>` also pulls its libc-free impl. }
-      CPAutoPullCrtlImpl(depth, hdrResolved);
+      CPPopCrtlHdrInFlight;
+      { pxx has no link step: a crtl `<header>` also pulls its libc-free impl.
+        Not here if another header is still half-emitted around us -- see
+        CrtlPendingPull for why the splice point has to be the top level. }
+      if CrtlHdrInFlightCount > 0 then
+      begin
+        { Only a header with an impl to pull belongs on the queue. Queueing
+          every include put GTK's ~1500-header tree on it and hit the bound. }
+        if CPCrtlSrcOf(hdrResolved, pendSrc) then CPQueuePendingPull(hdrResolved);
+      end
+      else
+      begin
+        CPAutoPullCrtlImpl(depth, hdrResolved);
+        CPDrainPendingPulls(depth);
+      end;
     end;
   end;
 end;

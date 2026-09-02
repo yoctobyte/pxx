@@ -210,6 +210,11 @@ const
   MAX_CPREP_PARAMS = 131072;
   MAX_CPREP_CONDS = 256;
   MAX_CPREP_INCLUDES = 128;
+  { crtl impls pulled per compile, and the queue of pulls waiting for the
+    outermost header to finish. 44 impls exist today; the old bound was
+    MAX_C_INCLUDE_DIRS = 64, which is a limit on `-I' roots and had nothing to
+    do with this. }
+  MAX_CRTL_PULLS = 512;
   MAX_CPREP_CHARS = 8388608;  { 8 MB }
   MAX_C_INCLUDE_DIRS = 64;    { user `-I` C include search roots }
   MAX_C_SYS_INCLUDE_DIRS = 64; { host system `<>` fallback roots — the tier-4 table BuildCSysIncludeDirs fills (feature-dynamic-include-paths-config). Was sixteen copy-pasted blocks in cpreproc.inc, two of them naming a hardcoded gcc/clang VERSION that had already gone stale. }
@@ -4470,8 +4475,41 @@ var
   CUseSystemLibs   : Boolean;
   CSystemLibs       : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
   CSystemLibCount   : Integer;
-  CrtlSrcPulled    : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
+  CrtlSrcPulled    : array[0..MAX_CRTL_PULLS-1] of AnsiString;
   CrtlSrcPulledCount : Integer;
+  { Impl pulls DEFERRED to the top level, in the order they were requested.
+
+    The splice point is the problem this exists to move. An impl is spliced
+    where its header FINISHES, so a header included from the MIDDLE of another
+    header splices its impl into the middle of that header -- ahead of
+    everything the outer header declares below the include. <stdio.h> includes
+    <sys/types.h> at line 9 and typedefs FILE at line 17, so every impl reached
+    through that one line was emitted into a translation unit with no FILE.
+    It has been true all along; what hid it is that src/pwd.c's own
+    `#include <stdio.h>' used to pull src/stdio.c right there, and src/stdio.c
+    repeats the FILE typedef. Working by a coincidence, one edit wide.
+
+    So a pull requested while ANY header is still in flight is queued and run
+    when the outermost one completes. At that moment no header is
+    half-emitted, which is the property the splice needs and the only one that
+    makes the point defensible. Impls are not counted as in flight: their
+    includes sit at the top, so splicing there already is the top level. }
+  CrtlPendingPull    : array[0..MAX_CRTL_PULLS-1] of AnsiString;
+  CrtlPendingPullCount : Integer;
+  { Crtl headers whose body is CURRENTLY being processed, innermost last. A
+    header reached AGAIN from inside itself is skipped by its own include guard,
+    and that empty body must NOT trigger the impl auto-pull: the outer instance
+    has not defined its macros yet, so the impl would compile against a
+    half-built header -- silently, because an undeclared identifier used as a
+    value is a warning. Measured 2026-09-02: <sys/types.h> gained an
+    `#include <sys/select.h>` (glibc has one), so src/sys/select.c was pulled
+    from inside <unistd.h> line 6; select.c's own <unistd.h> was guard-empty,
+    the pull fired anyway, and src/unistd.c compiled with every _SC_*, X_OK and
+    no_argument still undefined -- sysconf(_SC_PAGESIZE) returned -1 and
+    getopt_long compared required_argument = no_argument = 0. The outer
+    instance does the pull when it completes, which is the only correct moment. }
+  CrtlHdrInFlight    : array[0..MAX_CPREP_INCLUDES-1] of AnsiString;
+  CrtlHdrInFlightCount : Integer;
 
   { Ordered Pascal-unit (`uses`) search roots from `-Fu<dir>` (FPC-style) and
     `-I<dir>`. Searched in LoadUnit after the including file's own directory and

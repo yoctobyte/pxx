@@ -602,9 +602,12 @@ void __pxx_run_initializers(long *sp)
    to 1. Both work, because busybox chooses between the two spellings at compile
    time (GETOPT_RESET) and other real code does too.
 
-   NOT implemented: getopt_long, and the leading `+` / `-` optstring modes. A
-   leading ':' IS honoured -- it costs one branch and callers use it to tell a
-   missing argument from an unknown option.
+   NOT implemented: the leading `+` / `-` optstring modes. A leading ':' IS
+   honoured -- it costs one branch and callers use it to tell a missing
+   argument from an unknown option. getopt_long and getopt_long_only ARE
+   implemented (below, over the one parser pxx_getopt_impl); this line said they
+   were not, and stayed that way after they landed. Checked 2026-09-02 by
+   running `--file=abc -v --verbose rest' against glibc, not by reading it.
 
    Verified identical to glibc, stdout and stderr and exit status, for:
      -a -b -o X f1 f2 | -abo Y f | -a -- -b | f -a | -z | -o

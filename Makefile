@@ -13073,6 +13073,20 @@ test-core: $(COMPILER)
 	# All rows diffed against gcc.
 	./$(COMPILER) test/c_crtl_select.c $(TESTTMP)/c_select26
 	tools/expect_same.sh c_select26 "$$($(TESTTMP)/c_select26)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
+	# The crtl impl auto-pull must not fire for a header re-entered through its
+	# own include guard. <sys/types.h> includes <sys/select.h> (glibc does, and
+	# busybox reaches fd_set only that way), so with <unistd.h> FIRST the chain
+	# unistd.h -> sys/types.h -> sys/select.h -> src/sys/select.c -> unistd.h
+	# (guard-empty) pulled src/unistd.c while X_OK, _SC_* and no_argument were
+	# still undefined. It did not fail -- an undeclared identifier used as a
+	# value is a warning -- it returned -1 from sysconf and made getopt_long
+	# compare required_argument = no_argument = 0. Rows 1-3 and 7 are the ones
+	# that discriminate; 4-6 pass even when the pull is wrong, because those
+	# macros are read in the PROGRAM's translation unit. Preprocessor-level, so
+	# no cross rows: every target shares the include machinery.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_header_order_pull.c $(TESTTMP)/c_hdrorder26
+	tools/expect_same.sh c_hdrorder26 "$$($(TESTTMP)/c_hdrorder26)" "$$(printf '1 4096\n2 100\n3 1\n4 0 1 2 4\n5 0 1 2\n6 f abc\n7 1 2 rest')"
 	# posix_fallocate/fallocate, found the same way. ONE SYSCALL, TWO ERROR
 	# CONTRACTS: fallocate returns -1 and sets errno, posix_fallocate returns the
 	# error NUMBER and leaves errno alone. busybox writes
@@ -13137,6 +13151,18 @@ test-core: $(COMPILER)
 	# All rows diffed against gcc.
 	./$(COMPILER) test/c_preproc_va_args_expansion.c $(TESTTMP)/c_vaargs26
 	tools/expect_same.sh c_vaargs26 "$$($(TESTTMP)/c_vaargs26)" "$$(printf '1 1042\n2 1043\n3 1044\n4 1045\n5 5141\n6 7\n7 41\n8 no varargs')"
+	# The <locale.h> category numbers. crtl had LC_ALL = 0 and LC_NUMERIC = 4,
+	# which are glibc's LC_CTYPE and LC_MONETARY, and four more categories were
+	# missing outright. Nothing in this runtime could see it: crtl's setlocale
+	# ignores the category. But a pxx --emit-obj object is LINKED BY GCC in the
+	# busybox build, so the constant reaches the REAL setlocale -- ash.c's
+	# `setlocale(LC_ALL, value)' would have set LC_CTYPE alone. Rows 1 and 2 are
+	# diffed against glibc's headers because that is the only instrument that can
+	# see a category number that is merely WRONG. Row 3 asserts all thirteen are
+	# distinct, which is what a one-line edit to the list breaks. Row 4 is the
+	# one row that is NOT an oracle comparison -- it pins crtl's fixed "C" locale.
+	./$(COMPILER) test/c_crtl_locale_categories.c $(TESTTMP)/c_locale26
+	tools/expect_same.sh c_locale26 "$$($(TESTTMP)/c_locale26)" "$$(printf '1 0 1 2 3 4 5 6\n2 7 8 9 10 11 12\n3 0\n4 1 1')"
 	./$(COMPILER) test/c_crtl_bits_and_fdatasync.c $(TESTTMP)/c_bits26
 	tools/expect_same.sh c_bits26 "$$($(TESTTMP)/c_bits26)" "$$(printf '1 1 2 0\n2 1\n3 1\n4 0 0\n5 1\n6 1\n7 5\n8 0\n9 -1 1')"
 	./$(COMPILER) test/c_crtl_netdb_and_exec.c $(TESTTMP)/c_netdb26
