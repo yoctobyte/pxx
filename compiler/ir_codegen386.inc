@@ -5926,16 +5926,15 @@ begin
           end;
         end;
 
-      IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_LOAD_MEM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
-      IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP,
-      IR_ATOMIC, IR_CLONE, IR_CONST_DATA, { value-producing: emitted by the consuming store, like x86-64 }
-      IR_SLOTADDR, IR_DYNUNIQUE, IR_FIELD, IR_INDEX: ; { operands, emitted by parents }
-      { IR_LOAD_MEM: pure value node — statement-level emit re-runs its address
-        operand (`*f()` calls f twice). See aarch64 note. }
-
       else
-        IREmitNode386(i); { unknown statement op -> hard error inside }
+        { A value node does nothing at statement level -- the parent that
+          consumes it emits it, and emitting it here too runs its whole subtree
+          TWICE. The list of value kinds used to be enumerated per backend, in
+          five copies that drifted apart (8 of 24 kinds disagreed); it is now
+          IRKindIsStatement in ir.inc, which is the x86-64 allowlist hoisted.
+          x86-64 has no catch-all here and so never had this class of bug. }
+        if IRKindIsStatement(IRKind[i]) then
+          IREmitNode386(i);
     end;
   end;
 

@@ -5172,24 +5172,15 @@ begin
       IR_IO_UNLOCK:
         EmitI32($94000000 or (((IOUnlockAddr - CodeLen) div 4) and $03FFFFFF)); { bl io-unlock stub }
 
-      IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_LOAD_MEM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
-      IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP, IR_CONST_DATA,
-      IR_SLOTADDR, IR_DYNUNIQUE,
-      IR_FIELD, IR_INDEX, IR_VAR_BOX, IR_VAR_BINOP,
-      IR_ATOMIC, IR_CLONE: ;
-      { IR_ATOMIC / IR_CLONE are value nodes (return old value / child tid) that
-        their parent store_sym consumes — like IR_SYSCALL above. Emitting them at
-        statement level too ran the read-modify-write / thread-spawn TWICE (the
-        result store then re-evaluated the side-effecting node). }
-      { IR_LOAD_MEM is a pure value node (a deref); like IR_LOAD_SYM it must NOT
-        be emitted at statement level — doing so re-evaluates its address operand,
-        so `*f()` (deref of a call result) called f twice, advancing va_arg's
-        cursor an extra slot and breaking every variadic call. x86-64's driver has
-        no statement-level catch-all, so it never had this bug. }
-
       else
-        IREmitNodeAarch64(i);
+        { A value node does nothing at statement level -- the parent that
+          consumes it emits it, and emitting it here too runs its whole subtree
+          TWICE. The list of value kinds used to be enumerated per backend, in
+          five copies that drifted apart (8 of 24 kinds disagreed); it is now
+          IRKindIsStatement in ir.inc, which is the x86-64 allowlist hoisted.
+          x86-64 has no catch-all here and so never had this class of bug. }
+        if IRKindIsStatement(IRKind[i]) then
+          IREmitNodeAarch64(i);
     end;
   end;
 

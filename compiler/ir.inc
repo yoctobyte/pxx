@@ -364,6 +364,63 @@ begin
   end;
 end;
 
+{ Is this IR kind emitted at STATEMENT level, or is it a VALUE node that the
+  parent consuming it emits?
+
+  This is a property of the IR, not of a target: whether `a + b` is a statement
+  does not depend on which machine runs it. It lived as five per-backend lists
+  because each walker grew its own, and they DRIFTED -- measured 2026-09-02,
+  the five denylists disagreed on 8 of the 24 kinds any of them named
+  (IR_CLONE, IR_DYNUNIQUE, IR_LOAD_MEM, IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP,
+  IR_VAR_BOX, IR_VAR_BINOP).
+
+  WHY IT MATTERS, AND WHY IT IS SILENT: the walker visits every IR node, value
+  nodes included. Emitting a value node at statement level does not merely waste
+  the instructions -- the parent that consumes it emits it AGAIN, so the whole
+  subtree runs TWICE, side effects and all. It has already cost us twice, and
+  both were fixed one arm at a time rather than here: IR_ATOMIC (a
+  read-modify-write ran twice; InterLockedIncrement moved 10 to 12) and
+  IR_VIRTUAL_CALL (57e35555e -- every virtual call ran its callee twice, which
+  reached the backlog as a string allocation count of 7707 against 3799 and was
+  about neither strings nor allocation).
+
+  THE DEFAULT WAS INVERTED between backends, which is the actual root cause.
+  x86-64's walker is an ALLOWLIST -- it names the statement kinds and has no
+  `else`, so an unnamed kind does nothing. The other five were DENYLISTS -- name
+  the value kinds, `else` emit -- so a NEW IR kind defaulted to SKIP on x86-64
+  and to EMIT on every other target. aarch64's own walker says it: "x86-64's
+  driver has no statement-level catch-all, so it never had this bug."
+
+  So this list is the x86-64 allowlist, hoisted. Adding an IR kind now means
+  answering the statement-or-value question ONCE, here, instead of five times by
+  omission. Kinds absent from this list are values and are emitted by their
+  parent; that is the same answer x86-64 has always given. }
+function IRKindIsStatement(kind: Integer): Boolean;
+begin
+  case kind of
+    { control flow }
+    IR_LABEL, IR_JUMP, IR_JUMP_IF_FALSE, IR_JUMP_INDIRECT,
+    { calls -- emitted at statement level only when the result is discarded,
+      which the backends gate on IRStmtRoot }
+    IR_CALL, IR_VIRTUAL_CALL, IR_CALL_IND,
+    { stores and copies }
+    IR_STORE_SYM, IR_STORE_MEM, IR_STORE_DYN, IR_VAR_STORE,
+    IR_COPY_REC, IR_COPY_REC_MANAGED, IR_SET_COPY,
+    IR_SETLEN_DYN, IR_SETLEN_STR, IR_DEFAULT_MEM, IR_ZERO_SYM,
+    { I/O }
+    IR_WRITE, IR_WRITELN, IR_READLINE, IR_READ_VAR, IR_READ_DISCARD,
+    IR_IO_LOCK, IR_IO_UNLOCK,
+    { exceptions }
+    IR_EXC_ENTER, IR_EXC_MATCH, IR_EXC_MATCH_HIT, IR_EXC_LEAVE,
+    IR_EXC_STORE, IR_EXC_CLEAR, IR_RAISE,
+    { coroutines, signals, termination, inline asm }
+    IR_COSWITCH, IR_YIELD, IR_SET_SIGNAL, IR_TERMINATE, IR_ASM:
+      Result := True;
+  else
+    Result := False;
+  end;
+end;
+
 function IRNodeOK(idx: Integer): Boolean;
 begin
   Result := (idx >= 0) and (idx < IRCount);

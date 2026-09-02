@@ -6186,6 +6186,74 @@ denominator is **silently too large** rather than merely unstated.
 mutable state: it moved under this measurement at 17:33 the same day. A TU count
 with no config named is not reproducible even by its own author.
 
+### The map is an exact set — for ONE architecture
+
+Measured 2026-09-02 (frankD), the same day and one level up from the case above.
+Having correctly switched to the link map, a full-applet busybox run compiled
+**265/265 TUs for i386** and then failed at the LINK on a single undefined
+symbol, `bb_bswap_64`. Not a pxx bug:
+
+```c
+/* include/platform.h */
+#if ULONG_MAX > 0xffffffff
+/* inline 64-bit bswap only on 64-bit arches */
+# define bb_bswap_64(x) bswap_64(x)
+#endif
+```
+
+and `libbb/bb_bswap_64.c` self-guards with the complement. So on x86-64 the
+macro shadows the function, that TU compiles to an object defining **nothing**,
+the link never pulls it, and it is **absent from the map**. On i386 the macro
+does not exist, every `SWAP_BE64` is a real call, and the definition is
+required. The TU list had been derived from a map produced by a **host x86-64
+link**.
+
+So the two failure modes are mirror images, and a cross build can hit either:
+
+| population source | error | for a cross target |
+| --- | --- | --- |
+| artefacts on disk (`*.o`) | a **superset** that never shrinks | members the build does not compile |
+| the link map | an **exact set** — for the machine that produced it | **missing** what only the target needs |
+
+**A map is only authoritative for the architecture that produced it.** Name the
+arch beside the map, exactly as you name the config.
+
+**And the host archive cannot be asked to settle it.** The first fix looked up
+which `lib.a` member defines the symbol and found nothing — *and so did its
+negative control*, so the probe could not tell "my awk is broken" from "no
+member defines it". A positive control on `bb_cat` showed the awk was fine and
+`libbb/bb_bswap_64.o` is genuinely an **empty archive member**: present, defining
+no symbols. Only the TARGET build has a definition. The resolver therefore has
+to compile the candidate **for the target** and ask that object — asking the
+host's archive returns a true answer to a different question, which is this
+section's whole subject.
+
+### The same RED means two different things, and which one depends on the week
+
+Flagged 2026-09-02 (frankD), during the stand-down before the `string[N]`
+relayout. `gate.sh quick` went RED with *"the fixedpoint reached from PINNED
+differs from `compiler/pascal26`"*. That is the **documented stale-local-seed
+case** — not a miscompile, both binaries self-reproduce — and it cleared by
+reseeding from the pin and `touch`ing the sources (converged in 1 round at
+`32a2ce1d9806`). CLAUDE.md already says to read it that way.
+
+**But that reading is only correct while nothing is changing the layout of the
+compiler's own data.** `feature-p-implement-the-real-tyshortstring-byte-prefix-layout`
+re-types `string[N]`, which the compiler itself uses, and its failure mode IS
+the self-host fixedpoint. During that window the identical RED, with the
+identical wording, is the thing the change was most likely to break.
+
+**So the hazard is a REFLEX, not a message.** The diagnosis "benign, reseed and
+move on" will have been correct every previous time anyone saw it, which is
+exactly what makes it dangerous the one week it is not. A guard whose benign
+explanation is usually right trains the reader to stop looking.
+
+The discriminator is cheap and it is not the wording: **does the tree currently
+contain a change to the layout of anything `compiler.pas` stores?** If yes, a
+reseed that makes the RED go away has not explained it — it has removed the
+evidence. Reseed from the pin *and* confirm the fixedpoint converges with the
+change still applied.
+
 ### The pair worth holding together
 
 This and the `sizeof` collision below it are the two halves of one class, and

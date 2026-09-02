@@ -5015,18 +5015,15 @@ begin
       IR_IO_UNLOCK:
         EmitI32($EB000000 or ((((IOUnlockAddr - CodeLen) div 4) - 2) and $00FFFFFF)); { bl io-unlock }
 
-      IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK,
-      IR_LOAD_SYM, IR_LOAD_MEM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
-      IR_SET_LIT, IR_SET_BINOP, IR_SET_CMP, IR_CONST_DATA,
-      IR_SLOTADDR, IR_DYNUNIQUE, IR_FIELD, IR_INDEX,
-      IR_ATOMIC, IR_CLONE: ;
-      { IR_ATOMIC / IR_CLONE are value nodes consumed by their parent store, like
-        IR_SYSCALL — emitting them at statement level too ran the rmw/spawn twice. }
-      { IR_LOAD_MEM: pure value node — must not emit at statement level, else its
-        address operand re-evaluates (`*f()` calls f twice). See aarch64 note. }
-
       else
-        IREmitNodeArm32(i);
+        { A value node does nothing at statement level -- the parent that
+          consumes it emits it, and emitting it here too runs its whole subtree
+          TWICE. The list of value kinds used to be enumerated per backend, in
+          five copies that drifted apart (8 of 24 kinds disagreed); it is now
+          IRKindIsStatement in ir.inc, which is the x86-64 allowlist hoisted.
+          x86-64 has no catch-all here and so never had this class of bug. }
+        if IRKindIsStatement(IRKind[i]) then
+          IREmitNodeArm32(i);
     end;
   end;
 

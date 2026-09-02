@@ -5204,16 +5204,15 @@ begin
           xtensa_s32i(reg_xtensa_a4, reg_xtensa_a3, 0);
         end;
 
-      IR_NOP, IR_CONST_STR, IR_CONST_INT, IR_BLOCK, IR_CONST_DATA,
-      IR_LOAD_SYM, IR_BINOP, IR_NEG, IR_NOT, IR_ARG, IR_LEA, IR_SYSCALL,
-      IR_SLOTADDR, IR_FIELD, IR_INDEX: ;
-      { IR_ATOMIC is a value node consumed by its parent store, like
-        IR_SYSCALL. Emitting it at statement level TOO runs the
-        read-modify-write twice — riscv32 and arm32 both paid for this one. }
-      IR_ATOMIC: ;
-
       else
-        IREmitNodeXtensa(i);
+        { A value node does nothing at statement level -- the parent that
+          consumes it emits it, and emitting it here too runs its whole subtree
+          TWICE. The list of value kinds used to be enumerated per backend, in
+          five copies that drifted apart (8 of 24 kinds disagreed); it is now
+          IRKindIsStatement in ir.inc, which is the x86-64 allowlist hoisted.
+          x86-64 has no catch-all here and so never had this class of bug. }
+        if IRKindIsStatement(IRKind[i]) then
+          IREmitNodeXtensa(i);
     end;
   end;
 

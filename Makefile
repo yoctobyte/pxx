@@ -8868,6 +8868,15 @@ test-core: $(COMPILER)
 	# bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only
 	./$(COMPILER) test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_charstr_ptr26
 	$(TESTTMP)/test_charstr_ptr26 | diff -u test/test_char_into_shortstring_via_pointer.expected -
+	# The statement-vs-value classification every backend walker asks. A value
+	# node emitted at statement level is ALSO emitted by the parent consuming it,
+	# so its subtree runs twice -- IR_ATOMIC and IR_VIRTUAL_CALL both cost us
+	# that. Deliberate break verified: mis-classifying IR_ATOMIC in
+	# IRKindIsStatement makes the cross rows exit 81 (n=12) while x86-64 stays 0,
+	# because x86-64's walker is an allowlist with no catch-all to poison.
+	# bug-a-the-xtensa-statement-walker-emits-any-unnamed-node-kind-through-a-silent-else
+	./$(COMPILER) test/test_ir_value_node_not_emitted_as_statement.pas $(TESTTMP)/test_irstmtclass26
+	$(TESTTMP)/test_irstmtclass26 | diff -u test/test_ir_value_node_not_emitted_as_statement.expected -
 	# Real-valued CONSTANT EXPRESSIONS — folded at compile time, so a wrong fold
 	# is a silently wrong literal rather than a diagnostic.
 	./$(COMPILER) test/test_const_real_expressions.pas $(TESTTMP)/test_const_real_expr26
@@ -15419,6 +15428,20 @@ test-i386: $(COMPILER)
 	# positive control -- the pinned compiler still refuses this exact file here.
 	./$(COMPILER) --target=i386 test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_i386_charstrptr
 	tools/expect_same.sh i386/charstrptr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_charstrptr)" "$$(cat test/test_char_into_shortstring_via_pointer.expected)"
+	# The cross half of the statement-vs-value classification guard, and the half
+	# that can fail: x86-64 has no statement-level catch-all, so only a target
+	# that HAS one can regress. Exits 81 if a value kind is mis-classified.
+	./$(COMPILER) --target=i386 test/test_ir_value_node_not_emitted_as_statement.pas $(TESTTMP)/test_i386_irstmtclass
+	tools/expect_same.sh i386/irstmtclass "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_irstmtclass)" "$$(cat test/test_ir_value_node_not_emitted_as_statement.expected)"
+	# CROSS rows for the string[N] array-FIELD stride (7b4c176b7), which was wired
+	# NATIVE-ONLY. These pass today and are added as coverage, not as a fix --
+	# they are green with and without the statement-walker change. A stride is a
+	# LAYOUT property, and native-only coverage of a layout property is coverage
+	# of the 64-bit host only, which is how this class stays invisible. The
+	# test's own value rows pass with the bug present, because the write and the
+	# read share the wrong stride 224 bytes outside the record.
+	./$(COMPILER) -Fulib/rtl --target=i386 test/test_string_n_array_field_stride.pas $(TESTTMP)/test_i386_strnstride
+	tools/expect_same.sh i386/strn_fieldstride "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_strnstride)" "$$(printf 'stride   1\nfits     1\nguard    1\ntail     1\nvalues   11')"
 	./$(COMPILER) --target=i386 test/hello.pas $(TESTTMP)/test_i386_hello
 	tools/expect_same.sh i386/test_i386_hello "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hello)" "Hello, World!"
 	# GNU labels-as-values on this cross target. i386 has no PC-relative
@@ -16263,6 +16286,20 @@ test-aarch64: $(COMPILER)
 	# positive control -- the pinned compiler still refuses this exact file here.
 	./$(COMPILER) --target=aarch64 test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_a64_charstrptr
 	tools/expect_same.sh aarch64/charstrptr "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_charstrptr)" "$$(cat test/test_char_into_shortstring_via_pointer.expected)"
+	# The cross half of the statement-vs-value classification guard, and the half
+	# that can fail: x86-64 has no statement-level catch-all, so only a target
+	# that HAS one can regress. Exits 81 if a value kind is mis-classified.
+	./$(COMPILER) --target=aarch64 test/test_ir_value_node_not_emitted_as_statement.pas $(TESTTMP)/test_a64_irstmtclass
+	tools/expect_same.sh aarch64/irstmtclass "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_irstmtclass)" "$$(cat test/test_ir_value_node_not_emitted_as_statement.expected)"
+	# CROSS rows for the string[N] array-FIELD stride (7b4c176b7), which was wired
+	# NATIVE-ONLY. These pass today and are added as coverage, not as a fix --
+	# they are green with and without the statement-walker change. A stride is a
+	# LAYOUT property, and native-only coverage of a layout property is coverage
+	# of the 64-bit host only, which is how this class stays invisible. The
+	# test's own value rows pass with the bug present, because the write and the
+	# read share the wrong stride 224 bytes outside the record.
+	./$(COMPILER) -Fulib/rtl --target=aarch64 test/test_string_n_array_field_stride.pas $(TESTTMP)/test_a64_strnstride
+	tools/expect_same.sh aarch64/strn_fieldstride "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_strnstride)" "$$(printf 'stride   1\nfits     1\nguard    1\ntail     1\nvalues   11')"
 	./$(COMPILER) --target=aarch64 test/hello.pas $(TESTTMP)/test_aarch64_hello
 	# GNU labels-as-values on the cross target. aarch64 reaches a label address
 	# with `adr x0, #imm21' -- PC-relative, so no relocation and no literal pool,
@@ -18752,6 +18789,20 @@ test-arm32: $(COMPILER)
 	# native one -- is the guard. Positive control: the pinned compiler still does.
 	./$(COMPILER) --target=arm32 test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_a32_charstrptr
 	tools/expect_same.sh arm32/charstrptr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_charstrptr)" "$$(cat test/test_char_into_shortstring_via_pointer.expected)"
+	# The cross half of the statement-vs-value classification guard, and the half
+	# that can fail: x86-64 has no statement-level catch-all, so only a target
+	# that HAS one can regress. Exits 81 if a value kind is mis-classified.
+	./$(COMPILER) --target=arm32 test/test_ir_value_node_not_emitted_as_statement.pas $(TESTTMP)/test_a32_irstmtclass
+	tools/expect_same.sh arm32/irstmtclass "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_irstmtclass)" "$$(cat test/test_ir_value_node_not_emitted_as_statement.expected)"
+	# CROSS rows for the string[N] array-FIELD stride (7b4c176b7), which was wired
+	# NATIVE-ONLY. These pass today and are added as coverage, not as a fix --
+	# they are green with and without the statement-walker change. A stride is a
+	# LAYOUT property, and native-only coverage of a layout property is coverage
+	# of the 64-bit host only, which is how this class stays invisible. The
+	# test's own value rows pass with the bug present, because the write and the
+	# read share the wrong stride 224 bytes outside the record.
+	./$(COMPILER) -Fulib/rtl --target=arm32 test/test_string_n_array_field_stride.pas $(TESTTMP)/test_a32_strnstride
+	tools/expect_same.sh arm32/strn_fieldstride "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_strnstride)" "$$(printf 'stride   1\nfits     1\nguard    1\ntail     1\nvalues   11')"
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
 	tools/expect_same.sh arm32/test_arm32_hello "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_hello)" "Hello, World!"
 	./$(COMPILER) --target=arm32 test/c_local_string_array_init.c $(TESTTMP)/test_a32_lsarr
