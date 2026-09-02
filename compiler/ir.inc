@@ -1718,7 +1718,20 @@ begin
      TypeIsFrozenString(Syms[ASTIVal[base]].ElemType) then
     Result := SymStrCap[ASTIVal[base]]
   else if ASTKind[base] = AN_FIELD then
-    Result := RecFieldStrCap(ResolveNodeRec(ASTLeft[base]), GetASTIdentName(base));
+    Result := RecFieldStrCap(ResolveNodeRec(ASTLeft[base]), GetASTIdentName(base))
+  { `p^[0] := s`, p: ^array[..] of string[N] -- the THIRD shape, and the one the
+    comment above predicted: a chain that grows one arm per discovery grew
+    another. It needs NO new carrier. SymPtrElemStrCap already holds exactly
+    this N -- SetPtrElemArrayInfo fills it from ArrTypeElemStrCap, and the INDEX
+    path has read it for the element SLOT STRIDE all along (the elemSize arm in
+    IRLowerAddress). Only the truncating clamp never asked, so `p^[0] := <too
+    long>` copied the SOURCE length and wrote past the element, exactly as the
+    two arms above did before they were added. The carrier was present and the
+    reader was absent -- the same finding the `a[i]^` arm of ASTStrElemTkOf
+    records for the managed-string width.
+    bug-a-a-store-through-a-pointer-loses-the-shortstring-capacity-clamp }
+  else if DerefPtrArraySym(base) >= 0 then
+    Result := SymPtrElemStrCap[DerefPtrArraySym(base)];
 end;
 
 function ASTStrElemTkOf(node: Integer): Integer;
