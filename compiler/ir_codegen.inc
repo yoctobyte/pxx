@@ -1604,21 +1604,24 @@ begin
         below moves them into the frame slot. Gated on a KNOWN size -- an
         unsized record still refuses rather than being counted as 4 bytes and
         shifting every parameter after it. }
-      { GATED ON ProcCdecl, and the gate is the whole point. Pascal passes a
-        record of 8 bytes or less BY VALUE (IsRef stays False), so an ungated
-        test would accept those here too -- while the INTERNAL i386 caller still
-        pushes their address. That is a caller/callee disagreement about what
-        the slot contains, which is the exact failure this ticket exists to
-        prevent, and it would be silent. The internal convention keeps its old
-        refusal until its caller half is written. }
-      if ProcCdecl[procIdx] and (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+      { NO LONGER GATED ON ProcCdecl. It was, and the gate was right for as long
+        as it lasted: the INTERNAL i386 caller pushed a small record's ADDRESS,
+        so accepting the parameter here would have been a silent caller/callee
+        disagreement about what the slot contains rather than a build error.
+        The caller half now pushes the record's two dwords (ir_codegen386.inc,
+        the A32_RECORD arm of the direct ladder, plus the indirect and virtual
+        ones), so both sides say the same thing and the refusal has nothing left
+        to protect. An unsized record still refuses on either convention -- it
+        would be counted as 4 bytes and shift every parameter after it.
+        feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build }
+      if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
          (Syms[idx].TypeKind = tyRecord) and (RecSize(Syms[idx].RecName) <= 0) then
         Error('target i386: by-value record parameter of unknown size');
       if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
          not (TypeIsOrdinal(Syms[idx].TypeKind) or
               TypeIsFloat(Syms[idx].TypeKind) or
               TypeIsFrozenString(Syms[idx].TypeKind) or
-              (ProcCdecl[procIdx] and (Syms[idx].TypeKind = tyRecord)) or
+              (Syms[idx].TypeKind = tyRecord) or
               (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant, tySet])) then
         Error('target i386: only ordinal/pointer parameters supported yet');
       { THE WHOLE i386 cdecl DIFFERENCE IS THE DIRECTION OF THIS WALK.
@@ -1658,9 +1661,12 @@ begin
           slot. Same ordering ParamValueSize uses, and for the same reason: the
           pointer oracle is the answer only once the by-value case is ruled out.
           bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee }
-        if ProcCdecl[procIdx] and (Procs[procIdx].Params[j].TypeKind = tyRecord) and
+        if (Procs[procIdx].Params[j].TypeKind = tyRecord) and
            (not Procs[procIdx].Params[j].IsRef) and
            (not Procs[procIdx].Params[j].IsArray) then
+          { Ungated with the refusal above: on the internal convention a record
+            of 5..8 bytes now occupies two slots here too, and counting it as
+            one would shift every parameter on the far side of it. }
           Inc(sz, ((RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + j]) + 3) div 4) * 4)
         else if ABIParamSlotIsPointer(Procs[procIdx].Params[j].TypeKind,
                                  Procs[procIdx].Params[j].IsRef,
@@ -1677,7 +1683,7 @@ begin
         else
           Inc(sz, 4);
       end;
-      if ProcCdecl[procIdx] and (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+      if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
          (Syms[idx].TypeKind = tyRecord) then
       begin
         { By-value record: copy its whole stack argument into the frame slot,

@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386 | A | 45 | bug | PASCAL DONE AND PROVEN; NilPy, Rust and Zig still open. The four `fAlign := TypeAlign(fTk)` record-field sites in pasparser_decl.inc now call TypeFieldAlign, and a new mixed-link oracle (test-record-abi-mixed-link) judges the layout against gcc across a real link on x86_64 and i386, four shapes plus a value round trip through a `cvar` record global. The Track U fork this ticket flagged -- whether a Pascal record must match the C ABI -- dissolved on the first measurement: pxx's C frontend answered 12/4 and pxx's PASCAL frontend 16/8 for the same fields, same target, same compiler. It was not an FPC question, it was one compiler disagreeing with itself. N/R/Z have no export spelling and so no mixed link, and rustc/zig i686 are not on this box. | — |
-| feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build | A | 50→80 | feature | i386 accepts a by-value RECORD parameter only for cdecl; on the internal convention it still refuses, because the internal CALLER pushes the address for records of 8 bytes or less and the callee half would read bytes — a silent caller/callee disagreement. The refusal is therefore CORRECT and load-bearing, and the work is the caller half. Cost: lib/rtl/image.pas declares ImageSetPixel(...; c: TRGBA), so the unit does not build for i386 and neither do examples/fm or examples/raytracer, both of which build for arm32, aarch64, riscv32 and xtensa. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
@@ -855,9 +854,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3098)
+## done (3099)
 
-3098 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3099 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -949,6 +948,7 @@ _none_
 - [p 80] [A] feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
+- [p 80] [A] umbrella-cross-target-codegen-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [A] umbrella-managed-memory-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -1421,7 +1421,6 @@ _none_
 - **1** — decide-tobject-classinfo-blob-or-refusal
 - **1** — decide-which-gtk-a-bare-gtk-gtk-h-means
 - **1** — feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes
-- **1** — feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-os-targets-bsd-mac
 - **1** — feature-pal-esp-posix-fd-semantics

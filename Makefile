@@ -14653,6 +14653,19 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_i386_byvalue_set_param.pas $(TESTTMP)/test_i386_byvalue_set_param
 	./$(COMPILER) test/test_i386_byvalue_set_param.pas $(TESTTMP)/test_i386_byvalue_set_param_x64
 	tools/expect_same.sh i386/test_i386_byvalue_set_param "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_byvalue_set_param)" "$$($(TESTTMP)/test_i386_byvalue_set_param_x64)"
+	# By-value RECORD parameters on the INTERNAL convention, all four call
+	# shapes. i386 refused these outright until the caller half existed
+	# (feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build);
+	# recwide is the direct-call sibling that i386 could not build at all.
+	./$(COMPILER) --target=i386 test/test_byvalue_record_param_every_call_shape.pas $(TESTTMP)/test_i386_bvrparam
+	tools/expect_same.sh i386/test_i386_bvrparam "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_bvrparam)" "$$(printf 'fail=0\nBYVALRECPARAM OK')"
+	./$(COMPILER) --target=i386 test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_i386_recwide
+	./$(COMPILER) test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_i386_recwide_x64
+	tools/expect_same.sh i386/test_i386_recwide "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_recwide)" "$$($(TESTTMP)/test_i386_recwide_x64)"
+	# raytracer is the REAL program the refusal blocked: it draws through
+	# lib/rtl/image.pas, whose ImageSetPixel takes a by-value TRGBA.
+	./$(COMPILER) --target=i386 examples/raytracer/raytracer.pas $(TESTTMP)/test_i386_raytracer
+	tools/expect_same.sh i386/test_i386_raytracer "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_raytracer)" "$$(printf 'checksum=297858362\nALL OK')"
 	./$(COMPILER) --target=i386 test/test_cross_float_return.pas $(TESTTMP)/test_i386_fret
 	./$(COMPILER) test/test_cross_float_return.pas $(TESTTMP)/test_i386_fret_x64
 	tools/expect_same.sh i386/test_i386_fret "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fret)" "$$($(TESTTMP)/test_i386_fret_x64)"

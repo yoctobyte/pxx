@@ -3,7 +3,7 @@ slug: feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convent
 track: A
 prio: 50
 type: feature
-status: working
+status: done
 found: 2026-09-02
 found-by: frankC
 owner: frankC
@@ -78,3 +78,39 @@ exercises a cdecl record parameter does not cover this — that arm already work
 HEAD `eabd599ee`, compiler `58620a6d3662`. i386 is the only target of the six
 that refuses; verified by building the same two programs for all five cross
 targets.
+
+## Resolved 2026-09-02 (frankC) — the caller half exists, so the refusal was lifted
+
+The order the ticket asked for, in one commit because either half alone is a
+silent disagreement:
+
+1. **Caller** (`ir_codegen386.inc`, the direct ladder's new `A32_RECORD` arm,
+   joining the indirect and virtual ones): a 5..8 byte record's VALUE is already
+   in `edx:eax` — i386's `IR_LOAD_SYM` widens a record of at most one machine
+   pair exactly as arm32 and riscv32 do, the address form being the >8-byte arm
+   above it. `push edx` then `push eax`, so the low dword is at the lower
+   address and the callee's copy loop, which walks dwords upward from
+   `[ebp+8+sz]`, reads the record in its own order.
+2. **Callee** (`ir_codegen.inc`): the four `ProcCdecl` gates come off — the
+   unknown-size refusal, the "only ordinal/pointer parameters" predicate, the
+   parameter-width walk and the frame-slot copy. The unsized-record refusal
+   stays on both conventions: counted as 4 bytes it would shift every parameter
+   after it.
+
+A ≤4-byte record — `TRGBA`, the one in the report — never needed a new class:
+`Arg32Class` answers `A32_WORD`, one word IS the record, and the callee copy
+loop moves exactly one dword.
+
+Verified: `test_byvalue_record_param_every_call_shape` (direct/virtual/indirect ×
+4/8/12/16 bytes, plus a copy-semantics check and a `const` by-ref control) passes
+on **all six** targets; `test_arm32_record_byval_wide`, which i386 could not
+build at all, passes there now; `examples/fm` and `examples/raytracer` build for
+i386 and their output is byte-identical to the x86-64 oracle, as is that of 15
+other examples including `player`, which also draws through `image.pas`.
+
+That sweep is the positive control as well as the check: `raytracer` moved from
+BUILD-refused to matching, so the instrument does discriminate the state this
+ticket is about rather than passing everything put in front of it.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

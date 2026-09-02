@@ -3726,6 +3726,29 @@ begin
             Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
             Continue;
           end;
+          argCls := Arg32Class(procIdx, nArgs, IntToTypeKind(IRTk[IRA[argNode]]));
+          if argCls = A32_RECORD then
+          begin
+            { By-value record of 5..8 bytes on the INTERNAL convention: eax:edx
+              already holds its VALUE, because IR_LOAD_SYM widens a record of at
+              most one machine pair on this backend exactly as it does on arm32
+              and riscv32 (the address form above it is the >8-byte arm). Push
+              hi then lo, so the low dword lands at the lower address and the
+              callee's copy loop -- which walks dwords upward from [ebp+8+sz] --
+              reads the record in its own order.
+
+              This is the CALLER HALF the callee refusal was waiting for. The two
+              land together on purpose: a callee that accepts these bytes while
+              the caller still pushes an address is a silent disagreement about
+              what the slot contains, which is worse than the refusal.
+              feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build }
+            EmitB($52);                                { push edx (hi) }
+            EmitB($50);                                { push eax (lo) }
+            Inc(argBytes, Arg32Words(argCls, procIdx, nArgs) * 4);
+            Inc(nArgs);
+            Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
+            Continue;
+          end;
           if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
              Is64Bit386(Procs[procIdx].Params[nArgs].TypeKind) and
              (not ABIParamSlotIsPointer(Procs[procIdx].Params[nArgs].TypeKind,
