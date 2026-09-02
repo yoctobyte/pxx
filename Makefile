@@ -12786,6 +12786,22 @@ test-core: $(COMPILER)
 	# alias for fsync: EBADF from the kernel on a closed fd, not a silent 0.
 	# All rows were diffed against glibc by compiling this same file with gcc.
 	# feature-c-corpus-busybox-multi-applet
+	# tzset + tzname/timezone/daylight, tcgetsid, gethostid, getopt_long.
+	# Found by attempting the 258-applet busybox: tzset alone was 8 of 400
+	# translation units, and getopt_long was ONE file (libbb/getopt32.c) whose
+	# absence left getopt32/option_mask32 undefined and took the whole link down.
+	# The zone rows pin only TZ=UTC and an absent zone, because those are the two
+	# answers that do not need a timezone database installed; tzset was checked
+	# differentially against glibc over eight real zones (see the file header),
+	# and pinning CET here would fail on a box in another zone.
+	# Row 5 reads the return and errno into LOCALS before printing: as two
+	# arguments of one printf their evaluation order is unspecified, and the
+	# first draft read errno before the call and printed a confident 0 on both
+	# compilers -- two builds agreeing about an unsequenced read is the same
+	# undefined answer twice, not an oracle.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_tzset_getopt_long.c $(TESTTMP)/c_tzgetopt26
+	tools/expect_same.sh c_tzgetopt26 "$$($(TESTTMP)/c_tzgetopt26)" "$$(printf '1 UTC UTC 0 0\n2 0 0\n3 UTC\n4 1\n5 1 1\n6 1\n7 0 - 7\n7 97 - 7\n7 98 X 7\n7 67 - 7\n8 operand\n9 a -\n9 b Y')"
 	./$(COMPILER) test/c_crtl_bits_and_fdatasync.c $(TESTTMP)/c_bits26
 	tools/expect_same.sh c_bits26 "$$($(TESTTMP)/c_bits26)" "$$(printf '1 1 2 0\n2 1\n3 1\n4 0 0\n5 1\n6 1\n7 5\n8 0\n9 -1 1')"
 	./$(COMPILER) test/c_crtl_netdb_and_exec.c $(TESTTMP)/c_netdb26

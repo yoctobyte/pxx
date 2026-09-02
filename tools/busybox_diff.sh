@@ -1057,9 +1057,15 @@ for t in $TARGETS; do
       # exact failure -Wl,-z,muldefs used to hide -- so the report said the
       # link failed and refused to say why. A diagnostic that is silent on
       # half its population is the half you are about to spend an hour on.
-      grep -oE "undefined reference to \`[^']*'" "$WORK/build_$t.log" | sort -u | head -10
-      grep -oE "multiple definition of \`[^']*'" "$WORK/build_$t.log" | sort -u | head -10
-      grep -E "^[^ ].*: (error|fatal)" "$WORK/build_$t.log" | sort -u | head -5
+      # -a on every one of these, for the same reason the transcript diff below
+      # takes it: a build log holds compiler output, and one bad byte anywhere
+      # in it makes grep answer "binary file matches" and print NOTHING. That is
+      # not a silent failure -- it is a LOUD one that looks like a result, and it
+      # printed exactly that for a 387-object link, twice, in place of the symbol
+      # list this block exists to produce. Measured 2026-09-02.
+      grep -a -oE "undefined reference to \`[^']*'" "$WORK/build_$t.log" | sort -u | head -10
+      grep -a -oE "multiple definition of \`[^']*'" "$WORK/build_$t.log" | sort -u | head -10
+      grep -a -E "^[^ ].*: (error|fatal)" "$WORK/build_$t.log" | sort -u | head -5
       RC=1; continue
     fi
     printf '  note    %-8s %d objects linked separately (%d bytes)\n' "$t" "$nobj" "$(stat -c%s "$out")"

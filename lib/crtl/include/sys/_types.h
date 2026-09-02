@@ -12,4 +12,10 @@ typedef long __time_t;
    through it, src/netinet/in.c, in the middle of netdb.h. See netdb.h. */
 typedef unsigned int __socklen_t;
 
+/* pid_t's underlying type, here for the same reason: <termios.h> deliberately
+   includes NOTHING (its own note), and tcgetsid returns a pid_t. Reaching it
+   through <sys/types.h> would give termios.h a first include and the splice
+   that comes with one. */
+typedef long __pid_t;
+
 #endif

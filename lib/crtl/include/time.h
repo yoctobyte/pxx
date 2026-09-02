@@ -103,4 +103,20 @@ char *asctime_r(const struct tm *tm, char *buf);
 char *ctime(const time_t *timer);
 char *ctime_r(const time_t *timer, char *buf);
 
+/* tzset(3) and the three globals POSIX has it publish. busybox calls tzset()
+   at the top of eight translation units, so this is not one applet's need.
+
+   `timezone' is seconds WEST of UTC for STANDARD time -- the NEGATION of the
+   offset a TZif file stores, and the sign is the part that goes wrong quietly:
+   Europe/Amsterdam is utoff +3600 and timezone -3600, and swapping them is a
+   two-hour error that still prints a plausible clock.
+
+   `tzname' and `daylight' describe the ZONE and not the instant: tzname[1] is
+   the DST abbreviation whether or not DST is in effect today, and daylight is
+   1 for a zone that has summer time at all. */
+extern char *tzname[2];
+extern long timezone;
+extern int daylight;
+void tzset(void);
+
 #endif

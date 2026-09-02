@@ -15,6 +15,7 @@
 #include <sys/utsname.h>
 #include <stdarg.h>
 
+extern int __pxx_open(const char *path, int flags, int mode);
 extern long long __pxx_read(int fd, void *buf, long long n);
 extern long long __pxx_write(int fd, void *buf, long long n);
 extern int __pxx_close(int fd);
@@ -630,6 +631,55 @@ static void pxx_getopt_err(const char *prog, const char *msg, char c)
     __pxx_write(2, buf, 4);
 }
 
+/* The long-option half of the error format. glibc writes
+     <prog>: unrecognized option '--xyz'
+     <prog>: option '--xyz' requires an argument
+   and the quoting and the dash count are part of what a transcript comparison
+   sees, so the caller passes the dash count it actually parsed -- `-name' under
+   getopt_long_only prints with ONE dash, not two. */
+static void pxx_getopt_lerr(const char *prog, const char *pre, int dashes,
+                            const char *name, int nlen, const char *post)
+{
+    const char *p;
+    int i;
+    for (p = prog; p && *p; p++) __pxx_write(2, (void *)p, 1);
+    __pxx_write(2, (void *)": ", 2);
+    for (p = pre; *p; p++) __pxx_write(2, (void *)p, 1);
+    __pxx_write(2, (void *)"'", 1);
+    for (i = 0; i < dashes; i++) __pxx_write(2, (void *)"-", 1);
+    for (i = 0; i < nlen; i++) __pxx_write(2, (void *)&name[i], 1);
+    __pxx_write(2, (void *)"'", 1);
+    for (p = post; *p; p++) __pxx_write(2, (void *)p, 1);
+    __pxx_write(2, (void *)"\n", 1);
+}
+
+/* glibc does not stop at "is ambiguous": it lists the candidates, and the list
+   is part of what a transcript comparison sees. Written out here rather than
+   documented as a divergence, because the whole point of this file is that a
+   program built with pxx prints what the same program built with glibc prints.
+     <prog>: option '--ca' is ambiguous; possibilities: '--car' '--cart'   */
+static void pxx_getopt_amb(const char *prog, int dashes, const char *name,
+                           int nlen, const struct option *longopts)
+{
+    const char *p;
+    int i, j;
+    for (p = prog; p && *p; p++) __pxx_write(2, (void *)p, 1);
+    __pxx_write(2, (void *)": option '", 10);
+    for (i = 0; i < dashes; i++) __pxx_write(2, (void *)"-", 1);
+    for (i = 0; i < nlen; i++) __pxx_write(2, (void *)&name[i], 1);
+    __pxx_write(2, (void *)"' is ambiguous; possibilities:", 30);
+    for (i = 0; longopts[i].name; i++) {
+        j = 0;
+        while (j < nlen && longopts[i].name[j] && longopts[i].name[j] == name[j]) j++;
+        if (j != nlen) continue;
+        __pxx_write(2, (void *)" '", 2);
+        for (j = 0; j < dashes; j++) __pxx_write(2, (void *)"-", 1);
+        for (p = longopts[i].name; *p; p++) __pxx_write(2, (void *)p, 1);
+        __pxx_write(2, (void *)"'", 1);
+    }
+    __pxx_write(2, (void *)"\n", 1);
+}
+
 static int pxx_is_opt(const char *s)
 {
     return s != 0 && s[0] == '-' && s[1] != 0;
@@ -664,7 +714,15 @@ static void pxx_exchange(char **av)
     pxx_last_nonopt = hi;
 }
 
-int getopt(int argc, char *const argv[], const char *optstring)
+/* ONE parser for getopt, getopt_long and getopt_long_only. They differ only in
+   whether a `--name' (or, for long_only, a `-name') at an argument boundary is
+   looked up in a table before the character loop runs, and in nothing else --
+   the permutation bookkeeping, the `--' terminator, the reset rules and the
+   error formats are shared. Writing the long form as a second parser would
+   duplicate all of that, and the copy is the one that stays broken. */
+static int pxx_getopt_impl(int argc, char *const argv[], const char *optstring,
+                           const struct option *longopts, int *longindex,
+                           int long_only)
 {
     const char *spec;
     char **av = (char **)argv;     /* glibc permutes in place too */
@@ -717,6 +775,81 @@ int getopt(int argc, char *const argv[], const char *optstring)
         }
     }
 
+    /* ---- long options -------------------------------------------------
+       Only at an argument boundary: `-abc' mid-cluster is never a long name,
+       and checking there would make `-l' inside `-al' match a `--list'. */
+    if (longopts && pxx_optpos == 1 && av[optind][0] == '-') {
+        const char *arg = av[optind];
+        int dashes = (arg[1] == '-') ? 2 : 1;
+        if (dashes == 2 || (long_only && arg[1] != 0)) {
+            const char *nm = arg + dashes;
+            const char *eq = nm;
+            int nlen, i, match = -1, nmatch = 0;
+            while (*eq && *eq != '=') eq++;
+            nlen = (int)(eq - nm);
+            for (i = 0; longopts[i].name; i++) {
+                int j = 0;
+                while (j < nlen && longopts[i].name[j]
+                       && longopts[i].name[j] == nm[j]) j++;
+                if (j != nlen) continue;
+                if (longopts[i].name[nlen] == 0) { match = i; nmatch = 1; break; }
+                /* a PREFIX: glibc accepts it when it is unique */
+                if (match < 0) match = i;
+                nmatch++;
+            }
+            /* long_only: a single-dash argument that is not a long name falls
+               through to the SHORT parser, which is the whole point of the
+               "only" form -- `-h' must still work when `--help' exists. */
+            if (nmatch == 0 && dashes == 1) goto short_option;
+
+            optind++;
+            pxx_optpos = 1;
+            if (nmatch == 0) {
+                if (opterr && !silent)
+                    pxx_getopt_lerr(prog, "unrecognized option ", dashes, nm, nlen, "");
+                optopt = 0;
+                return '?';
+            }
+            if (nmatch > 1) {
+                /* DIVERGENCE, documented: glibc goes on to list the candidates
+                   ("; possibilities: '--aa' '--ab'"). We say it is ambiguous and
+                   stop. The decision -- reject -- is the same one, and it is the
+                   decision a program branches on. */
+                if (opterr && !silent)
+                    pxx_getopt_amb(prog, dashes, nm, nlen, longopts);
+                optopt = 0;
+                return '?';
+            }
+            optarg = 0;
+            if (*eq == '=') {
+                if (longopts[match].has_arg == no_argument) {
+                    if (opterr && !silent)
+                        pxx_getopt_lerr(prog, "option ", dashes, nm, nlen,
+                                        " doesn't allow an argument");
+                    optopt = longopts[match].val;
+                    return '?';
+                }
+                optarg = (char *)eq + 1;
+            } else if (longopts[match].has_arg == required_argument) {
+                if (optind >= argc || av[optind] == 0) {
+                    if (opterr && !silent)
+                        pxx_getopt_lerr(prog, "option ", dashes, nm, nlen,
+                                        " requires an argument");
+                    optopt = longopts[match].val;
+                    return silent ? ':' : '?';
+                }
+                optarg = av[optind];
+                optind++;
+            }
+            if (longindex) *longindex = match;
+            if (longopts[match].flag) {
+                *longopts[match].flag = longopts[match].val;
+                return 0;
+            }
+            return longopts[match].val;
+        }
+    }
+short_option:
     c = av[optind][pxx_optpos];
     optopt = (int)(unsigned char)c;
 
@@ -754,6 +887,23 @@ int getopt(int argc, char *const argv[], const char *optstring)
     pxx_optpos++;
     if (av[optind][pxx_optpos] == 0) { optind++; pxx_optpos = 1; }
     return (int)(unsigned char)c;
+}
+
+int getopt(int argc, char *const argv[], const char *optstring)
+{
+    return pxx_getopt_impl(argc, argv, optstring, 0, 0, 0);
+}
+
+int getopt_long(int argc, char *const argv[], const char *optstring,
+                const struct option *longopts, int *longindex)
+{
+    return pxx_getopt_impl(argc, argv, optstring, longopts, longindex, 0);
+}
+
+int getopt_long_only(int argc, char *const argv[], const char *optstring,
+                     const struct option *longopts, int *longindex)
+{
+    return pxx_getopt_impl(argc, argv, optstring, longopts, longindex, 1);
 }
 
 /* ---- login name ----------------------------------------------------------- */
@@ -878,6 +1028,115 @@ int gethostname(char *name, size_t len) {
   if (n + 1 > len) { errno = ENAMETOOLONG; return -1; }
   memcpy(name, u.nodename, n + 1);
   return 0;
+}
+
+/* ---- gethostid ------------------------------------------------------------
+ *
+ * Parses /etc/hosts itself rather than going through gethostbyname, and that is
+ * a consequence of the crtl splice model rather than a preference: a header
+ * pulls in the .c file paired with it, so a program that includes only
+ * <unistd.h> must find every unistd.h function HERE. Reaching into
+ * src/netinet/in.c from this file would leave that program with an undefined
+ * symbol at link. If gethostbyname ever becomes real (it is a stub today,
+ * returning 0 for every name), this stays the /etc/hosts reader for <unistd.h>
+ * and the two are expected to agree -- so change them together.
+ */
+static int pxx_hosts_addr(const char *want, unsigned int *out)
+{
+  /* /etc/hosts: "<address> <name> [alias...]", '#' to end of line. Matches the
+     FIRST line that carries `want' as the canonical name or as an alias, which
+     is the order glibc's files backend uses. */
+  char buf[8192];
+  int fd, i, n, start;
+  long long got;
+  fd = __pxx_open("/etc/hosts", 0, 0);
+  if (fd < 0) return 0;
+  got = __pxx_read(fd, buf, (long long)sizeof(buf) - 1);
+  __pxx_close(fd);
+  if (got <= 0) return 0;
+  buf[got] = 0;
+  n = (int)got;
+  i = 0;
+  while (i < n) {
+    int eol, tok, tlen, fieldno = 0;
+    unsigned int a0 = 0, a1 = 0, a2 = 0, a3 = 0;
+    int haveaddr = 0, matched = 0;
+    start = i;
+    eol = i;
+    while (eol < n && buf[eol] != '\n') eol++;
+    /* strip a comment */
+    { int c = start; while (c < eol && buf[c] != '#') c++; if (c < eol) eol = c; }
+    i = eol;
+    while (i < n && buf[i] != '\n') i++;
+    i++;                              /* past the newline */
+    tok = start;
+    while (tok < eol) {
+      while (tok < eol && (buf[tok] == ' ' || buf[tok] == '\t')) tok++;
+      tlen = 0;
+      while (tok + tlen < eol && buf[tok + tlen] != ' ' && buf[tok + tlen] != '\t') tlen++;
+      if (tlen == 0) break;
+      if (fieldno == 0) {
+        /* dotted quad only -- an IPv6 line has no address this call can use,
+           and glibc's own fallback asks for an AF_INET address too */
+        int k = 0; unsigned int v = 0; int part = 0, digits = 0;
+        haveaddr = 1;
+        for (k = 0; k <= tlen; k++) {
+          if (k < tlen && buf[tok + k] >= '0' && buf[tok + k] <= '9') {
+            v = v * 10u + (unsigned int)(buf[tok + k] - '0');
+            digits++;
+            if (v > 255u) { haveaddr = 0; break; }
+          } else if ((k < tlen && buf[tok + k] == '.') || k == tlen) {
+            if (digits == 0) { haveaddr = 0; break; }
+            if (part == 0) a0 = v; else if (part == 1) a1 = v;
+            else if (part == 2) a2 = v; else if (part == 3) a3 = v;
+            part++; v = 0; digits = 0;
+            if (part > 4) { haveaddr = 0; break; }
+          } else { haveaddr = 0; break; }
+        }
+        if (part != 4) haveaddr = 0;
+      } else {
+        int k = 0;
+        while (k < tlen && want[k] && buf[tok + k] == want[k]) k++;
+        if (k == tlen && want[k] == 0) matched = 1;
+      }
+      tok += tlen;
+      fieldno++;
+    }
+    if (haveaddr && matched) {
+      /* NETWORK byte order, the same value a struct in_addr would hold */
+      *out = (a0) | (a1 << 8) | (a2 << 16) | (a3 << 24);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+long gethostid(void)
+{
+  unsigned char idbuf[4];
+  char host[256];
+  unsigned int a = 0;
+  int fd;
+  long long got;
+
+  fd = __pxx_open("/etc/hostid", 0, 0);
+  if (fd >= 0) {
+    got = __pxx_read(fd, idbuf, 4);
+    __pxx_close(fd);
+    /* The file holds the id as a 32-bit value in HOST byte order, which is what
+       sethostid wrote; glibc reads it straight back. */
+    if (got == 4)
+      return (long)(int)((unsigned int)idbuf[0] | ((unsigned int)idbuf[1] << 8)
+                       | ((unsigned int)idbuf[2] << 16) | ((unsigned int)idbuf[3] << 24));
+  }
+  if (gethostname(host, sizeof(host)) != 0) return 0;
+  host[sizeof(host) - 1] = 0;
+  if (!pxx_hosts_addr(host, &a)) return 0;
+  /* glibc's exact transform, halves swapped. 127.0.1.1 is 0x0101007f in a
+     struct in_addr on a little-endian box, and 0x007f0101 after the swap --
+     which is the number glibc prints, so this is not a re-derivation but the
+     same arithmetic. */
+  return (long)(int)((a << 16) | (a >> 16));
 }
 
 int sethostname(const char *name, size_t len) {

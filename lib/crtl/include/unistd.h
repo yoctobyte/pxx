@@ -73,6 +73,18 @@ unsigned int alarm(unsigned int seconds);
    call. TRUNCATION IS AN ERROR (ENAMETOOLONG), not a short answer: a truncated
    hostname is a plausible different host. */
 int gethostname(char *name, size_t len);
+
+/* gethostid(3). glibc's answer is NOT a machine serial number and never was:
+   it reads /etc/hostid when that file exists, and otherwise resolves the
+   hostname and returns the address with its halves SWAPPED,
+   `(s_addr << 16) | (s_addr >> 16)'. On a box whose /etc/hosts maps its own
+   name to 127.0.1.1 that is 0x007f0101 -- which is what glibc prints here, and
+   what busybox's `hostid' applet must print for the two builds to agree.
+
+   The resolution is /etc/hosts only. There is no DNS in crtl, and the whole
+   point of this call is a local identifier, so a name that is not in
+   /etc/hosts gives 0 -- the same 0 glibc gives when it cannot resolve. */
+long gethostid(void);
 /* sethostname(2): root only; EPERM otherwise. */
 int sethostname(const char *name, size_t len);
 /* initgroups(3) is setgroups() over the groups `user' belongs to, plus `group'
@@ -199,5 +211,31 @@ int setgroups(size_t n, const gid_t *list);
 extern char *optarg;
 extern int optind, opterr, optopt, optreset;
 int getopt(int argc, char *const argv[], const char *optstring);
+
+/* getopt_long(3) and its table. glibc declares these in <getopt.h>; this file
+   is the ONE declaration site and <getopt.h> forwards here, because two
+   declarations of one function is how they drift (that header says so itself).
+
+   `flag' NULL means "return val"; non-NULL means "store val there and return
+   0", which is how a table sets a variable without the caller writing a case.
+
+   DIVERGENCE, and it is in the message and not the decision: an ambiguous
+   prefix is rejected exactly as glibc rejects it, but the diagnostic stops at
+   "is ambiguous" instead of going on to list the candidates. */
+#define no_argument        0
+#define required_argument  1
+#define optional_argument  2
+
+struct option {
+  const char *name;
+  int has_arg;
+  int *flag;
+  int val;
+};
+
+int getopt_long(int argc, char *const argv[], const char *optstring,
+                const struct option *longopts, int *longindex);
+int getopt_long_only(int argc, char *const argv[], const char *optstring,
+                     const struct option *longopts, int *longindex);
 
 #endif

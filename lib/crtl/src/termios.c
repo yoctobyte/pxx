@@ -104,3 +104,15 @@ void cfmakeraw(struct termios *t) {
   t->c_cc[VMIN]  = 1;
   t->c_cc[VTIME] = 0;
 }
+
+/* tcgetsid(3) -- TIOCGSID. The kernel writes the session id THROUGH the third
+   argument, so this cannot go down tio_ret's "nonzero means -1" path: the
+   value we want is in the out-parameter and the return is only the status. */
+pid_t tcgetsid(int fd)
+{
+  int sid = 0;
+  int rc = __pxx_ioctl(fd, TIOCGSID, (void *)&sid);
+  if (rc < 0) { errno = -rc; return (pid_t)-1; }
+  return (pid_t)sid;
+}
+

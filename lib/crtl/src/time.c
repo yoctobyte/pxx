@@ -171,61 +171,193 @@ static void pxx_tz_load(void) {
   if (got > 0) pxx_tz_len = got;
 }
 
-/* The UTC offset in seconds at `t`, from the loaded TZif. 0 on any problem. */
-static long pxx_tz_offset(long long t) {
+/* The zone in effect at `t`, from the loaded TZif: the UTC offset in seconds,
+   the DST flag, and the abbreviation. Everything is 0/NULL on any problem, and
+   a caller that only wants the offset goes through pxx_tz_offset below.
+
+   This is ONE walk of the file rather than three, because the three answers
+   come from the same ttinfo record and reading it three times is three chances
+   to disagree about which record it was. */
+static void pxx_tz_lookup(long long t, long *poff, int *pisdst,
+                          const char **pabbr) {
   const unsigned char *b = (const unsigned char *)pxx_tz_buf;
   long len, isutcnt, isstdcnt, leapcnt, timecnt, typecnt, charcnt;
-  long off, v1size, i, lo, hi, idx;
+  long off, v1size, i, lo, hi, idx, tsz, desig;
   int ver;
+  if (poff) *poff = 0;
+  if (pisdst) *pisdst = 0;
+  if (pabbr) *pabbr = 0;
   pxx_tz_load();
   len = pxx_tz_len;
-  if (len < 44) return 0;
-  if (b[0] != 'T' || b[1] != 'Z' || b[2] != 'i' || b[3] != 'f') return 0;
+  if (len < 44) return;
+  if (b[0] != 'T' || b[1] != 'Z' || b[2] != 'i' || b[3] != 'f') return;
   ver = b[4];
 
   isutcnt = pxx_be32u(b + 20); isstdcnt = pxx_be32u(b + 24);
   leapcnt = pxx_be32u(b + 28); timecnt  = pxx_be32u(b + 32);
   typecnt = pxx_be32u(b + 36); charcnt  = pxx_be32u(b + 40);
 
+  tsz = 4;                       /* transition-time width: 4 in v1, 8 in v2+ */
   if (ver == '2' || ver == '3' || ver == '4') {
     /* skip the 32-bit block and its header, then re-read the 64-bit counts */
     v1size = 44 + timecnt * 4 + timecnt + typecnt * 6 + charcnt
            + leapcnt * 8 + isstdcnt + isutcnt;
-    if (v1size + 44 > len) return 0;
+    if (v1size + 44 > len) return;
     b += v1size;
     len -= v1size;
-    if (b[0] != 'T' || b[1] != 'Z' || b[2] != 'i' || b[3] != 'f') return 0;
+    if (b[0] != 'T' || b[1] != 'Z' || b[2] != 'i' || b[3] != 'f') return;
     isutcnt = pxx_be32u(b + 20); isstdcnt = pxx_be32u(b + 24);
     leapcnt = pxx_be32u(b + 28); timecnt  = pxx_be32u(b + 32);
     typecnt = pxx_be32u(b + 36); charcnt  = pxx_be32u(b + 40);
-    off = 44;
-    if (off + timecnt * 8 + timecnt + typecnt * 6 > len) return 0;
-    /* largest transition <= t; before the first, use type 0 */
-    idx = -1;
+    tsz = 8;
+  }
+  off = 44;
+  if (off + timecnt * tsz + timecnt + typecnt * 6 + charcnt > len) return;
+
+  /* largest transition <= t; before the first, use type 0 */
+  idx = -1;
+  if (tsz == 8) {
     lo = 0; hi = timecnt - 1;
     while (lo <= hi) {
       long mid = lo + (hi - lo) / 2;
       if (pxx_be64(b + off + mid * 8) <= t) { idx = mid; lo = mid + 1; }
       else hi = mid - 1;
     }
-    if (idx < 0) i = 0;
-    else i = b[off + timecnt * 8 + idx];
-    if (i < 0 || i >= typecnt) return 0;
-    return pxx_be32s(b + off + timecnt * 8 + timecnt + i * 6);
-  }
-
-  /* version 1: 32-bit transitions */
-  off = 44;
-  if (off + timecnt * 4 + timecnt + typecnt * 6 > len) return 0;
-  idx = -1;
-  for (i = 0; i < timecnt; i++) {
-    long tt = pxx_be32s(b + off + i * 4);
-    if ((long long)tt <= t) idx = i; else break;
+  } else {
+    for (i = 0; i < timecnt; i++) {
+      long tt = pxx_be32s(b + off + i * 4);
+      if ((long long)tt <= t) idx = i; else break;
+    }
   }
   if (idx < 0) i = 0;
-  else i = b[off + timecnt * 4 + idx];
-  if (i < 0 || i >= typecnt) return 0;
-  return pxx_be32s(b + off + timecnt * 4 + timecnt + i * 6);
+  else i = b[off + timecnt * tsz + idx];
+  if (i < 0 || i >= typecnt) return;
+
+  if (poff) *poff = pxx_be32s(b + off + timecnt * tsz + timecnt + i * 6);
+  if (pisdst) *pisdst = b[off + timecnt * tsz + timecnt + i * 6 + 4] ? 1 : 0;
+  if (pabbr) {
+    desig = b[off + timecnt * tsz + timecnt + i * 6 + 5];
+    if (desig >= 0 && desig < charcnt)
+      *pabbr = (const char *)(b + off + timecnt * tsz + timecnt
+                              + typecnt * 6 + desig);
+  }
+}
+
+/* The UTC offset in seconds at `t`, from the loaded TZif. 0 on any problem. */
+static long pxx_tz_offset(long long t) {
+  long off;
+  pxx_tz_lookup(t, &off, 0, 0);
+  return off;
+}
+
+/* ---- tzset(3) and the three globals it publishes -------------------------
+ *
+ * busybox calls tzset() at the top of eight translation units (httpd, telnetd,
+ * ts, rtc, dhcpc, fallocate, switch_root, tls_sp_c32 through libbb), so its
+ * absence was not one applet's problem -- it was 8 of 400 objects.
+ *
+ * `timezone' is POSIX's, and its sign is the trap: it is seconds WEST of UTC
+ * for STANDARD time, i.e. the negation of the TZif utoff. Europe/Amsterdam is
+ * utoff +3600 and timezone -3600. Getting that backwards is a two-hour error
+ * that looks like a plausible time.
+ *
+ * `tzname' and `daylight' describe the ZONE, not the instant, so they are read
+ * by scanning the ttinfo records for a standard one and a DST one rather than
+ * from whichever record is in effect right now -- otherwise tzname[1] would be
+ * empty for half the year in a zone that plainly has summer time.
+ *
+ * The pointers are into pxx_tz_buf, which is static and lives as long as the
+ * process, so nothing is copied. A zone with no DST record leaves tzname[1]
+ * pointing at tzname[0], which is what glibc does. */
+char *tzname[2] = { (char *)"UTC", (char *)"UTC" };
+long timezone = 0;
+int daylight = 0;
+
+void tzset(void) {
+  const unsigned char *b;
+  long len, isutcnt, isstdcnt, leapcnt, timecnt, typecnt, charcnt;
+  long off, v1size, i, tsz, desig, ut;
+  int ver, isdst, sawstd, sawdst;
+  static char utc_name[4] = { 'U', 'T', 'C', 0 };
+
+  /* Re-read: a program may set TZ and call tzset() precisely to change zone,
+     which is the only reason this function exists rather than the lazy load
+     localtime() already does. */
+  pxx_tz_loaded = 0;
+  pxx_tz_len = 0;
+  tzname[0] = utc_name;
+  tzname[1] = utc_name;
+  timezone = 0;
+  daylight = 0;
+  pxx_tz_load();
+
+  b = (const unsigned char *)pxx_tz_buf;
+  len = pxx_tz_len;
+  if (len < 44) return;
+  if (b[0] != 'T' || b[1] != 'Z' || b[2] != 'i' || b[3] != 'f') return;
+  ver = b[4];
+  isutcnt = pxx_be32u(b + 20); isstdcnt = pxx_be32u(b + 24);
+  leapcnt = pxx_be32u(b + 28); timecnt  = pxx_be32u(b + 32);
+  typecnt = pxx_be32u(b + 36); charcnt  = pxx_be32u(b + 40);
+  tsz = 4;
+  if (ver == '2' || ver == '3' || ver == '4') {
+    v1size = 44 + timecnt * 4 + timecnt + typecnt * 6 + charcnt
+           + leapcnt * 8 + isstdcnt + isutcnt;
+    if (v1size + 44 > len) return;
+    b += v1size;
+    len -= v1size;
+    if (b[0] != 'T' || b[1] != 'Z' || b[2] != 'i' || b[3] != 'f') return;
+    isutcnt = pxx_be32u(b + 20); isstdcnt = pxx_be32u(b + 24);
+    leapcnt = pxx_be32u(b + 28); timecnt  = pxx_be32u(b + 32);
+    typecnt = pxx_be32u(b + 36); charcnt  = pxx_be32u(b + 40);
+    tsz = 8;
+  }
+  off = 44;
+  if (off + timecnt * tsz + timecnt + typecnt * 6 + charcnt > len) return;
+
+  /* Walk the TRANSITIONS BACKWARDS, not the type table forwards. The type
+     table is in file order and its first entry is the zone's oldest record --
+     for Europe/Amsterdam that is LMT, +1172 seconds of Local Mean Time from
+     before 1900. Reading the first standard-looking type gave
+     `LMT NST -1172' where glibc says `CET CEST -3600': a plausible-looking
+     answer, the wrong century. What POSIX means by "the current zone" is the
+     types in effect NOW, so take the most recent standard transition and the
+     most recent DST one. */
+  sawstd = 0; sawdst = 0;
+  for (i = timecnt - 1; i >= 0 && !(sawstd && sawdst); i--) {
+    const unsigned char *tt;
+    long ti = b[off + timecnt * tsz + i];
+    if (ti < 0 || ti >= typecnt) continue;
+    tt = b + off + timecnt * tsz + timecnt + ti * 6;
+    ut = pxx_be32s(tt);
+    isdst = tt[4] ? 1 : 0;
+    desig = tt[5];
+    if (desig < 0 || desig >= charcnt) continue;
+    if (!isdst && !sawstd) {
+      sawstd = 1;
+      timezone = -ut;                        /* POSIX: seconds WEST of UTC */
+      tzname[0] = (char *)(b + off + timecnt * tsz + timecnt
+                           + typecnt * 6 + desig);
+    } else if (isdst && !sawdst) {
+      sawdst = 1;
+      daylight = 1;
+      tzname[1] = (char *)(b + off + timecnt * tsz + timecnt
+                           + typecnt * 6 + desig);
+    }
+  }
+  /* A zone with NO transitions at all (UTC itself, and the fixed-offset zones)
+     has its one and only answer in type 0. */
+  if (!sawstd && typecnt > 0) {
+    const unsigned char *tt = b + off + timecnt * tsz + timecnt;
+    ut = pxx_be32s(tt);
+    desig = tt[5];
+    if (desig >= 0 && desig < charcnt) {
+      timezone = -ut;
+      tzname[0] = (char *)(b + off + timecnt * tsz + timecnt
+                           + typecnt * 6 + desig);
+    }
+  }
+  if (!sawdst) tzname[1] = tzname[0];
 }
 
 struct tm *localtime(const time_t *timer) {

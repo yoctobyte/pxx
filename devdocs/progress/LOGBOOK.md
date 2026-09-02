@@ -668,3 +668,22 @@ because a dropped one returns as a link failure 400 objects later.
 2026-09-02 | frankC | devdocs/progress/backlog-core/bug-a-dce-on-a-c-program-drops-main-because-nothing-roots-the-c-entry-path.md | Probed whether DCE's `only the Pascal frontend is wired up so far` refusal was stale the way the --emit-obj one turned out to be (6a084d569). It is NOT: lift it and a -O3 C executable keeps 43 of 792 bodies, none of them a C function -- main itself is dropped and the program SIGSEGVs. The 43 are exactly the Pascal runtime's own unconditional roots, so the C program is attached to the reachability walk nowhere. Reverted the probe rather than shipping a half-working path; the diagnosis is banked with the repro. WHY it needed saying: the discriminating measurement is that a C OBJECT with the same change is CORRECT (365368 -> 275272, right answer), because ObjProcIsExported roots it -- so this is the executable's ENTRY, not a call-graph gap, and the two look identical from a crash. Two refusals in one `if` chain, one stale and one honest, and only measuring told them apart.
 2026-09-02 | frankZ | lib/crtl/src/unistd.c, lib/crtl/src/sys/syscall.c (deleted), lib/crtl/include/sys/syscall.h | `syscall(2)` was declared in <unistd.h> and defined in src/sys/syscall.c. crtl pulls src/<x>.c when <x.h> COMPLETES, so a program including only <unistd.h> — the only header that declares it, and where every libc declares it — got the declaration and never the definition, and silently imported the symbol from the system C library with no ABI check. Moved the definition to src/unistd.c and deleted the orphan; <sys/syscall.h> is numbers only and needs no sibling .c. Positive control both ways: with the fix stashed the lint exits 1 AND a unistd.h-only probe warns about the system C library; with it applied the lint is OK (71 headers, 42 modules) and the probe returns 42, as does the busybox shape with <sys/syscall.h> and SYS_getpid. Closes lib-test#src:tools/crtl_reachability.py, 1 of the 16 jobs red in seven's full tier at 0f4d2c907d54.
 2026-09-02 | frankZ | Makefile, devdocs/progress/backlog-cfront/feature-c-labels-as-values-on-i386-arm32-riscv32.md | test-lua-cross's three failing targets do NOT fail on a variadic ABI, which is what both the ticket and the Makefile comment said. All three stop on `labeladdr`; built with -DLUA_USE_JUMPTABLE=0 — the one flag that stops lua taking a label's address — i386, arm32 and riscv32 all BUILD and pass 6/6 under qemu. IR_LABELADDR is the whole distance to green and it blocks a full-tier job, so prio 30 -> 60 and wired to the umbrella. The 6/6 is evidence about the rest of the port and NOT about the jump-table interpreter, which is the build it excludes (frankD's control, applied to my own claim). The Makefile also claimed the three were "omitted rather than reported as failures"; they are in LUA_CROSS_TARGETS and are reported.
+
+2026-09-02 | frankD (Track C) | lib/crtl/{include,src}, test/c_crtl_tzset_getopt_long.c |
+Four crtl gaps, all found by attempting a 258-applet busybox rather than by
+triage: tzset(3) with tzname/timezone/daylight, tcgetsid(3), gethostid(3), and
+getopt_long/getopt_long_only. WHY the weighting: tzset alone was 8 of 400
+translation units, but getopt_long was worth more than its ONE file —
+libbb/getopt32.c is where `getopt32` and `option_mask32` come from, so its
+absence took the whole link down. tzset reuses the TZif reader localtime
+already had, refactored to one walk yielding offset+isdst+abbreviation, and
+scans transitions BACKWARDS: reading the type table forwards gave
+`LMT NST -1172` for Europe/Amsterdam — the right file, the wrong century.
+Verified against glibc over eight zones including Kolkata (a historic DST
+record makes daylight 1 for a zone with none today) and Pacific/Chatham.
+getopt_long is the SAME parser as getopt, not a second one — one static
+implementation with a long-option arm at the argument boundary — and matches
+glibc over 16 argv shapes including all four error messages, the ambiguity
+possibilities list among them. gethostid reproduces glibc's algorithm exactly
+(/etc/hostid, else the hostname through /etc/hosts with the halves swapped) and
+prints the same 007f0101 here.

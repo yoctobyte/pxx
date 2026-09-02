@@ -2,6 +2,12 @@
 #ifndef PXX_CRTL_TERMIOS_H
 #define PXX_CRTL_TERMIOS_H 1
 
+/* The ONLY include here, and it is the leaf types header on purpose: this file
+   pulled in nothing until tcgetsid needed a pid_t, and <sys/_types.h> declares
+   no function, so it splices no implementation. Do not reach for
+   <sys/types.h> -- see the note on __socklen_t there. */
+#include <sys/_types.h>
+
 /* Terminal attributes, over the general PalIoctl bridge — these are REAL, not
    stubs: TCGETS/TCSETS are ordinary ioctls and crtl already has __pxx_ioctl.
    (Same lesson as the note in <sys/ioctl.h>: the claim that a new PAL entry was
@@ -179,6 +185,11 @@ struct winsize {
 
 #define TIOCGWINSZ 0x5413
 #define TIOCSWINSZ 0x5414
+/* Also in <sys/ioctl.h>, exactly as TIOCGWINSZ above already is and as glibc
+   has it: both headers reach the same asm-generic number, and a program that
+   includes either gets the constant. Same token sequence in both places, which
+   is what makes the duplicate legal rather than merely tolerated. */
+#define TIOCGSID   0x5429
 
 int tcgetattr(int fd, struct termios *t);
 int tcsetattr(int fd, int actions, const struct termios *t);
@@ -194,5 +205,13 @@ int cfsetispeed(struct termios *t, speed_t speed);
 int cfsetospeed(struct termios *t, speed_t speed);
 int cfsetspeed(struct termios *t, speed_t speed);
 void cfmakeraw(struct termios *t);
+
+/* tcgetsid(3): the session id of the terminal open on `fd'. getty and sulogin
+   call it to decide whether they already own the controlling terminal before
+   asking for one, so a stub returning 0 would not be a smaller answer -- it
+   would be a valid-looking session id and the wrong branch. This is TIOCGSID
+   and nothing else; on a fd that is not a terminal the kernel says ENOTTY and
+   that is the answer POSIX specifies. */
+__pid_t tcgetsid(int fd);
 
 #endif
