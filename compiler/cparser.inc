@@ -2921,7 +2921,8 @@ end;
   bug-c-sizeof-a-partial-index-answers-the-element-not-the-row }
 function CSizeofDescriptorWalk(si: Integer; var sz: Integer): Boolean;
 var cArrLen, cRec, cPtrRec, cNDims, cDim, cSpanSym, recId, depth: Integer;
-    cTk, cPtrTk: TTypeKind; cOK: Boolean;
+    cPtrDepth, cPtrBaseRec: Integer;   { pointer CHAIN, not one level of pointee }
+    cTk, cPtrTk, cPtrBaseTk: TTypeKind; cOK: Boolean;
     cFldRec: Integer; fieldName, cFldName: AnsiString;
 begin
   cOK := True;
@@ -2938,6 +2939,7 @@ begin
     cTk := Syms[si].ElemType;
     cRec := Syms[si].ElemRecName;
     cNDims := SymArrNDims[si];
+    cPtrDepth := 0; cPtrBaseTk := tyUnknown; cPtrBaseRec := REC_NONE;
   end
   else
   begin
@@ -2946,6 +2948,14 @@ begin
     cRec := Syms[si].RecName;
     cPtrTk := Syms[si].PtrElemTk;
     cPtrRec := Syms[si].PtrElemRec;
+    { The walk peels one pointer level per subscript, and PtrElemTk/PtrElemRec
+      only ever described ONE level, so the second peel had nothing left to
+      read. SymPtrDepth/SymPtrBaseTk/SymPtrBaseRec are the carriers for a
+      CHAIN -- the `**p` arm in ParseCSizeof already reads exactly these -- so
+      take them here too rather than re-deriving the chain per shape. }
+    cPtrDepth := SymPtrDepth[si];
+    cPtrBaseTk := IntToTypeKind(SymPtrBaseTk[si]);
+    cPtrBaseRec := SymPtrBaseRec[si];
   end;
   while cOK do
   begin
@@ -2984,8 +2994,29 @@ begin
       end
       else if cTk = tyPointer then
       begin
-        cTk := cPtrTk; cRec := cPtrRec;
-        cPtrTk := tyUnknown; cPtrRec := REC_NONE;
+        { Subscripting a pointer peels ONE level of the chain. With only
+          PtrElemTk/PtrElemRec to work from, the first peel consumed the last
+          thing the walk knew, so `p2[0][0]` on a `struct big **` ended at
+          tyUnknown and answered TypeSlotSize(tyUnknown) -- 8, the pointer
+          size, indistinguishable from a correct answer for `p2[0]`. Walk the
+          DEPTH instead: while more than one level remains the result is still
+          a pointer whose own pointee is the base, and the last level yields
+          the base itself. Depth 0/1 keeps the original two lines, so a plain
+          `T *p` is unchanged.
+          bug-c-sizeof-reaches-a-pointee-through-one-spelling-only }
+        if cPtrDepth > 1 then
+        begin
+          Dec(cPtrDepth);
+          cTk := tyPointer; cRec := cPtrBaseRec; cPtrRec := cPtrBaseRec;
+          if cPtrDepth > 1 then cPtrTk := tyPointer
+          else cPtrTk := cPtrBaseTk;
+        end
+        else
+        begin
+          cTk := cPtrTk; cRec := cPtrRec;
+          cPtrTk := tyUnknown; cPtrRec := REC_NONE;
+          cPtrDepth := 0;
+        end;
       end
       else cOK := False;
       depth := 0;
@@ -3013,6 +3044,7 @@ begin
       Next;   { consume the field name }
       cTk := RecFieldType(recId, fieldName);
       cRec := REC_NONE; cPtrTk := tyUnknown; cPtrRec := REC_NONE;
+      cPtrDepth := 0; cPtrBaseTk := tyUnknown; cPtrBaseRec := REC_NONE;
       cNDims := 0; cDim := 0; cSpanSym := -1;
       cFldRec := REC_NONE; cFldName := '';
       if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
