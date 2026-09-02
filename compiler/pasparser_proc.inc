@@ -3158,10 +3158,48 @@ procedure ParseUsesUnitBody(const name: AnsiString;
 procedure PyTryHostHeader(const cName: AnsiString; var path: AnsiString;
                           var content: AnsiString;
                           var isCUnit, isCHeader: Boolean);
+{$ifndef PXX_NO_CFRONT}
+var k: Integer;
+{$endif}
 begin
   if Length(content) > 0 then Exit;
-  ConcatThree('/usr/include/', cName, '.h', path);
-  LoadFile(path, content);
+{$ifndef PXX_NO_CFRONT}
+  { PXX'S OWN HEADERS FIRST, and this procedure's NAME is the reason they were
+    not. It probes /usr/include, it is called `PyTryHostHeader', and it is the
+    ONLY header probe the unit resolver has -- so a header crtl SHIPS was
+    invisible to `import <name>' while the very same name reached crtl's copy
+    from an ordinary C `#include <name.h>'. Measured 2026-09-02: crtl has a
+    4924-byte <stdlib.h>, a `.c` file including <stdlib.h> got it, and
+    `import stdlib` from a .npy got glibc's.
+
+    That is not just the wrong header, it is a MIXED CHAIN, and the mixture is
+    what actually broke: glibc's stdlib.h pulled glibc's
+    bits/libc-header-start.h, which asked for <features.h> and got CRTL's --
+    deliberately empty, so __GLIBC__ stays undefined for busybox's makedev --
+    and glibc's chain came out with no __GNUC_PREREQ. The next host header to
+    use one, bits/floatn.h, then met `0 (4, 3)' inside an #if, three hops
+    downstream of the cause. Keeping one universe per chain is the fix; making
+    the preprocessor tolerate the other universe's headers is not.
+
+    CIncludeDirs is walked rather than the crtl anchors being spelled out here:
+    it is the SAME list the C `<>` search uses, so the PXX_HOME / ExeDir /
+    stable-layout anchors have exactly one home and a user's -I can supply a
+    header for an import too. AddDefaultCIncludeDirs is idempotent and Exits
+    under -nostdinc. }
+  AddDefaultCIncludeDirs;
+  k := 0;
+  while (Length(content) = 0) and (k < CIncludeDirCount) do
+  begin
+    ConcatThree(CIncludeDirs[k], cName, '.h', path);
+    LoadFile(path, content);
+    Inc(k);
+  end;
+{$endif}
+  if Length(content) = 0 then
+  begin
+    ConcatThree('/usr/include/', cName, '.h', path);
+    LoadFile(path, content);
+  end;
   if Length(content) = 0 then
   begin
     ConcatThree('/usr/include/gtk-2.0/gtk/', cName, '.h', path);

@@ -1355,7 +1355,15 @@ begin
     if (CPExprPos <= CPExprEnd) and (CPExprText[CPExprPos] = ':') then
       Inc(CPExprPos)
     else
-      Error('C #if: expected '':'' in conditional expression');
+      { NAME THE EXPRESSION. This message used to say only that a ':' was
+        missing, and `#if' lines are macro-EXPANDED before they get here, so
+        neither the header nor the text was recoverable from it -- localising
+        one cost a bisect over a 40-header include chain. The expanded text is
+        the only identifying thing this function has; print it with a caret at
+        the position that failed. }
+      Error('C #if: expected '':'' in conditional expression, at offset ' +
+            CPSmallIntStr(CPExprPos - 1) + ' of the EXPANDED condition: ' +
+            Copy(CPExprText, 1, CPExprEnd));
     f := CPExprCond();
     CPExprUnsigned := ut or CPExprUnsigned;
     if Result <> 0 then Result := t else Result := f;
