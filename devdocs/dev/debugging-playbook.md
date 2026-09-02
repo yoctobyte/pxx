@@ -6134,6 +6134,42 @@ Neither errored. Both answered. Both answered *nothing to see*.
    `git diff --stat` and assert the change touches nothing the pinned binary
    reads. A precondition you do not branch on is a comment.
 
+### THE EXCEPTION IS THE GENEROUS RESULT — and it defeats rule 1
+
+Rule 1 rests on "a spurious FINDING gets investigated". That step is
+**suspicion**, and nobody directs suspicion at good news about their own
+change. So the asymmetry inverts whenever the wrong answer is the FLATTERING
+one, and two failures on 2026-09-02 broke that way rather than toward silence.
+
+**frankC, measured and reported by it rather than caught by review.** A
+differential credited its own change with FIXING a 224-byte record-field
+overrun on three targets — real numbers, a real bug, and entirely false. The
+baseline binary had been snapshotted before the pull that opened the ticket,
+so it compared **two trees rather than two compilers**. Its own framing is the
+transferable part: *"a differential that credits your change with fixing
+memory corruption does not invite a second look. 'Your change did nothing'
+would have been re-run immediately."*
+
+**What actually caught it was a contradiction, not a control.** An
+instrumented build showed no mechanism for the claimed fix — so reasoning said
+no change, measurement said big change, and for once the MEASUREMENT was the
+one that was wrong. The habit that saves you here is not distrusting
+measurement generally; it is noticing that two of your instruments disagree and
+declining to pick the one you prefer.
+
+A second instance the same day, reported by frankC and not independently
+verified here: frankA hit the same shape with an unmeasured line count.
+
+**So rule 1 is not wrong, it is incomplete.** A positive result does not need
+the same control a negative one needs — but a positive result that CREDITS THE
+CHANGE UNDER TEST needs its baseline's provenance asserted rather than assumed.
+Concretely, before believing a differential: state which commit each side was
+built from and check that the "before" side is the parent of the change, not
+whatever binary was on disk. That is one command, and it is the whole defect.
+
+**A useful smell:** if the result would make a good sentence in your own commit
+message, control it as if it were a negative.
+
 ### Authorship confers no immunity
 
 The `comm` was built by the person who had written the "a guard that cannot
