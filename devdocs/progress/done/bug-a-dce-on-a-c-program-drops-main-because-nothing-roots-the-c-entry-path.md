@@ -78,7 +78,7 @@ banked busybox at **13.7MB across 41 translation units**, all of it C, and
 refusal stands. Both halves are worth having: the object half is already
 correct here and is what busybox needs.
 
-## 2026-09-02 (frankC) — FIXED. The root was one hand-patched call, and it named itself
+## 2026-09-02 (frankC) — FIXED in `60edd4853`. The root was one hand-patched call, and it named itself
 
 `CPatchStubCall` (cparser.inc). The C entry stub emits its call to `main` as a
 forward with a zero displacement, because `main` has no `Procs[]` row yet, and
@@ -118,3 +118,7 @@ this kernel, a child that loops and `_exit`s reports **0 from both compilers**,
 and a child that writes 8MB gets **8416 from pxx**. `wait4`'s rusage works. The
 row now poisons `ru` and asserts the kernel wrote through the pointer, which is
 what its comment always claimed to be testing and is true for any child.
+
+Filed at `52363b95d` (the measurement that showed the refusal was honest),
+fixed at `60edd4853`. The `--emit-obj` half of the same `if` chain, whose
+refusal turned out to be stale rather than honest, is `6a084d569`.
