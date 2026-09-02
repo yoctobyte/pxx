@@ -75,12 +75,22 @@ not appear in any grep of the sizing-oracle surface:
 | aarch64 | `ir_codegen_aarch64.inc:1918` | same shape |
 | arm32 | `ir_codegen_arm32.inc:1671` | same shape |
 
-Measured by inspection at `f74d2f851`; no build run for this note. Expect the
-count to grow by three: `bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only`
-adds the matching `IR_STORE_MEM` arms on i386/aarch64/arm32, which currently
-refuse outright. That is **favourable ordering, not a conflict** — it makes the
-shape uniform across four backends instead of implemented-on-one-refusing-on-three,
-so this feature's edit there becomes mechanical.
+Measured by inspection at `f74d2f851`; no build run for this note.
+
+**Updated 2026-09-02: the predicted growth happened and it is now EIGHT arms,
+not four.** `bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only`
+landed at `e4cba526a` (verified on origin/master), adding the matching
+`IR_STORE_MEM` arms on i386/aarch64/arm32 which previously refused outright.
+So each of the four backends now carries the literal 8-byte length word in
+BOTH its `IR_STORE_SYM` and `IR_STORE_MEM` arm. That is **favourable for this
+feature, not a conflict** — the shape is now uniform across four backends
+instead of implemented-on-one-refusing-on-three, so the edit is mechanical
+rather than implement-here-un-refuse-there. It is simply eight sites.
+
+**Why this paragraph exists at all:** "grep the sizing oracles" is how someone
+will scope this feature, and it comes back short by all eight. None of these
+arms calls `FrozenStrSlotSize` or `SizeOfSlot` — they write the layout
+literally. Scope this feature by the LAYOUT, not by the oracle's callers.
 
 ## Measured, fresh binary
 
