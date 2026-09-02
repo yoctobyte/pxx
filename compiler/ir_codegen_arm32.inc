@@ -3907,7 +3907,17 @@ begin
           EmitI32($E1A06000);                      { mov r6, r0 (dst) }
           EmitI32($E8BD0020);                      { pop {r5} (src) }
           if IntToTypeKind(IRTk[valNode]) = tyChar then
-            Error('target arm32: char-to-inline-string store through pointer not yet supported');
+          begin
+            { r5 = char ordinal -> [len=1][char]. The same sequence the
+              IR_STORE_SYM arm above emits for `s := c`; r6/r5 already hold
+              dest/char here. }
+            EmitLoadImmArm32(9, 1);
+            EmitI32($E5869000);                      { str r9, [r6] (len=1) }
+            EmitLoadImmArm32(9, 0);
+            EmitI32($E5869004);                      { str r9, [r6,#4] }
+            EmitI32($E5C65008);                      { strb r5, [r6,#8] }
+            Exit;
+          end;
           { (src,len) via the nil-safe normalizer: frozen or managed source
             (managed previously misread its char data as the length). }
           EmitArm32StringParts(5, 5, 4, IntToTypeKind(IRTk[valNode]), -1);

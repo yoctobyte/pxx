@@ -2,9 +2,10 @@
 track: A
 prio: 35
 type: bug
-status: open
+status: done
 found: 2026-08-30
 found-by: claude-T
+owner: frankC
 ---
 
 # Storing a `char` into a `string[N]` through a pointer compiles on x86-64 only
@@ -195,3 +196,85 @@ both arms, and check row e as well as row a.**
 `[len:8][char]` to `[len:1][char]`, which makes each emitter marginally simpler
 and removes none of them. This does not need to wait for it, and it does not
 close if that lands.
+
+## FIXED 2026-09-02 (frankC) — three transplants, both rows, executed on five targets
+
+The `IR_STORE_MEM` arm on i386, aarch64 and arm32 now emits what the
+`IR_STORE_SYM` arm **in the same file** already emitted for `s := c`. At the
+refusal point each backend had already loaded dest and char into the registers
+that arm expects, so this is a transplant and not a port:
+
+| backend | emitted | note |
+| --- | --- | --- |
+| i386 | 6 `EmitB` lines | `mov eax, esi` is not convention — 32-bit mode has no `sil` |
+| aarch64 | 3 | one 64-bit `str x9, [x6]` covers both halves of the length word |
+| arm32 | 5 | two 32-bit stores for the length word, as its `IR_STORE_SYM` twin does |
+
+**Row e rides the same arm — confirmed, not assumed.** `pr^.s := c` in a file
+containing nothing else is refused by the PINNED compiler on all three targets
+with the same diagnostic, and compiles and runs on x86-64. There is no third
+path; one edit per backend closed both rows.
+
+### Verified by EXECUTION, not by compiling
+
+"It compiles" would have been the weak claim here — wrong bytes assemble fine.
+All five targets **run** `test/test_char_into_shortstring_via_pointer.pas` under
+qemu and produce byte-identical output, at **every level `-O0` through `-O3`**
+(20 cells, all green).
+
+**Positive control:** the pinned compiler still refuses that exact test file on
+i386/aarch64/arm32. That is what proves the test reaches the arm rather than
+passing for free. The pin/`lib/` precondition was checked — `git diff HEAD --
+lib/` was empty when the control was taken.
+
+**Aimed so it cannot pass by accident:** every string is pre-loaded with a
+5-char value before the store under test, so a store that does nothing prints
+`5 abcde` rather than reading back as a plausible pass. Rows c and d are the
+ticket's own isolating controls (no pointer; string source through the pointer),
+and row b checks the neighbouring `LongInt` field, which a wrong length word or
+a stray byte would land on.
+
+### Where the test is wired, and which row is the guard
+
+`test-i386`, `test-aarch64`, `test-arm32`, `test-riscv32`, plus the native
+suite. **The native row is marked in the Makefile as one that CANNOT FAIL for
+this bug** — x86-64 was correct throughout, so a native-only test would be a
+guard that cannot fail for the defect it is named after. The cross rows are the
+guard. riscv32's row is labelled as the control that these three transplants
+changed nothing on the backend that was already right.
+
+### The `--shorts 0` dodge is NOT in this repo
+
+Removing it in the same commit was the instruction and it cannot be followed
+here: the only `--shorts 0` in the tree is a comment in `pasmith_run.py`
+describing the **historic** dodge as fixed, and no invocation in `tools/`,
+`Makefile` or `tstate/` passes it. Track T's dodge lives in how its daemon
+invokes the slice on `seven` — T's own infra.
+
+So this ticket cannot close that loop, and per the section above a follow-up
+ticket is the one nobody picks up. **What is provided instead is the evidence
+that removes the need to trust anyone's say-so**: a cross slice run here with
+the rung LIVE against the fixed compiler, recorded below. Whoever holds Track T
+drops the dodge against that.
+
+### The rung, live: `--wide --shorts 2 --cross`, seeds 1-60
+
+> **60 programs, 0 divergences** — 0 FPC-rejected/generator bugs, 0 known
+> signatures, 0 NEW. Oracles: fpc-O0, fpc-O2, pxx-O0, pxx-O2, pxx-O3, pxx-i386,
+> pxx-aarch64, pxx-arm32.
+
+Run here against the fixed compiler, with the `--shorts` rung ON. Before this
+fix the same invocation stopped at the first seed on all three cross oracles.
+
+Two things it says. The rung is **live again** — the refusal that gated it is
+gone and the generator's shortstring shapes now reach every oracle. And 60 seeds
+of a rung that previously produced nothing at all is a **rate**, not a proof of
+absence: the earlier `--shorts 0` run was 294 programs and 0 divergences, so a
+clean 60 here is consistent with the cross dimension simply not being very
+productive at this grammar, which is the ticket's own reading.
+
+**Track T: this is the evidence to drop the dodge on.** It is not removable from
+this repo (see above), so it needs whoever holds the daemon invocation.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

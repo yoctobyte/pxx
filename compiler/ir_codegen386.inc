@@ -4644,7 +4644,17 @@ begin
           EmitB($89); EmitB($C7);                     { mov edi, eax }
           EmitB($5E);                                 { pop esi }
           if IntToTypeKind(IRTk[valNode]) = tyChar then
-            Error('target i386: char-to-inline-string store through pointer not yet supported');
+          begin
+            { esi = char ordinal -> [len=1][char]. The same sequence the
+              IR_STORE_SYM arm above emits for `s := c`: edi/esi already hold
+              dest/char here, so the two paths lower one concept identically.
+              `mov eax, esi` is not convention -- 32-bit mode has no `sil`. }
+            EmitB($C7); EmitB($07); EmitI32(1);       { mov dword [edi], 1 }
+            EmitB($C7); EmitB($47); EmitB($04); EmitI32(0); { mov dword [edi+4], 0 }
+            EmitB($89); EmitB($F0);                   { mov eax, esi }
+            EmitB($88); EmitB($47); EmitB($08);       { mov byte [edi+8], al }
+            Exit;
+          end;
           if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
           begin
             { Managed source -> frozen dest (r.s := managedStr): esi = handle

@@ -6135,3 +6135,65 @@ So this is not a rule about carelessness or about other people's instruments.
 **It is a thing you build by accident while checking something else, on the day
 you are most alert to it.** The defence is mechanical — inject a must-report
 case — precisely because vigilance is not one.
+
+## Derive a POPULATION from the build's own manifest, never from artefacts on disk
+
+Measured 2026-09-02 (frankD, busybox/i386; written up by frankC, who has no
+competing claim on the measurement).
+
+Asked "which TUs does our C frontend still refuse", the obvious population is
+the object files: `find . -name '*.o'`. That gave **424 of 438** compiling for
+i386 with 10 refusals. The real population, read from `busybox_unstripped.map`
+the way `busybox_diff.sh` reads it, was **28 TUs** — the tree was configured for
+a cat+echo scope, not the full applet set. A **15x superset**, and no step
+errored.
+
+**Build artefacts are a monotonically growing record of every configuration the
+tree has ever had. The link map is a statement about the current one.** Nothing
+deletes a stale `.o` when a config option flips off, so an artefact-derived
+population only ever grows, and every extra member is a file the current build
+does not compile and never asked anyone to.
+
+**Why it survives review: each false member fails PLAUSIBLY, and it fails like a
+compiler gap.** Four of the ten refusals — `libbb/capability.c`, `shell/ash.c`,
+`networking/nslookup.c`, both `networking/udhcp/` files — are `ENABLE_*=0` in
+the current config, so **gcc refuses them too**. `libbb/capability.c` uses
+`DEFINE_STRUCT_CAPS`, which `libbb.h` defines only under
+`#if ENABLE_FEATURE_SETPRIV_CAPABILITIES || ENABLE_RUN_INIT`, both 0 — and that
+was chased as a macro-expansion defect in the frontend before anyone asked
+whether the config defined it at all. The diagnosis is wrong and the diagnostic
+is real; nothing in the error text says "this file is not in your build".
+
+**The rule:** name the manifest the build itself uses — a link map, a
+`compile_commands.json`, a `.d` file, the linker's own input list — and derive
+the population from that. If you cannot name it, you are reporting a count whose
+denominator is unknown, which is the failure in *An instrument that reports a
+RESULT should report its DENOMINATOR* with the additional twist that this
+denominator is **silently too large** rather than merely unstated.
+
+**And say which config a count was measured against.** The config is shared
+mutable state: it moved under this measurement at 17:33 the same day. A TU count
+with no config named is not reproducible even by its own author.
+
+### The pair worth holding together
+
+This and the `sizeof` collision below it are the two halves of one class, and
+they fail in opposite directions:
+
+| | frankD, artefact population | frankC, `sizeof(*s.fp)` |
+| --- | --- | --- |
+| what you get | a real error, about the wrong thing | a plausible value, indistinguishable from right |
+| what tips you off | eventually, that gcc refuses it too | **nothing** — until a `double` row |
+| cost | time chasing a non-defect | a wrong finding written into a ticket |
+
+A **wrong diagnosis that cannot be told from a real defect**, and a **wrong
+value that cannot be told from a right one**. The artefact case is the milder
+one precisely because it produces an error message: something forced a second
+look. The `sizeof` case produced `4`, which is `TypeStorageSize(tyUnknown)` and
+also `sizeof(int)`, so the instrument reported "nothing recorded" in a spelling
+that reads as a correct element size — see *AND CHOOSE A PROBE WHOSE RIGHT
+ANSWER DIFFERS FROM THE DEFAULT* in CLAUDE.md.
+
+**Neither is caught by asking "did it error".** Both are caught by asking what
+the population, or the expected value, would look like if the machinery had done
+nothing at all.

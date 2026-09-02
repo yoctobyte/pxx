@@ -8858,6 +8858,16 @@ test-core: $(COMPILER)
 	# different targets. Byte-identical to FPC.
 	./$(COMPILER) test/test_frozen_string_param_setlength.pas $(TESTTMP)/test_frozen_param_setlen26
 	$(TESTTMP)/test_frozen_param_setlen26 | diff -u test/test_frozen_string_param_setlength.expected -
+	# `char VALUE + string DEST + POINTER store` was lowered on x86-64 and
+	# riscv32 only -- i386/aarch64/arm32 raised at their IR_STORE_MEM arm while
+	# all five handled the IR_STORE_SYM spelling (`s := c`). Rows c and d are the
+	# controls that isolate it to that combination; every string is pre-loaded
+	# with a 5-char value so a store that does nothing prints `5 abcde`.
+	# THIS NATIVE ROW CANNOT FAIL FOR THE BUG -- x86-64 was correct throughout.
+	# The cross rows in test-i386/-aarch64/-arm32/-riscv32 are the real guard.
+	# bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only
+	./$(COMPILER) test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_charstr_ptr26
+	$(TESTTMP)/test_charstr_ptr26 | diff -u test/test_char_into_shortstring_via_pointer.expected -
 	# Real-valued CONSTANT EXPRESSIONS — folded at compile time, so a wrong fold
 	# is a silently wrong literal rather than a diagnostic.
 	./$(COMPILER) test/test_const_real_expressions.pas $(TESTTMP)/test_const_real_expr26
@@ -15374,6 +15384,13 @@ test-i386: $(COMPILER)
 	# correct throughout and is the control that the fix changed nothing there.
 	./$(COMPILER) --target=i386 test/test_frozen_string_param_setlength.pas $(TESTTMP)/test_i386_frozenparam
 	tools/expect_same.sh i386/frozenparam "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozenparam)" "$$(cat test/test_frozen_string_param_setlength.expected)"
+	# The cross half of bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only,
+	# and the half that means something: this target REFUSED to compile the file
+	# at all before the fix ('char-to-inline-string store through pointer not yet
+	# supported'), so the native row is a guard that cannot fail. Verified as a
+	# positive control -- the pinned compiler still refuses this exact file here.
+	./$(COMPILER) --target=i386 test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_i386_charstrptr
+	tools/expect_same.sh i386/charstrptr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_charstrptr)" "$$(cat test/test_char_into_shortstring_via_pointer.expected)"
 	./$(COMPILER) --target=i386 test/hello.pas $(TESTTMP)/test_i386_hello
 	tools/expect_same.sh i386/test_i386_hello "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hello)" "Hello, World!"
 	# GNU labels-as-values on this cross target. i386 has no PC-relative
@@ -16208,6 +16225,13 @@ test-aarch64: $(COMPILER)
 	# correct throughout and is the control that the fix changed nothing there.
 	./$(COMPILER) --target=aarch64 test/test_frozen_string_param_setlength.pas $(TESTTMP)/test_a64_frozenparam
 	tools/expect_same.sh aarch64/frozenparam "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozenparam)" "$$(cat test/test_frozen_string_param_setlength.expected)"
+	# The cross half of bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only,
+	# and the half that means something: this target REFUSED to compile the file
+	# at all before the fix ('char-to-inline-string store through pointer not yet
+	# supported'), so the native row is a guard that cannot fail. Verified as a
+	# positive control -- the pinned compiler still refuses this exact file here.
+	./$(COMPILER) --target=aarch64 test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_a64_charstrptr
+	tools/expect_same.sh aarch64/charstrptr "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_charstrptr)" "$$(cat test/test_char_into_shortstring_via_pointer.expected)"
 	./$(COMPILER) --target=aarch64 test/hello.pas $(TESTTMP)/test_aarch64_hello
 	# GNU labels-as-values on the cross target. aarch64 reaches a label address
 	# with `adr x0, #imm21' -- PC-relative, so no relocation and no literal pool,
@@ -16911,6 +16935,12 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_static_string_literal "$$(tools/run_target.sh aarch64 $(TESTTMP)/ssl_a64 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_a64_x64 | grep -v '^pxx-census')"
 
 test-riscv32: $(COMPILER)
+	# The cross half of bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only.
+	# riscv32 was already CORRECT here while i386/aarch64/arm32 refused, which is
+	# why the ticket could cite a non-x86-64 reference. This row is the control
+	# that the three transplants changed nothing on the backend that was right.
+	./$(COMPILER) --target=riscv32 test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_rv32_charstrptr
+	tools/expect_same.sh riscv32/charstrptr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_charstrptr)" "$$(cat test/test_char_into_shortstring_via_pointer.expected)"
 	# A `var` parameter of every scalar kind, plus var->var forwarding. The
 	# 32-bit backends carried a hand-rolled arm AHEAD of the shared
 	# ABIParamSlotHoldsValueAddr predicate that was a strict subset of it; this
@@ -18683,6 +18713,11 @@ test-arm32: $(COMPILER)
 	# correct throughout and is the control that the fix changed nothing there.
 	./$(COMPILER) --target=arm32 test/test_frozen_string_param_setlength.pas $(TESTTMP)/test_a32_frozenparam
 	tools/expect_same.sh arm32/frozenparam "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozenparam)" "$$(cat test/test_frozen_string_param_setlength.expected)"
+	# The cross half of bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only.
+	# arm32 REFUSED to compile this file before the fix, so this row -- not the
+	# native one -- is the guard. Positive control: the pinned compiler still does.
+	./$(COMPILER) --target=arm32 test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_a32_charstrptr
+	tools/expect_same.sh arm32/charstrptr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_charstrptr)" "$$(cat test/test_char_into_shortstring_via_pointer.expected)"
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
 	tools/expect_same.sh arm32/test_arm32_hello "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_hello)" "Hello, World!"
 	./$(COMPILER) --target=arm32 test/c_local_string_array_init.c $(TESTTMP)/test_a32_lsarr

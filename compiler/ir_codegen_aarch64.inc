@@ -4024,7 +4024,15 @@ begin
           EmitI32($AA0003E6);                      { mov x6, x0 (dst) }
           EmitI32($F84107E5);                      { ldr x5, [sp],#16 (src) }
           if IntToTypeKind(IRTk[valNode]) = tyChar then
-            Error('target aarch64: char-to-inline-string store through pointer not yet supported');
+          begin
+            { x5 = char ordinal -> [len=1][char]. The same sequence the
+              IR_STORE_SYM arm above emits for `s := c`; x6/x5 already hold
+              dest/char here. }
+            EmitLoadImmA64(9, 1);
+            EmitI32($F90000C9);                    { str x9, [x6] (len=1) }
+            EmitI32($390020C5);                    { strb w5, [x6,#8] }
+            Exit;
+          end;
           if IntToTypeKind(IRTk[valNode]) = tyAnsiString then
           begin
             { Managed source -> frozen dest (r.s := managedStr): x5 = handle
