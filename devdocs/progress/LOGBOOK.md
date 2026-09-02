@@ -623,3 +623,18 @@ is the tell. Proved by exhaustion over the source: the single `:= True` is
 inside a loop this path never enters. Reported by frankZ, whose attribution
 (the auto-filed range points at 18b3ec2a6 and is wrong) stands and whose
 mechanism hypothesis does not.
+
+2026-09-02 | frankD (Track C) | tools/busybox_diff.sh | The applet-set check now
+compares against `include/applet_tables.h` — the generated list of applets the
+tree ACTUALLY builds — instead of against NUM_APPLETS. WHY: the count is a lossy
+proxy in both directions. `busybox` is the multiplexer, has a CONFIG_ and no
+table entry; and an applet can be CONFIG_X=y and still produce no entry when
+every FEATURE_ under it is off (measured: `tftp` with FEATURE_TFTP_GET and _PUT
+both off). Asking for 259 names and building 257 applets made the old check
+print "the tree has EXTRAS", which is false in the direction that sends the
+reader hunting for something that is not there. The new reader carries a
+positive control on ITSELF — its name count must equal the table's own
+NUM_APPLETS, and it dies rather than naming applets if not; the first version
+counted the "\0" separator as an applet, which that control catches.
+BOOKKEEPING: these 75 lines landed inside 2148d95fa, whose message describes
+only the cparser fix. Recorded here because the commit does not say it.
