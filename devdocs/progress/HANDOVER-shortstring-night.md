@@ -264,8 +264,37 @@ comment at four call sites.** `IRStrTkOf`'s docstring already
 prescribes the remedy verbatim. The fix was designed, named, documented and
 applied on aarch64; arm32's sites never got it.
 
-Two is a smell, three is a design flaw. **A comment is not a mechanism.** This
-is a normalisation decision, deliberately not taken unattended.
+Two is a smell, three is a design flaw. **A comment is not a mechanism.**
+
+### The fork, and what changed under it tonight
+
+**Every defect found tonight is the same sentence: a reader did not ask the
+prefix its width.** Five causes fixed, two survivors still open, and they arrive
+in shapes that share no identifier — `IntToTypeKind` at a compare callsite, a
+missing kind in a signature, a stale `symIdx`, a bare `+ 8`, an offset-0 load
+treated as a low word. **frankb-a9's own account of the real exposure is that
+most of them contain no helper name at all**, which is why no grep found them and
+why five sessions each hit a different one.
+
+**Option A — fence the spelling.** frankc-af landed a Track T check tonight
+(`43c31eff0`) that mechanically catches `IntToTypeKind` where `IRStrTkOf` is
+required. It goes green, and it would have caught arm32's four sites. **Cheap,
+already done, and it fences one spelling of the mistake.**
+
+**Option B — remove the question.** Make the IR owe its callers a resolved kind,
+so a reader cannot get a width without asking for one. `IRStrTkOf` already exists
+and its docstring already prescribes exactly this; the gap is that asking it
+remains optional at every site.
+
+**My read, and frankb-a9 is the one who would actually know: A does not close
+this.** The guard fences the spelling that has already been fixed everywhere it
+occurs, while the defects that are still open contain no such spelling. A check
+that catches the shape of last night's bug is worth having and is not the same as
+a mechanism. **Two is a smell, three is a design flaw — this is at five plus two,
+found in one evening, by sessions actively hunting it.**
+
+Not taken unattended, because B is a normalisation across seven backends and the
+IR, and that is the shape of change this file says lands as a whole or not at all.
 
 **P3 and the phase-4 flip were NOT started.** frankb-a9 is holding at the
 phase-2 boundary; the coordinator is holding a quiet tree. The flip re-types
