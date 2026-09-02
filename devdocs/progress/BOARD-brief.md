@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:8 unfinished:27 blocked:6 backlog:4 backlog-umbrella:6 backlog-core:136 backlog-nilpy:97 backlog-tools:6 backlog-pascal:55 backlog-decide:31 backlog-libs:16 backlog-cfront:20 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3137 rejected:72`
+`working:8 unfinished:27 blocked:6 backlog:4 backlog-umbrella:7 backlog-core:136 backlog-nilpy:97 backlog-tools:6 backlog-pascal:55 backlog-decide:31 backlog-libs:16 backlog-cfront:20 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3137 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -63,11 +63,18 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
+- `[p 75] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 2)
+- `[p 75] [A]` bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets (unblocks 1)
+- `[p 75] [C]` bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size (unblocks 1)
+- `[p 75] [C]` bug-c-sizeof-reaches-a-pointee-through-one-spelling-only (unblocks 1)
+- `[p 75] [N]` bug-n-nilpy-carries-its-own-copies-of-the-float-type-table (unblocks 1)
+- `[p 75] [P]` bug-p-a-user-type-whose-name-shadows-a-builtin-is-unusable (unblocks 1)
+- `[p 75] [P]` bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts (unblocks 1)
+- `[p 75] [A]` refactor-a-the-const-cast-width-table-is-the-third-copy (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [A]` umbrella-managed-memory-is-correct
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
 - `[p 70] [C]` bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
@@ -82,12 +89,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [C]` feature-c-corpus-busybox-i386-the-second-architecture
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
-- `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
-- `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
-- `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
-- `[p 62] [N]` feature-nilpy-enum-class
-- `[p 60] [C]` bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero
-- `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 
 _360 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
