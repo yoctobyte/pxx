@@ -45,4 +45,4 @@ expect_same: MISMATCH [test_npy_clone26]
 takes it from the repro line.*
 
 ## Log
-- 2026-09-02 — auto-closed by the seven watcher: `test-threads#src:test/test_nilpy_thread_clone.npy` passes at 0da8a0ae4200 (tier native); it was red at dc018685fd56. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
+- 2026-09-02 — auto-closed by the seven watcher: `test-threads#src:test/test_nilpy_thread_clone.npy` passes at 08f7de0715a8 (tier native); it was red at 43aa63d1b54d. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
