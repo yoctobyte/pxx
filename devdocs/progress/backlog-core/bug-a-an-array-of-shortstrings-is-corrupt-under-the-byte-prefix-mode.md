@@ -68,3 +68,39 @@ assertions.
 
 `feature-a-dynamic-array-of-frozen-strings` is a feature for DYNAMIC arrays.
 This is a static array and a correctness bug.
+
+## Narrowed 2026-09-02 22:2x (frankuser) — measurement only, files untouched
+
+**Not an optimiser bug.** Identical at `-O0`, `-O1`, `-O2` and `-O3` on x86-64:
+`a[0] len=4`, `b[0] len=2199023255554`, `a[1]='one'` FALSE at every level. So it
+is **unlike `CmpFusible`** — the `-O0`-correct/`-O1+`-wrong tell does not apply
+here, and the defect is in the layout/codegen arm rather than a predicate.
+
+**Live control:** default mode at `-O2` gives `len=4 len=2 TRUE` on the same
+harness, so these rows can produce the right answer.
+
+**Cross-target, `-dPXX_SHORTSTRING`, default `-O`:**
+
+| target | `a[0]` | `b[0]` len | `a[1]='one'` |
+| --- | --- | --- | --- |
+| x86-64 | len=4 | **2199023255554** | FALSE |
+| aarch64 | len=4 | **2199023255554** | FALSE |
+| i386 | len=4 | **2** *(looks correct)* | FALSE |
+| arm32 | len=4 | **2** *(looks correct)* | FALSE |
+| riscv32 | len=4 | **2** *(looks correct)* | FALSE |
+
+**The 64/32 split is the most useful thing here, and it is a trap.** The three
+32-bit targets report `b[0] len=2`, which is the CORRECT value — while the
+comparison on the same element is still FALSE. `2199023255554` is `0x20000000002`:
+**its low 32 bits are exactly 2.** So a length read from the wrong offset is
+truncated on a 32-bit target into the right answer by accident.
+
+**A `Length()` probe passes on i386, arm32 and riscv32 while the bug is fully
+present** — the expected value collides with the failure value on precisely the
+targets where a width bug is most likely to be looked for. Assert the VALUE
+(`a[1] = 'one'`), which is FALSE on all five, never the length.
+
+*Stated as measured. The register-width reading of `0x20000000002` is the
+obvious explanation and is NOT measured — nobody has read the emitted load. It
+is offered as where to point gdb first, not as a diagnosis; three theories died
+on the field-compare tonight, each confirmed by source-reading first.*
