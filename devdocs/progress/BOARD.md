@@ -95,7 +95,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (140)
+## backlog-core (139)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -168,7 +168,6 @@ _none_
 | feature-a-a-private-clause-for-parallel-for | A | 50 | feature | `parallel for` has `reduction(op: v)` and nothing else, so a captured local the body ASSIGNS cannot be made per-worker. That is not a defect -- docs/library/concurrency.md documents capture-by-reference and says an unguarded shared write is a data race -- but it means a whole class of loop body cannot be written at all: the natural `s := ''; SetLength(s, 8); use(s)` scratch variable has no race-free spelling with a captured scalar. A `private(v)` clause giving each worker its own copy (initialised empty/zero, discarded at the end) would close it; the reduction machinery already builds exactly this, a per-worker private plus a combine, so private is that minus the combine. | — |
 | feature-a-a-refusal-is-a-claim-with-a-date-on-it | A | 35 | feature |  | — |
 | feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile | A+S | 35 | feature | xtensa is the only hosted target with NO signal runtime — EmitSignalRuntimeForTarget has arms for five arches and falls through for xtensa, on purpose, because `FreeRTOS is not a Unix`. That rationale was written before the hosted xtensa profile existed, and under --platform=posix xtensa IS a Unix running on Linux via qemu. Not the 8-line IR_SET_SIGNAL port it looks like: the arm depends on a ~155-line runtime that does not exist. Unblocks 4 programs, not 1, because the three SA_SIGINFO refusals are gated on the same fact. | — |
-| feature-a-a-stackful-generator-is-x86-64-only-so-examples-chess-cannot-target-anything-else | A | 45→80 | feature | A plain `generator;` uses the STACKFUL lowering, which needs CoSwitch (x86-64 asm) and refuses on every other target. examples/chess/chess.pas uses one for move generation, so chess builds for x86-64 alone — the only program in examples/ that fails on ALL five cross targets. MEASURED: the accepted alternative, `generator; stackless;` with `uses slgen`, works and gives identical answers on all six targets, so the refusal is NOT load-bearing here. The open question is whether chess's generator can be expressed stacklessly, which is a capability question, not a porting one. | — |
 | feature-a-a-variant-has-no-null-tag | A | 45 | feature | pxx has one no-value variant tag (VT_EMPTY), so VarIsNull and VarIsEmpty are the same question and `v := Null; VarIsEmpty(v)` answers True where FPC says False. variants.pas states the approximation in its header and asks for a ticket rather than a silent guess — this is that ticket. A VT_NULL tag is a compiler change, and decide-variant-tag-space-is-a-language-wide-commitment already settled that the tag space is Track A\'s to renumber freely. | — |
 | feature-a-an-extern-only-variable-still-reserves-its-storage | A | 25 | feature | A variable declared only `extern` (C) or `external` (Pascal) is emitted as an UND symbol and every reference is retargeted to it -- but AllocFromDeclTypeDesc has already reserved its storage, and the slot stays in .bss unaddressed. Measured: a TU containing `extern int Big[1000];` has exactly the same bss= as one containing `int Big[1000];` (42156B both), so the object carries 4000 bytes it can never reach. Wasted space, never a wrong value. Both frontends. | — |
 | feature-a-classinfo-returns-the-typinfo-header | A | 45 | feature | Re-filed from decide-classinfo-returns-our-blob-or-nothing / decide-tobject-classinfo-blob-or-refusal, both decided 2026-08-25. x.ClassInfo returns exactly what TypeInfo(TThatClass) returns -- the 24-byte {Kind; NamePtr; DataPtr} header whose DataPtr points at the class blob -- so o.ClassInfo = TypeInfo(TFoo) holds and a layout walker reads a real kind byte. One header word per declared class. | — |
@@ -860,9 +859,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3088)
+## done (3089)
 
-3088 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3089 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -952,7 +951,6 @@ _none_
 - [p 85] [T] regression-test-core-test-exception-unhandled-3 (unblocks 1)
 - [p 85] [T] regression-test-core-test-setlen-in-parallel-for-body-2 (unblocks 1)
 - [p 85] [T] feature-t-grade-a-pin-instead-of-gating-it
-- [p 80] [A] feature-a-a-stackful-generator-is-x86-64-only-so-examples-chess-cannot-target-anything-else (unblocks 1)
 - [p 80] [A] feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - [p 80] [A] feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build (unblocks 1)
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
@@ -1432,7 +1430,6 @@ _none_
 - **1** — decide-the-utf16-payload-fact-is-spelled-twice-kind-widestr-and-enc-ucs2
 - **1** — decide-tobject-classinfo-blob-or-refusal
 - **1** — decide-which-gtk-a-bare-gtk-gtk-h-means
-- **1** — feature-a-a-stackful-generator-is-x86-64-only-so-examples-chess-cannot-target-anything-else
 - **1** — feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes
 - **1** — feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build
 - **1** — feature-nilpy-parallel-for-in

@@ -14754,6 +14754,20 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_i386_aggret "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_aggret)" "$$($(TESTTMP)/test_i386_aggret_x64)"
 	# aggregate / frozen-string result via a VIRTUAL and an INDIRECT call
 	# (feature-cross-virtual-indirect-hidden-dest)
+	# examples/chess on a cross target. It was the ONE program in examples/ that
+	# failed to build on all five, and for a single word: a plain `generator;`
+	# takes the STACKFUL lowering, whose body runs on a heap coroutine stack
+	# swapped by CoSwitch, which is x86-64 assembly. Now `generator; stackless;`,
+	# a state-machine transform of the body that needs no assembly anywhere.
+	#
+	# THE ROW IS HERE RATHER THAN IN lib-test BECAUSE THE POINT IS THE TARGET.
+	# lib-test already builds chess with $(PXX_STABLE) and asserts the same
+	# `ALL OK`, and that row stays green (checked: the pin builds the stackless
+	# spelling too) -- but it runs on x86-64, which is the one target that never
+	# had the problem. --selftest rather than the interactive default: it is
+	# deterministic and it exercises the generator, which is what changed.
+	./$(COMPILER) --target=i386 examples/chess/chess.pas $(TESTTMP)/chess_i386
+	tools/expect_same.sh i386/examples_chess "$$(tools/run_target.sh i386 $(TESTTMP)/chess_i386 --selftest | tail -1)" "ALL OK"
 	./$(COMPILER) --target=i386 test/test_cross_virtual_indirect_aggret.pas $(TESTTMP)/test_i386_vindaggret
 	./$(COMPILER) test/test_cross_virtual_indirect_aggret.pas $(TESTTMP)/test_i386_vindaggret_x64
 	tools/expect_same.sh i386/test_i386_vindaggret "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_vindaggret)" "$$($(TESTTMP)/test_i386_vindaggret_x64)"

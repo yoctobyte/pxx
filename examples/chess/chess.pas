@@ -23,7 +23,7 @@ program Chess;
 
 {$mode objfpc}
 
-uses coroutine, sysutils, platform;
+uses coroutine, slgen, sysutils, platform;
 
 const
   INF      = 30000;
@@ -469,7 +469,21 @@ begin
   MkMove.flags := flags;
 end;
 
-function GenMoves(const pos: TPosition): TMove; generator;
+function GenMoves(const pos: TPosition): TMove; generator; stackless;
+{ STACKLESS, so this program is not x86-64-only. The stackful lowering runs the
+  generator body on a heap coroutine stack swapped by CoSwitch, which is x86-64
+  assembly, and the parser refuses it on every other target -- chess was the one
+  program in examples/ that failed to build on ALL FIVE cross targets, and for
+  this one word.
+
+  The two are NOT interchangeable in general: stackful owns a stack and can
+  therefore suspend from inside a nested call, while stackless is a state-machine
+  transform of the body, so a `yield` reachable only through a helper is not
+  expressible. Checked here rather than assumed -- all 24 yields in this file are
+  lexically inside this function; the only other match is the section comment
+  above. MkMove is a call, but it produces the yielded VALUE and does not yield,
+  which is the distinction that matters.
+  feature-a-a-stackful-generator-is-x86-64-only-so-examples-chess-cannot-target-anything-else }
 { Pseudo-legal moves for the side to move. Legality (own king safe) is filtered
   by the caller via make / InCheck / unmake. }
 var
