@@ -53,6 +53,68 @@ void *__pxx_va_arg_fp(struct __pxx_va_elem *ap) {
   return addr;
 }
 
+/* va_arg of a STRUCT or UNION on SysV AMD64, which is the one shape the two
+   helpers above cannot serve: an aggregate occupies one eightbyte SLOT PER
+   EIGHTBYTE, and the classifier decides per eightbyte whether that slot is an
+   INTEGER (gp) or SSE (fp) one -- so a `struct { double a, b; }` lands in two
+   XMM slots that are SIXTEEN bytes apart in the save area, not contiguous.
+   Nothing that returns a single address can describe it, which is why this one
+   copies into a caller-supplied destination instead.
+
+   `ssemask` bit k = eightbyte k is SSE-classified; `neight` = how many there
+   are; `size` = the aggregate's byte size. The frontend computes all three from
+   the SAME ABISysVArgPlace oracle the CALLER used to place the argument, which
+   is what makes the two halves agree.
+
+   THE ALL-OR-NOTHING RULE IS THE PART A PER-SLOT HELPER GETS WRONG: SysV says
+   an aggregate whose eightbytes cannot ALL be placed in registers goes to
+   memory ENTIRELY. Walking it a slot at a time would take eightbyte 0 from a
+   register and eightbyte 1 from the overflow area, which is a plausible wrong
+   answer rather than a crash -- it needs five earlier GP variadic arguments to
+   show up. The check is done once, here, before any offset moves.
+   bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer */
+void __pxx_va_arg_agg(struct __pxx_va_elem *ap, void *dst,
+                      unsigned int neight, unsigned int ssemask,
+                      unsigned int size) {
+  unsigned int k, ngp, nsse, i;
+  char *d;
+  char *src;
+  d = (char *)dst;
+  ngp = 0;
+  nsse = 0;
+  for (k = 0; k < neight; k = k + 1) {
+    if ((ssemask >> k) & 1u) nsse = nsse + 1;
+    else ngp = ngp + 1;
+  }
+  /* neight == 0 IS the MEMORY class, straight from ABISysVRecordEightbytes,
+     which returns 0 for both of its memory answers (size > 16, and a <=16-byte
+     record the walk classified MEMORY). Inferring it from `size > 16` here
+     would get the second one wrong, and getting it wrong is a plausible value
+     rather than a fault. The bank-full test is the SAME all-or-nothing rule
+     ABISysVArgPlace applies on the caller's side; both sides must reach the
+     same answer or every argument after this one is off by a slot. */
+  if (neight == 0 || ap->gp_offset + ngp * 8 > 48 ||
+      ap->fp_offset + nsse * 16 > 176) {
+    /* MEMORY: the bytes are contiguous in the caller's stack area, 8-aligned. */
+    src = (char *)ap->overflow_arg_area;
+    for (i = 0; i < size; i = i + 1) d[i] = src[i];
+    ap->overflow_arg_area = (void *)(src + ((size + 7u) & ~7u));
+    return;
+  }
+  for (k = 0; k < neight; k = k + 1) {
+    if ((ssemask >> k) & 1u) {
+      src = (char *)ap->reg_save_area + ap->fp_offset;
+      ap->fp_offset = ap->fp_offset + 16;
+    } else {
+      src = (char *)ap->reg_save_area + ap->gp_offset;
+      ap->gp_offset = ap->gp_offset + 8;
+    }
+    for (i = 0; i < 8; i = i + 1) {
+      if (k * 8 + i < size) d[k * 8 + i] = src[i];
+    }
+  }
+}
+
 /* Cross-target (aarch64) variadic model: the pxx value model passes every scalar
    — floats included — as bits in a general argument register, so there is ONE
    register save area of 8 eight-byte slots (x0..x7 = 64 bytes) and no separate
@@ -91,7 +153,16 @@ void *__pxx_va_arg_cross32(struct __pxx_va_elem *ap, unsigned int size,
                            unsigned int align) {
   unsigned int step;
   void *addr;
-  step = (size <= 4) ? 4 : 8;
+  /* Round the byte size up to a whole 4-byte word slot. This used to read
+     `(size <= 4) ? 4 : 8`, which is the same answer for every SCALAR (no C
+     variadic scalar exceeds 8 bytes) and the wrong one for a STRUCT: an
+     i386 cdecl aggregate occupies ceil(size/4) words of its own bytes, and
+     the caller counts it that way. Identical bytes for 1..8; a
+     generalisation, not a behaviour change, for anything the old form
+     could not describe.
+     bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer */
+  step = (size + 3u) & ~3u;
+  if (step < 4) step = 4;
   /* ALIGNMENT IS PER-TARGET AND THE FRONTEND ANSWERS IT, because the three
      targets sharing this walk genuinely disagree. AAPCS32 gives an 8-byte
      scalar 8-byte alignment, in registers and on the stack, for a variadic

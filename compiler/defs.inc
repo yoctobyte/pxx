@@ -5235,6 +5235,19 @@ var
     and IR_CALL_IND have no free operand, so their dest node lives here (-1 = none).
     bug-frozen-string-result-global-not-reentrant. }
   IRCallDest : array of Integer;
+  { The RECORD IDENTITY of a by-value struct argument, carried on the VALUE node
+    IRLowerCallArg returns (an IR_LEA over the private temp). REC_NONE = not a
+    record argument.
+
+    It exists for exactly one question the backends cannot otherwise answer: a
+    struct in a call's VARIADIC TAIL. A fixed parameter recovers its record id
+    from the callee declaration (ProcParamRecId), and a variadic slot has no
+    declaration to recover it from -- while the temp's address is tagged
+    tyPointer, so by the time an argument-placement loop reads
+    IRTk[IRA[argNode]] the aggregate is gone and one pointer-sized slot is all
+    it can emit. gcc puts the aggregate's own bytes there.
+    bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer }
+  IRArgRecId : array of Integer;
   { Class-instantiation IR_CALL (procIdx = -tkGetMem): the ctor proc the FRONTEND
     picked by argument types. Every backend used to re-resolve the ctor itself with
     a first-name-match FindUMeth(ci,'create'), which cannot see overloads, so an

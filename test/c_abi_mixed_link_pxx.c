@@ -62,3 +62,63 @@ typedef double (*fn_mix)(struct MIX);
 
 int    relay_p2_ind (void) { struct P2  p; fn_p2  f = gcc_p2;  p.a=3; p.b=7;    return f(p); }
 double relay_mix_ind(void) { struct MIX p; fn_mix f = gcc_mix; p.a=7; p.y=0.25; return f(p); }
+
+/* ===== THE VARIADIC TAIL, both directions =====
+
+   A struct through `...` is a THIRD convention in this compiler, not a
+   variation on the two above: a fixed parameter recovers its record identity
+   from the callee declaration, and a variadic slot has no callee declaration to
+   recover it from. Until 2026-09-02 the slot held a POINTER to a caller temp
+   where gcc puts the aggregate's own bytes -- self-consistent inside pxx, so
+   every row above stayed green while `semctl(id, n, SETVAL, union semun)`
+   returned wrong answers.
+
+   Same six shapes as above, because the classification boundaries are the same
+   ones and a variadic slot crosses them independently. The `full` pair is the
+   row a per-slot implementation gets wrong and a per-aggregate one does not:
+   five named ints leave gp_offset at 40, a 2-eightbyte INTEGER aggregate needs
+   16, and SysV says an aggregate that cannot be placed in registers ENTIRELY
+   goes to memory ENTIRELY -- walking it a slot at a time takes eightbyte 0 from
+   the last register and eightbyte 1 from the overflow area, which is a
+   plausible wrong number rather than a crash.
+   bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer */
+#include <stdarg.h>
+
+int va_take_p2(int n, ...)
+{ struct P2 p; va_list ap; va_start(ap,n); p = va_arg(ap, struct P2); va_end(ap);
+  return p.a * 10 + p.b; }
+int va_take_p4(int n, ...)
+{ struct P4 p; va_list ap; va_start(ap,n); p = va_arg(ap, struct P4); va_end(ap);
+  return ((p.a * 10 + p.b) * 10 + p.c) * 10 + p.d; }
+int va_take_p6(int n, ...)
+{ struct P6 p; va_list ap; va_start(ap,n); p = va_arg(ap, struct P6); va_end(ap);
+  return p.a*1 + p.b*2 + p.c*3 + p.d*4 + p.e*5 + p.f*6; }
+double va_take_d2(int n, ...)
+{ struct D2 p; va_list ap; va_start(ap,n); p = va_arg(ap, struct D2); va_end(ap);
+  return p.x * 10.0 + p.y; }
+double va_take_mix(int n, ...)
+{ struct MIX p; va_list ap; va_start(ap,n); p = va_arg(ap, struct MIX); va_end(ap);
+  return p.a * 100.0 + p.y; }
+int va_take_c3(int n, ...)
+{ struct C3 p; va_list ap; va_start(ap,n); p = va_arg(ap, struct C3); va_end(ap);
+  return p.a * 100 + p.b * 10 + p.c; }
+int va_take_full(int a, int b, int c, int d, int e, ...)
+{ struct P4 p; va_list ap; va_start(ap,e); p = va_arg(ap, struct P4); va_end(ap);
+  return ((((a*10+b)*10+c)*10+d)*10+e) * 10000
+         + ((p.a * 10 + p.b) * 10 + p.c) * 10 + p.d; }
+
+extern int    gcc_va_p2 (int n, ...);
+extern int    gcc_va_p4 (int n, ...);
+extern int    gcc_va_p6 (int n, ...);
+extern double gcc_va_d2 (int n, ...);
+extern double gcc_va_mix(int n, ...);
+extern int    gcc_va_c3 (int n, ...);
+extern int    gcc_va_full(int a, int b, int c, int d, int e, ...);
+
+int    va_relay_p2 (void) { struct P2  p; p.a=3; p.b=7;                     return gcc_va_p2(0, p); }
+int    va_relay_p4 (void) { struct P4  p; p.a=1;p.b=2;p.c=3;p.d=4;          return gcc_va_p4(0, p); }
+int    va_relay_p6 (void) { struct P6  p; p.a=1;p.b=2;p.c=3;p.d=4;p.e=5;p.f=6; return gcc_va_p6(0, p); }
+double va_relay_d2 (void) { struct D2  p; p.x=1.5; p.y=2.5;                 return gcc_va_d2(0, p); }
+double va_relay_mix(void) { struct MIX p; p.a=7; p.y=0.25;                  return gcc_va_mix(0, p); }
+int    va_relay_c3 (void) { struct C3  p; p.a=1; p.b=2; p.c=3;              return gcc_va_c3(0, p); }
+int    va_relay_full(void){ struct P4  p; p.a=1;p.b=2;p.c=3;p.d=4;          return gcc_va_full(1,2,3,4,5, p); }

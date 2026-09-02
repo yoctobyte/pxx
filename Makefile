@@ -19670,7 +19670,7 @@ test-c-abi-cross: $(COMPILER)
 # value, and the ones this corpus calls take scalars and varargs.
 .PHONY: test-c-abi-mixed-link
 test-c-abi-mixed-link: $(COMPILER)
-	@exp="$$(printf 'take_p2 37\ntake_p4 1234\ntake_p6 91\ntake_d2 17.50\ntake_mix 700.25\ntake_c3 123\ntake_late 1234537\nrelay_p2 37\nrelay_p4 1234\nrelay_p6 91\nrelay_d2 17.50\nrelay_mix 700.25\nrelay_late 1234589\nrelay_p2_ind 37\nrelay_mix_ind 700.25')"; \
+	@exp="$$(printf 'take_p2 37\ntake_p4 1234\ntake_p6 91\ntake_d2 17.50\ntake_mix 700.25\ntake_c3 123\ntake_late 1234537\nrelay_p2 37\nrelay_p4 1234\nrelay_p6 91\nrelay_d2 17.50\nrelay_mix 700.25\nrelay_late 1234589\nrelay_p2_ind 37\nrelay_mix_ind 700.25\nva_take_p2 37\nva_take_p4 1234\nva_take_p6 91\nva_take_d2 17.50\nva_take_mix 700.25\nva_take_c3 123\nva_take_full 123451234\nva_relay_p2 37\nva_relay_p4 1234\nva_relay_p6 91\nva_relay_d2 17.50\nva_relay_mix 700.25\nva_relay_c3 123\nva_relay_full 123451234')"; \
 	overall=0; ran=0; want=0; skipped=0; \
 	for t in x86_64 i386; do \
 	  want=$$((want+1)); \

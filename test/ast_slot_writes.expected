@@ -789,6 +789,7 @@ AN_COMPOUND_ASSIGN Right right
 AN_COMPOUND_LITERAL Left frSeq
 AN_COMPOUND_LITERAL Left seq
 AN_COMPOUND_LITERAL Left sq
+AN_COMPOUND_LITERAL Left vaSeq
 AN_COMPOUND_LITERAL Left zseq
 AN_DEREF Left GenMakeIdent(ps, tyPointer)
 AN_DEREF Left GenMakeSlotAddr(i)
@@ -1048,6 +1049,7 @@ AN_SEQ Left asgN
 AN_SEQ Left asn
 AN_SEQ Left assignNode
 AN_SEQ Left call
+AN_SEQ Left callNode
 AN_SEQ Left cp
 AN_SEQ Left declNode
 AN_SEQ Left exprNode

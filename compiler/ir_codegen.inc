@@ -9360,7 +9360,19 @@ begin
               end
               else
               begin
-                aggIsRef := False; aggIsArr := False; aggRec := REC_NONE;
+                aggIsRef := False; aggIsArr := False;
+                { ...unless the argument is a STRUCT, which the comment above is
+                  wrong about: C default promotion does not flatten an aggregate,
+                  and there is no parameter to ask. IRLowerCallArg made the
+                  private temp and stamped its record identity on the value node
+                  precisely because this is the one place it cannot be recovered
+                  from the callee. With it, a variadic aggregate takes the same
+                  ABISysVArgPlace classification and the same eightbyte
+                  expansion a fixed one does; without it the slot held the
+                  temp's ADDRESS, and gcc put the aggregate's bytes there.
+                  bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer }
+                aggRec := IRArgRecId[argNodeArr[i]];
+                if aggRec > REC_NONE then tk := tyRecord else aggRec := REC_NONE;
               end;
               ABISysVArgPlace(tk, aggIsRef, aggIsArr, aggRec, intIdx, sseIdx,
                               sysvSlots, apMem, apS0, apS1, apR0, apR1, apAgg);

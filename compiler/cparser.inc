@@ -1606,6 +1606,7 @@ var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     genCtrl, genCtrlCG, genSel, genDefault, genVal, genAssocCG: Integer;
     vaPtrDepth, vaElemTk, vaElemRec, vaBaseTk, vaBaseRec: Integer;
     vaRecId, ptrNode, diagIdx: Integer;
+    vaN8, vaC0, vaC1, vaMask, vaTmp, vaSavedRec, vaSeq: Integer;
     vt: TTypeKind;
     name: AnsiString;
     argUndecl: array[0..31] of Boolean;
@@ -1829,9 +1830,18 @@ begin
             size-driven — pass the arg's byte size so it steps by 4 or 8. }
           helper := FindProc('__pxx_va_arg_cross32');
           a3 := AllocNode(AN_INT_LIT);
-          { A struct arg occupies one pointer-width slot (see the by-pointer note
-            above), so the walk steps by TARGET_PTR_SIZE, not the struct's size. }
-          if vaRecId <> REC_NONE then ASTIVal[a3] := TARGET_PTR_SIZE
+          { A struct arg. On i386 the caller now marshals the aggregate's OWN
+            bytes -- ceil(RecSize/4) words, the same as a fixed cdecl parameter
+            (ir_codegen386.inc's variadic-tail arm, via the record identity
+            IRLowerCallArg stamps on the value node) -- so the walk steps by the
+            struct's size and the result is read with ONE deref below.
+            arm32 and riscv32 keep the pointer slot: their callers were not
+            converted, and a receiving half that moved alone is a crash rather
+            than a wrong value. Both are named in the ticket.
+            bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer }
+          if (vaRecId <> REC_NONE) and (TargetArch = TARGET_I386) then
+            ASTIVal[a3] := RecSize(vaRecId)
+          else if vaRecId <> REC_NONE then ASTIVal[a3] := TARGET_PTR_SIZE
           else ASTIVal[a3] := TypeSlotSize(vt);
           ASTTk[a3] := Ord(tyInteger);
           { Slot ALIGNMENT, which the three 32-bit targets sharing this walk do
@@ -1851,8 +1861,16 @@ begin
           a5 := AllocNode(AN_ARG); ASTLeft[a5] := a4; ASTRight[a5] := -1; ASTRight[a2] := a5;
           callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
           ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
-          if vaRecId <> REC_NONE then
+          if (vaRecId <> REC_NONE) and (TargetArch = TARGET_I386) then
           begin
+            { The slot holds the aggregate's own bytes now: one deref. }
+            node := AllocNode(AN_DEREF); ASTLeft[node] := callNode; ASTTk[node] := Ord(tyRecord);
+            ASTIVal[node] := vaRecId;
+          end
+          else if vaRecId <> REC_NONE then
+          begin
+            { arm32 / riscv32: still a POINTER to the caller's copy — load it
+              (first deref), then read the record (second). }
             ptrNode := AllocNode(AN_DEREF); ASTLeft[ptrNode] := callNode; ASTTk[ptrNode] := Ord(tyPointer);
             node := AllocNode(AN_DEREF); ASTLeft[node] := ptrNode; ASTTk[node] := Ord(tyRecord);
             ASTIVal[node] := vaRecId;
@@ -1863,6 +1881,59 @@ begin
             node := CVaArgThreadPointee(node, vaPtrDepth, vaElemTk, vaElemRec, vaBaseTk, vaBaseRec);
           end;
           Result := node; Exit;
+        end;
+        { A STRUCT or UNION, on x86-64, where the caller now marshals the
+          aggregate's own eightbytes rather than a pointer to a copy
+          (ir_codegen.inc's variadic-tail arm, via the record identity
+          IRLowerCallArg stamps on the argument's value node). The two halves
+          must move together or nothing round-trips, and the receiving half
+          cannot be another "deref the slot": an aggregate occupies one slot PER
+          EIGHTBYTE, and a `struct { double a, b; }` lands in two XMM slots
+          SIXTEEN bytes apart. Nothing that returns a single address describes
+          that, so this materialises a temp and lets __pxx_va_arg_agg copy into
+          it -- the same shape gcc emits.
+
+          ABISysVRecordEightbytes is the SAME oracle the caller placed the
+          argument with, which is what makes the two agree; n = 0 is its MEMORY
+          answer (both of them) and is passed through as neight = 0.
+
+          n < 0 is the classifier REFUSING a shape it does not model, and there
+          the caller still falls through to the one-pointer-slot answer -- so
+          this must too. The double deref below stays, for exactly that case.
+          bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer }
+        if (TargetArch = TARGET_X86_64) and (vaRecId <> REC_NONE) then
+        begin
+          vaN8 := ABISysVRecordEightbytes(vaRecId, vaC0, vaC1);
+          if vaN8 >= 0 then
+          begin
+            vaMask := 0;
+            if (vaN8 >= 1) and (vaC0 = SYSV_CLS_SSE) then vaMask := vaMask or 1;
+            if (vaN8 >= 2) and (vaC1 = SYSV_CLS_SSE) then vaMask := vaMask or 2;
+            vaSavedRec := LastTypeRecId;
+            LastTypeRecId := vaRecId;
+            vaTmp := AllocVar('', tyRecord);
+            LastTypeRecId := vaSavedRec;
+            a2 := AllocNode(AN_IDENT); ASTIVal[a2] := vaTmp; ASTTk[a2] := Ord(tyRecord);
+            a3 := AllocNode(AN_ADDR); ASTLeft[a3] := a2; ASTTk[a3] := Ord(tyPointer);
+            argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
+            a4 := AllocNode(AN_ARG); ASTLeft[a4] := a3; ASTRight[argNode] := a4;
+            a5 := AllocNode(AN_INT_LIT); ASTIVal[a5] := vaN8; ASTTk[a5] := Ord(tyInteger);
+            a5arg := AllocNode(AN_ARG); ASTLeft[a5arg] := a5; ASTRight[a4] := a5arg;
+            node := AllocNode(AN_INT_LIT); ASTIVal[node] := vaMask; ASTTk[node] := Ord(tyInteger);
+            ptrNode := AllocNode(AN_ARG); ASTLeft[ptrNode] := node; ASTRight[a5arg] := ptrNode;
+            node := AllocNode(AN_INT_LIT); ASTIVal[node] := RecSize(vaRecId); ASTTk[node] := Ord(tyInteger);
+            valNode := AllocNode(AN_ARG); ASTLeft[valNode] := node; ASTRight[valNode] := -1;
+            ASTRight[ptrNode] := valNode;
+            callNode := AllocNode(AN_CALL);
+            ASTIVal[callNode] := FindProc('__pxx_va_arg_agg');
+            ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
+            vaSeq := AllocNode(AN_SEQ); ASTLeft[vaSeq] := callNode; ASTRight[vaSeq] := -1;
+            node := AllocNode(AN_COMPOUND_LITERAL);
+            ASTIVal[node] := vaTmp;
+            ASTLeft[node] := vaSeq;
+            ASTTk[node] := Ord(tyRecord);
+            Result := node; Exit;
+          end;
         end;
         if TargetArch <> TARGET_X86_64 then
           { Cross (aarch64): single GP-style save area (floats carried as GP bits),

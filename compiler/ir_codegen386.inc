@@ -3573,11 +3573,24 @@ begin
                 everything else is one 4-byte slot. Counting it is not optional
                 -- argBytes is both the frame reservation and the saved-esp slot
                 offset, so an uncounted tail arg overwrites the saved esp. }
-              tk := IntToTypeKind(IRTk[IRA[argNode]]);
-              if TypeIsFloat(tk) or Is64Bit386(tk) then
-                Inc(argBytes, 8)
+              { ...unless the argument is a STRUCT, which no promotion flattens.
+                IRLowerCallArg stamped the record identity on the value node
+                because this is the one slot with no callee declaration to
+                recover it from; without it the aggregate was counted as the
+                4 bytes of the temp's ADDRESS and gcc put its own bytes there.
+                Same ceil(RecSize/4) as the fixed-param arm above, and it must
+                stay the same in both loops.
+                bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer }
+              if IRArgRecId[IRA[argNode]] > REC_NONE then
+                Inc(argBytes, ((RecSize(IRArgRecId[IRA[argNode]]) + 3) div 4) * 4)
               else
-                Inc(argBytes, 4);
+              begin
+                tk := IntToTypeKind(IRTk[IRA[argNode]]);
+                if TypeIsFloat(tk) or Is64Bit386(tk) then
+                  Inc(argBytes, 8)
+                else
+                  Inc(argBytes, 4);
+              end;
             end;
             Inc(nArgs);
             argNode := IRB[argNode];
@@ -3639,10 +3652,20 @@ begin
             begin
               { Variadic tail — the same promotion the counting loop applied, and
                 it MUST be the same or the widths disagree and every argument
-                after the first float lands at the wrong offset. }
-              tk := IntToTypeKind(IRTk[IRA[argNode]]);
-              if TypeIsFloat(tk) then tk := tyDouble
-              else if not Is64Bit386(tk) then tk := tyInteger;
+                after the first float lands at the wrong offset. A struct is the
+                exception the counting loop states: it takes the by-value
+                aggregate arm below, ceil(RecSize/4) dwords of its own bytes. }
+              if IRArgRecId[IRA[argNode]] > REC_NONE then
+              begin
+                argIsRec386 := True;
+                recDw386 := (RecSize(IRArgRecId[IRA[argNode]]) + 3) div 4;
+              end
+              else
+              begin
+                tk := IntToTypeKind(IRTk[IRA[argNode]]);
+                if TypeIsFloat(tk) then tk := tyDouble
+                else if not Is64Bit386(tk) then tk := tyInteger;
+              end;
             end;
             if argIsRec386 then
             begin

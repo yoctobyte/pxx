@@ -246,6 +246,7 @@ begin
   SetLength(IRKind, n);         SetLength(IRA, n);         SetLength(IRB, n);
   SetLength(IRC, n);            SetLength(IRIVal, n);      SetLength(IRTk, n);
   SetLength(IRCallDest, n);     SetLength(IRCtorProc, n);  SetLength(IRSetLenBaseRec, n);
+  SetLength(IRArgRecId, n);
   SetLength(IRStmtRoot, n);     SetLength(IRLine, n);      SetLength(IRFile, n);
   SetLength(IRLoadRedundant, n);
   IRCapacity := n;
@@ -265,6 +266,7 @@ begin
   IRLine[IRCount] := CurLowerLine;
   IRFile[IRCount] := CurLowerFile;
   IRCallDest[IRCount] := -1;
+  IRArgRecId[IRCount] := REC_NONE;
   IRCtorProc[IRCount] := -1;
   Result := IRCount;
   Inc(IRCount);
@@ -4693,6 +4695,15 @@ begin
     end
     else
       IRAppend(IR_COPY_REC, tmpAddr, srcAddr, -1, RecSize(argRecId), Ord(tyRecord));
+
+    { Stamp the record identity on the value node the backends inspect. tmpAddr
+      is an IR_LEA tagged tyPointer -- correct, and it is why an argument in a
+      VARIADIC TAIL used to be emitted as one pointer-sized slot holding the
+      temp's address, where gcc puts the aggregate's own bytes. A fixed
+      parameter recovers the id from ProcParamRecId; a variadic slot has no
+      callee declaration to recover it from, so it travels here.
+      bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer }
+    IRArgRecId[tmpAddr] := argRecId;
 
     value := tmpAddr;
   end

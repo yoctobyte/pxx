@@ -36,6 +36,9 @@ void __pxx_va_start_impl(struct __pxx_va_elem *ap, void *save,
 void *__pxx_va_arg_gp(struct __pxx_va_elem *ap);
 void *__pxx_va_arg_fp(struct __pxx_va_elem *ap);
 void *__pxx_va_arg_cross(struct __pxx_va_elem *ap);
+void __pxx_va_arg_agg(struct __pxx_va_elem *ap, void *dst,
+                     unsigned int neight, unsigned int ssemask,
+                     unsigned int size);
 void __pxx_va_start_impl32(struct __pxx_va_elem *ap, void *save,
                            unsigned int gpbytes, void *overflow,
                            unsigned int regsize);
