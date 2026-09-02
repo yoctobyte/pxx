@@ -1,6 +1,6 @@
 ---
 prio: 70
-track: T
+track: A
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 6 is `tools/expect_same.sh test_npy_clone26 "$(/tmp/test_npy_clone26)" "$(printf 'tid nonzero = True\nchild ran = 7')"`. The job's own `src` (`test/test_nilpy_thread_clone.npy`, 4 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -53,3 +53,42 @@ takes it from the repro line.*
 - 2026-09-02 — the seven watcher saw `test-threads#src:test/test_nilpy_thread_clone.npy` GREEN at 88807c8258fe (tier native) and did NOT close this: this is a repeat stub (`regression-test-threads-test-nilpy-thread-clone-2`, not `regression-test-threads-test-nilpy-thread-clone`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-02 — the seven watcher saw `test-threads#src:test/test_nilpy_thread_clone.npy` GREEN at 7c32e3fee9ce (tier native) and did NOT close this: this is a repeat stub (`regression-test-threads-test-nilpy-thread-clone-2`, not `regression-test-threads-test-nilpy-thread-clone`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-02 — the seven watcher saw `test-threads#src:test/test_nilpy_thread_clone.npy` GREEN at c8375f3e76e9 (tier full) and did NOT close this: this is a repeat stub (`regression-test-threads-test-nilpy-thread-clone-2`, not `regression-test-threads-test-nilpy-thread-clone`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+
+## NOT A REGRESSION — measured on the pin, 2026-09-02 22:2x (frankuser)
+
+**It fails at the same rate on a compiler that predates every commit in the
+range, so no bisect of that range can find it.** Interleaved A/B, 45 runs each,
+same host, same minute, alternating to control for load:
+
+| binary | commit | failed |
+| --- | --- | --- |
+| tip `a81084690bac` | `ba90811d3` | **1/45** |
+| pinned `1eec4dc5e0a7` | pin v399, predates the range | **1/45** |
+
+Built both with `--threadsafe` (the test refuses without it) from
+`test/test_nilpy_thread_clone.npy`; failures are SIGSEGV (rc=139), and the
+crash lands **before the first line finishes printing** — output truncates at
+`tid nonzero =`.
+
+**So this is a rare intermittent in thread startup, roughly 2%, not a defect
+introduced by anything in the bisect range.** Tonight it was re-filed as
+`NEW-RED` against `51b80e55be90`, a **docs-only** commit, and the only
+compiler-touching files in that 21-commit range were `compiler/ir.inc` and
+`compiler/symtab.inc` — the frozen-string fix, which is innocent here. Two
+separate auto-filings (16:04 and 20:07) at unrelated shas is itself the
+signature of an intermittent rather than a regression.
+
+**Why a single-run watcher cannot see this.** At ~2%, one run per sha passes 49
+times in 50, so the test reads as green until it doesn't, and whichever sha
+happens to catch it gets blamed. `flaky: 0` in the report means *not classified*
+flaky, not *measured* not-flaky.
+
+**Re-laned T → A.** The ticket's own header says the T tag is a fallback because
+the failing step named no owner; a SIGSEGV in cloned-thread startup is Track A.
+Plausibly related: `feature-a-tls-stack-bounds-for-cloned-threads` and
+`bug-a-test-tthread-fails-under-full-tier-load-but-never-in-isolation` — that
+last one is the same shape (a threads test failing only under load).
+
+**The bug is real; only the attribution was wrong.** ~2% of `__pxxclone` starts
+segfault before the parent completes a write.

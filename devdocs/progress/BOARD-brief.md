@@ -77,7 +77,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-core-test-sizeof-user-name-shadows-builtin
 - `[p 70] [A+S]` regression-test-emit-obj-test-esp-hello
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
-- `[p 70] [T]` regression-test-threads-test-nilpy-thread-clone-2
+- `[p 70] [A]` regression-test-threads-test-nilpy-thread-clone-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values

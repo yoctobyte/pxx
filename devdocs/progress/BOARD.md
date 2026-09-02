@@ -73,7 +73,7 @@ _none_
 | regression-test-core-test-sizeof-user-name-shadows-builtin | T | 70 | regression | regression: test-core#src:test/test_sizeof_user_name_shadows_builtin.pas at 5ad048c2d9ae in step 2/2, `tools/expect_same.sh test_sizeof_shadow26 "$(/tmp/test_sizeof_shadow26)" "$(printf 'a 12\nb 10\nc TRUE\nd 1\ne 1\nf 8\n…` (auto-filed by twatch) | — |
 | regression-test-emit-obj-test-esp-hello | A+S | 70 | regression | regression: test-emit-obj#src:test/test_esp_hello.pas@1 at 7fff15ddc1eb in step 27/8, `for t in "--target=riscv32 --platform=esp" "--target=xtensa --platform=esp"; do \ ./compiler/pascal26 --emit-obj $t tes…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-c-header-still-works-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_import_c_header_still_works.npy /tmp/test_nilpy_imphdr26` (auto-filed by twatch) | — |
-| regression-test-threads-test-nilpy-thread-clone-2 | T | 70 | regression | regression: test-threads#src:test/test_nilpy_thread_clone.npy at 08f7de0715a8 in step 2/6, `tools/expect_same.sh test_npy_clone26 "$(/tmp/test_npy_clone26)" "$(printf 'tid nonzero = True\nchild ran = 7')"` (auto-filed by twatch) | — |
+| regression-test-threads-test-nilpy-thread-clone-2 | A | 70 | regression | regression: test-threads#src:test/test_nilpy_thread_clone.npy at 08f7de0715a8 in step 2/6, `tools/expect_same.sh test_npy_clone26 "$(/tmp/test_npy_clone26)" "$(printf 'tid nonzero = True\nchild ran = 7')"` (auto-filed by twatch) | — |
 
 ## backlog_new (2)
 
@@ -991,7 +991,7 @@ _none_
 - [p 70] [T] regression-test-core-test-sizeof-user-name-shadows-builtin
 - [p 70] [A+S] regression-test-emit-obj-test-esp-hello
 - [p 70] [N] regression-test-nilpy-test-nilpy-import-c-header-still-works-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [T] regression-test-threads-test-nilpy-thread-clone-2
+- [p 70] [A] regression-test-threads-test-nilpy-thread-clone-2
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
