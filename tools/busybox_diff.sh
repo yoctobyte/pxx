@@ -74,8 +74,12 @@
 #               336016 linked, and the cost of separate compilation 242568 ->
 #               42176. Ignored outside --separate: there are no objects to prune.
 #   --separate  build busybox the way BUSYBOX does -- one object per translation
-#               unit and a real link -- instead of as a unity. x86_64 only,
-#               because --emit-obj has no aarch64 object writer yet. This is a
+#               unit and a real link -- instead of as a unity. Which targets it
+#               can do is MEASURED per run by sep_probe, not stated here: this
+#               line used to say "x86_64 only, because --emit-obj has no aarch64
+#               object writer yet" and that had been false for two of the four
+#               targets for days. See sep_probe for the three questions it asks.
+#               This is a
 #               STRICTLY STRONGER claim than the unity: it needs no include
 #               ordering, no ASH_TEST exclusion, and no preamble tricks, so it
 #               is the configuration that scales past the handful of applets a
@@ -1118,7 +1122,14 @@ for t in $TARGETS; do
       # causes (inline asm, a >256-byte local string array, statfs, tcsetpgrp)
       # appeared nowhere against a filename. Reading that report, you fix bc.c
       # seven times.
-      if ( cd "$BB" && "$COMPILER" --emit-obj $OBJFLAGS $INC "$WORK/wrap/$tag.c" "$WORK/obj/$tag.o" ) \
+      # $targflag, and its absence here was INVISIBLE while this mode refused
+      # every target but x86_64: the objects were all built for the HOST, which
+      # is what x86_64 wanted anyway. The moment sep_probe let i386 through, the
+      # link said `i386:x86-64 architecture of input file libbb_xfuncs.o is
+      # incompatible with i386 output' -- 28 host objects handed to `gcc -m32'.
+      # A flag that is correct for the only case a guard admits is not a flag
+      # anyone has tested.
+      if ( cd "$BB" && "$COMPILER" --emit-obj $targflag $OBJFLAGS $INC "$WORK/wrap/$tag.c" "$WORK/obj/$tag.o" ) \
            > "$WORK/tu/$tag.log" 2>&1; then
         nobj=$((nobj+1))
       else

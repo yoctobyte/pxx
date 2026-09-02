@@ -4,10 +4,10 @@ title: "crtl has no <regex.h>, and it is the single biggest thing between busybo
 track: C
 prio: 60
 type: feature
-status: open
+status: working
 created: 2026-09-02
 found-by: frankD
-owner:
+owner: frankD
 blocked-by:
 summary: "7 of busybox's 396 translation units stop at `C include file not found: \"regex.h\"` when built for i386 -- awk, sed, grep, expr, test, mdev and libbb/xregcomp -- and that is the largest single cause left after fifteen headers landed on 2026-09-02. Unlike those, this is not a transcription job: it needs regcomp/regexec/regerror/regfree, both BRE and ERE, and the POSIX leftmost-longest rule. On x86-64 the gap is invisible because pxx falls back to the host's /usr/include; a cross target has no fallback, which is why i386 is the instrument that found it."
 ---

@@ -5,13 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:8 unfinished:27 blocked:6 backlog:4 backlog-umbrella:7 backlog-core:137 backlog-nilpy:97 backlog-tools:6 backlog-pascal:56 backlog-decide:32 backlog-libs:16 backlog-cfront:18 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3140 rejected:72`
+`working:9 unfinished:27 blocked:6 backlog:4 backlog-umbrella:7 backlog-core:137 backlog-nilpy:97 backlog-tools:6 backlog-pascal:56 backlog-decide:32 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3140 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA
+- `feature-c-crtl-posix-regex-regcomp-regexec` [C] — owner: frankD
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
@@ -57,7 +58,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 391, ranked
+## Ready — top 30 of 390, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
@@ -90,4 +91,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [C]` feature-c-corpus-busybox-i386-the-second-architecture
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 
-_361 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_360 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
