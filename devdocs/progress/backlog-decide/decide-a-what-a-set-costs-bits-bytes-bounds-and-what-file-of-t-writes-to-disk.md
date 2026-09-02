@@ -98,6 +98,31 @@ the low-memory target, and this proposal declines it. That may well be the
 right call — it is the expensive half — but it should be declined knowingly,
 not absorbed.
 
+### FPC's actual rule, measured first-hand (fpc 3.2.2, `-O-`, 2026-09-02)
+
+The owner questioned the no-rebase claim — *"a set of ['x'..'z'] would take more
+than 1 byte on fpc since they start counting at zero?"* — and he was right to.
+Measured rather than repeated, because two unmeasured FPC numbers already got
+into these tickets today:
+
+```
+set of 0..7        4
+set of 0..31       4
+set of 0..32      32
+set of 32..63     32     <- spans exactly 32 values, still 32 bytes
+set of 200..207   32
+set of 'x'..'z'   32     <- three bits wanted; 'z' is ordinal 122
+set of Char       32
+```
+
+**The width is a function of the HIGH BOUND ALONE**: 4 if `hi <= 31`, else 32.
+There is no rebasing and no span term — `set of 32..63` needs one word's worth
+of bits and gets 32 bytes, because bit 63 must exist at index 63.
+
+**This makes the owner's offset idea a real improvement over FPC, not merely a
+compaction of our own waste.** `set of 'x'..'z'` would be 1 byte against FPC's
+32. That is what makes Fork B a genuine choice rather than a formality.
+
 **Fork B — offsetting and FPC-readable files are mutually exclusive.** FPC
 truncates (small-set word, high bound ≤ 31 → 4 bytes) but **does not rebase to
 `lo`** (frankb-a9, measured), so `set of 200..207` is 32 bytes in an FPC file.

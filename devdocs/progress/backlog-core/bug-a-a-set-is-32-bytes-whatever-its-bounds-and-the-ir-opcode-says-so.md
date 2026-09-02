@@ -30,6 +30,12 @@ so `set of 200..207` is 32 in both compilers and only the low-bounded case
 diverges. That is the common case; `set of Char` and `set of 0..255` are
 already agreed.
 
+**FPC's rule measured first-hand 2026-09-02 (3.2.2, `-O-`): the width is a
+function of the HIGH BOUND ALONE** — 4 if `hi <= 31`, else 32. No rebasing, no
+span term: `set of 32..63` spans exactly 32 values and still costs 32 bytes,
+and `set of 'x'..'z'` costs 32 for three bits. This confirms frankb-a9's
+no-rebase measurement and is now independently sourced.
+
 Corroborated 2026-09-02 by two sources that fail differently — frankb-a9's
 measurement against FPC, and a grep of our own definitions:
 
