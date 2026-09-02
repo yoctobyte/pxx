@@ -379,6 +379,25 @@ the four-backend x86-64 helper trio that has no equivalent elsewhere.**
 > list is not the same as the concat rule being right for it. The real work is
 > the byte-prefix codegen, per backend.
 
+## THE SEQUENCING HOLD IS LIFTED — the capacity fix LANDED 2026-09-02
+
+`bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes` is in
+`done/`. All three shapes fixed, and the count matters for this feature: they
+were **three different causes across four sites**, one of which is F7's
+permissive default firing again (a parameter got `DEFAULT_STR_CAP + 8` = 263).
+The attributability argument below has been satisfied rather than waived — the
+capacity now reaches every container shape, so a wrong stride measured during P2
+can only be the prefix width.
+
+**One result from that work bears directly on P2's testing.** A capacity bug is
+invisible when the wrong answer and the right answer coincide: with
+`t: string[10]` following an `array of string[10]` parameter, the broken code
+and the correct code produce the same stride. **Any P2 test must vary the
+capacity between neighbouring declarations**, not merely use a frozen string
+somewhere.
+
+### The original hold, kept for the record
+
 ## SEQUENCED BEHIND THE CAPACITY FIX — do not start this in parallel with it
 
 **`bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes` lands
