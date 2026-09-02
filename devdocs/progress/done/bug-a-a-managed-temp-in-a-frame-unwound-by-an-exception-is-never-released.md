@@ -212,4 +212,4 @@ As this ticket warned, `compiler/pascal26` is byte-identical either way because
 this change in either direction and is not evidence about it.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 596a2998a.
