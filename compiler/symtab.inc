@@ -235,6 +235,8 @@ end;
 { Defined further down this include; RegisterGeneralAlias below needs it to
   recognise a frozen-string alias, and the FPC seed build wants the forward. }
 function TypeIsFrozenString(tk: TTypeKind): Boolean; forward;
+{ The length-prefix WIDTH the two frozen kinds disagree about; see its body. }
+function FrozenStrPrefixSize(tk: TTypeKind): Integer; forward;
 { Sizing a frozen string needs its CAPACITY as well as its kind, and
   RecFieldByteSize -- which is above both -- is one of the callers that has one.
   bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more }
@@ -3627,17 +3629,42 @@ begin
     Result := Ord(tk);
 end;
 
+function FrozenStrPrefixSize(tk: TTypeKind): Integer;
+{ WIDTH OF A FROZEN STRING'S LENGTH PREFIX, IN BYTES -- the single fact that
+  separates the two frozen kinds, and until now the only place it was written
+  down was inside FrozenStrSlotSize's `+ 8` / `+ 1`.
+
+  tyString / tyFixedString: an 8-byte NativeInt length word, then the chars.
+  tyShortString:            one length byte, then the chars (the FPC ABI).
+
+  It exists as a named function because the literal 8 is the thing P2 has to
+  find and route, and a literal cannot be grepped from the concept: a sweep for
+  `+ 8` on a string-ish line returns 254 candidates of which 55 are the
+  interned-literal pool, which is tyString and must KEEP its 8. Anything asking
+  this function is asking about a VARIABLE's slot and will follow the kind
+  automatically; anything still spelling 8 has not been audited yet. That makes
+  the remaining literals a shrinking, countable worklist rather than a judgement
+  call at each site.
+
+  NOT a behaviour change on its own: every kind returns exactly what the
+  arithmetic it replaces returned.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+begin
+  if tk = tyShortString then
+    Result := 1
+  else
+    Result := 8;
+end;
+
 function FrozenStrSlotSize(tk: TTypeKind; cap: Integer): Integer;
-{ Byte size of an inline frozen fixed-string slot.
-  tyFixedString = 8-byte NativeInt length word + cap chars (matches today's
-  frozen tyString layout, so it reuses the existing tyString codegen unchanged).
-  tyShortString = 1 length byte + cap chars (classic FPC shortstring, cap<=255). }
+{ Byte size of an inline frozen fixed-string slot: the length prefix plus cap
+  chars. tyFixedString's 8-byte word matches today's frozen tyString layout, so
+  it reuses the existing tyString codegen unchanged; tyShortString's single byte
+  is the classic FPC shortstring (cap <= 255, because a byte cannot count past
+  it -- which is why the wide kind must stay for N > 255). }
 begin
   if cap <= 0 then cap := DEFAULT_STR_CAP;
-  if tk = tyShortString then
-    Result := cap + 1
-  else
-    Result := cap + 8;
+  Result := cap + FrozenStrPrefixSize(tk);
 end;
 
 function SizeOfSlot(tk: TTypeKind; cap: Integer): Integer;
