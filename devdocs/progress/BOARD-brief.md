@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:7 backlog:6 backlog-umbrella:6 backlog-core:141 backlog-nilpy:96 backlog-tools:73 backlog-pascal:60 backlog-decide:26 backlog-libs:16 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3102 rejected:72`
+`working:5 unfinished:27 blocked:7 backlog:6 backlog-umbrella:6 backlog-core:141 backlog-nilpy:96 backlog-tools:73 backlog-pascal:60 backlog-decide:26 backlog-libs:16 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3103 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -64,7 +64,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [T]` regression-test-core-test-exception-unhandled-3 (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-setlen-in-parallel-for-body-2 (unblocks 1)
 - `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
-- `[p 80] [A]` bug-a-the-tkinter-demo-hits-a-different-backend-gap-on-each-of-i386-arm32-and-aarch64 (unblocks 1)
+- `[p 80] [A]` bug-a-the-tkinter-demo-hits-a-different-backend-gap-on-i386-and-on-arm32 (unblocks 1)
 - `[p 80] [A]` feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross (unblocks 1)
 - `[p 80] [A]` feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one

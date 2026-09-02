@@ -8871,6 +8871,52 @@ begin
   Result := FindUMeth(ci, name);
 end;
 
+function FindUMethArityStrict(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
+{ FindUMethArity WITHOUT its final fall back to the first name match: -1 means
+  "this class has no method of that name that could take this many arguments",
+  which is a question the fallback cannot answer.
+
+  It exists because a caller has to be able to DECLINE. FindUMethArity is a
+  selector -- it is asked which overload, having already decided it is a method
+  call, so answering with the first name match is right for it. A caller that is
+  still deciding WHETHER this is a method call reads that same answer as yes,
+  and then binds a call that no signature accepts.
+
+  Measured: `Write(f, 'payload')` inside a method named `write` bound to the
+  member on the strength of the name alone and emitted a three-argument call to
+  a two-parameter method. i386, arm32 and aarch64 refuse it ('call argument
+  count mismatch'); x86-64 has no such guard, so it emitted the call, the file
+  came out EMPTY and the function returned True. lib/rtl/configparser.pas is
+  written in exactly that shape.
+  bug-p-a-write-call-inside-a-method-named-write-binds-to-the-member-whatever-its-arity }
+var i, base, cnt, curr, want: Integer; lo, name2: AnsiString;
+begin
+  FindUMethArityStrict := -1;
+  name2 := name;
+  lo := ULower(name2);
+  curr := ci;
+  while curr >= 0 do
+  begin
+    base := UClsMBase[curr];
+    cnt  := UClsMCount[curr];
+    i := 0;
+    while i < cnt do
+    begin
+      if UMemberNameMatch(UMthNOff[base + i], UMthNLen[base + i], curr, name, lo) then
+      begin
+        want := nExplicitArgs + 1;   { Self at 0, class methods included }
+        if ProcArityMatches(UMthProc_[base + i], want) then
+        begin FindUMethArityStrict := base + i; Exit; end;
+      end;
+      Inc(i);
+    end;
+    { Hiding ends the walk here for the same reason it does in FindUMethArity:
+      an inherited same-name method is invisible, not a fallback. }
+    if UClsLevelHidesMeth(curr, name, lo) then Break;
+    curr := UClsParent[curr];
+  end;
+end;
+
 function FindUMethForSig(ci: Integer; const name: AnsiString; sigProc: Integer): Integer;
 { The class method that implements ONE interface method SLOT.
 

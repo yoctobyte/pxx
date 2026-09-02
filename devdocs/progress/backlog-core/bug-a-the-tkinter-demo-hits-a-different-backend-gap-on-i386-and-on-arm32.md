@@ -1,5 +1,5 @@
 ---
-slug: bug-a-the-tkinter-demo-hits-a-different-backend-gap-on-each-of-i386-arm32-and-aarch64
+slug: bug-a-the-tkinter-demo-hits-a-different-backend-gap-on-i386-and-on-arm32
 track: A
 prio: 40
 type: bug
@@ -8,7 +8,7 @@ created: 2026-09-02
 found-by: frankC
 owner: ""
 blocked-by: []
-summary: "examples/tk/uses_tkinter_and_configparser builds on x86-64 and on NO cross target, and the five failures are not one cause: i386 'symbol kind not supported yet (load)', arm32 'constructor with more than 4 parameter words not supported', aarch64 'call argument count mismatch' -- which reads like a defect rather than a refusal and is the one to look at first. riscv32 and xtensa refuse dynamic symbols deliberately (the demo needs libtcl at runtime), so those two are NOT part of this ticket."
+summary: "examples/tk/uses_tkinter_and_configparser builds on x86-64 and on no cross target, and the failures are not one cause. TWO REMAIN: i386 'symbol kind not supported yet (load)' and arm32 'constructor with more than 4 parameter words not supported'. The aarch64 one was the defect the reading predicted and is FIXED. riscv32 and xtensa refuse dynamic symbols deliberately (the demo needs libtcl at runtime), so those two are not part of this ticket."
 ---
 
 # One program, three backend gaps
@@ -37,13 +37,18 @@ demo needs `libtcl` at runtime. That refusal names its own reason and its own
 alternatives. **Out of scope here** — it is a target capability, not a gap in
 this program's lowering.
 
-## The one to look at first
+## The one to look at first — done, and it was a defect
 
-**aarch64's `call argument count mismatch`** is the odd one out: the other two
-name a feature nobody has written, this one names an internal disagreement. A
-refusal that reports a count mismatch is describing a state the compiler
-believes is impossible, so it is a defect until shown otherwise, and it is
-cheaper to reproduce than either of the others.
+**aarch64's `call argument count mismatch`** was the odd one out: the other two
+name a feature nobody has written, this one named an internal disagreement. A
+refusal that reports a count mismatch describes a state the compiler believes is
+impossible, so it was a defect until shown otherwise.
+
+It was. Fixed 2026-09-02 —
+`bug-p-a-write-call-inside-a-method-named-write-binds-to-the-member-whatever-its-arity`.
+aarch64 builds the demo now. The reading was worth more than the ranking: the
+same defect was silently writing an EMPTY FILE on x86-64, where no guard
+caught it.
 
 ## Rank
 

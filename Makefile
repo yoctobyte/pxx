@@ -8675,7 +8675,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_method_implicit_field.pas $(TESTTMP)/test_method_implicit_field26
 	tools/expect_same.sh test_method_implicit_field26 "$$($(TESTTMP)/test_method_implicit_field26)" "$$(printf '3\n2\n42\n0\n-1')"
 	./$(COMPILER) test/test_method_read_write_unqualified.pas $(TESTTMP)/test_method_rw_unqual26
-	tools/expect_same.sh test_method_rw_unqual26 "$$($(TESTTMP)/test_method_rw_unqual26)" "$$(printf 'data=42\nr=43')"
+	tools/expect_same.sh test_method_rw_unqual26 "$$($(TESTTMP)/test_method_rw_unqual26)" "$$(printf 'data=42\nr=43\nspill=OK')"
 	# inside a method, the class's own method shadows a same-name plain proc (sysutils.Move vs TGame.Move)
 	./$(COMPILER) test/test_method_shadows_unit_proc.pas $(TESTTMP)/test_method_shadows_unit_proc26
 	tools/expect_same.sh test_method_shadows_unit_proc26 "$$($(TESTTMP)/test_method_shadows_unit_proc26)" "$$(printf 'tick=50\npos=5\nsteps=3\nplainHits=0\nb0=7 b1=8\nplainHits2=2')"

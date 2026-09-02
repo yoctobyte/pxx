@@ -4827,7 +4827,8 @@ begin
       end
       else if (CurProc >= 0) and (CurSelfClass >= REC_UCLASS_BASE) and
               (Tokens[TokPos].Kind = tkLParen) and
-              (FindUMeth(SelfMemberCi(CurTok.SVal), CurTok.SVal) >= 0) then
+              (FindUMethArityStrict(SelfMemberCi(CurTok.SVal), CurTok.SVal,
+                                    CountCallArgsAhead) >= 0) then
       begin
         { An unqualified `Read`/`Write`/`Readln`/`Writeln` naming a METHOD of the
           enclosing class binds to that member (Self.method), like FPC — not the
@@ -4838,7 +4839,27 @@ begin
           above. Mirrors the implicit-Self method statement dispatch in the tkIdent
           case. See bug-bare-read-write-in-method-hits-intrinsic. }
         smci := SelfMemberCi(CurTok.SVal);
-        smmii := FindUMeth(smci, CurTok.SVal);
+        { ARITY-GATED above and TYPE-selected here, both of which this branch
+          used to skip -- it asked FindUMeth, which answers on the NAME alone.
+          Two consequences, and only the second one was visible:
+
+            * a call no overload could accept still bound to the member, so
+              `Write(f, 'payload')` inside a method named `write` became a
+              3-argument call to a 2-parameter method. i386/arm32/aarch64 refuse
+              that; x86-64 does not, and it wrote an EMPTY FILE and returned
+              True. lib/rtl/configparser.pas is written in that shape, and FPC
+              rejects the same source outright ("Wrong number of parameters
+              specified for call to write"), so it built nowhere and ran wrong
+              on the one target that took it.
+            * with two same-arity overloads the FIRST body won whatever was
+              passed -- the defect FindUMethOverloadAhead exists to fix.
+
+          The tkIdent twin this branch says it mirrors already asked both
+          questions. This is the copy that did not, which is the arm that stays
+          broken. Now they ask the same thing.
+          bug-p-a-write-call-inside-a-method-named-write-binds-to-the-member-whatever-its-arity }
+        smmii := FindUMethOverloadAhead(smci, CurTok.SVal, CountCallArgsAhead);
+        if smmii < 0 then smmii := FindUMethArityStrict(smci, CurTok.SVal, CountCallArgsAhead);
         smpii := UMthProc_[smmii];
         Next; { consume the method name token }
         smSelfIdx := Procs[CurProc].Params[0].SymIdx;
