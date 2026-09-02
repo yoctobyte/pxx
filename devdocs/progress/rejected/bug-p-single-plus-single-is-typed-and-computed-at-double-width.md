@@ -6,7 +6,7 @@ type: bug
 status: rejected
 owner: ""
 blocked-by: []
-summary: "REJECTED 2026-09-02 (owner): not a bug. Evaluating `Single + Single` at double width is a legitimate implementation choice and is strictly MORE accurate, and a program that stores the result in a Single gets FPC's exact bytes -- measured, `s := a + b` gives 0.300000012 on both. Nobody computes a wrong value. Two observables DO diverge and are accepted deliberately: `SizeOf(a+b)` is 8 where FPC says 4, and an overloaded `P(a+b)` picks the Double arm where FPC picks Single -- these over-allocate and call a more precise function, neither is a wrong answer, and a caller needing the narrow type writes `Single(a+b)`. Matching FPC would mean discarding precision we already have to reproduce its rounding, which is FPC-parity chasing rather than language conformance."
+summary: "REJECTED 2026-09-02 (owner): not a bug. Evaluating `Single + Single` at double width is a legitimate implementation choice and is strictly MORE accurate, and a program that stores the result in a Single gets FPC's exact bytes -- measured, `s := a + b` gives 0.300000012 on both. Nobody computes a wrong value. Two behaviours are CHOSEN, not tolerated, and neither compiler is wrong:  `SizeOf(a+b)` is 8 where FPC says 4, and an overloaded `P(a+b)` picks the Double arm where FPC picks Single -- both are TRUE statements about a pxx expression, exactly as FPC's answers are true about an FPC one; SizeOf reported correctly about the actual type, which is why the operator exists. A caller needing the narrow type writes `Single(a+b)`. Matching FPC would mean discarding precision we already have to reproduce its rounding, which is FPC-parity chasing rather than language conformance."
 ---
 
 # Pascal `Single + Single` is typed Double
@@ -99,20 +99,32 @@ variable (`SizeOf(a)` = 4) and it does **not** for the expression
 because the wrong reason invites a refile the first time someone runs the
 expression form.
 
-### Two divergences accepted deliberately
+### Two CHOSEN behaviours — and `SizeOf` was not diverging, it was working
 
-Both are REACHABLE by a correct program, so they are recorded rather than
-waved off:
+Recorded as **chosen, not tolerated** (owner, 2026-09-02). Neither compiler is
+wrong here and neither is more right:
 
-1. **`SizeOf(a+b)` is 8.** A program sizing a buffer from it over-allocates by
-   four bytes. Wasteful, never wrong.
-2. **Overload resolution picks the `Double` arm.** A program with `P(Single)`
-   and `P(Double)` calls the more precise one. Different function, same
-   mathematics — unless the two overloads deliberately do different things,
-   which is the caller's design problem, not the compiler's.
+1. **`SizeOf(a+b)` = 8 is TRUE.** It is a correct statement about the size of a
+   pxx expression, exactly as FPC's 4 is a correct statement about an FPC one.
+   Each reports its own compiler's representation faithfully — *"the programmer
+   had all information it wants; sizeof reported CORRECTLY about the accurate
+   type. that's why it exists — to not make assumptions."* A programmer who asks
+   rather than assumes is served correctly by both compilers. **A truthful
+   instrument returning an answer you did not expect is not a defect**, and this
+   ticket read one as a defect because it expected the other number.
 
-A caller who needs the narrow static type writes `Single(a + b)`, which is
-ordinary Pascal and not a workaround.
+2. **Overload resolution picks the `Double` arm**, because the argument IS a
+   double: `Single` is a storage type and double is the native evaluation type.
+   The call is consistent with the expression's actual type rather than in spite
+   of it.
+
+The distinction between *chosen* and *tolerated* is the point of writing this
+down. "We accept this divergence" concedes something was off and invites the
+next reader to re-litigate it. "Both answers are correct about different
+representations" closes it.
+
+A caller who wants the narrow static type writes `Single(a + b)` — ordinary
+Pascal, not a workaround.
 
 ### What would reopen this
 

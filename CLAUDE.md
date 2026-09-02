@@ -58,9 +58,25 @@ expression's static type — is **implementation latitude**. Measured 2026-09-02
 rounding to single and widening — discarding precision we already have to
 reproduce another compiler's rounding.
 
+**NEITHER COMPILER IS WRONG HERE, AND `SizeOf` WAS NOT DIVERGING — IT WAS
+WORKING** (owner, 2026-09-02): *"the programmer had all information it wants —
+sizeof reported CORRECTLY about the accurate type. that's why it exists — to not
+make assumptions."* `SizeOf(a+b)` = 8 is a TRUE statement about a pxx expression,
+and FPC's 4 is a true statement about an FPC one. Each reports its own
+compiler's representation, honestly, which is the entire reason the operator
+exists. **A truthful instrument returning an answer you did not expect is not a
+defect** — and a programmer who asks instead of assuming is served correctly by
+both. This is a CLASS, not one ticket: where two implementations make different
+but equally valid representational choices, introspection that reports each
+choice faithfully is doing its job in both.
+
+So these are recorded as **CHOSEN, never as tolerated**. "We accept this
+divergence" invites a re-litigation because it concedes something was off; "both
+answers are correct about different representations" does not.
+
 Reopening one needs **real source, not a probe**, that is correct under FPC and
 wrong under pxx *because of an intermediate's type*. A program that prints
-`SizeOf` of an expression is not that.
+`SizeOf` of an expression is not that — it is the operator working.
 
 ## Umbrellas — the goal is the ranking
 
