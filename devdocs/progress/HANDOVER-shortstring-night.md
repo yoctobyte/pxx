@@ -346,3 +346,18 @@ yours to release.
   In conversation a stale claim dies with the next message; in a durable artifact
   it is what someone acts on at 8am — applying a real edit to already-correct code,
   or concluding a converted backend was not.
+- **The check that catches the worst rung is asked of the WRITING, not the
+  measurement.** frankA's ladder: rung two is having the probe open and not
+  widening it; **rung three is running it, having the output on screen, and
+  writing the contradicting sentence anyway.** Rung three is invisible to every
+  process check here — *"did you verify this?"* answers **yes**, truthfully; the
+  measurement happened, and only the reading of the prose against it did not. The
+  question that catches it: **"which sentence in what I am about to publish does
+  this output bear on, and does it agree?"** A handover is the highest-risk place
+  for it — mostly prose, written at the end when the measurements feel settled,
+  and the one document that gets *acted on* rather than read.
+- **`cmd | tail` reports TAIL's exit status, not the program's.** This session
+  read `exit=0` off a segfaulting binary that way, minutes after recording the
+  same trap from another session. Use `prog > file; rc=$?`. Both survivors
+  re-confirmed live at `0f57d8a55` with binary `4ba5c77aacc7`: `p^[1]` blank,
+  `r.f = 'hello'` **exit 139**.
