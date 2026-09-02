@@ -3,7 +3,7 @@ prio: 45  # auto
 track: B
 type: feature
 status: backlog
-summary: "ATTEMPTED 2026-09-01, wall MAPPED rather than guessed at, and TWO OF THE THREE ARE NOW DOWN. uPSUtils compiles CLEAN on the pinned stable, first try, no flags beyond -Mobjfpc. uPSCompiler hit three walls: (1) missing PByteArray -- FIXED, a System-level FPC type, now in lib/rtl/sysutils.pas; (2) a value cast to a string alias dropped a following INDEX -- FIXED 2026-09-02 (9339d6661), so `tbtwidestring(p^.twidestring)[1]`, the shape that file uses 13 times, compiles and runs; (3) STILL OPEN and it is the only one left: `SetLength(tbtstring(p^.tstring), n)` (line 2753) answers `SetLength expects a string variable in IR codegen` -- a DIFFERENT arm from (2), the lowering wants an IR_LEA and a cast is not one. uPSRuntime has not been reached: it stops earlier on a `{$IF}` comparison. NOT vendored -- probed against a clone outside the repo, which is the reversible half of the ticket's own two options."
+summary: "ATTEMPTED 2026-09-01, wall MAPPED rather than guessed at, and TWO OF THE THREE ARE NOW DOWN. uPSUtils compiles CLEAN on the pinned stable, first try, no flags beyond -Mobjfpc. uPSCompiler hit three walls: (1) missing PByteArray -- FIXED, a System-level FPC type, now in lib/rtl/sysutils.pas; (2) a value cast to a string alias dropped a following INDEX -- FIXED 2026-09-02 (9339d6661), so `tbtwidestring(p^.twidestring)[1]`, the shape that file uses 13 times, compiles and runs; (3) `SetLength(tbtstring(p^.tstring), n)` (line 2753) -- FIXED 2026-09-02, a DIFFERENT arm from (2) (the lowering wants an IR_LEA and a cast is not one), and worse than reported: all THREE spellings failed, including the builtin `SetLength(AnsiString(s), n)`, which died at PARSE time. ALL THREE WALLS ARE NOW DOWN and the next step is to re-run the real attempt against a fresh clone, which is not in the tree. uPSRuntime has not been reached: it stops earlier on a `{$IF}` comparison. NOT vendored -- probed against a clone outside the repo, which is the reversible half of the ticket's own two options."
 ---
 
 # RemObjects Pascal Script — compile under pxx (embeddable scripting)
@@ -240,3 +240,36 @@ question this note is naming an owner for.
 minimal repros of the shapes the 2026-09-01 attempt recorded, not from a fresh
 build of the upstream file. Re-running the real attempt is the next step and it
 needs the clone back.
+
+
+---
+
+## 2026-09-02 (frankH, later) — wall 3 is down; all three named walls are closed
+
+`SetLength(tbtstring(p^.tstring), n)` compiles and runs (`1fd4e7f22`). It was a
+different arm from wall 2 and **measurement made it bigger than the ticket said**:
+all three spellings failed, each differently, and fpc 3.2.2 accepts all three.
+
+    SetLength(AnsiString(s), 7)     undefined variable (AnsiString)   -- at PARSE time
+    SetLength(tbtstring(s), 2)      SetLength expects a string variable in IR codegen
+    SetLength(tbtstring(p^.s), 8)   ...the same, through a record field
+
+The builtin spelling dying in the parser and the alias ones dying in IR codegen
+is why it read as two problems: the target name goes to `FindVarSym`, misses,
+and the two populations diverge from there. Recorded because the ticket named
+only the alias-through-a-field form, and a reader fixing exactly that would have
+left the builtin spelling broken.
+
+### What this does NOT establish
+
+**Nobody has rebuilt `uPSCompiler.pas` since.** There is no clone in the tree
+(and the 2026-09-01 attempt deliberately did not vendor one), so the three walls
+are closed *as shapes*, verified against minimal repros of what that attempt
+recorded — not against the file. A fourth wall behind the third is entirely
+possible and would be the ordinary outcome; the previous attempt found three by
+walking, not by predicting.
+
+**So the residual question has an owner: re-clone and re-run.** That is the next
+step on this ticket and it needs network access the fixing sessions did not use.
+Until someone does it, the honest claim is "the three known walls are gone", not
+"Pascal Script compiles".
