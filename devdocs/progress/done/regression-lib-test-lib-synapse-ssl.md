@@ -92,3 +92,27 @@ irreversible and the owner's alone — nobody should take one to close a ticket.
 
 ## Log
 - 2026-09-02 — auto-closed by the seven watcher: `lib-test#src:test/lib_synapse_ssl.pas` passes at bb524e1abd1f (tier full); it was red at 889bfcf73256. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
+
+## Verified at the current pin (frankA, 2026-09-02)
+
+The watcher's auto-close above is a GREEN, and a green in a job that has flapped
+is not by itself evidence about the defect. This is the other half: all FOUR
+synapse programs built with `$(PXX_STABLE)` = pin v400 (`6c184b4bcc37`) and run
+against the Makefile's own expected text rather than against an exit code.
+
+| program | |
+| --- | --- |
+| `lib_synapse` | eight lines, byte-identical to the recipe's `expect_same` |
+| `lib_synapse_transitive_unit` | `ok` |
+| `lib_synapse_ssl` | three `=ok` lines and `SYNAPSE-SSL OK`, both assertions |
+| `lib_synapse_tls_loopback` | seven lines ending `TLS-LOOPBACK OK`, rc 0 — not 77, so it did not take the SKIP arm |
+
+The fourth is run and reported even though no ticket names it, because the
+summary says *"all four synapse programs"*.
+
+**This ticket existed TWICE**, byte-identical apart from the auto-close Log
+entry: `backlog/` and `done/`. The `backlog/` copy is removed. That is
+[[bug-t-the-watcher-auto-close-copies-a-ticket-into-done-instead-of-moving-it]],
+which predicted exactly this and says the mechanism will reproduce on the next
+auto-close — it did, twice, on 2026-09-02, and the ranker was still offering the
+`backlog/` copies as open work.

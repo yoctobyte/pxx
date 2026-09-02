@@ -120,3 +120,91 @@ back if what it touches becomes load-bearing.
 **To revive it:** move it to the owning lane's backlog, set `status: backlog`,
 and say in the ticket WHAT CHANGED to make it matter now. Restoring it because it
 reads well is how the pile comes back.
+
+
+## Third live instance, 2026-09-02 — found while dispatching, not while auditing
+
+`bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string` sat at
+`status: backlog`, **prio 70, second in `ready --track P`**, while its fix had
+been on origin since 02:03 that morning (`9c6b216aa`, 14 assertions added). Its
+own summary ended *"Fixed by teaching the oracle AN_FIELD and AN_DEREF"* — past
+tense, in the one field everybody reads — and a SECOND ticket
+(`regression-lib-test-lib-synapse-3`) named it as the thing that fixed them.
+
+**Two independent documents said it was done and the ranker kept offering it.**
+
+Cost this time: it was about to be handed to an agent as work. The previous two
+instances cost a dispatch each; this one was caught only because the coordinator
+happened to read the queue before relaying it, which is not a mechanism.
+
+Note the aperture would not even need prose analysis here — a ticket whose
+summary contains "Fixed by" while its status is `backlog` is a one-line grep.
+That is not the general case, but it is a cheap first cut that would have caught
+all three.
+
+## 2026-09-02 (frankA) — the proposed one-line grep, tested against the three cases that motivated it
+
+The section above offers a cheap first cut: *"a ticket whose summary contains
+'Fixed by' while its status is `backlog` is a one-line grep... it would have
+caught all three."* It was worth running before building anything on it.
+
+**It catches one of the three.**
+
+| instance | summary text | `Fixed by` | sentence-initial `Fixed`/`FIXED` | `fixed at\|by\|in` |
+| --- | --- | --- | --- | --- |
+| `feature-random-library` | **there is no `summary:` field at all** | — | — | — |
+| `bug-p-a-char-array-…-is-not-a-string` | `…Fixed by teaching the oracle…` | yes | yes | yes |
+| `regression-test-c-conformance-shard2-6-2` | `FIXED at 0ee41312d.` | **no** | yes | yes |
+
+The first instance is uncatchable by ANY summary filter — its ticket has no
+summary field, which is worth knowing on its own, because the aperture as
+described reads a field that is not universally present. The third says
+`FIXED at`, not `Fixed by`, and is the most recent one.
+
+### And on the open board, precision matters more than the wording suggests
+
+Run over every open folder (`backlog`, `backlog-*`, `urgent`, `low-prio`),
+excluding `README.md`:
+
+| filter | open hits | true |
+| --- | --- | --- |
+| `fixed at\|by\|in`, `is fixed`, `already fixed` | 17 | 3 |
+| `Fixed by` (the proposal) | 7 | 3 |
+| sentence-initial `Fixed`/`FIXED` | 2 | 1 |
+| **summary's FIRST WORD is `FIXED`/`Fixed`** | **1** | **1** |
+
+**The false positives are not noise, they are the house style.** Every one of
+the five `backlog-core` hits reads *"<some OTHER ticket> was fixed by X, and the
+residual is Y"* — which is exactly how this repo banks a residual so an
+exculpation has an owner, and it is indistinguishable from "this ticket is done"
+by any filter that only looks for the WORD. The aperture needs the sentence's
+SUBJECT.
+
+`feature-embed-pascal-script` is the sharpest example: its summary is
+*"ATTEMPTED… (1) …FIXED, (2) …FIXED, (3) STILL OPEN"*. Two of its three walls
+are down and the ticket is correctly open.
+
+### What the run actually found
+
+Four tickets closed on it, all verified rather than closed on the grep:
+
+- `regression-lib-test-lib-synapse-3`, `-ssl`, `-transitive-unit` — all four
+  synapse programs rebuilt at pin v400 and matched against the Makefile's own
+  expected text.
+- `bug-a-set-membership-truncates-the-test-value-on-32-bit-backends` — summary's
+  first word is `FIXED`, sat at prio 25 in `backlog-core`. Its test runs clean
+  at HEAD and is wired at eight Makefile sites.
+
+That last one is the case for the aperture that the three recorded instances do
+not make. All three of those were caught because somebody was about to be handed
+the work; **this one was at prio 25 and nobody was ever going to be**. A ticket
+too low to dispatch is exactly the one no human will notice is already done.
+
+### Two more duplicates found while doing it
+
+`regression-lib-test-lib-synapse-ssl` and `-transitive-unit` each existed in
+BOTH `backlog/` and `done/`, byte-identical apart from the auto-close Log entry
+— [[bug-t-the-watcher-auto-close-copies-a-ticket-into-done-instead-of-moving-it]]
+reproducing exactly as it predicted, on 2026-09-02, while the ranker kept
+offering the `backlog/` copies. Removed. `tools/ticket_path.sh --check-dupes`
+now reports the board clean; it is what surfaced both.

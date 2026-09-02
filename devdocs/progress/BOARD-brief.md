@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:7 unfinished:27 blocked:6 backlog:7 backlog-umbrella:6 backlog-core:137 backlog-nilpy:97 backlog-tools:7 backlog-pascal:55 backlog-decide:30 backlog-libs:16 backlog-cfront:20 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3130 rejected:72`
+`working:7 unfinished:27 blocked:6 backlog:4 backlog-umbrella:6 backlog-core:136 backlog-nilpy:97 backlog-tools:6 backlog-pascal:55 backlog-decide:30 backlog-libs:16 backlog-cfront:20 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3132 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -56,12 +56,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 395, ranked
+## Ready — top 30 of 391, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
-- `[p 85] [P]` regression-lib-test-lib-synapse-3 (unblocks 1)
-- `[p 85] [P]` regression-lib-test-lib-synapse-ssl
-- `[p 85] [P]` regression-lib-test-lib-synapse-transitive-unit
+- `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
@@ -88,5 +86,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
+- `[p 62] [N]` feature-nilpy-enum-class
+- `[p 60] [C]` bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero
 
-_365 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_361 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

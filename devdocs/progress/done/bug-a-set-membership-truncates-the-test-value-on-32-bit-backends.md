@@ -4,7 +4,7 @@ title: "`in` with a 64-bit element is wrong on ALL FOUR 32-bit backends, in two 
 track: A
 type: bug
 prio: 25
-status: backlog
+status: done
 found: 2026-08-28
 found-by: frankwasm (measured on five targets while implementing the wasm32 `in` arm)
 owner: frankA
@@ -220,3 +220,27 @@ recorded decision rather than an accident:
 [[decide-does-in-truncate-an-out-of-range-element-or-answer-false]]. This fix
 did not choose a semantics — it moved four backends onto the answer x86-64 and
 aarch64 already gave. What no ruling changes is that all six must answer alike.
+
+## Verified at HEAD and closed (frankA, 2026-09-02)
+
+`test/test_set_in_64bit_element.pas` runs clean at HEAD, 21 rows, and is wired
+into the Makefile at **eight** call sites (native plus the six cross targets,
+and one guard row). The FPC divergence has its own ticket
+([[decide-does-in-truncate-an-out-of-range-element-or-answer-false]], which is
+in `decided/` — settled, not merely filed; checked rather than assumed, because
+the first version of this line said "filed and open"), so nothing of this
+ticket's own scope is outstanding.
+
+Closed on the fix, not on a green: what makes it closeable is the recorded
+byte-identical-object regression across the pre- and post-fix binaries plus six
+targets agreeing, both already in the section above.
+
+**Found by a filter, and how matters.** This ticket's summary begins with the
+word `FIXED` while its status was `backlog` — the exact aperture
+[[bug-t-check-has-no-aperture-for-a-ticket-whose-body-records-its-own-completion]]
+asks for. It sat at prio 25, which is why nobody dispatching hit it; the three
+instances that ticket records were all caught because someone was about to be
+handed the work.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

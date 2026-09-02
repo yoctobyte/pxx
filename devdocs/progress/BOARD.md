@@ -63,14 +63,11 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (7)
+## backlog (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | regression-lib-test-crtl-reachability-8 | C | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py at cdae8cf6580b in step 23/88, `python3 tools/gen_crtl_map.py --check` (auto-filed by twatch) | — |
-| regression-lib-test-lib-synapse-3 | P | 70→85 | regression | CAUSE FOUND AND FIXED IN TREE, JOB STILL RED — and it stays red until the next pin, because this job builds with $(PXX_STABLE). All three lib_synapse reds are ONE construct: `szDescription := '...'` on an `array[0..N] of Char` FIELD in synapse's ssfpc.inc. ASTCharArrayCap answered only for AN_IDENT, so the char-array-is-a-string conversion never fired for a field and the store was refused as `cannot assign ShortString to Char`. Fixed by bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string; all four synapse programs now build and match their expected output byte for byte under the tree compiler. | — |
-| regression-lib-test-lib-synapse-ssl | P | 70→85 | regression | CAUSE FOUND AND FIXED IN TREE, JOB STILL RED — and it stays red until the next pin, because this job builds with $(PXX_STABLE). All three lib_synapse reds are ONE construct: `szDescription := '...'` on an `array[0..N] of Char` FIELD in synapse's ssfpc.inc. ASTCharArrayCap answered only for AN_IDENT, so the char-array-is-a-string conversion never fired for a field and the store was refused as `cannot assign ShortString to Char`. Fixed by bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string; all four synapse programs now build and match their expected output byte for byte under the tree compiler. | — |
-| regression-lib-test-lib-synapse-transitive-unit | P | 70→85 | regression | CAUSE FOUND AND FIXED IN TREE, JOB STILL RED — and it stays red until the next pin, because this job builds with $(PXX_STABLE). All three lib_synapse reds are ONE construct: `szDescription := '...'` on an `array[0..N] of Char` FIELD in synapse's ssfpc.inc. ASTCharArrayCap answered only for AN_IDENT, so the char-array-is-a-string conversion never fired for a field and the store was refused as `cannot assign ShortString to Char`. Fixed by bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string; all four synapse programs now build and match their expected output byte for byte under the tree compiler. | — |
 | regression-test-core-c-asm-in-inline-body | T | 70 | regression | regression: test-core#src:test/c_asm_in_inline_body.c@2 at 2d6e7d5c26db in step 7/3, `python3 tools/ast_slot_overloads.py --self-check` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-pointer-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_c_pointer.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_c_pointer.npy /tmp/test_nilpy_c_pointer26` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-c-header-still-works-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_import_c_header_still_works.npy /tmp/test_nilpy_imphdr26` (auto-filed by twatch) | — |
@@ -90,7 +87,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (137)
+## backlog-core (136)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -125,7 +122,6 @@ _none_
 | bug-a-pxxcoswitch-and-pxxclone-are-missing-on-riscv32 | A | 25 | bug | `__pxxcoswitch(@a, @b)` compiles for x86-64 and arm32 and gives `pascal26: error: target riscv32: unsupported node in IR codegen: coswitch` on riscv32; `__pxxclone` has the same missing arm. Compile-time error, not a wrong answer. Found while auditing what else riscv32 lacked after adding IR_RTTI_REG/IR_RESOURCES — the other four absent node kinds are all unreachable on riscv32, these two are not. | — |
 | bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body | A | 30 | bug |  | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
-| bug-a-set-membership-truncates-the-test-value-on-32-bit-backends | A | 25 | bug | FIXED on all four 32-bit backends 2026-08-31. Wider than filed: riscv32 and xtensa have the same defect (they gained their `in` arms after this was written), and there are TWO shapes, not one. A constant set literal is SPECIAL_IN, compared inline -- that shape silently answered TRUE for 2^32+1. A set VARIABLE is IR_BINOP tkIn -- that shape did not compile at all, because a 64-bit LEFT operand routed `in` into the 64-bit ARITHMETIC emitter, which has no tkIn arm. One root cause: `in` was being treated as 64-bit arithmetic when it is a membership test with a Boolean result. Test test_set_in_64bit_element.pas, 21 rows, six targets. NOTE: FPC 3.2.2 truncates and so disagrees on 7 rows -- deliberate, see decide-does-in-truncate-an-out-of-range-element-or-answer-false. | — |
 | bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug | A | 20 | bug | Sweep of every comment that ENUMERATES targets, checked against a derived backend list. Three miscounts: PXXVarBinOp's 'the other four targets' (five call it), symtab.inc's 'Every 32-bit backend (i386, arm32, riscv32)' (xtensa is a fourth and does NOT consult the shared decision), and PXXStrCmp3's 'the four cross backends' — that last one already filed as a live bug. A count reads as a complete enumeration, so nobody counts. | — |
 | bug-a-test-tthread-fails-under-full-tier-load-but-never-in-isolation | A | 3 | bug | test_tthread failed once as test-threads#08 in a full tier and cannot be reproduced in isolation — 0 failures in 8 runs — so it is load-dependent, not a regression | — |
 | bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture | A | 40 | bug | Five Makefile guards check the pinned stable with `test -x`, which tests the executable BIT — a property of the file, not of whether this CPU can run it. On a non-x86-64 host every guard reports healthy and the recipe then dies at exec with `Exec format error`, after printing a message saying there is no pinned stable at a path where one demonstrably is. Found on `via` (aarch64), where the repo ships only `stable_linux_amd64`. A reader would reasonably conclude the checkout is broken. | — |
@@ -334,11 +330,10 @@ _none_
 | refactor-n-two-import-handlers-are-twins | N | 45 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 
-## backlog-tools (7)
+## backlog-tools (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-t-check-has-no-aperture-for-a-ticket-whose-body-records-its-own-completion | A | 50→60 | bug |  | — |
 | bug-t-lane-attribution-has-two-instruments-that-disagree | T | 45 | bug | 33 open tickets carry no `track:` frontmatter field, 30 of them in RANKED folders. The ranker still lanes them, via a cascade of fallbacks — a `feature-track-t-*` slug prefix, a `Track X` mention in the decl line, a `Track` bullet in the body. Any tool that reads `fm.get('track')` sees nothing for all 33. Two instruments, one answering about a field that is not there. Surfaced when a backlog sweep nearly mis-filed two tickets the ranker had been lanting as T all along; progress.py's own comment records the same class biting in the opposite direction on 2026-07-15. | — |
 | bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names | T | 70 | bug | verify_pin() does clone.checkout(<the pinned TREE>), which also checks out stable_linux_amd64/** as of that tree. A pin commit is always a DESCENDANT of the tree it pins, so the checked-out binary is the PREVIOUS pin. Every pin verify therefore builds its $(PXX_STABLE) targets with pin v(N-1) while recording the verdict under vN. Evidence: one run logs `verifying PIN v400 (67ae9a62d567)` and then `testmgr: pin=399 sha256=954adef93a7b`; `pin=400` appears ZERO times in the whole watcher log. The already-closed bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label saw this exact symptom (`ver said v347 while the verified tree carried pin 346`) and fixed the LABEL. | — |
 | bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it | T+S | 45 | bug | test-esp-bare and test-esp-softfloat appear in ZERO testmgr tiers and in no script — grep across tools/ finds one xtensa/esp job total, test-xtensa. So the ESP bare-metal suite is written, correct, and never executed by any gate or sweep. Found because the one executed windowed row landed there, in a target nothing runs. | — |
@@ -874,9 +869,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3130)
+## done (3132)
 
-3130 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3132 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -958,9 +953,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 90] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
-- [p 85] [P] regression-lib-test-lib-synapse-3 (unblocks 1)
-- [p 85] [P] regression-lib-test-lib-synapse-ssl
-- [p 85] [P] regression-lib-test-lib-synapse-transitive-unit
+- [p 85] [T] umbrella-one-full-tier-run-with-no-red-tier [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
@@ -997,7 +990,6 @@ _none_
 - [p 60] [N] bug-n-os-environ-and-os-sep-are-not-values
 - [p 60] [N] bug-n-the-hex-string-escape-emits-a-raw-byte-not-a-code-point
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
-- [p 60] [A] bug-t-check-has-no-aperture-for-a-ticket-whose-body-records-its-own-completion
 - [p 60] [T] bug-t-the-exit-observable-ratchet-was-red-at-its-own-arming-commit
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [C] feature-c-crtl-posix-regex-regcomp-regexec
@@ -1267,7 +1259,6 @@ _none_
 - [p 25] [A] bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted
 - [p 25] [A] bug-a-promocore-is-not-the-only-place-that-knows-the-promo-slot-layout
 - [p 25] [A] bug-a-pxxcoswitch-and-pxxclone-are-missing-on-riscv32
-- [p 25] [A] bug-a-set-membership-truncates-the-test-value-on-32-bit-backends
 - [p 25] [A+S] bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss
 - [p 25] [A] bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use
 - [p 25] [A] bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings
@@ -1388,4 +1379,3 @@ _none_
 - **1** — feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host
 - **1** — feature-target-wasm
 - **1** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
-- **1** — regression-lib-test-lib-synapse-3
