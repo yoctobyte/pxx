@@ -134,6 +134,60 @@ artifact another program reads, so the format is a contract rather than an
 intermediate, and matching it buys real interop. Recommend **truncate, do not
 offset** unless the owner would rather have the smaller file.
 
+### SETTLED BY MEASUREMENT: our mask is a ZERO-EXTENSION of FPC's set
+
+Owner, 2026-09-02: *"we hardly don't have to change anything. at least not for
+fileIO — we can simply check the highest set index."* **Correct, and now
+measured on both size classes.** Same member lists, same declarations, bytes
+dumped through `PByte(@s)`:
+
+```
+set of 0..31   [0,1,8,31]      fpc (4B)  : 3 1 0 128
+                               pxx (32B) : 3 1 0 128 0 0 0 0 ...
+set of 200..207 [200,203,207]  fpc (32B) bytes 24..27 : 0 137 0 0
+                               pxx (32B) bytes 24..27 : 0 137 0 0
+```
+
+**Both compilers place ordinal `i` at byte `i div 8`, bit `i mod 8`, and
+NEITHER rebases.** So FPC's 4-byte set is *literally the first 4 bytes of ours*,
+and FPC's 32-byte set is ours exactly.
+
+**File I/O therefore needs no representation change and no offsetting:** write 4
+bytes when the declared high bound is <= 31, else 32; read and zero-extend. The
+files are byte-identical to FPC's for free. This resolves Fork B in the cheap
+direction — we get interop without giving up anything we had, because the
+compact-but-incompatible option was never a saving we already held.
+
+### The consequence that argues FOR narrowing, found by the same measurement
+
+**A record containing a small set still cannot blit.** In memory the set
+occupies 32 bytes; on disk it occupies 4; so every field after it sits at a
+different offset and `file of T` must marshal field-by-field.
+
+That means narrowing the in-memory width buys **three** things, not one:
+FPC-identical `SizeOf`, **blittable records for `file of T`**, and the ESP
+memory the owner originally raised. The blit is the one nobody had counted.
+
+### And `SizeOf` resolves rather than conflicts
+
+Owner: *"the other question would be sizeof — and this is where stuff either
+conflicts either we have to rewrite our sets to either use a dword or use 32
+bytes."*
+
+Under the owner's own 2026-09-02 rule, `SizeOf(set of 0..7)` = 32 is a **TRUE
+statement about our representation** — the truthful-instrument class — so it is
+`known-incompat` and CHOSEN, not a defect, for as long as we keep 32.
+
+The one shape where it becomes a wrong VALUE is `BlockWrite(f, s, SizeOf(s))`,
+which puts 32 bytes down where FPC puts 4. But that is **self-consistent**: we
+write 32 and read 32. It breaks only on cross-compiler file exchange, which is
+exactly what the typed-file path handles by writing the declared width instead.
+
+So the fork is not "match `SizeOf` or rewrite sets". It is: **keep 32** and
+accept an honest `SizeOf` divergence plus a marshalling `file of T`; or
+**narrow** and take FPC's `SizeOf`, blittable records and ESP memory together,
+paying the ABI change once.
+
 ## Consequence that lands under EVERY option
 
 **If any type's on-disk form differs from its in-memory form, `file of T` is a
