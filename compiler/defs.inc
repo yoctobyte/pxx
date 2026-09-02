@@ -3590,8 +3590,12 @@ var
   LastTypeSubHi : Int64; { frozen fixed-string capacity from the most recent string[N] type parse (0 = default); consumed by AllocVar/AllocArray, then reset }
   TVarRecId : Integer;   { record id of builtinheap.TVarRec (`array of const`
                            element), or REC_NONE if the unit isn't loaded }
-  MethodPtrRecId : Integer; { record id of the 16-byte method-pointer layout
-                           {Code@0, Data@8} minted on first `of object` proc
+  MethodPtrRecId : Integer; { record id of the method-pointer layout
+                           {Code@0, Data@TARGET_PTR_SIZE} -- two target
+                           pointers, 16 bytes on 64-bit and 8 on 32-bit, NOT a
+                           fixed 16 (that literal was the defect in
+                           bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets)
+                           minted on first `of object` proc
                            type; REC_NONE until then }
   LastTypePointerElemTk : TTypeKind;
   { The ELEMENT kind of a managed STRING type just parsed — tyWideChar for

@@ -12965,7 +12965,8 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         (ASTIVal = signature Procs[] index) and emit IR_CALL_IND (IRA = callee
         code address, IRB = args, IRIVal = sig, IRC = extra leading Self args:
         0 for a plain proc pointer, 1 for a method pointer). A method pointer is
-        a 16-byte {Code@0, Data@8} record: load Self (Data) as arg0, call Code. }
+        a two-pointer {Code@0, Data@TARGET_PTR_SIZE} record (16 bytes on
+        64-bit, 8 on 32-bit): load Self (Data) as arg0, call Code. }
       cpi := ASTIVal[node];
       first := -1; last := -1;
       pendBase := PendOAWBCount;   { open-array copy-out writebacks (see AN_CALL) }

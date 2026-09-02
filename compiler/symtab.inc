@@ -1633,16 +1633,28 @@ begin
 end;
 
 function EnsureMethodPtrRec: Integer;
-{ Record id of the shared 16-byte method-pointer layout {Code@0, Data@8}. Minted
-  lazily on the first `procedure(...) of object` type. No named fields are needed:
-  the method-pointer assignment (@obj.method) and call read Code/Data by fixed
-  offset, so only the 16-byte size + 8-byte alignment matter. }
+{ Record id of the shared method-pointer layout {Code@0, Data@TARGET_PTR_SIZE}:
+  two target pointers, so 16/8 on a 64-bit target and 8/4 on a 32-bit one.
+  Minted lazily on the first `procedure(...) of object` type. No named fields
+  are needed: the method-pointer assignment (@obj.method) and call read
+  Code/Data by fixed offset, so only the size + alignment matter.
+
+  BOTH WERE LITERAL 64-BIT CONSTANTS, and the comment said `Data@8` as fact --
+  the prose being the second copy, and the one that would have survived a
+  correct code fix. Measured by running: `SizeOf(procedure of object)` answered
+  16 on i386, arm32 and riscv32 while the equivalent user-declared
+  `record Code, Data: Pointer` answered 8 on the same targets. The STORE was
+  always target-aware (a method pointer read back through such a record returns
+  the object in Data on i386, i.e. offset 4), so nothing was corrupted and no
+  call was misdirected -- the cost was eight wasted bytes per value and a
+  `SizeOf` a program can read back wrong.
+  bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets }
 var ci: Integer;
 begin
   if MethodPtrRecId <> REC_NONE then begin Result := MethodPtrRecId; Exit; end;
   ci := AddUClass(0, 0);
-  UClsSize_[ci]    := 16;
-  UClsAlign[ci]    := 8;
+  UClsSize_[ci]    := 2 * TARGET_PTR_SIZE;
+  UClsAlign[ci]    := TARGET_PTR_SIZE;
   UClsIsRecord[ci] := True;
   MethodPtrRecId := REC_UCLASS_BASE + ci;
   Result := MethodPtrRecId;

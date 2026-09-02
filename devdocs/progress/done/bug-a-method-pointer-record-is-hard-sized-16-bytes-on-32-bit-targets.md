@@ -4,9 +4,10 @@ title: "A `procedure of object` is declared 16 bytes on every target, so SizeOf 
 track: A
 type: bug
 prio: 20
-status: backlog
+status: done
 found: 2026-08-28
 found-by: frankwasm (fell out of falsifying the wasm32 IR_DEFAULT_MEM arm)
+owner: frankC
 ---
 
 ## The fact
@@ -94,3 +95,59 @@ read back by another toolchain, or any on-disk/on-wire format containing a
 `procedure of object`. There, eight bytes of over-declaration is a field-offset
 mismatch rather than waste. Nobody has hit that; if anyone does, this is not a p20
 and the ticket should say so rather than being re-argued from scratch.
+
+## Fixed 2026-09-02
+
+`EnsureMethodPtrRec` now takes `2 * TARGET_PTR_SIZE` and `TARGET_PTR_SIZE`.
+**riscv32 measured too** — this ticket listed it as "same code path, not run",
+and it was 16 there as well; so were i386 and arm32.
+
+| target | ptr | `record Code, Data: Pointer` | `procedure of object` |
+| --- | ---: | ---: | ---: |
+| x86-64 | 8 | 16 | 16 (unchanged) |
+| i386, arm32, riscv32 | 4 | 8 | 16 -> **8** |
+
+**All THREE copies of the prose corrected in the same edit**, as this ticket
+asked: the `EnsureMethodPtrRec` header, `MethodPtrRecId`'s comment in
+`defs.inc`, and the method-call lowering comment in `ir.inc` — each stated
+`{Code@0, Data@8}` as fact, which is wrong on five of seven targets. The
+ticket's own note that *the prose is the second copy, and the one that would
+survive a correct code fix* was right, and there were three.
+
+## Verified
+
+`test/test_method_pointer_size_is_two_pointers.pas`. Assertions are RELATIONAL
+— the method pointer must equal the hand-written `record Code, Data: Pointer`
+and both must equal `2 * SizeOf(Pointer)` — so the file carries no expected
+widths and passes on every target while printing a different correct number on
+each. Green on x86-64, i386, arm32 and riscv32.
+
+**It also CALLS.** A size row alone cannot see the failure a size change would
+introduce: shrinking the record is only correct if the call path never relied on
+the old width. The test assigns a method pointer, calls through it, and checks
+the receiver saw its own object — with TWO receivers, so a `Data` read at the
+wrong offset cannot pass by landing on the only object present.
+
+Positive control against the **pinned** compiler:
+- pinned **x86-64: PASSES** — which is the point. The host tier could never
+  have caught this, and that is why it survived.
+- pinned **i386: 2 rows FAIL**, and both call rows pass, confirming this
+  ticket's finding that dispatch was always correct and only the declared size
+  was wrong.
+
+Pin precondition asserted, not assumed: `git diff HEAD -- lib/` is empty, so the
+change touches nothing the pinned binary reads live (a pin freezes the BINARY,
+not `lib/rtl` or `lib/crtl`).
+
+`gate.sh quick` GREEN, FPC seed canary PASS.
+
+**One trap worth recording.** The test first printed `FAIL` lines and exited
+**0**, so under the pinned/i386 control it reported failure in the text and
+success in the exit code — and testmgr reads the exit code. A test that cannot
+fail in the dimension the harness reads is not a test. `Halt(fails)` added.
+The same omission was in the rows added to
+`test_sizeof_user_name_shadows_builtin.pas` earlier the same day, and is fixed
+there too. No `.expected` for either: their correct output is target-dependent.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

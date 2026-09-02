@@ -63,6 +63,7 @@ var
   cv: Currency;           { a VARIABLE of the shadowing record type }
   dv: TDateTime;          { ...and of the shadowing array type    }
   av: TCurArr;
+  chk: Integer;
 
 begin
   { user TYPE names beat the builtin table }
@@ -105,4 +106,22 @@ begin
     passed. WideChar (2) and ByteBool (1) are chosen because no fallback in
     this area produces 2 or 1. }
   WriteLn('n ', SizeOf(wc), ' ', SizeOf(bb));
+
+  { ASSERT, do not only PRINT. Rows a..i predate this and are judged by
+    comparing the transcript against FPC by hand, which is why they are bare
+    WriteLns. That is fine for a row a human reads once; it is not fine for a
+    regression guard, because testmgr reads the EXIT CODE and a file that
+    prints a wrong number and exits 0 cannot fail in the dimension the harness
+    reads. The rows added with the ParseTypeKind fix therefore check
+    themselves. No `.expected` is stored: row h prints SizeOf(Pointer), so the
+    correct transcript differs per target. }
+  chk := 0;
+  if SizeOf(cv) <> 12 then begin WriteLn('FAIL j ', SizeOf(cv)); chk := chk + 1; end;
+  if cv.a + cv.b + cv.c <> 6 then begin WriteLn('FAIL k'); chk := chk + 1; end;
+  if (SizeOf(av) <> 12) or (Length(av) <> 12) then begin WriteLn('FAIL l ', SizeOf(av), ' ', Length(av)); chk := chk + 1; end;
+  if SizeOf(dv) <> 10 then begin WriteLn('FAIL m ', SizeOf(dv)); chk := chk + 1; end;
+  { the control: an unshadowed builtin must STILL resolve to the builtin }
+  if SizeOf(wc) <> 2 then begin WriteLn('FAIL n WideChar ', SizeOf(wc)); chk := chk + 1; end;
+  if SizeOf(bb) <> 1 then begin WriteLn('FAIL n ByteBool ', SizeOf(bb)); chk := chk + 1; end;
+  Halt(chk);
 end.
