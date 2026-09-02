@@ -208,7 +208,89 @@ ticketed:
 `bug-a-comparing-a-frozen-record-field-to-a-literal-crashes-or-answers-false`
 and `bug-a-indexing-a-frozen-string-through-a-pointer-deref-reads-the-wrong-byte`.
 
-### BOTH SURVIVORS ARE CLOSED (`0dd5858e6`, frankb-a9, 22:01)
+### RETRACTED: my "both survivors closed on five targets" measurement
+
+**I never passed `-dPXX_SHORTSTRING`.** My command was
+`./compiler/pascal26 surv.pas surv` — positional output, freshly built binary, a
+real run that really passed. It measured the **default 8-byte-prefix path, which
+was never broken**, and I reported it as the byte-prefix path this entire
+overhaul is about. **The five-target table is withdrawn, not repaired**: none of
+those rows exercised the flag.
+
+**This is worse than a broken instrument, and it is the finding to keep.** That
+harness had a positive control, a negative control that returned FALSE, a
+`file(1)` architecture check and five targets. **Every guard passed honestly** —
+all of them were aimed at a configuration nobody was arguing about. CLAUDE.md
+asks "would this row still pass if the machinery did nothing"; the missing
+question is **"does this row exercise the CONFIGURATION my claim is about"**. A
+guard cannot tell you that you asked the wrong question. frankb-a9 and I got
+opposite results at the identical compiler sha `a09992a1c33f` and **neither
+harness was faulty** — a correct harness faithfully ran the wrong mode.
+
+**Any claim about this overhaul that does not name the mode it was measured in
+is not a claim about this overhaul.**
+
+### The survivors ARE closed — on frankb-a9's evidence, at `ba90811d3`
+
+Four causes, one sentence: **a guard spelled `= tyString` where it meant
+`TypeIsFrozenString`.** (1) `ir.inc`'s AN_FIELD rvalue arm value-loaded a frozen
+field — eight bytes of the string AS its value, `rax = $6F6C6C656805` at the
+fault. (2) the x86-64 and aarch64/arm32 compare guards, in two spellings.
+(3) **`CmpFusible`, the one worth keeping.**
+
+**`-O0` correct while `-O1+` is wrong says the unwidened predicate is in the
+OPTIMISER, not in the arm you are reading.** After the value-load and both
+compare guards were fixed, x86-64 *still* answered FALSE at `-O1`/`-O2` and
+correctly at `-O0`: the optimiser predicate excluding float/string/variant from
+`cmp`+`setcc` fusion spelled the string half as a bare equality, so a
+`tyShortString` operand got fused and the two field **addresses** were compared
+as integers. By then nothing in the compare path looked wrong, because nothing
+in it was.
+
+**The widths were right the whole time** — `lea 0x1(%rax)` for the field against
+`lea 0x8(%rcx)` for the literal. This read as a width bug for a day and never
+was one.
+
+**Three theories died on this bug in one hour, each refuted by a single program,
+each having looked confirmed by source-reading first. The fourth attempt read
+the registers at the fault and took one command.** A theory the code confirms is
+not thereby measured. That is a repeatable failure mode of source-reading, not a
+curiosity.
+
+**The deref write side is real and the slug undersells it.** With the fix
+reverted: the program prints `read [^@^@^@]` *and then* `write [hello]` — the
+store went to base+8, landed inside the slot, corrupted nothing visible, and
+**the assignment was silently discarded.** `p^[1] := 'H'` doing nothing is the
+part a user meets. Silent corruption, not a display bug. The positive control
+found it; the repro did not.
+
+Verified by me in BOTH modes at `ba90811d3` / `a81084690bac`: six rows correct,
+exit 0, default and `-dPXX_SHORTSTRING` alike.
+
+### FLIP BLOCKER: arrays of shortstrings are corrupt under the flag
+
+`bug-a-an-array-of-shortstrings-is-corrupt-under-the-byte-prefix-mode`
+(`bb04bd580`, backlog-core, prio 80). Measured at `ba90811d3`, exit 0 both modes:
+
+| | default | `-dPXX_SHORTSTRING` |
+| --- | --- | --- |
+| `a[0]` (`string[8]`) | len=4 `[zero]` | len=4 **`[z  ]`** |
+| `b[0]` (`string[4]`) | len=2 `[ab]` | **len=2199023255554** |
+| `b[1]` | len=2 `[cd]` | **len=72057594037927938** |
+| `a[1]='one'` | TRUE | **FALSE** |
+
+`0x20000000002` and `0x100000000000002` both end in the real length 2, with
+neighbouring bytes dragged into a 64-bit load; the narrower declared width
+corrupts harder, which is what an element-stride disagreement looks like. **A
+`Length()` of 7.2e16 is an overrun, not a display defect** — and the flip turns
+this mode on globally.
+
+**Two guard traps in it:** `a[2]` reads CORRECTLY, so a probe checking the last
+element passes; `a[0]` reports the RIGHT length beside corrupt data, so a probe
+asserting `Length` passes. It surfaced from a widened repro's negative-control
+row, not from the repro's own assertions.
+
+## BOTH SURVIVORS ARE CLOSED (`0dd5858e6`, frankb-a9, 22:01)
 
 **One commit, 38 lines across `compiler/ir.inc` and `compiler/symtab.inc`, closed
 both.** They were never two defects — frankb-a9's `ddc4d3d51` had already said the
