@@ -3,7 +3,7 @@ slug: bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine
 track: A
 prio: 65
 type: bug
-blocked-by: []
+blocked-by: [decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part]
 status: backlog
 found: 2026-09-01
 found-by: frankZ
@@ -135,3 +135,25 @@ the I/O lock a miss falls back to `gettid` and is merely slower; for option 1's
 zeroes a live exception chain. Detection for THIS purpose is still open, and the
 numbers are on
 [[decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part]].
+
+## 2026-09-02 (frankA) — wired to the decide ticket it asked for
+
+This ticket has been the top of `ready --track A` for two days and `next` has
+handed it to every Track A session that asked, because it carried
+`blocked-by: []`. Its residual is not work: the crash it was filed for is fixed
+(`ba2682d2f`), and everything left is the sentence at the end of "Why this is
+not just call the stub" — *"This is a fork of intent about the TLS design and it
+is worth a `decide-` if whoever picks it up cannot settle it from the code."*
+
+**That decide- exists now** —
+[[decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part]],
+filed by frankC and since given the generator-stack measurement — so the edge is
+wired rather than left implicit. The sibling
+[[bug-a-the-exception-chain-fix-is-defeated-by-a-libc-pthread]] already carries
+exactly this `blocked-by`; these two are the same blocker seen from two ends,
+and only one of them said so.
+
+An unblocked ticket whose only remaining content is "someone must decide" is
+worse than a blocked one: it is offered first, read for ten minutes, and put
+back. Nothing here is newly known — the edge just stops costing a session each
+time.

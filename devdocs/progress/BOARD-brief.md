@@ -57,7 +57,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 391, ranked
+## Ready — top 30 of 390, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
@@ -66,8 +66,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [A]` umbrella-managed-memory-is-correct
+- `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 1)
 - `[p 70] [C]` bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
@@ -78,7 +78,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-threads-test-nilpy-thread-clone
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
-- `[p 65] [A]` bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [C]` feature-c-corpus-busybox-i386-the-second-architecture
@@ -89,5 +88,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [C]` bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero
+- `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 
-_361 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_360 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

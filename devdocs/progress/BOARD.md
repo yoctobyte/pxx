@@ -97,7 +97,7 @@ _none_
 | bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing | A+S | 40 | bug | A bare ESP boot compiles a raw `clock_gettime64` into `Randomize`, behind a guard that never ran | — |
 | bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
-| bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine | A | 65 | bug | A thread pxx did not create — a libc pthread, or any thread a linked C library starts — never runs the __pxxclone stub that carves and installs a per-thread TLS block, so it INHERITS its creator's gs and every `gs:` slot it touches is the creator's. Measured: gs_base is BSS_TLS_MAIN on all five threads of test_multithreading. The CRASH this caused is fixed (ba2682d2f made the heap magazine's guard atomic, so a shared magazine is correct); what is left is that the TLS block is not per-thread for foreign threads, which is a design question and touches every slot, not just the magazine. | — |
+| bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine | A | 65 | bug | A thread pxx did not create — a libc pthread, or any thread a linked C library starts — never runs the __pxxclone stub that carves and installs a per-thread TLS block, so it INHERITS its creator's gs and every `gs:` slot it touches is the creator's. Measured: gs_base is BSS_TLS_MAIN on all five threads of test_multithreading. The CRASH this caused is fixed (ba2682d2f made the heap magazine's guard atomic, so a shared magazine is correct); what is left is that the TLS block is not per-thread for foreign threads, which is a design question and touches every slot, not just the magazine. | decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part |
 | bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad | A | 35 | bug | UNMEASURED RESIDUAL, filed so it has an owner rather than living in a closed ticket's scope note. bug-a-a-managed-temp-in-a-frame-unwound-by-an-exception-is-never-released was fixed by asking the landing-pad gate a second time inside CompileAST, but the request is raised ONLY for a plain body: an asm body and a generator/stackless body keep the prologue decision. So a generator whose step function raises past a hidden managed argument temp should still leak one block per raise. Should -- not does: a standalone repro was attempted and did not get past a parse error unrelated to the bug, so this is reasoned from the code path and NOT measured. Verify before working it; if it does not reproduce, close as rejected rather than leaving it open at a guess. | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-a-record-parameters-type-is-not-resolved-when-its-slot-is-sized | A | 40 | bug | AllocParam decides a by-value record parameter's slot size from RecSize(LastTypeRecId), and LastTypeRecId is REC_NONE for 41 of the 52 record parameters in compiler.pas. RecSize(REC_NONE) is the 8-byte fallback, so the `RecSize(..) <= 8` test that chooses between an inline record slot and a pointer slot is a CONSTANT TRUE for those 41 — the branch's comment describes a decision it is not making. Not a miscompile: every later answer is <= the 8 it reserves, so the slot is over-allocated by up to 4 bytes on a 32-bit target and never under-read. What it costs is that the rule cannot be reasoned about, and it is the input half of the ticket that renamed ParamSize. | — |
@@ -961,8 +961,8 @@ _none_
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [A] umbrella-managed-memory-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
+- [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - [p 70] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
-- [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 1)
 - [p 70] [C] bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [T] bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
@@ -973,7 +973,6 @@ _none_
 - [p 70] [T] regression-test-threads-test-nilpy-thread-clone
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
-- [p 65] [A] bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
 - [p 65] [C] feature-c-corpus-busybox-i386-the-second-architecture
@@ -1349,6 +1348,7 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **3** — feature-port-windows-pe
+- **2** — decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part
 - **2** — decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-a-c-diagnostics-cannot-name-a-header-only-the-module-that-included-it
@@ -1358,7 +1358,6 @@ _none_
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
 - **1** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
-- **1** — decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part
 - **1** — decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
 - **1** — decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
