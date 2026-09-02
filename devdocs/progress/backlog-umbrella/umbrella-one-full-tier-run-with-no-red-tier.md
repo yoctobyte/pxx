@@ -987,3 +987,81 @@ not blanket — the map only matters where nothing else already reaches.
 
 This one is closed, on every host, without a pin: both guards are pure Python
 over the tree.
+
+## Correction, same day: `crtl_reachability` is not a fourth blocker — it IS the synapse group
+
+2026-09-02, frankZ, after Track T re-ran the job at `8dcf6ae13` as asked. **My
+previous section closed this too early.** The `clock_t` diagnosis above is
+confirmed by T independently and stands, but "the fix landed 14 minutes later,
+so re-run it" was only true of the SECOND cause. The job is red at HEAD for a
+**third** one, and re-running does not clear it.
+
+```
+testmgr: RED
+pascal26:0: error: incompatible types: cannot assign ShortString to Char
+```
+
+That is [[bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string]] —
+`ASTCharArrayCap` answering only for `AN_IDENT`, fixed in this tree at
+`9c6b216aa`. It is the construct already written up in the synapse group above.
+
+**Reproduced here independently before accepting it.** Binary
+`9b8ef1068ec8347d925a7ef632286d2a8019bd74cd1d447f651afa78ff9edb9d`, origin
+`799ac25db`, all three programs, both compilers, same flags:
+
+| program | pinned v399 | HEAD |
+|---|---|---|
+| `test/lib_synapse.pas` | `cannot assign ShortString to Char` | ok, code=659224B |
+| `test/lib_synapse_ssl.pas` | same error | ok, code=720664B |
+| `test/lib_synapse_transitive_unit.pas` | same error | ok, code=655128B |
+
+`lib_synapse`'s figures are byte-identical to the ones T measured on seven —
+**a second source that fails differently** (different host, different binary,
+different harness), which is the only kind that counts.
+
+### The structural half, and it shrinks this umbrella
+
+`lib-test#src:tools/crtl_reachability.py` **is** `lib-test#00`: one job of 198
+recipe lines over 39 source files, named for its first source — and the first
+line of the `lib-test` recipe is literally `python3 tools/crtl_reachability.py`.
+T located the red at **step 83** of it, `$(PXX_STABLE) --mimic-fpc
+-Fuexternal/synapse ... test/lib_synapse.pas`.
+
+So the four job names this umbrella has been counting —
+`crtl_reachability` plus the three `lib_synapse*` — are **one construct, one
+fix, one gate.** Not four blockers. The umbrella's remaining set is therefore:
+
+1. **the synapse construct**, fixed at `9c6b216aa`, waiting on a pin — four job
+   names, one cause; and
+2. **two that reproduce nowhere** (`test_exception_unhandled`,
+   `test_setlen_in_parallel_for_body`).
+
+This is the `tools-devtest#00` lesson arriving a second time from a second job:
+**one job name carrying an arbitrary union means the red COUNT is not a count of
+causes, in either direction.** There it inflated a fix (five guards closed, the
+verdict unmoved); here it inflated the backlog (one construct wearing four
+names). `bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step`
+is the ticket, and it is now the reason two separate umbrella sections were
+written wrong.
+
+### The loop worth naming: the shadow is reporting the pin's own defects
+
+T reports seven's pin-shadow lists **exactly three blocking reds, and all three
+are `$(PXX_STABLE)` compiles** of a construct this tree fixed. The pin is v399,
+cut on the owner's instruction, and independently known broken — it carries
+`4af4645ba` without its fix `d5e0a1e48`, which landed an hour after the cut.
+
+So the advisory's blockers are **artefacts of the binary it is advising about**,
+and nothing in the tree can retire them: the only thing between here and a clean
+advisory is the broken pin. Left to run, that is self-perpetuating.
+
+CLAUDE.md already rules on both halves — *"a red is a reason to pin SOONER, not
+later"*, and *"read a shadow verdict as a GRADE, never as permission"* — and
+this is the sharpest measured instance of it so far: three reds that exist only
+because the pin is old, presented in a field named `would_pin`.
+
+**Recorded, not acted on.** Pinning is the owner's alone, it is irreversible,
+and it is explicitly out of this session's brief. A ticket wanting a pin is
+never a reason to take one, and a peer's relay is not authority — T says the
+same about its own owner. This section exists so that whoever does decide is
+looking at a measurement rather than a red count.
