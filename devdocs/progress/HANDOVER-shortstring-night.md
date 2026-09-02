@@ -28,12 +28,30 @@ phase 2.** The gap is now larger than when six were in:
 elsewhere.** Every backend emits a one-byte prefix. What is left is the walker
 store-side defect and the phase-4 flip, which is the owner's to release.
 
-**The one thing worth doing before the flip: re-run the survivor repro on
-i386, arm32, aarch64 and riscv32.** The fix landed in `ir.inc`/`symtab.inc`,
-which every backend shares, so it very likely carries — but "very likely
-carries" is exactly the claim this file has been wrong about twice tonight, and
-the whole native-only blind spot in CLAUDE.md is that the dev loop, the quick
-gate and the pin all run on x86-64.
+**DONE — five targets measured, all green.** x86-64 and i386 natively, arm32 /
+aarch64 / riscv32 under qemu (all four qemu binaries are installed on plexus;
+this cost about a minute and did not need anyone's permission):
+
+| target | how run | six-row repro | negative control |
+| --- | --- | --- | --- |
+| x86-64 | native | exit 0, all correct | `r.f='nope'` FALSE |
+| i386 | native | exit 0, all correct | FALSE |
+| arm32 | qemu-arm | exit 0, all correct | FALSE |
+| aarch64 | qemu-aarch64 | exit 0, all correct | FALSE |
+| riscv32 | qemu-riscv32 | exit 0, all correct | FALSE |
+
+**i386 is the row that matters** — it is the one this file recorded as
+segfaulting, and the native-only blind spot in CLAUDE.md is exactly that a
+32-bit width bug cannot fail an x86-64 loop.
+
+**Each row carries its own positive control and an identity check.** "All TRUE
+on every target" is also what a harness prints when it is not running anything,
+so every cross row ran the eleven-row program whose `r.f = 'nope'` must come
+back FALSE, and `file` was read for the actual machine (`ARM`, `UCB RISC-V`,
+`Intel i386`) rather than trusting the `--target` flag I passed in.
+
+**NOT measured: wasm32 and xtensa.** No runtime invoked for either, so they are
+blank, not green — the phase-4 flip should not read this table as seven.
 
 ### The green light that is not one
 
