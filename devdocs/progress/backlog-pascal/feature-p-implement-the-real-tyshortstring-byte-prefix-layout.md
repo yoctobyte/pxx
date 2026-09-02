@@ -28,7 +28,18 @@ string[256]     264      REJECTED: "string length must be a value from 1 to 255"
 string[1000]   1008      REJECTED
 ```
 
-`cap+8` against `cap+1`, uniformly. **`ShortString` is a strict SUBSET of
+`cap+8` against `cap+1`, uniformly.
+
+**The 255 ceiling re-measured properly after the owner questioned it** — the
+first version of this claim was one mode and stated generally. `string[1000]`
+is rejected in **all eight FPC modes** (default, objfpc, delphi, fpc, tp,
+macpas, iso, extendedpascal) with *"string length must be a value from 1 to
+255"*; the boundary is exact (`string[255]` → 256, `string[256]` → rejected);
+and no switch lifts it (`-Sh` swaps to ansistring rather than extending the
+shortstring). **The limit is the REPRESENTATION, not a policy**: a 1-byte
+length prefix cannot count past 255, so FPC could not raise it without ceasing
+to be a shortstring. NOT checked: an obscure source directive — but any such
+directive would have to widen the prefix, which is the same change. **`ShortString` is a strict SUBSET of
 frozenstring**, and the reason is the header itself: a 1-byte length prefix
 *cannot* express a cap above 255. The wide kind must therefore stay for N>255 —
 this is not a replacement, it is the second of two.
