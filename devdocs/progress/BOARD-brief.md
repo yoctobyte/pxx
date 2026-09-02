@@ -36,7 +36,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-user-defined-decorators` [N]
 - `feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython` [O]
 - `feature-opt-static-literal-blocks-should-never-be-written-to` [A+O]
-- `feature-pal-esp-posix-fd-semantics` [S] — blocked-by: bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier
+- `feature-pal-esp-posix-fd-semantics` [B+S]
 - `feature-pascal-corpus-expansion` [P]
 - `feature-pascal-corpus-fpc-testsuite` [P]
 - `feature-pascal-corpus-generics` [P]

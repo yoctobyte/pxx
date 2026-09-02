@@ -20037,6 +20037,39 @@ test-emit-obj: $(COMPILER)
 	  readelf -sW $(TESTTMP)/espx_p_$$t.o | grep -qE "OBJECT +GLOBAL +DEFAULT +[0-9]+ EspCount$$" || { echo "test-emit-obj: the two-text-section $$t writer does not export the cvar global"; exit 1; }; \
 	  readelf -rW $(TESTTMP)/espx_p_$$t.o | grep -qE ' free( |$$)' || { echo "test-emit-obj: no relocation in the $$t iram object names free -- the external symbol base did not move past the exported symbols, so the calls name the wrong callee"; exit 1; }; \
 	 done; echo "test-emit-obj: the two-text-section ESP writer exports a cvar global and still resolves its externals"
+	# BASELINE for feature-pal-esp-posix-fd-semantics, to be diffed against
+	# after the rewrite to exact POSIX fd semantics.
+	#
+	# It is built for the ESP TARGETS and not run on the host on purpose. That
+	# ticket says the thing to do first without hardware is a host-side
+	# `--platform=esp` test pinning today's behaviour; measured 2026-09-02, that
+	# pins the WRONG POPULATION. The whole stdio/IDF implementation in
+	# lib/rtl/platform/esp/platform_backend.pas is under
+	# {$ifdef PXX_PAL_ESP_IDF_TARGET}, defined only for CPU_XTENSA / CPU_RISCV32
+	# (lines 160-161), so on an x86-64 host that arm is compiled OUT and every
+	# PAL file call returns PAL_ERR_UNSUPPORTED from the stub -- open of a
+	# writable path included, which the real arm would have succeeded at. A host
+	# row asserting -38 passes before AND after the rewrite.
+	#
+	# The load-bearing assertion is the SYMBOL IMPORT: the object must reference
+	# the newlib stdio surface the current implementation is written on. That
+	# pins "still the stdio-backed path", and it is exactly what MUST change
+	# when the rewrite moves to direct open/read/write -- so this row is meant
+	# to go red then and be updated deliberately, not to keep passing silently.
+	#
+	# NEGATIVE CONTROL, run rather than assumed: the same source built for the
+	# HOST with --platform=esp references 0 of those 7 symbols, while both ESP
+	# targets reference all 7. So the row discriminates which arm compiled
+	# instead of merely observing that something built.
+	@for t in riscv32 xtensa; do \
+	  ./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/esp --emit-obj --target=$$t --platform=esp test/esp_pal_fdsem_baseline.pas $(TESTTMP)/esppal_$$t.o >/dev/null || { echo "esp-pal-baseline: the PAL fixture FAILED to build for $$t"; exit 1; }; \
+	  n=$$(readelf -sW $(TESTTMP)/esppal_$$t.o | awk '$$7=="UND"{print $$8}' | grep -xE "fopen|fread|fwrite|fseek|ftell|fflush|fclose" | sort -u | wc -l); \
+	  [ "$$n" = 7 ] || { echo "esp-pal-baseline: $$t object references $$n/7 newlib stdio symbols -- either the IDF arm did not compile (so this row is pinning the host stub) or the backend no longer uses stdio, which is the rewrite and needs this row updated"; exit 1; }; \
+	 done
+	@./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/esp --platform=esp test/esp_pal_fdsem_baseline.pas $(TESTTMP)/esppal_host >/dev/null 2>&1 || { echo "esp-pal-baseline: the host --platform=esp build failed"; exit 1; }
+	@n=$$(nm -u $(TESTTMP)/esppal_host 2>/dev/null | grep -cE "fopen|fread|fwrite|fseek|ftell|fflush|fclose" || true); \
+	 [ "$$n" = 0 ] || { echo "esp-pal-baseline: the HOST --platform=esp build references $$n newlib stdio symbols, so the IDF arm is no longer host-excluded and a host-side test would now pin real behaviour -- re-read the ticket note"; exit 1; }; \
+	 echo "esp-pal-baseline: the IDF stdio arm compiles for riscv32 + xtensa (7/7 newlib syms) and is absent on the host (0) -- feature-pal-esp-posix-fd-semantics"
 	#    THE NEGATIVE CONTROL, and it is the one that says the surface did not
 	#    widen on its own. An UNMARKED ESP program must still export app_main and
 	#    nothing else defined -- every other global in the object is an UND

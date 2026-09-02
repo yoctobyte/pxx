@@ -1,6 +1,10 @@
 ---
 prio: 20
-blocked-by: bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier
+track: B
+type: feature
+status: unfinished
+blocked-by: []
+summary: "Exact POSIX fd semantics for the ESP PAL over IDF VFS, replacing the newlib-stdio backend. UNBLOCKED 2026-09-02: bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier is in done/. Acceptance still needs a C3/S3 link-and-run, which this box cannot do. The baseline the ticket asked for IS NOW LANDED, but NOT in the shape the ticket suggested: a host-side --platform=esp test would pin the STUB, because the whole stdio/IDF arm is under {$ifdef PXX_PAL_ESP_IDF_TARGET}, set only for CPU_XTENSA/CPU_RISCV32 -- so on the host every PAL file call returns PAL_ERR_UNSUPPORTED and such a row would pass identically before and after the rewrite. The landed baseline builds the fixture for both ESP targets and asserts the newlib stdio symbol imports, with the host build (0 of 7) as its negative control."
 ---
 
 # ESP PAL: exact POSIX fd semantics over ESP-IDF VFS
@@ -267,3 +271,59 @@ diffed against.
 ### Not done
 
 The rewrite itself. It resumes when the Track A bug lands.
+
+
+---
+
+## 2026-09-02 (frankH) — unblocked; baseline landed, but NOT the one this ticket asked for
+
+`bug-a-emit-obj-ignores-external-name-and-emits-the-pascal-identifier` is in
+`done/`, so the frontmatter edge is cleared. Acceptance is unchanged: it needs a
+C3/S3 link-and-run and there is no device here.
+
+### The "doable without hardware" note was pointing at the wrong population
+
+The 2026-07-20 sweep note says to write host-side `--platform=esp` tests pinning
+today's behaviour — `PAL_OPEN_EXCL` returning `PAL_ERR_UNSUPPORTED`, and the
+errno collapse — so the rewrite has something to diff against. **Measured, and
+that would have pinned the stub.** The entire stdio/IDF implementation in
+`lib/rtl/platform/esp/platform_backend.pas` sits under
+`{$ifdef PXX_PAL_ESP_IDF_TARGET}`, which lines 160–161 define **only** for
+`CPU_XTENSA` and `CPU_RISCV32`. On x86-64 with `--platform=esp` that arm is
+compiled out entirely:
+
+| call | host `--platform=esp` | host POSIX |
+| --- | --- | --- |
+| open a missing path | `-38` | `-2` (ENOENT) |
+| open with `EXCL` | `-38` | `3` |
+| write to fd 1, len 0 | `-38` | `0` |
+| read from a bad fd | `-38` | `-9` (EBADF) |
+
+Everything is `-38`, including the plain open the real arm would have
+**succeeded** at. So a host row asserting `-38` passes before and after the
+rewrite and says nothing about either — and the errno collapse the note names
+cannot be observed on the host at all, because the code that collapses it is
+not in the binary.
+
+### What landed instead
+
+`test/esp_pal_fdsem_baseline.pas`, built for **riscv32 and xtensa** with
+`--emit-obj`, where the real arm is what compiles. The load-bearing assertion is
+the **symbol import**: the object must reference all seven newlib stdio entries
+(`fopen fread fwrite fseek ftell fflush fclose`) the current implementation is
+written on. That pins "still the stdio-backed path", and it is precisely what
+must change when the rewrite moves to direct `open`/`read`/`write` — so the row
+is **meant to go red then** and be updated deliberately, rather than keep
+passing while the thing it names is gone.
+
+**Negative control, run rather than assumed:** the same source built for the
+host with `--platform=esp` references **0** of those 7, while both ESP targets
+reference **7**. So the row discriminates which arm compiled instead of merely
+observing that something built. Wired into `test-emit-obj` beside the other ESP
+object rows.
+
+### Still needs hardware
+
+Everything in Acceptance. This only ensures the code the rewrite will edit is
+proven to compile, and that its current shape is recorded in a way that will
+notice when it changes.
