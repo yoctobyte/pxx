@@ -3613,6 +3613,53 @@ compiles **with no import at all** and the from-import binds nothing.
 The companion habit, from the same fix: **when you disprove a comment, correct
 it in place, and grep for its copies.** That one had two.
 
+### The harder half: prose that was TRUE WHEN WRITTEN
+
+The case above is a comment that was always wrong. The commoner and quieter case
+is a claim that was **correct on the day it was written** and went false because
+the world moved, with nothing anywhere that re-derives it. It cannot rot loudly:
+there is no wrong binding to discover, and every word of it was once accurate.
+
+**Five instances on 2026-09-02, three different agents, five different
+directions. None errored. All were plausible.**
+
+- `tools/busybox_diff.sh`'s own usage text: *"`--separate` currently needs
+  `-Wl,-z,muldefs`"*. True when written; false from `9e7c4cf8c`, which removed
+  the flag in the same commit that made `static` emit LOCAL. The script had not
+  passed it for a day (fixed `be4742893`).
+- A ticket's pasted run transcript, hand-shortened to `applets=... (79)`. The
+  TOOL printed the full applet list; the elision was the transcriber's. That one
+  configuration is now the only recorded run nobody can reproduce, and two agents
+  reasoned about the tool's behaviour from it before either opened the tool.
+- A binary sha sitting in ticket prose (`816f18f7784d`), read by a later session
+  as a live endpoint belonging to whoever was in the conversation.
+- A comment describing a guard that a later, correct migration deleted. Deleting
+  the line did not flag the paragraph above it (fixed `1b878b381`).
+- **The purest one** (frankb-a9): a ratchet guard armed with a constant that
+  nothing re-derives. It was RED AT ITS OWN ARMING COMMIT — three rows stale in
+  numerator and denominator — so every full tier since has carried an identical
+  FAIL, and a later +17 rows arrived at a guard with nothing left to detect. The
+  same file fixes exactly this defect ONE ROW ABOVE, where a label quoting
+  *"still ~536"* against a measured 561 was repaired by printing the live count
+  beside the quoted one.
+
+**The fix is not "be careful". It is to make the number re-derive itself:**
+
+1. **Print the live value beside the quoted one.** A constant that announces its
+   own drift cannot be three rows stale and still look like a real breach. This
+   is the one structural defence, and one of these files already implements it.
+2. **Put the INSTRUCTION in the prose, not just the fact** — "do not re-add a
+   local kind check here, the table is the one home" gives the next migration
+   something to notice. A comment stating only a fact gives it nothing.
+3. **When you delete a line, read the paragraph above it.** No tool will.
+4. **Cite the DOCUMENT, not the person**, for any number lifted from a write-up,
+   until somebody re-runs it. Two of the five above were misattribution rather
+   than staleness, and both went to the nearest live party.
+
+The unifying tell, and it is the same one as everywhere else in this file: the
+artefact is **accurate about something adjacent** — what was true at write time —
+and silent about the layer that moved.
+
 ## `-dPXX_ALLOC_CENSUS`'s LAST LINE is a snapshot at a threshold, so anything freed at the END reads as a leak
 
 Measured 2026-09-02 while sweeping managed seams. `TStringList` looked like it
