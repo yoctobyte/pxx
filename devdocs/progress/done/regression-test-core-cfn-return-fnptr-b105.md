@@ -110,3 +110,6 @@ desyncs, and the body is read as further parameters — which fits `near: z >>> 
 this boundary and the repro; deliberately not taken in parallel, because two
 agents on one question is the collision git cannot see. Reassign to whoever
 picks it up if that changes.
+
+## Log
+- 2026-09-02 — auto-closed by the seven watcher: `test-core#src:test/cfn_return_fnptr_b105.c` passes at 588d8512f101 (tier native); it was red at 65b719ab48ae. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
