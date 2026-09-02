@@ -977,7 +977,7 @@ _none_
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 75] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 2)
 - [p 75] [P] bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size (unblocks 1)
-- [p 75] [A] bug-a-frozen-compare-feeds-inttotypekind-where-irstrtkof-is-required
+- [p 75] [A] bug-a-frozen-compare-feeds-inttotypekind-where-irstrtkof-is-required [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [A] umbrella-managed-memory-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]

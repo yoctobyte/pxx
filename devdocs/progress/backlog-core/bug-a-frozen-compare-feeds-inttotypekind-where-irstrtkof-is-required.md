@@ -13,6 +13,42 @@ summary: "Under -dPXX_SHORTSTRING, comparing two frozen strings is FALSE on x86-
 
 # Frozen compare: `IntToTypeKind` where `IRStrTkOf` is required (arm32), and no kind at all (x86-64)
 
+## HELD — do not claim this yet. The fix destroys a test we are about to get free.
+
+NOT DISPATCHABLE until the IRFrozenKindOfAddr walker fix lands (frankb-a9, sole
+and named owner). This is a deliberate unowned state, decided 2026-09-02, not a
+gap in the paperwork — and it looks exactly like a gap, which is why it is
+written here rather than held in the coordinator's head. It was the ranked head
+of `ready --track A` when this was added.
+
+**The reason.** The walker model predicts that after the walker fix, comparison
+stays red on exactly x86-64 and arm32 and goes green nowhere else. That
+prediction is the only falsifiable check anyone has on whether the walker model
+is right. Repair arm32's compare first and the prediction is unfalsifiable: a
+green afterwards proves nothing and a red proves nothing, because both sides
+moved. Walker lands, prediction confirms or fails, THEN this gets an owner.
+
+**It is tempting precisely because it is cheap and well specified** — arm32 is
+four identifiers, `IntToTypeKind(IRTk[left])` to `IRStrTkOf(left)`, with
+`IRStrTkOf`'s own docstring prescribing that exact substitution. Small,
+verifiable, and worth nothing tonight against losing the prediction. A session
+that finishes early and goes looking will find this and see no reason not to
+take it; the reason is the paragraph above.
+
+**Open discrepancy in the population, unresolved — do not treat either row as
+settled.** This ticket's summary places riscv32, xtensa and wasm32 outside the
+population (riscv32 refusing the flag by design). Two other sessions reported
+the opposite from their own runs after their conversions landed: frankh-15 that
+riscv32 comparison is correct (`856810406`), franks-ab that xtensa comparison is
+correct (`fe8662e24`). Both may be true of different trees — the conversions
+landed after this diagnosis — which would make it the snapshot rule rather than
+a contradiction. It matters because the prediction above is stated over a
+partition, and a partition whose membership is uncertain cannot falsify
+anything. Whoever runs the prediction must re-derive the population from the
+tree at that moment rather than citing this paragraph, this summary, or either
+of those commits.
+
+
 ## Repro — no pointer, no parameter, no literal
 
 ```pascal
