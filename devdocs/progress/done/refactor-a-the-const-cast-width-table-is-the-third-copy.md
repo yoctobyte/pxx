@@ -132,4 +132,4 @@ Two positive controls, because the change has two halves:
 `gate.sh quick` GREEN, FPC seed canary PASS.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 0ba16eb2a.
