@@ -12823,6 +12823,53 @@ test-core: $(COMPILER)
 	else \
 	  echo "test_source_one_to_one_oo: -OO emitted the dead arm (undefined symbol), -O0 pruned it"; \
 	fi
+	# STATEMENTS BEHIND AN UNCONDITIONAL TRANSFER are not emitted, at every level.
+	# The third shape of the same consensus core and a DIFFERENT mechanism from
+	# the two above: sequence reachability in the AN_SEQ spine, not a constant
+	# condition. -O0 was the level that failed -- IROptDeadCode already caught
+	# this from -O1 up, so the -O1/-O2/-O3 rows assert the new lowering AGREES
+	# with the fixed point the old pass reached rather than competing with it.
+	# feature-a-prune-statements-after-a-return-at-O0
+	#
+	# The `fwd:` label sits behind an Exit and a goto reaches it, which is the
+	# whole risk of this pass and its positive control. MEASURED with the label
+	# guard patched out of ir.inc: the compiler REJECTS the file with `invalid IR
+	# jump target (label not defined)`, so a dropped guard fails loudly at build
+	# time rather than miscompiling.
+	./$(COMPILER) -O0 test/test_unreachable_after_terminator.pas $(TESTTMP)/aterm_o0
+	tools/expect_same.sh aterm_o0 "$$($(TESTTMP)/aterm_o0)" "AFTERTERM OK"
+	./$(COMPILER) -O1 test/test_unreachable_after_terminator.pas $(TESTTMP)/aterm_o1
+	tools/expect_same.sh aterm_o1 "$$($(TESTTMP)/aterm_o1)" "AFTERTERM OK"
+	./$(COMPILER) -O2 test/test_unreachable_after_terminator.pas $(TESTTMP)/aterm_o2
+	tools/expect_same.sh aterm_o2 "$$($(TESTTMP)/aterm_o2)" "AFTERTERM OK"
+	./$(COMPILER) -O3 test/test_unreachable_after_terminator.pas $(TESTTMP)/aterm_o3
+	tools/expect_same.sh aterm_o3 "$$($(TESTTMP)/aterm_o3)" "AFTERTERM OK"
+	# -OO must still emit the unreachable call, same asserted FAILURE as above.
+	./$(COMPILER) -OO test/test_unreachable_after_terminator.pas $(TESTTMP)/aterm_oo
+	@if $(TESTTMP)/aterm_oo >/dev/null 2>&1; then \
+	  echo "test_unreachable_after_terminator: -OO RAN. It must emit the code behind the Exit and die on never_term_P -- the flag did nothing."; exit 1; \
+	else \
+	  echo "test_unreachable_after_terminator: -OO emitted the unreachable tail (undefined symbol), -O0 pruned it"; \
+	fi
+	# The C half, and it is NOT a formality: a C function body is an AN_BLOCK,
+	# whose lowering walks the AN_SEQ chain itself instead of handing the seq
+	# node to IRLowerAST, so the prune's first version -- which lived only in the
+	# AN_SEQ spine -- pruned nothing at all for C. The switch rows are the ones
+	# that matter: `case`/`default` are jump targets carrying no AN_LABEL node,
+	# and a `case` arm ending in `return` made the prune delete the arms behind
+	# it, rejecting the compiler's own crtl. gcc is the ORACLE at -O0, where it
+	# drops the same statements with no optimiser asked for.
+	./$(COMPILER) -O0 test/c_unreachable_after_terminator.c $(TESTTMP)/c_aterm_o0
+	./$(COMPILER) -O2 test/c_unreachable_after_terminator.c $(TESTTMP)/c_aterm_o2
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -O0 -w test/c_unreachable_after_terminator.c -o $(TESTTMP)/c_aterm_gcc || { echo "c_unreachable_after_terminator: gcc could not build the oracle"; exit 1; }; \
+	  tools/expect_same.sh c_aterm_o0 "$$($(TESTTMP)/c_aterm_o0)" "$$($(TESTTMP)/c_aterm_gcc)" || exit 1; \
+	  tools/expect_same.sh c_aterm_o2 "$$($(TESTTMP)/c_aterm_o2)" "$$($(TESTTMP)/c_aterm_gcc)" || exit 1; \
+	  echo "c_unreachable_after_terminator: matches the gcc oracle at -O0 and -O2"; \
+	else \
+	  tools/expect_same.sh c_aterm_o0 "$$($(TESTTMP)/c_aterm_o0)" "$$(printf 'g=5\nlbl=7\npick=10 20 99\npick2=10 20 99')"; \
+	  tools/expect_same.sh c_aterm_o2 "$$($(TESTTMP)/c_aterm_o2)" "$$(printf 'g=5\nlbl=7\npick=10 20 99\npick2=10 20 99')"; \
+	fi
 	# A CONSTANT LEFT OPERAND OF `and`/`or`, AND `not` OVER A BOOLEAN LITERAL,
 	# fold in the PARSER, because Pascal short-circuits and that is the language's
 	# rule rather than an optimisation. The C sibling landed in 88ef1232f; the

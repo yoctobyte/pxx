@@ -181,6 +181,15 @@ end;
   point kind has to be added HERE, and the header of AN_SWITCH in defs.inc says
   where the dispatch that needs them lives.
 
+  SECOND SIGHTING, same omission, different pass and found independently the
+  same day: the unreachable-tail prune (ASTSeqTailUnreachable, below) reaches
+  this guard through the AN_BLOCK walk, and a C `case` arm ending in `return`
+  made it drop every arm behind that one. The compiler then rejected its OWN
+  crtl -- `invalid IR conditional jump target`, lib/crtl/src/stdio.c near
+  vsnprintf -- and a five-line `switch (x) { case 1: return 10; ... }` besides.
+  Two passes, two routes, one missing enumeration: it is the strongest evidence
+  for the paragraph above that a guard listing SPELLINGS keeps coming up short.
+
   THE BUDGET IS PART OF THE GUARD, not a performance tweak. A statement list
   chains through ASTRight, so a thousand-statement arm is a thousand-deep walk;
   exhausting the budget answers TRUE -- keep the arm -- because a guard that
@@ -202,6 +211,73 @@ begin
   begin ASTSubtreeHasLabel := True; Exit; end;
   if ASTSubtreeHasLabel(ASTRight[node], budget) then
     ASTSubtreeHasLabel := True;
+end;
+
+{ Does this statement unconditionally transfer control AWAY, so that whatever
+  follows it in the same sequence cannot be reached by falling through?
+
+  gcc, clang and tcc all drop the statements after one, at -O0 and with no
+  optimiser asked for, which is what makes this LOWERING rather than an
+  optimisation -- the same argument the constant-condition arm prune rests on
+  (decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0).
+
+  BREAK and CONTINUE are in the list on purpose: they leave the enclosing LOOP,
+  so the rest of THIS sequence is as unreachable as it is after an Exit. What is
+  deliberately NOT here is a call to a routine that never returns -- that is a
+  property of the callee, not of this node, and guessing it wrong deletes live
+  code. AN_IF is not here either, even when both its arms terminate: that is a
+  real shape, and it needs its own reasoning rather than being smuggled in. }
+function ASTIsTerminatorStmt(node: Integer): Boolean;
+begin
+  ASTIsTerminatorStmt := False;
+  if node < 0 then Exit;
+  if SourceOneToOne then Exit;
+  ASTIsTerminatorStmt :=
+    (ASTKind[node] = AN_HALT) or (ASTKind[node] = AN_EXIT) or
+    (ASTKind[node] = AN_BREAK) or (ASTKind[node] = AN_CONTINUE) or
+    (ASTKind[node] = AN_RAISE) or (ASTKind[node] = AN_GOTO) or
+    (ASTKind[node] = AN_GOTO_INDIRECT);
+end;
+
+{ Given a node in an AN_SEQ chain, is everything BEHIND it unreachable?
+
+  ONE function because there are TWO chain walks in ir.inc -- the AN_SEQ spine
+  and the AN_BLOCK loop, which walks the same cons chain itself instead of
+  handing the seq node to IRLowerAST. The first version of this prune lived
+  only in the spine, and that is exactly the second path normalise-dont-special-case
+  describes: MEASURED, a C function body is an AN_BLOCK, so `return; g=2;` kept
+  emitting the store at -O0 (400 unreachable stores: -O0 and -OO both 425752B,
+  while the Pascal shape was 89880B against -OO's 93976B) while the Pascal half
+  of the very same change was already pruning. Duplicating the walks is
+  tolerable -- they build different things -- but the DECISION must have one
+  home, or the next walk added inherits the bug rather than the fix.
+
+  The label guard is the whole risk and it lives here for the same reason: a
+  `goto` may land anywhere behind the terminator, so ONE label in the remainder
+  keeps ALL of it. Conservative on purpose -- splitting the chain at the label
+  is a bigger claim than this pass makes. Budget exhaustion answers KEEP, since
+  a guard that runs out of room must fail toward emitting code. }
+function ASTSeqTailUnreachable(seqNode: Integer): Boolean;
+var budget: Integer;
+begin
+  ASTSeqTailUnreachable := False;
+  if seqNode < 0 then Exit;
+  { AN_SEQ ONLY, never AN_PAIR, even though the spine walk in ir.inc accepts
+    both kinds. AN_PAIR is a generic two-slot node and one of its uses is
+    AN_IF's (then-arm, else-arm) -- on which "everything after Left is
+    unreachable" would delete the ELSE ARM.
+
+    No such pair reaches here today and that was measured, not assumed: `if c
+    then Exit else n := 42` and a function whose two arms both Exit are correct
+    at -O0 and -O2 and match FPC, because AN_IF lowers its own pair and never
+    hands it to the spine. This line is a guard against that walk changing, and
+    it is cheap in exactly the direction that matters -- being wrong without it
+    silently deletes a branch, being conservative with it costs a few unpruned
+    bytes in a shape that does not occur. }
+  if ASTKind[seqNode] <> AN_SEQ then Exit;
+  if not ASTIsTerminatorStmt(ASTLeft[seqNode]) then Exit;
+  budget := 20000;
+  ASTSeqTailUnreachable := not ASTSubtreeHasLabel(ASTRight[seqNode], budget);
 end;
 
 { Is this `if` condition a COMPILE-TIME constant, and which way does it go?

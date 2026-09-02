@@ -14422,7 +14422,12 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         begin
           item := IRDropManagedResult(ASTLeft[seq], IRLowerAST(ASTLeft[seq]));
           IRDiscardValue(ASTLeft[seq], item);
-          seq := ASTRight[seq];
+          { The terminator itself is lowered above; only what FOLLOWS it goes.
+            Same decision as the AN_SEQ spine and deliberately the same call --
+            a C function body is an AN_BLOCK, so this walk is the one the C
+            frontend takes and a prune that lived only in the spine missed it. }
+          if ASTSeqTailUnreachable(seq) then seq := -1
+          else seq := ASTRight[seq];
         end
         else
         begin
@@ -14797,6 +14802,17 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         end;
         IRSeqSpine[IRSeqSpineTop] := left;
         IRSeqSpineTop := IRSeqSpineTop + 1;
+        { UNREACHABLE TAIL: stop here and let the tail lower as -1, which is
+          how an empty tail is already spelled. The terminator itself is on the
+          spine already and still lowers. Why this is safe, what the label guard
+          is for, and why AN_PAIR is excluded even though this loop accepts it,
+          all live on ASTSeqTailUnreachable in ast_arena.inc -- one home for the
+          decision, two walks that ask it. }
+        if ASTSeqTailUnreachable(seqCur) then
+        begin
+          seqCur := -1;
+          Break;
+        end;
         seqCur := ASTRight[seqCur];
       end;
       { seqCur is the TAIL — the first node that is not itself a sequence. }
