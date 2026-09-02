@@ -3191,6 +3191,14 @@ begin
           begin
             elemTk := RecFieldPtrElemTk(recId, fieldName);
             sz := TypeStorageSize(elemTk, RecFieldPtrElemRec(recId, fieldName));
+            { ...and if the pointee is an ARRAY, the whole array. The same
+              multiply the VARIABLE spelling does below, on the field twin of
+              the same column -- one flattened product covers `int (*)[2][3]`
+              too. Without it this arm could only ever answer the element size,
+              which is a different wrong answer from the one the missing
+              element type gave, so both had to be fixed to move the row. }
+            if RecFieldPtrElemArrLen(recId, fieldName) > 0 then
+              sz := sz * RecFieldPtrElemArrLen(recId, fieldName);
           end;
         end
         else if (si >= 0) and (Syms[si].TypeKind = tyPointer) then
@@ -13955,6 +13963,7 @@ var
   bfBitWidth, bfBitShift, bfBitBytes: array of Integer;
   bfAnonRec: array of Integer;   { REC_UCLASS_BASE+subci for a field flattened from an anon member, else REC_NONE }
   bfNDims: array of Integer;
+  bfPtrElemArrLen: array of Integer;   { flattened extent of an ARRAY pointee, `int (*fp)[4]` -> 4; 0 otherwise }
   bfDimSpan: array of Integer;
   fldNDims, dimVal, ndi, bitWidth, bitUnitOff, bitUnitUsed, bitUnitSize, bitUnitAlign, bitBytes: Integer;
   bitUnitBytes: Integer;   { bytes a bitfield storage unit occupies (8 for long-long) }
@@ -14009,6 +14018,7 @@ begin
   SetLength(bfArrLen, bfCap);    SetLength(bfIsArr, bfCap);     SetLength(bfBitWidth, bfCap);
   SetLength(bfBitShift, bfCap);  SetLength(bfBitBytes, bfCap);  SetLength(bfAnonRec, bfCap);
   SetLength(bfNDims, bfCap);     SetLength(bfDimSpan, bfCap * MAX_ARR_DIMS);
+  SetLength(bfPtrElemArrLen, bfCap);
   for k := 0 to bfCap - 1 do bfAnonRec[k] := REC_NONE;
   bitUnitOff := -1; bitUnitUsed := 0; bitUnitSize := 0; bitUnitAlign := 1;
   bitPos := 0;
@@ -14186,7 +14196,27 @@ begin
           bfNOff[bfCount] := CTypeFnPtrNameOff; bfNLen[bfCount] := CTypeFnPtrNameLen;
           bfOff[bfCount] := thisOff;
           bfTk[bfCount] := Ord(tyPointer); bfRec[bfCount] := REC_NONE;
-          bfElemTk[bfCount] := Ord(tyUnknown); bfElemRec[bfCount] := REC_NONE;
+          { A pointer-to-ARRAY member -- `int (*fp)[4];` -- reaches this arm too,
+            because ParseCDeclType parks its name in CTypeFnPtrName exactly as it
+            does for a function pointer. The arm was written for function
+            pointers, whose pointee genuinely has no type, so it hardcoded
+            tyUnknown; that made `sizeof(*s.fp)` answer the tyUnknown DEFAULT.
+            The int spelling hid it -- the default happens to equal sizeof(int),
+            so the row read like "the element size" -- and `double (*dp)[4]`
+            is what tells the two apart: it answered 4, not 8 and not 32.
+            Record the real pointee and its extent instead. Same arm, same
+            omission, one scope down from ParseCGlobalVarDecl's.
+            bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size }
+          if CTypePtrElemArrLen > 0 then
+          begin
+            bfElemTk[bfCount] := CTypeElemTk; bfElemRec[bfCount] := CTypeElemRec;
+            bfPtrElemArrLen[bfCount] := CTypePtrElemArrLen;
+          end
+          else
+          begin
+            bfElemTk[bfCount] := Ord(tyUnknown); bfElemRec[bfCount] := REC_NONE;
+            bfPtrElemArrLen[bfCount] := 0;
+          end;
           bfIsArr[bfCount] := False; bfArrLen[bfCount] := 1; bfNDims[bfCount] := 0;
           bfBitWidth[bfCount] := 0; bfBitShift[bfCount] := 0; bfBitBytes[bfCount] := 0;
           bfProcSig[bfCount] := fldProcSig; bfElemProcSig[bfCount] := -1;
@@ -14500,6 +14530,7 @@ begin
           bfNOff[bfCount] := fnOff; bfNLen[bfCount] := fnLen; bfOff[bfCount] := thisOff;
           bfTk[bfCount] := declTk; bfRec[bfCount] := declRec;
           bfElemTk[bfCount] := declElemTk; bfElemRec[bfCount] := declElemRec;
+          bfPtrElemArrLen[bfCount] := 0;   { plain declarator: never a pointer-to-array }
           bfIsArr[bfCount] := isArr; bfArrLen[bfCount] := arrLen;
           bfNDims[bfCount] := fldNDims;
           if isBitField then
@@ -14601,6 +14632,7 @@ begin
     LastTypePointerAlias := -1;   { C struct fields carry their pointee directly; never re-read from the Pascal alias table }
     AddUField(ci, bfNOff[k], bfNLen[k], bfOff[k], bfTk[k], bfRec[k]);
     UFldAnonRec[UFldCount-1] := bfAnonRec[k];
+    UFldPtrElemArrLen[UFldCount-1] := bfPtrElemArrLen[k];
     UFldIsArray[UFldCount-1] := bfIsArr[k];
     UFldArrLen[UFldCount-1] := bfArrLen[k];
     UFldBitWidth[UFldCount-1] := bfBitWidth[k];

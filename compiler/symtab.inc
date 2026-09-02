@@ -1661,6 +1661,7 @@ begin
   SetLength(UFldNOff, n);       SetLength(UFldNLen, n);         SetLength(UFldOff_, n);
   SetLength(UFldTk, n);         SetLength(UFldRec_, n);         SetLength(UFldAnonRec, n);
   SetLength(UFldPtrElemTk, n);  SetLength(UFldPtrElemRec, n);   SetLength(UFldPtrAlias, n);
+  SetLength(UFldPtrElemArrLen, n);
   SetLength(UFldPtrElemStrTk, n);
   SetLength(UFldPtrDepth, n);   SetLength(UFldPtrBaseTk, n);    SetLength(UFldPtrBaseRec, n);
   SetLength(UFldProcSig, n);    SetLength(UFldElemProcSig, n);  SetLength(UFldIsArray, n);
@@ -1718,6 +1719,7 @@ begin
         asked. feature-unicodestring-model }
       UFldPtrElemStrTk[dst+k] := UFldPtrElemStrTk[src];
       UFldPtrElemRec[dst+k] := UFldPtrElemRec[src];
+      UFldPtrElemArrLen[dst+k] := UFldPtrElemArrLen[src];
       UFldPtrDepth[dst+k] := UFldPtrDepth[src];
       UFldPtrBaseTk[dst+k] := UFldPtrBaseTk[src];
       UFldPtrBaseRec[dst+k] := UFldPtrBaseRec[src];
@@ -1762,6 +1764,7 @@ begin
     UFldPtrElemTk[fi] := Ord(LastTypePointerElemTk);
     UFldPtrElemStrTk[fi] := LastTypePointerStrElemTk;
     UFldPtrElemRec[fi] := LastTypePointerElemRec;
+    UFldPtrElemArrLen[fi] := 0;   { array pointee extent: no Pascal carrier; the C struct builder stamps it post-AddUField }
     UFldPtrAlias[fi] := LastTypePointerAlias;
     UFldPtrDepth[fi] := LastTypePointerDepth;
     UFldPtrBaseTk[fi] := LastTypePointerBaseTk;
@@ -1772,6 +1775,7 @@ begin
     UFldPtrElemTk[fi] := Ord(tyUnknown);
     UFldPtrElemStrTk[fi] := 0;
     UFldPtrElemRec[fi] := REC_NONE;
+    UFldPtrElemArrLen[fi] := 0;
     UFldPtrAlias[fi] := -1;
     UFldPtrDepth[fi] := 0;
     UFldPtrBaseTk[fi] := Ord(tyUnknown);
@@ -2694,6 +2698,19 @@ begin
   begin
     fi := FindUField(rec - REC_UCLASS_BASE, field2);
     if fi >= 0 then Result := IntToTypeKind(UFldPtrElemTk[fi]);
+  end;
+end;
+
+function RecFieldPtrElemArrLen(rec: Integer; const field: AnsiString): Integer;
+{ Flattened extent of an ARRAY pointee of a pointer-typed field; 0 if the
+  pointee is not an array. The field twin of reading SymPtrElemArrLen[si]. }
+var fi: Integer; field2: AnsiString;
+begin
+  Result := 0; field2 := field;
+  if rec >= REC_UCLASS_BASE then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if fi >= 0 then Result := UFldPtrElemArrLen[fi];
   end;
 end;
 

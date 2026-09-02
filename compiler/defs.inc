@@ -5463,6 +5463,18 @@ var
     feature-unicodestring-model }
   UFldPtrElemStrTk : array of Integer;
   UFldPtrElemRec : array of Integer;
+  { The pointee's EXTENT when a field points at an ARRAY: `int (*fp)[4]` --
+    the FLATTENED product, so `int (*fp2)[2][3]` records 6 and one multiply
+    sizes both. The field twin of SymPtrElemArrLen, and the column the field
+    side simply never had: without it `sizeof(*s.fp)` could only ever answer
+    the pointee's ELEMENT size. 0 when the pointee is not an array, which is
+    also what makes the read a plain `if > 0 then multiply`.
+    Write sites follow UFldPtrElemStrTk's list above -- the C struct builder's
+    parenthesised-declarator arm, the reset beside it, and the class-
+    INHERITANCE copy. Miss the copy and a descendant sizes an inherited field
+    smaller than the base does.
+    bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size }
+  UFldPtrElemArrLen : array of Integer;
   { ...and the rest of a pointer FIELD's identity. The pointee alone cannot tell
     a `PChar` field from a `^PChar` field -- both point at something whose
     immediate kind is the same one step down -- so `r.F^` printed the address.

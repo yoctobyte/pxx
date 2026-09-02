@@ -463,7 +463,7 @@ _none_
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 
-## backlog-cfront (19)
+## backlog-cfront (18)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -471,7 +471,6 @@ _none_
 | bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning-not-an-error | C | 45 | bug | pxx's C frontend treats an undeclared identifier used as a VALUE as 0 with a warning, while an undeclared identifier used as a CALL is a hard error. gcc rejects both under -std=gnu99, which is what our own busybox oracle uses. The consequence is not cosmetic: crtl's <sys/syscall.h> defends itself with `naming any SYS_* here is a compile error, which is the point', and that sentence is false under this compiler — an arm32 build of src/sys/statfs.c compiled cleanly and called syscall number 0. Fixing it also requires filling the crtl gaps it is currently papering over (locale.h has no LC_COLLATE/LC_CTYPE/LC_MONETARY/LC_TIME, which the lua build hits today). | — |
 | bug-c-including-stdio-h-refuses-to-compile-for-xtensa | C+S | 45 | bug | `#include <stdio.h>` refuses to compile for --target=xtensa: `__pxx_read is a pxx-internal runtime symbol and cannot be imported dynamically`, raised in lib/crtl/src/unistd.c at `ssize_t write`. The identical two-line file compiles for x86-64. Reduced to `#include <stdio.h>` plus one trivial function -- nothing in the user code touches read/write. A C file with NO include compiles for xtensa fine, so this is the crtl pull, not the xtensa C backend generally. The guard is correct in what it says (the symbol needs a Pascal bridge that is not visible); what is target-specific is why the bridge is missing on xtensa and present on x86-64. | — |
 | bug-c-long-double-is-8-bytes-in-pxx-and-16-in-gcc | C | 35 | bug | C `long double` is mapped to double (clexer.inc:342), so it is 8 bytes where gcc's is 16. MEASURED both sides: `struct { long double x; }` is sizeof 16 under gcc and 8 under pxx. Any such struct crossing a real C boundary therefore disagrees about its own SIZE before any calling-convention question is reached, and psABI puts an x87 member in MEMORY class where pxx would see one SSE eightbyte. Found by writing the NEGATIVE control for the new SysV classifier: the classifier's tyExtended refusal is unreachable from C because the frontend erases the distinction first, so a guard that looks like it covers long double cannot fire. Pre-existing and independent of the aggregate-classification work. | — |
-| bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size | C | 40→75 | bug | `sizeof(*s.fp)` where `fp` is a struct member of type `int (*)[4]` answers 8 -- the POINTER size, i.e. the arm never fired at all -- where gcc says 16. The VARIABLE spelling of the same construct is fixed; this is the field spelling, and it is NOT the same one-line gap: 8 rather than 4 says `RecFieldType(recId, 'fp') = tyPointer` is false or the pointee type is unrecorded, so the field arm declines before any extent could be applied. INDEXING through the same field is CORRECT -- `(*s.fp)[1]` reads and writes fine -- so the field carries enough to address and not enough to size, and a fix needs the pointee's extent on the FIELD (there is no UFldPtrElemArrLen; the symbol side has SymPtrElemArrLen). | — |
 | bug-c-sizeof-reaches-a-pointee-through-one-spelling-only | C | 40→75 | bug | C: sizeof of a subscript through a pointer-to-pointer answers the pointer size | — |
 | bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet | C | 35 | bug | LATENT, with a named trigger. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]` tests pick the 4-byte-slot va_arg helper; everything else falls to an else whose comment says `Cross (aarch64)` but whose condition is `<> TARGET_X86_64`, i.e. the 8-byte-slot path. xtensa and wasm32 are 32-bit and absent from the set -- the set is correct TODAY only because neither can compile a C program at all (`C program entry stub not implemented for this target yet`). The day either gains an entry stub it silently gets 64-bit varargs slots. Fix the set in the SAME commit as the stub. | — |
 | bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently | C | 50 | bug | C: two conflicting typedefs for one name are accepted silently, last wins | — |
@@ -874,9 +873,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3139)
+## done (3140)
 
-3139 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3140 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -964,7 +963,6 @@ _none_
 - [p 75] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 2)
 - [p 75] [A] bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so (unblocks 1)
 - [p 75] [A] bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets (unblocks 1)
-- [p 75] [C] bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size (unblocks 1)
 - [p 75] [C] bug-c-sizeof-reaches-a-pointee-through-one-spelling-only (unblocks 1)
 - [p 75] [N] bug-n-nilpy-carries-its-own-copies-of-the-float-type-table (unblocks 1)
 - [p 75] [P] bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes (unblocks 1)
@@ -1364,7 +1362,6 @@ _none_
 - **1** — bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
-- **1** — bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size
 - **1** — bug-c-sizeof-reaches-a-pointee-through-one-spelling-only
 - **1** — bug-n-nilpy-carries-its-own-copies-of-the-float-type-table
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
