@@ -915,3 +915,75 @@ and then gate. The reason it matters is above: it is the FIRST structural check
 in `lib-test`, so while it is stale that whole job dies four lines in and
 `lib-test#src:tools/crtl_reachability.py` stays red for a reason its own name
 does not mention.
+
+## `lib-test#crtl_reachability` — the exculpation now has an answer, and it is not ours
+
+2026-09-02, frankZ. Binary `9b8ef1068ec8347d925a7ef632286d2a8019bd74cd1d447f651afa78ff9edb9d`,
+commit `678fbc3b1`, `converged after 1 round(s)`, `gate.sh quick` GREEN with the
+FPC seed canary LIVE.
+
+The half-finding on record was: `crtl_reachability.py` prints
+`OK -- 72 headers, 44 modules` **in its own log** while the job goes red later
+in the `lib-test` recipe. Nobody owned "then what?". Here it is.
+
+**The job name is its FIRST source file, and the failure is 40 steps down.**
+`lib-test#src:tools/crtl_reachability.py` names step 1 of a recipe whose stored
+reason ends `cfileops: identical to gcc | ... | cchown: identical to gcc |
+pascal26:18: error: stray token at top level (not a declaration): 'clock_t'`.
+Read against the Makefile, the step after `cchown` is `$(PXX_STABLE)
+test/ctimes.c`, and `ctimes.c` includes `<sys/times.h>`.
+
+**`lib/crtl/include/sys/times.h` did not exist until `f9e495823`.** Before it,
+that include fell through to the host's `/usr/include` — the same fallthrough
+the job's *other* stored reason warns about in as many words (*"#include
+<dirent.h> resolved from the host system (/usr/include), not pxx's own
+headers"*). glibc's `sys/times.h` then hits pxx's C parser at line 18 with a
+`clock_t` it has no typedef for, and `stray token at top level` is what that
+correctly says.
+
+Dates settle it: the watcher's bad sha `5d983997a05a` is **2026-09-01
+19:31:36Z**; `f9e495823` is **19:45:39Z**. Both ancestors of origin/master
+(`merge-base --is-ancestor`, not `cat-file -e`). **The red was fixed fourteen
+minutes after the run that reported it.**
+
+Verified at the bad sha rather than argued: `git archive 5d983997a05a` of
+`lib/crtl`, `compiler/crtl_names.inc` and both guard scripts into a scratch
+tree, then run them there — `crtl-map: OK -- 397 crtl functions mapped to 28
+headers`, reachability OK. **Both guards were green at the bad sha**, so
+neither was the cause, which is what makes the `ctimes.c` step the only
+candidate left standing rather than the most appealing one.
+
+**The residual, and its owner: Track T's, and it is the INSTRUMENT.** twatch
+still lists this as `open regression ... bad=5d983997a05a (2 in range)` with
+its own note that *"bad touches NO buildable file"* — an idle bisect that
+cannot converge because every commit in its range is docs. All seven
+`regression-lib-test-crtl-reachability*` tickets are in `done/`. Nothing here
+needs a fix; the watcher needs to re-run the job at a sha past `f9e495823`, or
+the stuck-bisect state needs clearing. Named for T, not left implied.
+
+## A red that had not been reported yet — the crtl name map
+
+Same session, `678fbc3b1`. `python3 tools/gen_crtl_map.py --check` is **step 2
+of the same `lib-test` recipe**, and it was **FAILING on origin/master** (rc=1)
+when this session started: `409 functions across 32 headers` in the generated
+map against `498 across 41` in `lib/crtl`.
+
+Green at the bad sha (397/28, measured above) and red now, so this is drift
+that arrived AFTER the last regeneration (`d82949bc9`) — the busybox crtl
+campaign, thirteen commits, `d71642873` / `e2068a9cc` / `99854e01a` /
+`032a55a3f` / `1799aad1a` chief among them, each adding crtl bodies without
+regenerating the map that makes them reachable.
+
+**Not found by triage and not reported by anyone** — it was sitting in this
+session's working tree as an unexplained modified file after a restart, and the
+file's own header says how to interrogate it.
+
+What it actually changes, measured in both directions rather than asserted:
+`endmntent()` called with no `#include` is **rejected** by the pinned compiler
+(`error: call to undeclared function`) and compiles and links against crtl on
+the live one; `alarm()` with no `#include` was already reachable another way
+and both compilers emit byte-identical programs (code=306968B). Per-function,
+not blanket — the map only matters where nothing else already reaches.
+
+This one is closed, on every host, without a pin: both guards are pure Python
+over the tree.
