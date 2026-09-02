@@ -4,11 +4,11 @@ track: A
 prio: 65
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-02
 found-by: frankC
 owner: frankC
-summary: "`Arg32Class` (symtab.inc) has NO tyRecord case, so a by-value record classifies as A32_WORD — ONE word — and the virtual and indirect ladders on every 32-bit backend push a single word for it. A 4-byte record is accidentally right and a >8-byte one is by-ref and right, so ONLY 5..8 bytes is wrong, and it is wrong SILENTLY: arm32, riscv32 and xtensa all build, run, exit 0 and return a corrupted record. Measured identically on all three. The DIRECT path is correct on each, which is why nothing caught it. i386 refuses the whole construct for a separate reason (see the sibling ticket)."
+summary: "FIXED in `567577507`. `Arg32Class` had no tyRecord case, so a by-value record classified as A32_WORD -- ONE word -- and the virtual and indirect ladders on every 32-bit backend passed half of an 8-byte record. Added the A32_RECORD band (<=4 bytes the word IS the record; 5..8 the callee slot is 8 bytes; >8 the frontend already sets IsRef so one word is an address) and routed all four backends through it. Verified on all SIX targets by test/test_byvalue_record_param_every_call_shape.pas: x86-64, i386, arm32, riscv32, aarch64 and xtensa all answer BYVALRECPARAM OK. Closed 2026-09-02 after re-running every target -- the fix landed and the ticket was never moved."
 ---
 
 # An 8-byte by-value record loses its second word through virtual and indirect calls, on every 32-bit backend
@@ -84,3 +84,16 @@ are affected, i386 by refusal rather than by corruption.
 targets. It already discriminates: pre-fix x86-64 and aarch64 PASS, so a change
 that merely makes everything green without those staying green has broken
 something else.
+
+## 2026-09-02 — closed after re-verifying, not from the commit log
+
+Re-ran the guard on every runnable target at `c4ec910f5`, rather than closing on
+the presence of a commit: x86-64, i386, arm32, riscv32, aarch64 and xtensa all
+answer `BYVALRECPARAM OK`. `567577507` confirmed on origin/master with
+`git merge-base --is-ancestor`, which asks about the branch rather than about
+this checkout's object store.
+
+Worth carrying from the fix: the test was written for the BOUNDARY (a row whose
+word count differs from its argument count) rather than for the reported
+failure, and that is what turned a ten-minute arm32 fix into four defects found
+across four backends.
