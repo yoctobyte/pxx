@@ -75,9 +75,12 @@ _none_
 | regression-test-nilpy-test-nilpy-import-c-header-still-works-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_import_c_header_still_works.npy /tmp/test_nilpy_imphdr26` (auto-filed by twatch) | — |
 | regression-test-threads-test-nilpy-thread-clone-2 | T | 70 | regression | regression: test-threads#src:test/test_nilpy_thread_clone.npy at 08f7de0715a8 in step 2/6, `tools/expect_same.sh test_npy_clone26 "$(/tmp/test_npy_clone26)" "$(printf 'tid nonzero = True\nchild ran = 7')"` (auto-filed by twatch) | — |
 
-## backlog_new (0)
+## backlog_new (2)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-a-a-typed-pointer-deref-of-a-frozen-string-is-unlowered-on-wasm32 | A | 25 | bug | Reading through a typed pointer to a frozen string — Length(p^) where p: ^string[10] — is unlowered on wasm32 and traps with `wasm trap: unreachable`, at DEFAULT as well as under -dPXX_SHORTSTRING. The WRITE through the same pointer (p^ := c) lowers fine, so this is a missing read lowering, not a pointer problem. Confirmed under the pinned compiler, so it predates the byte-prefix conversion. Consequence for another lane: wasm32 cannot go green on any Length(p^) row, so it must not be counted as a target for the IRFrozenKindOfAddr read-side fix. | — |
+| bug-a-setlength-on-a-frozen-string-traps-on-wasm32 | A | 25 | bug | SetLength on a frozen string traps on wasm32 with `wasm trap: unreachable`. WasmEmitSetLenStr has no frozen arm at all: it unconditionally calls the MANAGED string runtime routine PXXStrSetLen with the slot address, so a frozen slot is handed to code that expects a heap handle. Confirmed under the pinned compiler, so it predates the byte-prefix conversion, and it is a missing feature failing loud rather than a prefix-width bug — it traps at default as well as under -dPXX_SHORTSTRING. | — |
 
 ## backlog-umbrella (7)
 
@@ -1277,8 +1280,10 @@ _none_
 - [p 25] [A+B] feature-target-wasm (unblocks 1) [parked — re-claim, do not duplicate] [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 25] [A] bug-a-64-bit-multiply-overflow-is-unchecked-under-q-plus-on-riscv32-and-xtensa
 - [p 25] [A] bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted
+- [p 25] [A] bug-a-a-typed-pointer-deref-of-a-frozen-string-is-unlowered-on-wasm32
 - [p 25] [A] bug-a-promocore-is-not-the-only-place-that-knows-the-promo-slot-layout
 - [p 25] [A] bug-a-pxxcoswitch-and-pxxclone-are-missing-on-riscv32
+- [p 25] [A] bug-a-setlength-on-a-frozen-string-traps-on-wasm32
 - [p 25] [A+S] bug-a-the-esp32-bare-image-doubled-in-code-and-grew-half-again-in-bss
 - [p 25] [A] bug-a-the-ir-frame-op-doc-asserts-a-frame-layout-riscv32-does-not-use
 - [p 25] [A] bug-a-the-token-pool-stores-text-only-for-identifiers-and-strings
