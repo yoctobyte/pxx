@@ -12276,8 +12276,8 @@
   "sha": "297a6755c0bd1204449c76ebcf920dd7b9313e24"
  },
  "last_slow": {
-  "date": "2026-09-01T18:46:01Z",
-  "sha": "4fc3dc7eaff440d442768057a5e9007ff8eb33ea"
+  "date": "2026-09-02T03:41:02Z",
+  "sha": "b3ad1d5a2480bdc7ee873137f4636ac721e7eb15"
  },
  "open_regressions": [
   {
