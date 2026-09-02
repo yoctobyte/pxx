@@ -991,6 +991,9 @@ begin
   CompactClasses := False;
   CompactClassesExplicit := False;
   ProcExceptionCleanupFrameActive := False;
+  ProcCleanupFrameWanted := False;
+  ProcCleanupFrameLateArmed := False;
+  ProcCleanupFrameLatePatch := 0;
   EnableAutoVar := True;
   EnableLazyVar := True;
   CIncludeDirCount := 0;

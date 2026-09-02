@@ -576,6 +576,8 @@ var
   savedSC, savedFS, savedCurProc : Integer;
   savedGLC, savedGFC, savedGLB, j, savedVisVarSeq: Integer;
   cleanupJnePatch: Integer;
+  savedCleanupFrameWanted, savedCleanupFrameLateArmed: Boolean;
+  savedCleanupFrameLatePatch: Integer;
   patchPos : Integer;
   depth    : Integer;
   doneArgs, doneParam, isArr, isByRef, isConst, isOut, declOverload, declFlexColumn, isClassKeyword, isStaticMethod, declInline: Boolean;
@@ -2047,6 +2049,14 @@ begin
   savedGFC := GotoFixupCount;
   savedProcCleanupFrameActive := ProcExceptionCleanupFrameActive;
   ProcExceptionCleanupFrameActive := False;
+  { Same save/restore discipline as the flag above, and for the same reason: a
+    nested proc's body is parsed and lowered DURING the outer proc's parse, so
+    without this its late-gate answer would be read as the outer proc's. }
+  savedCleanupFrameWanted := ProcCleanupFrameWanted;
+  savedCleanupFrameLateArmed := ProcCleanupFrameLateArmed;
+  savedCleanupFrameLatePatch := ProcCleanupFrameLatePatch;
+  ProcCleanupFrameWanted := False;
+  ProcCleanupFrameLateArmed := False;
   savedGLB := GotoLabelBase;
   GotoLabelBase := GotoLabelCount;   { this routine's labels start here; the
     enclosing scope's stay put. Resetting the COUNT to 0 restored the count on
@@ -2686,7 +2696,23 @@ begin
       to ParseBlock, so -O0/-O1 stay byte-identical. }
     inlineBodyNode := WrapManagementOps(procIdx, ParseBlockAST);
     if methOwnerCi < 0 then TryRetainInlineBody(procIdx, inlineBodyNode);
+    { ASK THE LANDING-PAD QUESTION AGAIN, from inside CompileAST, once the
+      hidden argument temps exist. Only for a plain body: an asm body emits its
+      own code and a generator body is a state machine whose frame the prologue
+      decision already covers, so neither is re-asked. Requested only when the
+      prologue said NO -- a proc that already has its frame must not get a
+      second one. }
+    if (not needsProcCleanupFrame) and TargetHasProcCleanupFrame and
+       ExceptionUsed and (not isAsmFunc) then
+      ProcCleanupFrameWanted := True;
+    ProcCleanupFrameLateArmed := False;
     CompileAST(inlineBodyNode);
+    ProcCleanupFrameWanted := False;
+    if ProcCleanupFrameLateArmed then
+    begin
+      needsProcCleanupFrame := True;
+      cleanupJnePatch := ProcCleanupFrameLatePatch;
+    end;
     ASTNodeCount := ASTArenaFloor;
     Expect(tkEnd, 'end');
     Eat(tkSemicolon);
@@ -2728,6 +2754,9 @@ begin
   else
     EmitProcEpilog(Procs[procIdx].RetSymIdx);
   ProcExceptionCleanupFrameActive := savedProcCleanupFrameActive;
+  ProcCleanupFrameWanted := savedCleanupFrameWanted;
+  ProcCleanupFrameLateArmed := savedCleanupFrameLateArmed;
+  ProcCleanupFrameLatePatch := savedCleanupFrameLatePatch;
 
   { End of this proc's body bytes — the iram byte-range is [BodyAddr, ProcBodyEnd). }
   ProcBodyEnd[procIdx] := CodeLen;

@@ -4626,6 +4626,27 @@ var
   BSS_SIG_CTX     : Integer;  { the ucontext_t* the kernel passed the handler. Parked for the fault-to-RAISE work (rewrite the saved RIP to a raise stub before returning), which is the rest of feature-signal-siginfo-ucontext; read by __pxxSigContext. }
   ExceptionUsed   : Boolean;
   ProcExceptionCleanupFrameActive: Boolean;
+  { THE UNWIND LANDING PAD, DECIDED AFTER LOWERING INSTEAD OF BEFORE PARSING.
+
+    A proc that can be unwound past needs a landing pad or its managed locals
+    are never released. The gate for it used to be asked in the prologue, from
+    ProcHasManagedLocalCleanup, which walks Syms[] for skLocal entries -- and the
+    HIDDEN ARGUMENT TEMPS it should be asking about do not exist yet at that
+    point: IRLowerAST mints them while lowering the body, long after the
+    prologue was emitted. The gate was not filtering temps out; it was asked
+    before they existed, so it was structurally incapable of a different answer.
+    That leaked one heap block per raise, unbounded, where FPC reports 0 unfreed
+    (bug-a-a-managed-temp-in-a-frame-unwound-by-an-exception-is-never-released).
+
+    So the question is asked a SECOND time, inside CompileAST between IRLowerAST
+    and IREmitMachineCode: the temps exist by then and no machine code has been
+    emitted for the body yet, which are the two things the answer needs. Wanted
+    is the request (set only for a plain body -- asm and generator bodies keep
+    the prologue decision), LateArmed and LatePatch carry the answer back out to
+    the landing pad, which lives in the proc parser and cannot see in here. }
+  ProcCleanupFrameWanted: Boolean;
+  ProcCleanupFrameLateArmed: Boolean;
+  ProcCleanupFrameLatePatch: Integer;
   InLValueWrite   : Boolean;
   CurWriteFd      : Integer; { fd a write/writeln syscall targets; STDOUT by default, 2 for writeln(StdErr,..) }
   CAttrPacked     : Boolean;

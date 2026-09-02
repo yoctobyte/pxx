@@ -15516,6 +15516,18 @@ test-i386: $(COMPILER)
 	# The differential row is NOT sufficient on its own — before the fix
 	# this program printed byte-identical output on every backend while
 	# leaking every object, so only the absolute bound can see it.
+	# A MANAGED ARGUMENT TEMP IN A FRAME AN EXCEPTION UNWINDS PAST. Sibling of
+	# the row below and a different mechanism: that one is about the exception
+	# OBJECT, this one about a hidden AnsiString temp in a frame the unwind goes
+	# past. The bound is absolute for the reason assert_no_leak.sh gives -- the
+	# leak was one block per raise, so at 3000 raises a regression reads ~8400
+	# live against this bound of 200. MEASURED both ways before wiring: 8392 on
+	# the pre-fix compiler, 4 on the fixed one, so the row is known to be able
+	# to fail rather than assumed to be.
+	# bug-a-a-managed-temp-in-a-frame-unwound-by-an-exception-is-never-released
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_unwind_temp_leak.pas $(TESTTMP)/teutl
+	tools/assert_no_leak.sh exception_unwind_temp 200 $(TESTTMP)/teutl
+	tools/expect_same.sh exception_unwind_temp_out "$$($(TESTTMP)/teutl | grep -v '^pxx-census:')" "UNWIND TEMP OK"
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_exception_object_leaks.pas $(TESTTMP)/teol_i386
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_i386_x64
 	tools/expect_same.sh i386/test_exception_object_leaks "$$(tools/run_target.sh i386 $(TESTTMP)/teol_i386)" "$$($(TESTTMP)/teol_i386_x64)"

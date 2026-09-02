@@ -10,7 +10,7 @@ found-by: frankB
 owner: ""
 blocked-by: []
 tags: [memory-leak, exceptions, unwind]
-summary: "A hidden managed ARGUMENT TEMP in a frame that an exception unwinds past is never released — one heap block per raise, unbounded, and FPC reports 0 unfreed on the same program. `raise Exception.Create(gmsg + Chr(65))` leaks 1/raise; so does `Boom(gmsg + Chr(65))` where the CALLEE raises, so it is not confined to the raise statement. The frame's unwind landing pad is gated on ProcHasManagedLocalCleanup at pasparser_proc.inc:2604, but the body is not parsed until line 2687 — so the gate is decided BEFORE the temps it should be asking about exist, and can only ever see DECLARED locals. Merely declaring an unused AnsiString in the raising routine makes the leak vanish; an Integer local does not. Dropping the ProcHasManagedLocalCleanup condition fixes it completely and costs +12% to +24% code size on exception-using programs (measured), which is why it is filed rather than landed."
+summary: "FIXED 2026-09-02 (frankC) by asking the landing-pad gate a SECOND time inside CompileAST, between IRLowerAST and IREmitMachineCode -- the two points where the hidden temps already exist and no body code has been emitted yet. Costs +1.3%/0%/+3.3% code size on the three programs where dropping the condition cost +20.3%/+23.6%/+12.4%, because only a proc that actually mints a managed temp gets a pad. Plain bodies only: asm and generator bodies keep the prologue decision and a generator raising past a managed temp is NOT covered. Original report: a hidden managed ARGUMENT TEMP in a frame that an exception unwinds past is never released — one heap block per raise, unbounded, and FPC reports 0 unfreed on the same program. `raise Exception.Create(gmsg + Chr(65))` leaks 1/raise; so does `Boom(gmsg + Chr(65))` where the CALLEE raises, so it is not confined to the raise statement. The frame's unwind landing pad is gated on ProcHasManagedLocalCleanup at pasparser_proc.inc:2604, but the body is not parsed until line 2687 — so the gate is decided BEFORE the temps it should be asking about exist, and can only ever see DECLARED locals. Merely declaring an unused AnsiString in the raising routine makes the leak vanish; an Integer local does not. Dropping the ProcHasManagedLocalCleanup condition fixes it completely and costs +12% to +24% code size on exception-using programs (measured), which is why it is filed rather than landed."
 ---
 
 # A managed temp in a frame unwound by an exception is never released
@@ -135,3 +135,78 @@ predicate about the body and so needs the body either way.
 Whatever the approach: the leak is per-raise and unbounded, so any program that
 raises in a loop grows without limit. That is what sets prio 65 rather than the
 low prio a code-size trade-off would suggest.
+
+## 2026-09-02 (frankC) — FIXED by asking the gate where it can see the answer
+
+This ticket's own recommended direction, taken: *"Make the gate see the temps
+rather than guessing before they exist."*
+
+The gate is now asked a SECOND time, inside `CompileAST` between `IRLowerAST`
+and `IREmitMachineCode`. Those two points are exactly where the answer is
+available: `IRLowerAST` has just minted the hidden argument temps as `Syms[]`
+entries, and no machine code for the body has been emitted yet. The predicate
+itself is unchanged — `ProcHasManagedLocalCleanup` was never wrong, it was
+asked before its subject existed.
+
+```
+                              before        after
+raise Exception.Create(gmsg + Chr(65))   7816 @ 8000    live 4, FLAT
+Boom(gmsg + Chr(65)), callee raises      7815 @ 8000    live 4, FLAT
+the same at depth 4                      leaks          live 4, FLAT
+```
+
+### It costs a fraction of the always-on fix
+
+That is the whole reason to do it this way rather than drop the condition.
+Measured on this tree, the same three programs the ticket used, against a
+pre-change compiler built from one tree with four files stashed:
+
+| program | before | after | this fix | dropping the condition (above) |
+| --- | --- | --- | --- | --- |
+| test_exception_object_leaks | 306968 | 311064 | **+1.3%** | +20.3% |
+| test_cross_exception | 69400 | 69400 | **0%** | +23.6% |
+| examples/json/jsondemo | 1122072 | 1158936 | **+3.3%** | +12.4% |
+
+Only a proc that actually mints a managed temp gets a landing pad, so the cost
+lands on the procs that need one instead of on every proc in an
+exception-using program. `test_cross_exception` is unchanged at all: nothing in
+it needs a pad it did not already have.
+
+### Why this was safe to move, checked rather than assumed
+
+`ProcExceptionCleanupFrameActive` has exactly ONE reader,
+`ir_codegen.inc:14052`, and it runs during code generation — after lowering. So
+setting it later than the prologue changes nothing. Had it been read during
+parsing, this approach would have been wrong and silently so.
+
+For a PLAIN body nothing is emitted between the old gate site and `CompileAST`
+(the generator prologue is inside an `isGenerator` branch), so when the early
+gate already fires the emitted bytes are unchanged — the late path only adds a
+frame where there was none.
+
+### Scope, stated rather than implied
+
+- **Plain bodies only.** An `asm` body and a generator/stackless body keep the
+  prologue decision and are not re-asked. A generator whose step function raises
+  past a managed temp would still leak; that is NOT covered here and was not
+  measured in this ticket either.
+- The request is raised only when the prologue said NO, so a proc that already
+  has a frame cannot get a second one.
+- The wanted/armed/patch globals are saved and restored per proc alongside
+  `ProcExceptionCleanupFrameActive`, because a nested proc's body is parsed and
+  lowered during the outer proc's parse and would otherwise return its answer as
+  the outer proc's.
+
+### The regression test, and it is proven able to fail
+
+`test/test_exception_unwind_temp_leak.pas`, wired with `assert_no_leak.sh` at
+bound 200. Measured BOTH ways before wiring: **live=8392 on the pre-fix
+compiler, live=4 on the fixed one.** Its header carries the trap this ticket
+found — merely declaring an unused `AnsiString` in a raising routine switches
+the old gate on and takes the temps with it, so a well-meaning local added to
+any routine in that file would quietly convert it into a test that passes on the
+broken compiler.
+
+As this ticket warned, `compiler/pascal26` is byte-identical either way because
+`compiler.pas` never sets `ExceptionUsed` — the self-host fixedpoint cannot see
+this change in either direction and is not evidence about it.

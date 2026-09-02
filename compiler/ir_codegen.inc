@@ -12874,6 +12874,21 @@ begin
   end;
   IRReset;
   IRLowerAST(node);
+  { THE LANDING-PAD GATE, ASKED WHERE IT CAN SEE THE ANSWER. IRLowerAST has just
+    minted this body's hidden argument temps as Syms[] entries, and no machine
+    code for the body has been emitted yet -- the two conditions the question
+    needs, and neither holds in the prologue where it used to be asked. See
+    ProcCleanupFrameWanted in defs.inc for the leak this closes. }
+  if ProcCleanupFrameWanted then
+  begin
+    ProcCleanupFrameWanted := False;
+    if (CurProc >= 0) and ProcHasManagedLocalCleanup(CurProc, -1) then
+    begin
+      EmitProcCleanupFrameEnterForTarget(ProcCleanupFrameLatePatch);
+      ProcExceptionCleanupFrameActive := True;
+      ProcCleanupFrameLateArmed := True;
+    end;
+  end;
   { Nil the HIDDEN MANAGED LOCALS this body's parse/lowering minted — the
     `as`-cast interface temp from IRMaterializeIntfCast, the for-in container
     temp ParseForInNodeAST materialises for `for x in obj.Items`, and every other
