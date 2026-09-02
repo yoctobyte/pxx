@@ -277,4 +277,4 @@ productive at this grammar, which is the ticket's own reading.
 this repo (see above), so it needs whoever holds the daemon invocation.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e4cba526a.
