@@ -177,3 +177,12 @@ rebuilt (`c7c83465b0e9`), targeted set re-run green, tier restarted from a
 clean tree. The trigger is worth naming because it is not an edit you make: it
 is a pull you invite, and "my tree is final" is exactly the state in which you
 stop counting sync as touching the instrument.
+
+## Log
+
+Fixed in **commit dcb6f2c17** — the overload table in `ast_arena.inc`, the nine
+walkers migrated onto it, `tools/ast_slot_overloads.py` with its snapshot and
+positive control, and the two regression tests. Closed and moved to `done/` in
+commit 68950b03b, which carries the full-tier result and files the unrelated
+Track T ratchet that run turned up. A stale comment the migration left behind
+was fixed by frankc-af in commit 1b878b381.
