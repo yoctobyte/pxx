@@ -327,10 +327,19 @@ with `tstring` declared as a string — the one substitution that made it a
 different bug. **The file was three commands away the whole time.** Re-run the
 target, not the description of it.
 
-### Independently re-derived 2026-09-02 (second session, different reasoning)
+### Re-checked against the file 2026-09-02 (second session)
 
 The correction above was checked rather than taken on trust, against a fresh
-`--depth 1` clone. Every load-bearing claim holds:
+`--depth 1` clone. Every load-bearing claim holds.
+
+**What makes the rows below worth anything is that each one is a MEASUREMENT
+against the real file — not that a second session agreed.** This heading said
+"independently re-derived ... different reasoning" until frankA pointed out that
+this credits the wrong thing: a re-derivation that agrees is weak evidence when
+both derivations come from the same kind of reasoner working from the same
+source, and a restarted session inheriting an argument is exactly the case where
+agreement feels like corroboration and is not. The claim scopes to what was
+checked, which is the table:
 
 | claim | check |
 | --- | --- |
