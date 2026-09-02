@@ -3,7 +3,7 @@ slug: regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native
 track: N
 type: regression
 prio: 60
-status: backlog
+status: done
 blocked-by: []
 summary: "Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design."
 ---
@@ -104,3 +104,46 @@ One further red in that sweep, `test-smoke quick_canary_argv0.pas@2`, was an
 **artifact** of running from a worktree under `/tmp` and is excluded: confirmed
 by hand in the same tree, outside testmgr's path rewriting, printing
 `argv0 canary ok 42`.
+
+## GREEN at HEAD (frankZ, plexus, 2026-09-02)
+
+All three pass. Binary `090042338fc2deae`, commit `9c6b216aa`, run solo:
+
+```
+test_nilpy_lowercase_name_vs_class        PASS   (8 expected lines)
+test_nilpy_isinstance_over_a_type_value   PASS   (11)
+test_nilpy_builtin_over_variant_receiver  PASS   (14)
+```
+
+Compared the way the Makefile compares them — `./pascal26 test/<t>.npy` then
+`diff` against `test/<t>.expected`. **Negative control run**, because "0
+differences" and "nothing was compared" print identically: feeding one test's
+output to another's `.expected` reports a difference, so the comparison can
+fail. The expected files are 8/11/14 lines of real output, not empty.
+
+**Solo, not under seven's full-matrix parallelism** — which is the caveat that
+matters for the two threading-adjacent tickets on this umbrella, and does NOT
+matter here: this ticket's own diagnosis established these were deterministic
+COMPILER bugs (test sources byte-identical across the range, and a compiler
+built at `d424445ce` reproduced two of the three FAILs on demand). A
+deterministic dispatch bug does not hide from a solo run.
+
+**I did not identify the fixing commit and am not going to guess one.** 779
+commits touched `compiler/` between `e7c0d1d2a` and HEAD, of which ~30 are
+`fix(N)`/`fix(nilpy)` on dispatch and method typing —
+`19dc5586e fix(nilpy): type a method call by the METHOD, not a same-named
+intrinsic` and `7ddcb9650`/`90f2b646f` are the shape, but naming one without
+building it would be exactly the attribution-by-topic this repo has been burned
+by twice. The regression is gone; which commit closed it buys nothing now.
+
+## The finding that OUTLIVES the fix
+
+*"They were invisible because `test-nilpy` is in limited/full, NOT native — by
+design."* That is still true and is not fixed by anything here. Three
+compiler-caused NilPy regressions lived through a full-tier window because the
+tier that samples the tip every ~8 commits cannot see them. Left for Track T/N
+as a coverage question; it is not a regression and does not belong on this
+umbrella.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

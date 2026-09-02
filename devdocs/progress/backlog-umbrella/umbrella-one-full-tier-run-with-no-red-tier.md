@@ -3,7 +3,7 @@ slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
 prio: 85
 type: umbrella
-blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native, regression-cascade-fc01c8094434]
+blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, regression-cascade-fc01c8094434]
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
@@ -245,3 +245,61 @@ nineteen the owner acted on.
 (it does, since `f4fb9d31b`) and `tgenconstraint1`'s `gap:` (it compiles). A
 skip row is a capability claim the runner obeys and nothing re-reads. Only
 `tgenconstraint37` keeps its `gap:`, and it is real.
+
+## The synapse group — three jobs, ONE construct, and the corpus was the blocker
+
+2026-09-02, frankZ. These three sat here as *"cannot be reproduced on plexus at
+all"* because `external/synapse` is one of the 41 jobs that SKIP for missing
+corpus. `tools/install_externals.sh` fetches it (synapse @ `b3224c3d133a`).
+**All three reproduce on the first try and all three are one construct.**
+
+`external/synapse/ssfpc.inc`, in `WSAStartup`'s `with WSData do`:
+
+```pascal
+szDescription  := 'Synsock - Synapse Platform Independent Socket Layer';
+szSystemStatus := 'Running on Unix/Linux by FreePascal';
+```
+
+`ASTCharArrayCap` — the ONE oracle the char-array-is-a-string conversion asks,
+in both directions and at every site — answered only for `AN_IDENT` while its
+header said it answered about a NODE. A record FIELD got -1, the conversion
+never fired, the store fell through to the scalar type check, and
+`cannot assign ShortString to Char` is what that check correctly says when it is
+asked to put a string into a Char. **Five of six lvalue shapes refused; the
+plain variable was the only one that worked.** Fixed at `9c6b216aa`
+([[bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string]]); FPC 3.2.2
+is the oracle for all 14 rows of the new test, and the pinned compiler rejecting
+that test is its positive control.
+
+**The three JOBS stay wired and stay RED.** Their recipe builds with
+`$(PXX_STABLE)` and the pin still carries the bug — nothing in this tree can
+turn them green, so resolving them would claim a verdict the job cannot return.
+They close when the owner pins. **That is not a reason to pin**, and nobody
+should take one to close a ticket.
+
+## The three NilPy dispatch tests are green — resolved
+
+Binary `090042338fc2deae`, commit `9c6b216aa`, all three PASS against their
+`.expected` files, with a negative control run (one test's output against
+another's expectation reports a difference, so the comparison can fail). Solo
+rather than under seven's parallelism, which does not matter here: that ticket's
+own diagnosis established these as deterministic COMPILER bugs. The fixing
+commit is not named and is not guessed — 779 commits touched `compiler/` in the
+window.
+
+## A harness lesson, mine, worth more than the sweep
+
+Checking the cascade's 24 NilPy jobs, I compared each program's output against
+`test/<name>.expected` and got **11 failures**. All eleven were exactly the
+tests that have **no `.expected` file** — the Makefile compares them against an
+inline `printf` string instead. `diff` against a missing file errors, and my
+loop read that as a failing test.
+
+`test_nilpy_optional_param` then passed in 2.1s under the real recipe.
+
+Same shape as the two contaminated runs recorded above and as
+`d27c304e1`'s rule: **an instrument that answers about something else does not
+error, it answers.** The fix was to stop hand-rolling the comparison and run
+`testmgr --job` — the thing that owns the recipe. `PXX_ALLOW_FULL_SUITE=1` is
+what a single-job run past the quick tier costs, and it is a SPEED guardrail,
+taken autonomously.
