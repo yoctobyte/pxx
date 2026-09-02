@@ -9,7 +9,7 @@ created: 2026-09-02
 found-by: frankD
 owner: ""
 blocked-by: []
-summary: "Rung 3 of feature-busybox-kiosk-selfhosting-target, and the live one now that rungs 1, 2 and 2b are done: an 80-applet busybox built entirely by pxx, 149 objects, one real link, byte-identical to gcc over 261 cases. What is missing is a KERNEL and a ROOTFS, not more compiler work. qemu-system is installed for every pxx target plus /dev/kvm. The first decision is fetch-a-kernel versus build-one, and it should be made with a measurement rather than a preference. The proof this rung owes is a boot to a shell prompt with PID 1 being our busybox -- not a chroot, which proves nothing about the kernel interface."
+summary: "Rung 3 of feature-busybox-kiosk-selfhosting-target, and the live one now that rungs 1, 2 and 2b are done: a 141-applet busybox built entirely by pxx, 265 objects, one real link with no `-Wl,-z,muldefs`, byte-identical to the gcc oracle over 387 cases (feature-c-corpus-busybox-141-applets-linked, met 2026-09-02; it superseded the 80-applet/149-object/261-case figure this ticket was filed with). x86-64 only -- aarch64 waits on an --emit-obj object writer. What is missing is a KERNEL and a ROOTFS, not more compiler work. qemu-system is installed for every pxx target plus /dev/kvm. The first decision is fetch-a-kernel versus build-one, and it should be made with a measurement rather than a preference. The proof this rung owes is a boot to a shell prompt with PID 1 being our busybox -- not a chroot, which proves nothing about the kernel interface."
 ---
 
 # Rung 3 — the image
@@ -17,10 +17,16 @@ summary: "Rung 3 of feature-busybox-kiosk-selfhosting-target, and the live one n
 The userland exists and is proven:
 
 ```
-tools/busybox_diff.sh --separate --applets '<80 applets>'
-  ORACLE  gcc separate build, 149 objects (261 cases)
-  PASS    x86_64   byte-identical to the gcc oracle over 261 cases
+tools/busybox_diff.sh --separate --applets "$(busybox --list)"
+  ORACLE  gcc separate build, 265 objects (387 cases)
+  PASS    x86_64   byte-identical to the gcc oracle over 387 cases
 ```
+
+(This ticket was filed against the 80-applet / 149-object / 261-case run.
+`feature-c-corpus-busybox-141-applets-linked` met a strictly larger bar the same
+day -- 141 applets, 265 TUs, no `-Wl,-z,muldefs`, and the gcc build itself
+agreeing with upstream's own separately-linked binary. The userland this rung
+needs is therefore bigger than the one it was written for, not smaller.)
 
 Nothing about that is a chroot claim. It is 149 objects linked into one
 multiplexer that answers exactly as a gcc-built one does over 261 input cases.
