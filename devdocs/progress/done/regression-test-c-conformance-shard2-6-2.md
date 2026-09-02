@@ -3,6 +3,7 @@ prio: 70
 track: A
 owner: frankC
 summary: "FIXED at 0ee41312d. `00213.c` on all five conformance targets: the dead-arm prune's label guard missed AN_CASE/AN_DEFAULT, so a `case` inside `if (0)` was pruned while AN_SWITCH's dispatch still jumped to it. Re-laned T -> A: the failing step named no owner and the fallback was wrong. NOTE FOR ANYONE READING THE MANIFEST: the conformance reds moved shard3 -> shard2 between two full runs, which is a DIFFERENT bug taking the same slot, not the old set shrinking — the two are indistinguishable on a dashboard."
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/run_c_conformance.sh ./compiler/pascal26 --shard 2/6`. The job's own `src` (`tools/compiler_srchash.sh`, 3 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -134,3 +135,30 @@ This is a NEW red — it postdates the set
 since said that umbrella is old reds only. It was fixed before that reached me;
 the diagnosis is banked here rather than in a session's context, and the
 umbrella is not claiming it.
+
+## Verified at HEAD and closed (frankA, 2026-09-02)
+
+`0ee41312d` is an ancestor of `origin/master` (`git merge-base --is-ancestor`,
+not `cat-file -e`). The corpus is not installed on plexus, so `00213.c` itself
+could not be run here — **what was run is the probe the fix added**, which is
+the one that lives in the quick tier precisely because the corpus does not:
+
+```
+./compiler/pascal26 test/c_dead_arm_holds_a_case_label.c <out>   ->  ok
+<out>                                                            ->  0, rc=42
+```
+
+`rc=42` is not a bare exit code here: `main` folds the eight per-row results
+into a bitmask, prints it, and returns `f ? f : 42`, so 42 means every row
+including both `if (1)` / bare-block controls agreed. The Makefile row asserting
+only `$$?` is therefore asserting the output.
+
+**Closed as fixed, not as green.** The distinction matters on this slug: the
+ticket's own summary warns that the conformance reds moved shard3 -> shard2
+between two full runs, so a green in this slot is not evidence about this
+defect. What closes it is that the named cause was found, fixed, and carries a
+test with a both-ways positive control — the test does not compile on the
+pre-fix compiler, and a call to a symbol defined nowhere inside `if (0)` still
+links silently, so the prune still FIRES and the guard was widened rather than
+disabled.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
