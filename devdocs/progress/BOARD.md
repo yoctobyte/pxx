@@ -311,7 +311,7 @@ _none_
 | feature-nilpy-fstring-nested-spec-and-nested-fstring | N | 30 | feature | f-string: a nested format spec and a nested f-string | — |
 | feature-nilpy-hasattr-per-instance-assigned-tracking | N | 45 | feature | hasattr reports True for a field the instance never assigned — `if flag: self.m = 1` then hasattr(a,\"m\") on a False path answers True where CPython answers False. The remaining half of the DECIDED decide-nilpy-hasattr-per-instance-semantics: the per-instance assigned bit. | — |
 | feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition | N | 25 | feature | NilPy: `while x in (\"a\",\"b\")` now rebuilds the constant tuple on every test. A provably-constant container build is loop-invariant and should be hoisted to a variable once — what a person would write by hand — while everything else keeps being folded into the condition. | — |
-| feature-nilpy-idf-import | A | 20 | feature | nilpy includes anything from ESP-IDF and it just works | feature-c-source-frontend, feature-esp32-idf-xtensa |
+| feature-nilpy-idf-import | N | 20 | feature | North-star integration milestone: nilpy source that `include`s an ARBITRARY ESP-IDF header and calls what it declares, with no hand-written per-API binding. BOTH stated blockers are now in done/ (feature-c-source-frontend, feature-esp32-idf-xtensa) -- the body's Blocked-by line is pre-YAML prose the ranker never saw, and progress.sh check --strict has been reporting it as STALE-EDGE-CLEAR. PROBED 2026-09-02 against an IDF-SHAPED header on the host (no ESP, no IDF checkout): extern calls, object-like macro constants, static-inline bodies, and a static inline whose body uses a function-like macro ALL work from nilpy today. The one measured gap is calling a FUNCTION-LIKE MACRO from nilpy source, which is RegisterCMacroConsts's documented limitation. So Slices A-C are effectively done for this path and Slice E is the live dependency. Full acceptance still needs an IDF checkout and ESP32-S3 hardware, neither of which is on this box. | feature-c-source-frontend, feature-esp32-idf-xtensa |
 | feature-nilpy-lambda-compiled-closure | N | 55 | feature | nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics) | — |
 | feature-nilpy-map-over-several-iterables | N | 40 | feature | `map(f, xs, ys)` — CPython's N-iterable map — is a PARSE error (\"Expected: )\"). The map arm reads exactly two arguments, and the whole callback path below it (PyCallKey1, pymap_iter_i, pyiter_map_i) is one-argument by construction. | — |
 | feature-nilpy-match-statement | N | 25 | feature | `match` / `case` — structural pattern matching is not parsed | — |
@@ -1356,7 +1356,7 @@ _none_
 - [p 20] [A] feature-cli-widgetset-flag
 - [p 20] [A] feature-cross-frontend-interop-contract
 - [p 20] [N] feature-n-nilpy-ast-typing-module-scope
-- [p 20] [A] feature-nilpy-idf-import
+- [p 20] [N] feature-nilpy-idf-import
 - [p 20] [A+O] feature-opt-o3-register-pressure
 - [p 20] [T] feature-t-record-host-cpu-features-in-tstate
 - [p 20] [M] feature-t-windows-wine-harness

@@ -1,5 +1,10 @@
 ---
 prio: 20
+track: N
+type: feature
+status: backlog
+blocked-by: []
+summary: "North-star integration milestone: nilpy source that `include`s an ARBITRARY ESP-IDF header and calls what it declares, with no hand-written per-API binding. BOTH stated blockers are now in done/ (feature-c-source-frontend, feature-esp32-idf-xtensa) -- the body's Blocked-by line is pre-YAML prose the ranker never saw, and progress.sh check --strict has been reporting it as STALE-EDGE-CLEAR. PROBED 2026-09-02 against an IDF-SHAPED header on the host (no ESP, no IDF checkout): extern calls, object-like macro constants, static-inline bodies, and a static inline whose body uses a function-like macro ALL work from nilpy today. The one measured gap is calling a FUNCTION-LIKE MACRO from nilpy source, which is RegisterCMacroConsts's documented limitation. So Slices A-C are effectively done for this path and Slice E is the live dependency. Full acceptance still needs an IDF checkout and ESP32-S3 hardware, neither of which is on this box."
 ---
 
 # nilpy includes anything from ESP-IDF and it just works
@@ -106,3 +111,73 @@ Bonus / north-star: edit→build `.o`→IDF-link in the seconds range.
   (Slices A–C static-inline, E macros, F register layout) rather than header
   import alone. New work owned here = IDF header-import robustness +
   `sdkconfig.h` + nilpy FFI type inference + nilpy `app_main` entry.
+
+
+---
+
+## 2026-09-02 (frankH) — probed on the host: three of the four constructs already work
+
+Reached as the oldest open ticket. **Not stale, and no longer blocked**: both
+blockers named in the body — `feature-c-source-frontend` and
+`feature-esp32-idf-xtensa` — are in `done/`. That Blocked-by line is pre-YAML
+prose, so the ranker never saw the edge in the first place;
+`tools/progress.sh check --strict` has been printing
+`STALE-EDGE-CLEAR: feature-nilpy-idf-import … names only closed blockers`
+unread. Frontmatter added above so the ticket now says what it is.
+
+### What was measured, and what it does NOT cover
+
+There is no ESP-IDF checkout on this box (`IDF_PATH` unset) and no ESP32-S3, so
+the ticket's actual acceptance was not attempted. What was probed instead is
+**our side of the compile/link boundary the ticket itself draws** — an
+IDF-*shaped* local header carrying the four constructs the table lists, imported
+from nilpy, on the host. That answers "which constructs does the frontend
+surface", which is the part that needs no hardware, and nothing about linking or
+flashing.
+
+| construct | from nilpy | from the C frontend |
+| --- | --- | --- |
+| extern function (defined in another TU) | **works** | works |
+| object-like integer macro (`#define TICK_PERIOD_MS 10`) | **works** | works |
+| `static inline` body compiled into our object | **works** | works |
+| `static inline` whose body uses a function-like macro | **works** (16) | works |
+| **function-like macro called from source** (`BIT(3)`) | **FAILS** — `undefined variable (BIT)` | works (8) |
+| register struct (bitfield + volatile) | not established — see below | works (`1 2`) |
+
+**So Slices A–C are effectively done for this path, and Slice E is the live
+dependency.** The table in this ticket lists A–C-for-static-inline, E and F as
+all outstanding; only E is, on this evidence.
+
+The function-like-macro gap is not a surprise once found —
+`RegisterCMacroConsts` (`cparser.inc:12946`) says in its own header comment that
+it surfaces *object-like integer* macros and that "function-like macros,
+string/float/empty bodies … are skipped". Note the shape it does NOT block: a
+macro used **inside** a header's own inline body expands during preprocessing
+and works fine. It is only a macro invoked from nilpy source that has nowhere to
+expand.
+
+### One row deliberately left as "not established"
+
+`gpio_conf_reg_t()` from nilpy gave `expected expression`. That is very likely
+my nilpy spelling for instantiating a C struct rather than a frontend gap, and I
+did not find the right one. **Recorded as unknown rather than as a failure** —
+the C frontend reads and writes those bitfields correctly, so the layout work is
+evidently there, and filing this as an F-slice gap on my spelling would be a
+false lead.
+
+### A correction to my own measurement, because it nearly became the finding
+
+The first run of this probe reported that macros AND static inlines both failed
+from nilpy, and only externs worked. That was wrong, and the cause was my
+harness: a `fakeidf.c` sat beside `fakeidf.h` in the `-Fu` directory, so
+`import fakeidf` resolved the **`.c`** — which contains only the extern — and
+every "missing" construct was simply not in the file that got imported. Isolating
+the header changed three rows. The import reported nothing unusual; it succeeded,
+against a different file than the one I meant.
+
+### What a taker needs that this box does not have
+
+An ESP-IDF checkout (`tools/install_esp32_target.sh` fetches one) and an
+ESP32-S3, or a C3 for the already-proven riscv32 path. Both are the owner's to
+authorise — an IDF install is a large network fetch — so this was not started
+unattended.
