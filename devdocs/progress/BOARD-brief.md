@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:8 unfinished:28 blocked:7 backlog:6 backlog-umbrella:6 backlog-core:138 backlog-nilpy:96 backlog-tools:74 backlog-pascal:59 backlog-decide:29 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3117 rejected:72`
+`working:9 unfinished:28 blocked:7 backlog:6 backlog-umbrella:6 backlog-core:138 backlog-nilpy:96 backlog-tools:74 backlog-pascal:59 backlog-decide:29 backlog-libs:16 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3117 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,6 +13,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA
 - `feature-a-prune-statements-after-a-return-at-O0` [A] — owner: frankC
+- `feature-c-gnu-inline-asm-with-a-non-empty-template` [C] — owner: frankB
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
@@ -59,7 +60,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 462, ranked
+## Ready — top 30 of 461, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [P]` regression-lib-test-lib-synapse-3 (unblocks 1)
@@ -92,4 +93,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
 
-_432 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_431 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -3,11 +3,12 @@ slug: feature-c-gnu-inline-asm-with-a-non-empty-template
 track: C
 type: feature
 prio: 40
-status: open
+status: working
 found: 2026-09-02
 found-by: frankD
 blocked-by: []
 summary: "pxx's C frontend refuses GNU inline asm whose template is non-empty (`error: C: inline asm with a non-empty template is not supported — the instructions would be silently dropped`). The refusal is right; the gap is real. It is the LAST non-crtl blocker for busybox at 258 applets: networking/tls_sp_c32.c takes an x86-64 asm arm because pxx announces __GNUC__, and its failure takes the 400-object link down with it (curve_P256_compute_pubkey_and_premaster undefined). Everything else in that build now compiles."
+owner: frankB
 ---
 
 # GNU inline asm with a non-empty template
