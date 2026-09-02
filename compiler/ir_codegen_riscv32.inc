@@ -1385,6 +1385,9 @@ procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
   itemNode, hi: Integer;   { `x in [consts]` — SPECIAL_IN's item walk }
+  ctorP, ctorPj: Integer;  { class-instantiation: the ctor proc, and the running
+                             PARAMETER index (Self is 0) — `j` carries the class
+                             and then the ctor, so it cannot also count params }
   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   tk: TTypeKind;
   sgn, savedLVW: Boolean;
@@ -2608,26 +2611,52 @@ begin
           j := IRResolveCtorProc(node, j);      { overload-resolved ctor PROC }
           if j < 0 then
             Exit;                             { no ctor: instance in a0 }
+          ctorP := j;
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { Self, deepest }
-          nArgs := 1;
+          nArgs := 1;                         { WORDS }
+          ctorPj := 1;                        { parameter index; Self is 0 }
           argNode := IRB[node];               { size arg }
           argNode := IRB[argNode];            { first explicit ctor arg }
           while argNode <> -1 do
           begin
-            IREmitNodeRISCV32(IRA[argNode]);
-            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
-            Inc(nArgs);
+            { EmitCallArgWordsRISCV32 is the ladder the direct, indirect and
+              virtual paths already share; the constructor was the FOURTH path
+              and it carried none -- one word per argument, whatever its class.
+              So an Int64 or a 5..8 byte record constructor parameter lost its
+              high word and shifted every parameter after it. Measured:
+              `TC64.Create(70000, 1, 2, 3, 4)` with `a: Int64`.
+              bug-a-the-constructor-argument-ladder-is-the-copy-that-never-learned-argument-classes }
+            EmitCallArgWordsRISCV32(ctorP, ctorPj, argNode, nArgs);
+            Inc(ctorPj);
             argNode := IRB[argNode];
           end;
-          if nArgs > 8 then
-            Error('target riscv32: constructor with more than 8 parameter words not supported');
-          for i := 0 to nArgs - 1 do
-            rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
-          rv32_lw(reg_t1, reg_sp, (nArgs - 1) * 4);            { Self again }
-          rv32_addi(reg_sp, reg_sp, nArgs * 4);
-          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_t1, reg_sp, 0);  { save Self }
-          EmitCallProc(j);
-          rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { Self }
+          if nArgs <= 8 then
+          begin
+            for i := 0 to nArgs - 1 do
+              rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
+            rv32_lw(reg_t1, reg_sp, (nArgs - 1) * 4);            { Self again }
+            rv32_addi(reg_sp, reg_sp, nArgs * 4);
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_t1, reg_sp, 0);  { save Self }
+            EmitCallProc(ctorP);
+            rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { Self }
+          end
+          else
+          begin
+            { Over eight words this refused outright. The direct path's answer
+              is right here too: reorder the tail into psABI order, load a0..a7
+              from their (high) slots, and keep the WHOLE block live across the
+              call, since words 8+ ARE the callee's incoming stack arguments.
+              Self stays word 0 at the top of the block -- the reorder only
+              touches the tail -- so it is reloaded from there afterwards and
+              the block is dropped once, with no separate save.
+              bug-a-arm32-refuses-a-constructor-with-more-than-four-parameter-words }
+            EmitStackTailToPsABIOrderRISCV32(nArgs);
+            for i := 0 to 7 do
+              rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
+            EmitCallProc(ctorP);
+            rv32_lw(reg_a0, reg_sp, (nArgs - 1) * 4);            { Self }
+            rv32_addi(reg_sp, reg_sp, nArgs * 4);
+          end;
           Exit;
         end;
         if procIdx = -Ord(tkFreeMem) then

@@ -2361,25 +2361,93 @@ begin
           if p1 < 0 then
             Exit;                        { no ctor: instance pointer in r0 }
           EmitI32($E92D0001);            { push {r0} (Self = word 0, deepest) }
-          nArgs := 1;                    { total arg words }
+          nArgs := 1;                    { total arg WORDS }
+          j := 1;                        { PARAMETER index; Self is 0 }
           argNode := IRB[node];          { size arg }
           argNode := IRB[argNode];       { first explicit ctor arg }
           while argNode <> -1 do
           begin
-            IREmitNodeArm32(IRA[argNode]);
-            EmitI32($E92D0001);          { push {r0} }
-            Inc(nArgs);
+            { The constructor ladder was the FIFTH copy of this decision and the
+              one nobody updated: it pushed exactly one word per argument, so an
+              Int64 or a 5..8 byte record constructor parameter lost its high
+              word and every parameter after it shifted. MEASURED before this
+              arm existed: `TC64.Create(70000, 1, 2, 3, 4)` with
+              `a: Int64` answered 4295039530 for 71234 -- the high word read back
+              as the neighbouring slot. It asks Arg32Class now, like the direct,
+              virtual and indirect ladders above it.
+              bug-a-the-constructor-argument-ladder-is-the-copy-that-never-learned-argument-classes }
+            argCls := Arg32Class(p1, j, IntToTypeKind(IRTk[IRA[argNode]]));
+            if argCls = A32_SET then argCls := A32_WORD;   { arm32 passes a set by address }
+            if (argCls = A32_RECORD) or (argCls = A32_PAIR64) then
+            begin
+              if argCls = A32_PAIR64 then EmitNode64Arm32(IRA[argNode])
+              else IREmitNodeArm32(IRA[argNode]);          { r0=lo, r1=hi }
+              EmitI32($E92D0001);        { push {r0} (lo) }
+              EmitI32($E92D0002);        { push {r1} (hi) }
+            end
+            else if argCls = A32_DOUBLE then
+            begin
+              IREmitNodeArm32(IRA[argNode]);               { d0 }
+              if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+                EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[IRA[argNode]]));
+              EmitI32($EC510B10);                          { vmov r0, r1, d0 }
+              EmitI32($E92D0001); EmitI32($E92D0002);      { push lo, hi }
+            end
+            else if argCls = A32_SINGLE then
+            begin
+              IREmitNodeArm32(IRA[argNode]);               { d0 }
+              if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+                EmitIntToD0Arm32Tk(IntToTypeKind(IRTk[IRA[argNode]]));
+              EmitI32($EEB70BC0);                          { vcvt.f32.f64 s0, d0 }
+              EmitI32($EE100A10);                          { vmov r0, s0 }
+              EmitI32($E92D0001);                          { push {r0} }
+            end
+            else
+            begin
+              IREmitNodeArm32(IRA[argNode]);
+              EmitI32($E92D0001);        { push {r0} }
+            end;
+            Inc(nArgs, Arg32Words(argCls, p1, j));
+            Inc(j);
             argNode := IRB[argNode];
           end;
-          if nArgs > 4 then
-            Error('target arm32: constructor with more than 4 parameter words not supported');
-          for i := 0 to nArgs - 1 do
-            EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
-          EmitLoadImmArm32(9, nArgs * 4);
-          EmitI32($E08DD009);            { add sp, sp, r9 (drop pushed words) }
-          EmitI32($E92D0001);            { push {r0} (save Self) }
-          EmitCallProc(p1);
-          EmitI32($E8BD0001);            { pop {r0} (Self = constructor result) }
+          if nArgs <= 4 then
+          begin
+            for i := 0 to nArgs - 1 do
+              EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
+            EmitLoadImmArm32(9, nArgs * 4);
+            EmitI32($E08DD009);          { add sp, sp, r9 (drop pushed words) }
+            EmitI32($E92D0001);          { push {r0} (save Self) }
+            EmitCallProc(p1);
+            EmitI32($E8BD0001);          { pop {r0} (Self = constructor result) }
+          end
+          else
+          begin
+            { More than four words: r0-r3 take the first four and words 4..n-1
+              STAY on the stack across the call, because they are the callee's
+              incoming stack arguments. Exactly the j>4 arm the direct, virtual
+              and indirect ladders in this file already use, and the pushes above
+              produced the identical layout (Self deepest, arg k at
+              [sp+(nArgs-1-k)*4]), so nothing about the block has to change --
+              only the decision not to drop it early.
+
+              This refused outright before, on every constructor of five or more
+              parameter words, and arm32 was the only target that did:
+              `TWide.Create(1,2,3,4,5,6)` builds and answers 123456 on x86-64,
+              i386, aarch64 and riscv32.
+
+              Self is NOT re-pushed here. The <= 4 arm saves it because it has
+              already dropped the block; this arm still has it, at the deepest
+              slot, so it is reloaded from there after the call and the block is
+              dropped once. One fewer push and no second copy to keep in step.
+              bug-a-arm32-refuses-a-constructor-with-more-than-four-parameter-words }
+            for i := 0 to 3 do
+              EmitI32($E59D0000 or (i shl 12) or ((nArgs - 1 - i) * 4)); { ldr r[i], [sp, #off] }
+            EmitCallProc(p1);
+            EmitI32($E59D0000 or ((nArgs - 1) * 4));  { ldr r0, [sp, #(nArgs-1)*4] (Self) }
+            EmitLoadImmArm32(9, nArgs * 4);
+            EmitI32($E08DD009);          { add sp, sp, r9 (drop the whole block) }
+          end;
           Exit;
         end;
         if procIdx = -Ord(tkFreeMem) then

@@ -2941,13 +2941,66 @@ begin
             Exit;                        { no ctor: instance pointer in eax }
           EmitB($50);                    { push eax (Self = param 0, deepest) }
           argBytes := 4;
+          nArgs := 1;                    { parameter index; Self is 0 }
           argNode := IRB[node];          { size arg }
           argNode := IRB[argNode];       { first explicit ctor arg }
           while argNode <> -1 do
           begin
-            IREmitNode386(IRA[argNode]); { arg -> eax }
-            EmitB($50);                  { push eax }
-            Inc(argBytes, 4);
+            { FOUR BYTES PER ARGUMENT was what this loop assumed, and the class
+              of the argument decides the width. The direct, virtual and
+              indirect ladders in this file all ask Arg32Class; the constructor
+              is the copy that never did, so an Int64, a Double or a 5..8 byte
+              record constructor parameter was pushed as one dword and every
+              parameter after it shifted -- and on i386 that did not merely
+              answer wrong, it SEGFAULTED all three times, because the reload of
+              Self at [esp+argBytes-4] then read an argument instead of the
+              instance and the caller went on to use it as one.
+              bug-a-the-constructor-argument-ladder-is-the-copy-that-never-learned-argument-classes }
+            argCls := Arg32Class(p1, nArgs, IntToTypeKind(IRTk[IRA[argNode]]));
+            IREmitNode386(IRA[argNode]); { arg -> eax (edx:eax for a pair) }
+            if argCls = A32_SET then
+            begin
+              { The set's value is its address: push all eight dwords, high
+                first, so byte 0 lands at the callee's lowest arg address. }
+              for i := 7 downto 0 do
+              begin
+                EmitB($8B); EmitB($50); EmitB(i * 4);   { mov edx, [eax+i*4] }
+                EmitB($52);                             { push edx }
+              end;
+            end
+            else if argCls = A32_DOUBLE then
+            begin
+              if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+                EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]]));
+              EmitB($83); EmitB($EC); EmitB($08);                         { sub esp, 8 }
+              EmitB($F2); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movsd [esp], xmm0 }
+            end
+            else if argCls = A32_SINGLE then
+            begin
+              if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
+                EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]]));
+              EmitB($F2); EmitB($0F); EmitB($5A); EmitB($C0);             { cvtsd2ss xmm0, xmm0 }
+              EmitB($83); EmitB($EC); EmitB($04);                         { sub esp, 4 }
+              EmitB($F3); EmitB($0F); EmitB($11); EmitB($04); EmitB($24); { movss [esp], xmm0 }
+            end
+            else if (argCls = A32_PAIR64) or (argCls = A32_RECORD) then
+            begin
+              { edx:eax holds the pair. A 32-bit source widened into a 64-bit
+                parameter still has to be extended -- the direct ladder does the
+                same, and without it the high dword is whatever edx held. }
+              if (argCls = A32_PAIR64) and
+                 (not Is64Bit386(IntToTypeKind(IRTk[IRA[argNode]]))) then
+              begin
+                if TypeSigned(IntToTypeKind(IRTk[IRA[argNode]])) then EmitB($99)  { cdq }
+                else begin EmitB($31); EmitB($D2); end;                           { xor edx, edx }
+              end;
+              EmitB($52);                { push edx (hi) }
+              EmitB($50);                { push eax (lo) }
+            end
+            else
+              EmitB($50);                { push eax }
+            Inc(argBytes, Arg32Words(argCls, p1, nArgs) * 4);
+            Inc(nArgs);
             argNode := IRB[argNode];
           end;
           EmitCallProc(p1);

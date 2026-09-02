@@ -2661,14 +2661,79 @@ begin
             Exit;                               { no ctor: instance in a2 }
           argBase := XtSpillDepth;
           XtensaPushA2;                         { Self = word 0 (call0: deepest) }
-          nArgs := 1;
+          nArgs := 1;                           { WORDS }
+          i := 1;                               { PARAMETER index; Self is 0 }
           argNode := IRB[node];                 { size arg }
           argNode := IRB[argNode];              { first explicit ctor arg }
           while argNode <> -1 do
           begin
-            IREmitNodeXtensa(IRA[argNode]);
-            XtensaPushA2;
-            Inc(nArgs);
+            { One word per ARGUMENT was what this loop did, and the class of the
+              argument decides the count. Measured before this ladder existed,
+              all three on xtensa alone once arm32 and riscv32 were fixed:
+              an Int64 ctor parameter answered 8589938036 for 71234, an 8-byte
+              by-value record 702091 for 702039, and a Double 700001 for 702509.
+              The DIRECT path in this file has had these four arms for a long
+              time; the constructor is the copy that never got them.
+
+              The even-word pad is the same call the direct path makes and for
+              the same reason: the callee spill runs one shared 64-bit branch for
+              Int64, Double and a 5..8 byte record, so it skips an odd word on
+              its side too. Both sides apply the rule or neither does.
+              bug-a-the-constructor-argument-ladder-is-the-copy-that-never-learned-argument-classes }
+            argCls := Arg32Class(j, i, IntToTypeKind(IRTk[IRA[argNode]]));
+            if argCls = A32_DOUBLE then
+            begin
+              XtensaPadTo64Xtensa(j, nArgs);
+              EmitFloatOperandXtensa(IRA[argNode], tyDouble);   { a2=lo, a3=hi }
+              XtensaPushA2;
+              xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+              XtensaPushA2;
+              Inc(nArgs, 2);
+            end
+            else if argCls = A32_SINGLE then
+            begin
+              EmitFloatOperandXtensa(IRA[argNode], tySingle);
+              XtensaPushA2;
+              Inc(nArgs, 1);
+            end
+            else if argCls = A32_PAIR64 then
+            begin
+              XtensaPadTo64Xtensa(j, nArgs);
+              EmitNode64Xtensa(IRA[argNode]);                   { a2=lo, a3=hi }
+              XtensaPushA2;
+              xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+              XtensaPushA2;
+              Inc(nArgs, 2);
+            end
+            else if argCls = A32_RECORD then
+            begin
+              XtensaPadTo64Xtensa(j, nArgs);
+              IREmitNodeXtensa(IRA[argNode]);                   { a2=lo, a3=hi }
+              XtensaPushA2;
+              xtensa_mov(reg_xtensa_a2, reg_xtensa_a3);
+              XtensaPushA2;
+              Inc(nArgs, 2);
+            end
+            else if argCls = A32_SET then
+            begin
+              { The set's VALUE is its address; push all eight words inline, as
+                the direct path does, so the callee spill can rebuild it. }
+              IREmitNodeXtensa(IRA[argNode]);                   { a2 = set address }
+              xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
+              for hi := 0 to 7 do
+              begin
+                xtensa_l32i(reg_xtensa_a2, reg_xtensa_a3, hi * 4);
+                XtensaPushA2;
+              end;
+              Inc(nArgs, 8);
+            end
+            else
+            begin
+              IREmitNodeXtensa(IRA[argNode]);
+              XtensaPushA2;
+              Inc(nArgs, 1);
+            end;
+            Inc(i);
             argNode := IRB[argNode];
           end;
           if XtensaABI = XTENSA_ABI_WINDOWED then
