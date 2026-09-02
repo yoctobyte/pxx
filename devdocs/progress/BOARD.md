@@ -477,10 +477,11 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog-decide (26)
+## backlog-decide (27)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit | U | 55 | decide | A pxx --emit-obj object exports its ENTIRE runtime -- 288 weak FUNC symbols for a two-function C translation unit -- and per-object DCE therefore cannot prune it: measured, an object keeps 529 of 804 bodies where the same code as an executable keeps 78. Pruning it changes the object's LINK SURFACE (the symbol goes, not just the bytes), which is a semantic change one existing test asserts against. The fork: is an object a self-contained runtime that anything may link against, or a translation unit whose runtime is an implementation detail? Both are coherent; they differ on what a second object may assume. | — |
 | decide-a-latent-defect-ticket-should-block-the-work-that-makes-it-observable | U | 55 | decide | f4fb9d31b made generic constraints load-bearing while bug-p-generic-constraints-are-checked-before-the-type-section-closes sat open at p40 describing exactly why the placement was wrong. The regression was predicted in writing before it happened, and nothing in the board could express the dependency. Same shape hit three times on 2026-08-30. Options: a new edge type, a convention on blocked-by, a check in tools/progress.sh, or accept it. | — |
 | decide-c-crtl-rand-max-is-conforming-but-breaks-real-code | U | 40 | decide | crtl defines RAND_MAX as 32767 and rand() returns [0,32767]. C99 7.20.2.1 only requires RAND_MAX >= 32767, so this is conforming — but every mainstream libc uses 2147483647 and real programs branch on the value. busybox editors/awk.c has an #error for anything else and is the only busybox file still blocked on a non-library gap. Raising it is a behaviour change to a shipped library, not a defect fix, so it is a call to make, not a bug to close. | — |
 | decide-do-we-introduce-the-named-trade-off-flag-axis-and-what-is-the-bar | U | 55 | decide | The O charter names -Os, -Ofast and -funroll-loops as the shape a trade-off takes -- an author chooses WHICH trade, not HOW MUCH -- but NONE OF THE THREE EXISTS. No named trade-off flag has ever been built, so the axis is described and empty. A first candidate now exists: the x86-64 static-literal retain guard, measured -3.96% on literal-heavy code and +6.95% on the real workload (compiler.pas), i.e. a genuine trade rather than a win or a loss. The fork: do we open the named-flag axis at all, and what is the bar for putting a pass behind one -- given that PROMISE (delivered value, measured) and PROOF (Track T full tier) were ruled for the -O levels and a trade-off flag by construction cannot show net promise? Filed by the coordinator at frank-optimize's request; frank-optimize declined to file it while holding the candidate. | — |
@@ -1022,6 +1023,7 @@ _none_
 - [p 55] [T] bug-t-test-fgl-skips-silently-when-the-corpus-is-absent-so-its-gate-row-passes-by-not-running
 - [p 55] [T] bug-t-the-duplicate-expectation-ratchet-is-npy-only-and-the-first-escape-was-a-pas-test
 - [p 55] [T] bug-t-the-gate-checks-binary-freshness-with-a-heuristic-that-cannot-see-the-common-case
+- [p 55] [U] decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit
 - [p 55] [U] decide-a-latent-defect-ticket-should-block-the-work-that-makes-it-observable
 - [p 55] [U] decide-do-we-introduce-the-named-trade-off-flag-axis-and-what-is-the-bar
 - [p 55] [U] decide-nilpy-ranking-is-shaped-by-a-low-dependency-sample
