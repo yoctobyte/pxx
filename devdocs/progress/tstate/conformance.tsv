@@ -213,7 +213,7 @@ pass	tgenconstraint16.pp	tgenconstraint	-
 pass	tgenconstraint17.pp	tgenconstraint	-	
 pass	tgenconstraint18.pp	tgenconstraint	-	
 pass	tgenconstraint19.pp	tgenconstraint	-	
-skip	tgenconstraint1.pp	tgenconstraint	gap	Delphi generic constraint syntax (class/record/constructor/interface constraints)
+pass	tgenconstraint1.pp	tgenconstraint	-	
 pass	tgenconstraint20.pp	tgenconstraint	-	
 pass	tgenconstraint21.pp	tgenconstraint	-	
 pass	tgenconstraint22.pp	tgenconstraint	-	
@@ -233,8 +233,8 @@ pass	tgenconstraint34.pp	tgenconstraint	-
 pass	tgenconstraint35.pp	tgenconstraint	-	
 pass	tgenconstraint36.pp	tgenconstraint	-	
 skip	tgenconstraint37.pp	tgenconstraint	gap	generic constraints on forward-declared class/interface (T: IInterface)
-skip	tgenconstraint38.pp	tgenconstraint	wontfix	dialect-pass — PXX does not enforce generic constraints (compile-time safety net only; runtime semantics well-defined) — not a bug, FPC-strict candidate
-skip	tgenconstraint39.pp	tgenconstraint	wontfix	dialect-pass — PXX does not enforce generic constraints (compile-time safety net only; runtime semantics well-defined) — not a bug, FPC-strict candidate
+pass	tgenconstraint38.pp	tgenconstraint	-	
+pass	tgenconstraint39.pp	tgenconstraint	-	
 pass	tgenconstraint3.pp	tgenconstraint	-	
 pass	tgenconstraint40.pp	tgenconstraint	-	
 pass	tgenconstraint4.pp	tgenconstraint	-	
@@ -275,7 +275,7 @@ pass	tgeneric29.pp	tgeneric	-
 pass	tgeneric2.pp	tgeneric	-	
 skip	tgeneric30.pp	tgeneric	wontfix	dialect-pass — mode-delphi generic method impl without <T> — PXX's Delphi-generics rewriter deliberately accepts the bare name (3d71edcf); not a bug
 pass	tgeneric31.pp	tgeneric	-	
-fail	tgeneric32.pp	tgeneric	-	compile error
+pass	tgeneric32.pp	tgeneric	-	
 pass	tgeneric33.pp	tgeneric	-	
 pass	tgeneric34.pp	tgeneric	-	
 pass	tgeneric35.pp	tgeneric	-	
@@ -293,7 +293,7 @@ pass	tgeneric45.pp	tgeneric	-
 pass	tgeneric46.pp	tgeneric	-	
 pass	tgeneric47.pp	tgeneric	-	
 skip	tgeneric48.pp	tgeneric	gap	mixed generic overloads by arity (class/record/interface/procvar/array)
-fail	tgeneric49.pp	tgeneric	-	compile error
+pass	tgeneric49.pp	tgeneric	-	
 pass	tgeneric4.pp	tgeneric	-	
 skip	tgeneric50.pp	tgeneric	gap	hint directives (deprecated/platform/experimental) on generics and specializations
 pass	tgeneric51.pp	tgeneric	-	
