@@ -8,7 +8,7 @@ status: open
 created: 2026-09-02
 found-by: frankD
 owner: frankD
-summary: "**265 OF 265 TRANSLATION UNITS BECOME i386 OBJECTS AND ALL 266 LINK** (the 266th is libbb/bb_bswap_64.c, which the host link map omits -- see below), measured 2026-09-02 at the full 140-applet scope with binary cd239178b3a0. The i386 binary RUNS and differs from the gcc oracle on ONE of 387 cases, ticketed as bug-c-busybox-mv-treats-an-existing-plain-file-destination-as-a-directory-on-i386. **x86-64 at the same scope is byte-identical to the gcc oracle over all 387 cases** -- the first green full-applet separate build, previously stopped at getnameinfo. Earlier counts on this ticket (332, then 384 of 396) were taken at a different applet scope and are not comparable: busybox's .config is shared mutable state and a TU count without its scope named is not reproducible. regex.h (7 TUs) landed as 2f920dfd4 and resolv.h and the 4 inline-asm files are out of scope at this applet set."
+summary: "**265 OF 265 TRANSLATION UNITS BECOME i386 OBJECTS AND ALL 266 LINK** (the 266th is libbb/bb_bswap_64.c, which the host link map omits -- see below), measured 2026-09-02 at the full 140-applet scope with binary cd239178b3a0. The i386 binary RUNS and differs from the gcc oracle on ONE of 387 cases, ticketed as bug-a-i386-a-pointer-is-register-and-memory-resident-at-once-across-a-goto-entered-loop. **x86-64 at the same scope is byte-identical to the gcc oracle over all 387 cases** -- the first green full-applet separate build, previously stopped at getnameinfo. Earlier counts on this ticket (332, then 384 of 396) were taken at a different applet scope and are not comparable: busybox's .config is shared mutable state and a TU count without its scope named is not reproducible. regex.h (7 TUs) landed as 2f920dfd4 and resolv.h and the 4 inline-asm files are out of scope at this applet set."
 ---
 
 # The second architecture, and what the first one was borrowing
@@ -233,7 +233,7 @@ at `getnameinfo` in `libbb/xconnect.c`; the header work cleared it.
 
 **i386 compiles completely** -- 265 of 265 -- and now links and runs. The single
 differing case is `mv copy.txt moved.txt`, filed as
-`bug-c-busybox-mv-treats-an-existing-plain-file-destination-as-a-directory-on-i386`
+`bug-a-i386-a-pointer-is-register-and-memory-resident-at-once-across-a-goto-entered-loop`
 with stat/lstat/S_ISDIR/errno already measured out as the cause.
 
 ### The link failure that was not a pxx bug

@@ -1,7 +1,7 @@
 ---
-slug: bug-c-busybox-mv-treats-an-existing-plain-file-destination-as-a-directory-on-i386
-title: "busybox mv on i386 completes the rename and then runs one loop iteration too many -- argv pointer identity, not stat"
-track: C
+slug: bug-a-i386-a-pointer-is-register-and-memory-resident-at-once-across-a-goto-entered-loop
+title: "i386: a pointer variable is register- and memory-resident at once across a goto-entered loop, so ++ updates one and the loop test reads the other"
+track: A
 prio: 55
 type: bug
 status: open
@@ -9,7 +9,7 @@ created: 2026-09-02
 found-by: frankD
 owner:
 blocked-by:
-summary: "`mv A B` on the i386 build RENAMES A TO B and THEN errors with `can't stat 'B/A'`, exit 1. Sharp boundary: every command that reaches mv.c's `goto DO_MOVE` (destination not a directory -- including `-T`, which is a SECOND such goto) fails this way, and every command that enters the loop normally (`mv A DIR`, `mv -t DIR A`) is correct. On the extra pass `*argv` is still the FIRST argument -- the message says `B/A`, not `B/B` -- so the `++` in `while (*++argv && *argv != last)` did not take effect for that pass. REFUTED by measurement, all four builds identical: argc/argv pointer identity, the terminator itself, a goto into a do-while body, the same under register pressure at -O0 and -O2, and stat/lstat/S_ISDIR/errno. Not optimiser-dependent (-O1 and -O2 both). Reproduces at `--applets "mv cp"` (34 objects) and a single TU can be swapped and relinked in seconds -- rig in the body. Next step is instrumenting mv_main, which will most likely re-lane this to A."
+summary: "INSTRUMENTED AND LOCALISED. On i386, `mv A NEW` moves the file and then takes one extra loop pass. The instrumented trace shows `argv` holding the SAME address at both evaluations of `while (*++argv && *argv != last)` while the loop still terminates after two -- which is only consistent with `argv` being register- and memory-resident at once: the `++` advances a REGISTER (pass 1 to the `NEW` slot, pass 2 to the NULL terminator, which short-circuits and ends the loop), while the `!= last` comparison and the body both re-read the MEMORY slot the `++` never wrote back, so the test asks `"A" != "NEW"` and grants the extra pass. That is also why the message reads `NEW/A` and not `NEW/NEW`. argc, optind, flags and last are all correct, so getopt32 and its varargs are exonerated along with stat/lstat/S_ISDIR/errno and argv pointer identity. Five minimal programs failed to reproduce it standalone; busybox itself is the reproducer, seconds per iteration via the single-TU rig in the body. RE-LANED TO A: i386 code generation, not the C frontend."
 ---
 
 # The case
@@ -214,3 +214,70 @@ jump, versus the `++` being applied to a copy. Both are backend concerns, so
 **this most likely re-lanes to A**; it has not been re-laned yet because no
 measurement has yet put the fault below the C level, and the four probes above
 each failed to.
+
+# 2026-09-02, night — INSTRUMENTED. `argv` is register- and memory-resident at once
+
+`mv_main` instrumented through the single-TU rig (an edited COPY of mv.c, the
+busybox tree untouched; note `-Icoreutils` is needed or `libcoreutils/coreutils.h`
+does not resolve). `mv A NEW`, i386, `-O2`:
+
+```
+DBG post-getopt argc=2 optind=1 flags=0 argv=0xfff0f8d8 argv[0]=A argv[1]=NEW
+DBG last=0xfff1150d (NEW) &argv[argc-1]=0xfff0f8dc
+DBG body     argv=0xfff0f8d8 *argv=A dest=NEW last=0xfff1150d(NEW) eq=0
+DBG prewhile argv=0xfff0f8d8 *argv=A last=0xfff1150d
+mv: can't stat 'NEW/A': Not a directory
+DBG prewhile argv=0xfff0f8d8 *argv=A last=0xfff1150d
+```
+
+`argc`, `optind`, `flags` and `last` are all **correct** -- `flags=0` in
+particular, so the earlier suspicion of a stray `OPT_DESTDIR` from getopt32's
+varargs is dead too.
+
+**`argv` holds 0xfff0f8d8 at both `prewhile` prints, and the loop still
+terminates after two passes.** Those two facts cannot both be true of a single
+`argv`, and that is the finding:
+
+- the `++` in `*++argv` advances a REGISTER copy: pass 1 lands on the `NEW`
+  slot (non-NULL, so `&&` continues), pass 2 lands on the NULL terminator,
+  which short-circuits and is what finally ends the loop;
+- every other read -- the `!= last` comparison, `*argv` in the body, and the
+  instrumentation itself -- reads the MEMORY slot, which the `++` never wrote
+  back. So the comparison asks `"A" != "NEW"`, answers true, and grants the
+  extra pass.
+
+That also explains the concatenation being `NEW/A` rather than `NEW/NEW`, which
+was the first clue, and why the loop stops instead of spinning.
+
+**The absent `DBG body` line on pass 2 corroborates rather than contradicts**:
+`cp_mv_stat` on the concatenated path fails, and `if (dest_exists < 0) goto RET_1;`
+sits ABOVE the `DO_MOVE:` label, so pass 2 legitimately skips it.
+
+**One honest caveat.** The instrumentation reads `argv` the same way the body
+does, so "argv never changed" is a statement about what the PROGRAM observes,
+not an independent view of the register. That is the defect rather than a
+limitation of the probe -- the program's own reads are the thing that is wrong --
+but a disassembly of `mv_main` around the loop is what would show the two
+locations directly, and it has not been done.
+
+## Why it does not reproduce standalone
+
+Five minimal programs failed to trigger it, each closer than the last: the
+terminator alone; a `goto` from outside into a `do-while` body; the same with
+eight extra live locals at `-O0` and `-O2`; the same with the parameter
+reassigned by a NON-CONSTANT (`argv += opt_index`, the `argv += optind` shape);
+all correct on all four builds. Whatever forces `argv` to be both
+register-allocated and memory-resident needs more of `mv_main` than these have --
+most likely the spill pressure of the real body, which contains `bb_perror_msg`,
+`copy_file`, `remove_file` and a nested error ladder.
+
+**So the reproducer of record is busybox itself**, via the rig above, which is
+seconds per iteration. Do not spend more time shrinking it before looking at the
+generated code; the trace already localises it.
+
+## Re-laned to A
+
+This is i386 backend code generation, not the C frontend: the frontend's own
+loop and jump lowering is correct in isolation on this target at both `-O0` and
+`-O2`, and the divergence is between two storage locations for one variable.
+Track C found it and has taken it as far as source-level measurement can.
