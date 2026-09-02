@@ -118,4 +118,4 @@ failure and the dead arm it guards *surviving* is a second — their const-branc
 fold is what makes `if (__builtin_constant_p(x) && ...)` actually disappear once
 the builtin reduces to 0. Only the first was mine. All five of these are green
 without the second, so it does not bite here.
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 5cc4af7da.
