@@ -2,15 +2,15 @@
 track: A
 prio: 45
 type: refactor
-summary: "Five frontend drivers each open-code the same program prologue (entry stub, div0 stub, signal runtime, I/O lock stubs, System intrinsics, the emitted AnsiString runtime). The copies drift in one direction — whatever the Pascal driver gained last — and the BASIC one has now been caught missing four of them, one at a time."
+summary: "TEN OF TWELVE drivers now reach their parse through EmitProgramPrologue (frontend_prologue.inc); NilPy landed 2026-09-02, verified by 24 before/after rows (12 .npy tests, plain and --threadsafe, identical program output and identical compiler messages), eleven other-frontend binaries byte-identical, and three cross targets identical under qemu. LEFT: the C driver, blocked on merging its five per-arch call-main entry chains with EmitProgramEntryForTarget; and the PASCAL driver, blocked on a question this ticket used to call pure de-duplication -- the Pascal driver does NOT call RegisterEmittedStringRuntimeForwards, it registers a larger target-conditional SUPERSET inline, and RegisterProc is not idempotent, so passing wantAnsiRuntime=True would append ~40 duplicate proc rows. Decide that before converting, not during. The drift this deletes is measured, not felt: adding ONE new stub in 187a372a6 required four hand-written call sites, one per unconverted driver."
 ---
 
 # One program-driver prologue, instead of five copies that drift
 
 - **Type:** refactor (Track A — the drivers live in `pasparser_prog.inc`,
   `cparser.inc`, `pyparser.inc`, `bparser.inc` and the other skeleton frontends)
-- **Status:** backlog
-- **Owner:** claude-A
+- **Status:** working
+- **Owner:** frankA
 
 ## The pattern, measured rather than felt
 
@@ -282,3 +282,86 @@ compared against.
 unit-free `.bas` program with a string literal into a compile error, because the
 managed-string helper it calls only ships with `builtinheap`. So BASIC calls
 `EmitFinalizerRunnerBody` directly rather than `EmitProgramEpilogue`.
+
+## 2026-09-02 (frankA) — NilPy converted; ten of twelve; and the Pascal driver has a named blocker
+
+Adoption is **ten of twelve**. `pyparser` now calls `EmitProgramPrologue(True,
+True, True, jmpPatch)` and keeps only its two genuinely NilPy-specific steps
+after it (`EmitPyBitFloatErrStub`, `EnableExceptionRuntime`).
+
+### Why NilPy was worth doing before Pascal, contrary to this ticket's own ranking
+
+The ticket ranks Pascal and NilPy "lowest value of the twelve", because neither
+gains a step. That is true about BYTES and wrong about DRIFT: a hand-rolled
+step in the Pascal or NilPy driver is a step the next person copies into a
+fourth place. Measured this session — `187a372a6` added one new stub
+(`EmitHeapLockSlowStub`) and it had to be written at **four** call sites,
+`frontend_prologue.inc` plus the three unconverted drivers, precisely because
+those three were unconverted. NilPy's copy is now gone.
+
+### Verification
+
+- `make compiler/pascal26`: `converged after 1 round(s)`, `13bfcd811577`.
+- **Twelve .npy tests compiled plain AND `--threadsafe`, before and after: 24
+  rows, program output and compiler messages byte-identical on all 24, and
+  0 rows that failed to produce a binary** (the sweep asserts that count, since
+  a row that never built compares equal to another row that never built).
+- **Every other frontend byte-identical**: ada, algol, erlang, fortran, lolcode,
+  whitespace, zig, basic, rust, C, and two Pascal programs. Eleven binaries,
+  `cmp` clean. That is the blast radius the change was supposed to have.
+- **The arms do discriminate**, which is the control the above needs:
+  `test_nil_python_core.npy` is 1387726 bytes and `code=1310488B` on both
+  compilers, and 38248 bytes differ from offset 434. Same size, same output,
+  rearranged — so the reorder reached the NilPy path and changed nothing
+  observable.
+- **Cross targets**: arm32/aarch64/i386 build to identical SIZES with 69-71
+  bytes differing (the intrinsics-registration order and the BSS arena offsets),
+  and run under qemu to identical output and identical exit codes. riscv32
+  fails identically before and after, with the identical message — pre-existing,
+  [[bug-a-nilpy-on-cross-targets-four-remaining-walls]].
+- `tools/gate.sh quick` GREEN with `PASS FPC seed canary (concurrent)`.
+
+### The order that changed, and it is only NilPy
+
+This driver emitted the div0 stub and `EmitProgramRuntimeStubsForTarget` BEFORE
+the AnsiString runtime; every other driver does it after. The canonical order
+wins. Both work — the stubs sit behind the entry jump and are reached only by
+call — which is what the 24 identical rows say.
+
+### The Pascal driver is blocked on a real question, not on care
+
+This ticket says converting Pascal is "pure de-duplication with no behaviour to
+gain". It is not, and the reason is one line:
+
+**`RegisterEmittedStringRuntimeForwards` is called by `pyparser` and `cparser`
+and NOT by the Pascal driver.** Its own header says why: *"ParseProgram still
+registers a much larger, target-conditional SUPERSET inline (variants,
+interface ARC, the float writers, the xtensa divide helpers); this is the
+minimum the emitter itself needs."* The prologue calls the shared subset
+whenever `wantAnsiRuntime`, and `RegisterProc` is **not** idempotent — it
+appends and `Inc(ProcCount)` unconditionally. So handing the Pascal driver
+`wantAnsiRuntime = True` registers ~40 duplicate proc rows on top of the
+superset it already registered.
+
+That is a question with an answer, not a hazard to tiptoe around: either the
+prologue stops bundling the forwards with the emission (a fourth flag, or the
+caller's job), or the Pascal superset is expressed as the shared subset plus its
+target-conditional extras. The second is the `normalise-dont-special-case`
+answer and is the larger change. **Whoever takes Pascal decides that first and
+converts second.** It should not be found halfway through a byte diff.
+
+### Two residuals recorded rather than fixed
+
+- **`BSS_HEAP_PTR / BSS_HEAP_END / BSS_FREE_LIST / BSS_HEAP_LOCK` are 0 for the
+  nine skeleton/R/Z/BASIC drivers** — i.e. all four aliased onto BSS offset 0,
+  which is the identical shape to the `BSS_SIG_*` aliasing this ticket already
+  records for the C driver. The prologue allocates them under `withHeapArena`
+  so that this conversion changes exactly one driver; making it unconditional
+  is the right end state and belongs with the Pascal conversion, which is the
+  other driver allocating them by hand. **NOT DEMONSTRATED:** no program
+  reaching those slots from a skeleton frontend has been constructed, so this is
+  a shape, not a defect.
+- **The Pascal epilogue is `EmitFinalizerRunnerBody; FillRootVMTSlotDefaults;
+  ApplyCallFixups`** — `EmitProgramEpilogue` runs the two ends back to back, so
+  adopting it means deciding whether `FillRootVMTSlotDefaults` may move. Same
+  commit as the Pascal prologue.

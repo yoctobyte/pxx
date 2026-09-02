@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (7)
+## working (8)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -19,6 +19,7 @@ _none_
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
 | refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops | A | 45 | refactor | The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command but the target is NOT zero -- the census counts UNDEFINED symbols under the flag, so a NilPy arm whose helper lives in a shared file is invisible to it: `pasparser_proc.inc` carries nine real `isNilPy` arms and the census scores that file at ZERO. `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 209 now, after five steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), ParseFactor's NilPy head (34 sites, two hooks), and the two DEAD-ARM deletions -- the shared expression and statement call loops carried thirteen arms guarded by `isNilPy` where the question was `PyExprMode`, which could not fire at all (7314fab2b, 23c4552af). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead. | — |
+| refactor-a-one-program-driver-prologue-for-every-frontend | A | 45 | refactor | TEN OF TWELVE drivers now reach their parse through EmitProgramPrologue (frontend_prologue.inc); NilPy landed 2026-09-02, verified by 24 before/after rows (12 .npy tests, plain and --threadsafe, identical program output and identical compiler messages), eleven other-frontend binaries byte-identical, and three cross targets identical under qemu. LEFT: the C driver, blocked on merging its five per-arch call-main entry chains with EmitProgramEntryForTarget; and the PASCAL driver, blocked on a question this ticket used to call pure de-duplication -- the Pascal driver does NOT call RegisterEmittedStringRuntimeForwards, it registers a larger target-conditional SUPERSET inline, and RegisterProc is not idempotent, so passing wantAnsiRuntime=True would append ~40 duplicate proc rows. Decide that before converting, not during. The drift this deletes is measured, not felt: adding ONE new stub in 187a372a6 required four hand-written call sites, one per unconverted driver. | — |
 
 ## unfinished (27)
 
@@ -87,7 +88,7 @@ _none_
 | umbrella-pxx-hosted-beyond-linux | A | 25 | umbrella | GOAL, not a unit of work. 'Run a minimal system with compiler' -- pxx HOSTED somewhere that is not Linux/x86-64, not merely cross-emitting to it. Self-host is proved here every ~12s by the build; the goal is that same property on another kernel. OpenBSD is the nearest rung and the only one with tickets today; minix 2/3 and Windows have NONE, which is information, not an oversight. | decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual, feature-port-openbsd-libc |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (137)
+## backlog-core (136)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -218,7 +219,6 @@ _none_
 | refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed | A | 60 | refactor | C owns its lexer/parser/preproc but NOT its lowering: ir.inc carries 40 CProgramMode references. So most Track C work needs Track A's files, and a C agent cannot be staffed independently -- measured 2026-08-29, four of six ranked C tickets need an A file. | — |
 | refactor-a-nilpy-calling-convention-logic-lives-in-the-pascal-parser-files | A | 25 | refactor | 78 `isNilPy` branches sit inside the pasparser_*.inc set — NilPy language rules living in files named for the Pascal parser. It is why a Track N ticket routes its holder into files Track N does not own, and it is `the-substrate-is-ast-and-ir-not-the-parser` violated by filename rather than by design. | — |
 | refactor-a-nodearrndinfo-is-a-symtab-query-living-in-a-pascal-parser-file | A | 30 | refactor | NodeArrNDInfo contains no Pascal syntax and no Pascal semantics — it is a pure symbol-table query (SymArrNDims / UFldArrNDims / SymArrDimSpan) that happens to live in pasparser_call.inc. Track C now calls it across the frontend boundary, which the-substrate-is-ast-and-ir-not-the-parser.md warns against. The doctrine violation is the FILE, not the call: move it to symtab.inc. | — |
-| refactor-a-one-program-driver-prologue-for-every-frontend | A | 45 | refactor | Five frontend drivers each open-code the same program prologue (entry stub, div0 stub, signal runtime, I/O lock stubs, System intrinsics, the emitted AnsiString runtime). The copies drift in one direction — whatever the Pascal driver gained last — and the BASIC one has now been caught missing four of them, one at a time. | — |
 | refactor-a-one-rule-spelled-two-ways-at-two-strictnesses-in-ir-lowering | A | 40 | refactor | ir.inc:10426 reads `(CProgramMode or IsNodePChar(dest))` -- one rule expressed two ways at two different strictnesses, with the dialect flag standing in for the property it implies. Normalising it DELETES an entry from the C carve-out inventory rather than moving one, so it makes that refactor smaller. | — |
 | refactor-a-search-path-helpers-live-in-the-c-preprocessor | A | 18 | refactor | AddPasUnitDir / AddPasIncDir / AddCIncludeDir are generic search-path functions that live in cpreproc.inc, so compiler.pas's own -Fu/-I handling depends on the C frontend. Six of the eleven errors from omitting the C frontend are this misplacement, not coupling: moving them drops omit-c from 11 sites to about 4. | — |
 | refactor-a-seven-frontends-borrow-rust-parser-helpers | A | 22 | refactor | Zig, ALGOL, Erlang, Fortran, LOLCODE and Whitespace all call five helpers whose bodies live in rparser.inc, so PXX_NO_RUST alone fails with 198 errors and Rust can only be omitted together with all six. Three different layers are marooned under one R prefix: AST constructors (share, wrong file), RWiden (numeric widening — SEMANTICS, should not be shared at all), and REmitParamRegSpill (raw x86-64 emission in a frontend). | — |
@@ -871,9 +871,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3136)
+## done (3137)
 
-3136 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3137 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -1106,7 +1106,6 @@ _none_
 - [p 45] [N] feature-nilpy-threadsafe-containers
 - [p 45] [A+O] feature-opt-inline-float-and-record-returning-leaves
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
-- [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
 - [p 45] [A] refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths [parked — re-claim, do not duplicate]
 - [p 45] [A] refactor-a-viscachevis-is-indexed-by-a-string-id-and-sized-by-a-unit-count
 - [p 45] [N] refactor-n-two-import-handlers-are-twins

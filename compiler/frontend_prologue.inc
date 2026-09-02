@@ -70,6 +70,26 @@ begin
     program whether or not it reads its arguments. Twelve drivers allocated it by
     hand, one line above the entry stub that is its only writer. }
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
+
+  { The arena model's four published slots, and they must be allocated BEFORE
+    the entry stub because that is what writes BSS_HEAP_PTR/BSS_HEAP_END from
+    the mmap it performs. Gated on withHeapArena rather than unconditional
+    because that is the exact set of drivers that needs them TODAY and this is
+    a de-duplication, not a behaviour change: the Pascal driver allocates the
+    same four in its own BSS block (it grows the break lazily and passes False),
+    and the nine skeleton/R/Z/BASIC drivers allocate none, which leaves all four
+    at 0 -- aliased onto BSS offset 0 -- exactly as BSS_SIG_* was before
+    EmitProgramRuntimeStubsForTarget took it over. That is the same shape of
+    hazard and it is NOT demonstrated: no program reaching it has been
+    constructed. Whoever converts the Pascal driver should make this
+    unconditional and check those nine. }
+  if withHeapArena then
+  begin
+    BSS_HEAP_PTR  := BSSSize; Inc(BSSSize, 8);
+    BSS_HEAP_END  := BSSSize; Inc(BSSSize, 8);
+    BSS_FREE_LIST := BSSSize; Inc(BSSSize, 8);
+    BSS_HEAP_LOCK := BSSSize; Inc(BSSSize, 8);
+  end;
   EmitProgramEntryForTarget(withHeapArena, jmpPatch);
 
   { FIRST of the stubs, ahead of the string runtime below and NOT with the other

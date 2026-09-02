@@ -38175,63 +38175,37 @@ begin
   for i := 0 to MAX_UCLASS * 4 - 1 do PyDcCmpProc[i] := -1;
   PyMixN := 0; PyMixSkipN := 0; PyMixReplay := False;
   PyRegisterClassShells;
-  BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
-  BSS_HEAP_PTR    := BSSSize; Inc(BSSSize, 8);
-  BSS_HEAP_END    := BSSSize; Inc(BSSSize, 8);
-  BSS_FREE_LIST   := BSSSize; Inc(BSSSize, 8);
-  BSS_HEAP_LOCK   := BSSSize; Inc(BSSSize, 8);
-  { Entry stub: save the initial sp, mmap the heap arena, jump to the main body.
-    This was eight lines of raw x86-64 with NO target dispatch at all, so a
-    `--target=arm32` NilPy build produced an ELF marked `Machine: ARM` whose
-    entry point was `mov %rsp, 0x82b5060` — SIGILL on instruction one, no
-    diagnostic. True = this driver's allocator wants a real arena (the Pascal
-    driver grows the break lazily and passes False).
-    bug-a-nilpy-on-cross-targets-four-remaining-walls }
-  EmitProgramEntryForTarget(True, jmpPatch);
-  { Integer div-by-zero abort stub — same latent hole as the C driver: a
-    builtinheap div site compiled before PXXDivZero registers fell back to a
-    zero Div0StubAddr. Python '//'/'%' always need the check; unconditional. }
-  { The heap lock's contended path and its deadlock diagnosis. BEFORE the
-    AnsiString runtime below, which emits five heap-lock acquires of its own;
-    an acquire emitted while HeapLockSlowAddr is 0 takes the undiagnosed
-    fallback. See EmitHeapLockSlowStub on why this is a per-driver call. }
-  if ThreadSafeMode and (TargetArch = TARGET_X86_64) then EmitHeapLockSlowStub;
-  if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
-  { --threadsafe statement-atomic I/O lock stubs. Shared dispatcher, and a
-    call every frontend driver needs: without it IOLockAddr stays 0 and any
-    AN_WRITE lowering under --threadsafe calls code offset 0 -- the ELF entry
-    point -- which jumps back to main and hangs until the stack is gone
-    (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
-  { THE finish-the-runtime step (signal runtime + --threadsafe I/O lock stubs).
-    Was EmitIoLockStubsForTarget alone, so this frontend shipped with no signal
-    runtime at all — the same gap the I/O lock had, one stub later.
-    bug-a-only-the-pascal-driver-emits-the-signal-runtime }
-  EmitProgramRuntimeStubsForTarget;
+  { ONE prologue for every frontend (compiler/frontend_prologue.inc), in place
+    of the sequence this driver used to spell out: System intrinsics ->
+    BSS_INITIAL_RSP and the arena slots -> the per-target entry stub -> the
+    heap-lock slow stub -> the emitted AnsiString runtime with its forwards ->
+    the div-by-zero stub -> the signal runtime and the --threadsafe I/O lock
+    stubs. Every reason this driver had a comment for is now a comment on the
+    shared routine, which is the point: the next runtime stub family is added
+    there and this frontend has it without anyone remembering to come here.
+
+    True/True/True. The arena: this allocator wants a real mmap region and
+    publishes BSS_HEAP_PTR/BSS_HEAP_END, where Pascal grows the break lazily.
+    The AnsiString runtime: every NilPy string is managed. The div0 stub:
+    Python '//' and '%' always need the check, so unlike Pascal there is no
+    pre-scan worth doing.
+
+    ORDER CHANGED, deliberately and only here: this driver used to emit the
+    div0 stub and the runtime stubs BEFORE the AnsiString runtime, where every
+    other driver does it after. Both orders work -- the stubs sit behind the
+    entry jump and are reached only by call -- so the canonical one wins.
+    Measured, because "only layout" is a claim: test_nil_python_core.npy is
+    1387726 bytes and code=1310488B both before and after, byte 434 onward
+    differs, 38248 bytes in total. Same size, same output, rearranged. Twelve
+    .npy tests compiled plain AND --threadsafe, before and after: program
+    output and compiler messages identical on all 24.
+    refactor-a-one-program-driver-prologue-for-every-frontend }
+  EmitProgramPrologue(True, True, True, jmpPatch);
   { Bitwise-on-float TypeError abort stub — EmitVarBinOp's double path calls it
     when a bitwise op has a float variant operand (Python raises, we abort like
     pylib's PyTypeError). bug-nilpy-bitwise-on-float-variant-truncates. }
   if TargetArch = TARGET_X86_64 then EmitPyBitFloatErrStub;
   if pyHasExceptions then EnableExceptionRuntime;
-  { Forward-declare the builtin heap allocator before emitting the string
-    runtime, which calls Alloc. The unit body (compiled by ParseUsesUnit below)
-    fills these in; without it a .npy that touches the heap fails
-    FindProc('PXXAlloc') during EmitAnsiStringRuntime. This block used to be
-    written out here and again in ParseProgram, and the C driver had neither —
-    see the note on the shared helper. }
-  RegisterEmittedStringRuntimeForwards;
-  { EmitAnsiStringRuntime emits raw x86-64 machine code. The Pascal and C
-    drivers both guard it (`and (TargetArch = TARGET_X86_64)`); this one did
-    not, so a cross build spliced an x86-64 blob into the middle of the ARM /
-    i386 code stream. It was not even executed to fail: its length is not a
-    multiple of 4, so it shifted every ARM instruction after it two bytes out
-    of alignment and the first real proc decoded as garbage. The cross backends
-    call the builtinheap Pascal helpers directly instead — the same reason the
-    Pascal driver's guard exists.
-    bug-a-nilpy-on-cross-targets-four-remaining-walls }
-  if TargetArch = TARGET_X86_64 then EmitAnsiStringRuntime;
-  { builtinheap declares TInterfacedObject/IInterface, whose signatures name
-    TGuid and TObject — register the builtin rows first (idempotent), exactly
-    like the Pascal and C paths. }
   RegisterBuiltinTGuid;
   RegisterBuiltinTObject;
   ParseUsesUnitAmbient('builtinheap');
