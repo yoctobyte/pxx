@@ -3,7 +3,7 @@ slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
 prio: 85
 type: umbrella
-blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, bug-c-labels-as-values-is-the-whole-of-the-lua-regression]
+blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, regression-test-core-cfn-return-fnptr-b105]
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
@@ -523,3 +523,28 @@ so "no skip row names it" meant *the shard never executed*, and I read it as
 comparison.** Caught by asking which shard the file hashes into; fixed by
 running shard4, where it duly appears as a SKIPLIST row. Same family as the two
 instrument errors above, and the third today.
+
+## Labels-as-values closed by frankD; one new blocker in its place
+
+`bug-c-labels-as-values-is-the-whole-of-the-lua-regression` and both lua
+regressions are resolved (`6eea46f7c` x86-64, `15e4b9c0a` aarch64, `45a871287`).
+Unwired. My scoping on that ticket was **wrong in one respect and I had written
+it as fact**: I said it needed "an address-of-label relocation the object writer
+does not emit". No relocation was needed anywhere. I took that from frankD's own
+cost estimate and repeated it in my own voice without checking — a citation
+sourced from a brief, arriving as if measured, which is the failure this repo
+has a rule about.
+
+frankD also supplied the control my two counter-tests lacked: **the lua suite
+does not discriminate the two interpreter paths** — a `-DLUA_USE_JUMPTABLE=0`
+build passes 6/6 as well, so "6/6" was a true sentence about the wrong claim.
+The discriminating control is binary identity at the same flags. **That applies
+to my five gtk jobs too**: they were failing to COMPILE, so they pass whatever
+`__builtin_constant_p` reduces to, and "5/5 GREEN" says nothing about 0 being
+the right value. Owed, and being written.
+
+**New blocker, wired:** [[regression-test-core-cfn-return-fnptr-b105]] — a
+function RETURNING a function pointer stopped parsing. Three-line repro, bounded
+to four probes, and **the auto-filed range is wrong**: it blames `18b3ec2a6`,
+while my own optdiff log at `9df0058fe` already shows the file BUILD-FAIL, one
+commit after the real cause and two before the blamed sha. Owner frankD.

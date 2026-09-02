@@ -61,6 +61,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [P]` regression-lib-test-lib-synapse-3 (unblocks 1)
 - `[p 85] [P]` regression-lib-test-lib-synapse-ssl (unblocks 1)
 - `[p 85] [P]` regression-lib-test-lib-synapse-transitive-unit (unblocks 1)
+- `[p 85] [C]` regression-test-core-cfn-return-fnptr-b105 (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-exception-unhandled-3 (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-setlen-in-parallel-for-body-2 (unblocks 1)
 - `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
@@ -75,7 +76,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [P]` bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
-- `[p 70] [C]` regression-test-core-cfn-return-fnptr-b105
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [A]` bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine
