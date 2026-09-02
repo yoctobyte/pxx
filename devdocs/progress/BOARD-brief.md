@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:7 backlog:8 backlog-umbrella:6 backlog-core:139 backlog-nilpy:96 backlog-tools:73 backlog-pascal:60 backlog-decide:26 backlog-libs:16 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3099 rejected:72`
+`working:5 unfinished:27 blocked:7 backlog:8 backlog-umbrella:6 backlog-core:141 backlog-nilpy:96 backlog-tools:73 backlog-pascal:60 backlog-decide:26 backlog-libs:16 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3099 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -55,7 +55,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 460, ranked
+## Ready — top 30 of 461, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [C]` bug-c-labels-as-values-is-the-whole-of-the-lua-regression (unblocks 3)
@@ -65,10 +65,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [T]` regression-test-core-test-exception-unhandled-3 (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-setlen-in-parallel-for-body-2 (unblocks 1)
 - `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
+- `[p 80] [A]` bug-a-the-tkinter-demo-hits-a-different-backend-gap-on-each-of-i386-arm32-and-aarch64 (unblocks 1)
+- `[p 80] [A]` feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross (unblocks 1)
 - `[p 80] [A]` feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
-- `[p 80] [A]` umbrella-cross-target-codegen-is-correct
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [A]` umbrella-managed-memory-is-correct
 - `[p 70] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 1)
@@ -86,6 +87,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
 - `[p 65] [A]` feature-a-fold-the-consensus-dead-branch-core-at-every-level
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
-- `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 
-_430 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_431 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

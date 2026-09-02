@@ -4,7 +4,7 @@ title: "Cross-target codegen is CORRECT — xtensa, riscv32, arm32, i386"
 track: A
 prio: 80
 type: umbrella
-blocked-by: [bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs, feature-a-port-alloca-to-i386-arm32-and-riscv32, bug-a-i386-c-main-gets-argc-and-argv-swapped, bug-a-riscv32-and-xtensa-still-refuse-aggregate-results-via-virtual-and-indirect-calls-under-a-done-ticket, feature-a-i386-refuses-a-by-value-record-parameter-on-the-internal-convention-so-lib-rtl-image-does-not-build, feature-a-a-stackful-generator-is-x86-64-only-so-examples-chess-cannot-target-anything-else]
+blocked-by: [bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs, feature-a-port-alloca-to-i386-arm32-and-riscv32, bug-a-i386-c-main-gets-argc-and-argv-swapped, feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross, bug-a-the-tkinter-demo-hits-a-different-backend-gap-on-each-of-i386-arm32-and-aarch64]
 created: 2026-08-31
 summary: "GOAL, not a unit of work. The owner's ranking: 'cross platform has way prio above look-if-I-do-this-on-platform-that-it-would-break-z'. A program that compiles right on one target and wrong on another is the defect this umbrella exists for; a hypothetical about an untried platform is not. Measured target clusters: xtensa 11, riscv 8, arm32 5, i386."
 ---
@@ -57,3 +57,42 @@ wrong and the instrument was the mistake — I grepped the backlog for files
 *mentioning* this slug, and the edge lives in this file's own `blocked-by`,
 where three blockers already sat. A grep that returns nothing is not the same as
 an empty list.
+
+
+## 2026-09-02 (frankC) — the SECOND attempt, at `c2e9bbafd`
+
+Same instrument as the first, whole `examples/` tree this time (39 programs, 19
+skipped for want of a runnable x86-64 oracle), bytes compared against x86-64.
+
+**Every row the first attempt named is now green except the two that were
+already filed elsewhere.**
+
+| program | first attempt | now |
+| --- | --- | --- |
+| fm | i386:BUILD riscv32:RUN(139) xtensa:RUN(139) | **ok on all five** |
+| raytracer | i386:BUILD | **ok on all five** |
+| jsondemo | riscv32:BUILD xtensa:BUILD | **ok on all five** |
+| chess | BUILD on all five | **ok on all five** (see the timeout note below) |
+| console_2048, menudemo | riscv32:DIFF xtensa:DIFF | **ok on all five** |
+| satdemo | riscv32:RUN(139) xtensa:RUN(135) | **ok on all five** |
+| mathdemo | riscv32:DIFF xtensa:DIFF | unchanged — filed in `float/` (F) |
+
+14 programs green on all five targets. Three rows are not:
+
+- **`mathdemo`** — `sin` on both soft-float targets, byte-identically. Already
+  filed under F, still the same shape.
+- **`httpdemo`** — NEW, and the first attempt never saw it because it ran a
+  hand-written program list rather than the tree. Stackful coroutines exist for
+  four targets. Filed:
+  `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross`.
+- **`uses_tkinter_and_configparser`** — NEW, fails on all five, and on **four
+  different causes**. Filed:
+  `bug-a-the-tkinter-demo-hits-a-different-backend-gap-on-each-of-i386-arm32-and-aarch64`.
+
+### `chess | xtensa:RUN(124)` was the instrument, not the program
+
+The sweep reported a failure here and it was my 90-second timeout: run under
+`qemu-xtensa` with 600s, chess finishes in **1m57s** and its output is
+byte-identical to the oracle. Recorded because the next reader of that table
+would otherwise chase a defect that does not exist — a timeout does not error,
+it answers.
