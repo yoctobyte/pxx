@@ -229,7 +229,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (97)
+## backlog-nilpy (96)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -266,7 +266,6 @@ _none_
 | bug-n-kwargs-collector-alongside-named-params-needs-the-remainder | N | 50 | bug | `def f(a=1, **kw)` called as `f(**{'a':5,'x':7,'y':8})` must give a=5 and kw={'x':7,'y':8} — the collector takes the UNCONSUMED keys. pylib has no helper that subtracts consumed names, and adding one is compiler/builtin/** which NEEDS A PIN, so this is coordinator-scheduled, not worker-startable. | — |
 | bug-n-len-does-not-dispatch-len-dunder-on-a-dynamically-typed-value | N | 60 | bug | len(x) raises TypeError: expected an object with a length, got object whenever x's static type was not inferred, even though x's class defines __len__: an element of a list, a value out of a dict, an unannotated parameter, the return of any self-referencing or recursive function. The same value answers .attr, .method(), for-in and x[i] correctly, so len is the one protocol with no dynamic fallback. | — |
 | bug-n-name-on-a-builtin-type-is-unimplemented | N | 20 | bug | `str.__name__` / `int.__name__` raise AttributeError: 'type' object has no attribute '__name__'. A USER class answers correctly, so only the builtin-type value (VT_BTYPE) is missing the attribute. Clean Python-shaped error, not a crash. | — |
-| bug-n-nilpy-carries-its-own-copies-of-the-float-type-table | N | 30→75 | bug | `compiler/pyparser.inc` holds three private copies of the builtin float mapping, all hard-wiring `real` to `tyDouble`, and one of them additionally collapses `single` and `extended` to Double. The Pascal frontend just had the same duplication fixed; NilPy kept its own, so `Real` there is Double even on targets where it is Single. | — |
 | bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic | N | 70 | bug | a = x + 1 then `not a` is True and `~a` is 4, where CPython says False and -1026. It is not about the operator on the right: +, -, *, >> all trigger it, and so does a later reassignment from a plain literal. `int(1025)` does NOT. Some spellings return a 62-bit value with a tag in the high nibble (0x3000000000000004), so `~` is complementing a BOX rather than the integer it holds. It changes CONTROL FLOW: `if not a:` takes the wrong branch, silently. | — |
 | bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value | N | 45 | bug | `B = object` is `undefined variable (object)`, while `t = str`, `u = int`, `v = dict` all bind and call fine. `object` is the single builtin type name that is not a first-class value — it is consumed as a no-op in the base-class position and has no row anywhere else, so any expression naming it fails. | — |
 | bug-n-os-environ-and-os-sep-are-not-values | N | 60 | bug | `os.environ` and `os.sep` are not first-class values: `os.environ.get('X')` compiles but `'X' in os.environ` is `error: undefined variable (os)`. PyIsStdlibMemberValue recognises exactly three os members (seek_set/cur/end), so every DATA attribute of os fails while its functions work. Measured cost: it is the single largest wall in the reportlab probe — one 7-line file blocks 30 of 159. | — |
@@ -871,9 +870,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3146)
+## done (3147)
 
-3146 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3147 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -959,7 +958,6 @@ _none_
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 75] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 2)
-- [p 75] [N] bug-n-nilpy-carries-its-own-copies-of-the-float-type-table (unblocks 1)
 - [p 75] [P] bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes (unblocks 1)
 - [p 75] [P] bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size (unblocks 1)
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
@@ -1355,7 +1353,6 @@ _none_
 - **1** — bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
-- **1** — bug-n-nilpy-carries-its-own-copies-of-the-float-type-table
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes
 - **1** — bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size

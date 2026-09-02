@@ -1077,7 +1077,17 @@ begin
     tkInteger_T: Result := tyInteger;
     tkBoolean_T: Result := tyBoolean;
     tkString_T: Result := tyString;
-    tkReal_T, tkSingle_T, tkDouble_T, tkExtended_T: Result := tyDouble;
+    { `Real` is the NATIVE float depth, not unconditionally Double -- tySingle on
+      xtensa and riscv32, a long-settled dialect decision. RealTypeKind (util.inc)
+      is the one routine that answers it; this was the third private copy of that
+      mapping, after the two fixed in the Pascal frontend under
+      bug-a-sizeof-real-disagrees-with-the-storage-real-actually-gets.
+
+      Single/Double/Extended KEEP collapsing to tyDouble here, deliberately and
+      pending a decision rather than by oversight -- see the note below.
+      bug-n-nilpy-carries-its-own-copies-of-the-float-type-table }
+    tkReal_T: Result := RealTypeKind;
+    tkSingle_T, tkDouble_T, tkExtended_T: Result := tyDouble;
     tkIdent:
     begin
       lo := LowerCase(GetTokenStr(i));
@@ -46438,7 +46448,8 @@ begin
                 if CaseEqual(tiName, 'string') or CaseEqual(tiName, 'ansistring') then tiTk := tyAnsiString
                 else if CaseEqual(tiName, 'shortstring') then tiTk := tyShortString
                 else if CaseEqual(tiName, 'single') then tiTk := tySingle
-                else if CaseEqual(tiName, 'double') or CaseEqual(tiName, 'real') then tiTk := tyDouble
+                else if CaseEqual(tiName, 'double') then tiTk := tyDouble
+                else if CaseEqual(tiName, 'real') then tiTk := RealTypeKind
                 else if CaseEqual(tiName, 'extended') then tiTk := tyExtended;
               end;
             end;
@@ -46457,7 +46468,7 @@ begin
             tkBoolean_T:  tiTk := tyBoolean;
             tkChar_T:     tiTk := tyChar;
             tkString_T:   tiTk := tyAnsiString;
-            tkReal_T:     tiTk := tyDouble;
+            tkReal_T:     tiTk := RealTypeKind;
             tkLongWord_T: tiTk := tyUInt32;
             tkSingle_T:   tiTk := tySingle;
             tkDouble_T:   tiTk := tyDouble;
