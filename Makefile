@@ -10161,6 +10161,23 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_asm_modrm26 "$$($(TESTTMP)/test_asm_modrm26)" "$$(printf '111\n222\n333')"
 	./$(COMPILER) test/test_asm_carry_chain.pas $(TESTTMP)/test_asm_carry26
 	tools/expect_same.sh test_asm_carry26 "$$($(TESTTMP)/test_asm_carry26)" "$$(printf '0\n1\n-1\n0\n0')"
+	# AN ASM BLOCK IN AN UNREACHABLE TAIL must not switch the prune off.
+	# AN_ASM's ASTLeft/ASTRight are an AsmBytes offset and length, not node
+	# refs, so ASTSubtreeHasLabel recursing into them answered a spurious True
+	# and SUPPRESSED a correct prune. never_asmprobe is declared and never
+	# defined, so the assertion is THAT IT RUNS -- a suppressed prune emits the
+	# call and the binary does not start, which is what it did before the fix.
+	# Both frontends, because C reaches the guard through the AN_BLOCK walk and
+	# Pascal through the AN_SEQ spine: two routes to one node, both were broken.
+	# -O0 as well as the default, since the prune runs at every level but -OO.
+	./$(COMPILER) test/test_asm_in_unreachable_tail.pas $(TESTTMP)/test_asm_tail26
+	tools/expect_same.sh test_asm_tail26 "$$($(TESTTMP)/test_asm_tail26)" "ASM TAIL OK"
+	./$(COMPILER) -O0 test/test_asm_in_unreachable_tail.pas $(TESTTMP)/test_asm_tail26_o0
+	tools/expect_same.sh test_asm_tail26_o0 "$$($(TESTTMP)/test_asm_tail26_o0)" "ASM TAIL OK"
+	./$(COMPILER) test/c_asm_in_unreachable_tail.c $(TESTTMP)/c_asm_tail26
+	tools/expect_same.sh c_asm_tail26 "$$($(TESTTMP)/c_asm_tail26)" "ASM TAIL OK g=1"
+	./$(COMPILER) -O0 test/c_asm_in_unreachable_tail.c $(TESTTMP)/c_asm_tail26_o0
+	tools/expect_same.sh c_asm_tail26_o0 "$$($(TESTTMP)/c_asm_tail26_o0)" "ASM TAIL OK g=1"
 	./$(COMPILER) test/test_asm_branch.pas $(TESTTMP)/test_asm_branch26
 	$(TESTTMP)/test_asm_branch26; tools/expect_same.sh test_asm_branch26-rc "$$?" "45"
 	./$(COMPILER) test/test_asm_keywords.pas $(TESTTMP)/test_asm_keywords26

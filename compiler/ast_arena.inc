@@ -227,6 +227,22 @@ begin
     ASTSubtreeHasLabel := True;
     Exit;
   end;
+  { AN_ASM HAS NO CHILD NODES AND MUST NOT BE RECURSED INTO. Its ASTLeft and
+    ASTRight are an AsmBytes OFFSET and a LENGTH, not node references -- see
+    ParseAsmStatementAST (pasparser_stmt.inc) and CAsmBuildBlock
+    (cparser.inc), and ir.inc's AN_ASM arm reads them straight back out as
+    IRAppend(IR_ASM, ASTLeft, ASTRight, ...). Recursing would index ASTKind
+    with a byte offset, and AsmBytes offsets run far past a body's node count,
+    so the failure mode is an OUT-OF-RANGE READ rather than a wrong answer.
+    Answering False is also the correct answer on the merits: an asm block
+    contains no AST children and is not an entry point (see the note above on
+    why AN_ASM is deliberately absent from the list). Reachable through
+    ASTSeqTailUnreachable, which walks the remainder spine: `Exit; asm ... end`
+    in Pascal and `return; asm("cmc");` in C both put an AN_ASM here.
+    Diagnosed by frankb-a9 (Track C). ASTLeft/ASTRight are OVERLOADED PER KIND,
+    so every generic walker over them has this shape -- the sweep for the rest
+    is [[bug-a-generic-astleft-astright-walkers-recurse-into-kinds-that-overload-those-fields]]. }
+  if ASTKind[node] = AN_ASM then Exit;
   if ASTSubtreeHasLabel(ASTLeft[node], budget) then
   begin ASTSubtreeHasLabel := True; Exit; end;
   if ASTSubtreeHasLabel(ASTRight[node], budget) then
