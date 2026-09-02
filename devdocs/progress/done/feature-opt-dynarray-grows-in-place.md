@@ -142,4 +142,4 @@ that safe, and it is also why the `-dPXX_HEAP_DEBUG` row is wired.
   ticket said to do this one first.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f967d81e5.
