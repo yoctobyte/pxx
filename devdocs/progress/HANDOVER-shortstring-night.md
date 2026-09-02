@@ -49,7 +49,26 @@ s=lit   = TRUE     p^=lit  = TRUE     r.f=lit = SEGFAULT
   two word sizes: a wrong-width field length is a count in the hundreds of
   millions, which the comparison either walks off or short-circuits on.
 
-**That is a fifth cause, not a remnant of the four.** Both ticketed. The matrix did
+**That is a fifth cause, not a remnant of the four.**
+
+**THE TWO SURVIVORS FAIL ON OPPOSITE OPERAND SHAPES — they are two shapes, not
+one missing resolution** (frankc-af, corroborated from a second tree):
+
+```
+s[1] =[h]      r.f[1] =[h]      p^[1]  =[ ]     <- indexing fails on the DEREF
+s=lit  TRUE    p^=lit  TRUE     r.f=lit SEGV    <- comparison fails on the FIELD
+```
+
+Indexing handles the variable and the field and fails on the **deref**. Comparison
+handles the variable and the deref and fails on the **field**. If they were one
+missing resolution they would fail on the same shape.
+
+**And `r.f = 'hello'` SEGFAULTS rather than answering FALSE.** Every other member
+of this family tonight failed *generously* — a wrong width gives a length in the
+hundreds of millions and the mismatch short-circuits to "no". A segfault means it
+is dereferencing something it computed, so it is likely **not** the same mechanism
+as the FALSE-answering ones even though it sits on the same arm.
+ Both ticketed. The matrix did
 exactly what it was built for — it named the readers the fix does not reach.
 
 What separated the layers was **franks-ab's falsifiable prediction** — that the
@@ -92,9 +111,13 @@ cite the ticket, the summary, or either commit. That instruction is in
 `d23178788`, which also holds the compare-fix ticket out of `ready --track A` —
 it was the ranked HEAD and the tool was actively handing it to the next session.
 
-## P4 precondition: wasm32 has NO wired rows
+## P4 precondition: wasm32 rows — CLEARED (`a322f1552`)
 
-**wasm32 is converted and has ZERO Makefile rows exercising the conversion.**
+**RESOLVED tonight.** `test-wasm32` is now 26 rows (22 default + 4 shortstring),
+re-measured rather than transcribed — two expected strings carry meaningful
+trailing spaces, and a `.expected` relayed through chat is where losing one costs
+an hour. Verified distinguishable: default binary against the short expectation is
+rc=1, short binary rc=0. **The gap it closed was real:**
 Rows passing a mode flag: arm32 36, riscv32 31, aarch64 29, xtensa 6, **wasm32 0**.
 Its eight configurations were genuinely measured but ad-hoc; nothing holds them.
 Its one standing shortstring row runs at **DEFAULT** — by that commit's own
@@ -164,3 +187,11 @@ yours to release.
 - **Cite by CONSTRUCT, not by line.** Two of the three line numbers this document
   originally carried had already drifted within the same evening — arm32's onto a
   procedure header. **A stale line number does not error; it points somewhere.**
+- **A population figure needs a DATE, or it keeps answering about the tree it was
+  taken on.** "riscv32 refuses the flag" was TRUE when measured and became false
+  when riscv32 was converted — an **expired** measurement, not a wrong one, and
+  the more dangerous kind: the quoted diagnostic is a real string the compiler
+  once printed, so nothing about it ever comes to look false.
+- **A clean tree one commit ahead is the signature of a session BETWEEN commit and
+  push**, not of stranded work. Sampled in that gap twice tonight; ref-level
+  checks (`merge-base --is-ancestor`, `ls-tree origin/master`) are the discriminator.
