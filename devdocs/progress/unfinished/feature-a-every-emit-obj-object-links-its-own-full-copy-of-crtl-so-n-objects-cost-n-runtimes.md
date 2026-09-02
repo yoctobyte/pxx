@@ -58,6 +58,29 @@ after.
 Recorded here because it changes the size this ticket is about, and because the
 way it was nearly missed is the reusable part.
 
+**CORRECTION, 65682 IS THE DELTA AND NOT THE RESIDUAL** (frankC, same day).
+Measured on one object: today's total LOCAL body bytes are **173823**, of which
+the 46 newly-LOCAL account for 65682 and 108141 were already LOCAL before
+`9e7c4cf8c`. The pinned object's LOCAL total is exactly 108141 — today minus the
+46 — which is the cross-check that makes the attribution believable rather than
+merely arithmetically available. So **the per-object un-mergeable residual is
+~174KB of LOCAL plus the ~21KB weak surface**, and `9e7c4cf8c` raised it by 61%
+rather than creating it. Every "~21KB per object" figure earlier in this ticket
+is the WEAK half only and was never the whole residual.
+
+**AND THERE IS NO LEFT EDGE TO TAKE.** `--separate --pinned` on today's script
+is RED: *82 objects did not link*, on `multiple definition of abort, abs,
+accept, access, addmntent, ...`. `9e7c4cf8c` did two things in one commit —
+made `static` emit LOCAL, and removed `-Wl,-z,muldefs` from the harness link on
+the strength of that. A compiler from below it cannot build this mode at all, so
+any `--separate` size compared across that boundary compares two LINK MODES
+rather than two compilers. The commensurability question is closed in the
+strongest available way: not "the endpoints are hard to align" but "the older
+endpoint cannot produce the artefact". (Those duplicate names are crtl's PUBLIC
+surface, not the 46 internals — a different population, so it is a second
+mechanism and not the same one seen twice. The list is `head -10` truncated, so
+ten is a sample and not a count.)
+
 `9e7c4cf8c` — *static on a C function is internal linkage, so the object writer
 emits it LOCAL* — moved **46 crtl symbols from GLOBAL/WEAK to LOCAL**
 (`__crtl_alloc_file`, `__crtl_atoa`, the `__crtl_dexp_*` family, `gr_parse`,
