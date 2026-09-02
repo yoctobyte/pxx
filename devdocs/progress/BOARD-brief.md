@@ -5,14 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:9 unfinished:28 blocked:6 backlog:5 backlog-umbrella:6 backlog-core:138 backlog-nilpy:96 backlog-tools:4 backlog-pascal:58 backlog-decide:29 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 divergence:1 float:25 done-followup:3 decided:144 done:3117 rejected:72`
+`working:8 unfinished:28 blocked:6 backlog:5 backlog-umbrella:6 backlog-core:138 backlog-nilpy:96 backlog-tools:4 backlog-pascal:58 backlog-decide:29 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 divergence:1 float:25 done-followup:3 decided:144 done:3118 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA
-- `feature-a-prune-statements-after-a-return-at-O0` [A] — owner: frankC
 - `feature-c-gnu-inline-asm-with-a-non-empty-template` [C] — owner: frankB
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
