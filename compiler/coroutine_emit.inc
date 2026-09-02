@@ -127,18 +127,59 @@ begin
     EmitI32($E8BD4FF0);   { pop {r4-r11, lr} }
     EmitI32($E12FFF1E);   { bx lr }
   end
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    { riscv32: pfrom=a0, pto=a1 (psABI). The saved frame is SIXTEEN bytes --
+      exc_top, s0, ra, pad -- and the pad is what keeps sp 16-byte aligned,
+      which the psABI requires at every call boundary.
+
+      THREE SLOTS RATHER THAN THIRTEEN, and that is riscv32-specific rather
+      than a shortcut: this backend's codegen never touches s1-s11 (the same
+      fact exception_emit.inc's jmpbuf relies on, where the frame is likewise
+      s0/sp/ra). Saving registers no generated code writes would cost 44 bytes
+      per switch to preserve zeroes. If that ever stops being true, the
+      exception stub is wrong in the same way and both move together.
+
+      BSS_EXC_TOP is threaded through the switch exactly as arm32 and aarch64
+      do it -- each coroutine stack owns its own exception chain, so the value
+      travels with the stack rather than staying global. The address comes from
+      the auipc + inline-literal trick the raise stub uses (auipc puts PC in the
+      register, the jal steps over the 4-byte literal, the lw reads it back).
+      feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross }
+    CoSwitchAddr := CodeLen;
+    rv32_addi(reg_sp, reg_sp, -16);
+    rv32_sw(reg_s0, reg_sp, 4);
+    rv32_sw(reg_ra, reg_sp, 8);
+    rv32_auipc(reg_t0, 0);                { &BSS_EXC_TOP }
+    rv32_jal(reg_zero, 8);
+    EmitGlobRef(BSS_EXC_TOP);
+    rv32_lw(reg_t0, reg_t0, 8);
+    rv32_lw(reg_t1, reg_t0, 0);           { t1 = exc_top }
+    rv32_sw(reg_t1, reg_sp, 0);           { save it on THIS stack }
+    rv32_sw(reg_sp, reg_a0, 0);           { *pfrom = sp }
+    rv32_lw(reg_sp, reg_a1, 0);           { sp <- *pto }
+    rv32_lw(reg_t1, reg_sp, 0);           { the other stack's exc_top }
+    rv32_sw(reg_t1, reg_t0, 0);           { BSS_EXC_TOP = it }
+    rv32_lw(reg_s0, reg_sp, 4);
+    rv32_lw(reg_ra, reg_sp, 8);
+    rv32_addi(reg_sp, reg_sp, 16);
+    rv32_jalr(reg_zero, reg_ra, 0);       { ret }
+  end
   else if TargetArch = TARGET_WASM32 then
     Error('wasm32: coroutine context switch not implemented (a wasm module has '
           + 'no addressable stack pointer to swap)')
   else
-    { riscv32/xtensa land in a later phase. Falling through leaves CoSwitchAddr
+    { xtensa lands in a later phase -- its windowed ABI keeps callee-saved state
+      in a rotating register window rather than on the stack the way this switch
+      assumes, so it has to spill the window first and is not riscv32's twin.
+      Falling through leaves CoSwitchAddr
       at 0 while the caller (EnableCoroutineRuntime) has already set
       CoroutineUsed — but MEASURED 2026-08-31, that is not a live miscompile
       today: it is masked downstream, because both backends refuse IR_COSWITCH
       ('unsupported node in IR codegen: coswitch'), so any program that gets a
       stub emitted also gets a node they reject. Two reasons to close it here
       anyway. The diagnostic: 'coroutines are not implemented for target
-      riscv32' is the true statement; the codegen one names an internal node for
+      xtensa' is the true statement; the codegen one names an internal node for
       something the user did not do wrong. And the masking is the fragile half —
       it holds only while the backends have NO coswitch lowering. Give riscv32
       one without adding a stub arm here and the downstream guard disappears,

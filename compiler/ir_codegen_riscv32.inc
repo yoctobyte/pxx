@@ -3502,6 +3502,23 @@ begin
         EmitCallProc(procIdx);
       end;
 
+    IR_COSWITCH:
+      begin
+        { __pxxcoswitch(pfrom, pto): pfrom -> a0, pto -> a1, call CoSwitch.
+          The stub is emitted by coroutine_emit.inc; this arm and that one land
+          together on purpose -- its own comment says why. A lowering without a
+          stub calls address ZERO, and the only thing that had been preventing
+          that was this node being unsupported here. }
+        argNode := IRA[node];                        { IR_ARG pfrom }
+        IREmitNodeRISCV32(IRA[argNode]);             { a0 = pfrom }
+        rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+        argNode := IRB[argNode];                     { IR_ARG pto }
+        IREmitNodeRISCV32(IRA[argNode]);             { a0 = pto }
+        rv32_addi(reg_a1, reg_a0, 0);                { a1 = pto }
+        rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { a0 = pfrom }
+        EmitRiscv32CallToCode(reg_ra, CoSwitchAddr);
+      end;
+
     IR_SET_SIGNAL:
       begin
         { SetSignalHandler(sig, handler): a0 = sig, a1 = handler -> sethook stub
@@ -4042,9 +4059,58 @@ begin
           Error('target riscv32: no atomic primitive on a multi-core part with no '
                 + 'A extension (masking interrupts cannot stop the other core)');
         if TargetPlatform <> PLATFORM_ESP then
-          Error('target riscv32: atomics need machine-mode CSR access (mstatus), '
-                + 'which a hosted user-mode program does not have; this core has '
-                + 'no A extension to use instead');
+        begin
+          { HOSTED riscv32 uses the A extension, which is the honest primitive
+            here: the interrupt-masking arm below is a MACHINE-MODE trick and a
+            user-mode program cannot do it, which is what this used to refuse.
+            The refusal was right about the ESP parts and wrong to generalise
+            from them -- qemu's rv32gc, and every hosted rv32 Linux core, has A.
+
+            Encodings verified against clang --target=riscv32 -march=rv32ima
+            rather than derived: amoswap.w.aqrl a0,a2,(a1) = 0EC5A52F,
+            amoadd.w.aqrl = 06C5A52F, lr.w.aqrl a0,(a1) = 1605A52F,
+            sc.w.aqrl t0,a3,(a1) = 1ED5A2AF. An encoder that is merely reasoned
+            out assembles to something, and something is not the instruction.
+
+            Args arrive pushed in order, deepest first, exactly as the ESP arm
+            pops them; only the middle changes.
+            feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross }
+          argNode := IRA[node]; nArgs := 0;
+          while argNode <> -1 do
+          begin
+            IREmitNodeRISCV32(IRA[argNode]);
+            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+            Inc(nArgs);
+            argNode := IRB[argNode];
+          end;
+          if IRIVal[node] = ATOMIC_CAS then
+          begin
+            rv32_lw(reg_a3, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { newval }
+            rv32_lw(reg_a2, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { expected }
+            rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { addr }
+            { CAS is the one that needs the reservation pair: AMO alone cannot
+              express "store only if it still equals expected". }
+            rv32_lr_w(reg_a0, reg_a1);              { retry: a0 = *addr }
+            rv32_bne(reg_a0, reg_a2, 12);           { differs -> done, a0 = old }
+            rv32_sc_w(reg_t0, reg_a3, reg_a1);      { t0 = 0 on success }
+            rv32_bne(reg_t0, reg_zero, -8);         { reservation lost -> retry }
+          end
+          else if IRIVal[node] = ATOMIC_ADD then
+          begin
+            rv32_lw(reg_a2, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { delta }
+            rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { addr }
+            rv32_amoadd_w(reg_a0, reg_a2, reg_a1);  { a0 = old }
+          end
+          else
+          begin
+            rv32_lw(reg_a2, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { val }
+            rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { addr }
+            rv32_amoswap_w(reg_a0, reg_a2, reg_a1); { a0 = old }
+          end;
+          { typed Int64 (a0:a1) — sign-extend, as the ESP arm and IR_SYSCALL do }
+          rv32_srai(reg_a1, reg_a0, 31);
+          Exit;
+        end;
         argNode := IRA[node]; nArgs := 0;
         while argNode <> -1 do
         begin

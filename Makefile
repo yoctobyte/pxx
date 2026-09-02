@@ -16184,6 +16184,20 @@ test-riscv32: $(COMPILER)
 	# (bug-a-an-8-byte-by-value-record-loses-its-second-word-through-virtual-and-indirect-calls-on-every-32-bit-backend).
 	./$(COMPILER) --target=riscv32 --platform=posix test/test_byvalue_record_param_every_call_shape.pas $(TESTTMP)/test_riscv32_bvrparam
 	tools/expect_same.sh riscv32/test_riscv32_bvrparam "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_bvrparam)" "$$(printf 'fail=0\nBYVALRECPARAM OK')"
+	# STACKFUL COROUTINES: httpdemo runs an HTTP server coroutine and a client
+	# coroutine on one thread over the epoll reactor. riscv32 refused the whole
+	# construct until the CoSwitch stub, the IR_COSWITCH lowering, scheduler.pas's
+	# initial frame and the A-extension atomics all existed
+	# (feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross).
+	# Compared against the x86-64 ORACLE, not a transcript: the point is agreement.
+	./$(COMPILER) --target=riscv32 --platform=posix examples/net/httpdemo.pas $(TESTTMP)/test_riscv32_httpdemo
+	./$(COMPILER) examples/net/httpdemo.pas $(TESTTMP)/test_riscv32_httpdemo_x64
+	tools/expect_same.sh riscv32/test_riscv32_httpdemo "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_httpdemo)" "$$($(TESTTMP)/test_riscv32_httpdemo_x64)"
+	# ...and the atomics underneath it, which riscv32 refused in user mode until
+	# the A extension was emitted (the ESP arm masks interrupts, which needs
+	# machine mode). palatomic against the same oracle.
+	./$(COMPILER) --target=riscv32 --platform=posix test/test_riscv32_hosted_atomics.pas $(TESTTMP)/test_riscv32_atomics
+	tools/expect_same.sh riscv32/test_riscv32_atomics "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_atomics)" "$$(printf '11|11\n11|99\n42|42\nATOMICS OK')"
 	./$(COMPILER) --target=riscv32 --platform=posix test/test_ctor_arg_classes_and_arity.pas $(TESTTMP)/test_riscv32_ctor_argcls
 	tools/expect_same.sh riscv32/test_riscv32_ctor_argcls "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_ctor_argcls)" "$$(printf 'fails=0\nWIDECTOR OK')"
 	# managed-record operator chain (TBigInt: Boolean + dynarray = 8 bytes byval)

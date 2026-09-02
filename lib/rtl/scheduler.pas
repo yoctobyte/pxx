@@ -108,6 +108,7 @@ const
 {$ifdef CPU_I386}  const SYS_gettid = 224; {$endif}
 {$ifdef CPU_AARCH64} const SYS_gettid = 178; {$endif}
 {$ifdef CPU_ARM32} const SYS_gettid = 224; {$endif}
+{$ifdef CPU_RISCV32} const SYS_gettid = 178; {$endif}
 
 { exit_group — the reactor-exhaustion fatal below terminates the PROCESS itself
   rather than going through Halt. Same inline-rather-than-uses reason as gettid.
@@ -118,6 +119,7 @@ const
 {$ifdef CPU_I386}  const SYS_exit_group = 252; {$endif}
 {$ifdef CPU_AARCH64} const SYS_exit_group = 94; {$endif}
 {$ifdef CPU_ARM32} const SYS_exit_group = 248; {$endif}
+{$ifdef CPU_RISCV32} const SYS_exit_group = 94; {$endif}
 
 { Reactor flags are identical across all Linux targets; only the syscall
   numbers and the epoll_event layout vary per arch. }
@@ -178,6 +180,22 @@ const
   SYS_timerfd_create  = 350;
   SYS_timerfd_settime = 353;
 {$endif}
+{ riscv32 is an ASM-GENERIC port, so its numbers are aarch64's and NOT arm32's,
+  which is the mistake the shape of this file invites -- the two are both 32-bit
+  and adjacent in every table here, and a number from the wrong table is not a
+  compile error, it is a different syscall at runtime. Like aarch64 it has
+  epoll_pwait and no epoll_wait. }
+{$ifdef CPU_RISCV32}
+const
+  SYS_fcntl           = 25;
+  SYS_epoll_create1   = 20;
+  SYS_epoll_ctl       = 21;
+  SYS_epoll_pwait     = 22;
+  SYS_read            = 63;
+  SYS_close           = 57;
+  SYS_timerfd_create  = 85;
+  SYS_timerfd_settime = 86;
+{$endif}
 
 type
   { Linux epoll_event: u32 events then u64 data. Only x86 packs it (data at
@@ -194,6 +212,11 @@ type
   TEpollEvent = record events: LongWord; _pad: LongWord; data: Int64; end;
 {$endif}
 {$ifdef CPU_ARM32}
+  TEpollEvent = record events: LongWord; _pad: LongWord; data: Int64; end;
+{$endif}
+{ riscv32 aligns a u64 to 8 like aarch64/arm32 do, so it takes the PADDED shape
+  (data at offset 8, size 16), not i386's packed one. }
+{$ifdef CPU_RISCV32}
   TEpollEvent = record events: LongWord; _pad: LongWord; data: Int64; end;
 {$endif}
 
@@ -420,6 +443,17 @@ begin
   PW(top + 0)^  := 0;                { exc_top }
   PW(top + 36)^ := Int64(@CoStart);  { lr -> CoStart }
 {$else}
+{$ifdef CPU_RISCV32}
+  { riscv32 restores: exc, s0, ra, pad — SIXTEEN bytes, and the pad is what
+    keeps sp 16-byte aligned as the psABI requires. Three slots rather than
+    thirteen because this backend's codegen never touches s1-s11; the same fact
+    the exception jmpbuf relies on. This layout and the CoSwitch stub in
+    compiler/coroutine_emit.inc are ONE contract -- change either and change
+    both, which is why each says so. }
+  top := top - 16;
+  PW(top + 0)^ := 0;                 { exc_top }
+  PW(top + 8)^ := Int64(@CoStart);   { ra -> CoStart }
+{$else}
   { x86-64 pops: exc, r15, r14, r13, r12, rbx, rbp, ret — 8 qwords; rsp at
     CoStart entry must be == 8 (mod 16). }
   top := top - 8;
@@ -432,6 +466,7 @@ begin
   PW(top + 40)^ := 0;                { rbx }
   PW(top + 48)^ := 0;                { rbp }
   PW(top + 56)^ := Int64(@CoStart);  { return address -> CoStart }
+{$endif}
 {$endif}
 {$endif}
 {$endif}
@@ -635,6 +670,9 @@ begin
       n := Integer(__pxxrawsyscall(SYS_epoll_pwait, r^.epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
 {$endif}
 {$ifdef CPU_ARM32}
+      n := Integer(__pxxrawsyscall(SYS_epoll_pwait, r^.epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
+{$endif}
+{$ifdef CPU_RISCV32}
       n := Integer(__pxxrawsyscall(SYS_epoll_pwait, r^.epfd, Int64(@evs[0]), MAX_CO, -1, 0, 0));
 {$endif}
       for k := 0 to n - 1 do

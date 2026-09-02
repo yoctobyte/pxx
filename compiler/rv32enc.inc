@@ -182,6 +182,27 @@ procedure rv32_ori(rd, rs1, imm: Integer);  begin EmitIType(imm, rs1, 6, rd, $13
 procedure rv32_andi(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 7, rd, $13); end;
 procedure rv32_jal(rd, offset: Integer);    begin EmitJType(offset, rd, $6F); end;
 procedure rv32_jalr(rd, rs1, imm: Integer); begin EmitIType(imm, rs1, 0, rd, $67); end;
+
+{ ---- the A extension: AMO, LR and SC -------------------------------------
+  R-type on opcode $2F with funct3 = 010 (word width), and funct7 carries the
+  operation in its top five bits plus the two ordering bits:
+  funct7 = (funct5 shl 2) or (aq shl 1) or rl. Both ordering bits are set on
+  every emission here -- sequential consistency is what __pxxatomic_* promises,
+  and the weaker orderings have no spelling in that interface to ask for.
+
+  These are deliberately NOT reachable on the ESP parts. The refusal in
+  ir_codegen_riscv32.inc's IR_ATOMIC asks the per-CHIP capability table first:
+  the ESP32-C3/C2 are RV32IMC and would take an ILLEGAL INSTRUCTION on any of
+  these, which is why that arm masks interrupts instead. What these encoders
+  add is the HOSTED case, where the core is qemu's rv32gc and has them.
+  feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross }
+procedure rv32_amo_w(funct5, rd, rs2, rs1: Integer);
+begin EmitRType((funct5 shl 2) or 3, rs2, rs1, 2, rd, $2F); end;
+procedure rv32_amoswap_w(rd, rs2, rs1: Integer); begin rv32_amo_w($01, rd, rs2, rs1); end;
+procedure rv32_amoadd_w(rd, rs2, rs1: Integer);  begin rv32_amo_w($00, rd, rs2, rs1); end;
+procedure rv32_lr_w(rd, rs1: Integer);           begin rv32_amo_w($02, rd, 0, rs1); end;
+procedure rv32_sc_w(rd, rs2, rs1: Integer);      begin rv32_amo_w($03, rd, rs2, rs1); end;
+
 procedure rv32_mul(rd, rs1, rs2: Integer);  begin EmitRType(1, rs2, rs1, 0, rd, $33); end;
 procedure rv32_mulhu(rd, rs1, rs2: Integer);begin EmitRType(1, rs2, rs1, 3, rd, $33); end;
 procedure rv32_mulh(rd, rs1, rs2: Integer); begin EmitRType(1, rs2, rs1, 1, rd, $33); end;
