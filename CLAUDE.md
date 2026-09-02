@@ -292,6 +292,19 @@ compiled, and still reports `DIFFERS` for the rows where nothing was built.
 Four instances in 24h, worked: debugging-playbook.md, "Assert the PRECONDITION,
 not just the comparison".
 
+**MATCH THE ASSERTION CLASS TO THE DEFECT CLASS — some bugs cannot fail a value
+check, BY CONSTRUCTION.** A leak is the clean case: it does not corrupt, it just
+never gives memory back, so every output assertion still passes. Measured
+2026-09-02: with the open-array ownership fix reverted, the test printed
+`OPENARRAYFRESH OK` while 1504 of 3000 arrays leaked — only
+`tools/assert_no_leak.sh` saw it (`allocs=3000 frees=1496`, exit 1; with the fix,
+`frees=2993`, exit 0). An `expect_same` row alone would have certified the leak
+as correct, and `test_open_array_no_leak.pas` — a test NAMED for the leak — is
+green a million iterations deep and was green throughout. **Ask what your
+assertion is PHYSICALLY able to observe before trusting it**; a positive control
+drawn from the right population still passes if the instrument reads the wrong
+quantity.
+
 ## Debugging — measure, do not reason
 
 **The expensive bugs here do not crash; they produce a plausible wrong value far
