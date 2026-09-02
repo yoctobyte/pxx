@@ -97,4 +97,4 @@ passing.
 what found this, which is the sampling model working as designed.
 
 ## Log
-- 2026-09-02 — resolved.
+- 2026-09-02 — resolved; the fix is commit 2148d95fa (the same commit carried the ticket and the test).
