@@ -8,7 +8,7 @@ created: 2026-09-02
 found: 2026-09-02
 found-by: frankC
 owner: frankC
-commit: PENDING-COMMIT
+commit: 9d4bda60b
 blocked-by: []
 summary: "Pascal is case-insensitive, so `const PYITER_MAP = 4` and `function pyiter_map(...)` in one unit are ONE identifier. compiler/builtin/pylib.pas had FOUR such pairs, and `pyiter_map(key, v)` folded to the const, ANSWERED 4 and threw the arguments away -- silently, on every target. i386 alone objected, indirectly: it refuses to load a const symbol, so every program pulling in pyeval was unbuildable there. FIXED both ways -- the tag family is renamed PYITER_K_* so the collision is structurally impossible, and calling a const is now a refusal that names which way it resolved."
 ---
