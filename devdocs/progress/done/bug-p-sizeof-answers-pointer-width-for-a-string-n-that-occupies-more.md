@@ -2,7 +2,6 @@
 track: P
 prio: 70
 type: bug
-blocked-by: [umbrella-sizeof-is-one-answer]
 found: 2026-09-02
 found-by: frankB
 resolved: 2026-09-02

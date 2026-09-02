@@ -15,6 +15,9 @@ blocked-by:
   - bug-n-nilpy-carries-its-own-copies-of-the-float-type-table
   - bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386
   - bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets
+  - bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes
+  - bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so
+  - bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more
 summary: "GOAL: a program can trust SizeOf. `FillChar(x, SizeOf(x), 0)` and `Move(a, b, SizeOf(a))` are correct for EVERY type in every frontend, and `file of T` can write a layout that reads back. Today they are not: SizeOf answers 8 for every `string[N]` while pxx's OWN layout engine gives that type 18, so `FillChar` on an `array[0..2] of string[10]` clears 24 of 54 bytes and leaves a[2] intact -- silent, and correct under FPC so no differential probe sees it. Root cause is measured and structural: FOUR functions answer `how big is this type`, each adding one more parameter because the kind alone was not enough -- TypeSlotSize(tk) at 363 sites, TypeStorageSize(tk, recId), SizeOfSlot(tk, cap), FrozenStrSlotSize(tk, cap). SizeOfSlot's own comment says it: `A FROZEN STRING'S SIZE IS NOT A FUNCTION OF ITS KIND`. Two is a smell, three is a design flaw; this is four, plus duplicated builtin type tables in A, N and P that disagree with each other."
 ---
 
@@ -72,6 +75,16 @@ intact. The subrange bug was found only because its positive control was a SIZE
 row rather than a value row. Any test this umbrella accepts must assert sizes
 and strides directly, and must include a row where the type's size is NOT a
 function of its kind.
+
+## Wiring a member — the edge runs ONE WAY
+
+**The UMBRELLA carries `blocked-by: <member>`. A member must NOT carry
+`blocked-by: <umbrella>`.** Written the second way it means what it says — the
+ticket is blocked BY the umbrella — and `ready` drops it entirely, which is the
+exact opposite of joining the queue. Measured 2026-09-02: three tickets were
+wired backwards (this coordinator told frankb-a9 to do it, and did it itself on
+the set split); all three vanished from `ready` at p75 and nothing errored.
+Add your slug to the list above instead.
 
 ## Notes
 
