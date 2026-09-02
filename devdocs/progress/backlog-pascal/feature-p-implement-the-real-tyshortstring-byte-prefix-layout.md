@@ -33,6 +33,27 @@ summary: "MEASURED at bf92c45a7, binary sha256 `5f275966bf50`: we are `cap+8` an
 > lib/rtl/typinfo.pas:20:  PString  = ^TRttiStr;
 > ```
 >
+> **AND THE CONTRACT IS WRITTEN DOWN, NAMING THE WRITER SIDE.** The comment
+> directly above `TRttiStr` (found by frank-coordinator-2c) is not decoration —
+> it is the ABI spec:
+>
+> > *"word-length-prefixed strings (**`rtti_emit.inc` points NamePtr at
+> > `Strs[].Offset`**) ... a name pointer must be a FROZEN string pointer to read
+> > the inline `[len][chars]` blob correctly — `^string` would misread the length
+> > word as a managed handle and crash. **`string[255]` is the frozen
+> > (tyFixedString) word-prefix kind.**"*
+>
+> The emitter writes word-prefixed blobs; `TRttiStr` is the reader. Re-type
+> `string[255]` to a byte prefix and the two disagree — the reader misreads the
+> length, which is the exact crash this comment exists to prevent. **`255` is
+> precisely on the boundary**: `tyShortString` caps at 255 so it DOES re-type;
+> at 254 it would not.
+>
+> **Rewrite that comment in the SAME COMMIT as the re-type.** Per CLAUDE.md, a
+> comment and code that disagree mean one is wrong and the next reader cannot
+> tell which — and here the comment is the only record of why `PString` cannot
+> be `^string`. Do not delete it; correct it.
+>
 > `defs.inc:5588` records that the compiler EMITS `{NamePtr:PString;
 > DataPtr:Pointer}` which `typinfo.pas` READS. So this is a **cross-component
 > ABI contract containing a fixed string at exactly the 255 boundary**, in
