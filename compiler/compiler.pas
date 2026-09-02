@@ -263,8 +263,14 @@ function IRIndexNeedsStrCOW(base, elemSize: Integer): Boolean; forward;
 {$ifndef PXX_NO_FORTRAN}{$include fparser.inc}{$endif}
 {$ifndef PXX_NO_ALGOL}{$include gparser.inc}{$endif}
 {$ifndef PXX_NO_ERLANG}{$include eparser.inc}{$endif}
-{$include dce.inc}      { reachability-gated dead-code elimination — after every emitter, before the writer }
 {$include elfwriter.inc}
+{$include dce.inc}      { reachability-gated dead-code elimination — after every emitter, before the writer RUNS.
+                          AFTER elfwriter.inc in DECLARATION order, which is a different thing: under --emit-obj
+                          the pass's root set has to be the object's export surface, and that surface is decided
+                          by ObjProcIsExported. Asking it, rather than restating `ProcCdecl and not
+                          ProcCStaticLink` here, is the point -- a second copy of an export policy is a copy that
+                          drifts, and the one it would drift from is what the symbol table emits. elfwriter.inc
+                          names nothing from dce.inc, so the edge only points one way. }
 {$include rtti_emit.inc}
 {$include resources_emit.inc}
 {$ifndef PXX_NO_CFRONT}{$include cpreproc.inc}{$endif}

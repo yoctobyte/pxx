@@ -163,3 +163,69 @@ That reframes both options rather than choosing between them:
 soon.** Not started here — it is a backend-wide change and this session could
 not have verified it in the sitting it had. The measurement is banked, which is
 what the ticket asked for.
+
+## 2026-09-02 (frankC) — step (3) LANDED for Pascal objects: DCE now runs under `--emit-obj`
+
+The step this ticket's own recommendation called "third, much smaller" is in.
+`--dce --emit-obj` was a documented no-op; it is now the difference between
+these two columns, measured on `test/test_emit_obj.pas`, x86-64:
+
+| | base | `--dce` |
+| --- | --- | --- |
+| object | 133608 | **31312** |
+| `.text` | 109400 | 18791 |
+| FUNC symbols | 223 | 54 |
+| 2-object link | 156496 | **57080** |
+| 3-object link | 227936 | 77376 |
+| **marginal cost of one more object** | 71440 | **20296** |
+
+Every link answers identically (`done99 pxx-emit-obj`, `42 42 42`), the export
+surface is byte-for-byte the same symbol list, and `AddUp` — a LOCAL reachable
+only from an export — survives while `FloatToStr` goes.
+
+So N×135KB became N×20KB, which is what step (3) promised. It does **not**
+deduplicate across objects: options (1) and (2) above are untouched and still
+the answer to the ticket's title.
+
+### The refusal was right in the aggregate and wrong about almost all of itself
+
+`-c / --shared carry their own code-offset relocations`. They do. But every
+table those relocations are built from — `Fixups`, `GlobFix`, `CallFix`,
+`ProcAddrFix`, `DynCall`, `CodeRef`, `Procs[].BodyAddr` — is one the pass
+already compacts and re-patches, because an ET_EXEC image reads the same
+tables. **Exactly two code offsets were outside them**, and they are not in any
+fixup table at all: `InitThunkOff` and `FiniThunkOff`, stated raw as
+`.text + <offset>` in `.rela.init_array` / `.rela.fini_array`.
+
+Lifting the refusal without them produced a **4.3x smaller object that
+SIGSEGVs before `main`** — the size row alone would have called that a success.
+Three things were needed:
+
+1. **A root set.** An executable is rooted at its entry point; an object's
+   callers are outside it. Rooting at `ObjProcIsExported` — the object writer's
+   own predicate, asked rather than restated, so the root set and the GLOBAL
+   symbol block cannot drift — is what makes the pass useful rather than
+   merely correct. Without it the pass deletes the object's whole reason to
+   exist. (This is also why `dce.inc` now includes *after* `elfwriter.inc`.)
+2. **The thunks kept alive.** They are not a clean tail: measured here, the
+   init thunk is at `0x1aae4` and `__pxx_run_finalizers`' body at `0x1ab28`, so
+   both thunks fall INSIDE the removable range of whatever proc precedes them,
+   which is a different proc in every program. Registered as stub targets — the
+   existing mechanism — and remapped through `DceNewOff`.
+3. **One hand-written rel32 recorded.** The init thunk's `call <code offset 0>`
+   is computed against a fixed target rather than routed through `CallFix`,
+   because its callee is the program body and no `Procs[]` row names it. It now
+   goes through `RecordCodeRef`. That single unrecorded displacement was the
+   segfault.
+
+`--shared` still refuses, with an accurate reason instead of the old one: its
+exported surface goes through a `.dynsym` and a GOT this pass has never been
+read against, and turning both on from one measurement would leave the failing
+one unidentified.
+
+### Still off, and each is a separate question
+
+`--emit-obj` from the **C frontend** (`not IsPascalFrontend`), every non-x86-64
+target, and `-g`. The busybox 13.7MB number is C, so this does not move it —
+wiring the C frontend into DCE is the next step for that consumer and is not
+this change.

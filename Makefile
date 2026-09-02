@@ -19402,6 +19402,48 @@ test-emit-obj: $(COMPILER)
 	    echo "test-emit-obj: x86-64 .o links+runs under clang -pie (second linker)"; \
 	  else echo "clang not installed; second-linker PIE check skipped"; fi; \
 	else echo "gcc not installed; x86-64 .o link check skipped"; fi
+	# 4a. --dce UNDER --emit-obj: SMALLER, SAME EXPORTS, SAME ANSWER.
+	#    The pass refused `-c` outright until 2026-09-02 on the premise that an
+	#    object "carries its own code-offset relocations". Every table those
+	#    relocations are built from was already compacted by the pass; the two
+	#    that were not are the init/fini thunk offsets, which are stated raw in
+	#    .rela.init_array / .rela.fini_array. Turning the refusal off without
+	#    them SEGFAULTS BEFORE main -- so this block asserts the size AND the
+	#    run, because either alone is passed by a broken object.
+	#    Measured at the fix: 133608 -> 31312 for this source, and the marginal
+	#    cost of an extra object in a 3-object link 71440 -> 20296.
+	#    feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes
+	rm -f $(TESTTMP)/test_emit_obj_x64_dce.o
+	./$(COMPILER) -Fulib/rtl --emit-obj --dce test/test_emit_obj.pas $(TESTTMP)/test_emit_obj_x64_dce.o
+	#    ASSERT THE PRECONDITION, not just the comparison: a size test whose
+	#    inputs were never proven to exist cannot fail. `&&` between the stages,
+	#    never `;`.
+	test -s $(TESTTMP)/test_emit_obj_x64.o && test -s $(TESTTMP)/test_emit_obj_x64_dce.o
+	test $$(size -A $(TESTTMP)/test_emit_obj_x64_dce.o | awk '$$1==".text"{print $$2}') -lt \
+	     $$(size -A $(TESTTMP)/test_emit_obj_x64.o     | awk '$$1==".text"{print $$2}')
+	#    THE ROW THAT CATCHES THE REAL FAILURE MODE. The pass roots an object at
+	#    its export surface, so a bug in that root set does not crash -- it
+	#    deletes an exported routine, and the link either fails on `undefined
+	#    reference' or, with a second pxx object present, resolves to ITS copy.
+	#    Comparing the two symbol lists is what says the surface is unchanged;
+	#    counting them is not, because dropping one export while the pass gains
+	#    an unrelated symbol keeps the count.
+	readelf -sW $(TESTTMP)/test_emit_obj_x64.o     | awk '$$4=="FUNC" && $$5=="GLOBAL"{print $$8}' | LC_ALL=C sort > $(TESTTMP)/test_emit_obj_exports_base.txt
+	readelf -sW $(TESTTMP)/test_emit_obj_x64_dce.o | awk '$$4=="FUNC" && $$5=="GLOBAL"{print $$8}' | LC_ALL=C sort > $(TESTTMP)/test_emit_obj_exports_dce.txt
+	test -s $(TESTTMP)/test_emit_obj_exports_base.txt
+	diff -u $(TESTTMP)/test_emit_obj_exports_base.txt $(TESTTMP)/test_emit_obj_exports_dce.txt
+	#    ...and a LOCAL that only an export reaches must survive, while the
+	#    unreachable bulk must not. AddUp is the positive control drawn from
+	#    this object: it is dead by name (nothing outside calls it) and live by
+	#    reachability, which is precisely the distinction the pass exists to
+	#    make. FloatToStr is the negative one -- linked in, never reached.
+	readelf -sW $(TESTTMP)/test_emit_obj_x64_dce.o | grep -q 'FUNC    LOCAL  DEFAULT    1 AddUp'
+	! readelf -sW $(TESTTMP)/test_emit_obj_x64_dce.o | grep -q ' FloatToStr$$'
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -no-pie $(TESTTMP)/test_emit_obj_x64_caller.c $(TESTTMP)/test_emit_obj_x64_dce.o -o $(TESTTMP)/test_emit_obj_x64_dce_exe || { echo "test-emit-obj: --dce object FAILED to link"; exit 1; }; \
+	  tools/expect_same.sh test_emit_obj_x64_dce_exe "$$($(TESTTMP)/test_emit_obj_x64_dce_exe)" "done99 pxx-emit-obj" || exit 1; \
+	  echo "test-emit-obj: --dce object links+runs identically, and is smaller"; \
+	else echo "gcc not installed; --dce object link check skipped"; fi
 	# 4b-bis. AN OBJECT'S FILE-SCOPE INITIALISERS RUN IN A FOREIGN PROGRAM.
 	#    The rows above link a pxx object into a gcc program and call a
 	#    FUNCTION, which is the half that always worked. Nothing above reads a

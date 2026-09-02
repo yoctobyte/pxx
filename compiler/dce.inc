@@ -224,7 +224,19 @@ begin
   { The reference shapes this pass knows how to re-patch are x86-64's rel32
     call/jmp. Every other target keeps its bodies. }
   if TargetArch <> TARGET_X86_64 then why := 'target is not x86-64'
-  else if EmitObjMode or EmitSharedMode then why := '-c / --shared carry their own code-offset relocations'
+  { --shared only. `-c` used to be refused beside it on the premise that an
+    object "carries its own code-offset relocations"; it does, and every table
+    those relocations are built from -- Fixups, GlobFix, CallFix, ProcAddrFix,
+    DynCall, CodeRef and Procs[].BodyAddr -- is one this pass already compacts
+    and re-patches below, because an ET_EXEC image reads the same tables. The
+    half that was genuinely missing was not a relocation at all: it was the ROOT
+    SET. An executable is rooted at its entry point, and an object's callers are
+    outside it, so rooting an object the same way drops its entire reason to
+    exist. That root now exists (see the export loop below), so the refusal has
+    nothing left to refuse. --shared keeps it: its exported surface goes through
+    a .dynsym and a GOT this pass has never been read against, and turning both
+    on from one measurement would leave the failing one unidentified. }
+  else if EmitSharedMode then why := '--shared: .dynsym/GOT surface is unmeasured against this pass'
   else if DebugInfo then why := '-g line/frame tables carry code offsets'
   else if not IsPascalFrontend then
     why := 'only the Pascal frontend is wired up so far'
@@ -245,6 +257,25 @@ begin
     end;
     Inc(i);
   end;
+  { THE INIT/FINI THUNKS ARE CODE NO PROC OWNS, and under --emit-obj they are
+    the object's entry points -- the loader calls them through .init_array /
+    .fini_array. They are NOT a clean tail: measured on test_emit_obj, the init
+    thunk sits at 0x1aae4 and __pxx_run_finalizers' body at 0x1ab28, so both
+    thunks fall INSIDE the removable range of whatever proc precedes them.
+    Registering them as stub targets is the existing mechanism for exactly this
+    -- a range that holds one is kept whole -- and it is why the thunks survive
+    a pass that has no edge pointing at them.
+
+    The fini thunk's own call to the finalizer runner needs no edge either:
+    FiniRunnerProc is already an explicit root above. Reaching it through
+    DceOwnerOf would attribute it to the proc whose range it happens to land in,
+    which is a different proc on every program. }
+  if InitThunkOff >= 0 then
+    if not DceAddStubTarget(InitThunkOff) then
+    begin DceReportLine('off: no stub slot for the init thunk'); Exit; end;
+  if FiniThunkOff >= 0 then
+    if not DceAddStubTarget(FiniThunkOff) then
+    begin DceReportLine('off: no stub slot for the fini thunk'); Exit; end;
 
   { The two graph tables are sized to THIS image's call sites, not to a cap --
     they are the only place the pass allocates anything big. }
@@ -268,6 +299,27 @@ begin
   i := 0;
   while i < FiniProcCount do begin DceMark(FiniProcs[i]); Inc(i); end;
   DceMark(FiniRunnerProc);
+  { AN OBJECT'S CALLERS ARE NOT IN THE OBJECT. Everything this object exports is
+    reachable by definition -- that is what exporting means -- and no edge inside
+    the image says so. Without this loop the pass is correct and useless: it
+    would root an --emit-obj object at its initialisers and drop every cdecl
+    routine the object was built to provide.
+
+    ObjProcIsExported is the object writer's own predicate, deliberately, so the
+    root set and the GLOBAL symbol block cannot disagree about who is visible.
+    They must not: a proc dropped here gets BodyAddr := -1, ObjProcIsDefined
+    reads that, and the symbol quietly stops being emitted -- a link that fails
+    on `undefined reference` if you are lucky and resolves to another object's
+    copy if you are not. }
+  if EmitObjMode then
+  begin
+    i := 0;
+    while i < ProcCount do
+    begin
+      if ObjProcIsDefined(i) and ObjProcIsExported(i) then DceMark(i);
+      Inc(i);
+    end;
+  end;
   { a call from code that is never dropped -- the entry stub, the runtime stubs,
     the main body -- is a root by definition }
   i := 0;
@@ -517,6 +569,13 @@ begin
 
   DbgMainBodyStart := DceNewOff(DbgMainBodyStart);
   DbgMainBodyEnd := DceNewOff(DbgMainBodyEnd);
+  { The object/so writers state these as `.text + <offset>` in .rela.init_array
+    and .rela.fini_array, and as DT_INIT / DT_FINI. They are raw code offsets
+    held outside every fixup table, which is what "-c / --shared carry their own
+    code-offset relocations" was pointing at. Kept alive as stub targets above,
+    so DceNewOff always has a real answer for them. }
+  if InitThunkOff >= 0 then InitThunkOff := DceNewOff(InitThunkOff);
+  if FiniThunkOff >= 0 then FiniThunkOff := DceNewOff(FiniThunkOff);
   CodeLen := CodeLen - gotB;
 
   { --- and re-patch what moved ------------------------------------------- }

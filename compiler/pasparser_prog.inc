@@ -593,6 +593,14 @@ begin
   InitThunkOff := CodeLen;
   EmitSharedThunkPrologue;
   EmitB($E8);                                     { call <code offset 0> }
+  { RECORD IT. This displacement is hand-computed against a fixed target rather
+    than routed through CallFix, because its callee is the program body at
+    offset 0 and no Procs[] row names that. A rel32 nobody recorded is correct
+    exactly until something ahead of it moves -- and under --emit-obj --dce
+    something does: the pass compacts ~90KB out of the middle, this site slides
+    down with it, the displacement does not, and the loader calls into whatever
+    now sits at the old distance. Measured: SIGSEGV before main. }
+  RecordCodeRef(0);
   callSite := CodeLen;
   EmitI32(0 - (callSite + 4));
   EmitSharedThunkEpilogue;
