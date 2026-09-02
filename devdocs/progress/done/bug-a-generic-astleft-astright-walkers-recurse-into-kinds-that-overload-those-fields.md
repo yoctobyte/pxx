@@ -3,12 +3,12 @@ slug: bug-a-generic-astleft-astright-walkers-recurse-into-kinds-that-overload-th
 track: A
 prio: 55
 type: bug
-status: working
+status: done
 blocked-by: []
 found: 2026-09-02
 found-by: frankb-a9
 owner: frankb-a9
-summary: "ASTLeft/ASTRight are OVERLOADED PER NODE KIND, and the overload set is EIGHT kinds, not one: AN_ASM (AsmBytes offset + length), AN_PTR_CAST (proc-sig index), AN_VIRTUAL_CALL / AN_CLASS_VIRTUAL_CALL (VMT slot), AN_CALL (ProcRetRecId), AN_METHODREF (VMT slot), AN_TYPEINFO and AN_CLASSREF (0/1 flags). Three of those are VALID node indices, so no out-of-range read will ever catch them. Nine walkers recurse through the slots generically; the other 32 self-recursive walkers are kind-dispatched and are NOT vulnerable. FIXED by a single table in ast_arena.inc (ASTLeftIsChild / ASTRightIsChild + ASTChildLeft / ASTChildRight) that all nine now ask, plus tools/ast_slot_overloads.py, which fails if a kind drifts out of it. Measured cost: within noise of the self-host compile. NO OBSERVABLE INSTANCE was found in test/ (2233 files, two probes, 238k firings) -- this lands as a guard with an explicitly negative reachability result, not as a repro."
+summary: "RESOLVED. ASTLeft/ASTRight are OVERLOADED PER NODE KIND, and the overload set is EIGHT kinds, not one: AN_ASM (AsmBytes offset + length), AN_PTR_CAST (proc-sig index), AN_VIRTUAL_CALL / AN_CLASS_VIRTUAL_CALL (VMT slot), AN_CALL (ProcRetRecId), AN_METHODREF (VMT slot), AN_TYPEINFO and AN_CLASSREF (0/1 flags). Three of those are VALID node indices, so no out-of-range read will ever catch them. Nine walkers recurse through the slots generically; the other 32 self-recursive walkers are kind-dispatched and are NOT vulnerable. FIXED by a single table in ast_arena.inc (ASTLeftIsChild / ASTRightIsChild + ASTChildLeft / ASTChildRight) that all nine now ask, plus tools/ast_slot_overloads.py, which fails if a kind drifts out of it. Measured cost: within noise of the self-host compile. NO OBSERVABLE INSTANCE was found in test/ (2233 files, two probes, 238k firings) -- this lands as a guard with an explicitly negative reachability result, not as a repro. Full tier at dcb6f2c17: 3804 ok, 6 SKIP, 1 FAIL, and that FAIL is a Track T ratchet that has been red since its own arming commit (bug-t-the-exit-observable-ratchet-was-red-at-its-own-arming-commit), not this change."
 ---
 
 # Generic ASTLeft/ASTRight walkers vs kinds that overload those fields
@@ -147,3 +147,33 @@ diff the next time anything near it changes; it does not find one today.
 have a real node in `Right` (the interface value; the callee expression) and
 park their slot number in `ASTSOffset` / `ASTIVal` instead. That is the shape
 the other six should have had.
+
+## The tier, since the load-bearing claim spans eight frontends
+
+`--tier full` at `dcb6f2c17`, from a tree verified equal to `origin/master`,
+binary `c7c83465b0e9`: **3804 ok, 6 SKIP, 1 FAIL.**
+
+The quick tier covers two frontends and the claim "AN_CALL's ASTRight is never
+a child" covers eight, which is why a full run was worth the ten minutes.
+
+The four new rows are proven to have RUN, not just to have not failed —
+`test-core#945..948` carry the four `ok:` compile lines and the census tool's
+self-check line. A tier row that passes because nothing executed is the failure
+this repo has a whole rule about.
+
+**The single FAIL is not this change.** `tools-devtest#00` fails on
+`exit_observable_devtest.py`'s stdout-only share ratchet. Removing this
+commit's four Makefile rows leaves the measurement byte-identical at
+667 of 718 — they are x86-64 `$(COMPILER)` rows and that population is
+`run_target.sh` cross-target rows. Running the guard unchanged against
+successive Makefiles shows it was RED at its own arming commit, by three rows,
+before anything drifted. Filed as
+[[bug-t-the-exit-observable-ratchet-was-red-at-its-own-arming-commit]].
+
+A FIRST RUN OF THIS TIER WAS DISCARDED, not read: `tools/sync.sh` rebased in 25
+commits mid-run, three touching `compiler/`, so the binary was snapshotted at
+one sha while the harness read sources from a tree that had moved. Killed,
+rebuilt (`c7c83465b0e9`), targeted set re-run green, tier restarted from a
+clean tree. The trigger is worth naming because it is not an edit you make: it
+is a pull you invite, and "my tree is final" is exactly the state in which you
+stop counting sync as touching the instrument.
