@@ -11,11 +11,11 @@
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `26db8523e829` on seven, 2026-09-02T21:00:26Z (20m ago).**
+**Newest full tier in the fleet: `26db8523e829` on seven, 2026-09-02T21:00:26Z (22m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `26db8523e829` | RED | 20m | — (newest) |
+| seven | `26db8523e829` | RED | 22m | — (newest) |
 | plexus | `27424c927b65` | RED | 3d10h | 3d10h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -44,7 +44,7 @@ Reading a staler host's map for a cross-target job answers a question about an O
   - `tools-devtest#00`
   </details>
 - **test-core#src:test/test_sizeof_user_name_shadows_builtin.pas** — test/test_sizeof_user_name_shadows_builtin.pas tools/expect_same.sh (seven): bad `2ba37ba919b6`, last good `08f7de0715a8`, 1 commit(s) in range
-- **test-emit-obj#src:test/test_esp_hello.pas@1** — test/test_esp_hello.pas test/c_obj_extern_addr.c (seven): bad `7fff15ddc1eb`, last good `1b2c0b5dcba9`, 3 commit(s) in range
+- **test-emit-obj#src:test/test_esp_hello.pas@1** — test/test_esp_hello.pas test/c_obj_extern_addr.c (seven): bad `7fff15ddc1eb`, last good `eadf214725a1`, 2 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
