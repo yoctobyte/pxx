@@ -287,3 +287,33 @@ sibling through the same API as its control. The interface case is NOT reachable
 from a program — an interface's RTTI blob is deliberately absent from the class
 registry (measured: `GetClass('IInterface')` answers nil) — which is why the
 interface half is asserted on the object, in the Makefile, and not by a probe.
+
+## 2026-09-02 (frankA) — what is left of step 2, named
+
+With the thunks symbolised and the bodiless slots dropped, **every relocation
+family in both a Pascal and a C object names zero `.text` section symbols.**
+The blocker that remains is invisible to that metric, because it is not a
+relocation at all: six BAKED call displacements in a C object.
+
+```
+function-sections: CallFix 1089  relocated 1083  pinned-target 6  undefined 0  no-symbol 0  (pinned: sysret sysret sysret sysret sysret sysret)
+```
+
+The report now NAMES them, which is what turned a number into a diagnosis. Six
+sites, one callee, and it is not the duplicate-static-in-the-users-own-file case
+the predicate's comment describes: `static int sysret` exists in **crtl's**
+`fcntl.c` and in **crtl's** `unistd.c`, both pulled into one preprocessor buffer
+behind a program whose only libc reference is `printf`. C gives each internal
+linkage, so they are two distinct functions — sharing one `Procs[]` row.
+
+Filed as
+[[feature-c-two-same-named-file-scope-statics-share-one-procs-row-so-neither-can-have-a-symbol]]
+(Track C, prio 45) rather than fixed here: the fix is a Procs row per (module,
+name) in the C frontend, and four other per-row attributes are silently
+overwritten by the second body today. **Not wired as `blocked-by`** — step 2's
+first half is finished and this ticket should stay visible; the dependency is
+real but one-directional and belongs in prose, not in a field that would hide
+the parent from `ready`.
+
+A minimal C TU with no crtl pull is at `pinned-target 0`, and so is a Pascal
+object, so nothing else in the tree is known to be in this shape.

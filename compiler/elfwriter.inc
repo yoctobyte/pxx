@@ -3065,23 +3065,45 @@ end;
   accounted for the other 1044. }
 procedure ObjReportFunctionSections;
 var i, reloc, tgtPinned, undef, noSym: Integer;
-    firstBaked: AnsiString;
+    firstBaked, pinnedNames: AnsiString;
 begin
   if not FunctionSections then Exit;
   reloc := 0; tgtPinned := 0; undef := 0; noSym := 0;
+  pinnedNames := '';
   for i := 0 to CallFixCount-1 do
     if ObjCallFixIsRelocatable(i) then Inc(reloc)
     else if (CallFix[i].ProcIdx >= 0) and (CallFix[i].ProcIdx < ProcCount) and
             (CallFixTarget[i] >= 0) and
-            (CallFixTarget[i] <> Procs[CallFix[i].ProcIdx].BodyAddr) then Inc(tgtPinned)
+            (CallFixTarget[i] <> Procs[CallFix[i].ProcIdx].BodyAddr) then
+    begin
+      Inc(tgtPinned);
+      { NAMED, not just counted. This number is the one thing left blocking
+        per-function sections, and driving it to zero means knowing WHICH
+        callee's snapshot disagrees with its row. The count alone is actively
+        misleading: it sent its first reader looking for duplicate file-scope
+        statics in the translation unit under compilation, which has none --
+        the six in a plain C object are all `sysret', and both definitions are
+        in CRTL (fcntl.c and unistd.c), pulled into the same buffer behind a
+        program whose only libc reference is printf.
+        ONE NAME PER SITE, NOT PER CALLEE, so a repeated name is the finding
+        rather than a printing bug: six sites, one callee. Capped at 8 with the
+        cap stated in the output, so a pathological object prints a line and
+        not a megabyte, and nobody reads a truncation as a total. }
+      if tgtPinned <= 8 then
+        pinnedNames := pinnedNames + ' ' + Procs[CallFix[i].ProcIdx].Name
+      else if tgtPinned = 9 then
+        pinnedNames := pinnedNames + ' ...(first 8 only)';
+    end
     else if (CallFix[i].ProcIdx < 0) or (CallFix[i].ProcIdx >= ProcCount) or
             (not ObjProcIsDefined(CallFix[i].ProcIdx)) then Inc(undef)
     else Inc(noSym);
-  writeln(StdErr, 'function-sections: CallFix ', CallFixCount,
+  write(StdErr, 'function-sections: CallFix ', CallFixCount,
           '  relocated ', reloc,
           '  pinned-target ', tgtPinned,
           '  undefined ', undef,
           '  no-symbol ', noSym);
+  if tgtPinned > 0 then write(StdErr, '  (pinned:', pinnedNames, ')');
+  writeln(StdErr, '');
   { The other two families that name a proc by index, counted for the same
     reason: what blocks per-function sections is the number still BAKED, and
     a VMT slot left baked is worse than a baked call because the program
