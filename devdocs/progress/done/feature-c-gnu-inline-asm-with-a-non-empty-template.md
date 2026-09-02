@@ -7,7 +7,7 @@ status: done
 found: 2026-09-02
 found-by: frankD
 blocked-by: []
-summary: "pxx's C frontend refuses GNU inline asm whose template is non-empty (`error: C: inline asm with a non-empty template is not supported — the instructions would be silently dropped`). The refusal is right; the gap is real. It is the LAST non-crtl blocker for busybox at 258 applets: networking/tls_sp_c32.c takes an x86-64 asm arm because pxx announces __GNUC__, and its failure takes the 400-object link down with it (curve_P256_compute_pubkey_and_premaster undefined). Everything else in that build now compiles."
+summary: "RESOLVED for x86-64. GNU inline asm with a non-empty template is read by compiler/asmatt.inc (an AT&T reader over asmenc's existing AsmDispatch, not a second assembler) and its operands are pinned to fixed registers at parse time. Supported: \"r\" \"rm\" \"m\", the fixed-register letters, matching digits, memory/cc/register clobbers. \"+r\", [sym], earlyclobber, asm goto, unknown constraints and unknown mnemonics still refuse BY NAME. VERIFIED: busybox networking/tls_sp_c32.c compiles and links (busybox_diff.sh --separate, 3 applets, 42 objects, curve_P256_compute_pubkey_and_premaster defined, byte-identical to the gcc oracle over 31 cases), and three of its four x86-64-reachable asm arms carried verbatim into test/casm_gnu_operands.c print exactly what gcc -O0 prints. NOT verified here: the 258-applet build — that is frankD's campaign and this ticket removed one blocker from it, which is not the same claim. Two things a reader needs: `--pinned` shows a PASS on this ticket's own reproducer (the pin predates __GNUC__), and the work found a live pre-existing ModRM miscompile in lib/asmcore, fixed in 8b89a201d and present in the pin."
 owner: frankB
 ---
 
