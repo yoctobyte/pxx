@@ -911,7 +911,13 @@ begin
   ASTNodeCount := INLINE_AST_RESERVE;   { per-proc AST starts above the low inline reserve; the per-body resets restore this, but the FIRST allocation (before any reset) must not land in [0..INLINE_AST_RESERVE) and collide with retained inline nodes }
   EnsureTokCapacity(65536);   { bootstrap the dynamic token arrays before any lexer runs }
   InliningActive := 0;
-  OptLevel := 2;   { -O2 is the default (feature-optimization-levels): ~1.34x faster / ~11% smaller, self-host -O2 fixedpoint byte-identical. -O0 is still selectable and remains the byte-identity reference; opt passes gate on OptLevel>=tier. }
+  OptLevel := 2;   { -O2 is the default (feature-optimization-levels): ~1.34x faster / ~11% smaller, self-host -O2 fixedpoint byte-identical. -O0 is still selectable; opt passes gate on OptLevel>=tier.
+     -O0 IS NO LONGER THE BYTE-IDENTITY REFERENCE. It now prunes the dead arm of
+     a constant-condition `if`/`while`, because gcc, clang and tcc all do at -O0
+     and tcc has no optimiser at all, which makes it LOWERING rather than an
+     optimisation (decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0).
+     The 1:1 reference moves to `-OO`, a named flag, per part 3 of
+     feature-a-fold-the-consensus-dead-branch-core-at-every-level. }
   OptLevelExplicit := False;
   RcSuppressAssign := False;
   WarnedMissedFold := False;

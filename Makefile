@@ -12736,6 +12736,37 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_andchain26 "$$($(TESTTMP)/c_andchain26)" "$$(printf '1 0\n2 1\n3 1\n4 2\n5 done')"
 	./$(COMPILER) test/c_fn_typed_parameter.c $(TESTTMP)/c_fnparam26
 	tools/expect_same.sh c_fnparam26 "$$($(TESTTMP)/c_fnparam26)" "$$(printf '1 42\n2 10\n3 u7\nv9\n4 1\n5 42\n6 10')"
+	# A CONSTANT `if` CONDITION LOWERS ONE ARM, at every level. Shared lowering in
+	# ir.inc, so both frontends inherit it; IROptConstBranch's `OptLevel >= 1`
+	# gate is correct and stays where it is. -O0 was the level that failed.
+	# feature-a-fold-the-consensus-dead-branch-core-at-every-level
+	#
+	# ALL THREE LEVELS on both files, because the claim is "every level" and a
+	# single-level row cannot say that. The Pascal file's arithmetic is the
+	# discriminator: every pruned arm carries a side effect an order of magnitude
+	# larger than the live one, so a wrongly-kept arm changes n rather than merely
+	# slowing it down, and by how much says which arm leaked.
+	./$(COMPILER) -O0 test/test_const_dead_arm_prune.pas $(TESTTMP)/pas_prune_o0
+	tools/expect_same.sh pas_prune_o0 "$$($(TESTTMP)/pas_prune_o0)" "$$(printf 'n=15 want 15\ns=abcd\nw=7 want 7\njumped in\nDEADARMPRUNE OK')"
+	./$(COMPILER) -O2 test/test_const_dead_arm_prune.pas $(TESTTMP)/pas_prune_o2
+	tools/expect_same.sh pas_prune_o2 "$$($(TESTTMP)/pas_prune_o2)" "$$(printf 'n=15 want 15\ns=abcd\nw=7 want 7\njumped in\nDEADARMPRUNE OK')"
+	./$(COMPILER) -O3 test/test_const_dead_arm_prune.pas $(TESTTMP)/pas_prune_o3
+	tools/expect_same.sh pas_prune_o3 "$$($(TESTTMP)/pas_prune_o3)" "$$(printf 'n=15 want 15\ns=abcd\nw=7 want 7\njumped in\nDEADARMPRUNE OK')"
+	# The C half, and the row that makes the escape guard mandatory: `&&label`
+	# into a constant-false arm. gcc/clang/tcc all keep such an arm. gcc is the
+	# ORACLE here and it links this file at -O0 too, which it could only do
+	# having already pruned the never_arm_C arms with no optimiser asked for.
+	./$(COMPILER) -O0 test/c_const_if_dead_arm_prune.c $(TESTTMP)/c_prune_o0
+	./$(COMPILER) -O2 test/c_const_if_dead_arm_prune.c $(TESTTMP)/c_prune_o2
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -O0 test/c_const_if_dead_arm_prune.c -o $(TESTTMP)/c_prune_gcc || { echo "c_const_if_dead_arm_prune: gcc could not build the oracle"; exit 1; }; \
+	  tools/expect_same.sh c_prune_o0 "$$($(TESTTMP)/c_prune_o0)" "$$($(TESTTMP)/c_prune_gcc)" || exit 1; \
+	  tools/expect_same.sh c_prune_o2 "$$($(TESTTMP)/c_prune_o2)" "$$($(TESTTMP)/c_prune_gcc)" || exit 1; \
+	  echo "c_const_if_dead_arm_prune: matches the gcc oracle at -O0 and -O2"; \
+	else \
+	  tools/expect_same.sh c_prune_o0 "$$($(TESTTMP)/c_prune_o0)" "$$(printf 'skipped the arm\nN ran\nhits=1')"; \
+	  tools/expect_same.sh c_prune_o2 "$$($(TESTTMP)/c_prune_o2)" "$$(printf 'skipped the arm\nN ran\nhits=1')"; \
+	fi
 	# A CONSTANT LEFT OPERAND OF `and`/`or`, AND `not` OVER A BOOLEAN LITERAL,
 	# fold in the PARSER, because Pascal short-circuits and that is the language's
 	# rule rather than an optimisation. The C sibling landed in 88ef1232f; the

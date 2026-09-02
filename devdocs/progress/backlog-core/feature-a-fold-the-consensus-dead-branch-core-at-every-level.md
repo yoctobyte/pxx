@@ -8,7 +8,7 @@ blocked-by: []
 found: 2026-08-31
 found-by: frank-user
 owner: ""
-summary: "Implements the ruling in decided/decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0. What REMAINS is the DEAD-ARM PRUNE at -O0: fold statements after a return, and drop the arm of an if whose condition is already a constant, because gcc, clang and tcc all do and tcc has no optimizer, so this is LOWERING. The SHORT-CIRCUIT half is DONE (88ef1232f, 2026-09-01) and it was worse than this file said: `0 && f()` folded at NO level, -O3 included, not just at -O0. HARD CONSTRAINT, measured: prune only when unreachable AND the address does not escape; a dead arm holding a label whose address is taken is kept by all three at every level, and an if-only test will not catch getting this wrong. Both frontends: the Pascal arm is measured open, `if False and (F=0)` keeps its dead call at -O2. Also adds -OO for the true source-1:1 build, as a NAMED FLAG not a level."
+summary: "Implements the ruling in decided/decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0. The SHORT-CIRCUIT half is DONE (88ef1232f C, e31f7112f Pascal) and the DEAD-ARM PRUNE is DONE for `if` and `while` in shared lowering, with the address-escape guard (part 2). What REMAINS is part 1s third shape -- statements after a return/Exit, still -O0 only, a different mechanism (AN_SEQ reachability, not a constant condition) -- plus part 3 -OO and part 4 the charter line, because gcc, clang and tcc all do and tcc has no optimizer, so this is LOWERING. The SHORT-CIRCUIT half is DONE (88ef1232f, 2026-09-01) and it was worse than this file said: `0 && f()` folded at NO level, -O3 included, not just at -O0. HARD CONSTRAINT, measured: prune only when unreachable AND the address does not escape; a dead arm holding a label whose address is taken is kept by all three at every level, and an if-only test will not catch getting this wrong. Both frontends: the Pascal arm is measured open, `if False and (F=0)` keeps its dead call at -O2. Also adds -OO for the true source-1:1 build, as a NAMED FLAG not a level."
 ---
 
 # Fold the consensus dead-branch core at every level
@@ -171,3 +171,112 @@ Also untouched, all still open: **part 2** the address-escape guard (a dead arm
 holding a label whose address is taken is kept by gcc/clang/tcc at every level —
 and Pascal has no computed goto, so this is a C-frontend obligation), **part 3**
 `-OO`, and **part 4** the charter amendment.
+
+## 2026-09-02 (frankC) — THE DEAD-ARM PRUNE IS DONE FOR `if` AND `while`
+
+Part 1's larger half. `IRLowerAST` now drops the dead arm of a constant-condition
+`AN_IF`, and a constant-FALSE `AN_WHILE` entire, in SHARED lowering — so both
+frontends and all six backends inherit it, and the `OptLevel >= 1` gate on
+`IROptimize` stays exactly where it was.
+
+```
+                       -O0        -O1/-O2/-O3
+if False then Never    was 127    was alive     now alive at every level
+while False do Never   was 127    was alive     now alive at every level
+```
+
+**THE `while` ARM WAS FOUND BY TESTING THIS TICKET'S OWN ACCEPTANCE LIST, not by
+believing the `if` fix.** With `AN_IF` pruning and nothing else, `if False then
+WriteLn(NeverW)` was clean at -O0 while `while False do WriteLn(NeverW)` two
+lines below it still died with `undefined symbol`. The acceptance section
+predicted this in writing — *"a fix touching only `if` will miss them, and no
+`if`-only test will say so"* — and it was right. Both shapes are now one
+mechanism reading one helper, per normalise-dont-special-case.
+
+**`while True` IS DELIBERATELY NOT PRUNED, and that is a correctness
+requirement, not caution.** It is the desugaring target for Ada `loop`/`exit
+when` (aparser.inc) and for the post-bearing C `for`, so folding a
+constant-condition loop *regardless of its value* would delete a running
+program's body. `test_const_dead_arm_prune.pas` carries the positive control for
+it: a `while True ... Break` whose counter stays 0 if the loop is wrongly
+dropped.
+
+**Checked BEFORE building, because these are the two shapes that would have made
+this a miscompile rather than a bug:** `repeat` has its own `AN_REPEAT` kind and
+never becomes an `AN_WHILE`, so `repeat ... until True` cannot be reached; and
+`do { } while (0)` — the most common idiom in C — desugars to
+`flag=1; while (flag || 0)`, whose condition holds a VARIABLE, so `ASTConstCond`
+rejects it and the loop is untouched.
+
+### The escape guard
+
+Unchanged in design and now applied to both kinds: an arm holding `AN_LABEL`,
+`AN_LABELADDR` or `AN_GOTO_INDIRECT` is KEPT. Deliberately broader than "the
+address was taken" — Pascal reaches the same hazard by a different route (`goto`
+into the arm), and the recursion's budget answers TRUE on exhaustion, because a
+guard that runs out of room must fail toward emitting code. **Proven
+load-bearing, not decorative:** with it disabled the compiler refuses the C
+computed-goto program outright with `invalid IR label-address target (label not
+defined)`.
+
+### What was measured before landing
+
+Both differentials are ISOLATING: the pre-change compiler was built from ONE
+tree with only `ir.inc` and `ast_arena.inc` stashed, so a difference below can
+have no other author. (Confirmed at the same time: the 9 commits this tree was
+behind touched neither `compiler/` nor `lib/`.)
+
+- **-O2, IMAGE identity, whole Pascal corpus: `ok=1410 skip=232 fail=0`.** Not
+  "the output matched" — the two compilers emit BYTE-IDENTICAL binaries for
+  every program at the default level. `IROptConstBranch` already reached this
+  fixed point from -O1 up, so the new lowering AGREES with the existing pass
+  rather than competing with it, and -O0 is the only level whose bytes move.
+  This is the claim that makes a change to shared `AN_IF`/`AN_WHILE` lowering
+  safe to land.
+- **-O0, OUTPUT differential, whole Pascal corpus: `ok=1410 skip=232 fail=0`** —
+  the level that does change, and no program's behaviour moved with it.
+  An earlier run of this read `fail=4` and **all four were the instrument**:
+  three `test_c_gtk_*` rows differing only in the HH:MM:SS.mmm and
+  `(process:PID)` that GLib prints itself, and `lib_mimic_urllib_request_server`
+  differing only in the ephemeral port it bound, both sides timing out
+  identically. The harness now normalises exactly those three patterns and
+  nothing wider: the Pascal prune test's whole discriminator is that a wrongly
+  kept arm changes `n=15`, so a filter broad enough to hide a PID would hide the
+  finding the harness exists to catch.
+- The harness's own control had to be replaced first: it used
+  `test_pascal_dead_arm_ext.pas`, which exercises the PARSER fold that landed at
+  `e31f7112f` and is therefore in BOTH binaries, so the two images matched and
+  the control correctly refused to certify the run. A control drawn from the
+  wrong population passes and certifies a broken instrument; this one failed
+  instead, which is the only reason the run was not believed.
+- C side matches the **gcc oracle** at -O0, -O2 and -O3. gcc links the file at
+  -O0 with no optimiser asked for, including the new `while (0)` row — which is
+  the evidence that this is lowering and not an optimisation.
+
+`test/test_const_dead_arm_prune.pas` (renamed from `..._const_if_...`, because
+after the `while` rows the old name named only half of what it tested) and
+`test/c_const_if_dead_arm_prune.c`, both wired at every level.
+
+`compiler.pas:914`'s comment claimed -O0 "remains the byte-identity reference".
+This change falsifies it, so it is corrected in the same commit and points at
+`-OO`.
+
+## What REMAINS
+
+**Part 1's third shape: statements after a `return`/`Exit`.** Still open, still
+-O0 only, measured at this tree:
+
+```pascal
+procedure P; begin Exit; WriteLn(NeverR); end;   { -O0 rc=127, -O2 alive }
+```
+
+It is NOT the same mechanism and is deliberately not bolted onto this one: `if`
+and `while` are a CONDITION being constant, while this is statement-sequence
+REACHABILITY inside `AN_SEQ`, needing a notion of which node kinds terminate a
+block. The same label guard would apply.
+
+**Part 2** the address-escape guard is DONE (above). **Part 3** `-OO` and
+**part 4** the charter amendment remain, and part 3 now has a concrete
+definition it did not have before: `-OO` is `-O0` with this prune and the
+`e31f7112f`/`88ef1232f` const folds disabled — i.e. exactly the pre-change
+compiler measured above.

@@ -138,6 +138,65 @@ begin
   ASTRight[Result]    := CloneAST(ASTRight[node]);
 end;
 
+{ ---- The dead-arm prune's escape guard -----------------------------------
+
+  "Does this subtree contain a LABEL?" -- the one question that decides whether
+  an unreachable `if` arm may be dropped.
+
+  Reachability alone is NOT sufficient and this is the case that proves it:
+
+      void f(void){ void *p = &&inside; if (0) { inside: N(); } goto *p; }
+
+  gcc, clang and tcc all KEEP `N` here, at every level, because the label's
+  address escaped and the arm is reachable through `goto *p`. pxx has both
+  halves -- AN_LABELADDR is `&&label` and AN_GOTO_INDIRECT is `goto *expr` --
+  so pruning on reachability would silently break computed-goto code.
+
+  DELIBERATELY MORE CONSERVATIVE THAN "the address was taken": ANY label in the
+  arm keeps it. Two reasons. A plain `goto` from outside into the arm is the
+  same hazard wearing a different spelling, and Pascal has `goto` and no
+  labels-as-values, so an address-taken test would answer "safe to prune" for
+  the only shape Pascal can hurt itself with. And the cheap answer is the safe
+  one: over-keeping costs bytes in dead code, under-keeping miscompiles.
+
+  THE BUDGET IS PART OF THE GUARD, not a performance tweak. A statement list
+  chains through ASTRight, so a thousand-statement arm is a thousand-deep walk;
+  exhausting the budget answers TRUE -- keep the arm -- because a guard that
+  runs out of room must fail toward emitting code, never toward deleting it. }
+function ASTSubtreeHasLabel(node: Integer; var budget: Integer): Boolean;
+begin
+  ASTSubtreeHasLabel := False;
+  if node < 0 then Exit;
+  if budget <= 0 then begin ASTSubtreeHasLabel := True; Exit; end;
+  Dec(budget);
+  if (ASTKind[node] = AN_LABEL) or (ASTKind[node] = AN_LABELADDR) or
+     (ASTKind[node] = AN_GOTO_INDIRECT) then
+  begin
+    ASTSubtreeHasLabel := True;
+    Exit;
+  end;
+  if ASTSubtreeHasLabel(ASTLeft[node], budget) then
+  begin ASTSubtreeHasLabel := True; Exit; end;
+  if ASTSubtreeHasLabel(ASTRight[node], budget) then
+    ASTSubtreeHasLabel := True;
+end;
+
+{ Is this `if` condition a COMPILE-TIME constant, and which way does it go?
+
+  Literal-only, matching the folds in the parsers and the ruling: a `const z = 0`
+  is not consulted, because gcc and tcc keep propagation-through-a-variable and
+  clang prunes it, so nothing portable relies on either answer. By the time
+  lowering sees the node, both frontends have already folded their short-circuit
+  chains down to a literal, which is what makes this arm reachable at all. }
+function ASTConstCond(node: Integer; var taken: Boolean): Boolean;
+begin
+  ASTConstCond := False;
+  if node < 0 then Exit;
+  if (ASTKind[node] <> AN_BOOL_LIT) and (ASTKind[node] <> AN_INT_LIT) then Exit;
+  taken := ASTIVal[node] <> 0;
+  ASTConstCond := True;
+end;
+
 { ---- Dynamic-array SHAPE of an expression --------------------------------
 
   These four answer "is this expression a dynamic array, and of what" for any

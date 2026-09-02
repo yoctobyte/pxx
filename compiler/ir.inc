@@ -6932,6 +6932,8 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     pendBase: Integer;
     mcCrefSym, mcInstSym, mcSize, mcVmt, mcAddr, mcSelfArg: Integer;
     dynLenTmp: Integer;
+    constArmBudget, deadArm, liveArm: Integer;   { the dead-arm prune -- see AN_IF }
+    constArmTaken: Boolean;
     caseIsStr: Boolean;
 begin
   if node = -1 then
@@ -13161,6 +13163,55 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
     AN_IF:
     begin
       pairNode := ASTRight[node];
+      { A CONSTANT CONDITION LOWERS ONE ARM, AND THIS IS LOWERING.
+
+        gcc, clang and tcc all drop the dead arm, and tcc has no optimiser at
+        all, so real code relies on it at EVERY level -- which is the whole
+        argument of
+        decided/decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0.
+        It lives here and not in IROptimize deliberately: IROptConstBranch is
+        gated behind `OptLevel >= 1`, that gate is correct and stays, and -O0
+        was the one level where `if False then Never()` still emitted a call to
+        a declared-but-never-defined external -- so the binary linked, warned,
+        and died before main with `undefined symbol`. MEASURED: rc=127 at -O0,
+        alive at -O2 and -O3.
+
+        Shared here rather than in either parser because BOTH frontends need it
+        and the AST is the shared substrate -- devdocs/dev/ir-as-substrate.md.
+        The parsers' own folds are what reduce a short-circuit CHAIN to the
+        literal this reads; they are not duplicates of it.
+
+        THE GUARD IS NOT OPTIONAL. An arm holding a label is reachable through
+        `goto` -- computed or plain -- so reachability alone is the wrong test
+        and ASTSubtreeHasLabel is the right one. See its header for the
+        `&&label` case all three reference compilers keep. }
+      constArmBudget := 20000;
+      if ASTConstCond(ASTLeft[node], constArmTaken) then
+      begin
+        if constArmTaken then deadArm := ASTRight[pairNode]
+        else deadArm := ASTLeft[pairNode];
+        if not ASTSubtreeHasLabel(deadArm, constArmBudget) then
+        begin
+          if constArmTaken then liveArm := ASTLeft[pairNode]
+          else liveArm := ASTRight[pairNode];
+          if liveArm = -1 then
+          begin
+            { `if False then S` with no else: the statement lowers to nothing.
+              IR_BLOCK over a single label keeps every caller's assumption that
+              a statement yields one node. }
+            endLabel := IRNewLabel;
+            endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+            Result := IRAppend(IR_BLOCK, endLabelNode, endLabelNode, -1, 0, 0);
+            Exit;
+          end;
+          pcBase := PostCallIntfCount;
+          last := IRDropManagedResult(liveArm, IRLowerAST(liveArm));
+          IRMarkStatementNode(last);
+          IRFlushPostCallIntf(pcBase);
+          Result := IRAppend(IR_BLOCK, last, last, -1, 0, 0);
+          Exit;
+        end;
+      end;
       elseLabel := IRNewLabel;
       endLabel := IRNewLabel;
       condNode := IRLowerAST(ASTLeft[node]);
@@ -13379,6 +13430,33 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
 
     AN_WHILE:
     begin
+      { A constant-FALSE condition means the body never runs, so the loop
+        lowers to nothing. This is the AN_IF prune's SIBLING, and it is here
+        because normalise-dont-special-case says the arm you do not grep for is
+        the one that stays broken -- measured exactly that way at this tree:
+        after the AN_IF prune landed, `if False then WriteLn(NeverW)` was alive
+        at -O0 while `while False do WriteLn(NeverW)` still died with
+        `undefined symbol`, which is the ticket's own acceptance warning
+        ("a fix touching only `if` will miss them") coming true.
+
+        CONSTANT TRUE IS DELIBERATELY NOT PRUNED. `while True` is the
+        desugaring target for Ada `loop`/`exit when` (aparser.inc) and for
+        several repeat/for-in shapes, so the loop is LIVE and folding it would
+        delete a running program's body, not dead code.
+
+        Same label guard as AN_IF, for the same reason: a `goto` from outside
+        into the body keeps it. Break/Continue inside the dead body target this
+        loop's own labels and go away with it. }
+      constArmBudget := 20000;
+      if ASTConstCond(ASTLeft[node], constArmTaken) and (not constArmTaken) then
+        if not ASTSubtreeHasLabel(ASTRight[node], constArmBudget) then
+        begin
+          endLabel := IRNewLabel;
+          endLabelNode := IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
+          Result := IRAppend(IR_BLOCK, endLabelNode, endLabelNode, -1, 0, 0);
+          Exit;
+        end;
+
       startLabel := IRNewLabel;
       endLabel := IRNewLabel;
       startLabelNode := IRAppend(IR_LABEL, -1, -1, -1, startLabel, 0);
