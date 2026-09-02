@@ -941,8 +941,21 @@ RC=0
 make_wrappers() {
   # One wrapper .c per translation unit, each carrying the SAME preamble the
   # unity's preamble supplies -- busybox's real build force-includes
-  # include/autoconf.h (Makefile.flags) and pxx has no -include, so this is
-  # what `gcc -include include/autoconf.h` does, spelled as source.
+  # include/autoconf.h (Makefile.flags) and NO busybox header includes it, so
+  # this is what `gcc -include include/autoconf.h` does, spelled as source.
+  #
+  # Spelled as source DELIBERATELY, not for want of the flag: pxx grew
+  # `-include <file>' since this was written (the note here used to say it had
+  # none). Putting it in the file keeps the wrapper self-contained and hands
+  # gcc and pxx a byte-identical translation unit, so a divergence cannot come
+  # from one side's command line. Getting this wrong is not a compile error you
+  # would recognise: ~2500 IF_FEATURE_XXX(...) macros go undefined and each
+  # invocation reaches the parser as an identifier applied to a parenthesised
+  # expression, which reads as a macro-expansion bug in the C frontend --
+  # `stray token at top level', `expected '')'' before IF_FEATURE_GREP_CONTEXT'
+  # and `undeclared identifier ''size_t'' used as value' all came from exactly
+  # that on 2026-09-02, in three different files, and were briefly filed as
+  # three separate compiler defects.
   #
   # BUILT ONCE AND SHARED BY BOTH SIDES. Now that the oracle also compiles
   # separately, pxx and gcc must be handed the SAME translation units, or the
