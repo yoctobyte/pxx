@@ -2405,6 +2405,18 @@ procedure ObjPlanEspSymbols(numSectionSyms: Integer;
                             var strSize, numLocalProcs, numExportProcs,
                                 numExportData, appMainOff, firstGlobal,
                                 extSym0: Integer); forward;
+{ The .symtab index of every defined proc, in the layout the HOSTED writers
+  emit (writeELFRelX64General and its i386 sibling): null, three section syms,
+  local procs, local data, then firstGlobal onward for the exported ones. The
+  ESP writer has its own version of this inside ObjPlanEspSymbols because its
+  symbol table is laid out differently; the two must not be merged by someone
+  who notices they look alike.
+
+  Split into a second pass for the same reason that one is: an exported proc's
+  index depends on numLocalProcs AND numLocalData, neither of which is known
+  until the first pass has counted them. Getting it wrong aims a call at the
+  wrong symbol, which the linker resolves happily -- a wild jump, not an
+  error -- so ObjCallFixIsRelocatable refuses anything it cannot index. }
 procedure ObjRefuseEspDataImports; forward;
 function ObjEspProcIsExported(procIdx: Integer): Boolean; forward;
 
@@ -2951,6 +2963,87 @@ begin
   Result := ProcCdecl[procIdx] and (not ProcCStaticLink[procIdx]);
 end;
 
+procedure ObjPlanHostedProcSymIdx(numLocalProcs, numLocalData: Integer);
+var i, n, firstGlobal: Integer;
+begin
+  for i := 0 to ProcCount-1 do ObjProcSymIdx[i] := -1;
+  n := 0;
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and (not ObjProcIsExported(i)) then
+    begin
+      ObjProcSymIdx[i] := 4 + n;
+      Inc(n);
+    end;
+  firstGlobal := 4 + numLocalProcs + numLocalData;
+  n := 0;
+  for i := 0 to ProcCount-1 do
+    if ObjProcIsDefined(i) and ObjProcIsExported(i) then
+    begin
+      ObjProcSymIdx[i] := firstGlobal + n;
+      Inc(n);
+    end;
+end;
+
+function ObjCallFixIsRelocatable(i: Integer): Boolean;
+var p: Integer;
+begin
+  ObjCallFixIsRelocatable := False;
+  if not FunctionSections then Exit;
+  if not EmitObjMode then Exit;
+  p := CallFix[i].ProcIdx;
+  if (p < 0) or (p >= ProcCount) then Exit;
+  if (CallFixTarget[i] >= 0) and (CallFixTarget[i] <> Procs[p].BodyAddr) then Exit;
+  if not ObjProcIsDefined(p) then Exit;
+  if ObjProcSymIdx[p] < 0 then Exit;
+  ObjCallFixIsRelocatable := True;
+end;
+
+{ May this call site become a relocation against the callee's symbol?
+
+  Refuses exactly one shape, and getting the test right mattered. CallFixTarget
+  is an unconditional SNAPSHOT of Procs[procIdx].BodyAddr taken when the site was
+  recorded (symtab.inc), so it is -1 only for a FORWARD reference. Reading
+  ">= 0" as "pinned to a specific body" therefore refused every BACKWARD call --
+  measured, 1004 of 1084 sites in a C object against 80 accepted. The report
+  below is what caught that; the predicate looked obviously right.
+
+  The real hazard is narrower: the snapshot DISAGREEING with the row. A C file
+  with two same-named file-scope statics compiles both and the later body
+  overwrites the row, so a site aimed at the first body would be silently
+  re-aimed at the second -- links cleanly, runs the wrong function, which is how
+  test/cstatic_same_module_dup.c once went from "2 11" to "11 11". Those stay
+  baked, and because they stay baked they are also what will block per-function
+  sections later, so they are COUNTED rather than assumed absent. }
+{ What this flag did and, more usefully, what it could NOT do. The count that
+  matters is not how many calls were relocated but how many call sites remain
+  BAKED, because per-function sections cannot land while any of them do: a baked
+  displacement is computed for this object's own copy of the callee, so a linker
+  that drops or replaces that copy leaves the jump pointing into whatever moves
+  in. Printed rather than inferred -- the first reading of this feature counted
+  80 relocations against 1124 call instructions in .text and no amount of
+  reasoning about EmitCallProc would have said which of the four reasons
+  accounted for the other 1044. }
+procedure ObjReportFunctionSections;
+var i, reloc, tgtPinned, undef, noSym: Integer;
+begin
+  if not FunctionSections then Exit;
+  reloc := 0; tgtPinned := 0; undef := 0; noSym := 0;
+  for i := 0 to CallFixCount-1 do
+    if ObjCallFixIsRelocatable(i) then Inc(reloc)
+    else if (CallFix[i].ProcIdx >= 0) and (CallFix[i].ProcIdx < ProcCount) and
+            (CallFixTarget[i] >= 0) and
+            (CallFixTarget[i] <> Procs[CallFix[i].ProcIdx].BodyAddr) then Inc(tgtPinned)
+    else if (CallFix[i].ProcIdx < 0) or (CallFix[i].ProcIdx >= ProcCount) or
+            (not ObjProcIsDefined(CallFix[i].ProcIdx)) then Inc(undef)
+    else Inc(noSym);
+  writeln(StdErr, 'function-sections: CallFix ', CallFixCount,
+          '  relocated ', reloc,
+          '  pinned-target ', tgtPinned,
+          '  undefined ', undef,
+          '  no-symbol ', noSym);
+end;
+
+
 function ObjProcBind(procIdx: Integer): Byte;
 { The st_info BINDING NIBBLE, already shifted: $10 GLOBAL, $20 WEAK.
 
@@ -3320,6 +3413,7 @@ begin
     end;
 end;
 
+
 procedure ObjPlanHostedSymbols(var strSize, numLocalProcs, numExportProcs,
                                numLocalData, numExportData, numImportData: Integer);
 { The EXPORT POLICY of a hosted relocatable object, in one place because it is
@@ -3466,7 +3560,16 @@ begin
   impSym0 := extSym0 + ExternalCount;
   numSyms := impSym0 + numImportData;
 
+  ObjPlanHostedProcSymIdx(numLocalProcs, numLocalData);
+
   relaTextCount := FixCount + GlobFixCount + DynCallCount + ProcAddrFixCount;
+  { --function-sections: one PC32 per internal call, against the callee's own
+    FUNC symbol. Counted with the same predicate that emits them, so the header
+    and the body cannot disagree about how many there are -- a mismatch here
+    writes a section whose size does not match its contents, which readelf
+    reports as a truncated file rather than as anything naming this feature. }
+  for i := 0 to CallFixCount-1 do
+    if ObjCallFixIsRelocatable(i) then Inc(relaTextCount);
   relaDataCount := DataPtrFixCount + MethodFixCount + ExternalCount;
 
   textOff := ELF_HEADER_SIZE;                    { 64, already 8-aligned }
@@ -3689,6 +3792,20 @@ begin
   for i := 0 to ProcAddrFixCount-1 do
     writeRela64(f, ProcAddrFix[i].CodePos, 1, 2,
                 Procs[ProcAddrFix[i].ProcIdx].BodyAddr - 4);
+
+  { --function-sections: the internal calls, LAST in .rela.text so the entries
+    above keep the file offsets they had. addend -4 is the standard rel32 bias,
+    so the linker computes S + (-4) - P -- exactly the displacement
+    ApplyCallFixups baked. RELA carries its addend explicitly and IGNORES the
+    bytes already sitting in .text, so the two agree by construction and the
+    LINKED binary must be byte-identical with the flag on and off. That identity
+    is how this step is verified: on its own it has no observable effect, and a
+    step with no observable effect can only be checked by proving it changed
+    nothing. }
+  for i := 0 to CallFixCount-1 do
+    if ObjCallFixIsRelocatable(i) then
+      writeRela64(f, CallFix[i].CodePos, ObjProcSymIdx[CallFix[i].ProcIdx], 2, -4);
+  ObjReportFunctionSections;
 
   { .rela.data: data->data pointers, data->code method slots, and one
     R_X86_64_64 per external GOT slot against that extern's UND symbol. }

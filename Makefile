@@ -19689,6 +19689,46 @@ test-emit-obj: $(COMPILER)
 	  tools/expect_same.sh test_emit_obj_x64_dce_exe "$$($(TESTTMP)/test_emit_obj_x64_dce_exe)" "done99 pxx-emit-obj" || exit 1; \
 	  echo "test-emit-obj: --dce object links+runs identically, and is smaller"; \
 	else echo "gcc not installed; --dce object link check skipped"; fi
+	# 4a-bis. --function-sections: INTERNAL CALLS BECOME RELOCATIONS.
+	#    The prerequisite step of
+	#    feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl. With one
+	#    .text section it has NO observable effect, so the claim asserted here is
+	#    exactly that: the LINKED BINARY IS BYTE-IDENTICAL with the flag on and
+	#    off, because the linker must compute the same displacement that was
+	#    baked. A step that changes nothing can only be verified by proving it
+	#    changed nothing.
+	#
+	#    ONE OBJECT PATH, each linked before the next compile overwrites it. Not
+	#    tidiness: gcc records the input object's name as an STT_FILE symbol, so
+	#    two objects named off.o and on.o give binaries differing by the one
+	#    character of their names and 10755 bytes downstream. Measured and
+	#    chased -- .text, .data and .rodata were byte-identical throughout.
+	rm -f $(TESTTMP)/cfs.o $(TESTTMP)/cfs_plain.o
+	./$(COMPILER) --emit-obj test/c_function_sections.c $(TESTTMP)/cfs.o
+	cp $(TESTTMP)/cfs.o $(TESTTMP)/cfs_plain.o
+	./$(COMPILER) --emit-obj --function-sections test/c_function_sections.c $(TESTTMP)/cfs.o
+	#    THE CONTROL, and it runs before anything it protects: if the flag
+	#    changed nothing in the object then "identical binaries" below is not a
+	#    result, it is the flag failing to run.
+	@if cmp -s $(TESTTMP)/cfs_plain.o $(TESTTMP)/cfs.o; then \
+	  echo "c_function_sections: --function-sections changed NOTHING in the object -- every assertion below would be vacuous"; exit 1; fi
+	#    AIMED: the plain object names no callee in .rela.text; the flagged one
+	#    names deep2, the callee of deep1. A count alone would pass on any
+	#    relocation at all, including the data ones both objects already have.
+	@test $$(readelf -r -W $(TESTTMP)/cfs_plain.o | sed -n "/Relocation section '.rela.text'/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* deep2') -eq 0 \
+	  || { echo "c_function_sections: the PLAIN object already relocates a call -- this test cannot show the flag doing anything"; exit 1; }
+	@test $$(readelf -r -W $(TESTTMP)/cfs.o | sed -n "/Relocation section '.rela.text'/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* deep2') -gt 0 \
+	  || { echo "c_function_sections: --function-sections emitted no relocation for the call to deep2"; exit 1; }
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) --emit-obj test/c_function_sections.c $(TESTTMP)/cfs.o >/dev/null; \
+	  gcc -no-pie $(TESTTMP)/cfs.o -o $(TESTTMP)/cfs_off || { echo "c_function_sections: plain object failed to link"; exit 1; }; \
+	  ./$(COMPILER) --emit-obj --function-sections test/c_function_sections.c $(TESTTMP)/cfs.o >/dev/null; \
+	  gcc -no-pie $(TESTTMP)/cfs.o -o $(TESTTMP)/cfs_on || { echo "c_function_sections: --function-sections object failed to link"; exit 1; }; \
+	  tools/expect_same.sh cfs_off "$$($(TESTTMP)/cfs_off)" "13" || exit 1; \
+	  tools/expect_same.sh cfs_on "$$($(TESTTMP)/cfs_on)" "13" || exit 1; \
+	  cmp -s $(TESTTMP)/cfs_off $(TESTTMP)/cfs_on || { echo "c_function_sections: the linked binaries DIFFER. A relocated call resolved to something other than the baked displacement -- compare .text before believing the addend."; exit 1; }; \
+	  echo "c_function_sections: internal calls relocate; the linked binary is byte-identical"; \
+	else echo "gcc not installed; --function-sections link check skipped"; fi
 	# 4b-bis. AN OBJECT'S FILE-SCOPE INITIALISERS RUN IN A FOREIGN PROGRAM.
 	#    The rows above link a pxx object into a gcc program and call a
 	#    FUNCTION, which is the half that always worked. Nothing above reads a

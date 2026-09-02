@@ -2492,6 +2492,25 @@ var
   PaScanCount : Integer;
   FxSaveOn   : Boolean;  { -O3 x86-64 (pxx internal ABI §5b): this body reserved a 6-slot frame area for the xmm8..13 pool at ABI boundaries. The callee-saved discipline is invisible to SysV externs, indirect targets, coroutine switches and longjmp unwinds (skipped epilogues), so the pool is saved to these slots before each such boundary (extern call, IR_CALL_IND, IR_COSWITCH, try-entry) and restored right after (or on the IR_EXC_ENTER landing pad) — preserving residents that belong to ANY frame up-stack, not just this body's. Set per body by FloatPoolBoundaryAssign; False for -O0/-O2 / non-x86-64 / inline-asm bodies, so those stay byte-identical. }
   FxSaveBase : Integer;  { rbp offset of slot 0 (xmm8); slot k = FxSaveBase + 8*k }
+  FunctionSections : Boolean;
+  { `--function-sections`: under --emit-obj, turn every internal call into a
+    RELOCATION against the callee's own FUNC symbol instead of a displacement
+    baked at emit time by ApplyCallFixups.
+
+    Measured before starting (feature-a-every-emit-obj-object-links-its-own-full-
+    copy-of-crtl-so-n-objects-cost-n-runtimes): an object's .rela.text already
+    holds 1699 entries for a one-function C file, and EVERY ONE targets data
+    (.bss/.data/errno/optind/opterr). ZERO target a FUNC. That is the whole
+    reason N objects cost N runtimes -- the linker cannot drop or dedup code it
+    cannot re-aim, because user code jumps at a displacement computed for its
+    OWN copy of the runtime.
+
+    This flag is the PREREQUISITE step, not the payoff: with one .text section
+    it changes nothing a linker can observe, which is exactly how it is
+    verified -- the linked binary must come out BYTE-IDENTICAL with the flag on
+    and off. The payoff needs per-function sections plus --gc-sections, which
+    is a restructuring of writeELFRelX64General's fixed 9-section layout and is
+    deliberately NOT in this flag yet. }
   SourceOneToOne : Boolean;
   { `-OO`: emit what the SOURCE says, for the whole pipeline. A NAMED FLAG and
     never a level below zero -- decide-the-o-level-charter rules that trade-offs

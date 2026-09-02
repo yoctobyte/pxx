@@ -828,6 +828,9 @@ begin
   WriteLn;
   WriteLn('common options:');
   WriteLn('  -O0 -O1 -O2 -O3       optimisation level (-O2 is the proven default)');
+  WriteLn('  --function-sections   --emit-obj: relocate internal calls against the callee''s');
+  WriteLn('                        symbol instead of baking the displacement. A prerequisite');
+  WriteLn('                        for letting a linker drop or share runtime code.');
   WriteLn('  -OO                   source 1:1 -- emit what the source says, no folding at all.');
   WriteLn('                        A diagnostic reference, not a shipping mode: it emits calls');
   WriteLn('                        the program cannot reach, which -O0 and above prune.');
@@ -923,6 +926,7 @@ begin
      feature-a-fold-the-consensus-dead-branch-core-at-every-level. }
   OptLevelExplicit := False;
   SourceOneToOne := False;
+  FunctionSections := False;
   RcSuppressAssign := False;
   WarnedMissedFold := False;
   WarnedMissedFoldBranch := False;
@@ -1053,6 +1057,11 @@ begin
     else if option = '--warn-missed-fold' then
     begin
       WarnMissedFold := True;
+      Inc(i);
+    end
+    else if option = '--function-sections' then
+    begin
+      FunctionSections := True;
       Inc(i);
     end
     else if option = '-OO' then

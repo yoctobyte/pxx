@@ -9,7 +9,7 @@ created: 2026-09-01
 found-by: frankA
 owner: frankC
 blocked-by: []
-summary: "Two --emit-obj objects now link and share one runtime (bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link), but WEAK only picks a winner among duplicate symbols -- the losing objects' sections are still linked in whole. Measured: two objects that each contain crtl produce a 580088-byte binary against 310544 for one, and busybox's 41-TU separate build came out at 13.7MB for the same reason. Needs section-granular deduplication: a crtl archive the linker pulls members from, or function/data sections plus COMDAT groups."
+summary: "Two --emit-obj objects now link and share one runtime (bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link), but WEAK only picks a winner among duplicate symbols -- the losing objects' sections are still linked in whole. Measured: two objects that each contain crtl produce a 580088-byte binary against 310544 for one, and busybox's 41-TU separate build came out at 13.7MB for the same reason. Needs section-granular deduplication: a crtl archive the linker pulls members from, or function/data sections plus COMDAT groups. STEP 1 IS IN: --function-sections turns internal calls into relocations against the callee symbol (1078 of 1084 sites in a C object; the 6 left are the duplicate-static shape and need a per-BODY symbol), verified by the linked binary being BYTE-IDENTICAL with the flag on and off. It shrinks nothing on its own -- the payoff needs per-function sections + --gc-sections, which is a restructuring of writeELFRelX64General's fixed 9-section layout, and ProcAddrFix relocates against the .text SECTION symbol so it breaks there too."
 ---
 
 # N objects cost N runtimes
@@ -353,3 +353,77 @@ fork stays open without blocking the work.
 That makes the ranking: relocations first (this ticket's own recommendation),
 then per-function sections, both behind a flag so `--emit-obj` cannot regress
 for the busybox consumer while they land incrementally.
+
+## 2026-09-02 (frankC) — the relocation step is IN, behind `--function-sections`
+
+This ticket's own ranking: *"the relocation change is the ticket, and archive vs
+COMDAT is a choice made afterwards and cheaply."* That change is landed, opt-in.
+
+`--function-sections` under `--emit-obj` turns an internal call into an
+`R_X86_64_PC32` against the callee's own FUNC symbol instead of the displacement
+`ApplyCallFixups` bakes.
+
+| | CallFix sites | relocated | still baked |
+| --- | --- | --- | --- |
+| C object (`printf` + a 3-deep chain) | 1084 | **1078** | 6 |
+| Pascal object | 253 | **253** | 0 |
+
+### It has NO observable effect, and that is how it is verified
+
+With one `.text` section the linker must compute exactly the displacement that
+was baked, so **the linked binary is BYTE-IDENTICAL with the flag on and off** —
+asserted for both frontends, alongside a control proving the two OBJECTS really
+differ. A step that changes nothing can only be verified by proving it changed
+nothing, and only a control separates that from a flag that never ran.
+
+### Two instrument failures on the way, both worth keeping
+
+**1. The predicate looked obviously right and was wrong about 93% of the sites.**
+It refused any site with `CallFixTarget >= 0`, reading that as "pinned to a
+specific body — the C duplicate-static case". But `CallFixTarget` is an
+*unconditional snapshot* of `Procs[procIdx].BodyAddr` taken when the site is
+recorded (symtab.inc), so it is `-1` only for a FORWARD reference: the test
+refused every BACKWARD call. **1004 of 1084 rejected, 80 accepted.** The real
+hazard is narrower — the snapshot DISAGREEING with the row, which is the actual
+duplicate-static case and is 6 sites, not 1004.
+
+What caught it was printing the breakdown rather than reasoning about it. The
+first reading was "80 relocations against 1124 call instructions", and no amount
+of thinking about `EmitCallProc` would have said which of four reasons owned the
+other 1044. `ObjReportFunctionSections` is kept for that reason: the number that
+matters is how many sites remain BAKED, because per-function sections cannot
+land while any do.
+
+**2. Two linked binaries differed by 10755 bytes and 100% of it was the
+filename.** `gcc` records the input object's name as an `STT_FILE` symbol, so
+`off.o` vs `on.o` shrank `.strtab` by the one character of the name and shifted
+every offset after it. `.text`, `.data` and `.rodata` were byte-identical the
+whole time. The fix is one object path, each linked before the next compile
+overwrites it — the same shape a C sweep in this session needed for the same
+reason, and it is now written into the Makefile rows as a comment rather than
+left to be rediscovered.
+
+### What this does NOT do
+
+It does not shrink anything. Object grows slightly (1699 -> 1779 `.rela.text`
+entries on the C file). The payoff needs per-function sections plus
+`--gc-sections`, and **that is a restructuring of `writeELFRelX64General`, which
+is built around a FIXED 9-section layout with hard-coded offsets and a 66-byte
+`.shstrtab` blob** — N sections means N section headers, per-proc `st_shndx`,
+section-relative `r_offset` and a `.rela.text.<name>` each. That is the
+backend-wide job frankA flagged and it is deliberately not in this flag.
+
+Two things the next session needs, both measured here rather than assumed:
+
+- **`ProcAddrFix` (`@proc`) relocates against the `.text` SECTION symbol plus an
+  addend**, so it is section-relative and breaks under per-function sections
+  exactly like a baked call. It needs the same substitution and is not covered
+  by `--function-sections` today.
+- **The 6 baked sites are real and must be handled, not waved at.** They are the
+  duplicate-static shape (`test/cstatic_same_module_dup.c`); relocating them
+  against the proc symbol re-aims them at the wrong body, which links cleanly and
+  runs the wrong function. Per-function sections needs a per-BODY symbol there.
+
+`test/c_function_sections.c`, wired as `test-emit-obj` block 4a-bis. Whole
+`test-emit-obj` target green with the flag default-off, so the existing path is
+untouched.
