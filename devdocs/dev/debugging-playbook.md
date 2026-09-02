@@ -6479,3 +6479,51 @@ as the checked one.** This is `the name is not the thing`'s hedge-the-premise
 rule running in reverse: an unlabelled claim travelling beside a labelled one
 inherits its credibility, and a caveat aimed at the wrong half actively
 transfers credibility to the wrong number.
+
+## A BYTE PATTERN IS A FACT ABOUT A LAYOUT — and the layout is chosen by a flag that appears nowhere in the output
+
+Measured 2026-09-02 (frankC and franks-ab, in both directions within an hour).
+
+Two sessions hunting the same shortstring defect exchanged byte dumps from the
+same probe text and reached opposite conclusions about whether a store was
+corrupt:
+
+```
+s := 'abcde'; p := @s; p^ := c;        { c = 'X' }
+bytes 0..6 = 1 0 0 0 0 0 0
+```
+
+One read that as **correct** — an 8-byte length word of 1, chars at `+8`. The
+other read it as **corruption** — under `-dPXX_SHORTSTRING` the length is one
+byte and the `'X'` belongs at offset 1. **Both readings were right, about
+different configs.** Each session then tried to correct the other, and each
+would have withdrawn a valid finding had the correction been accepted: one a
+real store defect, the other a valid x86-64 control.
+
+**Neither table carried the config.** The flag changes what the bytes MEAN and
+it appears nowhere in the program's output — so two correct measurements were
+rendered incomparable by the one variable that was invisible in both.
+
+**The rule.** When a build flag selects a representation, the config is part of
+the measurement, not context around it. Put it in the table, next to the
+numbers, every time — and prefer a probe that PRINTS which layout it is in over
+one whose config lives only in the row label. franks-ab's own acceptance rows
+had the same weakness: `ssbp_default` and `ssbp_short` were distinguishable
+only by the label, and the only line whose output differed between the two
+modes was a `sizeof` row — *"that is luck, not design."*
+
+**Why this one is worth its own section:** it is the standard "correct about
+something else" failure, but occurring INSIDE the instrument built to hunt that
+failure. A byte dump feels like ground truth precisely because it is raw, which
+is what suppresses the question "raw according to which layout?"
+
+**A related and worse shape, from the same episode.** `arm32` HAS the
+width-aware operand normaliser and DOES call it at its compare arm — it simply
+passes `IntToTypeKind(IRTk[n])` where the normaliser's own comment requires
+`IRStrTkOf(n)`. That is a harder failure to see than a backend missing the
+layer outright, **because the shape looks converted**: a reviewer diffing arm32
+against aarch64 at that arm sees near-identical code differing in one
+identifier. Prefer "does this call site ask the right QUESTION" over "does this
+backend have the right MACHINERY" — a backend that happens to pass and a
+backend that asks correctly are different claims, and only the second survives
+someone editing the file.

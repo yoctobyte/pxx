@@ -17963,6 +17963,16 @@ test-wasm32: $(COMPILER)
 	# Oracle is the NATIVE x86-64 build of the same source, as in test-riscv32:
 	# the point of a cross row is that the answer does not depend on the target.
 	#
+	# CONFIG: every row here is the DEFAULT layout -- no -dPXX_SHORTSTRING.
+	# Stated because a byte pattern is a fact ABOUT A LAYOUT, and the layout is
+	# chosen by a flag that appears nowhere in a program's output. Two sessions
+	# compared correct wasm32 and xtensa byte dumps on 2026-09-02, reached
+	# opposite conclusions, and each nearly retracted a valid finding: same probe
+	# text, different config, and neither table carried the config that made its
+	# numbers mean anything. If a -dPXX_SHORTSTRING variant is ever added here,
+	# make the ROW LABEL carry the config -- a label is all that distinguishes
+	# two otherwise identical rows, and the program itself will not tell you.
+	#
 	# THE 22 ROWS BELOW ARE THE MEASURED-GREEN SUBSET of a 27-candidate sweep.
 	# The 5 that are NOT here are excluded deliberately and are NOT an oversight:
 	#
