@@ -167,6 +167,24 @@ different question.** `working/` measures INTENT; commits by `Claude-Session`
 trailer measure ACTIVITY (the author is always `yoctobyte`). **Name the
 instrument in the clearance**, so a wrong one is auditable, not authoritative.
 
+## A "still open" list in a commit message cannot age
+
+frank-user derived a five-backend work list from `ad9478098` at 20:42 and
+dispatched after 21:00. Backend three (arm32, `09d9b10fd`) landed at 20:57:42
+inside that window, so one of the five was already done — **the status section
+was TRUE when written, has no mechanism to go stale, and reads exactly like a
+current one.** I relayed that list onward before it was corrected.
+
+**Ask the TREE, not a moment.** A commit's status section answers "what was
+open when I wrote this"; a live probe answers "what is open now" — for this
+case, whether the compiler accepts `-dPXX_SHORTSTRING --target=X`. Prefer the
+probe for any list you are about to act on or relay.
+
+**And while several sessions work one phase, EVERY count is a snapshot** —
+independently counting the same rows minutes apart gave different numbers for
+three targets, because three sessions were landing into them as I counted. Do
+not report a moving count as a state; say when it was taken, or ask the holder.
+
 ## Standing constraints
 
 - **Box contention is real.** Same tier, same day, one variable: **403s idle vs
