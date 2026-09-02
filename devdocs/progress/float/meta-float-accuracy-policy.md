@@ -224,3 +224,50 @@ form not correctly rounded" is accuracy (low, by this rule), while "writeln fixe
 Int64" is a wrong value at scale and "the writer was called with the wrong number of
 arguments" is a signature bug that happened to live in float code. Rank the mechanism, never
 the datatype.
+
+## 2026-09-02 — `known-incompat/` exists now, and it is this category's destination
+
+A new terminal folder landed today: `devdocs/progress/known-incompat/`. Entry
+test — the measurement is TRUE and reproducible, **no program observes a wrong
+value**, and **neither implementation is wrong**; ours is CHOSEN, never
+tolerated. Full contract in that folder's README.
+
+**That is the same principle this category already runs on.** The owner's
+2026-08-15 position — *1-2 ulp is a recorded issue, **never a bug**; error that
+GROWS with the argument still is* — is a known-incompat statement in all but
+name. So is the general rule restated 2026-09-02: *"compatible with FPC" means
+the VALUE, not the intermediate's type.*
+
+**Nothing has been moved, deliberately.** The 2026-08-16 directive is *"do NOT
+fix them piecemeal ... once we collected them all we could decide how to solve
+this for all cases"*, and sweeping tickets out of the index one at a time
+dissolves the collection this page exists to be. Classifying is not fixing, but
+it has the same effect on the index.
+
+### What this unblocks
+
+The central tension above is unchanged and is still the thing to decide once:
+position 1 says a 1-ulp move is not a bug, position 2's `.expected` files are
+generated from CPython and turn it red in CI. **`known-incompat/` gives position
+1 somewhere to live** — a place that records "true, reproducible, and not a
+defect" without either pretending the measurement is wrong or leaving it in a
+ranked queue forever. It does not resolve the contradiction; it removes the
+excuse that there was nowhere to put the answer.
+
+### The candidates, for whoever decides — NOT a work list
+
+Two here are not ulp questions at all, so they would survive whatever is decided
+about accuracy tiers:
+
+- `bug-b-f-fixed-point-rounding-of-a-tie-goes-down-where-fpc-goes-up` —
+  `Format('%.2f',[1.005])` is 1.00 here, 1.01 in FPC. **Ours is arithmetically
+  right**: 1.005 as a double is 1.00499999999999989…, so 1.00 is the correct
+  rounding of the value that actually exists. FPC rounds the decimal literal it
+  was written from. Rendering the true value is a defensible choice and it is
+  ours.
+- `compat-pascal-a-whole-valued-double-variant-writes-a-trailing-point-zero` —
+  `15.0` vs FPC `15`, the ticket's own words: *rendering only, the value is
+  right.*
+
+Neither is proposed for a move today. They are listed so the decision has
+concrete cases in front of it rather than a category.
