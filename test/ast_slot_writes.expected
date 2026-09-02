@@ -382,6 +382,7 @@ AN_ASSIGN Right ASTLeft[pairNode]
 AN_ASSIGN Right ASTRight[pairNode]
 AN_ASSIGN Right AllocNode(AN_BINOP)
 AN_ASSIGN Right AllocNode(AN_INT_LIT)
+AN_ASSIGN Right CLIArrElem[cliBase + ei]
 AN_ASSIGN Right CNormalizeToBool(IntToTypeKind(ASTTk[left]), ASTRight[node])
 AN_ASSIGN Right CNormalizeToBool(declTk, ASTRight[asn])
 AN_ASSIGN Right CPromoteCharTo(IntToTypeKind(ASTTk[left]), rhs)
@@ -424,7 +425,6 @@ AN_ASSIGN Right acc
 AN_ASSIGN Right addNode
 AN_ASSIGN Right addrNode
 AN_ASSIGN Right argAST
-AN_ASSIGN Right arrElems[ei]
 AN_ASSIGN Right atDflt
 AN_ASSIGN Right bNode
 AN_ASSIGN Right baseNode
