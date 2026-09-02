@@ -177,6 +177,27 @@ frankb-a9's own ready-for-P4 condition: **i386 landed and reviewed against the
 three classes, PLUS the wasm32 rows wired.** It messages the coordinator at that
 point rather than proceeding.
 
+## A concrete fix shape for the comparison defect (from i386)
+
+**Comparison is CORRECT on i386** — `s = 'hello'` answers TRUE, matching FPC,
+where x86-64 and arm32 answer FALSE. **What does it is resolving the kind at the
+`PXXStrEq`/`PXXStrCmp3` DECOMPOSE**, because i386 calls those helpers rather than
+inlining them.
+
+**arm32 reaches the same helpers and passes `IntToTypeKind` at its call sites.**
+So arm32's half of the comparison defect has a working model in the tree, on a
+backend that landed tonight. x86-64 remains the different one — it inlines and
+has no kind in `EmitStrCmpReg`'s signature to substitute.
+
+**And a trap i386 hit that a copyist would not survive:** i386's concat and
+compare arms branch on `lhsTk = tyString`. Setting `lhsTk := IRStrTkOf(left)`
+breaks the **DEFAULT** path, not the shortstring one — `IRStrTkOf` resolves
+`string[8]` to `tyFixedString` with no flag in play, the test goes false, and a
+frozen operand falls into the single-character arm. **The tests must widen to
+`TypeIsFrozenString` in the same edit.** Two things stay wide by construction: the
+concat scratch buffer (written unconditionally, returned as a `tyString` value)
+and `Strs[].Offset + 8`, the interned pool.
+
 ## The one decision waiting for you
 
 **Why is asking a frozen prefix its width a per-site decision at all?**
@@ -239,3 +260,9 @@ yours to release.
 - **A clean tree one commit ahead is the signature of a session BETWEEN commit and
   push**, not of stranded work. Sampled in that gap twice tonight; ref-level
   checks (`merge-base --is-ancestor`, `ls-tree origin/master`) are the discriminator.
+- **A control can be vacuous because your work is STAGED.** frankA's first
+  isolation attempt had the diff staged, so `git diff` came back empty and
+  `git checkout --` restored from the *index* — both arms identical by
+  construction, and it would have printed a clean 11/11. **Two tells, both
+  present: a zero-line patch, and both rebuilds printing `verified` instead of
+  `converged`.** Third vacuous control caught tonight, each by a different session.
