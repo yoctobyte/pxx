@@ -10610,17 +10610,49 @@ function ConstIntCastWidth(const nm: AnsiString; var bytes: Integer; var signed:
   tk*_T keyword spellings and the tkIdent type aliases (Int64/UInt64/...).
   Uses CaseEqual (not LowerCase) so it stays callable before LowerCase is
   declared — self-host requires declaration-before-use. }
+var tk: TTypeKind;
 begin
-  Result := True; signed := True; bytes := 8;
-  if CaseEqual(nm, 'int64') or CaseEqual(nm, 'nativeint') or CaseEqual(nm, 'ptrint') then begin bytes := 8; signed := True; end
-  else if CaseEqual(nm, 'uint64') or CaseEqual(nm, 'qword') or CaseEqual(nm, 'nativeuint') or CaseEqual(nm, 'ptruint') then begin bytes := 8; signed := False; end
-  else if CaseEqual(nm, 'integer') or CaseEqual(nm, 'longint') then begin bytes := 4; signed := True; end
-  else if CaseEqual(nm, 'cardinal') or CaseEqual(nm, 'longword') or CaseEqual(nm, 'dword') then begin bytes := 4; signed := False; end
-  else if CaseEqual(nm, 'smallint') then begin bytes := 2; signed := True; end
-  else if CaseEqual(nm, 'word') then begin bytes := 2; signed := False; end
-  else if CaseEqual(nm, 'shortint') then begin bytes := 1; signed := True; end
-  else if CaseEqual(nm, 'byte') or CaseEqual(nm, 'char') then begin bytes := 1; signed := False; end
-  else Result := False;
+  { THE THIRD COPY OF THE BUILTIN TYPE-NAME TABLE, now derived from the one
+    shared with the declaration path and the runtime cast chain instead of
+    spelling the names again. It answered a different QUESTION -- a width and a
+    signedness rather than a kind -- which is why the earlier merge left it
+    behind; but TypeSlotSize and TypeSigned answer that question FROM a kind, so
+    the name table itself was never the part that had to be duplicated.
+
+    IT WAS NOT HARMLESS, and this ticket said it probably was. `nativeint`,
+    `ptrint`, `nativeuint` and `ptruint` were 8 bytes UNCONDITIONALLY -- the
+    same claim the runtime chain used to make and had corrected, since these
+    are pointer-sized BY DEFINITION. Measured on i386 and arm32, one program:
+
+      const A = NativeInt(4294967296 + 5);   ->  4294967301
+      var   a: NativeInt; a := 4294967296+5; ->  5
+
+    The const fold and the runtime cast disagreed about the SAME cast in the
+    same program, and the const one produced a value that does not fit the type
+    on that target. Self-inconsistent, so it needs no oracle to be wrong. Both
+    32-bit targets, both signed and unsigned; x86-64 could never show it because
+    there 8 is the right answer.
+
+    Deriving also picks up `sizeint`/`sizeuint`, which the shared table has and
+    this list never did -- they were simply not castable in a const expression.
+
+    The accepted KINDS stay an explicit closed set rather than TypeIsOrdinal,
+    which would newly admit Boolean and enums; this is a widths-of-the-integer-
+    family question and that is a deliberate boundary, not an omission.
+    refactor-a-the-const-cast-width-table-is-the-third-copy }
+  tk := BuiltinScalarTypeKind(nm);
+  Result := (tk = tyInt8) or (tk = tyUInt8) or (tk = tyInt16) or (tk = tyUInt16) or
+            (tk = tyInt32) or (tk = tyUInt32) or (tk = tyInt64) or (tk = tyUInt64) or
+            (tk = tyNativeInt) or (tk = tyNativeUInt) or (tk = tyInteger) or (tk = tyChar);
+  if Result then
+  begin
+    bytes := TypeSlotSize(tk);
+    signed := TypeSigned(tk);
+  end
+  else
+  begin
+    bytes := 8; signed := True;
+  end;
 end;
 
 function ConstAliasCastWidth(const nm: AnsiString; var bytes: Integer; var signed: Boolean): Boolean;
