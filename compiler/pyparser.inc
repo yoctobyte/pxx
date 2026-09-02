@@ -46199,8 +46199,38 @@ begin
         lastArg := -1;
         nArgs := 0;
         repeat
-          ParseExpr;
-          exprNode := CurASTNode;
+          { ARGUMENT 2 IS A CODE ADDRESS, not a value, and a bare def name has
+            to be read as one HERE because NilPy has no `@`. Everywhere else a
+            bare def name in a value position becomes a BOXED callable
+            (PyMakeFuncValueFor), and the box is not just the wrong
+            representation: that builder may substitute a synthesized
+            return-side WRAPPER with the Variant-hidden-destination ABI, which
+            is not the (arg) -> Int64 convention the clone trampoline calls.
+            So the natural spelling was the broken one. Measured before this
+            arm, `__pxxclone(flags, stk + N, worker, 0, 0)`: the clone syscall
+            SUCCEEDS and returns a real tid every run, and the child jumps into
+            a boxed-value handle -- SIGSEGV on 1 run of 3, a silent no-op child
+            on the other 2. The same program with the raw address recovered out
+            of `repr(worker)` ran the child correctly 3 of 3, which is what
+            says the trampoline was never the problem.
+            Pascal spells this `@ThreadEntry` at the same argument
+            (pasparser_expr.inc); this is the NilPy spelling of the same thing.
+            Guarded on the FOLLOWING token being a comma so that `f(x)` in this
+            position is still a call, not an address. }
+          if (nArgs = 2) and (CurTok.Kind = tkIdent) and
+             (TokPos < TokCount) and (Tokens[TokPos].Kind = tkComma) and
+             (FindProcExactCase(PyQualifyNested(CurTok.SVal)) >= 0) then
+          begin
+            exprNode := AllocNode(AN_PROCADDR);
+            ASTIVal[exprNode] := FindProcExactCase(PyQualifyNested(CurTok.SVal));
+            ASTTk[exprNode] := Ord(tyPointer);
+            Next;   { consume the name }
+          end
+          else
+          begin
+            ParseExpr;
+            exprNode := CurASTNode;
+          end;
           argSeq := AllocNode(AN_ARG);
           ASTLeft[argSeq] := exprNode;
           if lastArg = -1 then

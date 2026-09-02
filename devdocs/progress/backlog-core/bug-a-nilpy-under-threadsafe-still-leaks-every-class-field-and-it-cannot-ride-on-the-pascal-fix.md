@@ -65,14 +65,36 @@ runtime. There is no single place to put an acquire.
    `test_threadsafe_class_finalize_kinds.pas` exists to keep that true. A NilPy
    finalizer has no such property.
 
-## What is NOT known and should be measured first
+## What is NOT known and should be measured first — ANSWERED 2026-09-02 (frankA)
 
-**Can a NilPy program create a thread at all today?** If it cannot, every one of
+**Can a NilPy program create a thread at all today?** *(the original question, kept
+because the answer only means something against it:)* If it cannot, every one of
 these frees is single-threaded and the gate is buying nothing on this path — in
 which case the fix is to let the NilPy route run the managed pass unconditionally
 and the whole design problem above evaporates. If it can, none of that holds.
-That measurement is cheap and nobody has made it; do it before designing
-anything.
+
+**It can. The design problem does not evaporate.** `pyparser.inc` has a
+`__pxxclone(flags, childStack, entry, arg, ctidptr)` builtin that refuses to
+compile without `--threadsafe`, and a NilPy program using it starts a real
+thread that runs real NilPy code: constructed, run, and now wired as
+`test/test_nilpy_thread_clone.npy` — mmap a stack, clone, and the child sets a
+global the parent spins on. 5 runs of 5, `child ran = 7`.
+
+**Nobody had ever constructed one, and the natural spelling was broken**, which
+is presumably why this stayed unmeasured: no `.npy` in the tree used
+`__pxxclone`. Passing the entry point as a bare def name — the only spelling
+NilPy has, since it has no `@` — got the BOXED callable every other value
+position gets, and the box may even be a synthesized return-side wrapper with a
+different ABI. So the child jumped into a value handle: on the pin, this exact
+source is rc=139 three runs of three, with `tid nonzero = True` already printed.
+Fixed in the same push (a bare def name at that one argument is read as an
+address, as Pascal reads `@ThreadEntry` at the same position). The measurement
+above is against the FIXED compiler; against the pin the answer is "it creates
+the thread and the thread dies instantly", which is a yes to the question this
+section asks and a no to any use of it.
+
+So the frees on this path can genuinely race, `PXX_TS_HARDLOCK` is not gating
+nothing, and the two obstacles below stand as written.
 
 ## Also still open, same lock, named in the parent
 

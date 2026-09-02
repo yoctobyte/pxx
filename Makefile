@@ -4245,6 +4245,15 @@ test-threads: $(COMPILER)
 	./$(COMPILER) test/test_threadsafe_nilpy_io.npy $(TESTTMP)/test_ts_npy_off26
 	tools/expect_same.sh test_ts_npy_on26.1 "$$($(TESTTMP)/test_ts_npy_on26)" "$$($(TESTTMP)/test_ts_npy_off26)"
 	tools/expect_same.sh test_ts_npy_on26.2 "$$($(TESTTMP)/test_ts_npy_on26)" "$$(printf 'hi\ninner 3\nouter 6\ninner 0\ninner 1\ninner 2\ntotal 6')"
+	# A NilPy program creating a real thread, with the natural spelling of the
+	# entry point. `__pxxclone`'s third argument is a code address; a bare def
+	# name is boxed everywhere else in NilPy, and the box can be a synthesized
+	# wrapper with a different ABI, so the child jumped into a handle. On the
+	# pin this same source is rc=139 three runs of three, with `tid nonzero =
+	# True` ALREADY PRINTED -- which is why the row asserts that the child RAN
+	# and not merely that clone returned a tid.
+	./$(COMPILER) --threadsafe test/test_nilpy_thread_clone.npy $(TESTTMP)/test_npy_clone26
+	tools/expect_same.sh test_npy_clone26 "$$($(TESTTMP)/test_npy_clone26)" "$$(printf 'tid nonzero = True\nchild ran = 7')"
 	# heap contract: thread creation without --threadsafe is a clear compile error, not a heisencrash
 	! ./$(COMPILER) test/test_thread_clone.pas $(TESTTMP)/test_thread_clone_guard26 > $(TESTTMP)/test_thread_clone_guard.log 2>&1
 	grep -q "requires --threadsafe" $(TESTTMP)/test_thread_clone_guard.log

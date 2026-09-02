@@ -1,0 +1,50 @@
+# A NilPy program creating a REAL thread, with the natural spelling of the
+# entry point.
+#
+# WHAT THIS PINS. `__pxxclone`'s third argument is a code address. Everywhere
+# else in NilPy a bare def name in a value position becomes a BOXED callable,
+# and the box may even be a synthesized return-side wrapper with a different
+# ABI -- so the natural spelling was the broken one. Measured on the pin, this
+# exact source: the clone syscall succeeds and returns a real tid every run,
+# and the child then jumps into a boxed-value handle. 3 runs of 3 SIGSEGV
+# (rc=139) with `tid nonzero = True` already printed. Post-fix, 5 of 5 print
+# `child ran = 7`.
+#
+# THE `tid > 0` LINE IS NOT THE ASSERTION. It was true on the broken build too
+# -- the syscall is not what was wrong -- so a row that stopped there would
+# have passed against a compiler that cannot start a thread at all. The child
+# has to be OBSERVED, which is what the spin below is for.
+#
+# The bound on the spin is a liveness guard, not a timing assumption: if the
+# child never runs, this prints `child ran = 0` and the row fails on the text
+# rather than hanging the tier.
+#
+# Answers the measurement bug-a-nilpy-under-threadsafe-still-leaks-every-class-
+# field asks for first -- "can a NilPy program create a thread at all today?"
+# Yes, so the --threadsafe gate on the NilPy finalize path is not buying
+# nothing and that ticket's design problem does not evaporate.
+
+SYS_mmap = 9
+CLONE_VM = 0x00000100
+CLONE_FS = 0x00000200
+CLONE_FILES = 0x00000400
+CLONE_SIGHAND = 0x00000800
+CLONE_THREAD = 0x00010000
+flags = CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD
+
+ran = 0
+
+
+def worker(arg):
+    global ran
+    ran = 7
+    return 0
+
+
+stk = __pxxrawsyscall(SYS_mmap, 0, 1048576, 3, 0x22, -1, 0)
+tid = __pxxclone(flags, stk + 1048576, worker, 0, 0)
+print("tid nonzero =", tid > 0)
+i = 0
+while i < 400000000 and ran == 0:
+    i = i + 1
+print("child ran =", ran)
