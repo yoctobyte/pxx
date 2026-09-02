@@ -173,3 +173,33 @@ should re-read the load rather than inherit "blocked on a busy box" from here.
   number is the symptom and the shape is the ticket — and it will be stale again
   by the time anyone reads this, which is itself part of the argument for
   splitting the job rather than counting it.
+
+## The one-job shape has a second cost: nobody can tell whose red it is (frankZ, 2026-09-02)
+
+Working the regression umbrella I fixed five guards in this job and it is now
+**133 green, 0 red here** — `sync.sh`'s backoff breaking its own stated bound
+(~19% of runs, `67cf9588a`), seven runtime `/tmp` literals, a binary-name
+collision, the `exit_observable` ratchet, and `job_reason` reading a population
+the real environment never produces.
+
+**And the job is still RED on seven, on a DIFFERENT four guards**, in the full
+run at `9031c8cb7bc3` (2026-09-02T06:24Z): `twatch_timeout_staleness`,
+`twatch_timeout_verdict`, `twatch_verify_request`, `verify_assertions`. All four
+pass here, in the same `make tools-devtest` invocation that showed me my five.
+
+**That is an EXCULPATION, and it is not mine to close.** "Not the five I fixed"
+is half a finding; "then what is failing on seven?" needs an owner, and it is
+Track T's, because all four are watcher/verifier guards and the difference is
+something about the host: the live tstate archive moving under a guard that
+reads real state rather than a fixture, the watcher's own clone, or timing.
+I did not diagnose it and I am deliberately not guessing — deriving a cause for
+a failure I cannot reproduce is how a wrong root cause gets recorded.
+
+**This is the ticket's own point arriving from a new direction.** One job over
+133 guards means one job name carries an arbitrary union of unrelated failures,
+so a fix that genuinely closes five of them changes the red set without changing
+the VERDICT, and from the outside — a dashboard, `--status`, the umbrella's
+`still_red` list — that is indistinguishable from nothing having happened. It
+also means neither party can see whose red it is without reading the stored
+reason string, which is truncated at 400 characters. Splitting the job would
+make "five fixed, four still red on one host" expressible; today it is not.

@@ -781,3 +781,137 @@ The remaining **three are all `lib_synapse`**, they are fixed in the compiler
 (`9c6b216aa`), and they build with `$(PXX_STABLE)` — so **nothing but a pin can
 turn them green, and a pin is the owner's alone.** No compiler defect is
 outstanding in the set.
+
+## Second reading of the manifest: 16 -> 10, and the conformance slot changed OCCUPANT
+
+Two more full runs on seven since (`c43f10db8090` 05:56Z, `9031c8cb7bc3`
+06:24Z), both `new_red` 0, both `still_red` **10**. So the thirteen really did
+clear, confirmed from outside rather than by my own runs.
+
+**But the conformance reds moved shard3 -> shard2, and that is a different bug
+in the same slot, not the set shrinking further.** Those two facts read
+identically on a dashboard, which is why the manifest has to be read by JOB and
+by REASON, not by count.
+
+I also read the wrong instrument again and caught it: I had 65 commits of drift
+when I resumed, and my closing "no compiler defect is outstanding in the set"
+was true of a manifest read 65 commits earlier — **a snapshot with an expiry
+date, not a state.**
+
+### `00213.c` — OUT OF SCOPE, and the diagnosis is banked elsewhere
+
+**Scope correction from the owner, relayed 2026-09-02: this umbrella is OLD REDS
+ONLY.** A red that arrives from another agent's work is fixed by whoever is
+working that area, through the normal queue. `00213.c` postdates the set I was
+given, so it was never mine — I had already fixed it (`0ee41312d`) before the
+correction reached me, and it is green, but the umbrella does not claim it. The
+full diagnosis lives in
+[[regression-test-c-conformance-shard2-6-2]] so it survives a session restart.
+Summary only, below, because the shard3 -> shard2 movement is the part a
+dashboard hides and the umbrella is where someone would look for it.
+
+`invalid IR conditional jump target (label not defined)` on all five
+conformance targets. The dead-arm prune (`b8ee49996`) drops a constant-false
+`if`/`while` body, and its escape guard `ASTSubtreeHasLabel` enumerated
+`AN_LABEL` / `AN_LABELADDR` / `AN_GOTO_INDIRECT` while missing `AN_CASE` /
+`AN_DEFAULT`. A `case` inside `if (0)` went with the arm; `AN_SWITCH`'s
+dispatch, which is outside the arm, still jumped to its label.
+
+**The boundary is the PRUNING, not the nesting** — measured: a top-level
+`case`, a `case` in a bare block and a `case` inside `if (1)` all build;
+`if (0)` and `while (0)` do not, at every `-O` level including `-O0`, which is
+correct because the prune is shared lowering rather than an optimisation.
+Fixed at `0ee41312d` with `test/c_dead_arm_holds_a_case_label.c`, positive
+control both ways (does not compile pre-fix; a dead arm with no label is still
+pruned). Shard 2/6 green on all five targets.
+
+**Corroborated independently the same day:** frankC hit the identical omission
+from a second, unrelated pass — pruning statements behind an unconditional
+transfer, wired into the `AN_BLOCK` walk — where it made the compiler reject
+its own crtl (`lib/crtl/src/stdio.c`, near `vsnprintf`). Two passes, one missing
+enumeration, same day. My "a guard that enumerates spellings will keep missing
+the next one" was written as a prediction; frankC's instance makes it a
+measurement. The reachability decision now lives in one function,
+`ASTSeqTailUnreachable`, called by both walks.
+
+### `crtl_names.inc` was 89 functions stale, and that is why my syscall fix did not clear its job
+
+`lib-test#src:tools/crtl_reachability.py` was red for a reason the job's name
+does not mention. `crtl-reachability` prints `OK -- 72 headers, 44 modules` in
+that job's own log, so my `c64176e26` fix demonstrably took; the recipe dies
+four lines later on `crtl-map: compiler/crtl_names.inc is STALE`. The generated
+map held **409 functions / 32 headers** against the **498 / 41** the sources
+declare — drift since roughly `91b92d5e8c99c3`, most of it the busybox crtl
+surface. Regenerated.
+
+That is a behaviour change and not a cosmetic one: those 89 names now resolve to
+crtl instead of being imported from the system C library in a libc-free build.
+So this one did not lean on `quick` — `test-core` ran behind
+`PXX_ALLOW_FULL_SUITE=1`.
+
+**And its residual is NOT mine.** With the map fixed, `lib-test` runs much
+further and then dies on
+`stable_linux_amd64/default/pinned ... test/lib_synapse.pas` with
+`cannot assign ShortString to Char` — the `ASTCharArrayCap` bug fixed at
+`9c6b216aa` and still live in the PIN. So `lib-test` as a whole stays red until
+the owner pins, exactly like the three `lib_synapse` jobs.
+
+### `tools-devtest#00`: an exculpation with a named owner
+
+Green here at 133 guards, still red on seven on a **different four**
+(`twatch_timeout_staleness`, `twatch_timeout_verdict`, `twatch_verify_request`,
+`verify_assertions`) — all of which pass here in the same invocation that
+showed me my five. "Not the five I fixed" is half a finding. The residual is
+**Track T's**: all four are watcher/verifier guards and the difference is
+something about that host. Recorded on
+[[chore-t-tools-devtest-is-one-job-that-runs-86-guards]] rather than left to
+look absorbed by my five. I did not diagnose it and am not guessing.
+
+### Standing
+
+Of the 10: **five were `00213.c` and are fixed; one was the stale crtl map and
+is fixed; three are `lib_synapse`, pin-blocked; one is `tools-devtest#00`, whose
+remaining four are T's on T's host.** `lib-test` is a fourth pin-blocked job
+hiding behind a reachability name.
+
+## Scope, restated, and the honest standing
+
+The owner has narrowed this umbrella to **old reds only** — the set as it stood
+when it was written. That removes `00213.c` (five conformance jobs, fixed
+anyway at `0ee41312d`, banked in its own ticket) and it removes anything else
+that arrives from another agent's work from here on.
+
+What is left of the ORIGINAL set, and who can act on it:
+
+| job(s) | state | who |
+|---|---|---|
+| `lib_synapse` ×3 | fixed in the compiler at `9c6b216aa`, built with `$(PXX_STABLE)` | **only a pin** — the owner's |
+| `lib-test#src:tools/crtl_reachability.py` | stale `crtl_names.inc` FIXED here; the recipe then dies further on at `lib_synapse` under the PIN | **only a pin**, for the residual |
+| `tools-devtest#00` | 133 green here; red on seven on a different four watcher guards | **Track T**, on T's host — recorded on [[chore-t-tools-devtest-is-one-job-that-runs-86-guards]] |
+| `test_exception_unhandled`, `test_setlen_in_parallel_for_body` | measured FLAKES (10/11 and 10/10 markers) | Track T owns the residual |
+
+**So the honest state is: this umbrella has no outstanding compiler defect that
+I can act on. It is blocked on a pin.** Three jobs and the residual of a fourth
+need one, and a pin is the owner's alone. That is a complete answer, not a
+gap — and per the brief, the green full run is evidence that arrives, not work
+I perform.
+
+### Held work, in case this session is restarted
+
+`compiler/crtl_names.inc` is regenerated in the working tree and **not yet
+pushed**. `gate.sh quick` is GREEN on it; `make test-core` behind
+`PXX_ALLOW_FULL_SUITE=1` was still running when this was written, and it is the
+gate that matters because the change moves 89 names from "imported from the
+system C library" to "resolved from crtl" in a libc-free build.
+
+If a restart takes it, it is one command to redo and needs no context:
+
+```
+python3 tools/gen_crtl_map.py     # 409/32 headers -> 498/41
+make compiler/pascal26            # crtl_names.inc is a COMPILER_INC input
+```
+
+and then gate. The reason it matters is above: it is the FIRST structural check
+in `lib-test`, so while it is stale that whole job dies four lines in and
+`lib-test#src:tools/crtl_reachability.py` stays red for a reason its own name
+does not mention.
