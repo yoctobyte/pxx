@@ -333,10 +333,11 @@ _none_
 | refactor-n-two-import-handlers-are-twins | N | 45 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 
-## backlog-tools (4)
+## backlog-tools (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-t-lane-attribution-has-two-instruments-that-disagree | T | 45 | bug | 33 open tickets carry no `track:` frontmatter field, 30 of them in RANKED folders. The ranker still lanes them, via a cascade of fallbacks — a `feature-track-t-*` slug prefix, a `Track X` mention in the decl line, a `Track` bullet in the body. Any tool that reads `fm.get('track')` sees nothing for all 33. Two instruments, one answering about a field that is not there. Surfaced when a backlog sweep nearly mis-filed two tickets the ranker had been lanting as T all along; progress.py's own comment records the same class biting in the opposite direction on 2026-07-15. | — |
 | bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it | T+S | 45 | bug | test-esp-bare and test-esp-softfloat appear in ZERO testmgr tiers and in no script — grep across tools/ finds one xtensa/esp job total, test-xtensa. So the ESP bare-metal suite is written, correct, and never executed by any gate or sweep. Found because the one executed windowed row landed there, in a target nothing runs. | — |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | UNBLOCKED 2026-09-01 -- the permission it waited on was APPROVED 2026-08-31 (decide-install-qemu-system-and-a-freebsd-image-on-plexus) and this ticket was never moved out of blocked/. Owner restated it 2026-09-01: 'we are allowed to install a bsd image on qemu, i thought we already answered that. or maybe i only answered for openbsd, either way, same answer' -- so it covers OpenBSD too. Stays prio 20: permission granted is not priority raised, and BSD is demoted under the linux-only focus. ORIGINAL: Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | — |
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
@@ -1083,6 +1084,7 @@ _none_
 - [p 45] [P] bug-p-a-user-type-whose-name-shadows-a-builtin-is-unusable
 - [p 45] [S] bug-s-xtensa-cannot-link-any-program-that-uses-the-heap-runtime-calloc-is-external
 - [p 45] [A+T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
+- [p 45] [T] bug-t-lane-attribution-has-two-instruments-that-disagree
 - [p 45] [T+S] bug-t-the-esp-bare-suite-is-in-no-tier-so-nothing-ever-runs-it
 - [p 45] [U] decide-shift-native-width-was-never-re-confirmed-on-the-full-table
 - [p 45] [A] feature-a-a-variant-has-no-null-tag

@@ -9660,7 +9660,7 @@ test-core: $(COMPILER)
 	# despite requesting opposite orders, which is the tell that both ran a
 	# third function. The expected text below is gcc's, verified against it.
 	./$(COMPILER) test/c_crtl_callback_param_shadowed.c $(TESTTMP)/c_cbshadow26
-	tools/expect_same.sh c_cbshadow26 "$$($(TESTTMP)/c_cbshadow26)" "$$(printf 'asc=13579\ndesc=97531\nfound=7\ndecoy=0\nplain=123')"
+	tools/expect_same.sh c_cbshadow26 "$$($(TESTTMP)/c_cbshadow26)" "$$(printf 'asc=13579\ndesc=97531\nfound=7\ndecoy=0\nlocallen=42\nmember=222\nplain=123')"
 	./$(COMPILER) test/cstatic_same_module_dup.c $(TESTTMP)/cstatic_same_module26 > $(TESTTMP)/cstatic_same_module.log 2>&1
 	tools/expect_same.sh cstatic_same_module.log "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_same_module.log)" "1"
 	tools/expect_same.sh cstatic_same_module26 "$$($(TESTTMP)/cstatic_same_module26)" "2 11"

@@ -29,25 +29,39 @@
    defect, kept because it shows the damage is not confined to the first call in
    the function.
 
-   POSITIVE CONTROL, run rather than asserted. The pre-fix compiler
-   (90b2afd68ab7) prints
+   POSITIVE CONTROL, run rather than asserted, against a compiler built from
+   this fix's parent commit (binary 12149c4f6679) -- this exact file, not a
+   different repro whose rows were composed into an expected pre-fix output.
+   It prints
 
-     asc=53917  desc=53917  found=5  decoy=0  plain=213
+     asc=53917  desc=53917  found=5  decoy=0  locallen=6  member=222  plain=213
 
    against gcc's
 
-     asc=13579  desc=97531  found=7  decoy=0  plain=123
+     asc=13579  desc=97531  found=7  decoy=0  locallen=42 member=222  plain=123
 
-   -- four of five rows wrong, and `asc` and `desc` wrong IDENTICALLY despite
+   -- five of seven rows wrong, and `asc` and `desc` wrong IDENTICALLY despite
    requesting opposite orders, which is the tell: both calls ran the same
-   function and it was neither of the ones passed. */
+   function and it was neither of the ones passed.
+
+   The two rows the pre-fix compiler gets RIGHT are the two controls, which is
+   the property that makes this file a test rather than a snapshot: `decoy` (the
+   user's own function, still callable) and `member` (a call through a struct
+   member, which never went near FindProc). A change that broke either of those
+   went too wide, and this file would say so. */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static int cmp(const void *a, const void *b) { (void)a; (void)b; return 0; }
 static int dcmp(const void *a, const void *b) { return *(const int *)b - *(const int *)a; }
 
 static int by_int(const void *a, const void *b) { return *(const int *)a - *(const int *)b; }
+
+/* For the two extra rows at the end of main. */
+struct ops { int (*cmp)(const void *, const void *); };
+static size_t my_len(const char *s) { (void)s; return 42; }
+static int tag222(const void *a, const void *b) { (void)a; (void)b; return 222; }
 
 static void show(const char *tag, int *v, int n) {
   int i;
@@ -73,6 +87,27 @@ int main(void) {
   printf("found=%d\n", found ? *found : -1);
 
   printf("decoy=%d\n", cmp(&k, &k));
+
+  /* THE SECOND CLASS, and the worse-looking one: a LOCAL function pointer whose
+     name is a libc function. `strlen' here is a local holding my_len, so C says
+     it wins over crtl's strlen for the whole block. Pre-fix this printed 6 --
+     crtl's strlen ran, on a call the user wrote to their own variable. It is
+     the same defect as the qsort rows and it needed no callback parameter and
+     no crtl body to reach; it only needs the user to name a local after
+     something in libc. */
+  {
+    size_t (*strlen)(const char *) = my_len;
+    printf("locallen=%d\n", (int)strlen("abcdef"));
+  }
+
+  /* CONTROL, and it was always right: a call through a STRUCT MEMBER never went
+     near FindProc, so it must be 222 both before and after. If a future change
+     to the resolution order breaks this row, the change went too wide. */
+  {
+    struct ops o;
+    o.cmp = tag222;
+    printf("member=%d\n", o.cmp(&k, &k));
+  }
   {
     int p[3] = {2, 1, 3};
     qsort(p, 3, sizeof(int), by_int);
