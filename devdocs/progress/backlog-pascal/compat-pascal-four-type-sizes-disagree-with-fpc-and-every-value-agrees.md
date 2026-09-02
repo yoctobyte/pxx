@@ -552,3 +552,33 @@ running the oracle, it must be left blank or marked `assumed`.
 The two subrange rows in that block have the same defect and were right by luck.
 The `string[10] fpc 11` row is the same and is still unverified against FPC.
 
+
+
+## 2026-09-02 (frankB) — measuring the `string[N]` third turned up a separate BUG
+
+Not this ticket's issue, fixed separately, but whoever takes the representation
+decision needs both facts:
+
+**1. `SizeOf` was answering the pointer width for every `string[N]`** — all seven
+shapes — while the layout engine gave that type cap+8. `SizeOf(array[0..2] of
+string[10])` was 24 with the elements 18 apart, so `FillChar(a, SizeOf(a), 0)`
+cleared 24 of 54 bytes. Fixed at `be76fab5a`,
+[[bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more]]. That
+was SizeOf disagreeing with **our own storage**, not with FPC, so it was wrong
+under either answer to the question below and fixing it prejudges nothing.
+
+Note the trap it leaves behind: for `string[7]` specifically, the WRONG answer
+(pointer width, 8) equals FPC's RIGHT answer (7+1, 8). A test had frozen that 8
+and read as agreeing with FPC while agreeing with nothing in memory.
+
+**2. The representation decision is cheaper than this ticket assumes.**
+`tyShortString` ALREADY EXISTS and `FrozenStrSlotSize` already returns cap+1 for
+it — the split is live, and `string[N]` simply maps onto `tyFixedString`
+(8-byte length word) instead. So this is plausibly a mapping change plus its
+consequences, not a new storage kind. Measured, not read: `string[10]` is 18
+bytes here and 11 under FPC, and the length word is what differs.
+
+Contrast with the SET third, which really is a Track A codegen/ABI slice: 115
+`tySet` sites, 32 bytes baked into every backend, the by-value ABI class,
+`IR_SET_COPY`/`IR_SET_LIT`, constant baking and default parameters. The two
+remaining thirds are NOT the same size of job and should not be ranked as one.
