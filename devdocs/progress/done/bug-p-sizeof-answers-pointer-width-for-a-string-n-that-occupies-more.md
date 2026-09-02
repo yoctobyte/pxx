@@ -155,3 +155,10 @@ Still open, and untouched here: `string[N]` is cap+8 where fpc is cap+1. See
 [[compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees]].
 `tyShortString` already exists and `FrozenStrSlotSize` already returns cap+1
 for it.
+
+## Log
+
+- Found and fixed in one pass while measuring the `string[N]` third of
+  [[compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees]],
+  commit be76fab5a. Filed already-resolved: it needed no coordination, ranking
+  or memory, and exists so the three code comments citing this slug resolve.
