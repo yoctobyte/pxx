@@ -78,7 +78,7 @@ jobs between them. The gtk five are fixed; these two need the feature.
 **Do not add `-DLUA_USE_JUMPTABLE=0` to the recipe to close this.** It would go
 green while hiding the gap and while no longer testing what a real lua build
 does on a GNU-announcing compiler.
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 45a871287.
 
 ## Fixed by the feature, not by the recipe — measured 2026-09-02
 
