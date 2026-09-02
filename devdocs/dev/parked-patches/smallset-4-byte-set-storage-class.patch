@@ -1,0 +1,2122 @@
+diff --git a/Makefile b/Makefile
+index 50cb8dd54..eb4b9e173 100644
+--- a/Makefile
++++ b/Makefile
+@@ -10874,6 +10874,8 @@ test-core: $(COMPILER)
+ 	tools/expect_same.sh test_dyn_comma26 "$$($(TESTTMP)/test_dyn_comma26)" "$$(printf 'm=138 m12=12 brk=12\nalias=9 t11=2')"
+ 	./$(COMPILER) test/test_set_subrange.pas $(TESTTMP)/test_set_subrange26
+ 	tools/expect_same.sh test_set_subrange26 "$$($(TESTTMP)/test_set_subrange26)" "$$(printf 'union: 1 2 3 4 5 6 10 15 20\ninter: 3 4 15\ndiff: 1 2 10\n15in')"
++	./$(COMPILER) test/test_small_set_width.pas $(TESTTMP)/test_small_set_width26
++	tools/expect_same.sh test_small_set_width26 "$$($(TESTTMP)/test_small_set_width26)" "$$(printf 'sz 4 4 4 32 32 32\nrec 12 arr 12\ncopy 42 42\nunion 62\ninter 8\ndiff  6\nsymd  54\ncmp 111111\noor 001\nincl 9 36 11\nbyval 129\nvarp  145\nresult 28\narr 3 6 12\nconst=02\nplusB=012\nforin=345\nwide=100')"
+ 	./$(COMPILER) test/test_cross_float_const.pas $(TESTTMP)/test_float_const26
+ 	tools/expect_same.sh test_float_const26 "$$($(TESTTMP)/test_float_const26)" "$$(printf 'pi=3.14159 scale=2.00\ncoef=8.25\ntab=35.75 c2=0.25')"
+ 	./$(COMPILER) test/test_asm_emit.pas $(TESTTMP)/test_asm_emit26
+@@ -15732,6 +15734,9 @@ test-i386: $(COMPILER)
+ 	./$(COMPILER) --target=i386 test/test_cross_sets.pas $(TESTTMP)/test_i386_sets
+ 	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_i386_sets_x64
+ 	tools/expect_same.sh i386/test_i386_sets "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sets)" "$$($(TESTTMP)/test_i386_sets_x64)"
++	./$(COMPILER) --target=i386 test/test_small_set_width.pas $(TESTTMP)/test_i386_smallset
++	./$(COMPILER) test/test_small_set_width.pas $(TESTTMP)/test_i386_smallset_x64
++	tools/expect_same.sh i386/test_small_set_width "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_smallset)" "$$($(TESTTMP)/test_i386_smallset_x64)"
+ 	./$(COMPILER) --target=i386 test/test_classref.pas $(TESTTMP)/test_i386_classref
+ 	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_i386_classref_x64
+ 	tools/expect_same.sh i386/test_i386_classref "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_classref)" "$$($(TESTTMP)/test_i386_classref_x64)"
+diff --git a/compiler/abi.inc b/compiler/abi.inc
+index a54c732e2..b6d76c1bb 100644
+--- a/compiler/abi.inc
++++ b/compiler/abi.inc
+@@ -96,7 +96,7 @@ begin
+     Exit;
+   end;
+   { the per-target row }
+-  if Syms[symIdx].TypeKind = tySet then
++  if TypeIsSet(Syms[symIdx].TypeKind) then
+     ABIParamSlotHoldsValueAddr :=
+       (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64) or
+       (TargetArch = TARGET_ARM32);
+diff --git a/compiler/cparser.inc b/compiler/cparser.inc
+index c36ca8b7d..c208783c1 100644
+--- a/compiler/cparser.inc
++++ b/compiler/cparser.inc
+@@ -740,7 +740,7 @@ function CTypeKindHasNoCSpelling(tk: TTypeKind): Boolean;
+ begin
+   CTypeKindHasNoCSpelling :=
+     (tk = tyAnsiString) or (tk = tyString) or (tk = tyShortString) or
+-    (tk = tyFixedString) or (tk = tySet) or (tk = tyVariant);
++    (tk = tyFixedString) or TypeIsSet(tk) or (tk = tyVariant);
+ end;
+ 
+ { Refuse, BY NAME, a Pascal routine whose signature C cannot express. Partial
+diff --git a/compiler/defs.inc b/compiler/defs.inc
+index 4c547607c..60ecdc9db 100644
+--- a/compiler/defs.inc
++++ b/compiler/defs.inc
+@@ -1094,9 +1094,9 @@ const
+   IR_COPY_REC     = 37;  { IRA = dest addr; IRB = src addr; IRIVal = byte count (full record copy) }
+   IR_PROCADDR     = 38;  { IRA = proc idx; load absolute code address of an internal proc into the result }
+   IR_CLASSREF     = 39;  { IRA = class index (ci); load runtime address of the class RTTI blob (PClassRTTI) }
+-  IR_SET_COPY     = 40;  { IRA = dest addr; IRB = src addr; copy full 32-byte set }
+-  IR_SET_BINOP    = 41;  { IRA/IRB = set addresses; IRC = op; IRIVal = BSS scratch offset }
+-  IR_SET_CMP      = 42;  { IRA/IRB = set addresses; IRC = comparison op }
++  IR_SET_COPY     = 40;  { IRA = dest addr; IRB = src addr; copy IRSetWidth(node) bytes -- the set's whole bitmap, whose width is SetSlotBytes(IRTk) and is NOT a constant. Was documented as `copy full 32-byte set` while 32 was the only width. }
++  IR_SET_BINOP    = 41;  { IRA/IRB = set addresses; IRC = op; IRIVal = BSS scratch offset; IRTk = the set kind, so the operand width is IRSetWidth(node) }
++  IR_SET_CMP      = 42;  { IRA/IRB = set addresses; IRC = comparison op; IRIVal = the OPERANDS' TTypeKind ordinal, because IRTk is occupied by the result type (tyBoolean). IRSetWidth(node) reads it. }
+   IR_VAR_STORE    = 43;  { IRA = dest variant addr; IRB = value; IRC = source TTypeKind ord (tyVariant ord = 16-byte copy) }
+   IR_VAR_BINOP    = 44;  { value: IRA/IRB = operand variant addrs; IRC = op token; IRIVal = result BSS off (arith); IRTk = tyVariant(arith)|tyBoolean(cmp) }
+   IR_VAR_BOX      = 45;  { value: IRA = temp variant addr; IRB = scalar value; IRC = scalar TTypeKind ord; boxes and returns addr in rax }
+@@ -2000,7 +2000,7 @@ type
+     tySingle,    { 18: Single — 4-byte IEEE 754, SSE2 xmm }
+     tyDouble,    { 19: Double/Real — 8-byte IEEE 754, SSE2 xmm }
+     tyExtended,  { 20: Extended — 10-byte x87, load/store via x87; ops in SSE2 double }
+-    tySet,       { 21: Set — 32-byte bitset }
++    tySet,       { 21: Set — 32-byte bitset. The WIDE storage class; see tySmallSet }
+     tyVariant,    { 22: Variant — 16-byte tagged scalar value (8-byte tag + 8-byte payload) }
+     tyAnsiString, { 23: Managed refcounted AnsiString }
+     tyAuto,       { 24: Statically typed variable with inferred type }
+@@ -2068,7 +2068,30 @@ type
+       where they are — they are additive, they still catch shapes the kind does
+       not reach, and removing them is a separate migration.
+       bug-a-writeln-of-a-widechar-prints-its-ordinal }
+-    tyWideChar     { 31: UTF-16 code unit — 2 unsigned bytes, converts as UTF-8 }
++    tyWideChar,    { 31: UTF-16 code unit — 2 unsigned bytes, converts as UTF-8 }
++    { The NARROW storage class of a set. ONE semantic type — a bitset over an
++      ordinal element type — in two storage classes that differ only in how
++      many bytes the bitmap occupies, exactly as tyPromoInt32/tyPromoInt64 are
++      one type in two widths. Semantics are written ONCE against TypeIsSet and
++      parameterised by SetSlotBytes; never fork them per class.
++
++      Chosen at the ONE place a set's element type is parsed
++      (ParseSetElemSpec): 4 bytes when the element's high ordinal is <= 31,
++      32 bytes otherwise — which is FPC's own rule, measured 2026-09-02
++      (`set of 0..31` 4, `set of 0..32` 32, `set of 'a'..'z'` 32 because FPC
++      does NOT rebase to the low bound, so `set of 200..207` is 32 in both).
++
++      Why a KIND and not a width threaded beside tySet: the width is then a
++      function of the kind again, so all 347 TypeSlotSize sites and every
++      layout site answer correctly with no new parameter — and a site that
++      forgets the new kind FAILS LOUD (a type test says "not a set") instead
++      of silently laying out 32 bytes where the reader expects 4. Set
++      LITERALS stay 32 bytes wide in Data[]: a blob is read through its
++      ADDRESS and a 4-byte read of its low 4 bytes is the same bits, so
++      narrowing the constant pool would buy rodata and cost a whole class of
++      width-mismatch bugs.
++      bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so }
++    tySmallSet     { 32: Set whose elements all fit 0..31 — 4-byte bitset }
+   );
+ 
+   TSymKind  = (skLocal, skGlobal, skParam, skConst);
+@@ -5629,6 +5652,7 @@ var
+   LastTypeSetElemTk : Integer;  { set by ParseTypeKind for set types: element TTypeKind ordinal }
+   LastTypeSetElemLo : Int64;    { …and the element subrange bounds, when it is one (Hi < Lo = none) }
+   LastTypeSetElemHi : Int64;
++  LastTypeSetKind   : Integer;  { ...and the STORAGE CLASS the element bounds imply: Ord(tySmallSet) when every element fits 0..31, Ord(tySet) otherwise. Written by ParseSetElemSpec and by the named-alias path, read by every site that turns `set of X` into a type kind, so the width decision is made ONCE and carried rather than re-derived per entity. }
+ 
+   { Named type aliases. Phase 2: pointer aliases (PFoo = ^TFoo) carry an element
+     type so the deref/index machinery knows what they point at. }
+diff --git a/compiler/ir.inc b/compiler/ir.inc
+index f2fe493e8..6c6cf139d 100644
+--- a/compiler/ir.inc
++++ b/compiler/ir.inc
+@@ -272,6 +272,72 @@ begin
+   Inc(IRCount);
+ end;
+ 
++function SetKindOfNode(n: Integer): TTypeKind;
++{ The set STORAGE CLASS an AST operand carries, for the ops that must agree on
++  a width. The node's own ASTTk first; an AN_IDENT whose ASTTk was never
++  stamped (the function-name result form leaves it 0) falls back to the
++  SYMBOL's kind, which is the same fallback the set-assignment arm already
++  carries for the same reason.
++
++  Answers tySet -- the wide class, the width everything was before tySmallSet
++  -- for anything it cannot identify. Guessing narrow would truncate a real
++  set; guessing wide only forgoes the saving. }
++begin
++  SetKindOfNode := tySet;
++  if n < 0 then Exit;
++  if IntToTypeKind(ASTTk[n]) = tySmallSet then
++    SetKindOfNode := tySmallSet
++  else if (ASTKind[n] = AN_IDENT) and (ASTIVal[n] >= 0) and (ASTIVal[n] < SymCount) and
++          (Syms[ASTIVal[n]].TypeKind = tySmallSet) and (not Syms[ASTIVal[n]].IsArray) then
++    SetKindOfNode := tySmallSet;
++end;
++
++function IRSetOperandWidth(n: Integer): Integer;
++{ Bytes of the set an ADDRESS node points at — what `x in s`, Include and
++  Exclude need in order to bound the element ordinal they index with.
++
++  The bound is not cosmetic. Every backend clamped the element to 0..255 so an
++  out-of-range one could not deref past a 32-byte set; against a FOUR-byte set
++  that same clamp reads (and, for Include, WRITES) up to 28 bytes past the
++  object. `var x: Integer; s: set of 0..7; x in s` with x = 100 is ordinary
++  code FPC accepts and answers False for, so the clamp has to follow the set.
++
++  IRTk first; an IR_LEA whose tk was never stamped falls back to the SYMBOL,
++  the same two-step SetKindOfNode makes on the AST side. Anything unidentified
++  answers 32 — the pre-tySmallSet width, which is the conservative direction
++  for a READ and is what every set was before. }
++begin
++  IRSetOperandWidth := 32;
++  if n < 0 then Exit;
++  if TypeIsSet(IntToTypeKind(IRTk[n])) then
++    IRSetOperandWidth := SetSlotBytes(IntToTypeKind(IRTk[n]))
++  else if (IRKind[n] = IR_LEA) and (IRA[n] >= 0) and (IRA[n] < SymCount) and
++          TypeIsSet(Syms[IRA[n]].TypeKind) then
++    IRSetOperandWidth := SetSlotBytes(Syms[IRA[n]].TypeKind);
++end;
++
++function IRSetWidth(node: Integer): Integer;
++{ Bytes of the SET operand of a set opcode — the ONE place a backend asks how
++  wide the bitmap in front of it is, so the answer cannot drift between seven
++  emitters the way a literal 32 did.
++
++  IRTk carries the set's storage kind on IR_SET_LIT / IR_SET_COPY / IR_SET_BINOP.
++  IR_SET_CMP is the exception and has to be: its IRTk is the RESULT type
++  (tyBoolean), so the operands' kind rides in IRIVal, which that opcode does not
++  otherwise use.
++
++  A node whose kind is neither set kind answers 32 — the width every set was
++  before tySmallSet existed. That is deliberate: a producer that forgets to
++  stamp the kind gets the OLD behaviour rather than a zero-byte copy, so the
++  failure is a missed optimisation and not a silently empty set.
++  bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so }
++begin
++  if IRKind[node] = IR_SET_CMP then
++    IRSetWidth := SetSlotBytes(IntToTypeKind(Integer(IRIVal[node])))
++  else
++    IRSetWidth := SetSlotBytes(IntToTypeKind(IRTk[node]));
++end;
++
+ function IROpName(kind: Integer): AnsiString;
+ begin
+   case kind of
+@@ -3787,13 +3853,16 @@ begin
+      (not ProcParamExplicitByRef[cpi * MAX_PROC_PARAMS + pathIdx]) and
+      (not Procs[cpi].Params[pathIdx].IsArray) and
+      (not ProcParamIsConst[cpi * MAX_PROC_PARAMS + pathIdx]) and
+-     (((Procs[cpi].Params[pathIdx].TypeKind = tySet) and
+-       (IntToTypeKind(ASTTk[argAST]) = tySet)) or
++     ((TypeIsSet(Procs[cpi].Params[pathIdx].TypeKind) and
++       TypeIsSet(IntToTypeKind(ASTTk[argAST]))) or
+       (TypeIsFrozenString(Procs[cpi].Params[pathIdx].TypeKind) and
+        TypeIsFrozenString(IntToTypeKind(ASTTk[argAST])))) then
+   begin
+-    if Procs[cpi].Params[pathIdx].TypeKind = tySet then
+-      tmpSym := AllocVar('', tySet)
++    if TypeIsSet(Procs[cpi].Params[pathIdx].TypeKind) then
++      { the PARAMETER's storage class, not tySet: the temp is what the callee's
++        slot is filled from, so a narrow parameter needs a narrow temp or the
++        by-value push reads 28 bytes past it }
++      tmpSym := AllocVar('', Procs[cpi].Params[pathIdx].TypeKind)
+     else
+     begin
+       { 255 covers every string[N], so a wider temp cannot truncate whatever
+@@ -5314,29 +5383,72 @@ end;
+   primitives, which every backend already implements. (`shr` is IR_BINOP with op
+   Ord(tkShrLogical) — the LOGICAL shift right, which is what a byte-index divide
+   wants; Ord(tkShr) is the arithmetic one and would be wrong here.) }
+-procedure IRLowerSetBitMutate(setAddrNode, valNode: Integer; isIncl: Boolean);
+-var vTmp, ptrTmp, mask, curByte, newByte: Integer;
++procedure IRLowerSetBitMutate(setAddrNode, valNode: Integer; isIncl: Boolean;
++                             elemMask: Integer);
++{ elemMask is the set's own bit-index mask -- 255 for a 32-byte tySet, 31 for a
++  4-byte tySmallSet. It was the literal 255 while 32 bytes was the only width;
++  against a narrow set that wrote up to 28 bytes past the object, and Include is
++  the WRITE direction, so the clamp has to be the set's and not a constant.
++
++  But masking ALONE is wrong for an out-of-range element: `and elemMask` FOLDS it
++  onto a valid bit instead of dropping it, so on a 4-byte set `Include(s, 100)`
++  set bit 4 (100 and 31 = 4). FPC 3.2.2's rule, measured on the raw bytes of the
++  set object, 2026-09-02, and it takes TWO steps, not one:
++
++    fold the element to a BYTE (`and 255` -- a set element is a byte ordinal in
++    FPC's model, 256 elements max), then SKIP the write if that byte index lies
++    outside THIS set's storage.
++
++  Every measured row falls out of it. `set of 0..7` (4 bytes): Include(s,100)
++  leaves $04 -- byte 12 is past the object, so no-op -- while Include(s,20) DOES
++  set bit 20, inside the four bytes though outside the declared 0..7. `set of
++  0..255` (32 bytes): Include(s,300) sets bit 44, because 300 and 255 = 44 and
++  byte 5 is inside. So the boundary is the STORAGE width, and for a 32-byte set
++  the guard is a tautology -- which is why it is only EMITTED for a narrow set,
++  leaving wide-set codegen byte-identical to what it was before tySmallSet.
++  Bounding by the storage width rather than by the declared high ordinal is
++  pre-existing behaviour that FPC shares; only the fold was ours. }
++var vTmp, ptrTmp, mask, curByte, newByte, skipLbl: Integer;
+ begin
+   { Evaluate the value once. }
+   vTmp := AllocVar('', tyInteger);
+   IRAppend(IR_STORE_SYM, vTmp, valNode, -1, 0, Ord(tyInteger));
+-  { byteAddr := setAddr + ((val and 255) shr 3); cache in a pointer temp so the
++  if elemMask <> 255 then
++  begin
++    { if ((val and 255) and not elemMask) <> 0 then skip -- the byte-folded
++      element is outside this set's storage, so the write is a no-op. One test
++      catches negatives too: elemMask+1 is a power of two. }
++    skipLbl := IRNewLabel;
++    IRAppend(IR_JUMP_IF_FALSE, skipLbl,
++      IRAppend(IR_BINOP,
++        IRAppend(IR_BINOP,
++          IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, vTmp, -1, -1, 0, Ord(tyInteger)),
++            IRAppend(IR_CONST_INT, -1, -1, -1, 255, Ord(tyInteger)),
++            Ord(tkAnd), 0, Ord(tyInteger)),
++          IRAppend(IR_CONST_INT, -1, -1, -1, not elemMask, Ord(tyInteger)),
++          Ord(tkAnd), 0, Ord(tyInteger)),
++        IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInteger)),
++        Ord(tkEq), 0, Ord(tyBoolean)), -1, 0, 0);
++  end
++  else
++    skipLbl := -1;
++  { byteAddr := setAddr + ((val and elemMask) shr 3); cache in a pointer temp so the
+     address is computed once and reused by the load and the store. }
+   ptrTmp := AllocVar('', tyPointer);
+   IRAppend(IR_STORE_SYM, ptrTmp,
+     IRAppend(IR_BINOP, setAddrNode,
+       IRAppend(IR_BINOP,
+         IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, vTmp, -1, -1, 0, Ord(tyInteger)),
+-          IRAppend(IR_CONST_INT, -1, -1, -1, 255, Ord(tyInteger)), Ord(tkAnd), 0, Ord(tyInteger)),
++          IRAppend(IR_CONST_INT, -1, -1, -1, elemMask, Ord(tyInteger)), Ord(tkAnd), 0, Ord(tyInteger)),
+         IRAppend(IR_CONST_INT, -1, -1, -1, 3, Ord(tyInteger)), Ord(tkShrLogical), 0, Ord(tyInteger)),
+       Ord(tkPlus), 0, Ord(tyPointer)),
+     -1, 0, Ord(tyPointer));
+-  { mask := 1 shl ((val and 255) and 7). }
++  { mask := 1 shl ((val and elemMask) and 7). }
+   mask := IRAppend(IR_BINOP,
+             IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+             IRAppend(IR_BINOP,
+               IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, vTmp, -1, -1, 0, Ord(tyInteger)),
+-                IRAppend(IR_CONST_INT, -1, -1, -1, 255, Ord(tyInteger)), Ord(tkAnd), 0, Ord(tyInteger)),
++                IRAppend(IR_CONST_INT, -1, -1, -1, elemMask, Ord(tyInteger)), Ord(tkAnd), 0, Ord(tyInteger)),
+               IRAppend(IR_CONST_INT, -1, -1, -1, 7, Ord(tyInteger)), Ord(tkAnd), 0, Ord(tyInteger)),
+             Ord(tkShl), 0, Ord(tyInteger));
+   curByte := IRAppend(IR_LOAD_MEM, IRAppend(IR_LOAD_SYM, ptrTmp, -1, -1, 0, Ord(tyPointer)),
+@@ -5348,14 +5460,18 @@ begin
+                  IRAppend(IR_NOT, mask, -1, -1, 0, Ord(tyInteger)), Ord(tkAnd), 0, Ord(tyInteger));
+   IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, ptrTmp, -1, -1, 0, Ord(tyPointer)),
+     newByte, -1, 0, Ord(tyUInt8));
++  if skipLbl >= 0 then IRAppend(IR_LABEL, -1, -1, -1, skipLbl, 0);
+ end;
+ 
+ { Runtime `lo..hi` range into a set: a counter loop calling IRLowerSetBitMutate.
+   lo/hi are already-lowered integer values. Always Include (set literals only
+   add). }
+ procedure IRLowerSetRangeMutate(setSym, loNode, hiNode: Integer);
+-var iSym, hiSym, topLbl, endLbl: Integer;
++var iSym, hiSym, topLbl, endLbl, elemMask: Integer;
+ begin
++  { the target set's own bit-index mask, from its symbol -- see
++    IRLowerSetBitMutate }
++  elemMask := SetSlotBytes(Syms[setSym].TypeKind) * 8 - 1;
+   iSym := AllocVar('', tyInteger);
+   hiSym := AllocVar('', tyInteger);
+   IRAppend(IR_STORE_SYM, iSym, loNode, -1, 0, Ord(tyInteger));
+@@ -5369,7 +5485,7 @@ begin
+       IRAppend(IR_LOAD_SYM, hiSym, -1, -1, 0, Ord(tyInteger)), Ord(tkLe), 0, Ord(tyBoolean)),
+     -1, 0, 0);
+   IRLowerSetBitMutate(IRAppend(IR_LEA, setSym, -1, -1, 0, Ord(tyPointer)),
+-    IRAppend(IR_LOAD_SYM, iSym, -1, -1, 0, Ord(tyInteger)), True);
++    IRAppend(IR_LOAD_SYM, iSym, -1, -1, 0, Ord(tyInteger)), True, elemMask);
+   { i := i + 1 }
+   IRAppend(IR_STORE_SYM, iSym,
+     IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, iSym, -1, -1, 0, Ord(tyInteger)),
+@@ -7428,7 +7544,7 @@ begin
+               IRLowerAST(ASTRight[itemNode]))
+           else
+             IRLowerSetBitMutate(IRAppend(IR_LEA, setSym, -1, -1, 0, Ord(tyPointer)),
+-              IRLowerAST(itemNode), True);
++              IRLowerAST(itemNode), True, SetSlotBytes(Syms[setSym].TypeKind) * 8 - 1);
+           argNode := ASTRight[argNode];
+         end;
+         Result := IRAppend(IR_LEA, setSym, -1, -1, 0, Ord(tySet));
+@@ -7450,13 +7566,15 @@ begin
+       bug started reading e.g. 16777218. }
+     AN_SET_INCL:
+     begin
+-      IRLowerSetBitMutate(IRLowerAddress(ASTLeft[node]), IRLowerAST(ASTRight[node]), True);
++      IRLowerSetBitMutate(IRLowerAddress(ASTLeft[node]), IRLowerAST(ASTRight[node]), True,
++                          SetSlotBytes(SetKindOfNode(ASTLeft[node])) * 8 - 1);
+       Result := -1;
+     end;
+ 
+     AN_SET_EXCL:
+     begin
+-      IRLowerSetBitMutate(IRLowerAddress(ASTLeft[node]), IRLowerAST(ASTRight[node]), False);
++      IRLowerSetBitMutate(IRLowerAddress(ASTLeft[node]), IRLowerAST(ASTRight[node]), False,
++                          SetSlotBytes(SetKindOfNode(ASTLeft[node])) * 8 - 1);
+       Result := -1;
+     end;
+ 
+@@ -7853,7 +7971,7 @@ begin
+         dcValTmp := AllocVar('', tyPointer);
+         IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAST(dcCntAst), -1, 0, Ord(tyPointer));
+       end
+-      else if (dcElemTk = tyRecord) or (dcElemTk = tySet) then
++      else if (dcElemTk = tyRecord) or TypeIsSet(dcElemTk) then
+       begin
+         { Records and sets are ADDRESS-valued: IR_COPY_REC's source operand is
+           an address, and a record assignment builds it with IRLowerAST. So an
+@@ -8086,7 +8204,7 @@ begin
+           bulk-copy. The retain is what the new buffer's ownership needs. }
+         IRAppend(IR_COPY_REC_MANAGED, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
+           IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(tyPointer)), dcElemRec, dcElemSz, Ord(tyRecord))
+-      else if (dcElemTk = tyRecord) or (dcElemTk = tySet) then
++      else if (dcElemTk = tyRecord) or TypeIsSet(dcElemTk) then
+         IRAppend(IR_COPY_REC, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
+           IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(tyPointer)), -1, dcElemSz, Ord(tyRecord))
+       else
+@@ -8118,7 +8236,7 @@ begin
+           to share the general-register class. `A == &A[0]` answered 0.
+           bug-c-cast-of-a-float-element-array-to-a-pointer-yields-a-wrong-address }
+         Result := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer))
+-      else if TypeIsFrozenString(Syms[varIdx].TypeKind) or (Syms[varIdx].TypeKind = tySet) then
++      else if TypeIsFrozenString(Syms[varIdx].TypeKind) or TypeIsSet(Syms[varIdx].TypeKind) then
+         Result := IRAppend(IR_LEA, varIdx, -1, -1, 0, ASTTk[node])
+       else if TypeIsPromoInt(Syms[varIdx].TypeKind) and not Syms[varIdx].IsRef then
+         { A promotable int IS its slot: the value may be a bignum, so an rvalue
+@@ -8148,7 +8266,7 @@ begin
+         Result := IRLowerBitFieldRead(node, left,
+                                       RecFieldType(ResolveNodeRec(ASTLeft[node]),
+                                                    GetASTIdentName(node)))
+-      else if (IntToTypeKind(ASTTk[node]) = tyString) or (IntToTypeKind(ASTTk[node]) = tySet) then
++      else if (IntToTypeKind(ASTTk[node]) = tyString) or TypeIsSet(IntToTypeKind(ASTTk[node])) then
+       begin
+         { A frozen-string / set value IS its address (no load). Present the
+           address node with the value's frozen-string tag, mirroring the AN_IDENT
+@@ -10069,21 +10187,31 @@ begin
+         Result := IRAppend(IR_BINOP, left, right, Integer(ASTIVal[node]), 0, Ord(tyBoolean));
+       end
+       else if (ASTIVal[node] <> Ord(tkIn)) and
+-              ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tySet) or
+-               (IntToTypeKind(ASTTk[ASTRight[node]]) = tySet)) then
++              (TypeIsSet(IntToTypeKind(ASTTk[ASTLeft[node]])) or
++               TypeIsSet(IntToTypeKind(ASTTk[ASTRight[node]]))) then
+       begin
+         left := IRLowerAST(ASTLeft[node]);
+         right := IRLowerAST(ASTRight[node]);
+         if (ASTIVal[node] = Ord(tkEq)) or (ASTIVal[node] = Ord(tkNeq)) or
+            (ASTIVal[node] = Ord(tkLt)) or (ASTIVal[node] = Ord(tkLe)) or
+            (ASTIVal[node] = Ord(tkGt)) or (ASTIVal[node] = Ord(tkGe)) then
+-          Result := IRAppend(IR_SET_CMP, left, right, Integer(ASTIVal[node]), 0, Ord(tyBoolean))
++          { IRIVal carries the OPERANDS' storage class here, because IRTk is
++            taken by the result type. IRSetWidth reads it back. }
++          Result := IRAppend(IR_SET_CMP, left, right, Integer(ASTIVal[node]),
++                             Ord(SetNarrower(SetKindOfNode(ASTLeft[node]),
++                                             SetKindOfNode(ASTRight[node]))),
++                             Ord(tyBoolean))
+         else
+         begin
+           BSSSize := AlignTo(BSSSize, 8);
+           idx := BSSSize;
++          { the scratch stays 32 bytes whatever the operands are -- it is one
++            BSS slot reused by every set binop in the program, and sizing it to
++            the narrowest caller would under-serve the widest }
+           Inc(BSSSize, 32);
+-          Result := IRAppend(IR_SET_BINOP, left, right, Integer(ASTIVal[node]), idx, Ord(tySet));
++          Result := IRAppend(IR_SET_BINOP, left, right, Integer(ASTIVal[node]), idx,
++                             Ord(SetNarrower(SetKindOfNode(ASTLeft[node]),
++                                             SetKindOfNode(ASTRight[node]))));
+         end;
+       end
+       else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant) or
+@@ -10691,7 +10819,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
+         if (lhsTk = tyUnknown) or (lhsTk = tyAuto) then
+           Error('default requires a known target type');
+         ASTTk[ASTRight[node]] := Ord(lhsTk);
+-        if (lhsTk = tyRecord) or (lhsTk = tySet) or
++        if (lhsTk = tyRecord) or TypeIsSet(lhsTk) or
+            ((ASTKind[ASTLeft[node]] = AN_IDENT) and Syms[ASTIVal[ASTLeft[node]]].IsArray and
+             not (Syms[ASTIVal[ASTLeft[node]]].ArrLen = -1)) then
+         begin
+@@ -10705,8 +10833,8 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
+             else
+               Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, REC_NONE, elemSize, Ord(lhsTk));
+           end
+-          else if lhsTk = tySet then
+-            Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, REC_NONE, TypeSlotSize(tySet), Ord(lhsTk))
++          else if TypeIsSet(lhsTk) then
++            Result := IRAppend(IR_DEFAULT_MEM, leftAddr, -1, REC_NONE, TypeSlotSize(lhsTk), Ord(lhsTk))
+           else
+           begin
+             varIdx := ASTIVal[ASTLeft[node]];
+@@ -11145,10 +11273,10 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
+         seq := IRLowerAST(ASTLeft[left]);
+         Result := IRAppend(IR_STORE_MEM, outNode, seq, -1, 0, Ord(tyPointer));
+       end
+-      else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tySet) or
++      else if TypeIsSet(IntToTypeKind(ASTTk[ASTLeft[node]])) or
+               ((ASTKind[ASTLeft[node]] = AN_IDENT) and
+                (ASTIVal[ASTLeft[node]] >= 0) and
+-               (Syms[ASTIVal[ASTLeft[node]]].TypeKind = tySet) and
++               TypeIsSet(Syms[ASTIVal[ASTLeft[node]]].TypeKind) and
+                not Syms[ASTIVal[ASTLeft[node]]].IsArray) then
+       begin
+         { The symbol-TypeKind fallback is the SAME rule the record arm below
+@@ -11161,7 +11289,9 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
+           bug-a-set-and-array-function-results-come-back-empty }
+         leftAddr := IRLowerDestAddress(ASTLeft[node]);
+         right := IRLowerAST(ASTRight[node]);
+-        Result := IRAppend(IR_SET_COPY, leftAddr, right, -1, 0, Ord(tySet));
++        Result := IRAppend(IR_SET_COPY, leftAddr, right, -1, 0,
++                           Ord(SetNarrower(SetKindOfNode(ASTLeft[node]),
++                                           SetKindOfNode(ASTRight[node]))));
+       end
+       else if (ASTKind[ASTLeft[node]] = AN_IDENT) and
+               Syms[ASTIVal[ASTLeft[node]]].IsArray and
+@@ -11756,10 +11886,11 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
+           if (CurProc >= 0) and (Procs[CurProc].RetSymIdx >= 0) then
+           begin
+             varIdx := Procs[CurProc].RetSymIdx;
+-            if Syms[varIdx].TypeKind = tySet then
++            if TypeIsSet(Syms[varIdx].TypeKind) then
+             begin
+               leftAddr := IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer));
+-              last := IRAppend(IR_SET_COPY, leftAddr, value, -1, 0, Ord(tySet));
++              last := IRAppend(IR_SET_COPY, leftAddr, value, -1, 0,
++                               Ord(Syms[varIdx].TypeKind));
+             end
+             else if Syms[varIdx].TypeKind = tyRecord then
+             begin
+diff --git a/compiler/ir_codegen.inc b/compiler/ir_codegen.inc
+index 01b26b0d0..437526760 100644
+--- a/compiler/ir_codegen.inc
++++ b/compiler/ir_codegen.inc
+@@ -1620,6 +1620,7 @@ procedure EmitParamSpillsForTarget(procIdx, nparams: Integer);
+   local parr/pbyref/ptypes arrays were replaced by the equivalent
+   Procs[procIdx].Params[] fields, which the driver mirrors them into. }
+ var i, j, k, idx, sz, pw, pnWords, whi, xtInBias, xtVReg, xtVReg2: Integer;
++    setW: Integer;                       { words of a by-value SET param's bitmap }
+     intIdx, sseIdx, stackOff: Integer;   { SysV arg classification, cdecl arm }
+     a64Fp: Boolean;                      { AAPCS64 cdecl arm: this param is FP-bank }
+     isEight: Boolean;                    { AAPCS soft-float 8-byte by-value param }
+@@ -1678,7 +1679,7 @@ begin
+               TypeIsFloat(Syms[idx].TypeKind) or
+               TypeIsFrozenString(Syms[idx].TypeKind) or
+               (Syms[idx].TypeKind = tyRecord) or
+-              (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant, tySet])) then
++              (Syms[idx].TypeKind in [tyString, tyAnsiString, tyPointer, tyClass, tyVariant, tySet, tySmallSet])) then
+         Error('target i386: only ordinal/pointer parameters supported yet');
+       { THE WHOLE i386 cdecl DIFFERENCE IS THE DIRECTION OF THIS WALK.
+         pxx's internal convention pushes arguments LEFT TO RIGHT, so the
+@@ -1734,8 +1735,8 @@ begin
+           Inc(sz, 4)
+         else if (Procs[procIdx].Params[j].TypeKind = tyInt64) or (Procs[procIdx].Params[j].TypeKind = tyUInt64) then
+           Inc(sz, 8)                                 { 64-bit by-value param }
+-        else if Procs[procIdx].Params[j].TypeKind = tySet then
+-          Inc(sz, TypeSlotSize(tySet))                    { 32-byte by-value set }
++        else if TypeIsSet(Procs[procIdx].Params[j].TypeKind) then
++          Inc(sz, TypeSlotSize(Procs[procIdx].Params[j].TypeKind))  { by-value set: its own bitmap width }
+         else
+           Inc(sz, 4);
+       end;
+@@ -1753,9 +1754,9 @@ begin
+         end;
+       end
+       else if (not Syms[idx].IsRef) and (not Syms[idx].IsArray) and
+-         (Syms[idx].TypeKind = tySet) then
++         TypeIsSet(Syms[idx].TypeKind) then
+       begin
+-        for j := 0 to (TypeSlotSize(tySet) div 4) - 1 do
++        for j := 0 to (TypeSlotSize(Syms[idx].TypeKind) div 4) - 1 do
+         begin
+           EmitB($8B); EmitB($85); EmitI32(8 + sz + j * 4);      { mov eax, [ebp+disp] }
+           EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset + j * 4);
+@@ -2155,9 +2156,9 @@ begin
+               (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]) > 4) and
+               (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + i]) <= 8) then
+         Inc(pnWords, 2)
+-      else if (Procs[procIdx].Params[i].TypeKind = tySet) and
++      else if TypeIsSet(Procs[procIdx].Params[i].TypeKind) and
+          (not Procs[procIdx].Params[i].IsRef) and (not Procs[procIdx].Params[i].IsArray) then
+-        Inc(pnWords, 8)   { by-value 32-byte set: 8 words inline (mirrors i386) }
++        Inc(pnWords, SetSlotBytes(Procs[procIdx].Params[i].TypeKind) div 4)   { by-value set: its bitmap inline, a word at a time (mirrors i386) }
+       else
+         Inc(pnWords, 1);
+     pw := 0;
+@@ -2167,13 +2168,14 @@ begin
+       sz := ParamSlotWordSize(idx);
+       EmitLoadImmRISCV32(reg_t0, Syms[idx].Offset);
+       rv32_add(reg_t0, reg_s0, reg_t0);
+-      if (Syms[idx].TypeKind = tySet) and
++      if TypeIsSet(Syms[idx].TypeKind) and
+          (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+       begin
+-        { by-value set: rebuild all 8 words in the 32-byte param slot; word
++        { by-value set: rebuild every word of its bitmap in the param slot; word
+           pw+w comes from a[pw+w] or, past a7, from the caller-kept stack
+           block (same formula as the scalar stack-arg path). }
+-        for sz := 0 to 7 do
++        setW := SetSlotBytes(Syms[idx].TypeKind) div 4;
++        for sz := 0 to setW - 1 do
+         begin
+           if pw + sz < 8 then
+             rv32_sw(reg_a0 + pw + sz, reg_t0, sz * 4)
+@@ -2183,7 +2185,7 @@ begin
+             rv32_sw(reg_t1, reg_t0, sz * 4);
+           end;
+         end;
+-        Inc(pw, 8);
++        Inc(pw, setW);
+       end
+       else if (((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
+           (Syms[idx].TypeKind = tyDouble)) and
+@@ -6338,6 +6340,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
+     baseAddr, indexNode, lo, elemSize, offset, addressNode, valueNode: Integer;
+     argNode, pathIdx, procIdx, specialId, classIdx, slot, cpi, i, jbePatch, anonIdx, lastOrd: Integer;
+     asmGfK: Integer; asmGfFound: Boolean;
++    setW, k, sz: Integer;   { set opcodes: the REX mask that selects qword-vs-dword steps, the step size, and the step count }
+     searchTop, pJzBump, pJaeTake, pJmpDone, pJbeNoGrow, pFreeNil, pNotDouble, pDone: Integer;
+     pUnsNeg, pUnsDone, pAppendDone: Integer;
+     pAnsiPadEnd: Integer;   { rel8 placeholder: jump past the nil-handle pad arm }
+@@ -8805,8 +8808,10 @@ begin
+ 
+           tkIn:
+             begin
+-              { rax = element value (LHS), rcx = set address (RHS) }
+-              EmitB($48); EmitB($3D); EmitI32(255); { cmp rax, 255 }
++              { rax = element value (LHS), rcx = set address (RHS). The
++                range check is the SET's, not a constant 255: against a
++                4-byte tySmallSet a 255 bound derefs up to 28 bytes past it. }
++              EmitB($48); EmitB($3D); EmitI32(IRSetOperandWidth(right) * 8 - 1); { cmp rax, <max elem> }
+               EmitB($0F); EmitB($87); nextJmp := CodeLen; EmitI32(0); { ja out_of_range }
+               
+               EmitB($48); EmitB($89); EmitB($C2); { mov rdx, rax }
+@@ -11425,7 +11430,7 @@ begin
+         IREmitNode(IRA[node]);                 { rax = dest address }
+         EmitB($48); EmitB($89); EmitB($C7);    { mov rdi, rax }
+         EmitB($5E);                            { pop rsi }
+-        EmitB($48); EmitB($C7); EmitB($C1); EmitI32(32); { mov rcx, 32 }
++        EmitB($48); EmitB($C7); EmitB($C1); EmitI32(IRSetWidth(node)); { mov rcx, <set width> }
+         EmitB($F3); EmitB($A4);                { rep movsb }
+       end;
+ 
+@@ -11437,18 +11442,27 @@ begin
+         EmitB($48); EmitB($89); EmitB($C6);    { mov rsi, rax }
+         EmitB($5A);                            { pop rdx = lhs }
+         EmitB($48); EmitB($8D); EmitB($3C); EmitB($25); EmitGlobRef(IRIVal[node]); { lea rdi, scratch }
+-        for i := 0 to 3 do
+-        begin
+-          EmitB($48); EmitB($8B); EmitB($42); EmitB(i * 8); { mov rax, [rdx+off] }
+-          EmitB($48); EmitB($8B); EmitB($4E); EmitB(i * 8); { mov rcx, [rsi+off] }
++        { QWORD steps while the bitmap has whole eightbytes; a 4-byte tySmallSet
++          takes ONE dword step instead. Same instruction stream with REX.W
++          cleared -- setW masks $08 out of each REX byte for the
++          narrow one via a MASK on each REX byte ($48 -> $40, a REX prefix with
++          no bits set, which is legal and encodes the 32-bit form) -- so the
++          wide path is byte-identical to what it was. }
++        sz := IRSetWidth(node) div 8;
++        setW := $FF; k := 8;
++        if sz = 0 then begin sz := 1; setW := $F7; k := 4; end;
++        for i := 0 to sz - 1 do
++        begin
++          EmitB($48 and setW); EmitB($8B); EmitB($42); EmitB(i * k); { mov rax, [rdx+off] }
++          EmitB($48 and setW); EmitB($8B); EmitB($4E); EmitB(i * k); { mov rcx, [rsi+off] }
+           case IntToTokenKind(IRC[node]) of
+-            tkPlus: EmitB($48); { prefix for or below }
+-            tkStar: EmitB($48); { prefix for and below }
+-            tkSymDiff: EmitB($48); { prefix for xor below }
++            tkPlus: EmitB($48 and setW); { prefix for or below }
++            tkStar: EmitB($48 and setW); { prefix for and below }
++            tkSymDiff: EmitB($48 and setW); { prefix for xor below }
+             tkMinus:
+               begin
+-                EmitB($48); EmitB($F7); EmitB($D1);        { not rcx }
+-                EmitB($48); EmitB($21); EmitB($C8);        { and rax, rcx }
++                EmitB($48 and setW); EmitB($F7); EmitB($D1);        { not rcx }
++                EmitB($48 and setW); EmitB($21); EmitB($C8);        { and rax, rcx }
+               end;
+           end;
+           if IntToTokenKind(IRC[node]) = tkPlus then
+@@ -11457,7 +11471,7 @@ begin
+             begin EmitB($21); EmitB($C8); end               { and rax, rcx }
+           else if IntToTokenKind(IRC[node]) = tkSymDiff then
+             begin EmitB($31); EmitB($C8); end;              { xor rax, rcx  (`><`) }
+-          EmitB($48); EmitB($89); EmitB($47); EmitB(i * 8); { mov [rdi+off], rax }
++          EmitB($48 and setW); EmitB($89); EmitB($47); EmitB(i * k); { mov [rdi+off], rax }
+         end;
+         EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(IRIVal[node]); { lea rax, scratch }
+       end;
+@@ -11469,47 +11483,55 @@ begin
+         IREmitNode(IRB[node]);                 { rhs address }
+         EmitB($48); EmitB($89); EmitB($C6);    { mov rsi, rax }
+         EmitB($5A);                            { pop rdx = lhs }
+-        EmitB($4D); EmitB($31); EmitB($C0);    { xor r8, r8: subset violations }
+-        EmitB($4D); EmitB($31); EmitB($C9);    { xor r9, r9: differences }
+-        for i := 0 to 3 do
+-        begin
+-          EmitB($48); EmitB($8B); EmitB($42); EmitB(i * 8); { mov rax, [rdx+off] }
+-          EmitB($48); EmitB($8B); EmitB($4E); EmitB(i * 8); { mov rcx, [rsi+off] }
+-          EmitB($49); EmitB($89); EmitB($C2);                { mov r10, rax }
+-          EmitB($49); EmitB($31); EmitB($CA);                { xor r10, rcx }
+-          EmitB($4D); EmitB($09); EmitB($D1);                { or r9, r10 }
++        { The eightbyte/dword split SET_BINOP explains above; here `setW` is a
++          MASK applied to each REX byte, clearing REX.W ($08) for the narrow
++          class and leaving the wide stream byte-identical. r8/r9/r10 still
++          need their REX.R/B bits, which is why this is a mask and not a
++          constant prefix. }
++        sz := IRSetWidth(node) div 8;
++        setW := $FF; k := 8;
++        if sz = 0 then begin sz := 1; setW := $F7; k := 4; end;
++        EmitB($4D and setW); EmitB($31); EmitB($C0);    { xor r8, r8: subset violations }
++        EmitB($4D and setW); EmitB($31); EmitB($C9);    { xor r9, r9: differences }
++        for i := 0 to sz - 1 do
++        begin
++          EmitB($48 and setW); EmitB($8B); EmitB($42); EmitB(i * k); { mov rax, [rdx+off] }
++          EmitB($48 and setW); EmitB($8B); EmitB($4E); EmitB(i * k); { mov rcx, [rsi+off] }
++          EmitB($49 and setW); EmitB($89); EmitB($C2);                { mov r10, rax }
++          EmitB($49 and setW); EmitB($31); EmitB($CA);                { xor r10, rcx }
++          EmitB($4D and setW); EmitB($09); EmitB($D1);                { or r9, r10 }
+           if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkLt)) then
+           begin
+-            EmitB($49); EmitB($89); EmitB($CA);              { mov r10, rcx }
+-            EmitB($49); EmitB($F7); EmitB($D2);              { not r10 }
+-            EmitB($4C); EmitB($21); EmitB($D0);              { and rax, r10 }
+-            EmitB($49); EmitB($09); EmitB($C0);              { or r8, rax }
++            EmitB($49 and setW); EmitB($89); EmitB($CA);              { mov r10, rcx }
++            EmitB($49 and setW); EmitB($F7); EmitB($D2);              { not r10 }
++            EmitB($4C and setW); EmitB($21); EmitB($D0);              { and rax, r10 }
++            EmitB($49 and setW); EmitB($09); EmitB($C0);              { or r8, rax }
+           end
+           else if (IRC[node] = Ord(tkGe)) or (IRC[node] = Ord(tkGt)) then
+           begin
+-            EmitB($49); EmitB($89); EmitB($C2);              { mov r10, rax }
+-            EmitB($49); EmitB($F7); EmitB($D2);              { not r10 }
+-            EmitB($4C); EmitB($21); EmitB($D1);              { and rcx, r10 }
+-            EmitB($49); EmitB($09); EmitB($C8);              { or r8, rcx }
++            EmitB($49 and setW); EmitB($89); EmitB($C2);              { mov r10, rax }
++            EmitB($49 and setW); EmitB($F7); EmitB($D2);              { not r10 }
++            EmitB($4C and setW); EmitB($21); EmitB($D1);              { and rcx, r10 }
++            EmitB($49 and setW); EmitB($09); EmitB($C8);              { or r8, rcx }
+           end;
+         end;
+         if IRC[node] = Ord(tkEq) then
+         begin
+-          EmitB($4D); EmitB($85); EmitB($C9);                { test r9, r9 }
++          EmitB($4D and setW); EmitB($85); EmitB($C9);                { test r9, r9 }
+           EmitB($0F); EmitB($94); EmitB($C0);                { sete al }
+         end
+         else if IRC[node] = Ord(tkNeq) then
+         begin
+-          EmitB($4D); EmitB($85); EmitB($C9);                { test r9, r9 }
++          EmitB($4D and setW); EmitB($85); EmitB($C9);                { test r9, r9 }
+           EmitB($0F); EmitB($95); EmitB($C0);                { setne al }
+         end
+         else
+         begin
+-          EmitB($4D); EmitB($85); EmitB($C0);                { test r8, r8 }
++          EmitB($4D and setW); EmitB($85); EmitB($C0);                { test r8, r8 }
+           EmitB($0F); EmitB($94); EmitB($C0);                { sete al }
+           if (IRC[node] = Ord(tkLt)) or (IRC[node] = Ord(tkGt)) then
+           begin
+-            EmitB($4D); EmitB($85); EmitB($C9);              { test r9, r9 }
++            EmitB($4D and setW); EmitB($85); EmitB($C9);              { test r9, r9 }
+             EmitB($0F); EmitB($95); EmitB($C1);              { setne cl }
+             EmitB($20); EmitB($C8);                          { and al, cl }
+           end;
+diff --git a/compiler/ir_codegen386.inc b/compiler/ir_codegen386.inc
+index 7ad344304..726ed1904 100644
+--- a/compiler/ir_codegen386.inc
++++ b/compiler/ir_codegen386.inc
+@@ -851,7 +851,7 @@ begin
+       whoSym := 'a compiler-minted temporary'
+     else
+       whoSym := 'variable ''' + Syms[symIdx].Name + '''';
+-    if Syms[symIdx].TypeKind = tySet then
++    if TypeIsSet(Syms[symIdx].TypeKind) then
+       Error('target i386: ' + whoSym + ' is a SET, which the i386 fat-slot ' +
+             'model does not carry yet')
+     else if Syms[symIdx].TypeKind = tyShortString then
+@@ -1479,6 +1479,7 @@ var
+   classIdx, elemSize, lo, hi, itemNode, p1, p2, pNil386, pDone386: Integer;
+   vaNvw, vaK, vaO1, vaO2: Integer;
+   k386, recDw386: Integer;   { by-value record argument: dword index and count }
++  setW: Integer;             { by-value SET argument: dwords of the PARAMETER's bitmap (SetSlotBytes), one for a tySmallSet and eight for a tySet }
+   argIsRec386: Boolean;
+   vaTk: TTypeKind;   { holds IntToTypeKind(...) — keep it the enum so FPC's strict
+                        enum/int boundary is satisfied (pxx erases it; FPC does not). }
+@@ -2845,7 +2846,7 @@ begin
+         begin
+           EmitB($85); EmitB($D2);                    { test edx, edx }
+           EmitB($74); EmitB($05);                    { jz +5 (over the mov) }
+-          EmitB($B8); EmitI32(256);                  { mov eax, 256 }
++          EmitB($B8); EmitI32(IRSetOperandWidth(right) * 8);  { mov eax, <past the set> }
+         end;
+         EmitB($50);                                  { push eax }
+         IREmitNode386(right);
+@@ -2914,7 +2915,7 @@ begin
+         begin
+           { Set membership: eax = element, ecx = set address. Byte = element>>3,
+             bit = element and 7. Result (0/1) -> eax. }
+-          EmitB($3D); EmitI32(255);                  { cmp eax, 255 }
++          EmitB($3D); EmitI32(IRSetOperandWidth(right) * 8 - 1);  { cmp eax, <max elem> }
+           EmitB($0F); EmitB($87); nextJmp := CodeLen; EmitI32(0); { ja out-of-range }
+           EmitB($89); EmitB($C2);                    { mov edx, eax }
+           EmitB($C1); EmitB($EA); EmitB($03);        { shr edx, 3 (byte index) }
+@@ -2979,9 +2980,12 @@ begin
+             IREmitNode386(IRA[argNode]); { arg -> eax (edx:eax for a pair) }
+             if argCls = A32_SET then
+             begin
+-              { The set's value is its address: push all eight dwords, high
+-                first, so byte 0 lands at the callee's lowest arg address. }
+-              for i := 7 downto 0 do
++              { The set's value is its address: push its whole bitmap, high
++                dword first, so byte 0 lands at the callee's lowest arg
++                address. Arg32Words is the same count the arg-offset walk and
++                the callee spill use -- asking it here is what stops the three
++                from disagreeing about a narrow set. }
++              for i := Arg32Words(argCls, p1, nArgs) - 1 downto 0 do
+               begin
+                 EmitB($8B); EmitB($50); EmitB(i * 4);   { mov edx, [eax+i*4] }
+                 EmitB($52);                             { push edx }
+@@ -3805,18 +3809,20 @@ begin
+           if vaFwd then nArgs := vaNvw - 1 - vaK else nArgs := vaK;
+           IREmitNode386(IRA[argNode]);
+           if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
+-             (Procs[procIdx].Params[nArgs].TypeKind = tySet) and
++             TypeIsSet(Procs[procIdx].Params[nArgs].TypeKind) and
+              (not Procs[procIdx].Params[nArgs].IsRef) and
+              (not Procs[procIdx].Params[nArgs].IsArray) then
+           begin
+-            { Set by-value param: eax is the 32-byte set address. Push high
+-              dwords first so byte 0 is at the callee's lowest arg address. }
+-            for i := 7 downto 0 do
++            { Set by-value param: eax is the set's address. Push high dwords
++              first so byte 0 is at the callee's lowest arg address. The count is
++              the PARAMETER's bitmap width, not a constant eight. }
++            setW := SetSlotBytes(Procs[procIdx].Params[nArgs].TypeKind) div 4;
++            for i := setW - 1 downto 0 do
+             begin
+               EmitB($8B); EmitB($50); EmitB(i * 4);    { mov edx, [eax+i*4] }
+               EmitB($52);                              { push edx }
+             end;
+-            Inc(argBytes, TypeSlotSize(tySet));
++            Inc(argBytes, setW * 4);
+             Inc(nArgs);
+             Inc(vaK); if vaK >= vaNvw then argNode := -1 else argNode := vaOrder[vaK];
+             Continue;
+@@ -4093,8 +4099,8 @@ begin
+           end
+           else if argCls = A32_SET then
+           begin
+-            { eax = the 32-byte set's address; push all 8 dwords, high first. }
+-            for i := 7 downto 0 do
++            { eax = the set's address; push its whole bitmap, high dword first. }
++            for i := Arg32Words(argCls, procIdx, nArgs) - 1 downto 0 do
+             begin
+               EmitB($8B); EmitB($50); EmitB(i * 4);  { mov edx, [eax+i*4] }
+               EmitB($52);                            { push edx }
+@@ -4224,12 +4230,12 @@ begin
+           end
+           else if argCls = A32_SET then
+           begin
+-            { By-value set: eax is the 32-byte set's ADDRESS; push all 8 dwords
++            { By-value set: eax is the set's ADDRESS; push its whole bitmap
+               inline so the callee's spill can rebuild the set in its own slot.
+               One address word left the callee reading its own slot as set
+               bytes — `b.CountSet([eA,eC,eD])` answered 1 on i386 and 0 on
+               riscv32 where FPC says 3. }
+-            for i := 7 downto 0 do
++            for i := Arg32Words(argCls, procIdx, nArgs) - 1 downto 0 do
+             begin
+               EmitB($8B); EmitB($50); EmitB(i * 4);  { mov edx, [eax+i*4] }
+               EmitB($52);                            { push edx }
+@@ -4920,19 +4926,20 @@ begin
+ 
+     IR_SET_COPY:
+       begin
+-        { Copy the full 32-byte set from src (IRB) to dest (IRA). }
++        { Copy the set's whole bitmap from src (IRB) to dest (IRA) --
++          IRSetWidth bytes, 32 for a tySet and 4 for a tySmallSet. }
+         IREmitNode386(IRB[node]);                    { eax = source addr }
+         EmitB($50);                                  { push src }
+         IREmitNode386(IRA[node]);                    { eax = dest addr }
+         EmitB($89); EmitB($C7);                      { mov edi, eax }
+         EmitB($5E);                                  { pop esi }
+-        EmitB($B9); EmitI32(32);                     { mov ecx, 32 }
++        EmitB($B9); EmitI32(IRSetWidth(node));       { mov ecx, <set width> }
+         EmitB($F3); EmitB($A4);                      { rep movsb }
+       end;
+ 
+     IR_SET_BINOP:
+       begin
+-        { Set +/-/* over 32 bytes = 8 dwords, into the BSS scratch (IRIVal).
++        { Set +/-/* over the operands' bitmap dwords, into the BSS scratch (IRIVal).
+           eax holds [lhs+i], ecx holds [rhs+i]; result -> [scratch+i]. }
+         IREmitNode386(IRA[node]);                    { lhs addr }
+         EmitB($50);                                  { push lhs }
+@@ -4940,7 +4947,7 @@ begin
+         EmitB($89); EmitB($C6);                      { mov esi, eax (rhs) }
+         EmitB($5A);                                  { pop edx (lhs) }
+         EmitB($BF); EmitGlobRef(IRIVal[node]);       { mov edi, scratch }
+-        for i := 0 to 7 do
++        for i := 0 to (IRSetWidth(node) div 4) - 1 do
+         begin
+           EmitB($8B); EmitB($42); EmitB(i * 4);      { mov eax, [edx+i*4] (lhs) }
+           EmitB($8B); EmitB($4E); EmitB(i * 4);      { mov ecx, [esi+i*4] (rhs) }
+@@ -4972,7 +4979,7 @@ begin
+         EmitB($5F);                                  { pop edi (lhs) }
+         EmitB($31); EmitB($DB);                      { xor ebx, ebx (violations) }
+         EmitB($31); EmitB($D2);                      { xor edx, edx (differences) }
+-        for i := 0 to 7 do
++        for i := 0 to (IRSetWidth(node) div 4) - 1 do
+         begin
+           EmitB($8B); EmitB($47); EmitB(i * 4);      { mov eax, [edi+i*4] (lhs) }
+           EmitB($8B); EmitB($4E); EmitB(i * 4);      { mov ecx, [esi+i*4] (rhs) }
+diff --git a/compiler/ir_codegen_aarch64.inc b/compiler/ir_codegen_aarch64.inc
+index f05ad647b..f5e34a572 100644
+--- a/compiler/ir_codegen_aarch64.inc
++++ b/compiler/ir_codegen_aarch64.inc
+@@ -1786,6 +1786,7 @@ var
+   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
+   classIdx, elemSize, lo, hi, decs, specialId, jnsOff, jmpDone, j, itemNode, p1, p2, p3: Integer;
+   pNilPos, pDonePos: Integer;
++  setN, setLd, setAl: Integer;   { set opcodes: eightbyte step count, the load/store size-bit delta and the ALU sf mask that select the narrow (w-register) form }
+   cdeclDropA64: Integer;   { bytes the C-ABI call arm must drop after the call }
+   cdeclBlkA64: Integer;    { AAPCS64 outgoing stack-argument block bytes }
+   a64Fp: Boolean;          { AAPCS64: this argument takes the FP bank }
+@@ -2854,7 +2855,7 @@ begin
+         else if op = Ord(tkIn) then
+         begin
+           { Set membership: x0 = element, x1 = set address. Result (0/1) -> x0. }
+-          EmitI32($F103FC1F);                   { cmp x0, #255 }
++          EmitI32($F100001F or ((IRSetOperandWidth(right) * 8 - 1) shl 10));  { cmp x0, #<max elem> }
+           p1 := CodeLen; EmitI32($54000008);    { b.hi out-of-range (patched) }
+           EmitI32($D343FC02);                   { lsr x2, x0, #3 (byte index) }
+           EmitI32($8B020022);                   { add x2, x1, x2 }
+@@ -4237,19 +4238,23 @@ begin
+ 
+     IR_SET_COPY:
+       begin
+-        { Copy 32-byte set from src (IRB) to dest (IRA). }
++        { Copy the set's whole bitmap from src (IRB) to dest (IRA). }
+         IREmitNodeAarch64(IRB[node]);            { x0 = source addr }
+         EmitI32($F81F0FE0);                      { str x0, [sp,#-16]! }
+         IREmitNodeAarch64(IRA[node]);            { x0 = dest addr }
+         EmitI32($AA0003E6);                      { mov x6, x0 (dst) }
+         EmitI32($F84107E5);                      { ldr x5, [sp],#16 (src) }
+-        EmitI32($D2800404);                      { mov x4, #32 }
++        EmitI32($D2800004 or (IRSetWidth(node) shl 5));   { mov x4, #<set width> }
+         EmitA64CopyBytes(4, 5, 6);
+       end;
+ 
+     IR_SET_BINOP:
+       begin
+-        { Set +/-/* over 4 qwords into the BSS scratch (IRIVal). }
++        { Set +/-/* over the operands' bitmap into the BSS scratch (IRIVal).
++          QWORD steps while there are whole eightbytes; a 4-byte tySmallSet
++          takes ONE w-register step instead, which is the SAME encodings with
++          one bit cleared -- the size field's high bit for a load/store, `sf`
++          for an ALU op. The wide path is byte-identical to what it was. }
+         IREmitNodeAarch64(IRA[node]);            { x0 = lhs addr }
+         EmitI32($F81F0FE0);                      { str x0, [sp,#-16]! }
+         IREmitNodeAarch64(IRB[node]);            { x0 = rhs addr }
+@@ -4258,23 +4263,29 @@ begin
+         EmitI32($18000043);                      { ldr w3, [pc+8] (scratch addr) }
+         EmitI32($14000002);                      { b .+8 }
+         EmitGlobRef(IRIVal[node]);
+-        for i := 0 to 3 do
++        setN := IRSetWidth(node) div 8;
++        setLd := 0; setAl := -1;
++        if setN = 0 then begin setN := 1; setLd := $40000000; setAl := $7FFFFFFF; end;
++        for i := 0 to setN - 1 do
+         begin
+-          EmitI32($F9400024 or (i * 1024));      { ldr x4, [x1, #i*8] }
+-          EmitI32($F9400045 or (i * 1024));      { ldr x5, [x2, #i*8] }
+-          if IntToTokenKind(IRC[node]) = tkPlus then EmitI32($AA050084)   { orr x4,x4,x5 }
+-          else if IntToTokenKind(IRC[node]) = tkStar then EmitI32($8A050084) { and x4,x4,x5 }
+-          else if IntToTokenKind(IRC[node]) = tkMinus then EmitI32($8A250084) { bic x4,x4,x5 }
+-          else if IntToTokenKind(IRC[node]) = tkSymDiff then EmitI32($CA050084); { eor x4,x4,x5 (`><`) }
+-          EmitI32($F9000064 or (i * 1024));      { str x4, [x3, #i*8] }
++          EmitI32(($F9400024 or (i * 1024)) - setLd);      { ldr x4, [x1, #i*8] }
++          EmitI32(($F9400045 or (i * 1024)) - setLd);      { ldr x5, [x2, #i*8] }
++          if IntToTokenKind(IRC[node]) = tkPlus then EmitI32($AA050084 and setAl)   { orr x4,x4,x5 }
++          else if IntToTokenKind(IRC[node]) = tkStar then EmitI32($8A050084 and setAl) { and x4,x4,x5 }
++          else if IntToTokenKind(IRC[node]) = tkMinus then EmitI32($8A250084 and setAl) { bic x4,x4,x5 }
++          else if IntToTokenKind(IRC[node]) = tkSymDiff then EmitI32($CA050084 and setAl); { eor x4,x4,x5 (`><`) }
++          EmitI32(($F9000064 or (i * 1024)) - setLd);      { str x4, [x3, #i*8] }
+         end;
+         EmitI32($AA0303E0);                      { mov x0, x3 (result addr) }
+       end;
+ 
+     IR_SET_CMP:
+       begin
+-        { Compare two 32-byte sets (4 qwords). x7 = differences, x9 = subset
+-          violations. }
++        { Compare two sets. x7 = differences, x9 = subset violations. Qword
++          steps, or one w-register step for a 4-byte tySmallSet -- see the
++          SET_BINOP arm above for why one bit does it. The cset tail needs no
++          variant: a w-register write zero-extends, so `cmp x7, #0` is still
++          the right question. }
+         IREmitNodeAarch64(IRA[node]);            { x0 = lhs addr }
+         EmitI32($F81F0FE0);                      { str x0, [sp,#-16]! }
+         IREmitNodeAarch64(IRB[node]);            { x0 = rhs addr }
+@@ -4282,21 +4293,24 @@ begin
+         EmitI32($F84107E1);                      { ldr x1, [sp],#16 (lhs) }
+         EmitI32($D2800007);                      { mov x7, #0 (differences) }
+         EmitI32($D2800009);                      { mov x9, #0 (violations) }
+-        for i := 0 to 3 do
++        setN := IRSetWidth(node) div 8;
++        setLd := 0; setAl := -1;
++        if setN = 0 then begin setN := 1; setLd := $40000000; setAl := $7FFFFFFF; end;
++        for i := 0 to setN - 1 do
+         begin
+-          EmitI32($F9400024 or (i * 1024));      { ldr x4, [x1, #i*8] (lhs) }
+-          EmitI32($F9400045 or (i * 1024));      { ldr x5, [x2, #i*8] (rhs) }
+-          EmitI32($CA050086);                    { eor x6, x4, x5 }
+-          EmitI32($AA0600E7);                    { orr x7, x7, x6 }
++          EmitI32(($F9400024 or (i * 1024)) - setLd);      { ldr x4, [x1, #i*8] (lhs) }
++          EmitI32(($F9400045 or (i * 1024)) - setLd);      { ldr x5, [x2, #i*8] (rhs) }
++          EmitI32($CA050086 and setAl);          { eor x6, x4, x5 }
++          EmitI32($AA0600E7 and setAl);          { orr x7, x7, x6 }
+           if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkLt)) then
+           begin
+-            EmitI32($8A250088);                  { bic x8, x4, x5 (lhs and not rhs) }
+-            EmitI32($AA080129);                  { orr x9, x9, x8 }
++            EmitI32($8A250088 and setAl);        { bic x8, x4, x5 (lhs and not rhs) }
++            EmitI32($AA080129 and setAl);        { orr x9, x9, x8 }
+           end
+           else if (IRC[node] = Ord(tkGe)) or (IRC[node] = Ord(tkGt)) then
+           begin
+-            EmitI32($8A2400A8);                  { bic x8, x5, x4 (rhs and not lhs) }
+-            EmitI32($AA080129);                  { orr x9, x9, x8 }
++            EmitI32($8A2400A8 and setAl);        { bic x8, x5, x4 (rhs and not lhs) }
++            EmitI32($AA080129 and setAl);        { orr x9, x9, x8 }
+           end;
+         end;
+         if IRC[node] = Ord(tkEq) then
+diff --git a/compiler/ir_codegen_arm32.inc b/compiler/ir_codegen_arm32.inc
+index da3875807..8190e6a17 100644
+--- a/compiler/ir_codegen_arm32.inc
++++ b/compiler/ir_codegen_arm32.inc
+@@ -2322,7 +2322,7 @@ begin
+         else if op = Ord(tkIn) then
+         begin
+           { Set membership: r0 = element, r1 = set address. Result (0/1) -> r0. }
+-          EmitI32($E35000FF);                   { cmp r0, #255 }
++          EmitI32($E3500000 or (IRSetOperandWidth(right) * 8 - 1));  { cmp r0, #<max elem> }
+           p1 := CodeLen; EmitI32($8A000000);    { bhi out-of-range (patched) }
+           EmitI32($E1A021A0);                   { lsr r2, r0, #3 (byte index) }
+           EmitI32($E7D12002);                   { ldrb r2, [r1, r2] (set byte) }
+@@ -4088,19 +4088,19 @@ begin
+ 
+     IR_SET_COPY:
+       begin
+-        { Copy 32-byte set from src (IRB) to dest (IRA). }
++        { Copy the set's whole bitmap from src (IRB) to dest (IRA). }
+         IREmitNodeArm32(IRB[node]);              { r0 = source addr }
+         EmitI32($E92D0001);                      { push {r0} }
+         IREmitNodeArm32(IRA[node]);              { r0 = dest addr }
+         EmitI32($E1A06000);                      { mov r6, r0 (dst) }
+         EmitI32($E8BD0020);                      { pop {r5} (src) }
+-        EmitLoadImmArm32(4, 32);                 { r4 = 32 }
++        EmitLoadImmArm32(4, IRSetWidth(node));   { r4 = the set's width }
+         EmitArm32CopyBytes(4, 5, 6);
+       end;
+ 
+     IR_SET_BINOP:
+       begin
+-        { Set +/-/* over 8 dwords into the BSS scratch (IRIVal). }
++        { Set +/-/* over the operands' bitmap dwords into the BSS scratch (IRIVal). }
+         IREmitNodeArm32(IRA[node]);              { r0 = lhs addr }
+         EmitI32($E92D0001);                      { push {r0} }
+         IREmitNodeArm32(IRB[node]);              { r0 = rhs addr }
+@@ -4109,7 +4109,7 @@ begin
+         EmitI32($E59F3000);                      { ldr r3, [pc] (scratch addr) }
+         EmitI32($EA000000);                      { b .+8 }
+         EmitGlobRef(IRIVal[node]);
+-        for i := 0 to 7 do
++        for i := 0 to (IRSetWidth(node) div 4) - 1 do
+         begin
+           EmitI32($E5914000 or (i * 4));         { ldr r4, [r1, #i*4] }
+           EmitI32($E5925000 or (i * 4));         { ldr r5, [r2, #i*4] }
+@@ -4133,7 +4133,7 @@ begin
+         EmitI32($E8BD0002);                      { pop {r1} (lhs) }
+         EmitI32($E3A06000);                      { mov r6, #0 (differences) }
+         EmitI32($E3A07000);                      { mov r7, #0 (violations) }
+-        for i := 0 to 7 do
++        for i := 0 to (IRSetWidth(node) div 4) - 1 do
+         begin
+           EmitI32($E5914000 or (i * 4));         { ldr r4, [r1, #i*4] (lhs) }
+           EmitI32($E5925000 or (i * 4));         { ldr r5, [r2, #i*4] (rhs) }
+diff --git a/compiler/ir_codegen_riscv32.inc b/compiler/ir_codegen_riscv32.inc
+index 4181d7d8c..a9b6e8614 100644
+--- a/compiler/ir_codegen_riscv32.inc
++++ b/compiler/ir_codegen_riscv32.inc
+@@ -1036,12 +1036,12 @@ begin
+   end
+   else if cls = A32_SET then
+   begin
+-    { By-value set: a0 is the 32-byte set's ADDRESS; push all 8 words inline so
++    { By-value set: a0 is the set's ADDRESS; push its whole bitmap inline so
+       the callee's spill can rebuild it. One address word left the callee reading
+       its own slot as set bytes — `CountSet([eA,eC,eD])` answered 0 here where
+       FPC says 3. }
+     IREmitNodeRISCV32(IRA[argNode]);                { a0 = set address }
+-    for i := 0 to 7 do
++    for i := 0 to Arg32Words(cls, procIdx, paramIdx) - 1 do
+     begin
+       rv32_lw(reg_t1, reg_a0, i * 4);
+       rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_t1, reg_sp, 0);
+@@ -1389,6 +1389,7 @@ var
+                              PARAMETER index (Self is 0) — `j` carries the class
+                              and then the ctor, so it cannot also count params }
+   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
++  setW: Integer;      { words of a by-value SET argument's bitmap -- the PARAMETER's width (SetSlotBytes), one word for a tySmallSet and eight for a tySet }
+   tk: TTypeKind;
+   sgn, savedLVW: Boolean;
+   sVal: AnsiString;
+@@ -2589,7 +2590,7 @@ begin
+             in-range flag (elem < 256) gates both the byte offset (so an
+             out-of-range element never derefs past the 32-byte set) and the
+             result bit. Result 0/1 -> a0. }
+-          rv32_sltiu(reg_t2, reg_a0, 256);        { t2 = in-range (0/1) }
++          rv32_sltiu(reg_t2, reg_a0, IRSetOperandWidth(right) * 8);  { t2 = in-range (0/1) }
+           rv32_sub(reg_t0, reg_zero, reg_t2);     { t0 = 0 or 0xFFFFFFFF mask }
+           rv32_srli(reg_t1, reg_a0, 3);           { byte index }
+           rv32_and(reg_t1, reg_t1, reg_t0);       { clamp to 0 when out of range }
+@@ -3128,21 +3129,22 @@ begin
+           end
+           else if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+              (i < Procs[procIdx].ParamCount) and
+-             (Procs[procIdx].Params[i].TypeKind = tySet) and
++             TypeIsSet(Procs[procIdx].Params[i].TypeKind) and
+              (not Procs[procIdx].Params[i].IsRef) and
+              (not Procs[procIdx].Params[i].IsArray) then
+           begin
+             { Set by-value param: the arg value is the 32-byte set's ADDRESS —
+-              push all 8 words inline (mirrors i386) so the callee spill can
+-              rebuild the full set in its 32-byte param slot. One address word
++              push its whole bitmap inline, a word at a time (mirrors i386), so the
++              callee spill can rebuild the set in its own param slot. One address word
+               would leave the callee reading its own slot as set bytes. }
+             IREmitNodeRISCV32(IRA[argNode]);        { a0 = set address }
+-            for j := 0 to 7 do
++            setW := SetSlotBytes(Procs[procIdx].Params[i].TypeKind) div 4;
++            for j := 0 to setW - 1 do
+             begin
+               rv32_lw(reg_t1, reg_a0, j * 4);
+               rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_t1, reg_sp, 0);
+             end;
+-            Inc(nArgs, 8);
++            Inc(nArgs, setW);
+           end
+           else if (procIdx >= 0) and
+              (i < Procs[procIdx].ParamCount) and
+@@ -3796,12 +3798,13 @@ begin
+ 
+     IR_SET_COPY:
+       begin
+-        { Copy the 32-byte set from src (IRB) to dest (IRA), 8 words. }
++        { Copy the set's whole bitmap from src (IRB) to dest (IRA), a word
++          at a time -- eight words for a tySet, one for a tySmallSet. }
+         IREmitNodeRISCV32(IRB[node]);            { a0 = source addr }
+         rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+         IREmitNodeRISCV32(IRA[node]);            { a0 = dest addr }
+         rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { a1 = src }
+-        for i := 0 to 7 do
++        for i := 0 to (IRSetWidth(node) div 4) - 1 do
+         begin
+           rv32_lw(reg_t0, reg_a1, i * 4);
+           rv32_sw(reg_t0, reg_a0, i * 4);
+@@ -3810,14 +3813,14 @@ begin
+ 
+     IR_SET_BINOP:
+       begin
+-        { Set +/-/* over 8 words into the BSS scratch (IRIVal). }
++        { Set +/-/* over the operands' bitmap words into the BSS scratch (IRIVal). }
+         IREmitNodeRISCV32(IRA[node]);            { a0 = lhs addr }
+         rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+         IREmitNodeRISCV32(IRB[node]);            { a0 = rhs addr }
+         rv32_addi(reg_a1, reg_a0, 0);            { a1 = rhs }
+         rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { a0 = lhs }
+         EmitLoadGlobAddrRISCV32(reg_a2, Integer(IRIVal[node]));     { a2 = scratch }
+-        for i := 0 to 7 do
++        for i := 0 to (IRSetWidth(node) div 4) - 1 do
+         begin
+           rv32_lw(reg_t0, reg_a0, i * 4);
+           rv32_lw(reg_t1, reg_a1, i * 4);
+@@ -3840,7 +3843,8 @@ begin
+     IR_SET_CMP:
+       begin
+         { Compare two 32-byte sets. t3 = accumulated differences, t4 =
+-          subset-direction violations (mirrors the aarch64 shape, 8 words). }
++          subset-direction violations (mirrors the aarch64 shape), over as
++          many words as the operands' storage class has. }
+         IREmitNodeRISCV32(IRA[node]);            { a0 = lhs addr }
+         rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+         IREmitNodeRISCV32(IRB[node]);            { a0 = rhs addr }
+@@ -3848,7 +3852,7 @@ begin
+         rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { a0 = lhs }
+         rv32_addi(reg_t3, reg_zero, 0);          { differences }
+         rv32_addi(reg_t4, reg_zero, 0);          { violations }
+-        for i := 0 to 7 do
++        for i := 0 to (IRSetWidth(node) div 4) - 1 do
+         begin
+           rv32_lw(reg_t0, reg_a0, i * 4);        { lhs word }
+           rv32_lw(reg_t1, reg_a1, i * 4);        { rhs word }
+diff --git a/compiler/ir_codegen_wasm32.inc b/compiler/ir_codegen_wasm32.inc
+index aa83cc388..27282d5f6 100644
+--- a/compiler/ir_codegen_wasm32.inc
++++ b/compiler/ir_codegen_wasm32.inc
+@@ -215,6 +215,7 @@ begin
+     tyNativeUInt: WasmTypeKindName := 'NativeUInt';
+     tyExtended: WasmTypeKindName := 'Extended';
+     tySet:     WasmTypeKindName := 'set';
++    tySmallSet: WasmTypeKindName := 'smallset';
+     tyAuto:    WasmTypeKindName := 'an inferred type';
+     { The two kinds tyString was split into. A message that says `type kind 26`
+       sends the reader to the enum; one that says ShortString sends them to the
+diff --git a/compiler/ir_codegen_xtensa.inc b/compiler/ir_codegen_xtensa.inc
+index a36557395..15fe32ff8 100644
+--- a/compiler/ir_codegen_xtensa.inc
++++ b/compiler/ir_codegen_xtensa.inc
+@@ -1585,6 +1585,7 @@ var
+   argCls: Integer;    { Arg32Class of the argument being pushed on the virtual /
+                         indirect ladders -- see those arms }
+   scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
++  setW: Integer;      { words of a by-value SET argument's bitmap -- the PARAMETER's width (SetSlotBytes), one word for a tySmallSet and eight for a tySet }
+   tk: TTypeKind;
+   sgn, savedLVW: Boolean;
+   sVal: AnsiString;
+@@ -2599,7 +2600,9 @@ begin
+             check rather than riscv32's branch-free mask, because xtensa has no
+             sltiu and no zero register — the mask costs more instructions here
+             than the branch does. Same semantics: an element outside 0..255
+-            yields 0 and never dereferences past the 32-byte set, and `bgeu`
++            yields 0 and never dereferences past the SET (the bound is the
++            set's own width, not a constant 256 -- 28 bytes past a
++            tySmallSet), and `bgeu`
+             catches a negative element as a huge unsigned in one compare, as
+             riscv32's `sltiu` does.
+ 
+@@ -2608,7 +2611,7 @@ begin
+             which means anything that so much as USES typinfo failed to compile
+             for this target, one layer under the rtti_reg arm above. }
+           EmitAsmXtensa(['movi a5, 0',
+-                         'movi a4, 256',
++                         'movi a4, ' + AIntToStr(IRSetOperandWidth(right) * 8),
+                          'bgeu a2, a4, .done',
+                          'movi a6, 3',
+                          'ssr a6',
+@@ -2716,16 +2719,17 @@ begin
+             end
+             else if argCls = A32_SET then
+             begin
+-              { The set's VALUE is its address; push all eight words inline, as
++              { The set's VALUE is its address; push its whole bitmap inline, as
+                 the direct path does, so the callee spill can rebuild it. }
+               IREmitNodeXtensa(IRA[argNode]);                   { a2 = set address }
+               xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
+-              for hi := 0 to 7 do
++              setW := Arg32Words(argCls, j, i);
++              for hi := 0 to setW - 1 do
+               begin
+                 xtensa_l32i(reg_xtensa_a2, reg_xtensa_a3, hi * 4);
+                 XtensaPushA2;
+               end;
+-              Inc(nArgs, 8);
++              Inc(nArgs, setW);
+             end
+             else
+             begin
+@@ -3287,12 +3291,13 @@ begin
+           end
+           else if (procIdx >= 0) and (not ProcExternal[procIdx]) and
+              (i < Procs[procIdx].ParamCount) and
+-             (Procs[procIdx].Params[i].TypeKind = tySet) and
++             TypeIsSet(Procs[procIdx].Params[i].TypeKind) and
+              (not Procs[procIdx].Params[i].IsRef) and
+              (not Procs[procIdx].Params[i].IsArray) then
+           begin
+             { Set by-value param: the arg VALUE is the 32-byte set's ADDRESS, so
+-              push all 8 words inline (mirrors i386 and riscv32) and let the
++              push its whole bitmap inline, a word at a time (mirrors i386 and
++              riscv32), and let the
+               callee spill rebuild the set in its own 32-byte param slot. One
+               address word leaves the callee reading its own uninitialised slot
+               as set bytes.
+@@ -3306,12 +3311,13 @@ begin
+               and could not run here until IR_SET_COPY landed minutes ago. }
+             IREmitNodeXtensa(IRA[argNode]);        { a2 = set address }
+             xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
+-            for j := 0 to 7 do
++            setW := SetSlotBytes(Procs[procIdx].Params[i].TypeKind) div 4;
++            for j := 0 to setW - 1 do
+             begin
+               xtensa_l32i(reg_xtensa_a2, reg_xtensa_a3, j * 4);
+               XtensaPushA2;
+             end;
+-            Inc(nArgs, 8);
++            Inc(nArgs, setW);
+           end
+           else if (procIdx >= 0) and
+              (i < Procs[procIdx].ParamCount) and (i < MAX_PROC_PARAMS) and
+@@ -3740,12 +3746,13 @@ begin
+ 
+     IR_SET_COPY:
+       begin
+-        { Copy the 32-byte set from src (IRB) to dest (IRA), 8 words. }
++        { Copy the set's whole bitmap from src (IRB) to dest (IRA), a word
++          at a time -- eight words for a tySet, one for a tySmallSet. }
+         IREmitNodeXtensa(IRB[node]);              { a2 = source addr }
+         XtensaPushA2;
+         IREmitNodeXtensa(IRA[node]);              { a2 = dest addr }
+         XtensaPopA3;                              { a3 = src }
+-        for i := 0 to 7 do
++        for i := 0 to (IRSetWidth(node) div 4) - 1 do
+         begin
+           xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, i * 4);
+           xtensa_s32i(reg_xtensa_a4, reg_xtensa_a2, i * 4);
+@@ -3754,7 +3761,7 @@ begin
+ 
+     IR_SET_BINOP:
+       begin
+-        { Set +/-/*/>< over 8 words into the BSS scratch (IRIVal). }
++        { Set +/-/*/>< over the operands' bitmap words into the BSS scratch (IRIVal). }
+         IREmitNodeXtensa(IRA[node]);              { a2 = lhs addr }
+         XtensaPushA2;
+         IREmitNodeXtensa(IRB[node]);              { a2 = rhs addr }
+@@ -3765,7 +3772,7 @@ begin
+           the loop rather than materialising it eight times. }
+         if IntToTokenKind(IRC[node]) = tkMinus then
+           xtensa_movi(reg_xtensa_a8, -1);
+-        for i := 0 to 7 do
++        for i := 0 to (IRSetWidth(node) div 4) - 1 do
+         begin
+           xtensa_l32i(reg_xtensa_a5, reg_xtensa_a2, i * 4);
+           xtensa_l32i(reg_xtensa_a6, reg_xtensa_a3, i * 4);
+@@ -3801,7 +3808,7 @@ begin
+         if (IRC[node] = Ord(tkLe)) or (IRC[node] = Ord(tkLt)) or
+            (IRC[node] = Ord(tkGe)) or (IRC[node] = Ord(tkGt)) then
+           xtensa_movi(reg_xtensa_a11, -1);        { the `not` mask, hoisted }
+-        for i := 0 to 7 do
++        for i := 0 to (IRSetWidth(node) div 4) - 1 do
+         begin
+           xtensa_l32i(reg_xtensa_a4, reg_xtensa_a2, i * 4);   { lhs word }
+           xtensa_l32i(reg_xtensa_a5, reg_xtensa_a3, i * 4);   { rhs word }
+diff --git a/compiler/pasparser_call.inc b/compiler/pasparser_call.inc
+index c9563e23e..d5585a488 100644
+--- a/compiler/pasparser_call.inc
++++ b/compiler/pasparser_call.inc
+@@ -1293,6 +1293,12 @@ function OverloadArgRank(pTk, aTk: TTypeKind): Integer;
+ begin
+   if pTk = aTk then begin Result := 0; Exit; end;
+ 
++  { The two set storage classes rank as an EXACT match: they are one type in two
++    widths and a set literal always arrives as the wide one, so ranking them
++    "merely compatible" would let an unrelated candidate outrank the only real
++    one. }
++  if TypeIsSet(pTk) and TypeIsSet(aTk) then begin Result := 0; Exit; end;
++
+   { char -> string, and string flavour -> string flavour (a frozen tyString
+     literal onto a managed AnsiString param) }
+   if ((pTk = tyString) or (pTk = tyAnsiString)) and
+diff --git a/compiler/pasparser_decl.inc b/compiler/pasparser_decl.inc
+index 2d59f36de..e7e4e5610 100644
+--- a/compiler/pasparser_decl.inc
++++ b/compiler/pasparser_decl.inc
+@@ -108,6 +108,11 @@ begin
+   LastTypeSetElemTk := Ord(elemTk);
+   LastTypeSetElemLo := elemLo;
+   LastTypeSetElemHi := elemHi;
++  { ...and, from those bounds, the STORAGE CLASS. Decided here so that a var, a
++    field, a parameter and a named alias spelled from the same `set of X` all
++    get the same width without any of them re-deriving it. }
++  LastTypeSetKind := Ord(SetStorageKind(LastTypeSetEnumId, LastTypeSetElemTk,
++                                        elemLo, elemHi));
+ end;
+ 
+ procedure ParseEnumMembers(etid: Integer);
+@@ -493,7 +498,7 @@ begin
+         Next;
+         Expect(tkOf, 'of');
+         ParseSetElemSpec;
+-        Result := tySet;
++        Result := IntToTypeKind(LastTypeSetKind);
+         Exit;
+       end;
+       { EVERY builtin type NAME below is skipped when a source/RTL alias of that name exists. The
+@@ -791,7 +796,7 @@ begin
+             aliasIdx := FindTypeAlias(lo);
+             if aliasIdx >= 0 then
+             begin
+-              if AliasTk[aliasIdx] = Ord(tySet) then
++              if TypeIsSet(IntToTypeKind(AliasTk[aliasIdx])) then
+               begin
+                 { Named set type: element enum kept in AliasElemTk but not
+                   exposed as LastTypeEnumId, so the property kind stays SET.
+@@ -800,7 +805,8 @@ begin
+                 LastTypeSetElemTk := AliasSetElemTk[aliasIdx];
+                 LastTypeSetElemLo := AliasSetElemLo[aliasIdx];
+                 LastTypeSetElemHi := AliasSetElemHi[aliasIdx];
+-                Result := tySet;
++                LastTypeSetKind := AliasTk[aliasIdx];
++                Result := IntToTypeKind(AliasTk[aliasIdx]);
+               end
+               else if AliasTk[aliasIdx] = Ord(tyPointer) then
+               begin
+@@ -1287,7 +1293,7 @@ begin
+       SymProcSig[idx] := LastTypeProcSig;
+       SymSyncTypeRef(idx);
+     end
+-    else if VDTk = tySet then
++    else if TypeIsSet(VDTk) then
+     begin
+       SymSetEnumId[idx] := LastTypeSetEnumId;
+       SymSetElemTk[idx] := LastTypeSetElemTk;
+@@ -2679,7 +2685,7 @@ begin
+                 Inc(PendingInitCount);
+               end;
+             end
+-            else if (cElemTk = tySet) and
++            else if TypeIsSet(cElemTk) and
+                     ((CurTok.Kind = tkLBrack) or
+                      ((CurTok.Kind = tkIdent) and (FindSetConst(CurTok.SVal) >= 0))) then
+             begin
+@@ -2712,7 +2718,7 @@ begin
+                 LocalInitFOff[LocalInitCount] := -1;
+                 LocalInitKind[LocalInitCount] := 9;      { AN_SET_CONST_REF }
+                 LocalInitVal[LocalInitCount]  := cSetOff;
+-                LocalInitTk[LocalInitCount]   := Ord(tySet);
++                LocalInitTk[LocalInitCount]   := Ord(cElemTk);
+                 Inc(LocalInitCount);
+               end
+               else
+@@ -2723,7 +2729,7 @@ begin
+                 PendingInitFOff[PendingInitCount] := -1;
+                 PendingInitKind[PendingInitCount] := 9;  { AN_SET_CONST_REF }
+                 PendingInitVal[PendingInitCount]  := cSetOff;
+-                PendingInitTk[PendingInitCount]   := Ord(tySet);
++                PendingInitTk[PendingInitCount]   := Ord(cElemTk);
+                 Inc(PendingInitCount);
+               end;
+             end
+@@ -2767,7 +2773,7 @@ begin
+       begin
+         cTk := ParseTypeKind;
+         cEnumId := LastTypeEnumId;
+-        if cTk = tySet then
++        if TypeIsSet(cTk) then
+         begin
+           { Typed set constant `const S: TS = [..]`: bake the 32-byte mask and
+             record it in the SetConst table; uses resolve to AN_SET_CONST_REF.
+@@ -6293,7 +6299,8 @@ begin
+         Expect(tkOf, 'of');
+         ParseSetElemSpec;
+         RegisterSetAlias(tnOff, tnLen, LastTypeSetEnumId, LastTypeSetElemTk,
+-                         LastTypeSetElemLo, LastTypeSetElemHi);
++                         LastTypeSetElemLo, LastTypeSetElemHi,
++                         IntToTypeKind(LastTypeSetKind));
+         while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
+       end
+       else if CurTok.Kind = tkArray then
+diff --git a/compiler/pasparser_expr.inc b/compiler/pasparser_expr.inc
+index 000f805d0..238944b48 100644
+--- a/compiler/pasparser_expr.inc
++++ b/compiler/pasparser_expr.inc
+@@ -5853,10 +5853,10 @@ begin
+         if (not IsNodeArray(valNode)) and
+            (not ((ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
+                  (ASTIVal[valNode] < SymCount) and Syms[ASTIVal[valNode]].IsArray)) and
+-           ((IntToTypeKind(ASTTk[valNode]) = tySet) or
++           (TypeIsSet(IntToTypeKind(ASTTk[valNode])) or
+             ((ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
+              (ASTIVal[valNode] < SymCount) and
+-             (Syms[ASTIVal[valNode]].TypeKind = tySet))) then
++             TypeIsSet(Syms[ASTIVal[valNode]].TypeKind))) then
+           ErrorRecover('Length: a set has no length (did you mean the element count?)');
+         { Length of a whole 1-D static array is a compile-time constant (FPC
+           too): the runtime -tkLength path reads a [data-8] length header,
+@@ -9306,8 +9306,10 @@ begin
+     end
+     else if (op = tkAnd) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
+       ASTTk[node] := Ord(tyBoolean)
+-    else if (ASTTk[left] = Ord(tySet)) or (ASTTk[right] = Ord(tySet)) then
+-      ASTTk[node] := Ord(tySet)
++    else if TypeIsSet(IntToTypeKind(ASTTk[left])) or TypeIsSet(IntToTypeKind(ASTTk[right])) then
++      { the NARROWER storage class, so a chain of set operations keeps the
++        width its operands can actually hold -- see SetNarrower }
++      ASTTk[node] := Ord(SetNarrower(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
+     else if op = tkSlash then
+     begin
+       ASTTk[node] := Ord(FloatBinopResultTk(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])));  { '/' produces native-depth float }
+@@ -9762,8 +9764,8 @@ begin
+             TypeIsOrdinal(IntToTypeKind(ASTTk[left])) and
+             (ASTTk[right] = Ord(tyPointer)) then
+       ASTTk[node] := Ord(tyPointer)
+-    else if (ASTTk[left] = Ord(tySet)) or (ASTTk[right] = Ord(tySet)) then
+-      ASTTk[node] := Ord(tySet)
++    else if TypeIsSet(IntToTypeKind(ASTTk[left])) or TypeIsSet(IntToTypeKind(ASTTk[right])) then
++      ASTTk[node] := Ord(SetNarrower(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
+     else if ((op = tkOr) or (op = tkXor)) and (ASTTk[left] = Ord(tyBoolean)) and (ASTTk[right] = Ord(tyBoolean)) then
+       ASTTk[node] := Ord(tyBoolean)
+     else if (ASTTk[left] = Ord(tySingle)) or (ASTTk[left] = Ord(tyDouble)) or (ASTTk[left] = Ord(tyExtended)) or
+diff --git a/compiler/pasparser_lval.inc b/compiler/pasparser_lval.inc
+index a474bf9cc..f14c79a67 100644
+--- a/compiler/pasparser_lval.inc
++++ b/compiler/pasparser_lval.inc
+@@ -3561,7 +3561,7 @@ begin
+     if ParamIsVarRecArrayAt(i, argNo) then hasVarRec := True
+     else if (argNo >= 0) and (argNo < Procs[i].ParamCount) and
+             (not Procs[i].Params[argNo].IsArray) and
+-            (Procs[i].Params[argNo].TypeKind = tySet) then hasSet := True;
++            TypeIsSet(Procs[i].Params[argNo].TypeKind) then hasSet := True;
+     i := ProcHashNext[i];
+   end;
+   Result := hasVarRec and not hasSet;
+@@ -6998,7 +6998,7 @@ begin
+     plausible 0 / 2147483647 — which is why the subrange bounds were plumbed
+     through rather than the arm being written without them.
+     bug-p-low-and-high-of-a-set-do-not-answer-the-element-bounds }
+-  if tkOut = tySet then
++  if TypeIsSet(tkOut) then
+   begin
+     tkOut := IntToTypeKind(SymSetElemTk[symIdx]);
+     if SymSetElemHi[symIdx] >= SymSetElemLo[symIdx] then
+diff --git a/compiler/pasparser_proc.inc b/compiler/pasparser_proc.inc
+index 2652cb37b..dc37447db 100644
+--- a/compiler/pasparser_proc.inc
++++ b/compiler/pasparser_proc.inc
+@@ -986,7 +986,7 @@ begin
+         ptypesRec[i] := LastTypeRecId;
+         { LastTypeSetEnumId is only meaningful when the type just parsed WAS a
+           set — it is not cleared for other kinds. }
+-        if tk = tySet then ptypesSetEnum[i] := LastTypeSetEnumId
++        if TypeIsSet(tk) then ptypesSetEnum[i] := LastTypeSetEnumId
+         else ptypesSetEnum[i] := -1;
+         { ...and the same rule for a plain enum param: LastTypeEnumId is only
+           meaningful when the type just parsed WAS one. }
+@@ -1507,7 +1507,7 @@ begin
+         ProcParamElemDynDepth[procIdx * MAX_PROC_PARAMS + i] := pElemDynDepth[i];
+         if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
+           ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
+-        if ptypes[i] = tySet then
++        if TypeIsSet(ptypes[i]) then
+           ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
+         if ptypes[i] = tyAnsiString then
+           ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
+@@ -1849,7 +1849,7 @@ begin
+             ProcParamElemDynDepth[procIdx * MAX_PROC_PARAMS + i] := pElemDynDepth[i];
+             if (ptypes[i] = tyClass) or (ptypes[i] = tyRecord) then
+               ProcParamRecId[procIdx * MAX_PROC_PARAMS + i] := ptypesRec[i];
+-            if ptypes[i] = tySet then
++            if TypeIsSet(ptypes[i]) then
+               ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
+             if ptypes[i] = tyAnsiString then
+               ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
+@@ -2252,7 +2252,7 @@ begin
+       ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + i] := pElemRowLen[i];
+       ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + i] := pElemRowLo[i];
+       ProcParamElemDynDepth[procIdx * MAX_PROC_PARAMS + i] := pElemDynDepth[i];
+-      if ptypes[i] = tySet then
++      if TypeIsSet(ptypes[i]) then
+         ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
+       if ptypes[i] = tyAnsiString then
+         ProcParamStrElemTk[procIdx * MAX_PROC_PARAMS + i] := ptypesStrElemTk[i];
+diff --git a/compiler/pasparser_stmt.inc b/compiler/pasparser_stmt.inc
+index 451cb7762..79a60afb9 100644
+--- a/compiler/pasparser_stmt.inc
++++ b/compiler/pasparser_stmt.inc
+@@ -905,7 +905,7 @@ begin
+   Expect(tkDo, 'do');
+   bodyNode := ParseStatementAST;
+   Result := BuildForInSetLoop(varIdx, SymSetEnumId[setSym], SymSetElemTk[setSym],
+-                              GenMakeIdent(setSym, tySet), bodyNode);
++                              GenMakeIdent(setSym, Syms[setSym].TypeKind), bodyNode);
+ end;
+ 
+ { for x in <string|static array|dynarray|open-array var> do BODY:
+@@ -1023,7 +1023,7 @@ var
+   recId: Integer;
+ begin
+   { set var → membership-scan over the element base-type range }
+-  if Syms[contSym].TypeKind = tySet then
++  if TypeIsSet(Syms[contSym].TypeKind) then
+   begin
+     Result := ParseForInSetAST(varIdx, contSym);
+     Exit;
+@@ -1268,7 +1268,7 @@ begin
+   { set-valued qualified source (obj.field / Self.field of `set of <enum|Char>`)
+     → membership scan, equivalent to the symbol-based ParseForInSetAST. The set
+     node is cloned so the loop builder owns a private copy. }
+-  if contTk = tySet then
++  if TypeIsSet(contTk) then
+   begin
+     { Inline `for var x in obj.field` over a set: backfill before the body is
+       parsed, mirroring ParseForInSetAST (feature-inline-loop-var-rio). }
+@@ -2260,7 +2260,7 @@ begin
+       Inc(CurGenSlotNext, (RecSize(Syms[i].RecName) + 7) div 8);
+       Continue;
+     end;
+-    if Syms[i].IsArray or (tk = tySet) then
++    if Syms[i].IsArray or TypeIsSet(tk) then
+       { NAME the local and its type kind. Without them this said only that some
+         local somewhere in the body was of an unsupported kind, and the ones that
+         actually trip it are HIDDEN desugar temps a reader cannot see in the
+@@ -5478,7 +5478,7 @@ begin
+         castTk := IntToTypeKind(ASTTk[valNode]);
+         if TypeIsFrozenString(castTk) or (castTk = tyAnsiString) or
+            (castTk = tyString) or (castTk = tyRecord) or (castTk = tyClass) or
+-           (castTk = tySet) or (castTk = tyVariant) then
++           TypeIsSet(castTk) or (castTk = tyVariant) then
+           ErrorRecover('Inc/Dec needs an ordinal or a pointer, not '
+                        + TypeKindSpelling(castTk));
+         opNode := AllocNode(AN_BINOP);
+diff --git a/compiler/rtti_emit.inc b/compiler/rtti_emit.inc
+index 5ef23967a..da79b3df2 100644
+--- a/compiler/rtti_emit.inc
++++ b/compiler/rtti_emit.inc
+@@ -277,7 +277,7 @@ begin
+   if UPropEnumId[pri] >= 0 then kind := RTTI_KIND_ENUM
+   else if tk = Ord(tyString) then kind := RTTI_KIND_STRING
+   else if tk = Ord(tyClass) then kind := RTTI_KIND_CLASS
+-  else if tk = Ord(tySet) then kind := RTTI_KIND_SET
++  else if TypeIsSet(IntToTypeKind(tk)) then kind := RTTI_KIND_SET
+   else if tk = Ord(tyRecord) then
+   begin
+     tci := UPropRec[pri] - REC_UCLASS_BASE;
+@@ -925,7 +925,7 @@ begin
+       Result := 1;                                        { tkInteger }
+     Ord(tyChar): Result := 2;                              { tkChar }
+     Ord(tySingle), Ord(tyDouble), Ord(tyExtended): Result := 4; { tkFloat }
+-    Ord(tySet): Result := 5;                               { tkSet }
++    Ord(tySet), Ord(tySmallSet): Result := 5;              { tkSet }
+     Ord(tyShortString), Ord(tyFixedString), Ord(tyString): Result := 7; { tkSString }
+     Ord(tyAnsiString): Result := 9;                        { tkAString }
+     Ord(tyVariant): Result := 11;                          { tkVariant }
+@@ -961,7 +961,7 @@ begin
+     Ord(tySingle):      Result := 'Single';
+     Ord(tyDouble):      Result := 'Double';
+     Ord(tyExtended):    Result := 'Extended';
+-    Ord(tySet):         Result := 'Set';
++    Ord(tySet), Ord(tySmallSet): Result := 'Set';
+     Ord(tyVariant):     Result := 'Variant';
+     Ord(tyAnsiString):  Result := 'AnsiString';
+     Ord(tyShortString), Ord(tyFixedString), Ord(tyString): Result := 'ShortString';
+@@ -1203,7 +1203,7 @@ begin
+       else kind := PxxTkToFPCKind(AliasTk[ci]);       { subrange -> 1, set -> 5, … }
+       PatchDataU64(hdr + 0, kind);
+       if (AliasProcSig[ci] >= 0) or (AliasStrCap[ci] > 0) or AliasIsSub[ci] or
+-         (AliasTk[ci] = Ord(tySet)) then
++         TypeIsSet(IntToTypeKind(AliasTk[ci])) then
+         nm := GetSliceName(AliasNOff[ci], AliasNLen[ci])   { defines a type: own name }
+       else
+         nm := TypeInfoOrdName(AliasTk[ci]);                { plain rename: pass through }
+@@ -1236,7 +1236,7 @@ begin
+           tdOff := EmitTypeData(hdr, ordTy, fltTy, AliasSubLo[ci],
+                                 AliasSubHi[ci], 0, 0, 0, 0, -1);
+       end
+-      else if AliasTk[ci] = Ord(tySet) then
++      else if TypeIsSet(IntToTypeKind(AliasTk[ci])) then
+       begin
+         elemTk   := AliasSetElemTk[ci];
+         elemEnum := AliasElemTk[ci];   { for a SET alias this slot is the element ENUM id, or -1 }
+diff --git a/compiler/symtab.inc b/compiler/symtab.inc
+index 6ed7bc6f6..34fef79f8 100644
+--- a/compiler/symtab.inc
++++ b/compiler/symtab.inc
+@@ -239,6 +239,10 @@ function TypeIsFrozenString(tk: TTypeKind): Boolean; forward;
+   RecFieldByteSize -- which is above both -- is one of the callers that has one.
+   bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more }
+ function SizeOfSlot(tk: TTypeKind; cap: Integer): Integer; forward;
++{ The set family predicate and the set bitmap width, both defined further down;
++  AddUField (above them) asks whether a field is a set. }
++function TypeIsSet(tk: TTypeKind): Boolean; forward;
++function SetSlotBytes(tk: TTypeKind): Integer; forward;
+ 
+ procedure RegisterGeneralAlias(noff, nlen, tk, rec: Integer);
+ begin
+@@ -426,9 +430,12 @@ begin
+ end;
+ 
+ procedure RegisterSetAlias(noff, nlen, elemEnumId, elemTk: Integer;
+-                          elemLo, elemHi: Int64);
++                          elemLo, elemHi: Int64; setTk: TTypeKind);
+ { Named set type: TFooSet = set of TFoo. Stored in the alias table with
+-  AliasTk=tySet; AliasElemTk holds the element enum id (or -1) and
++  AliasTk = the set STORAGE CLASS the element spec chose (tySet or tySmallSet
++  -- passed in rather than assumed, because an alias is where a set type is
++  almost always spelled and the entity that later uses it sees only the name);
++  AliasElemTk holds the element enum id (or -1) and
+   AliasSetElemTk the element TTypeKind ordinal — a `set of Char` or
+   `set of 0..7` has no enum id, and losing its element KIND is what made
+   `for c in cs` unusable over a named set type. }
+@@ -438,7 +445,7 @@ begin
+   AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
+   AliasPtrElemAlias[AliasCount] := -1;   { ...and pointee-is-a-named-pointer-alias, same rule }
+   AliasNLen[AliasCount] := nlen;
+-  AliasTk[AliasCount] := Ord(tySet);
++  AliasTk[AliasCount] := Ord(setTk);
+   AliasElemTk[AliasCount] := elemEnumId;
+   AliasSetElemTk[AliasCount] := elemTk;
+   AliasSetElemLo[AliasCount] := elemLo;
+@@ -1798,7 +1805,7 @@ begin
+     Pascal type was parsed last. The Pascal field-decl site stamps this, the way
+     SymEnumId is stamped at var-decl sites and not inside AllocVar. }
+   UFldEnumId[fi] := -1;
+-  if tk = Ord(tySet) then
++  if TypeIsSet(IntToTypeKind(tk)) then
+   begin
+     UFldSetEnumId[fi] := LastTypeSetEnumId;
+     UFldSetElemTk[fi] := LastTypeSetElemTk;
+@@ -3139,7 +3146,8 @@ begin
+     18: Result := 4;  { tySingle }
+     19: Result := 8;  { tyDouble }
+     20: Result := 10; { tyExtended }
+-    21: Result := 32; { tySet }
++    21: Result := 32; { tySet — the WIDE set storage class }
++    32: Result := 4;  { tySmallSet — elements all fit 0..31 }
+     22: Result := 16; { tyVariant — 8-byte tag + 8-byte payload }
+     23: Result := TARGET_PTR_SIZE; { tyAnsiString }
+     24: Result := 0;  { tyAuto }
+@@ -3163,6 +3171,96 @@ begin
+   TypeIsPromoInt := (tk = tyPromoInt32) or (tk = tyPromoInt64);
+ end;
+ 
++{ The SET family. One semantic type in two storage classes -- see tySmallSet in
++  defs.inc. Widen every existing `= tySet` test to this predicate: a set is a
++  set whichever bitmap width it carries, and the width is asked for separately
++  through SetSlotBytes / TypeSlotSize. }
++function TypeIsSet(tk: TTypeKind): Boolean;
++begin
++  TypeIsSet := (tk = tySet) or (tk = tySmallSet);
++end;
++
++function SetSlotBytes(tk: TTypeKind): Integer;
++{ Bytes of a set's BITMAP, for the ops that walk it (copy, union/intersect/
++  difference, compare). Identical to TypeSlotSize for the two set kinds; it
++  exists so a reader of a set opcode sees the width named as a set width
++  rather than as a slot size, and so a non-set kind reaching a set opcode
++  answers the safe wide value instead of a scalar's 1, 2 or 8. }
++begin
++  if tk = tySmallSet then SetSlotBytes := 4 else SetSlotBytes := 32;
++end;
++
++function SetNarrower(a, b: TTypeKind): TTypeKind;
++{ The storage class an operation over TWO set operands may safely touch: the
++  NARROWER of the two.
++
++  Not the wider, and the asymmetry is the whole point. Every wide object in
++  play -- a baked 32-byte literal blob, a runtime-built set temp, a `set of
++  Char` variable -- tolerates a 4-byte access of its low bytes, because a set's
++  bit for element e lives at byte e div 8 and the narrow class exists exactly
++  when no element exceeds 31. A narrow object does NOT tolerate a 32-byte one:
++  that reads 28 bytes past a 4-byte variable.
++
++  So mixing widths costs bits off the wide operand and never an out-of-range
++  access. Mixing them at all is already a type error FPC rejects
++  (`Incompatible types: got "TS8" expected "TSC"`, measured 3.2.2) -- we accept
++  it, and this is what we accept it AS. }
++begin
++  if (a = tySmallSet) or (b = tySmallSet) then SetNarrower := tySmallSet
++  else SetNarrower := tySet;
++end;
++
++function SetStorageKind(elemEnumId, elemTk: Integer; elemLo, elemHi: Int64): TTypeKind;
++{ Which storage class does `set of <this element type>` get? THE ONE PLACE the
++  question is answered -- ParseSetElemSpec calls it and stashes the answer in
++  LastTypeSetKind, and every entity (var, field, param, result, named alias)
++  reads that rather than re-deriving it, so the two halves of a declaration
++  cannot disagree about a width.
++
++  FPC's rule, measured 2026-09-02 against 3.2.2: FOUR BYTES WHEN THE ELEMENT'S
++  HIGH ORDINAL IS <= 31, thirty-two otherwise -- and NOT rebased to the low
++  bound, so `set of 200..207` is wide in both compilers and only the
++  low-bounded case ever narrows. `set of 0..31` 4, `set of 0..32` 32,
++  `set of Boolean` 4, `set of 'a'..'z'` 32 (because 'z' is 122).
++
++  A negative low bound keeps the WIDE class deliberately. FPC rejects
++  `set of -5..5` outright; we accept it, the element's bit index is its value,
++  and narrowing a shape whose bit numbering is already meaningless would turn a
++  latent nonsense into an out-of-range write. Wide is what it does today. }
++var i, base, cnt, o: Integer;
++    hi, lo: Int64;
++begin
++  SetStorageKind := tySet;
++  if elemEnumId >= 0 then
++  begin
++    base := EnumTypeValBase[elemEnumId];
++    cnt := EnumTypeValCount[elemEnumId];
++    if cnt <= 0 then Exit;
++    lo := EnumValOrd[base]; hi := lo;
++    for i := 1 to cnt - 1 do
++    begin
++      o := EnumValOrd[base + i];
++      if o < lo then lo := o;
++      if o > hi then hi := o;
++    end;
++  end
++  else if elemHi >= elemLo then
++  begin
++    lo := elemLo; hi := elemHi;
++  end
++  else if IntToTypeKind(elemTk) = tyBoolean then
++  begin
++    lo := 0; hi := 1;
++  end
++  else
++  begin
++    { tyChar, tyUInt8 and every other ordinal element with no recorded
++      subrange: the whole 0..255 bit range, which is the wide class. }
++    lo := 0; hi := 255;
++  end;
++  if (lo >= 0) and (hi <= 31) then SetStorageKind := tySmallSet;
++end;
++
+ { NilPy's `int` is arbitrary precision, so an ARITHMETIC result over machine
+   ints has to be promotable even when both operands are native — otherwise a
+   value that starts small and grows wraps at 2^63 with no diagnostic, which is
+@@ -3523,7 +3621,7 @@ begin
+   if (dstTk = tyRecord) <> (srcTk = tyRecord) then Exit;
+ 
+   { A SET is a 32-byte bitset. Same argument. }
+-  if (dstTk = tySet) <> (srcTk = tySet) then Exit;
++  if TypeIsSet(dstTk) <> TypeIsSet(srcTk) then Exit;
+ 
+   { A CLASS reference is pointer-shaped, so a Pointer on the other side is the
+     one legal partner -- everything else reads the instance address as data. }
+@@ -3594,14 +3692,14 @@ begin
+     11, 12, 13, 14,  { tyInt32..tyUInt64 }
+     15, 16, 17,      { tyNativeInt, tyNativeUInt, tyPointer }
+     18, 19, 20,      { tySingle, tyDouble, tyExtended }
+-    21:              { tySet }
++    21, 32:          { tySet, tySmallSet }
+       Result := True;
+   end;
+ end;
+ 
+ function TypeIsAggregate(tk: TTypeKind): Boolean;
+ begin
+-  Result := (tk = tyRecord) or (tk = tySet);
++  Result := (tk = tyRecord) or TypeIsSet(tk);
+ end;
+ 
+ function TypeIsFrozenString(tk: TTypeKind): Boolean;
+@@ -3767,7 +3865,10 @@ const
+   A32_PAIR64 = 1;   { two words — a 64-bit INTEGER by value; widen a 32-bit source }
+   A32_DOUBLE = 2;   { two words — a Double by value; the value is in the arch float reg }
+   A32_SINGLE = 3;   { one word — narrow the double-valued register to single first }
+-  A32_SET    = 4;   { eight words — copied inline from the set's address }
++  A32_SET    = 4;   { the set's bitmap, copied inline from its address —
++                      eight words for a tySet, ONE for a tySmallSet. Like
++                      A32_RECORD below, the width is the PARAMETER's and not
++                      the class's; ask Arg32Words. }
+   A32_RECORD = 5;   { ceil(RecSize/4) words — a by-value RECORD, copied inline
+                       from its address exactly as A32_SET is. Ask Arg32Words for
+                       the count; it is the only class whose width depends on the
+@@ -3795,7 +3896,7 @@ begin
+       Arg32Words := (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + paramIdx]) + 3) div 4;
+     if Arg32Words < 1 then Arg32Words := 1;
+   end
+-  else if cls = A32_SET then Arg32Words := TypeSlotSize(tySet) div 4
++  else if cls = A32_SET then Arg32Words := TypeSlotSize(Procs[procIdx].Params[paramIdx].TypeKind) div 4
+   else if (cls = A32_PAIR64) or (cls = A32_DOUBLE) then Arg32Words := 2
+   else Arg32Words := 1;
+ end;
+@@ -3858,7 +3959,7 @@ begin
+      (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + paramIdx]) > 4) and
+      (RecSize(ProcParamRecId[procIdx * MAX_PROC_PARAMS + paramIdx]) <= 8) then
+     Arg32Class := A32_RECORD
+-  else if (ptk = tySet) and (not Procs[procIdx].Params[paramIdx].IsArray) then
++  else if TypeIsSet(ptk) and (not Procs[procIdx].Params[paramIdx].IsArray) then
+     Arg32Class := A32_SET
+   else if (ptk = tyInt64) or (ptk = tyUInt64) then
+     Arg32Class := A32_PAIR64
+@@ -4816,6 +4917,13 @@ begin
+     Result := TARGET_PTR_SIZE
+   else
+     Result := TypeSlotSize(Syms[idx].TypeKind);
++  { A SET slot is never smaller than a pointer. On x86-64, aarch64 and arm32 the
++    slot HOLDS THE VALUE'S ADDRESS (ABIParamSlotHoldsValueAddr) and the bitmap's
++    own width says nothing about that -- a 4-byte tySmallSet slot took an 8-byte
++    pointer and wrote over the next parameter. It was invisible while every set
++    was 32 bytes, because 32 covers a pointer on every target we have. }
++  if TypeIsSet(Syms[idx].TypeKind) and (Result < TARGET_PTR_SIZE) then
++    Result := TARGET_PTR_SIZE;
+ end;
+ 
+ function ParamValueSize(idx: Integer): Integer;
+@@ -4856,6 +4964,12 @@ begin
+     Result := TARGET_PTR_SIZE
+   else
+     Result := TypeSlotSize(Syms[idx].TypeKind);
++  { ...and the same pointer floor ParamSlotWordSize applies, for the same
++    reason: on the targets where a set param's slot holds its ADDRESS, the slot
++    is at least a pointer whatever the bitmap measures. These two functions
++    disagreeing about one parameter is bug-a-param-pointer-rule-divergence. }
++  if TypeIsSet(Syms[idx].TypeKind) and (Result < TARGET_PTR_SIZE) then
++    Result := TARGET_PTR_SIZE;
+ end;
+ 
+ function AllocParam(const name: AnsiString; tk: TTypeKind; isRef, isArray: Boolean): Integer;
+@@ -4961,6 +5075,10 @@ begin
+     align := TARGET_PTR_SIZE
+   else
+     align := TypeAlign(tk);
++  { a slot widened to pointer size above is aligned like one too -- otherwise a
++    tySmallSet param lands on a 4-aligned offset and the address written into it
++    straddles }
++  if TypeIsSet(tk) and (align < TARGET_PTR_SIZE) then align := TARGET_PTR_SIZE;
+   FrameSize := AlignTo(FrameSize + sz, align);
+   Syms[SymCount].Offset := -FrameSize;
+   SymSyncTypeRef(SymCount);
+@@ -5817,8 +5935,8 @@ begin
+         lt := IntToTypeKind(IRTk[IRA[node]]);
+         rt := IntToTypeKind(IRTk[IRB[node]]);
+         if (nt = tyAnsiString) or TypeIsFrozenString(nt) or (nt = tyVariant) then Exit;
+-        if (lt = tyAnsiString) or TypeIsFrozenString(lt) or (lt = tyVariant) or (lt = tySet) then Exit;
+-        if (rt = tyAnsiString) or TypeIsFrozenString(rt) or (rt = tyVariant) or (rt = tySet) then Exit;
++        if (lt = tyAnsiString) or TypeIsFrozenString(lt) or (lt = tyVariant) or TypeIsSet(lt) then Exit;
++        if (rt = tyAnsiString) or TypeIsFrozenString(rt) or (rt = tyVariant) or TypeIsSet(rt) then Exit;
+         ScratchSafeSubtree := ScratchSafeSubtree(IRA[node]) and
+                               ScratchSafeSubtree(IRB[node]);
+       end;
+@@ -8479,6 +8597,18 @@ begin
+     Result := True;
+     Exit;
+   end;
++  { The two SET storage classes are one type. A set LITERAL is always the wide
++    class (its blob is 32 bytes in Data[]), so without this every call of
++    `P(s: set of TEnum)` with a literal argument failed overload resolution
++    with "argument types: (set) / candidates: P(set)" -- a message naming the
++    same spelling on both sides, which is what a kind split looks like from
++    the outside. The width is reconciled at the CALL (IRLowerCallArg's
++    by-value set temp takes the PARAMETER's class), not here. }
++  if TypeIsSet(pType) and TypeIsSet(aType) then
++  begin
++    Result := True;
++    Exit;
++  end;
+   if TypeIsOrdinal(pType) and TypeIsOrdinal(aType) then
+   begin
+     { A Boolean PARAMETER accepts only a Boolean argument (FPC: no implicit
+@@ -9683,6 +9813,7 @@ begin
+     tyDouble:      Result := 'Double';
+     tyExtended:    Result := 'Extended';
+     tySet:         Result := 'set';
++    tySmallSet:    Result := 'set';
+     tyVariant:     Result := 'Variant';
+     tyAnsiString:  Result := 'AnsiString';
+     tyAuto:        Result := 'auto';
+@@ -9708,7 +9839,7 @@ function BinopOperandIsMachineWord(tk: TTypeKind): Boolean;
+   its address (no load)"), so the node holds a machine word however it is tagged. }
+ begin
+   Result := TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown) or
+-            (tk = tyString) or (tk = tySet) or (tk = tyPointer);
++            (tk = tyString) or TypeIsSet(tk) or (tk = tyPointer);
+ end;
+ 
+ function CurProcNoteForError: AnsiString;
+diff --git a/lib/rtl/typinfo.pas b/lib/rtl/typinfo.pas
+index a597c33c7..5ad532cb3 100644
+--- a/lib/rtl/typinfo.pas
++++ b/lib/rtl/typinfo.pas
+@@ -368,6 +368,7 @@ const
+   pxxTkAuto         = 24;
+   pxxTkShortString  = 25;
+   pxxTkFixedString  = 26;
++  pxxTkSmallSet     = 32;   { a set whose elements all fit 0..31 -- FOUR bytes, where pxxTkSet is 32. One type, two storage classes; see tySmallSet in compiler/defs.inc. }
+ 
+ function GetClass(const name: string): PClassRTTI;
+ function GetClassName(cls: PClassRTTI): string;
+@@ -631,7 +632,13 @@ function TypeKindSize(tk: Int64): Integer;
+ begin
+   if (tk = 2) or (tk = 3) or (tk = 7) or (tk = 8) then TypeKindSize := 1
+   else if (tk = 9) or (tk = 10) then TypeKindSize := 2
+-  else if (tk = 1) or (tk = 11) or (tk = 12) then TypeKindSize := 4
++  else if (tk = 1) or (tk = 11) or (tk = 12) or (tk = 32) then TypeKindSize := 4
++  { 32 = pxxTkSmallSet, a FOUR-byte set. Without this row it fell to the 8-byte
++    default and a published `set of TColor` property read the four bytes AFTER
++    the field as well -- in test_streaming_enumset that is the caption handle,
++    so `Colors` streamed back as 8484786405250170885 instead of 5. SetOrdProp
++    uses the same width to choose its STORE size, so the write direction
++    clobbered the neighbour. }
+   else TypeKindSize := 8;
+ end;
+ 
+diff --git a/test/test_small_set_width.pas b/test/test_small_set_width.pas
+new file mode 100644
+index 000000000..a2ab0924d
+--- /dev/null
++++ b/test/test_small_set_width.pas
+@@ -0,0 +1,181 @@
++{ A set whose elements all fit 0..31 is FOUR bytes, not 32 — tySmallSet.
++
++  Every row here is a shape that reads or writes the bitmap, because the
++  narrow storage class changes the WIDTH of every one of them: the copy, the
++  four binary operators, the six comparisons, membership, Include/Exclude, the
++  by-value parameter push and the callee spill, the hidden-destination result,
++  and the layout of a record or array that contains one. A width that is right
++  in some of those and wrong in others produces a plausible wrong value, not a
++  crash, which is why they are all here rather than a representative few.
++
++  THE OUT-OF-RANGE ELEMENT ROWS ARE THE POINT OF THE FILE. `x in s` and
++  Include(s, x) used to clamp the element to 0..255 so it could not deref past
++  a 32-byte set; against a four-byte one that same clamp reads and WRITES up to
++  28 bytes past the object, and `var x: Integer; x := 100; x in s` is ordinary
++  code FPC accepts and answers False for. Nothing else in the corpus reaches it.
++
++  Sizes are FPC 3.2.2's own rule, measured 2026-09-02: four bytes when the
++  element's HIGH ordinal is <= 31, thirty-two above it, and NOT rebased to the
++  low bound -- so `set of 200..207` is wide in both compilers.
++  bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so }
++program test_small_set_width;
++
++type
++  TE   = (eA, eB, eC, eD);
++  TES  = set of TE;
++  TS8  = set of 0..7;
++  TS31 = set of 0..31;
++  TS32 = set of 0..32;      { one past the small-set ceiling: WIDE }
++  THi  = set of 200..207;   { low-bounded only in FPC's imagination: WIDE }
++  TSC  = set of Char;
++
++  TRec = record
++    a: Byte;
++    s: TS8;
++    b: Byte;
++  end;
++
++const
++  CPreset: TES = [eA, eC];
++
++var
++  s1, s2, s3: TS8;
++  es: TES;
++  r: TRec;
++  arr: array[0..2] of TS8;
++  i, oor: Integer;
++  wide: TSC;
++
++function Bits(const s: TS8): Integer;
++{ by-VALUE narrow set parameter: the caller pushes its bitmap and the callee
++  spills it into its own slot }
++var k, n: Integer;
++begin
++  n := 0;
++  for k := 0 to 7 do
++    if k in s then n := n + (1 shl k);
++  Bits := n;
++end;
++
++function MakeSet(lo, hi: Integer): TS8;
++{ a narrow set RESULT: returned through the caller-owned hidden destination,
++  whose copy size is the set's own width }
++var k: Integer; acc: TS8;
++begin
++  acc := [];
++  for k := lo to hi do
++    Include(acc, k);
++  MakeSet := acc;
++end;
++
++procedure Widen(var s: TS8; v: Integer);
++{ a VAR narrow set: the callee writes through the caller's object }
++begin
++  Include(s, v);
++end;
++
++procedure ShowE(const nm: string; const e: TES);
++var k: TE;
++begin
++  write(nm, '=');
++  for k := eA to eD do
++    if k in e then write(Ord(k));
++  writeln;
++end;
++
++begin
++  { sizes — the headline, and FPC's exact answers }
++  writeln('sz ', SizeOf(TES), ' ', SizeOf(TS8), ' ', SizeOf(TS31), ' ',
++          SizeOf(TS32), ' ', SizeOf(THi), ' ', SizeOf(TSC));
++  writeln('rec ', SizeOf(TRec), ' arr ', SizeOf(arr));
++
++  { assignment (IR_SET_COPY at the narrow width) and membership }
++  s1 := [1, 3, 5];
++  s2 := s1;
++  writeln('copy ', Bits(s1), ' ', Bits(s2));
++
++  { the four binary operators }
++  s1 := [1, 2, 3];
++  s2 := [3, 4, 5];
++  writeln('union ', Bits(s1 + s2));
++  writeln('inter ', Bits(s1 * s2));
++  writeln('diff  ', Bits(s1 - s2));
++  writeln('symd  ', Bits(s1 >< s2));
++
++  { the six comparisons }
++  s3 := [1, 2, 3];
++  write('cmp ');
++  if s1 = s3  then write('1') else write('0');
++  if s1 <> s2 then write('1') else write('0');
++  if s1 <= s3 then write('1') else write('0');
++  if s1 >= s3 then write('1') else write('0');
++{$ifdef FPC}
++  { FPC 3.2.2 REFUSES `<` and `>` on sets -- "Operation not implemented for
++    sets" -- so the oracle gets proper-subset spelled the long way and pxx gets
++    the operator. Same value either way; the point of keeping both is that
++    tkLt/tkGt are their own arm of SET_CMP and the narrow width has to reach
++    them too. }
++  if ([1,2] <= s1) and ([1,2] <> s1) then write('1') else write('0');
++  if (s1 >= [1,2]) and (s1 <> [1,2]) then write('1') else write('0');
++{$else}
++  if [1,2] < s1 then write('1') else write('0');
++  if s1 > [1,2] then write('1') else write('0');
++{$endif}
++  writeln;
++
++  { membership with an OUT-OF-RANGE element — must be False and must not read
++    past the four bytes }
++  oor := 100;
++  s1 := [1, 3];
++  write('oor ');
++  if oor in s1 then write('1') else write('0');
++  oor := 40;
++  if oor in s1 then write('1') else write('0');
++  oor := 3;
++  if oor in s1 then write('1') else write('0');
++  writeln;
++
++  { Include/Exclude, including out of range: the WRITE direction of the same
++    clamp. The set must be unchanged and the neighbouring fields intact. }
++  r.a := 9; r.s := [2]; r.b := 11;
++  { the element is a VARIABLE on purpose: a constant 100 is folded (and
++    range-check-warned) by FPC before it ever reaches the bit write, so a
++    literal would test the constant folder and not the clamp. }
++  oor := 100;
++  Include(r.s, oor);
++  Include(r.s, 5);
++  oor := 200;
++  Exclude(r.s, oor);
++  writeln('incl ', r.a, ' ', Bits(r.s), ' ', r.b);
++
++  { by-value parameter, var parameter, function result }
++  s1 := [0, 7];
++  writeln('byval ', Bits(s1));
++  Widen(s1, 4);
++  writeln('varp  ', Bits(s1));
++  writeln('result ', Bits(MakeSet(2, 4)));
++
++  { an array of narrow sets: the element stride is the set's own width }
++  for i := 0 to 2 do
++    arr[i] := MakeSet(i, i + 1);
++  writeln('arr ', Bits(arr[0]), ' ', Bits(arr[1]), ' ', Bits(arr[2]));
++
++  { an enum-element narrow set, a named set constant, and for-in }
++  es := CPreset;
++  ShowE('const', es);
++  es := es + [eB];
++  ShowE('plusB', es);
++  write('forin=');
++  for i := 0 to 7 do
++    if i in MakeSet(3, 5) then write(i);
++  writeln;
++
++  { a WIDE set beside them, to prove the wide class still works unchanged }
++  wide := ['a'..'e'];
++  wide := wide - ['c'];
++  write('wide=');
++  if 'b' in wide then write('1') else write('0');
++  if 'c' in wide then write('1') else write('0');
++  if 'z' in wide then write('1') else write('0');
++  writeln;
++end.

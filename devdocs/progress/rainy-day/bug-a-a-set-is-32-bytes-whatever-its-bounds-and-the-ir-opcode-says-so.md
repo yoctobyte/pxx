@@ -8,7 +8,7 @@ status: rainy-day
 created: 2026-09-02
 found-by: frankuser
 owner: ""
-summary: "PARKED BY THE OWNER 2026-09-02 — sets are 32 bytes, always, and that is CHOSEN, not tolerated. Deferred rather than rejected: it is solvable at an overhead, and solving it could beat FPC by rebasing to `lo` (FPC does not, so `set of 'x'..'z'` costs it 32 bytes for three bits). WHAT PARKING COSTS, measured and accepted: a record containing a small set cannot blit to a typed file — 32 bytes in memory, 4 on disk, every later field shifted — so `file of T` marshals field-by-field there, and the docs must advise against records-with-sets for file IO. WHAT IT DOES NOT COST: bare-set file IO, which needs no change at all, because our 32-byte mask is a byte-exact ZERO-EXTENSION of FPC's set (measured both size classes) — write 4 bytes when the declared high bound is <= 31, else 32. ORIGINALLY SPLIT OUT of compat-pascal-four-type-sizes-... at frankb-a9's request, because it shares neither cause nor lane nor size with the string[N] third it was bundled with. `set of 0..7` is 32 bytes in pxx; FPC gives 4 — a small-set word whenever the HIGH bound is <= 31, and 32 above it (FPC does not rebase to `lo`, so `set of 200..207` is 32 in both). A 32x footprint on the commonest small set, and not a wrong VALUE: every set operation is correct, which is why no differential probe reaches it. NOT a parser change and not a mapping change: 115 `tySet` sites, 39 `IR_SET_COPY`/`IR_SET_LIT` sites, and the width is baked into two contracts rather than a table — `defs.inc:2003` defines the kind itself as `{ 21: Set — 32-byte bitset }` and `defs.inc:1097` documents `IR_SET_COPY` as `copy full 32-byte set`. So it is a codegen/ABI slice: a variable-width set changes the by-value ABI class and every backend's copy, and both IR opcodes' contracts have to change with it."
+summary: "PARKED BY THE OWNER 2026-09-02 — and since then the mechanism has been BUILT AND MEASURED GREEN but deliberately NOT LANDED: the patch is banked at `devdocs/dev/parked-patches/smallset-4-byte-set-storage-class.patch` and the question of whether that changes the park is [[decide-a-the-smallset-mechanism-is-built-and-green-does-that-change-the-park]]. The park stands until the owner answers; the tree is at 32 bytes. Original summary follows. — sets are 32 bytes, always, and that is CHOSEN, not tolerated. Deferred rather than rejected: it is solvable at an overhead, and solving it could beat FPC by rebasing to `lo` (FPC does not, so `set of 'x'..'z'` costs it 32 bytes for three bits). WHAT PARKING COSTS, measured and accepted: a record containing a small set cannot blit to a typed file — 32 bytes in memory, 4 on disk, every later field shifted — so `file of T` marshals field-by-field there, and the docs must advise against records-with-sets for file IO. WHAT IT DOES NOT COST: bare-set file IO, which needs no change at all, because our 32-byte mask is a byte-exact ZERO-EXTENSION of FPC's set (measured both size classes) — write 4 bytes when the declared high bound is <= 31, else 32. ORIGINALLY SPLIT OUT of compat-pascal-four-type-sizes-... at frankb-a9's request, because it shares neither cause nor lane nor size with the string[N] third it was bundled with. `set of 0..7` is 32 bytes in pxx; FPC gives 4 — a small-set word whenever the HIGH bound is <= 31, and 32 above it (FPC does not rebase to `lo`, so `set of 200..207` is 32 in both). A 32x footprint on the commonest small set, and not a wrong VALUE: every set operation is correct, which is why no differential probe reaches it. NOT a parser change and not a mapping change: 115 `tySet` sites, 39 `IR_SET_COPY`/`IR_SET_LIT` sites, and the width is baked into two contracts rather than a table — `defs.inc:2003` defines the kind itself as `{ 21: Set — 32-byte bitset }` and `defs.inc:1097` documents `IR_SET_COPY` as `copy full 32-byte set`. So it is a codegen/ABI slice: a variable-width set changes the by-value ABI class and every backend's copy, and both IR opcodes' contracts have to change with it."
 ---
 
 # A set is 32 bytes whatever its bounds
@@ -98,3 +98,42 @@ they are.
 `prio: 30` is its own intrinsic worth — a real efficiency defect, no wrong value,
 no program blocked. It inherits p75 from the umbrella, which is the number that
 should route it.
+
+## Built and banked, 2026-09-02 (frankA) — the park stands, the work is on disk
+
+The owner's `smallset` design above was implemented while this ticket was being
+parked; the two crossed in flight. It is **not landed** — a park is a live
+decision and this is a fork of intent, so the tree is back at 32 bytes and the
+change sits as a patch:
+
+```
+devdocs/dev/parked-patches/smallset-4-byte-set-storage-class.patch   # 22 files, applies clean at ff62bb870
+```
+
+Measured at `ff62bb870` with the patch applied (`converged after 1 round(s)`,
+binary `d374f4a8bdd7`): the new `test/test_small_set_width.pas` matches the FPC
+3.2.2 oracle byte-for-byte **natively and on i386, aarch64, arm32 and riscv32**;
+a 57-test set corpus gives 50 same / 1 diff (`test_rtti InstanceSize 80 → 48`,
+the intended win) / **0 new failures**; 32/32 cross rows SAME; `gate.sh quick`
+GREEN with the FPC seed canary PASS. Positive controls both ways:
+`test_set_subrange` binaries DIFFER on all four targets, `test_sets` and
+`test_const_set` are byte-identical on all four, and the new test FAILS against
+the pre-change compiler. Whether that changes the park is the owner's call —
+[[decide-a-the-smallset-mechanism-is-built-and-green-does-that-change-the-park]]
+has the full table and the counter-argument.
+
+### One measurement worth keeping whatever is decided
+
+**FPC's `Include`/`Exclude` with a variable element is two steps, not one:** fold
+the element to a BYTE (`and 255`), then **skip the write** if that byte index is
+outside *this set's* storage. Measured on the raw bytes of the set object, same
+at `-O2` and `-O-`: on `set of 0..7`, `Include(s, 100)` is a **no-op** while
+`Include(s, 20)` **does** set bit 20; on `set of 0..255`, `Include(s, 300)` sets
+bit 44. So the boundary is the STORAGE width, not the declared high bound, and
+pxx already agrees with FPC on every row that a 32-byte set can reach.
+
+It stops agreeing the moment a set is 4 bytes: the naive narrowing — `and
+elemMask` — **folds** an out-of-storage element onto a valid bit (`Include(s,
+100)` sets bit 4, since 100 and 31 = 4) and looks correct in every existing
+test, because no current test can distinguish it. A future attempt at this
+ticket that does not carry a range GUARD will ship that silently.
