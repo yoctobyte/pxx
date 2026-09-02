@@ -3653,6 +3653,32 @@ begin
         EmitI32($EB000000 or ((((SigSetHookAddr - CodeLen - 8) div 4)) and $FFFFFF));  { bl sethook }
       end;
 
+    IR_LABELADDR:
+      begin
+        { &&label -> r0 = the label's runtime address, PC-relative and with no
+          relocation, so it works in an executable and in an object alike.
+          ARM has no single instruction that reaches an arbitrary PC-relative
+          address -- `add rd, pc, #imm' takes only an 8-bit rotated immediate --
+          so the delta rides in a literal and is added to PC:
+
+            A+0   ldr r0, [pc, #0]     ; PC reads A+8, which is the literal
+            A+4   b   .+8              ; jump over it, to A+12
+            A+8   .word delta          ; patched: target - (A+20)
+            A+12  add r0, pc, r0       ; PC reads A+20, so r0 = target
+
+          The two +8s are ARM's pipeline offset and they are NOT the same one:
+          the load's is what makes [pc,#0] name A+8, the add's is what the
+          delta is measured from. }
+        EmitI32($E59F0000);                          { ldr r0, [pc, #0] }
+        EmitI32($EA000000);                          { b .+8 }
+        if LabelAddrFixCount >= MAX_IR then Error('label address fixup overflow');
+        LabelAddrFixPos[LabelAddrFixCount] := CodeLen;
+        LabelAddrFixTarget[LabelAddrFixCount] := IRA[node];
+        Inc(LabelAddrFixCount);
+        EmitI32(0);                                  { delta (patched below) }
+        EmitI32($E08F0000);                          { add r0, pc, r0 }
+      end;
+
     IR_PROCADDR:
       begin
         { @proc -> r0 = absolute code address, via a PC-relative load of a 4-byte
@@ -4689,6 +4715,7 @@ begin
   for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
+  LabelAddrFixCount := 0;
 
   { Carve this body's alloca base slot and record where the expression stack
     starts. One word, only when the body actually contains an IR_ALLOCA, so a
@@ -4745,6 +4772,12 @@ begin
           lblId := Integer(IRIVal[i]);
           if (lblId >= 0) and (lblId < MAX_IR) then
             LabelPositions[lblId] := CodeLen;
+        end;
+
+      IR_JUMP_INDIRECT:
+        begin
+          IREmitNodeArm32(IRA[i]);                   { r0 = target address }
+          EmitI32($E12FFF10);                        { bx r0 }
         end;
 
       IR_JUMP:
@@ -4997,5 +5030,18 @@ begin
       Patch32(pos, $1A000000 or ((((targetOffset - pos) div 4) - 2) and $00ffffff))
     else
       Error('target arm32: invalid instruction at label fixup');
+  end;
+
+  { The &&label deltas. Their own loop, because the word being patched carries
+    no opcode for the loop above to recognise. See LabelAddrFix* in defs.inc. }
+  for f := 0 to LabelAddrFixCount - 1 do
+  begin
+    lblId := LabelAddrFixTarget[f];
+    pos := LabelAddrFixPos[f];
+    targetOffset := LabelPositions[lblId];
+    if targetOffset = -1 then Error('Unresolved &&label in ARM32 IR codegen');
+    { pos is the literal's own offset; the `add r0, pc, r0' four bytes later
+      reads PC as pos+4+8. }
+    Patch32(pos, targetOffset - (pos + 12));
   end;
 end;

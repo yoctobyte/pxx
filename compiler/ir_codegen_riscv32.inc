@@ -1504,6 +1504,21 @@ begin
         AsmRv32BlockResolve;
       end;
 
+    IR_LABELADDR:
+      begin
+        { &&label -> a0 = the label's runtime address, PC-relative over the full
+          +/-2GB with no relocation and no literal: `auipc' puts PC+hi20<<12 in
+          a0 and `addi' adds the signed low 12. Both words are placeholders and
+          both are rewritten by the &&label patch loop, because the split
+          depends on the target and neither half is meaningful alone. }
+        if LabelAddrFixCount >= MAX_IR then Error('label address fixup overflow');
+        LabelAddrFixPos[LabelAddrFixCount] := CodeLen;
+        LabelAddrFixTarget[LabelAddrFixCount] := IRA[node];
+        Inc(LabelAddrFixCount);
+        rv32_auipc(reg_a0, 0);           { patched: hi20 of (target - here) }
+        rv32_addi(reg_a0, reg_a0, 0);    { patched: lo12 of the same }
+      end;
+
     IR_PROCADDR:
       begin
         { @proc -> a0 = the routine's absolute code address. Load a PC-relative
@@ -4328,6 +4343,7 @@ end;
 
 procedure IREmitMachineCodeRISCV32;
 var i, lblId, pos, targetOffset, f, si, procIdx, sz: Integer;
+    rvHi, rvLo: Integer;
     LabelFixupCount: Integer;
 begin
   { Nil-init hidden owning locals synthesised for materialised managed-string
@@ -4360,6 +4376,7 @@ begin
   for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
+  LabelAddrFixCount := 0;
 
   { Carve this body's alloca base slot and record where the expression stack
     starts. One word, only when the body actually contains an IR_ALLOCA, so a
@@ -4386,6 +4403,12 @@ begin
           lblId := Integer(IRIVal[i]);
           if (lblId >= 0) and (lblId < MAX_IR) then
             LabelPositions[lblId] := CodeLen;
+        end;
+
+      IR_JUMP_INDIRECT:
+        begin
+          IREmitNodeRISCV32(IRA[i]);     { a0 = target address }
+          rv32_jalr(reg_zero, reg_a0, 0);{ jr a0 -- no link register written }
         end;
 
       IR_JUMP:
@@ -4575,5 +4598,29 @@ begin
       Patch32(pos, EncodeRISCVBEQ(reg_a0, reg_zero, targetOffset - pos))
     else
       Error('target riscv32: invalid instruction at label fixup');
+  end;
+
+  { The &&label auipc/addi pairs. Their own loop: both words are rewritten and
+    neither carries an opcode the loop above could recognise as a displacement.
+    The +$800 is auipc/addi's standard pairing -- addi sign-extends its 12-bit
+    immediate, so a low half of $800..$FFF borrows one from the high half, and
+    without the round-up every target whose low 12 bits have bit 11 set lands
+    4096 bytes early. }
+  for f := 0 to LabelAddrFixCount - 1 do
+  begin
+    lblId := LabelAddrFixTarget[f];
+    pos := LabelAddrFixPos[f];
+    targetOffset := LabelPositions[lblId];
+    if targetOffset = -1 then Error('Unresolved &&label in RISC-V IR codegen');
+    { RISCVPcrelSplit is the one place this split is written, and the
+      auipc/jalr pair four hundred lines above already goes through it. Doing
+      the arithmetic again here would be a second statement of the same rule --
+      and the rule has a trap in it (addi sign-extends, so a low half with bit
+      11 set borrows from the high half), which is exactly the kind of thing a
+      second copy gets wrong. `hi' comes back as a BYTE value, which is what
+      EmitUType's $FFFFF000 mask wants. }
+    RISCVPcrelSplit(targetOffset - pos, rvHi, rvLo);
+    Patch32(pos,     (rvHi and $FFFFF000) or (reg_a0 shl 7) or $17);
+    Patch32(pos + 4, ((rvLo and $FFF) shl 20) or (reg_a0 shl 15) or (reg_a0 shl 7) or $13);
   end;
 end;

@@ -4278,6 +4278,30 @@ begin
         EmitB($E8); EmitI32(SigSetHookAddr - (CodeLen + 4));   { call sethook }
       end;
 
+    IR_LABELADDR:
+      begin
+        { &&label -> eax = the label's runtime address. i386 has no PC-relative
+          addressing at all, so the address is BUILT from the program counter:
+
+            A+0  call .+5        ; pushes A+5 -- the only way to read EIP
+            A+5  pop  eax        ; eax = A+5
+            A+6  add  eax, delta ; patched: target - (A+5)
+
+          A `mov eax, imm32' patched with an absolute address at finalize would
+          be shorter and would be POSITION-DEPENDENT, which is the property
+          feature-a-x86-64-object-output-is-position-dependent exists to avoid.
+          This form needs no relocation and works the same in an executable and
+          in an --emit-obj object. }
+        EmitB($E8); EmitI32(0);                      { call .+5 }
+        EmitB($58);                                  { pop eax }
+        EmitB($05);                                  { add eax, imm32 }
+        if LabelAddrFixCount >= MAX_IR then Error('label address fixup overflow');
+        LabelAddrFixPos[LabelAddrFixCount] := CodeLen;
+        LabelAddrFixTarget[LabelAddrFixCount] := IRA[node];
+        Inc(LabelAddrFixCount);
+        EmitI32(0);                                  { delta (patched below) }
+      end;
+
     IR_PROCADDR:
       begin
         { @proc -> mov eax, imm32 (absolute code address, patched at finalize). }
@@ -5561,6 +5585,7 @@ begin
   for i := 0 to IRLabelCount - 1 do
     LabelPositions[i] := -1;
   LabelFixupCount := 0;
+  LabelAddrFixCount := 0;
 
   { --- PC-RELATIVE ANCHOR (i386 --emit-obj only) ---
     `call .L; .L: pop esi` leaves the address of the pop in esi, and every data
@@ -5658,6 +5683,12 @@ begin
           lblId := Integer(IRIVal[i]);
           if (lblId >= 0) and (lblId < MAX_IR) then
             LabelPositions[lblId] := CodeLen;
+        end;
+
+      IR_JUMP_INDIRECT:
+        begin
+          IREmitNode386(IRA[i]);                     { eax = target address }
+          EmitB($FF); EmitB($E0);                    { jmp eax }
         end;
 
       IR_JUMP:
@@ -5882,5 +5913,22 @@ begin
     targetOffset := LabelPositions[lblId];
     if targetOffset = -1 then Error('Unresolved forward jump in i386 IR codegen');
     Patch32(pos, targetOffset - (pos + 4));
+  end;
+
+  { The &&label deltas. Their own loop: the word patched here is an ADD's
+    immediate, not a branch displacement, and the loop above would have to
+    guess which is which. See LabelAddrFix* in defs.inc.
+    pos is the immediate's offset. The call is 5 bytes and pushed the address
+    after itself; `pop eax' is that same address, and it sits at pos-2 -- so
+    the base already in eax is pos-2, NOT pos, and NOT the usual (pos+4) of a
+    branch displacement. Counted from the emitter above: E8+imm32 (5), 58 (1),
+    05 (1) puts pos at call+7 and the popped address at call+5. }
+  for f := 0 to LabelAddrFixCount - 1 do
+  begin
+    lblId := LabelAddrFixTarget[f];
+    pos := LabelAddrFixPos[f];
+    targetOffset := LabelPositions[lblId];
+    if targetOffset = -1 then Error('Unresolved &&label in i386 IR codegen');
+    Patch32(pos, targetOffset - (pos - 2));
   end;
 end;

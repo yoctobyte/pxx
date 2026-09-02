@@ -3702,6 +3702,21 @@ var
     that goes stale, so it moved here rather than being passed around. Still
     reset per body, in the same place it always was. }
   LabelFixupCount : Integer;
+
+  { The ADDRESS-OF-A-LABEL fixups, kept apart from the branch fixups above on
+    purpose. A branch fixup patches a relative DISPLACEMENT inside a branch
+    instruction and the patch loop tells the shapes apart by sniffing the
+    placeholder's opcode byte; a `&&label' site is a bare word or an
+    instruction pair with no opcode to sniff, so putting it on the same list
+    would mean choosing a byte value that no branch placeholder happens to use
+    -- a guard that works until someone adds a fourth branch shape. Two lists,
+    two loops, no sniffing.
+    Used by the backends that cannot reach a label PC-relatively in ONE
+    instruction (i386, arm32, riscv32); x86-64's `lea` and aarch64's `adr` sit
+    on the branch list because there they ARE a single displacement. }
+  LabelAddrFixPos    : array[0..MAX_IR-1] of Integer;
+  LabelAddrFixTarget : array[0..MAX_IR-1] of Integer;
+  LabelAddrFixCount  : Integer;
   { Xtensa only. A forward jump reserves its slot before the label exists, so
     the slot's WIDTH is a guess: -1 here means the guess was the three-byte J
     and LabelFixupPos points at the J; anything else is the anchor PC of a

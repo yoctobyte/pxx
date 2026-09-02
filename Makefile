@@ -14614,6 +14614,15 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/frozenparam "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozenparam)" "$$(cat test/test_frozen_string_param_setlength.expected)"
 	./$(COMPILER) --target=i386 test/hello.pas $(TESTTMP)/test_i386_hello
 	tools/expect_same.sh i386/test_i386_hello "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hello)" "Hello, World!"
+	# GNU labels-as-values on this cross target. i386 has no PC-relative
+	# addressing at all, so &&label is a `call .+5; pop eax; add eax,imm32'
+	# thunk -- three instructions where aarch64 needs one, and the only one of
+	# the five backends whose fixup base is not the byte after the immediate.
+	# The .expected is gcc's own output for the same file on x86-64 -- the
+	# point of a cross row is that the answer does not depend on the target.
+	# bug-c-labels-as-values-is-the-whole-of-the-lua-regression
+	./$(COMPILER) --target=i386 test/c_labels_as_values.c $(TESTTMP)/test_i386_labelval
+	tools/expect_same.sh i386/labelval "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_labelval)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
 	# The open-array parameter slot is a HANDLE, not its element -- the bug was
 	# i386-only, so this is where it has to be caught
 	# (bug-a-an-open-array-of-double-segfaults-on-i386).
@@ -16060,6 +16069,14 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_cross_var_param_scalar_kinds.pas $(TESTTMP)/test_riscv32_varkinds
 	./$(COMPILER) test/test_cross_var_param_scalar_kinds.pas $(TESTTMP)/test_varkinds_x64
 	tools/expect_same.sh riscv32/varkinds "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_varkinds)" "$$($(TESTTMP)/test_varkinds_x64)"
+	# GNU labels-as-values on this cross target. riscv32 uses auipc+addi split by
+	# RISCVPcrelSplit -- the same helper the auipc/jalr long jump uses, so a
+	# borrow bug in the sign-extended low half would show up here first.
+	# The .expected is gcc's own output for the same file on x86-64 -- the
+	# point of a cross row is that the answer does not depend on the target.
+	# bug-c-labels-as-values-is-the-whole-of-the-lua-regression
+	./$(COMPILER) --target=riscv32 test/c_labels_as_values.c $(TESTTMP)/test_riscv32_labelval
+	tools/expect_same.sh riscv32/labelval "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_labelval)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
 	# frozen inline strings (string[N]): riscv32 had NO frozen store, no frozen Length
 	# and no frozen->managed arg materialisation, so this printed len=0 and segfaulted.
 	# Output must match the x86-64 oracle exactly (b345)
@@ -17791,6 +17808,15 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/frozenparam "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozenparam)" "$$(cat test/test_frozen_string_param_setlength.expected)"
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
 	tools/expect_same.sh arm32/test_arm32_hello "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_hello)" "Hello, World!"
+	# GNU labels-as-values on this cross target. arm32 loads the delta from an
+	# inline literal word and adds pc to it, because no arm32 immediate form
+	# reaches an arbitrary label. The `b .+8' over the word is the part that
+	# breaks if the sequence is ever reordered.
+	# The .expected is gcc's own output for the same file on x86-64 -- the
+	# point of a cross row is that the answer does not depend on the target.
+	# bug-c-labels-as-values-is-the-whole-of-the-lua-regression
+	./$(COMPILER) --target=arm32 test/c_labels_as_values.c $(TESTTMP)/test_a32_labelval
+	tools/expect_same.sh arm32/labelval "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_labelval)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
 	# were x86-64-only gaps, so every target must print the same line
 	./$(COMPILER) --target=arm32 test/test_variant_class_cross.pas $(TESTTMP)/test_arm32_varcls
