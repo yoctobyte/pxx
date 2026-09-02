@@ -13115,6 +13115,21 @@ test-core: $(COMPILER)
 	# macros are read in the PROGRAM's translation unit. Preprocessor-level, so
 	# no cross rows: every target shares the include machinery.
 	# All rows diffed against gcc.
+	# FILE-SCOPE array initialisers past 256 elements. ParseCGlobalVarDecl held
+	# its element columns as 256-entry STACK arrays and, one past the end, set
+	# nArrElems := -1 and took the whole-array SKIP path: no diagnostic, the
+	# array sized to ONE element, the initialiser gone. busybox's GENERATED
+	# include/applet_tables.h has one <applet>_main per applet, so at 141
+	# applets the build was byte-identical to gcc and at 257 all 400 objects
+	# still linked and then every applet segfaulted through a one-element
+	# table. Rows 1 and 2 read the same table at 256 and 257 -- a test built
+	# only at 300 would pass on a compiler capped at 400 and tell nobody. Row 4
+	# is the designated-RANGE arm, which had a separate guard that stopped
+	# replicating mid-range and left the tail null.
+	# All rows diffed against gcc; the pinned compiler dies with runtime error
+	# 216 on this file.
+	./$(COMPILER) test/c_global_array_init_over_256.c $(TESTTMP)/c_ginit25626
+	tools/expect_same.sh c_ginit25626 "$$($(TESTTMP)/c_ginit25626)" "$$(printf '1 71892\n2 72490\n3 99750 300\n4 0 1 2\n5 300 s000 s256 s299')"
 	./$(COMPILER) test/c_crtl_header_order_pull.c $(TESTTMP)/c_hdrorder26
 	tools/expect_same.sh c_hdrorder26 "$$($(TESTTMP)/c_hdrorder26)" "$$(printf '1 4096\n2 100\n3 1\n4 0 1 2 4\n5 0 1 2\n6 f abc\n7 1 2 rest')"
 	# posix_fallocate/fallocate, found the same way. ONE SYSCALL, TWO ERROR

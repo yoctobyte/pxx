@@ -9186,7 +9186,6 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     dimVal, flatLen, mdi, tdArrLen: Integer;
     initStr: AnsiString;
     clRecTk: TTypeKind; clRecId, anonIdx: Integer; anonName: AnsiString;
-    arrOffs, arrLens, arrKind, arrSym, arrTgt: array[0..255] of Integer;
     fnCurTgt, fnRangeHi, fnMaxTgt: Integer; fnHadDesig: Boolean;
     clWrap, clSavedPos: Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
@@ -9245,7 +9244,7 @@ begin
       fnCurTgt := 0; fnHadDesig := False;
       while CBlockContinues do
       begin
-        if nArrElems > 255 then begin nArrElems := -1; Break; end;
+        EnsureCGIArrCapacity(nArrElems);
         { `[k] =` / `[lo ... hi] =` element designators (C 6.7.8 / GNU range) —
           the reloc-table shape `{[0 ... 2]=&sys_ni, [0]=one, ...}` (00216). }
         fnRangeHi := -1;
@@ -9266,14 +9265,14 @@ begin
         if CurTok.Kind = tkAmp then Next;   { `&func` == `func` for a fn pointer }
         if (CurTok.Kind = tkIdent) and (FindProc(CurTok.SVal) >= 0) then
         begin
-          arrKind[nArrElems] := 3;       { proc address }
-          arrSym[nArrElems] := FindProc(CurTok.SVal);
+          CGIArrKind[nArrElems] := 3;       { proc address }
+          CGIArrSym[nArrElems] := FindProc(CurTok.SVal);
           Next;
         end
         else if CConsumeCastProcInit(idx) then
         begin
-          arrKind[nArrElems] := 3;       { (cast)proc — same proc-address form }
-          arrSym[nArrElems] := idx;
+          CGIArrKind[nArrElems] := 3;       { (cast)proc — same proc-address form }
+          CGIArrSym[nArrElems] := idx;
         end
         else if CurTok.Kind = tkIdent then
         begin
@@ -9283,37 +9282,38 @@ begin
             aSyscall[] file-VFS null-call class. Warn (skip reserved __names). }
           idx := FindSym(CurTok.SVal);
           if (idx >= 0) and (CurTok.SVal <> 'NULL') then
-          begin arrKind[nArrElems] := 2; arrSym[nArrElems] := idx; end
+          begin CGIArrKind[nArrElems] := 2; CGIArrSym[nArrElems] := idx; end
           else
           begin
             if (idx < 0) and (CurTok.SVal <> 'NULL') and
                ((Length(CurTok.SVal) < 2) or (CurTok.SVal[1] <> '_') or (CurTok.SVal[2] <> '_')) then
               Warn('undeclared identifier ''' + CurTok.SVal +
                    ''' in static initializer (treated as null slot)');
-            arrKind[nArrElems] := 1; arrSym[nArrElems] := 0;
+            CGIArrKind[nArrElems] := 1; CGIArrSym[nArrElems] := 0;
           end;
           Next;
         end
         else if CurTok.Kind = tkInteger then
         begin
-          arrKind[nArrElems] := 1; arrSym[nArrElems] := CurTok.IVal; Next;
+          CGIArrKind[nArrElems] := 1; CGIArrSym[nArrElems] := CurTok.IVal; Next;
         end
         else
         begin
-          arrKind[nArrElems] := 1; arrSym[nArrElems] := 0;
+          CGIArrKind[nArrElems] := 1; CGIArrSym[nArrElems] := 0;
           CSkipCInitElement;
         end;
-        arrTgt[nArrElems] := fnCurTgt;
+        CGIArrTgt[nArrElems] := fnCurTgt;
         Inc(nArrElems);
         if fnRangeHi >= fnCurTgt then
         begin
           { range: replicate the one proc/value across [fnCurTgt .. fnRangeHi] }
-          while (fnCurTgt < fnRangeHi) and (nArrElems <= 255) do
+          while fnCurTgt < fnRangeHi do
           begin
             Inc(fnCurTgt);
-            arrKind[nArrElems] := arrKind[nArrElems - 1];
-            arrSym[nArrElems]  := arrSym[nArrElems - 1];
-            arrTgt[nArrElems]  := fnCurTgt;
+            EnsureCGIArrCapacity(nArrElems);
+            CGIArrKind[nArrElems] := CGIArrKind[nArrElems - 1];
+            CGIArrSym[nArrElems]  := CGIArrSym[nArrElems - 1];
+            CGIArrTgt[nArrElems]  := fnCurTgt;
             Inc(nArrElems);
           end;
         end;
@@ -9345,7 +9345,8 @@ begin
       if CurTok.Kind = tkAmp then Next;   { optional `&` before the function name }
       if (CurTok.Kind = tkIdent) and (FindProc(CurTok.SVal) >= 0) then
       begin
-        arrKind[0] := 3; arrSym[0] := FindProc(CurTok.SVal); nArrElems := 1; Next;
+        EnsureCGIArrCapacity(0);
+        CGIArrKind[0] := 3; CGIArrSym[0] := FindProc(CurTok.SVal); nArrElems := 1; Next;
       end
       else
         while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
@@ -9356,7 +9357,7 @@ begin
     fnMaxTgt := -1;
     if fnHadDesig then
       for ei := 0 to nArrElems - 1 do
-        if arrTgt[ei] > fnMaxTgt then fnMaxTgt := arrTgt[ei];
+        if CGIArrTgt[ei] > fnMaxTgt then fnMaxTgt := CGIArrTgt[ei];
     if wasArr then
     begin
       if arrLen < 1 then
@@ -9411,27 +9412,27 @@ begin
       begin
         PendingInitSym[PendingInitCount]  := idx;
         if not wasArr then PendingInitElem[PendingInitCount] := PI_ELEM_NONE
-        else if fnHadDesig then PendingInitElem[PendingInitCount] := arrTgt[ei]
+        else if fnHadDesig then PendingInitElem[PendingInitCount] := CGIArrTgt[ei]
         else PendingInitElem[PendingInitCount] := ei;
         PendingInitFLen[PendingInitCount] := 0;
         PendingInitTk[PendingInitCount]   := Ord(tyPointer);
-        if arrKind[ei] = 3 then
+        if CGIArrKind[ei] = 3 then
         begin
           PendingInitFOff[PendingInitCount] := -1;
           PendingInitKind[PendingInitCount] := 2;          { proc address -> AN_PROCADDR }
-          PendingInitVal[PendingInitCount]  := arrSym[ei];
+          PendingInitVal[PendingInitCount]  := CGIArrSym[ei];
         end
-        else if arrKind[ei] = 2 then
+        else if CGIArrKind[ei] = 2 then
         begin
           PendingInitFOff[PendingInitCount] := -4;          { address of named global }
           PendingInitKind[PendingInitCount] := 0;
-          PendingInitVal[PendingInitCount]  := arrSym[ei];
+          PendingInitVal[PendingInitCount]  := CGIArrSym[ei];
         end
         else
         begin
           PendingInitFOff[PendingInitCount] := -1;          { NULL / integer literal }
           PendingInitKind[PendingInitCount] := 0;
-          PendingInitVal[PendingInitCount]  := arrSym[ei];
+          PendingInitVal[PendingInitCount]  := CGIArrSym[ei];
         end;
         Inc(PendingInitCount);
       end;
@@ -9520,17 +9521,17 @@ begin
       Next; Next;  { consume assignment and opening initializer token }
       while CBlockContinues do
       begin
-        if nArrElems > 255 then begin nArrElems := -1; Break; end;
+        EnsureCGIArrCapacity(nArrElems);
         if CurTok.Kind = tkString then
         begin
           { string-literal element (kind 0): record the token span }
-          arrKind[nArrElems] := 0;
-          arrOffs[nArrElems] := Tokens[TokPos - 1].SOffset;
-          arrLens[nArrElems] := Tokens[TokPos - 1].SLen;
+          CGIArrKind[nArrElems] := 0;
+          CGIArrOffs[nArrElems] := Tokens[TokPos - 1].SOffset;
+          CGIArrLens[nArrElems] := Tokens[TokPos - 1].SLen;
           Next;
           while CurTok.Kind = tkString do
           begin
-            arrLens[nArrElems] := arrLens[nArrElems] + Tokens[TokPos - 1].SLen;
+            CGIArrLens[nArrElems] := CGIArrLens[nArrElems] + Tokens[TokPos - 1].SLen;
             Next;
           end;
         end
@@ -9542,14 +9543,14 @@ begin
             falls back to the whole-array skip path. }
           if CurTok.SVal = 'NULL' then
           begin
-            arrKind[nArrElems] := 1;
-            arrSym[nArrElems] := 0;
+            CGIArrKind[nArrElems] := 1;
+            CGIArrSym[nArrElems] := 0;
           end
           else
           begin
-            arrSym[nArrElems] := FindSym(CurTok.SVal);
-            if arrSym[nArrElems] < 0 then begin nArrElems := -1; Break; end;
-            arrKind[nArrElems] := 2;
+            CGIArrSym[nArrElems] := FindSym(CurTok.SVal);
+            if CGIArrSym[nArrElems] < 0 then begin nArrElems := -1; Break; end;
+            CGIArrKind[nArrElems] := 2;
           end;
           Next;
         end
@@ -9557,8 +9558,8 @@ begin
         begin
           { integer-literal element (kind 1): typically `0`/NULL terminator in a
             `char *[]` table. Store the literal value as the pointer bits. }
-          arrKind[nArrElems] := 1;
-          arrSym[nArrElems] := CurTok.IVal;
+          CGIArrKind[nArrElems] := 1;
+          CGIArrSym[nArrElems] := CurTok.IVal;
           Next;
         end
         else
@@ -9724,23 +9725,23 @@ begin
         PendingInitElem[PendingInitCount] := ei;
         PendingInitTk[PendingInitCount]   := Ord(tyPointer);
         PendingInitKind[PendingInitCount] := 0;
-        if arrKind[ei] = 0 then
+        if CGIArrKind[ei] = 0 then
         begin
           PendingInitFOff[PendingInitCount] := -3;  { string literal span }
-          PendingInitFLen[PendingInitCount] := arrLens[ei];
-          PendingInitVal[PendingInitCount]  := arrOffs[ei];
+          PendingInitFLen[PendingInitCount] := CGIArrLens[ei];
+          PendingInitVal[PendingInitCount]  := CGIArrOffs[ei];
         end
-        else if arrKind[ei] = 2 then
+        else if CGIArrKind[ei] = 2 then
         begin
           PendingInitFOff[PendingInitCount] := -4;  { address of named global }
           PendingInitFLen[PendingInitCount] := 0;
-          PendingInitVal[PendingInitCount]  := arrSym[ei];
+          PendingInitVal[PendingInitCount]  := CGIArrSym[ei];
         end
         else
         begin
           PendingInitFOff[PendingInitCount] := -1;  { NULL / integer literal }
           PendingInitFLen[PendingInitCount] := 0;
-          PendingInitVal[PendingInitCount]  := arrSym[ei];
+          PendingInitVal[PendingInitCount]  := CGIArrSym[ei];
         end;
         Inc(PendingInitCount);
       end;

@@ -6540,6 +6540,25 @@ begin
   SetLength(CStrInitElem, cap);
 end;
 
+procedure EnsureCGIArrCapacity(n: Integer);
+{ Grow the file-scope array-initialiser element pools to hold index n. Same
+  shape as EnsureCStrInitCapacity above; see CGIArrOffs in defs.inc. The five
+  arrays are one record split into columns, so they grow together -- a caller
+  that grew only the column it was about to write is how the other four go
+  short without anything failing. }
+var cap: Integer;
+begin
+  cap := Length(CGIArrKind);
+  if n < cap then Exit;
+  if cap = 0 then cap := 512;
+  while cap <= n do cap := cap * 2;
+  SetLength(CGIArrOffs, cap);
+  SetLength(CGIArrLens, cap);
+  SetLength(CGIArrKind, cap);
+  SetLength(CGIArrSym, cap);
+  SetLength(CGIArrTgt, cap);
+end;
+
 procedure EnsurePIPathCapacity(n: Integer);
 { Grow the nested-field span pool to hold index n. Same shape as the tables it
   serves; see PIPathOff in defs.inc. }

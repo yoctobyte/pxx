@@ -3309,6 +3309,23 @@ var
     it. The brace-initialiser arm, which can recurse, keeps using arrElems. }
   CStrInitElem : array of Integer;
   CStrInitCount : Integer;
+  { FILE-SCOPE array-initialiser element pool, the sibling of CStrInitElem one
+    scope up. ParseCGlobalVarDecl held these as 256-element STACK arrays and,
+    past 256 elements, set nArrElems := -1 and took the whole-array SKIP path:
+    no diagnostic, an array sized to ONE element, and its initialiser gone.
+    Measured 2026-09-02: busybox's generated include/applet_tables.h defines
+    `int (*const applet_main[])(int, char**)' with one entry per applet, so the
+    257-applet build linked all 400 objects and then segfaulted in every applet
+    that did real work, while 141 applets had been byte-identical to gcc. 256
+    is not a number the generated table knows about. Growable and unit-scope
+    for the same reason CStrInitElem is, and safe on the same grounds:
+    ParseCGlobalVarDecl is called only from the two top-level declaration
+    loops and never re-enters itself, so there is no nesting to interleave. }
+  CGIArrOffs : array of Integer;
+  CGIArrLens : array of Integer;
+  CGIArrKind : array of Integer;
+  CGIArrSym  : array of Integer;
+  CGIArrTgt  : array of Integer;
   CLocalStaticDecl : Boolean; { current block-scope C declaration had `static`;
     allocate its storage globally while still parsing it in statement position }
   CHeaderMode : Boolean; { parsing C in header/FFI mode }
