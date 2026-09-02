@@ -12776,6 +12776,20 @@ test-core: $(COMPILER)
 	  tools/expect_same.sh c_prune_o0 "$$($(TESTTMP)/c_prune_o0)" "$$(printf 'skipped the arm\nN ran\nhits=1')"; \
 	  tools/expect_same.sh c_prune_o2 "$$($(TESTTMP)/c_prune_o2)" "$$(printf 'skipped the arm\nN ran\nhits=1')"; \
 	fi
+	# `-OO` -- the source-1:1 reference, part 3 of the same ticket. The -OO row
+	# asserts a FAILURE on purpose and that is the flag's positive control: a
+	# flag that silently did nothing would pass a row asserting success, and this
+	# test would certify a flag that does not exist. never_oo_P is declared and
+	# never defined, so emitting the unreachable call is observable as a binary
+	# that cannot start, and pruning it is observable as one that runs.
+	./$(COMPILER) -O0 test/test_source_one_to_one_oo.pas $(TESTTMP)/oo_pruned
+	tools/expect_same.sh oo_pruned "$$($(TESTTMP)/oo_pruned)" "SOURCE1TO1 OK"
+	./$(COMPILER) -OO test/test_source_one_to_one_oo.pas $(TESTTMP)/oo_verbatim
+	@if $(TESTTMP)/oo_verbatim >/dev/null 2>&1; then \
+	  echo "test_source_one_to_one_oo: -OO RAN. It must emit the unreachable call and die on never_oo_P -- the flag did nothing."; exit 1; \
+	else \
+	  echo "test_source_one_to_one_oo: -OO emitted the dead arm (undefined symbol), -O0 pruned it"; \
+	fi
 	# A CONSTANT LEFT OPERAND OF `and`/`or`, AND `not` OVER A BOOLEAN LITERAL,
 	# fold in the PARSER, because Pascal short-circuits and that is the language's
 	# rule rather than an optimisation. The C sibling landed in 88ef1232f; the

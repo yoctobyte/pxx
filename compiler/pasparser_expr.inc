@@ -31,6 +31,11 @@ procedure ParseFactor; forward;
 function PasBoolLit(n: Integer; var v: Boolean): Boolean;
 begin
   PasBoolLit := False;
+  { -OO emits what the source says, so every fold in this file switches off
+    HERE rather than at each call site: this helper is the single question they
+    all ask, and a gate at the choke point cannot be forgotten by the next fold
+    someone adds. }
+  if SourceOneToOne then Exit;
   if (n < 0) or (n >= ASTNodeCount) then Exit;
   if ASTKind[n] <> AN_BOOL_LIT then Exit;
   v := ASTIVal[n] <> 0;

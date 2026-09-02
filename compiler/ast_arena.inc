@@ -191,6 +191,11 @@ end;
 function ASTConstCond(node: Integer; var taken: Boolean): Boolean;
 begin
   ASTConstCond := False;
+  { -OO emits what the source says, so every fold in this file switches off
+    HERE rather than at each call site: this helper is the single question they
+    all ask, and a gate at the choke point cannot be forgotten by the next fold
+    someone adds. }
+  if SourceOneToOne then Exit;
   if node < 0 then Exit;
   if (ASTKind[node] <> AN_BOOL_LIT) and (ASTKind[node] <> AN_INT_LIT) then Exit;
   taken := ASTIVal[node] <> 0;

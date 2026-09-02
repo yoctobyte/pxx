@@ -8,7 +8,7 @@ blocked-by: []
 found: 2026-08-31
 found-by: frank-user
 owner: ""
-summary: "Implements the ruling in decided/decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0. The SHORT-CIRCUIT half is DONE (88ef1232f C, e31f7112f Pascal) and the DEAD-ARM PRUNE is DONE for `if` and `while` in shared lowering, with the address-escape guard (part 2). What REMAINS is part 1s third shape -- statements after a return/Exit, still -O0 only, a different mechanism (AN_SEQ reachability, not a constant condition) -- plus part 3 -OO and part 4 the charter line, because gcc, clang and tcc all do and tcc has no optimizer, so this is LOWERING. The SHORT-CIRCUIT half is DONE (88ef1232f, 2026-09-01) and it was worse than this file said: `0 && f()` folded at NO level, -O3 included, not just at -O0. HARD CONSTRAINT, measured: prune only when unreachable AND the address does not escape; a dead arm holding a label whose address is taken is kept by all three at every level, and an if-only test will not catch getting this wrong. Both frontends: the Pascal arm is measured open, `if False and (F=0)` keeps its dead call at -O2. Also adds -OO for the true source-1:1 build, as a NAMED FLAG not a level."
+summary: "Implements the ruling in decided/decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0. The SHORT-CIRCUIT half is DONE (88ef1232f C, e31f7112f Pascal) and the DEAD-ARM PRUNE is DONE for `if` and `while` in shared lowering, with the address-escape guard (part 2). Parts 3 (-OO, the source-1:1 named flag, gated at three choke points so a later fold inherits it) and 4 (the charter amendment) are DONE too. Part 1s third shape -- statements after a return/Exit, still -O0 only -- is SPLIT OUT to feature-a-prune-statements-after-a-return-at-O0, being AN_SEQ reachability rather than a constant condition, because gcc, clang and tcc all do and tcc has no optimizer, so this is LOWERING. The SHORT-CIRCUIT half is DONE (88ef1232f, 2026-09-01) and it was worse than this file said: `0 && f()` folded at NO level, -O3 included, not just at -O0. HARD CONSTRAINT, measured: prune only when unreachable AND the address does not escape; a dead arm holding a label whose address is taken is kept by all three at every level, and an if-only test will not catch getting this wrong. Both frontends: the Pascal arm is measured open, `if False and (F=0)` keeps its dead call at -O2. Also adds -OO for the true source-1:1 build, as a NAMED FLAG not a level."
 ---
 
 # Fold the consensus dead-branch core at every level
@@ -275,8 +275,57 @@ and `while` are a CONDITION being constant, while this is statement-sequence
 REACHABILITY inside `AN_SEQ`, needing a notion of which node kinds terminate a
 block. The same label guard would apply.
 
-**Part 2** the address-escape guard is DONE (above). **Part 3** `-OO` and
-**part 4** the charter amendment remain, and part 3 now has a concrete
-definition it did not have before: `-OO` is `-O0` with this prune and the
-`e31f7112f`/`88ef1232f` const folds disabled — i.e. exactly the pre-change
-compiler measured above.
+**Part 2** the address-escape guard is DONE (above).
+
+## 2026-09-02 (frankC) — PARTS 3 AND 4 ARE DONE
+
+**Part 3, `-OO`.** A named flag, never a level below zero, per this repo's
+o-level charter: an author must choose WHICH trade, not HOW MUCH. It is `-O0`
+plus `SourceOneToOne`, which switches off the dead-arm prune and the
+`e31f7112f`/`88ef1232f` const folds — so it emits what the source says, for the
+whole pipeline.
+
+The gate is at **three choke points, not at the call sites**: `ASTConstCond`
+(shared lowering), `PasBoolLit` (Pascal parser), `CConstIntLit` (C parser).
+Each is the single question its folds ask — verified by listing every caller,
+all of which are folds — so a fold added later inherits `-OO` without anyone
+remembering to gate it.
+
+`-OO` is a DIAGNOSTIC mode and not a shipping one: it deliberately emits calls
+the program cannot reach. Measured, 200-statement dead arm:
+
+```
+-OO code=134936B    the arm is emitted, 1:1 with source
+-O0 code= 89880B    pruned; this is the RTL floor
+-O2 code= 65304B
+```
+
+`test/test_source_one_to_one_oo.pas` **asserts a FAILURE at -OO**, deliberately
+inverted against every other row in the suite, and that inversion is the flag's
+positive control: `never_oo_P` is declared and never defined, so emitting the
+unreachable call is observable as a binary that cannot start. A flag that
+silently did nothing would pass a row asserting success and certify a flag that
+does not exist. Both frontends verified; ordinary C is unchanged at `-OO` and
+still matches gcc.
+
+One reading was chased rather than accepted: `-OO` and `-O0` reported an
+IDENTICAL `code=89880B` on the prune test while their images differed by 1465
+bytes. Builds are deterministic (same flags twice, byte-identical), and the
+explanation is that 89880B is the **RTL floor** — both programs are tiny once
+pruned, so code size is dominated by the runtime. The 200-statement arm above
+is what made the flag's effect legible.
+
+**Part 4, the charter.** `decide-the-o-level-charter` had `O0 = zero
+optimization, source 1:1`. The two halves came apart, so `source 1:1` MOVED to
+`-OO` rather than being quietly violated, and the amendment says why in the
+open: gcc, clang and tcc all prune here with no optimiser asked for, and tcc HAS
+no optimiser, so this is lowering — a level called "zero optimization" that
+performs zero LOWERING would not be a compiler.
+
+## This ticket is DONE
+
+The one shape left from part 1 — statements after a `return`/`Exit` — is split
+out as [[feature-a-prune-statements-after-a-return-at-O0]], because it is a
+different mechanism (`AN_SEQ` reachability, needing a notion of which node kinds
+terminate a block) and deserves its own place in the ranker rather than a tail
+on a closed ticket.

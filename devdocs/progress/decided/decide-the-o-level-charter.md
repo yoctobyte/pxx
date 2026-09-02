@@ -7,7 +7,7 @@ prio: 65
 status: decided
 found: 2026-08-30
 found-by: owner, proposing a five-level scheme and asking to be corrected
-summary: "RULED 2026-08-30, amended the same day. O0 zero optimization / O1 DEBUG-SAFE optimization (our divergence: this is -Og elsewhere, unenforced until someone builds the test) / O2 proven default / O3 experimental, on track for O2 / O4 RESEARCH — correct but speculative, may never promote, and its purpose is to keep O3's drain honest. The rejected idea was O4 as the TRADE-OFF bin: 'only for certain applications' is a different axis, and those stay NAMED FLAGS because an author must choose WHICH trade, not HOW MUCH. O4 is swept on a slower cadence than the ladder, because nothing depends on it."
+summary: "RULED 2026-08-30, amended the same day, and again 2026-09-02 when `source 1:1` LEFT O0 for the named flag -OO (O0 now does the lowering gcc/clang/tcc all do with no optimiser asked for; 1:1 stayed load-bearing for telling a lowering bug from an optimizer bug, so it moved rather than being violated). O0 zero optimization / O1 DEBUG-SAFE optimization (our divergence: this is -Og elsewhere, unenforced until someone builds the test) / O2 proven default / O3 experimental, on track for O2 / O4 RESEARCH — correct but speculative, may never promote, and its purpose is to keep O3's drain honest. The rejected idea was O4 as the TRADE-OFF bin: 'only for certain applications' is a different axis, and those stay NAMED FLAGS because an author must choose WHICH trade, not HOW MUCH. O4 is swept on a slower cadence than the ladder, because nothing depends on it."
 ---
 
 # The O-level charter
@@ -20,7 +20,7 @@ two axes. He took the correction; this is the ruling.
 
 | level | meaning |
 | --- | --- |
-| **O0** | zero optimization, source 1:1. What makes `-g` output trustworthy. |
+| **O0** | zero optimization. What makes `-g` output trustworthy. |
 | **O1** | **debug-safe optimization** — optimize, but never confuse a debugger. |
 | **O2** | the proven default. Debuggers mostly cope. |
 | **O3** | **experimental**, staging for `-O2`. Drains upward. |
@@ -28,6 +28,33 @@ two axes. He took the correction; this is the ruling.
 **Proof for a promotion is the owner's standing rule: self-host + all tests
 passed, with no more proof available until a counterproof.** See
 [[decide-the-o3-tier-is-34-percent-faster-and-nothing-gates-it]].
+
+### AMENDED 2026-09-02 — `source 1:1` left O0 and became `-OO`
+
+O0's line used to read *"zero optimization, source 1:1"*. The two halves came
+apart, so the second half moved to a named flag rather than being quietly
+violated.
+
+`-O0` now prunes the dead arm of a constant-condition `if`/`while` and folds a
+constant short-circuit operand
+([[feature-a-fold-the-consensus-dead-branch-core-at-every-level]], implementing
+[[decide-should-unreachable-code-that-breaks-the-LOAD-be-pruned-at-O0]]). That
+is not this charter being broken: gcc, clang and **tcc** all do it with no
+optimiser asked for, and tcc HAS no optimiser, which is what settles that these
+are **lowering** and not optimization. A level called "zero optimization" that
+performs zero *lowering* would not be a compiler.
+
+But 1:1 was load-bearing for a real job — **separating a lowering bug from an
+optimizer bug** — so it moved to **`-OO`**, a NAMED FLAG and never a level below
+zero, exactly as this charter's own rejected-idea section requires: an author
+must choose WHICH trade, not HOW MUCH. `-OO` is a **diagnostic** mode, not a
+shipping one. It deliberately emits calls the program cannot reach, so a program
+whose dead arm names an undefined symbol links under `-O0` and fails to start
+under `-OO`. That is the intended behaviour and is what makes it a reference.
+
+| flag | meaning |
+| --- | --- |
+| **-OO** | source 1:1 — emit what the source says, no folding at all. Diagnostic, not shippable. |
 
 ## O1 — the correction, and the debt it carries
 

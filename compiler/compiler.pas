@@ -828,6 +828,9 @@ begin
   WriteLn;
   WriteLn('common options:');
   WriteLn('  -O0 -O1 -O2 -O3       optimisation level (-O2 is the proven default)');
+  WriteLn('  -OO                   source 1:1 -- emit what the source says, no folding at all.');
+  WriteLn('                        A diagnostic reference, not a shipping mode: it emits calls');
+  WriteLn('                        the program cannot reach, which -O0 and above prune.');
   WriteLn('  -g                    DWARF line info (x86-64)');
   WriteLn('  --target=<t>          cross-compile; see --list-targets');
   WriteLn('  -Fu<dir>              add a Pascal unit search root');
@@ -919,6 +922,7 @@ begin
      The 1:1 reference moves to `-OO`, a named flag, per part 3 of
      feature-a-fold-the-consensus-dead-branch-core-at-every-level. }
   OptLevelExplicit := False;
+  SourceOneToOne := False;
   RcSuppressAssign := False;
   WarnedMissedFold := False;
   WarnedMissedFoldBranch := False;
@@ -1049,6 +1053,15 @@ begin
     else if option = '--warn-missed-fold' then
     begin
       WarnMissedFold := True;
+      Inc(i);
+    end
+    else if option = '-OO' then
+    begin
+      { The 1:1 reference. Tested BEFORE the -O<digit> arm on purpose: that arm
+        reads option[3] as a digit, and 'O' would come out as level 31. }
+      OptLevel := 0;
+      SourceOneToOne := True;
+      OptLevelExplicit := True;
       Inc(i);
     end
     else if (option = '-O0') or (option = '-O1') or (option = '-O2') or (option = '-O3') then

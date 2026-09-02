@@ -2492,6 +2492,24 @@ var
   PaScanCount : Integer;
   FxSaveOn   : Boolean;  { -O3 x86-64 (pxx internal ABI §5b): this body reserved a 6-slot frame area for the xmm8..13 pool at ABI boundaries. The callee-saved discipline is invisible to SysV externs, indirect targets, coroutine switches and longjmp unwinds (skipped epilogues), so the pool is saved to these slots before each such boundary (extern call, IR_CALL_IND, IR_COSWITCH, try-entry) and restored right after (or on the IR_EXC_ENTER landing pad) — preserving residents that belong to ANY frame up-stack, not just this body's. Set per body by FloatPoolBoundaryAssign; False for -O0/-O2 / non-x86-64 / inline-asm bodies, so those stay byte-identical. }
   FxSaveBase : Integer;  { rbp offset of slot 0 (xmm8); slot k = FxSaveBase + 8*k }
+  SourceOneToOne : Boolean;
+  { `-OO`: emit what the SOURCE says, for the whole pipeline. A NAMED FLAG and
+    never a level below zero -- decide-the-o-level-charter rules that trade-offs
+    are not levels, because an author must choose WHICH trade and not HOW MUCH.
+
+    It exists because -O0 stopped being the byte-identity reference: -O0 now
+    prunes the dead arm of a constant `if`/`while` and folds a constant
+    short-circuit operand, both of which gcc/clang/tcc also do with no optimiser
+    asked for, so they are LOWERING and belong at every level
+    (feature-a-fold-the-consensus-dead-branch-core-at-every-level). The 1:1
+    reference had to move somewhere rather than disappear -- separating a
+    LOWERING bug from an OPTIMIZER bug is the whole reason -O0's charter said
+    1:1 -- and this is where it moved.
+
+    -OO is a DIAGNOSTIC mode, not a shipping one: it deliberately emits calls
+    the program can never reach, so a program whose dead arm names an undefined
+    symbol links under -O0 and fails to start under -OO. That is the intended
+    behaviour and is what makes it a reference. }
   OptLevelExplicit : Boolean;  { true once an explicit -O flag was seen. -g (DWARF Tier-1) defaults to -O0 for debuggable 1:1 codegen (inline/opt would relocate or elide lines/functions, breaking breakpoints) UNLESS the user explicitly picked an -O level. }
   { --measure-regcall: phase-0 opportunity probe for feature-callconv-register-args.
     Per compiled body, tally params and how many are register-residency-eligible

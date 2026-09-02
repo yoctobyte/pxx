@@ -358,6 +358,11 @@ end;
 function CConstIntLit(n: Integer; var v: Int64): Boolean;
 begin
   CConstIntLit := False;
+  { -OO emits what the source says, so every fold in this file switches off
+    HERE rather than at each call site: this helper is the single question they
+    all ask, and a gate at the choke point cannot be forgotten by the next fold
+    someone adds. }
+  if SourceOneToOne then Exit;
   if (n < 0) or (n >= ASTNodeCount) then Exit;
   if ASTKind[n] <> AN_INT_LIT then Exit;
   v := ASTIVal[n];
