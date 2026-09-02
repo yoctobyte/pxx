@@ -14,7 +14,13 @@ summary: "The stale-stamp bug now STOPS loudly (527837d3a) instead of printing a
 
 Split out of
 [[bug-a-the-mandatory-fixedpoint-step-reports-success-from-a-stale-stamp]],
-whose loud-stop half landed as `527837d3a`. **Nothing is broken today**: a stamp
+whose loud-stop half landed as `01dd27dd1` ("the fixedpoint step can no
+longer report success for sources it never saw"). The sha originally cited
+here, `527837d3a`, was a PRE-REBASE ghost — reachable from no remote ref, and
+still readable in its author's own object store, which is why it never looked
+wrong to them. Corrected 2026-09-02 by matching the subject on origin/master;
+CLAUDE.md cites the same sha for the same behaviour, which is the second
+source. **Nothing is broken today**: a stamp
 written for other sources is refused with a one-line recovery, and running that
 line rebuilds correctly. This ticket is only about removing the manual step.
 
