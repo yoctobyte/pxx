@@ -1,8 +1,9 @@
 ---
-summary: "With nested comments OFF (delphi mode), a {$...} sequence inside a brace comment does not end the comment in pxx, but does in FPC. Lax direction — pxx accepts sources FPC rejects"
+summary: "KNOWN-INCOMPAT, chosen (2026-09-02). With nested comments OFF (delphi mode) a {$...} inside a brace comment does not end the comment here and does in FPC -- the LAX direction, so pxx accepts sources FPC rejects, which CLAUDE.md states is not a defect. No correct program is refused and nothing computes a wrong value; relying on it means relying on a lexer accident to change what is code. Independently: the one-line fix was tried 2026-08-19, is in the right place, and BREAKS THE SELF-BUILD -- evidence about cost, and the second reason rather than the first."
 type: compat
 track: P
 prio: 5
+status: known-incompat
 ---
 
 # `{$...}` inside a brace comment survives `{$NESTEDCOMMENTS OFF}` in pxx
@@ -111,3 +112,23 @@ wrong: the grep was `grep -rn "{ [^}]*{\$"` in double quotes, where `\$`
 collapses to `$` and the pattern anchors to end-of-line, so it matched nothing
 and looked like a clean bill of health. The self-build caught it one build
 later. Single quotes (`'{ *{\$'`) give the real 69.
+
+## KNOWN-INCOMPAT 2026-09-02 — the lax direction, and the fix breaks the self-build
+
+Two independent reasons, either sufficient, and the order matters.
+
+**First: it is the lax direction.** pxx accepts a source FPC rejects. CLAUDE.md
+is explicit that **us accepting what FPC rejects is not a defect** — no correct
+program is refused, nothing computes a wrong value. A program relying on `{$...}`
+inside a brace comment terminating that comment is relying on a lexer accident to
+change which text is code.
+
+**Second, and only second: the obvious fix does not land.** Recorded here
+2026-08-19 — the one-line change is real, is in the right place, and **breaks the
+self-build.** That is evidence about COST, not about correctness. A fix being
+hard is never why something stops being a defect, which is why it is not the
+first reason.
+
+**What would reopen it:** real source that is correct under FPC and wrong here
+*because* pxx keeps the comment open. Absent that, this is a difference in what
+the two lexers tolerate inside a comment, and ours tolerates more.

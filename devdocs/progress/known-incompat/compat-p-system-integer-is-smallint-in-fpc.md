@@ -1,6 +1,8 @@
 ---
 track: P
 prio: 10
+summary: "KNOWN-INCOMPAT, chosen (2026-09-02). SizeOf(System.Integer) is 2 in fpc 3.2.2 and 4 here, because FPC's system unit declares Integer = smallint and the 4-byte Integer comes from the MODE redeclaring it -- so in FPC the qualifier selects a DIFFERENT type and System.Integer(x) truncates to 16 bits. pxx has one Integer and no System namespace. A programmer qualifying a name means THE Integer type, not "narrow this to 16 bits"; reproducing FPC would make an explicit qualification change the semantics of what it qualifies. Narrow: System.LongWord, System.Boolean and System.Char all agree; Integer is the one name FPC's mode shadows."
+status: known-incompat
 ---
 
 # `System.Integer` is SmallInt in FPC, LongInt in pxx
@@ -61,3 +63,24 @@ call it.
 `make compiler/pascal26` + `tools/gate.sh quick`. Coverage today:
 `test/test_fpc_compat_batch.pas` asserts the `System.LongWord` identities and
 carries a comment pointing here.
+
+## KNOWN-INCOMPAT 2026-09-02 — chosen, and ours is what the source meant
+
+The measurement is true and reproducible. FPC's `system` unit really declares
+`Integer = smallint`, and the 4-byte `Integer` every objfpc program uses comes
+from the MODE redeclaring it — so in FPC the qualifier selects a different type
+and `System.Integer(x)` is a 16-bit truncating cast.
+
+**Chosen, not tolerated.** pxx has one `Integer` and no `System` namespace to
+differ from. A programmer who writes `System.Integer` is qualifying the name to
+be unambiguous — they mean *the* Integer type. They do not mean "please narrow
+this to 16 bits". Reproducing FPC would make an explicit qualification change the
+semantics of the thing it qualifies, which is the opposite of what qualifying is
+for. CLAUDE.md: **ask what the source MEANT, not what FPC returned.**
+
+Neither compiler is wrong. FPC's answer is correct about FPC's two-type reality;
+ours is correct about a language with one `Integer`.
+
+**What would reopen it:** real source — not a probe — that writes
+`System.Integer` *because* it wants the 16-bit truncating cast and is wrong here
+as a result. Code that qualifies for clarity is served correctly.
