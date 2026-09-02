@@ -190,6 +190,26 @@ end;
   Two passes, two routes, one missing enumeration: it is the strongest evidence
   for the paragraph above that a guard listing SPELLINGS keeps coming up short.
 
+  AN_ASM IS DELIBERATELY ABSENT, and this note exists because the paragraph
+  above tells you to add every future entry-point kind HERE -- so the next
+  reader will reach for asm and should not. An asm block is not an entry point:
+  pxx resolves asm labels WITHIN one asm statement, so a jump out of a block is
+  not expressible and pruning a whole block behind a terminator cannot orphan
+  anything. Measured 2026-09-02: `asm jmp fwd7 end; Exit; asm fwd7: end` is
+  refused at compile time with `asm: undefined label "fwd7"`, and an asm block
+  alone behind an Exit prunes with the program still correct. Adding AN_ASM
+  would not harden the guard -- it would answer TRUE for a node that is not an
+  entry point and suppress a prune that is correct today (frankb-a9's argument,
+  and it is the right one: conservative in the useless direction is just wrong
+  in the cheap direction).
+
+  WHAT WOULD CHANGE IT is `asm goto`, which by definition names C labels the
+  template can jump to, and asm labels made visible across statements. Neither
+  exists today; the C frontend refuses a non-empty template outright. If either
+  lands, AN_ASM belongs in the list below and the tell is the usual one --
+  `invalid IR jump target (label not defined)`, loud, not a miscompile. Carried
+  in [[feature-c-gnu-inline-asm-with-a-non-empty-template]] rather than only here.
+
   THE BUDGET IS PART OF THE GUARD, not a performance tweak. A statement list
   chains through ASTRight, so a thousand-statement arm is a thousand-deep walk;
   exhausting the budget answers TRUE -- keep the arm -- because a guard that
