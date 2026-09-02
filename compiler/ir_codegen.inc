@@ -11045,6 +11045,48 @@ begin
         EmitB($48); EmitB($85); EmitB($C0);                    { test rax,rax }
         EmitB($0F); EmitB($84); pDynZero := CodeLen; EmitI32(0); { jz zero }
 
+        { The nested/field twin of the in-place grow in the symbol-target arm
+          above; the argument for every guard is written out there and is the
+          same one here. This site reaches `SetLength(rec.arr, n)` and
+          `SetLength(a[i], n)`, which the symbol arm never sees -- and a
+          two-dimensional table grown a row at a time is exactly the shape that
+          makes allocate-always visible.
+          Stack here is [rsp]=old, [rsp+8]=n, [rsp+16]=&slot, and the RESULT of
+          this node is the data pointer, which the fast path leaves unchanged.
+          feature-opt-dynarray-grows-in-place }
+        EmitB($48); EmitB($8B); EmitB($34); EmitB($24);             { mov rsi,[rsp] = old data }
+        EmitB($48); EmitB($85); EmitB($F6);                         { test rsi,rsi }
+        EmitB($0F); EmitB($84); pDynFastNil := CodeLen; EmitI32(0); { jz alloc }
+        EmitB($48); EmitB($83); EmitB($7E); EmitB($F0); EmitB($01); { cmp qword [rsi-16],1 }
+        EmitB($0F); EmitB($85); pDynFastShared := CodeLen; EmitI32(0); { jne alloc }
+        EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($08); { mov rdx,[rsp+8] = n }
+        EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);             { mov rcx,[rsi-8] = old len }
+        EmitB($48); EmitB($39); EmitB($CA);                         { cmp rdx,rcx }
+        EmitB($0F); EmitB($82); pDynFastShrink := CodeLen; EmitI32(0); { jb alloc }
+        EmitB($48); EmitB($89); EmitB($D0);                         { mov rax,rdx }
+        EmitScaleByElem(0, slElemSize);                             { rax := n * elemSize }
+        EmitB($48); EmitB($83); EmitB($C0); EmitB($18);             { add rax,24 = needed payload }
+        EmitB($48); EmitB($3B); EmitB($46); EmitB($E0);             { cmp rax,[rsi-32] = capacity }
+        EmitB($0F); EmitB($87); pDynFastBig := CodeLen; EmitI32(0); { ja alloc }
+
+        EmitScaleByElem(1, slElemSize);                             { rcx := oldLen * elemSize }
+        EmitB($48); EmitB($83); EmitB($E8); EmitB($18);             { sub rax,24 = n bytes }
+        EmitB($48); EmitB($29); EmitB($C8);                         { sub rax,rcx = tail bytes }
+        EmitB($48); EmitB($8D); EmitB($3C); EmitB($0E);             { lea rdi,[rsi+rcx] = old end }
+        EmitB($48); EmitB($89); EmitB($C1);                         { mov rcx,rax }
+        EmitB($31); EmitB($C0);                                     { xor eax,eax }
+        EmitB($F3); EmitB($AA);                                     { rep stosb }
+        EmitB($48); EmitB($89); EmitB($56); EmitB($F8);             { mov [rsi-8],rdx = new length }
+        EmitB($48); EmitB($89); EmitB($F0);                         { mov rax,rsi (result = data) }
+        EmitB($48); EmitB($83); EmitB($C4); EmitB($18);             { add rsp,24 }
+        EmitB($E9); pDynFastDone := CodeLen; EmitI32(0);            { jmp release-lock }
+
+        Patch32(pDynFastNil, CodeLen - (pDynFastNil + 4));
+        Patch32(pDynFastShared, CodeLen - (pDynFastShared + 4));
+        Patch32(pDynFastShrink, CodeLen - (pDynFastShrink + 4));
+        Patch32(pDynFastBig, CodeLen - (pDynFastBig + 4));
+        EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax,[rsp+8] = n }
+
         { size = n*elemSize + 24 }
         if slElemSize = 8 then
           begin EmitB($48); EmitB($C1); EmitB($E0); EmitB($03); end
@@ -11054,6 +11096,21 @@ begin
             EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1);
           end;
         EmitB($48); EmitB($83); EmitB($C0); EmitB($18);        { add rax,24 (header: kind+rc+len) }
+        { Geometric headroom off the LENGTH -- see the symbol-target arm for why
+          it must not come off [rsi-32]. Without it the in-place path above is
+          reachable at most once per array. }
+        EmitB($48); EmitB($8B); EmitB($34); EmitB($24);             { mov rsi,[rsp] = old data }
+        EmitB($48); EmitB($85); EmitB($F6);                         { test rsi,rsi }
+        EmitB($0F); EmitB($84); pDynCapNil := CodeLen; EmitI32(0);  { jz cap_done }
+        EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);             { mov rcx,[rsi-8] = old len }
+        EmitScaleByElem(1, slElemSize);                             { rcx := oldLen * elemSize }
+        EmitB($48); EmitB($01); EmitB($C9);                         { add rcx,rcx }
+        EmitB($48); EmitB($83); EmitB($C1); EmitB($18);             { add rcx,24 }
+        EmitB($48); EmitB($39); EmitB($C1);                         { cmp rcx,rax }
+        EmitB($0F); EmitB($82); pDynCapSmall := CodeLen; EmitI32(0); { jb cap_done }
+        EmitB($48); EmitB($89); EmitB($C8);                         { mov rax,rcx }
+        Patch32(pDynCapNil, CodeLen - (pDynCapNil + 4));
+        Patch32(pDynCapSmall, CodeLen - (pDynCapSmall + 4));
         EmitHeapAllocLocked;                                   { rax = block base }
         EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08); { mov rcx,[rsp+8] = n }
         EmitB($48); EmitB($C7); EmitB($00); EmitI32(0);        { mov qword [rax],0 (kind: untagged, phase 1) }
@@ -11215,6 +11272,7 @@ begin
         EmitB($48); EmitB($83); EmitB($C4); EmitB($18);        { add rsp,24 }
 
         Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
+        Patch32(pDynFastDone, CodeLen - (pDynFastDone + 4));
         EmitReleaseHeapLock;
       end;
 

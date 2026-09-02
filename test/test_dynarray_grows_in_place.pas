@@ -32,7 +32,10 @@ end;
 
 type
   TRec = record n: Integer; s: AnsiString; end;
+  THolder = record tag: Integer; arr: array of Integer; end;
 var
+  hold: THolder;
+  grid: array of array of Integer;
   a, b: array of Integer;
   ms: array of AnsiString;
   rs: array of TRec;
@@ -116,7 +119,43 @@ begin
     for j := 0 to Length(nest[i]) - 1 do sum := sum + nest[i][j];
   Chk('nested arrays survive outer growth', (Length(nest) = 10) and (sum = 1380));
 
-  { 7. a one-shot SetLength from nil takes no headroom it then has to keep }
+  { 7. the NESTED/FIELD lowering is a second emit site, and it has its own
+    positive control: a record field and an array element are reached through
+    IR_SETLEN_DYN, which the symbol-target arm never sees. Both read 2047 on the
+    pre-fix compiler. }
+  SetLength(hold.arr, 1);
+  hold.arr[0] := 1;
+  p0 := PtrUInt(@hold.arr[0]);
+  moves := 0;
+  for i := 2 to 2048 do
+  begin
+    SetLength(hold.arr, i);
+    hold.arr[i - 1] := i;
+    p := PtrUInt(@hold.arr[0]);
+    if p <> p0 then begin Inc(moves); p0 := p; end;
+  end;
+  sum := 0;
+  for i := 0 to 2047 do sum := sum + hold.arr[i];
+  Chk('record field grows in place',
+      (moves >= 1) and (moves <= 40) and (Length(hold.arr) = 2048) and (sum = 2098176));
+
+  SetLength(grid, 2);
+  SetLength(grid[1], 1);
+  grid[1][0] := 5;
+  p0 := PtrUInt(@grid[1][0]);
+  moves := 0;
+  for i := 2 to 2048 do
+  begin
+    SetLength(grid[1], i);
+    grid[1][i - 1] := i;
+    p := PtrUInt(@grid[1][0]);
+    if p <> p0 then begin Inc(moves); p0 := p; end;
+  end;
+  Chk('array element grows in place',
+      (moves >= 1) and (moves <= 40) and (Length(grid[1]) = 2048)
+      and (grid[1][0] = 5) and (grid[1][2047] = 2048) and (Length(grid[0]) = 0));
+
+  { 8. a one-shot SetLength from nil takes no headroom it then has to keep }
   a := nil;
   SetLength(a, 1000);
   Chk('one-shot sizing from nil', (Length(a) = 1000) and (a[999] = 0));
