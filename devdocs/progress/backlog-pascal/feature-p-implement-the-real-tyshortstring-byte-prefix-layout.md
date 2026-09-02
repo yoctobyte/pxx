@@ -272,6 +272,47 @@ a test for this must assert the STRIDE and a `string[N]` whose content length
 differs from its capacity — a value check cannot see a wrong prefix width when
 the string happens to fill its slot.
 
+## THE BIG FLIP IS LAST, AND IT SERIALISES THE FLEET (owner, 2026-09-02)
+
+*"that big flip should be LAST. and likely, we dont want any other work done at
+that point since this affects our self-compile capability."* **This is a hard
+constraint, not a preference** — treat it like `make pin`: one of the few things
+that genuinely serialises, per CLAUDE.md's "sequence the few things that
+genuinely serialise ... landing order when a change is only correct as a whole".
+
+**And the flip is really TWO flips of very different risk.** Measured in the
+compiler's own sources:
+
+```
+string[N] declarations       :  3
+array of string[N]           :  7
+plain `string` declarations  : 69
+```
+
+**Flip A — explicit `string[N]`, N <= 255, re-types to `tyShortString`.**
+Touches **10** declarations in the compiler. The capacity carriers and
+`FrozenStrSlotSize` already handle it (see above). Low exposure.
+
+**Flip B — bare `string` changes kind.** Touches all **69**, and changes both
+the slot (264 -> 256) and the prefix width (8 -> 1) for every string the
+compiler itself uses, because `tyString` is *"the self-host model"*
+(`defs.inc:1118`). **This is the one that endangers self-compile.**
+
+**Leaving bare `string` exactly as it is — still `tyString`, still
+`LOCAL_STR_CAP + 8` — means Flip B never happens** and Flip A's self-host
+exposure is ten declarations rather than sixty-nine. That is a far smaller
+thing to stop the fleet for, and it is the default this ticket recommends.
+
+> **VERIFY BEFORE TRUSTING THIS SPLIT.** In USER code plain `string` measures 8
+> — a managed `tyAnsiString` handle — while `defs.inc` calls `tyString` the
+> self-host model. So bare `string` means different things in the compiler's own
+> sources than in user code, and **the coordinator did not trace how that mode
+> is selected.** The 69 rests on it. Establish it first.
+
+Recovery if the flip does break the fixedpoint: reseed from the pin and `touch`
+the sources — the pinned binary predates the flip by construction, so it is
+always a valid seed. Say which pin in the commit.
+
 ## CONSTANTS: the landing order, and it is narrower than it looks
 
 The owner named the sequencing risk: *"the big catch is — constant strings.
