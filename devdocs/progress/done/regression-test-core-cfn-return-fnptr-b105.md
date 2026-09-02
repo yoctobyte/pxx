@@ -152,4 +152,4 @@ labelled, because a test built around that alone would have proved nothing.
 
 ## Log
 - 2026-09-02 — auto-closed by the seven watcher: `test-core#src:test/cfn_return_fnptr_b105.c` passes at 588d8512f101 (tier native); it was red at 65b719ab48ae. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 21fd08c1c.
