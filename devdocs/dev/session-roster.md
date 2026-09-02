@@ -150,12 +150,24 @@ where `working/` is least informative — nobody has claimed it yet.** Not an
 argument against flagging; the alternative is sitting on work silently.
 frankA: **"unclaimed is a snapshot, and the collision only surfaces at push."**
 
-**Not a bad instrument — a good one aimed at a different question.** `working/`
-and `owner:` measure INTENT; commits grouped by `Claude-Session` trailer measure
-ACTIVITY, and only that answers "is someone typing here now" (the author is
-always `yoctobyte`). **Name the instrument in the clearance**, so a wrong one is
-auditable rather than authoritative — and having just flagged something, ask the
-agent outright.
+**The window does not contain an unowned ticket — the flag IS the claim**, and
+it is a stronger signal than `working/` because it is younger. A session that
+flags something and asks to be ranked is telling you it intends to work it.
+Ranking it back to them is right; the error is that the flag leaves **no
+artifact anyone else can read**, so the next session sees an unclaimed ticket
+and takes it — citing your ranking as evidence it was free.
+
+**So: a ticket someone has just flagged is THEIRS until they say otherwise, and
+your job in that window is to make the flag VISIBLE, not to re-rank it.** The
+reply that ranks it says *claim it now, before you start*; if they cannot claim
+immediately, record the intent in the ticket yourself. One action, and it closes
+the hole without asking `working/` to be something it is not.
+
+**And when you do read an instrument: not a bad one — a good one aimed at a
+different question.** `working/` and `owner:` measure INTENT; commits grouped by
+`Claude-Session` trailer measure ACTIVITY, and only that answers "is someone
+typing here now" (the author is always `yoctobyte`). **Name the instrument in
+the clearance**, so a wrong one is auditable rather than authoritative.
 
 ## Standing constraints
 
