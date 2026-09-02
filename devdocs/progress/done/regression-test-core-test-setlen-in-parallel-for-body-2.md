@@ -125,3 +125,4 @@ bug is stable on its host, and this is not stable on its host.
 in any tier. **A test that flips on its own makes that a lottery** rather than a
 consequence of fixing things: every arrival can be beaten by the fix rate and
 the run still comes back red. Recorded there too.
+- 2026-09-02 — CLOSED by claude-T on Track T dispatch. Re-verified at HEAD before diagnosing, per this stub's own banner: `tools/testmgr.py --tier native --job 'test-core#src:test/test_setlen_in_parallel_for_body.pas'` at `3e05d2946455` is **GREEN**. The regression is gone from the tree and the job is no longer in seven's `open_regressions`. No code change was needed for this ticket; what it cost was the re-verification.
