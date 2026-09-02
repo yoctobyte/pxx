@@ -4,10 +4,10 @@ title: "N objects link N copies of crtl: weak resolves the symbol, it does not d
 track: A
 prio: 55
 type: feature
-status: backlog
+status: working
 created: 2026-09-01
 found-by: frankA
-owner: ""
+owner: frankC
 blocked-by: []
 summary: "Two --emit-obj objects now link and share one runtime (bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link), but WEAK only picks a winner among duplicate symbols -- the losing objects' sections are still linked in whole. Measured: two objects that each contain crtl produce a 580088-byte binary against 310544 for one, and busybox's 41-TU separate build came out at 13.7MB for the same reason. Needs section-granular deduplication: a crtl archive the linker pulls members from, or function/data sections plus COMDAT groups."
 ---
@@ -288,3 +288,68 @@ and the honest reading is that this moves an object toward option (1)'s
 semantics (a pxx object stops being a self-contained runtime) without the
 archive that makes that deliberate. Worth deciding rather than assuming:
 whether a pxx object is a self-contained runtime or a translation unit.
+
+## 2026-09-02 (frankC) — the "7 relocations" number is WRONG, and the prerequisite it states is right
+
+Re-measured at `67bf0612e`, x86-64, before starting the relocation work this
+ticket ranks first. **The claim above — "an object has only 7 `.text`
+relocations in total" — does not reproduce.**
+
+| object | `.rela.text` | `.rela.data` | `.rela.init_array` | `.rela.fini_array` |
+| --- | --- | --- | --- | --- |
+| C, one function + `main` | **1699** | 5 | 1 | 1 |
+| Pascal, one `cdecl` function | **191** | 63 | 1 | 1 |
+
+The first count I took said 1706 and was also wrong: the awk set a flag at
+`.rela.text` and never cleared it, so it counted every later RELA section too.
+An instrument that answers about the wrong population does not error — it
+answers. The table above is from a per-section parse, cross-checked against
+`readelf -S` sizes.
+
+**The SUBSTANCE of the claim survives and is sharper than the number was.**
+Classifying every `.rela.text` entry by what it TARGETS:
+
+```
+a.o (C):      1072 -> .bss    423 -> .data    114 -> errno   48 -> optind   8 -> opterr
+p.o (Pascal):  136 -> .bss     55 -> .data
+              ---- FUNC-targeting entries, both objects: ZERO ----
+```
+
+Every one is a DATA reference. So the real prerequisite is not "an object has
+almost no relocations" (it has 1699) but the exact statement:
+
+> **No relocation in `.text` targets a FUNC symbol. Every internal call is a
+> displacement baked at emit time by `ApplyCallFixups`.**
+
+That is a one-line check anyone can re-run, it cannot be confused with the
+data relocations that already exist in quantity, and it is what the reorder /
+dedup work actually has to change. `ApplyCallFixups` (symtab.inc) patches every
+`CallFix` site for every architecture; nothing in the x86-64 object path turns
+one into a relocation. The machinery to do so already exists and is used on
+another target: `ObjProcSymIdx[]` plus `writeRela64`, which is how the xtensa
+IRAM path (`IramCallFix`) relocates its calls.
+
+Also worth correcting for whoever picks this up: `ProcAddrFix` (`@proc`) DOES
+relocate, but against **section symbol `.text` + addend**, not against the
+proc's own symbol — so it is section-relative and would break under
+per-function sections exactly like a baked call does. It needs the same
+substitution.
+
+## `--gc-sections` SIDESTEPS THE INTERFACE FORK — option (2) is not blocked
+
+The open question in `decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit`
+blocks narrowing the DCE ROOT SET, because dropping an unreached crtl routine
+from an object removes its SYMBOL and changes the link surface that
+`test-emit-obj` 4b-septies pins.
+
+Option (2) does not have that problem, and this is the reason to prefer it
+rather than wait for the ruling. At a FINAL link `--gc-sections` computes
+reachability from the ENTRY POINT; a global symbol is not a root there (that is
+shared-library behaviour). So per-function sections let the linker drop the
+BYTES of unreached crtl while the object still EXPORTS every symbol it exports
+today. The link surface is unchanged, 4b-septies keeps its meaning, and the
+fork stays open without blocking the work.
+
+That makes the ranking: relocations first (this ticket's own recommendation),
+then per-function sections, both behind a flag so `--emit-obj` cannot regress
+for the busybox consumer while they land incrementally.
