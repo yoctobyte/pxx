@@ -3,7 +3,7 @@ slug: feature-a-fold-the-consensus-dead-branch-core-at-every-level
 track: A
 prio: 65
 type: feature
-status: open
+status: done
 blocked-by: []
 found: 2026-08-31
 found-by: frank-user
@@ -329,3 +329,6 @@ out as [[feature-a-prune-statements-after-a-return-at-O0]], because it is a
 different mechanism (`AN_SEQ` reachability, needing a notion of which node kinds
 terminate a block) and deserves its own place in the ranker rather than a tail
 on a closed ticket.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
