@@ -808,6 +808,41 @@ wrong answers.** It predates every commit of this feature. Do not merge it
 with the width class — merging is what would send the next reader to operand
 selection when arm32's problem was one identifier. frankwasm owns it.
 
+**AND WIDTH IS NOW RULED OUT BY MEASUREMENT RATHER THAN ASSERTED, WHICH
+MATTERS BECAUSE I LATER ARGUED THE OPPOSITE FROM THIS SEAT.** frankwasm
+measured at HEAD, at DEFAULT, with the walker fix present:
+
+| | `SizeOf(TS)` | `var_var` | `var_lit` | `lit_lit` |
+| --- | --- | --- | --- | --- |
+| wasm32 | 18 | **FALSE** | TRUE | TRUE |
+| native | 18 | TRUE | TRUE | TRUE |
+
+`18 = cap 10 + 8`, so the VARIABLE carries the same 8-byte prefix the literal
+does and **there is no narrow kind anywhere in that program.** The failing pair
+and a passing pair are therefore both SAME-WIDTH, and width cannot discriminate
+between them. That is a quantity; the paragraph above it was a pattern of rows.
+
+**What I got wrong, and it is the same error mirrored.** I told frankwasm its
+"operand selection, not width" reading was the symptom of a width bug —
+variable-vs-literal IS the cross-width pair under `-dPXX_SHORTSTRING`, since
+literals keep their 8-byte pool prefix permanently. **True for x86-64 and
+arm32, where a width-only fix turned all six shapes green, and not a mechanism
+for a backend I had not measured.** frankwasm had already retracted offering a
+mechanism for backends IT had not measured; I made the identical move in the
+message correcting it, from the shared-surface seat, where a mechanism claim
+travels furthest. Caught by frankwasm within the hour.
+
+**The generalisable part: the row pattern survives across two unrelated causes,
+which is what makes one explanation look like it covers both.** Same shape as
+this ticket's own census artefact — the ratios survived the double-count, which
+is what made an artefact look like a distribution. A symptom that is stable
+across backends is evidence of a shared cause ONLY if the quantity behind it is
+also shared. Ask for the quantity.
+
+**Clean separation, recorded as a positive result:** the walker fix `764dc3a30`
+is in frankwasm's tree and `var_var` is still FALSE. The walker correctly did
+not touch this. That is the scope of the walker fix being right, not a residue.
+
 **Correction to a population figure in circulation: riscv32 does NOT refuse the
 flag.** It accepts it and passes all four modes plus all six comparison shapes;
 it is a converted backend, measured here.
@@ -1194,3 +1229,73 @@ and the goal is missed.
 `record a: Byte; s: string[4]; b: LongInt; end` must be 12 with s@1 and b@8. A
 size-only row can be satisfied by a record that is the right total with the
 fields in the wrong places.
+
+### MEASURED IS NOT WIRED — wasm32 is the only converted backend with zero flagged rows
+
+Review of `0973746b0` (wasm32, phase 2 backend four). **The conversion itself is
+clean** — verified against the source, not the commit message: every surviving
+literal 8 in `ir_codegen_wasm32.inc` is correctly invariant (`WASM_STR_SLOTS` is
+a pool slot count with one use at :5978; `Strs[si].Offset + 8` at :2692/:4385/
+:6425 is interned literals, permanently 8 by construction; :2534/:2555 are
+PXXAlloc alignments; :567/:1344/:1392 are prose about USER-written pointer
+arithmetic). The three primitives ask `FrozenStrPrefixSize` (:2165/:2177/:2191,
+store at :4767/:4780), and :4240/:4242 branches to the EXISTING
+`PXXWriteFrozenBW` rather than inventing a third path, with :4139 keeping the
+wide helper permanently on the `IR_CONST_STR` literal arm. All three review
+classes pass.
+
+**The finding is about coverage, and it is this ticket's own nonzero-field-width
+rule one step further out.** Counting Makefile rows that pass a mode flag:
+
+| arm32 | riscv32 | aarch64 | xtensa | **wasm32** |
+| --- | --- | --- | --- | --- |
+| 36 | 31 | 29 | 6 | **0** (of 22 rows) |
+
+The eight configurations in that commit were really measured and they are not
+wired anywhere. wasm32's one standing shortstring row is
+`test_shortstring_trunc` at DEFAULT — which, **by the commit's own byte-identity
+proof (35 modules identical before and after), is exactly the path the change
+did not touch.** So the standing test covers the proven no-op and none of the
+conversion, and `test_shortstring_mixed_widths` — the nonzero field width `s:9`
+that reaches `PXXWriteFrozenBW` — is wired for the other four and not for this
+one.
+
+**Why this is not ordinary missing coverage: P4 deletes the flag.** Today an
+unwired backend is a gap in a path most programs never take. After the flip
+`string[N]` re-types unconditionally, and that same backend becomes an
+UNVERIFIED DEFAULT. The window in which this is cheap to fix closes at P4, which
+is the argument for wiring it before the flip rather than after.
+
+`run_target.sh` now has a `wasm32)` arm and `test-wasm32` runs 22 executed rows
+under `wasmtime`, so the tooling that would have blocked this already exists —
+what is missing is rows, not capability. Routed to frankwasm and frankc-af
+(who built the arm) rather than taken, to avoid two sessions in one Makefile
+region; shared-surface on-call will take it if neither has it.
+
+#### Two properties of the wasm32 rows that a reviewer will misread (frankwasm)
+
+Recorded BEFORE the rows land, because both are cases where the correct result
+looks like a mistake and the mistake looks correct.
+
+**`ssbp_short` printing `sizeof 11` against `ssbp_default`'s `18` is the
+POSITIVE CONTROL for the whole set, and must not be collapsed as redundant.**
+If the short row ever prints 18, the backend silently ignored the flag — and
+**every other row in the set still passes**, because they would all be
+measuring the default path twice. This is this ticket's own recurring shape:
+the guard that cannot fail prints PASS. The pair IS the instrument; either row
+alone is decoration.
+
+**`ssmw_short` being byte-identical to `ssmw_default` is the CORRECT result and
+will read as a copy-paste error.** Cross-width conversion must yield the same
+VALUES at either prefix width — that is what `w2n`/`n2w` mean — so identical
+output is the property under test, not a duplicated row. Anyone tempted to
+"fix" it by making the two differ would be asserting that conversion changes
+the value.
+
+### PHASE 2 IS ONE BACKEND FROM DONE — i386 alone
+
+`TargetHasByteStrPrefixCodegen` now carries six of seven rows: x86-64, aarch64,
+arm32, riscv32, xtensa (`fe8662e24`), wasm32 (`0973746b0`). **Only
+`TARGET_I386` is missing.** Note that `0973746b0`'s message lists xtensa as
+still open — it was already in; read the function, not a commit message, for
+what is converted.
