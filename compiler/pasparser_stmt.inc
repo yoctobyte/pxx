@@ -6811,6 +6811,33 @@ begin
                 ParseStatementAST := node;
                 Exit;
               end;
+              { ...and the SUFFIXED spelling of the same mistake,
+                `TS(s)[2] := 'X'`, which the guard above deliberately does not
+                take (it tests tkAssign, the whole-value target). It arrived at
+                the walk below still wrapped in AN_PTR_CAST/tyPointer, so the
+                subscript indexed a POINTER with no element type and the store
+                went nowhere: measured, `s` came back unchanged where fpc 3.2.2
+                prints `hXllo`, with no diagnostic. That silence is why this was
+                ranked above its loudly-refusing siblings.
+
+                Same remedy as the rvalue twin in pasparser_expr.inc: drop the
+                wrapper and hand the STRING to the shared walk, which reads the
+                base kind off the node and already answers tyChar for `[i]` on a
+                string. Scoped exactly like the guard above -- a non-pointer
+                alias over a managed string, and an lvalue operand.
+                bug-p-a-cast-to-a-string-alias-silently-drops-a-following-index }
+              if (not pcharCast) and (aliasIdx >= 0) and
+                 (AliasPtrDepth[aliasIdx] = 0) and
+                 (CurTok.Kind = tkLBrack) and
+                 ((ASTTk[ASTLeft[indexNode]] = Ord(tyAnsiString)) or
+                  (ASTTk[ASTLeft[indexNode]] = Ord(tyString))) and
+                 IsASTLValue(ASTLeft[indexNode]) then
+              begin
+                valNode    := ASTLeft[indexNode];
+                castTk     := IntToTypeKind(ASTTk[valNode]);
+                castElemTk := Ord(tyChar);
+                castRec    := REC_NONE;
+              end;
               { Handle the ^ / .field / [i] suffix chain.
 
                 This walk was the LAGGARD of the six postfix pointer walks in

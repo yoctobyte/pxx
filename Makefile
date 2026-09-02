@@ -5454,6 +5454,17 @@ test-core: $(COMPILER)
 	# compiles, prints the int and char rows, and then dies on the string row.
 	./$(COMPILER) test/test_alias_cast_assign_target.pas $(TESTTMP)/test_aliascast26
 	tools/expect_same.sh test_aliascast26 "$$($(TESTTMP)/test_aliascast26 | tail -n 1)" "ALIAS CAST TARGET OK"
+	# ...and the INDEXED spelling of the same cast, read and written, for every
+	# string flavour a named alias can have. The index used to be DROPPED (not
+	# misparsed) so the expression silently answered the whole string; the
+	# frozen-string flavour failed differently, through the PChar adapter, and
+	# was found by grepping for the sibling. The pinned compiler REFUSES this
+	# file outright. Controls were RUN: with the value-no-op arm disabled and
+	# the compiler rebuilt, `value overload` goes RED and `value concat`
+	# SEGFAULTS -- the Pos and Length rows stay green under that same broken
+	# build, which is why they are coverage and not the control.
+	./$(COMPILER) test/test_string_alias_cast_index.pas $(TESTTMP)/test_stralias_idx26
+	tools/expect_same.sh test_stralias_idx26 "$$($(TESTTMP)/test_stralias_idx26 | tail -n 1)" "total ok 21 / 21"
 	# on-handler binder must not poison the next routine's params (stale SymBlockId)
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_on_handler_next_proc_params.pas $(TESTTMP)/test_on_handler_npp26
 	tools/expect_same.sh test_on_handler_npp26 "$$($(TESTTMP)/test_on_handler_npp26)" "$$(printf 'purging\nTRUE 7')"

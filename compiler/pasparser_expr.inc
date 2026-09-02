@@ -546,6 +546,8 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     rndArgTk, rndRawTk: TTypeKind;   { its type, to restore after the identity }
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
     vcNode: Integer;   { a typecast of a VARIANT, rewritten as the conversion }
+    strAliasCast: Boolean;   { the C4 cast names a STRING alias -- a value no-op, but its postfix tail is still the shared suffix loop }
+    strAliasIdx: Boolean;    { ...and it is FOLLOWED BY `[`, so the tail is the shared suffix loop rather than an Exit }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
     tiAlias: Integer;   { …and the alias-table row when it is a NAMED structural type }
     tiArr: Integer;     { …and the ArrType row when it is a NAMED array type }
@@ -6744,14 +6746,31 @@ begin
             LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
             Exit;
           end;
-          if (AliasTk[aliasIdx] = Ord(tyAnsiString)) or
-             (AliasTk[aliasIdx] = Ord(tyString)) then
+          strAliasCast := (AliasTk[aliasIdx] = Ord(tyAnsiString)) or
+                          (AliasTk[aliasIdx] = Ord(tyString));
+          { A FROZEN-string alias (`type TS = String[20]`) is the sibling of the
+            same defect and was found by grepping for one rather than by a second
+            report: it is not ordinal, not float, not record, so it falls into
+            the POINTER fall-through below and its `[i]` is then read through the
+            PChar adapter -- `TS(sh)[1]` answered an empty character where fpc
+            3.2.2 answers `w`, silently, on the pinned compiler too. Only the
+            INDEXED shape joins here: the value shape (`WriteLn(TS(sh))`,
+            `Length(TS(sh))`, `Pos(TS('rl'), sh)`) was MEASURED correct on the
+            pin and is left on the path that produced it. }
+          strAliasIdx := (CurTok.Kind = tkLBrack) and
+                         (strAliasCast or
+                          TypeIsFrozenString(IntToTypeKind(AliasTk[aliasIdx])));
+          if strAliasCast and (CurTok.Kind <> tkLBrack) then
           begin
             { STRING-typed alias cast — `tbtstring(' ')` (Pascal Script):
               a value-level no-op, NOT a pointer reinterpret. Keep the
               operand node and its own string kind; consumers coerce
               frozen<->managed as usual. Tagging it tyPointer made
-              Pos(tbtstring(' '), s) miss every string overload. }
+              Pos(tbtstring(' '), s) miss every string overload.
+
+              An INDEX after the cast is the one thing this exit must not take
+              with it: it falls through to the shared suffix loop below instead.
+              See the note at the fall-through. }
             LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
             Exit;
           end;
@@ -6854,6 +6873,37 @@ begin
             LastExprTk := castTk;
             Exit;
           end;
+          if strAliasIdx then
+          begin
+            { INDEXED string-alias cast — `TAlias(s)[1]`, and the `[1]` was being
+              DROPPED rather than misparsed. The arm above is right that the cast
+              is a value-level no-op, but it returned with the subscript still
+              standing in the token stream, so whatever came next swallowed it
+              and the expression silently answered the WHOLE STRING: pxx printed
+              `hello` where fpc 3.2.2 prints `h`, with no diagnostic. Three faces
+              by position from that one cause -- silent wrong value in an
+              assignment, `cannot assign AnsiString to Char`, and `expected ')'
+              before '['` in argument position -- which is why it read as three
+              defects.
+
+              There is nothing to reinterpret, so the base IS the operand; the
+              cast owes the tail only a node and a type. The suffix loop below
+              already states the string-index rule (`[i]` on a string yields
+              tyChar) for `PR(raw)^.s[2]`, so this adds a caller to that walk
+              rather than a fifth private one -- which is the whole point, since
+              a fifth walker is what
+              refactor-p-one-lvalue-path-for-statements-and-expressions exists
+              to stop.
+              bug-p-a-cast-to-a-string-alias-silently-drops-a-following-index }
+            node := CurASTNode;
+            tk   := IntToTypeKind(ASTTk[CurASTNode]);
+            if not (TypeIsFrozenString(tk) or (tk = tyString) or
+                    (tk = tyAnsiString)) then
+              tk := IntToTypeKind(AliasTk[aliasIdx]);
+            recName := REC_NONE;
+          end
+          else
+          begin
           node := AllocNode(AN_PTR_CAST);
           ASTLeft[node] := CurASTNode;
           { A custom alias to ^Char/^AnsiChar (e.g. `type PC = ^Char; PC(s)`)
@@ -6868,6 +6918,7 @@ begin
           { Set locals so the suffix loop below can resolve ^ and .field }
           tk      := tyPointer;
           recName := AliasElemRec[aliasIdx];  { pointee record id, used after ^ }
+          end;
           { Inline metaclass-cast construction `TFooClass(expr).Create(args)`: the
             alias is a `class of T` (element tyClass) and the next selector is
             `.Create`. Dispatch through the metaclass like the variable form (the
