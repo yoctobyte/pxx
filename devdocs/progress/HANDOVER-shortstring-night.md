@@ -17,17 +17,23 @@ xtensa already in. Verified here with a freshly rebuilt binary: all seven accept
 phase 2.** The gap is now larger than when six were in:
 
 - **the walker store-side defect — all seven targets, unfixed**, frankb-a9 sole owner
-- **two surviving readers** after the four-cause fix, plus a **fifth cause**
-- `p^[1]` reads a blank while `s[1]` and `r.f[1]` read `h` in the same run
-- `r.f = 'hello'` **segfaults** on x86-64/riscv32/**i386**, FALSE on aarch64/arm32
-  (i386 measured at `c8375f3e7`; it resolves the kind at the decompose and
-  crashes anyway, so resolving there is necessary and not sufficient — the field
-  case is a third shape rather than either of the two already known)
+- ~~two surviving readers~~ — **BOTH CLOSED at `0dd5858e6`** (frankb-a9, 22:01),
+  one commit, one shared cause. Verified independently at `51b80e55b`; see
+  "BOTH SURVIVORS ARE CLOSED" below for the rebuilt-binary measurement and the
+  eleven-row widening. **x86-64 only** — the cross-target rows below were
+  measured before the fix and have NOT been re-run.
 - compare deliberately unowned; its flag rows deliberately unwired
 
-**Seven converted, ZERO of the three defect classes closed.** Every backend now
-emits a one-byte prefix and the shared paths that READ those prefixes are still
-wrong on all of them.
+**Seven converted; the reader classes are closed on x86-64 and unmeasured
+elsewhere.** Every backend emits a one-byte prefix. What is left is the walker
+store-side defect and the phase-4 flip, which is the owner's to release.
+
+**The one thing worth doing before the flip: re-run the survivor repro on
+i386, arm32, aarch64 and riscv32.** The fix landed in `ir.inc`/`symtab.inc`,
+which every backend shares, so it very likely carries — but "very likely
+carries" is exactly the claim this file has been wrong about twice tonight, and
+the whole native-only blind spot in CLAUDE.md is that the dev loop, the quick
+gate and the pin all run on x86-64.
 
 ### The green light that is not one
 
