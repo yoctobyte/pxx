@@ -218,4 +218,4 @@ question and it belongs to [[feature-embed-pascal-script]]; naming it here so
 the exculpation has an owner.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit fac756ee4.
