@@ -3,11 +3,11 @@ slug: feature-a-prune-statements-after-a-return-at-O0
 track: A
 prio: 55
 type: feature
-status: open
+status: working
 blocked-by: []
 found: 2026-09-02
 found-by: frankC
-owner: ""
+owner: frankC
 summary: "The third shape of the consensus dead-code core, split out of feature-a-fold-the-consensus-dead-branch-core-at-every-level once its other parts landed. Statements after a return/Exit are still EMITTED at -O0, so a dead call to an undefined symbol links and dies before main; measured `procedure P; begin Exit; WriteLn(NeverR); end` rc=127 at -O0, alive at -O2/-O3. Split rather than carried because it is a DIFFERENT MECHANISM from the if/while prune that landed: statement-sequence reachability inside AN_SEQ, needing a notion of which node kinds terminate a block, not a constant condition. The same label-escape guard applies."
 ---
 
