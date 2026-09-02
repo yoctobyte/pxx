@@ -4027,6 +4027,17 @@ controlled experiment on the suspected input. "The pin does it too" is one
 observation with an uncontrolled variable I had not noticed was a variable, and
 it cannot distinguish the two hypotheses at all.
 
+**And the pin is not frozen ACROSS A SESSION either — the path is stable, the
+content is not.** Measured 2026-09-02, same session as the above: I used
+`stable_linux_amd64/default/pinned` as a positive control for a SizeOf fix, it
+showed the defect, and an hour later the identical command on the identical path
+showed the defect GONE. Nothing had regressed — `make pin` had run, v401 landed
+carrying my own fix, and the "old" compiler was now a new one. Nothing in the
+invocation says which version answered; the discriminator is
+`git merge-base --is-ancestor <your fix> <the pin commit>`, and it takes a
+second. **A pinned control is only a control until the next pin.** Re-assert it
+at the moment you quote it, not at the moment you first ran it.
+
 The general form, and it is worth asking out loud before trusting any frozen
 reference: **what does this instrument actually hold constant, and is the thing
 I am accusing inside it or outside it?** An exculpation needs the SUSPECTED

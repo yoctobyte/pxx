@@ -11074,7 +11074,7 @@ test-core: $(COMPILER)
 	# STRIDE, not against a constant, so it stays correct if `string[N]` is
 	# ever changed from an 8-byte length word to fpc's 1-byte shortstring.
 	./$(COMPILER) test/test_sizeof_stringn_matches_storage.pas $(TESTTMP)/test_sizeof_stringn26
-	tools/expect_same.sh test_sizeof_stringn26 "$$($(TESTTMP)/test_sizeof_stringn26)" "$$(printf 'alias      1\nvar        1\ninline     1\narrtype    1\narrvar     1\nelement    1\nfield      1\nrecord     1\nplainstr   1\nfillchar   111\nmove       111\ntruncate   11')"
+	tools/expect_same.sh test_sizeof_stringn26 "$$($(TESTTMP)/test_sizeof_stringn26)" "$$(printf 'alias      1\nvar        1\ninline     1\narrtype    1\narrvar     1\nelement    1\nfield      1\nbracket    1\ncontained  1\nrecord     1\nplainstr   1\nguard      1\nfillchar   111\nmove       111\ntruncate   11')"
 	# ...and the same capacity one container deeper: an `array of string[N]` as a
 	# record FIELD strode by LOCAL_STR_CAP+8 = 264 rather than 18, putting
 	# element 1 past the END of the record. The value rows below PASS with the

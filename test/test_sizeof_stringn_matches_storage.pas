@@ -39,7 +39,8 @@ var
   av, bv: A3;
   rv: TRc;
   pl: string;
-  stride, i: LongInt;
+  stride, i, gbad: LongInt;
+  guard: array[0..31] of LongInt;
   p0, p1: ^Byte;
 begin
   p0 := @av[0]; p1 := @av[1];
@@ -54,11 +55,36 @@ begin
   WriteLn('element    ', Ord(SizeOf(av[0])= stride));
   WriteLn('field      ', Ord(SizeOf(rv.f) = stride));
 
-  { A record containing one is at least its field plus the byte after it.
-    RecSize was ALREADY right -- this row passed before the fix too, so it does
-    not discriminate; it is here as a regression guard on the half that worked,
-    since the fix touches RecFieldByteSize. }
-  WriteLn('record     ', Ord(SizeOf(TRc) >= stride + 1));
+  { EVERY ROW ABOVE IS AN INTERNAL-CONSISTENCY INVARIANT, and that is a real
+    limit rather than a style: `stride` is the layout engine's own answer, so
+    asserting SizeOf against it proves the two AGREE and can never notice they
+    are wrong TOGETHER. That is not hypothetical -- it is exactly the next bug
+    found in this family, where a record field's array strode 264 with SizeOf
+    agreeing at 36 only because SizeOf was reading a different path. The rows
+    below are the missing dimension: bounds that come from the DECLARATION, and
+    containment, neither of which the layout engine gets a vote on.
+
+    An absolute bracket on the slot. A `string[10]` must hold a length prefix
+    and ten chars, so it cannot be smaller than 11; and the prefix is a length
+    word, so it cannot be larger than 8+10. Both ends are the DECLARED capacity,
+    not a measurement, and the bracket is deliberately wide enough to survive
+    the pending change of the prefix from eight bytes to one (18 -> 11, still
+    inside it) while rejecting the 263/264 defaults this family keeps
+    substituting when a capacity goes missing. }
+  WriteLn('bracket    ', Ord((stride >= 11) and (stride <= 18)));
+
+  { CONTAINMENT: the last element must END INSIDE the array. This is the row a
+    self-consistent pair cannot satisfy by being wrong together -- an
+    over-strided array reports a matching SizeOf and still runs off its own
+    end. }
+  p0 := @av[0]; p1 := @av[2];
+  WriteLn('contained  ', Ord((LongInt(p1) - LongInt(p0)) + stride <= SizeOf(av)));
+
+  { A record containing one, bounded on BOTH sides. The old row was
+    `>= stride + 1`, which cannot fail upward: a record bloated by an
+    over-strided field satisfies it. }
+  WriteLn('record     ', Ord((SizeOf(TRc) >= stride + 1) and
+                             (SizeOf(TRc) <= stride + 16)));
 
   { The BOUNDARY, and the one row that is deliberately NOT portable to FPC. A
     plain managed string is a handle here, so its SizeOf is honestly the pointer
@@ -68,8 +94,16 @@ begin
     fix that over-reaches from `string[N]` into the managed model. }
   WriteLn('plainstr   ', Ord(SizeOf(pl) = SizeOf(Pointer)));
 
-  { The value rows: the idiom that made the wrong size observable. }
+  { The value rows: the idiom that made the wrong size observable. The guard
+    catches the OTHER failure mode in this family -- writes that land outside
+    the aggregate entirely, which every value assertion passes because the
+    write and the read share the same wrong stride and agree with each other
+    out there. }
+  for i := 0 to 31 do guard[i] := 12345;
   av[0] := 'aaaaaaaaaa'; av[1] := 'bbbbbbbbbb'; av[2] := 'cccccccccc';
+  gbad := 0;
+  for i := 0 to 31 do if guard[i] <> 12345 then gbad := gbad + 1;
+  WriteLn('guard      ', Ord(gbad = 0));
   FillChar(av, SizeOf(av), 0);
   Write('fillchar   ');
   for i := 0 to 2 do Write(Ord(Length(av[i]) = 0));
