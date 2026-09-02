@@ -6415,3 +6415,67 @@ drops the objects.
 keeps the logs, *and* that a success still removes the directory completely.
 Only the second one stops a retention fix from quietly becoming the disk leak it
 was avoiding. Landed as `1b2c0b5dc`.
+
+## A CORRECTED COUNT CAN STILL BE A COUNT OF THE WRONG POPULATION — fixing the instrument does not fix the question
+
+Measured 2026-09-02 (frankC), across the phase-2 shortstring conversion.
+
+A per-backend census of `PXXWriteFrozenW` call sites was produced with
+`grep -c` and circulated to four sessions, with one number flagged as loose
+and this one explicitly vouched for. It was wrong twice over, and **the two
+errors are different animals** — the second survives the fix for the first.
+
+**Error 1, the miscount.** `grep -c` counts LINES CONTAINING A STRING. It swept
+up comment lines naming the helper and, systematically, the guard that follows
+every lookup in this codebase:
+
+```pascal
+procIdx := FindProc('PXXWriteFrozenW');
+if procIdx < 0 then Error('PXXWriteFrozenW not found');   { <- counted }
+```
+
+That idiom means **a raw name count returns 2 per real site**, wherever it is
+used. Not noise — a predictable factor, derivable from the convention without
+measuring anything. Corrected distribution: wasm32 2, every other backend 1,
+against a reported 6-versus-1-or-2.
+
+**Error 2, and this is the one that matters.** The corrected count was still
+answering the wrong question. Both the wrong count and the right one answer
+*"how many places WRITE this layout"*, and both were read as *"how many places
+DEPEND on this layout"*. The isolating probe, on wasm32:
+
+```
+s := 'abcde'; p := @s; p^ := c;        { c = 'X' }
+
+           printed  Length  s[1]   s = 'X'   bytes 0..6
+x86-64      [X]       1      X      OK       1 0 0 0 0 0 0
+wasm32      [X]       1      X     FAIL      1 0 0 0 0 0 0
+```
+
+Identical memory, identical length, identical indexing, identical printed
+output — **only the comparison differs.** The store is correct. Comparison is a
+READER of the length prefix, `SetLength` is another (it traps on wasm32), and
+neither appears in any writer census. Converting the writers to a 1-byte prefix
+while those readers assume 8 changes which rows pass rather than fixing them.
+
+**The rule.** When a census is going to size other people's work, state the
+population in the sentence — "sites that WRITE the prefix", not "sites". Then
+ask what else DEPENDS on the same representation without appearing in that
+population. Readers, comparisons, size assumptions and serialisers are the
+usual answers, and none of them are found by grepping the writer's name.
+
+**Corollary, and it is why the name grep cannot be the only instrument:** a
+width assumption that never mentions a helper is invisible to a name search
+BY CONSTRUCTION. frankh-15's riscv32 conversion found its last site only by
+grepping the backend for surviving `, 8)` on string-ish lines — an inline
+`PXXStrFromLit` arm with no helper name near it, missed while reading its own
+diff. A name grep cannot fail on that class; it is the guard-that-cannot-fail
+shape applied to code search rather than to tests.
+
+**And a note on hedging, from the same episode.** The author marked one number
+loose and vouched for the other; the vouched-for one broke. Hedging the right
+half is not protection — **the visible caution made the unmeasured number read
+as the checked one.** This is `the name is not the thing`'s hedge-the-premise
+rule running in reverse: an unlabelled claim travelling beside a labelled one
+inherits its credibility, and a caveat aimed at the wrong half actively
+transfers credibility to the wrong number.
