@@ -12727,7 +12727,7 @@
   },
   {
    "bad": "2ba37ba919b6a8b15b4bf51dda760f2bf296565f",
-   "bad_untestable": true,
+   "bad_untestable": false,
    "first_seen": false,
    "good": "08f7de0715a8a9cf5f2e739231b7ac7d2b18177f",
    "job": "test-core#src:test/test_sizeof_user_name_shadows_builtin.pas",
