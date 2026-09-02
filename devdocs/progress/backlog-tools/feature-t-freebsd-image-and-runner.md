@@ -159,3 +159,58 @@ way, same answer."* So the approval covers **OpenBSD as well as FreeBSD**.
 
 **Priority unchanged at 20.** Permission granted is not priority raised, and BSD
 is demoted under the 2026-09-01 linux-only focus. This is takeable, not urgent.
+
+## Same measurement on seven — 2026-09-02, claude-T
+
+Taken up from the Track T ready queue on seven, where it ranks **p55** by
+propagation from `feature-port-freebsd-native` even though its own `prio:` is
+20. Step 1's method re-applied to this box, because the approval and every
+measurement above are about **plexus** and nothing in the ticket says the runner
+must live there.
+
+| checked | seven |
+| --- | --- |
+| `qemu-system-x86_64`, `qemu-img`, `qemu-system-i386` | **not installed** |
+| `virsh`, `vagrant`, `VBoxManage` | not installed |
+| `qemu-x86_64`, `qemu-arm`, `qemu-aarch64`, `qemu-riscv32` (user-mode) | **all present** |
+| bootable image (`*.qcow2`/`*.iso`/`*freebsd*`/`*openbsd*` under `$HOME /srv /opt /data`) | **none** |
+| disk on `/` | **419G free of 538G** |
+
+Identical to plexus in every respect that matters: the `qemu-user` /
+`qemu-system` split step 1 identified is the gap here too, disk is a non-issue,
+and the only `*freebsd*` hits are the same two source corpora that step 1
+already named as near-misses (`library_candidates/freebsd-regex`,
+`test/crtl_freebsd_regex_header_smoke.c`) — now duplicated per clone on this box
+as well.
+
+### Why this stops here rather than proceeding
+
+Two authority boundaries, neither of them work:
+
+1. **The approval names plexus.** *"this box is dedicated to development"* was
+   said about plexus, and `decide-install-qemu-system-and-a-freebsd-image-on-plexus`
+   is titled for it. Reading it as covering seven would be the same move this
+   ticket's own step 1 documents and warns about — a true statement read as
+   being about the wrong subject. It may well extend; that is a one-line answer
+   and not mine to assume.
+2. **`qemu-system` is a system package.** Installing it needs sudo, which
+   CLAUDE.md:214 reserves outright ("authority only he holds (sudo, hardware,
+   money)"), independently of which box.
+
+So the residual is unchanged in shape from step 1 — a question, not a task —
+but it is now a *narrower* question, because the measurement is done on both
+boxes and the answer is the same: nothing to find, one package to install, one
+image to fetch.
+
+### What a decision needs, if it is taken
+
+- **Which box.** seven has 419G free and runs the watcher; plexus has been
+  QUIET for ~3 days and is not publishing, so a runner wired there would produce
+  no tstate rows until that changes. On availability alone seven is the better
+  host today; on approval, plexus is the one that has it.
+- Note the ticket asks for it to be wired **as a tier/job** (step 3), which
+  means it must live where a watcher runs. That argues for seven and is worth
+  saying out loud, since the original filing assumed plexus.
+
+Priority left at 20. Nothing here raises it, and the 2026-09-01 linux-only
+focus still applies.

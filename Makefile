@@ -6489,7 +6489,7 @@ test-core: $(COMPILER)
 	@# a rewrite that stopped firing altogether. Both halves were confirmed by
 	@# disabling the guard: 2 injections and a failed parse.
 	./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26
-	test "$$($(TESTTMP)/test_genshadow26)" = "shadow 12 10"
+	tools/expect_same.sh test_genshadow26 "$$($(TESTTMP)/test_genshadow26)" "shadow 12 10"
 	@# A pointer type ALIAS must be the type it aliases. RegisterGeneralAlias
 	@# recorded `AliasElemTk := tk`, so every general pointer alias claimed a
 	@# tyPointer element regardless of target -- `= Pointer`, `= PChar` and
@@ -6509,7 +6509,7 @@ test-core: $(COMPILER)
 	@# `x: TFoo<I> = (...)` spelling suppresses the rewrite here and breaks every
 	@# typed const of this shape. Oracle: FPC prints the same line.
 	./$(COMPILER) test/test_generic_ptr_specialize_const.pas $(TESTTMP)/test_genptrspec26
-	test "$$($(TESTTMP)/test_genptrspec26)" = "ptrspec 7 1"
+	tools/expect_same.sh test_genptrspec26 "$$($(TESTTMP)/test_genptrspec26)" "ptrspec 7 1"
 	@# regression-test-pascal-conformance-shard0-6-2: the bound-name harvest took
 	@# a typed const's ARGUMENTS for a declaration's parameters. It only ever
 	@# records tkIdent, and the lexer gives ten spellings a dedicated kind, so
@@ -6518,7 +6518,7 @@ test-core: $(COMPILER)
 	@# the width-specific integers and a user alias here. Per-name split (8 fail
 	@# / 7 pass before the fix) is recorded in the file header. Oracle: FPC.
 	./$(COMPILER) test/test_generic_bound_name_harvest.pas $(TESTTMP)/test_genboundharvest26
-	test "$$($(TESTTMP)/test_genboundharvest26)" = "boundharvest 45 A 10 1111111111"
+	tools/expect_same.sh test_genboundharvest26 "$$($(TESTTMP)/test_genboundharvest26)" "boundharvest 45 A 10 1111111111"
 	@# A GENERIC class declared bodyless WITH a Delphi modifier (`class abstract;`,
 	@# `class sealed(TBase);`) was mis-parsed: the bodyless test in
 	@# ParseGenericTemplateNamed looked at the token after `class` without
@@ -6529,7 +6529,7 @@ test-core: $(COMPILER)
 	@# the reported line never reproduced. Per-form before/after split and the
 	@# FPC divergence on the fourth form are in the file header. Oracle: FPC.
 	./$(COMPILER) test/test_generic_bodiless_class_modifier.pas $(TESTTMP)/test_genbodiless26
-	test "$$($(TESTTMP)/test_genbodiless26)" = "bodiless 7 3 1"
+	tools/expect_same.sh test_genbodiless26 "$$($(TESTTMP)/test_genbodiless26)" "bodiless 7 3 1"
 	@# THE NESTED ARM of the same bug. The up-front `bodyless` test above fixed the
 	@# outer form; the depth loop that runs for templates that DO have a body kept
 	@# its own copy of "is this `class` token an opener?" and knew only about member
@@ -6540,7 +6540,7 @@ test-core: $(COMPILER)
 	@# go through ClassTokOpensBody. rtl-generics' TList captured 10,914 tokens
 	@# before and 515 after. First family in the file is the bodied control.
 	./$(COMPILER) test/test_generic_bodiless_nested_class_in_type_section.pas $(TESTTMP)/test_gennestbodiless26
-	test "$$($(TESTTMP)/test_gennestbodiless26)" = "bodiless-nested 3 ctl 7 sub"
+	tools/expect_same.sh test_gennestbodiless26 "$$($(TESTTMP)/test_gennestbodiless26)" "bodiless-nested 3 ctl 7 sub"
 	@# GetPropInfo(AnObject, 'Caption') -- the spelling every FPC consumer uses --
 	@# bound typinfo's PClassRTTI arm and segfaulted, because the narrowing guard
 	@# read the parameter's pointee from Syms[Params[j].SymIdx] and that symbol is
@@ -6550,7 +6550,7 @@ test-core: $(COMPILER)
 	@# column now. Baseline 46abdaa0285e segfaults (exit 139, no output); do NOT
 	@# simplify this into a local overload pair -- those pass on the bug.
 	./$(COMPILER) -Fulib/rtl test/test_typinfo_instance_overload.pas $(TESTTMP)/test_typinfoovl26
-	test "$$($(TESTTMP)/test_typinfoovl26)" = "typinfo-overload hi"
+	tools/expect_same.sh test_typinfoovl26 "$$($(TESTTMP)/test_typinfoovl26)" "typinfo-overload hi"
 	@out=$$(PXXDBG=p.dgen ./$(COMPILER) -Futest/units test/test_generic_shadow_decl.pas $(TESTTMP)/test_genshadow26 2>&1); \
 	 decl=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TBox'); \
 	 real=$$(printf '%s\n' "$$out" | grep -c 'p.dgen inject specialize before TPairU'); \

@@ -637,3 +637,81 @@ re-derivation: rebuild the original line from the rewritten one by dropping the
 label and restoring ` = `, then compare to what was there. A checker that
 re-parses with the same regex that wrote the line cannot fail; one that
 reconstructs the input can.
+
+---
+
+## 2026-09-02, claude-T — re-measured first; the ticket had mostly landed already
+
+Taken from the Track T ready queue. Re-measuring before acting, because the
+counts above are from 2026-08-26:
+
+| | filed 2026-08-26 | now |
+| --- | --- | --- |
+| recipe lines in `Makefile` | 13,214 | 22,735 |
+| bare `test "$$(…)" = "…"` | **2,461** | **6** → now **0** |
+| …cross-target (`run_target.sh` both sides) | **480** | **0** |
+| `tools/expect_same.sh` call sites | (did not exist) | **3,628** |
+| `diff -u` recipes | 362 | 470 |
+
+**Step 1 and step 2 are done.** `tools/expect_same.sh` exists (created
+2026-08-29; its header carries this ticket's reasoning verbatim) and the 480
+cross-target assertions — the subset this ticket called "the worst by a
+distance" — are at zero. Step 3 said to leave the remainder alone "until 1–2
+have proven themselves"; the pattern has now proven itself 3,628 times.
+
+### What I converted: the last 6
+
+All six were the same shape, all in `test-core`, all comparing a binary's stdout
+to a literal:
+
+```
+test_genshadow26  test_genptrspec26  test_genboundharvest26
+test_genbodiless26  test_gennestbodiless26  test_typinfoovl26
+```
+
+Bare equality assertions in `Makefile` are now **0**.
+
+Gate, per this ticket's own terms — Track A's file lane, so self-host plus the
+touched targets:
+
+- all six jobs GREEN (`testmgr --tier native --job 'test-core#src:test/…'`);
+- `tools/selfhost_fixedpoint.sh`: *"converged after 1 round(s) from pinned"* and
+  *"agrees with compiler/pascal26"* — the `converged` verb, not the stamp path;
+- the helper demonstrated on this ticket's own subject: mismatch prints
+  `expect_same: MISMATCH [test_genshadow26]` and a unified diff, exit 1; equality
+  prints nothing, exit 0.
+
+Per CLAUDE.md's shared-internals rule — *"ownership, not a lock … telling is not
+asking"* — Track A was told what was touched and given a window.
+
+### Two things left, and NEITHER is the shape this ticket describes
+
+**1. Eight `-ge` threshold assertions remain, and `expect_same.sh` cannot fix
+them.**
+
+```
+test "$$(grep -c 'a.reload marked' …/test_opt_sr_marks.log)"   -ge 6
+test "$$(grep -c ' bo$$'          …/test_opt_sr_marks.log)"    -ge 1
+test "$$(grep -c ' c$$'           …/test_opt_sr_marks.log)"    -ge 5
+test "$$(grep -c 'a.reload DECLINED' …/test_opt_sr_declined.log)" -ge 1
+```
+
+Same silence, different predicate: the assertion is a **threshold**, not an
+equality, so the fix is a sibling helper (`expect_at_least.sh <label> <actual>
+<min>`) that prints the count it got and the floor it wanted. Deliberately not
+written here — a second helper is a design choice, and this ticket is about
+equality assertions. Left as the named residual rather than converted badly.
+
+**2. Those four assertions exist TWICE, identically, in two different targets.**
+`Makefile:990-1005` under `test-nilpy` and `Makefile:14254-14269` under
+`test-core` are byte-identical blocks asserting over the same literal paths
+(`$(TESTTMP)/test_opt_sr_marks.log`, `test_opt_sr_declined.log`).
+
+That is worth someone's attention independently of this ticket: testmgr splits
+recipes into jobs and keeps a producer with its consumer by scanning for shared
+literal `/tmp` paths, so two targets asserting over one path either merge into
+one job or one of them reads a file the other produced. A duplicated assertion
+that passes is not evidence both targets exercised it. **Not filed as a ticket
+by me** — I have not measured which of the two actually produces the logs, and a
+ticket asserting a defect I have not confirmed is the failure mode this whole
+family is about.
