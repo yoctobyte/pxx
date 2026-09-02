@@ -115,4 +115,4 @@ shape. See [[bug-c-the-sizeof-descriptor-walk-answers-from-tyunknown]] for why
 declining there is not a free change.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 536a3e2d0.
