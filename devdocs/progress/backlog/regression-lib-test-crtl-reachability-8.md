@@ -40,3 +40,6 @@ crtl-map: compiler/crtl_names.inc is STALE — run: python3 tools/gen_crtl_map.p
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-02 — the seven watcher saw `lib-test#src:tools/crtl_reachability.py` GREEN at 0da8a0ae4200 (tier full) and did NOT close this: this is a repeat stub (`regression-lib-test-crtl-reachability-8`, not `regression-lib-test-crtl-reachability`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.

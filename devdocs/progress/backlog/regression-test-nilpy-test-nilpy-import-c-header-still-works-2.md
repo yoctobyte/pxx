@@ -39,3 +39,6 @@ pascal26:22: error: C #if: expected ':' in conditional expression
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-02 — the seven watcher saw `test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy` GREEN at 0da8a0ae4200 (tier full) and did NOT close this: this is a repeat stub (`regression-test-nilpy-test-nilpy-import-c-header-still-works-2`, not `regression-test-nilpy-test-nilpy-import-c-header-still-works`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
