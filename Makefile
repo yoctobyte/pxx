@@ -13196,6 +13196,24 @@ test-core: $(COMPILER)
 	# anything after the sixth (row 9). A round-trip-only test passes on a
 	# zero-padded ntoa, which is a different string on the wire.
 	# All rows diffed against gcc.
+	# <arpa/telnet.h>, <sys/prctl.h>, <netpacket/packet.h>, <linux/types.h>,
+	# <asm/types.h>, <sys/vfs.h>, <features.h> -- all found by attempting
+	# busybox for i386. A wrong PROTOCOL constant does not fail to compile, it
+	# puts a different byte on the wire, and the telnet command bytes run
+	# downward from IAC=255, which is the shape a transposition survives. Row 4
+	# has already earned its keep: this header was first written without
+	# TELOPT_TSPEED, which shifted LFLOW/LINEMODE/XDISPLOC each down by one and
+	# compiled perfectly. Row 6 is sockaddr_ll's LAYOUT -- sll_addr is EIGHT
+	# bytes, the kernel's maximum hardware address and not ethernet's six, so a
+	# six-byte version has every field at the right offset and the wrong
+	# sizeof, which is what bind() hands the kernel.
+	# ROW 8 IS DELIBERATELY NOT AN ORACLE ROW and is inverted: gcc prints
+	# `glibc', we must print `not-glibc'. crtl ships <features.h> for no other
+	# reason than to keep __GLIBC__ undefined -- libbb/makedev.c takes glibc's
+	# arm under it -- and agreeing with gcc here would mean the host's copy had
+	# been reached. Every other row is diffed against gcc.
+	./$(COMPILER) test/c_crtl_telnet_and_prctl.c $(TESTTMP)/c_telprctl26
+	tools/expect_same.sh c_telprctl26 "$$($(TESTTMP)/c_telprctl26)" "$$(printf '1 255 254 253 252 251 250\n2 240 241 242 246 249\n3 0 1 3 24 31\n4 33 0 1 2\n5 15 16 23 38 39 47\n6 20 | 0 2 4 8 10 11 12\n7 1 2 4 8 4\n8 not-glibc\n9 0 pxxprobe')"
 	./$(COMPILER) test/c_crtl_net_headers.c $(TESTTMP)/c_nethdr26
 	tools/expect_same.sh c_nethdr26 "$$($(TESTTMP)/c_nethdr26)" "$$(printf '1 8 28 8\n2 1234 5678 8 beef\n3 a0b c0d\n4 8 14 18 24\n5 102 6 6 14 64 1518\n6 001122334455 0:11:22:33:44:55\n7 000102030405 0:1:2:3:4:5\n8 aabbccddeeff aa:bb:cc:dd:ee:ff\n9 001122334455 0:11:22:33:44:55\n10 NULL\n11 NULL\n12 NULL')"
 	# <sched.h> (5 TUs) and <linux/fs.h> (6), found the same way. A WRONG IOCTL
