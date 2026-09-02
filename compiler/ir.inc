@@ -15672,3 +15672,57 @@ begin
     Error(what + ': this scalar type not yet supported');
   end;
 end;
+
+{ ===== FROZEN-STRING PREFIX WIDTH: THE ONE PLACE THAT ANSWERS IT =====
+  Lives HERE, not in a backend, because SEVEN backends need the same answer and
+  ir_codegen.inc (x86-64) is included LAST — anything defined there is invisible
+  to aarch64, i386, arm32, riscv32, xtensa and wasm32. Putting the walker beside
+  the IR it walks is also the substrate rule: the width is a property of the IR
+  node, not of any one instruction encoder.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+
+function IRFrozenKindOfAddr(node: Integer): TTypeKind;
+{ The FROZEN STRING KIND an address node points at, so a reader can pick the
+  right prefix width. tyString when it cannot be determined, which is the
+  8-byte answer and therefore the pre-existing behaviour -- this must never
+  GUESS narrow, because reading an 8-byte prefix as 1 byte truncates a length
+  while reading a 1-byte prefix as 8 gives a length in the billions. Wrong-wide
+  is the recoverable direction and wrong-narrow is not.
+
+  The IR is why this exists: a frozen string's ARG node is tagged tyString
+  generically (measured -- `Length(s)` on a `string[10]` produces
+  `arg ... tk=4`), so the width is not recoverable from the node's own kind and
+  has to be walked back to the symbol.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+begin
+  Result := tyString;
+  if node < 0 then Exit;
+  if (IRKind[node] = IR_LEA) or (IRKind[node] = IR_SLOTADDR) then
+  begin
+    if (IRA[node] >= 0) and (IRA[node] < SymCount) and
+       TypeIsFrozenString(Syms[IRA[node]].TypeKind) then
+      Result := Syms[IRA[node]].TypeKind;
+  end
+  else if TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
+    Result := IntToTypeKind(IRTk[node]);
+end;
+
+function IRStrTkOf(node: Integer): TTypeKind;
+{ A node's type kind, WITH FROZEN STRINGS RESOLVED TO THE KIND THAT CARRIES
+  THE WIDTH. Everywhere else `IntToTypeKind(IRTk[node])` is the right question;
+  for a frozen string it is not, because the IR tags every frozen string
+  tyString generically and tyString means an 8-byte prefix. A backend that asks
+  the node reads 8 for a shortstring and then reads eight bytes of [len][chars]
+  as a length.
+
+  This exists so the fix is ONE substitution rather than one per site: every
+  `IntToTypeKind(IRTk[n])` that feeds a prefix width or a char offset becomes
+  `IRStrTkOf(n)` and is correct on all seven backends. Measured on x86-64
+  before it existed, in two places at once — the frozen->frozen store arm
+  printed 255 blanks and the frozen->managed conversion handed a billions-long
+  length to the allocator.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+begin
+  Result := IntToTypeKind(IRTk[node]);
+  if TypeIsFrozenString(Result) then Result := IRFrozenKindOfAddr(node);
+end;

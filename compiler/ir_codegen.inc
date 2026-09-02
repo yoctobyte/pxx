@@ -4481,8 +4481,6 @@ begin
   IREmitCodeCall(VariantRetainBlobAddr);
 end;
 
-function IRFrozenKindOfAddr(node: Integer): TTypeKind; forward;
-
 procedure EmitAnsiStrFromInlineStringTk(srcTk: TTypeKind);
 { rax = inline string address ([len][chars]). Returns a managed string ptr.
   srcTk decides the LENGTH PREFIX WIDTH, and therefore also where the chars
@@ -4493,7 +4491,7 @@ procedure EmitAnsiStrFromInlineStringTk(srcTk: TTypeKind);
   (managed) and `s: string[10]` read the 1-byte prefix as an 8-byte word, so
   rdi became a length in the billions and the program died in
   AnsiStrFromLiteral with `out of memory (heap arena mmap failed)`. That is the
-  wrong-NARROW direction this file's IRFrozenKindOfAddr comment warns about,
+  wrong-NARROW direction ir.inc's IRFrozenKindOfAddr comment warns about,
   reached from the other side: the SOURCE is narrow and the reader is wide.
   feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
 begin
@@ -4775,31 +4773,6 @@ end;
   the convention every caller here already uses.
   feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
 
-function IRFrozenKindOfAddr(node: Integer): TTypeKind;
-{ The FROZEN STRING KIND an address node points at, so a reader can pick the
-  right prefix width. tyString when it cannot be determined, which is the
-  8-byte answer and therefore the pre-existing behaviour -- this must never
-  GUESS narrow, because reading an 8-byte prefix as 1 byte truncates a length
-  while reading a 1-byte prefix as 8 gives a length in the billions. Wrong-wide
-  is the recoverable direction and wrong-narrow is not.
-
-  The IR is why this exists: a frozen string's ARG node is tagged tyString
-  generically (measured -- `Length(s)` on a `string[10]` produces
-  `arg ... tk=4`), so the width is not recoverable from the node's own kind and
-  has to be walked back to the symbol.
-  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
-begin
-  Result := tyString;
-  if node < 0 then Exit;
-  if (IRKind[node] = IR_LEA) or (IRKind[node] = IR_SLOTADDR) then
-  begin
-    if (IRA[node] >= 0) and (IRA[node] < SymCount) and
-       TypeIsFrozenString(Syms[IRA[node]].TypeKind) then
-      Result := Syms[IRA[node]].TypeKind;
-  end
-  else if TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
-    Result := IntToTypeKind(IRTk[node]);
-end;
 
 procedure EmitStoreRcxAsStrLen(dstTk: TTypeKind);
 { [rdi] := rcx, at dstTk's prefix width. The byte form writes cl. }

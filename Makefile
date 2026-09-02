@@ -16291,6 +16291,24 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_static_string_literal "$$(tools/run_target.sh i386 $(TESTTMP)/ssl_i386 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_i386_x64 | grep -v '^pxx-census')"
 
 test-aarch64: $(COMPILER)
+	# THE BYTE PREFIX ON THE SECOND BACKEND. aarch64 is the first cross target
+	# converted, and it is here rather than only in the x86-64 rows because the
+	# whole width-and-alignment class is structurally invisible on the 64-bit
+	# host -- the dev loop, gate.sh quick and the pin all run there. The DEFAULT
+	# rows are the ones that catch a regression in ordinary builds: every helper
+	# encoding was checked to reproduce the literal it replaced bit-for-bit, so
+	# default aarch64 must be byte-identical to before the conversion.
+	./$(COMPILER) --target=aarch64 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a64_ssbp_d
+	tools/expect_same.sh aarch64/ssbp_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a64_ssbp_s
+	tools/expect_same.sh aarch64/ssbp_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	# ... and the cross-width conversion, which is what actually broke on this
+	# backend: Length() read the prefix at a fixed 8 and answered
+	# 0x6F6C6C654805 -- the length byte followed by the characters of 'hello'.
+	./$(COMPILER) --target=aarch64 test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a64_ssmw_d
+	tools/expect_same.sh aarch64/ssmw_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\nchars    120 121 ')"
+	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a64_ssmw_s
+	tools/expect_same.sh aarch64/ssmw_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\nchars    120 121 ')"
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
 	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
 	# correct throughout and is the control that the fix changed nothing there.
