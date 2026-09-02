@@ -8,6 +8,40 @@ blocked-by: [compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agr
 
 # `file of T` and untyped `file` are not supported
 
+> **BLITTING IS A CONSEQUENCE OF THE FORMAT CHOICE, NOT A LIMITATION — measured
+> 2026-09-02 (`5f275966bf50` @ `bf92c45a7`), and this CORRECTS an earlier
+> framing in this ticket's own history that said records could not blit.**
+>
+> ```
+>                         pxx        FPC (-Mobjfpc)
+> string[100]             108        101
+> TRec = a:s[100]; b:s[200]
+>   SizeOf                320        302
+>   field b offset        112        101
+> TGrid = [0..2] of [0..10] of string[100]
+>   SizeOf               3564       3333
+>   inner / outer stride  108/1188   101/1111
+> ```
+>
+> **Both compilers are fully contiguous.** FPC's record is exactly 101+201 with
+> no padding; our grid is exactly 3*11*108 with clean strides. Nested arrays of
+> fixed strings are the EASY case in both, not the hard one.
+>
+> **So `file of T` CAN blit — if it writes OUR layout.** The file is then
+> self-consistent and simply not FPC-readable. Marshalling is required only by
+> the decision to write FPC-compatible files, and that is true for sets as much
+> as strings: writing our own 32-byte set is a blit too. **State the format
+> choice first; the blit/marshal question is downstream of it and not
+> independent.**
+>
+> Two divergences that appear in RECORDS and not in arrays: **we pad and FPC
+> does not** (offset 112 vs 101 — our 8-byte length word needs alignment, FPC's
+> 1-byte prefix is byte-aligned), and **`string[1000]` cannot arise in FPC at
+> all**, so records holding one are ours-only by construction and blitting them
+> is unambiguous. Implementing
+> [[feature-p-implement-the-real-tyshortstring-byte-prefix-layout]] removes the
+> padding as well as the width gap.
+>
 > **SETS: A CONSTRAINT AND A DOC OBLIGATION, settled by the owner 2026-09-02.**
 > Sets stay 32 bytes in memory. Measured: our mask is a byte-exact ZERO-EXTENSION
 > of FPC's, so **a bare set writes with no conversion** — put down 4 bytes when

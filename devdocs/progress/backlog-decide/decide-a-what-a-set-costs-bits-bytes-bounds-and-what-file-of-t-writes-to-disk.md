@@ -234,6 +234,27 @@ mechanism, not a reversal of the decision. Unparking is his call. But the cost
 estimate this decide was parked on was too high, and that is recorded here so
 the next reader does not inherit it.
 
+## CORRECTION 2026-09-02: blit-vs-marshal is DOWNSTREAM of the format choice
+
+This decide (and the ticket it fed) said a record containing a small set
+"cannot blit". **That is wrong as stated, and the coordinator wrote it.** It
+cannot blit *if we write FPC's layout*. Writing our own 32-byte set is a blit.
+
+Measured on fixed strings, where the same confusion applied: pxx `TGrid =
+array[0..2] of array[0..10] of string[100]` is exactly 3*11*108 with strides
+108 and 1188 — fully contiguous. FPC's is exactly 3*11*101. **Both compilers
+blit these; the layouts merely differ.**
+
+**So the real fork is the FORMAT, and blit-vs-marshal follows from it:**
+
+| format written | blit? | FPC can read it? |
+| --- | --- | --- |
+| ours (set 32B, string cap+8, records padded) | **yes, today** | no |
+| FPC's (set 4/32B, string cap+1, no padding) | no — marshal | yes |
+
+Nothing is broken in the first row. Decide the format; do not decide "can we
+blit" as though it were an independent property.
+
 ## Consequence that lands under EVERY option
 
 **If any type's on-disk form differs from its in-memory form, `file of T` is a
