@@ -756,6 +756,56 @@ Recovery if the flip does break the fixedpoint: reseed from the pin and `touch`
 the sources — the pinned binary predates the flip by construction, so it is
 always a valid seed. Say which pin in the commit.
 
+### P4's DEFINITION OF DONE INCLUDES DELETING `-dPXX_SHORTSTRING` (added 2026-09-02, phase 2)
+
+**Phase 2 introduced an opt-in define, `-dPXX_SHORTSTRING`, and P4 is not done
+until it is GONE — same commit as the flip, not a follow-up ticket.** It is
+listed here rather than filed separately on this ticket's own reasoning about
+Track T's `--shorts` dodge: *"a ticket whose entire content is 'stop working
+around a thing that now works' is exactly the ticket nobody picks up, and the
+dodge then becomes permanent by default."* An off-by-default scaffolding flag is
+that ticket, and within a week it reads as a legitimate feature nobody dares
+delete.
+
+**Why it exists at all:** phase 2 as written was not hard, it was
+INCONSISTENT — *"nothing re-types yet, so nothing observes it"* together with
+*"produce a positive control"* demands a guard for code that has no reachable
+spelling, and a guard that cannot fail prints PASS. No spelling could produce a
+`tyShortString` variable, so seven backends of machine code would have been
+written and none of it executed. The flag is the reachable spelling: under it,
+`string[N]` with N <= 255 binds to `tyShortString`. Off by default, so the
+fixedpoint, the pin and every existing test are byte-for-byte unaffected.
+
+**P4's acceptance rows, then, are three and not two:**
+1. `string[N]`, N <= 255, binds to `tyShortString` with no define set.
+2. The offset assertion — chars start at +1, `s[0]` is the length byte.
+3. **`PasDefineExists('PXX_SHORTSTRING')` returns zero grep hits**, and the
+   per-target refusal it guards is gone with it. The flag's whole purpose was
+   to make phase 2 testable before phase 4 existed; once `string[N]` re-types
+   unconditionally, the flag's `then` branch IS the default and the `else`
+   branch is the dead one.
+
+**The four build combinations were measured before the backend grind, not
+after** — `PXX_MANAGED_STRING` and `PXX_SHORTSTRING` are two independent axes,
+so there are four, and the frozen x shortstring corner is the one no default
+build visits. **Two of the four were broken, and both bugs were on x86-64,
+the backend already declared complete:**
+
+| mode | `b := s` (narrow -> wide) | cause |
+| --- | --- | --- |
+| managed x shortstring | `out of memory (heap arena mmap failed)` | `EmitAnsiStrFromInlineString` hardcoded an 8-byte read |
+| frozen x shortstring | length 255, 255 blanks | the frozen->frozen arm read the width off `IRTk[valueNode]` |
+
+**The direction is the lesson, and it generalises past this feature.** Both
+readers fall back to `tyString` when they cannot tell, and `tyString` is the
+WIDE answer — so every wide -> narrow path was correct and every narrow -> wide
+path was wrong. A single-width test cannot see this at all, and
+`test_shortstring_byte_prefix` holds exactly one string. `test_shortstring_
+mixed_widths` is the four-mode guard, and its two positive controls fire in
+DISJOINT modes: reverting the frozen->frozen half moves rows only under frozen
+x shortstring, reverting the frozen->managed half only under managed x
+shortstring. Neither half alone would have been caught by a three-mode matrix.
+
 ## CONSTANTS: the landing order, and it is narrower than it looks
 
 The owner named the sequencing risk: *"the big catch is — constant strings.

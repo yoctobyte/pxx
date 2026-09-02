@@ -4481,10 +4481,26 @@ begin
   IREmitCodeCall(VariantRetainBlobAddr);
 end;
 
-procedure EmitAnsiStrFromInlineString;
-{ rax = inline string address ([len:8][chars]). Returns a managed string ptr. }
+function IRFrozenKindOfAddr(node: Integer): TTypeKind; forward;
+
+procedure EmitAnsiStrFromInlineStringTk(srcTk: TTypeKind);
+{ rax = inline string address ([len][chars]). Returns a managed string ptr.
+  srcTk decides the LENGTH PREFIX WIDTH, and therefore also where the chars
+  start — the two travel together and reading them at different widths is the
+  failure below.
+
+  Measured 2026-09-02 under `-dPXX_SHORTSTRING`: `b := s` for `b: string`
+  (managed) and `s: string[10]` read the 1-byte prefix as an 8-byte word, so
+  rdi became a length in the billions and the program died in
+  AnsiStrFromLiteral with `out of memory (heap arena mmap failed)`. That is the
+  wrong-NARROW direction this file's IRFrozenKindOfAddr comment warns about,
+  reached from the other side: the SOURCE is narrow and the reader is wide.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
 begin
-  EmitAsmX64(['mov rdi, [rax]', 'lea rsi, [rax+8]']);
+  if FrozenStrPrefixSize(srcTk) = 1 then
+    EmitAsmX64(['movzx rdi, byte [rax]', 'lea rsi, [rax+1]'])
+  else
+    EmitAsmX64(['mov rdi, [rax]', 'lea rsi, [rax+8]']);
   IREmitCodeCall(AnsiStrFromLiteralAddr);
 end;
 
@@ -4550,7 +4566,12 @@ begin
 end;
 
 procedure EmitAnsiStrFromInlineStringOf(node: Integer);
-{ EmitAnsiStrFromInlineString, but told WHICH node produced the address in rax,
+{ EmitAnsiStrFromInlineStringTk, but told WHICH NODE produced the address in
+  rax rather than which kind, so it can both take a literal's static block and
+  work out the source's prefix width itself. There is deliberately NO kind-less
+  spelling left: every caller now states a width or hands over a node to derive
+  one from, because the silent 8-byte default is exactly what made a shortstring
+  source read a length in the billions.
   so a literal can take its static block and never reach the runtime. The dead
   `mov rax, imm64` the caller already emitted for the literal is left standing:
   overwriting it costs one instruction against a call, an allocation and a
@@ -4558,7 +4579,7 @@ procedure EmitAnsiStrFromInlineStringOf(node: Integer);
   is where a wrong value would come from. }
 begin
   if EmitStaticLitHandle(node) then Exit;
-  EmitAnsiStrFromInlineString;
+  EmitAnsiStrFromInlineStringTk(IRFrozenKindOfAddr(node));
 end;
 
 { Is this store the accumulation shape `s := s + x`, where the destination IS
@@ -6391,6 +6412,7 @@ end;
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     wrFrozenPfx: Integer;   { length-prefix width of the frozen string being written }
+    srcFrozenTk: TTypeKind; { frozen kind of a copy's SOURCE — its prefix width may differ from the dest's }
     scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
     allocaLoop, allocaDone: Integer;  { IR_ALLOCA's relocation loop: back edge, and the forward rel8 out of it }
     op: TTokenKind;
@@ -7275,7 +7297,7 @@ begin
                 StrValTk value-kind normalisation) materialises into a managed
                 handle. Without this a tyFixedString source fell through to the
                 bogus retain path and stored an empty/garbage handle. }
-              EmitAnsiStrFromInlineString;
+              EmitAnsiStrFromInlineStringTk(IRFrozenKindOfAddr(valueNode));
             end
             else if not IRNodeOwnsManagedStr(valueNode) then
             begin
@@ -7375,12 +7397,26 @@ begin
                 case, not an exotic one); the destination width from the
                 symbol's. Reading with the wrong one gives a length in the
                 billions; writing with the wrong one puts the chars at the
-                wrong offset. }
-              EmitLoadRcxStrLenFromRsi(IntToTypeKind(IRTk[valueNode]));
+                wrong offset.
+
+                THE SOURCE WIDTH IS NOT `IRTk[valueNode]`, WHICH IS WHAT THIS
+                ARM READ UNTIL IT WAS MEASURED. The IR tags a frozen string's
+                value node tyString GENERICALLY -- that is the whole reason
+                IRFrozenKindOfAddr exists -- so the node's own kind answers 8
+                for a shortstring source and the arm read 8 bytes of [len][chars]
+                as a length. Measured 2026-09-02 under
+                `-uPXX_MANAGED_STRING -dPXX_SHORTSTRING`: `b := s` for
+                `b: string; s: string[10] = 'world'` printed length 255 (the
+                huge length clamped to the dest cap) and 255 blanks.
+                It read correctly in the WIDE->narrow direction only because
+                tyString is also the fallback, i.e. the bug was invisible in
+                exactly the direction the phase-2 test covered. }
+              srcFrozenTk := IRFrozenKindOfAddr(valueNode);
+              EmitLoadRcxStrLenFromRsi(srcFrozenTk);
               EmitClampRcxToStrCap(SymStrCap[symIdx]); { truncate to string[N] capacity }
               EmitStoreRcxAsStrLen(Syms[symIdx].TypeKind);
               EmitB($48); EmitB($83); EmitB($C6);
-              EmitB(FrozenStrPrefixSize(IntToTypeKind(IRTk[valueNode])));  { add rsi, srcPrefix }
+              EmitB(FrozenStrPrefixSize(srcFrozenTk));                     { add rsi, srcPrefix }
               EmitB($48); EmitB($83); EmitB($C7);
               EmitB(FrozenStrPrefixSize(Syms[symIdx].TypeKind));           { add rdi, dstPrefix }
               EmitB($F3); EmitB($A4);             { rep movsb }
@@ -7916,7 +7952,7 @@ begin
                 StrValTk value-kind normalisation) materialises into a managed
                 handle. Without this a tyFixedString source fell through to the
                 bogus retain path and stored an empty/garbage handle. }
-              EmitAnsiStrFromInlineString;
+              EmitAnsiStrFromInlineStringTk(IRFrozenKindOfAddr(valueNode));
             end
             else if not IRNodeOwnsManagedStr(valueNode) then
             begin

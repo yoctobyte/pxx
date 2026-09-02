@@ -11120,6 +11120,23 @@ test-core: $(COMPILER)
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_ssbp_short26
 	tools/expect_same.sh test_ssbp_short26 "$$($(TESTTMP)/test_ssbp_short26)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
 	tools/expect_same.sh test_strn_container26 "$$($(TESTTMP)/test_strn_container26)" "$$(printf 'openp1     1\nopenp2     1\nopenp20    1\nopenvals   1\ndyn1d      1\ndyn2d      1\ndyn2dvals  1\nguard      1')"
+	# TWO FROZEN WIDTHS IN ONE PROGRAM, all FOUR combinations of the two string
+	# build axes. PXX_MANAGED_STRING chooses what bare `string` is and
+	# PXX_SHORTSTRING chooses what `string[N]` is, so the widths are furthest
+	# apart in the frozen x shortstring corner -- which is the corner no default
+	# build visits. The SAME rows in every mode, and they are FPC 3.2.2's: the
+	# two default modes prove nothing moved, the two shortstring modes prove the
+	# cross-width conversion. Only the narrow->wide direction ever broke, because
+	# tyString is also the fallback both readers use, so a single-width test
+	# cannot see this at all.
+	./$(COMPILER) test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_dm26
+	tools/expect_same.sh test_ssmw_dm26 "$$($(TESTTMP)/test_ssmw_dm26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\nchars    120 121 ')"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_ds26
+	tools/expect_same.sh test_ssmw_ds26 "$$($(TESTTMP)/test_ssmw_ds26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\nchars    120 121 ')"
+	./$(COMPILER) -uPXX_MANAGED_STRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_fm26
+	tools/expect_same.sh test_ssmw_fm26 "$$($(TESTTMP)/test_ssmw_fm26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\nchars    120 121 ')"
+	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_fs26
+	tools/expect_same.sh test_ssmw_fs26 "$$($(TESTTMP)/test_ssmw_fs26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\nchars    120 121 ')"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26
