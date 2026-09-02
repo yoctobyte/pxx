@@ -12623,7 +12623,15 @@ test-core: $(COMPILER)
 	# All ten rows were diffed against glibc by compiling this file with gcc.
 	# feature-c-crtl-getsid-priority-and-mtab-writing
 	./$(COMPILER) test/c_crtl_mount_and_prio.c $(TESTTMP)/c_mntprio26
-	tools/expect_same.sh c_mntprio26 "$$($(TESTTMP)/c_mntprio26)" "$$(printf '1 1 1\n2 -1 1\n3 3 0\n4 -1 1\n5 0\n6 0\n7 [/dev/sda1] [/mnt/my disk] [ext4] 0 2\n8 0 1\n9 [/mnt/back\\\\slash] [ro] 1 0\n10 1')"
+	# ROW 9 CARRIES ONE BACKSLASH, and the expectation used to demand two. The C
+	# source writes mnt_dir = "/mnt/back\\slash", which in C is ONE backslash, and
+	# the addmntent/getmntent_r round trip must give it back unchanged. Four
+	# backslashes here reach printf as \\ and print TWO, so this job failed on its
+	# FIRST-EVER run against an expectation nobody had executed. Decided by the
+	# oracle rather than by reading the escapes: gcc's own binary from this same
+	# source prints `9 [/mnt/back\slash] [ro] 1 0', and pxx's output is identical
+	# to gcc's on all ten rows. The compiler and the crtl were right.
+	tools/expect_same.sh c_mntprio26 "$$($(TESTTMP)/c_mntprio26)" "$$(printf '1 1 1\n2 -1 1\n3 3 0\n4 -1 1\n5 0\n6 0\n7 [/dev/sda1] [/mnt/my disk] [ext4] 0 2\n8 0 1\n9 [/mnt/back\\slash] [ro] 1 0\n10 1')"
 	./$(COMPILER) test/test_const_branch_dead_arm.pas $(TESTTMP)/test_constbranch26
 	tools/expect_same.sh test_constbranch26 "$$($(TESTTMP)/test_constbranch26)" "$$(printf '42 42 42\n100 200 400 300\n42 1')"
 	# The SIBLING defect, and it is not the const-branch one: a loop in dead code
