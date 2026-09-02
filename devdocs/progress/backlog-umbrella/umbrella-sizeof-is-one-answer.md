@@ -108,6 +108,58 @@ function of its kind.
 
 ## Wiring a member — the edge runs ONE WAY
 
+## THE UMBRELLA'S OWN TESTS SHARE ONE BLIND SPOT — a stride cannot audit itself
+
+Raised by frankB from `bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes`
+(2026-09-02), and it generalises past that ticket, so it belongs here rather
+than there.
+
+That bug is **not a fat layout — it is a write outside the record.**
+`record inner: array[0..1] of string[10]; tail: LongInt` is 40 bytes, and
+`@inner[1]` was **224 bytes past its end**; `r.inner[1] := s` clobbered five
+words of an unrelated local. Ordinary declared Pascal. **Every value row passed
+while it did that**, because the write and the read share the wrong stride:
+they agree with each other outside the record, and the field reads back exactly
+what was stored. frankB's control on the pinned binary:
+`stride 0  fits 0  guard 0  tail 1  values 11`.
+
+**Checked against this umbrella's two closed layout members, and the news is
+mostly good.** Neither is value-only:
+`bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets` asserts
+relationally, CALLS through the pointer with two receivers so a wrong-offset
+`Data` read cannot pass by landing on the only object present, and carries a
+pinned-i386 positive control. `bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more`
+asserts against a measured stride with `FillChar`/`Move` rows and a control
+that drives the size rows to 0. Both are better instrumented than the trap
+requires.
+
+**But the blind spot survives in the instrument they share.**
+`test/test_sizeof_stringn_matches_storage.pas:46` measures
+`stride := LongInt(p1) - LongInt(p0)` — the layout engine's own answer — and
+every row then asserts `SizeOf(x) = stride`. That is an **internal-consistency**
+invariant: it proves `SizeOf` agrees with the layout engine, and is structurally
+incapable of noticing that **the layout engine is wrong in the same direction**.
+Under frankB's bug both sides move together and all seven rows stay green. The
+one row carrying an absolute bound, `record  SizeOf(TRc) >= stride + 1`
+(line 61), is a `>=` and therefore cannot fail upward — a record bloated to 264
+by an over-strided field satisfies it.
+
+**What the missing dimension is, in one sentence:** every assertion here is
+relative, and nothing asserts that the aggregate's last element ends INSIDE the
+aggregate. frankB's `guard` and `tail` rows are that instrument — a declared
+neighbour, written before and read after, which fails when the stride walks past
+the end regardless of what the values say.
+
+**So, for any member of this umbrella still open or being verified:** a green
+built only from `SizeOf == stride` rows is evidence about agreement between two
+numbers, not about either being right. Add one absolute row. This is CLAUDE.md's
+"a guard that cannot fail is not a guard, and it prints PASS", in the specific
+form this umbrella keeps producing — which is unsurprising, since a subject
+whose whole defect is "four functions disagree about a size" will naturally be
+tested by comparing sizes to each other.
+
+Not a defect claim against either closed ticket, and neither is reopened here.
+
 **The UMBRELLA carries `blocked-by: <member>`. A member must NOT carry
 `blocked-by: <umbrella>`.** Written the second way it means what it says — the
 ticket is blocked BY the umbrella — and `ready` drops it entirely, which is the
