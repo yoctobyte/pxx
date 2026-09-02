@@ -446,14 +446,12 @@ begin
             host everything is measured on. Delete this check as each backend is
             converted, and it disappears entirely at phase 4 along with the
             flag. }
-          if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_AARCH64) and
-             (TargetArch <> TARGET_ARM32) then
-            Error('-dPXX_SHORTSTRING: the byte-length-prefix codegen exists ' +
-                  'for x86-64, aarch64 and arm32 only so far. This target still ' +
-                  'emits ' +
-                  'an 8-byte length word, which would silently overrun the ' +
-                  'smaller slot. Build without the flag, or finish phase 2 for ' +
-                  'this backend ' +
+          if not TargetHasByteStrPrefixCodegen(TargetArch) then
+            Error('-dPXX_SHORTSTRING: the byte-length-prefix codegen does not ' +
+                  'exist for target ' + TargetArchName(TargetArch) + ' yet. It ' +
+                  'still emits an 8-byte length word, which would silently ' +
+                  'overrun the smaller slot. Build without the flag, or finish ' +
+                  'phase 2 for this backend ' +
                   '(feature-p-implement-the-real-tyshortstring-byte-prefix-layout)');
           Result := tyShortString;
         end

@@ -108,6 +108,29 @@ begin
   else BareStringKind := tyString;
 end;
 
+function TargetHasByteStrPrefixCodegen(arch: Integer): Boolean;
+{ Has this backend been converted to emit tyShortString's ONE-BYTE length
+  prefix? Everything not listed still writes an 8-byte length word, so binding
+  `string[N]` to tyShortString there would size a slot for 1 byte and then read
+  and write 8 — a silent overrun, not a missing feature.
+
+  ONE ROW PER TARGET, deliberately, rather than the chain of `<>` this replaced.
+  Phase 2 converts the backends one at a time and possibly in parallel, and a
+  single boolean condition means every session edits the SAME line: five
+  conflicts in one expression, each of them a correct change. A row each
+  conflicts only with itself.
+
+  This whole function disappears at phase 4, when `string[N]` re-types
+  unconditionally and every backend has been converted — see the ticket's
+  definition of done, which lists deleting the flag as an acceptance row.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+begin
+  Result := False;
+  if arch = TARGET_X86_64 then Result := True;
+  if arch = TARGET_AARCH64 then Result := True;
+  if arch = TARGET_ARM32   then Result := True;
+end;
+
 function TargetIsEspClass: Boolean;
 { True for the ESP-class bare-metal targets — the ones that have no hosted OS
   under them and therefore no full RTL: EITHER ESP ISA under `--esp-profile=bare`,
