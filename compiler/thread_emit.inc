@@ -60,6 +60,36 @@ begin
       cld because rep stosq reads DF and only the ABI (not this stub's caller)
       guarantees it clear. rdi holds flags and rcx holds arg, so both are saved
       across stosq's fixed-register contract. }
+    { ---- carve the child's SIGNAL ALT STACK, above the TLS block ---- }
+    { sigaltstack(2) is PER-THREAD and is NOT inherited across clone. The only
+      other registration is in SigInstallAddr, which runs on whichever thread
+      called SetSignalHandler -- so before this, a cloned worker reported
+      sp=0 flags=SS_DISABLE size=0 and a stack overflow on it was UNHANDLEABLE:
+      the fault happens because there is no stack left, so the kernel has
+      nowhere to push the signal frame and kills the process outright. Measured
+      on one binary, one argument apart: overflow on main is handled and exits
+      7; the same overflow on a __pxxclone worker exits 139 with the handler
+      never entered.
+
+      ABOVE THE TLS BLOCK, not below it, and that is the whole of the placement
+      argument. The child's rsp starts just under the TLS block and grows DOWN
+      from there, so anything carved BELOW would be the region the thread's own
+      stack runs through -- the alt stack would be overwritten by ordinary
+      calls long before a fault needed it. Carved from the top, the alt stack
+      is at the highest addresses of the mapping and the guard page is at the
+      lowest, so it is still mapped at the moment the stack is exhausted, which
+      is the only property it needs.
+
+      Not a shared BSS buffer: two threads faulting at once would push signal
+      frames onto one region. That is why this is per-thread storage and not a
+      second use of BSS_SIG_ALTSTK.
+
+      Costs SIG_ALTSTACK_SIZE of every thread's stack (32KB of palthread's 1MB
+      default) and one syscall per thread. The floor a caller must now supply is
+      TLS_BLOCK_SIZE + SIG_ALTSTACK_SIZE plus whatever the thread actually uses;
+      __pxxclone is reachable directly, so a caller passing a stack smaller than
+      that was already carving a TLS block out of nothing. }
+    EmitB($48); EmitB($81); EmitB($EE); EmitI32(SIG_ALTSTACK_SIZE);  { sub rsi, SIG_ALTSTACK_SIZE }
     EmitB($48); EmitB($81); EmitB($EE); EmitI32(TLS_BLOCK_SIZE);  { sub rsi, TLS_BLOCK_SIZE }
     EmitB($FC);                                       { cld }
     EmitB($57);                                       { push rdi   (flags) }
@@ -100,6 +130,28 @@ begin
     EmitB($48); EmitB($8D); EmitB($74); EmitB($24); EmitB($10); { lea rsi, [rsp+16] }
     EmitB($B8); EmitI32(158);                         { mov eax, 158 (arch_prctl) }
     EmitB($0F); EmitB($05);                           { syscall }
+    { ---- register the alt stack carved above, on THIS thread ---- }
+    { The stack_t is built on the child's own stack rather than in BSS for the
+      same reason the buffer is per-thread: a shared struct is a race between
+      two threads registering at once, and this one is dead the instant the
+      syscall returns. 32 rather than 24 keeps rsp 16-aligned across the call.
+      altBase = tlsBlock + TLS_BLOCK_SIZE, and tlsBlock is rsp+16 -- the stage
+      area holding (entry, arg) is the 16 bytes below it.
+      rdi, rsi and rax are all dead here: rdi and rsi were arch_prctl's
+      arguments and entry/arg live on the stack. }
+    EmitB($48); EmitB($8D); EmitB($B4); EmitB($24);
+      EmitI32(16 + TLS_BLOCK_SIZE);                   { lea rsi, [rsp+16+TLS_BLOCK_SIZE] }
+    EmitB($48); EmitB($83); EmitB($EC); EmitB($20);   { sub rsp, 32 }
+    EmitB($48); EmitB($89); EmitB($34); EmitB($24);   { mov [rsp], rsi      (ss_sp) }
+    EmitB($48); EmitB($C7); EmitB($44); EmitB($24); EmitB($08);
+      EmitI32(0);                                     { mov qword [rsp+8], 0  (ss_flags) }
+    EmitB($48); EmitB($C7); EmitB($44); EmitB($24); EmitB($10);
+      EmitI32(SIG_ALTSTACK_SIZE);                     { mov qword [rsp+16], size }
+    EmitB($48); EmitB($89); EmitB($E7);               { mov rdi, rsp        (new) }
+    EmitB($31); EmitB($F6);                           { xor esi, esi        (old = nil) }
+    EmitB($B8); EmitI32(131);                         { mov eax, 131 (sigaltstack) }
+    EmitB($0F); EmitB($05);                           { syscall }
+    EmitB($48); EmitB($83); EmitB($C4); EmitB($20);   { add rsp, 32 }
     EmitB($58);                                       { pop rax  (entry) }
     EmitB($5F);                                       { pop rdi  (arg -> first int arg) }
     EmitB($FF); EmitB($D0);                           { call rax (entry(arg)) }

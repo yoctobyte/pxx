@@ -4,7 +4,7 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "MEASURED: a stack overflow on the MAIN thread runs the SIGSEGV handler and exits 7; the same overflow on a cloned worker exits 139 with the handler never entered. Same binary, one argument apart. sigaltstack(2) is PER-THREAD and is registered only by SetSignalHandler, which the main thread calls -- a cloned thread's alt stack reads sp=0 flags=SS_DISABLE size=0, so SA_ONSTACK has nowhere to put the frame and the kernel kills the process."
-status: backlog
+status: done
 owner: frankS
 ---
 
@@ -76,3 +76,58 @@ in the sibling ticket.
 A test in the shape of the measurement above — overflow on main vs on a worker,
 both handled — plus `test_signal_threads`, `test_thread_clone`, and the
 stack-size arithmetic in `palthread` if (1) is taken.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## Fixed (frankA, 2026-09-02) — option (1), x86-64
+
+Taken as recommended: the clone stub carves the alt stack, above the TLS block
+rather than below it. **Above matters and the ticket does not say why.** The
+child's `rsp` starts sixteen bytes under the TLS block and grows DOWN from
+there, so an alt stack carved below would be the region the thread's own calls
+run through — it would be overwritten by ordinary work long before a fault
+needed it. Carved from the top, it sits at the highest addresses of the mapping
+while the guard page is at the lowest, which is the only property it needs.
+
+### Measured, one binary, one argument apart
+
+| | pre-fix `f4107b6da95e` | post-fix `6bcfc4f4c068` |
+| --- | --- | --- |
+| overflow on main | `handled code=1 ... handler-in-bss=TRUE`, exit 7 | identical |
+| overflow on a worker | **no output at all, exit 139** | `handled code=1 ... handler-in-bss=FALSE`, exit 7 |
+
+### The assertion is not "did we survive"
+
+`test/test_thread_sigaltstack.pas` asserts `handler-in-bss`, which must answer
+**differently on the two threads**: main's alt stack is the process-wide BSS
+buffer `SetSignalHandler` registers (TRUE), the worker's is carved off its own
+mmap'd stack (FALSE). A fix that handed every thread the BSS buffer would pass
+a survival test and print TRUE twice — and it would be the bug this ticket's
+own text warns about, two concurrent faults pushing frames onto one region.
+The main row is also the control: byte-identical across the fix.
+
+### Also landed
+
+`lib/rtl/palthread.pas` grew `PAL_MIN_STACK = 128 * 1024`. The stub now carves
+1152 + 32768 bytes before the child's first instruction, so a smaller request
+would have it writing past the mapping — and into another thread's storage
+rather than onto this one's guard page, so it would not even look like a stack
+problem. **Necessity not demonstrated by a caller:** every call site in the tree
+passes 0 (the default), so nothing exercises it today; it is there because the
+stub's requirement is new and invisible from the call site.
+
+### Not done, and named rather than left
+
+The other three legs of `EnsureCloneStub` — i386, aarch64, arm32 — have the same
+gap. Filed as
+[[bug-a-the-clone-stub-registers-a-signal-alt-stack-on-x86-64-only]] rather than
+written blind: the property is "the kernel delivered onto the alt stack", the
+only way to run those targets here is qemu-user, and
+[[bug-a-riscv32-sa-onstack-has-no-effect-under-qemu]] already records that
+`SA_ONSTACK` does not take effect there. A cross run could not have told a wrong
+stub from qemu ignoring the flag.
+
+Gate: `make compiler/pascal26` converged, `tools/gate.sh quick` GREEN with the
+FPC seed canary live, and `test_signal_threads`, `test_thread_clone`,
+`test_palthread`, `test_multithreading` all green by hand.

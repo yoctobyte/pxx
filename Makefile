@@ -7382,6 +7382,27 @@ test-core: $(COMPILER)
 	# on RLIMIT_STACK. feature-signal-siginfo-ucontext item 3
 	./$(COMPILER) test/test_signal_altstack.pas $(TESTTMP)/test_signal_altstack26
 	tools/expect_same.sh test_signal_altstack26 "$$($(TESTTMP)/test_signal_altstack26; echo "exit=$$?")" "$$(printf 'recursing\ncode=1\nhandler-off-faulting-stack=TRUE\nexit=0')"
+	# ...AND THE SAME THING ON A THREAD THE PROCESS CLONED. sigaltstack(2) is
+	# PER-THREAD and is not inherited across clone(2), so the registration the
+	# row above makes on the main thread does nothing for a worker: it reported
+	# sp=0 flags=SS_DISABLE size=0, and a stack overflow on it exited 139 with
+	# the handler never entered. The clone stub now carves an alt stack off the
+	# TOP of the child's own stack, above the TLS block it already carves --
+	# above, because the child's rsp starts just under that block and grows DOWN,
+	# so anything carved below is the region ordinary calls run through.
+	# ONE BINARY, ONE ARGUMENT APART, and `handler-in-bss' is the assertion,
+	# not "did we survive". Surviving shows a handler ran, not WHERE:
+	#   main   -> TRUE   (the process-wide BSS buffer SetSignalHandler registers)
+	#   worker -> FALSE  (its own stack, carved by the stub)
+	# The rows MUST DIFFER. A fix that handed every thread the BSS buffer would
+	# print TRUE twice and pass a "did it survive" test, and it would be wrong:
+	# two threads faulting at once would push signal frames onto one region.
+	# The main row is also the control -- it is byte-identical before and after
+	# the fix, measured against the pre-fix compiler f4107b6da95e, where the
+	# worker row is `139' and no output at all.
+	./$(COMPILER) --threadsafe test/test_thread_sigaltstack.pas $(TESTTMP)/test_thread_sigalt26
+	tools/expect_same.sh test_thread_sigalt26-main "$$($(TESTTMP)/test_thread_sigalt26; echo "exit=$$?")" "$$(printf 'main\nhandled code=1 off-faulting-stack=TRUE handler-in-bss=TRUE\nexit=7')"
+	tools/expect_same.sh test_thread_sigalt26-worker "$$($(TESTTMP)/test_thread_sigalt26 w; echo "exit=$$?")" "$$(printf 'worker\nhandled code=1 off-faulting-stack=TRUE handler-in-bss=FALSE\nexit=7')"
 	# __pxxSigNum: which signal is being dispatched, read from inside the
 	# PARAMETERLESS hook. One hook registered for three signals, counted per
 	# number — usr1 twice is the row that matters (a hook that merely counted

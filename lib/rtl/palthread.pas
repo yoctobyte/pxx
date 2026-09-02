@@ -48,6 +48,12 @@ type
 
 const
   PAL_DEFAULT_STACK = 1024 * 1024;   { 1 MiB default child stack }
+  { What the clone stub carves off the top before the child's first instruction
+    -- a 1152-byte TLS block and a 32768-byte signal alt stack -- plus a 64KB
+    working floor. Stated as one number here rather than derived from the
+    compiler's constants because the RTL cannot see them; if either grows, this
+    is the second copy and the stub is the first. }
+  PAL_MIN_STACK = 128 * 1024;
 
 { Spawn a thread running entry(arg) on a fresh mmap'd stack. stackSize <= 0 picks
   PAL_DEFAULT_STACK. Fills h and returns 0 on success, negative on failure. }
@@ -151,6 +157,20 @@ var
   ignore: Int64;
 begin
   if stackSize <= 0 then stackSize := PAL_DEFAULT_STACK;
+  { A FLOOR, because the clone stub carves off the TOP before the thread runs:
+    a TLS block (1152 bytes) and, since a cloned thread got its own signal alt
+    stack, SIG_ALTSTACK_SIZE (32768) above it. A caller asking for less than
+    that is not getting a small stack, it is getting a stub writing past the
+    end of the mapping -- and the failure would land in another thread's
+    storage rather than on this one's guard page, so it would not look like a
+    stack problem at all. Raised silently rather than refused: a thread that
+    runs is what the caller asked for, the extra pages are one mmap, and
+    PalThreadCreate has no channel for "your request was adjusted".
+    NECESSITY NOT DEMONSTRATED BY A CALLER: every call site in the tree passes
+    0, i.e. the default, so nothing exercises this today and no measurement
+    shows a caller hitting it. It is here because the STUB's requirement is new
+    and unstated anywhere the caller can see, not because a bug was found. }
+  if stackSize < PAL_MIN_STACK then stackSize := PAL_MIN_STACK;
   h.Tid := 0;
   h.TidWord := 0;
   { One extra page at the LOW end becomes a PROT_NONE guard: running the stack
