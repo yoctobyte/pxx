@@ -2,16 +2,57 @@
 slug: feature-p-implement-the-real-tyshortstring-byte-prefix-layout
 title: "Implement the real `tyShortString` byte-length-prefix layout — the kind is already plumbed, the codegen is not"
 track: P
-prio: 65
+prio: 85
 type: feature
 status: backlog
 created: 2026-09-02
 found-by: owner (raised 2026-09-02), measured by frankuser
-owner: ""
+owner: "frankb-a9"
 summary: "MEASURED at bf92c45a7, binary sha256 `5f275966bf50`: we are `cap+8` and FPC is `cap+1`, uniformly — ShortString 263 vs 256, string[10] 18 vs 11, string[255] 263 vs 256. The ENTIRE divergence is the length-word width (8-byte NativeInt vs 1 byte), and it is a documented INTERIM: `pasparser_decl.inc:540` maps the name `shortstring` to a 255-cap `tyFixedString` with the comment *'the true byte-length-prefix tyShortString (FPC ABI) is a later codegen slice'*. THE KIND IS ALREADY PLUMBED — `tyShortString` has 63 sites across 18 files including EVERY backend (i386, wasm32, arm32, aarch64), `abi.inc` and `rtti_emit.inc`, against `tyFixedString`'s 79; `FrozenStrSlotSize` already returns `cap+1` for it. What is missing is the byte-prefix codegen, not the type. WHY IT MATTERS BEYOND SizeOf: unlike sets, a fixed string is NOT a zero-extension of FPC's — the length word is at the FRONT and a different width — so there is NO truncating-copy trick, and every fixed string in a typed file is a genuine conversion. Implementing this makes `string[N]` for N<=255 byte-identical to FPC, which makes records containing one BLIT instead of marshal. Note pxx accepts `string[256]` (264) and `string[1000]` (1008) where FPC rejects both: frozenstring is a strict SUPERSET, and the 1-byte prefix IS the 255 ceiling, so the wide kind must stay for N>255."
 ---
 
 # The real `tyShortString`, and why it is cheaper than it looks
+
+> **OWNER: HIGHEST PRIORITY, PHASED, frankb-a9 HOLDS IT (2026-09-02).**
+> `prio: 85` — above every actionable ticket on the board; only
+> `umbrella-compile-and-run-dosbox` [p90] outranks it and that is a goal, not
+> work.
+>
+> ## THE PHASES — land each one green, push, and report before starting the next
+>
+> **P1 — AUDIT, no behaviour change.** Find every site that assumes an 8-byte
+> length prefix without going through `EmitStoreStrLen`/`EmitLoadStrLen` (13
+> references; aarch64 emits a length word inline in at least two places, and 16
+> comments across backends name it directly). Deliverable is a LIST, in this
+> ticket. Also settle the unverified question below — how the self-host string
+> mode is selected — because Phase 4's scope depends on it.
+>
+> **P2 — BYTE-PREFIX CODEGEN, still unreachable.** Make `tyShortString` actually
+> store a 1-byte length, per backend, behind the named emit pair. Nothing
+> re-types yet, so nothing observes it. Positive control required: a synthetic
+> `tyShortString` slot whose stride is asserted, since no source spelling
+> reaches this kind yet.
+>
+> **P3 — THE NINE CONVERSION ARMS**, including `tyString -> tyShortString`.
+> Still nothing re-types.
+>
+> **P4 — THE FLIP: `string[N]`, N <= 255, binds to `tyShortString`.**
+> **SERIALISING — quiet tree, no other work landing, announce before and after.**
+> This is where the self-host fixedpoint is on the line. Recommended scope:
+> explicit `string[N]` only (10 declarations in `compiler/`), leaving bare
+> `string` as `tyString` untouched (69 declarations) — see the two-flips section.
+> Recovery: reseed from the pin, `touch` the sources, name the pin in the commit.
+>
+> **P5 — typed constants** for N <= 255 (`const T: string[10] = 'hello'`), which
+> have real `.data`. Literals never change; they are `tyString` and convert at
+> use.
+>
+> **Gate at every phase:** `make compiler/pascal26` must print **`converged
+> after N round(s)`**, not `verified` — the stamp path means nothing was built.
+> `gate.sh quick` before committing, not after, so the FPC seed canary runs.
+> Cross-target matters here: per the rule landed today, "nothing observably
+> differs" measured on x86-64 is a claim about one target, and this change is
+> exactly the width-and-alignment class that hides there.
 
 > **DECIDED BY THE OWNER, 2026-09-02 — DO IT.** *"all we need to do is
 > implement a real shortstring type. it will give us some headache with all

@@ -60,6 +60,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 386, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
+- `[p 85] [P]` feature-p-implement-the-real-tyshortstring-byte-prefix-layout (unblocks 1)
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
@@ -70,7 +71,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [A]` umbrella-managed-memory-is-correct
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- `[p 70] [P]` feature-p-implement-the-real-tyshortstring-byte-prefix-layout (unblocks 1)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
 - `[p 70] [C]` regression-lib-test-crtl-reachability-8
