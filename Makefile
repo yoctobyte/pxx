@@ -12103,6 +12103,22 @@ test-core: $(COMPILER)
 	tools/expect_same.sh sweep_rtti_field26 "$$($(TESTTMP)/sweep_rtti_field26)" "$$(printf 'class=TThing\nCount=42 kind=1\nTag=99 kind=13\nTag(after set)=123\nBuddy=self kind=6\nInner.a=7 kind=5\nabsent=ok\nDONE')"
 	./$(COMPILER) -Fulib/rtl test/test_rtti_method_call_by_name.pas $(TESTTMP)/sweep_rtti_method26
 	tools/expect_same.sh sweep_rtti_method26 "$$($(TESTTMP)/sweep_rtti_method26)" "$$(printf 'Add arity=2 retKind=13\nAdd param0kind=6 param1kind=13\nAdd(42)=142\nBump arity=1 retKind=0\nBase(after Bump)=101\nabsent=ok\nDONE')"
+	# A METHOD WITH NO BODY REFLECTS AS nil, NOT AS ONE BYTE BELOW THE ENTRY
+	# POINT. Every writer resolved a VMT/RTTI slot as `entry + BodyAddr', and a
+	# bodiless routine has BodyAddr = -1, so the slot held an address inside
+	# the image that the program jumps to the first time anything calls
+	# through it. Two normal populations have no body: an ABSTRACT method
+	# (this test) and an INTERFACE method (the test_emit_obj .rela.data rows
+	# in the --emit-obj block below, which is where an interface's RTTI is
+	# observable at all -- it is deliberately absent from the class registry,
+	# so GetClass('IInterface') answers nil and no program-level probe reaches
+	# it).
+	# AIMED, measured not predicted: the pre-fix compiler (787639bf0c8d)
+	# prints FALSE on rows 2 and 3 of the five below. Rows 1, 4 and 5 are the
+	# control and are unchanged across the fix -- a change that nils every
+	# method slot passes the Abs1 rows and fails those.
+	./$(COMPILER) -Fulib/rtl test/test_rtti_bodiless_method_code_is_nil.pas $(TESTTMP)/sweep_rtti_bodiless26
+	tools/expect_same.sh sweep_rtti_bodiless26 "$$($(TESTTMP)/sweep_rtti_bodiless26)" "$$(printf 'Real1 code nil=FALSE\nAbs1 code nil=TRUE\nGetMethodAddr Abs1 nil=TRUE\nReal1 called, ran=7\nDONE')"
 	# The two numberings, pinned in both directions. Every row is derived from
 	# compiler/defs.inc's TTypeKind and lib/rtl/typinfo.pas's TTypeKind, not
 	# recorded: Int64 is 13 there and 19 here, Double 19 vs tkFloat 4, Byte 8 vs
@@ -20078,9 +20094,22 @@ test-emit-obj: $(COMPILER)
 	#    at all, which is most of them.
 	@test $$(readelf -r -W $(TESTTMP)/fsm_plain.o | sed -n "/Relocation section '.rela.data'/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* \.text') -gt 0 \
 	  || { echo "test_emit_obj: the PLAIN object has no .text-relative .rela.data entry -- this fixture cannot show the flag doing anything"; exit 1; }
-	@test $$(readelf -r -W $(TESTTMP)/fsm.o | sed -n "/Relocation section '.rela.data'/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* \.text') \
-	     -lt $$(readelf -r -W $(TESTTMP)/fsm_plain.o | sed -n "/Relocation section '.rela.data'/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* \.text') \
-	  || { echo "test_emit_obj: --function-sections left every VMT slot relocating against .text"; exit 1; }
+	#    ZERO, not merely fewer. Three of these entries could not be relocated
+	#    at all because their method has NO BODY -- IInterface.QueryInterface
+	#    and its two siblings -- and they were emitted as `.text - 1', which
+	#    is the same defect the abstract-method row above asserts from the
+	#    program side, seen here on the object where the arithmetic is
+	#    printed. They are now dropped before any writer runs, so this asserts
+	#    the property step 2 is actually after: NOTHING in this object's
+	#    .rela.data names the .text section symbol. The `-gt 0' row above is
+	#    the positive control and is what stops this passing vacuously.
+	@test $$(readelf -r -W $(TESTTMP)/fsm.o | sed -n "/Relocation section '.rela.data'/,/^$$/p" | grep -cE '^[0-9a-f]{8,}.* \.text') -eq 0 \
+	  || { echo "test_emit_obj: --function-sections left a VMT slot relocating against .text"; exit 1; }
+	#    AND NO NEGATIVE ADDEND ANYWHERE, in either object. `.text - 1' is the
+	#    bodiless case and it appeared in the PLAIN object too, so the flag
+	#    cannot be what fixes it and this row is checked on both.
+	@test $$(readelf -r -W $(TESTTMP)/fsm.o $(TESTTMP)/fsm_plain.o | grep -cE '\.text - ') -eq 0 \
+	  || { echo "test_emit_obj: a relocation still carries a negative .text addend (a method with no body)"; exit 1; }
 	#    NAMED, not merely counted: a specific method symbol has to appear.
 	@readelf -r -W $(TESTTMP)/fsm.o | sed -n "/Relocation section '.rela.data'/,/^$$/p" | grep -qE '^[0-9a-f]{8,}.* __pxxTObjectToString' \
 	  || { echo "test_emit_obj: no VMT slot relocates against a method's own symbol"; exit 1; }

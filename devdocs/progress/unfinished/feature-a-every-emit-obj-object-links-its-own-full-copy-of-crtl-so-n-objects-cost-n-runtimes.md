@@ -230,3 +230,60 @@ families sit in one block and neither instrument covers both.
 That is fine for a relocation, which wants an address. It is NOT fine for
 `--gc-sections`, which wants a size, so whoever builds step 2's second half owes
 these two a real extent.
+
+## 2026-09-02 (frankA) — the last three were a live bug, and the object was where it printed
+
+The three `.rela.data` entries still naming the `.text` section symbol read
+`.text - 1`, and the minus one is the whole finding. Every writer resolves a
+VMT/RTTI method slot as `entry + Procs[p].BodyAddr`, and a routine with no body
+has `BodyAddr = -1`. The slot ends up holding **the address one byte below the
+entry point** — inside the image, plausible, and dereferenced the first time
+anything calls through it.
+
+**It is not an `--emit-obj` artefact.** The ordinary executable carries the same
+value; the object is just where the arithmetic is printed instead of folded.
+Measured with the pre-fix compiler `787639bf0c8d`, words equal to `entry - 1` in
+a linked binary: `test_emit_obj` 3, a probe with one abstract method 5, a probe
+with two interfaces 27.
+
+**Two populations have no body, both by declaration and both normal:** an
+INTERFACE method (`IInterface.QueryInterface` and its two siblings were the three
+here) and an ABSTRACT method (`TStream.Read`). The recording site guards on
+`procIdx >= 0`, which asks whether the routine is KNOWN — it is, with a real
+signature that the arity and param-kind fields read legitimately — when the
+question is whether it has CODE.
+
+`DropBodilessMethodFixups` (emit.inc) drops those fixups once, at the single
+point where all code is emitted and DCE has run, just before the writer
+dispatch. So `MethodFixCount` is already right for the four object writers that
+size `.rela.data` from it and the six loops that resolve a slot, and **none of
+them needed to change** — the alternative was six sites and four counts kept in
+agreement by hand.
+
+| after the drop, `test_emit_obj --emit-obj --function-sections` | |
+| --- | --- |
+| `.rela.text` naming `.text` | 0 |
+| `.rela.data` naming `.text` | **0** (was 3) |
+| `.rela.init_array` / `.rela.fini_array` | 0 / 0 |
+
+**Step 2's first half is done: nothing in a Pascal object names the `.text`
+section symbol.** What remains is giving the per-function sections real
+extents — including the two thunk symbols, which still carry SIZE 0.
+
+**Two things tried and rejected, both recorded because they look right:**
+
+- **An error instead of nil.** The @proc sibling refuses a bodiless routine at
+  link time and that is correct there; here it refused every program that uses
+  `TStream`. `nil` is what typinfo's `GetMethodAddr` documents as its only "no
+  address" answer, and it is what the slot already holds.
+- **A relocation against the null symbol.** Spells the same nil, but leaves an
+  entry in `.rela.data` for a slot with no target — under `--function-sections`
+  the point is that nothing names what it does not mean.
+
+**Reachability, since it decides whether this is a bug or bookkeeping.** The
+abstract case is reachable from ordinary user code: `GetMethodAddr(cls, 'Abs1')`
+returned a non-nil pointer to `entry - 1`, and the new test calls the concrete
+sibling through the same API as its control. The interface case is NOT reachable
+from a program — an interface's RTTI blob is deliberately absent from the class
+registry (measured: `GetClass('IInterface')` answers nil) — which is why the
+interface half is asserted on the object, in the Makefile, and not by a probe.

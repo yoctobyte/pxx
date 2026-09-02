@@ -2449,6 +2449,10 @@ begin
     where it is first needed without execution falling into it.
     feature-port-rtl-over-libc }
   EmitLibcSyscallThunk;
+  { All code is emitted and DCE has run, so BodyAddr is final for every proc:
+    the last point at which a method fixup can be asked whether its target has
+    code, and the only one before the writers. }
+  DropBodilessMethodFixups;
   if EmitSharedMode then
     writeELFSharedX64(outFile)
   else if EmitObjMode then

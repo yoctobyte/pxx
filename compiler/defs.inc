@@ -2445,6 +2445,10 @@ var
   MethodFixups       : array of TMethodFixup;
   MethodFixCount     : Integer;
   MethodFixCapacity  : Integer;
+  MethodFixDropped   : Integer;   { fixups DropBodilessMethodFixups removed (emit.inc): a
+                                    VMT/RTTI slot whose method has no body -- an interface
+                                    or abstract declaration -- keeps its nil instead of
+                                    being patched to `entry + (-1)'. }
   DataPtrFix         : array of TDataPtrFix;
   DataPtrFixCount    : Integer;
   DataPtrFixCapacity : Integer;

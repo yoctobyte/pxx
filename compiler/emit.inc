@@ -148,6 +148,52 @@ begin
   Inc(MethodFixCount);
 end;
 
+{ Drop every method fixup whose target has NO BODY, leaving the slot at the nil
+  it was reserved with. Called once, at the single point where all code is
+  emitted and DCE has run, just before the writer dispatch -- so MethodFixCount
+  is already correct for the four object writers that size .rela.data from it
+  and the six loops that resolve a slot, and none of them needs to know.
+
+  WHAT WAS WRONG. Every writer resolves a slot as `entry + BodyAddr', and a
+  routine with no body has BodyAddr = -1. The slot then holds THE ADDRESS ONE
+  BYTE BELOW THE ENTRY POINT: in range, plausible, and dereferenced the first
+  time anything calls through it. Measured on test/test_emit_obj.pas -- three
+  such words in the linked executable, and in an --emit-obj object three
+  .rela.data entries reading `.text - 1'.
+
+  WHO HAS NO BODY, both by declaration and both normal:
+    - an INTERFACE method (IInterface.QueryInterface and its two siblings were
+      the three above). An interface is a signature and nothing else.
+    - an ABSTRACT method (TStream.Read). A descendant supplies the body; the
+      base class slot has none to name.
+  The Procs[] entry exists in both cases and carries a real signature, which is
+  why the guard at the recording site -- `if procIdx >= 0' -- passes: it asks
+  whether a routine is KNOWN, and the question here is whether it has CODE.
+
+  WHY NIL IS THE ANSWER AND NOT AN ERROR. The @proc sibling (ProcAddrFix, in
+  elfwriter.inc) refuses a bodiless routine at link time, and that is right
+  there -- taking the address of a routine with no body is a program bug. It is
+  not one here: `nil' is precisely what typinfo's GetMethodAddr documents for
+  "no address", and it is what the RTTI record already holds. Making this an
+  error was tried and refused every program that uses TStream.
+  ALSO NOT A RELOCATION AGAINST THE NULL SYMBOL: that spells the same nil, but
+  it leaves an entry in .rela.data for a slot with no target, and under
+  --function-sections the whole point is that nothing names a section it does
+  not mean. Dropping the fixup is the same value with nothing left over. }
+procedure DropBodilessMethodFixups;
+var i, keep: Integer;
+begin
+  keep := 0;
+  for i := 0 to MethodFixCount - 1 do
+    if Procs[MethodFixups[i].ProcIdx].BodyAddr >= 0 then
+    begin
+      MethodFixups[keep] := MethodFixups[i];
+      Inc(keep);
+    end;
+  MethodFixDropped := MethodFixCount - keep;
+  MethodFixCount := keep;
+end;
+
 procedure EmitI32(v: Int64);
 begin
   EmitB(Byte(v and $FF)); EmitB(Byte((v shr 8) and $FF));
