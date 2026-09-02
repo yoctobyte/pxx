@@ -12539,7 +12539,7 @@
   },
   {
    "bad": "fca437d4daaf06a806f2ce1234ed031610be804f",
-   "bad_untestable": true,
+   "bad_untestable": false,
    "first_seen": false,
    "good": "cdae8cf6580bc5dd40f603391a4e98c5d8317c09",
    "job": "test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy",
