@@ -3,7 +3,7 @@ slug: feature-c-gnu-inline-asm-with-a-non-empty-template
 track: C
 type: feature
 prio: 40
-status: working
+status: done
 found: 2026-09-02
 found-by: frankD
 blocked-by: []
@@ -226,7 +226,24 @@ clean. `__GNUC__` was added after the pin. Reproduce with `compiler/pascal26`,
 and put a poison `#error` at the `#elif` to learn which arm you are on — the pin
 does not error here, it answers correctly about a different compiler.
 
-### Not verified here: the 400-object link at 258 applets
+### A real link, verified here
 
-That claim is frankD/frankuser's measurement and this session did not re-run it.
-What is shown above is that the one TU compiles and defines the missing symbol.
+`tools/busybox_diff.sh --separate --targets x86_64 --applets "cat echo
+ssl_client"` — **GREEN**. Not a unity build: 42 objects compiled one per
+translation unit and linked for real, then compared against the same source
+built by gcc.
+
+- `networking_tls_sp_c32.o` is in the object list, so the file this ticket is
+  about was compiled by pxx and linked, not skipped.
+- The linked binary defines `curve_P256_compute_pubkey_and_premaster` — the
+  exact symbol whose absence took the 400-object link down.
+- `PASS x86_64 byte-identical to the gcc oracle over 31 cases`.
+
+**Scope of that claim.** Three applets, not 258, and the 31 cases exercise cat
+and echo — they do not execute the TLS path. So this shows the blocker is gone
+through a real link and the build agrees with gcc; it does not re-measure the
+258-applet build, which stays attributed to whoever ran it. The TLS asm itself
+is verified numerically against gcc in `test/casm_gnu_operands.c`.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

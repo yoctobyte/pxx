@@ -8,14 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (8)
+## working (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386 | A | 45 | bug | PASCAL DONE AND PROVEN; NilPy, Rust and Zig still open. The four `fAlign := TypeAlign(fTk)` record-field sites in pasparser_decl.inc now call TypeFieldAlign, and a new mixed-link oracle (test-record-abi-mixed-link) judges the layout against gcc across a real link on x86_64 and i386, four shapes plus a value round trip through a `cvar` record global. The Track U fork this ticket flagged -- whether a Pascal record must match the C ABI -- dissolved on the first measurement: pxx's C frontend answered 12/4 and pxx's PASCAL frontend 16/8 for the same fields, same target, same compiler. It was not an FPC question, it was one compiler disagreeing with itself. N/R/Z have no export spelling and so no mixed link, and rustc/zig i686 are not on this box. | — |
 | feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross | A | 45→80 | feature | riscv32 is DONE -- examples/net/httpdemo builds and runs there with output byte-identical to the x86-64 oracle, and i386/arm32/aarch64 are unchanged. XTENSA REMAINS, and it is the hard half: under the windowed ABI the callee-saved state lives in a rotating register window rather than on the stack the way CoSwitch assumes, so a stack switch has to spill the window first. riscv32 took FOUR pieces, not the three this ticket predicted -- the CoSwitch stub, the IR_COSWITCH lowering, scheduler.pas's initial frame and epoll syscall numbers, AND atomic codegen, which riscv32 refused in user mode because its only primitive was the ESP arm's machine-mode interrupt mask. | — |
 | feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes | A | 55→80 | feature | Two --emit-obj objects now link and share one runtime (bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link), but WEAK only picks a winner among duplicate symbols -- the losing objects' sections are still linked in whole. Measured: two objects that each contain crtl produce a 580088-byte binary against 310544 for one, and busybox's 41-TU separate build came out at 13.7MB for the same reason. Needs section-granular deduplication: a crtl archive the linker pulls members from, or function/data sections plus COMDAT groups. STEP 1 IS IN: --function-sections turns internal calls into relocations against the callee symbol (1078 of 1084 sites in a C object; the 6 left are the duplicate-static shape and need a per-BODY symbol), verified by the linked binary being BYTE-IDENTICAL with the flag on and off. It shrinks nothing on its own -- the payoff needs per-function sections + --gc-sections, which is a restructuring of writeELFRelX64General's fixed 9-section layout, and ProcAddrFix relocates against the .text SECTION symbol so it breaks there too. PARKED AFTER STEP 1 (533858cce, --function-sections: internal calls become relocations). MEASURED ON THE PARKED TREE AT 39c7042211a7, two things the next session needs: (a) --function-sections DOES NOT PRODUCE FUNCTION SECTIONS -- the object still has one .text and 13 sections, so -Wl,--gc-sections drops 168 bytes of 624888 (0.03%) in every combination; the flag does what its help text says and its NAME asserts a property step 2 has not built yet. (b) Step (3), DCE under --emit-obj, is now on for BOTH frontends (60edd4853 wired the C one in; passages above saying it is off for C are stale) and its residual is PINNED BY BEING EXPORTED, not unpruned: a C object exports 286 crtl entry points WEAK, --dce drops 269 LOCAL bodies and exactly ZERO weak ones, and those 286 hold 52% of the pruned object's .text. No compile-time pass may contradict an export contract, which is a second independent argument for option (4)'s COMDAT group. Cost of separation for a 3-TU C program: 242568 without --dce, 42176 with it. tools/busybox_diff.sh takes an opt-in --dce so the 149-object number can be retaken; unrun here, no busybox tree on this box. | — |
-| feature-c-gnu-inline-asm-with-a-non-empty-template | C | 40→70 | feature | pxx's C frontend refuses GNU inline asm whose template is non-empty (`error: C: inline asm with a non-empty template is not supported — the instructions would be silently dropped`). The refusal is right; the gap is real. It is the LAST non-crtl blocker for busybox at 258 applets: networking/tls_sp_c32.c takes an x86-64 asm arm because pxx announces __GNUC__, and its failure takes the 400-object link down with it (curve_P256_compute_pubkey_and_premaster undefined). Everything else in that build now compiles. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
@@ -869,9 +868,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3118)
+## done (3119)
 
-3118 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3119 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -969,6 +968,7 @@ _none_
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [P] bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string
 - [p 70] [B] feature-b-a-bootable-image-with-the-busybox-userland-on-it
+- [p 70] [C] feature-c-corpus-busybox-258-applets-linked
 - [p 70] [A] regression-test-c-conformance-shard2-6-2
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
@@ -1367,7 +1367,6 @@ _none_
 - **1** — decide-which-gtk-a-bare-gtk-gtk-h-means
 - **1** — feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross
 - **1** — feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes
-- **1** — feature-c-gnu-inline-asm-with-a-non-empty-template
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-os-targets-bsd-mac
 - **1** — feature-pal-esp-posix-fd-semantics

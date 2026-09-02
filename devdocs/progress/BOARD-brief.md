@@ -5,14 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:8 unfinished:28 blocked:6 backlog:5 backlog-umbrella:6 backlog-core:138 backlog-nilpy:96 backlog-tools:4 backlog-pascal:58 backlog-decide:29 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 divergence:1 float:25 done-followup:3 decided:144 done:3118 rejected:72`
+`working:7 unfinished:28 blocked:6 backlog:5 backlog-umbrella:6 backlog-core:138 backlog-nilpy:96 backlog-tools:4 backlog-pascal:58 backlog-decide:29 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 divergence:1 float:25 done-followup:3 decided:144 done:3119 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA
-- `feature-c-gnu-inline-asm-with-a-non-empty-template` [C] — owner: frankB
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
@@ -58,7 +57,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 389, ranked
+## Ready — top 30 of 390, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [P]` regression-lib-test-lib-synapse-3 (unblocks 1)
@@ -77,6 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [P]` bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
+- `[p 70] [C]` feature-c-corpus-busybox-258-applets-linked
 - `[p 70] [A]` regression-test-c-conformance-shard2-6-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
@@ -89,6 +89,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
-- `[p 60] [C]` bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero
 
-_359 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_360 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
