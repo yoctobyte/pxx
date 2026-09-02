@@ -176,4 +176,4 @@ unchanged, not regressed, and still carry the defect. They have no mixed-link
 oracle here (that harness runs x86_64 and i386 only), which is why they were not
 done blind. Split out as
 [[bug-a-c-the-variadic-struct-abi-is-still-a-pointer-on-aarch64-arm32-and-riscv32]].
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 59706a0fe.
