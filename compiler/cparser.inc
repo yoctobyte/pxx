@@ -7114,6 +7114,74 @@ begin
   end;
 end;
 
+{ ---- binding GNU asm operands to pinned registers --------------------------
+
+  The strategy, and why it is not the allocator work the ticket first feared.
+  gcc's `"r"` means "the compiler picks a register and tells the template which
+  via %N". pxx has no register allocator at all -- nothing is live in a
+  register across a statement boundary -- so there is nothing to pick AROUND.
+  Each operand is therefore PINNED to a fixed register chosen right here, at
+  parse time, which is what lets the choice reach AsmBytes: the block is
+  encoded during parsing and a codegen-time decision could never get into it.
+
+  Two consequences fall out, both in our favour:
+
+  - No save/restore. The pool below is caller-saved registers only, so
+    clobbering one costs nothing and the callee-saved set is never touched.
+    `"memory"` and `"cc"` clobbers are free for the same reason the Pascal path
+    can discard them.
+  - MATCHING CONSTRAINTS ARE THE CHEAP CASE. `"0"(a)` ties an input to output
+    0's location; when output 0 IS a fixed register, that is satisfied by
+    construction -- load `a` into the same register. Every x86-64-reachable
+    block in busybox's tls_sp_c32.c uses them, and the scoping had them down as
+    the expensive part.
+
+  What it costs is speed: gcc would keep these values in registers across the
+  whole enclosing loop, and we round-trip each through a frame slot. Correct
+  and slower, which is the right trade for a construct this rare. }
+
+const
+  { Caller-saved only, so nothing needs saving. rax and rdx come LAST: `mul`
+    writes both implicitly, and the fixed-register constraints ("a", "d") want
+    them, so leaving them until the pool is under pressure avoids most
+    collisions without any cleverness. rbx, rbp, rsp and r12-r15 are absent on
+    purpose -- clobbering a callee-saved register here would break our caller,
+    and pxx's prologue does not save them. }
+  CASM_POOL_COUNT = 9;
+  CAsmPool: array[0..CASM_POOL_COUNT-1] of Integer =
+    (8, 9, 10, 11, 6, 7, 1, 0, 2);   { r8 r9 r10 r11 rsi rdi rcx rax rdx }
+
+{ The register a fixed-letter constraint names, or -1. These are the EASY
+  constraints, not the hard ones: the letter says which register, so there is
+  nothing to choose. tls_sp_c32.c wants "a" for mul's implicit operand. }
+function CAsmFixedReg(const cls: AnsiString): Integer;
+begin
+  Result := -1;
+  if cls = 'a' then Result := 0
+  else if cls = 'b' then Result := 3
+  else if cls = 'c' then Result := 1
+  else if cls = 'd' then Result := 2
+  else if cls = 'S' then Result := 6
+  else if cls = 'D' then Result := 7;
+end;
+
+{ True for a constraint class this frontend can honour. Deliberately short:
+  the measured vocabulary of the four x86-64-reachable busybox blocks, and
+  nothing speculative. Everything else refuses by name in CAsmRefuseUnsupported
+  so a reader learns which letter is missing. }
+function CAsmClassSupported(const cls: AnsiString): Boolean;
+begin
+  Result := (cls = 'r') or (cls = 'rm') or (cls = 'mr') or (cls = 'm')
+            or (CAsmFixedReg(cls) >= 0);
+end;
+
+{ Does this class want a register, as opposed to memory? `"rm"` lets gcc choose;
+  we always take the register, which is a legal choice for it. }
+function CAsmClassWantsReg(const cls: AnsiString): Boolean;
+begin
+  Result := cls <> 'm';
+end;
+
 { Refuse the captured block by NAME where the reason is a specific operand,
   and return quietly where it is not, leaving the caller's blanket refusal to
   speak. Ordered so the first thing a reader is told is the smallest thing that
@@ -7140,6 +7208,190 @@ begin
       Error('C: inline asm earlyclobber constraint "' + CAsmOps[i].Raw
             + '" is not supported');
   end;
+end;
+
+{ Bind every operand to a pinned register, encode the block, and synthesise the
+  ordinary C assignments that carry values in and out of it. The result is a
+  plain statement block:
+
+      T_in  = <input expression>          ...one per input
+      <asm: load pinned regs from T_in, the template, store outputs to T_out>
+      <output lvalue> = T_out             ...one per output
+
+  Everything outside the asm node is ordinary AST, so no IR node changes, no
+  codegen changes and no allocator are involved. The moves inside it go through
+  AsmDispatch with an AOP_MEM operand -- `[rbp+disp32]`, the same form a named
+  Pascal local takes -- which is possible only because AllocVar assigns a C
+  local its frame offset at DECLARATION time, so the offset is already final
+  while the block is still being encoded. }
+function CAsmBuildBlock(isExt: Boolean): Integer;
+var
+  i, r, reg, poolNext, tk, fixed, startOff, blkLen: Integer;
+  used: array[0..15] of Boolean;
+  tmpSym, opReg, opSz: array[0..MAX_CASM_OPERANDS-1] of Integer;
+  head, tail, nd, idn, asn, sq, blk, val: Integer;
+  cls, nm, rest: AnsiString;
+  dummySize: Integer;
+begin
+  { ---- what we can honour at all ---- }
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    if CAsmOps[i].TiedTo >= 0 then Continue;   { class comes from its partner }
+    if not CAsmClassSupported(CAsmOps[i].Cons) then
+      Error('C: inline asm constraint "' + CAsmOps[i].Raw
+            + '" is not supported — this frontend reads "r", "rm", "m" and the'
+            + ' fixed-register letters a b c d S D');
+  end;
+  for i := 0 to CAsmOutCount - 1 do
+  begin
+    if CAsmOps[i].Cons = 'm' then
+      Error('C: inline asm memory OUTPUT constraint "' + CAsmOps[i].Raw
+            + '" is not supported');
+    { An output expression is written twice -- once as the store target here,
+      and once more if a matching input names it. Restricting outputs to a
+      plain variable keeps that from evaluating a subscript or a call twice,
+      which is a wrong answer rather than a refusal. Every output in the
+      busybox blocks this targets is a plain local. }
+    if ASTKind[CAsmOps[i].Expr] <> AN_IDENT then
+      Error('C: inline asm output operand must be a plain variable'
+            + ' — a more complex lvalue would be evaluated more than once');
+  end;
+
+  for r := 0 to 15 do used[r] := False;
+
+  { ---- registers the block has already spoken for ---- }
+  rest := CAsmClobRegs;
+  while rest <> '' do
+  begin
+    i := Pos(' ', rest);
+    if i > 0 then begin nm := Copy(rest, 1, i - 1); rest := Copy(rest, i + 1, Length(rest)); end
+    else begin nm := rest; rest := ''; end;
+    if (nm <> '') and (nm[1] = '%') then nm := Copy(nm, 2, Length(nm));
+    if nm <> '' then
+    begin
+      if not AsmRegNum(nm, reg, dummySize) then
+        Error('C: inline asm clobbers "' + nm + '", which is not a register'
+              + ' this backend knows');
+      used[reg] := True;
+    end;
+  end;
+
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    opReg[i] := -1;
+    if CAsmOps[i].TiedTo >= 0 then Continue;
+    fixed := CAsmFixedReg(CAsmOps[i].Cons);
+    if fixed >= 0 then
+    begin
+      if used[fixed] then
+        Error('C: inline asm wants register constraint "' + CAsmOps[i].Raw
+              + '" but that register is already taken by another operand or a'
+              + ' clobber');
+      opReg[i] := fixed;
+      used[fixed] := True;
+    end;
+  end;
+
+  { ---- and the rest, pinned from the caller-saved pool ---- }
+  poolNext := 0;
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    if (CAsmOps[i].TiedTo >= 0) or (opReg[i] >= 0) then Continue;
+    while (poolNext < CASM_POOL_COUNT) and used[CAsmPool[poolNext]] do Inc(poolNext);
+    if poolNext >= CASM_POOL_COUNT then
+      Error('C: inline asm needs more registers than this frontend can pin'
+            + ' — it uses a fixed caller-saved pool, not a register allocator');
+    opReg[i] := CAsmPool[poolNext];
+    used[opReg[i]] := True;
+  end;
+  for i := 0 to CAsmOpCount - 1 do
+    if CAsmOps[i].TiedTo >= 0 then opReg[i] := opReg[CAsmOps[i].TiedTo];
+
+  { ---- widths, and a local to carry each value ---- }
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    if CAsmOps[i].Cons = 'm' then
+    begin
+      opSz[i] := TARGET_PTR_SIZE;
+      tmpSym[i] := AllocVar('', tyPointer);
+    end
+    else
+    begin
+      tk := ASTTk[CAsmOps[i].Expr];
+      opSz[i] := TypeSlotSize(IntToTypeKind(tk));
+      if (opSz[i] <> 1) and (opSz[i] <> 2) and (opSz[i] <> 4) and (opSz[i] <> 8) then
+        Error('C: inline asm operand is ' + AIntToStr(opSz[i])
+              + ' bytes wide, which does not fit a register');
+      tmpSym[i] := AllocVar('', IntToTypeKind(tk));
+    end;
+  end;
+
+  { ---- tell the template reader what each %N is ---- }
+  AttResetBindings;
+  for i := 0 to CAsmOpCount - 1 do
+    if CAsmClassWantsReg(CAsmOps[i].Cons) then
+      AttBindOperand(i, ATTBIND_REG, opReg[i], opSz[i])
+    else
+      AttBindOperand(i, ATTBIND_MEM, opReg[i], 0);
+
+  { ---- encode: loads, the template, stores ---- }
+  AttBeginBlock(startOff);
+  for i := CAsmOutCount to CAsmOpCount - 1 do
+    AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, True);
+  AttEncodeTemplateInner(CAsmTemplate, isExt);
+  for i := 0 to CAsmOutCount - 1 do
+    AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, False);
+  AttEndBlock(startOff, blkLen);
+
+  { ---- and the ordinary statements around it ---- }
+  head := -1; tail := -1;
+  for i := CAsmOutCount to CAsmOpCount - 1 do
+  begin
+    idn := AllocNode(AN_IDENT);
+    ASTIVal[idn] := tmpSym[i];
+    ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
+    val := CAsmOps[i].Expr;
+    if CAsmOps[i].Cons = 'm' then
+    begin
+      nd := AllocNode(AN_ADDR);
+      ASTLeft[nd] := val;
+      ASTTk[nd] := Ord(tyPointer);
+      val := nd;
+    end;
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := idn; ASTRight[asn] := val;
+    ASTTk[asn] := ASTTk[idn];
+    sq := AllocNode(AN_SEQ);
+    ASTLeft[sq] := asn; ASTRight[sq] := -1;
+    if head < 0 then head := sq else ASTRight[tail] := sq;
+    tail := sq;
+  end;
+
+  nd := AllocNode(AN_ASM);
+  ASTLeft[nd] := startOff;
+  ASTRight[nd] := blkLen;
+  sq := AllocNode(AN_SEQ);
+  ASTLeft[sq] := nd; ASTRight[sq] := -1;
+  if head < 0 then head := sq else ASTRight[tail] := sq;
+  tail := sq;
+
+  for i := 0 to CAsmOutCount - 1 do
+  begin
+    idn := AllocNode(AN_IDENT);
+    ASTIVal[idn] := tmpSym[i];
+    ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
+    asn := AllocNode(AN_ASSIGN);
+    ASTLeft[asn] := CAsmOps[i].Expr; ASTRight[asn] := idn;
+    ASTTk[asn] := ASTTk[CAsmOps[i].Expr];
+    sq := AllocNode(AN_SEQ);
+    ASTLeft[sq] := asn; ASTRight[sq] := -1;
+    ASTRight[tail] := sq;
+    tail := sq;
+  end;
+
+  blk := AllocNode(AN_BLOCK);
+  ASTLeft[blk] := head;
+  Result := blk;
 end;
 
 function ParseCStatementAST: Integer;
@@ -7333,19 +7585,19 @@ begin
     if not asmEmpty then
     begin
       CAsmRefuseUnsupported;
-      { A template with no operands to substitute is self-contained text: the
-        AT&T reader hands each instruction to AsmDispatch and the block becomes
-        an AN_ASM span of AsmBytes, indistinguishable at codegen from a Pascal
-        `asm` block. Operand binding is the separate half and is not built yet,
-        so a template that mentions %N is still refused -- by asmatt.inc, which
-        names the operand. }
-      if CAsmOpCount > 0 then
-        Error('C: inline asm with operand sections is not supported yet'
-              + ' — the template is read, but %0..%9 substitution is not,'
-              + ' so the operands would be silently dropped');
+      { The AT&T reader hands each instruction to AsmDispatch and the block
+        becomes an AN_ASM span of AsmBytes, indistinguishable at codegen from a
+        Pascal `asm` block. With operands, CAsmBuildBlock additionally pins each
+        one to a register and wraps the span in ordinary assignments. }
       if TargetArch <> TARGET_X86_64 then
         Error('C: inline asm with a non-empty template is only supported on'
               + ' x86-64, not ' + TargetArchName(TargetArch));
+      if CAsmOpCount > 0 then
+      begin
+        Result := CAsmBuildBlock(asmSections > 0);
+        Exit;
+      end;
+      AttResetBindings;
       AttEncodeTemplate(CAsmTemplate, asmSections > 0, asmStart, asmLen);
       node := AllocNode(AN_ASM);
       ASTLeft[node] := asmStart;

@@ -16,6 +16,13 @@
 #   no operands       cmc, which carries no AT&T suffix at all
 #   SIB               base+index*scale, to keep the memory path honest beyond
 #                     the one shape busybox happens to use
+#   ZERO disp + r8-r15  the shape that found bug-a-asmcore-modrm-regfield-unmasked.
+#                     `movq (%r9), %r8` is the ONE combination where an unmasked
+#                     ModRM reg field is visible: with a disp8 the stray bit
+#                     lands on the same bit modBits=1 sets and the encoding comes
+#                     out right by accident, so a test that only covered
+#                     `8(%r9)` would have passed over a corrupt instruction
+#                     stream. Both are here, adjacent, for that reason.
 
 movq %rax, %rbx
 movl %ecx, %edx
@@ -45,3 +52,16 @@ incq %rcx
 decq %rdx
 testq %rax, %rax
 leaq 16(%rdi), %rsi
+
+movq (%r9), %r8
+movq (%r8), %r15
+movq %r8, (%r9)
+movq %r15, (%r8)
+movq (%rax), %r11
+movq (%r11), %rax
+addq (%r10), %r12
+movq 8(%r9), %r8
+movq (%r12), %r13
+movq (%r13), %r12
+movq (%rsp), %r9
+movq (%rbp), %r10

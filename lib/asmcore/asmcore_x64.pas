@@ -166,7 +166,24 @@ begin
     else modBits := 2;
   end;
 
-  BufAppend(buf, Byte((modBits shl 6) or (regField shl 3) or rmField));
+  { `and 7` is not decoration. regField arrives as a full 0..15 register number
+    and bit 3 belongs to REX.R, which the caller has already emitted; leaving it
+    here ORs it into the MOD field instead. The damage is invisible for a disp8
+    operand -- bit 6 of an unmasked reg 8..15 is the same bit modBits=1 sets, so
+    `mov r8, [r9+8]` came out right -- and corrupts the instruction STREAM for a
+    zero displacement, where modBits is 0: the byte says mod=01, no disp follows,
+    and the disassembler eats the next instruction's REX prefix. Measured
+    2026-09-02 against the pinned compiler, so it predates the AT&T reader that
+    found it: Pascal `mov r8, [r9]` emitted 4d 8b 41 for 4d 8b 01.
+    Every other ModRM composition in this file already masks, and so does its
+    twin EncModRMMem in compiler/x64enc.inc. Two implementations of one concept,
+    one of them missing the mask -- which is why this went unseen: the twin that
+    Pascal's named-local operands take was correct all along, and only the
+    asmcore path an explicit [reg] operand reaches was not.
+    Found by the AT&T template reader; fixed rather than ticketed, per the
+    logbook entry of 2026-09-02. Guarded by test/test_asm_modrm_zero_disp.pas
+    and by the zero-displacement rows of test/casm_att_template.att. }
+  BufAppend(buf, Byte((modBits shl 6) or ((regField and 7) shl 3) or rmField));
 
   if needSib then
   begin

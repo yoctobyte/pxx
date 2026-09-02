@@ -8930,17 +8930,15 @@ test-core: $(COMPILER)
 	# every accepted spelling, then the gas differential. gcc -O0 oracle.
 	# Each shape asserts its OWN message: the refusals run most-specific-first, so
 	# a reader is told the smallest thing that has to change rather than the same
-	# blanket sentence for four different causes. SHAPE_PLAIN is the one with a
-	# lifecycle -- it becomes an acceptance test when "=r"/"r" land.
+	# blanket sentence for several different causes. A third shape, plain
+	# "=r"/"r", lived here until the operand binding landed; it now compiles and
+	# has moved to casm_gnu_operands.c below.
 	@./$(COMPILER) test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 2>&1 \
 	  | grep -q 'read-write constraint "+r" is not supported' \
 	  || { echo 'casm_nonempty_template_fails: FAIL - "+r" was accepted, or refused without naming itself'; exit 1; }
 	@./$(COMPILER) -dSHAPE_SYMBOLIC test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 2>&1 \
 	  | grep -q 'symbolic operand \[a\] is not supported' \
 	  || { echo 'casm_nonempty_template_fails SHAPE_SYMBOLIC: FAIL - [a] was accepted, or refused without naming itself'; exit 1; }
-	@./$(COMPILER) -dSHAPE_PLAIN test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 2>&1 \
-	  | grep -q 'inline asm with operand sections is not supported yet' \
-	  || { echo 'casm_nonempty_template_fails SHAPE_PLAIN: FAIL - operands were accepted and dropped, or refused as something else'; exit 1; }
 	@./$(COMPILER) test/casm_goto_fails.c $(TESTTMP)/casmgoto26 2>&1 \
 	  | grep -q 'inline asm goto is not supported' \
 	  || { echo 'casm_goto_fails: FAIL - asm goto was accepted, or refused as something else'; exit 1; }
@@ -8951,6 +8949,15 @@ test-core: $(COMPILER)
 	# difference, not a semantic one. --self-check is the positive control:
 	# swapping an operand order must change what pxx encodes.
 	python3 tools/casm_att_diff.py --self-check test/casm_att_template.att
+	# Operands, against gcc on the same source. add8, mul1 and submod are the
+	# x86-64 arms of busybox networking/tls_sp_c32.c verbatim -- the file this
+	# whole feature exists for, whose refusal took a 400-object link down with
+	# `undefined reference to curve_P256_compute_pubkey_and_premaster`. Between
+	# them they cover matching constraints, "=rm", a fixed-register "a", an "m"
+	# whose address is pinned, a "dx" clobber that must keep rdx out of the
+	# pool, and cmc. The carry inputs are chosen so a dropped carry cannot pass.
+	./$(COMPILER) test/casm_gnu_operands.c $(TESTTMP)/casmgnuop26
+	tools/expect_same.sh casmgnuop26 "$$($(TESTTMP)/casmgnuop26)" "$$(printf 'add3 12\nadd8 0 0 0 0 0 0 0 0 carry=1\nmul1 4 18446744073709551614 0\nsubmod 1 18446744069414584320 18446744073709551615 4294967294')"
 	./$(COMPILER) test/casm_barrier.c $(TESTTMP)/casmbarrier26
 	tools/expect_same.sh casmbarrier26 "$$($(TESTTMP)/casmbarrier26)" "43 2"
 	# A ternary as the CALLEE of a call. (*fp)(a), (fp)(a), (name)(a), (a,fn)(x),
@@ -10145,6 +10152,13 @@ test-core: $(COMPILER)
 	# positive control -- see the header in the test for which wrong encoding
 	# each one rules out. The pinned compiler rejects this file outright
 	# ("asm: unknown instruction: adc"), which is the aim check.
+	# A ModRM reg field of r8..r15 with a ZERO-displacement memory operand: the
+	# one combination where asmcore's unmasked reg field was visible, because a
+	# disp8 hid it (the stray bit set the bit modBits=1 was going to set). The
+	# pinned compiler prints "0 15 333" here -- the third row is the control,
+	# correct in both, so a failure names the defect rather than "asm is broken".
+	./$(COMPILER) test/test_asm_modrm_zero_disp.pas $(TESTTMP)/test_asm_modrm26
+	tools/expect_same.sh test_asm_modrm26 "$$($(TESTTMP)/test_asm_modrm26)" "$$(printf '111\n222\n333')"
 	./$(COMPILER) test/test_asm_carry_chain.pas $(TESTTMP)/test_asm_carry26
 	tools/expect_same.sh test_asm_carry26 "$$($(TESTTMP)/test_asm_carry26)" "$$(printf '0\n1\n-1\n0\n0')"
 	./$(COMPILER) test/test_asm_branch.pas $(TESTTMP)/test_asm_branch26

@@ -24,11 +24,46 @@
 
   feature-c-gnu-inline-asm-with-a-non-empty-template }
 
+const
+  { How a `%N` in the template resolves. The caller binds each operand to a
+    fixed register BEFORE encoding -- see the pinning note in
+    feature-c-gnu-inline-asm-with-a-non-empty-template -- so substitution never
+    has to happen as text and never has to wait for codegen. }
+  ATTBIND_NONE = 0;
+  ATTBIND_REG  = 1;   { %N is a register: `"r"`, `"rm"`, `"a"` and friends }
+  ATTBIND_MEM  = 2;   { %N is `[reg]`, the register holding the address: `"m"` }
+
 var
   AttSrc     : AnsiString;   { the template being read }
   AttPos     : Integer;      { 1-based cursor into AttSrc }
   AttExtended: Boolean;      { extended asm: `%%` is an escaped `%`, `%N` an operand }
   AttMaxOpnd : Integer;      { highest %N seen, or -1 -- the caller checks it }
+  AttBindKind: array[0..MAX_CASM_OPERANDS-1] of Integer;
+  AttBindReg : array[0..MAX_CASM_OPERANDS-1] of Integer;
+  AttBindSize: array[0..MAX_CASM_OPERANDS-1] of Integer;  { bytes; 0 = let the suffix say }
+  AttBindCount: Integer;
+
+{ Clear every binding. Called on its own for an operand-free template, so a
+  stale binding from an earlier statement can never satisfy a `%N`. }
+procedure AttResetBindings;
+var i: Integer;
+begin
+  for i := 0 to MAX_CASM_OPERANDS - 1 do
+  begin
+    AttBindKind[i] := ATTBIND_NONE;
+    AttBindReg[i] := 0;
+    AttBindSize[i] := 0;
+  end;
+  AttBindCount := 0;
+end;
+
+procedure AttBindOperand(n, kind, reg, size: Integer);
+begin
+  AttBindKind[n] := kind;
+  AttBindReg[n] := reg;
+  AttBindSize[n] := size;
+  if n >= AttBindCount then AttBindCount := n + 1;
+end;
 
 { ---- character-level scanning ---- }
 
@@ -254,6 +289,30 @@ begin
   AsmOpSize[slot] := size;
 end;
 
+function AttReadOperandNumber: Integer; forward;
+
+{ Inside ( ), a register may be written directly or named by an operand:
+  `1*8(%0)` is how tls_sp_c32.c reaches every limb, and %0 there is an `"r"`
+  operand holding a pointer. Both spellings land in the same slot as a plain
+  register, so the memory parser below does not need to know which it got. }
+procedure AttParseBaseOrOperand(slot: Integer);
+var n: Integer;
+begin
+  if AttExtended and (AttPeek = '%') and AttIsDigit(AttPeek2) then
+  begin
+    Inc(AttPos);
+    n := AttReadOperandNumber;
+    if AttBindKind[n] <> ATTBIND_REG then
+      Error('C: inline asm template uses the memory operand %' + AIntToStr(n)
+            + ' as an address register');
+    AsmOpKind[slot] := AOP_REG;
+    AsmOpReg[slot] := AttBindReg[n];
+    AsmOpSize[slot] := AttBindSize[n];
+    Exit;
+  end;
+  AttParseRegisterRef(slot);
+end;
+
 { A memory operand: [disp] ( base [, index [, scale]] ). AT&T also writes a
   bare `disp` for an absolute address and `sym(%rip)` for a symbol; neither is
   read here, and both refuse by name below rather than encoding something
@@ -264,10 +323,7 @@ begin
   { AttPos is on '(' }
   Inc(AttPos);
   AttSkipSpace;
-  if AttExtended and (AttPeek = '%') and AttIsDigit(AttPeek2) then
-    Error('C: inline asm template uses an operand as a base register'
-          + ' — %N inside ( ) is not supported yet');
-  AttParseRegisterRef(slot);
+  AttParseBaseOrOperand(slot);
   num := AsmOpReg[slot];
   size := AsmOpSize[slot];
   if size <> 8 then
@@ -278,7 +334,7 @@ begin
   begin
     Inc(AttPos);
     AttSkipSpace;
-    AttParseRegisterRef(slot);
+    AttParseBaseOrOperand(slot);
     idxNum := AsmOpReg[slot];
     idxSize := AsmOpSize[slot];
     if idxSize <> 8 then
@@ -302,6 +358,30 @@ begin
   AsmOpScale[slot] := Integer(scale);
   if sawDisp then AsmOpVal[slot] := disp else AsmOpVal[slot] := 0;
   AsmOpSize[slot] := 0;   { the mnemonic's suffix supplies it }
+end;
+
+{ Read the digits of a `%N` and check that the caller actually bound operand
+  N. An unbound one is the difference between substituting a register and
+  substituting whatever happened to be in the table, so it refuses rather than
+  defaulting. }
+function AttReadOperandNumber: Integer;
+var n: Integer;
+begin
+  n := 0;
+  while (not AttAtEnd) and AttIsDigit(AttPeek) do
+  begin
+    n := n * 10 + (Ord(AttPeek) - Ord('0'));
+    Inc(AttPos);
+    if n >= MAX_CASM_OPERANDS then Break;
+  end;
+  if n > AttMaxOpnd then AttMaxOpnd := n;
+  if AttBindCount = 0 then
+    Error('C: inline asm template uses %' + AIntToStr(n)
+          + ' but the statement declares no operands');
+  if (n >= AttBindCount) or (AttBindKind[n] = ATTBIND_NONE) then
+    Error('C: inline asm template uses %' + AIntToStr(n)
+          + ', which is not one of its ' + AIntToStr(AttBindCount) + ' operands');
+  Result := n;
 end;
 
 procedure AttParseOperand(slot: Integer);
@@ -329,15 +409,26 @@ begin
       { %N, or a modifier like %b0 / %w0 / %k0 / %l0 }
       if AttIsDigit(AttPeek) then
       begin
-        n := 0;
-        while (not AttAtEnd) and AttIsDigit(AttPeek) do
+        n := AttReadOperandNumber;
+        if AttBindKind[n] = ATTBIND_REG then
         begin
-          n := n * 10 + (Ord(AttPeek) - Ord('0'));
-          Inc(AttPos);
+          AsmOpKind[slot] := AOP_REG;
+          AsmOpReg[slot] := AttBindReg[n];
+          AsmOpSize[slot] := AttBindSize[n];
+        end
+        else
+        begin
+          { An `"m"` operand: the caller put its ADDRESS in a register, so the
+            template's `%N` is that register dereferenced. The width comes from
+            the mnemonic's suffix, exactly as for any other memory operand. }
+          AsmOpKind[slot] := AOP_MEMR;
+          AsmOpReg[slot] := AttBindReg[n];
+          AsmOpIndex[slot] := -1;
+          AsmOpScale[slot] := 1;
+          AsmOpVal[slot] := 0;
+          AsmOpSize[slot] := 0;
         end;
-        if n > AttMaxOpnd then AttMaxOpnd := n;
-        Error('C: inline asm operand substitution %' + AIntToStr(n)
-              + ' is not supported yet — only a template with no operands is read');
+        Exit;
       end;
       Error('C: inline asm template has an unsupported % escape'
             + ' — write %% for a register in an extended asm statement');
@@ -498,6 +589,9 @@ end;
   Encodes into AsmBytes exactly as AsmParseBody does, so the AN_ASM /
   IR_ASM node this produces is indistinguishable at codegen from a Pascal
   block: startOff and len name a span the blit loop copies. }
+{ Encode `tpl` into AsmBytes. The operand bindings must already be set by the
+  caller (AttResetBindings + AttBindOperand), because a `%N` is resolved during
+  this call and there is no later pass that could fix one up. }
 procedure AttEncodeTemplate(const tpl: AnsiString; isExt: Boolean;
                             var startOff, len: Integer);
 begin
@@ -513,4 +607,58 @@ begin
     AttSkipSeparators;
   end;
   len := AsmBytesCount - startOff;
+end;
+
+{ ---- the moves that bind operands to their pinned registers ----------------
+
+  An operand's value lives in an ordinary compiler-made local, written and read
+  by ordinary C assignments the parser synthesises around this block. All the
+  asm has to do is move between that local's frame slot and the pinned
+  register, which AOP_MEM already means: `[rbp+disp32]`, exactly the form
+  AsmParseOperand builds for a named Pascal local. So the prologue and epilogue
+  go through the SAME encoder as everything else, and no new IR node, no
+  codegen change and no register allocator is involved.
+
+  This is what makes pinning cheap here. The registers are chosen at parse
+  time, so the choice reaches AsmBytes; nothing is live in a register across a
+  statement boundary in this compiler, so nothing has to be saved first. }
+procedure AttEmitFrameMove(regNum, size, frameOff: Integer; load: Boolean);
+var i: Integer;
+begin
+  for i := 0 to 3 do
+  begin
+    AsmOpKind[i] := AOP_NONE; AsmOpReg[i] := 0; AsmOpSize[i] := 0;
+    AsmOpVal[i] := 0; AsmOpIndex[i] := -1; AsmOpScale[i] := 1;
+  end;
+  if load then
+  begin
+    AsmOpKind[0] := AOP_REG;  AsmOpReg[0] := regNum; AsmOpSize[0] := size;
+    AsmOpKind[1] := AOP_MEM;  AsmOpVal[1] := frameOff; AsmOpSize[1] := size;
+  end
+  else
+  begin
+    AsmOpKind[0] := AOP_MEM;  AsmOpVal[0] := frameOff; AsmOpSize[0] := size;
+    AsmOpKind[1] := AOP_REG;  AsmOpReg[1] := regNum; AsmOpSize[1] := size;
+  end;
+  if not AsmDispatch('mov', 2) then
+    Error('C: inline asm could not encode an operand move');
+end;
+
+{ Open a block: the caller emits its own prologue moves, then the template,
+  then its epilogue moves, and closes with AttEndBlock to get the span. }
+procedure AttBeginBlock(var startOff: Integer);
+begin
+  startOff := AsmBytesCount;
+end;
+
+procedure AttEndBlock(startOff: Integer; var len: Integer);
+begin
+  len := AsmBytesCount - startOff;
+end;
+
+{ Encode a template that is already inside an open block (bindings set). }
+procedure AttEncodeTemplateInner(const tpl: AnsiString; isExt: Boolean);
+var ignoreStart, ignoreLen: Integer;
+begin
+  AttEncodeTemplate(tpl, isExt, ignoreStart, ignoreLen);
 end;

@@ -8,24 +8,21 @@
  * silently miscompile exactly the code that cares most about what the machine
  * does — which is the failure class this project treats as its most expensive.
  *
- * WHY THREE SHAPES. The parser used to count the operand sections and skip
- * their tokens on paren depth, so every unimplemented corner produced the same
+ * WHY TWO SHAPES. The parser used to count the operand sections and skip their
+ * tokens on paren depth, so every unimplemented corner produced the same
  * sentence: "inline asm with a non-empty template is not supported". That is
  * true and it is useless — a reader cannot tell from it whether the missing
  * piece is a constraint class, an operand spelling, or a whole feature. The
  * operand sections are now captured, and the refusals run most-specific-first.
- * These three assert that ordering, one compile each, selected by -d:
+ * These assert that ordering, one compile each, selected by -d:
  *
  *   (default)       "+r"        -> read-write constraint, named
  *   SHAPE_SYMBOLIC  [a] "=r"    -> symbolic operand spelling, named
- *   SHAPE_PLAIN     "=r" / "r"  -> the constraints are fine; %N substitution
- *                                  is what does not exist yet
  *
- * There is no blanket refusal left behind these: a template with no operands
- * to substitute is now READ (compiler/asmatt.inc), so every remaining refusal
- * names a construct. SHAPE_PLAIN is the one with a lifecycle — it is the
- * vocabulary the busybox tls_sp_c32.c work is building towards, so when
- * "=r"/"r" bind to real operands this shape becomes an ACCEPTANCE test.
+ * There is no blanket refusal left behind them: every remaining refusal names a
+ * construct. A third shape, plain "=r"/"r", lived here until the operand
+ * binding landed and now COMPILES — it moved to casm_gnu_operands.c, which is
+ * what a refusal test graduating into an acceptance test looks like.
  *
  * feature-c-gnu-inline-asm-with-a-non-empty-template */
 int printf(const char *, ...);
@@ -35,9 +32,6 @@ int main(void)
 	int x = 0;
 #if defined(SHAPE_SYMBOLIC)
 	asm volatile ("mov %[a], %[a]" : [a] "=r"(x));
-#elif defined(SHAPE_PLAIN)
-	int y = 1;
-	asm volatile ("mov %1, %0" : "=r"(x) : "r"(y));
 #else
 	asm volatile ("mov %0, %0" : "+r"(x));
 #endif
