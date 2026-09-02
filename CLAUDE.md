@@ -557,6 +557,14 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   commit message**, the only warning anyone gets.
 - **Push OFTEN — pushing is the default, not a milestone.** Unpushed work is work
   Track T cannot see. Never push another agent's in-flight work.
+  **A LOCAL COMMIT IS NOT BANKING.** A session is restarted without warning and
+  the restart takes the commit with it. Measured 2026-09-02: of four sessions
+  cycled for a Claude update, three held stranded local state — and frankZ's was
+  `263ceaed3`, *"bank the 00213 diagnosis where a restart cannot take it"*, 257
+  lines across five tickets, committed for exactly that reason and never pushed.
+  The tree survives on disk, but the NEXT session has no idea it is there and is
+  told by this file to distrust a diff it cannot explain. Push, or it is a diff
+  nobody dares touch.
 - **Park held work as a PATCH or a STASH. Never a file copy.** Unconditionally.
   A patch goes through a merge and can therefore CONFLICT; `cp` has no merge step
   to fail at, so a restored copy silently reverts everything that landed while it
