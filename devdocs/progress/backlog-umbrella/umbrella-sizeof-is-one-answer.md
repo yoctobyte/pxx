@@ -50,6 +50,37 @@ it sit duplicated builtin type-name tables in A, N and P that disagree.
 Every member below is the same sentence in a different place: **something other
 than the layout engine was asked how big a type is, and it answered.**
 
+## THE ROOT OF THE STRING HALF HAS A NAME: `tyString` IS OVERLOADED
+
+Found 2026-09-02 when the owner asked whether `tyString` was misnamed. It is
+not misnamed — **it is overloaded, and the codebase says so itself**:
+
+```
+tyString,      { 4: Pascal string with inline length prefix }
+{ Ordinals 25+: frozen fixed-length string kinds (disambiguate the old
+  overloaded tyString) ... tyString stays a legacy frozen alias during migration. }
+tyShortString, { 25 }   tyFixedString, { 26 }
+```
+
+**`tyString` serves three roles**: string literals; plain `string` variables (a
+`LOCAL_STR_CAP` = 256 slot); and `string[N]` record fields (`UFldSubHi`:
+*"stored as tyString with an N+8 slot"*). Length is an inline 8-byte NativeInt
+prefix — **but CAPACITY is carried out of band**, in `SymSubHi`, `UFldSubHi`,
+`SymStrCap`, `ArrTypeElemStrCap` and `SymPtrElemStrCap`.
+
+**That is this umbrella's string half, stated at the root.** `SizeOfSlot`'s
+comment — *"a frozen string's size is not a function of its kind"* — is a
+description of `tyString` being overloaded. The capacity side-tables exist
+because the kind cannot carry the capacity; the size oracles exist because of
+the side-tables. Every string member of this umbrella is a leaf of that.
+
+**A migration to fix it already exists and is barely started:** 627 `tyString`
+sites against 80 `tyFixedString` and 63 `tyShortString`. So the end condition
+here is not only "one oracle" — for strings it is **finishing a migration
+someone already designed**, which is a much better position than inventing one.
+Whoever takes a string member should check whether their fix is a leaf or a
+step in that migration, and prefer the step.
+
 ## Two shapes
 
 **1. The oracle takes too few parameters** — so a type whose size depends on
