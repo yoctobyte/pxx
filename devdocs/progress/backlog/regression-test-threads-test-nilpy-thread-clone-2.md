@@ -92,3 +92,4 @@ last one is the same shape (a threads test failing only under load).
 
 **The bug is real; only the attribution was wrong.** ~2% of `__pxxclone` starts
 segfault before the parent completes a write.
+- 2026-09-02 — the seven watcher saw `test-threads#src:test/test_nilpy_thread_clone.npy` GREEN at 26db8523e829 (tier full) and did NOT close this: this is a repeat stub (`regression-test-threads-test-nilpy-thread-clone-2`, not `regression-test-threads-test-nilpy-thread-clone`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
