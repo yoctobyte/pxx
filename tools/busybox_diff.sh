@@ -210,6 +210,22 @@ want_num_applets() { printf '#define NUM_APPLETS %s\n' "$NAPPLETS"; }
 # measured twelve times -- twelve identical failures that looked like
 # overwhelming agreement and were one data point. The identity of the applets
 # is the thing being asked about, so ask about it.
+# Which requested applets the configured tree does NOT have on. Prints them,
+# one per line, so a failure can NAME the applet instead of only its count.
+# `oldconfig' drops a knob whose dependencies are unmet, and it does so
+# silently: asking for 141 applets and being handed 140 used to produce
+# "reports #define NUM_APPLETS 140, not 141", which tells you that something
+# was dropped and never which thing, so every diagnosis started with a manual
+# bisect of the applet list. The information was always in .config.
+missing_applets() {
+  local a A
+  [ -f "$BB/.config" ] || { printf '%s\n' $APPLETS; return 0; }
+  for a in $APPLETS; do
+    A="$(printf '%s' "$a" | tr 'a-z-' 'A-Z_')"
+    grep -qx "CONFIG_$A=y" "$BB/.config" || printf '%s\n' "$a"
+  done
+}
+
 applets_ok() {
   local a A
   [ -f "$BB/.config" ] || return 1
@@ -239,8 +255,16 @@ if [ ! -f "$BB/include/NUM_APPLETS.h" ] \
    || ! grep -qx "$(printf '#define ENABLE_BUSYBOX %s' "$([ "$NAPPLETS" -gt 1 ] && echo 1 || echo 0)")" "$BB/include/autoconf.h"; then
   CFGLOG="${TMPDIR:-/tmp}/bbdiff-configure.log"
   configure_tree "$CFGLOG" || { tail -20 "$CFGLOG" >&2; die "could not configure the tree (log: $CFGLOG)"; }
-  grep -qx "$(want_num_applets)" "$BB/include/NUM_APPLETS.h" \
-    || die "configured tree reports $(tr -d '\n' < "$BB/include/NUM_APPLETS.h"), not $NAPPLETS applet(s) (log: $CFGLOG)"
+  if ! grep -qx "$(want_num_applets)" "$BB/include/NUM_APPLETS.h"; then
+    MISSING="$(missing_applets | tr '\n' ' ')"
+    if [ -n "${MISSING# }" ]; then
+      die "configured tree reports $(tr -d '\n' < "$BB/include/NUM_APPLETS.h"), not $NAPPLETS applet(s) -- oldconfig dropped: ${MISSING% } (unmet dependency, or the applet is spelled differently in Config.in than on the command line) (log: $CFGLOG)"
+    fi
+    # Every requested applet IS on, so the tree has MORE than was asked for.
+    # That is a different fault with a different fix, and saying "dropped"
+    # here would send the reader looking for something that is present.
+    die "configured tree reports $(tr -d '\n' < "$BB/include/NUM_APPLETS.h"), not $NAPPLETS applet(s) -- yet every requested applet is on, so the tree has EXTRAS (an applet selected as a dependency of one that was asked for) (log: $CFGLOG)"
+  fi
   rm -f "$CFGLOG"
 fi
 

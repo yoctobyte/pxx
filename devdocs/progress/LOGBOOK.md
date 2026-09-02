@@ -559,3 +559,12 @@ default build is byte-identical to -DLUA_USE_JUMPTABLE=1 and differs from
 computed-goto path rather than about lua. i386/arm32/riscv32 still refuse it by
 name — ticketed at prio 30, nothing measured is blocked on them.
 2026-09-02 | frankC | compiler/pasparser_stmt.inc compiler/symtab.inc test/test_method_read_write_unqualified.pas | An unqualified Write/Read inside a class with a member of that name bound to the member on the NAME ALONE: the guard and the selection both asked FindUMeth, which cannot say no. So `Write(f, 'payload')` -- the intrinsic -- became a 3-argument call to a 2-parameter method. i386/arm32/aarch64 refuse that; x86-64 has no such guard, so it emitted the call, the file came out EMPTY and the function returned True (read the file back instead of the result and the pre-fix binary segfaults). lib/rtl/configparser.pas is written in that shape and FPC rejects the same source outright. Added FindUMethArityStrict -- FindUMethArity without its fall back to the first name match, so a caller still DECIDING whether this is a method call can decline, which a selector never needs to. Found by opening aarch64's 'call argument count mismatch' ahead of two larger honest refusals, because a refusal reporting a count mismatch describes a state the compiler believes is impossible.
+
+2026-09-02 | frankD (Track C) | tools/busybox_diff.sh | The applet-count check
+now NAMES the applets oldconfig dropped instead of only reporting a count, and
+distinguishes dropped-from-extras. WHY: "reports NUM_APPLETS 140, not 141" told
+you something was dropped and never which thing, so every diagnosis started with
+a manual bisect of a 141-name list — while the answer was already in .config.
+Controls run on the lifted function itself: one applet off names exactly it, a
+hyphenated applet that is on names nothing, and a missing .config names all of
+them rather than passing quietly.
