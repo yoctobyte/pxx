@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 70
+prio: 80
 type: bug
 status: backlog
 found: 2026-09-02
@@ -117,3 +117,54 @@ not was printed in the log all along and read by nobody.
 A verify of `v400 (67ae9a62d567)` must log `pin=400 sha256=6c184b4bcc37`, and
 its `lib_synapse` jobs must be GREEN — v400 builds all three, measured. Under
 today's code the same verify logs `pin=399` and fails them.
+
+---
+
+## Second instrument, same defect, one hour later — and the gap is measured
+
+Re-ranked 70 → 80 on this, not on the original finding. One instrument getting a
+pin identity wrong is a bug in that instrument; **two independent ones within an
+hour is the identity itself being easy to get wrong**, and everything that
+quotes a pin is exposed.
+
+**The second instance** (coordinator, on `umbrella-sizeof-is-one-answer`): a pin
+ancestry table checking whether three closed tickets' *pinned positive controls*
+had gone stale. It resolved the pin as commit `766b99f98` — the
+`chore(stable): pin v401` commit — rather than `07d196aa4`, the tree v401 was
+built from. Caught before it moved a conclusion: none of the three controls sits
+in the gap, so all three were still VALID. Anything that did sit in the gap would
+have returned a **false VALID**.
+
+That is not this ticket's mechanism — `verify_pin` checks out the tree and gets
+the old binary; the table read the commit and got a too-new tree — but it is the
+same root confusion, from the opposite end: **the pin commit and the pinned tree
+are different objects and neither name says which one it is.**
+
+**The gap is not incidental, and it is not small.** Measured across the three
+pins cut on seven:
+
+| pin | commit | tree | commits between |
+| --- | --- | --- | --- |
+| v401 | `766b99f98` | `07d196aa4` | **4** |
+| v400 | `3e05d2946` | `67ae9a62d` | **2** |
+| v399 | `a7abc2481` | `86c71828c` | **3** |
+
+Never zero. The pin is cut at tree `T`, then `stabilize-fast`, `pin`, commit and
+a rebase loop against a busy origin all take minutes, during which the fleet
+lands work. So the pin commit is 2–4 commits ahead of the tree it describes, and
+that distance grows with fleet activity rather than shrinking.
+
+Concretely for v401: `dfff555e0`, `d6b222419` and `10916bd26` are inside the gap
+and are *not* in the pinned binary, but any check that resolves "the pin" to
+`766b99f98` will believe they are.
+
+**What this adds to the fix list.** Alongside the three options above, the
+cheapest general remedy is naming: `pin.log` already records both — the git sha
+column is the TREE. Any consumer resolving "the pin" to a commit should be
+reading that column, and a helper that returns the pinned TREE for a version
+would make the right answer the easy one. Two instruments got this wrong in an
+hour by each deriving it independently.
+
+**Positive control for that helper**, from the table above: given `v401` it must
+return `07d196aa4`, not `766b99f98`, and `git rev-list --count 07d196aa4..766b99f98`
+must be 4.
