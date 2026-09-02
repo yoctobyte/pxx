@@ -2,7 +2,7 @@
 track: P
 prio: 70
 type: bug
-blocked-by: []
+blocked-by: [umbrella-sizeof-is-one-answer]
 found: 2026-09-02
 found-by: frankB
 resolved: 2026-09-02
@@ -162,3 +162,26 @@ for it.
   [[compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees]],
   commit be76fab5a. Filed already-resolved: it needed no coordination, ranking
   or memory, and exists so the three code comments citing this slug resolve.
+
+
+## 2026-09-02 — wired under [[umbrella-sizeof-is-one-answer]], and it does NOT finish it
+
+Member one, and worth being explicit that resolving this ticket did not deliver
+the umbrella's end condition. The umbrella wants ONE oracle asked by everything.
+This fix added a FOURTH sizing function:
+
+    TypeSlotSize(tk)                363 sites
+    TypeStorageSize(tk, recId)
+    FrozenStrSlotSize(tk, cap)
+    SizeOfSlot(tk, cap)             <- added here
+
+Four functions answering "how big is this type", each having grown a parameter
+because the kind alone was insufficient, is the shape
+`devdocs/dev/root-cause-over-microfix.md` calls a design flaw rather than a
+smell. `SizeOfSlot`'s own comment states the defect in one line -- "A FROZEN
+STRING'S SIZE IS NOT A FUNCTION OF ITS KIND" -- and that sentence generalises
+past frozen strings, which is the umbrella's point.
+
+So read this ticket as: the seven measured SizeOf arms now ask a function that
+has the capacity, and the FIFTH caller nobody has found yet still cannot. That
+is a narrowing, not a closure.
