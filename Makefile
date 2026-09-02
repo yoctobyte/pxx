@@ -7339,9 +7339,9 @@ test-core: $(COMPILER)
 	# in-place path writes into capacity nothing zeroed, so a stale-byte or
 	# use-after-free mistake there shows up as $$DD rather than as a pass.
 	./$(COMPILER) test/test_dynarray_grows_in_place.pas $(TESTTMP)/test_dynarray_grows_in_place26
-	tools/expect_same.sh test_dynarray_grows_in_place26 "$$($(TESTTMP)/test_dynarray_grows_in_place26 | tail -1)" "total ok 12 / 12"
+	tools/expect_same.sh test_dynarray_grows_in_place26 "$$($(TESTTMP)/test_dynarray_grows_in_place26 | tail -1)" "total ok 13 / 13"
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_dynarray_grows_in_place.pas $(TESTTMP)/test_dynarray_grows_in_place_hd26
-	tools/expect_same.sh test_dynarray_grows_in_place_hd26 "$$($(TESTTMP)/test_dynarray_grows_in_place_hd26 | tail -1)" "total ok 12 / 12"
+	tools/expect_same.sh test_dynarray_grows_in_place_hd26 "$$($(TESTTMP)/test_dynarray_grows_in_place_hd26 | tail -1)" "total ok 13 / 13"
 	# --threadsafe I/O statement lock: reentrant (write-arg writes), single-thread output unchanged
 	./$(COMPILER) --threadsafe test/test_threadsafe_io_lock.pas $(TESTTMP)/test_threadsafe_io_lock26
 	tools/expect_same.sh test_threadsafe_io_lock26 "$$($(TESTTMP)/test_threadsafe_io_lock26)" "$$(printf 'outer inner 21\n42\nline1 10\nline2 20\nline3 30\ndone')"

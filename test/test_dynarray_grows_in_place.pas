@@ -42,6 +42,8 @@ var
   nest: array of array of Integer;
   p0, p: PtrUInt;
   i, j, moves: Integer;
+  big: array of Byte;
+  stale: Integer;
   sum: Int64;
 begin
   ok := 0; total := 0;
@@ -159,6 +161,28 @@ begin
   a := nil;
   SetLength(a, 1000);
   Chk('one-shot sizing from nil', (Length(a) = 1000) and (a[999] = 0));
+
+  { 9. grow in place into an OVERSIZED reused block. Every row above grows a
+    block that was allocated at its own size, so the capacity it grows into was
+    zeroed by that same allocation and a missing memset cannot show. This row
+    varies the REQUEST against the BLOCK: poison 1 MiB, free it, take a 700 KiB
+    request that first-fit serves from the same block, then grow into the span
+    only the previous tenant ever wrote. Measured 2026-09-02: the word at
+    [data-32] is the BLOCK size (it still read 1048600 for a 716824-byte
+    request), so the fast path grows into bytes PXXAlloc never cleared for THIS
+    allocation -- exactly the span its `rep stosb` covers. Drop that memset and
+    this row reads $AA; the other rows stay green. }
+  SetLength(big, 1024 * 1024);
+  for i := 0 to Length(big) - 1 do big[i] := $AA;
+  SetLength(big, 0);
+  SetLength(big, 700 * 1024);
+  SetLength(big, 1000 * 1024);
+  stale := 0;
+  for i := 700 * 1024 to Length(big) - 1 do
+    if big[i] <> 0 then Inc(stale);
+  Chk('grow into an oversized reused block zeroes the tail',
+      (stale = 0) and (Length(big) = 1000 * 1024));
+  SetLength(big, 0);
 
   WriteLn('total ok ', ok, ' / ', total);
 end.
