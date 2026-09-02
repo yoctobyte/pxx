@@ -3,7 +3,7 @@ slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
 prio: 85
 type: umbrella
-blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, bug-c-labels-as-values-is-the-whole-of-the-lua-regression, regression-test-core-c-crtl-mount-and-prio]
+blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, bug-c-labels-as-values-is-the-whole-of-the-lua-regression]
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
@@ -375,3 +375,38 @@ touching `cparser.inc`, not asked. Their reply supplied the one shape the
 always-0 reduction is wrong for — `BUILD_BUG_ON(!__builtin_constant_p(x))`,
 which becomes a negative array dimension, i.e. still loud — and it is named in
 the source comment so nobody rediscovers it.
+
+## The eighth was not a regression at all
+
+`regression-test-core-c-crtl-mount-and-prio` — a **first-ever red**, which the
+stub itself flags: no earlier passing sha, so no interval contains a cause. The
+expectation demanded two backslashes where the C source writes one
+(`"/mnt/back\\slash"` is ONE backslash in C) because the Makefile's `printf`
+carried an extra escaping level that had never been executed.
+
+**Decided by an oracle, not by counting escapes.** Comment-versus-code says one
+side is wrong and you do not know which, so rather than reason about the
+make→shell→printf chain I ran gcc on the same source: it prints one backslash,
+and pxx matches gcc on **all ten rows**, diffed whole. Fixed the string, `1/1
+pass`. `c3abc58f2`.
+
+## State of the umbrella, and what each blocker is waiting on
+
+| blocker | waiting on |
+|---|---|
+| three `lib_synapse` jobs | **a pin.** Cause fixed at `9c6b216aa`; they build with `$(PXX_STABLE)`. |
+| `bug-c-labels-as-values-...` | **frankD**, who has taken it. A real feature: an address-of-label relocation the object writer does not emit, and an indirect-branch node the IR's control flow lacks. |
+| `test_exception_unhandled`, `test_setlen_in_parallel_for_body` | **Track T.** Do not reproduce here on either compiler; the residual is named on both. |
+
+Nothing on that list is work a session on this box can perform, which is the
+condition this umbrella was given: *"your job ends at 'no wired blockers and the
+causes are fixed'; the green full run is evidence that arrives, not work you
+perform."*
+
+Two things may move the count on their own, both frankD's and both landing
+without my involvement: the widened const-branch fold (a dead
+`if (__builtin_constant_p(x) && ...)` arm kept its calls as real external
+references, because the `x and 0` identity read the OUTER binop while the C
+frontend wraps unsigned results in a width mask — so the real shape is
+`and(and(x,0),0xFFFFFFFF)` and nothing folded), and busybox rung 3 going green
+at 141 applets / 265 objects, byte-identical to gcc over 387 cases.

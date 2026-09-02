@@ -6,7 +6,7 @@ prio: 70
 status: backlog
 found: 2026-09-02
 found-by: frankZ
-owner: ""
+owner: frankD
 blocked-by: []
 summary: "GNU labels-as-values (`&&label` as a void*, `goto *expr`) is the ONLY thing between HEAD and a green test-lua. Lua 5.4 turns its computed-goto interpreter loop on with a BARE `#if defined(__GNUC__)` — no version test — so 00ab464bf's GNU C 2.7 claim reaches it, ljumptab.h's `&&L_OP_MOVE` initializer fails, and lvm.c does not compile. Proved both directions: `-DLUA_USE_JUMPTABLE=0` and `-U__GNUC__` each build the runner, and the resulting binary passes 6/6 lua programs. So the gap is one C-frontend feature and nothing downstream of it."
 ---
@@ -106,3 +106,17 @@ broken**: five `test_c_gtk*` on `__builtin_constant_p` (fixed, see
 is not an argument against the commit — it is the number nobody had, and the
 busybox corpus was simply the wrong place to look for it. Routed to frankD, who
 owns the claim and the lane.
+
+## Taken by frankD (2026-09-02), and costed before started
+
+frankD owns `00ab464bf` and the lane, and has taken this. Their scoping, kept
+here so the next reader does not re-derive it:
+
+- **address-of-label needs a relocation the object writer does not emit yet**;
+- **`goto *p` needs an indirect branch the IR's control flow has no node for**,
+- and therefore **every backend's reachability walk has to stop treating a
+  computed jump as a fall-through.**
+
+Not started immediately — a large batch lands first — and deliberately costed
+before being touched rather than started and stalled. Nothing here is blocked on
+me; the two lua tickets are `blocked-by` this one and will follow it.
