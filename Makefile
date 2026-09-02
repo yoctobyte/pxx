@@ -13224,6 +13224,83 @@ test-core: $(COMPILER)
 	# All rows diffed against gcc.
 	./$(COMPILER) test/c_crtl_netlink.c $(TESTTMP)/c_netlink26
 	tools/expect_same.sh c_netlink26 "$$($(TESTTMP)/c_netlink26)" "$$(printf '1 12 16\n2 0 2 4 8\n3 0 4 6 8 12\n4 4 16 16 16\n5 16 29 16 32\n6 16 20\n7 1\n8 36 28\n9 1 2 4 300 400 800\n10 1 2 3 4 16\n11 0 15 16 20')"
+	# <sys/uio.h>, found attempting busybox for i386, and with it the
+	# NORMALISATION of `struct iovec' onto one definition site: <sys/socket.h>
+	# had its own copy for msghdr and now includes this header instead. Two
+	# definitions of one struct do not fail to compile, they fail when they
+	# DRIFT, and this one is two pointer-sized fields -- the shape where a
+	# `void *' vs `char *' costs nothing on x86-64 and everything on i386.
+	# ROW 3 IS THE ROW THAT PAYS: preadv takes its offset as TWO longs, lo then
+	# hi, so a 32-bit build passing one compiles, links, runs, and reads from
+	# offset 0 -- real bytes from the right file, just the wrong ones. Reading
+	# "world" and not "hello" is the assertion. All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_uio.c $(TESTTMP)/c_uio26
+	tools/expect_same.sh c_uio26 "$$($(TESTTMP)/c_uio26)" "$$(printf '1 16 16\n2 12 [hello][ wo][rld!]\n3 5 [world]\n4 [hello][WORLD]')"
+	# <sys/file.h>, <sys/klog.h>, <sys/swap.h>, <sys/personality.h> -- four
+	# one-syscall headers, same origin. ROW 2 IS THE ONE THAT MATTERS: flock is
+	# not fcntl record locking, the lock belongs to the OPEN FILE DESCRIPTION,
+	# so two open()s of one file conflict where two fcntl locks in one PROCESS
+	# would not -- an implementation routed through fcntl passes "lock
+	# succeeds" and fails exactly here. Row 4 is PER_*, where the personality
+	# is the low byte and several names carry FLAGS folded in on top (PER_SVR4
+	# is not 0x0001); writing the low byte alone compiles and gives a different
+	# personality. Row 5 issues the call -- personality(0xffffffff) is a QUERY
+	# because the set is rejected and the PREVIOUS value comes back.
+	# ROW 3 IS NOT AN ORACLE ROW: glibc declares klogctl and no constants at
+	# all, so the #else arm carries the literals busybox itself passes. Rows 6
+	# and 7 are behaviour, and print 0 on ENOSYS -- a syscall never wired up is
+	# what they catch, and it is not spelled EPERM.
+	./$(COMPILER) test/c_crtl_flock_klog_swap_personality.c $(TESTTMP)/c_flkswp26
+	tools/expect_same.sh c_flkswp26 "$$($(TESTTMP)/c_flkswp26)" "$$(printf '1 1 2 4 8 32 192\n2 0 1 0\n3 1 2 3 10\n4 0 8 255 68157441 8388608 134217736\n5 1 1 1\n6 1\n7 1\n8 32768 32767 0 65536')"
+	# <linux/version.h>, <linux/sockios.h>, <linux/vt.h>, <linux/watchdog.h>,
+	# <linux/if_tun.h>, <linux/filter.h>, <linux/bpf_common.h>. ROW 4 IS THE ONE
+	# THAT PAYS: every value in bpf_common.h is zero in SOME field -- BPF_LD,
+	# BPF_W, BPF_IMM, BPF_ADD, BPF_JA and BPF_K are all 0x00 -- because they are
+	# values of DIFFERENT bitfields in one 16-bit opcode, so a name taken from
+	# the wrong group assembles a LEGAL instruction with another meaning and
+	# BPF_JGT for BPF_JGE loses exactly the boundary packet. The row builds
+	# udhcp's real filter prologue and prints its opcodes. Row 6 is sock_fprog's
+	# layout (`len' is unsigned short, and setsockopt hands the whole struct to
+	# the kernel). Row 7 is vt_stat, whose v_state is SIXTEEN bits and is why
+	# VT_GETSTATE cannot see past console 15. Row 8 is the watchdog pair whose
+	# DIRECTION bits are part of the number. Row 10 is IFF_NO_PI colliding with
+	# net/if.h's IFF_MULTICAST -- same bit, same struct field, and only the ioctl
+	# says which vocabulary is in force. Row 2 is the weak one and says so in the
+	# source: LINUX_VERSION_CODE describes the HEADERS, so both sides answer 1
+	# for different reasons; it catches a missing code, not a wrong one.
+	./$(COMPILER) test/c_crtl_vt_watchdog_tun_bpf.c $(TESTTMP)/c_vtwdt26
+	tools/expect_same.sh c_vtwdt26 "$$($(TESTTMP)/c_vtwdt26)" "$$(printf '1 132627 393472 328959\n2 1 1\n3 89a0 89a3 8990 89f0\n4 30 15 28 45 b1 48 15 6 6\n5 6 4 268435455 9\n6 16 0 8 | 8 0 2 4\n7 6 | 0 2 4 | 5600 5603 5608\n8 c0045706 80045707 80045704 80285700\n9 2 1 256\n10 1 2 1000 800 | 400454ca 400454cb')"
+	# <linux/loop.h> and <asm/unistd.h>. THIS TEST EXISTS FOR ONE TYPE:
+	# __kernel_old_dev_t has THREE widths and its name says nothing about which
+	# -- `unsigned long' on x86-64, `unsigned short' on i386, `unsigned int' for
+	# everyone falling through to asm-generic. It is the pre-2.6 device number
+	# and survives only because struct loop_info (the 32-bit LOOP_GET_STATUS)
+	# has two of them; a 16-bit version on x86-64 moves lo_inode and everything
+	# after it, and the ioctl fills a backing inode from the middle of the
+	# struct. So rows 1 and 2 MUST DIFFER between the targets and the i386 row
+	# below asserts that they do -- a cross row that matched would mean the
+	# per-target arm was never taken, which is the failure a same-answer cross
+	# row cannot see. Rows 3-5 are the control: all __u64/__u32, identical on
+	# both, so the divergence above is the dev_t and not the whole struct.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_loop_and_asm_unistd.c $(TESTTMP)/c_loopun26
+	tools/expect_same.sh c_loopun26 "$$($(TESTTMP)/c_loopun26)" "$$(printf '1 168 232 304\n2 0 8 16 32 48\n3 24 40 56 216\n4 4c00 4c01 4c03 4c05 4c0a 4c82\n5 64 32 1 4 29\n6 1 251')"
+	# <mtd/mtd-user.h>, <sys/timex.h>, <sys/kd.h>, <linux/capability.h>. Row 1 is
+	# mtd_info_user's LAYOUT: a __u8 then five __u32 then a __u64 is 32 bytes with
+	# two holes, and a transcription that tidied them still compiles -- MEMGETINFO
+	# then reports a flash size read out of the erasesize slot and flashcp writes
+	# that many bytes to a device that cannot be un-written. Row 2 carries the
+	# __kernel_loff_t claim: the argument TYPE is inside MEMGETBADBLOCK's number,
+	# and off_t would make it a different request on i386. Row 4 is struct timex
+	# at 208 bytes -- eleven trailing pad words the kernel copies both ways. Row 7
+	# asserts adjtimex's return is a clock STATE, 0..5 all success, so
+	# `if (adjtimex(&t))' fails exactly when a leap second is pending. Row 9 is
+	# LED_* against K_*: 1/2/4 in both, two ioctls, so the wrong set is always
+	# accepted. Row 14 is the capability negotiation busybox depends on -- capget
+	# with a bogus version writes the supported one BACK and returns -1/EINVAL.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_mtd_timex_kd_caps.c $(TESTTMP)/c_mtdtkc26
+	tools/expect_same.sh c_mtdtkc26 "$$($(TESTTMP)/c_mtdtkc26)" "$$(printf '1 32 | 0 4 8 12 20 24\n2 80204d01 40084d02 40084d0b 80c84d0a 40104d14\n3 8 328 48 64 | 4 7168 3\n4 208 | 8 40 72 112 160\n5 1 4000 8001 a001 8001\n6 1 40 2000 ff00 | 5 6\n7 1 1\n8 4b60 4b6c 4b67 4b72 4b44\n9 1 2 4 | 1 2 4\n10 0 1 2 3 | 1 3\n11 24 32 16 | 513 1\n12 19980330 20071026 20080522 | 1 2 2 | 19980330 1\n13 0 34 40 | 0 200000 | 1 4 | 1 0\n14 1 1\n15 0 8 12 24')"
 	./$(COMPILER) test/c_crtl_telnet_and_prctl.c $(TESTTMP)/c_telprctl26
 	tools/expect_same.sh c_telprctl26 "$$($(TESTTMP)/c_telprctl26)" "$$(printf '1 255 254 253 252 251 250\n2 240 241 242 246 249\n3 0 1 3 24 31\n4 33 0 1 2\n5 15 16 23 38 39 47\n6 20 | 0 2 4 8 10 11 12\n7 1 2 4 8 4\n8 not-glibc\n9 0 pxxprobe')"
 	./$(COMPILER) test/c_crtl_net_headers.c $(TESTTMP)/c_nethdr26
@@ -15152,6 +15229,16 @@ test-i386: $(COMPILER)
 	# is identical, which is what says the split is the size_t and nothing else.
 	./$(COMPILER) --target=i386 test/c_crtl_sched_and_fs_ioctls.c $(TESTTMP)/test_i386_schedfs
 	tools/expect_same.sh i386/schedfs "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_schedfs)" "$$(printf '1 0 1 2 3 5 6\n2 20000 2000000 4000000 8000000 10000000 20000000 40000000\n3 100 ff 1024\n4 1 0 1 1 3\n5 0 2\n6 0\n7 0 1\n8 1\n9 0\n10 125d 125e 125f 1260\n11 1261 1262 1263 1264\n12 1265 1266 1267 1268\n13 1277 1278 1279 127a\n14 127b 127c 127d 127e\n15 127f 1 2\n16 c0045877 c0045878 c0185879\n17 24 0 8 16\n18 80041270 40041271 80041272')"
+	# The 32-bit half of the loop/unistd rows, and the reason that test exists.
+	# __kernel_old_dev_t is `unsigned short' here and `unsigned long' natively,
+	# so struct loop_info is 140 bytes against 168 and every field after
+	# lo_number moves. Row 6 is the same shape for syscall NUMBERS: __NR_write
+	# is 4 here and 1 natively, SYS_ioprio_set 289 against 251 -- ionice.c
+	# includes <asm/unistd.h> and then calls syscall(), so a forwarder reaching
+	# the wrong table would compile and call something else. Rows 3-5 match the
+	# core run exactly, which is what says the split is these two things only.
+	./$(COMPILER) --target=i386 test/c_crtl_loop_and_asm_unistd.c $(TESTTMP)/test_i386_loopun
+	tools/expect_same.sh i386/loopun "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_loopun)" "$$(printf '1 140 232 304\n2 0 4 8 16 32\n3 24 40 56 216\n4 4c00 4c01 4c03 4c05 4c0a 4c82\n5 64 32 1 4 29\n6 4 289')"
 	./$(COMPILER) --target=i386 test/c_crtl_select.c $(TESTTMP)/test_i386_select
 	tools/expect_same.sh i386/select "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
 	./$(COMPILER) --target=i386 test/c_crtl_fallocate.c $(TESTTMP)/test_i386_fallocate

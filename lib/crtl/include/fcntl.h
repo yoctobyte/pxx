@@ -69,6 +69,22 @@ extern int fcntl(int fd, int cmd, ...);
 #define FALLOC_FL_KEEP_SIZE   0x01
 #define FALLOC_FL_PUNCH_HOLE  0x02
 
+/* flock(2) operations. THESE LIVE HERE AND NOT ONLY IN <sys/file.h> because
+   glibc puts them here too (bits/fcntl-linux.h), so code that includes just
+   <fcntl.h> and writes LOCK_EX compiles there and must compile here. They are
+   NOT related to `struct flock' above: that is fcntl record locking, this is
+   a whole-file advisory lock on the open file description, and on Linux the
+   two do not see each other. <sys/file.h> includes this header rather than
+   repeating the numbers -- one definition site. */
+#define LOCK_SH    1   /* shared */
+#define LOCK_EX    2   /* exclusive */
+#define LOCK_NB    4   /* OR'd in with one of the above: fail rather than block */
+#define LOCK_UN    8   /* release */
+#define LOCK_MAND  32  /* a mandatory flock ... */
+#define LOCK_READ  64  /* ... allowing concurrent reads */
+#define LOCK_WRITE 128 /* ... allowing concurrent writes */
+#define LOCK_RW    192 /* ... allowing both */
+
 /* posix_fallocate(3) RETURNS THE ERROR NUMBER AND DOES NOT SET errno. That is
    not a quirk of this implementation; it is what POSIX specifies, and busybox
    writes `if ((errno = posix_fallocate(fd, ofs, len)) != 0)' precisely because

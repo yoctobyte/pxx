@@ -181,11 +181,12 @@ struct sockaddr {
 #define MSG_NOSIGNAL 0x4000
 #define MSG_MAXIOVLEN 16
 
-/* scatter/gather I/O (sys/uio.h shape, kept here for the crtl socket surface) */
-struct iovec {
-  void *iov_base;
-  size_t iov_len;
-};
+/* Scatter/gather I/O. struct iovec USED to be defined here, with a comment
+   saying it had "the sys/uio.h shape"; that was true and it was the wrong
+   place, because a program including only <sys/uio.h> then got no iovec at
+   all. It lives in <sys/uio.h> now -- one definition, included from here the
+   way glibc's <sys/socket.h> includes it. */
+#include <sys/uio.h>
 
 struct msghdr {
   void *msg_name;

@@ -42,4 +42,22 @@ typedef long         __kernel_suseconds_t;
 typedef long         __kernel_clock_t;
 typedef unsigned int __kernel_mode_t;
 
+/* __kernel_old_dev_t HAS THREE DIFFERENT WIDTHS and the name says nothing
+   about which: `unsigned long' on x86-64 (asm/posix_types_64.h), `unsigned
+   short' on i386 (posix_types_32.h), and `unsigned int' for everyone falling
+   through to asm-generic. It is the pre-2.6 device number and survives only
+   because `struct loop_info' -- the 32-bit LOOP_GET_STATUS -- has two of them.
+   Getting it wrong does not fail: on x86-64 a 16-bit version moves lo_inode
+   and everything after it, and the ioctl returns a backing inode read out of
+   the middle of the struct. Measured against this box's headers, 2026-09-02:
+   sizeof(struct loop_info) is 168 with the right width and 160 with the
+   short. */
+#if defined(__x86_64__)
+typedef unsigned long  __kernel_old_dev_t;
+#elif defined(__i386__)
+typedef unsigned short __kernel_old_dev_t;
+#else
+typedef unsigned int   __kernel_old_dev_t;
+#endif
+
 #endif
