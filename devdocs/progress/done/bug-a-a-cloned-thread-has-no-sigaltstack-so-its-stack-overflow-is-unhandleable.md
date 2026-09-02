@@ -78,7 +78,7 @@ both handled — plus `test_signal_threads`, `test_thread_clone`, and the
 stack-size arithmetic in `palthread` if (1) is taken.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1e75fe2d3.
 
 ## Fixed (frankA, 2026-09-02) — option (1), x86-64
 
