@@ -9044,6 +9044,27 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cswitch_b1326; tools/expect_same.sh cswitch_b1326-rc "$$?" "3"
 	./$(COMPILER) test/cbuiltin_expect_b14.c $(TESTTMP)/cbuiltin_expect_b1426
 	$(TESTTMP)/cbuiltin_expect_b1426; tools/expect_same.sh cbuiltin_expect_b1426-rc "$$?" "5"
+	# `__builtin_constant_p` reduces to 0 unconditionally -- the CONSERVATIVE
+	# direction, since 0 selects the generic arm and that arm computes the same
+	# value the constant arm would. gcc answers 1 for a literal, so this file is
+	# a deliberate divergence and a gcc_diff_probe on it differs at row 1 BY
+	# DESIGN (gcc exits 1, we exit 42); everything else agrees with gcc.
+	# It exists because the five gtk jobs the reduction turned green do NOT
+	# discriminate its VALUE: forcing the reduction to 1 and rebuilding leaves
+	# all five byte-identical in output (measured 2026-09-02). They were failing
+	# to COMPILE before the builtin existed, so they prove it is RECOGNISED and
+	# nothing more -- the same trap as the lua suite, which passes 6/6 with the
+	# jump-table interpreter compiled out.
+	# The row that carries the weight is the `if (__builtin_constant_p(x) && c)`
+	# fold: glib and busybox both guard a special arm that way, and the arm must
+	# DISAPPEAR rather than merely be skipped -- `data_extract_to_command` was
+	# the last undefined symbol in the busybox link for exactly this reason.
+	# Positive control, measured: with the reduction forced to 1, this test goes
+	# rc 127 (`symbol lookup error: undefined symbol: never_linked`) and warns at
+	# compile time. It is NOT a link failure -- pxx defers an undefined symbol to
+	# the system C library -- so the guard's tell is the loader, not the linker.
+	./$(COMPILER) test/c_builtin_constant_p.c $(TESTTMP)/c_builtin_constant_p26
+	$(TESTTMP)/c_builtin_constant_p26; tools/expect_same.sh c_builtin_constant_p26-rc "$$?" "42"
 	./$(COMPILER) test/cfnptr_deref_call_b15.c $(TESTTMP)/cfnptr_deref_call_b1526
 	$(TESTTMP)/cfnptr_deref_call_b1526; tools/expect_same.sh cfnptr_deref_call_b1526-rc "$$?" "42"
 	./$(COMPILER) test/caddr_array_field_b16.c $(TESTTMP)/caddr_array_field_b1626

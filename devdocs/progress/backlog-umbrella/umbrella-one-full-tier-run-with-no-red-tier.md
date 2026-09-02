@@ -3,7 +3,7 @@ slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
 prio: 85
 type: umbrella
-blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, regression-test-core-cfn-return-fnptr-b105]
+blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2]
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
@@ -548,3 +548,61 @@ function RETURNING a function pointer stopped parsing. Three-line repro, bounded
 to four probes, and **the auto-filed range is wrong**: it blames `18b3ec2a6`,
 while my own optdiff log at `9df0058fe` already shows the file BUILD-FAIL, one
 commit after the real cause and two before the blamed sha. Owner frankD.
+
+## `cfn_return_fnptr_b105` closed the same night, and I had the mechanism wrong
+
+frankD fixed it at `2148d95fa` — an uninitialised `paramsOverflow` read, not
+the shared-declarator desync I proposed. Unwired. Verified at HEAD, binary
+`f28b7828e18d4d5f`, `converged after 2 round(s)`. My four-probe boundary was
+real; the reading I put on it was not, and the fifth probe I never ran — the
+ZERO-parameter shape, which stayed green throughout — is the one that would
+have killed my story on the spot. The attribution half stands and is why the
+ticket stays readable rather than deleted.
+
+## The gtk five do NOT discriminate the value, measured — my greens were unqualified
+
+Owed to frankD, whose lua control (a `-DLUA_USE_JUMPTABLE=0` build passes 6/6
+too) showed "6/6" was a true sentence about the wrong claim. The same applies to
+my five gtk jobs and now it is measured rather than suspected.
+
+Forced `__builtin_constant_p` to reduce to **1** instead of 0, rebuilt the
+compiler (`e7376b4065be84f6` → `3e95da5a17bc8878`, so the patch demonstrably
+reached it), and ran all five as the Makefile runs them:
+
+| | value 0 | value 1 |
+|---|---|---|
+| `test_c_gtk` `_call` `_types` `_window` `gtk3_stock` | 5 × rc 0 | 5 × rc 0 |
+
+**All five byte-identical in output** (modulo pid and clock in glib's own
+CRITICAL lines). They were failing to COMPILE before the builtin existed, so
+they prove it is RECOGNISED — and that is the whole of what they prove. They
+say nothing about 0 being the right reduction. **"5/5 GREEN" was correct and
+about the wrong claim**, exactly as frankD warned.
+
+**Written a test that does discriminate:** `test/c_builtin_constant_p.c`, wired
+into `test-core`. Six rows: the value for a literal (where gcc says 1 and we
+say 0 — a deliberate divergence, and a gcc_diff_probe differs there BY DESIGN),
+the value for a runtime operand, the operand being UNEVALUATED, soundness of
+both arms, use in a constant-expression context, and the load-bearing one —
+that `if (__builtin_constant_p(x) && c)` makes its arm DISAPPEAR, asserted
+through a symbol declared and defined nowhere, which is the busybox
+`data_extract_to_command` shape.
+
+Its **positive control is measured, not assumed**: with the reduction forced to
+1 the test goes rc 127, `symbol lookup error: undefined symbol: never_linked`.
+Note the failure mode, because it is not the obvious one — **pxx does not refuse
+the link.** It warns that the symbol will come from the system C library, emits
+a binary, and the loader kills it at run time. A guard waiting for a link error
+here would never fire.
+
+## A note on the binary sha, since I quoted the other one all evening
+
+Reverting the experiment and rebuilding reached `101b681ef373eb76`, not the
+`e7376b4065be84f6` I started from — the documented case: each rebuild seeds from
+the previous local binary, so a revert→rebuild walks off the chain and lands on
+a DIFFERENT valid fixedpoint. Both self-reproduce; neither is a miscompile.
+Reseeding from `stable_linux_amd64/default/pinned` and touching the sources
+converged to `101b681ef373eb76` as well **in 2 rounds** — so that, not the sha I
+had been quoting, is this tree's pin-derived fixedpoint, and `e7376b4065be84f6`
+was the off-chain one I had accumulated. Every number above `2148d95fa` is at
+`f28b7828e18d4d5f`, reached from the pin.
