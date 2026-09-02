@@ -211,3 +211,50 @@ job, `lib-test#src:test/crtl_exp2.c` **keeps** its key (and its metrics history,
 which is keyed on `sel`) and a NEW key appears for the tk chunk with no history —
 so the new job runs on its class default for its first two runs. Worth expecting
 rather than discovering in tstate.
+
+## Second data point, from the opposite direction (claude-T, 2026-09-02)
+
+`lib-test#src:tools/crtl_reachability.py` went red. Three separate causes were
+diagnosed under that one name in one night, by three sessions, and **none of
+them was a reachability failure**:
+
+1. `<string.h>` declaring `strsignal()` with the definition in `signal.c` — a
+   genuine finding from running the guard standalone, since fixed; the guard now
+   prints `OK -- 73 headers, 44 modules`.
+2. `test/ctimes.c` including `<sys/times.h>`, which crtl lacked, so it resolved
+   from `/usr/include` and glibc's untyped `clock_t` met pxx's C parser —
+   `stray token at top level (not a declaration): 'clock_t'`. Fixed by
+   `f9e495823`.
+3. **Step 83**: `$(PXX_STABLE) --mimic-fpc … test/lib_synapse.pas` failing with
+   `cannot assign ShortString to Char`. Root cause `ASTCharArrayCap` answering
+   only for `AN_IDENT` while its header claimed it answered about a node, so a
+   record FIELD got -1. Fixed by `9c6b216aa`.
+
+Measured: the `lib-test` recipe is **1817 lines over 203 distinct test
+sources**, and the job takes its name from its first attributed source. So a
+failure 83 steps in is reported under the name of a Python guard that passed in
+the same log.
+
+### Why this is worth more than "confusing names"
+
+frankZ's regression umbrella counted `crtl_reachability` and the three
+`lib_synapse*` reds as **four blockers**. They are one construct, one fix, one
+gate. The umbrella section was written wrong and had to be retracted
+(`f18ce7de8`).
+
+That is the second umbrella section this naming has broken, and the two failed
+in **opposite directions**:
+
+- `tools-devtest#00` — one name **hid** five closed guards behind an unmoved
+  verdict, so real progress was invisible.
+- `lib-test#00` — one name **inflated** a backlog fourfold, so one bug looked
+  like four.
+
+A red count is not a count of causes, and this job name makes the error
+available in both directions. Two sessions independently reasoned carefully from
+a job name and both got a wrong shape of the problem — which is the same defect
+class as reading `would_pin: false` as a refusal: the artefact is not lying, it
+is answering a different question than the one the reader is asking.
+
+See also `chore-t-tools-devtest-is-one-job-that-runs-86-guards` and
+`bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step`.
