@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:8 unfinished:27 blocked:6 backlog:5 backlog-umbrella:7 backlog-core:135 backlog-nilpy:97 backlog-tools:6 backlog-pascal:55 backlog-decide:32 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3145 rejected:72`
+`working:8 unfinished:27 blocked:6 backlog:5 backlog-umbrella:7 backlog-core:135 backlog-nilpy:97 backlog-tools:6 backlog-pascal:56 backlog-decide:32 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3145 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -57,7 +57,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 388, ranked
+## Ready — top 30 of 389, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
@@ -72,6 +72,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [A]` umbrella-managed-memory-is-correct
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
+- `[p 70] [P]` feature-p-implement-the-real-tyshortstring-byte-prefix-layout (unblocks 1)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
@@ -88,6 +89,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
-- `[p 65] [P]` feature-pascal-corpus-generics
 
-_358 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_359 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

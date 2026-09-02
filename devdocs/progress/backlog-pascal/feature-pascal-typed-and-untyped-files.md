@@ -3,7 +3,7 @@ summary: "`file of T` and untyped `file` are refused outright — only TextFile 
 type: feature
 prio: 70
 track: P
-blocked-by: [compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees]
+blocked-by: [compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees, feature-p-implement-the-real-tyshortstring-byte-prefix-layout]
 ---
 
 # `file of T` and untyped `file` are not supported
