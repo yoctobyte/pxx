@@ -159,23 +159,30 @@ for whoever closes the two survivor tickets** — not a task to hand anyone now.
   length 1..8 and `SetLength` trapping (both reproduce on the pin); `r.f = s`
   segfaults riscv32; `Copy(p^,1,3)` OOMs x86-64 under the flag.
 
-## One caveat before anyone acts on the walker prediction
+## The walker prediction was RUN, and it held — hold released
 
-**RESOLVED, and against the relay.** riscv32 IS in the population — frankb-a9
-retracted its own "riscv32 refuses the flag" figure; riscv32 accepts it and passes
-all four modes and all six comparison shapes (ticket corrected, `a6f81ffd2`).
-The original claim was: frankc-af's ticket
-places riscv32/xtensa/wasm32 outside the population; frankh-15 and franks-ab each
-reported their own backend correct, and the coordinator relayed that as a widened
-three-to-two. **Those were two sessions self-reporting on backends they had just
-landed — two readings that can go wrong the same way are one reading**, and the
-conversions post-date the diagnosis, so both may be true of different trees.
+franks-ab predicted the walker fix would **not** repair comparison. **It did
+not.** Comparison was repaired separately, by causes (2) and (3). A prediction
+that could have come out either way, and it is what separated the layers.
 
-A partition whose membership is uncertain cannot falsify anything. **Whoever runs
-the prediction must re-derive the population from the tree at that moment**, not
-cite the ticket, the summary, or either commit. That instruction is in
-`d23178788`, which also holds the compare-fix ticket out of `ready --track A` —
-it was the ranked HEAD and the tool was actively handing it to the next session.
+So the compare ticket's hold (`d23178788`) had done its job and is **released**;
+the ticket is closed (`52cefaea2`). Its two prescribed remedies are exactly what
+frankb-a9 implemented — `EmitStrCmpReg` gained a type kind on x86-64, arm32's
+four callers moved to `IRStrTkOf`. **Re-measured independently** at `c8375f3e7`:
+`var=var`, `var=lit` and `lit=var` all TRUE on x86-64, arm32, aarch64 and
+riscv32.
+
+**What survives is a different defect, not a remnant** — the record-FIELD operand
+and the pointer-deref INDEX fail on *opposite* operand shapes, and are separately
+ticketed:
+`bug-a-comparing-a-frozen-record-field-to-a-literal-crashes-or-answers-false`
+and `bug-a-indexing-a-frozen-string-through-a-pointer-deref-reads-the-wrong-byte`.
+
+One population note that was resolved along the way: **riscv32 IS in the
+population.** The "riscv32 refuses the flag" figure was TRUE when measured and
+expired when riscv32 was converted — settled by the origin retracting its own
+figure, which fails differently, rather than by two sessions agreeing about
+backends they had just landed.
 
 ## P4 precondition: wasm32 rows — CLEARED (`a322f1552`)
 
