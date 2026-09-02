@@ -5995,3 +5995,94 @@ returned `no jobs match` (exit 1) because the real name was `test-xtensa#122` �
 again a clean, correct, useless zero. **A zero from a scoped instrument owes you
 a positive control: run it scoped the same way against something you KNOW is
 there.** If that also returns nothing, the scope is the bug, not the subject.
+
+## TWO PATHS, ONE QUESTION — perturb the operand so only one can claim it
+
+**The technique in one line: when two mechanisms can answer the same question,
+change the input so that only one of them is eligible, and see whether the
+answer moves.** If it moves, you have located the liar in one compile, without
+reading either path. If it does not, they agree and the bug is below both.
+
+Measured 2026-09-02, `bug-c-sizeof-reaches-a-pointee-through-one-spelling-only`.
+`sizeof(p2[0][0])` on a `struct big **` answered **8** where gcc says 40. The
+ticket had a diagnosis: the general expression path could not type subscripting
+through a pointer-to-pointer, so the type machinery needed extending. That
+diagnosis was wrong, and following it would have meant building a capability
+that already existed.
+
+One parenthesis settled it:
+
+```
+sizeof(p2[0][0])     8      <- the token walk claims the operand
+sizeof((p2[0])[0])  40      <- IDENTICAL operand; the leading `(` makes the
+                               walk ineligible, so the expression path answers
+struct big x = p2[0][0];    <- copies all 44 bytes: the expression path was
+                               typing this correctly all along
+```
+
+The operand did not change meaning. Only *which path was allowed to claim it*
+changed. That is the whole instrument, and it cost one compile.
+
+**Where to find the perturbation.** You need a syntactic change that is
+semantically inert but shifts eligibility. A redundant parenthesis is the
+cheapest in C and Pascal, because pattern-matching arms are usually written
+against a leading identifier and a paren makes them decline. Others that have
+worked here: a redundant cast, `+ 0`, a temporary variable, spelling a call as
+`(*f)(x)`, and — the reverse direction — REMOVING parens, since some fast paths
+only fire on the parenthesised form. The comment above `ParseCSizeof`'s
+general-expression arm records exactly that asymmetry: `sizeof(**p2)` was 8 and
+`sizeof **p2` was 16, the same operand, because one spelling ran the token walk
+and the other did not.
+
+### The defect this finds, and why nothing else finds it
+
+The failure was not a missing capability. `CSizeofDescriptorWalk` finished with
+`cOK = True` and `cTk = tyUnknown`, then answered `TypeSlotSize(tyUnknown)`.
+
+**It reported SUCCESS on a size it never established.** That is what makes it
+final rather than recoverable: the caller's fallback to the expression path is
+gated on the walk not having consumed the operand, so a walk that consumed
+everything and understood nothing locks out the path that would have been
+right. And the number it fabricates — 8 — is the *correct* answer for
+`sizeof(p2[0])`, one subscript short. So the wrong answer is drawn from the
+same small set as the right ones, and no amount of staring at outputs separates
+them.
+
+This is the `Every instrument that lies, lies by being CORRECT ABOUT SOMETHING
+ELSE` family with a mechanism attached. The general form:
+
+> **A parallel fast path must DECLINE when it cannot answer, and "cannot
+> answer" has to be represented.** A path whose failure value is
+> indistinguishable from a plausible success value has no way to decline, so it
+> does not.
+
+Two things to check whenever you find one:
+
+1. **Does the fast path have a way to say "I don't know"?** If its result type
+   is just the answer, it has none, and it will invent one. Here the walk
+   returned `Boolean` and the caller discarded it (`if not CSizeofDescriptorWalk(si, sz) then ;`).
+2. **Is the fallback still reachable after the fast path gives up?** A gate
+   like "only re-parse if nothing was consumed" assumes consumption implies
+   success. That assumption is exactly what fails.
+
+### Do not fix it by making the fast path decline, without checking the cost
+
+The obvious repair — have the walk return False on `tyUnknown` — was measured
+and NOT landed, and the reason generalises. The general path's own unknown
+branch is `else sz := 4`, while the walk's is 8. So an operand neither path can
+type would move 8 -> 4: still wrong, and now wrong for the plain-pointer case
+that 8 happened to get right. **Two paths that disagree about what "I do not
+know" COSTS cannot be safely reordered until they agree.** Settle the unknown
+answer once, have both read it, then let either decline
+(`bug-c-the-sizeof-descriptor-walk-answers-from-tyunknown`).
+
+### The related trap: a ticket whose stated reason for being hard is wrong
+
+Worse than a ticket with no analysis, because it tells the next person not to
+look. This one said the machinery needed extending; the machinery was fine. Two
+others in the same family carried measurements that had gone stale — one
+recorded `8` where the compiler answered `4`, and the `4` was not the element
+size but `TypeStorageSize(tyUnknown)`, i.e. nothing recorded at all.
+
+**Re-measure the ticket's own numbers before you accept its diagnosis.** It
+costs one compile, and a stale number does not error — it points somewhere.
