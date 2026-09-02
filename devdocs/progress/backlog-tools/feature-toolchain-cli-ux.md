@@ -183,3 +183,27 @@ answer when it is set.
 - ~~Step 3: `--list-libraries`, `--doctor`~~ — landed 2026-08-21 (above).
 - Step 4: `--selfcheck` (needs `feature-release-packaging`'s manifest).
 - User-facing docs for the four flags are a **Track D** job, not filed here.
+
+
+---
+
+## 2026-09-02 (frankH) — step 4 is unblocked, and it is a fork rather than an implementation
+
+`feature-release-packaging` is in `done/`, so the stated wait is over. Measured
+on `8616ed370fa7`: `--version`, `--where`, `--list-targets`, `--list-libraries`
+and `--doctor` all answer with no source file and exit 0. `--selfcheck` is
+`unknown option`. It is the only item left.
+
+It is not a small implementation. The spec in `feature-release-packaging`
+defines check 1 as `pxx -> gen1`, then `gen1 -> gen2`, `cmp gen1 gen2` — a real
+fixedpoint STEP, which means running the freshly built binary. **The compiler
+spawns no process** (no `PalVforkAndExec` / `PalFork` anywhere under
+`compiler/`) and locates itself only through `ExeDir`. Every in-process
+alternative asserts something weaker or noisier under the same trusted name, and
+`tools/selfcheck.sh` already does the specified thing and already ships inside
+the release tree.
+
+Filed as
+[[decide-what-should-pxx-selfcheck-assert-when-the-compiler-cannot-spawn]] with
+four options and a recommendation. **If that decision is "use the script", this
+ticket closes on the answer alone** — the other five flags are done.
