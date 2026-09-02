@@ -156,6 +156,40 @@ required. That is a much stronger claim than "sizes get closer": records
 containing fixed strings become byte-compatible, which is what `file of T`
 interop actually needs.
 
+## CAPACITY STORAGE NEEDS NOTHING — the carriers are already kind-agnostic
+
+The owner asked where the capacity is stored, and then answered the follow-on
+himself: *"if we track that for fixedstrings, we can use the same field for
+shortstrings already."* **Correct, and it withdraws a caution the coordinator
+had just given about needing a new carrier per keying.**
+
+`SymSubHi`'s own comment says it outright — *"frozen fixed-string capacity (max
+chars) for **tyFixedString/tyShortString** slots"* — and every call site
+confirms the shape: the capacity table stores a bare `N` while the KIND travels
+beside it in a separate table.
+
+```
+FrozenStrSlotSize(tk,                       SymStrCap[retSymIdx])
+FrozenStrSlotSize(tk,                       SymPtrElemStrCap[...])
+FrozenStrSlotSize(IntToTypeKind(UFldTk[i]), UFldStrCap[i])
+FrozenStrSlotSize(Syms[i].ElemType,         SymStrCap[i])
+```
+
+Kind tables: `UFldTk`, `AliasTk`, `ArrTypeElemTk`, `Syms[].ElemType`. Capacity
+tables: `SymStrCap`, `SymSubHi`, `SymPtrElemStrCap`, `UFldStrCap`, `UFldSubHi`,
+`AliasStrCap`, `AliasSubHi`, `ArrTypeElemStrCap`, plus the transient
+`LastTypeStrCap`/`LastTypeSubHi`.
+
+**So a `string[10]` that re-types writes `10` into the SAME StrCap slot and
+`tyShortString` into the SAME Tk slot, and `FrozenStrSlotSize` already returns
+11 instead of 18 with no change.** No tenth carrier, no new table.
+
+**Keep the two problems separate.** That the capacity has no canonical home —
+nine carriers keyed three ways, which is why the clamp can be right while the
+stride is wrong in one expression — is a real design defect and belongs to
+[[umbrella-sizeof-is-one-answer]]. It is **not** an obstacle to this feature,
+and this feature does not make it worse.
+
 ## OVERFLOW/TRUNCATION IS SAFE TODAY, AND THIS CHANGE DOES NOT TOUCH IT
 
 The owner raised the real semantic worry: the cap is **compile-time-only
