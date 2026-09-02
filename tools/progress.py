@@ -105,7 +105,7 @@ STATUSES = [
     # ours is the chosen one. Distinct from rejected/ (which says the report is
     # WRONG) — filing a true measurement there misrepresents it and invites a
     # refile. Loaded, never ranked.
-    "divergence",
+    "known-incompat",
     # Track F parks here. Listed so the folder is LOADED (board, check, blocker
     # resolution see it) — NOT so it is ranked: ready/next read only
     # RANKED_STATUSES (urgent/backlog/backlog_new/unfinished), which is the

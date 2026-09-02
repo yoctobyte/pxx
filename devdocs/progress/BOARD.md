@@ -675,7 +675,7 @@ _none_
 | task-t-a-corpus-tree-absence-should-be-counted-not-just-echoed | T | 45 | task | A test row whose corpus tree is absent echoes SKIP and passes, and nothing counts how many did. Measured on this box: test-core's crtl_tiny_regex_match row was UNGUARDED, so a missing library_candidates/tiny-regex-c hard-errored and — because make stops at the first failing recipe line — took 844 of test-core's 1745 compile rows (48%) with it, with no indication in the log of how much had not run. Guarding it (2026-09-01) fixes that and buys the opposite failure: testmgr's own TIERS comment records test-fgl printing SKIP and PASSING for its entire life without running once. Both failure modes are live in this repo TODAY. The missing mechanism is the same one test-c-abi-mixed-link now has: count the skips and report `N of M measured, K skipped`, so a box quietly running half the suite is visible in the verdict instead of indistinguishable from a green one. | — |
 | task-t-the-c-corpus-is-two-rungs-not-four-and-a-missing-tree-reports-pass | T | 45 | task | Of the four C corpora the repo treats as its real-program coverage -- lua, zlib, quickjs, tcc -- only lua and zlib are in a testmgr tier. test-quickjs exists in the Makefile and is enrolled in NO tier; test-tcc does not exist at all (TCC_SRC appears 0 times) though install_lib_candidates.sh can fetch it. And test-quickjs self-skips exit 0 on a box without the tree, so enrolling it alone would still assert nothing while reporting success. | — |
 
-## divergence (1)
+## known-incompat (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |

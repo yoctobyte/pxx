@@ -3,7 +3,7 @@ slug: bug-p-single-plus-single-is-typed-and-computed-at-double-width
 track: P
 prio: 40
 type: bug
-status: divergence
+status: known-incompat
 owner: ""
 blocked-by: []
 summary: "KNOWN DIVERGENCE, not a bug (owner, 2026-09-02). The measurement in this ticket is TRUE and reproducible; it is not a defect. Evaluating `Single + Single` at double width is a legitimate implementation choice and is strictly MORE accurate, and a program that stores the result in a Single gets FPC's exact bytes -- measured, `s := a + b` gives 0.300000012 on both. Nobody computes a wrong value. Two behaviours are CHOSEN, not tolerated, and neither compiler is wrong:  `SizeOf(a+b)` is 8 where FPC says 4, and an overloaded `P(a+b)` picks the Double arm where FPC picks Single -- both are TRUE statements about a pxx expression, exactly as FPC's answers are true about an FPC one; SizeOf reported correctly about the actual type, which is why the operator exists. A caller needing the narrow type writes `Single(a+b)`. Matching FPC would mean discarding precision we already have to reproduce its rounding, which is FPC-parity chasing rather than language conformance."

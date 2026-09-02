@@ -636,7 +636,7 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   `PENDING-COMMIT` and `sync.sh` fills it in. Recover a ghost by matching the
   commit **subject** on origin/master.
 - **Tickets live in** `devdocs/progress/{urgent,working,unfinished,blocked,done,
-  rejected,low-prio,divergence}/` and, for open unclaimed work, **per-lane
+  rejected,low-prio,known-incompat}/` and, for open unclaimed work, **per-lane
   backlogs**:
   `backlog-core` (A), `-nilpy` (N), `-tools` (T), `-pascal` (P), `-decide` (U),
   `-libs` (B/E), `-cfront` (C), `-web` (W), `-windows` (M), `-docs` (D),
@@ -645,7 +645,7 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   `BOARD.md` after moving anything.
   **Four terminal folders, and they say DIFFERENT things** — putting a ticket in
   the wrong one is how it gets refiled. `rejected/`: the report is **WRONG**
-  (unreachable observable, false premise, not a goal). `divergence/`: the
+  (unreachable observable, false premise, not a goal). `known-incompat/`: the
   measurement is **TRUE and reproducible** and still not a defect — both
   behaviours are correct about their own implementation and ours is **chosen**,
   never merely tolerated. `low-prio/`: real, probably correct, and not worth

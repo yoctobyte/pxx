@@ -1,4 +1,4 @@
-# `divergence/` — not a bug: a known, chosen difference
+# `known-incompat/` — not a bug: a known, chosen incompatibility
 
 **The ticket here was RIGHT.** Its measurement is true, reproducible, and worth
 having. It is still not a defect, because **both behaviours are correct about
@@ -14,7 +14,7 @@ time someone else runs the same probe and sees the repo call it wrong.
 | folder | what it says |
 | --- | --- |
 | `rejected/` | the report is **WRONG** — unreachable observable, false premise, not a goal |
-| `divergence/` | the measurement is **TRUE** and it is **not a defect** — chosen, not tolerated |
+| `known-incompat/` | the measurement is **TRUE** and it is **not a defect** — chosen, not tolerated |
 | `low-prio/` | real, probably correct, **not worth ranker attention** — no plan, no claim it is wrong |
 | `rainy-day/` | real, intended, **deferred** — a future plan |
 
