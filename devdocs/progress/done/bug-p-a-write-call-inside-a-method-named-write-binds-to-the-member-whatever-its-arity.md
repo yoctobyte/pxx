@@ -8,7 +8,7 @@ created: 2026-09-02
 found: 2026-09-02
 found-by: frankC
 owner: frankC
-commit: PENDING-COMMIT
+commit: c33ae90ab
 blocked-by: []
 summary: "An unqualified Write/Read call inside a class that has a member of that name bound to the member on the NAME ALONE -- no arity check, no type check. `Write(f, 'payload')` inside a method named write therefore became a 3-argument call to a 2-parameter method: i386/arm32/aarch64 refuse it, x86-64 has no such guard and emitted it, and the file came out EMPTY while the function returned True. lib/rtl/configparser.pas is written in exactly that shape. FIXED: the branch now asks the arity/type-aware finders the tkIdent twin it claims to mirror was already asking."
 ---
