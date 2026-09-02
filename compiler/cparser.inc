@@ -5772,11 +5772,12 @@ var baseTk, declTk, scalarTk: TTypeKind;
     curElemIdx, rangeHi, maxElemIdx, dk: Integer;
     strRowEnd, strLit, strK: Integer;    { a string literal filling a char ROW }
     hadArrDesig: Boolean;
-    arrElems: array[0..255] of Integer;
-    arrElemIdx: array[0..255] of Integer;
+    cliBase, cliOuterTop: Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     vlaDim, vlaPos, vlaElemSz, vlaSzSym, vlaAlloc, vlaMul, vlaSzLit: Integer;
 begin
+  cliOuterTop := CLIArrTop;
+  cliBase := CLIArrTop;
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 r` -> [4]), else -1 }
   { Capture the pointer element type/record now — ParseCExpr below must not
@@ -6127,6 +6128,7 @@ begin
         garbage). Record-element arrays (each element a nested brace group) and
         over-long lists fall back to the balanced-brace skip below. }
       nArrElems := 0;
+      cliBase := CLIArrTop;
       CStrInitCount := 0;
       recArrInitCount := 0;
       hadArrDesig := False;
@@ -6207,13 +6209,14 @@ begin
               wsoff := Tokens[TokPos - 1].SOffset;
               wslen := Tokens[TokPos - 1].SLen;
               for strK := 0 to wslen - 1 do
-                if (nArrElems <= 255) and (beFlat < strRowEnd) then
+                if beFlat < strRowEnd then
                 begin
+                  CLIArrReserve(cliBase, nArrElems);
                   strLit := AllocNode(AN_INT_LIT);
                   ASTIVal[strLit] := Ord(TokChars[wsoff + strK]);
                   ASTTk[strLit] := Ord(declTk);
-                  arrElems[nArrElems] := strLit;
-                  arrElemIdx[nArrElems] := beFlat;
+                  CLIArrElem[cliBase + nArrElems] := strLit;
+                  CLIArrIdx[cliBase + nArrElems] := beFlat;
                   Inc(nArrElems);
                   Inc(beFlat);
                 end;
@@ -6221,13 +6224,14 @@ begin
             end;
             { the terminating NUL, and then the rest of the row is left alone
               (zero, like every other short initializer here) }
-            if (nArrElems <= 255) and (beFlat < strRowEnd) then
+            if beFlat < strRowEnd then
             begin
+              CLIArrReserve(cliBase, nArrElems);
               strLit := AllocNode(AN_INT_LIT);
               ASTIVal[strLit] := 0;
               ASTTk[strLit] := Ord(declTk);
-              arrElems[nArrElems] := strLit;
-              arrElemIdx[nArrElems] := beFlat;
+              CLIArrElem[cliBase + nArrElems] := strLit;
+              CLIArrIdx[cliBase + nArrElems] := beFlat;
               Inc(nArrElems);
             end;
             beFlat := strRowEnd;
@@ -6235,9 +6239,9 @@ begin
           end
           else
           begin
-            if nArrElems > 255 then Error('too many C array initializer elements');
-            arrElems[nArrElems] := ParseCExpr;
-            arrElemIdx[nArrElems] := beFlat;   { row-major flat position }
+            CLIArrReserve(cliBase, nArrElems);
+            CLIArrElem[cliBase + nArrElems] := ParseCExpr;
+            CLIArrIdx[cliBase + nArrElems] := beFlat;   { row-major flat position }
             Inc(nArrElems);
             Inc(beFlat);
           end;
@@ -6254,7 +6258,7 @@ begin
         curElemIdx := 0;
         while CBlockContinues do
         begin
-          if nArrElems > 255 then begin nArrElems := -1; Break; end;
+          CLIArrReserve(cliBase, nArrElems);
           { `[k] =` element designator, and `[lo ... hi] =` GNU range, reposition
             the running index (C 6.7.8); the same value fills a whole range. }
           rangeHi := -1;
@@ -6272,20 +6276,19 @@ begin
             if CurTok.Kind = tkAssign then Next;
             if curElemIdx < 0 then curElemIdx := 0;
           end;
-          arrElems[nArrElems] := ParseCExpr;
-          arrElemIdx[nArrElems] := curElemIdx;
+          CLIArrElem[cliBase + nArrElems] := ParseCExpr;
+          CLIArrIdx[cliBase + nArrElems] := curElemIdx;
           Inc(nArrElems);
           if rangeHi >= curElemIdx then
           begin
             { replicate the one value across [curElemIdx .. rangeHi] }
             for dk := curElemIdx + 1 to rangeHi do
             begin
-              if nArrElems > 255 then begin nArrElems := -1; Break; end;
-              arrElems[nArrElems] := arrElems[nArrElems - 1];
-              arrElemIdx[nArrElems] := dk;
+              CLIArrReserve(cliBase, nArrElems);
+              CLIArrElem[cliBase + nArrElems] := CLIArrElem[cliBase + nArrElems - 1];
+              CLIArrIdx[cliBase + nArrElems] := dk;
               Inc(nArrElems);
             end;
-            if nArrElems < 0 then Break;
             curElemIdx := rangeHi + 1;
           end
           else
@@ -6293,18 +6296,10 @@ begin
           if CurTok.Kind = tkComma then begin Next; Continue; end;
           Break;
         end;
-        if nArrElems >= 0 then Expect(tkEnd, '}')
-        else begin
-          { oversize: finish the balanced-brace skip from wherever we stopped }
-          brDepth := 1;
-          while (brDepth > 0) and (CurTok.Kind <> tkEOF) do
-          begin
-            if CurTok.Kind = tkBegin then Inc(brDepth)
-            else if CurTok.Kind = tkEnd then Dec(brDepth);
-            Next;
-          end;
-          nArrElems := 0;
-        end;
+        { No `oversize' arm any more: the element pool grows, so there is no
+          count at which this list stops being read and the balanced-brace skip
+          that used to swallow the rest has nothing left to skip. }
+        Expect(tkEnd, '}');
       end
       else if (CurTok.Kind = tkAssign) and (Tokens[TokPos].Kind = tkString) and
               (declTk <> tyRecord) and (declTk <> tyPointer) and
@@ -6378,7 +6373,7 @@ begin
       maxElemIdx := -1;
       if hadArrDesig then
         for dk := 0 to nArrElems - 1 do
-          if arrElemIdx[dk] > maxElemIdx then maxElemIdx := arrElemIdx[dk];
+          if CLIArrIdx[cliBase + dk] > maxElemIdx then maxElemIdx := CLIArrIdx[cliBase + dk];
       if arrLen < 1 then
       begin
         if hadArrDesig and (maxElemIdx >= 0) then arrLen := maxElemIdx + 1
@@ -6498,11 +6493,11 @@ begin
       begin
         idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(declTk);
         idxLit := AllocNode(AN_INT_LIT);
-        if hadArrDesig then ASTIVal[idxLit] := arrElemIdx[ei] else ASTIVal[idxLit] := ei;
+        if hadArrDesig then ASTIVal[idxLit] := CLIArrIdx[cliBase + ei] else ASTIVal[idxLit] := ei;
         ASTTk[idxLit] := Ord(tyInteger);
         inode := AllocNode(AN_INDEX); ASTLeft[inode] := idn; ASTRight[inode] := idxLit;
         ASTTk[inode] := Ord(declTk);
-        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := inode; ASTRight[asn] := arrElems[ei];
+        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := inode; ASTRight[asn] := CLIArrElem[cliBase + ei];
         ASTTk[asn] := Ord(declTk);
         seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
         if head = -1 then head := seq else ASTRight[tail] := seq;
@@ -6694,6 +6689,7 @@ begin
   end
   else
     ASTLeft[blk] := head;   { -1 = empty block, emits nothing }
+  CLIArrTop := cliOuterTop;
   Result := blk;
 end;
 

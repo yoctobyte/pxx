@@ -13172,6 +13172,17 @@ test-core: $(COMPILER)
 	# 216 on this file.
 	./$(COMPILER) test/c_global_array_init_over_256.c $(TESTTMP)/c_ginit25626
 	tools/expect_same.sh c_ginit25626 "$$($(TESTTMP)/c_ginit25626)" "$$(printf '1 71892\n2 72490\n3 99750 300\n4 0 1 2\n5 300 s000 s256 s299')"
+	# The BLOCK-SCOPE sibling of the file-scope cap above, and it failed in four
+	# different ways past 256 -- three of them silent. Row 4 is the one only the
+	# string-ROW arm can fail: that arm TRUNCATED mid-row, so a whole-array
+	# check passes on it. Row 6 is the re-entrancy positive control -- the inner
+	# 300-element declaration is parsed while the outer list has two elements in
+	# flight, which is why this arm needs a base-index stack and not the flat
+	# pool the file-scope fix uses; on a flat pool the inner one starts at slot
+	# 0 and writes over both. On the pinned compiler every row is wrong.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_local_array_init_over_256.c $(TESTTMP)/c_linit25626
+	tools/expect_same.sh c_linit25626 "$$($(TESTTMP)/c_linit25626)" "$$(printf '1 71892\n2 72490\n3 99750 99750\n4 0 7 9\n5 400 TAIL second\n6 11 99750 33 44 55')"
 	./$(COMPILER) test/c_crtl_header_order_pull.c $(TESTTMP)/c_hdrorder26
 	tools/expect_same.sh c_hdrorder26 "$$($(TESTTMP)/c_hdrorder26)" "$$(printf '1 4096\n2 100\n3 1\n4 0 1 2 4\n5 0 1 2\n6 f abc\n7 1 2 rest')"
 	# posix_fallocate/fallocate, found the same way. ONE SYSCALL, TWO ERROR

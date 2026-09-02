@@ -938,6 +938,7 @@ begin
   CUseSystemLibs := False;
   CSystemLibCount := 0;
   CrtlSrcPulledCount := 0;
+  CLIArrTop := 0;
   CrtlHdrInFlightCount := 0;
   CrtlPendingPullCount := 0;
   WarnSelfResult := True;   { on by default; --no-warn-self-result silences }

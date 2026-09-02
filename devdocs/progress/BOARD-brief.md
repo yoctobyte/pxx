@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:7 unfinished:27 blocked:6 backlog:3 backlog-umbrella:6 backlog-core:137 backlog-nilpy:97 backlog-tools:6 backlog-pascal:56 backlog-decide:30 backlog-libs:16 backlog-cfront:18 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3125 rejected:72`
+`working:7 unfinished:27 blocked:6 backlog:3 backlog-umbrella:6 backlog-core:137 backlog-nilpy:97 backlog-tools:6 backlog-pascal:56 backlog-decide:30 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3126 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -56,7 +56,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 389, ranked
+## Ready — top 30 of 388, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [P]` regression-lib-test-lib-synapse-3 (unblocks 1)
@@ -89,4 +89,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - `[p 60] [N]` bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 
-_359 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_358 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

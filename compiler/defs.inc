@@ -3331,6 +3331,20 @@ var
     for the same reason CStrInitElem is, and safe on the same grounds:
     ParseCGlobalVarDecl is called only from the two top-level declaration
     loops and never re-enters itself, so there is no nesting to interleave. }
+  { BLOCK-SCOPE array-initialiser element pool, the same columns one scope down.
+    ParseCLocalDeclAST held these as 256-entry STACK arrays too, and past 256 it
+    refused loudly in one arm and gave up SILENTLY in three: two guards in the
+    string-ROW arm stopped copying mid-row and left the tail zero, and two bails
+    dropped the whole initialiser. Unlike the file-scope pool this arm IS
+    re-entrant -- the brace arm calls ParseCExpr, which can reach a GNU
+    statement-expression holding another declaration -- so the pool is a STACK:
+    each declarator takes cliBase := CLIArrTop, reserves its slot before the
+    element expression is parsed (so a nested declaration starts above it), and
+    the procedure restores CLIArrTop on the way out. There is exactly one exit;
+    the procedure contains no `Exit'. }
+  CLIArrElem : array of Integer;
+  CLIArrIdx  : array of Integer;
+  CLIArrTop  : Integer;
   CGIArrOffs : array of Integer;
   CGIArrLens : array of Integer;
   CGIArrKind : array of Integer;

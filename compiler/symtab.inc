@@ -6540,6 +6540,32 @@ begin
   SetLength(CStrInitElem, cap);
 end;
 
+procedure EnsureCLIArrCapacity(n: Integer);
+{ Grow the block-scope array-initialiser element pools to hold index n. Same
+  shape as EnsureCStrInitCapacity above; see CLIArrElem in defs.inc. Both
+  columns grow together, for the reason EnsureCGIArrCapacity gives. }
+var cap: Integer;
+begin
+  cap := Length(CLIArrElem);
+  if n < cap then Exit;
+  if cap = 0 then cap := 512;
+  while cap <= n do cap := cap * 2;
+  SetLength(CLIArrElem, cap);
+  SetLength(CLIArrIdx, cap);
+end;
+
+procedure CLIArrReserve(base, n: Integer);
+{ Claim slot base+n of the block-scope element pool BEFORE the element
+  expression is parsed. Claiming it first is the whole point: ParseCExpr can
+  reach a GNU statement-expression holding another declaration, and that
+  declaration takes CLIArrTop as ITS base -- so the slot has to be above the
+  top already, or the inner declaration writes over the element we are about
+  to store. See CLIArrElem in defs.inc. }
+begin
+  EnsureCLIArrCapacity(base + n);
+  if base + n + 1 > CLIArrTop then CLIArrTop := base + n + 1;
+end;
+
 procedure EnsureCGIArrCapacity(n: Integer);
 { Grow the file-scope array-initialiser element pools to hold index n. Same
   shape as EnsureCStrInitCapacity above; see CGIArrOffs in defs.inc. The five
