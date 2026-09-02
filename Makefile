@@ -10118,6 +10118,13 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_asm_func26 "$$($(TESTTMP)/test_asm_func26)" "14"
 	./$(COMPILER) test/test_asm_swap.pas $(TESTTMP)/test_asm_swap26
 	tools/expect_same.sh test_asm_swap26 "$$($(TESTTMP)/test_asm_swap26)" "$$(printf '42\n-7\n-7\n42')"
+	# adc/sbb/cmc: the two missing rows of asmenc.inc's ALU ext table plus the
+	# one carry-flag op a bignum chain needs. Every row of the expectation is a
+	# positive control -- see the header in the test for which wrong encoding
+	# each one rules out. The pinned compiler rejects this file outright
+	# ("asm: unknown instruction: adc"), which is the aim check.
+	./$(COMPILER) test/test_asm_carry_chain.pas $(TESTTMP)/test_asm_carry26
+	tools/expect_same.sh test_asm_carry26 "$$($(TESTTMP)/test_asm_carry26)" "$$(printf '0\n1\n-1\n0\n0')"
 	./$(COMPILER) test/test_asm_branch.pas $(TESTTMP)/test_asm_branch26
 	$(TESTTMP)/test_asm_branch26; tools/expect_same.sh test_asm_branch26-rc "$$?" "45"
 	./$(COMPILER) test/test_asm_keywords.pas $(TESTTMP)/test_asm_keywords26

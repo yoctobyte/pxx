@@ -833,6 +833,11 @@ begin
   if CaseEqual(mn,'cqo')     then begin AsmB($48); AsmB($99); Exit; end;
   if CaseEqual(mn,'cdqe')    then begin AsmB($48); AsmB($98); Exit; end;
   if CaseEqual(mn,'cwde')    then begin AsmB($98); Exit; end;
+  { cmc — complement carry. The one carry-flag op a chain actually needs:
+    tls_sp_c32.c's sp_256_sub_8_p256_mod adds 1 and flips CF rather than
+    subtracting ffffffffffffffff. clc/stc are deliberately NOT added beside it;
+    nothing asks for them yet and an unused mnemonic is an untested one. }
+  if CaseEqual(mn,'cmc')     then begin AsmB($F5); Exit; end;
   { CPU feature discovery — see the twin block in asmtext.inc. cpuid clobbers
     eax/ebx/ecx/edx; xgetbv reads XCR<ecx> into edx:eax, which is how a program
     tells "the CPU has AVX" from "the OS actually saves the YMM state". Both
@@ -1033,6 +1038,14 @@ begin
   if CaseEqual(mn,'mov') then begin AsmEncodeMov; Exit; end;
   if CaseEqual(mn,'add') then begin AsmEncodeALU($01,$03,0); Exit; end;
   if CaseEqual(mn,'or')  then begin AsmEncodeALU($09,$0B,1); Exit; end;
+  { adc/sbb were the two missing rows of this table — the /ext codes below run
+    add=0 or=1 adc=2 sbb=3 and=4 sub=5 xor=6 cmp=7 and only 2 and 3 were absent.
+    asmtext.inc has carried both since it was written (EncALURegReg $11/$13 and
+    $19/$1B, EncALUImm ext 2 and 3), so this is the asmenc side of the
+    "a mnemonic lands in BOTH encoders" rule catching up, not new encoding.
+    Needed by every carry chain: busybox's tls_sp_c32.c is four of them. }
+  if CaseEqual(mn,'adc') then begin AsmEncodeALU($11,$13,2); Exit; end;
+  if CaseEqual(mn,'sbb') then begin AsmEncodeALU($19,$1B,3); Exit; end;
   if CaseEqual(mn,'and') then begin AsmEncodeALU($21,$23,4); Exit; end;
   if CaseEqual(mn,'sub') then begin AsmEncodeALU($29,$2B,5); Exit; end;
   if CaseEqual(mn,'xor') then begin AsmEncodeALU($31,$33,6); Exit; end;
