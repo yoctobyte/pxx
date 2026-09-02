@@ -57,6 +57,78 @@ begin
   XtRegName := 'a' + AIntToStr(r);
 end;
 
+{ ===== FROZEN-STRING LENGTH PREFIX, xtensa =====
+  Declared at the TOP of the file, above every use, because PXX prescans headers
+  and FPC is single-pass: helpers placed next to their first caller build fine
+  here and fail the FPC seed canary. That is not a hypothetical — it happened on
+  aarch64, where `make compiler/pascal26` and --tier quick BOTH passed while the
+  seed build was broken.
+
+  xtensa is 32-bit, so this follows ARM32's shape and NOT aarch64's: the WIDE
+  prefix is TWO stores, the low word plus an explicit zero high word, and since
+  xtensa has no zero register the store helper needs a scratch register to hold
+  the zero. A copyist working from the 64-bit helper writes ONE store and leaves
+  garbage in the high half of the length.
+
+  No hand-assembled hex here, unlike aarch64 and arm32: xtensa has a real
+  encoder layer in xtensaenc.inc, so these call xtensa_s8i / xtensa_l8ui /
+  xtensa_s32i / xtensa_l32i / xtensa_addi — the same encoders the rest of this
+  backend already runs through. The default path's encodings are therefore
+  unchanged by CONSTRUCTION rather than by a bit-for-bit re-derivation: at
+  FrozenStrPrefixSize = 8 each helper emits the identical encoder calls the
+  literal sequence it replaces already made.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+
+procedure EmitStoreStrLenXtensa(lenReg, bufReg, zeroReg: Integer; dstTk: TTypeKind);
+{ [a<bufReg>] := a<lenReg>, at dstTk's prefix width. The 8-byte form writes the
+  low word then a zero high word and CLOBBERS a<zeroReg> to do it; the 1-byte
+  form writes one byte and leaves the scratch alone. Passing lenReg as zeroReg
+  is safe and is what the one-char arm does — the length store has already
+  happened by the time the zero is materialised. }
+begin
+  if FrozenStrPrefixSize(dstTk) = 1 then
+    xtensa_s8i(lenReg, bufReg, 0)
+  else
+  begin
+    xtensa_s32i(lenReg, bufReg, 0);
+    xtensa_movi(zeroReg, 0);
+    xtensa_s32i(zeroReg, bufReg, 4);
+  end;
+end;
+
+procedure EmitLoadStrLenXtensa(lenReg, bufReg: Integer; srcTk: TTypeKind);
+{ a<lenReg> := [a<bufReg>], at srcTk's prefix width. L8UI is the only 8-bit load
+  this ISA has and it ZERO-extends, which is what makes the result safe to use
+  directly as a byte count; a sign-extending load would give a length in the
+  billions for any string longer than 127. The wide form reads only the low
+  word, as every existing reader in this file already did. }
+begin
+  if FrozenStrPrefixSize(srcTk) = 1 then
+    xtensa_l8ui(lenReg, bufReg, 0)
+  else
+    xtensa_l32i(lenReg, bufReg, 0);
+end;
+
+procedure EmitLeaStrDataXtensa(dstReg, srcReg: Integer; tk: TTypeKind);
+{ a<dstReg> := a<srcReg> + tk's prefix size — the address of the first
+  CHARACTER. The offset and the prefix width are ONE number; a site that adds 8
+  after storing a 1-byte length puts the chars seven bytes too far in, which is
+  why this shares FrozenStrPrefixSize with the length helpers rather than
+  spelling the number itself. dstReg = srcReg steps a pointer in place. }
+begin
+  xtensa_addi(dstReg, srcReg, FrozenStrPrefixSize(tk));
+end;
+
+procedure EmitStoreCharAtStrDataXtensa(charReg, bufReg: Integer; tk: TTypeKind);
+{ [a<bufReg> + prefix] := a<charReg> as a byte — the single character of a
+  one-char string, written where tk says the chars begin. Shares its width with
+  EmitStoreStrLenXtensa by construction, which is the point: these two are the
+  pair that has to agree, and spelling both as a literal 8 is what made them
+  able to disagree. }
+begin
+  xtensa_s8i(charReg, bufReg, FrozenStrPrefixSize(tk));
+end;
+
 function XtensaMarshalReg4: Integer;
 { The FOURTH register of the string-helper marshalling quad (lenA, srcA, then
   two more that differ per helper).
@@ -605,14 +677,19 @@ begin
   else
   begin
     IREmitNodeXtensa(valNode);                  { a2 = frozen buffer }
-    xtensa_l32i(reg_xtensa_a4, reg_xtensa_a2, 0);  { len = [buf] }
-    xtensa_addi(reg_xtensa_a3, reg_xtensa_a2, 8);  { src = buf+8 }
+    { The length read and the data offset are ONE number — the source's own
+      prefix width. IRStrTkOf and not IntToTypeKind(IRTk[..]), because the IR
+      tags EVERY frozen string tyString generically, so the node's own kind
+      reads 8 for a shortstring and hands the allocator eight bytes of
+      [len][chars] as a length. }
+    EmitLoadStrLenXtensa(reg_xtensa_a4, reg_xtensa_a2, IRStrTkOf(valNode));
+    EmitLeaStrDataXtensa(reg_xtensa_a3, reg_xtensa_a2, IRStrTkOf(valNode));
     xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);
     EmitStrFromLitXtensa;                       { a2 = handle }
   end;
 end;
 
-procedure EmitFrozenCopyXtensa(srcTk: TTypeKind; cap: Integer);
+procedure EmitFrozenCopyXtensa(srcTk, dstTk: TTypeKind; cap: Integer);
 { THE FROZEN COPY ITSELF, destination given as an ADDRESS: a5 = the evaluated
   source, a4 = the destination inline buffer, `cap` = its capacity. Writes
   [len:8][chars] with the length clamped (truncating `string[N]` semantics).
@@ -624,17 +701,24 @@ procedure EmitFrozenCopyXtensa(srcTk: TTypeKind; cap: Integer);
   so IR_STORE_MEM can reach it: a `string[N]` RECORD FIELD is reached through an
   address expression, not a slot index, and that path had no frozen store at all
   — the generic sized store dropped the source ADDRESS into the field.
-  bug-a-xtensa-cannot-read-a-managed-string-out-of-a-record-field-or-array-element }
+  bug-a-xtensa-cannot-read-a-managed-string-out-of-a-record-field-or-array-element
+
+  TWO KINDS, NOT ONE, and that is the whole of the byte-prefix change here: once
+  a second prefix width exists a frozen->frozen copy stops being a copy and
+  becomes a CONVERSION, so the source width and the destination width are
+  independent facts. srcTk must be resolved through IRStrTkOf /
+  IRFrozenKindOfAddr by the caller — `IntToTypeKind(IRTk[node])` answers
+  tyString for every frozen string and so reads 8 for a shortstring, which is a
+  length in the billions clamped down to a capacity of blanks.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
 begin
   if cap <= 0 then cap := DEFAULT_STR_CAP;
 
   if srcTk = tyChar then
   begin
     xtensa_movi(reg_xtensa_a8, 1);
-    xtensa_s32i(reg_xtensa_a8, reg_xtensa_a4, 0);   { len = 1 }
-    xtensa_movi(reg_xtensa_a8, 0);
-    xtensa_s32i(reg_xtensa_a8, reg_xtensa_a4, 4);   { high half of the length }
-    xtensa_s8i(reg_xtensa_a5, reg_xtensa_a4, 8);    { the char }
+    EmitStoreStrLenXtensa(reg_xtensa_a8, reg_xtensa_a4, reg_xtensa_a8, dstTk);
+    EmitStoreCharAtStrDataXtensa(reg_xtensa_a5, reg_xtensa_a4, dstTk);
     Exit;
   end;
 
@@ -644,8 +728,11 @@ begin
                    'addi a8, a5, -8', 'l32i a6, a8, 0', '.fs:'])
   else
   begin
-    xtensa_l32i(reg_xtensa_a6, reg_xtensa_a5, 0);   { frozen/literal: len = [src] }
-    xtensa_addi(reg_xtensa_a5, reg_xtensa_a5, 8);   { chars = src+8 }
+    { frozen/literal source, read at ITS OWN width — which may differ from the
+      destination's. The managed arm above stays at 8 deliberately: that is a
+      heap header, not a frozen prefix, and it does not follow this flag. }
+    EmitLoadStrLenXtensa(reg_xtensa_a6, reg_xtensa_a5, srcTk);
+    EmitLeaStrDataXtensa(reg_xtensa_a5, reg_xtensa_a5, srcTk);
   end;
 
   { Truncating `string[N]` assignment: clamp the length to the slot capacity
@@ -654,10 +741,10 @@ begin
   xtensa_movi(reg_xtensa_a8, cap);
   EmitAsmXtensa(['bge a8, a6, .tk', 'mov a6, a8', '.tk:']);
 
-  xtensa_s32i(reg_xtensa_a6, reg_xtensa_a4, 0);     { publish the length }
-  xtensa_movi(reg_xtensa_a8, 0);
-  xtensa_s32i(reg_xtensa_a8, reg_xtensa_a4, 4);
-  xtensa_addi(reg_xtensa_a4, reg_xtensa_a4, 8);     { dst chars }
+  { Publish the clamped length and step to the chars, both at the DESTINATION's
+    width — a8 is dead after the clamp above, so it is free as the zero scratch. }
+  EmitStoreStrLenXtensa(reg_xtensa_a6, reg_xtensa_a4, reg_xtensa_a8, dstTk);
+  EmitLeaStrDataXtensa(reg_xtensa_a4, reg_xtensa_a4, dstTk);   { dst chars }
   { byte-copy loop: a4=dst, a5=src, a6=cnt, a8 scratch }
   EmitAsmXtensa(['.fc:', 'movi a8, 0', 'beq a6, a8, .fd',
                  'l8ui a8, a5, 0', 's8i a8, a4, 0',
@@ -674,7 +761,9 @@ begin
   IREmitNodeXtensa(valNode);                    { a2 = source }
   xtensa_mov(reg_xtensa_a5, reg_xtensa_a2);     { a5 = src }
   EmitSlotAddrXtensa(reg_xtensa_a4, si);        { a4 = dst buffer }
-  EmitFrozenCopyXtensa(IntToTypeKind(IRTk[valNode]), SymStrCap[si]);
+  { IRStrTkOf for the source (see EmitFrozenCopyXtensa's header); the symbol's
+    own kind for the destination, which is the only thing that knows its width. }
+  EmitFrozenCopyXtensa(IRStrTkOf(valNode), Syms[si].TypeKind, SymStrCap[si]);
 end;
 
 procedure EmitStrHandleForStoreXtensa(valNode: Integer);
@@ -738,8 +827,11 @@ begin
   else if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) then
   begin
     IREmitNodeXtensa(valNode);                  { a2 = inline buffer addr }
-    xtensa_l32i(reg_xtensa_a4, reg_xtensa_a2, 0); { len = [buf] }
-    xtensa_addi(reg_xtensa_a3, reg_xtensa_a2, 8); { src = buf+8 }
+    { Width-aware for the same reason as EmitAnsiStringFromNodeXtensa's arm
+      above — this is the frozen -> MANAGED conversion, where a prefix read at
+      the wrong width reaches the allocator as a length. }
+    EmitLoadStrLenXtensa(reg_xtensa_a4, reg_xtensa_a2, IRStrTkOf(valNode));
+    EmitLeaStrDataXtensa(reg_xtensa_a3, reg_xtensa_a2, IRStrTkOf(valNode));
     xtensa_mov(reg_xtensa_a2, reg_xtensa_a4);     { len }
     EmitStrFromLitXtensa;
   end
@@ -2149,11 +2241,17 @@ begin
           EmitStrRefCallXtensa('PXXStrDecRef');
           Exit;
         end;
-        if tk = tyString then
+        if TypeIsFrozenString(tk) then
         begin
           { Frozen `string[N]` store through an address: copy [len][chars] with
             the length clamped to the destination capacity, which the IR carries
-            as the node's ival. Same core as the slot-addressed store. }
+            as the node's ival. Same core as the slot-addressed store.
+
+            The GUARD is TypeIsFrozenString and not `tk = tyString`, because a
+            tyShortString destination is a frozen string too and would otherwise
+            fall past this arm into the scalar store below — which drops the
+            source ADDRESS into the slot. Widening it is a no-op for the kinds
+            that reached here before, since tyString satisfies it. }
           IREmitNodeXtensa(IRB[node]);               { a2 = source }
           XtensaPushA2;
           savedLVW := InLValueWrite;
@@ -2163,7 +2261,13 @@ begin
           xtensa_mov(reg_xtensa_a4, reg_xtensa_a2);  { a4 = dst }
           XtensaPopA3;
           xtensa_mov(reg_xtensa_a5, reg_xtensa_a3);  { a5 = src }
-          EmitFrozenCopyXtensa(IntToTypeKind(IRTk[IRB[node]]), Integer(IRIVal[node]));
+          { The DESTINATION is reached through an address expression, so its
+            width is only knowable by walking that address back to its symbol —
+            IRFrozenKindOfAddr, which is exactly the question, and which answers
+            the wide tyString when it cannot tell (the recoverable direction). }
+          EmitFrozenCopyXtensa(IRStrTkOf(IRB[node]),
+                               IRFrozenKindOfAddr(IRA[node]),
+                               Integer(IRIVal[node]));
           Exit;
         end;
         if IsFloatXtensa(tk) then
@@ -2249,8 +2353,8 @@ begin
           end
           else if TypeIsFrozenString(IntToTypeKind(IRTk[right])) then
           begin
-            xtensa_l32i(r4, reg_xtensa_a8, 0);
-            xtensa_addi(reg_xtensa_a6, reg_xtensa_a8, 8);
+            EmitLoadStrLenXtensa(r4, reg_xtensa_a8, IRStrTkOf(right));
+            EmitLeaStrDataXtensa(reg_xtensa_a6, reg_xtensa_a8, IRStrTkOf(right));
           end
           else
           begin
@@ -2267,8 +2371,11 @@ begin
           end
           else if TypeIsFrozenString(IntToTypeKind(IRTk[left])) then
           begin
-            xtensa_l32i(reg_xtensa_a4, reg_xtensa_a8, 0);
-            xtensa_addi(reg_xtensa_a5, reg_xtensa_a8, 8);
+            { len and chars at the OPERAND's own prefix width — the guard above
+              only says "frozen", and every frozen kind is tagged tyString in
+              the IR, so the width has to come from IRStrTkOf. }
+            EmitLoadStrLenXtensa(reg_xtensa_a4, reg_xtensa_a8, IRStrTkOf(left));
+            EmitLeaStrDataXtensa(reg_xtensa_a5, reg_xtensa_a8, IRStrTkOf(left));
           end
           else
           begin
@@ -2389,8 +2496,8 @@ begin
           end
           else if TypeIsFrozenString(IntToTypeKind(IRTk[right])) then
           begin
-            xtensa_l32i(reg_xtensa_a6, reg_xtensa_a8, 0);
-            xtensa_addi(r4, reg_xtensa_a8, 8);
+            EmitLoadStrLenXtensa(reg_xtensa_a6, reg_xtensa_a8, IRStrTkOf(right));
+            EmitLeaStrDataXtensa(r4, reg_xtensa_a8, IRStrTkOf(right));
           end
           else
           begin
@@ -2407,8 +2514,11 @@ begin
           end
           else if TypeIsFrozenString(IntToTypeKind(IRTk[left])) then
           begin
-            xtensa_l32i(reg_xtensa_a4, reg_xtensa_a8, 0);
-            xtensa_addi(reg_xtensa_a5, reg_xtensa_a8, 8);
+            { len and chars at the OPERAND's own prefix width — the guard above
+              only says "frozen", and every frozen kind is tagged tyString in
+              the IR, so the width has to come from IRStrTkOf. }
+            EmitLoadStrLenXtensa(reg_xtensa_a4, reg_xtensa_a8, IRStrTkOf(left));
+            EmitLeaStrDataXtensa(reg_xtensa_a5, reg_xtensa_a8, IRStrTkOf(left));
           end
           else
           begin
@@ -2857,7 +2967,7 @@ begin
             arrive tagged: `f` lowers to an IR_LEA of its symbol (the buffer
             ADDRESS), `pf^` to a bare pointer load whose value IS the buffer.
             Same structural predicate as aarch64/riscv32 (b345). }
-          if (IntToTypeKind(IRTk[valNode]) = tyString) or
+          if TypeIsFrozenString(IntToTypeKind(IRTk[valNode])) or
              ((IRKind[valNode] = IR_LEA) and
               TypeIsFrozenString(Syms[IRA[valNode]].TypeKind) and
               not Syms[IRA[valNode]].IsArray) or
@@ -2865,7 +2975,16 @@ begin
               (IntToTypeKind(IRTk[valNode]) = tyPointer)) then
           begin
             IREmitNodeXtensa(valNode);          { a2 = frozen buffer addr }
-            xtensa_l32i(reg_xtensa_a2, reg_xtensa_a2, 0);
+            { IRFrozenKindOfAddr and NOT IRStrTkOf, and this is the site that was
+              the LAST thing wrong on aarch64: the guard above deliberately
+              accepts a POINTER-typed node (the `ps^` / `rec.pf^` deref shape),
+              and IRStrTkOf answers about the node's own kind FIRST — for a
+              tyPointer LEA it returns tyPointer, never consults the symbol, and
+              reads 8. Length then answered 0x6F6C6C654805 there: the length
+              byte followed by the characters of 'hello'. The address walker
+              reads the SYMBOL, which is the only thing that knows the width. }
+            EmitLoadStrLenXtensa(reg_xtensa_a2, reg_xtensa_a2,
+                                 IRFrozenKindOfAddr(valNode));
             Exit;
           end;
           { Length(arr) / Length(managed): a2 = handle; count at [handle-8],
@@ -3385,10 +3504,15 @@ begin
               EmitAnsiStringFromNodeXtensa(IRA[argNode])
             else
               IREmitNodeXtensa(IRA[argNode]);
-            { External C call: skip the 8-byte length prefix of a Pascal string
-              literal so the callee sees a const char* (as on x86-64/riscv32). }
+            { External C call: skip the length prefix of a Pascal string literal
+              so the callee sees a const char* (as on x86-64/riscv32). The skip
+              is the PREFIX WIDTH, not a literal 8 — the width comes off the
+              VALUE node (IRA[argNode]), which is the LEA that can be walked
+              back to a symbol; the guard's argNode is the IR_ARG wrapper and
+              would always answer the generic wide tyString. }
             if ProcExternal[procIdx] and TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
-              xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, 8);
+              EmitLeaStrDataXtensa(reg_xtensa_a2, reg_xtensa_a2,
+                                   IRStrTkOf(IRA[argNode]));
             XtensaPushA2;
             Inc(nArgs, 1);
           end;
@@ -3551,9 +3675,27 @@ begin
             end
             else if TypeIsFrozenString(tk) then
             begin
+              { THE PREFIX IS READ IN SHARED RUNTIME HERE, NOT IN THIS FILE, and
+                on xtensa that is the ONLY reader for a frozen write: unlike
+                arm32 there is no inline `wid = 0` syscall path beside it, so
+                this call carries every width including 0. Pick the sibling that
+                matches the width — PXXWriteFrozenBW reads PByte(p)^ and writes
+                from p+1, PXXWriteFrozenW reads a machine word and writes from
+                p+8. Both already exist in builtinheap.pas; a third would be two
+                correct functions and one more to keep in step.
+
+                Getting this wrong is not a misformatted field. The pad is
+                max(0, wid - len), a RUNTIME quantity, so reading a 1-byte
+                prefix as a machine word hands write() a length in the billions.
+                It is also the exact hole that certified aarch64 complete while
+                `WriteLn(s:9)` was broken, because every test used width 0 and
+                width 0 never called the helper — on xtensa it always does. }
               IREmitNodeXtensa(valNode);               { a2 = buffer addr }
               EmitLoadConstXtensa(reg_xtensa_a3, j);
-              EmitXtensaHelperCall(XtensaHelperProc('PXXWriteFrozenW'), 2);
+              if FrozenStrPrefixSize(IRStrTkOf(valNode)) = 1 then
+                EmitXtensaHelperCall(XtensaHelperProc('PXXWriteFrozenBW'), 2)
+              else
+                EmitXtensaHelperCall(XtensaHelperProc('PXXWriteFrozenW'), 2);
             end
             else if Is64BitXtensa(tk) or TypeIsOrdinal(tk) or (tk = tyUnknown) then
             begin

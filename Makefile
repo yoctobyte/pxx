@@ -18052,6 +18052,37 @@ test-wasm32: $(COMPILER)
 	tools/expect_same.sh wasm32/shortstring_trunc "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_shortstring_trunc.wasm)" "$$($(TESTTMP)/w32_shortstring_trunc_x64)"
 	@echo "wasm32: 22 rows green (5 excluded, see comment above)"
 test-xtensa: $(COMPILER)
+	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
+	# conversion cannot pass its easy rows. Every frozen write here goes through
+	# the shared runtime helper at EVERY field width including 0 -- there is no
+	# inline widthless syscall path beside it as on arm32 -- so picking between
+	# PXXWriteFrozenW and PXXWriteFrozenBW wrongly fails the plain `write` row,
+	# not only the padded one. The general phase-2 warning ("width 0 bypasses
+	# the helper and is all any test had") is INVERTED for xtensa: there is no
+	# bypass, so a helper defect surfaces immediately rather than hiding.
+	#
+	# Expected values DERIVED, not copied from another backend: the shortstring
+	# rows are FPC 3.2.2's own output, and the two `sizeof` answers come from
+	# SizeOfSlot -- cap+FrozenStrPrefixSize, so 10+8=18 and 10+1=11. Neither is
+	# a function of the target word size, which is why a 32-bit backend gets the
+	# same two numbers as a 64-bit one rather than by coincidence.
+	#
+	# WHAT A GREEN HERE DOES NOT MEAN: --xtensa-soft-mulhigh (see :17825) means
+	# the emulator is not bit-identical to hardware for multiplies. It is
+	# required -- without it integer formatting takes an illegal instruction on
+	# qemu's core -- and --platform=posix is required because the xtensa DEFAULT
+	# platform is bare-metal ESP, which has no libc and no dynamic segment.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_xt_ssbp_d
+	tools/expect_same.sh xtensa/ssbp_default "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_xt_ssbp_s
+	tools/expect_same.sh xtensa/ssbp_short "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	# The cross-width conversion, with the NONZERO-field-width rows (`pad`,
+	# `padw`) that certified aarch64 complete by their absence. On xtensa these
+	# share the helper with the plain writes above rather than reaching new code.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_xt_ssmw_d
+	tools/expect_same.sh xtensa/ssmw_default "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_xt_ssmw_s
+	tools/expect_same.sh xtensa/ssmw_short "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	# `var` parameter of every scalar kind + var->var forwarding — the twin of
 	# the riscv32 row; both backends had the same subsumed arm ahead of
 	# ABIParamSlotHoldsValueAddr, removed 2026-08-31 byte-identically.

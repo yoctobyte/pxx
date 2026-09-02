@@ -130,6 +130,7 @@ begin
   if arch = TARGET_AARCH64 then Result := True;
   if arch = TARGET_ARM32   then Result := True;
   if arch = TARGET_RISCV32 then Result := True;
+  if arch = TARGET_XTENSA  then Result := True;
 end;
 
 function TargetIsEspClass: Boolean;
