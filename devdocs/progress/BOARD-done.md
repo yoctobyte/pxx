@@ -2864,6 +2864,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-delphi-bare-alldefaulted-arg | P | 70 | regression | regression: test-core#src:test/test_delphi_bare_alldefaulted_arg.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-dynarray-params | T | 70 | regression | regression: test-core#src:test/test_dynarray_params.pas red at 34670fe9b872 (auto-filed by twatch) | — |
 | regression-test-core-test-exception-unhandled-2 | T | 70 | regression | regression: test-core#src:test/test_exception_unhandled.pas@3 at f9e495823dce in step 53/47, `/tmp/next-test_multithreading26 \| grep -q "multithreadin` (auto-filed by twatch) | — |
+| regression-test-core-test-exception-unhandled-3 | T | 70→85 | regression | regression: test-core#src:test/test_exception_unhandled.pas@3 at 3d4801b6abc3 in step 53/47, `/tmp/next-test_multithreading26 \| grep -q "multithreading test completed successfully"` (auto-filed by twatch) | — |
 | regression-test-core-test-exception-unhandled | T | 70 | regression | regression: test-core#src:test/test_exception_unhandled.pas@1 red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-core-test-float-write | T | 70 | regression | regression: test-core#src:test/test_float_write.pas@1 red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-test-fortran-skeleton | T | 70 | regression | regression: test-core#src:test/test_fortran_skeleton.f90 red at ad8e212cf739 (auto-filed by twatch) | — |
@@ -2940,6 +2941,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-rust-module-items | T | 70 | regression | regression: test-core#src:test/test_rust_module_items.rs at 99af5f3270cf in step 16/5, `./compiler/pascal26 /tmp/rust_unity.rs /tmp/test_rust_un` (auto-filed by twatch) | — |
 | regression-test-core-test-set-literal-element-types | P | 70 | regression | regression: test-core#src:test/test_set_literal_element_types.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-set-runtime | P | 70 | regression | regression: test-core#src:test/test_set_runtime.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
+| regression-test-core-test-setlen-in-parallel-for-body-2 | T | 70→85 | regression | regression: test-core#src:test/test_setlen_in_parallel_for_body.pas at 456361785e34 in step 2/2, `tools/expect_same.sh test_setlen_parfor26 "$(/tmp/test_s` (auto-filed by twatch) | — |
 | regression-test-core-test-setlen-in-parallel-for-body | T | 70 | regression | first-ever red: test-core#src:test/test_setlen_in_parallel_for_body.pas at d28b77ce5d88 in step 2/2, `tools/expect_same.sh test_setlen_parfor26 "$(/tmp/test_s` (auto-filed by twatch) | — |
 | regression-test-core-test-setlength-grow-capacity | P | 70 | regression | regression: test-core#src:test/test_setlength_grow_capacity.pas red at 10dada0b7689 (auto-filed by twatch) | — |
 | regression-test-core-test-sizeof | P | 70 | regression | regression: test-core#src:test/test_sizeof.pas red at 35dbb5a998e7 (auto-filed by twatch) | — |

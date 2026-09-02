@@ -2963,7 +2963,11 @@ begin
   Result := ProcCdecl[procIdx] and (not ProcCStaticLink[procIdx]);
 end;
 
-procedure ObjPlanHostedProcSymIdx(numLocalProcs, numLocalData: Integer);
+{ numExtraLocal: LOCAL symbols emitted after the local data block and before
+  the first global -- today the init/fini thunk symbols under
+  --function-sections. It only has to move firstGlobal; the thunks are not in
+  Procs[] and have no ObjProcSymIdx row. }
+procedure ObjPlanHostedProcSymIdx(numLocalProcs, numLocalData, numExtraLocal: Integer);
 var i, n, firstGlobal: Integer;
 begin
   for i := 0 to ProcCount-1 do ObjProcSymIdx[i] := -1;
@@ -2974,7 +2978,7 @@ begin
       ObjProcSymIdx[i] := 4 + n;
       Inc(n);
     end;
-  firstGlobal := 4 + numLocalProcs + numLocalData;
+  firstGlobal := 4 + numLocalProcs + numLocalData + numExtraLocal;
   n := 0;
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then
@@ -3002,6 +3006,13 @@ end;
   here to compare and nothing to refuse on. That is a difference in the DATA,
   not a relaxation -- if either grows a target snapshot, this predicate needs
   the clause too. }
+{ Names for the init/fini thunk symbols. LOCAL, so they cannot collide across
+  objects and cannot join the export surface -- both properties the COMDAT
+  group-signature question will need again. }
+const
+  OBJ_INIT_THUNK_NAME = '__pxx_init_thunk';
+  OBJ_FINI_THUNK_NAME = '__pxx_fini_thunk';
+
 function ObjProcRefIsRelocatable(p: Integer): Boolean;
 begin
   ObjProcRefIsRelocatable := False;
@@ -3586,6 +3597,8 @@ var
   initArrSec, finiArrSec, numSects, shstrSize: Integer;
   initArrNm, relaInitArrNm, finiArrNm, relaFiniArrNm: Integer;
   hasInitArr, hasFiniArr: Boolean;
+    nThunkSym, initThunkSym, finiThunkSym: Integer;
+    thunkInitStrOff, thunkFiniStrOff, thunkNext: Integer;
 {$ifdef FPC}
   f: File;
 {$else}
@@ -3615,12 +3628,55 @@ begin
     exported data + external funcs + imported data. extSym0 moves by
     numExportData and impSym0 is new; every relocation that names a symbol
     index is built from these three. }
-  firstGlobal := 4 + numLocalProcs + numLocalData;
+  { --function-sections: the init and fini thunks get LOCAL FUNC symbols of
+    their own, so .rela.init_array/.rela.fini_array can name THEM with addend 0
+    instead of `.text` plus a baked offset. They were the last two code
+    references in the object still bound to the section symbol, and they cannot
+    be left that way for per-function sections: each thunk falls INSIDE the
+    range of whatever proc precedes it -- a different proc in every program --
+    so a `.text + off` addend is a promise about a layout the linker is about
+    to change.
+
+    Gated, so the DEFAULT object is byte-identical: without the flag no symbol
+    is added, firstGlobal does not move, and every index built from it is what
+    it was. }
+  nThunkSym := 0;
+  if FunctionSections then
+  begin
+    if InitThunkOff >= 0 then Inc(nThunkSym);
+    if FiniThunkOff >= 0 then Inc(nThunkSym);
+  end;
+  initThunkSym := -1; finiThunkSym := -1;
+  thunkInitStrOff := 0; thunkFiniStrOff := 0;
+  if nThunkSym > 0 then
+  begin
+    thunkNext := 4 + numLocalProcs + numLocalData;
+    if InitThunkOff >= 0 then begin initThunkSym := thunkNext; Inc(thunkNext); end;
+    if FiniThunkOff >= 0 then finiThunkSym := thunkNext;
+    { The two names go at the END of .strtab, not beside their symbols. A string
+      table is a blob addressed by explicit per-symbol offsets, so the order is
+      free -- and appending is the only placement whose offset is knowable here,
+      because ObjPlanHostedSymbols returns a TOTAL and not a running position.
+      The SYMBOLS still sit between the local data and the first global, which
+      is the part firstGlobal cares about. }
+    if InitThunkOff >= 0 then
+    begin
+      thunkInitStrOff := strSize;
+      strSize := strSize + Length(OBJ_INIT_THUNK_NAME) + 1;
+    end;
+    if FiniThunkOff >= 0 then
+    begin
+      thunkFiniStrOff := strSize;
+      strSize := strSize + Length(OBJ_FINI_THUNK_NAME) + 1;
+    end;
+  end;
+
+  firstGlobal := 4 + numLocalProcs + numLocalData + nThunkSym;
   extSym0 := firstGlobal + numExportProcs + numExportData;
   impSym0 := extSym0 + ExternalCount;
   numSyms := impSym0 + numImportData;
 
-  ObjPlanHostedProcSymIdx(numLocalProcs, numLocalData);
+  ObjPlanHostedProcSymIdx(numLocalProcs, numLocalData, nThunkSym);
 
   relaTextCount := FixCount + GlobFixCount + DynCallCount + ProcAddrFixCount;
   { --function-sections: one PC32 per internal call, against the callee's own
@@ -3727,6 +3783,16 @@ begin
   for i := 0 to SymCount-1 do
     if ObjDataIsLocal(i) then
       writeSym64(f, ObjDataStrOff[i], $01, 5, Syms[i].Offset, SymAllocSize[i]);
+  { The thunk symbols, if any: LOCAL FUNC ($02) in .text, between the local
+    data and the first global so firstGlobal describes them. SIZE 0 ON PURPOSE
+    -- a thunk is code no proc owns and its extent is recorded nowhere, so
+    stating one would be inventing it. That is a real limit for a later
+    --gc-sections, which wants a size; it is none for a relocation, which wants
+    an address. }
+  if initThunkSym >= 0 then
+    writeSym64(f, thunkInitStrOff, $02, 1, InitThunkOff, 0);
+  if finiThunkSym >= 0 then
+    writeSym64(f, thunkFiniStrOff, $02, 1, FiniThunkOff, 0);
   for i := 0 to ProcCount-1 do
     if ObjProcIsDefined(i) and ObjProcIsExported(i) then
       writeSym64(f, ObjProcStrOff[i], Byte(ObjProcBind(i) or 2), 1, Procs[i].BodyAddr, ObjProcSize(i));
@@ -3758,6 +3824,8 @@ begin
   for i := 0 to ExternalCount-1 do writeStrZ(f, ExternalLinkName(i));
   for i := 0 to SymCount-1 do
     if ObjDataIsImport(i) and ObjDataIsReferenced(i) then writeStrZ(f, Syms[i].Name);
+  if initThunkSym >= 0 then writeStrZ(f, OBJ_INIT_THUNK_NAME);
+  if finiThunkSym >= 0 then writeStrZ(f, OBJ_FINI_THUNK_NAME);
   writePad(f, relaTextOff - (strOff + strSize));
 
   { .rela.text. Section syms: 1 = .text, 2 = .data, 3 = .bss.
@@ -3903,12 +3971,14 @@ begin
   if hasInitArr then
   begin
     writeU64(f, 0);
-    writeRela64(f, 0, 1, 1, InitThunkOff);
+    if initThunkSym >= 0 then writeRela64(f, 0, initThunkSym, 1, 0)
+    else writeRela64(f, 0, 1, 1, InitThunkOff);
   end;
   if hasFiniArr then
   begin
     writeU64(f, 0);
-    writeRela64(f, 0, 1, 1, FiniThunkOff);
+    if finiThunkSym >= 0 then writeRela64(f, 0, finiThunkSym, 1, 0)
+    else writeRela64(f, 0, 1, 1, FiniThunkOff);
   end;
 
   { .shstrtab: 66-byte base blob, plus 29 bytes per array pair that exists. }

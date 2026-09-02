@@ -19966,11 +19966,21 @@ test-emit-obj: $(COMPILER)
 	# 4a-bis. --function-sections: INTERNAL CALLS BECOME RELOCATIONS.
 	#    The prerequisite step of
 	#    feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl. With one
-	#    .text section it has NO observable effect, so the claim asserted here is
-	#    exactly that: the LINKED BINARY IS BYTE-IDENTICAL with the flag on and
-	#    off, because the linker must compute the same displacement that was
-	#    baked. A step that changes nothing can only be verified by proving it
-	#    changed nothing.
+	#    .text section it has NO observable effect ON THE PROGRAM, so the claim
+	#    asserted here is exactly that: every ALLOCATABLE section of the linked
+	#    binary is byte-identical with the flag on and off, because the linker
+	#    must compute the same address that was baked. A step that changes
+	#    nothing can only be verified by proving it changed nothing.
+	#
+	#    IT WAS A WHOLE-FILE `cmp' UNTIL THE THUNKS GOT SYMBOLS. Once
+	#    .rela.init_array/.rela.fini_array named __pxx_init_thunk and
+	#    __pxx_fini_thunk instead of `.text + off', the flag began adding two
+	#    LOCAL entries to .symtab -- 88 bytes of file, none of it executable or
+	#    readable by the program. Whole-file `cmp' called that a failure. The
+	#    replacement is not weaker: it compares the allocatable sections
+	#    individually AND asserts the symbol delta is EXACTLY those two names
+	#    with nothing removed, so a change that quietly dropped or renamed a
+	#    symbol is caught here where `cmp' would only have said "differ".
 	#
 	#    ONE OBJECT PATH, each linked before the next compile overwrites it. Not
 	#    tidiness: gcc records the input object's name as an STT_FILE symbol, so
@@ -20000,8 +20010,13 @@ test-emit-obj: $(COMPILER)
 	  gcc -no-pie $(TESTTMP)/cfs.o -o $(TESTTMP)/cfs_on || { echo "c_function_sections: --function-sections object failed to link"; exit 1; }; \
 	  tools/expect_same.sh cfs_off "$$($(TESTTMP)/cfs_off)" "13" || exit 1; \
 	  tools/expect_same.sh cfs_on "$$($(TESTTMP)/cfs_on)" "13" || exit 1; \
-	  cmp -s $(TESTTMP)/cfs_off $(TESTTMP)/cfs_on || { echo "c_function_sections: the linked binaries DIFFER. A relocated call resolved to something other than the baked displacement -- compare .text before believing the addend."; exit 1; }; \
-	  echo "c_function_sections: internal calls relocate; the linked binary is byte-identical"; \
+	  tools/elf_alloc_same.sh $(TESTTMP)/cfs_off $(TESTTMP)/cfs_on 3 > $(TESTTMP)/cfs_alloc.log 2>&1 \
+	    || { echo "c_function_sections: the linked binaries differ in ALLOCATABLE content. A relocated call or thunk resolved to something other than the baked address."; cat $(TESTTMP)/cfs_alloc.log; exit 1; }; \
+	  grep -q 'symbols added: \[__pxx_fini_thunk __pxx_init_thunk \]' $(TESTTMP)/cfs_alloc.log \
+	    || { echo "c_function_sections: the flag changed the symbol table by something other than the two thunk symbols:"; cat $(TESTTMP)/cfs_alloc.log; exit 1; }; \
+	  grep -q 'removed: \[none\]' $(TESTTMP)/cfs_alloc.log \
+	    || { echo "c_function_sections: the flag REMOVED a symbol from the linked binary"; cat $(TESTTMP)/cfs_alloc.log; exit 1; }; \
+	  echo "c_function_sections: internal calls relocate; allocatable content identical, +2 thunk symbols"; \
 	else echo "gcc not installed; --function-sections link check skipped"; fi
 	# 4a-ter. --function-sections: VMT SLOTS AND @proc RELOCATE TOO.
 	#    4a-bis covers CallFix. Two other families name a proc BY INDEX and were
@@ -20012,9 +20027,17 @@ test-emit-obj: $(COMPILER)
 	#    the method leaves the slot pointing at whatever moved in, with no jump
 	#    for the linker to have been told about.
 	#
+	#    THE INIT AND FINI THUNKS TOO. They were the last two code references in
+	#    the object still bound to the .text SECTION symbol, and they cannot stay
+	#    that way for per-function sections: each thunk falls INSIDE the range of
+	#    whatever proc precedes it -- a different proc in every program -- so a
+	#    `.text + off' addend is a promise about a layout the linker is about to
+	#    change. They now have LOCAL FUNC symbols of their own.
+	#
 	#    Same claim and same shape as 4a-bis: with one .text there is no
-	#    observable effect, so what is asserted is that the LINKED BINARY IS
-	#    BYTE-IDENTICAL with the flag on and off. ONE OBJECT PATH, for the
+	#    observable effect ON THE PROGRAM, so what is asserted is that every
+	#    ALLOCATABLE section is byte-identical with the flag on and off, and
+	#    that the ONLY symbol-table change is the two thunk names. ONE OBJECT PATH, for the
 	#    STT_FILE reason 4a-bis records -- and it bites harder here, because the
 	#    first version of this row compared eo_off.o against eo_on.o and read
 	#    the one character of filename as a real difference twice, once in each
@@ -20043,11 +20066,24 @@ test-emit-obj: $(COMPILER)
 	  gcc $(TESTTMP)/fsm.o $(TESTTMP)/fsm_caller.c -o $(TESTTMP)/fsm_on || { echo "test_emit_obj: --function-sections object failed to link"; exit 1; }; \
 	  tools/expect_same.sh fsm_off "$$($(TESTTMP)/fsm_off)" "done99 pxx-emit-obj" || exit 1; \
 	  tools/expect_same.sh fsm_on "$$($(TESTTMP)/fsm_on)" "done99 pxx-emit-obj" || exit 1; \
-	  cmp -s $(TESTTMP)/fsm_off $(TESTTMP)/fsm_on || { echo "test_emit_obj: the linked binaries DIFFER -- a relocated VMT slot or @proc resolved to something other than the baked address."; exit 1; }; \
-	  echo "test_emit_obj: VMT slots and @proc relocate; the linked binary is byte-identical"; \
+	  tools/elf_alloc_same.sh $(TESTTMP)/fsm_off $(TESTTMP)/fsm_on 4 > $(TESTTMP)/fsm_alloc.log 2>&1 \
+	    || { echo "test_emit_obj: the linked binaries differ in ALLOCATABLE content -- a relocated VMT slot, @proc or thunk resolved to something other than the baked address."; cat $(TESTTMP)/fsm_alloc.log; exit 1; }; \
+	  grep -q 'symbols added: \[__pxx_fini_thunk __pxx_init_thunk \]' $(TESTTMP)/fsm_alloc.log \
+	    || { echo "test_emit_obj: the flag changed the symbol table by something other than the two thunk symbols:"; cat $(TESTTMP)/fsm_alloc.log; exit 1; }; \
+	  grep -q 'removed: \[none\]' $(TESTTMP)/fsm_alloc.log \
+	    || { echo "test_emit_obj: the flag REMOVED a symbol from the linked binary"; cat $(TESTTMP)/fsm_alloc.log; exit 1; }; \
+	  echo "test_emit_obj: VMT slots, @proc and the thunks relocate; allocatable content identical, +2 thunk symbols"; \
 	else echo "gcc not installed; --function-sections VMT link check skipped"; fi
 	#    NOTE, measured rather than assumed: the two `expect_same' rows above are
-	#    VACUOUS FOR THIS FAMILY and are kept only as a crash check. Poisoning
+	#    VACUOUS FOR THE VMT FAMILY and are kept only as a crash check -- but NOT
+	#    for the thunks, which is the one place the output does discriminate.
+	#    Poisoning the init-array addend (0 -> 8, so the array points 8 bytes
+	#    into the thunk) makes .init_array differ AND turns the program's output
+	#    from `done99 pxx-emit-obj' into `done': the initialiser ran wrong. So
+	#    this block has one family the byte-compare alone catches and one both
+	#    instruments catch, and neither instrument covers both.
+	#
+	#    The VMT half: Poisoning
 	#    the new addend (0 -> 8, so every relocated slot points 8 bytes into its
 	#    method) makes the linked binary DIFFER -- the control fires -- while
 	#    both programs still print `done99 pxx-emit-obj', because this fixture's

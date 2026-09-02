@@ -186,3 +186,47 @@ So the honest statement of the remaining work for step 2's first half is: give
 the init/fini thunks symbols, decide what an interface-method VMT slot should
 relocate against, and eliminate the six pinned-target call sites. None of those
 is a design question.
+
+## 2026-09-02 (frankA) — the thunks have symbols; two of the five are gone
+
+`.rela.init_array` and `.rela.fini_array` now name `__pxx_init_thunk` and
+`__pxx_fini_thunk`, LOCAL FUNC symbols in `.text`, with addend 0. Under
+`--function-sections` only, so the default object is byte-identical (verified by
+sha256 against one built before the change).
+
+That leaves **three** entries in a Pascal object and **zero** in a C one still
+bound to the `.text` section symbol — the three interface-method VMT slots whose
+`BodyAddr` is `-1`.
+
+**The verification method had to change, and that is worth reading before
+touching either test.** 4a-bis and 4a-ter asserted the LINKED BINARY was
+byte-identical with the flag on and off, which was the right assertion for a
+flag with no observable effect. Adding two symbols gives it one: the file grows
+88 bytes, and the account is exact — 2 × 24 bytes of `Elf64_Sym` plus 34 bytes
+of names is 82, plus 6 of padding. **None of it is executable or readable by the
+program.** Both blocks now compare every allocatable section individually via
+`tools/elf_alloc_same.sh` and additionally assert the symbol delta is EXACTLY
+those two names with nothing removed — stronger than `cmp`, which could only
+have said "differ".
+
+`elf_alloc_same.sh` carries two guards it needed on its first run:
+
+- **It counts what it compared and fails below a caller-supplied floor.** The
+  first version extracted sections with `objcopy`, compared them, and printed
+  `identical` having compared ZERO — the extraction silently produced nothing
+  and the loop body never ran.
+- **`LC_ALL=C` on both the `sort` and the `comm`.** Without it, `comm` warned
+  "file 1 is not in sorted order" on stderr, printed a 60-name added list and a
+  59-name removed list of the SAME symbols, and exited 0.
+
+**Poison control, run:** changing the init-array addend 0 → 8 makes
+`.init_array` differ AND turns the program's output from `done99 pxx-emit-obj`
+into `done`. So for the thunks BOTH instruments discriminate, where for the VMT
+slots only the byte-compare does — recorded in the test, because the two
+families sit in one block and neither instrument covers both.
+
+**One limit stated rather than discovered later:** the thunk symbols carry SIZE
+0, because a thunk is code no proc owns and its extent is recorded nowhere.
+That is fine for a relocation, which wants an address. It is NOT fine for
+`--gc-sections`, which wants a size, so whoever builds step 2's second half owes
+these two a real extent.
