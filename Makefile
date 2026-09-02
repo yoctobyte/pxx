@@ -11018,6 +11018,13 @@ test-core: $(COMPILER)
 	# survived); it is the portable half, and pinned/riscv32 prints "a 8|4 b FALSE".
 	./$(COMPILER) test/test_sizeof_string_matches_storage.pas $(TESTTMP)/test_sizeof_string26
 	tools/expect_same.sh test_sizeof_string26 "$$($(TESTTMP)/test_sizeof_string26)" "$$(printf 'a 8|8\nb TRUE\nc TRUE\nd TRUE\ne TRUE\nf TRUE\nOK')"
+	# ...and the SIZED spelling, which the row above does not reach: `string[N]`
+	# runs through the same SizeOf arms and kept answering the pointer width
+	# long after the bare `string` was fixed. Asserted against the MEASURED
+	# STRIDE, not against a constant, so it stays correct if `string[N]` is
+	# ever changed from an 8-byte length word to fpc's 1-byte shortstring.
+	./$(COMPILER) test/test_sizeof_stringn_matches_storage.pas $(TESTTMP)/test_sizeof_stringn26
+	tools/expect_same.sh test_sizeof_stringn26 "$$($(TESTTMP)/test_sizeof_stringn26)" "$$(printf 'alias      1\nvar        1\ninline     1\narrtype    1\narrvar     1\nelement    1\nfield      1\nrecord     1\nplainstr   1\nfillchar   111\nmove       111\ntruncate   11')"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26

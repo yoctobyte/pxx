@@ -29,7 +29,7 @@ type
     K: array[TKind] of Byte;        { 4  }
     D: array of Integer;            { handle }
     P: array[0..1] of TPt;          { 16 }
-    S: string[7];                   { 8  }
+    S: string[7];                   { 15 here, 8 in fpc -- see the rec.S row }
     C: Char;                        { 1  }
     N: TPt;                         { 8  }
   end;
@@ -51,6 +51,7 @@ var
   vK: array[TKind] of Byte;
   vP: array[0..1] of TPt;
   vD: array of Integer;
+  vS: string[7];
 
 procedure Check(const nm: string; got, want: Integer);
 begin
@@ -90,7 +91,19 @@ begin
   Check('var.D  dynamic', SizeOf(vD), SizeOf(Pointer));
 
   { --- non-array fields must be unchanged by the fix --- }
-  Check('rec.S  shortstring', SizeOf(r.S), 8);
+
+  { Asserted against the plain-var form, like the array rows above and for the
+    same reason -- this row used to freeze the number 8, and 8 was right for
+    the WRONG REASON. A `string[7]` occupies 15 bytes here (an 8-byte length
+    word plus 7 chars), and SizeOf answered the pointer width for every frozen
+    string, which on x86-64 is also 8. fpc's own answer is 8 too, at 7+1, so
+    the row agreed with fpc, with the declaration comment, and with nothing
+    that was actually in memory: FillChar(r.S, SizeOf(r.S), 0) cleared 8 of 15
+    bytes. The invariant -- a field sizes like a variable of the same type --
+    holds under either length-word width, so it survives the open question of
+    whether `string[N]` should become a 1-byte-prefixed shortstring.
+    bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more }
+  Check('rec.S  shortstring', SizeOf(r.S), SizeOf(vS));
   Check('rec.C  scalar', SizeOf(r.C), 1);
   Check('rec.N  nested record', SizeOf(r.N), SizeOf(TPt));
 

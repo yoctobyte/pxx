@@ -3950,7 +3950,7 @@ begin
                 if (szElemTk = tyRecord) and (ArrTypeElemRec[szAi] >= 0) then
                   prevTok := RecSize(ArrTypeElemRec[szAi]) * szFlatLen
                 else
-                  prevTok := TypeSlotSize(szElemTk) * szFlatLen;
+                  prevTok := SizeOfSlot(szElemTk, ArrTypeElemStrCap[szAi]) * szFlatLen;
               end;
             end
             else
@@ -3967,7 +3967,7 @@ begin
                 if AliasTk[aliasIdx] = Ord(tyRecord) then
                   prevTok := RecSize(AliasElemRec[aliasIdx])   { e.g. method-pointer-of-object alias }
                 else
-                  prevTok := TypeSlotSize(IntToTypeKind(AliasTk[aliasIdx]));
+                  prevTok := SizeOfSlot(IntToTypeKind(AliasTk[aliasIdx]), AliasStrCap[aliasIdx]);
               end
               else if FindEnumType(name) >= 0 then
                 prevTok := TypeSlotSize(tyInteger)   { enums are ordinal/integer-sized, cf. ParseTypeKind }
@@ -4046,7 +4046,7 @@ begin
                     if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                       prevTok := RecSize(Syms[sci].ElemRecName)
                     else
-                      prevTok := TypeSlotSize(Syms[sci].ElemType);
+                      prevTok := SizeOfSlot(Syms[sci].ElemType, SymStrCap[sci]);
                   end
                   else if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) then
                   begin
@@ -4081,14 +4081,14 @@ begin
                       if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                         prevTok := RecSize(Syms[sci].ElemRecName) * szFlatLen
                       else
-                        prevTok := TypeSlotSize(Syms[sci].ElemType) * szFlatLen;
+                        prevTok := SizeOfSlot(Syms[sci].ElemType, SymStrCap[sci]) * szFlatLen;
                     end
                     else if szNIdx = SymArrNDims[sci] then
                     begin
                       if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                         prevTok := RecSize(Syms[sci].ElemRecName)
                       else
-                        prevTok := TypeSlotSize(Syms[sci].ElemType);
+                        prevTok := SizeOfSlot(Syms[sci].ElemType, SymStrCap[sci]);
                     end
                     else
                     begin
@@ -4118,12 +4118,12 @@ begin
                     if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                       prevTok := RecSize(Syms[sci].ElemRecName) * Syms[sci].ArrLen
                     else
-                      prevTok := TypeSlotSize(Syms[sci].ElemType) * Syms[sci].ArrLen;
+                      prevTok := SizeOfSlot(Syms[sci].ElemType, SymStrCap[sci]) * Syms[sci].ArrLen;
                   end
                   else if (Syms[sci].TypeKind = tyRecord) and (Syms[sci].RecName >= 0) then
                     prevTok := RecSize(Syms[sci].RecName)
                   else
-                    prevTok := TypeSlotSize(Syms[sci].TypeKind);
+                    prevTok := SizeOfSlot(Syms[sci].TypeKind, SymStrCap[sci]);
                 end
                 else
                 begin

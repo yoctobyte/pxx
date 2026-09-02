@@ -235,6 +235,10 @@ end;
 { Defined further down this include; RegisterGeneralAlias below needs it to
   recognise a frozen-string alias, and the FPC seed build wants the forward. }
 function TypeIsFrozenString(tk: TTypeKind): Boolean; forward;
+{ Sizing a frozen string needs its CAPACITY as well as its kind, and
+  RecFieldByteSize -- which is above both -- is one of the callers that has one.
+  bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more }
+function SizeOfSlot(tk: TTypeKind; cap: Integer): Integer; forward;
 
 procedure RegisterGeneralAlias(noff, nlen, tk, rec: Integer);
 begin
@@ -2766,7 +2770,10 @@ begin
   if (etk = tyRecord) and (erec >= 0) then
     Result := RecSize(erec)
   else
-    Result := TypeSlotSize(etk);
+    { ...and a frozen `string[N]` field is cap+8, not the pointer width its KIND
+      reports -- the same shape as the array-element bug in this function's own
+      header, one type over. RecFieldStrCap already carries the N. }
+    Result := SizeOfSlot(etk, RecFieldStrCap(rec, field2));
   if not RecFieldIsArray(rec, field2) then Exit;
   { a dynamic-array field is a reference }
   if RecFieldDynDepth(rec, field2) > 0 then begin Result := TARGET_PTR_SIZE; Exit; end;
@@ -3602,6 +3609,36 @@ begin
     Result := cap + 1
   else
     Result := cap + 8;
+end;
+
+function SizeOfSlot(tk: TTypeKind; cap: Integer): Integer;
+{ TypeSlotSize, except that A FROZEN STRING'S SIZE IS NOT A FUNCTION OF ITS
+  KIND -- it is cap+8 (tyFixedString) or cap+1 (tyShortString), which is what
+  FrozenStrSlotSize above answers and what record fields, array elements, symbol
+  allocation and the ABI have always used. TypeSlotSize can only report the
+  kind, so it gave every `string[N]` a pointer width, and the sizing callers
+  that HELD a capacity never passed it.
+
+  That was not an FPC divergence -- it was SizeOf disagreeing with THIS
+  compiler's own storage. `SizeOf(array[0..2] of string[10])` answered 24 while
+  the elements measured 18 apart, so `FillChar(a, SizeOf(a), 0)` cleared 24 of
+  the 54 live bytes and left a[2] intact, and `Move(a, b, SizeOf(a))` copied
+  less than half -- both silent, both correct under FPC 3.2.2.
+
+  cap <= 0 keeps TypeSlotSize DELIBERATELY, and that is not an oversight: a zero
+  capacity means none was recorded, and the legacy overloaded tyString's slot is
+  described by TypeSlotSize itself as "struct pointer / inline". Its true size
+  is not knowable from the kind plus a zero, so widening it here would be a
+  guess dressed as a fix. Every `string[N]` records its N -- that is the case
+  measured, and the case this changes. A plain managed `string` is tyAnsiString,
+  which TypeIsFrozenString excludes, so it keeps the pointer width that is
+  honestly its own (measured stride 8).
+  bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more }
+begin
+  if TypeIsFrozenString(tk) and (cap > 0) then
+    Result := FrozenStrSlotSize(tk, cap)
+  else
+    Result := TypeSlotSize(tk);
 end;
 
 { The RETURN half of the ABI oracle lives in abi.inc with the parameter half —
