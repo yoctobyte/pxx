@@ -4,7 +4,7 @@ title: "`TAlias(s)[1]` yields the WHOLE STRING, no diagnostic — FPC yields the
 track: P
 prio: 60
 type: bug
-status: backlog
+status: done
 found: 2026-09-01
 found-by: frankH
 owner: ""
@@ -147,3 +147,75 @@ next person does not re-find it and file it: accepting what FPC rejects is not a
 defect, and `F('literal')` into a typed-pointer parameter is reachable only by
 code the programmer already got wrong. It is `rejected/` territory, not compat.
 It is mentioned at all because the crash is loud enough to look like a lead.
+
+---
+
+## 2026-09-02 (frankH) — FIXED, both faces, all four string flavours. `9339d6661`
+
+Fixed rather than left as an acceptance row for the refactor, because the fix
+that was available **deletes a special case instead of adding a walker** — which
+is the thing the refactor exists to do, one arm at a time. No fifth hand-rolled
+postfix walk was written.
+
+### What it actually was
+
+The C4 arm is correct that a string-typed alias cast is a value-level no-op. Its
+mistake was `Exit`, which returned with the `[1]` still standing in the token
+stream. With an index following, the base IS the operand — there is nothing to
+reinterpret — so the arm now falls through to **the suffix loop that already
+stands twenty lines below it**, the same walk `PR(raw)^.s[2]` goes through, which
+already states the string-index rule (`[i]` on a string yields tyChar). The
+statement side is the same shape: 850a9e4cd's guard tests `tkAssign`, so an
+INDEXED target still arrived wrapped in `AN_PTR_CAST`/`tyPointer` and the store
+went nowhere; it now drops the wrapper and hands the string to
+`ParseClassRecordSelectors`, which reads the base kind off the node.
+
+### The sibling, found by grepping for one
+
+**`type TS = String[20]` was broken differently and nobody had reported it.** It
+is not ordinal, not float, not record, so it fell into the POINTER fall-through
+and read its index through the PChar adapter: `TS(sh)[1]` answered an empty
+character where fpc 3.2.2 answers `w`, and `TS(sh)[1] := 'W'` wrote into the
+wrong byte. Both silent, both on the pinned compiler too. WideString and
+UnicodeString aliases were refused outright by the pin and now work.
+
+Only the INDEXED shape joins the new path. The frozen-string VALUE shape
+(`WriteLn(TS(sh))`, `Length(TS(sh))`, `Pos(TS('rl'), sh)`) was **measured
+correct on the pin** and is left on the path that produced it — widening it
+would have been a change with no evidence behind it.
+
+### The 2026-09-01 sweep's conclusion held
+
+That entry swept the tree for `Ident(...)[` and found zero casts to a string or
+array type followed by an index — so nothing depended on the swallow, and
+nothing broke. The pointer-cast-then-index positive control it named
+(`@PUInt8(instance)[p^.GetRef]` in `lib/rtl/typinfo.pas`) is green.
+
+### Controls, and one of them corrected the arm's own comment
+
+`test/test_string_alias_cast_index.pas`, 21 rows in `test-core`, every
+expectation fpc 3.2.2's answer on the same source. The pinned compiler **refuses
+the file outright**.
+
+The two rows that pin the OTHER direction — the cast must not become a pointer
+reinterpret — were chosen by RUNNING the control, not by reading the arm's
+comment. With the value-no-op arm disabled and the compiler rebuilt,
+`F(tbtstring('ab'))` binds the **Pointer** overload and answers `ptr`, and
+`tbtstring('x') + 'y'` **segfaults**. The `Pos` and `Length` rows stayed GREEN
+under that same broken build — so the arm's own comment, which names
+`Pos(tbtstring(' '), s)` as the thing that broke when it was tagged tyPointer,
+no longer describes a case that can fail. They are coverage here, not the
+control, and the test says so.
+
+### Two of the three Pascal Script walls are down
+
+`tbtwidestring(p^.twidestring)[1]` — the shape `uPSCompiler.pas` uses 13 times
+in one file, at line 1930 — compiles and runs, in both value and argument
+position. **`SetLength(tbtstring(p^.tstring), n)` (line 2753) is a DIFFERENT arm
+and stays open**: `SetLength expects a string variable in IR codegen`, because
+the lowering wants an `IR_LEA` and a cast is not one. That is the residual
+question and it belongs to [[feature-embed-pascal-script]]; naming it here so
+the exculpation has an owner.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

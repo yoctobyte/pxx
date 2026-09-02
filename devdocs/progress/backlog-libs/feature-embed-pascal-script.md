@@ -3,7 +3,7 @@ prio: 45  # auto
 track: B
 type: feature
 status: backlog
-summary: "ATTEMPTED 2026-09-01, and the wall is MAPPED rather than guessed at. uPSUtils compiles CLEAN on the pinned stable, first try, no flags beyond -Mobjfpc. uPSCompiler hits exactly three walls, and TWO OF THEM ARE ONE ROOT CAUSE: (1) missing PByteArray -- FIXED, it is a System-level FPC type and now lives in lib/rtl/sysutils.pas; (2+3) a value cast to a string alias is not transparent to the postfix/lvalue tail, filed as bug-p-a-cast-to-a-string-alias-silently-drops-a-following-index, whose own root cause is refactor-p-one-lvalue-path-for-statements-and-expressions. uPSRuntime has not been reached: it stops earlier on a `{$IF}` comparison. NOT vendored -- probed against a clone outside the repo, which is the reversible half of the ticket's own two options."
+summary: "ATTEMPTED 2026-09-01, wall MAPPED rather than guessed at, and TWO OF THE THREE ARE NOW DOWN. uPSUtils compiles CLEAN on the pinned stable, first try, no flags beyond -Mobjfpc. uPSCompiler hit three walls: (1) missing PByteArray -- FIXED, a System-level FPC type, now in lib/rtl/sysutils.pas; (2) a value cast to a string alias dropped a following INDEX -- FIXED 2026-09-02 (9339d6661), so `tbtwidestring(p^.twidestring)[1]`, the shape that file uses 13 times, compiles and runs; (3) STILL OPEN and it is the only one left: `SetLength(tbtstring(p^.tstring), n)` (line 2753) answers `SetLength expects a string variable in IR codegen` -- a DIFFERENT arm from (2), the lowering wants an IR_LEA and a cast is not one. uPSRuntime has not been reached: it stops earlier on a `{$IF}` comparison. NOT vendored -- probed against a clone outside the repo, which is the reversible half of the ticket's own two options."
 ---
 
 # RemObjects Pascal Script — compile under pxx (embeddable scripting)
@@ -206,3 +206,37 @@ The dialect gap is smaller than the ticket assumed and it is concentrated:
 **land the cast-transparency refactor and re-probe.** That is one change, it
 clears two of three walls here, and it closes four tickets elsewhere. Vendoring
 and the smoke test are downstream of that, not of a long tail of small gaps.
+
+
+---
+
+## 2026-09-02 (frankH) — wall 2 is down; wall 3 is a different arm and is the only one left
+
+[[bug-p-a-cast-to-a-string-alias-silently-drops-a-following-index]] is fixed
+(`9339d6661`). Verified on the exact shape this file uses rather than on the
+ticket's abstraction of it:
+
+```pascal
+type tbtwidestring = WideString;
+     PRec = ^TRec; TRec = record twidestring: tbtwidestring; end;
+c := tbtwidestring(p^.twidestring)[1];      { was: expected ')' before '[' }
+TakeW(tbtwidestring(p^.twidestring)[2]);    { was: expected comma or close paren }
+```
+
+Both compile and run and answer what fpc 3.2.2 answers. The pinned compiler
+refuses both. That is `uPSCompiler.pas:1930` and the 13 occurrences of the shape
+in that one file.
+
+**Wall 3 is NOT the same bug and must not be assumed to have gone with it.**
+`SetLength(tbtstring(p^.tstring), 8)` still answers *"SetLength expects a string
+variable in IR codegen"* — measured today, after the fix. It is a different arm:
+the `specialId = 101` lowering requires an `IR_LEA` target and a cast node is
+not one, so this is the SetLength lvalue path rather than the postfix tail. The
+minimal repro is the three lines above with the string field. Whoever takes it
+should file or fix it in Track A/P and link it here; that is the residual
+question this note is naming an owner for.
+
+**Still not vendored, still no clone in the tree** — the numbers above come from
+minimal repros of the shapes the 2026-09-01 attempt recorded, not from a fresh
+build of the upstream file. Re-running the real attempt is the next step and it
+needs the clone back.

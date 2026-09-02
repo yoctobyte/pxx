@@ -108,3 +108,33 @@ about, arriving by a fourth spelling. Regression test:
 - **Two of the remaining shapes refuse loudly and one is silent.** If the
   refactor is ranked on risk removed rather than tickets closed, the silent one
   is the whole argument.
+
+---
+
+## 2026-09-02 (frankH, later) — the surface is now ONE shape, and the silent one is gone
+
+[[bug-p-a-cast-to-a-string-alias-silently-drops-a-following-index]] is fixed
+(`9339d6661`), so the divergence list from this morning's sweep reads:
+
+| | |
+| --- | --- |
+| string-alias cast, indexed, read AND written | **fixed** — all four string flavours, matching fpc 3.2.2 |
+| [[bug-p-a-class-cast-cannot-index-a-default-property-as-an-assignment-target]] | still open, and it **refuses loudly** |
+
+**This ticket's argument has changed and whoever ranks it should know how.** The
+2026-09-01 sweep noted that *"if the refactor is ranked on risk removed rather
+than tickets closed, the silent one is the whole argument."* That silent one is
+now fixed, so the remaining case announces itself with a diagnostic. The ticket
+is not stale — two lvalue parsers is still the design flaw — but the risk half
+of its case is spent, and what is left is tidiness plus one loud refusal.
+
+**And the fix was not a microfix**, which is the part that bears on the refactor
+itself: it DELETED a special case. The arm returned early with the subscript
+still in the token stream; it now falls through to the suffix loop already
+standing below it, and the statement side hands the string to
+`ParseClassRecordSelectors` rather than walking it. That is this ticket's own
+remedy applied to one arm, and it worked without the flag-passing hand-off the
+body above worries about — because there was no resolution step to protect, only
+an `Exit` to remove. Two arms down by the same move (the record-cast twin in
+`done/` was the first), which is evidence the unification is tractable
+incrementally rather than as one change.
