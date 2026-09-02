@@ -148,4 +148,4 @@ x86-64 oracle on all five cross targets, except fm and raytracer on i386, which
 that last blocker covers.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 995b1daef.
