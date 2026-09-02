@@ -115,8 +115,9 @@ point rather than proceeding.
 **Why is asking a frozen prefix its width a per-site decision at all?**
 
 Three sites carry a comment telling the next author not to read the width from
-`IntToTypeKind` — aarch64 `:2022`, riscv32 `:503`, arm32 `:1299` — **and arm32
-violated its own comment at four call sites.** `IRStrTkOf`'s docstring already
+`IntToTypeKind` — **cited by construct, never by line**: `IREmitNodeAarch64`,
+`EmitFrozenStoreRISCV32`, `EmitArm32StringParts` — **and arm32 violated its own
+comment at four call sites.** `IRStrTkOf`'s docstring already
 prescribes the remedy verbatim. The fix was designed, named, documented and
 applied on aarch64; arm32's sites never got it.
 
@@ -160,3 +161,6 @@ yours to release.
   whenever a fix moves which row crashes; it already moved once (first killer was
   `assign from field`, now `compare field to literal`), and that single row is
   currently hiding the verdict of eleven rows behind it on two backends.
+- **Cite by CONSTRUCT, not by line.** Two of the three line numbers this document
+  originally carried had already drifted within the same evening — arm32's onto a
+  procedure header. **A stale line number does not error; it points somewhere.**
