@@ -178,3 +178,55 @@ known. That keeps `AsmBytes` as the one encoder and adds no second path.
 hoped for, but not allocator work either. It is an AT&T front end plus three
 mnemonics plus an operand table on one IR node. The hard refusal stays for every
 constraint not on the table above.
+
+## IMPLEMENTED 2026-09-02 (frankB) — what works, what still refuses
+
+`compiler/asmatt.inc` reads the AT&T template and hands each instruction to
+`AsmDispatch`; `CAsmBuildBlock` (cparser.inc) binds the operands. Landed as
+`998ccb249` (adc/sbb/cmc), `f892c91aa` (operand capture), `802dba4e8` (the
+reader), `8b89a201d` (operands + a ModRM fix).
+
+**Supported:** `"r"`, `"rm"`, `"m"`, the fixed-register letters `a b c d S D`,
+matching digits, and `memory`/`cc`/register clobbers. x86-64 only.
+**Still refused, by name:** `"+r"`, `[sym]`, `&` earlyclobber, `asm goto`, every
+other constraint letter, every mnemonic not in the reader's base list, template
+labels and symbol operands, and any non-x86-64 target.
+
+### Verified
+
+- Three of the four x86-64-reachable arms of `tls_sp_c32.c` carried **verbatim**
+  into `test/casm_gnu_operands.c` print exactly what `gcc -O0` prints for the
+  same source. Carry inputs are chosen so a dropped carry cannot pass.
+- `--emit-obj` on the real `networking/tls_sp_c32.c` succeeds and the object
+  defines `curve_P256_compute_pubkey_and_premaster`.
+- `tools/casm_att_diff.py`: 40 AT&T instructions, each disassembling exactly as
+  gas assembles the same text, with a swapped-operand positive control.
+
+### The scoping was wrong in a useful direction
+
+Pinning made the *allocator contract* a non-problem — there is no allocator, so
+nothing is live to preserve, and matching constraints are free by construction.
+The real cost was the AT&T-vs-Intel syntax front. And the feature needed **no IR
+node, no codegen change and no allocator**: operands ride through ordinary
+compiler-made locals in synthesised C statements, which works only because
+`AllocVar` fixes a C local's frame offset at declaration time.
+
+### It found a live pre-existing miscompile
+
+`EmitModRMMem` left the ModRM reg field unmasked, so REX.R's bit landed in MOD.
+Correct by accident for a disp8, corrupting for a zero displacement with
+r8..r15. Reachable from Pascal inline asm and present in the pin. Fixed in
+`8b89a201d`; see the LOGBOOK entry.
+
+### READ THIS BEFORE REPRODUCING: `--pinned` shows a PASS
+
+**The pinned compiler does not define `__GNUC__`** (verified with an `#error`
+probe), so it takes `tls_sp_c32.c`'s portable `#else` arm and compiles the file
+clean. `__GNUC__` was added after the pin. Reproduce with `compiler/pascal26`,
+and put a poison `#error` at the `#elif` to learn which arm you are on — the pin
+does not error here, it answers correctly about a different compiler.
+
+### Not verified here: the 400-object link at 258 applets
+
+That claim is frankD/frankuser's measurement and this session did not re-run it.
+What is shown above is that the one TU compiles and defines the missing symbol.
