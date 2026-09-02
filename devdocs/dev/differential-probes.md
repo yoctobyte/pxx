@@ -315,6 +315,36 @@ things rot: *"Two unowned tools shipped in a night I spent documenting how unown
 things rot. They are fine today because I am the only reader."* Indexing them is the
 whole fix; there is nothing else wrong with them.
 
+## PIN THE FPC MODE when you compare BY HAND — the default is not objfpc
+
+`tools/fpc_diff_probe.sh` passes `-Mobjfpc` and is fine. The trap is the
+hand-run comparison you do while chasing something — `fpc foo.pas`, then eyeball
+it against pxx — because **FPC's default mode is `fpc`, where `Integer` is 2
+bytes**, and pxx's is 4.
+
+Measured 2026-09-02, chasing a real Pascal bug:
+
+```
+                        pxx      fpc (default)   fpc -Mobjfpc / -Mdelphi
+SizeOf(Integer)          4            2                    4
+SizeOf(user record of
+  three Integers)       12            6                   12
+```
+
+The hand-run said `6 6 6` against pxx's `12 12 12` and read as a fresh
+three-way divergence in the exact area under repair. It is not a divergence at
+all — the two compilers were asked different questions. A whole class of size,
+layout, overflow and range findings will look wrong this way, and the numbers
+are plausible enough (exactly half) to be written into a ticket.
+
+**So: `fpc -Mobjfpc -Sh` for any hand comparison, or use the probe.** And if a
+hand-run divergence is a clean factor of two on an integer-width-sensitive
+quantity, suspect the mode before you suspect the compiler.
+
+This is the same animal as `NAME OR PIN YOUR INPUT` in the playbook: an
+unpinned default is an inferred input, and it is lossy in a way that does not
+error.
+
 ## The rules every one of these shares
 
 These are not style preferences. Each was learned by chasing a phantom.

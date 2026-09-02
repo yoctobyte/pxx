@@ -6086,3 +6086,52 @@ size but `TypeStorageSize(tyUnknown)`, i.e. nothing recorded at all.
 
 **Re-measure the ticket's own numbers before you accept its diagnosis.** It
 costs one compile, and a stale number does not error — it points somewhere.
+
+
+## A BROKEN INSTRUMENT ALMOST ALWAYS REPORTS THE NULL RESULT — which is why "I found nothing" needs the control and "I found something" often does not
+
+The asymmetry, and it is the reason guards-that-cannot-fail survive: **a
+spurious FINDING gets investigated, and a spurious ABSENCE gets filed.** So the
+broken instrument that reports something is caught by the next step, and the
+broken instrument that reports nothing becomes a fact in a ticket.
+
+Worked out with frankb-a9 on 2026-09-02, from two independent failures the same
+day that both broke toward *no finding*:
+
+- A `comm` intended to count how many library types are declared under a builtin
+  type name. The builtin list had ten names per line, so it compared whole lines
+  and could never match anything. It reported **zero collisions** — the expected
+  and convenient answer. The real answer was one.
+- A **pinned-binary control** used as a cheap "before" run. A pin freezes the
+  compiler BINARY, not `lib/rtl` or `lib/crtl`, which it reads live from the
+  working tree. So a change that includes a library file makes the "old"
+  compiler read the NEW library and reproduce the fix — the control passes by
+  showing **no difference**. That one cost a day: two failing tests were blamed
+  on the wrong session's commits.
+
+Neither errored. Both answered. Both answered *nothing to see*.
+
+**The operative practice:**
+
+1. **Every negative result needs a positive control.** Not every positive one
+   does. Budget accordingly instead of controlling everything equally.
+2. **Draw the control from the population the question is about**, and make it
+   a case the instrument MUST report — inject a known-present item and assert it
+   comes back. The `comm` above passed every plausibility check and failed this
+   one instantly.
+3. **State the precondition as a BRANCH.** Before quoting a pinned control,
+   `git diff --stat` and assert the change touches nothing the pinned binary
+   reads. A precondition you do not branch on is a comment.
+
+### Authorship confers no immunity
+
+The `comm` was built by the person who had written the "a guard that cannot
+fail prints PASS" rule into CLAUDE.md that same morning, while deliberately
+bounding a blast radius, on a day spent finding exactly this class of defect in
+other people's tickets. It still returned the answer they expected and was
+nearly shipped.
+
+So this is not a rule about carelessness or about other people's instruments.
+**It is a thing you build by accident while checking something else, on the day
+you are most alert to it.** The defence is mechanical — inject a must-report
+case — precisely because vigilance is not one.
