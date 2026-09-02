@@ -6739,7 +6739,28 @@ begin
     NOT here: PChar has its own dedicated handling (PChar<->string conversions, the
     NUL-terminated model), and routing it through the generic builtin-pointer alias
     would bypass that. }
-  else if CaseEqual(nm, 'pshortstring') then Result := tyShortString
+  { PShortString MUST ANSWER WHAT `ShortString` ITSELF ANSWERS, and until
+    2026-09-02 it did not: `shortstring` as a TYPE NAME maps to a 255-cap
+    tyFixedString (pasparser_decl.inc:542, a documented interim until the
+    byte-prefix codegen lands), while this line made the POINTEE tyShortString,
+    whose slot rule is cap+1. Two names for one type, disagreeing about where
+    the characters start -- the pointee looked for them at offset 1 and the
+    storage has them at offset 8.
+
+    Measured before the fix, `var s: ShortString; p := @s; s := 'hello'`:
+    `WriteLn(p^)` printed ~1000 NUL bytes where FPC prints `hello`, while
+    `Length(p^)` and `t := p^` were both CORRECT -- the length word is at offset
+    0 under both conventions and the two disagree only about its WIDTH, so the
+    low byte reads right on a little-endian target. Half-working, which is the
+    shape that survives review.
+
+    This also makes tyShortString genuinely unreachable-with-a-value from
+    source, which is what the byte-prefix feature's phase 2 needs: it can then
+    change that kind's codegen without any source spelling observing it. The two
+    names flip TOGETHER at the re-type, and they must stay together -- that is
+    the whole content of this comment.
+    bug-p-a-pshortstring-deref-reads-chars-at-the-wrong-prefix-offset }
+  else if CaseEqual(nm, 'pshortstring') then Result := tyFixedString
   else Result := tyUnknown;
 end;
 

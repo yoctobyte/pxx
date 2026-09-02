@@ -1,12 +1,12 @@
 ---
-track: P
+track: A
 prio: 60
 type: bug
 blocked-by: []
 found: 2026-09-02
 found-by: frankB
 owner: —
-summary: "`PShortString` is the one spelling that reaches tyShortString from ordinary source, and it already mixes the two prefix conventions -- but ONLY on the direct-write path, which is the part that makes it survive review. Measured 2026-09-02 against FPC 3.2.2: for `var s: ShortString; p := @s`, `WriteLn(p^)` prints ~1000 NUL bytes where FPC prints `hello`, while `t := p^` (the COPY path) and `Length(p^)` are both CORRECT. Storage dumped: `05 00 00 00 00 00 00 00 h e l l o` -- so `ShortString` the TYPE NAME is tyFixedString (8-byte length word, SizeOf 263 vs FPC 256), while `PShortString` maps its POINTEE to tyShortString (`pasparser_lval.inc:6742`), whose slot rule is cap+1. Two names for one type disagreeing about the prefix width. MATTERS BEYOND ITSELF: this is the live, reachable instance of the exact failure predicted for `lib/rtl/typinfo.pas`'s RTTI name reader after the byte-prefix flip -- a correct Length beside empty content, arriving far from the cause -- so it is a ready-made positive control for feature-p-implement-the-real-tyshortstring-byte-prefix-layout rather than one that has to be built. Note the copy path being correct means an assertion on `t := p^` cannot see this bug; assert the CHARS on the direct path."
+summary: "CAUSE CORRECTED 2026-09-02 -- my first analysis was WRONG and the bug is FOUR TIMES WIDER than filed. I reported this as a PShortString-specific prefix-offset mismatch (pointee tyShortString, cap+1, vs storage tyFixedString, cap+8). Measured after making those two names agree: the mapping WAS inconsistent and is now fixed, and THE BUG DID NOT MOVE. It is general to every frozen-string POINTER DEREF -- `var s: string[10]; p: ^string[10]; p := @s; WriteLn(p^)` prints blanks exactly like the ShortString spelling, where FPC prints the string. So the prefix mismatch was real but incidental; PShortString was simply the first spelling I tried. THE SHAPE THAT MATTERS IS UNCHANGED AND IS WHY THIS IS STILL WORTH A TICKET: only the DIRECT-WRITE path is wrong. `t := p^` and `Length(p^)` are both CORRECT for both spellings, and `lib/rtl/typinfo.pas` derefs RTTI name pointers exclusively as `result := ps^` -- the correct path. So an RTTI name test passes today, and would keep passing through that half after the byte-prefix flip: a guard that cannot fail, drawn from exactly the population the question is about. Assert the CHARS on the DIRECT path or this is invisible. Track A rather than P: the divergence is in deref codegen, not in the parser."
 ---
 
 # `PShortString` derefs a `ShortString` at the wrong prefix offset

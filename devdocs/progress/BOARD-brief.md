@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:9 unfinished:26 blocked:6 backlog:5 backlog-umbrella:7 backlog-core:137 backlog-nilpy:96 backlog-tools:6 backlog-pascal:55 backlog-decide:33 backlog-libs:16 backlog-cfront:18 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3150 rejected:72`
+`working:9 unfinished:26 blocked:6 backlog:5 backlog-umbrella:7 backlog-core:138 backlog-nilpy:96 backlog-tools:6 backlog-pascal:54 backlog-decide:33 backlog-libs:16 backlog-cfront:18 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3150 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -87,7 +87,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 - `[p 62] [N]` feature-nilpy-enum-class
+- `[p 60] [A]` bug-a-a-frozen-string-pointer-deref-prints-blanks-in-a-direct-write
 - `[p 60] [C]` bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero
-- `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
 
 _360 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
