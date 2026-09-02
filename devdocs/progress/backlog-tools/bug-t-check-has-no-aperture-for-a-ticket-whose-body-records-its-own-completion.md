@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 45
+prio: 60
 type: bug
 status: backlog
 owner: ""
@@ -70,3 +70,28 @@ would cover for each other go stale together.
 
 > **A ticket's "Remaining" section is a claim with a date on it, exactly like its
 > status line.**
+
+## A second live instance, 2026-09-02 — and this ticket was duplicated
+
+frankZ hit the same defect in the wild: conformance shard0 was claude-T's fix
+from 09-01, still wired as an umbrella blocker three days later, because the
+BODY said RESOLVED and the frontmatter did not. `ready`/`next` kept handing it
+out. Same mechanism as the 2026-08-30 `feature-random-library` dispatch above,
+so this is a recurrence and not a one-off.
+
+A loose scan finds **~15 candidates** across the open folders. **That number is
+not trustworthy** and must not be used as a work estimate: it comes from
+grepping bodies for resolution-shaped prose, which is a filter answering about
+the filter list rather than about the repo. It is a reason to build the aperture,
+not a backlog.
+
+**This ticket was filed a second time**, as
+`bug-t-tickets-announce-resolution-in-the-body-while-frontmatter-keeps-them-open`
+(frankuser, 2026-09-02, prio 60), by a session that searched and did not find
+this one. Merged here and the duplicate deleted. The duplication is itself
+evidence for the aperture: the 74-ticket Track T backlog is not searchable
+enough for a filer to reliably discover that their finding already exists, and
+`check` has no aperture for a duplicate either.
+
+**Prio raised 45 -> 60**, taking the duplicate's number: two independent live
+dispatch costs in four days is a higher rate than the original filing knew about.
