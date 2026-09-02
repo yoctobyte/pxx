@@ -125,3 +125,39 @@ running more seeds of the same shape.
 
 It does **not** show there are no cross bugs in those rungs. 294 seeds is 294
 seeds; a clean run is evidence about the rate, not proof of absence.
+
+
+## Re-measured 2026-09-02 (frankC), during the shortstring cluster census
+
+Still open, on `0c487458fa67`. **riscv32 now PASSES** — this ticket predates
+that, and it matters because it means a non-x86-64 reference implementation
+already exists to copy from.
+
+Six shapes, five targets:
+
+| | shape | x86-64 | i386 | aarch64 | arm32 | riscv32 |
+| --- | --- | --- | --- | --- | --- | --- |
+| a | `p^ := c` (this ticket) | ok | REFUSED | REFUSED | REFUSED | ok |
+| b | `p^ := 'abc'` literal via pointer | ok | ok | ok | ok | ok |
+| c | `p^.a := 1`, string field present | ok | ok | ok | ok | ok |
+| d | `p^.s := 'abc'` string field via pointer | ok | ok | ok | ok | ok |
+| e | **`p^.s := ch` char into a string FIELD** | ok | REFUSED | REFUSED | REFUSED | ok |
+| f | `s := ch` char into string, NO pointer | ok | ok | ok | ok | ok |
+
+**Row e is this ticket's sibling and was not recorded here**: the same defect
+reached through a record field rather than a bare pointer. Row f shows it is not
+the char-to-string conversion; row b shows it is not the pointer store. The
+refusal is exactly `char VALUE + string DEST + POINTER store`.
+
+Note rows c and d are [[bug-cross-pointer-store-record-with-shortstring-field]],
+which is DONE (`7716bd2a`) — so the record spelling of the pointer store was
+fixed and this spelling was not. `normalise-dont-special-case`: one arm of a
+double case, and the sibling only becomes visible with both on one page. **Fix
+both arms, and check row e as well as row a.**
+
+## Not blocked by the byte-prefix layout
+
+[[feature-p-implement-the-real-tyshortstring-byte-prefix-layout]] would change
+`[len:8][char]` to `[len:1][char]`, which makes each emitter marginally simpler
+and removes none of them. This does not need to wait for it, and it does not
+close if that lands.
