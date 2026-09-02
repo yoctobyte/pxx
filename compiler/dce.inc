@@ -238,8 +238,8 @@ begin
     on from one measurement would leave the failing one unidentified. }
   else if EmitSharedMode then why := '--shared: .dynsym/GOT surface is unmeasured against this pass'
   else if DebugInfo then why := '-g line/frame tables carry code offsets'
-  else if not IsPascalFrontend then
-    why := 'only the Pascal frontend is wired up so far'
+  else if (not IsPascalFrontend) and (not IsCFrontend) then
+    why := 'only the Pascal and C frontends are wired up so far'
   else if AsmEntryOff <> 0 then why := 'the .asm frontend overrides the entry point';
   if why <> '' then begin DceReportLine('off: ' + why); Exit; end;
 
@@ -296,6 +296,11 @@ begin
   while i < IramCallFixCount do begin DceMark(IramCallFix[i].ProcIdx); Inc(i); end;
   i := 0;
   while i < InitProcCount do begin DceMark(InitProcs[i]); Inc(i); end;
+  { an entry stub's hand-patched call -- the C frontend's `main`, and its
+    pre-main initializer shell. See RecordEntryRoot for why a CallFix edge
+    cannot exist for these. }
+  i := 0;
+  while i < EntryRootCount do begin DceMark(EntryRootProc[i]); Inc(i); end;
   i := 0;
   while i < FiniProcCount do begin DceMark(FiniProcs[i]); Inc(i); end;
   DceMark(FiniRunnerProc);

@@ -1907,6 +1907,7 @@ begin
     hand-copied negation chains cost. }
   IsPascalFrontend := not (isC or isBasic or isNilPy or isAsm or isRust or isAda
                            or isZig or isLol or isWs or isF90 or isAlgol or isErl);
+  IsCFrontend := isC;
 
   { NilPy string model: a NilPy `""` must be a real zero-length block, not nil,
     so `is None` can tell None from the empty string
@@ -2001,6 +2002,7 @@ begin
   GlobFixCount := 0; CallFixCount := 0; ProcAddrFixCount := 0;
   CallFixCapacity := 0; CodeRefCapacity := 0; GlobFixCapacity := 0;
   CodeRefCount := 0;
+  EntryRootCount := 0;
   XtEntryPcAnchor := -1;
   IramCallFixCount := 0;
   SymCount := 0; ProcCount := 0;

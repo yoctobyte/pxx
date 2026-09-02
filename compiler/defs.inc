@@ -2825,6 +2825,19 @@ var
   CodeRefCount  : Integer;
   CodeRefCapacity : Integer;
 
+  { Procs an ENTRY STUB reaches by a hand-patched call rather than through
+    CallFix. There is no edge to find: the C frontend emits its stub before
+    `main` has a Procs[] row at all, patches the displacement afterwards with
+    CPatchStubCall, and nothing in the graph ever says the stub called anything.
+    A reachability pass reading only CallFix therefore concludes a C program's
+    `main` is unreachable and deletes it -- measured, 43 of 792 bodies live and
+    a SIGSEGV. Registered by RecordEntryRoot at the patch point, so a future
+    hand-patched stub gets this without anyone remembering the rule.
+    bug-a-dce-on-a-c-program-drops-main-because-nothing-roots-the-c-entry-path }
+  EntryRootProc : array of Integer;
+  EntryRootCount : Integer;
+  EntryRootCapacity : Integer;
+
   { xtensa long entry jump: the code offset a0 holds after the entry stub's
     `call0`, i.e. the runtime PC anchor the entry literal is measured FROM.
     -1 = the short 3-byte `j` was emitted and jmpPatch is a `j` to patch.
@@ -6243,6 +6256,12 @@ var
     leading # as an attribute. Eleven jobs went red on one missing term.
     Add a frontend by adding a term to the ONE assignment. }
   IsPascalFrontend: Boolean;
+  { ...and the same for C, spelled in the same place for the same reason. A
+    POSITIVE test, not another negation chain: everything downstream asks "is
+    this C", and `not IsPascalFrontend` answers "is this any of eleven other
+    languages" -- a different question that merely agrees on a two-frontend
+    build. }
+  IsCFrontend: Boolean;
   { PyLexAll is APPENDING to the token stream (a `.py` MODULE pulled in by an
     import) rather than lexing the main program: it must not reset TokCount or
     the shared token-char buffer (feature-nilpy-py-module-loader). }

@@ -25,6 +25,7 @@
  * feature-c-corpus-busybox-multi-applet
  */
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <unistd.h>
@@ -91,6 +92,9 @@ int main(void) {
   p = fork();
   if (p == 0) { _exit(7); }
   printf("14 %d\n", p > 0);
+  /* Poison BEFORE the reap, so row 18 below reads what wait4 wrote and not
+     what the frame happened to hold. */
+  memset(&ru, 0xAB, sizeof ru);
   /* Each read sequenced on its own: an argument list has no evaluation order. */
   r = wait4(p, &st, 0, &ru);
   printf("15 %d\n", r == p);
@@ -98,10 +102,30 @@ int main(void) {
   printf("16 %d\n", rc);
   rc = WEXITSTATUS(st);
   printf("17 %d\n", rc);
-  /* ru was written -- ru_maxrss is the field that cannot legitimately be 0 for
-     a process that ran at all. This is the positive control on the fourth
-     argument actually reaching the kernel. */
-  printf("18 %d\n", ru.ru_maxrss > 0);
+  /* THE POSITIVE CONTROL ON THE FOURTH ARGUMENT REACHING THE KERNEL, and it
+     used to be `ru.ru_maxrss > 0` on a `ru` nobody had written -- so what it
+     read was uninitialised stack, and it answered 1 because of what the
+     sigprocmask work above happened to leave there. It was diffed against
+     glibc, agreed, and the agreement meant nothing: both sides were reading
+     their own garbage. Enabling --dce for the C frontend changed the frame
+     layout, the garbage became 0, and that is the only reason anyone looked.
+
+     ru_maxrss is ALSO the wrong field. Measured against the gcc oracle on the
+     same kernel: a child that loops and _exits reports maxrss 0 from BOTH
+     compilers -- a process that touches nothing beyond its COW inheritance
+     legitimately has no high-water mark to report. Give the child 8MB to write
+     and pxx answers 8416, so wait4's rusage works; the old row was asserting
+     something wait4 never promised.
+
+     `ru` is poisoned and the whole struct is checked for a change instead.
+     That is exactly the claim the comment always made -- the kernel wrote
+     through the fourth argument -- and it is true for any child. */
+  {
+    int wrote = 0, k;
+    const unsigned char *rb = (const unsigned char *)&ru;
+    for (k = 0; k < (int)sizeof ru; k++) if (rb[k] != 0xAB) { wrote = 1; break; }
+    printf("18 %d\n", wrote);
+  }
 
   p = fork();
   if (p == 0) { _exit(3); }

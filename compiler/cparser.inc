@@ -10395,9 +10395,17 @@ end;
   written out twice. x86 family: E8 rel32 = target - (patch+4). arm32: BL imm24
   = (target - (patch+8)) div 4 (pc is 8 ahead of the BL). aarch64: BL imm26.
   riscv32: the auipc+jalr pair, both words. }
-procedure CPatchStubCall(patchPos, bodyAddr: Integer);
+procedure CPatchStubCall(patchPos, bodyAddr, procIdx: Integer);
+{ The entry stub's forward call, aimed once its callee has a body.
+
+  `procIdx` is not used to compute anything -- bodyAddr already is
+  Procs[procIdx].BodyAddr at every call site. It is here so the patch can SAY
+  what it aimed at: this displacement is written by hand rather than through
+  CallFix, so the call graph has no edge for it, and a reachability pass reads
+  the callee as unreachable. See RecordEntryRoot. }
 var rvHi, rvLo: Integer;
 begin
+  RecordEntryRoot(procIdx);
   if TargetArch = TARGET_ARM32 then
     Patch32(patchPos, Integer($EB000000) or
       (((bodyAddr - (patchPos + 8)) div 4) and $00FFFFFF))
@@ -10411,7 +10419,13 @@ begin
     Patch32(patchPos + 4, EncodeRISCVJalr(reg_ra, reg_t0, rvLo));
   end
   else
+  begin
+    { ...and on the rel32 targets, the SITE moves too when a pass compacts the
+      code between here and the body. That is exactly what CodeRef records, and
+      its patch formula (target - (pos+4)) is this same one. }
+    RecordCodeRefAt(patchPos, bodyAddr);
     Patch32(patchPos, bodyAddr - (patchPos + 4));
+  end;
 end;
 
 procedure ParseCProgram;
@@ -11107,7 +11121,7 @@ begin
     ErrorAt(CLastCSourceLine, 'main function not found');
   end;
   { Patch the entry stub's call-to-main with main's body address. }
-  CPatchStubCall(callPatch, Procs[mainIdx].BodyAddr);
+  CPatchStubCall(callPatch, Procs[mainIdx].BodyAddr, mainIdx);
 
   { ... and the pre-main initializer call, the same way. The stub emitted it as
     a forward because the shell's body lives in crtl, which is not pulled until
@@ -11122,7 +11136,7 @@ begin
     if initIdx < 0 then
       Error('internal: the entry stub asked for a pre-main initializer phase ' +
             'but __pxx_run_initializers was never pulled');
-    CPatchStubCall(initPatch, Procs[initIdx].BodyAddr);
+    CPatchStubCall(initPatch, Procs[initIdx].BodyAddr, initIdx);
   end;
 end;
 

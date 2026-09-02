@@ -84,6 +84,28 @@ begin
   RecordCodeRefAt(CodeLen, target);
 end;
 
+procedure RecordEntryRoot(procIdx: Integer);
+{ "An entry stub calls this proc, and no CallFix says so."
+
+  The counterpart of RecordCodeRefAt for the case where the target IS a proc:
+  RecordCodeRefAt keeps a code offset's BYTES alive and re-aims the
+  displacement, which is right for a stub nobody owns, and wrong here -- a
+  range merely kept is never WALKED, so `main` would survive with every routine
+  it calls deleted underneath it. This marks the proc itself, so reachability
+  runs from it the way it runs from the program body. }
+var n: Integer;
+begin
+  if procIdx < 0 then Exit;
+  if EntryRootCount >= EntryRootCapacity then
+  begin
+    if EntryRootCapacity = 0 then n := 8 else n := EntryRootCapacity * 2;
+    SetLength(EntryRootProc, n);
+    EntryRootCapacity := n;
+  end;
+  EntryRootProc[EntryRootCount] := procIdx;
+  Inc(EntryRootCount);
+end;
+
 procedure AddDataPtrFix(dataPos, targetOff: Integer);
 { Record a data->data 8-byte pointer relocation: the slot at dataPos is patched
   at link time to (dataBase + targetOff). Used by RTTI and resource emission.

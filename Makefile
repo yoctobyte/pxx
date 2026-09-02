@@ -12727,13 +12727,33 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_andchain26 "$$($(TESTTMP)/c_andchain26)" "$$(printf '1 0\n2 1\n3 1\n4 2\n5 done')"
 	./$(COMPILER) test/c_fn_typed_parameter.c $(TESTTMP)/c_fnparam26
 	tools/expect_same.sh c_fnparam26 "$$($(TESTTMP)/c_fnparam26)" "$$(printf '1 42\n2 10\n3 u7\nv9\n4 1\n5 42\n6 10')"
+	# DCE MUST NOT DELETE A C PROGRAM'S main. The C entry stub's call to main is
+	# hand-patched with an absolute address, never through CallFix, so the call
+	# graph has no edge to it -- the pass dropped main and the program SIGSEGVed
+	# before printing anything (43 of 792 bodies live, MEASURED).
+	# bug-a-dce-on-a-c-program-drops-main-because-nothing-roots-the-c-entry-path
+	# -O3 is the level that turns DCE on, so the two rows are the test: same
+	# output, smaller image. EQUALITY ALONE IS NOT THE TEST -- a pass that
+	# dropped nothing also produces equal output, which is what this looked like
+	# before the frontend was wired in at all.
+	./$(COMPILER) -O2 test/c_dce_entry_root.c $(TESTTMP)/c_dceroot_o2
+	./$(COMPILER) -O3 test/c_dce_entry_root.c $(TESTTMP)/c_dceroot_o3
+	tools/expect_same.sh c_dceroot_o2 "$$($(TESTTMP)/c_dceroot_o2)" "$$(printf 'chain 42\ndone')"
+	tools/expect_same.sh c_dceroot_o3 "$$($(TESTTMP)/c_dceroot_o3)" "$$(printf 'chain 42\ndone')"
+	test $$(stat -c%s $(TESTTMP)/c_dceroot_o3) -lt $$(stat -c%s $(TESTTMP)/c_dceroot_o2)
 	# sigprocmask/sigtimedwait/sigwait and wait4/wait3 -- see the file's header for
 	# why waiting works where sigaction still cannot. sigprocmask USED TO RETURN 0
 	# AND DO NOTHING, so rows 2-4 read the mask back out rather than trusting the
 	# return value; with a fake one, row 5's kill terminates the process and rows
 	# 6+ never print, which shows up here as a short output.
-	# Row 18 is the positive control on wait4's fourth argument: ru_maxrss cannot
-	# legitimately be 0 for a process that ran.
+	# Row 18 is the positive control on wait4's fourth argument: `ru` is POISONED
+	# before the reap and the row asserts the kernel wrote through the pointer.
+	# It used to read `ru.ru_maxrss > 0` on a `ru` nobody had written, so it was
+	# testing uninitialised stack -- it agreed with glibc because both sides read
+	# their own garbage, and enabling --dce for the C frontend moved the frame and
+	# flipped it to 0. ru_maxrss is also the wrong field: measured against gcc on
+	# the same kernel, a child that loops and _exits reports 0 from BOTH, and a
+	# child that writes 8MB gets 8416 from pxx. See the file.
 	# All 22 rows were diffed against glibc by compiling this same file with gcc.
 	# feature-c-corpus-busybox-multi-applet
 	./$(COMPILER) test/c_crtl_signal_and_wait.c $(TESTTMP)/c_sigwait26
