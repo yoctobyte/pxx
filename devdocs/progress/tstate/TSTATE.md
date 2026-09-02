@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 3d0h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `bb524e1abd1f` | 2026-09-02T10:41:16Z | RED (full) | 1108.3s | `bb524e1abd1f` RED |
+| seven | `2d6e7d5c26db` | 2026-09-02T10:45:28Z | RED (native) | 185.7s | `bb524e1abd1f` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `bb524e1abd1f` on seven, 2026-09-02T10:41:16Z (0m ago).**
+**Newest full tier in the fleet: `bb524e1abd1f` on seven, 2026-09-02T10:41:16Z (4m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `bb524e1abd1f` | RED | 0m | — (newest) |
+| seven | `bb524e1abd1f` | RED | 4m | — (newest) |
 | plexus | `27424c927b65` | RED | 3d0h | 3d0h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -43,6 +43,7 @@ Reading a staler host's map for a cross-target job answers a question about an O
   - `test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint`
   - `tools-devtest#00`
   </details>
+- **test-core#src:test/c_asm_in_inline_body.c@2** — test/c_asm_in_inline_body.c tools/expect_same.sh +1 (seven): bad `2d6e7d5c26db`, last good `bb524e1abd1f`, 1 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
