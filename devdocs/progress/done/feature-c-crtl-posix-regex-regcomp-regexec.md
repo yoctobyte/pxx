@@ -9,7 +9,7 @@ created: 2026-09-02
 found-by: frankD
 owner: frankD
 blocked-by:
-summary: "LANDED. `lib/crtl/include/regex.h` and `lib/crtl/src/regex.c` -- a backtracking VM whose accept instruction records-and-fails so match[0] is leftmost-LONGEST, with a memo that makes a back-reference-free pattern polynomial and is switched off (unsound) when a back-reference appears, and a step budget that returns REG_ESPACE rather than a wrong REG_NOMATCH. BRE and ERE, classes, intervals, back-references, REG_ICASE / NEWLINE / NOTBOL / NOTEOL / NOSUB / STARTEND, and the GNU \\< \\> \\b \\w operators real patterns use. Verified against this box's glibc with the same source built by gcc: 4527 corpus cases from busybox's own sed/grep/awk testsuites and 375 back-reference cases are byte-identical, and 79 of 81 hand-written rows; the two that differ are recorded at the row. **Four of the seven translation units this ticket named now become i386 objects** -- libbb/xregcomp.c, sed, expr, test. The other three stop on causes that have nothing to do with regex and are ticketed separately: awk on `strncasecmp`, grep and mdev on busybox's IF_FEATURE_*() config macros."
+summary: "LANDED. `lib/crtl/include/regex.h` and `lib/crtl/src/regex.c` -- a backtracking VM whose accept instruction records-and-fails so match[0] is leftmost-LONGEST, with a memo that makes a back-reference-free pattern polynomial and is switched off (unsound) when a back-reference appears, and a step budget that returns REG_ESPACE rather than a wrong REG_NOMATCH. BRE and ERE, classes, intervals, back-references, REG_ICASE / NEWLINE / NOTBOL / NOTEOL / NOSUB / STARTEND, and the GNU \\< \\> \\b \\w operators real patterns use. Verified against this box's glibc with the same source built by gcc: 4527 corpus cases from busybox's own sed/grep/awk testsuites and 375 back-reference cases are byte-identical, and 79 of 81 hand-written rows; the two that differ are recorded at the row. **ALL SEVEN translation units this ticket named now become i386 objects** -- libbb/xregcomp.c, awk, sed, grep, expr, test and mdev."
 ---
 
 # What is missing
@@ -146,21 +146,53 @@ code motion:
 
 # The frontier this moves to
 
-| TU | now stops at |
-| --- | --- |
-| `libbb/xregcomp.c` | -- becomes an i386 object |
-| `editors/sed.c` | -- becomes an i386 object |
-| `coreutils/expr.c` | -- becomes an i386 object |
-| `coreutils/test.c` | -- becomes an i386 object |
-| `editors/awk.c` | `call to undeclared function: strncasecmp` |
-| `findutils/grep.c` | `expected ')' before 'IF_FEATURE_GREP_CONTEXT'` |
-| `util-linux/mdev.c` | `expected ')'` (the same `IF_FEATURE_MDEV_EXEC(x;)` shape) |
+**All seven build.** `libbb/xregcomp.c`, `editors/awk.c`, `editors/sed.c`,
+`findutils/grep.c`, `coreutils/expr.c`, `coreutils/test.c` and
+`util-linux/mdev.c` each become an i386 object, run individually.
 
-Each row was run individually. A batch sweep started at the same time is NOT
-the source: a peer's `busybox_diff.sh` regenerated `include/autoconf.h` at
-17:33 while it ran, and the sweep's own output was read before it had finished,
-so its partial refusal list was an alphabetical prefix wearing the shape of a
-result.
+## THE THREE `REMAINING BLOCKERS' FIRST REPORTED HERE WERE MY OWN MISSING FLAGS
+
+The first version of this section said four of seven, and named `strncasecmp`
+for awk and busybox's `IF_FEATURE_*()` macros for grep and mdev. Both were
+artifacts of the sweep script, not of pxx, and the second one is worth keeping
+because of how convincing it was.
+
+busybox's real build FORCE-INCLUDES its config: `Makefile.flags` carries
+`-include include/autoconf.h`, and **no busybox header includes it**. Compile
+without that flag and every one of the ~2500 `IF_FEATURE_XXX(...)` macros is
+undefined, so each invocation survives into the parser as an identifier
+followed by a parenthesised expression. The diagnostics that produces are
+entirely plausible compiler bugs:
+
+- `stray token at top level (not a declaration): 'IF_DESKTOP'`
+- `expected ')' before 'IF_FEATURE_GREP_CONTEXT'`
+- `undeclared identifier 'size_t' used as value (treated as 0)`
+
+Three different messages, three different files, all reading as a macro-expansion
+gap in the C frontend. A minimal repro of `#define IF_DESKTOP(...)` followed by
+`IF_DESKTOP(long long) int f(void);` compiles correctly, which looked like
+evidence the bug was context-dependent rather than evidence the macro was never
+defined. `-D_GNU_SOURCE` was missing the same way and produced the awk
+`strncasecmp` refusal.
+
+**THE CHECK THAT WOULD HAVE CAUGHT IT IS `WHAT FLAGS DOES THE REAL BUILD
+USE'**, asked before believing any refusal from a hand-rolled sweep, and it is
+now the first thing to ask of any busybox TU that pxx declines.
+
+A bisect of `libbb.h` also has to be recorded as a NON-result: truncating the
+header and asking whether the marker survived produced an answer at every step,
+because a truncated header errors out before reaching the marker and the probe
+read `no stray-token message' as `the macro is alive'. **A guard that returns
+`alive' when the program never ran is not a guard**; the version that worked
+inserts the marker into the INTACT file, where a failure to reach it is
+impossible.
+
+Two other measurements from the same hour, both discarded rather than reported:
+a batch sweep whose output was read before it had finished (its `.fail` list
+was an alphabetical prefix wearing the shape of a result -- the `&` inside a
+backgrounded call detached it, so the harness reported the WRAPPER as complete),
+and one that spanned a peer's `busybox_diff.sh` regenerating
+`include/autoconf.h` at 17:33 underneath it.
 
 ## Log
 - 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2f920dfd4.
