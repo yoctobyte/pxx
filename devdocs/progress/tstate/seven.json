@@ -12745,7 +12745,7 @@
   },
   {
    "bad": "adbe33db812f7cc5bbc89f04915d6ac06b2af821",
-   "bad_untestable": true,
+   "bad_untestable": false,
    "first_seen": false,
    "good": "eadf214725a129db6cafabd1fe1fb4eb91543221",
    "job": "test-emit-obj#src:test/test_esp_hello.pas@1",
