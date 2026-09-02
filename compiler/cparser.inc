@@ -6083,6 +6083,7 @@ begin
         garbage). Record-element arrays (each element a nested brace group) and
         over-long lists fall back to the balanced-brace skip below. }
       nArrElems := 0;
+      CStrInitCount := 0;
       recArrInitCount := 0;
       hadArrDesig := False;
       if (CurTok.Kind = tkAssign) and (declTk = tyRecord) and
@@ -6274,6 +6275,18 @@ begin
           adjacent literals) into per-character element assignments + a NUL, the
           same arrElems path the brace initializer uses. }
         Next;   { consume '='; CurTok is now the string, i.e. Tokens[TokPos-1] }
+        { INTO CStrInitElem, NOT arrElems. arrElems is a 256-element stack array
+          and 256 characters is a length real C exceeds without trying:
+          busybox's networking/httpd.c stopped on a 331-byte
+          `static const char suffixTable[]' with "local string-initialised array
+          exceeds 256 bytes", while the IDENTICAL declaration at file scope
+          compiled and ran -- one construct, two paths, and only the local one
+          had a limit. The cap is GONE rather than raised: a bigger stack array
+          moves the number without answering what the right number is.
+          Shared unit-scope state is safe here for a reason this arm has and the
+          brace arm does not -- it walks TOKENS and never calls ParseCExpr, so
+          no nested declaration can begin between this fill and the store loop
+          that drains it. }
         while (CurTok.Kind = tkString) do
         begin
           wsoff := Tokens[TokPos - 1].SOffset;
@@ -6281,7 +6294,7 @@ begin
           ei := 0;
           while ei < wslen do
           begin
-            if nArrElems > 255 then begin nArrElems := -1; Break; end;
+            EnsureCStrInitCapacity(CStrInitCount);
             if Tokens[TokPos - 1].IVal = 1 then
             begin
               { wide string L"..." — UTF-8 decode the source bytes to one wchar_t
@@ -6294,32 +6307,27 @@ begin
               idxLit := AllocNode(AN_INT_LIT);
               ASTIVal[idxLit] := wcp;
               ASTTk[idxLit] := Ord(tyInteger);
-              arrElems[nArrElems] := idxLit;
-              Inc(nArrElems);
+              CStrInitElem[CStrInitCount] := idxLit;
+              Inc(CStrInitCount);
             end
             else
             begin
               idxLit := AllocNode(AN_INT_LIT);
               ASTIVal[idxLit] := Ord(TokChars[wsoff + ei]);
               ASTTk[idxLit] := Ord(tyChar);
-              arrElems[nArrElems] := idxLit;
-              Inc(nArrElems);
+              CStrInitElem[CStrInitCount] := idxLit;
+              Inc(CStrInitCount);
               Inc(ei);
             end;
           end;
-          if nArrElems < 0 then Break;
           Next;
         end;
-        if nArrElems < 0 then
-          Error('local string-initialised array exceeds 256 bytes')
-        else
-        begin
-          { NUL terminator so the array is a valid C string. }
-          idxLit := AllocNode(AN_INT_LIT);
-          ASTIVal[idxLit] := 0; ASTTk[idxLit] := Ord(tyChar);
-          arrElems[nArrElems] := idxLit;
-          Inc(nArrElems);
-        end;
+        { NUL terminator so the array is a valid C string. }
+        EnsureCStrInitCapacity(CStrInitCount);
+        idxLit := AllocNode(AN_INT_LIT);
+        ASTIVal[idxLit] := 0; ASTTk[idxLit] := Ord(tyChar);
+        CStrInitElem[CStrInitCount] := idxLit;
+        Inc(CStrInitCount);
       end;
       { With `[k]=` / range designators an unsized array is sized to the highest
         index touched, not the element count. }
@@ -6330,6 +6338,7 @@ begin
       if arrLen < 1 then
       begin
         if hadArrDesig and (maxElemIdx >= 0) then arrLen := maxElemIdx + 1
+        else if CStrInitCount > 0 then arrLen := CStrInitCount
         else if nArrElems > 0 then arrLen := nArrElems
         else if recArrInitCount > 0 then arrLen := recArrInitCount
         else arrLen := 1;
@@ -6429,12 +6438,18 @@ begin
       end;
       { C99 6.7.8p21: any brace initializer zero-fills the tail the list does
         not reach — zero the whole array before the element stores. }
-      if (nArrElems > 0) or (recArrInitCount > 0) then
+      if (nArrElems > 0) or (CStrInitCount > 0) or (recArrInitCount > 0) then
       begin
         seq := CMakeZeroLocal(idx, declTk);
         if head = -1 then head := seq else ASTRight[tail] := seq;
         tail := seq;
       end;
+      { The two element sources are mutually exclusive by construction -- the
+        string arm is an `else if' of the brace arm -- so this walks whichever
+        one filled, and `CStrInitCount' being nonzero is the tell. Bounded by
+        arrLen because an explicitly sized `char t[4] = "abcdef"' truncates and
+        keeps no NUL (C99 6.7.8p14); the unbounded version wrote two elements
+        past the object. }
       for ei := 0 to nArrElems - 1 do
       begin
         idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(declTk);
@@ -6444,6 +6459,21 @@ begin
         inode := AllocNode(AN_INDEX); ASTLeft[inode] := idn; ASTRight[inode] := idxLit;
         ASTTk[inode] := Ord(declTk);
         asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := inode; ASTRight[asn] := arrElems[ei];
+        ASTTk[asn] := Ord(declTk);
+        seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
+        if head = -1 then head := seq else ASTRight[tail] := seq;
+        tail := seq;
+      end;
+      for ei := 0 to CStrInitCount - 1 do
+      begin
+        if ei >= arrLen then Break;
+        idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx; ASTTk[idn] := Ord(declTk);
+        idxLit := AllocNode(AN_INT_LIT);
+        ASTIVal[idxLit] := ei;
+        ASTTk[idxLit] := Ord(tyInteger);
+        inode := AllocNode(AN_INDEX); ASTLeft[inode] := idn; ASTRight[inode] := idxLit;
+        ASTTk[inode] := Ord(declTk);
+        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := inode; ASTRight[asn] := CStrInitElem[ei];
         ASTTk[asn] := Ord(declTk);
         seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
         if head = -1 then head := seq else ASTRight[tail] := seq;

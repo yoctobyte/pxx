@@ -6528,6 +6528,18 @@ begin
   ClearPendingInitTarget(n);
 end;
 
+procedure EnsureCStrInitCapacity(n: Integer);
+{ Grow the block-scope string-initialiser element pool to hold index n. Same
+  shape as EnsurePendingInitCapacity above; see CStrInitElem in defs.inc. }
+var cap: Integer;
+begin
+  cap := Length(CStrInitElem);
+  if n < cap then Exit;
+  if cap = 0 then cap := 512;
+  while cap <= n do cap := cap * 2;
+  SetLength(CStrInitElem, cap);
+end;
+
 procedure EnsurePIPathCapacity(n: Integer);
 { Grow the nested-field span pool to hold index n. Same shape as the tables it
   serves; see PIPathOff in defs.inc. }

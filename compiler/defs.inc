@@ -3263,6 +3263,19 @@ var
   CTypeFnRetPElemRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   CTypeFnRetPRecId : array[0..MAX_PROC_PARAMS-1] of Integer;
   CTypeFnRetPProcSig : array[0..MAX_PROC_PARAMS-1] of Integer;
+  { A block-scope array initialised from a STRING literal, one AST node per
+    character. Growable and unit-scope because the per-declarator arrElems in
+    ParseCLocalDeclAST is a 256-element STACK array, and 256 characters is a
+    length real C exceeds without trying: busybox's networking/httpd.c stopped
+    a 400-translation-unit build on a 331-byte `static const char suffixTable[]'
+    while the IDENTICAL declaration at file scope compiled, because the
+    file-scope path was never capped.
+    Safe as shared state despite ParseCLocalDeclAST being re-entrant: the
+    string arm walks TOKENS and never calls ParseCExpr, so nothing can begin a
+    nested declaration between the fill below and the store loop that drains
+    it. The brace-initialiser arm, which can recurse, keeps using arrElems. }
+  CStrInitElem : array of Integer;
+  CStrInitCount : Integer;
   CLocalStaticDecl : Boolean; { current block-scope C declaration had `static`;
     allocate its storage globally while still parsing it in statement position }
   CHeaderMode : Boolean; { parsing C in header/FFI mode }

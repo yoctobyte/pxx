@@ -12984,6 +12984,22 @@ test-core: $(COMPILER)
 	# All rows diffed against gcc.
 	./$(COMPILER) test/c_crtl_fallocate.c $(TESTTMP)/c_fallocate26
 	tools/expect_same.sh c_fallocate26 "$$($(TESTTMP)/c_fallocate26)" "$$(printf '1 1 1\n2 -1 1\n3 1\n4 1\n5 1')"
+	# A block-scope array initialised from a STRING literal. The same construct
+	# at file scope was never capped; the local path expanded it into
+	# per-character nodes in a 256-entry STACK array and refused past that, so
+	# busybox's networking/httpd.c stopped on a 331-byte
+	# `static const char suffixTable[]' while the identical file-scope
+	# declaration compiled. Row 1 is that shape and the only row the fix was
+	# needed for; every other row PASSED BEFORE IT and is here because a
+	# "remove the cap" that removed the element expansion would break them --
+	# row 3 in particular (a non-static local is a fresh copy per call, so
+	# sharing one object passes row 2 and fails row 3). Row 5 is the truncating
+	# `static const char sized[4] = "abcdef"' of C99 6.7.8p14: four bytes, no
+	# NUL. The old store loop was bounded by the element count and not by the
+	# array, so it wrote two elements PAST the object.
+	# All rows diffed against gcc, and against all four cross targets.
+	./$(COMPILER) test/c_local_string_array_init.c $(TESTTMP)/c_lsarr26
+	tools/expect_same.sh c_lsarr26 "$$($(TESTTMP)/c_lsarr26)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
 	./$(COMPILER) test/c_crtl_bits_and_fdatasync.c $(TESTTMP)/c_bits26
 	tools/expect_same.sh c_bits26 "$$($(TESTTMP)/c_bits26)" "$$(printf '1 1 2 0\n2 1\n3 1\n4 0 0\n5 1\n6 1\n7 5\n8 0\n9 -1 1')"
 	./$(COMPILER) test/c_crtl_netdb_and_exec.c $(TESTTMP)/c_netdb26
@@ -14807,6 +14823,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/labelval "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_labelval)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
 	./$(COMPILER) --target=i386 test/c_crtl_tcpgrp_statfs.c $(TESTTMP)/test_i386_tcpgrp
 	tools/expect_same.sh i386/tcpgrp "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_tcpgrp)" "$$(printf '1 1 1\n2 -1 1\n3 1 1\n4 1 1 1\n5 1\n6 1 1\n7 -1 1')"
+	./$(COMPILER) --target=i386 test/c_local_string_array_init.c $(TESTTMP)/test_i386_lsarr
+	tools/expect_same.sh i386/lsarr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_lsarr)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
 	./$(COMPILER) --target=i386 test/c_crtl_select.c $(TESTTMP)/test_i386_select
 	tools/expect_same.sh i386/select "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
 	./$(COMPILER) --target=i386 test/c_crtl_fallocate.c $(TESTTMP)/test_i386_fallocate
@@ -15581,6 +15599,8 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/labelval "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_labelval)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
 	./$(COMPILER) --target=aarch64 test/c_crtl_tcpgrp_statfs.c $(TESTTMP)/test_a64_tcpgrp
 	tools/expect_same.sh aarch64/tcpgrp "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_tcpgrp)" "$$(printf '1 1 1\n2 -1 1\n3 1 1\n4 1 1 1\n5 1\n6 1 1\n7 -1 1')"
+	./$(COMPILER) --target=aarch64 test/c_local_string_array_init.c $(TESTTMP)/test_a64_lsarr
+	tools/expect_same.sh aarch64/lsarr "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_lsarr)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
 	./$(COMPILER) --target=aarch64 test/c_crtl_select.c $(TESTTMP)/test_a64_select
 	tools/expect_same.sh aarch64/select "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
 	./$(COMPILER) --target=aarch64 test/c_crtl_fallocate.c $(TESTTMP)/test_a64_fallocate
@@ -16293,6 +16313,8 @@ test-riscv32: $(COMPILER)
 	# were the answer.
 	./$(COMPILER) --target=riscv32 test/c_crtl_tcpgrp_statfs.c $(TESTTMP)/test_riscv32_tcpgrp
 	tools/expect_same.sh riscv32/tcpgrp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_tcpgrp)" "$$(printf '1 1 1\n2 -1 1\n3 1 1\n4 1 1 1\n5 1\n6 1 1\n7 -1 1')"
+	./$(COMPILER) --target=riscv32 test/c_local_string_array_init.c $(TESTTMP)/test_riscv32_lsarr
+	tools/expect_same.sh riscv32/lsarr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_lsarr)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
 	# Three kernel spellings behind one call: x86-64 has sys_select, i386 has
 	# sys__newselect, aarch64 has only pselect6, and riscv32 has only the
 	# time64 pselect6 with a 64-bit timespec even though its `long' is 32 bits.
@@ -18037,6 +18059,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/frozenparam "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozenparam)" "$$(cat test/test_frozen_string_param_setlength.expected)"
 	./$(COMPILER) --target=arm32 test/hello.pas $(TESTTMP)/test_arm32_hello
 	tools/expect_same.sh arm32/test_arm32_hello "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_hello)" "Hello, World!"
+	./$(COMPILER) --target=arm32 test/c_local_string_array_init.c $(TESTTMP)/test_a32_lsarr
+	tools/expect_same.sh arm32/lsarr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_lsarr)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
 	# GNU labels-as-values on this cross target. arm32 loads the delta from an
 	# inline literal word and adds pc to it, because no arm32 immediate form
 	# reaches an arbitrary label. The `b .+8' over the word is the part that
