@@ -2113,13 +2113,37 @@ begin
       about a chip it was not targeting; it named no symbol, so the `in:` line
       pointed at whichever RTL unit happened to hold the first external
       (softfloat.pas) with nothing to grep for; and it did not say what to do.
-      bug-a-a-riscv32-diagnostic-names-the-wrong-target }
+      bug-a-a-riscv32-diagnostic-names-the-wrong-target
+
+      A FOURTH, MEASURED 2026-09-02: it advised changing the TARGET when on
+      xtensa the fix is almost always changing the PLATFORM or PROFILE, and
+      that sent FOUR sessions in one evening to the conclusion that xtensa
+      cannot compile ordinary programs. It cannot compile them in ONE
+      configuration. Bare `--target=xtensa` defaults to the IDF profile, whose
+      heap is newlib's (builtinheap.pas declares calloc/free external precisely
+      so the IDF link resolves them) — so this fires on `hello.pas` too, and it
+      fires on a build that is CORRECTLY configured and simply is not meant to
+      become a standalone image here.
+
+      That is why the advice now leads with the two configurations that produce
+      a runnable image on this same target, and says what the IDF profile's
+      externals are for. Suggesting a different target for a build whose only
+      problem is that it is an IDF build is how a working target gets written
+      off. The old text was never false — it was correct about something else,
+      which is the failure mode that costs the most here. }
     if ExternalCount > 0 then
       ErrorNoPos('target ' + TargetDisplayName + ': external (dynamic) symbols are '
             + 'not supported on this target (first one: '
             + Procs[ExternalProc[0]].Name + '); this backend emits no dynamic '
-            + 'segment, so link the dependency in statically or build for a '
-            + 'target that has one (x86-64, i386, arm32, aarch64)');
+            + 'segment. If you meant a HOSTED image, add --platform=posix (it '
+            + 'uses syscalls and declares no externals, and is what the cross '
+            + 'test suite runs under qemu); for a standalone bare-metal image '
+            + 'add --esp-profile=bare. The default IDF profile''s externals are '
+            + 'meant to be resolved by the IDF link, not by this writer — if '
+            + 'that is what you want, link the object with the IDF toolchain '
+            + 'rather than asking for a complete executable here. Otherwise '
+            + 'link the dependency in statically, or build for a target that '
+            + 'emits a dynamic segment (x86-64, i386, arm32, aarch64).');
     { @proc address fixups (ProcAddrFix) are 32-bit-absolute patched in place
       below and work for the bare ET_EXEC image on both riscv32 (auipc +
       inline literal) and xtensa (L32R inline literal) — each IR_PROCADDR
