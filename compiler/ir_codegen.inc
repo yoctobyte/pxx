@@ -376,6 +376,28 @@ begin
   EmitAsmX64(['pop rdi', 'pop rdx', 'pop rcx']);
 end;
 
+procedure EmitScaleByElem(reg: Integer; es: Integer);
+{ reg := reg * es, for reg 0 = rax and 1 = rcx only. A shift when es is a power
+  of two, `imul r64, r64, imm32` otherwise -- three bytes plus an immediate, and
+  it needs no scratch register, which is the whole reason it is here: the
+  SetLength fast paths hold n in rdx and the old length in rcx at the moment
+  they need to scale, so the `mov rcx, imm / imul rax, rcx` idiom the allocate
+  path uses would clobber a live value. }
+var k: Integer;
+begin
+  if es = 1 then Exit;
+  k := 0;
+  while (k < 32) and ((1 shl k) < es) do Inc(k);
+  if (1 shl k) = es then
+  begin
+    EmitB($48); EmitB($C1); EmitB($E0 + reg); EmitB(k);        { shl reg, k }
+  end
+  else
+  begin
+    EmitB($48); EmitB($69); EmitB($C0 + reg * 9); EmitI32(es); { imul reg, reg, es }
+  end;
+end;
+
 procedure EmitHeapAllocLocked;
 { rax = requested payload bytes. Returns payload pointer in rax. Caller holds
   the heap lock when threading is enabled. }
@@ -6199,6 +6221,9 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
     pDynZero, pDynNoOld, pDynKeepCopy, pDynNoRetain, pDynNoRetainCount: Integer;
+    pDynFastNil, pDynFastShared, pDynFastShrink, pDynFastBig, pDynFastDone: Integer;
+    pDynCapNil, pDynCapSmall, pDynCapDone: Integer;
+    slDynFast: Boolean;    { the in-place dynarray grow path was emitted }
     slNoStrZero: Boolean;  { NilPy managed string: SetLength(s,0) keeps a real block }
     slDepth, slElemSize, slRetainTop, pSlRetainDone, slBaseRec, slMek, slProcIdx: Integer;
     slBaseTk: TTypeKind;
@@ -10107,6 +10132,70 @@ begin
               EmitB($0F); EmitB($84); pDynZero := CodeLen; EmitI32(0);
             end;
 
+            { ---- GROW A UNIQUE DYNARRAY IN PLACE ----------------------------
+              The sibling of the in-place ansistring resize below, and it exists
+              for the same reason: allocate-copy-free makes `SetLength(a, n+1)`
+              in a loop O(n^2) in copies AND leaves every intermediate block
+              behind as garbage the allocator cannot hand back (the large free
+              list is first-fit on `size >= request`, so a freed 2^k block can
+              never serve the next 2^(k+1) request). That is what made
+              feature-dynamic-compiler-tables measure BSS 246.8 MB -> 75.9 MB
+              and max RSS UP ~10%: the tables shrank and their discarded
+              geometric series did not.
+
+              Taken only when ALL of: the old block exists, it is UNIQUE
+              (rc = 1), the request GROWS (n >= oldLen) and the request fits the
+              allocator's size word at [data-32]. Element managed-ness does NOT
+              enter the test, and that is deliberate rather than an oversight:
+              on the slow path every SURVIVING element is retained and then the
+              whole old block is released, so a survivor nets exactly zero --
+              which is what doing nothing at all also produces. Only a SHRINK
+              drops elements, and a shrink is refused here.
+
+              Zeroing the new tail is mandatory and not merely tidy: PXXAlloc's
+              zero-init contract covers the bytes it was ASKED for, and the
+              large first-fit path hands back an oversized block with its
+              ORIGINAL size word and only `size` bytes zeroed -- so the capacity
+              this path grows into is precisely the span nothing zeroed.
+              feature-opt-dynarray-grows-in-place }
+            slDynFast := not ((Syms[symIdx].TypeKind = tyAnsiString) and
+                              not Syms[symIdx].IsArray);
+            if slDynFast then
+            begin
+              EmitB($48); EmitB($8B); EmitB($34); EmitB($24);             { mov rsi, [rsp] = old data }
+              EmitB($48); EmitB($85); EmitB($F6);                         { test rsi, rsi }
+              EmitB($0F); EmitB($84); pDynFastNil := CodeLen; EmitI32(0); { jz alloc }
+              EmitB($48); EmitB($83); EmitB($7E); EmitB($F0); EmitB($01); { cmp qword [rsi-16], 1 }
+              EmitB($0F); EmitB($85); pDynFastShared := CodeLen; EmitI32(0); { jne alloc }
+              EmitB($48); EmitB($8B); EmitB($54); EmitB($24); EmitB($08); { mov rdx, [rsp+8] = n }
+              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);             { mov rcx, [rsi-8] = old len }
+              EmitB($48); EmitB($39); EmitB($CA);                         { cmp rdx, rcx }
+              EmitB($0F); EmitB($82); pDynFastShrink := CodeLen; EmitI32(0); { jb alloc (shrink drops elements) }
+              EmitB($48); EmitB($89); EmitB($D0);                         { mov rax, rdx }
+              EmitScaleByElem(0, elemSize);                             { rax := n * elemSize }
+              EmitB($48); EmitB($83); EmitB($C0); EmitB($18);             { add rax, 24 = needed payload }
+              EmitB($48); EmitB($3B); EmitB($46); EmitB($E0);             { cmp rax, [rsi-32] = capacity }
+              EmitB($0F); EmitB($87); pDynFastBig := CodeLen; EmitI32(0); { ja alloc }
+
+              EmitScaleByElem(1, elemSize);                             { rcx := oldLen * elemSize }
+              EmitB($48); EmitB($83); EmitB($E8); EmitB($18);             { sub rax, 24 = n bytes }
+              EmitB($48); EmitB($29); EmitB($C8);                         { sub rax, rcx = tail bytes }
+              EmitB($48); EmitB($8D); EmitB($3C); EmitB($0E);             { lea rdi, [rsi+rcx] = old end }
+              EmitB($48); EmitB($89); EmitB($C1);                         { mov rcx, rax }
+              EmitB($31); EmitB($C0);                                     { xor eax, eax }
+              EmitB($F3); EmitB($AA);                                     { rep stosb }
+              EmitB($48); EmitB($89); EmitB($56); EmitB($F8);             { mov [rsi-8], rdx = new length }
+              EmitB($58);                                                 { pop rax = data (unchanged) }
+              EmitB($59);                                                 { pop rcx = n }
+              EmitB($E9); pDynFastDone := CodeLen; EmitI32(0);            { jmp release-lock }
+
+              Patch32(pDynFastNil, CodeLen - (pDynFastNil + 4));
+              Patch32(pDynFastShared, CodeLen - (pDynFastShared + 4));
+              Patch32(pDynFastShrink, CodeLen - (pDynFastShrink + 4));
+              Patch32(pDynFastBig, CodeLen - (pDynFastBig + 4));
+              EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] = n }
+            end;
+
             if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
             begin
               { Managed strings use the allocator payload size at [data-32] as
@@ -10191,6 +10280,38 @@ begin
               end;
             if not ((Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray) then
               begin EmitB($48); EmitB($83); EmitB($C0); EmitB($18); end; { add rax, 24 (header: kind+rc+len) }
+            if slDynFast then
+            begin
+              { GEOMETRIC HEADROOM, and it is what makes the in-place path above
+                reachable more than once: without it every grow asks for exactly
+                what it needs, the block is exactly full, and the next grow
+                misses the capacity test. Allocate max(needed, 2*oldBytes + 24)
+                and store the EXACT length -- Length() reads [data-8], never the
+                block.
+
+                THE DOUBLING COMES OFF THE LENGTH, NOT OFF [rsi-32]. Taking it
+                off the block size compounds: the large free list is first-fit
+                on `size >= request` and does NOT rewrite the size word, so a
+                small array that reused an oversized freed block would double
+                that block's size on every grow -- 4M, 8M, 16M, OOM. That is
+                not hypothetical; it is the bug the ansistring arm below carries
+                the same warning about, found there first.
+
+                An array grown from NIL takes no headroom (oldLen = 0), so a
+                one-shot `SetLength(a, big)` still allocates exactly big. }
+              EmitB($48); EmitB($8B); EmitB($34); EmitB($24);             { mov rsi, [rsp] = old data }
+              EmitB($48); EmitB($85); EmitB($F6);                         { test rsi, rsi }
+              EmitB($0F); EmitB($84); pDynCapNil := CodeLen; EmitI32(0);  { jz cap_done }
+              EmitB($48); EmitB($8B); EmitB($4E); EmitB($F8);             { mov rcx, [rsi-8] = old len }
+              EmitScaleByElem(1, elemSize);                             { rcx := oldLen * elemSize }
+              EmitB($48); EmitB($01); EmitB($C9);                         { add rcx, rcx }
+              EmitB($48); EmitB($83); EmitB($C1); EmitB($18);             { add rcx, 24 }
+              EmitB($48); EmitB($39); EmitB($C1);                         { cmp rcx, rax }
+              EmitB($0F); EmitB($82); pDynCapSmall := CodeLen; EmitI32(0); { jb cap_done }
+              EmitB($48); EmitB($89); EmitB($C8);                         { mov rax, rcx }
+              Patch32(pDynCapNil, CodeLen - (pDynCapNil + 4));
+              Patch32(pDynCapSmall, CodeLen - (pDynCapSmall + 4));
+            end;
             EmitHeapAllocLocked;            { rax = allocator payload / array base }
             EmitB($48); EmitB($8B); EmitB($4C); EmitB($24); EmitB($08); { mov rcx, [rsp+8] = n }
             EmitB($48); EmitB($C7); EmitB($00); EmitI32(0);  { mov qword [rax], 0 (kind: untagged, phase 1) }
@@ -10386,6 +10507,8 @@ begin
             Patch32(pJmpDone, CodeLen - (pJmpDone + 4));
             if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
               Patch32(pAnsiFastDone, CodeLen - (pAnsiFastDone + 4));
+            if slDynFast then
+              Patch32(pDynFastDone, CodeLen - (pDynFastDone + 4));
             EmitReleaseHeapLock;
           end
           else if specialId = SPECIAL_IN then
