@@ -233,7 +233,7 @@ configure_tree() {
     # dropping six applets to avoid one symbol would shrink the corpus for no
     # reason. Turning it on makes BOTH sides self-contained and adds busybox's
     # own crypt sources to the C the frontend has to compile, which is the point
-    # of the corpus. Measured 2026-09-02: at 258 applets `crypt' was the ONLY
+    # of the corpus. Measured 2026-09-02: at 257 applets `crypt' was the ONLY
     # undefined symbol in the gcc oracle's 400-object link.
     sed -i 's/^# CONFIG_USE_BB_CRYPT is not set$/CONFIG_USE_BB_CRYPT=y/' .config
     yes '' | make oldconfig >/dev/null 2>&1 || exit 1
@@ -955,7 +955,7 @@ make_wrappers() {
 # where `nullptr' is a keyword: miscutils/bc.c uses it as an ORDINARY IDENTIFIER
 # and the oracle refused the file ("expected identifier or `(' before
 # `nullptr'") while busybox's own build of the identical source succeeded during
-# configure, three minutes earlier in the same run. Measured 2026-09-02 at 258
+# configure, three minutes earlier in the same run. Measured 2026-09-02 at 257
 # applets. This is not relaxing the oracle to let a subject pass -- pxx never
 # saw the file, and the fix is to compile the program the way the program says
 # it must be compiled.

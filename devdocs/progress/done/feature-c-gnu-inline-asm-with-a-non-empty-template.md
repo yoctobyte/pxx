@@ -7,7 +7,7 @@ status: done
 found: 2026-09-02
 found-by: frankD
 blocked-by: []
-summary: "RESOLVED for x86-64. GNU inline asm with a non-empty template is read by compiler/asmatt.inc (an AT&T reader over asmenc's existing AsmDispatch, not a second assembler) and its operands are pinned to fixed registers at parse time. Supported: \"r\" \"rm\" \"m\", the fixed-register letters, matching digits, memory/cc/register clobbers. \"+r\", [sym], earlyclobber, asm goto, unknown constraints and unknown mnemonics still refuse BY NAME. VERIFIED: busybox networking/tls_sp_c32.c compiles and links (busybox_diff.sh --separate, 3 applets, 42 objects, curve_P256_compute_pubkey_and_premaster defined, byte-identical to the gcc oracle over 31 cases), and three of its four x86-64-reachable asm arms carried verbatim into test/casm_gnu_operands.c print exactly what gcc -O0 prints. NOT verified here: the 258-applet build — that is frankD's campaign and this ticket removed one blocker from it, which is not the same claim. Two things a reader needs: `--pinned` shows a PASS on this ticket's own reproducer (the pin predates __GNUC__), and the work found a live pre-existing ModRM miscompile in lib/asmcore, fixed in 8b89a201d and present in the pin."
+summary: "RESOLVED for x86-64. GNU inline asm with a non-empty template is read by compiler/asmatt.inc (an AT&T reader over asmenc's existing AsmDispatch, not a second assembler) and its operands are pinned to fixed registers at parse time. Supported: \"r\" \"rm\" \"m\", the fixed-register letters, matching digits, memory/cc/register clobbers. \"+r\", [sym], earlyclobber, asm goto, unknown constraints and unknown mnemonics still refuse BY NAME. VERIFIED: busybox networking/tls_sp_c32.c compiles and links (busybox_diff.sh --separate, 3 applets, 42 objects, curve_P256_compute_pubkey_and_premaster defined, byte-identical to the gcc oracle over 31 cases), and three of its four x86-64-reachable asm arms carried verbatim into test/casm_gnu_operands.c print exactly what gcc -O0 prints. NOT verified here: the 257-applet build — that is frankD's campaign and this ticket removed one blocker from it, which is not the same claim. Two things a reader needs: `--pinned` shows a PASS on this ticket's own reproducer (the pin predates __GNUC__), and the work found a live pre-existing ModRM miscompile in lib/asmcore, fixed in 8b89a201d and present in the pin."
 owner: frankB
 ---
 
@@ -22,7 +22,7 @@ The refusal itself is the right behaviour and should stay until this lands:
 accepting the construct and dropping the instructions is how a program computes
 a plausible wrong answer.
 
-## Where it bites, measured 2026-09-02 at 258 applets / 400 translation units
+## Where it bites, measured 2026-09-02 at 257 applets / 400 translation units
 
 - **networking/tls_sp_c32.c** — the only remaining non-crtl failure in the
   build. Its asm arms are guarded `#if ALLOW_ASM && defined(__GNUC__) &&
@@ -239,10 +239,10 @@ built by gcc.
   exact symbol whose absence took the 400-object link down.
 - `PASS x86_64 byte-identical to the gcc oracle over 31 cases`.
 
-**Scope of that claim.** Three applets, not 258, and the 31 cases exercise cat
+**Scope of that claim.** Three applets, not 257, and the 31 cases exercise cat
 and echo — they do not execute the TLS path. So this shows the blocker is gone
 through a real link and the build agrees with gcc; it does not re-measure the
-258-applet build, which stays attributed to whoever ran it. The TLS asm itself
+257-applet build, which stays attributed to whoever ran it. The TLS asm itself
 is verified numerically against gcc in `test/casm_gnu_operands.c`.
 
 ## Log

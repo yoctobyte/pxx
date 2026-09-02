@@ -76,7 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [P]` bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
-- `[p 70] [C]` feature-c-corpus-busybox-258-applets-linked
+- `[p 70] [C]` feature-c-corpus-busybox-257-applets-linked
 - `[p 70] [A]` regression-test-c-conformance-shard2-6-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
