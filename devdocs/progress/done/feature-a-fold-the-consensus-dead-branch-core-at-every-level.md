@@ -331,4 +331,4 @@ terminate a block) and deserves its own place in the ranker rather than a tail
 on a closed ticket.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4a3aadddd.
