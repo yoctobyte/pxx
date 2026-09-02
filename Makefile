@@ -8867,7 +8867,12 @@ test-core: $(COMPILER)
 	# The cross rows in test-i386/-aarch64/-arm32/-riscv32 are the real guard.
 	# bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only
 	./$(COMPILER) test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_charstr_ptr26
-	$(TESTTMP)/test_charstr_ptr26 | diff -u test/test_char_into_shortstring_via_pointer.expected -
+	# `c = s` and `s = c` must agree and neither may WRITE. i386 emitted
+	# `or dword [ecx], 1` where it meant `cmp` -- $$83 is group-1 and the ModRM
+	# reg field picks the op ($$09 = OR, $$39 = CMP). The native row cannot fail
+	# for that bug (x86-64 was never affected); it is the agreement control.
+	./$(COMPILER) test/test_char_string_equality_both_directions.pas $(TESTTMP)/test_chareq26
+	$(TESTTMP)/test_chareq26 | diff -u test/test_char_string_equality_both_directions.expected -
 	# The statement-vs-value classification every backend walker asks. A value
 	# node emitted at statement level is ALSO emitted by the parent consuming it,
 	# so its subtree runs twice -- IR_ATOMIC and IR_VIRTUAL_CALL both cost us
@@ -15445,6 +15450,10 @@ test-i386: $(COMPILER)
 	# positive control -- the pinned compiler still refuses this exact file here.
 	./$(COMPILER) --target=i386 test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_i386_charstrptr
 	tools/expect_same.sh i386/charstrptr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_charstrptr)" "$$(cat test/test_char_into_shortstring_via_pointer.expected)"
+	# THE ROW THAT MEANS SOMETHING for the char/string equality fix: the OR-for-CMP
+	# encoding was i386-only, so this is the arm that fails on the pre-fix binary.
+	./$(COMPILER) --target=i386 test/test_char_string_equality_both_directions.pas $(TESTTMP)/test_i386_chareq
+	tools/expect_same.sh i386/chareq "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_chareq)" "$$(cat test/test_char_string_equality_both_directions.expected)"
 	# The cross half of the statement-vs-value classification guard, and the half
 	# that can fail: x86-64 has no statement-level catch-all, so only a target
 	# that HAS one can regress. Exits 81 if a value kind is mis-classified.
@@ -16321,6 +16330,8 @@ test-aarch64: $(COMPILER)
 	# positive control -- the pinned compiler still refuses this exact file here.
 	./$(COMPILER) --target=aarch64 test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_a64_charstrptr
 	tools/expect_same.sh aarch64/charstrptr "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_charstrptr)" "$$(cat test/test_char_into_shortstring_via_pointer.expected)"
+	./$(COMPILER) --target=aarch64 test/test_char_string_equality_both_directions.pas $(TESTTMP)/test_a64_chareq
+	tools/expect_same.sh aarch64/chareq "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_chareq)" "$$(cat test/test_char_string_equality_both_directions.expected)"
 	# The cross half of the statement-vs-value classification guard, and the half
 	# that can fail: x86-64 has no statement-level catch-all, so only a target
 	# that HAS one can regress. Exits 81 if a value kind is mis-classified.
@@ -17047,6 +17058,8 @@ test-riscv32: $(COMPILER)
 	# that the three transplants changed nothing on the backend that was right.
 	./$(COMPILER) --target=riscv32 test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_rv32_charstrptr
 	tools/expect_same.sh riscv32/charstrptr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_charstrptr)" "$$(cat test/test_char_into_shortstring_via_pointer.expected)"
+	./$(COMPILER) --target=riscv32 test/test_char_string_equality_both_directions.pas $(TESTTMP)/test_rv32_chareq
+	tools/expect_same.sh riscv32/chareq "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_chareq)" "$$(cat test/test_char_string_equality_both_directions.expected)"
 	# A `var` parameter of every scalar kind, plus var->var forwarding. The
 	# 32-bit backends carried a hand-rolled arm AHEAD of the shared
 	# ABIParamSlotHoldsValueAddr predicate that was a strict subset of it; this
@@ -18842,6 +18855,8 @@ test-arm32: $(COMPILER)
 	# native one -- is the guard. Positive control: the pinned compiler still does.
 	./$(COMPILER) --target=arm32 test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/test_a32_charstrptr
 	tools/expect_same.sh arm32/charstrptr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_charstrptr)" "$$(cat test/test_char_into_shortstring_via_pointer.expected)"
+	./$(COMPILER) --target=arm32 test/test_char_string_equality_both_directions.pas $(TESTTMP)/test_a32_chareq
+	tools/expect_same.sh arm32/chareq "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_chareq)" "$$(cat test/test_char_string_equality_both_directions.expected)"
 	# The cross half of the statement-vs-value classification guard, and the half
 	# that can fail: x86-64 has no statement-level catch-all, so only a target
 	# that HAS one can regress. Exits 81 if a value kind is mis-classified.

@@ -2617,8 +2617,16 @@ begin
             EmitB($8B); EmitB($0C); EmitB($24);
             { mov eax, [esp+4] }
             EmitB($8B); EmitB($44); EmitB($24); EmitB($04);
-            { cmp dword [ecx], 1 }
-            EmitB($83); EmitB($09); EmitB($01);
+            { cmp dword [ecx], 1 -- ModRM $39, NOT $09. $83 is group-1 and the
+              REG FIELD picks the operation: 7 = CMP, 1 = OR. This read $09 for
+              years, i.e. `or dword [ecx], 1`, which did two wrong things at
+              once: OR's ZF is set from `len or 1`, never zero, so the `jne`
+              below always took the not-equal arm and `'a' = s` answered False
+              for every s; and it WROTE, setting bit 0 of the length prefix, so
+              Length(s) went 2 -> 3 with a garbage char exposed. The sibling arm
+              nine lines up (`str = char`) had it right with $38 on eax, which
+              is why only one of the two directions was broken. }
+            EmitB($83); EmitB($39); EmitB($01);
             { jne .not_equal }
             EmitB($0F); EmitB($85); nextJmp := CodeLen; EmitI32(0);
             { movzx edx, byte [ecx+8] }

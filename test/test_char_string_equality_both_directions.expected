@@ -1,0 +1,6 @@
+1char eq  TRUE TRUE
+1char ne  TRUE TRUE
+len before 2
+not equal
+len after  2
+t is [ab]
