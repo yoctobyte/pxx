@@ -4250,8 +4250,17 @@ test-threads: $(COMPILER)
 	# bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower. Positive control is
 	# recorded in the test: weakening the retain blob's `lock inc` to a plain `inc` makes this
 	# report fail=2 on every run, so the guard is known to be able to fail.
+	# BUILT TWICE, AND THE SECOND ROW IS NOT A DUPLICATE. The default level is -O2, where the
+	# literal is the static saturated handle -- never retained, never released -- so under the
+	# test's own positive control (retain blob's `lock inc` -> plain `inc`) the two LITERAL rows
+	# cannot fail at this level at all, and only the two `heap handle back to rc=1` rows detect
+	# it. At -O0 the literal is an ordinary heap block and the sets swap over: three rows fail,
+	# of which two are PAYLOAD rows. Neither level's failing set contains the other's, measured
+	# at 5df66928aa39, so one build can only exercise half of what this program asserts.
 	./$(COMPILER) --threadsafe test/test_threadsafe_refcount_lockfree.pas $(TESTTMP)/test_threadsafe_refcount_lockfree26
 	tools/expect_same.sh test_threadsafe_refcount_lockfree26 "$$($(TESTTMP)/test_threadsafe_refcount_lockfree26 | tail -n 2)" "$$(printf 'fail=0\nTSRCLOCKFREE OK')"
+	./$(COMPILER) -O0 --threadsafe test/test_threadsafe_refcount_lockfree.pas $(TESTTMP)/test_threadsafe_refcount_lockfree26_o0
+	tools/expect_same.sh test_threadsafe_refcount_lockfree26_o0 "$$($(TESTTMP)/test_threadsafe_refcount_lockfree26_o0 | tail -n 2)" "$$(printf 'fail=0\nTSRCLOCKFREE OK')"
 	# `parallel for` scalar capture (Phase A): enclosing scalars by-ref via the frame pointer (read + write-back)
 	./$(COMPILER) --threadsafe test/test_parallel_for_capture.pas $(TESTTMP)/test_parallel_for_capture26
 	tools/expect_same.sh test_parallel_for_capture26 "$$($(TESTTMP)/test_parallel_for_capture26)" "$$(printf 'readErr=0\ntotal=4950\nPARFORCAP OK')"

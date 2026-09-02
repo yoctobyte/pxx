@@ -187,3 +187,44 @@ our versions would take the counted arm, and every row would pass — correctly,
 because the program would still be correct, just slower by the 9.28% of uforth's
 profile that motivated the pass. That is a performance regression with no guard,
 and it belongs to whoever owns the pass rather than to this test.
+
+## Postscript 2026-09-02 (frankA) — the control needs AIMING, and its answer is level-scoped
+
+I worked this ticket in parallel without seeing `ad55e4dcc` land, reached the
+same root cause and discarded my version on the conflict rather than fight for
+it. Two things survive as a delta, both re-measured against the CURRENT test
+text at binary `5df66928aa39` — the earlier figures were taken before the
+`PWord` and `IsStaticBlock` commits and were not carried across.
+
+**1. Two of the three sites the control looks aimable at are silent.**
+`ir_codegen.inc` has THREE `lock inc qword [rax-16]` sites. Only the retain
+BLOB's own (~3700) is what this program races. Weakening instead the two
+`incOp` sites in `EmitAnsiStrRetain*` (~428, ~473) — the callers that still
+hold the heap lock — leaves the test at **fail=0 on every run of three at both
+-O0 and -O2**. That is indistinguishable from a guard that cannot fail, and it
+is what I saw on my first attempt at re-running the recorded control: three
+clean runs that read exactly like a neutered test. So "I weakened the retain
+and nothing failed" is not evidence about this test unless the site is named.
+
+**2. The control's answer is level-scoped, so one build sees half the file.**
+Blob weakened, three runs each, every run failing:
+
+```
+-O2   2 FAILs   heap handle back to rc=1 after the parallel hammer
+                heap handle back to rc=1 after the array dropped it
+-O0   3 FAILs   literal count bit-identical — the block was never written
+                heap payload intact
+                shared payload survived SetLength churn
+```
+
+At -O2 the literal is the static saturated handle, never retained and never
+released, so its rows **cannot fail there however broken the retain is**. At -O0
+it is an ordinary heap block and the sets swap over — and it fires as PAYLOAD
+CORRUPTION rather than as a wrong count, because a lost increment frees a live
+block. **Neither level's failing set contains the other's**, and the default
+level was the only one this program was built at. The Makefile now builds it at
+-O0 as well, with that as the stated reason so the row does not read as a
+duplicate somebody can tidy away.
+
+## Log
+- 2026-09-02 — postscript, -O0 arm and control aiming, commit PENDING-COMMIT.

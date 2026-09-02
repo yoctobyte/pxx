@@ -202,6 +202,33 @@ begin
     detect the lost increments. With the atomic form, fail=0. So the guard can
     fail, and the `lock` prefix is load-bearing rather than defensive.
 
+    THAT CONTROL HAS TO BE AIMED, and two of the three places it looks aimable
+    are silent. `ir_codegen.inc` has THREE `lock inc qword [rax-16]` sites and
+    only the retain BLOB's own (~3700, inside the nil/static-guarded blob) is
+    what this program races. Weakening instead the two `incOp` sites in
+    EmitAnsiStrRetain* (~428, ~473) — the callers that still hold the heap lock,
+    so nothing here races them — leaves this test at fail=0 on every run of
+    three at BOTH -O0 and -O2. A control pointed at the wrong one of three
+    identical-looking sites reports exactly what a neutered test reports, so
+    "I weakened the retain and nothing failed" is not evidence about the test.
+
+    AND ITS ANSWER IS LEVEL-SCOPED, which is why the Makefile builds this
+    program at -O0 as well as at the default. Blob weakened, three runs each,
+    measured at 5df66928aa39, every run failing:
+
+      -O2   2 FAILs   heap handle back to rc=1 after the parallel hammer
+                      heap handle back to rc=1 after the array dropped it
+      -O0   3 FAILs   literal count bit-identical — the block was never written
+                      heap payload intact
+                      shared payload survived SetLength churn
+
+    At -O2 the literal is the static saturated handle, never retained and never
+    released, so its rows CANNOT fail there however broken the retain is. At -O0
+    it is an ordinary heap block and the sets swap over — and it fires as
+    PAYLOAD CORRUPTION rather than as a wrong count, because a lost increment
+    frees a live block. Neither level's failing set contains the other's, so one
+    build of this program can only ever exercise half of what it asserts.
+
     THREE MORE for the representation branch, RE-RUN at 0f1d03315f4e after the
     PWord fix above landed (the earlier numbers were taken at 480d4584403c and
     the perturbations were spelled against the old `PWord` reads, so they would
