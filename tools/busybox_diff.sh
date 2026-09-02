@@ -973,8 +973,16 @@ make_wrappers() {
   rm -rf "$WORK/wrap"; mkdir -p "$WORK/wrap"
   while read -r src; do
     tag="$(printf '%s' "$src" | tr / _ | sed 's/\.c$//')"
-    { cat "$WORK/preamble.h"; printf '#include "%s"\n' "$src"; } > "$WORK/wrap/$tag.c"
+    make_one_wrapper "$src" "$tag"
   done < "$WORK/tulist.txt"
+}
+
+# One wrapper, so the cross-link's TU additions are built by the SAME code path
+# as the initial list rather than by a second copy of the recipe. A second copy
+# is how the preamble and the additions drift apart, and a TU compiled without
+# the preamble fails in a way that reads as a compiler gap.
+make_one_wrapper() {
+  { cat "$WORK/preamble.h"; printf '#include "%s"\n' "$1"; } > "$WORK/wrap/$2.c"
 }
 
 # -std=gnu99 because BUSYBOX SAYS SO. Its own Makefile.flags carries
@@ -1164,6 +1172,78 @@ for t in $TARGETS; do
     # cases, so the count is asserted rather than printed.
     nobj=$(ls "$WORK/obj"/*.o 2>/dev/null | wc -l)
     [ "$nobj" -gt 1 ] || die "separate mode produced $nobj object(s) -- there is nothing here that a unity build would not also prove"
+    # Every source THIS CONFIG COMPILED, read off the archives rather than off
+    # the disk: a `*.o' left behind by a previous config is a member of neither
+    # archive, so a stale object cannot become a candidate. This is the search
+    # space for a symbol the map did not predict, and nothing outside it can be
+    # pulled in by accident.
+    ARCHIVE_SRCS=$(cd "$BB" && for a in $(ls */lib.a */*/lib.a 2>/dev/null); do
+                     d=$(dirname "$a")
+                     ar t "$a" 2>/dev/null | sed "s|^|$d/|; s|\\.o$|.c|"
+                   done | sort -u | while read -r c; do [ -f "$BB/$c" ] && printf '%s ' "$c"; done)
+    # THE TU LIST IS A HOST ARTEFACT AND THE POPULATION IS PER-TARGET.
+    # busybox_unstripped.map records which archive members THIS BOX's link
+    # pulled, and that set is not architecture-independent. platform.h:
+    #
+    #     #if ULONG_MAX > 0xffffffff
+    #     /* inline 64-bit bswap only on 64-bit arches */
+    #     # define bb_bswap_64(x) bswap_64(x)
+    #     #endif
+    #
+    # On x86-64 the macro shadows the function, `libbb/bb_bswap_64.o' is never
+    # pulled, and it is ABSENT FROM THE MAP. On i386 the macro does not exist,
+    # every SWAP_BE64 becomes a real call, and the link fails on one undefined
+    # symbol after all 265 objects compiled cleanly. Measured 2026-09-02.
+    #
+    # So a cross link is allowed to GROW the list, and only by symbols the
+    # linker actually asked for -- the addition is derived from the failure,
+    # never guessed, and every one is printed. `lib.a' is the right source
+    # because it holds exactly what THIS config compiled: a member the config
+    # excludes was never built and cannot be added by accident.
+    ldrounds=0
+    ldresolved=0
+    while ! $SEP_LD -o "$out" "$WORK/obj"/*.o >> "$WORK/build_$t.log" 2>&1; do
+      ldrounds=$((ldrounds+1))
+      [ "$ldrounds" -le 3 ] || break
+      added=0
+      for sym in $(grep -a -oE "undefined reference to \`[^']*'" "$WORK/build_$t.log" \
+                   | sed "s/.*\`//; s/'$//" | sort -u); do
+        # Candidates by TEXT, then decided by COMPILING. Asking the host
+        # archive which member defines the symbol cannot work here: on x86-64
+        # `libbb/bb_bswap_64.o' is an EMPTY object -- present in lib.a,
+        # defining nothing -- so the host has no definition to point at. Only
+        # the target build has one.
+        for cand in $(cd "$BB" && grep -lw "$sym" $ARCHIVE_SRCS 2>/dev/null); do
+          grep -qxF "$cand" "$WORK/tulist.txt" && continue
+          tag2=$(printf '%s' "${cand%.c}" | tr '/' '_')
+          make_one_wrapper "$cand" "$tag2"
+          ( cd "$BB" && "$COMPILER" --emit-obj $targflag $OBJFLAGS $INC \
+              "$WORK/wrap/$tag2.c" "$WORK/cand.o" ) >> "$WORK/build_$t.log" 2>&1 || continue
+          nm -g --defined-only "$WORK/cand.o" 2>/dev/null | grep -qw "$sym" || continue
+          mv "$WORK/cand.o" "$WORK/obj/$tag2.o"
+          printf '%s\n' "$cand" >> "$WORK/tulist.txt"
+          printf '  note    %-8s +%s (defines `%s` for this target; the host object is empty, so the map omits it)\n' \
+                 "$t" "$cand" "$sym"
+          added=$((added+1))
+          break
+        done
+      done
+      rm -f "$WORK/cand.o"
+      ldresolved=$((ldresolved+added))
+      # A round that resolved nothing will fail identically forever, and
+      # retrying would bury the real diagnostic under three copies of itself.
+      # It is also REPORTED rather than merely broken out of: "the link failed
+      # and I could find nothing to add" and "the link succeeded first time"
+      # are the same silence in a log skim, and telling them apart is the whole
+      # subject of this block.
+      if [ "$added" -eq 0 ]; then
+        printf '  note    %-8s link failed and no configured source defines the missing symbol(s) for this target\n' "$t"
+        break
+      fi
+      nobj=$(ls "$WORK/obj"/*.o 2>/dev/null | wc -l)
+    done
+    [ "$ldrounds" -eq 0 ] || [ "$ldresolved" -eq 0 ] \
+      || printf '  note    %-8s the host map was short %d translation unit(s) for this target\n' "$t" "$ldresolved"
     if ! $SEP_LD -o "$out" "$WORK/obj"/*.o >> "$WORK/build_$t.log" 2>&1; then
       printf '  FAIL    %-8s %d objects did not link\n' "$t" "$nobj"
       # Two failure modes, not one. Grepping only for `undefined reference'

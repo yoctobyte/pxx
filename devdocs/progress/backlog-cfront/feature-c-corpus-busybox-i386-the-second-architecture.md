@@ -8,7 +8,7 @@ status: open
 created: 2026-09-02
 found-by: frankD
 owner: frankD
-summary: "384 OF 396 TRANSLATION UNITS BECOME i386 OBJECTS, measured on a quiet tree at 0da8a0ae4 with binary 1652b00f68f1, and EVERY ONE OF THE 12 REFUSALS WAS ALREADY TICKETED: regex.h (7 TUs) and resolv.h (1), which want an IMPLEMENTATION rather than a header, and 4 inline-asm files that belong to the AT&T reader. **regex.h LANDED 2026-09-02 (2f920dfd4) and all 7 of its TUs now become i386 objects**, leaving resolv.h and the 4 asm files -- both ticketed. There is no unticketed blocker left in this ticket. First attempt, 2026-09-02, was 332 with 68 refusals -- 64 crtl HEADER gaps across 34 distinct headers, invisible on x86-64 where pxx falls back to the host's /usr/include and a cross target rightly cannot, plus the same 4 asm. All 34 landed, in five commits (eac7126f1, 037e38c64, 0baec7bad, c3e89bdee, and linux/fd.h), the last of which the sweep itself found: it was not in the 34-header table, because mkfs_vfat.c only became the next failure once the ones ahead of it were gone. The counts quoted mid-session (358, 367) were taken while headers were being edited under the sweep and are WITHDRAWN, not corrected -- a contaminated count is not a smaller true count. WHAT IS NOT YET MEASURED: the LINK. 384 objects is a compile result; the sweep refuses to link a partial set, correctly, so busybox-on-i386 as a running program is still gated on regex.h."
+summary: "**265 OF 265 TRANSLATION UNITS BECOME i386 OBJECTS AND ALL 266 LINK** (the 266th is libbb/bb_bswap_64.c, which the host link map omits -- see below), measured 2026-09-02 at the full 140-applet scope with binary cd239178b3a0. The i386 binary RUNS and differs from the gcc oracle on ONE of 387 cases, ticketed as bug-c-busybox-mv-treats-an-existing-plain-file-destination-as-a-directory-on-i386. **x86-64 at the same scope is byte-identical to the gcc oracle over all 387 cases** -- the first green full-applet separate build, previously stopped at getnameinfo. Earlier counts on this ticket (332, then 384 of 396) were taken at a different applet scope and are not comparable: busybox's .config is shared mutable state and a TU count without its scope named is not reproducible. regex.h (7 TUs) landed as 2f920dfd4 and resolv.h and the 4 inline-asm files are out of scope at this applet set."
 ---
 
 # The second architecture, and what the first one was borrowing
@@ -213,3 +213,74 @@ TUs (the cat+echo scope), not the ~396 of the full-applet one. So `384/396`,
 way a binary sha is quoted beside a timing. A count on its own cannot be
 checked, and the failure mode is not a wrong number -- it is a number that is
 right about a build nobody else has.
+
+
+## 2026-09-02, night — i386 LINKS AND RUNS; and the map is an exact set for ONE architecture
+
+Full 140-applet scope, `--separate`, binary `cd239178b3a0`:
+
+```
+  ORACLE  gcc separate build, 265 objects (387 cases)
+  ORACLE  busybox agrees with the gcc build
+  PASS    x86_64   byte-identical to the gcc oracle over 387 cases
+  note    i386     +libbb/bb_bswap_64.c (defines `bb_bswap_64` for this target)
+  note    i386     266 objects linked separately with `gcc -m32` (167179260 bytes)
+  FAIL    i386     differs from the gcc oracle          <- one case, ticketed
+```
+
+**x86-64 is the first green full-applet separate build.** It previously stopped
+at `getnameinfo` in `libbb/xconnect.c`; the header work cleared it.
+
+**i386 compiles completely** -- 265 of 265 -- and now links and runs. The single
+differing case is `mv copy.txt moved.txt`, filed as
+`bug-c-busybox-mv-treats-an-existing-plain-file-destination-as-a-directory-on-i386`
+with stat/lstat/S_ISDIR/errno already measured out as the cause.
+
+### The link failure that was not a pxx bug
+
+The first i386 attempt compiled all 265 objects and then failed to link on ONE
+undefined symbol, `bb_bswap_64`. `include/platform.h`:
+
+```c
+#if ULONG_MAX > 0xffffffff
+/* inline 64-bit bswap only on 64-bit arches */
+# define bb_bswap_64(x) bswap_64(x)
+#endif
+```
+
+with `libbb/bb_bswap_64.c` self-guarded by the exact complement,
+`#if !(ULONG_MAX > 0xffffffff)`. On x86-64 the macro shadows the function, the
+TU compiles to an object **that defines nothing**, the link never pulls it, and
+it is therefore ABSENT FROM `busybox_unstripped.map` -- grep count zero. On i386
+the macro does not exist and every `SWAP_BE64` becomes a real call.
+
+**The TU list was derived from a map produced by a HOST x86-64 link.** Together
+with the stale-`*.o` finding recorded above, that is a matched pair, and the
+playbook now carries both (section 89, written up by frankC from this
+measurement):
+
+| population | shape | what it gets wrong for a cross target |
+| --- | --- | --- |
+| `*.o` on disk | a SUPERSET that never shrinks | members the current config does not compile |
+| the link map | an EXACT SET, for the machine that produced it | MISSING what only the target needs |
+
+**Name the architecture beside the map exactly as you name the config.**
+
+### And the host archive cannot answer the question
+
+The first resolver looked up which `lib.a` member defines the missing symbol
+and found nothing -- and its negative control also found nothing, so it could
+not tell "my `awk` is broken" from "no member defines it". A positive control
+on `bb_cat` showed the `awk` was fine and that `libbb/bb_bswap_64.o` is a
+genuinely EMPTY archive member: present, defining no symbols. The host has no
+definition to point at. **Only the target build has one**, so the resolver has
+to compile the candidate for the target and ask that object.
+
+`tools/busybox_diff.sh` now does exactly that on a cross link failure: candidate
+sources by text, restricted to the sources this config compiled (read off
+`ar t` of the archives, so a stale `*.o` can never become a candidate), each
+compiled for the target, and the one whose OBJECT defines the symbol is kept.
+Every addition is printed with the symbol that caused it. Bounded at three
+rounds, and a round that resolves nothing says so out loud rather than falling
+through -- "the link failed and I found nothing to add" and "the link succeeded
+first time" are the same silence in a log skim.
