@@ -208,7 +208,16 @@ jittered_backoff() {
     _t=$1
     _r=$(od -An -N4 -tu4 /dev/urandom 2>/dev/null | tr -d ' \n')
     [ -n "$_r" ] || _r=$$
-    _ms=$(( _t * 500 + _r % (_t * 1000 + 1) ))
+    # NO `+ 1` ON THE MODULUS. `_r % (_t * 1000)` is 0.._t*1000-1, which makes
+    # _ms exactly [_t*500, _t*1500) -- the half-open interval the comment above
+    # promises. The `+ 1` that used to be here closed the interval at the top,
+    # so one draw in 1001 landed on exactly 3*tries/2 and
+    # tools/sync_contention_devtest.py failed its own stated bound (`all within
+    # [tries/2, 3*tries/2)`, min 0.503 max 1.500). At 200 draws per check that
+    # is ~19% of runs, which is why tools-devtest#00 went red without a cause.
+    # The guard was right and the code was wrong; the mean is `tries` either
+    # way, so nothing about the backoff's patience changes.
+    _ms=$(( _t * 500 + _r % (_t * 1000) ))
     printf '%d.%03d\n' "$(( _ms / 1000 ))" "$(( _ms % 1000 ))"
 }
 

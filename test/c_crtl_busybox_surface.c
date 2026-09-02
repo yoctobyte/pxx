@@ -39,8 +39,9 @@ static const char *MTAB =
   "/dev/sdb1   /mnt/plain    xfs      ro,noauto\n";
 
 int main(void) {
-  char path[] = "/tmp/c_crtl_bb_mtabXXXXXX";
-  char lpath[] = "/tmp/c_crtl_bb_lineXXXXXX";
+  char path[256];
+  char lpath[256];
+  const char *dir;
   int fd;
   FILE *f;
   struct mntent *m;
@@ -48,6 +49,18 @@ int main(void) {
   char *line = 0;
   size_t n = 0;
   ssize_t r;
+
+  /* Directory from the environment, never a bare /tmp literal: a path written
+     at RUNTIME is one no Makefile sweep reaches, so testmgr cannot privatize
+     it and two concurrent runs share the file. TESTMGR_TMP first (testmgr's
+     env allowlist is what $TESTTMP does not survive), TESTTMP second, /tmp
+     last so a bare run stays byte-identical.
+     Guard: tools/testmgr_hardcoded_tmp_devtest.py. */
+  dir = getenv("TESTMGR_TMP");
+  if (!dir) dir = getenv("TESTTMP");
+  if (!dir) dir = "/tmp";
+  snprintf(path,  sizeof path,  "%s/c_crtl_bb_mtabXXXXXX", dir);
+  snprintf(lpath, sizeof lpath, "%s/c_crtl_bb_lineXXXXXX", dir);
   gid_t gs[64];
   int cnt, i, in_range = 1, saw_high = 0;
   long v;

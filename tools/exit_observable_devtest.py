@@ -173,14 +173,28 @@ def main():
     # and trips it, while an uncapped row paired with a capped one does not.
     # Positive control, asserted below, because a bound nobody proved can fail
     # is the failure this whole file exists to name.
-    STDOUT_ONLY_SHARE = 619 / 665                 # 0.93083, measured 2026-09-01
+    # RE-ARMED AGAIN 2026-09-02 by frankZ, DOWNWARD, and the direction is the
+    # whole point. The corpus grew 665 -> 698 and every one of the 33 new
+    # differential rows was uncapped, so the share went 93.083% -> 93.419%
+    # and this tripped -- correctly, and for the reason it was designed to:
+    # a batch large enough to move the share. The answer was NOT to re-arm at
+    # 93.419%. Five arm32 leak rows were CAPPED instead (managed_str /
+    # dynarray / open_array_managed_field / managed_dynarray_field /
+    # exception_object ownership, each comparing qemu against the x86-64
+    # build of the same source), taking uncapped 652 -> 647 and the share to
+    # 92.704%. The bound moves to THAT, so the ratchet stays tight and the
+    # improvement cannot be given back. Re-arming upward on a red would have
+    # made this the third kind of dead guard: one that ratifies whatever it
+    # finds.
+    STDOUT_ONLY_SHARE = 647 / 698                 # 0.92693, measured 2026-09-02
     uncapped = len(cross) - len(capped)
     share = uncapped / max(len(cross), 1)
     check(share <= STDOUT_ONLY_SHARE,
           "and the stdout-only SHARE has not grown past its measured value",
           "%d of %d = %.2f%% compare stdout alone "
-          "(re-armed 2026-09-01 at 619 of 665 = %.2f%%; was a COUNT capped at "
-          "531, which the corpus outgrew while getting better)"
+          "(re-armed DOWNWARD 2026-09-02 at 647 of 698 = %.2f%%, after capping "
+          "five arm32 leak rows rather than ratifying the drift; was a COUNT "
+          "capped at 531, which the corpus outgrew while getting better)"
           % (uncapped, len(cross), 100 * share, 100 * STDOUT_ONLY_SHARE))
     check((uncapped + 1) / (len(cross) + 1) > STDOUT_ONLY_SHARE,
           "and that bound is tight — one more uncapped row would breach it",

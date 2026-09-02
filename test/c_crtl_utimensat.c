@@ -21,10 +21,25 @@
 #include <errno.h>
 
 int main(void) {
-  char p[] = "/tmp/c_crtl_utimensatXXXXXX";
+  char p[256];
+  /* The ABSENT path must not be a bare /tmp literal: two concurrent runs would
+     share it, and a stray file left by anything else flips row 4 from ENOENT
+     to success. testmgr cannot privatize a path written at RUNTIME, so read
+     the directory from the environment -- TESTMGR_TMP first (testmgr launches
+     jobs through an env allowlist that $TESTTMP does not survive), TESTTMP
+     second (what `make test TESTTMP=$(mktemp -d)` exports), /tmp last so a
+     bare run stays byte-identical. */
+  char absent[512];
+  const char *dir;
   struct stat st;
   struct timespec ts[2];
   int fd, r;
+
+  dir = getenv("TESTMGR_TMP");
+  if (!dir) dir = getenv("TESTTMP");
+  if (!dir) dir = "/tmp";
+  snprintf(p,      sizeof p,      "%s/c_crtl_utimensatXXXXXX", dir);
+  snprintf(absent, sizeof absent, "%s/c_crtl_utimensat_absent", dir);
 
   fd = mkstemp(p);
   close(fd);
@@ -49,7 +64,7 @@ int main(void) {
   stat(p, &st);
   printf("3 %d %lld %lld\n", r, (long long)st.st_atime, (long long)st.st_mtime);
 
-  r = utimensat(AT_FDCWD, "/tmp/c_crtl_utimensat_absent", ts, 0);
+  r = utimensat(AT_FDCWD, absent, ts, 0);
   printf("4 %d %d\n", r, errno);
 
   unlink(p);

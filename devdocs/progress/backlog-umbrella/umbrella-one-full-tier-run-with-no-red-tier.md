@@ -3,7 +3,7 @@ slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
 prio: 85
 type: umbrella
-blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, feature-c-labels-as-values-on-i386-arm32-riscv32]
+blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2]
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
@@ -720,3 +720,64 @@ first reseed touched `compiler/*.inc compiler/*.pas lib/rtl/*.pas` while
 Re-running both touch sets from the pin now gives `135bb8fec65f1271` either way,
 so the touch set is not the variable and I do not know what was. Recording it
 unexplained rather than shipping the neat version.
+
+## Groups 3 and 5 closed; the manifest is down to the three that need a pin
+
+**Group 3 — `test-lua-cross` is GREEN, 24/24.** frankD implemented
+`IR_LABELADDR`/`IR_JUMP_INDIRECT` on i386, arm32 and riscv32 (`1f4003e56`) the
+same night I re-ranked it, and closed the residual I had flagged rather than
+leaving my 6/6 standing unqualified: on i386 and riscv32 the DEFAULT build is
+byte-identical to `-DLUA_USE_JUMPTABLE=1` and differs from `=0`, so the binary
+passing 6/6 is the jump-table binary and the `=0` row is only the control that
+the flag reaches the code. Verified here: 24 PASS, 0 FAIL, 0 SKIP, binary
+`5df66928aa3979df` — the same sha frankD reports, which is the first time two
+checkouts have independently reached one pin-derived fixedpoint tonight.
+Unwired.
+
+**Group 5 — `tools-devtest#00` is GREEN, 133 guards, 0 red.** It was 5 red here
+(seven's stored reason named a different, truncated set — this job's red set
+moves, because several of its guards are environment- or corpus-dependent).
+Four were real defects and one was a guard lying about itself:
+
+- **`sync_contention` was RIGHT and `tools/sync.sh` was wrong.**
+  `_ms = _t*500 + _r % (_t*1000 + 1)` closes an interval the comment three
+  lines above promises is half-open, so one draw in 1001 lands on exactly
+  `3*tries/2` and the guard's own stated bound fails. At 200 draws per check
+  that is **~19% of runs red for no cause** — a flake that looks like nothing.
+  Dropped the `+ 1`; 20000 draws now give min 0.500, max 1.499, mean 1.0021,
+  exactly 1000 distinct values. Positive control: the old formula produced 29
+  breaches in 20000. The mean is unchanged, so no patience is traded.
+- **`testmgr_hardcoded_tmp`: seven runtime `/tmp` literals across six test
+  sources** (five C crtl tests and one Pascal). A path written at RUNTIME is
+  one no Makefile sweep reaches, so two concurrent runs share the file. All now
+  read `TESTMGR_TMP`, then `TESTTMP`, then `/tmp`. Positive control on every
+  one: point `TESTMGR_TMP` at a directory that does not exist and each output
+  changes, while the pre-fix binaries ignore it — so the env path is live and
+  not a comment. Output byte-identical to before with the variable unset.
+- **`npy_cross_target_expectation`: two sources compiled to one binary path**
+  (the whole-dynarray-to-var-parameter test and the var-dynarray-parameter test
+  both wrote `test_dynarray_var_param26`), so the loser's assertion runs the
+  winner's program. Renamed.
+- **`exit_observable`: the ratchet tripped and I did NOT re-arm it upward.**
+  The corpus grew 665 to 698 and all 33 new differential rows were uncapped, so
+  the stdout-only share went 93.083% to 93.419%. Capped five arm32 leak rows
+  instead (each already comparing qemu against the x86-64 build of the same
+  source), taking it to 647/698 = 92.693%, and re-armed DOWNWARD so the
+  improvement cannot be given back. Re-arming upward on a red would have made
+  it the third kind of dead guard: one that ratifies whatever it finds.
+- **`job_reason` was passing for the wrong reason.** Its scrub check fed a
+  literal `/tmp/testmgr-scratch-99123`, which is only what testmgr derives when
+  `TESTTMP` is unset — and `Makefile:90` EXPORTS it. So the guard passed by hand
+  and failed under the make target, the only way the job actually runs. Its
+  input came from a population the real environment never produces. Now derived
+  from `testmgr.TESTTMP`, and given the positive control it never had: a path
+  outside the scratch root that must SURVIVE, so the assertion cannot be
+  satisfied by a scrubber that empties everything.
+
+### What is left
+
+`still_red` at `0f4d2c907d54` was 16. Thirteen are now green and verified here.
+The remaining **three are all `lib_synapse`**, they are fixed in the compiler
+(`9c6b216aa`), and they build with `$(PXX_STABLE)` — so **nothing but a pin can
+turn them green, and a pin is the owner's alone.** No compiler defect is
+outstanding in the set.

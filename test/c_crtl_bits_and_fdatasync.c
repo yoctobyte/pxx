@@ -42,7 +42,19 @@ int main(void) {
   unsigned char bits[4];
   sighandler_t fp;
   int fd, rc, e;
-  char path[] = "/tmp/pxx_fdatasync_probe";
+  char path[256];
+  const char *dir;
+
+  /* Directory from the environment, never a bare /tmp literal: a path written
+     at RUNTIME is one no Makefile sweep reaches, so testmgr cannot privatize
+     it and two concurrent runs share the file. TESTMGR_TMP first (testmgr's
+     env allowlist is what $TESTTMP does not survive), TESTTMP second, /tmp
+     last so a bare run stays byte-identical.
+     Guard: tools/testmgr_hardcoded_tmp_devtest.py. */
+  dir = getenv("TESTMGR_TMP");
+  if (!dir) dir = getenv("TESTTMP");
+  if (!dir) dir = "/tmp";
+  snprintf(path, sizeof path, "%s/pxx_fdatasync_probe_%d", dir, (int)getpid());
 
   memset(bits, 0, sizeof(bits));
   setbit(bits, 9);

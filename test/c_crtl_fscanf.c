@@ -50,12 +50,23 @@
 
 int main(void) {
   FILE *f;
-  char path[64];
+  char path[256];
   unsigned u; int a, b, n; char s1[64], s2[64]; double d; char ch;
   int r;
 
-  /* Own file, so two runs cannot collide. */
-  sprintf(path, "/tmp/pxx_fscanf_%d.txt", (int)getpid());
+  /* Own file, so two runs cannot collide -- pid AND the run's own directory. */
+  /* Directory from the environment, never a bare /tmp literal: a path written
+     at RUNTIME is one no Makefile sweep reaches, so testmgr cannot privatize
+     it and two concurrent runs share the file. TESTMGR_TMP first (testmgr's
+     env allowlist is what $TESTTMP does not survive), TESTTMP second, /tmp
+     last so a bare run stays byte-identical.
+     Guard: tools/testmgr_hardcoded_tmp_devtest.py. */
+  {
+    const char *dir = getenv("TESTMGR_TMP");
+    if (!dir) dir = getenv("TESTTMP");
+    if (!dir) dir = "/tmp";
+    snprintf(path, sizeof path, "%s/pxx_fscanf_%d.txt", dir, (int)getpid());
+  }
 
   f = fopen(path, "w");
   fputs("12345\nhello world\n  42 -7 0x1f 0755\n3.5e2 rest\nabc,def\nXY\n", f);

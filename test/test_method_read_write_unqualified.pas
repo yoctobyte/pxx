@@ -1,5 +1,13 @@
 program test_method_read_write_unqualified;
 
+{ sysutils is here ONLY for GetEnvironmentVariable, so the spill path can
+  come from the run's own directory instead of a shared /tmp literal
+  (tools/testmgr_hardcoded_tmp_devtest.py). It brings no Read or Write of
+  its own, so the binding this test is about is unaffected -- and the
+  assertions below still discriminate: `spill=OK` needs the intrinsic
+  3-argument Write to reach the file. }
+uses sysutils;
+
 { An unqualified Read/Write call STATEMENT inside a method whose class has a
   Read/Write member must bind to the member (Self.Read/Self.Write), not the
   console/file intrinsic. This was the TStream.CopyFrom symptom: `Write(buf,n)`
@@ -80,7 +88,15 @@ var
 begin
   b := TBuf.Create;
   b.Run;
-  tmp := '/tmp/pxx_test_method_rw_unqualified.txt';
+  { NOT a bare /tmp literal: two concurrent runs would share the file, and
+    testmgr cannot privatize a path written at RUNTIME. TESTMGR_TMP first --
+    testmgr launches jobs through an env allowlist that $TESTTMP does not
+    survive; TESTTMP second is what `make test TESTTMP=$(mktemp -d)` exports;
+    /tmp last keeps a bare run byte-identical. }
+  tmp := GetEnvironmentVariable('TESTMGR_TMP');
+  if tmp = '' then tmp := GetEnvironmentVariable('TESTTMP');
+  if tmp = '' then tmp := '/tmp';
+  tmp := tmp + '/pxx_test_method_rw_unqualified.txt';
   if b.spill(tmp) then writeln('spill=OK') else writeln('spill=FAIL');
   b.Free;
 end.

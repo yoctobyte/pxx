@@ -58,9 +58,23 @@ check("Error 1" not in r, "and the make line is DROPPED",
       "status+name already say it; keeping it makes every reason identical")
 
 print("\ntstate is committed to git, so the reason must be git-stable")
-r = reason("wrote /tmp/testmgr-scratch-99123/a.bin\nboom\n" + MAKE_ERR)
+# THE SCRATCH ROOT IS $(TESTTMP)/testmgr-scratch-<pid>, NOT /tmp/testmgr-scratch-<pid>.
+# This line used to hardcode the /tmp form, which is only what testmgr derives
+# when TESTTMP is unset -- and the Makefile EXPORTS it (Makefile:90, default
+# /tmp/pxx-testtmp-<uid>-<checkout>-<hash>). So the guard passed when run by
+# hand and FAILED under `make tools-devtest`, which is the only way the job
+# actually runs. A guard whose input comes from a population the real
+# environment never produces answers a question nobody asked; it happened to
+# answer "no" here, but it would just as happily have printed PASS about the
+# wrong path. Derive the input from the same TESTTMP testmgr read.
+r = reason("wrote %s/testmgr-scratch-99123/a.bin\nboom\n" % testmgr.TESTTMP + MAKE_ERR)
 check("$TMP" in r and "99123" not in r, "the pid-keyed scratch path is scrubbed",
       "else every run dirties tstate with nothing changed")
+# ...and the positive control the line above cannot be: prove the assertion can
+# FAIL, by feeding a path the scrubber must not touch.
+r2 = reason("wrote /var/lib/elsewhere-99123/a.bin\nboom\n" + MAKE_ERR)
+check("99123" in r2, "and a path that is NOT the scratch root survives",
+      "the check above would pass on any input the scrubber emptied")
 r = reason("\n".join("padding line %d that goes on a while" % i
                      for i in range(60)) + "\n" + MAKE_ERR)
 check(len(r) <= testmgr.REASON_MAX, "and the whole thing is capped at %d"

@@ -8182,8 +8182,13 @@ test-core: $(COMPILER)
 	# element stores route through IR_LEA and always worked, which is what hid it.
 	# The last row is the ARC check: without the retain, nilling d frees the block
 	# `e` still points at. Byte-identical to fpc 3.2.2.
-	./$(COMPILER) test/test_dynarray_assign_to_a_var_parameter.pas $(TESTTMP)/test_dynarray_var_param26
-	tools/expect_same.sh test_dynarray_var_param26 "$$($(TESTTMP)/test_dynarray_var_param26)" "$$(printf 'nil     0\nasg     2\ncopy    2\nout     2\nfnres   4\ndynstr  2\nsetlen  3\nelem    99\nrecfld  2\nsurvive 3 11 22 33')"
+	# NOT $(TESTTMP)/test_dynarray_var_param26 -- that name belongs to
+	# test/test_dynarray_var_param.pas at the other end of this target, and two
+	# sources writing one path means the loser's assertion runs the winner's
+	# program. Caught by npy_cross_target_expectation_devtest's
+	# t_no_new_binary_name_collision.
+	./$(COMPILER) test/test_dynarray_assign_to_a_var_parameter.pas $(TESTTMP)/test_dynarray_asgvarparam26
+	tools/expect_same.sh test_dynarray_asgvarparam26 "$$($(TESTTMP)/test_dynarray_asgvarparam26)" "$$(printf 'nil     0\nasg     2\ncopy    2\nout     2\nfnres   4\ndynstr  2\nsetlen  3\nelem    99\nrecfld  2\nsurvive 3 11 22 33')"
 	# FPC finalizes a MANAGED out parameter on entry, and only a managed one.
 	# pxx read `out` as a spelling of `var` everywhere, so it cleared neither —
 	# which made the ordinal rows accidentally right and left the managed ones
@@ -18355,7 +18360,7 @@ test-arm32: $(COMPILER)
 	# number rather than by a test.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_str_ownership_leaks.pas $(TESTTMP)/msol_a32_x64
-	tools/expect_same.sh arm32/test_managed_str_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/msol_a32)" "$$($(TESTTMP)/msol_a32_x64)"
+	tools/expect_same.sh arm32/test_managed_str_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/msol_a32; echo "exit=$$?")" "$$($(TESTTMP)/msol_a32_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=arm32 --platform=posix test/test_virtual_call_runs_once.pas $(TESTTMP)/vcro_a32
 	tools/expect_same.sh arm32/test_virtual_call_runs_once "$$(tools/run_target.sh arm32 $(TESTTMP)/vcro_a32)" "VIRTUAL CALL RUNS ONCE OK"
 	./$(COMPILER) --target=arm32 --platform=posix test/test_dynarray_result.pas $(TESTTMP)/dynres_a32
@@ -18383,10 +18388,10 @@ test-arm32: $(COMPILER)
 	# function at all, which is a separate gap with its own ticket.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_dynarray_ownership_leaks.pas $(TESTTMP)/dao_a32_x64
-	tools/expect_same.sh arm32/test_dynarray_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/dao_a32)" "$$($(TESTTMP)/dao_a32_x64)"
+	tools/expect_same.sh arm32/test_dynarray_ownership_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/dao_a32; echo "exit=$$?")" "$$($(TESTTMP)/dao_a32_x64; echo "exit=$$?")"
 	./$(COMPILER) --target=arm32 test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_a32
 	./$(COMPILER) test/test_open_array_managed_field_record.pas $(TESTTMP)/oamfr_a32_x64
-	tools/expect_same.sh arm32/test_open_array_managed_field_record "$$(tools/run_target.sh arm32 $(TESTTMP)/oamfr_a32)" "$$($(TESTTMP)/oamfr_a32_x64)"
+	tools/expect_same.sh arm32/test_open_array_managed_field_record "$$(tools/run_target.sh arm32 $(TESTTMP)/oamfr_a32; echo "exit=$$?")" "$$($(TESTTMP)/oamfr_a32_x64; echo "exit=$$?")"
 	tools/assert_no_leak.sh arm32/dynarray_ownership 50 tools/run_target.sh arm32 $(TESTTMP)/dao_a32
 	tools/assert_no_leak.sh x86-64/dynarray_ownership 50 $(TESTTMP)/dao_a32_x64
 	# A dyn array of AnsiString held as a FIELD released the array and
@@ -18406,7 +18411,7 @@ test-arm32: $(COMPILER)
 	# is the same gap and is not exception-specific.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_arm32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_managed_dynarray_field_leaks.pas $(TESTTMP)/mdf_arm32_x64
-	tools/expect_same.sh arm32/test_managed_dynarray_field_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/mdf_arm32)" "$$($(TESTTMP)/mdf_arm32_x64)"
+	tools/expect_same.sh arm32/test_managed_dynarray_field_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/mdf_arm32; echo "exit=$$?")" "$$($(TESTTMP)/mdf_arm32_x64; echo "exit=$$?")"
 	tools/assert_no_leak.sh arm32/managed_dynarray_field 50 tools/run_target.sh arm32 $(TESTTMP)/mdf_arm32
 	tools/assert_no_leak.sh x86-64/managed_dynarray_field 50 $(TESTTMP)/mdf_arm32_x64
 	# Every CAUGHT exception object must be freed at handler exit, and a
@@ -18422,7 +18427,7 @@ test-arm32: $(COMPILER)
 	# Verified against the clean-tree compiler, so it predates this test.
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_exception_object_leaks.pas $(TESTTMP)/teol_arm32
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_exception_object_leaks.pas $(TESTTMP)/teol_arm32_x64
-	tools/expect_same.sh arm32/test_exception_object_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/teol_arm32)" "$$($(TESTTMP)/teol_arm32_x64)"
+	tools/expect_same.sh arm32/test_exception_object_leaks "$$(tools/run_target.sh arm32 $(TESTTMP)/teol_arm32; echo "exit=$$?")" "$$($(TESTTMP)/teol_arm32_x64; echo "exit=$$?")"
 	tools/assert_no_leak.sh arm32/exception_object 50 tools/run_target.sh arm32 $(TESTTMP)/teol_arm32
 	tools/assert_no_leak.sh x86-64/exception_object 50 $(TESTTMP)/teol_arm32_x64
 	# Is a string literal handed over WITHOUT a heap copy. A literal is already
