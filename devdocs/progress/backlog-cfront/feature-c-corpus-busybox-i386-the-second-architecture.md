@@ -8,7 +8,7 @@ status: open
 created: 2026-09-02
 found-by: frankD
 owner: frankD
-summary: "384 OF 396 TRANSLATION UNITS BECOME i386 OBJECTS, measured on a quiet tree at 0da8a0ae4 with binary 1652b00f68f1, and EVERY ONE OF THE 12 REFUSALS IS ALREADY TICKETED: regex.h (7 TUs) and resolv.h (1), which want an IMPLEMENTATION rather than a header and have their own tickets, and 4 inline-asm files that belong to the AT&T reader. There is no unticketed blocker left in this ticket. First attempt, 2026-09-02, was 332 with 68 refusals -- 64 crtl HEADER gaps across 34 distinct headers, invisible on x86-64 where pxx falls back to the host's /usr/include and a cross target rightly cannot, plus the same 4 asm. All 34 landed, in five commits (eac7126f1, 037e38c64, 0baec7bad, c3e89bdee, and linux/fd.h), the last of which the sweep itself found: it was not in the 34-header table, because mkfs_vfat.c only became the next failure once the ones ahead of it were gone. The counts quoted mid-session (358, 367) were taken while headers were being edited under the sweep and are WITHDRAWN, not corrected -- a contaminated count is not a smaller true count. WHAT IS NOT YET MEASURED: the LINK. 384 objects is a compile result; the sweep refuses to link a partial set, correctly, so busybox-on-i386 as a running program is still gated on regex.h."
+summary: "384 OF 396 TRANSLATION UNITS BECOME i386 OBJECTS, measured on a quiet tree at 0da8a0ae4 with binary 1652b00f68f1, and EVERY ONE OF THE 12 REFUSALS WAS ALREADY TICKETED: regex.h (7 TUs) and resolv.h (1), which want an IMPLEMENTATION rather than a header, and 4 inline-asm files that belong to the AT&T reader. **regex.h LANDED 2026-09-02 (2f920dfd4) and all 7 of its TUs now become i386 objects**, leaving resolv.h and the 4 asm files -- both ticketed. There is no unticketed blocker left in this ticket. First attempt, 2026-09-02, was 332 with 68 refusals -- 64 crtl HEADER gaps across 34 distinct headers, invisible on x86-64 where pxx falls back to the host's /usr/include and a cross target rightly cannot, plus the same 4 asm. All 34 landed, in five commits (eac7126f1, 037e38c64, 0baec7bad, c3e89bdee, and linux/fd.h), the last of which the sweep itself found: it was not in the 34-header table, because mkfs_vfat.c only became the next failure once the ones ahead of it were gone. The counts quoted mid-session (358, 367) were taken while headers were being edited under the sweep and are WITHDRAWN, not corrected -- a contaminated count is not a smaller true count. WHAT IS NOT YET MEASURED: the LINK. 384 objects is a compile result; the sweep refuses to link a partial set, correctly, so busybox-on-i386 as a running program is still gated on regex.h."
 ---
 
 # The second architecture, and what the first one was borrowing
@@ -159,3 +159,57 @@ zero-init not implemented"* — which is precisely why the question is now asked
 of the compiler instead of a list of target names. The comparison itself needs no change: every target is already compared
 against the x86-64 gcc transcript, because busybox's observable behaviour in
 these cases is not architecture-dependent.
+
+
+## 2026-09-02, night — regex.h landed, and two ways to count the wrong thing
+
+`2f920dfd4` gave crtl a POSIX regex engine. Re-measured individually, with the
+flags busybox's own build uses, **all seven TUs that stopped at `regex.h` now
+become i386 objects**: `libbb/xregcomp.c`, `editors/awk.c`, `editors/sed.c`,
+`findutils/grep.c`, `coreutils/expr.c`, `coreutils/test.c`,
+`util-linux/mdev.c`. That leaves `networking/nslookup.c` (resolv.h) and the
+four `networking/tls_*` files (inline asm), both ticketed.
+
+### Two instruments that answered instead of erroring
+
+Neither produced an error. Both produced a NUMBER, and a plausible one.
+
+**1. A hand-rolled sweep that omits `-include include/autoconf.h`.**
+busybox's real build force-includes its config (`Makefile.flags`) and **no
+busybox header includes it**. Without the flag ~2500 `IF_FEATURE_XXX(...)`
+macros are undefined, so every invocation reaches the parser as an identifier
+applied to a parenthesised expression. That produces, in three different files,
+three different and entirely convincing C-frontend diagnostics:
+
+    stray token at top level (not a declaration): 'IF_DESKTOP'
+    expected ')' before 'IF_FEATURE_GREP_CONTEXT'
+    undeclared identifier 'size_t' used as value (treated as 0)
+
+A minimal repro of the same construct compiles correctly, which reads as
+evidence the bug is CONTEXT-DEPENDENT rather than evidence the macro was never
+defined. `-D_GNU_SOURCE` goes missing the same way and produces a bogus
+`strncasecmp` refusal. `tools/busybox_diff.sh` gets this right -- it spells
+autoconf.h into the wrapper preamble and asserts it is there. Nothing else does.
+
+**2. Taking the TU population from `*.o` files on disk.**
+Stale objects from a previous config survive a reconfigure, so a sweep over
+them compiles files the current build does not. Four of the ten refusals found
+that way -- `libbb/capability.c`, `shell/ash.c`, `networking/nslookup.c`, and
+both `networking/udhcp/*.c` -- are `ENABLE_*=0` in the current config; **gcc
+would refuse them too**, and `DEFINE_STRUCT_CAPS` is genuinely undefined when
+`ENABLE_FEATURE_SETPRIV_CAPABILITIES` and `ENABLE_RUN_INIT` are both 0. The
+population that means anything is `busybox_unstripped.map`, which is what
+`busybox_diff.sh` reads.
+
+### THE CONFIG IS SHARED MUTABLE STATE, AND A TU COUNT WITHOUT ONE IS NOT A CLAIM
+
+`busybox_diff.sh --applets` rewrites `.config` and regenerates
+`include/autoconf.h`. At 17:33 on 2026-09-02 a peer's run reconfigured the tree
+underneath a sweep of mine, and as of this writing the link map holds **28**
+TUs (the cat+echo scope), not the ~396 of the full-applet one. So `384/396`,
+`424/438` and `28/28` are all true statements about different trees.
+
+**Quote the applet scope and the map's TU count beside any number here**, the
+way a binary sha is quoted beside a timing. A count on its own cannot be
+checked, and the failure mode is not a wrong number -- it is a number that is
+right about a build nobody else has.
