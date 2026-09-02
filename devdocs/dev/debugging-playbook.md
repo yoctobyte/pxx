@@ -6312,3 +6312,95 @@ ANSWER DIFFERS FROM THE DEFAULT* in CLAUDE.md.
 **Neither is caught by asking "did it error".** Both are caught by asking what
 the population, or the expected value, would look like if the machinery had done
 nothing at all.
+
+## A COMPLETENESS GUARD MUST NOT SHARE THE INSTRUMENT IT IS GUARDING — two readings that fail the same way are one reading
+
+Measured 2026-09-02 (frankD, busybox at 394 applets). The successor to the
+section above: the manifest was the right population, and reading it lost two
+members anyway.
+
+`busybox_diff.sh` builds its translation-unit list from the link map with
+
+```sh
+grep -oE '[a-zA-Z0-9_/.+-]+\.a\([a-z_0-9]+\.o\)' "$MAP"
+```
+
+The member half of that has no hyphen. busybox has exactly two objects it
+cannot match — `loginutils/lib.a(add-remove-shell.o)` and
+`networking/lib.a(ether-wake.o)` — so both were silently absent from the TU
+list on **every run this harness had ever done**. The directory half of the
+same pattern had allowed `-` all along, because `console-tools/` needs it.
+
+It surfaced only at 394 applets, as `undefined reference to
+add_remove_shell_main` **in the gcc oracle's own link** — no smaller applet set
+had contained a hyphenated source, so 141- and 265-applet runs were green about
+a population two TUs short.
+
+**The part worth the section: a guard for exactly this class sat three lines
+below, and it could not fire.**
+
+```sh
+nmem=$(grep -oE '<the same pattern>' "$MAP" | ... | grep -vc ...)
+ninc=$(wc -l < includes.txt.raw)
+[ "$nmem" -eq "$ninc" ] || die "some member was dropped or merged"
+```
+
+Both of its sides are derived through the same lossy pattern, so they **agreed
+exactly while both were short by the same two**. The guard was well aimed, its
+control was drawn from the right population, it was branched on rather than
+merely computed — and it was still incapable of failing, because the defect was
+in the step both sides share.
+
+**This is a narrower mechanism than CLAUDE.md's "a guard that cannot fail is not
+a guard", and it may be the more common one.** The file's rule is about a
+control drawn from the *wrong population*. This one has the right population and
+the *wrong instrument*: the same rule that governs corroborating a conclusion —
+a second source only counts if it FAILS DIFFERENTLY — governs the two sides of a
+guard.
+
+**The general repair: count the population a second time with a pattern that
+cannot fail the same way, and require the pattern actually used to match all of
+it.**
+
+```sh
+nany=$(grep -oE '\.a\([^)]*\.o\)' "$MAP" | sort -u | wc -l)
+nmatched=$(grep -oE '\.a\([A-Za-z0-9_.+-]+\.o\)' "$MAP" | sort -u | wc -l)
+[ "$nany" -eq "$nmatched" ] || die "... unreadable to it: $(...)"
+```
+
+`[^)]*` is deliberately not a charset: it cannot be wrong about which characters
+a name may contain, which is the entire failure being guarded against. The two
+guards now answer different questions — the new one about the **pattern**, the
+old one about the **mapping** from member to source file — and neither can stand
+in for the other.
+
+**Positive control, drawn from the population the question is about:** point the
+new guard at the OLD pattern on a real map and it must name exactly
+`.a(add-remove-shell.o) .a(ether-wake.o)`; at the new pattern, nothing. Landed
+as `c238993b9`.
+
+**The tell to generalise:** wherever a population is built by matching names,
+ask what a member would have to be called to be invisible — then check whether
+anything that claims to verify the population's completeness is built from the
+same match. If it is, the two numbers will agree on the day they are both wrong.
+
+### The same run: a `die` that cites a path its own EXIT trap deletes
+
+Worth recording beside it because it is what made the above findable at all. The
+harness printed
+
+```
+busybox-diff: the gcc oracle's 519 objects did not link -- see /tmp/bbdiff-KhMYud/oracle_sep.log
+```
+
+and `cleanup()` had already `rm -rf`'d that directory. **Not an error — a
+correct-looking instruction to go and look somewhere empty**, and the cost is a
+full re-run of the thing that just failed. Retaining everything was not an
+option (~530MB a run; 4.6GB had accumulated on `/tmp`), so a nonzero exit now
+keeps the top-level `*.log` and `*.txt` — every path a `die` can cite — and
+drops the objects.
+
+**Assert the control in BOTH directions when you add retention:** that a failure
+keeps the logs, *and* that a success still removes the directory completely.
+Only the second one stops a retention fix from quietly becoming the disk leak it
+was avoiding. Landed as `1b2c0b5dc`.
