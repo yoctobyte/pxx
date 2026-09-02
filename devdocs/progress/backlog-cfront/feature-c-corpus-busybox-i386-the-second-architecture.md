@@ -8,7 +8,7 @@ status: open
 created: 2026-09-02
 found-by: frankD
 owner: frankD
-summary: "32 OF THE 34 HEADERS ARE IN, and the two that are left are the two that were never headers: regex.h (7 TUs) and resolv.h (1), both filed as their own tickets because they want an IMPLEMENTATION. First attempt, 2026-09-02: 332 of busybox's 400 translation units became i386 objects and three pxx i386 objects linked with `gcc -m32` and ran. Of the 68 refusals, 64 were crtl HEADER gaps across 34 distinct headers -- invisible on x86-64, where pxx falls back to the host's /usr/include and a cross target rightly cannot -- and 4 were inline asm, which is the AT&T reader's ticket, not this one. Landed since in four commits: eac7126f1 (15 headers), 037e38c64 (8 + statvfs over statfs), 0baec7bad (the rtnetlink family, 3.3k lines transcribed whole), and the SysV IPC family. A CLEAN RE-SWEEP IS OWED and the 332 above is the only number in this ticket that was measured: the counts quoted mid-session (358, 367) were taken while headers were being edited under the sweep and are withdrawn."
+summary: "384 OF 396 TRANSLATION UNITS BECOME i386 OBJECTS, measured on a quiet tree at 0da8a0ae4 with binary 1652b00f68f1, and EVERY ONE OF THE 12 REFUSALS IS ALREADY TICKETED: regex.h (7 TUs) and resolv.h (1), which want an IMPLEMENTATION rather than a header and have their own tickets, and 4 inline-asm files that belong to the AT&T reader. There is no unticketed blocker left in this ticket. First attempt, 2026-09-02, was 332 with 68 refusals -- 64 crtl HEADER gaps across 34 distinct headers, invisible on x86-64 where pxx falls back to the host's /usr/include and a cross target rightly cannot, plus the same 4 asm. All 34 landed, in five commits (eac7126f1, 037e38c64, 0baec7bad, c3e89bdee, and linux/fd.h), the last of which the sweep itself found: it was not in the 34-header table, because mkfs_vfat.c only became the next failure once the ones ahead of it were gone. The counts quoted mid-session (358, 367) were taken while headers were being edited under the sweep and are WITHDRAWN, not corrected -- a contaminated count is not a smaller true count. WHAT IS NOT YET MEASURED: the LINK. 384 objects is a compile result; the sweep refuses to link a partial set, correctly, so busybox-on-i386 as a running program is still gated on regex.h."
 ---
 
 # The second architecture, and what the first one was borrowing
@@ -80,6 +80,39 @@ The 34 headers, by how many translation units each one stops:
 `regex.h` is not like the others: it wants an implementation, not a header, and
 it should be its own ticket the moment anyone starts it. Most of the rest are
 structs, ioctl numbers and constants.
+
+### 2026-09-02, evening — the clean sweep: 384 of 396, and nothing unticketed
+
+Measured on a quiet tree, one binary, one commit, nothing edited underneath it
+(`0da8a0ae4`, `1652b00f68f1`):
+
+```
+bb-sep: 396 translation units
+bb-sep: objects ok=384 fail=12
+```
+
+| cause | TUs | where it lives |
+| --- | --- | --- |
+| `regex.h` | 7 | `feature-c-crtl-posix-regex-regcomp-regexec` |
+| `resolv.h` | 1 | `feature-c-crtl-resolv-h-and-the-ns-parser` |
+| inline asm (i386 template, `=&d` earlyclobber) | 4 | `feature-c-gnu-inline-asm-with-a-non-empty-template` |
+
+**The sweep found a header the 34-header table did not have**, and that is the
+method working rather than the table being wrong: `util-linux/mkfs_vfat.c` only
+became the next failure once the ones ahead of it were gone. `linux/fd.h` is
+now transcribed whole. It is the sharpest case in the crtl set for *whole, not
+to taste*: `FDGETPRM` is `_IOR(2, 0x04, struct floppy_struct)`, so the struct's
+SIZE is inside the request number — drop a field and the number changes, the
+kernel does not recognise it, the ioctl fails, and mkfs_vfat uses that ioctl as
+a **predicate** (success = "this is a real floppy"). A trimmed struct does not
+give a wrong geometry; it takes the wrong branch and writes a boot sector
+describing media it is not on.
+
+**The LINK is still unmeasured and that is the honest state of this rung.** 384
+objects is a compile result. The sweep refuses to link a partial object set —
+correctly, since undefined references from twelve missing TUs say nothing — so
+busybox-on-i386 as a *running* program is gated on `regex.h`, which is 7 of the
+12 and the only one with real size to it.
 
 ### 2026-09-02, later the same day — 32 of the 34 are in
 

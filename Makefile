@@ -13426,6 +13426,16 @@ test-core: $(COMPILER)
 	# field by field inside its own semctl. The other four match glibc.
 	./$(COMPILER) test/c_crtl_sysv_ipc.c $(TESTTMP)/c_sysvipc26
 	tools/expect_same.sh c_sysvipc26 "$$($(TESTTMP)/c_sysvipc26)" "$$(printf '1 512 1024 2048 0\n2 1\n3 1\n4 [shm] 1\n5 0 4096 1\n6 1\n7 1\n8 1\n9 5\n10 1 3\n11 1\n12 1 1\n13 1\n14 1\n15 1\n16 0 1 1\n17 4 7 [msg]\n18 1\n19 1 1\n20 -1\n21 48 112 88 120 6')"
+	# <linux/fd.h>. AN IOCTL NUMBER THAT CARRIES A STRUCT SIZE, which is the
+	# whole reason it is transcribed whole: FDGETPRM is _IOR(2, 0x04, struct
+	# floppy_struct), so dropping a field changes the NUMBER, the kernel does not
+	# recognise it, and busybox's mkfs_vfat.c -- which uses the ioctl as a
+	# PREDICATE, success meaning `this is a real floppy' -- takes the wrong branch
+	# and writes a boot sector describing media it is not on. Rows 3, 4 and 6 are
+	# the control: plain constants and an _IO() number with no size field, none of
+	# which may move with the width. Diffed against gcc.
+	./$(COMPILER) test/c_crtl_floppy.c $(TESTTMP)/c_floppy26
+	tools/expect_same.sh c_floppy26 "$$($(TESTTMP)/c_floppy26)" "$$(printf '1 32 24\n2 80200204 40200242 40200243\n3 1 2 4 1020\n4 4 56 64\n5 128 80\n6 24b 254')"
 	# <mtd/mtd-user.h>, <sys/timex.h>, <sys/kd.h>, <linux/capability.h>. Row 1 is
 	# mtd_info_user's LAYOUT: a __u8 then five __u32 then a __u64 is 32 bytes with
 	# two holes, and a transcription that tidied them still compiles -- MEMGETINFO
@@ -15403,6 +15413,14 @@ test-i386: $(COMPILER)
 	# plausible errno, never a crash. Diffed against gcc -m32.
 	./$(COMPILER) --target=i386 test/c_crtl_sysv_ipc.c $(TESTTMP)/test_i386_sysvipc
 	tools/expect_same.sh i386/sysvipc "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sysvipc)" "$$(printf '1 512 1024 2048 0\n2 1\n3 1\n4 [shm] 1\n5 0 4096 1\n6 1\n7 1\n8 1\n9 5\n10 1 3\n11 1\n12 1 1\n13 1\n14 1\n15 1\n16 0 1 1\n17 4 7 [msg]\n18 1\n19 1 1\n20 -1\n21 36 84 64 88 6')"
+	# Rows 1, 2 and 5 differ and rows 3, 4 and 6 do not. floppy_struct ends in a
+	# `const char *name', so it is 28 bytes here against 32 -- and because the
+	# size is INSIDE the request number, FDGETPRM moves with it, 0x801c0204
+	# against 0x80200204. That is the difference a same-answer cross row could
+	# not see, and row 6 (FDFLUSH/FDRESET, _IO() with no size field) is the half
+	# that must stay put. Diffed against gcc -m32.
+	./$(COMPILER) --target=i386 test/c_crtl_floppy.c $(TESTTMP)/test_i386_floppy
+	tools/expect_same.sh i386/floppy "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_floppy)" "$$(printf '1 28 24\n2 801c0204 401c0242 401c0243\n3 1 2 4 1020\n4 4 56 64\n5 88 52\n6 24b 254')"
 	./$(COMPILER) --target=i386 test/c_crtl_select.c $(TESTTMP)/test_i386_select
 	tools/expect_same.sh i386/select "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
 	./$(COMPILER) --target=i386 test/c_crtl_fallocate.c $(TESTTMP)/test_i386_fallocate
