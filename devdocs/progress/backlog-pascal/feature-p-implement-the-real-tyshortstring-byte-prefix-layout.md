@@ -39,6 +39,49 @@ summary: "MEASURED at bf92c45a7, binary sha256 `5f275966bf50`: we are `cap+8` an
 > list is not the same as the concat rule being right for it. The real work is
 > the byte-prefix codegen, per backend.
 
+## SEQUENCED BEHIND THE CAPACITY FIX — do not start this in parallel with it
+
+**`bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes` lands
+first.** frankB holds it, filed the constraint, and declined this feature on
+sequencing grounds rather than interest (2026-09-02). The reason is
+attributability, and it is the deciding kind:
+
+that ticket's finding is that `UFldStrCap` holds a record field's OWN capacity
+while `ir.inc:11260` reads it as the field's ELEMENT's capacity, so
+`inner: array[0..1] of string[10]` delivers 0 and `FrozenStrSlotSize`
+substitutes `DEFAULT_STR_CAP`. The declared 10 is not mis-sized — it is
+dropped. **Change the prefix width first and a wrong stride afterwards cannot
+be attributed to a layer:** is the prefix wrong, or was the capacity never
+delivered to it? `DEFAULT_STR_CAP` under a 1-byte prefix gives 256 instead of
+263 — just as wrong, and just as reasonable-looking. Fix the thread, then
+change what flows through it.
+
+Both diffs apply cleanly to `FrozenStrSlotSize` territory and neither produces
+a git conflict, which is exactly why this is written down instead of left to
+the merge. **If you want this feature sooner, take frankB's ticket too and do
+both in that order** — one agent, one sequence — rather than running them
+concurrently. Message frankB first either way.
+
+### A third site class, not in the counts above
+
+The backends **hardcode the 8-byte length word** in their char-to-inline-string
+store arms; none of them calls `FrozenStrSlotSize` or `SizeOfSlot`, so they do
+not appear in any grep of the sizing-oracle surface:
+
+| backend | arm | writes |
+| --- | --- | --- |
+| x86-64 | `ir_codegen.inc:4573` (`IREmitStoreCharAsString`) | `mov qword [rdi], 1` / `mov byte [rdi+8], sil` |
+| i386 | `ir_codegen386.inc:1900` | `mov dword [edi], 1` / `mov dword [edi+4], 0` / `mov byte [edi+8], al` |
+| aarch64 | `ir_codegen_aarch64.inc:1918` | same shape |
+| arm32 | `ir_codegen_arm32.inc:1671` | same shape |
+
+Measured by inspection at `f74d2f851`; no build run for this note. Expect the
+count to grow by three: `bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only`
+adds the matching `IR_STORE_MEM` arms on i386/aarch64/arm32, which currently
+refuse outright. That is **favourable ordering, not a conflict** — it makes the
+shape uniform across four backends instead of implemented-on-one-refusing-on-three,
+so this feature's edit there becomes mechanical.
+
 ## Measured, fresh binary
 
 Owner, 2026-09-02: *"shortstring is more or less what we call frozenstring"* —
