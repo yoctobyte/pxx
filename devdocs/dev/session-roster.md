@@ -226,12 +226,33 @@ Two habits, both cheap, both measured to work that same evening:
   until morning. **A false premise does not sit in a document — it re-sequenced a
   session**, onto a prerequisite that did not exist. That is the cost of a claim,
   not of a note.
-- **When you relay a decision, the premise travels with it and can rot
-  separately.** I relayed a descope one hop after the measurement that broke its
-  premise had already reversed it — correct decision, correct relay, stale by
-  minutes, and it told a working session to stop. Name the premise in the relay
-  so the receiver can notice it is dead; a decision quoted without its premise
-  cannot be checked by the person receiving it.
+- **Before sending, ask whether the RECEIVER can act on this without you.**
+  That is the test, and it replaces the weaker "name the premise when relaying"
+  that this entry carried first. The reason for the swap is worth keeping: the
+  old version names a property of the SENDER, which is a discipline you either
+  remember or do not and is unfalsifiable from outside; the new one names a
+  property of the MESSAGE, which anyone can apply to a draft, including someone
+  who has never read this file. It also separates two failures that look alike.
+  A descope I relayed one hop after the measurement had already reversed it was
+  **late but actionable** — it carried its reasoning and named who decided, so
+  the receiver evaluated and discarded it in minutes. The claim that started the
+  evening was **inert**: a conclusion with the measurement stripped out, which
+  no receiver could check at any speed. Late is recoverable. Inert is not.
+- **Labelling a claim as INFERENCE protects the reader who checks it. It does
+  not stop it propagating.** Measured the same evening, by this file's author.
+  From a clean partition — comparison correct on three backends, failing on two
+  — I inferred that the two failing ones lacked a named operand normaliser, said
+  plainly that this half was inferred rather than measured, and sent it. It was
+  relayed onward as a cause and reached an unattended hourly prompt. A session
+  that read the source found **two causes, not one, and the inference wrong for
+  one backend**: arm32 HAS the width-aware layer, and its callers pass a
+  different kind expression; x86-64 does not call the helper at all and inlines
+  through a routine with no kind in its signature. The label did its job — that
+  is why it was checked — but an inference travels at the same speed as a
+  measurement and arrives wearing the sender's credibility. **A partition is
+  evidence that causes differ, never evidence of what they are.** If an
+  inference is worth sending, send it with the check that would settle it, and
+  name who owns running that check.
 
 A fourth, which is the same defect one layer down: **a systematic inflation
 reads as a distribution.** The `grep -c` that produced "wasm32 has 6 call sites,
@@ -244,6 +265,41 @@ like a finding. Real sites were wasm32 2, one each elsewhere.
 Not a fifth: "a probe answer is live at READ TIME and cannot be carried forward"
 is already recorded, one section up, as *every count is a snapshot*. Restating
 it here would be the exact failure this section is about.
+
+### Why the stated rules did not fire — the part this section owed an answer
+
+The same evening, one rule DID fire and saved six builds. A session running the
+binary-comparison no-op proof hit the seed-staleness trap head-on — fresh
+worktree, no compiler seed, `cp` stamps the seed newer than the sources, `make`
+no-ops and exits 0 — and its check caught all six builds instead of reporting
+six false no-op proofs. The rule it fired was **"grep for `converged`, not for a
+zero exit"**, which is stated in CLAUDE.md exactly as the six that did not fire
+are stated.
+
+**The difference is not the wording. It is that the `converged` check was a step
+inside a build procedure, and the others were prose to remember.** A rule held as
+knowledge fires only when you happen to think of it, which is precisely when you
+are least likely to — you reach for an instrument because you are confident, and
+confidence is the state the rule exists to interrupt. A rule wired into a script,
+a gate, or a habitual command fires whether or not you thought of it.
+
+So the useful question about any rule here is not "is it written down" but
+**"what runs it?"** — and where the answer is "the reader, if they remember",
+expect it to miss. Prefer converting one into a command you always run over
+phrasing it more memorably. `grep -c` counting comments, a missing harness arm
+read as a platform fact, a refusing default profile read as a backend limit:
+none of those had a step attached, and all three had a one-command check
+available.
+
+A related conflation, from the same session, about the claims this file exists
+to protect: **a positive control proves an assertion is LIVE; it says nothing
+about COVERAGE.** A backend's four configurations were correctly controlled,
+genuinely able to fail, and never constructed a typed pointer — so they were
+right about what they ran and silent about a defect that corrupts a slot. The
+word "verified" was doing two jobs, a claim about the ROWS and a claim about the
+BACKEND. Liveness asks whether an assertion could detect a defect it meets;
+coverage asks whether it meets one. Ask both before letting a green license a
+sentence.
 
 ## Standing constraints
 
