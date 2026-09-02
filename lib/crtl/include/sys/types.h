@@ -24,6 +24,15 @@ typedef unsigned int gid_t;
    `who' argument of get/setpriority, where the same slot holds a pid, a pgrp
    or a uid depending on `which'. glibc spells it `unsigned int'. */
 typedef unsigned int id_t;
+
+/* __daddr_t: the BSD "disk address", a 32-bit `int' on x86-64 AND on i386 --
+   glibc spells it __S32_TYPE on both, so it does NOT follow the word size the
+   way off_t does. It survives in exactly one place crtl cares about, struct
+   mtget's mt_fileno/mt_blkno in <sys/mtio.h>; making it `long' to match its
+   neighbours there compiles and changes sizeof(struct mtget), which is encoded
+   in MTIOCGET's ioctl number. */
+typedef int __daddr_t;
+typedef __daddr_t daddr_t;
 /* dev_t and ino_t are 64-bit in glibc on EVERY target, independent of
    _FILE_OFFSET_BITS, because both carry values the kernel hands out at 64 bits:
    statx returns stx_ino as a u64, and the userspace dev_t encoding that

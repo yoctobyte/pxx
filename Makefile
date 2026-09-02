@@ -13285,6 +13285,26 @@ test-core: $(COMPILER)
 	# All rows diffed against gcc.
 	./$(COMPILER) test/c_crtl_loop_and_asm_unistd.c $(TESTTMP)/c_loopun26
 	tools/expect_same.sh c_loopun26 "$$($(TESTTMP)/c_loopun26)" "$$(printf '1 168 232 304\n2 0 8 16 32 48\n3 24 40 56 216\n4 4c00 4c01 4c03 4c05 4c0a 4c82\n5 64 32 1 4 29\n6 1 251')"
+	# <linux/if_packet.h>, <linux/input.h> (+ input-event-codes.h),
+	# <linux/hdreg.h>, <linux/i2c.h> (+ i2c-dev.h), <sys/mtio.h>,
+	# <sys/statvfs.h>. FIVE ROWS MUST DIFFER FROM THE i386 RUN and the cross row
+	# below asserts it: input_event is 24 bytes against 16 (it holds a timeval),
+	# hd_geometry 16 against 8, mtget 48 against 28 -- which changes MTIOCGET's
+	# NUMBER, since the size is encoded in it -- and statvfs 112 against 72,
+	# because `int __f_unused' exists only on 32-bit. Every other row is
+	# byte-identical on both, which is the control. Row 1 is the two PACKET_*
+	# vocabularies sharing their small integers (sll_pkttype values against
+	# setsockopt option names). Row 5 is the input-code overlap: 1 is KEY_ESC,
+	# REL_Y, ABS_Y and SND_TONE depending only on the event TYPE. Row 6 is
+	# EVIOCGNAME/EVIOCGBIT building the request FROM a length, so a stale sizeof
+	# is a different ioctl. Row 11 is hd_driveid at 512 bytes, where a subset is
+	# not a smaller struct but one with every later field at the wrong offset.
+	# Row 18 runs statvfs("/") and ends on the ST_VALID mask -- glibc strips it
+	# because it is statfs's "kernel filled this in" marker and not a mount
+	# option, and it was the ONLY place our statfs-derived statvfs disagreed.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_input_hdreg_i2c_mtio_statvfs.c $(TESTTMP)/c_inhims26
+	tools/expect_same.sh c_inhims26 "$$($(TESTTMP)/c_inhims26)" "$$(printf '1 0 1 2 4 | 1 2 5 8\n2 20 | 0 8 12 16 18\n3 18 16 8000\n4 24 | 0 16 18 20\n5 0 1 2 3 5 | 1 1 1 2\n6 80044501 80084502 80404506 80604521\n7 116 142 0 3 | 10001\n8 8 24 40 16\n9 301 30d 304 31f 31c\n10 321 326 32d 31a | ec ef\n11 512 16 | 20 54 164\n12 701 702 703 706 705 707 720\n13 1 0 | 1 10 400 | 1 1000000\n14 0 1 5 12 13 14 | 20 34\n15 8 48 8 48\n16 40086d01 80306d02 80086d03 | /dev/tape\n17 112 | 16 64 72 80\n18 0 4096 255 1 1 0')"
 	# <mtd/mtd-user.h>, <sys/timex.h>, <sys/kd.h>, <linux/capability.h>. Row 1 is
 	# mtd_info_user's LAYOUT: a __u8 then five __u32 then a __u64 is 32 bytes with
 	# two holes, and a transcription that tidied them still compiles -- MEMGETINFO
@@ -15239,6 +15259,14 @@ test-i386: $(COMPILER)
 	# core run exactly, which is what says the split is these two things only.
 	./$(COMPILER) --target=i386 test/c_crtl_loop_and_asm_unistd.c $(TESTTMP)/test_i386_loopun
 	tools/expect_same.sh i386/loopun "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_loopun)" "$$(printf '1 140 232 304\n2 0 4 8 16 32\n3 24 40 56 216\n4 4c00 4c01 4c03 4c05 4c0a 4c82\n5 64 32 1 4 29\n6 4 289')"
+	# The 32-bit half, and the reason that test exists. Rows 4, 11, 15, 16 and 17
+	# differ from the core run and nothing else does: input_event 16 not 24,
+	# hd_geometry 8 not 16, mtget 28 not 48, MTIOCGET 0x801c6d02 not 0x80306d02,
+	# statvfs 72 not 112. A cross row that matched everywhere would mean no
+	# per-target arm had been taken, which is what a same-answer cross row
+	# cannot see. Diffed against gcc -m32.
+	./$(COMPILER) --target=i386 test/c_crtl_input_hdreg_i2c_mtio_statvfs.c $(TESTTMP)/test_i386_inhims
+	tools/expect_same.sh i386/inhims "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_inhims)" "$$(printf '1 0 1 2 4 | 1 2 5 8\n2 20 | 0 8 12 16 18\n3 18 16 8000\n4 16 | 0 8 10 12\n5 0 1 2 3 5 | 1 1 1 2\n6 80044501 80084502 80404506 80604521\n7 116 142 0 3 | 10001\n8 8 24 40 16\n9 301 30d 304 31f 31c\n10 321 326 32d 31a | ec ef\n11 512 8 | 20 54 164\n12 701 702 703 706 705 707 720\n13 1 0 | 1 10 400 | 1 1000000\n14 0 1 5 12 13 14 | 20 34\n15 8 28 4 32\n16 40086d01 801c6d02 80046d03 | /dev/tape\n17 72 | 8 32 40 44\n18 0 4096 255 1 1 0')"
 	./$(COMPILER) --target=i386 test/c_crtl_select.c $(TESTTMP)/test_i386_select
 	tools/expect_same.sh i386/select "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
 	./$(COMPILER) --target=i386 test/c_crtl_fallocate.c $(TESTTMP)/test_i386_fallocate

@@ -63,7 +63,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (6)
+## backlog (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -73,6 +73,7 @@ _none_
 | regression-lib-test-lib-synapse-transitive-unit | P | 70→85 | regression | CAUSE FOUND AND FIXED IN TREE, JOB STILL RED — and it stays red until the next pin, because this job builds with $(PXX_STABLE). All three lib_synapse reds are ONE construct: `szDescription := '...'` on an `array[0..N] of Char` FIELD in synapse's ssfpc.inc. ASTCharArrayCap answered only for AN_IDENT, so the char-array-is-a-string conversion never fired for a field and the store was refused as `cannot assign ShortString to Char`. Fixed by bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string; all four synapse programs now build and match their expected output byte for byte under the tree compiler. | — |
 | regression-test-core-c-asm-in-inline-body | T | 70 | regression | regression: test-core#src:test/c_asm_in_inline_body.c@2 at 2d6e7d5c26db in step 7/3, `python3 tools/ast_slot_overloads.py --self-check` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-pointer-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_c_pointer.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_c_pointer.npy /tmp/test_nilpy_c_pointer26` (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-import-c-header-still-works-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_import_c_header_still_works.npy /tmp/test_nilpy_imphdr26` (auto-filed by twatch) | — |
 
 ## backlog_new (0)
 
@@ -461,7 +462,7 @@ _none_
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 
-## backlog-cfront (18)
+## backlog-cfront (20)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -476,6 +477,8 @@ _none_
 | bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently | C | 50 | bug | C: two conflicting typedefs for one name are accepted silently, last wins | — |
 | feature-c-corpus-busybox-i386-the-second-architecture | C | 65 | feature | First attempt, 2026-09-02: 332 of busybox's 400 translation units already become i386 objects, and three pxx i386 objects link with `gcc -m32` and run. The 68 failures have exactly two causes and neither is about i386 codegen. 64 are crtl HEADER gaps -- 34 distinct headers, led by regex.h (7 TUs), netinet/udp.h (7), linux/fs.h (6), sched.h (5) -- that the x86-64 build never had to face because pxx falls back to the host's /usr/include there and a cross target rightly cannot. 4 are inline asm: the AT&T reader is x86-64 only and one arm needs an earlyclobber constraint. This ticket is the header set; the asm is its own. | — |
 | feature-c-crtl-has-no-pty-family-at-all | C | 45 | feature | crtl has NO pty support: posix_openpt, grantpt, unlockpt, ptsname and ptsname_r are all absent from include/ and src/ (grep -rn over both returns nothing). busybox's libbb/getpty.c calls ptsname_r directly and busybox ASSUMES it exists -- include/platform.h:410 `#define HAVE_PTSNAME_R 1` is the default and nothing undefines it for a glibc-shaped libc, so there is no fallback path to take. Not blocking the current 141-applet busybox set (getpty.c is not in that TU list; measured against the harness's tulist), which is why this is filed rather than fixed: it blocks telnetd, script, microcom and the login-ish applets whenever the config grows to include them. Filed as a GROUP because the five calls are one mechanism -- open /dev/ptmx, TIOCSPTLCK to unlock, TIOCGPTN to get the number, format /dev/pts/N -- and implementing any one alone is not usable. | — |
+| feature-c-crtl-posix-regex-regcomp-regexec | C | 60 | feature | 7 of busybox's 396 translation units stop at `C include file not found: \"regex.h\"` when built for i386 -- awk, sed, grep, expr, test, mdev and libbb/xregcomp -- and that is the largest single cause left after fifteen headers landed on 2026-09-02. Unlike those, this is not a transcription job: it needs regcomp/regexec/regerror/regfree, both BRE and ERE, and the POSIX leftmost-longest rule. On x86-64 the gap is invisible because pxx falls back to the host's /usr/include; a cross target has no fallback, which is why i386 is the instrument that found it. | — |
+| feature-c-crtl-resolv-h-and-the-ns-parser | C | 40 | feature | networking/nslookup.c is the last busybox translation unit stopped by a header that is really an implementation. It needs `struct __res_state` and the _res global, res_init/res_mkquery/res_msend, and the ns_* message-parsing API -- ns_initparse, ns_parserr, ns_msg/ns_rr and their accessors, ns_name_uncompress. One TU, so it ranks below regex.h (7); filed separately because the two share nothing but their shape. | — |
 | feature-c-crtl-stdio-buffering-and-setvbuf | C | 55 | feature | lib/crtl/src/stdio.c is entirely unbuffered — fputc is one write() syscall per character — and setvbuf at :1051 is a stub that ignores its arguments and returns SUCCESS, which is the dishonest-stub shape the SetTextBuf ruling exists to reject, and worse here because C callers check the return. Add FILE write buffering under C99 7.19.3p7's policy, make setvbuf real, and share a flush registry with lib/rtl so mixed WriteLn/printf output keeps its order. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | S | 18 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -973,6 +976,7 @@ _none_
 - [p 70] [C] regression-lib-test-crtl-reachability-8 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-core-c-asm-in-inline-body
 - [p 70] [N] regression-test-core-test-nilpy-c-pointer-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
+- [p 70] [N] regression-test-nilpy-test-nilpy-import-c-header-still-works-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [A] bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine
@@ -996,6 +1000,7 @@ _none_
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [T] bug-t-the-exit-observable-ratchet-was-red-at-its-own-arming-commit
 - [p 60] [N] feature-a-declaration-phase
+- [p 60] [C] feature-c-crtl-posix-regex-regcomp-regexec
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
 - [p 60] [C] idea-c-realworld-test-targets [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
@@ -1150,6 +1155,7 @@ _none_
 - [p 40] [A] feature-a-gtk-version-selection-at-the-header-and-soname-layer
 - [p 40] [A] feature-a-report-fixed-cap-headroom
 - [p 40] [A+S] feature-a-xtensa-ucontext-pc-sp-offsets
+- [p 40] [C] feature-c-crtl-resolv-h-and-the-ns-parser
 - [p 40] [C] feature-c-csmith-differential-fuzzing
 - [p 40] [P] feature-embed-dwscript-rtti
 - [p 40] [O] feature-inline-nonleaf-and-branch-locals
