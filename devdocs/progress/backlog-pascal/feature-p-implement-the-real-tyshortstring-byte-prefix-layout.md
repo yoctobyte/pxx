@@ -62,6 +62,90 @@ the merge. **If you want this feature sooner, take frankB's ticket too and do
 both in that order** — one agent, one sequence — rather than running them
 concurrently. Message frankB first either way.
 
+## LANDING ORDER — step 3 is the one serialising item on the board besides `make pin`
+
+Approved by the owner 2026-09-02, relayed via frankuser. Each step lands
+independently green:
+
+1. **byte-prefix codegen per backend**, behind `EmitStoreStrLen` /
+   `EmitLoadStrLen`
+2. **the nine conversion/enumeration arms**, including `tyString -> tyShortString`
+3. **the re-type of `string[N]` to `tyShortString`** — THIS is the serialising step
+
+**Owner, verbatim:** *"that big flip should be LAST. and likely, we dont want
+any other work done at that point since this affects our self-compile
+capability."*
+
+It serialises rather than merely being risky because `tyString` is "the
+self-host model" (`defs.inc`, the `IR_SETLEN_STR = 61` comment — citation
+checked, it reads *"Frozen inline strings (tyString, the self-host model)"*),
+so the flip changes the layout of strings the compiler itself uses and the
+FIXEDPOINT is what breaks. **Recovery: reseed from the pin and `touch` the
+sources** — the pinned binary predates the flip by construction, and `cp`
+stamps a newer mtime so `make` no-ops without the touch.
+
+**Whoever runs step 3 tells the coordinator BEFORE starting**, so the tree can
+be quiet. Steps 1 and 2 need no such stop.
+
+### The exposure number needs reconciling before step 3 is scoped
+
+The plan rests on splitting the flip in two — re-type explicit `string[N]`
+(stated as 3 declarations plus 7 `array of string[N]`, so ten sites) while
+leaving bare `string` alone, which avoids touching all 69 of its uses and
+avoids changing both slot (264->256) and prefix width (8->1). **Leaving bare
+`string` untouched is the right call and is not in question here.**
+
+**But the ten does not reproduce. Measured 2026-09-02 at `9ff7a582e`:
+`compiler/**` contains ZERO explicit `string[N]` or `ShortString`
+declarations.** All 21 `string[N]` occurrences and all 37 `ShortString`
+occurrences are **prose inside comment blocks** — bug write-ups, field
+comments, playbook-style notes. The single non-comment hit is
+`rtti_emit.inc:967`, the string LITERAL `'ShortString'` in a type-name
+function. Spot-checked two that look most like code and both are inside `{ }`:
+`symtab.inc:6901` (`type TS = string[20];` inside a comment that closes at
+6906) and `defs.inc:3054` (a field comment).
+
+If that holds, step 3's explicit-declaration exposure inside the compiler is
+**nothing**, and the entire self-host risk lives in what bare `string` means —
+precisely the half the plan already declines to touch.
+
+**What this does NOT do:** it does not lift the owner's instruction. He called
+for a quiet tree and that is his call, not a grep's. What it changes is the
+SCOPE ESTIMATE, and it should be reconciled before anyone plans a fleet stop
+around ten declarations that may not exist. **Whoever reconciles it: my grep
+was `string\[[0-9]+\]` and `\bShortString\b` over `compiler/*.pas *.inc`.
+The way it could be wrong is a declaration reaching a fixed string through a
+named alias defined outside `compiler/**`** — that would not match, and it is
+the branch to check rather than re-running my pattern.
+
+### Two load-bearing claims that gate step 1, not step 3
+
+Both flagged by frankuser as unverified, and neither is an edit:
+
+- **Bare `string` may mean different things inside `compiler/**` than in user
+  code.** In user code plain `string` measures 8 — a managed `tyAnsiString`
+  handle — while `defs.inc` calls `tyString` the self-host model. How that mode
+  is selected was NOT traced, and the count of 69 rests on it.
+- **The normaliser in `symtab.inc` presents fixed/short strings as `tyString`
+  values on the grounds that they are "codegen-identical (same inline
+  word-prefixed layout)". A byte prefix makes that sentence false.** The
+  concentration behind the named emit pair is not total — aarch64 emits a
+  length word inline in at least two places.
+
+**So step 1's first job is an AUDIT for sites assuming an 8-byte prefix without
+going through `EmitStoreStrLen`/`EmitLoadStrLen`, not an edit.** Note the eight
+hardcoded arms in the section below are already eight such sites, found before
+anyone went looking.
+
+### A record of pleasant surprises is not evidence about the last step
+
+This feature has measured cheaper than estimated four separate times — the kind
+plumbed at 63 sites including every backend, `FrozenStrSlotSize` already
+returning `cap+1`, 20 of 29 kind lists already naming it, capacity carriers
+needing no change. **That record is about steps 1 and 2 and says nothing about
+step 3**, which is the only step whose failure mode is the self-host fixedpoint
+rather than a test.
+
 ### A third site class, not in the counts above
 
 The backends **hardcode the 8-byte length word** in their char-to-inline-string
