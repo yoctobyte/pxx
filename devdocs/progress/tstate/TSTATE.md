@@ -3,20 +3,20 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus **QUIET 3d0h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `25b8325d4b83` | 2026-09-02T11:23:20Z | RED (native) | 186.7s | `cdae8cf6580b` RED |
+| plexus **QUIET 3d1h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
+| seven | `25b8325d4b83` | 2026-09-02T11:38:26Z | RED (full) | 883.3s | `25b8325d4b83` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `cdae8cf6580b` on seven, 2026-09-02T11:19:35Z (3m ago).**
+**Newest full tier in the fleet: `25b8325d4b83` on seven, 2026-09-02T11:38:26Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `cdae8cf6580b` | RED | 3m | — (newest) |
-| plexus | `27424c927b65` | RED | 3d0h | 3d0h |
+| seven | `25b8325d4b83` | RED | 0m | — (newest) |
+| plexus | `27424c927b65` | RED | 3d1h | 3d1h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -46,17 +46,18 @@ Reading a staler host's map for a cross-target job answers a question about an O
 - **test-core#src:test/c_asm_in_inline_body.c@2** — test/c_asm_in_inline_body.c tools/expect_same.sh +1 (seven): bad `2d6e7d5c26db`, last good `bb524e1abd1f`, 1 commit(s) in range
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +48 (seven): bad `cdae8cf6580b`, last good `2d6e7d5c26db`, 2 commit(s) in range
 - **test-core#src:test/test_nilpy_c_pointer.npy** — test/test_nilpy_c_pointer.npy tools/expect_same.sh (seven): bad `25b8325d4b83`, last good `cdae8cf6580b`, 2 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy** — test/test_nilpy_import_c_header_still_works.npy tools/expect_same.sh (seven): bad `25b8325d4b83`, last good `cdae8cf6580b`, 2 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
 A regression clears when a later run on THAT host passes the job. These hosts have stopped publishing, so nothing can clear them; they return to the list above by themselves if the host runs again.
 
-- **test-pascal-conformance#shard0/6** (plexus, quiet 3d0h): bad `e46dbffaa80d`, 217 commit(s) in range
-- **test-asm#src:test/test_asm_emit_rv32.pas** (plexus, quiet 3d0h): bad `27424c927b65`, 88 commit(s) in range
-- **test-core#src:test/test_opt_store_reload.pas** (plexus, quiet 3d0h): bad `27424c927b65`, 88 commit(s) in range
-- **test-pascal-conformance#shard1/6** (plexus, quiet 3d0h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard2/6** (plexus, quiet 3d0h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard3/6** (plexus, quiet 3d0h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard4/6** (plexus, quiet 3d0h): bad `27424c927b65`, 231 commit(s) in range
-- **test-pascal-conformance#shard5/6** (plexus, quiet 3d0h): bad `27424c927b65`, 231 commit(s) in range
-- **tools-devtest#00** (plexus, quiet 3d0h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard0/6** (plexus, quiet 3d1h): bad `e46dbffaa80d`, 217 commit(s) in range
+- **test-asm#src:test/test_asm_emit_rv32.pas** (plexus, quiet 3d1h): bad `27424c927b65`, 88 commit(s) in range
+- **test-core#src:test/test_opt_store_reload.pas** (plexus, quiet 3d1h): bad `27424c927b65`, 88 commit(s) in range
+- **test-pascal-conformance#shard1/6** (plexus, quiet 3d1h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard2/6** (plexus, quiet 3d1h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard3/6** (plexus, quiet 3d1h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard4/6** (plexus, quiet 3d1h): bad `27424c927b65`, 231 commit(s) in range
+- **test-pascal-conformance#shard5/6** (plexus, quiet 3d1h): bad `27424c927b65`, 231 commit(s) in range
+- **tools-devtest#00** (plexus, quiet 3d1h): bad `27424c927b65`, 231 commit(s) in range
