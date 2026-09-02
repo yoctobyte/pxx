@@ -317,3 +317,12 @@ yours to release.
   construction, and it would have printed a clean 11/11. **Two tells, both
   present: a zero-line patch, and both rebuilds printing `verified` instead of
   `converged`.** Third vacuous control caught tonight, each by a different session.
+- **A correct decision can carry a WRONG REASON, and the reason is what the next
+  reader inherits.** Twice tonight, by the same session: the compare hold was
+  justified partly as "repair arm32 first and the prediction is unfalsifiable"
+  when arm32 had *already* been repaired in a commit predating the hold; and a
+  deferral was filed under "review already catches it" when the item passes that
+  test rather than failing it. **Both decisions were right and both labels were
+  wrong.** The decision survives on its label — so a label checked less carefully
+  than the decision is how a good call becomes bad guidance. Worth watching for
+  in any relaying role, where the label travels further than the reasoning.
