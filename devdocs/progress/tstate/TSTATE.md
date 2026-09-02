@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 3d10h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `26db8523e829` | 2026-09-02T20:45:33Z | RED (native) | 187.8s | `dbd822e63537` RED |
+| seven | `26db8523e829` | 2026-09-02T21:00:26Z | RED (full) | 875.6s | `26db8523e829` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `dbd822e63537` on seven, 2026-09-02T20:41:24Z (4m ago).**
+**Newest full tier in the fleet: `26db8523e829` on seven, 2026-09-02T21:00:26Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `dbd822e63537` | RED | 4m | — (newest) |
+| seven | `26db8523e829` | RED | 0m | — (newest) |
 | plexus | `27424c927b65` | RED | 3d10h | 3d10h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -45,7 +45,6 @@ Reading a staler host's map for a cross-target job answers a question about an O
   </details>
 - **test-core#src:test/test_sizeof_user_name_shadows_builtin.pas** — test/test_sizeof_user_name_shadows_builtin.pas tools/expect_same.sh (seven): bad `5ad048c2d9ae`, last good `08f7de0715a8`, 2 commit(s) in range
 - **test-emit-obj#src:test/test_esp_hello.pas@1** — test/test_esp_hello.pas test/c_obj_extern_addr.c (seven): bad `7fff15ddc1eb`, last good `afbc83e5a976`, 6 commit(s) in range
-- **test-threads#src:test/test_nilpy_thread_clone.npy** — test/test_nilpy_thread_clone.npy tools/expect_same.sh +2 (seven): bad `26db8523e829`, last good `dbd822e63537`, 1 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
