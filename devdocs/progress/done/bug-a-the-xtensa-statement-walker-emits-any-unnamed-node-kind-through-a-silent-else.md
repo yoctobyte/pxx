@@ -252,4 +252,4 @@ existing xtensa Makefile rows plus the fact that the change can only ever
 narrow what reaches the emitter.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7a995fe4e.
