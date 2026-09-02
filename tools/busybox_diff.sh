@@ -294,8 +294,29 @@ else
 fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/bbdiff-XXXXXX")"
-cleanup() { [ "$KEEP" -eq 1 ] && printf 'busybox-diff: work dir kept at %s\n' "$WORK" || rm -rf "$WORK"; }
+cleanup() { rm -f "${CTEST:-}"; [ "$KEEP" -eq 1 ] && printf 'busybox-diff: work dir kept at %s\n' "$WORK" || rm -rf "$WORK"; }
 trap cleanup EXIT
+
+# The compiler under test is COPIED here and every build below runs the copy.
+# A 265-TU run takes minutes, and `compiler/pascal26' is written IN PLACE by
+# `make' -- so any other work in this tree (a rebuild, a `git stash', another
+# agent's sync) swaps the binary underneath a run in flight. Nothing errors:
+# the run finishes, and its own `sha256=' line then names a compiler that
+# compiled only part of it. Measured 2026-09-02, on this script, by its own
+# author rebuilding during a run. Pinning by PATH is not pinning.
+# The snapshot lives BESIDE the original, not in $WORK: pxx derives two of its
+# default crtl include roots from argv[0] (`<exe>/../lib/crtl/include' and one
+# level above), and the builds below run with cwd = $BB, where the third root,
+# the cwd-relative `lib/crtl/include/', does not exist. So a snapshot in /tmp
+# has no crtl at all. Measured both ways from $BB: the copy beside the original
+# compiles `#include <stdio.h>'; the copy in /tmp does not. From the repo root
+# BOTH work, which is why this needed a control run from the cwd the harness
+# actually uses rather than from the one that was convenient.
+CTEST="$ROOT/compiler/.pxx-under-test-$$"
+cp "$COMPILER" "$CTEST" || die "could not snapshot the compiler under test"
+CSHA="$(sha256sum "$CTEST" | cut -d' ' -f1)"
+[ -n "$CSHA" ] || die "could not hash the compiler snapshot"
+COMPILER="$CTEST"
 
 # ---- the unity, generated from the link map ---------------------------------
 # The map names archive MEMBERS (`foo.o`); the include list needs their SOURCES.
@@ -432,8 +453,8 @@ NTU=$(( $(wc -l < "$WORK/includes.txt") + 1 ))
 count_cases() { grep -a '^### ' "$1" | grep -avc '^### exit='; }
 
 printf 'busybox-diff: tree=%s (busybox %s)\n' "$BB" "$BBVER"
-printf 'busybox-diff: compiler=%s\n' "$COMPILER"
-printf 'busybox-diff: sha256=%s\n' "$(sha256sum "$COMPILER" | cut -d' ' -f1)"
+printf 'busybox-diff: compiler=%s (snapshot of %s/compiler/pascal26)\n' "$COMPILER" "$ROOT"
+printf 'busybox-diff: sha256=%s\n' "$CSHA"
 printf 'busybox-diff: applets=%s  translation units=%d\n' "$APPLETS" "$NTU"
 
 # ---- the fixed input set ----------------------------------------------------

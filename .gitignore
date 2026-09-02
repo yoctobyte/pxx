@@ -95,3 +95,4 @@ devdocs/progress/tstate/*.html
 fred.txt
 twatch.conf
 .unoracled_buildable
+compiler/.pxx-under-test-*

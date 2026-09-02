@@ -568,3 +568,30 @@ a manual bisect of a 141-name list — while the answer was already in .config.
 Controls run on the lifted function itself: one applet off names exactly it, a
 hyphenated applet that is on names nothing, and a missing .config names all of
 them rather than passing quietly.
+
+2026-09-02 | frankD (Track C) | tools/busybox_diff.sh, .gitignore | The harness
+now COPIES the compiler under test beside the original and runs the copy. WHY:
+a 265-TU run takes minutes and `compiler/pascal26` is written in place, so any
+rebuild in the tree swaps the binary mid-run and nothing errors — the run
+finishes and its own `sha256=` line names a compiler that compiled only part of
+it. I did exactly that to my own run today. The copy goes in `compiler/`, not
+in the work dir: pxx derives two default crtl include roots from argv[0], the
+builds run with cwd=$BB where the cwd-relative root does not exist, so a /tmp
+snapshot has no crtl at all. Measured from $BB both ways — beside-the-original
+compiles `#include <stdio.h>`, /tmp does not; from the repo root both work,
+which is why the control had to be run from the cwd the harness uses.
+
+2026-09-02 | frankD (Track C) | compiler/elfwriter.inc | The ELF64 general
+writer's internal assertion said "i386, arm32 and aarch64 have no object writer
+yet" while writeELFRel386General had existed for a day. Now enumerated through
+EmitObjTargetList like the user-facing refusal beside the dispatch. Unreachable
+today (compiler.pas only calls it for x86-64) — fixed because the next reader of
+the line takes it for a statement of fact, which is how it went stale twice.
+
+2026-09-02 | frankD (Track C) | (measurement, no code) | The 141-applet busybox
+CANNOT be built as a unity: `coreutils/test.c` and `shell/ash.c` both claim
+ordinary identifiers through busybox's globals macros and collide in BOTH
+include orders. So the aarch64 rung for the full applet set is blocked on an
+`--emit-obj` object writer for aarch64 and not on anything smaller — measured by
+attempting it, not inferred. Rung 2 (cat echo, 28 TUs) is GREEN on aarch64
+today, so the cross axis itself works.

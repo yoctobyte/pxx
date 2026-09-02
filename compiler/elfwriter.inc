@@ -3438,10 +3438,20 @@ var
   f: Integer;
 {$endif}
 begin
+  { An INTERNAL assertion, not a user-facing refusal: compiler.pas only reaches
+    here with TargetArch = TARGET_X86_64, and the refusal a user sees is the
+    TargetHasObjectWriter one beside that dispatch. It still has to name the
+    right set, because the next reader of this line takes it for a statement of
+    fact -- and it was one: it said "i386 [...] ha[s] no object writer yet"
+    while writeELFRel386General had existed for a day. Enumerate, do not
+    assert. }
   if TargetArch <> TARGET_X86_64 then
-    ErrorNoPos('--emit-obj: the general ELF64 object writer is x86-64 only; '
-        + 'xtensa and riscv32 use the ELF32 one, and i386, arm32 and aarch64 '
-        + 'have no object writer yet');
+    ErrorNoPos('--emit-obj: internal -- the general ELF64 object writer was '
+        + 'reached with --target=' + TargetArchName(TargetArch)
+        + ', and it is x86-64 only. Targets with a writer of any kind: '
+        + EmitObjTargetList + '; each of the others reaches its own, not this '
+        + 'one, so arriving here is a dispatch bug rather than a missing '
+        + 'writer.');
 
   ObjCheckProcAddrBodies;
   ObjPlanHostedSymbols(strSize, numLocalProcs, numExportProcs,
