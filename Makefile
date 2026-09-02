@@ -13183,6 +13183,33 @@ test-core: $(COMPILER)
 	# All rows diffed against gcc.
 	./$(COMPILER) test/c_local_array_init_over_256.c $(TESTTMP)/c_linit25626
 	tools/expect_same.sh c_linit25626 "$$($(TESTTMP)/c_linit25626)" "$$(printf '1 71892\n2 72490\n3 99750 99750\n4 0 7 9\n5 400 TAIL second\n6 11 99750 33 44 55')"
+	# <netinet/udp.h>, <netinet/if_ether.h>, <netinet/ether.h> -- all three
+	# found by attempting busybox for i386, where pxx has no host /usr/include
+	# to fall back on and the gaps the x86-64 build was borrowing become
+	# refusals. udp.h alone stopped 7 translation units. Rows 2 and 3 write
+	# through one spelling of struct udphdr and read through the other, because
+	# busybox uses BOTH in one build (udhcp/packet.c writes `source',
+	# traceroute.c reads `uh_sport') and a header carrying one of them compiles
+	# half the corpus and looks finished. Rows 6-12 are glibc's MEASURED
+	# ether_aton/ntoa behaviour: ntoa drops a leading zero, aton wants exactly
+	# six colon-separated groups of one or two hex digits, and yet ignores
+	# anything after the sixth (row 9). A round-trip-only test passes on a
+	# zero-padded ntoa, which is a different string on the wire.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_net_headers.c $(TESTTMP)/c_nethdr26
+	tools/expect_same.sh c_nethdr26 "$$($(TESTTMP)/c_nethdr26)" "$$(printf '1 8 28 8\n2 1234 5678 8 beef\n3 a0b c0d\n4 8 14 18 24\n5 102 6 6 14 64 1518\n6 001122334455 0:11:22:33:44:55\n7 000102030405 0:1:2:3:4:5\n8 aabbccddeeff aa:bb:cc:dd:ee:ff\n9 001122334455 0:11:22:33:44:55\n10 NULL\n11 NULL\n12 NULL')"
+	# <sched.h> (5 TUs) and <linux/fs.h> (6), found the same way. A WRONG IOCTL
+	# NUMBER DOES NOT FAIL TO COMPILE -- it issues a different ioctl, and
+	# BLKRRPART where BLKGETSIZE64 was meant rereads the partition table of the
+	# disk whose size you asked for. Every number is diffed against the host's
+	# own kernel header. Row 7 is `rc', not a length: the raw syscall answers
+	# with the bytes written and glibc answers 0, and coreutils/nproc.c is
+	# written as `if (sched_getaffinity(...) == 0)'. Row 18 is the three
+	# size_t-spelled ioctls, whose NUMBER differs between 32- and 64-bit
+	# userspace -- the kernel's own spelling, and the i386 row below pins it.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_sched_and_fs_ioctls.c $(TESTTMP)/c_schedfs26
+	tools/expect_same.sh c_schedfs26 "$$($(TESTTMP)/c_schedfs26)" "$$(printf '1 0 1 2 3 5 6\n2 20000 2000000 4000000 8000000 10000000 20000000 40000000\n3 100 ff 1024\n4 1 0 1 1 3\n5 0 2\n6 0\n7 0 1\n8 1\n9 0\n10 125d 125e 125f 1260\n11 1261 1262 1263 1264\n12 1265 1266 1267 1268\n13 1277 1278 1279 127a\n14 127b 127c 127d 127e\n15 127f 1 2\n16 c0045877 c0045878 c0185879\n17 24 0 8 16\n18 80081270 40081271 80081272')"
 	./$(COMPILER) test/c_crtl_header_order_pull.c $(TESTTMP)/c_hdrorder26
 	tools/expect_same.sh c_hdrorder26 "$$($(TESTTMP)/c_hdrorder26)" "$$(printf '1 4096\n2 100\n3 1\n4 0 1 2 4\n5 0 1 2\n6 f abc\n7 1 2 rest')"
 	# posix_fallocate/fallocate, found the same way. ONE SYSCALL, TWO ERROR
@@ -15088,6 +15115,13 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/lsarr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_lsarr)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
 	./$(COMPILER) --target=i386 test/c_crtl_cmsg_and_socket_levels.c $(TESTTMP)/test_i386_cmsg
 	tools/expect_same.sh i386/cmsg "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cmsg)" "$$(printf '1 0 2 17 16\n2 17 16 2\n3 1 0 263 270\n4 255\n5 8 1\n6 12 12 4\n7 12 12 13 16\n8 1 1 111\n8 263 8 222\n9 2\n10 1\n11 1 0')"
+	# The 32-bit half of the linux/fs.h ioctls. BLKBSZGET, BLKBSZSET and
+	# BLKGETSIZE64 are spelled with size_t in the kernel's own header, so their
+	# encoded size -- and therefore the ioctl NUMBER -- differs between 32- and
+	# 64-bit userspace. Only row 18 differs from the core run; every other row
+	# is identical, which is what says the split is the size_t and nothing else.
+	./$(COMPILER) --target=i386 test/c_crtl_sched_and_fs_ioctls.c $(TESTTMP)/test_i386_schedfs
+	tools/expect_same.sh i386/schedfs "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_schedfs)" "$$(printf '1 0 1 2 3 5 6\n2 20000 2000000 4000000 8000000 10000000 20000000 40000000\n3 100 ff 1024\n4 1 0 1 1 3\n5 0 2\n6 0\n7 0 1\n8 1\n9 0\n10 125d 125e 125f 1260\n11 1261 1262 1263 1264\n12 1265 1266 1267 1268\n13 1277 1278 1279 127a\n14 127b 127c 127d 127e\n15 127f 1 2\n16 c0045877 c0045878 c0185879\n17 24 0 8 16\n18 80041270 40041271 80041272')"
 	./$(COMPILER) --target=i386 test/c_crtl_select.c $(TESTTMP)/test_i386_select
 	tools/expect_same.sh i386/select "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
 	./$(COMPILER) --target=i386 test/c_crtl_fallocate.c $(TESTTMP)/test_i386_fallocate
