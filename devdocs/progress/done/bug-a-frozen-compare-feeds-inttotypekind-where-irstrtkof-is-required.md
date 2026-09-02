@@ -3,17 +3,24 @@ slug: bug-a-frozen-compare-feeds-inttotypekind-where-irstrtkof-is-required
 track: A
 prio: 75
 type: bug
-status: open
+status: done
 blocked-by: []
 found: 2026-09-02
 found-by: frankC
 owner:
-summary: "Under -dPXX_SHORTSTRING, comparing two frozen strings is FALSE on x86-64 and arm32, correct on aarch64 (riscv32 was outside the population WHEN FILED because it refused the flag; it has since been converted, accepts the flag and passes all four modes and all six comparison shapes -- re-measured 2026-09-02, see the Population section). TWO DIFFERENT CAUSES, not one: arm32 HAS the width-aware normaliser and DOES call it, but resolves the operand kind with IntToTypeKind(IRTk[n]) at four call sites -- exactly what that normaliser's own comment forbids -- while aarch64 uses IRStrTkOf at all four equivalents; x86-64 has no width-aware compare path at all, EmitStrCmpReg (symtab.inc:7249) takes no type kind and hardcodes add rsi,8 / add rdi,8 / 8-byte length loads. Diagnosis only, not fixed: ir_codegen.inc and symtab.inc are frankb-a9's live surface."
+summary: "FIXED and VERIFIED. Under -dPXX_SHORTSTRING, comparing two frozen strings answered FALSE on x86-64 and arm32; frankb-a9 fixed both causes in 764dc3a30/64f230d12 exactly as this ticket prescribed -- EmitStrCmpReg gained a type kind (x86-64), and arm32's four callers moved from IntToTypeKind to IRStrTkOf. Re-measured independently at c8375f3e7 (compiler 4ba5c77aacc7): var=var, var=lit and lit=var all TRUE on x86-64, arm32, aarch64 AND riscv32. THE HOLD IS RELEASED. What survives is NOT a remnant of this -- the record-FIELD operand and the pointer-deref INDEX fail on opposite operand shapes and are separately ticketed."
 ---
 
 # Frozen compare: `IntToTypeKind` where `IRStrTkOf` is required (arm32), and no kind at all (x86-64)
 
-## HELD — do not claim this yet. The fix destroys a test we are about to get free.
+## HOLD RELEASED — 2026-09-02. The test it protected has been run.
+
+The hold existed to preserve franks-ab's falsifiable prediction that the walker
+fix would NOT repair comparison. **That prediction was tested and it held**: the
+walker fix did not repair comparison; causes (2) and (3) did, separately. Nothing
+is lost by closing this now.
+
+## FIXED — verified independently, not taken from the fixing session
 
 NOT DISPATCHABLE until the IRFrozenKindOfAddr walker fix lands (frankb-a9, sole
 and named owner). This is a deliberate unowned state, decided 2026-09-02, not a
