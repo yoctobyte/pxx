@@ -361,3 +361,21 @@ yours to release.
   same trap from another session. Use `prog > file; rc=$?`. Both survivors
   re-confirmed live at `0f57d8a55` with binary `4ba5c77aacc7`: `p^[1]` blank,
   `r.f = 'hello'` **exit 139**.
+- **A SLUG IS THE WORST POSSIBLE CARRIER FOR AN INFERENCE.** One session's
+  unmeasured framing — "the failing backends lack a named operand normaliser" —
+  became a ticket slug someone else linked to. **That ticket was never filed**, so
+  the link read as an open dependency to everything counting them, and the slug
+  asserted a partition that turned out wrong twice over (two causes, not one;
+  arm32 *has* the layer; x86-64 never calls the helper). A slug gets quoted by
+  other tickets **before anyone measures it**.
+- **That inference travelled THREE hops through people who each handled it
+  responsibly** — into a peer's summary, into an hourly automated prompt, and into
+  a third ticket's slug. **Nobody was careless with it and it still travelled.**
+  That is the argument for hedging the premise rather than the conclusion: the
+  conclusion gets scrutinised at every hop, the premise gets carried.
+- **Recovering a bare "state at commit X" ghost: `git log -S <ghost-sha>`.** Subject
+  matching is unavailable for a marker with no subject of its own, but the commit
+  that *introduced the string* is the commit whose pre-rebase id it was. Safe here
+  only because that commit touches no `compiler/` or `lib/` file, so its tree and
+  its parent's are identical for every build input — **write the derivation into
+  the ticket, not just the answer**, so the next reader can check it.
