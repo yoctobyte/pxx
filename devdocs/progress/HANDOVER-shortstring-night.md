@@ -5,13 +5,40 @@ of reconstructing it from ~40 commits.** One screen; detail is in the tickets.
 
 ## Where phase 2 stands
 
-**Six of seven backends converted.** x86-64, aarch64, arm32, riscv32, xtensa,
-wasm32. **i386 is the only one open** (frankA holds it).
+**All seven backends converted.** i386 landed last (`c8375f3e7`). Read the count
+from `TargetHasByteStrPrefixCodegen` in `compiler/util.inc` — seven rows — **never
+from a commit message**; wasm32's own says "STILL OPEN: i386 and xtensa" with
+xtensa already in. Verified here with a freshly rebuilt binary: all seven accept
+`-dPXX_SHORTSTRING`.
 
-`./compiler/pascal26 -dPXX_SHORTSTRING --target=<t>` is the live probe — it asks
-the tree and cannot go stale. **xtensa needs `--platform=posix
---xtensa-soft-mulhigh`**; bare `--target=xtensa` is the ESP profile and refuses
-by design, which misled four sessions before `ac0a2016d` rewrote the message.
+### Do not read that as phase 2 being done
+
+**"Seven of seven" is TRUE about that function's rows and is NOT a claim about
+phase 2.** The gap is now larger than when six were in:
+
+- **the walker store-side defect — all seven targets, unfixed**, frankb-a9 sole owner
+- **two surviving readers** after the four-cause fix, plus a **fifth cause**
+- `p^[1]` reads a blank while `s[1]` and `r.f[1]` read `h` in the same run
+- `r.f = 'hello'` **segfaults** on x86-64/riscv32, FALSE on aarch64/arm32
+- compare deliberately unowned; its flag rows deliberately unwired
+
+**Seven converted, ZERO of the three defect classes closed.** Every backend now
+emits a one-byte prefix and the shared paths that READ those prefixes are still
+wrong on all of them.
+
+### The green light that is not one
+
+`TargetHasByteStrPrefixCodegen`'s own comment says it disappears at phase 4
+*"when `string[N]` re-types unconditionally and every backend has been
+converted"*. **Every backend has now been converted**, so a reader meeting that
+comment in the morning will conclude P4 is ready. **It is not.** frankb-a9's
+ready condition is strictly stricter — i386 landed and reviewed against the three
+classes, **plus** the two surviving readers and the fifth cause — and it moved
+that condition FURTHER AWAY after i386's own review found them. The person who
+would know says no.
+
+**Anyone measuring from here needs a rebuild:** frankA's landing is the only
+commit in the last fourteen touching `compiler/` or `lib/`, and it touches both.
 
 ## The bug that was at least five bugs
 
