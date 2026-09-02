@@ -2,7 +2,7 @@
 slug: feature-p-implement-the-real-tyshortstring-byte-prefix-layout
 title: "Implement the real `tyShortString` byte-length-prefix layout — the kind is already plumbed, the codegen is not"
 track: P
-prio: 45
+prio: 65
 type: feature
 status: backlog
 created: 2026-09-02
@@ -12,6 +12,32 @@ summary: "MEASURED at bf92c45a7, binary sha256 `5f275966bf50`: we are `cap+8` an
 ---
 
 # The real `tyShortString`, and why it is cheaper than it looks
+
+> **DECIDED BY THE OWNER, 2026-09-02 — DO IT.** *"all we need to do is
+> implement a real shortstring type. it will give us some headache with all
+> mixed string types concatting etc, but that's all trivial. it will give us
+> blitted file io. and memory efficient string handling, something esp targets
+> will like. so, useful. we keep our fixedstring as well, just as is."*
+>
+> **`tyFixedString` STAYS EXACTLY AS IT IS.** This is additive — two kinds, not
+> a migration. Nothing about the wide kind changes, and it remains the only one
+> that can express `N > 255`.
+>
+> **The three payoffs, all measured rather than asserted:** blitted `file of T`
+> (our padding and alignment rules already match FPC exactly — see below — so
+> the width is the whole remaining gap); memory (`string[10]` becomes 11 bytes
+> instead of 18, a 39% saving on small strings, which is the ESP argument); and
+> FPC-byte-identical records for interop.
+>
+> **The mixed-kind surface, measured because "trivial" deserved a number:** 29
+> sites enumerate multiple string kinds together; **20 already name
+> `tyShortString`** and **9 omit it**, spread over 6 files at most 2 per file
+> (`symtab`, `pasparser_stmt`, `ir_codegen` ×2 each; `pyparser`,
+> `pasparser_expr`, `pasparser_decl` ×1). So the concat/assign work is
+> extending nine kind lists. **Caveat, stated so nobody quotes 9 as the job:
+> that bounds the ENUMERATION surface, not the semantics** — adding a kind to a
+> list is not the same as the concat rule being right for it. The real work is
+> the byte-prefix codegen, per backend.
 
 ## Measured, fresh binary
 
