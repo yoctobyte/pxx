@@ -7144,7 +7144,7 @@ end;
 
 function ParseCStatementAST: Integer;
 var node, exprNode, seq, seq2, blk: Integer;
-    asmSections: Integer; asmEmpty: Boolean;   { GCC inline asm }
+    asmSections, asmStart, asmLen: Integer; asmEmpty: Boolean;   { GCC inline asm }
 begin
   Result := -1;
   if CurTok.Kind = tkEOF then Exit;   { the enclosing CBlockContinues refuses it }
@@ -7321,20 +7321,37 @@ begin
     end;
     Expect(tkRParen, ')');
     Eat(tkSemicolon);
-    { An EMPTY template with no operands is a pure compiler barrier and is the
-      only accepted case; see the header above. Everything else is refused, and
-      the refusals run MOST SPECIFIC FIRST so the message names the thing that
+    { The refusals run MOST SPECIFIC FIRST, so the message names the thing that
       is actually missing rather than the outermost fact about it. A reader who
       is told "asm goto" knows what to build; one told "non-empty template"
-      three times over three different causes does not. }
+      over four different causes does not. There is no longer a blanket refusal
+      behind them: every path out of here either encodes the template or says
+      which construct it could not. }
     if CAsmIsGoto then
       Error('C: inline asm goto is not supported'
             + ' — the jump out of the template would have no target');
     if not asmEmpty then
     begin
       CAsmRefuseUnsupported;
-      Error('C: inline asm with a non-empty template is not supported'
-            + ' — the instructions would be silently dropped');
+      { A template with no operands to substitute is self-contained text: the
+        AT&T reader hands each instruction to AsmDispatch and the block becomes
+        an AN_ASM span of AsmBytes, indistinguishable at codegen from a Pascal
+        `asm` block. Operand binding is the separate half and is not built yet,
+        so a template that mentions %N is still refused -- by asmatt.inc, which
+        names the operand. }
+      if CAsmOpCount > 0 then
+        Error('C: inline asm with operand sections is not supported yet'
+              + ' — the template is read, but %0..%9 substitution is not,'
+              + ' so the operands would be silently dropped');
+      if TargetArch <> TARGET_X86_64 then
+        Error('C: inline asm with a non-empty template is only supported on'
+              + ' x86-64, not ' + TargetArchName(TargetArch));
+      AttEncodeTemplate(CAsmTemplate, asmSections > 0, asmStart, asmLen);
+      node := AllocNode(AN_ASM);
+      ASTLeft[node] := asmStart;
+      ASTRight[node] := asmLen;
+      Result := node;
+      Exit;
     end;
     { An empty template that nevertheless declares OUTPUTS is the one remaining
       silent miscompile in this path: the operands are dropped and the variable

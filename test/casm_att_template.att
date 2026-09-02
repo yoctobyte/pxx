@@ -1,0 +1,47 @@
+# AT&T instructions pxx's inline-asm template reader must encode exactly as GNU
+# as does. Fed to tools/casm_att_diff.py, which assembles this list twice --
+# once through pxx's asmatt.inc, once through gas -- and compares the bytes.
+#
+# The list is not a sampler. Every row is a shape the four x86-64-reachable asm
+# blocks in busybox's networking/tls_sp_c32.c actually contain, or a shape whose
+# encoding they depend on:
+#
+#   reg,reg           operand order reverses on the way to the Intel encoder
+#   imm,reg           `$` immediates, and the ALU /ext table rows adc and sbb
+#   imm,mem           the ONLY size information is the q suffix; without it
+#                     AsmOpSizeOf falls back to dword and silently truncates
+#   disp(reg)         1*8 and 2*4 must be folded, which is how every limb
+#                     offset in that file is written
+#   one-operand mem   mulq, the multiply half of the carry chain
+#   no operands       cmc, which carries no AT&T suffix at all
+#   SIB               base+index*scale, to keep the memory path honest beyond
+#                     the one shape busybox happens to use
+
+movq %rax, %rbx
+movl %ecx, %edx
+addq %rcx, %rdx
+adcq %r8, %r9
+subq %rsi, %rdi
+sbbq %r10, %r11
+adcq $1, %rsi
+sbbq $0, %rdx
+addq $1, (%rdi)
+sbbq $0, 16(%rdi)
+sbbq $0, 2*8(%rdi)
+movq 1*8(%r8), %r9
+movq %r9, 3*8(%r8)
+mulq 2*4(%r10)
+mulq %rcx
+cmc
+movl $0xffffffff, %eax
+xorq %r11, %r11
+andq %rax, %rbx
+orq %rax, %rbx
+cmpq %rax, 8(%rbx,%rcx,4)
+movq -8(%rbp), %rax
+negq %rax
+notq %rbx
+incq %rcx
+decq %rdx
+testq %rax, %rax
+leaq 16(%rdi), %rsi

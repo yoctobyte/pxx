@@ -8923,9 +8923,11 @@ test-core: $(COMPILER)
 	# an undeclared function and the operand sections died at the first ':'.
 	# busybox's libbb.h defines barrier() as `asm volatile ("":::"memory")`, which
 	# INIT_G()/INIT_S() expands, so three applets stopped on their first statement.
-	# An empty template orders the COMPILER only and compiles to nothing; a template
-	# with instructions is REFUSED, because dropping them would silently miscompile.
-	# Negative half first, then every accepted spelling. gcc -O0 oracle.
+	# An empty template orders the COMPILER only and compiles to nothing. A template
+	# with instructions is READ as of compiler/asmatt.inc, but only when it has no
+	# operands to substitute; everything still missing is refused BY NAME, because
+	# dropping instructions would silently miscompile. Negative half first, then
+	# every accepted spelling, then the gas differential. gcc -O0 oracle.
 	# Each shape asserts its OWN message: the refusals run most-specific-first, so
 	# a reader is told the smallest thing that has to change rather than the same
 	# blanket sentence for four different causes. SHAPE_PLAIN is the one with a
@@ -8937,11 +8939,18 @@ test-core: $(COMPILER)
 	  | grep -q 'symbolic operand \[a\] is not supported' \
 	  || { echo 'casm_nonempty_template_fails SHAPE_SYMBOLIC: FAIL - [a] was accepted, or refused without naming itself'; exit 1; }
 	@./$(COMPILER) -dSHAPE_PLAIN test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 2>&1 \
-	  | grep -q 'inline asm with a non-empty template' \
-	  || { echo 'casm_nonempty_template_fails SHAPE_PLAIN: FAIL - real instructions were accepted and dropped'; exit 1; }
+	  | grep -q 'inline asm with operand sections is not supported yet' \
+	  || { echo 'casm_nonempty_template_fails SHAPE_PLAIN: FAIL - operands were accepted and dropped, or refused as something else'; exit 1; }
 	@./$(COMPILER) test/casm_goto_fails.c $(TESTTMP)/casmgoto26 2>&1 \
 	  | grep -q 'inline asm goto is not supported' \
 	  || { echo 'casm_goto_fails: FAIL - asm goto was accepted, or refused as something else'; exit 1; }
+	# A template with no operands to substitute IS read now (compiler/asmatt.inc).
+	# The oracle is gas on the same AT&T text, compared instruction by
+	# instruction through objdump -- not byte-for-byte, because gas picks the
+	# imm8 short form where asmenc always emits imm32 and that is a size
+	# difference, not a semantic one. --self-check is the positive control:
+	# swapping an operand order must change what pxx encodes.
+	python3 tools/casm_att_diff.py --self-check test/casm_att_template.att
 	./$(COMPILER) test/casm_barrier.c $(TESTTMP)/casmbarrier26
 	tools/expect_same.sh casmbarrier26 "$$($(TESTTMP)/casmbarrier26)" "43 2"
 	# A ternary as the CALLEE of a call. (*fp)(a), (fp)(a), (name)(a), (a,fn)(x),

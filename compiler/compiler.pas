@@ -129,6 +129,7 @@ procedure EmitStatusSlotX64(reg, bssSlot: Integer; store: Boolean); forward;
 {$include coroutine_emit.inc}
 {$include thread_emit.inc}
 {$include asmenc.inc}
+{$include asmatt.inc}   { the AT&T reader for GNU templates — needs asmenc's AsmDispatch and AsmOp* }
 {$include asmtext.inc}
 {$ifndef PXX_NO_I386}{$include asmtext_386.inc}{$endif}
 {$include asmtext_rv32.inc}

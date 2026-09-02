@@ -18,13 +18,14 @@
  *
  *   (default)       "+r"        -> read-write constraint, named
  *   SHAPE_SYMBOLIC  [a] "=r"    -> symbolic operand spelling, named
- *   SHAPE_PLAIN     "=r" / "r"  -> nothing specific is wrong with it yet;
- *                                  falls through to the blanket refusal
+ *   SHAPE_PLAIN     "=r" / "r"  -> the constraints are fine; %N substitution
+ *                                  is what does not exist yet
  *
- * SHAPE_PLAIN is the one with a lifecycle: it is the vocabulary the busybox
- * tls_sp_c32.c work is building towards, so when "=r"/"r" land this shape
- * becomes an ACCEPTANCE test rather than a refusal one, and the blanket
- * message it asserts should be gone from this path entirely.
+ * There is no blanket refusal left behind these: a template with no operands
+ * to substitute is now READ (compiler/asmatt.inc), so every remaining refusal
+ * names a construct. SHAPE_PLAIN is the one with a lifecycle — it is the
+ * vocabulary the busybox tls_sp_c32.c work is building towards, so when
+ * "=r"/"r" bind to real operands this shape becomes an ACCEPTANCE test.
  *
  * feature-c-gnu-inline-asm-with-a-non-empty-template */
 int printf(const char *, ...);

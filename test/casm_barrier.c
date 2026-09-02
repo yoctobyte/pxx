@@ -13,12 +13,19 @@
  *
  * An empty template with no output operands orders the COMPILER, not the
  * machine, and pxx does not reorder across a statement boundary — so compiling
- * it to nothing is correct, and it is the only case accepted. Everything else
- * is refused by name: parsing real instructions and dropping them would
- * silently miscompile exactly the code that cares most about what the machine
- * does. The refusals are asserted by casm_nonempty_template_fails.c beside this.
+ * it to nothing is correct.
+ *
+ * It is no longer the ONLY case accepted: a template with real instructions and
+ * NO operands to substitute is read by compiler/asmatt.inc and encoded through
+ * asmenc.inc, checked against gas by tools/casm_att_diff.py. What this file
+ * still pins is the empty case specifically — that it compiles to nothing and
+ * costs nothing, which the AT&T reader must not change by starting to emit
+ * something for a template that says nothing. Operand substitution is still
+ * refused, and so is every instruction the reader does not know; the refusals
+ * are asserted by casm_nonempty_template_fails.c and casm_goto_fails.c.
  *
  * feature-c-gcc-extended-inline-asm
+ * feature-c-gnu-inline-asm-with-a-non-empty-template
  * Oracle: gcc -O0, diffed. */
 int printf(const char *, ...);
 
