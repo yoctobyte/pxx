@@ -3,7 +3,7 @@ slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
 prio: 85
 type: umbrella
-blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2]
+blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, bug-c-labels-as-values-is-the-whole-of-the-lua-regression, regression-test-core-c-crtl-mount-and-prio]
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
@@ -334,3 +334,44 @@ Five blockers remain and **none of them is work anyone can perform here**:
 So the umbrella's own condition — *"no wired blockers and the causes are
 fixed"* — is met for everything a session on this box can reach. The green
 `full` run is evidence that arrives from seven, not work performed here.
+
+## The third wave — SEVEN jobs, ONE cause, and the cause is a good commit
+
+2026-09-02, frankZ. Eight regressions arrived that nobody had wired here. Seven
+of them are **one commit**: `00ab464bf feat(C,B): the C frontend announces GNU C
+2.7`.
+
+That commit is right and is not being second-guessed. It fixed a **silent wrong
+layout** — with no `__GNUC__`, glibc's `<sys/cdefs.h>` defines `__attribute__`
+away, so PACKED / ALIGNED / NORETURN expanded to nothing and a libarchive gzip
+header union came out 12 bytes where gcc makes 8. Its stated trade is loud
+compile failures naming the construct in exchange for no quiet wrong answers,
+and that trade is one-directional. What it did not have is the size of the loud
+half: it measured *"busybox's 265 translation units: 1 fixed, 0 broken."*
+**Across the tier it is 7 broken**, and busybox was simply the wrong corpus to
+look in.
+
+- **Five `test_c_gtk*`** — `__builtin_constant_p`, which glib reaches on a bare
+  `__GNUC__ >= 2` gate (`gstrfuncs.h:311`). It is a **2.x** builtin, so the 2.7
+  claim turns it on even though that version was chosen to keep 3.x/4.x builtins
+  off. **FIXED** — reduced to the integer literal 0 beside `__builtin_expect`,
+  which is the arm every non-GCC compiler takes. All five GREEN under
+  `testmgr --job`, which owns the recipe (three run under `xvfb-run` and one
+  greps `readelf -d`; a hand-rolled comparison would have done none of that).
+  Re-laned P→C.
+- **Two `test-lua*`** — labels-as-values. Lua 5.4 gates its computed-goto
+  interpreter loop on a **bare `#if defined(__GNUC__)`**, no version test, so it
+  reaches `ljumptab.h`'s `&&L_OP_MOVE`. **NOT fixed** — it is a real C-frontend
+  feature and it is [[bug-c-labels-as-values-is-the-whole-of-the-lua-regression]],
+  wired here. Proved to be the ONLY blocker in both directions:
+  `-DLUA_USE_JUMPTABLE=0` and `-U__GNUC__` each build the runner, and the binary
+  passes 6/6 lua programs. Two proofs rather than one because they fail
+  differently — one isolates the construct, the other the cause.
+
+The eighth, `regression-test-core-c-crtl-mount-and-prio`, is wired here untriaged.
+
+**Sequenced with frankD**, who owns `00ab464bf` and the lane: told before
+touching `cparser.inc`, not asked. Their reply supplied the one shape the
+always-0 reduction is wrong for — `BUILD_BUG_ON(!__builtin_constant_p(x))`,
+which becomes a negative array dimension, i.e. still loud — and it is named in
+the source comment so nobody rediscovers it.

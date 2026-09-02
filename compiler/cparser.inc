@@ -2030,6 +2030,55 @@ begin
           Result := ASTLeft[argHead];
           Exit;
         end;
+        { gcc builtin `__builtin_constant_p(x)`: 1 when x folds to a compile-time
+          constant, 0 otherwise. **We answer 0, always, and that is a REDUCTION
+          rather than an implementation** -- said plainly here so nobody reads a
+          later 1 as a regression.
+
+          Why 0 is SOUND and not a workaround: every use of this builtin picks
+          between an arm that is only valid for a constant and a generic arm
+          that is valid for anything. Answering 0 takes the generic arm, which
+          is the arm a compiler without the builtin takes anyway. Answering 1
+          wrongly would be the unsound direction, and there is no shape where 0
+          produces a wrong VALUE -- only a slower one.
+
+          Every use in glib is that shape, and glib is what forced this:
+          gstrfuncs.h:311 `if (__builtin_constant_p (!str) && !str)`, :314 the
+          same with strlen, :160/:184 and gstring.h:74 the ternary form.
+
+          The ARGUMENT IS DISCARDED, which is also gcc's rule -- it is an
+          unevaluated operand, so `__builtin_constant_p (strlen (str))` must not
+          call strlen. Dropping argHead on the floor is that, not an oversight.
+
+          WHY IT SUDDENLY MATTERED. 00ab464bf made the C frontend announce GNU C
+          2.7, and its header lists this builtin among the ones that do NOT
+          work -- the version was chosen to keep 3.x/4.x-gated builtins off. But
+          __builtin_constant_p is a 2.x builtin, so glibc and glib reach it on a
+          bare `__GNUC__ >= 2` gate, below the line that claim was drawn at. Five
+          test-core gtk jobs went red on exactly this, all with the same line.
+          That commit's own answer to its own cost applies unchanged: the fix is
+          to support the construct, not to claim a smaller version.
+
+          RESIDUAL, deliberately not done here: a real implementation answers 1
+          for a literal and for a folded constant expression, which would let the
+          constant arm be taken where glib wrote one. That is a fold, it needs
+          the constant evaluator, and nothing measured wants it -- 0 compiles
+          every corpus we have.
+
+          THE ONE SHAPE 0 IS WRONG FOR, named so the next reader does not have
+          to rediscover it (frankD, 2026-09-02): `BUILD_BUG_ON(!__builtin_
+          constant_p(x))', which ASSERTS that x is constant. Answering 0 turns
+          that into a negative array dimension -- so it stays on the LOUD side
+          of the line, a hard error rather than a wrong value, which is the same
+          trade 00ab464bf took. `__builtin_choose_expr' is absent for the same
+          reason and anything nesting the two fails on the outer one first. }
+        if name = '__builtin_constant_p' then
+        begin
+          Result := AllocNode(AN_INT_LIT);
+          ASTIVal[Result] := 0;
+          ASTTk[Result] := Ord(tyInteger);
+          Exit;
+        end;
         { alloca(n) / __builtin_alloca(n): dynamic stack allocation in the
           current frame, freed at function return — a malloc shim would leak
           per call (QuickJS allocates every JS call frame with it). A USER

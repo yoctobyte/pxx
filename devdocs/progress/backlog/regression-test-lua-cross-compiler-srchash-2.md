@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: C
+blocked-by: [bug-c-labels-as-values-is-the-whole-of-the-lua-regression]
+summary: "TRIAGED, not fixed: lua 5.4 turns its computed-goto interpreter loop on with a BARE `#if defined(__GNUC__)`, so 00ab464bf's GNU C 2.7 claim reaches ljumptab.h's `&&L_OP_MOVE` and lvm.c does not compile. Labels-as-values is the ONLY blocker — `-DLUA_USE_JUMPTABLE=0` and `-U__GNUC__` each build the runner and it passes 6/6 lua programs. Blocked on the feature; do NOT add the -D to the recipe."
 ---
 
 > **Track guessed as C from the FAILING STEP** — line 2 of 2, `if [ ! -f "library_candidates/lua/src/lua.h" ]; then \ echo "test-lua-cross: SKIP — no lua tree at library_candidates/lu`, which names `test/lua/runner.c`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 4 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -61,3 +63,17 @@ test-lua-cross: FAILURES
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Triaged (frankZ, plexus, 2026-09-02) — one construct, and it is the only one
+
+Reproduced at binary `7ef59bc560b4b9fc` with the recipe's own flags, byte-identical
+to the log tail above. Cause, both counter-tests, and the 6/6 corpus run that
+proves nothing is behind the gap:
+[[bug-c-labels-as-values-is-the-whole-of-the-lua-regression]].
+
+Same root as the five `test_c_gtk*` reds — `00ab464bf`'s GNU C 2.7 claim, seven
+jobs between them. The gtk five are fixed; these two need the feature.
+
+**Do not add `-DLUA_USE_JUMPTABLE=0` to the recipe to close this.** It would go
+green while hiding the gap and while no longer testing what a real lua build
+does on a GNU-announcing compiler.

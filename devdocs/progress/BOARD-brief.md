@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:5 unfinished:27 blocked:7 backlog:13 backlog-umbrella:6 backlog-core:139 backlog-nilpy:96 backlog-tools:72 backlog-pascal:60 backlog-decide:26 backlog-libs:16 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3091 rejected:72`
+`working:5 unfinished:27 blocked:7 backlog:8 backlog-umbrella:6 backlog-core:139 backlog-nilpy:96 backlog-tools:72 backlog-pascal:60 backlog-decide:26 backlog-libs:16 backlog-cfront:15 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3096 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -55,12 +55,14 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 463, ranked
+## Ready — top 30 of 457, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
+- `[p 85] [C]` bug-c-labels-as-values-is-the-whole-of-the-lua-regression (unblocks 3)
 - `[p 85] [P]` regression-lib-test-lib-synapse-3 (unblocks 1)
 - `[p 85] [P]` regression-lib-test-lib-synapse-ssl (unblocks 1)
 - `[p 85] [P]` regression-lib-test-lib-synapse-transitive-unit (unblocks 1)
+- `[p 85] [T]` regression-test-core-c-crtl-mount-and-prio (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-exception-unhandled-3 (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-setlen-in-parallel-for-body-2 (unblocks 1)
 - `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
@@ -75,17 +77,15 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [P]` bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
-- `[p 70] [T]` regression-test-core-c-crtl-mount-and-prio
-- `[p 70] [P]` regression-test-core-test-c-gtk-2
-- `[p 70] [P]` regression-test-core-test-c-gtk-call-4
-- `[p 70] [P]` regression-test-core-test-c-gtk-types-2
-- `[p 70] [P]` regression-test-core-test-c-gtk-window-3
-- `[p 70] [P]` regression-test-core-test-c-gtk3-stock-2
-- `[p 70] [C]` regression-test-lua-compiler-srchash
-- `[p 70] [C]` regression-test-lua-cross-compiler-srchash-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [A]` bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
+- `[p 65] [N]` bug-n-yield-from-is-not-implemented
+- `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
+- `[p 65] [A]` feature-a-fold-the-consensus-dead-branch-core-at-every-level
+- `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
+- `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
+- `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 
-_433 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_427 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
