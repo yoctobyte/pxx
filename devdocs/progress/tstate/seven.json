@@ -12528,23 +12528,14 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-09-02T10:04:54Z",
+  "date": "2026-09-02T15:36:18Z",
   "red": [
-   "lib-test#src:tools/crtl_reachability.py",
-   "lib-test#src:test/lib_synapse.pas",
-   "lib-test#src:test/lib_synapse_transitive_unit.pas",
-   "lib-test#src:test/lib_synapse_ssl.pas",
    "tools-devtest#00"
   ],
-  "sha": "67ae9a62d567be6bddbb6c609db7c79c1d2005ff",
+  "sha": "07d196aa45eae7ad3eab752396fb2d950fb3738f",
   "tier": "full",
-  "ver": "v400",
-  "verdict": "RED",
-  "why": {
-   "lib-test#src:test/lib_synapse.pas": "pascal26:0: error: incompatible types: cannot assign ShortString to Char | pascal26:0: error: incompatible types: cannot assign ShortString to Char",
-   "lib-test#src:test/lib_synapse_ssl.pas": "pascal26:0: error: incompatible types: cannot assign ShortString to Char | pascal26:0: error: incompatible types: cannot assign ShortString to Char",
-   "lib-test#src:test/lib_synapse_transitive_unit.pas": "pascal26:0: error: incompatible types: cannot assign ShortString to Char | pascal26:0: error: incompatible types: cannot assign ShortString to Char"
-  }
+  "ver": "v401",
+  "verdict": "RED"
  },
  "watcher": {
   "testmgr": "9dbceb545285",
