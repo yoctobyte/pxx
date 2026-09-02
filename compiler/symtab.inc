@@ -14242,6 +14242,33 @@ end;
   element question is how `p^[i]` over an `array of Double` would have lost the
   element kind it already gets right today.
   bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
+{ The pointer SYMBOL behind `p^` when the pointee is a FROZEN STRING, else -1.
+
+  The frozen-string analogue of DerefPtrArraySym above, and it exists for the
+  identical reason stated there: on a deref the base node's OWN tag is close
+  enough to look right and wrong where it counts. The IR tags `p^` generically
+  tyString, tyString means an 8-byte prefix, and the indexing origin is computed
+  from that prefix -- so `p^[1]` addressed base+8 while a tyShortString's first
+  character sits at base+1. It read a BLANK rather than garbage, because offset
+  8 of an 11-byte slot is still inside the slot and still zero, which is why it
+  survived a fix that repaired Length(p^) in the same program.
+
+  The pointee's kind was never missing: it is PtrElemTk on the pointer's own
+  symbol, the same carrier IRFrozenKindOfAddr reads one level down in the IR.
+  This is that question asked at the AST, where the index origin is decided.
+  bug-a-indexing-a-frozen-string-through-a-pointer-deref-reads-the-wrong-byte }
+function DerefFrozenStrPtrSym(node: Integer): Integer;
+begin
+  Result := -1;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_DEREF then Exit;
+  if ASTLeft[node] < 0 then Exit;
+  if ASTKind[ASTLeft[node]] <> AN_IDENT then Exit;
+  Result := ASTIVal[ASTLeft[node]];
+  if (Result < 0) or (Result >= SymCount) then begin Result := -1; Exit; end;
+  if not TypeIsFrozenString(Syms[Result].PtrElemTk) then Result := -1;
+end;
+
 function DerefPtrArraySymAny(node: Integer): Integer;
 var dpaB: Integer;
 begin

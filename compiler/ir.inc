@@ -2020,6 +2020,7 @@ var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     tk: TTypeKind;
     baseDynDepth, dynRootSym, dynBaseRec, slotAddrNode: Integer;
     dpaSym: Integer;   { the pointer symbol behind a `p^[i]` array base }
+    dfsSym: Integer;   { ...and behind a `p^[i]` FROZEN STRING base }
     dynBaseTk: TTypeKind;
     recName, aliasIdx: Integer;
     strElemTk: TTypeKind;   { a managed string's ELEMENT type -- see the
@@ -2407,6 +2408,16 @@ begin
     begin
       tk := IntToTypeKind(ASTTk[baseNode]);
       recName := ResolveNodeRec(baseNode);
+      { `p^[i]` for `p: ^string[N]`. Same rule as the DerefPtrArraySym arm
+        below -- on a deref the kind comes from the POINTER SYMBOL, because the
+        base node's own ASTTk is generically tyString and tyString means an
+        8-byte prefix. The frozen arm further down derives the index origin
+        from that prefix (`lo := -(FrozenStrPrefixSize(tk) - 1)`), so a
+        shortstring pointee put index 1 at base+8 when its first character is
+        at base+1.
+        bug-a-indexing-a-frozen-string-through-a-pointer-deref-reads-the-wrong-byte }
+      dfsSym := DerefFrozenStrPtrSym(baseNode);
+      if dfsSym >= 0 then tk := Syms[dfsSym].PtrElemTk;
     end;
 
     if isArr then
