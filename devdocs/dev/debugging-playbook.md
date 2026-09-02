@@ -3988,6 +3988,51 @@ Same family as `code : STALE` in the watcher and the frozen-builtin seam
 `gate.sh` now guards: **the artifact you are measuring is assembled from more
 parts than the one you named.**
 
+## A pin freezes the BINARY, not what the binary READS — so it cannot exculpate a source change
+
+The section above is that seam read in one direction: a mixed compiler FAILS
+where neither endpoint does, and a new feature's own hole reads as ancient. This
+is the same seam read in the other direction, and it is the more dangerous one,
+because a false reproduction misdirects an investigation while a false
+exculpation **ends** it.
+
+Measured 2026-09-02. Two NilPy tests failed on a C header chain. I ran them
+under `stable_linux_amd64/default/pinned`, saw the identical error, and reported
+"the pin predates all of today's work, so this is not from today's commits" to
+the agent whose commits they were. **It was from today's commits.** `fca437d4d`
+had added `lib/crtl/include/features.h`, deliberately empty so `__GLIBC__` stays
+undefined for busybox; host `stdlib.h` pulled that empty file into glibc's own
+chain, which then emerged with no `__GNUC_PREREQ`, and the next host header to
+use one met `0 (4, 3)` inside an `#if`.
+
+**A pin freezes the compiler EXECUTABLE. It does not freeze the headers and
+library sources that executable reads, and those come from the working tree.**
+`lib/crtl/include/**` and `lib/rtl/**` are inputs, not parts of the pin. So:
+
+- **A pinned run can never exculpate a change to anything the compiler READS.**
+  For a C header, an RTL unit, or an include path, "the pin does it too" is not
+  evidence of age — the pin is reading the same new file you are.
+- It remains a good control for a change to `compiler/**`, which the pin really
+  does predate. The question is not "is the pin old" but **"is the thing I am
+  accusing inside the pin?"**
+- Note the sign. CLAUDE.md's B/E section carries the adjacent case — a C fix
+  PASSES under the pin because the pin predates `__GNUC__` and the source takes
+  its other arm. There the stale binary manufactures a green; here the live tree
+  manufactures a red. One seam, three ways to be wrong about it.
+
+**The falsification that works is the one-variable swap, not a second
+observation.** frankD settled it by moving that single file aside, running,
+putting it back, running again — compiler binary unchanged in both. That is a
+controlled experiment on the suspected input. "The pin does it too" is one
+observation with an uncontrolled variable I had not noticed was a variable, and
+it cannot distinguish the two hypotheses at all.
+
+The general form, and it is worth asking out loud before trusting any frozen
+reference: **what does this instrument actually hold constant, and is the thing
+I am accusing inside it or outside it?** An exculpation needs the SUSPECTED
+INPUT held fixed. Holding something else fixed, however rigorously, answers a
+different question — and answers it correctly, which is why it convinces.
+
 ## "Ruled out" and "could not look" must never print the same
 
 The sharpest version of this file's refrain, and it cost six days. A ticket
