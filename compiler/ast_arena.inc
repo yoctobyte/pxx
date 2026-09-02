@@ -317,21 +317,25 @@ begin
     ASTSubtreeHasLabel := True;
     Exit;
   end;
-  { AN_ASM HAS NO CHILD NODES AND MUST NOT BE RECURSED INTO. Its ASTLeft and
-    ASTRight are an AsmBytes OFFSET and a LENGTH, not node references -- see
-    ParseAsmStatementAST (pasparser_stmt.inc) and CAsmBuildBlock
-    (cparser.inc), and ir.inc's AN_ASM arm reads them straight back out as
-    IRAppend(IR_ASM, ASTLeft, ASTRight, ...). Recursing would index ASTKind
-    with a byte offset, and AsmBytes offsets run far past a body's node count,
-    so the failure mode is an OUT-OF-RANGE READ rather than a wrong answer.
-    Answering False is also the correct answer on the merits: an asm block
-    contains no AST children and is not an entry point (see the note above on
-    why AN_ASM is deliberately absent from the list). Reachable through
-    ASTSeqTailUnreachable, which walks the remainder spine: `Exit; asm ... end`
-    in Pascal and `return; asm("cmc");` in C both put an AN_ASM here.
-    Diagnosed by frankb-a9 (Track C). ASTLeft/ASTRight are OVERLOADED PER KIND,
-    so every generic walker over them has this shape -- the sweep for the rest
-    is [[bug-a-generic-astleft-astright-walkers-recurse-into-kinds-that-overload-those-fields]]. }
+  { The recursion goes through ASTChildLeft/ASTChildRight, NOT ASTLeft/ASTRight,
+    and that is load-bearing rather than stylistic. Those slots are overloaded
+    per kind -- AN_ASM parks an AsmBytes offset and length in them, and seven
+    other kinds park a VMT slot, a record id or a flag -- so a raw walk indexes
+    ASTKind with a payload integer. This walker was the instance that proved it
+    was not theoretical: reached through ASTSeqTailUnreachable, the garbage read
+    answered a spurious True, which SUPPRESSED a correct prune, so
+    `Exit; asm nop end; WriteLn(Undefined)` emitted the undefined call and the
+    binary would not start (both frontends; test_asm_in_unreachable_tail.pas and
+    c_asm_in_unreachable_tail.c hold that shape).
+
+    The kind list lives in ASTLeftIsChild/ASTRightIsChild above and nowhere else
+    -- do not re-add a local `if ASTKind = AN_ASM` here. The census tool
+    tools/ast_slot_overloads.py is what keeps that table honest; it found
+    AN_METHODREF after a careful eyeball census had declared the list complete.
+
+    Separately, and NOT the same point: AN_ASM is also deliberately absent from
+    the entry-point list above. Two different questions -- "has children" and
+    "is an entry point" -- that happen to have the same answer for this kind. }
   if ASTSubtreeHasLabel(ASTChildLeft(node), budget) then
   begin ASTSubtreeHasLabel := True; Exit; end;
   if ASTSubtreeHasLabel(ASTChildRight(node), budget) then
