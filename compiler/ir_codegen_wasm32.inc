@@ -623,7 +623,8 @@ function WasmEmitIndArgs(sigProc, firstArg, startIdx: Integer;
   time this file has needed one and the first time it cost nothing. }
 procedure WasmEmitConstStr(node: Integer); forward;
 procedure WasmEmitFrozenStore(dstIsSym: Boolean;
-                              dstRef, valNode, cap: Integer); forward;
+                              dstRef, valNode, cap: Integer;
+                              dtk: TTypeKind); forward;
 { The post-call exception check and the spill that must precede it. Forward
   because every call emitter needs them and the call emitters sit above the
   block machinery they branch through. }
@@ -1226,7 +1227,11 @@ begin
     { A frozen string through an ADDRESS — a string[N] record field, or `p^`.
       Capacity comes from the IR node here rather than from a symbol, because
       there is no symbol: the destination is an expression. }
-    WasmEmitFrozenStore(False, IRA[node], IRB[node], Integer(IRIVal[node]));
+    { The destination is an ADDRESS expression, so the width has to come from
+      what that address points at — IRTk[node] is the generic tyString for every
+      frozen string and would read 8 for a shortstring field. }
+    WasmEmitFrozenStore(False, IRA[node], IRB[node], Integer(IRIVal[node]),
+                        IRFrozenKindOfAddr(IRA[node]));
     Exit;
   end;
   if tk = tyAnsiString then
@@ -2099,6 +2104,7 @@ end;
   the element's layout — the confusion behind
   bug-open-array-param-length-high-zero. }
 function WasmStrTypeOf(node: Integer): TTypeKind;
+var ftk: TTypeKind;
 begin
   WasmStrTypeOf := WasmNodeResultType(node);
   if node < 0 then Exit;
@@ -2115,6 +2121,80 @@ begin
     through to the IR's own record and answers tyAnsiString. It answered
     LongWord before that predicate existed, which is a true statement about the
     arithmetic and a false one about the value. }
+
+  { THE PREFIX WIDTH, not merely the kind. The IR tags every frozen string
+    tyString generically, and tyString means an EIGHT-byte prefix — so a
+    tyShortString arriving here as tyString has its single length byte read as a
+    machine word, which is a length in the billions rather than a slightly wrong
+    one. IRFrozenKindOfAddr reads the SYMBOL, the only thing that knows the
+    width.
+
+    Only the GENERIC answer is refined, and that condition is the whole safety
+    of this. The IR_LEA arm above already consulted the symbol and may hold
+    tyShortString; IRFrozenKindOfAddr answers tyString when it cannot tell. So
+    refining unconditionally would widen a known-narrow kind back to 8 and
+    reintroduce the overrun this exists to remove. Wrong-wide is the recoverable
+    direction and wrong-narrow is not — this keeps wrong-wide the only direction
+    reachable.
+    feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+  if WasmStrTypeOf = tyString then
+  begin
+    ftk := IRFrozenKindOfAddr(node);
+    if TypeIsFrozenString(ftk) then WasmStrTypeOf := ftk;
+  end;
+end;
+
+{ ===== the frozen-string length prefix, at its OWN width =====
+
+  tyString and tyFixedString carry an 8-byte length word; tyShortString carries
+  one length byte (the FPC ABI). FrozenStrPrefixSize is the shared fact, and
+  these three are the only places this backend spells the WASM consequence of
+  it — so a site that asks them cannot be half-converted: it reads, writes and
+  steps over the same number of bytes by construction.
+
+  What this replaces is the width as a literal at each site. There were four
+  such sites and they are not interchangeable — one reads a prefix, one writes
+  one, two step over one — which is four independent chances to convert three of
+  them and leave a reader disagreeing with its writer. That disagreement is
+  silent: the module still validates and still runs.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+
+{ Address on the stack -> that frozen string's length, as an i32. }
+procedure WasmFrozenLoadLen(tk: TTypeKind);
+begin
+  if FrozenStrPrefixSize(tk) = 1 then
+    WasmMemOp($2D, 'i32.load8_u', 0, 0)
+  else
+    { The LOW word of the 8-byte prefix. A length cannot exceed a wasm32 address
+      space, so the high word is known zero and is never read — the same
+      assumption the backend has always made here. }
+    WasmMemOp($28, 'i32.load', 2, 0);
+end;
+
+{ Address on the stack -> the address of its CHARACTERS. }
+procedure WasmFrozenToChars(tk: TTypeKind);
+begin
+  WasmI32Const(FrozenStrPrefixSize(tk));
+  WasmOp($6A, 'i32.add');
+end;
+
+{ Length (i32) on the stack above the destination address -> the prefix written
+  at its own width.
+
+  The wide arm stores EIGHT bytes with one i64.store rather than four with an
+  i32.store, and that is load-bearing rather than incidental: it is what leaves
+  the high word zero without a second instruction. The byte arm has no high word
+  to clear, so these are not one instruction at two widths and cannot be folded
+  into one. }
+procedure WasmFrozenStoreLen(tk: TTypeKind);
+begin
+  if FrozenStrPrefixSize(tk) = 1 then
+    WasmMemOp($3A, 'i32.store8', 0, 0)
+  else
+  begin
+    WasmOp($AD, 'i64.extend_i32_u');
+    WasmMemOp($37, 'i64.store', 2, 0);
+  end;
 end;
 
 { Length. Both string representations keep their length in a machine word next
@@ -4139,7 +4219,28 @@ begin
   if tk = tyChar then hp := WasmWriteHelper('PXXWriteCharW')
   else if tk = tyBoolean then hp := WasmWriteHelper('PXXWriteBoolW')
   else if tk = tyAnsiString then hp := WasmWriteHelper('PXXWriteStrMW')
-  else if TypeIsFrozenString(tk) then hp := WasmWriteHelper('PXXWriteFrozenW')
+  { THE ONE HELPER CHOICE ON THIS BACKEND. The two differ only in the prefix
+    they read — PXXWriteFrozenW takes a machine word and writes from +8,
+    PXXWriteFrozenBW takes one byte and writes from +1 — and the caller knows
+    which at COMPILE time, which is why they are two procedures and not one with
+    a width argument (builtinheap.pas:2679 states that reasoning).
+
+    The kind must come from the VALUE, not from IRTk[node]: the IR tags every
+    frozen string tyString, and picking the wide helper for a shortstring reads
+    its length byte plus seven characters as a length — a write() of most of the
+    address space rather than a misformatted field.
+
+    The other frozen write site in this routine, the IR_CONST_STR arm above,
+    deliberately does NOT make this choice: an interned literal is laid out in
+    Data[] with an 8-byte prefix by construction and is never a tyShortString
+    variable, so it keeps the wide helper permanently. }
+  else if TypeIsFrozenString(tk) then
+  begin
+    if WasmStrTypeOf(valNode) = tyShortString then
+      hp := WasmWriteHelper('PXXWriteFrozenBW')
+    else
+      hp := WasmWriteHelper('PXXWriteFrozenW');
+  end
   else if TypeIsOrdinal(tk) or (tk = tyUnknown) then
     hp := WasmWriteHelper('PXXWriteDecW')
   else
@@ -4296,24 +4397,26 @@ begin
     Exit;
   end;
 
-  { Frozen: write the terminator, then hand over buffer+8. The store is what
-    EmitTerminateString does on x86-64, spelled as one i32.store8. }
+  { Frozen: write the terminator, then hand over the CHARACTERS. The store is
+    what EmitTerminateString does on x86-64, spelled as one i32.store8.
+
+    The kind comes from the symbol rather than the node: this is a path
+    ARGUMENT, so the buffer whose prefix is being read is the variable's own,
+    and Syms[] is what records its width. }
   adrL := WasmAddLocal(WT_I32, 'pathbuf');
   lenL := WasmAddLocal(WT_I32, 'pathlen');
   WasmLValueAddr(sym);
   WasmLocalTee(adrL);
-  WasmMemOp($28, 'i32.load', 2, 0);          { the 8-byte length prefix, low word }
+  WasmFrozenLoadLen(Syms[sym].TypeKind);
   WasmLocalSet(lenL);
   WasmLocalGet(adrL);
-  WasmI32Const(8);
-  WasmOp($6A, 'i32.add');
+  WasmFrozenToChars(Syms[sym].TypeKind);
   WasmLocalGet(lenL);
   WasmOp($6A, 'i32.add');
   WasmI32Const(0);
   WasmMemOp($3A, 'i32.store8', 0, 0);
   WasmLocalGet(adrL);
-  WasmI32Const(8);
-  WasmOp($6A, 'i32.add');
+  WasmFrozenToChars(Syms[sym].TypeKind);
   WasmEmitPathArg := True;
 end;
 
@@ -4610,7 +4713,19 @@ end;
   handle is address 0xFFFFFFF8 and traps. This is the one place so far where
   wasm's eager `select` is the wrong tool, and it is worth naming because
   `select` is otherwise the cheaper answer to every two-way choice here. }
-procedure WasmEmitFrozenStore(dstIsSym: Boolean; dstRef, valNode, cap: Integer);
+procedure WasmEmitFrozenStore(dstIsSym: Boolean; dstRef, valNode, cap: Integer;
+                              dtk: TTypeKind);
+{ dtk is the DESTINATION's frozen kind and it is a parameter rather than
+  something derived here, because the two callers know it by different routes
+  and neither route is available at this point: the symbol store reads
+  Syms[].TypeKind, the address store asks IRFrozenKindOfAddr. Deriving it here
+  would mean picking one and being wrong for the other caller.
+
+  The source kind is separate and stays local — a store CONVERTS between the two
+  frozen widths, so `dtk` and `stk` genuinely differ (`n2w` and `w2n` in
+  test_shortstring_mixed_widths.pas are exactly this), and collapsing them into
+  one "the frozen kind here" is how a cross-width copy reads its length at the
+  destination's width. }
 var lDst, lSrc, lLen, mv: Integer; stk: TTypeKind; savedLVW: Boolean;
 begin
   if cap <= 0 then cap := DEFAULT_STR_CAP;
@@ -4639,12 +4754,30 @@ begin
 
   if stk = tyChar then
   begin
-    { One i64.store writes BOTH words of the prefix, which is what keeps the
-      high half zero without a second instruction. }
-    WasmLocalGet(lDst); WasmI64Const(1);
-    WasmMemOp($37, 'i64.store', 2, 0);
+    { Length 1, then the character immediately after the prefix.
+
+      The length is a CONSTANT here, so this does not go through
+      WasmFrozenStoreLen: that helper takes an i32 off the stack and would emit
+      `i32.const 1; i64.extend_i32_u; i64.store` where this backend has always
+      emitted `i64.const 1; i64.store`. Both store the same eight bytes, and the
+      difference would still have cost the byte-identity of every default
+      module — which is the control this conversion is being proved against, so
+      spending it to share three lines would be a bad trade. }
+    WasmLocalGet(lDst);
+    if FrozenStrPrefixSize(dtk) = 1 then
+    begin
+      WasmI32Const(1);
+      WasmMemOp($3A, 'i32.store8', 0, 0);
+    end
+    else
+    begin
+      { One i64.store writes BOTH words of the prefix, which is what keeps the
+        high half zero without a second instruction. }
+      WasmI64Const(1);
+      WasmMemOp($37, 'i64.store', 2, 0);
+    end;
     WasmLocalGet(lDst); WasmLocalGet(lSrc);
-    WasmMemOp($3A, 'i32.store8', 0, 8);
+    WasmMemOp($3A, 'i32.store8', 0, FrozenStrPrefixSize(dtk));
     Exit;
   end;
 
@@ -4662,10 +4795,12 @@ begin
   end
   else
   begin
+    { The SOURCE's own width, which is not the destination's: a cross-width copy
+      is the ordinary case here, not the exotic one. }
     WasmLocalGet(lSrc);
-    WasmMemOp($28, 'i32.load', 2, 0);
+    WasmFrozenLoadLen(stk);
     WasmLocalSet(lLen);
-    WasmLocalGet(lSrc); WasmI32Const(8); WasmOp($6A, 'i32.add');
+    WasmLocalGet(lSrc); WasmFrozenToChars(stk);
     WasmLocalSet(lSrc);
   end;
 
@@ -4677,11 +4812,11 @@ begin
   WasmLocalSet(lLen);
 
   WasmLocalGet(lDst);
-  WasmLocalGet(lLen); WasmOp($AD, 'i64.extend_i32_u');
-  WasmMemOp($37, 'i64.store', 2, 0);
+  WasmLocalGet(lLen);
+  WasmFrozenStoreLen(dtk);
 
-  { PXXMemMove(dst + 8, chars, len) }
-  WasmLocalGet(lDst); WasmI32Const(8); WasmOp($6A, 'i32.add');
+  { PXXMemMove(dst + prefix, chars, len) }
+  WasmLocalGet(lDst); WasmFrozenToChars(dtk);
   WasmLocalGet(lSrc);
   WasmLocalGet(lLen);
   WasmCall(WasmSlotForProc(mv), 'PXXMemMove');
@@ -4810,14 +4945,16 @@ begin
   if TypeIsFrozenString(stk) then
   begin
     { A frozen string EVALUATES TO ITS ADDRESS (WasmEmitValueAs), and that
-      address is the [len:8][chars] blob — the same shape as a literal's, so
-      the length comes from memory and the chars from +8. }
+      address is the [len][chars] blob — the same shape as a literal's, so the
+      length comes from memory and the chars from just past the prefix. Unlike
+      the literal arm above, the width here is the VARIABLE's and so follows its
+      kind: a literal is always tyString, a `string[N]` need not be. }
     lv := WasmStrLocZ;
     WasmEmitValueAs(valNode, WT_I32, 'frozen string assigned to a managed string');
     if WasmBodyBroken then Exit;
     WasmLocalSet(lv);
-    WasmLocalGet(lv); WasmMemOp($28, 'i32.load', 2, 0);
-    WasmLocalGet(lv); WasmI32Const(8); WasmOp($6A, 'i32.add');
+    WasmLocalGet(lv); WasmFrozenLoadLen(stk);
+    WasmLocalGet(lv); WasmFrozenToChars(stk);
     WasmCall(WasmSlotForProc(hp), 'PXXStrFromLit');
     WasmEmitOwnedStr := True;
     Exit;
@@ -5024,7 +5161,11 @@ begin
       else if Syms[IRA[node]].TypeKind = tyAnsiString then
         WasmEmitManagedStore(True, IRA[node], IRB[node])
       else if TypeIsFrozenString(Syms[IRA[node]].TypeKind) then
-        WasmEmitFrozenStore(True, IRA[node], IRB[node], SymStrCap[IRA[node]])
+        { A symbol destination knows its own kind exactly — the symbol is the
+          only thing that records the prefix width, which is why this does not
+          go through IRFrozenKindOfAddr's "tyString when undeterminable". }
+        WasmEmitFrozenStore(True, IRA[node], IRB[node], SymStrCap[IRA[node]],
+                            Syms[IRA[node]].TypeKind)
       else if WasmSlotType(IRA[node], pvt) then
       begin
         WasmLValueAddr(IRA[node]);
@@ -5324,9 +5465,12 @@ begin
 
   if TypeIsFrozenString(tk) then
   begin
-    WasmLocalGet(valLoc); WasmMemOp($28, 'i32.load', 2, 0);
+    { tk is WasmStrTypeOf's answer, which resolves the generic tyString to the
+      kind that carries the width — so this reads a shortstring's one byte and a
+      tyString's eight without a second question being asked here. }
+    WasmLocalGet(valLoc); WasmFrozenLoadLen(tk);
     WasmLocalSet(lenLoc);
-    WasmLocalGet(valLoc); WasmI32Const(8); WasmOp($6A, 'i32.add');
+    WasmLocalGet(valLoc); WasmFrozenToChars(tk);
     WasmLocalSet(srcLoc);
     WasmStrParts := True;
     Exit;
