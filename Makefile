@@ -13011,6 +13011,25 @@ test-core: $(COMPILER)
 	# All rows diffed against gcc, and against all four cross targets.
 	./$(COMPILER) test/c_local_string_array_init.c $(TESTTMP)/c_lsarr26
 	tools/expect_same.sh c_lsarr26 "$$($(TESTTMP)/c_lsarr26)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
+	# Ancillary data (struct cmsghdr, CMSG_*) and the setsockopt levels, found
+	# by the udhcp client: it reads PACKET_AUXDATA off a recvmsg control buffer
+	# and opens an AF_PACKET socket. THE CONSTANT ROWS ARE NOT TAUTOLOGIES --
+	# they are diffed against glibc's own headers, which is the only thing that
+	# catches a transcribed digit, and a MISSING constant is worse than a wrong
+	# one here because pxx turns an undeclared identifier into 0 and 0 is
+	# SOL_IP. dhcpc.c compiled once with SOL_PACKET, AF_PACKET and PF_PACKET all
+	# silently zero.
+	# Row 11 pins a bound CMSG_NXTHDR deliberately does NOT enforce: it validates
+	# the CURRENT message's extent and does not read the next one's cmsg_len,
+	# which it has not vetted. A stricter walker returns NULL there; it was
+	# written first and replaced, because divergence in the direction of caution
+	# is still divergence on a walk over kernel-supplied bytes.
+	# The 32-bit cross rows below carry DIFFERENT numbers on purpose: cmsghdr is
+	# 16 bytes where size_t is 8 and 12 where it is 4, and both halves are diffed
+	# against gcc -- the second against `gcc -m32'. A single expectation would
+	# have meant pinning one width and skipping the other.
+	./$(COMPILER) test/c_crtl_cmsg_and_socket_levels.c $(TESTTMP)/c_cmsg26
+	tools/expect_same.sh c_cmsg26 "$$($(TESTTMP)/c_cmsg26)" "$$(printf '1 0 2 17 16\n2 17 16 2\n3 1 0 263 270\n4 255\n5 8 1\n6 16 16 8\n7 16 16 17 24\n8 1 1 111\n8 263 8 222\n9 2\n10 1\n11 1 0')"
 	./$(COMPILER) test/c_crtl_bits_and_fdatasync.c $(TESTTMP)/c_bits26
 	tools/expect_same.sh c_bits26 "$$($(TESTTMP)/c_bits26)" "$$(printf '1 1 2 0\n2 1\n3 1\n4 0 0\n5 1\n6 1\n7 5\n8 0\n9 -1 1')"
 	./$(COMPILER) test/c_crtl_netdb_and_exec.c $(TESTTMP)/c_netdb26
@@ -14836,6 +14855,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/tcpgrp "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_tcpgrp)" "$$(printf '1 1 1\n2 -1 1\n3 1 1\n4 1 1 1\n5 1\n6 1 1\n7 -1 1')"
 	./$(COMPILER) --target=i386 test/c_local_string_array_init.c $(TESTTMP)/test_i386_lsarr
 	tools/expect_same.sh i386/lsarr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_lsarr)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
+	./$(COMPILER) --target=i386 test/c_crtl_cmsg_and_socket_levels.c $(TESTTMP)/test_i386_cmsg
+	tools/expect_same.sh i386/cmsg "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cmsg)" "$$(printf '1 0 2 17 16\n2 17 16 2\n3 1 0 263 270\n4 255\n5 8 1\n6 12 12 4\n7 12 12 13 16\n8 1 1 111\n8 263 8 222\n9 2\n10 1\n11 1 0')"
 	./$(COMPILER) --target=i386 test/c_crtl_select.c $(TESTTMP)/test_i386_select
 	tools/expect_same.sh i386/select "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
 	./$(COMPILER) --target=i386 test/c_crtl_fallocate.c $(TESTTMP)/test_i386_fallocate
@@ -15612,6 +15633,8 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/tcpgrp "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_tcpgrp)" "$$(printf '1 1 1\n2 -1 1\n3 1 1\n4 1 1 1\n5 1\n6 1 1\n7 -1 1')"
 	./$(COMPILER) --target=aarch64 test/c_local_string_array_init.c $(TESTTMP)/test_a64_lsarr
 	tools/expect_same.sh aarch64/lsarr "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_lsarr)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
+	./$(COMPILER) --target=aarch64 test/c_crtl_cmsg_and_socket_levels.c $(TESTTMP)/test_a64_cmsg
+	tools/expect_same.sh aarch64/cmsg "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_cmsg)" "$$(printf '1 0 2 17 16\n2 17 16 2\n3 1 0 263 270\n4 255\n5 8 1\n6 16 16 8\n7 16 16 17 24\n8 1 1 111\n8 263 8 222\n9 2\n10 1\n11 1 0')"
 	./$(COMPILER) --target=aarch64 test/c_crtl_select.c $(TESTTMP)/test_a64_select
 	tools/expect_same.sh aarch64/select "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
 	./$(COMPILER) --target=aarch64 test/c_crtl_fallocate.c $(TESTTMP)/test_a64_fallocate
@@ -16326,6 +16349,8 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/tcpgrp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_tcpgrp)" "$$(printf '1 1 1\n2 -1 1\n3 1 1\n4 1 1 1\n5 1\n6 1 1\n7 -1 1')"
 	./$(COMPILER) --target=riscv32 test/c_local_string_array_init.c $(TESTTMP)/test_riscv32_lsarr
 	tools/expect_same.sh riscv32/lsarr "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_lsarr)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
+	./$(COMPILER) --target=riscv32 test/c_crtl_cmsg_and_socket_levels.c $(TESTTMP)/test_riscv32_cmsg
+	tools/expect_same.sh riscv32/cmsg "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_cmsg)" "$$(printf '1 0 2 17 16\n2 17 16 2\n3 1 0 263 270\n4 255\n5 8 1\n6 12 12 4\n7 12 12 13 16\n8 1 1 111\n8 263 8 222\n9 2\n10 1\n11 1 0')"
 	# Three kernel spellings behind one call: x86-64 has sys_select, i386 has
 	# sys__newselect, aarch64 has only pselect6, and riscv32 has only the
 	# time64 pselect6 with a 64-bit timespec even though its `long' is 32 bits.
@@ -18072,6 +18097,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_arm32_hello "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_hello)" "Hello, World!"
 	./$(COMPILER) --target=arm32 test/c_local_string_array_init.c $(TESTTMP)/test_a32_lsarr
 	tools/expect_same.sh arm32/lsarr "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_lsarr)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
+	./$(COMPILER) --target=arm32 test/c_crtl_cmsg_and_socket_levels.c $(TESTTMP)/test_a32_cmsg
+	tools/expect_same.sh arm32/cmsg "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_cmsg)" "$$(printf '1 0 2 17 16\n2 17 16 2\n3 1 0 263 270\n4 255\n5 8 1\n6 12 12 4\n7 12 12 13 16\n8 1 1 111\n8 263 8 222\n9 2\n10 1\n11 1 0')"
 	# GNU labels-as-values on this cross target. arm32 loads the delta from an
 	# inline literal word and adds pc to it, because no arm32 immediate form
 	# reaches an arbitrary label. The `b .+8' over the word is the part that

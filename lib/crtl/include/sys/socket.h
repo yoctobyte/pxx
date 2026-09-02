@@ -20,9 +20,14 @@ struct sockaddr {
 #define AF_INET 2
 #define AF_INET6 10
 
+#define AF_NETLINK 16
+#define AF_PACKET 17
+
 #define PF_UNSPEC AF_UNSPEC
 #define PF_INET AF_INET
 #define PF_INET6 AF_INET6
+#define PF_NETLINK AF_NETLINK
+#define PF_PACKET AF_PACKET
 
 #define SOCK_STREAM 1
 #define SOCK_DGRAM 2
@@ -31,6 +36,31 @@ struct sockaddr {
 #define SOCK_RAW 3
 
 #define SOL_SOCKET 1
+
+/* THE OTHER setsockopt LEVELS, from this box's bits/socket.h. They matter more
+   than they look: a missing one is not a compile error under pxx -- an
+   undeclared identifier used as a value becomes 0 with a warning
+   (bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning-not-an-error) --
+   and level 0 is SOL_IP, a real level that accepts real options. Measured
+   2026-09-02: busybox's udhcp client compiled with SOL_PACKET, AF_PACKET and
+   PF_PACKET all silently 0, which is a setsockopt on the IP level and a socket
+   in AF_UNSPEC. Nothing about that fails at build time. */
+#define SOL_IP 0
+#define SOL_RAW 255
+#define SOL_PACKET 263
+#define SOL_NETLINK 270
+/* SOL_TCP / SOL_UDP / SOL_IPV6 are NOT here. glibc puts each beside its own
+   protocol (<netinet/tcp.h>, <netinet/udp.h>, <netinet/in.h>), nothing in this
+   tree reaches for them, and a constant no call site passes is a promise this
+   runtime has not been asked to keep -- the same rule the SO_ block above
+   states. Adding one costs a line; getting its NUMBER wrong costs a silent
+   setsockopt on the wrong level. */
+
+/* SOL_PACKET options (linux/if_packet.h). Only the ones a program in this
+   tree reaches; the rest are absent for the reason the SO_ block above gives. */
+#define PACKET_ADD_MEMBERSHIP 1
+#define PACKET_DROP_MEMBERSHIP 2
+#define PACKET_AUXDATA 8
 
 /* THE SO_ NAMES, transcribed from this box's asm-generic/socket.h BY SCRIPT.
    Eighty-one numbers is the population where one recalled digit sets a
@@ -166,6 +196,51 @@ struct msghdr {
   size_t msg_controllen;
   int msg_flags;
 };
+
+/* ANCILLARY DATA -- struct cmsghdr and the CMSG_* walkers.
+ *
+ * busybox's udhcp client reads SOL_PACKET/PACKET_AUXDATA off a recvmsg control
+ * buffer and could not be compiled without them; nothing else in this runtime
+ * had needed a control message before.
+ *
+ * cmsg_len is size_t, NOT socklen_t. POSIX says socklen_t and glibc uses
+ * size_t on 64-bit Linux, and the kernel writes the field -- so the wrong one
+ * here does not produce a slower program, it produces a walker that reads the
+ * length out of the top half of a 64-bit field. Verified against glibc:
+ * sizeof(struct cmsghdr) == 16 and CMSG_DATA at offset 16 on x86-64,
+ * 12 and 12 on i386.
+ *
+ * The macros are glibc's, spelled out rather than approximated. CMSG_LEN and
+ * CMSG_SPACE differ ONLY in whether the payload is aligned -- LEN is what goes
+ * in cmsg_len (header, aligned, plus the exact payload), SPACE is what the
+ * buffer must hold (both aligned). Swapping them compiles, runs, and truncates
+ * the last control message. */
+struct cmsghdr {
+  size_t cmsg_len;
+  int    cmsg_level;
+  int    cmsg_type;
+};
+
+#define CMSG_ALIGN(len) \
+  (((len) + sizeof(size_t) - 1) & (size_t)~(sizeof(size_t) - 1))
+#define CMSG_DATA(cmsg)  ((unsigned char *)((struct cmsghdr *)(cmsg) + 1))
+#define CMSG_LEN(len)    (CMSG_ALIGN(sizeof(struct cmsghdr)) + (len))
+#define CMSG_SPACE(len)  (CMSG_ALIGN(len) + CMSG_ALIGN(sizeof(struct cmsghdr)))
+#define CMSG_FIRSTHDR(mhdr) \
+  ((size_t)(mhdr)->msg_controllen >= sizeof(struct cmsghdr) \
+     ? (struct cmsghdr *)(mhdr)->msg_control : (struct cmsghdr *)0)
+/* Padding between a message's payload and the next header. glibc exports this
+   as __CMSG_PADDING and __cmsg_nxthdr is written in terms of it; kept because
+   the alternative spelling (CMSG_ALIGN(len) - len) is the same value written
+   twice. */
+#define __CMSG_PADDING(len) \
+  ((sizeof(size_t) - ((len) & (sizeof(size_t) - 1))) & (sizeof(size_t) - 1))
+
+/* A FUNCTION, as in glibc, and for the reason glibc gives: the bounds check
+   below reads `cmsg->cmsg_len' three times and `mhdr' twice, and a macro doing
+   that re-evaluates both. */
+struct cmsghdr *__cmsg_nxthdr(struct msghdr *mhdr, struct cmsghdr *cmsg);
+#define CMSG_NXTHDR(mhdr, cmsg) __cmsg_nxthdr(mhdr, cmsg)
 
 #define SHUT_RD 0
 #define SHUT_WR 1
