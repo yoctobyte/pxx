@@ -50,6 +50,42 @@ it sit duplicated builtin type-name tables in A, N and P that disagree.
 Every member below is the same sentence in a different place: **something other
 than the layout engine was asked how big a type is, and it answered.**
 
+## THE PRINCIPLE, traced back to where it started (owner, 2026-09-02)
+
+*"it all started with the 'set' ticket .. that was the point i realized some
+typing need to be strict."* The set work and the string work are **one defect
+stated twice**:
+
+> **A type whose SIZE is a function of a DECLARED NUMBER must carry that
+> number. Otherwise the number is metadata, and metadata gets lost.**
+
+- **Sets.** `set of 0..7` and `set of Char` are both `tySet`. The bound is not
+  in the type, so the width cannot follow the declaration and everything gets
+  32 bytes.
+- **Fixed strings.** `string[10]` and `string[1000]` are both `tyFixedString`.
+  The capacity is not in the type, so it lives in **nine** side-tables keyed
+  three ways — and any path that fails to carry it yields a plausible 264-byte
+  default rather than an error.
+
+**The proof that it is one defect and not an analogy:** in `r.inner[0] := <20
+chars>` the capacity reaches the truncating CLAMP (correctly 10) and not the
+STRIDE (falls back to 264). One declared number, two consumers, two tables, one
+populated. That cannot happen to a number the type carries.
+
+**And the fix converges on one shape**, arrived at independently for both: a
+hidden second kind selected by the bound, source spelling unchanged —
+`smallset` for `set of 0..31`
+([[bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so]],
+parked), `tyShortString` for `string[N<=255]`
+([[feature-p-implement-the-real-tyshortstring-byte-prefix-layout]], p100). Both
+move the representational choice back to where the bound is known — the
+declaration — instead of leaving it to whichever side-channel happens to be
+populated at the point of use.
+
+**Read this before unparking the set work**: it is the same job, and whatever
+the string half learns about carrying a bound on the type applies to it
+directly.
+
 ## THE ROOT OF THE STRING HALF HAS A NAME: `tyString` IS OVERLOADED
 
 Found 2026-09-02 when the owner asked whether `tyString` was misnamed. It is
