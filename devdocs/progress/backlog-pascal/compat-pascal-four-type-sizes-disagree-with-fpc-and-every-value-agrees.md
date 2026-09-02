@@ -416,7 +416,7 @@ Measured at `27e983d24`, compiler sha256 `468194333634`:
 ```
 TSmall = 0..255      SizeOf 4    fpc 1
 TNeg   = -128..127   SizeOf 4    fpc 1
-set of 0..7          SizeOf 32   fpc 1     <- not bitpacked
+set of 0..7          SizeOf 32   fpc 4     <- BITPACKED ALREADY; the 32 is a fixed 256-BIT WIDTH, and the `fpc 1` this row used to read was never measured
 string[10]           SizeOf 8    fpc 11    <- POINTER size
 record of 2 subrange SizeOf 8    fpc 2
 ```
@@ -426,7 +426,13 @@ record of 2 subrange SizeOf 8    fpc 2
 1. **Subranges are not narrowed to their range.** A type declared `0..255` is
    stored in 4 bytes. Wasteful, and it makes every record containing one wider
    than the language implies.
-2. **Sets are not bitpacked.** `set of 0..7` takes 32 bytes where one suffices —
+2. **CORRECTED 2026-09-02 — sets ARE bitpacked, and this row was wrong twice.**
+   `set of 0..7` takes 32 bytes, which is 256 BITS: one bit per ordinal over the
+   whole 0..255 range, not a byte per element. `defs.inc:2003` defines the kind
+   as `{ 21: Set — 32-byte bitset }` and `IR_SET_LIT` bakes a *32-byte mask*.
+   The defect is that the width does not follow the DECLARED BOUNDS, not that
+   the bits are unpacked. FPC is 4 here, not 1. Moved out to
+   [[bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so]] —
    a 32x waste that is an efficiency defect on its own terms, independent of any
    FPC comparison.
 3. **`string[10]` is 8 bytes: POINTER SIZE.** So a short string is not stored
