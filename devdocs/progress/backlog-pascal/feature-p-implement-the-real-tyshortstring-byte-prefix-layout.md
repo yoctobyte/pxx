@@ -136,3 +136,64 @@ is the `file of T` argument, which stands on its own and was always the real
 one — a record containing a `string[10]` is 18 bytes in memory and 11 on disk,
 plus the record padding (offset 112 vs 101) that the byte prefix also removes.
 **The justification is narrower, not weaker in kind.**
+
+
+## The byte prefix is NOT the whole record-layout gap — alignment is hardcoded
+
+Checked 2026-09-02 (frankC) against the packing measurement added in
+`76342c379`, because that claim is now the load-bearing argument for this
+ticket's rank and it deserved a second instrument.
+
+**The packing half reproduces exactly.** pxx and FPC agree with no string in
+sight:
+
+| | pxx | FPC `-Mobjfpc` |
+| --- | --- | --- |
+| `record a: Byte; b: LongInt; end` | 8, b@4 | 8, b@4 |
+| `packed record a: Byte; b: LongInt; end` | 5, b@1 | 5, b@1 |
+| `record a: Byte; b: Byte; end` | 2, b@1 | 2, b@1 |
+
+**But "the only divergence is the string field's own width" is not right, and
+"no alignment work" is the part to correct.** Isolating the string field:
+
+| | pxx | FPC |
+| --- | --- | --- |
+| `record a: Byte; s: string[4]; end` | 24, **s@8** | 6, **s@1** |
+| `record s: string[4]; end` | 16 | 5 |
+| `record a: Byte; s: string[4]; b: LongInt; end` | 24, s@8, b@20 | 12, s@1, b@8 |
+
+pxx pads **seven bytes** before the string. FPC pads none — a shortstring is a
+byte array and aligns to 1. So a mixed record diverges in TWO ways: the string's
+width *and* the string's alignment. The `LongInt` observation holds — once each
+compiler has placed the string, both align `b` correctly relative to their own
+offset — but that is downstream of a field that is already in the wrong place.
+
+**Why the size fix alone will not move it** (read from source, not measured —
+there is no 5-byte string today to measure with): the record layout does not
+derive a frozen string's alignment from its size. It is a literal, at three
+arms in `pasparser_decl.inc`, and **each already names `tyShortString`**:
+
+```pascal
+else if (fTk = tyFixedString) or (fTk = tyShortString) then
+begin
+  fSize  := FrozenStrSlotSize(fTk, fStrCap);   { becomes cap+1 -- this is the fix }
+  fAlign := TARGET_PTR_SIZE;                   { stays 8 -- this is not }
+end;
+```
+
+`TypeAlign`/`TypeFieldAlign` are not consulted here, so making
+`FrozenStrSlotSize` return `cap+1` would give a `string[4]` field five bytes
+that are still 8-aligned: `record a: Byte; s: string[4]; end` would go from
+24/s@8 to 16/s@8, not to FPC's 6/s@1.
+
+**This does not weaken the ticket — it sharpens the work item.** The blit
+argument stands, and the alignment side is three lines (`fAlign := 1` for
+`tyShortString`, the wide `tyFixedString` keeping pointer alignment). It just
+has to be in the plan, or the feature lands, `SizeOf` matches FPC, and records
+still do not blit — which is the failure mode where the acceptance test passes
+and the goal is missed.
+
+**Acceptance should therefore assert an OFFSET, not just a size.**
+`record a: Byte; s: string[4]; b: LongInt; end` must be 12 with s@1 and b@8. A
+size-only row can be satisfied by a record that is the right total with the
+fields in the wrong places.
