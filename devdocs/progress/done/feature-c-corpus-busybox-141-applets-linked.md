@@ -59,4 +59,4 @@ link.
   person does not rediscover them as bugs.
 - `libbb/getpty.c` is not in this set, which is why the missing pty family is
   filed (`feature-c-crtl-has-no-pty-family-at-all`) rather than blocking.
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d71642873.
