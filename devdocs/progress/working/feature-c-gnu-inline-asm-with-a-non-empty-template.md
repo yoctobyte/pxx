@@ -108,3 +108,73 @@ expression pairs is genuinely new, but it is small.
 
 `barrier()` (`asm volatile ("":::"memory")`) already works, because an EMPTY
 template is accepted.
+
+## MEASURED 2026-09-02 (frankB): the constraint census, and it inverts the plan
+
+busybox @ `1a64f6a20aaf6e` via `tools/install_lib_candidates.sh busybox`;
+`networking/tls_sp_c32.c` md5 `fe8e47a4f7d5ca797ddc9241672088d0` (identical to
+frankD's tree). Repro confirmed on `compiler/pascal26` at `279763aa9`:
+`--emit-obj` on a four-line `"=r"/"r"` probe gives the ticket's error verbatim.
+
+**Exactly four asm blocks are reachable on x86-64.** The other five are the
+`__i386__` arms and one `#elif 0` (an untested ARM draft, never preprocessed).
+
+| block | outputs | inputs | clobbers |
+| --- | --- | --- | --- |
+| 260 `sp_256_add_8` | `"=r"` ×4 | `"0" "1" "2"` | `memory` |
+| 356 `sp_256_sub_8` | `"=r"` ×4 | `"0" "1" "2"` | `memory` |
+| 431 `sp_256_sub_8_p256_mod` | `"=r"` ×3 | `"0"`, `"1"`(literal) | `memory` |
+| 519 `sp_256to512_mul_8` inner | `"=rm"` ×3 | `"0" "1" "2"`, `"a"`, `"m"` | `cc`, `dx` |
+
+Vocabulary: `"=r" "=rm" "m" "a" "0" "1" "2"`, clobbers `memory cc dx`. **No
+`"+r"`, no `asm goto`, no named `[sym]` operands** (those are in the dead arm).
+
+### The ticket's "genuinely missing" piece is not missing — there is no allocator
+
+The scoping above says the gap is *the allocator contract*, and names tied
+operands as the hard case. Both dissolve here:
+
+- **`grep -n 'RegAlloc\|AllocReg\|register allocator' compiler/*.inc` returns
+  nothing.** pxx's x86-64 codegen keeps nothing live in registers across
+  statements — which is exactly why `AsmParseBody` can discard clobbers
+  (asmenc.inc:2048 says so, and the empty grep is a second source that fails
+  differently). So `memory`, `cc` and `dx` are all free, provided the pinned
+  scratch pool avoids `rdx`.
+- **Tied operands are only hard when you allocate.** Under the ticket's own
+  pinning scheme, operand *N* IS a fixed register, so `"0"(a)` means "load `a`
+  into that same register first" — satisfied by construction. Tied is the
+  cheapest constraint here, not the dearest.
+
+### What is actually missing: a syntax front, which nobody costed
+
+**GNU templates are AT&T. `asmenc`'s x86-64 body is Intel, and it is not text.**
+The scoping's "rewrite `%N` into text the per-target parse body already accepts"
+holds for i386/aarch64/arm32/xtensa/riscv32, which go through
+`AsmParseBodyText*` and emit *text lines*. x86-64 does not: `AsmParseBody` pulls
+**tokens from the Pascal lexer** and encodes into `AsmBytes` immediately, and
+`AsmParseOperand` wants `[rax+8]`, bare register names, `qword ptr`, no `$`.
+`movq 1*8(%0), %3` shares no syntax with that. So the real first slice is an
+AT&T scanner over the template string that drives `AsmDispatch` directly:
+operand order reversal, `$imm`, `%%reg`, `disp(base)` with `1*8` folded, and
+suffix→size where no register fixes it (`sbbq $0, 2*8(%0)`).
+
+Two smaller real gaps:
+- **`adc`, `sbb`, `cmc` are absent from `AsmDispatch`** (822-1260). All four
+  blocks are carry chains; none of them can encode today.
+- **`"m" (bb[j])` is not a name.** `AsmParseOperand` resolves operands by
+  `FindSym`; an indexed lvalue has no symbol. Its address has to be materialised
+  into a pinned register and substituted as `[rN]`.
+
+### Consequence for the architecture
+
+The template bytes can still be encoded at parse time *because* pinning makes
+them register-only — but the loads/stores around the block need frame offsets,
+which C does not have at parse time. So `IR_ASM` grows an operand table
+(currently `IRA`/`IRB` are just offset+len into `AsmBytes`) and codegen emits
+`mov rN, [rbp+off]` / `mov [rbp+off], rN` around the blit, where offsets are
+known. That keeps `AsmBytes` as the one encoder and adds no second path.
+
+**Estimate, now that the list exists:** not the translation layer the scoping
+hoped for, but not allocator work either. It is an AT&T front end plus three
+mnemonics plus an operand table on one IR node. The hard refusal stays for every
+constraint not on the table above.
