@@ -89,6 +89,23 @@ The last two blockers, both named by the attempt rather than by triage:
   Fixed in the same-day commit that adds
   `test/c_global_array_init_over_256.c`.
 
+## What this claim does NOT say
+
+**"pxx compiles and links busybox, byte-identical to gcc" is the claim.
+"crtl is enough to build busybox" is NOT, and it is the sentence a reader
+supplies for themselves.** This build emits **1053** `resolved from the host
+system (/usr/include), not pxx's own headers` warnings over **110** distinct
+headers. Measured the day this closed, by attempting the SAME 400 translation
+units for i386, where there is no host to fall back on: 64 of them stop on a
+crtl header gap, 34 distinct headers, led by `regex.h` and `netinet/udp.h` at
+7 translation units each. On x86-64 not one of those is visible, because the
+fallback answers every time and answers correctly.
+
+That is the second architecture's ticket
+(`feature-c-corpus-busybox-i386-the-second-architecture`), not a defect in this
+one — but it belongs here, because this is the page anyone quoting the GREEN
+will read.
+
 ## Scope
 
 x86-64 only, like rung 3. aarch64 needs an `--emit-obj` object writer

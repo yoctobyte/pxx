@@ -63,13 +63,14 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (3)
+## backlog (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | regression-lib-test-lib-synapse-3 | P | 70→85 | regression | CAUSE FOUND AND FIXED IN TREE, JOB STILL RED — and it stays red until the next pin, because this job builds with $(PXX_STABLE). All three lib_synapse reds are ONE construct: `szDescription := '...'` on an `array[0..N] of Char` FIELD in synapse's ssfpc.inc. ASTCharArrayCap answered only for AN_IDENT, so the char-array-is-a-string conversion never fired for a field and the store was refused as `cannot assign ShortString to Char`. Fixed by bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string; all four synapse programs now build and match their expected output byte for byte under the tree compiler. | — |
 | regression-lib-test-lib-synapse-ssl | P | 70→85 | regression | CAUSE FOUND AND FIXED IN TREE, JOB STILL RED — and it stays red until the next pin, because this job builds with $(PXX_STABLE). All three lib_synapse reds are ONE construct: `szDescription := '...'` on an `array[0..N] of Char` FIELD in synapse's ssfpc.inc. ASTCharArrayCap answered only for AN_IDENT, so the char-array-is-a-string conversion never fired for a field and the store was refused as `cannot assign ShortString to Char`. Fixed by bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string; all four synapse programs now build and match their expected output byte for byte under the tree compiler. | — |
 | regression-lib-test-lib-synapse-transitive-unit | P | 70→85 | regression | CAUSE FOUND AND FIXED IN TREE, JOB STILL RED — and it stays red until the next pin, because this job builds with $(PXX_STABLE). All three lib_synapse reds are ONE construct: `szDescription := '...'` on an `array[0..N] of Char` FIELD in synapse's ssfpc.inc. ASTCharArrayCap answered only for AN_IDENT, so the char-array-is-a-string conversion never fired for a field and the store was refused as `cannot assign ShortString to Char`. Fixed by bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string; all four synapse programs now build and match their expected output byte for byte under the tree compiler. | — |
+| regression-test-core-c-asm-in-inline-body | T | 70 | regression | regression: test-core#src:test/c_asm_in_inline_body.c@2 at 2d6e7d5c26db in step 7/3, `python3 tools/ast_slot_overloads.py --self-check` (auto-filed by twatch) | — |
 
 ## backlog_new (0)
 
@@ -458,7 +459,7 @@ _none_
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 
-## backlog-cfront (17)
+## backlog-cfront (18)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -471,6 +472,7 @@ _none_
 | bug-c-sizeof-reaches-a-pointee-through-one-spelling-only | C | 40 | bug | C: sizeof of a subscript through a pointer-to-pointer answers the pointer size | — |
 | bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet | C | 35 | bug | LATENT, with a named trigger. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]` tests pick the 4-byte-slot va_arg helper; everything else falls to an else whose comment says `Cross (aarch64)` but whose condition is `<> TARGET_X86_64`, i.e. the 8-byte-slot path. xtensa and wasm32 are 32-bit and absent from the set -- the set is correct TODAY only because neither can compile a C program at all (`C program entry stub not implemented for this target yet`). The day either gains an entry stub it silently gets 64-bit varargs slots. Fix the set in the SAME commit as the stub. | — |
 | bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently | C | 50 | bug | C: two conflicting typedefs for one name are accepted silently, last wins | — |
+| feature-c-corpus-busybox-i386-the-second-architecture | C | 65 | feature | First attempt, 2026-09-02: 332 of busybox's 400 translation units already become i386 objects, and three pxx i386 objects link with `gcc -m32` and run. The 68 failures have exactly two causes and neither is about i386 codegen. 64 are crtl HEADER gaps -- 34 distinct headers, led by regex.h (7 TUs), netinet/udp.h (7), linux/fs.h (6), sched.h (5) -- that the x86-64 build never had to face because pxx falls back to the host's /usr/include there and a cross target rightly cannot. 4 are inline asm: the AT&T reader is x86-64 only and one arm needs an earlyclobber constraint. This ticket is the header set; the asm is its own. | — |
 | feature-c-crtl-has-no-pty-family-at-all | C | 45 | feature | crtl has NO pty support: posix_openpt, grantpt, unlockpt, ptsname and ptsname_r are all absent from include/ and src/ (grep -rn over both returns nothing). busybox's libbb/getpty.c calls ptsname_r directly and busybox ASSUMES it exists -- include/platform.h:410 `#define HAVE_PTSNAME_R 1` is the default and nothing undefines it for a glibc-shaped libc, so there is no fallback path to take. Not blocking the current 141-applet busybox set (getpty.c is not in that TU list; measured against the harness's tulist), which is why this is filed rather than fixed: it blocks telnetd, script, microcom and the login-ish applets whenever the config grows to include them. Filed as a GROUP because the five calls are one mechanism -- open /dev/ptmx, TIOCSPTLCK to unlock, TIOCGPTN to get the number, format /dev/pts/N -- and implementing any one alone is not usable. | — |
 | feature-c-crtl-stdio-buffering-and-setvbuf | C | 55 | feature | lib/crtl/src/stdio.c is entirely unbuffered — fputc is one write() syscall per character — and setvbuf at :1051 is a stub that ignores its arguments and returns SUCCESS, which is the dishonest-stub shape the SetTextBuf ruling exists to reject, and worse here because C callers check the return. Add FILE write buffering under C99 7.19.3p7's policy, make setvbuf real, and share a flush registry with lib/rtl so mixed WriteLn/printf output keeps its order. | — |
 | feature-c-csmith-differential-fuzzing | C | 40 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
@@ -867,9 +869,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3126)
+## done (3128)
 
-3126 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3128 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -952,8 +954,8 @@ _none_
 
 - [p 90] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 85] [P] regression-lib-test-lib-synapse-3 (unblocks 1)
-- [p 85] [P] regression-lib-test-lib-synapse-ssl (unblocks 1)
-- [p 85] [P] regression-lib-test-lib-synapse-transitive-unit (unblocks 1)
+- [p 85] [P] regression-lib-test-lib-synapse-ssl
+- [p 85] [P] regression-lib-test-lib-synapse-transitive-unit
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
@@ -966,11 +968,13 @@ _none_
 - [p 70] [P] bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string
 - [p 70] [T] bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - [p 70] [B] feature-b-a-bootable-image-with-the-busybox-userland-on-it
+- [p 70] [T] regression-test-core-c-asm-in-inline-body
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [A] bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine
 - [p 65] [N] bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - [p 65] [N] bug-n-yield-from-is-not-implemented
+- [p 65] [C] feature-c-corpus-busybox-i386-the-second-architecture
 - [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
 - [p 65] [N] feature-nilpy-thirdparty-libraries-as-targets [parked — re-claim, do not duplicate]
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite [parked — re-claim, do not duplicate]
@@ -1375,5 +1379,3 @@ _none_
 - **1** — feature-target-wasm
 - **1** — refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops
 - **1** — regression-lib-test-lib-synapse-3
-- **1** — regression-lib-test-lib-synapse-ssl
-- **1** — regression-lib-test-lib-synapse-transitive-unit
