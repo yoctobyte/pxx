@@ -185,6 +185,41 @@ independently counting the same rows minutes apart gave different numbers for
 three targets, because three sessions were landing into them as I counted. Do
 not report a moving count as a state; say when it was taken, or ask the holder.
 
+## The fleet is an AMPLIFIER for a wrong instrument, and that part is mine
+
+CLAUDE.md already states the mechanism, verbatim: *"Every instrument that lies,
+lies by being CORRECT ABOUT SOMETHING ELSE... None error. All answer."* On the
+evening of 2026-09-02 six sessions hit it anyway, in one phase, in about three
+hours: a missing `run_target.sh` arm read as "wasm32 has no runner"; a bare
+`--target=xtensa` calloc refusal (the ESP platform default) read as "xtensa is
+blocked"; a `--xtensa-soft-mulhigh` SIGILL read as a backend bug; `grep -c`
+counting comments and the `if procIdx < 0 then Error(...)` guard read as a call
+count; a `sizeof` reading; a stale differential baseline.
+
+**So the write-up is not "state the rule" — the rule is stated, in the file
+every session loads at startup, and it did not fire six times.** A seventh
+phrasing is the failure mode, not the fix.
+
+What is genuinely new is not the mechanism but the BLAST RADIUS, and it is the
+coordinator's problem specifically. A wrong instrument read inside one session
+costs that session an hour. Relayed, it becomes another session's briefed
+deliverable in one hop — the wasm32 one did exactly that, through me. **I hold
+the least direct evidence about the most places, so I am the highest-throughput
+path for a confident wrong answer in the fleet.**
+
+Two habits, both cheap, both measured to work that same evening:
+
+- **Before relaying a NEGATIVE capability claim ("X cannot", "X has no"), spend
+  one command asking the tree.** Every one of the six was answerable that way
+  and none was asked. The xtensa premise was refuted by two green Makefile rows
+  that had compiled frozen-string programs for xtensa all along.
+- **When you relay a decision, the premise travels with it and can rot
+  separately.** I relayed a descope one hop after the measurement that broke its
+  premise had already reversed it — correct decision, correct relay, stale by
+  minutes, and it told a working session to stop. Name the premise in the relay
+  so the receiver can notice it is dead; a decision quoted without its premise
+  cannot be checked by the person receiving it.
+
 ## Standing constraints
 
 - **Box contention is real.** Same tier, same day, one variable: **403s idle vs
