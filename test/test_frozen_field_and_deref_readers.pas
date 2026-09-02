@@ -20,8 +20,12 @@ type
   TR = record f: TS10; g: TS10; end;
 var
   r, t: TR; s: TS10; p: PS10; i: Integer;
+  a8: array[0..2] of string[8];
+  a4: array[0..1] of string[4];
 begin
   r.f := 'hello'; r.g := 'hello'; t.f := 'world'; s := 'hello'; p := @s;
+  a8[0] := 'zero'; a8[1] := 'one'; a8[2] := 'two';
+  a4[0] := 'ab'; a4[1] := 'cd';
 
   { the variable spelling -- green throughout, so it is the control that says
     the harness is pointed at a working case too }
@@ -47,6 +51,22 @@ begin
   { THE WRITE HALF }
   p^[1] := 'H';
   WriteLn('wr   [', s, ']');
+
+  { ARRAY ELEMENTS. The store wrote an 8-byte length word into slots laid out
+    at the byte-prefix stride, so each element's prefix overwrote the previous
+    element's characters.
+
+    ASSERT THE VALUE, NEVER THE LENGTH, and these rows are shaped for that.
+    a[0] reported the RIGHT length beside destroyed data; a[2] -- the last
+    element, with nothing after it to overwrite it -- read back correctly; and
+    on the 32-bit targets a length read from the wrong offset TRUNCATED INTO THE
+    CORRECT ANSWER (0x20000000002 has low 32 bits of exactly 2). So a Length()
+    probe passes on i386/arm32/riscv32 with the bug fully present, and a
+    last-element probe passes everywhere. Only the characters and the compare
+    separate them. }
+  WriteLn('arr  [', a8[0], '|', a8[1], '|', a8[2], ']');
+  WriteLn('arrn [', a4[0], '|', a4[1], ']');
+  WriteLn('arrc ', a8[1] = 'one', ' ', a8[1] = 'nope');
 
   for i := 1 to 5 do Write(r.f[i]);
   WriteLn;

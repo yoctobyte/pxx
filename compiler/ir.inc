@@ -2649,7 +2649,35 @@ begin
       keyed off the address node, and that fixed the READ while leaving Write,
       concat and every argument position seeing tyChar. One decision, one site.
       feature-unicodestring-model }
-    Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, ASTTk[node]);
+    { ...but an ARRAY OF FROZEN STRINGS takes its element kind from the ARRAY,
+      not from ASTTk. ASTTk answers the generic tyString for `a[i]` where the
+      symbol records tyShortString, and tyString means an 8-byte prefix -- so
+      the STORE wrote a wide length word into a slot laid out for a byte one.
+      Measured on `array[0..2] of string[8]`, whose slots are 9 bytes and
+      whose SizeOf was correct throughout:
+
+        <4><0><0><0><0><0><0><0>z <3><0><0><0><0><0><0><0>o <3>...t
+
+      an 8-byte prefix written at every 9-byte stride, so each element's length
+      word overwrote the previous element's characters. `a[2]` -- the LAST
+      element, with nothing after it to overwrite it -- read back correctly,
+      and `a[0]` reported the right LENGTH beside destroyed data, so a probe
+      checking either one passes.
+
+      The narrower the declared width the worse it corrupts: at string[4] the
+      slot is 5 bytes and the 8-byte write runs into the next element's prefix,
+      so Length answered 72057594037927938.
+
+      Same shape as the FIELD case one arm below -- the aggregate already
+      records the kind and the AST tag is the generic one. Narrowed to frozen
+      strings because ASTTk is right for everything else, including the
+      tyWideChar decision the comment above describes.
+      bug-a-an-array-of-shortstrings-is-corrupt-under-the-byte-prefix-mode }
+    if isArr and TypeIsFrozenString(tk) and
+       (tk <> IntToTypeKind(ASTTk[node])) then
+      Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, Ord(tk))
+    else
+      Result := IRAppend(IR_INDEX, baseAddr, indexNode, lo, elemSize, ASTTk[node]);
   end
   else if ASTKind[node] = AN_FIELD then
   begin
@@ -8328,7 +8356,17 @@ begin
           beside `r.f = 'hello'` in the same program.
           bug-a-comparing-a-frozen-record-field-to-a-literal-crashes-or-answers-false }
         Result := left;
-        if TypeIsFrozenString(IntToTypeKind(ASTTk[node])) then
+        { DO NOT DOWNGRADE A KIND THE ADDRESS NODE ALREADY RESOLVED. ASTTk is
+          the generic tyString for `a[i]` and `r.f`, while the IR_INDEX /
+          IR_FIELD arms have just taken the specific kind from the ARRAY or
+          RECORD. Overwriting unconditionally put tyString back and widened a
+          known-narrow prefix from 1 to 8 -- which is how an array of
+          string[8] came to be STORED correctly at a 9-byte stride and READ at
+          an 8-byte one, with Length answering 4 beside data printed from the
+          wrong offset. Wrong-wide is not recoverable here; it walks off the
+          slot. Only tag when nothing better is present. }
+        if TypeIsFrozenString(IntToTypeKind(ASTTk[node])) and
+           not TypeIsFrozenString(IntToTypeKind(IRTk[Result])) then
           IRTk[Result] := ASTTk[node];
       end
       else if NodeDynDepth(node) > 0 then
@@ -15732,7 +15770,17 @@ begin
        TypeIsFrozenString(Syms[IRA[node]].TypeKind) then
       Result := Syms[IRA[node]].TypeKind;
   end
-  else if ((IRKind[node] = IR_LOAD_SYM) or (IRKind[node] = IR_LOAD_MEM)) and
+  { IR_LOAD_SYM ONLY. IR_LOAD_MEM was in this arm and had no business being
+    here: on an IR_LOAD_SYM, IRA is a SYMBOL index, and on an IR_LOAD_MEM it is
+    an ADDRESS NODE index. Indexing Syms[] with a node number is bounds-checked
+    and therefore never errors -- it answers, about an unrelated symbol, whose
+    PtrElemTk decided the prefix width of a string it has nothing to do with.
+    Measured: reading an `array[0..2] of string[8]` element through
+    IR_LOAD_MEM(IR_INDEX) took the branch and returned another symbol's kind.
+    The node's own tag, which the IR_INDEX / IR_FIELD arms now set correctly
+    from the aggregate, is the right answer for a load and is what it falls
+    through to. }
+  else if (IRKind[node] = IR_LOAD_SYM) and
           (IRA[node] >= 0) and (IRA[node] < SymCount) and
           TypeIsFrozenString(Syms[IRA[node]].PtrElemTk) then
     { THROUGH A TYPED POINTER. `p^` for `p: ^string[10]` lowers to a bare
