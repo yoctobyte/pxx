@@ -76,7 +76,10 @@ walker fix would NOT repair comparison. It didn't; comparison needed (2) and (3)
 
 ## One caveat before anyone acts on the walker prediction
 
-**The partition the prediction rests on is not pinned down.** frankc-af's ticket
+**RESOLVED, and against the relay.** riscv32 IS in the population — frankb-a9
+retracted its own "riscv32 refuses the flag" figure; riscv32 accepts it and passes
+all four modes and all six comparison shapes (ticket corrected, `a6f81ffd2`).
+The original claim was: frankc-af's ticket
 places riscv32/xtensa/wasm32 outside the population; frankh-15 and franks-ab each
 reported their own backend correct, and the coordinator relayed that as a widened
 three-to-two. **Those were two sessions self-reporting on backends they had just
@@ -88,6 +91,24 @@ the prediction must re-derive the population from the tree at that moment**, not
 cite the ticket, the summary, or either commit. That instruction is in
 `d23178788`, which also holds the compare-fix ticket out of `ready --track A` —
 it was the ranked HEAD and the tool was actively handing it to the next session.
+
+## P4 precondition: wasm32 has NO wired rows
+
+**wasm32 is converted and has ZERO Makefile rows exercising the conversion.**
+Rows passing a mode flag: arm32 36, riscv32 31, aarch64 29, xtensa 6, **wasm32 0**.
+Its eight configurations were genuinely measured but ad-hoc; nothing holds them.
+Its one standing shortstring row runs at **DEFAULT** — by that commit's own
+byte-identity proof, exactly the path the change did not touch. **The standing
+test covers the proven no-op and none of the conversion.**
+
+Today that is a gap in a path most programs never take. **P4 deletes the flag**,
+`string[N]` re-types unconditionally, and wasm32 becomes an unverified DEFAULT.
+The window where this is cheap closes at the flip. Owned by frankc-af (owns
+`test-wasm32`), rows measured by frankwasm, frankb-a9 on-call fallback.
+
+frankb-a9's own ready-for-P4 condition: **i386 landed and reviewed against the
+three classes, PLUS the wasm32 rows wired.** It messages the coordinator at that
+point rather than proceeding.
 
 ## The one decision waiting for you
 
