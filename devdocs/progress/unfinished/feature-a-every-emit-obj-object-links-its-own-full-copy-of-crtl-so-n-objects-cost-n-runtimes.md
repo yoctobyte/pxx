@@ -4,10 +4,10 @@ title: "N objects link N copies of crtl: weak resolves the symbol, it does not d
 track: A
 prio: 55
 type: feature
-status: working
+status: unfinished
 created: 2026-09-01
 found-by: frankA
-owner: frankC
+owner: 
 blocked-by: []
 summary: "Two --emit-obj objects now link and share one runtime (bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link), but WEAK only picks a winner among duplicate symbols -- the losing objects' sections are still linked in whole. Measured: two objects that each contain crtl produce a 580088-byte binary against 310544 for one, and busybox's 41-TU separate build came out at 13.7MB for the same reason. Needs section-granular deduplication: a crtl archive the linker pulls members from, or function/data sections plus COMDAT groups. STEP 1 IS IN: --function-sections turns internal calls into relocations against the callee symbol (1078 of 1084 sites in a C object; the 6 left are the duplicate-static shape and need a per-BODY symbol), verified by the linked binary being BYTE-IDENTICAL with the flag on and off. It shrinks nothing on its own -- the payoff needs per-function sections + --gc-sections, which is a restructuring of writeELFRelX64General's fixed 9-section layout, and ProcAddrFix relocates against the .text SECTION symbol so it breaks there too."
 ---
@@ -427,3 +427,82 @@ Two things the next session needs, both measured here rather than assumed:
 `test/c_function_sections.c`, wired as `test-emit-obj` block 4a-bis. Whole
 `test-emit-obj` target green with the flag default-off, so the existing path is
 untouched.
+
+## 2026-09-02 (frankC) — option (4): ONE COMDAT group, not 1650 sections. Much cheaper than (2), and step 1 just unblocked it
+
+Measured at `533858cce` on `test/c_function_sections.c` (805 FUNC symbols), and
+it reconfirms frankA's contiguity finding on a different program:
+
+```
+rank   1..800  the runtime, ending at pclose            0x00000..0x48641
+rank 801..804  deep3, deep2, deep1, main  (USER CODE)   0x488c8..0x489fe
+rank     805   __pxx_run_finalizers        (THE TAIL)   0x4c4e0
+```
+
+**The user's code is ranks 801-804 of 805.** The runtime is a single contiguous
+PREFIX with exactly one function stranded after the user's code. So the
+crtl/user boundary is ONE SPLIT POINT, not a per-function property.
+
+That admits a shape the three options above do not list:
+
+> **(4) Emit the runtime as one contiguous prefix in its own COMDAT group.**
+> Move the trailing tail (`__pxx_run_finalizers`, and the init/fini thunks)
+> ahead of the user's code, put the runtime prefix in a group section with a
+> fixed signature, and leave the user's code in plain `.text`. The linker keeps
+> ONE copy of the group across N objects and discards the rest.
+
+### Why this is the cheap one
+
+- **Two text sections, not ~1650.** `writeELFRelX64General` is hand-unrolled
+  around a FIXED 9-section layout with hard-coded `.shstrtab` name offsets
+  (1, 7, 18, 24, 35, 40, 48, 56) and a literal `numSects := 9`. Adding a
+  bounded number of sections is the shape it already supports — that is exactly
+  how `.init_array`/`.rela.init_array` were added, conditionally, with the
+  offsets recomputed. Adding N-per-proc is a rewrite of that writer.
+- **It attacks this ticket's TITLE directly.** N×135KB becomes 1×135KB plus
+  N×(user code). Per-function `--gc-sections` would additionally drop the ~84%
+  of the runtime nothing reaches, but that is a SECOND win and the title is the
+  first one.
+- **Step 1 is its prerequisite and is landed.** COMDAT means the losing copies'
+  code is DISCARDED, so callers in those objects must be re-aimed at the kept
+  copy. That is only possible because internal calls are now relocations
+  (`533858cce`). This is the same prerequisite option (2) needed; it is spent
+  either way.
+- **The ten shifting bytes stop being a problem, and stop being a puzzle.**
+  frankA measured that two objects' runtime prefixes differ in exactly TEN bytes
+  of 102878, every one a reference from the runtime bulk INTO the trailing tail,
+  each delta equal to the difference in the two programs' user-code sizes.
+  Moving the tail ahead of the user's code removes the only thing that made the
+  prefixes differ — and byte-identical prefixes is precisely the property COMDAT
+  wants, since the linker keeps one copy and assumes the others were the same.
+
+### What still has to be answered before building it
+
+- **Does the group's signature symbol collide?** All N objects must name the
+  same signature for the linker to dedup them, and that symbol has to be
+  reachable in `.symtab` without becoming part of the export surface.
+- **`.data`/`.bss` are NOT covered by this.** The group would hold `.text` only;
+  the runtime's data still lands per-object, and `test-emit-obj` 4b-septies pins
+  exactly that (two objects sharing one heap, one `errno`, one `optind`). Weak
+  binding still carries those, so the row keeps its meaning — but that is
+  reasoning, not a measurement, and it should be measured before landing.
+- **`ProcAddrFix` relocates against the `.text` SECTION symbol plus an addend.**
+  With the runtime in a different section from the user's code, a `@proc` naming
+  a runtime routine points at the wrong section. It needs the same substitution
+  the calls just got, and this is true for option (2) as well.
+
+**Recommendation, revised: (4) then (2).** (4) is a bounded change to the writer
+that fixes the title; (2) remains the bigger win and the bigger job, and neither
+is blocked by
+[[decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit]],
+because both drop BYTES while leaving the export surface alone.
+
+Parked here rather than started: the emission reorder alone changes where every
+proc lands, and landing that half-verified would destabilise `--emit-obj` for
+the busybox consumer and for Track T.
+
+## Parked 2026-09-02
+
+step 1 (--function-sections, internal calls become relocations) landed at 533858cce. Parked before step 2: the remaining work is an emission reorder plus COMDAT group sections (option 4, measured and written up in the ticket), which changes where every proc lands and would destabilise --emit-obj for busybox and Track T if landed half-verified.
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
