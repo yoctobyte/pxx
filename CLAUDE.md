@@ -207,6 +207,16 @@ one-line logbook pointer.
   authority anyway, so the fix is the wording, not the reader.
 - **B / E — build with `$(PXX_STABLE)`, never rebuild the compiler.** A compiler
   or language gap → ticket in the owning lane.
+  **VERIFYING A C FIX UNDER THE PIN CAN PASS FOR A REASON THAT HAS NOTHING TO DO
+  WITH YOUR FIX.** Not a stale binary — the pinned compiler is *correctly* older,
+  and the SOURCE branches on its age. Measured 2026-09-02: `busybox_diff.sh
+  --pinned` shows PASS on the GNU-inline-asm ticket's own reproducer, because the
+  pin predates `__GNUC__` (`00ab464bf`, not an ancestor of pin v399 `a7abc2481`;
+  independently confirmed with an `#error` probe against the pinned binary), so
+  `tls_sp_c32.c` takes its portable `#else` arm and never reaches the asm at all.
+  **A green that is correct about a different compiler.** Any feature guarded by
+  a version or feature-detection macro that landed after the pin has this shape.
+  Reproduce at HEAD, and say which compiler a green was measured with.
 - **T — owns the TOOL, never the BUG.** A compiler gap it hits → ticket in the
   owning lane. May improve its own tooling freely; its daemon writes ONLY
   `tstate/`.
