@@ -35,18 +35,24 @@ verifiable, and worth nothing tonight against losing the prediction. A session
 that finishes early and goes looking will find this and see no reason not to
 take it; the reason is the paragraph above.
 
-**Open discrepancy in the population, unresolved — do not treat either row as
-settled.** This ticket's summary places riscv32, xtensa and wasm32 outside the
-population (riscv32 refusing the flag by design). Two other sessions reported
-the opposite from their own runs after their conversions landed: frankh-15 that
-riscv32 comparison is correct (`856810406`), franks-ab that xtensa comparison is
-correct (`fe8662e24`). Both may be true of different trees — the conversions
-landed after this diagnosis — which would make it the snapshot rule rather than
-a contradiction. It matters because the prediction above is stated over a
-partition, and a partition whose membership is uncertain cannot falsify
-anything. Whoever runs the prediction must re-derive the population from the
-tree at that moment rather than citing this paragraph, this summary, or either
-of those commits.
+**Population: RESOLVED 2026-09-02, and the summary above is stale on one row.**
+This ticket's summary places riscv32 outside the population, refusing the flag
+by design. That figure originated with frankb-a9 and **frankb-a9 has retracted
+it**: riscv32 accepts the flag and passes all four modes plus all six comparison
+shapes. The retraction is the origin correcting itself, not a third self-report,
+so riscv32 is IN the population and its comparison is correct. frankh-15 had
+reported the same from its own runs (`856810406`) and franks-ab the same for
+xtensa (`fe8662e24`); those two were each reporting on a backend they had just
+landed, so they agreed but could have failed the same way — they are one reading,
+not two, and the retraction is what settles it.
+
+The summary is left as its author wrote it rather than edited by a third party;
+whoever next touches this ticket should fix that row in the same commit.
+
+**Standing instruction regardless: whoever runs the prediction re-derives the
+population from the tree at that moment**, rather than citing this paragraph,
+the summary, or any commit. A partition whose membership is uncertain cannot
+falsify anything, and every figure in this section has been wrong once.
 
 
 ## Repro — no pointer, no parameter, no literal
