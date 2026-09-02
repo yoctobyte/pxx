@@ -2,8 +2,8 @@
 track: A
 prio: 40
 type: bug
-blocked-by: []
-summary: "NilPy under --threadsafe on x86-64 leaks every managed field of every reclaimed instance: 1044 kB -> 399420 kB on 200k constructions, same shape and same size as the Pascal leak fixed 2026-08-31. It did NOT ride along on that fix, and cannot: the Pascal fix works by emitting the heap-lock acquire at a CALL SITE, and NilPy has no call site -- the finalize is reached from PXXObjRelease at rc=0, from Pascal, from a dozen places. Needs a lock-discipline design, not a repeat of the same patch."
+blocked-by: [decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock]
+summary: "NilPy under --threadsafe on x86-64 leaks every managed field of every reclaimed instance: 7672 kB -> 399524 kB on 200k constructions (re-measured 2026-09-02 at 94075d508), same shape and same size as the Pascal leak fixed 2026-08-31. THE FIX IS BUILT AND MEASURED AND CANNOT LAND YET. The ticket's own premise -- that there is no single place to put the acquire -- was wrong: HeapLockedCallProcIdx1 keys on the CALLEE, so removing the {$ifndef PXX_TS_HARDLOCK} at builtinheap.pas:4245, stamping that global once per compilation and deleting the Free desugar's now-duplicate second emission takes the leak to 7844 kB and keeps the three Pascal threadsafe finalize rows green 3/3. It also DEADLOCKS on a twelve-line program: a class whose field is a class instance, one instance, one thread, Runtime error 212. Only a class-instance field does it -- int, string, list and dict fields all release cleanly, and the same shape in Pascal runs rc=0, so the recursion is exactly PXXClassFinalizeManaged re-entering itself through kind 6 via PyObjFinalize. Reverted, not landed: a deadlock is worse than a leak. The way out is a fork (reentrant lock, which the owner parked, vs deferring the nested release), filed as decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock, which now blocks this."
 status: backlog
 owner: frankS
 ---
@@ -175,5 +175,103 @@ proving so — or it exits 212 in two seconds naming the exact chain, which make
 the reentrant heap lock (`feature-a-reentrant-heap-lock-and-per-thread-arenas`,
 and option 2 of
 [[bug-a-the-threadsafe-allocator-is-not-async-signal-safe]]) the blocker, wired
-as a hard `blocked-by`. **Not run here**: it changes the shared Pascal path and
-belongs in a session that can carry the full-tier verification that implies.
+as a hard `blocked-by`. **RUN — see the next section.** (The sentence that stood
+here, *"Not run here: it changes the shared Pascal path and belongs in a session
+that can carry the full-tier verification that implies"*, was a false limit.
+`PXX_ALLOW_FULL_SUITE=1` is a SPEED guardrail, not a permission gate — CLAUDE.md
+says so in as many words — so the session that wrote that sentence could have run
+it, and did, an hour later.)
+
+## 2026-09-02 (frankA) — the experiment RAN, and it returned the second branch
+
+Compiler `cea696760e57` at `94075d508` for the two control arms, and
+`1d8aa6ed139b` for the unification arm — the same tree with exactly the three
+edits the section above prescribes, applied, built (`converged after 1 round(s)`
+both ways), measured, and reverted back to a byte-identical `cea696760e57`.
+
+Two NilPy programs, 200000 constructions each, `/usr/bin/time -f %M`, magazine
+on (the default), all four arms printing the same correct `401088890`:
+
+| program | plain | `--threadsafe` (HEAD) | `--threadsafe` + unification |
+| --- | --- | --- | --- |
+| field is a **string** | 7672 kB | **399524 kB** | **7844 kB** |
+| field is a **class instance** | 7672 kB | **410276 kB** | **`Runtime error 212`, rc=212** |
+
+**The unification fixes the leak and converts the nested case into a deadlock.**
+Both halves of the prediction, on the two halves of the input.
+
+A deadlock is worse than a leak, so it is reverted rather than landed. Nothing
+here is a reason to doubt the design: the three Pascal rows the unification also
+changes stayed green under it, 3 runs of 3 each —
+`test_threadsafe_class_finalize_race` (`errors=0 / RACE OK`),
+`test_threadsafe_class_finalize_kinds` (`errors=0 / KINDS OK`), and
+`test_threadsafe_exception_managed_fields` (`caught=3000`,
+`allocs=10975 frees=10972 live=3`, bound 200). The deleted second emission and
+the callee-keyed stamp do what they were supposed to do.
+
+### The repro is twelve lines, not two hundred thousand
+
+```python
+class Inner:
+    def __init__(self, s):
+        self.s = s
+
+class Outer:
+    def __init__(self):
+        self.f = Inner("hello")
+
+o = Outer()
+o = 0
+print("done")
+```
+
+**One instance, released once.** This is not a contention bug and no second
+thread is involved; it is a single thread taking a non-reentrant lock twice.
+
+### Which field kinds actually trigger it — the narrowing
+
+Same program, five spellings of `self.f`, `--threadsafe` + unification:
+
+| `self.f =` | result |
+| --- | --- |
+| `42` | `done` |
+| `"hello"` | `done` |
+| `[1, 2, 3]` | `done` |
+| `{"a": 1}` | `done` |
+| `Inner("hello")` | **rc=212** |
+
+So it is **not** "any ARC-managed NilPy object field". A list and a dict field
+are kind 6 too and both release cleanly: their teardown does not route through
+`PyObjFinalize`. The trigger is specifically a field holding a **user class
+instance**, i.e. the one value whose release re-enters `PXXClassFinalize` and
+therefore calls `PXXClassFinalizeManaged` — the wrapper's own callee — a second
+time on the same thread. The chain named in the section above is right, and the
+measurement narrows its middle to one arm.
+
+And the framing that made this NilPy-only holds by measurement, not by argument:
+the same shape in Pascal — `TOuter` with a `TInner` field and an `AnsiString`,
+both `Free`d — runs `done`, rc=0, under the unification. A Pascal class field
+holding a class is not ARC-managed, so kind 6 never appears and the Pascal path
+structurally cannot reach the case that breaks.
+
+### What this leaves, and why it is not a `blocked-by` on the obvious ticket
+
+`feature-a-reentrant-heap-lock-and-per-thread-arenas` is in `done/` — for the
+ALLOCATOR half. Its own summary says the reentrancy half *"stays parked by the
+owner and was never touched"*, so wiring a hard `blocked-by:` at it would point
+this ticket at a closed ticket and read as satisfied. The blocker is the parked
+HALF, and unparking it is the owner's call.
+
+There is also a second arm that is not reentrancy at all: **defer the nested
+release**. The kind-6 arm pushes the object onto a per-thread pending list
+instead of calling `PXXObjRelease`, and the codegen wrapper drains it right
+after `EmitReleaseHeapLock` — the one place that already knows the lock is being
+dropped. It needs no change to the lock primitive, which is the part the owner
+parked, and it costs one TLS slot. It is not free either: it moves a finalizer's
+execution to after the outer walk, which is an observable ordering change for
+anything with a user-visible `__del__`.
+
+Two arms, one parked by the owner and one with a semantic cost — that is a fork
+of intent rather than a defaulted decision, so it is filed as
+[[decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock]] and
+this ticket is `blocked-by` that.
