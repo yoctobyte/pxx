@@ -98,3 +98,59 @@ Found while reviewing i386 (`c8375f3e7`), from frankA's observation that
 resolving the operand kind AT THE DECOMPOSE is what makes i386's comparison
 correct. i386 crashes on this row too, so the decompose fix is necessary and not
 sufficient.
+
+## RESOLVED `ba90811d3` — and the hypothesis above was WRONG (frankB, 2026-09-02)
+
+**Correcting my own diagnosis in the section above before anyone acts on it.**
+It said the surviving signature was *"a record field's decompose being
+incompatible with the two-operand compare SEQUENCE"* and pointed at a clobber
+between two decompose arms. **That is not what it was**, and the homogeneity
+table that suggested it was a true observation with a false explanation
+attached.
+
+**FOUR causes, all one sentence: a guard spelled `= tyString` where it meant
+`TypeIsFrozenString`.**
+
+1. **The value-load** (`ir.inc`, AN_FIELD rvalue). The arm implementing *"a
+   frozen-string value IS its address (no load)"* tested `ASTTk = tyString`. A
+   tyShortString field failed it, fell through to `IR_LOAD_MEM`, and **loaded
+   eight bytes of the string as its value**. gdb at the fault: `rax =
+   $6F6C6C656805` — length byte 5, then `hello`. An AN_IDENT frozen string takes
+   the address path above and never reaches this arm, which is precisely why
+   `s = 'hello'` was green beside the crash and why the failure looked like it
+   was *about* fields.
+2. **The compare guards**, x86-64 (`= tyString`) and aarch64/arm32
+   (`in [tyAnsiString, tyString, ...]`). Two spellings of one omission. With (1)
+   fixed, `r.f = r.g` — two fields, no literal — failed both and fell through to
+   the generic scalar compare. A literal operand had been dragging the guard
+   true all along.
+3. **`CmpFusible`**, the optimiser predicate. After (1) and (2), x86-64 still
+   answered FALSE **at -O1/-O2 and correctly at -O0**. It excludes
+   float/string/variant from `cmp`+`setcc` fusion and spelled the string half as
+   a bare equality, so a tyShortString operand was fused and the two field
+   ADDRESSES were compared as integers.
+
+**THE WIDTHS WERE NEVER WRONG.** The emitted code around the fault was already
+`lea 0x1(%rax)` for the field against `lea 0x8(%rcx)` for the literal, byte load
+against word load. This read as a width bug for a day. `Length(r.f)` = 5 was
+telling the truth.
+
+**`-O0` CORRECT WHILE `-O1+` IS WRONG IS THE TRANSFERABLE TELL** — it says the
+unwidened predicate is in the OPTIMISER, not in the arm you are reading. By that
+point nothing in the compare path looked wrong, because nothing in it was.
+
+**Three theories died before gdb.** Missing `IR_FIELD` walker arm (refuted by
+`Length(r.f)`), aggregate members (refuted by `a[1] = s`), the literal (refuted
+by `r.f = r.g`). Each was refuted by a one-program measurement and each had
+looked confirmed by reading. The fourth attempt stopped theorising and read the
+registers at the fault, which took one command.
+
+Verified 17/17 against the FPC 3.2.2 oracle at `a81084690bac` — native × four
+mode combinations × -O0/-O2, plus aarch64/arm32/riscv32/xtensa at default and
+`-dPXX_SHORTSTRING` — with `r.f = 'nope'` as a must-be-FALSE row so a
+stuck-TRUE compare cannot pass. Gate GREEN, FPC canary PASS.
+
+**NOTE ON A CLAIM IN CIRCULATION:** `0dd5858e6` did NOT close this. Re-measured
+at exactly the compiler sha it was reported passing at (`a09992a1c33f`, stashed
+tree, rebuilt): `r.f = 'hello'` exits 139 there. It closed the pointer-deref
+index and nothing else.
