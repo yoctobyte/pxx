@@ -8,7 +8,7 @@ blocked-by: []
 found: 2026-09-02
 found-by: frankC
 owner:
-summary: "Under -dPXX_SHORTSTRING, comparing two frozen strings is FALSE on x86-64 and arm32, correct on aarch64 (riscv32/xtensa/wasm32 not in the population -- riscv32 REFUSES the flag by design). TWO DIFFERENT CAUSES, not one: arm32 HAS the width-aware normaliser and DOES call it, but resolves the operand kind with IntToTypeKind(IRTk[n]) at four call sites -- exactly what that normaliser's own comment forbids -- while aarch64 uses IRStrTkOf at all four equivalents; x86-64 has no width-aware compare path at all, EmitStrCmpReg (symtab.inc:7249) takes no type kind and hardcodes add rsi,8 / add rdi,8 / 8-byte length loads. Diagnosis only, not fixed: ir_codegen.inc and symtab.inc are frankb-a9's live surface."
+summary: "Under -dPXX_SHORTSTRING, comparing two frozen strings is FALSE on x86-64 and arm32, correct on aarch64 (riscv32 was outside the population WHEN FILED because it refused the flag; it has since been converted, accepts the flag and passes all four modes and all six comparison shapes -- re-measured 2026-09-02, see the Population section). TWO DIFFERENT CAUSES, not one: arm32 HAS the width-aware normaliser and DOES call it, but resolves the operand kind with IntToTypeKind(IRTk[n]) at four call sites -- exactly what that normaliser's own comment forbids -- while aarch64 uses IRStrTkOf at all four equivalents; x86-64 has no width-aware compare path at all, EmitStrCmpReg (symtab.inc:7249) takes no type kind and hardcodes add rsi,8 / add rdi,8 / 8-byte length loads. Diagnosis only, not fixed: ir_codegen.inc and symtab.inc are frankb-a9's live surface."
 ---
 
 # Frozen compare: `IntToTypeKind` where `IRStrTkOf` is required (arm32), and no kind at all (x86-64)
@@ -80,12 +80,20 @@ separates this from the store-side defect franks-ab found (`p^ := c` writing
 the char at offset 8 under the flag): this repro contains no pointer store, so
 a store bug cannot be what it is measuring.
 
-## Population
+## Population — CORRECTED 2026-09-02, and the correction is about TIME
 
-riscv32 **refuses the flag by design** — `-dPXX_SHORTSTRING: the byte-length-prefix
-codegen exists for x86-64, aarch64 and arm32 only so far`. So the population is
-three converted backends, of which **two are wrong and one is right** — not
-"four backends, two wrong".
+When filed, riscv32 refused the flag outright: *"the byte-length-prefix codegen
+exists for x86-64, aarch64 and arm32 only so far"*. That measurement was true
+when taken. **riscv32 has since been converted**, and re-measured at HEAD it
+accepts the flag and answers correctly (`g1 = g2` TRUE, `Length` 5, chars
+intact). frankb-a9 retracted the figure as its own; the coordinator recorded it
+in this body at `a6f81ffd2` and correctly did not edit another author's summary.
+
+So the population grew under the ticket. **This is not a wrong measurement, it
+is an expired one** — and it is the more dangerous kind, because nothing about
+it ever becomes false-looking: the quoted diagnostic is still a real string the
+compiler once printed. A population figure in a summary needs a date on it, or
+it keeps answering about the tree it was measured on.
 
 ## The two causes, read from source rather than inferred
 

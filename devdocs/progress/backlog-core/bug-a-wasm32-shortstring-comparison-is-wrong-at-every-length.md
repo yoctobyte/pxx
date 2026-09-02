@@ -55,6 +55,33 @@ byte and a tyString's eight correctly, and this still reproduces.
   compared, so it never crashes and never prints garbage. It quietly answers no.
   Anything waiting for a visible symptom will miss it.
 
+## WIDTH IS NOT THE MECHANISM HERE — do not record it as settled
+
+frankb-a9's width explanation is correct for x86-64/arm32 (variable-vs-literal
+IS the cross-width pair there: a literal keeps its 8-byte pool prefix while a
+`string[N]` goes narrow under the flag) and its width-only fix turned all six
+shapes green on both. **It does not transfer to wasm32.** frankwasm measured, at
+HEAD with the walker fix in, at DEFAULT with no flag:
+
+```
+wasm32:  sizeof(TS) 18   var_var FALSE   var_lit TRUE   lit_lit TRUE
+native:  sizeof(TS) 18   var_var TRUE    var_lit TRUE   lit_lit TRUE
+```
+
+`SizeOf 18` = cap 10 + 8, so **the variable carries the same 8-byte prefix the
+literal does — there is no narrow kind anywhere in that program.** The failing
+pair and a passing pair are both same-width, so prefix width cannot be what
+separates them.
+
+Two further measured facts:
+- The walker fix `764dc3a30` is present and `var_var` is still FALSE. That is a
+  clean separation, not residue and not a gap in that fix.
+- The **pinned** compiler shows a byte-identical pattern with no flag at all, so
+  this is pre-existing and must not be blocked behind the byte-prefix work.
+
+Both frankb-a9 and frankwasm flagged this themselves rather than letting it
+settle here. A wrong settled cause is more expensive than an open one.
+
 ## Distinct from the x86-64/arm32 comparison bug
 
 `s = 'hello'` fails on exactly x86-64 and arm32 (frankh-15, under

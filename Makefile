@@ -18090,7 +18090,40 @@ test-wasm32: $(COMPILER)
 	./$(COMPILER) --target=wasm32 test/test_shortstring_trunc.pas $(TESTTMP)/w32_shortstring_trunc.wasm
 	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/w32_shortstring_trunc_x64
 	tools/expect_same.sh wasm32/shortstring_trunc "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_shortstring_trunc.wasm)" "$$($(TESTTMP)/w32_shortstring_trunc_x64)"
-	@echo "wasm32: 22 rows green (5 excluded, see comment above)"
+	# --- the phase-2 shortstring rows (frankC 2026-09-02) ---
+	# Wired because wasm32 had ZERO rows passing a mode flag where arm32 has 36,
+	# riscv32 31, aarch64 29 and xtensa 6 -- and worse, its one existing
+	# shortstring row (test_shortstring_trunc, default, above) is by frankwasm's
+	# own byte-identity proof exactly the path the conversion did NOT change.
+	# So the standing suite covered the proven no-op and none of the conversion:
+	# coverage that looks like coverage and cannot see the change.
+	#
+	# This matters past ordinary coverage because PHASE 4 DELETES THE FLAG. An
+	# unwired backend then stops being a coverage gap and becomes an UNVERIFIED
+	# DEFAULT (frankb-a9's point, and the reason these went in tonight).
+	#
+	# `sizeof 18` vs `sizeof 11` IS THE POSITIVE CONTROL FOR THIS WHOLE SET.
+	# 18 = cap 10 + 8-byte prefix; 11 = cap 10 + 1. If ssbp_short ever prints 18
+	# the backend silently ignored the flag, and every other row in that config
+	# becomes meaningless WHILE STILL PASSING. Do not drop either row as
+	# redundant -- the pair is the only thing proving the flag took effect.
+	./$(COMPILER) --target=wasm32 test/test_shortstring_byte_prefix.pas $(TESTTMP)/w32_ssbp_d.wasm
+	tools/expect_same.sh wasm32/ssbp_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssbp_d.wasm)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/w32_ssbp_s.wasm
+	tools/expect_same.sh wasm32/ssbp_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssbp_s.wasm)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	# Cross-width conversion. ssmw_short being IDENTICAL to ssmw_default is the
+	# POINT, not a copy-paste error: converting between widths must produce the
+	# same VALUES at either prefix width. Someone will eventually "fix" the
+	# duplication -- this comment is cheaper than that argument.
+	#
+	# `pad`/`padw` (`s:9`, `b:9`) are the NONZERO field width that reaches
+	# PXXWriteFrozenBW. That is the one path a width-0-only suite cannot see,
+	# and it is how aarch64 was certified complete while broken.
+	./$(COMPILER) --target=wasm32 test/test_shortstring_mixed_widths.pas $(TESTTMP)/w32_ssmw_d.wasm
+	tools/expect_same.sh wasm32/ssmw_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssmw_d.wasm)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
+	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/w32_ssmw_s.wasm
+	tools/expect_same.sh wasm32/ssmw_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssmw_s.wasm)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
+	@echo "wasm32: 26 rows green (22 default + 4 shortstring; 5 excluded, see comment above)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
