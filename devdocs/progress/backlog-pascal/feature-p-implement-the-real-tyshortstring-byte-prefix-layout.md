@@ -156,6 +156,38 @@ required. That is a much stronger claim than "sizes get closer": records
 containing fixed strings become byte-compatible, which is what `file of T`
 interop actually needs.
 
+## OVERFLOW/TRUNCATION IS SAFE TODAY, AND THIS CHANGE DOES NOT TOUCH IT
+
+The owner raised the real semantic worry: the cap is **compile-time-only
+information**, so `a: string[10]; a := 'hello'+' '+'world'` has to be clamped by
+something that was TOLD the cap. Measured, and it is:
+
+```
+                            pxx              FPC
+a := 'hello'+' '+'world'    [hello worl] 10  [hello worl] 10
+25x accumulate loop         [xxxxxxxxxx] 10  [xxxxxxxxxx] 10
+r.inner[0] := 20 chars      [hello worl] 10  [hello worl] 10
+guard / tail after store    intact           intact
+```
+
+Byte-identical to FPC in every shape tried, and **correct even in the record-
+field-array shape where frankB measured the stride as 264.** That is a sharper
+statement of this umbrella's thesis than the four-oracle census: in
+`r.inner[0]` the capacity reaches the **clamp** (which correctly uses 10) while
+the **stride** falls back to the `tyString` default. One number, two consumers,
+two side-tables — one populated, one not.
+
+**For this ticket the consequence is simple: the clamp bounds the LENGTH, not
+the prefix**, so 8 bytes of prefix becoming 1 does not touch the overflow
+machinery. The cap ceiling dropping to 255 is a parse-time check, not a runtime
+one.
+
+**Limit of the claim:** four shapes measured (bare var, concat expression,
+25-iteration accumulate, record-field array). NOT covered — the open-array
+parameter shape in
+[[bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes]],
+which reads `a[2]` empty despite a correct stride and is frankb-a9's.
+
 ## THE PREFIX IS 8 BYTES ON EVERY TARGET — and tyShortString is not a byte prefix TODAY
 
 The owner asked whether `tyString` uses a *word* for the length. Measured, and
