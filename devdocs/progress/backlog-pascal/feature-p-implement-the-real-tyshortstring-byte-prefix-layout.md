@@ -51,6 +51,32 @@ this is not a replacement, it is the second of two.
 > `5f275966bf50` at `bf92c45a7`; every number above is from that binary. The
 > stale one was wrong by exactly 7 bytes on every row and looked plausible.
 
+## OUR RECORD ALIGNMENT ALREADY MATCHES FPC — only the width differs
+
+The owner read the earlier no-padding measurement as *"FPC has packed record
+default to true, apparently."* Measured, and it is not: the earlier record had
+TWO shortstring fields, which need only byte alignment, so nothing had to be
+padded. Packing was never on.
+
+```
+                            FPC        pxx
+record  string[2]+LongInt    8  b@4     16  b@12
+packed  string[2]+LongInt    7  b@3     14  b@10
+record  Byte+LongInt         8  y@4      8  y@4      <- identical
+packed  Byte+LongInt         5  y@1      5  y@1      <- identical
+```
+
+**The bottom two rows are the finding.** Our padding and packing rules already
+agree with FPC exactly. The top two diverge only because our `string[2]` is 10
+bytes and FPC's is 3 — after which BOTH compilers correctly align the `LongInt`
+to 4 from wherever the string ended.
+
+**So this feature is the whole gap.** If `string[2]` were 3 bytes, `TU` would be
+8 with `b` at offset 4 — byte-identical to FPC — with no alignment work
+required. That is a much stronger claim than "sizes get closer": records
+containing fixed strings become byte-compatible, which is what `file of T`
+interop actually needs.
+
 ## Why it is cheaper than "a later codegen slice" suggests
 
 `tyShortString` is **not** a new kind to build. 63 sites, 18 files:
