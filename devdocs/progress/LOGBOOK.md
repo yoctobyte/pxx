@@ -610,3 +610,16 @@ getfattr, nbd-client, sh, static-sh, sysctl — busybox spells their knobs
 differently, e.g. `[` is CONFIG_TEST1 and `sh` goes through SH_IS_*).
 2026-09-02 | frankZ | devdocs/progress/tstate | the six optdiff reds on seven are STALE: five are the -O3 DCE threading hang (rc 124 = timeout) fixed at 0afbd1f7f and shard4 is the atomicity family fixed at 5136f3450, both LATER than the red sha a5f0958c6934. All six green here, 952 pass / 144 skip / diff=0, HEAD and binary unchanged either side. WHY it needed saying: twatch lists them as open, so anyone reading the queue would work a fixed bug. Marker counts discriminate flake from persistent red -- these are 1 NEW-RED / 0 FIXED each, the threading tests are 10/10.
 2026-09-02 | frankC | compiler/builtin/pylib.pas compiler/pasparser_expr.inc compiler/ir_codegen386.inc | Pascal is case-insensitive, so `const PYITER_MAP = 4` and `function pyiter_map(...)` in pylib.pas are ONE identifier -- four such pairs. The call folded to the const, answered 4 and threw the arguments away, silently, on every target; only i386 objected, and only because it refuses to LOAD a const symbol, which made every program pulling in pyeval unbuildable there. Renamed the whole PYITER_* tag family to PYITER_K_* (the prefix, not four renames, because the trap is structural) and made calling a const a refusal that names which way it resolved. Kept accepting the DECLARATION pair -- a tag beside its constructor is a real thing to write and FPC rejecting it is not our specification -- but the call is a mistake under any reading. Got there by naming the symbol in i386's kind-refusal, which the type-refusal one `if` below it had already learned to do and this one had not.
+
+2026-09-02 | frankD (Track C) | compiler/cparser.inc, test/c_fn_returning_fnptr_params.c |
+`void (*look(int a))(void) { }` was refused as having more than 16 parameters.
+UNINITIALISED READ: `paramsOverflow` is checked after the fnRetIsFunc branch and
+only the OTHER arm assigned it, so a function returning a function pointer read
+the flag off the stack. WHY it matters beyond the fix: the ZERO-parameter form
+kept working throughout, so the family had a member no test could fail on, and
+d71642873 surfaced it by changing what sat in that stack slot without touching
+the variable — a change that cannot touch a variable and still moves the answer
+is the tell. Proved by exhaustion over the source: the single `:= True` is
+inside a loop this path never enters. Reported by frankZ, whose attribution
+(the auto-filed range points at 18b3ec2a6 and is wrong) stands and whose
+mechanism hypothesis does not.

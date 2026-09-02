@@ -9784,6 +9784,17 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cternary_pointer_array_index_b10326; tools/expect_same.sh cternary_pointer_array_index_b10326-rc "$$?" "42"
 	./$(COMPILER) test/coffsetof_constexpr_array_b104.c $(TESTTMP)/coffsetof_constexpr_array_b10426
 	$(TESTTMP)/coffsetof_constexpr_array_b10426; tools/expect_same.sh coffsetof_constexpr_array_b10426-rc "$$?" "42"
+	# `RET (*name(params))(args)' across the parameter counts that discriminate.
+	# Row 1 is the ZERO-parameter shape, which kept working through the whole
+	# outage this file was written for -- a test built only around it would have
+	# been green while every other count was refused, which is why it is labelled
+	# rather than left as one more row. Rows 5/6 call through the RETURNED
+	# pointer with arguments, so a fix that recovered only the outer parameter
+	# count fails there rather than passing.
+	# All 6 rows diffed against gcc.
+	# bug-c-a-function-returning-a-function-pointer-is-refused-as-having-16-parameters
+	./$(COMPILER) test/c_fn_returning_fnptr_params.c $(TESTTMP)/c_fnretfnptr26
+	tools/expect_same.sh c_fnretfnptr26 "$$($(TESTTMP)/c_fnretfnptr26)" "$$(printf '1 1\n2 plain\n3 1\n4 1\n5 42\n6 42')"
 	./$(COMPILER) test/cfn_return_fnptr_b105.c $(TESTTMP)/cfn_return_fnptr_b10526
 	$(TESTTMP)/cfn_return_fnptr_b10526; tools/expect_same.sh cfn_return_fnptr_b10526-rc "$$?" "42"
 	./$(COMPILER) test/cexternal_func_addr_b106.c $(TESTTMP)/cexternal_func_addr_b10626

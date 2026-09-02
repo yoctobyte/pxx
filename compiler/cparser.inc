@@ -11293,6 +11293,18 @@ begin
   if retType = tyRecord then retRecId := CTypeBaseRec;
   if CTypeIsVoid then retType := tyInteger; { void return: value slot unused }
   fnRetIsFunc := CTypeFnRetIsFunc;
+  { Initialised HERE, before the branch, because the check that reads it is
+    AFTER the branch and only ONE arm used to set it. A function returning a
+    function pointer -- `void (*look(int a))(void) { ... }` -- takes the
+    fnRetIsFunc arm, which parses no parameter list of its own and so never
+    touched this; the read at the bottom then saw whatever was on the stack.
+    It went unnoticed for as long as that slot happened to hold zero, and it
+    stopped holding zero when the parameter loop below grew an arm (d71642873),
+    which is a change that cannot touch this variable and still moved the
+    answer. The three siblings set in both arms (name, nparams, isVariadic)
+    are why only this one was reachable.
+    bug-c-a-function-returning-a-function-pointer-is-refused-as-having-16-parameters }
+  paramsOverflow := False;
   if fnRetIsFunc then
   begin
     name := CTypeFnPtrName;
@@ -11356,7 +11368,6 @@ begin
   begin
     Expect(tkLParen, '(');
     nparams := 0;
-    paramsOverflow := False;
     isVariadic := False;
     while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
     begin

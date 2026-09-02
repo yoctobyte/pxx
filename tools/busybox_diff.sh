@@ -264,6 +264,43 @@ applets_ok() {
   return 0
 }
 
+# The applets this tree ACTUALLY builds, read out of the generated table rather
+# than inferred from a count. NUM_APPLETS was a proxy and it is a lossy one:
+# `busybox' is the multiplexer and has a CONFIG_ but no entry here, and an
+# applet can have CONFIG_X=y and still produce no entry when every FEATURE_
+# under it is off (measured: `tftp' with FEATURE_TFTP_GET/PUT both off). So a
+# run asking for 259 names legitimately built 257 applets, and the count check
+# called that "the tree has EXTRAS" -- a false sentence, in the direction that
+# sends the reader looking for something that is not there. Read the table.
+enabled_applets() {
+  [ -f "$BB/include/applet_tables.h" ] || return 1
+  awk '/^const char applet_names/,/^;/' "$BB/include/applet_tables.h" \
+    | grep -oE '"[^"]+"' | tr -d '"' | grep -vx '\\0' | sed '/^$/d' | sort -u
+}
+
+# `busybox' is the multiplexer, not an applet entry -- comparing with it in
+# reports a phantom missing applet on every multi-applet run.
+requested_applets() { printf '%s\n' $APPLETS | grep -vx busybox | sort -u; }
+
+# Does the built table hold exactly what was asked for? This replaces both the
+# NUM_APPLETS equality and applets_ok: it answers the same question about the
+# same population, by name and in both directions.
+applet_table_matches() {
+  local e r n num
+  e="$(enabled_applets)" || return 1
+  # POSITIVE CONTROL on our own reader before trusting its output: the table
+  # says how many applets it holds, and if this extraction does not agree with
+  # that number then it is not reading the table, and a diff built from it
+  # would name the wrong applets with total confidence. (It did: the first
+  # version of this counted the "\0" separator as an applet.)
+  n=$(printf '%s\n' "$e" | grep -c .)
+  num=$(sed -n 's/^#define NUM_APPLETS //p' "$BB/include/applet_tables.h" | tr -d '[:space:]')
+  [ -n "$num" ] || return 1
+  [ "$n" = "$num" ] || die "applet-table reader is broken: it found $n names where the table declares NUM_APPLETS $num. Every applet diagnosis below would be built on that, so this stops here rather than naming applets it cannot know."
+  r="$(requested_applets)"
+  [ "$e" = "$r" ]
+}
+
 ash_features_ok() {
   local f
   printf '%s\n' $APPLETS | grep -qx ash || return 0
@@ -273,22 +310,36 @@ ash_features_ok() {
   return 0
 }
 
-if [ ! -f "$BB/include/NUM_APPLETS.h" ] \
-   || ! grep -qx "$(want_num_applets)" "$BB/include/NUM_APPLETS.h" \
-   || ! applets_ok \
+if [ ! -f "$BB/include/applet_tables.h" ] \
+   || ! applet_table_matches \
    || ! ash_features_ok \
    || ! grep -qx "$(printf '#define ENABLE_BUSYBOX %s' "$([ "$NAPPLETS" -gt 1 ] && echo 1 || echo 0)")" "$BB/include/autoconf.h"; then
   CFGLOG="${TMPDIR:-/tmp}/bbdiff-configure.log"
-  configure_tree "$CFGLOG" || { tail -20 "$CFGLOG" >&2; die "could not configure the tree (log: $CFGLOG)"; }
-  if ! grep -qx "$(want_num_applets)" "$BB/include/NUM_APPLETS.h"; then
-    MISSING="$(missing_applets | tr '\n' ' ')"
-    if [ -n "${MISSING# }" ]; then
-      die "configured tree reports $(tr -d '\n' < "$BB/include/NUM_APPLETS.h"), not $NAPPLETS applet(s) -- oldconfig dropped: ${MISSING% } (unmet dependency, or the applet is spelled differently in Config.in than on the command line) (log: $CFGLOG)"
+  # Report the FIRST compiler errors, not the last 20 lines. A configure that
+  # dies inside busybox's own gcc build keeps going after the first failure, so
+  # the tail is whatever compiled last -- measured 2026-09-02 with `tc' in the
+  # applet list: the tail showed `AR libbb/lib.a' and three -Wunused-result
+  # warnings while the actual cause, "networking/tc.c:236: error: TCA_CBQ_MAX
+  # undeclared", sat at line 491 of 769. A diagnostic that prints the wrong end
+  # of the log is worse than none: it looks like an answer.
+  configure_tree "$CFGLOG" || {
+    if grep -qE '(error:|Error [0-9])' "$CFGLOG"; then
+      printf 'first errors in the configure log:\n' >&2
+      grep -nE '(error:|Error [0-9])' "$CFGLOG" | head -8 >&2
+      printf '(and the files they are in -- an applet whose sources do not build with the HOST gcc against THIS kernel'"'"'s headers has to come off the list; that is a busybox/host mismatch, not a pxx defect)\n' >&2
+      printf 'files: %s\n' "$(grep -oE '^[A-Za-z0-9_./-]+\.[ch]:[0-9]+:[0-9]+: error:' "$CFGLOG" | cut -d: -f1 | sort -u | tr '\n' ' ')" >&2
+    else
+      tail -20 "$CFGLOG" >&2
     fi
-    # Every requested applet IS on, so the tree has MORE than was asked for.
-    # That is a different fault with a different fix, and saying "dropped"
-    # here would send the reader looking for something that is present.
-    die "configured tree reports $(tr -d '\n' < "$BB/include/NUM_APPLETS.h"), not $NAPPLETS applet(s) -- yet every requested applet is on, so the tree has EXTRAS (an applet selected as a dependency of one that was asked for) (log: $CFGLOG)"
+    die "could not configure the tree (log: $CFGLOG)"
+  }
+  if ! applet_table_matches; then
+    ABSENT="$(comm -23 <(requested_applets) <(enabled_applets) | tr '\n' ' ')"
+    EXTRA="$(comm -13 <(requested_applets) <(enabled_applets) | tr '\n' ' ')"
+    MSG="the configured tree does not build the applet set that was asked for."
+    [ -n "${ABSENT# }" ] && MSG="$MSG ASKED FOR BUT NOT BUILT: ${ABSENT% } (unmet dependency; a knob spelled differently in Config.in; or CONFIG_X=y with every FEATURE_ under it off, which leaves the applet with no entry at all -- tftp is exactly that)."
+    [ -n "${EXTRA# }" ] && MSG="$MSG BUILT BUT NOT ASKED FOR: ${EXTRA% } (selected as a dependency of something on the list)."
+    die "$MSG (log: $CFGLOG)"
   fi
   rm -f "$CFGLOG"
 fi
