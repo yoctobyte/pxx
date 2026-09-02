@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:7 unfinished:27 blocked:6 backlog:7 backlog-umbrella:6 backlog-core:137 backlog-nilpy:97 backlog-tools:6 backlog-pascal:56 backlog-decide:30 backlog-libs:16 backlog-cfront:20 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3128 rejected:72`
+`working:7 unfinished:27 blocked:6 backlog:7 backlog-umbrella:6 backlog-core:137 backlog-nilpy:97 backlog-tools:7 backlog-pascal:55 backlog-decide:30 backlog-libs:16 backlog-cfront:20 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3129 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -71,7 +71,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 1)
 - `[p 70] [C]` bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
-- `[p 70] [P]` bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string
 - `[p 70] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
 - `[p 70] [C]` regression-lib-test-crtl-reachability-8
@@ -88,5 +87,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
+- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 
 _365 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

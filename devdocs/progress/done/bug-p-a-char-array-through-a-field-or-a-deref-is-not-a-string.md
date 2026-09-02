@@ -3,7 +3,7 @@ slug: bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string
 track: P
 type: bug
 prio: 70
-status: backlog
+status: done
 found: 2026-09-02
 found-by: frankZ
 owner: frankZ
@@ -107,3 +107,6 @@ The three `regression-lib-test-lib-synapse-*` jobs **build with
 `$(PXX_STABLE)`**, and the pinned compiler still has the bug. They stay RED
 until the owner takes the next pin, and no amount of work in this tree changes
 that. Stated on each of the three tickets.
+
+## Log
+- 2026-09-02 — resolved, commit 9c6b216aa.
