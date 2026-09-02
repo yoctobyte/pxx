@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:9 unfinished:28 blocked:7 backlog:6 backlog-umbrella:6 backlog-core:138 backlog-nilpy:96 backlog-tools:73 backlog-pascal:59 backlog-decide:29 backlog-libs:16 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3117 rejected:72`
+`working:9 unfinished:28 blocked:6 backlog:5 backlog-umbrella:6 backlog-core:138 backlog-nilpy:96 backlog-tools:6 backlog-pascal:59 backlog-decide:29 backlog-libs:16 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 float:25 done-followup:3 decided:144 done:3117 rejected:141`
 
 ## Held now (working/ — do not touch these files)
 
@@ -50,17 +50,16 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (7) — has an unmet blocker; do not claim
+## blocked (6) — has an unmet blocker; do not claim
 
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
-- `bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio` [T] — blocked-by: decide-t-per-assertion-subjects-or-accept-the-file-level-label
 - `feature-esp-gpio-and-adc-callback-slices` [B+S]
 - `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 460, ranked
+## Ready — top 30 of 392, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [P]` regression-lib-test-lib-synapse-3 (unblocks 1)
@@ -68,7 +67,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 85] [P]` regression-lib-test-lib-synapse-transitive-unit (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-exception-unhandled-3 (unblocks 1)
 - `[p 85] [T]` regression-test-core-test-setlen-in-parallel-for-body-2 (unblocks 1)
-- `[p 85] [T]` feature-t-grade-a-pin-instead-of-gating-it
 - `[p 80] [A]` feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes (unblocks 1)
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -86,11 +84,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [A]` bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
-- `[p 65] [T]` bug-t-no-full-suite-refuses-prose-in-a-non-git-compound-command
-- `[p 65] [T]` bug-t-the-quiet-bench-has-produced-nothing-for-two-days-and-never-on-seven
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
+- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
+- `[p 62] [N]` feature-nilpy-enum-class
+- `[p 60] [C]` bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero
 
-_430 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_362 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
