@@ -8926,9 +8926,22 @@ test-core: $(COMPILER)
 	# An empty template orders the COMPILER only and compiles to nothing; a template
 	# with instructions is REFUSED, because dropping them would silently miscompile.
 	# Negative half first, then every accepted spelling. gcc -O0 oracle.
+	# Each shape asserts its OWN message: the refusals run most-specific-first, so
+	# a reader is told the smallest thing that has to change rather than the same
+	# blanket sentence for four different causes. SHAPE_PLAIN is the one with a
+	# lifecycle -- it becomes an acceptance test when "=r"/"r" land.
 	@./$(COMPILER) test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 2>&1 \
+	  | grep -q 'read-write constraint "+r" is not supported' \
+	  || { echo 'casm_nonempty_template_fails: FAIL - "+r" was accepted, or refused without naming itself'; exit 1; }
+	@./$(COMPILER) -dSHAPE_SYMBOLIC test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 2>&1 \
+	  | grep -q 'symbolic operand \[a\] is not supported' \
+	  || { echo 'casm_nonempty_template_fails SHAPE_SYMBOLIC: FAIL - [a] was accepted, or refused without naming itself'; exit 1; }
+	@./$(COMPILER) -dSHAPE_PLAIN test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 2>&1 \
 	  | grep -q 'inline asm with a non-empty template' \
-	  || { echo 'casm_nonempty_template_fails: FAIL - real instructions were accepted and dropped'; exit 1; }
+	  || { echo 'casm_nonempty_template_fails SHAPE_PLAIN: FAIL - real instructions were accepted and dropped'; exit 1; }
+	@./$(COMPILER) test/casm_goto_fails.c $(TESTTMP)/casmgoto26 2>&1 \
+	  | grep -q 'inline asm goto is not supported' \
+	  || { echo 'casm_goto_fails: FAIL - asm goto was accepted, or refused as something else'; exit 1; }
 	./$(COMPILER) test/casm_barrier.c $(TESTTMP)/casmbarrier26
 	tools/expect_same.sh casmbarrier26 "$$($(TESTTMP)/casmbarrier26)" "43 2"
 	# A ternary as the CALLEE of a call. (*fp)(a), (fp)(a), (name)(a), (a,fn)(x),

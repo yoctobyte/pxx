@@ -6958,9 +6958,193 @@ begin
   Result := CurTok.Kind <> tkEnd;
 end;
 
+{ ---- GNU extended inline asm: capturing the operand sections ----------------
+
+  `asm [volatile|goto] ( template : outputs : inputs : clobbers [: labels] )`
+
+  The parser used to COUNT the colons and skip each section's tokens on paren
+  depth, which was enough to refuse the construct but not to say what about it
+  was unsupported -- every unimplemented corner produced the same sentence. The
+  capture below exists so the refusal can name the constraint it choked on.
+
+  Nothing here relaxes the refusal. Accepting a template and dropping its
+  instructions is the failure this construct is refused to prevent, and that
+  stays true until the encoder behind it works.
+  feature-c-gnu-inline-asm-with-a-non-empty-template }
+
+procedure CAsmReset;
+begin
+  CAsmOpCount := 0;
+  CAsmOutCount := 0;
+  CAsmTemplate := '';
+  CAsmClobMem := False;
+  CAsmClobCC := False;
+  CAsmClobRegs := '';
+  CAsmIsGoto := False;
+end;
+
+{ Split a constraint into its modifiers and its class letters. `=` and `+` mark
+  an output (`+` also an input); `&` is earlyclobber; `%` (commutative) and the
+  `*`/`?`/`!` register-preference hints carry no meaning for a compiler that
+  does not allocate, so they are dropped rather than refused -- they constrain
+  gcc's CHOICE, and we do not choose. A digit is not a class at all: it names
+  another operand, resolved to TiedTo by the caller, which knows the count. }
+procedure CAsmSplitConstraint(const raw: AnsiString; var cls: AnsiString;
+                              var isOut, isInOut, early: Boolean);
+var i: Integer; c: Char;
+begin
+  cls := ''; isOut := False; isInOut := False; early := False;
+  for i := 1 to Length(raw) do
+  begin
+    c := raw[i];
+    if c = '=' then isOut := True
+    else if c = '+' then begin isOut := True; isInOut := True; end
+    else if c = '&' then early := True
+    else if (c = '%') or (c = '*') or (c = '?') or (c = '!') then { a hint to gcc's allocator; we have none }
+    else cls := cls + c;
+  end;
+end;
+
+{ A matching constraint's operand number, or -1 when the text is not one.
+  Digits only: `0`..`29`, since MAX_CASM_OPERANDS is 30. }
+function CAsmDigitOperand(const s: AnsiString): Integer;
+var i, v: Integer;
+begin
+  Result := -1;
+  if Length(s) = 0 then Exit;
+  v := 0;
+  for i := 1 to Length(s) do
+  begin
+    if (s[i] < '0') or (s[i] > '9') then Exit;
+    v := v * 10 + (Ord(s[i]) - Ord('0'));
+    if v > MAX_CASM_OPERANDS then Exit;
+  end;
+  Result := v;
+end;
+
+{ One `[sym] "constraint" ( expr )` list, comma-separated, up to the next colon
+  or the closing paren. }
+procedure CAsmParseOperandSection(isOutSection: Boolean);
+var raw, cls, sym: AnsiString;
+    isOut, isInOut, early: Boolean;
+    tied: Integer;
+begin
+  while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkRParen) and
+        (CurTok.Kind <> tkEOF) do
+  begin
+    sym := '';
+    if CurTok.Kind = tkLBrack then
+    begin
+      Next;
+      if CurTok.Kind <> tkIdent then
+        Error('C: inline asm expects a name inside [ ] for a symbolic operand');
+      sym := CurTok.SVal;
+      Next;
+      Expect(tkRBrack, ']');
+    end;
+    if CurTok.Kind <> tkString then
+      Error('C: inline asm expects a quoted constraint for each operand');
+    raw := CurTok.SVal;
+    Next;
+    Expect(tkLParen, '(');
+    if CAsmOpCount >= MAX_CASM_OPERANDS then
+      Error('C: inline asm has more than ' + AIntToStr(MAX_CASM_OPERANDS)
+            + ' operands');
+    CAsmSplitConstraint(raw, cls, isOut, isInOut, early);
+    { A digit constraint names an earlier operand's location. It is only legal
+      in the INPUT section -- an output tied to an output has no meaning -- and
+      it must name an operand that already exists. }
+    tied := CAsmDigitOperand(cls);
+    if tied >= 0 then
+    begin
+      if isOutSection then
+        Error('C: inline asm output constraint "' + raw
+              + '" is a matching constraint, which only an input may use');
+      if tied >= CAsmOpCount then
+        Error('C: inline asm matching constraint "' + raw
+              + '" names operand ' + cls + ', which does not exist');
+    end;
+    CAsmOps[CAsmOpCount].Cons := cls;
+    CAsmOps[CAsmOpCount].Raw := raw;
+    CAsmOps[CAsmOpCount].IsOut := isOutSection or isOut;
+    CAsmOps[CAsmOpCount].IsInOut := isInOut;
+    CAsmOps[CAsmOpCount].Early := early;
+    CAsmOps[CAsmOpCount].SymName := sym;
+    CAsmOps[CAsmOpCount].TiedTo := tied;
+    CAsmOps[CAsmOpCount].Expr := ParseCExpr;
+    Inc(CAsmOpCount);
+    Expect(tkRParen, ')');
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+end;
+
+{ The clobber section: bare quoted names. "memory" and "cc" are not registers;
+  everything else is one. }
+procedure CAsmParseClobberSection;
+var nm: AnsiString;
+begin
+  while (CurTok.Kind <> tkColon) and (CurTok.Kind <> tkRParen) and
+        (CurTok.Kind <> tkEOF) do
+  begin
+    if CurTok.Kind <> tkString then
+      Error('C: inline asm expects a quoted name in the clobber list');
+    nm := CurTok.SVal;
+    Next;
+    if nm = 'memory' then CAsmClobMem := True
+    else if nm = 'cc' then CAsmClobCC := True
+    else
+    begin
+      if CAsmClobRegs <> '' then CAsmClobRegs := CAsmClobRegs + ' ';
+      CAsmClobRegs := CAsmClobRegs + nm;
+    end;
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+end;
+
+{ The `asm goto` label section: bare identifiers. Captured only so the refusal
+  below can be specific; nothing reads them. }
+procedure CAsmParseLabelSection;
+begin
+  while (CurTok.Kind <> tkRParen) and (CurTok.Kind <> tkEOF) do
+  begin
+    if CurTok.Kind <> tkIdent then
+      Error('C: inline asm goto expects a label name');
+    Next;
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+end;
+
+{ Refuse the captured block by NAME where the reason is a specific operand,
+  and return quietly where it is not, leaving the caller's blanket refusal to
+  speak. Ordered so the first thing a reader is told is the smallest thing that
+  has to change.
+
+  The classes this will grow to support are the measured vocabulary of the four
+  x86-64-reachable asm blocks in busybox's networking/tls_sp_c32.c: r, rm, m,
+  the fixed-register letters, and the matching digits. `+r` and the rest are
+  refused BY NAME until each is built and tested -- a narrower feature with an
+  honest refusal beats a wider one that guesses. }
+procedure CAsmRefuseUnsupported;
+var i: Integer;
+begin
+  for i := 0 to CAsmOpCount - 1 do
+  begin
+    if CAsmOps[i].SymName <> '' then
+      Error('C: inline asm symbolic operand [' + CAsmOps[i].SymName
+            + '] is not supported — only positional %0..%9 operands are read');
+    if CAsmOps[i].IsInOut then
+      Error('C: inline asm read-write constraint "' + CAsmOps[i].Raw
+            + '" is not supported — write it as an "=' + CAsmOps[i].Cons
+            + '" output with an input tied to it');
+    if CAsmOps[i].Early then
+      Error('C: inline asm earlyclobber constraint "' + CAsmOps[i].Raw
+            + '" is not supported');
+  end;
+end;
+
 function ParseCStatementAST: Integer;
 var node, exprNode, seq, seq2, blk: Integer;
-    asmSections, asmDepth: Integer; asmEmpty: Boolean;   { GCC inline asm }
+    asmSections: Integer; asmEmpty: Boolean;   { GCC inline asm }
 begin
   Result := -1;
   if CurTok.Kind = tkEOF then Exit;   { the enclosing CBlockContinues refuses it }
@@ -7100,49 +7284,68 @@ begin
       (CurTok.SVal = '__asm')) then
   begin
     Next;
-    if (CurTok.Kind = tkIdent) and
-       ((CurTok.SVal = 'volatile') or (CurTok.SVal = '__volatile__') or
-        (CurTok.SVal = 'goto') or (CurTok.SVal = 'inline')) then Next;
+    CAsmReset;
+    while (CurTok.Kind = tkIdent) and
+          ((CurTok.SVal = 'volatile') or (CurTok.SVal = '__volatile__') or
+           (CurTok.SVal = 'goto') or (CurTok.SVal = 'inline')) do
+    begin
+      if CurTok.SVal = 'goto' then CAsmIsGoto := True;
+      Next;
+    end;
     Expect(tkLParen, '(');
     if CurTok.Kind <> tkString then
       Error('C: inline asm expects a template string');
-    asmEmpty := (CurTok.SVal = '');
-    Next;
-    { adjacent string-literal concatenation in the template }
+    { adjacent string-literal concatenation in the template. tls_sp_c32.c
+      writes one instruction per literal, so this is the normal case, not a
+      corner. }
     while CurTok.Kind = tkString do
     begin
-      if CurTok.SVal <> '' then asmEmpty := False;
+      CAsmTemplate := CAsmTemplate + CurTok.SVal;
       Next;
     end;
+    asmEmpty := (CAsmTemplate = '');
     asmSections := 0;
     while CurTok.Kind = tkColon do
     begin
       Inc(asmSections);
       Next;
-      { skip this section's operand list; nested parens belong to a constraint's
-        expression, e.g. "+r"(x) }
-      asmDepth := 0;
-      while (CurTok.Kind <> tkEOF) and
-            ((asmDepth > 0) or
-             ((CurTok.Kind <> tkColon) and (CurTok.Kind <> tkRParen))) do
+      if asmSections = 1 then
       begin
-        if CurTok.Kind = tkLParen then Inc(asmDepth)
-        else if CurTok.Kind = tkRParen then Dec(asmDepth);
-        Next;
-      end;
+        CAsmParseOperandSection(True);
+        CAsmOutCount := CAsmOpCount;
+      end
+      else if asmSections = 2 then CAsmParseOperandSection(False)
+      else if asmSections = 3 then CAsmParseClobberSection
+      else if asmSections = 4 then CAsmParseLabelSection
+      else Error('C: inline asm has more than four operand sections');
     end;
     Expect(tkRParen, ')');
     Eat(tkSemicolon);
-    { sections 0..3 are outputs/inputs/clobbers; only a clobbers-only barrier
-      (":::") or a bare `asm("")` carries no operand this must honour. An OUTPUT
-      section means the statement produces a value, which an empty template
-      cannot have produced. }
+    { An EMPTY template with no operands is a pure compiler barrier and is the
+      only accepted case; see the header above. Everything else is refused, and
+      the refusals run MOST SPECIFIC FIRST so the message names the thing that
+      is actually missing rather than the outermost fact about it. A reader who
+      is told "asm goto" knows what to build; one told "non-empty template"
+      three times over three different causes does not. }
+    if CAsmIsGoto then
+      Error('C: inline asm goto is not supported'
+            + ' — the jump out of the template would have no target');
     if not asmEmpty then
+    begin
+      CAsmRefuseUnsupported;
       Error('C: inline asm with a non-empty template is not supported'
             + ' — the instructions would be silently dropped');
-    if asmSections = 1 then
+    end;
+    { An empty template that nevertheless declares OUTPUTS is the one remaining
+      silent miscompile in this path: the operands are dropped and the variable
+      is never written. The old test was `asmSections = 1`, which caught it only
+      when the output section was the LAST one written -- `asm("" : "=r"(x) : :
+      "memory")` has three sections and slipped through. Now that the operands
+      are captured the question can be asked directly. Inputs and clobbers on an
+      empty template stay accepted: that is the barrier form. }
+    if CAsmOutCount > 0 then
       Error('C: inline asm with an output operand list is not supported'
-            + ' — nothing would ever be written to it');
+            + ' — an empty template cannot have written to it');
     node := AllocNode(AN_BLOCK); ASTLeft[node] := -1;
     Result := node;
     Exit;

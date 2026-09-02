@@ -174,6 +174,9 @@ const
     cost. Do not reuse it as an index bound. }
   MAX_GLOBFIX = 262144;
   MAX_ASM_GLOBFIX = 4096;
+  { GNU's own documented ceiling on inline-asm operands is 30. The four
+    x86-64-reachable blocks in busybox's tls_sp_c32.c use 8 at most. }
+  MAX_CASM_OPERANDS = 30;
   MAX_INLINE_ASM_LINES = 4096;
   MAX_INLINE_ASM_HOLES = 1024;
   MAX_EXTERNAL = 16384;
@@ -1906,6 +1909,31 @@ type
   TAsmGlobFix = record
     AsmOff : Integer;
     BSSoff : Integer;
+  end;
+
+  { One GNU extended-inline-asm operand, as captured by the C parser.
+
+    The C frontend used to COUNT the operand sections and skip their tokens on
+    paren depth, which was enough to refuse the construct but not to say what
+    about it was unsupported. Capturing the pairs lets the refusal name the
+    exact constraint, which is the difference between a reader knowing what is
+    left to build and a reader guessing.
+
+    `Cons` is the constraint with its output modifiers stripped: `=r` and `+r`
+    both leave `r`, with IsOut/IsInOut carrying what was removed, so the
+    matching logic never has to re-parse a prefix. A matching (digit)
+    constraint is resolved to TiedTo at parse time -- `"0"` is not a
+    constraint class of its own, it is a second name for operand 0's.
+    feature-c-gnu-inline-asm-with-a-non-empty-template }
+  TCAsmOperand = record
+    Cons    : AnsiString;   { constraint text, =/+/& modifiers removed }
+    Raw     : AnsiString;   { ...as written, for the diagnostic }
+    IsOut   : Boolean;      { came from the output section }
+    IsInOut : Boolean;      { '+' }
+    Early   : Boolean;      { '&' earlyclobber }
+    Expr    : Integer;      { AST node of the bound C expression }
+    SymName : AnsiString;   { `[name]` symbolic operand, '' when positional }
+    TiedTo  : Integer;      { digit constraint's target operand, else -1 }
   end;
 
   TCallFix = record
@@ -4315,6 +4343,19 @@ var
   AsmBytesCount: Integer;
   AsmGlobFix: array[0..MAX_ASM_GLOBFIX-1] of TAsmGlobFix;
   AsmGlobFixCount: Integer;
+  { The GNU inline-asm block the C parser is reading right now. One set of
+    globals, not a stack: an asm statement cannot contain another one, so
+    there is never a second block open. Reset at the top of every asm
+    statement, so a refused block leaves nothing behind for the next.
+    feature-c-gnu-inline-asm-with-a-non-empty-template }
+  CAsmOps      : array[0..MAX_CASM_OPERANDS-1] of TCAsmOperand;
+  CAsmOpCount  : Integer;
+  CAsmOutCount : Integer;    { operands [0..CAsmOutCount) came from section 0 }
+  CAsmTemplate : AnsiString; { adjacent string literals already concatenated }
+  CAsmClobMem  : Boolean;    { "memory" }
+  CAsmClobCC   : Boolean;    { "cc" }
+  CAsmClobRegs : AnsiString; { the register clobbers, space-separated }
+  CAsmIsGoto   : Boolean;    { `asm goto` — a 4th section of label names }
   { Inline asm on cross targets (riscv32 first): the parser cannot encode at
     parse time like x86-64's AsmBytes path (the per-target EmitAsmXxx engines
     emit at CodeLen, where EmitGlobRef/EmitDataRef fixups are natively
