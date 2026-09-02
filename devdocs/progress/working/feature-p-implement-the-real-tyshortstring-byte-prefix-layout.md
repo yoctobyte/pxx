@@ -215,6 +215,50 @@ can actually know — which is exactly the question `SizeOfSlot` asks and answer
 honestly. Doing that once, against a pattern already in the file, is the
 tractable version; a blanket edit is not.
 
+### F8 — A GATE RED YOU WILL PROBABLY MEET, WHOSE REFLEX REMEDY DESTROYS THE EVIDENCE
+
+Raised by frankD, relayed by frank-coordinator-2c, verified in the script at
+`ea9fe253f`. This belongs in the ticket rather than a message because it is a
+READING INSTRUCTION for a diagnostic P2-P4 will plausibly trip more than once.
+
+`tools/selfhost_fixedpoint.sh:96` emits:
+
+    FAIL: the fixedpoint reached from PINNED differs from compiler/pascal26
+
+**It is not a staleness detector. It is the anti-Thompson agreement check** (the
+script's own header, lines 23-28): a compiler can converge to a DIFFERENT
+self-reproducing fixedpoint depending on which binary it started from — both
+stable, both green, one carrying whatever the local binary carried. The FAIL
+text names both causes in one breath: *"Local seed contamination, **or a
+self-perpetuating miscompile**."*
+
+**Cause one is the reflex reading and cause two is this feature's live risk.**
+We are changing the layout of strings the compiler itself uses; a
+self-perpetuating miscompile is exactly what the fixedpoint gate exists to
+catch, and it presents identically to a stale seed.
+
+**And the standard remedy for cause one destroys the evidence for cause two.**
+Reseeding from the pin makes `compiler/pascal26` *become* the pinned-derived
+fixedpoint, so afterwards the two sides of the comparison are the same object by
+construction and the check passes trivially. It can no longer tell you whether
+there were ever two fixedpoints. **The fix does not diagnose the RED; it removes
+the ability to.**
+
+**Order to follow — reseeding is the LAST step, not the first:**
+
+1. Do **not** reseed. Copy `compiler/pascal26` aside first.
+2. Read the `cmp` output the script already prints — it names the first
+   differing bytes.
+3. `make compiler/pascal26` from current sources, WITHOUT reseeding, and re-run.
+   A merely stale binary clears here — cause one, established rather than
+   assumed.
+4. **Still RED after a clean local rebuild = two distinct fixedpoints = cause
+   two.** Stop and report; do not reseed.
+
+A genuinely benign third case is already distinguished by the script itself: if
+`compiler/pascal26` changes mid-check it prints `NOTE ... this is NOT a self-host
+failure` and exits 0. That is not the case above.
+
 ### What P2 should be scoped by, in one line
 
 Not `grep tyShortString` (63, and it lies in the reassuring direction), not

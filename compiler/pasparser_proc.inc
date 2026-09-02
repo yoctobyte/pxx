@@ -521,6 +521,7 @@ var
   ptypesSetEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { `set of TEnum` param: element enum index, -1 otherwise }
   ptypesEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { enum-typed param: its enum index (the ELEMENT's, for an array param), -1 otherwise }
   ptypesStrElemTk : array[0..MAX_PROC_PARAMS-1] of Integer;  { managed-string param: the ELEMENT width, Ord(tyChar) or Ord(tyWideChar); 0 = not a managed string. Staged here and persisted to ProcParamStrElemTk, for the reason ptypesSetEnum's twin gives: a caller cannot read it back off the param symbol. }
+  ptypesStrCap : array[0..MAX_PROC_PARAMS-1] of Integer;  { frozen-string param: the declared capacity N of a `string[N]`, or of an open array's ELEMENT; 0 = not a frozen string. The FOURTH member of the return-channel family above, and the one that was missing: AllocParam read LastTypeStrCap itself, in the ALLOCATION loop, which runs after every parameter's type has been parsed -- so a `string[N]` param got whatever capacity the LAST parameter's type left behind. bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes }
   ptypesPtrElemTk : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptypesPtrElemRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   { The rest of a pointer PARAMETER's identity. Without these three a `^PChar`
@@ -1009,6 +1010,18 @@ begin
           else ptypesStrElemTk[i] := Ord(tyChar);
         end
         else ptypesStrElemTk[i] := 0;
+        { ...and a FOURTH time for the frozen-string CAPACITY, for exactly the
+          reason the three notes above give. LastTypeStrCap is a return channel
+          from the ParseTypeKind that just returned; capturing it here is the
+          only window in which it describes THIS parameter. AllocParam reads it
+          directly instead, from the allocation loop below -- which runs after
+          every parameter has been parsed, so it reads the LAST one's capacity.
+          Measured: `procedure P(var a: array of string[10]; t: LongInt)` gave
+          a[] a stride of DEFAULT_STR_CAP+8 = 263 rather than 18, while the same
+          parameter ALONE was correct, and `t: string[20]` gave it 20's stride.
+          The following parameter's type decided the preceding one's layout. }
+        if TypeIsFrozenString(tk) then ptypesStrCap[i] := LastTypeStrCap
+        else ptypesStrCap[i] := 0;
         ptypesPtrElemTk[i] := LastTypePointerElemTk;
         ptypesPtrElemRec[i] := LastTypePointerElemRec;
         ptypesPtrDepth[i] := LastTypePointerDepth;
@@ -1366,6 +1379,7 @@ begin
       ptypesPtrBaseRec[nparams] := REC_NONE;
       ptypesProcSig[nparams] := -1;
       parr[nparams] := False; pbyref[nparams] := False; pconst[nparams] := False;
+      ptypesStrCap[nparams] := 0;   { synthesized param: no declared capacity }
       pout[nparams] := False;
       pNDims[nparams] := 0; pDynDepth[nparams] := 0;
       pElemRowLen[nparams] := 0; pElemRowLo[nparams] := 0;
@@ -1389,6 +1403,7 @@ begin
       ptypesPtrBaseRec[nparams] := LiftCapPtrBaseRec[lcb + i];
       ptypesProcSig[nparams] := LiftCapProcSig[lcb + i];
       parr[nparams] := LiftCapArr[lcb + i];
+      ptypesStrCap[nparams] := 0;   { a lifted capture carries no declared capacity }
       pbyref[nparams] := True;            { captured by reference }
       pconst[nparams] := False;
       pout[nparams] := False;
@@ -1557,6 +1572,7 @@ begin
       ptypesSetEnum[i] := ptypesSetEnum[i-1];
       ptypesEnum[i] := ptypesEnum[i-1];
       ptypesStrElemTk[i] := ptypesStrElemTk[i-1];
+      ptypesStrCap[i] := ptypesStrCap[i-1];   { shifts like every other per-param column -- pconst's note above is about the one time this was forgotten }
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
       ptypesPtrDepth[i] := ptypesPtrDepth[i-1];
@@ -2153,6 +2169,12 @@ begin
   begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[procIdx].Params[i].SymIdx := idx;
+    { AllocParam set SymStrCap from LastTypeStrCap, which by now describes the
+      LAST parameter parsed rather than this one. Overwrite it with the value
+      captured in the parse loop, where the window was valid. Only when this
+      parameter actually declared one: 0 means "not a frozen string" and must
+      not overwrite anything AllocParam did for another kind. }
+    if ptypesStrCap[i] > 0 then SymStrCap[idx] := ptypesStrCap[i];
     { An enum param is an enum-typed value inside the body — the same stamp the
       var-decl sites make, so WriteLn(p) prints the member name there too. }
     if (ptypes[i] = tyInteger) and (ptypesEnum[i] >= 0) then

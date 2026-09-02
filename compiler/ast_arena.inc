@@ -564,6 +564,41 @@ begin
     Result := NodeDynBaseTk(ASTRight[node]);
 end;
 
+function NodeDynBaseStrCap(node: Integer): Integer;
+{ Declared CAPACITY of a (possibly nested) dynamic-array expression's base
+  element, when that element is a frozen `string[N]`; 0 when there is none.
+
+  The third member of this walker family, and it exists for the reason the
+  other two do not suffice: a frozen string's STRIDE is not a function of its
+  kind. NodeDynBaseTk answers tyFixedString for `array of array of string[10]`
+  and DynElemSize then asked TypeSlotSize, which reports the pointer width -- so
+  the inner dimension strode 8 bytes for an 18-byte element and every write but
+  the last landed on top of its neighbour. The 1-D spelling was correct
+  throughout, because its base is an AN_IDENT and takes a different arm
+  entirely, so the two spellings of one construct disagreed.
+  bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes }
+var ndbcTk, ndbcRec, ndbcCap: Integer;
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+    Result := SymStrCap[ASTIVal[node]]
+  else if (ASTKind[node] = AN_DEREF) and (DerefPtrArrayDynDepth(node) > 0) then
+  begin
+    if DerefPtrArrayElem(node, ndbcTk, ndbcRec, ndbcCap) then Result := ndbcCap;
+  end
+  else if ASTKind[node] = AN_FIELD then
+    Result := RecFieldStrCap(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) or
+          (ASTKind[node] = AN_DYN_INSERT) then
+    Result := NodeDynBaseStrCap(ASTLeft[node])
+  else if ASTKind[node] = AN_COMMA then
+    Result := NodeDynBaseStrCap(ASTRight[node]);
+  { A CALL returning a dyn array has no capacity carrier -- ProcRet* records the
+    element KIND only. Left at 0 deliberately: 0 routes to the existing
+    kind-only answer rather than inventing a width. }
+end;
+
 function NodeDynBaseRec(node: Integer): Integer;
 { Base element record id of a (possibly nested) dynamic-array expression. }
 var ndbrTk, ndbrRec, ndbrCap: Integer;

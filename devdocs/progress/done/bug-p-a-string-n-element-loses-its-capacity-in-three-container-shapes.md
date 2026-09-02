@@ -5,8 +5,8 @@ type: bug
 found: 2026-09-02
 found-by: frankB
 owner: frankB
-summary: "ONE OF THREE FIXED, and my original diagnosis of it was WRONG in both direction and severity. An `array[0..N] of string[M]` as a RECORD FIELD strode 264 bytes (LOCAL_STR_CAP+8) instead of 18 -- but NOT because layout dropped the capacity, which is what this ticket first said. Layout is correct: measured at the decl site, fTk=tyFixedString, fStrCap=10, fSize=18, and SizeOf agrees at 36. The INDEX path was wrong. A `string[N]` field is stored as tyString with its capacity in UFldStrCap, so the index path took its bare-string arm. And it is not a fat layout, it is MEMORY CORRUPTION: the field is 36 bytes inside a 40-byte record, so element 1 lands 224 bytes PAST THE RECORD and `r.inner[1] := s` clobbered five words of an unrelated local. The VALUE rows pass throughout -- write and read share the wrong stride and agree with each other outside the record -- so nothing but a stride or guard assertion can see it. Fixed by adding the record-FIELD base kind to ir.inc\'s index sizing, the third arm of a case whose array-symbol and `p^[i]` arms were already there. STILL OPEN, and confirmed still NOT the same cause: an open-array parameter (correct stride 18, a[2] still empty) and `array of array of string[10]` (element corrupted)."
-status: working
+summary: "ALL THREE SHAPES FIXED, and the headline is that they were THREE DIFFERENT CAUSES wearing one symptom -- which is why my first two diagnoses of this ticket were both wrong. (1) RECORD-FIELD ARRAY (fixed earlier): the index path read UFldStrCap as the field's ELEMENT capacity, striding 264 for an 18-byte slot and putting element 1 past the end of a 40-byte record. (2) OPEN-ARRAY PARAMETER: two independent bugs stacked. StaticArraySourceInfo sized the caller's marshalling copy with TypeStorageSize, which takes only a KIND, so a 72-byte array moved 4*8 = 32 bytes; AND AllocParam read LastTypeStrCap -- a parse-window return channel -- from the ALLOCATION loop, which runs after every parameter has been parsed, so a `string[N]` parameter received the LAST parameter's capacity. Measured: `P(var a: array of string[10])` was CORRECT while `P(var a: array of string[10]; t: LongInt)` strode 263 -- THE FOLLOWING PARAMETER'S TYPE DECIDED THE PRECEDING ONE'S LAYOUT, and with `t: string[10]` after it the bug is invisible because the wrong answer coincides with the right one. Fixed with a ptypesStrCap column beside the three return-channel columns (ptypesSetEnum/ptypesEnum/ptypesStrElemTk) whose comments already state this exact rule -- capacity was the fourth and was missed. (3) NESTED DYNAMIC ARRAY: DynElemSize asked TypeSlotSize at depth 1, giving 8 for an 18-byte element, so `array of array of string[10]` strode 8 in its inner dimension while the 1-D spelling (a different arm) was correct throughout. Fixed with a NodeDynBaseStrCap walker mirroring NodeDynBaseTk. test_string_n_container_strides.pas asserts MEASURED stride against MEASURED stride, never a constant, so the byte-prefix relayout cannot turn it red; positive control: 5 of 8 rows go 0 under the pinned compiler, and the test names the three that do not and why. SEPARATELY FILED, not this bug: `@a[0]` in a callee never equals the caller's address for ANY open-array element type -- bug-a-address-of-an-open-array-element-points-at-the-marshalling-temp."
+status: done
 ---
 
 # A `string[N]` element keeps its capacity in one container and loses it in three
@@ -140,3 +140,65 @@ Re-measured after the fix:
 The open-array one having the right stride and the wrong value is the reason
 this ticket said the three are not one cause. That prediction held. Do not close
 this on the record-field fix.
+
+## RESOLVED 2026-09-02 — three shapes, three causes, and the count was the finding
+
+Binary `a0fbf36e29f4`, `converged after 1 round(s)`, `gate.sh quick` GREEN with
+the FPC seed canary RUN (compiler/** was uncommitted, which is the only state in
+which it runs — and this change edits parameter declarations, exactly what it
+guards).
+
+### The three causes
+
+| shape | cause | site |
+| --- | --- | --- |
+| record-field array | index read `UFldStrCap` as the ELEMENT's capacity | `ir.inc` index arms |
+| open-array param | copy sized by KIND: `TypeStorageSize` | `ir.inc` `StaticArraySourceInfo` |
+| + a following param | `LastTypeStrCap` read outside its window | `pasparser_proc.inc` alloc loop |
+| nested dyn array | `TypeSlotSize` at depth 1 | `ir.inc` `DynElemSize` |
+
+Four sites, not three — the open-array shape was **two independent bugs
+stacked**, which is why fixing the copy size alone left it broken and looked
+like the fix had failed.
+
+### The one worth remembering
+
+**The FOLLOWING parameter's type decided the preceding one's layout.**
+`P(var a: array of string[10])` was correct; `P(var a: array of string[10];
+t: LongInt)` strode 263. `AllocParam` reads `LastTypeStrCap` — a parse-window
+return channel — from the ALLOCATION loop, which runs only after every
+parameter's type has been parsed.
+
+`pasparser_proc.inc` already documents this rule three times, for
+`LastTypeSetEnumId`, `LastTypeEnumId` and `LastTypeStrElemTk`, each with a note
+saying the value "is only meaningful when the type just parsed WAS one" and
+staging it into a per-param column. **Capacity is the fourth member of that
+family and was the one nobody staged.** The fix is a `ptypesStrCap` column, not
+a new mechanism — which is the tell that this was a missing instance of a known
+pattern rather than a new problem.
+
+And note what makes it nasty to test: with `t: string[10]` following, the wrong
+answer and the right answer COINCIDE. A test written with a same-capacity
+neighbour is green against the bug. `test_string_n_container_strides.pas`'s
+`openp20` row uses `string[20]` for exactly that reason.
+
+### F7's permissive default, caught in the act
+
+The 263 is `DEFAULT_STR_CAP + 8`. This is the mechanism frankA named — a MISSING
+capacity read as a PERMISSIVE one — firing in a fourth place, and it is the
+reason the symptom was "reads empty" rather than a crash. Nothing diagnosed;
+`FrozenStrSlotSize` was handed 0 and substituted 255.
+
+### Assertion class
+
+Every row of the new test compares a MEASURED stride against another MEASURED
+stride. No constant appears, so the byte-prefix relayout (which takes
+`string[10]` from 18 bytes to 11) cannot turn it red — a test asserting 18 would
+have gone red on a correct change and been "fixed" by pinning the old layout.
+
+Positive control: 5 of 8 rows go 0 under the pinned compiler. `openvals`,
+`dyn1d` and `guard` do not, and the test records why rather than leaving eight
+green rows looking equally load-bearing.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

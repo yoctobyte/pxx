@@ -1187,14 +1187,24 @@ begin
 end;
 
 
-function DynElemSize(depth: Integer; baseTk: TTypeKind; baseRec: Integer): Integer;
+function DynElemSize(depth: Integer; baseTk: TTypeKind; baseRec: Integer;
+                    baseCap: Integer): Integer;
 { Stride of one element of a dynamic array at the given depth. depth>1 holds
-  pointer-sized sub-array handles; depth=1 holds base elements. }
+  pointer-sized sub-array handles; depth=1 holds base elements.
+
+  baseCap is the frozen-string capacity of the base element, 0 when there is
+  none. It has to be a parameter because a frozen string is the one element kind
+  whose stride TypeSlotSize CANNOT answer -- it reports the pointer width, which
+  is 8 for an 18-byte `string[10]` slot. Passing 0 keeps the kind-only answer
+  deliberately: it means "no capacity was recorded", not "255".
+  bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes }
 begin
   if depth > 1 then
     Result := TARGET_PTR_SIZE
   else if baseTk = tyRecord then
     Result := RecSize(baseRec)
+  else if TypeIsFrozenString(baseTk) and (baseCap > 0) then
+    Result := FrozenStrSlotSize(baseTk, baseCap)
   else
     Result := TypeSlotSize(baseTk);
 end;
@@ -2181,7 +2191,8 @@ begin
         (a dynamic-array field is just another handle slot). }
       dynBaseTk := NodeDynBaseTk(baseNode);
       dynBaseRec := NodeDynBaseRec(baseNode);
-      elemSize := DynElemSize(baseDynDepth, dynBaseTk, dynBaseRec);
+      elemSize := DynElemSize(baseDynDepth, dynBaseTk, dynBaseRec,
+                              NodeDynBaseStrCap(baseNode));
       { Address of the slot holding this level's array handle. For a variable
         root the slot is the variable itself; for a field root it is the field
         slot in the object; for a sub-array it is the element address in the
@@ -3673,10 +3684,11 @@ end;
 function StaticArraySourceInfo(argAST: Integer; var cnt: Integer;
                                var elemTk: TTypeKind; var elemRec: Integer;
                                var elemSz: Integer): Boolean;
-var sasSym, sasRec: Integer; sasField: AnsiString;
+var sasSym, sasRec, sasCap: Integer; sasField: AnsiString;
 begin
   Result := False;
   cnt := 0; elemTk := tyUnknown; elemRec := REC_NONE; elemSz := 0;
+  sasCap := 0;   { frozen-string element capacity; 0 = this shape carries none }
   if argAST < 0 then Exit;
   if ASTKind[argAST] = AN_IDENT then
   begin
@@ -3687,6 +3699,7 @@ begin
     elemTk := Syms[sasSym].ElemType;
     elemRec := Syms[sasSym].ElemRecName;
     cnt := Syms[sasSym].ArrLen;
+    sasCap := SymStrCap[sasSym];
     Result := True;
   end
   else if ASTKind[argAST] = AN_FIELD then
@@ -3700,6 +3713,7 @@ begin
     elemTk := RecFieldType(sasRec, sasField);
     elemRec := RecFieldRecId(sasRec, sasField);
     cnt := RecFieldArrLen(sasRec, sasField);
+    sasCap := RecFieldStrCap(sasRec, sasField);
     Result := True;
   end
   else if ASTKind[argAST] = AN_INDEX then
@@ -3708,7 +3722,30 @@ begin
     Result := True;
   end;
   if not Result then Exit;
-  elemSz := TypeStorageSize(elemTk, elemRec);
+  { A FROZEN STRING ELEMENT'S WIDTH IS NOT A FUNCTION OF ITS KIND, and
+    TypeStorageSize only takes the kind -- so `array[0..3] of string[10]`
+    measured 8 (the pointer width tyString reports) instead of 18, and the
+    caller copied 4*8 = 32 bytes of a 72-byte array into the open-array temp.
+    Elements 0 and 1 survived, everything past them was zero, and the callee
+    read `a[2]` as the empty string on all targets.
+
+    IT CANNOT BE SEEN BY A VALUE ASSERTION. The callee's own indexing uses the
+    correct 18-byte stride (measured: @a[1]-@a[0] = 18 inside the callee), so
+    a[0] reads back exactly what was written and the shape looks healthy; only
+    the elements past the truncated copy are wrong, and they are wrong by being
+    EMPTY rather than corrupt. `var` is affected identically -- writes land in
+    the temp and are never copied back.
+
+    This is the same defect the comment below records for dyn-array-handle
+    elements, one type later: that one had TypeSlotSize answer 4 for an Integer
+    row and copy half the array. Two instances of one cause is the signal to
+    ask the WIDTH question per shape rather than add a third arm, which is why
+    the capacity is now collected in each branch above beside the count.
+    bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes }
+  if TypeIsFrozenString(elemTk) and (sasCap > 0) then
+    elemSz := FrozenStrSlotSize(elemTk, sasCap)
+  else
+    elemSz := TypeStorageSize(elemTk, elemRec);
   { ...unless the source array's elements are dyn-array HANDLES
     (`array[0..1] of TRow`): ElemType is the row's BASE type, so TypeSlotSize
     answered 4 for an Integer row and only half the array was copied into the

@@ -11085,6 +11085,20 @@ test-core: $(COMPILER)
 	# stride and guard rows exist and why a value-only test certified it.
 	./$(COMPILER) -Fulib/rtl test/test_string_n_array_field_stride.pas $(TESTTMP)/test_strn_fieldstride26
 	tools/expect_same.sh test_strn_fieldstride26 "$$($(TESTTMP)/test_strn_fieldstride26)" "$$(printf 'stride   1\nfits     1\nguard    1\ntail     1\nvalues   11')"
+	# ...and the same capacity through the three CONTAINER shapes, each of which
+	# had a DIFFERENT cause: an open-array parameter (the caller's copy was sized
+	# by KIND, so 4*8 = 32 bytes of a 72-byte array moved), a parameter FOLLOWING
+	# it (AllocParam read the LastTypeStrCap return channel from the allocation
+	# loop, so a `string[N]` param got the LAST parameter's capacity -- the
+	# following parameter's type decided the preceding one's layout), and the
+	# INNER dimension of `array of array of string[N]` (DynElemSize asked
+	# TypeSlotSize: 8 bytes for an 18-byte element). Every row is a MEASURED
+	# stride compared against another measured stride, never a constant, so the
+	# byte-prefix relayout cannot turn it red. Positive control: 5 of these 8 rows
+	# go 0 when built with the pinned compiler; `openvals` and `guard` do not, and
+	# the test says why.
+	./$(COMPILER) test/test_string_n_container_strides.pas $(TESTTMP)/test_strn_container26
+	tools/expect_same.sh test_strn_container26 "$$($(TESTTMP)/test_strn_container26)" "$$(printf 'openp1     1\nopenp2     1\nopenp20    1\nopenvals   1\ndyn1d      1\ndyn2d      1\ndyn2dvals  1\nguard      1')"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26
