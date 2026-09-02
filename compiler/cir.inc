@@ -226,8 +226,8 @@ begin
   Result := False;
   if (root < 0) or (root >= ASTNodeCount) or (depth > 24) then Exit;
   if root = target then begin Result := True; Exit; end;
-  Result := CASTNodeOccursIn(ASTLeft[root], target, depth + 1);
-  if not Result then Result := CASTNodeOccursIn(ASTRight[root], target, depth + 1);
+  Result := CASTNodeOccursIn(ASTChildLeft(root), target, depth + 1);
+  if not Result then Result := CASTNodeOccursIn(ASTChildRight(root), target, depth + 1);
 end;
 
 function IRAssignIsSharedCompound(node: Integer): Boolean;
@@ -384,11 +384,6 @@ begin
 
     The operand is still walked: a case label can legitimately sit inside the
     cast's subexpression, and only the Right field is not a tree. }
-  if ASTKind[node] = AN_PTR_CAST then
-  begin
-    IRLowerCSwitchDispatchScan(ASTLeft[node], selTmp, selTk, defaultLabel);
-    Exit;
-  end;
-  IRLowerCSwitchDispatchScan(ASTLeft[node], selTmp, selTk, defaultLabel);
-  IRLowerCSwitchDispatchScan(ASTRight[node], selTmp, selTk, defaultLabel);
+  IRLowerCSwitchDispatchScan(ASTChildLeft(node), selTmp, selTk, defaultLabel);
+  IRLowerCSwitchDispatchScan(ASTChildRight(node), selTmp, selTk, defaultLabel);
 end;

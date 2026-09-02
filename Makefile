@@ -10191,6 +10191,32 @@ test-core: $(COMPILER)
 	tools/expect_same.sh c_asm_tail26 "$$($(TESTTMP)/c_asm_tail26)" "ASM TAIL OK g=1"
 	./$(COMPILER) -O0 test/c_asm_in_unreachable_tail.c $(TESTTMP)/c_asm_tail26_o0
 	tools/expect_same.sh c_asm_tail26_o0 "$$($(TESTTMP)/c_asm_tail26_o0)" "ASM TAIL OK g=1"
+	# AN ASM BLOCK INSIDE A SWITCH ARM, and inside a body the INLINER clones.
+	# Both reach a GENERIC walker -- one that recurses through ASTLeft/ASTRight
+	# without asking what those slots mean for the kind in hand. AN_ASM's are an
+	# AsmBytes offset and a length, so the walker indexes ASTKind with a byte
+	# offset. Measured with a probe in the scan: on a switch with an asm arm it
+	# really does recurse into unrelated nodes, and at -O3 the two body cloners
+	# clone 238k payload-carrying nodes across test/. Neither produced an
+	# observable defect (306 generated switch shapes diffed against gcc: 0
+	# differ), which is why these are pins on shapes that WORK rather than a
+	# repro -- the sibling instance of the same walk, AN_PTR_CAST's signature
+	# index, segfaulted the compiler with no diagnostic on busybox's ash.
+	# -O3 as well as the default: the inliner does not fire below it, so a test
+	# that only runs at the default level tests the wrong population.
+	./$(COMPILER) test/c_asm_in_switch.c $(TESTTMP)/c_asm_switch26
+	tools/expect_same.sh c_asm_switch26 "$$($(TESTTMP)/c_asm_switch26)" "10 20 20 101 100 99"
+	./$(COMPILER) -O3 test/c_asm_in_switch.c $(TESTTMP)/c_asm_switch26_o3
+	tools/expect_same.sh c_asm_switch26_o3 "$$($(TESTTMP)/c_asm_switch26_o3)" "10 20 20 101 100 99"
+	./$(COMPILER) test/c_asm_in_inline_body.c $(TESTTMP)/c_asm_inline26
+	tools/expect_same.sh c_asm_inline26 "$$($(TESTTMP)/c_asm_inline26)" "35 14 5"
+	./$(COMPILER) -O3 test/c_asm_in_inline_body.c $(TESTTMP)/c_asm_inline26_o3
+	tools/expect_same.sh c_asm_inline26_o3 "$$($(TESTTMP)/c_asm_inline26_o3)" "35 14 5"
+	# The overload table itself: ast_arena.inc's ASTLeftIsChild/ASTRightIsChild
+	# is a DECLARATION, and a declaration goes stale silently. --self-check is
+	# the positive control -- it injects the exact defect (a payload write into
+	# a slot the table calls a child) and requires the census to report it.
+	python3 tools/ast_slot_overloads.py --self-check
 	./$(COMPILER) test/test_asm_branch.pas $(TESTTMP)/test_asm_branch26
 	$(TESTTMP)/test_asm_branch26; tools/expect_same.sh test_asm_branch26-rc "$$?" "45"
 	./$(COMPILER) test/test_asm_keywords.pas $(TESTTMP)/test_asm_keywords26

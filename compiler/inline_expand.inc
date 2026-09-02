@@ -219,12 +219,17 @@ begin
   ASTSOffset[r] := ASTSOffset[node];
   ASTSLen[r]    := ASTSLen[node];
   ASTTk[r]      := ASTTk[node];
-  if ASTLeft[node] >= 0 then
+  { A payload slot is COPIED, never cloned -- ast_arena.inc's overload table. }
+  if not ASTLeftIsChild(node) then
+    ASTLeft[r] := ASTLeft[node]
+  else if ASTLeft[node] >= 0 then
   begin
     ASTLeft[r] := CloneToInlineRegion(ASTLeft[node], procIdx);
     if ASTLeft[r] < 0 then begin CloneToInlineRegion := -1; Exit; end;
   end;
-  if ASTRight[node] >= 0 then
+  if not ASTRightIsChild(node) then
+    ASTRight[r] := ASTRight[node]
+  else if ASTRight[node] >= 0 then
   begin
     ASTRight[r] := CloneToInlineRegion(ASTRight[node], procIdx);
     if ASTRight[r] < 0 then begin CloneToInlineRegion := -1; Exit; end;
@@ -271,8 +276,10 @@ begin
     InlineStmtRhsLocalsWritten := True;
     Exit;
   end;
-  InlineStmtRhsLocalsWritten := InlineStmtRhsLocalsWritten(ASTLeft[node]) and
-                                InlineStmtRhsLocalsWritten(ASTRight[node]);
+  { -1 for a payload slot, and the node<0 base case answers True -- the
+    identity for `and`, so a payload contributes nothing either way. }
+  InlineStmtRhsLocalsWritten := InlineStmtRhsLocalsWritten(ASTChildLeft(node)) and
+                                InlineStmtRhsLocalsWritten(ASTChildRight(node));
 end;
 
 { Slice 2c: validate one if-arm — a single statement or an AN_SEQ chain of

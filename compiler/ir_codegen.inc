@@ -12846,8 +12846,10 @@ begin
           ' kind=', ASTKind[node], ' tk=', ASTTk[node],
           ' ival=', ASTIVal[node], ' line=', ASTLine[node], ':', ASTFile[node]);
   if depth > 40 then Exit;             { a malformed tree must not hang the dump }
-  AstDumpTree(ASTLeft[node], depth + 1);
-  AstDumpTree(ASTRight[node], depth + 1);
+  { The dump must show the TREE, not the payload read as one -- an AN_ASM
+    would otherwise print an unrelated subtree as its own children. }
+  AstDumpTree(ASTChildLeft(node), depth + 1);
+  AstDumpTree(ASTChildRight(node), depth + 1);
 end;
 
 procedure CompileAST(node: Integer);

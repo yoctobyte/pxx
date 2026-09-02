@@ -5600,8 +5600,11 @@ begin
   ASTSOffset[r] := ASTSOffset[node];
   ASTSLen[r]    := ASTSLen[node];
   ASTTk[r]      := ASTTk[node];
-  ASTLeft[r]    := IRCloneInlineBody(ASTLeft[node]);
-  ASTRight[r]   := IRCloneInlineBody(ASTRight[node]);
+  { Payload slots are copied verbatim -- ast_arena.inc's overload table. }
+  if ASTLeftIsChild(node) then ASTLeft[r] := IRCloneInlineBody(ASTLeft[node])
+  else ASTLeft[r] := ASTLeft[node];
+  if ASTRightIsChild(node) then ASTRight[r] := IRCloneInlineBody(ASTRight[node])
+  else ASTRight[r] := ASTRight[node];
   IRCloneInlineBody := r;
 end;
 

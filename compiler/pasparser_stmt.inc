@@ -1620,7 +1620,7 @@ function SLHasYield(node: Integer): Boolean;
 begin
   if node < 0 then begin Result := False; Exit; end;
   if (ASTKind[node] = AN_YIELD) or (ASTKind[node] = AN_AWAIT) then begin Result := True; Exit; end;
-  Result := SLHasYield(ASTLeft[node]) or SLHasYield(ASTRight[node]);
+  Result := SLHasYield(ASTChildLeft(node)) or SLHasYield(ASTChildRight(node));
 end;
 
 { Eligibility: every yield must sit only in flattenable statement positions —
@@ -1910,8 +1910,8 @@ begin
       end;
     else
       begin
-        SLRewriteLoopJumps(ASTLeft[node], contLbl, brkLbl);
-        SLRewriteLoopJumps(ASTRight[node], contLbl, brkLbl);
+        SLRewriteLoopJumps(ASTChildLeft(node), contLbl, brkLbl);
+        SLRewriteLoopJumps(ASTChildRight(node), contLbl, brkLbl);
       end;
   end;
 end;

@@ -499,9 +499,15 @@ const
                             that trusted it — IRLowerCSwitchDispatchScan — read
                             Right as a node index and recursed into a signature
                             id, segfaulting the compiler with no diagnostic on
-                            busybox's ash. If you add another overload of Left
-                            or Right, say so HERE: this comment is what a walker
-                            author reads instead of the write site. }
+                            busybox's ash. THIS IS NOT THE ONLY ONE and it was
+                            for a while the only one written down: AN_ASM,
+                            AN_VIRTUAL_CALL, AN_CLASS_VIRTUAL_CALL, AN_CALL,
+                            AN_METHODREF, AN_TYPEINFO and AN_CLASSREF overload a
+                            slot too. THE LIST LIVES IN ast_arena.inc's
+                            ASTLeftIsChild / ASTRightIsChild, every generic
+                            walker asks it, and tools/ast_slot_overloads.py
+                            fails if a kind drifts out of it -- so add a new
+                            overload THERE, not here. }
   AN_RTTI_REG     = 40; { __rttireg() intrinsic returning pointer to RTTI registry }
   AN_RESOURCES    = 41; { __resources() intrinsic returning pointer to resource table }
   AN_READLN       = 42; { Left = AN_ARG chain of lvalue targets (consumes a line) }

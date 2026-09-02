@@ -110,6 +110,93 @@ begin
   Inc(ASTNodeCount);
 end;
 
+{ ---- ASTLeft / ASTRight ARE OVERLOADED PER NODE KIND ----------------------
+
+  The two slots are a per-node payload whose MEANING depends on ASTKind. For
+  most kinds they are child node indices. For the eight below they are not, and
+  this is the only place that says so -- a generic walker that recurses through
+  them without asking indexes ASTKind with a byte offset, a VMT slot, a record
+  id or a flag.
+
+  THE THREE FAILURE SHAPES, hardest to see LAST:
+
+    AN_ASM's Left is an AsmBytes OFFSET and its Right a LENGTH. Offsets run to
+    65535 while a body's node count is often far smaller, so the read goes OUT
+    OF RANGE -- the loud case. Reached through ASTSeqTailUnreachable, where it
+    returned a spurious True and SUPPRESSED a correct prune, so
+    `Exit; asm nop end; WriteLn(Undef)` emitted the undefined call and the
+    binary would not start (both frontends; fixed 2026-09-02).
+
+    AN_PTR_CAST's Right is a proc-signature index. In range, and one value hit
+    node 0, whose own Left is 0: the recursion had a FIXED POINT and ran until
+    the stack died. IRLowerCSwitchDispatchScan SEGFAULTED with no diagnostic
+    while building busybox's ash.
+
+    A VMT SLOT, A RECORD ID AND A 0/1 FLAG ARE ALL VALID NODE INDICES. Nothing
+    goes out of range, nothing loops, nothing errors: the walker gets a
+    well-formed answer about an unrelated subtree. AN_VIRTUAL_CALL,
+    AN_CLASS_VIRTUAL_CALL, AN_CALL, AN_METHODREF, AN_TYPEINFO and AN_CLASSREF
+    are all this shape, and no instrument that watches for a crash will ever
+    see one. AN_METHODREF was found by the census tool below, not by reading:
+    `@obj.Method` parks the VMT slot in Right so a method pointer through a
+    base-class reference captures the OVERRIDE, and nothing at the write site
+    says the slot is not a node.
+
+  WHY A TABLE RATHER THAN A GUARD PER WALKER. The same omission has now been
+  found three times, in three passes, by three routes -- and each fix was one
+  `if ASTKind[node] = <the kind I just hit> then Exit`. Nine such lines is the
+  symptom: it is the identical "enumerate the spellings" failure that
+  ASTSubtreeHasLabel's own entry-point list has hit twice. Asking the arena
+  cannot go stale the way a copied guard can, and the next overloaded kind is
+  handled once, HERE. bug-a-generic-astleft-astright-walkers-recurse-into-kinds-that-overload-those-fields
+
+  TWO FORMS, and a cloner needs the predicate rather than the accessor.
+  ASTChildLeft/ASTChildRight answer -1 for a payload slot, which is what a
+  READER wants. A CLONER must copy the payload VERBATIM: CloneAST used to do
+  `ASTRight[clone] := CloneAST(recId)`, cloning node #recId and storing the
+  clone's index as the record id, and -1 would only trade a corrupt id for a
+  missing one.
+
+  IF YOU ADD ANOTHER OVERLOAD OF Left OR Right, ADD IT HERE. defs.inc's
+  AN_PTR_CAST comment used to carry that instruction and was the only kind
+  listed; it now points at this table. }
+function ASTLeftIsChild(node: Integer): Boolean;
+begin
+  Result := True;
+  if node < 0 then begin Result := False; Exit; end;
+  case ASTKind[node] of
+    AN_ASM,           { AsmBytes offset -- ParseAsmStatementAST / CAsmBuildBlock }
+    AN_TYPEINFO:      { 1 = "registered through RegisterTypeInfoReq", 0 = legacy enum }
+      Result := False;
+  end;
+end;
+
+function ASTRightIsChild(node: Integer): Boolean;
+begin
+  Result := True;
+  if node < 0 then begin Result := False; Exit; end;
+  case ASTKind[node] of
+    AN_ASM,                 { AsmBytes length }
+    AN_PTR_CAST,            { proc-signature index, read by CNodeProcSig }
+    AN_VIRTUAL_CALL,        { VMT slot }
+    AN_CLASS_VIRTUAL_CALL,  { built as an AN_CALL and re-kinded, so it inherits AN_CALL's }
+    AN_CALL,                { ProcRetRecId -- read by ResolveNodeRec's construction arm }
+    AN_METHODREF,           { VMT slot, so `@baseref.VirtualMethod` captures the override }
+    AN_CLASSREF:            { 1 = the VT_CLASSREF variant lowering, 0 = raw RTTI pointer }
+      Result := False;
+  end;
+end;
+
+function ASTChildLeft(node: Integer): Integer;
+begin
+  if ASTLeftIsChild(node) then Result := ASTLeft[node] else Result := -1;
+end;
+
+function ASTChildRight(node: Integer): Integer;
+begin
+  if ASTRightIsChild(node) then Result := ASTRight[node] else Result := -1;
+end;
+
 { Deep-copy an AST subtree. Copies the full per-node field set AllocNode
   initialises (the only AST-indexed arrays) and recurses on both children, so
   the clone is an independent tree. Used where a value node must appear in two
@@ -134,8 +221,11 @@ begin
   ASTPyUser[Result]   := ASTPyUser[node];
   ASTStrElemTk[Result] := ASTStrElemTk[node];
   ASTNDRowSubs[Result] := ASTNDRowSubs[node];
-  ASTLeft[Result]     := CloneAST(ASTLeft[node]);
-  ASTRight[Result]    := CloneAST(ASTRight[node]);
+  { PAYLOAD SLOTS ARE COPIED, NOT CLONED -- see the overload table above. }
+  if ASTLeftIsChild(node) then ASTLeft[Result] := CloneAST(ASTLeft[node])
+  else ASTLeft[Result] := ASTLeft[node];
+  if ASTRightIsChild(node) then ASTRight[Result] := CloneAST(ASTRight[node])
+  else ASTRight[Result] := ASTRight[node];
 end;
 
 { ---- The dead-arm prune's escape guard -----------------------------------
@@ -242,10 +332,9 @@ begin
     Diagnosed by frankb-a9 (Track C). ASTLeft/ASTRight are OVERLOADED PER KIND,
     so every generic walker over them has this shape -- the sweep for the rest
     is [[bug-a-generic-astleft-astright-walkers-recurse-into-kinds-that-overload-those-fields]]. }
-  if ASTKind[node] = AN_ASM then Exit;
-  if ASTSubtreeHasLabel(ASTLeft[node], budget) then
+  if ASTSubtreeHasLabel(ASTChildLeft(node), budget) then
   begin ASTSubtreeHasLabel := True; Exit; end;
-  if ASTSubtreeHasLabel(ASTRight[node], budget) then
+  if ASTSubtreeHasLabel(ASTChildRight(node), budget) then
     ASTSubtreeHasLabel := True;
 end;
 

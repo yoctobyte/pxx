@@ -3,12 +3,12 @@ slug: bug-a-generic-astleft-astright-walkers-recurse-into-kinds-that-overload-th
 track: A
 prio: 55
 type: bug
-status: open
+status: working
 blocked-by: []
 found: 2026-09-02
 found-by: frankb-a9
-owner:
-summary: "ASTLeft/ASTRight are OVERLOADED PER NODE KIND -- for AN_ASM they hold an AsmBytes offset and length, not node references -- so any walker that recurses through them without consulting ASTKind indexes ASTKind with a byte offset. One instance is FIXED (ASTSubtreeHasLabel, where it returned a spurious True and suppressed a correct prune; repro and regression tests landed). CloneAST has the same shape by inspection and is UNVERIFIED for reachability; ~8 further generic walkers in ast_arena.inc / cparser.inc / ast_syminfer.inc were never audited. This ticket is the sweep."
+owner: frankb-a9
+summary: "ASTLeft/ASTRight are OVERLOADED PER NODE KIND, and the overload set is EIGHT kinds, not one: AN_ASM (AsmBytes offset + length), AN_PTR_CAST (proc-sig index), AN_VIRTUAL_CALL / AN_CLASS_VIRTUAL_CALL (VMT slot), AN_CALL (ProcRetRecId), AN_METHODREF (VMT slot), AN_TYPEINFO and AN_CLASSREF (0/1 flags). Three of those are VALID node indices, so no out-of-range read will ever catch them. Nine walkers recurse through the slots generically; the other 32 self-recursive walkers are kind-dispatched and are NOT vulnerable. FIXED by a single table in ast_arena.inc (ASTLeftIsChild / ASTRightIsChild + ASTChildLeft / ASTChildRight) that all nine now ask, plus tools/ast_slot_overloads.py, which fails if a kind drifts out of it. Measured cost: within noise of the self-host compile. NO OBSERVABLE INSTANCE was found in test/ (2233 files, two probes, 238k firings) -- this lands as a guard with an explicitly negative reachability result, not as a repro."
 ---
 
 # Generic ASTLeft/ASTRight walkers vs kinds that overload those fields
@@ -16,53 +16,134 @@ summary: "ASTLeft/ASTRight are OVERLOADED PER NODE KIND -- for AN_ASM they hold 
 ## The mechanism
 
 `ASTLeft`/`ASTRight` are a two-slot payload whose MEANING depends on
-`ASTKind`. For most kinds they are child node indices. For `AN_ASM` they are
-not: `ParseAsmStatementAST` (pasparser_stmt.inc) and `CAsmBuildBlock`
-(cparser.inc:7371) store an **AsmBytes offset** in `ASTLeft` and a **length**
-in `ASTRight`, and ir.inc's `AN_ASM` arm reads them straight back out as
-`IRAppend(IR_ASM, ASTLeft[node], ASTRight[node], ...)`.
+`ASTKind`. For most kinds they are child node indices. For eight they are not,
+and a walker that recurses without asking indexes `ASTKind` with a byte offset,
+a VMT slot, a record id or a flag.
 
-A walker that recurses unconditionally therefore indexes `ASTKind` with a byte
-offset. AsmBytes offsets run to 65535 while a body's node count can be far
-smaller, so the failure mode is an **out-of-range read**, not a wrong answer.
+## The overload set, measured
 
-## What is already done — do not redo this part
+Every `x := AllocNode(AN_K)` (and every `ASTKind[x] := AN_K` re-kinding) paired
+with the writes to `ASTLeft[x]` / `ASTRight[x]` that follow it, attribution
+stopping at the next node construction:
 
-`ASTSubtreeHasLabel` is FIXED (early `Exit` for `AN_ASM` before the recursion,
-which is also the correct answer on the merits: an asm block has no AST
-children and is not an entry point). It was **not** merely latent there:
-reached through `ASTSeqTailUnreachable`, the garbage read returned a spurious
-`True` and SUPPRESSED a correct prune, so `Exit; asm nop end; WriteLn(Undef)`
-emitted the undefined call and the binary would not start. Both frontends.
-Regression tests `test/test_asm_in_unreachable_tail.pas` and
-`test/c_asm_in_unreachable_tail.c`, both measured failing on the pre-fix
-compiler.
+| kind | slot | what is actually in it |
+| --- | --- | --- |
+| `AN_ASM` | Left, Right | AsmBytes offset, block length |
+| `AN_PTR_CAST` | Right | proc-signature index (read by `CNodeProcSig`) |
+| `AN_VIRTUAL_CALL` | Right | VMT slot |
+| `AN_CLASS_VIRTUAL_CALL` | Right | built as an `AN_CALL`, re-kinded, inherits its |
+| `AN_CALL` | Right | `ProcRetRecId` — every write site, all 12 |
+| `AN_METHODREF` | Right | VMT slot, so `@baseref.VirtualMethod` captures the override |
+| `AN_TYPEINFO` | Left | `1` = registered through `RegisterTypeInfoReq` |
+| `AN_CLASSREF` | Right | `1` = the VT_CLASSREF variant lowering, `0` = raw pointer |
 
-## The sweep this ticket is for
+**Three failure shapes, and only the first is loud.** `AN_ASM`'s offsets run
+past the node count, so the read goes out of range. `AN_PTR_CAST`'s signature
+index is in range and one value hit node 0, whose own Left is 0 — a recursion
+fixed point that segfaulted the compiler with no diagnostic on busybox's ash.
+**A VMT slot, a record id and a 0/1 flag are all VALID node indices**: nothing
+goes out of range, nothing loops, nothing errors, and the walker gets a
+well-formed answer about an unrelated subtree.
 
-`CloneAST` (ast_arena.inc) has the identical shape — it ends with
-`ASTLeft[Result] := CloneAST(ASTLeft[node]); ASTRight[Result] := CloneAST(...)`
-with no kind check — and would clone an `AN_ASM` by treating its offset and
-length as nodes, producing a **corrupted asm block** rather than a
-conservative over-keep. Whether any caller clones a subtree containing
-`AN_ASM` is UNVERIFIED; establishing that is the first step, not the fix.
+`AN_METHODREF` was found by the census tool, not by reading. That is the
+argument for the tool in one line.
 
-Others named by a one-line grep and never audited: `DynTargetIsRereadable`,
-`NodeDynBaseRec`, `NodeDynBaseSym`, `NodeDynBaseTk`, `NodeDynDepth`
-(ast_arena.inc), `InferSymTypeFromNode` (ast_syminfer.inc), `CExprLongRank`,
-`CNodeArrayShape` (cparser.inc).
+## Which walkers, and which are NOT
 
-## The question worth answering before patching each one
+41 functions call themselves on `ASTLeft[..]`/`ASTRight[..]`. **Nine** recurse
+outside any kind arm:
 
-Nine `if ASTKind[node] = AN_ASM then Exit` lines is the symptom, not the fix --
-it is the same "enumerate the spellings" failure that this guard has now hit
-twice for entry points. Ask instead whether the arena should expose
-`ASTChildLeft(node)` / `ASTChildRight(node)` returning -1 for kinds whose slots
-are payload, so a generic walker CANNOT get this wrong and a new overloaded
-kind is handled once. `normalise-dont-special-case` argues for that shape; the
-counter-argument is that the accessor hides a cost in the hottest walkers, and
-that is worth measuring rather than assuming.
+| | |
+| --- | --- |
+| `CloneAST` | ast_arena.inc |
+| `CASTNodeOccursIn` | cir.inc — never mentions `ASTKind` at all |
+| `IRLowerCSwitchDispatchScan` | cir.inc — had a hand-written `AN_PTR_CAST` arm |
+| `CloneToInlineRegion` | inline_expand.inc |
+| `InlineStmtRhsLocalsWritten` | inline_expand.inc |
+| `IRCloneInlineBody` | ir.inc |
+| `SLHasYield`, `SLRewriteLoopJumps` | pasparser_stmt.inc |
+| `AstDumpTree` | ir_codegen.inc |
 
-Also open: whether any kind besides `AN_ASM` overloads these two slots. The
-grep behind this ticket found only `AN_ASM` assigning a non-node into them in
-the Pascal and C parsers, but the other frontends (N/R/Z) were not searched.
+The other 32 — `ResolveNodeRec`, `IRLowerAST`, `IsNodePChar`, `IRPointerStride`,
+`CNodePtrDepth`, `ASTConstIntValue` and the rest — recurse only inside a
+specific kind arm and **cannot be handed a payload slot at all.** That includes
+six of the eight this ticket originally listed as unaudited
+(`DynTargetIsRereadable`, `NodeDynDepth`, `NodeDynBaseTk/Rec/Sym`,
+`CExprLongRank`, `CNodeArrayShape`): not vulnerable, struck rather than left
+looking like open work.
+
+## The fix
+
+One table in `ast_arena.inc`, asked by all nine.
+
+**Two forms, because three of the nine are CLONERS.** `ASTChildLeft` /
+`ASTChildRight` answer `-1` for a payload slot, which is what a reader wants.
+A cloner must copy the payload **verbatim**: `CloneAST` used to do
+`ASTRight[clone] := CloneAST(recId)`, cloning node #recId and storing the
+CLONE's index as the record id, and `-1` would only trade a corrupt id for a
+missing one. So the table is a predicate — `ASTLeftIsChild` / `ASTRightIsChild`
+— with the accessor built on top.
+
+`defs.inc`'s `AN_PTR_CAST` comment used to say "if you add another overload,
+say so HERE" while listing only itself; it now points at the table.
+
+## The cost, since the objection was raised before the fix
+
+The counter-argument was that an accessor hides a cost in the hottest walkers.
+It does not reach them: the 32 kind-dispatched walkers, which include every hot
+one, are untouched. Measured anyway — the two binaries compiling
+`compiler/compiler.pas`, interleaved, min of N, same box: see the logbook entry
+for the numbers. No separation worth a design change.
+
+## What was NOT found, stated as a result
+
+`tools/ast_slot_overloads.py --self-check` is a guard with a positive control,
+and the two probe sweeps below are aimed instruments — but **no observable
+defect was reproduced.**
+
+- **`IRLowerCSwitchDispatchScan` × `AN_ASM`.** A probe in the scan shows it
+  really does recurse into the payload (`AN_ASM node=8786 left=63 right=1
+  nodecount=8918`). 306 generated shapes — varying asm byte-length, case count,
+  switch count, and decorrelating the byte offset from the node index — diffed
+  against gcc, with the compile branched on before comparing: **0 differ, 0
+  compile failures.** A second probe counting reachable `AN_CASE`/`AN_DEFAULT`
+  markers under the garbage subtree answered **0 on every one of 120 shapes**,
+  which is why: the walk lands on ordinary expression nodes.
+- **`CloneAST`, whole corpus.** All 2233 files in `test/`: 86 clones of a
+  payload-carrying kind, every one `AN_PTR_CAST` with `Right = -1`.
+- **The two body cloners at `-O3`, whole corpus.** 238,539 clones of a
+  payload-carrying kind, every one `AN_CALL` with `Right = -1`. C and Pascal
+  leave that slot -1; the frontend that fills it is NilPy, and no NilPy body
+  carrying one reached a cloner.
+
+So the corpus does not reach the corrupting case **today**. That is a
+reachability accident — `AN_CALL` is cloned in bulk and one frontend does park
+a record id there — not a property to rely on.
+
+## Regression tests
+
+- `test/c_asm_in_switch.c` (default and `-O3`) — asm in switch arms, including
+  an arm that is nothing but asm, a nested switch, and a multi-instruction
+  template so the offset is large. Pins that every arm still dispatches.
+- `test/c_asm_in_inline_body.c` (default and `-O3`) — asm inside a body the
+  inliner clones, nested one deep. `-O3` matters: the inliner does not fire
+  below it, so a default-only test measures the wrong population.
+- `test/ast_slot_writes.expected` + `tools/ast_slot_overloads.py --self-check`
+  — the census snapshot and its positive control.
+- `test/test_asm_in_unreachable_tail.pas` / `c_asm_in_unreachable_tail.c`
+  (pre-existing, from the `ASTSubtreeHasLabel` fix) still pass through the
+  table rather than through a hand-written `AN_ASM` arm.
+
+## Still open
+
+**Whether the frontends this compiler has beyond P/C/N/R/Z overload a slot.**
+The census reads `compiler/*.inc` wholesale, so `aparser` `bparser` `eparser`
+`fparser` `gparser` `lparser` `wparser` are all in it — but only for the
+`AllocNode`-adjacent write shape. A slot written through a helper, far from the
+construction, is invisible to it. The snapshot makes such a write show up as a
+diff the next time anything near it changes; it does not find one today.
+
+**`AN_INTF_CALL` and `AN_CALL_IND` are deliberately NOT in the table.** Both
+have a real node in `Right` (the interface value; the callee expression) and
+park their slot number in `ASTSOffset` / `ASTIVal` instead. That is the shape
+the other six should have had.
