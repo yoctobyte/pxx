@@ -18478,9 +18478,17 @@ test-lua: $(COMPILER)
 # Cross-target lua 5.4 (feature-c-cross-lua-sqlite). Builds the lua runner for a
 # cross target and runs every script under qemu, comparing to the same .expected
 # files as test-lua. NOT part of `make test` (3rd-party dep + qemu). aarch64 is
-# green; the other targets await their variadic-ABI bring-up (they build-fail
-# early, so are omitted here rather than reported as failures). Skips gracefully
-# when the lua tree or qemu is absent.
+# green. The other three are NOT omitted -- they are in LUA_CROSS_TARGETS and
+# they are reported as failures, which is what keeps this job red in the full
+# tier; the comment that said otherwise was describing an older list.
+# Nor is it a variadic-ABI gap. Measured 2026-09-02: all three stop on
+# `labeladdr` (IR_LABELADDR, unimplemented on i386/arm32/riscv32), and with
+# `-DLUA_USE_JUMPTABLE=0` -- the one flag that stops lua taking a label's
+# address -- all three BUILD and pass 6/6 under qemu. So that node is the whole
+# distance to green: feature-c-labels-as-values-on-i386-arm32-riscv32.
+# (That 6/6 says nothing about the jump-table interpreter itself, which is the
+# build it excludes; x86-64 passes 6/6 with it off too.)
+# Skips gracefully when the lua tree or qemu is absent.
 LUA_CROSS_TARGETS ?= aarch64 arm32 i386 riscv32
 test-lua-cross: $(COMPILER)
 	@if [ ! -f "$(LUA_SRC)/lua.h" ]; then \

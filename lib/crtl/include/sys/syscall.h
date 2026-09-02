@@ -18,7 +18,12 @@
  * needs goes through a named PAL entry; these exist so a program can reach a
  * call the PAL has no entry for -- busybox's util-linux/ionice.c
  * (ioprio_get/ioprio_set) and modutils (finit_module) are the two that brought
- * this header in. See syscall(2) in <unistd.h> for the call itself.
+ * this header in. See syscall(2) in <unistd.h> for the call itself -- both
+ * its declaration and, since it is the header that declares it, its
+ * definition (src/unistd.c). THIS HEADER IS NUMBERS ONLY and deliberately
+ * has no sibling src/sys/syscall.c: crtl pulls src/<x>.c when <x.h>
+ * completes, so an impl parked here was unreachable from the one header
+ * that declares the function. Do not move it back.
  */
 #ifndef _CRTL_SYS_SYSCALL_H
 #define _CRTL_SYS_SYSCALL_H

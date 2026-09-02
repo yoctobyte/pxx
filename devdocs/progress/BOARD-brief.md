@@ -59,6 +59,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 459, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
+- `[p 85] [C]` feature-c-labels-as-values-on-i386-arm32-riscv32 (unblocks 1)
 - `[p 85] [P]` regression-lib-test-lib-synapse-3 (unblocks 1)
 - `[p 85] [P]` regression-lib-test-lib-synapse-ssl (unblocks 1)
 - `[p 85] [P]` regression-lib-test-lib-synapse-transitive-unit (unblocks 1)
@@ -87,6 +88,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 
 _429 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

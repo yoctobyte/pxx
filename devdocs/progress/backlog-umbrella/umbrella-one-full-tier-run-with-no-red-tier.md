@@ -3,7 +3,7 @@ slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
 prio: 85
 type: umbrella
-blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2]
+blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2, feature-c-labels-as-values-on-i386-arm32-riscv32]
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
@@ -606,3 +606,117 @@ converged to `101b681ef373eb76` as well **in 2 rounds** — so that, not the sha
 had been quoting, is this tree's pin-derived fixedpoint, and `e7376b4065be84f6`
 was the off-chain one I had accumulated. Every number above `2148d95fa` is at
 `f28b7828e18d4d5f`, reached from the pin.
+
+## THE AUTHORITATIVE RED SET — seven's full tier at `0f4d2c907d54`, 16 jobs, 5 causes
+
+Everything before this section was worked off auto-filed stubs and per-job
+callbacks. This is the manifest itself, out of `runs-seven.ndjson`
+(2026-09-02T01:24:18Z, wall 604.7s): **`new_red` 0, `still_red` 16, `fixed` 1,
+`unreached` 0, `timed_out` false, `skip_holes` 1 (`test-core#991`).**
+
+Read the manifest, not `--status`'s "why" block. That block is the **v399 pin
+verify at `86c71828cd1e`, 80 commits behind master**, and its own line says 18
+of its 19 new reds pass in the full run three hours later. I started to reason
+about `00184.c(output)` from it and it is not in the full run's red set at all.
+
+All measurements below at binary `135bb8fec65f1271`, commit `2cf53df52`,
+reseeded from `stable_linux_amd64/default/pinned` (`converged after 2
+round(s)`), `gate.sh quick` GREEN.
+
+### Group 1 — TEN of the sixteen are one bug, and it is already fixed
+
+Every one of these carries the same stored reason: **`error: C function
+definition: more than 16 parameters not supported (MAX_PROC_PARAMS)`** — the
+uninitialised `paramsOverflow` read frankD fixed at `2148d95fa`.
+
+| jobs | the program | shape |
+|---|---|---|
+| `test-c-conformance{,-aarch64,-arm32,-i386,-riscv32}#shard3/6` | `00124.c` | `int (*f1(int a, int b))(int c, int b)` |
+| `test-sqlite-threads-{x86_64,i386,aarch64,arm32}#src:tools/compiler_srchash.sh` | `sqlite3.c:53552` | `static void (*memdbDlSym(sqlite3_vfs *, void *, const char *))(void)` |
+| `test-core#src:test/cfn_return_fnptr_b105.c` | the test written for `sqlite3OsDlSym` | same |
+
+**A function returning a function pointer.** The conformance corpus, sqlite's
+VFS and our own regression test are three independent witnesses to one
+declarator, and one initialiser fixed all ten.
+
+Measured green here, all of it: `00124.c` compiles on native + i386 + aarch64 +
+arm32 + riscv32; shard 3/6 is **37 pass, 0 fail, 0 skip** on all five targets
+(same denominator seven reported, so it is the same 37 programs);
+`test-sqlite-threads` **PASSes on all four arches**. `test-core#cfn_return_...`
+the watcher already auto-closed at `588d8512f101`.
+
+That is 10 of 16 gone on one commit, and it is why "report by group" is the
+instruction — held one at a time, these look like a conformance problem, a
+sqlite problem and a C-frontend problem.
+
+### Group 2 — `lib_synapse` × 3: fixed in the compiler, waiting on a pin
+
+`ASTCharArrayCap` answering only for `AN_IDENT` (`9c6b216aa`). These build with
+`$(PXX_STABLE)`, so they stay red until the owner pins. **Not my work and not
+anyone's**; deliberately still wired.
+
+### Group 3 — `test-lua-cross`: NOT a variadic-ABI gap, and its ticket said it was
+
+`target {i386,arm32,riscv32}: labeladdr`. The ticket
+[[feature-c-labels-as-values-on-i386-arm32-riscv32]] was filed at prio 30 saying
+the other three targets "already build-fail on their variadic ABI" and that
+"nothing measured is blocked on this". Measured: build the same runner with
+`-DLUA_USE_JUMPTABLE=0` and **all three build and pass 6/6 under qemu**. So
+`IR_LABELADDR` is the whole distance to green, and it blocks a full-tier job.
+Prio 30 → 60, summary corrected, wired here. The Makefile's own comment said the
+three were "omitted rather than reported as failures" — they are in
+`LUA_CROSS_TARGETS` and they are reported; fixed in the same commit.
+
+(That 6/6 is evidence about the REST of the port and not about the jump-table
+interpreter, which is the build it excludes — frankD's control, applied to my
+own claim before someone else has to.)
+
+### Group 4 — `lib-test#src:tools/crtl_reachability.py`: FIXED HERE
+
+`<unistd.h>` declares `syscall()`; the definition sat in
+`lib/crtl/src/sys/syscall.c`. crtl pulls `src/<x>.c` when `<x.h>` completes, so
+a program including only `<unistd.h>` — the only header that declares it, and
+where every libc declares it — reached the declaration and never the
+definition, and **silently imported the symbol from the system C library, ABI
+unchecked**. Moved into `lib/crtl/src/unistd.c`, deleted the orphan, and pointed
+`<sys/syscall.h>` (numbers only, no sibling `.c`) at where it lives.
+
+Positive control both ways: with the fix stashed, the lint exits 1 **and** a
+probe including only `<unistd.h>` warns that it will import from the system C
+library; with it applied, the lint is `OK -- 71 headers, 42 modules, every
+declared function reachable from its own header` and the probe links to ours and
+returns 42. The busybox shape (`<unistd.h>` + `<sys/syscall.h>`, `SYS_getpid`)
+also returns 42.
+
+### Group 5 — `tools-devtest#00`: Track T's own tooling, 4 failing checks
+
+Not touched. T owns the tool; four of its `twatch_*_devtest.py` self-checks fail
+on the harness's own text. Left for T.
+
+### Where that leaves the goal
+
+Of the 16: **10 fixed and verified, 1 fixed here, 3 waiting on a pin, 1 needs a
+backend feature (now ranked and wired), 1 is T's own tooling.** Nothing in the
+set is an unexplained compiler defect any more.
+
+`opt` is a DISJOINT tier and its five red shards are not in this manifest; I
+measured all six green here at pass=952 skip=144 diff=0 and seven has not re-run
+`opt` since 2026-09-01T10:08Z.
+
+### A caveat on the sha I quoted earlier tonight
+
+The conformance and sqlite runs above were FIRST measured at
+`f28b7828e18d4d5f`, which `gate.sh quick` then judged not to be the pin-derived
+fixedpoint (`the fixedpoint reached from PINNED differs from
+compiler/pascal26`). I reseeded and re-measured the decisive parts at
+`135bb8fec65f1271`, which gates GREEN — `00124.c` on all five targets and
+`test-sqlite-threads x86_64`. The four cross-conformance SHARD runs (aarch64,
+arm32, i386, riscv32, ~40 min of qemu) were not repeated and are quoted at
+`f28b7828e18d4d5f`; the compile of the one program that was failing was.
+
+I also formed and **refuted** a tidy explanation for the two binaries: that my
+first reseed touched `compiler/*.inc compiler/*.pas lib/rtl/*.pas` while
+`$(COMPILER_INC)` also covers `compiler/builtin/*.pas` and `lib/asmcore/*.pas`.
+Re-running both touch sets from the pin now gives `135bb8fec65f1271` either way,
+so the touch set is not the variable and I do not know what was. Recording it
+unexplained rather than shipping the neat version.
