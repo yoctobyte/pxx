@@ -46,3 +46,44 @@ expect_same: MISMATCH [c_sigwait26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Triaged (frankZ, plexus, 2026-09-02) — does not reproduce here, and nothing since could have fixed it
+
+Binary `5df66928aa3979df`, commit `67cf9588a`, reseeded from
+`stable_linux_amd64/default/pinned` (`converged after 2 round(s)`),
+`gate.sh quick` GREEN.
+
+**208 runs, 208 matching the expected string exactly:**
+
+| how | runs | mismatches |
+|---|---|---|
+| serial, idle box | 40 | 0 |
+| 8-way concurrent | 40 | 0 |
+| 32-way concurrent under 16-way CPU saturation (12-core box) | 128 | 0 |
+
+The last row is deliberately the hostile one: this is a signals-and-wait test,
+and the shape that would fail intermittently is a timing or delivery race under
+the 16-way matrix seven runs. It did not.
+
+**And it was not fixed since.** `0affa5fa87f4` is an ancestor of origin/master
+with 5 commits after it, of which exactly one touches `compiler/` or
+`lib/crtl/` — `1f4003e56`, labels-as-values on i386/arm32/riscv32, which cannot
+reach a native signal test. So "already fixed" is not available as an
+explanation; something has to own the difference.
+
+**No flake history either.** Over the 50 history entries in seven's state this
+job has **1 NEW-RED and 0 FIXED** — its first red ever. That is the opposite of
+the signature the two known umbrella flakes carry (10 NEW-RED / 11 FIXED and
+10/10), so this is not the same animal, and I am not calling it a flake.
+
+### The residual, and who owns it
+
+"Not reproducible on plexus" is half a finding. The open question is whether
+seven's environment differs in something this test is sensitive to — signal
+disposition inherited from the runner, a `wait` racing the harness's own child
+reaping, or the per-run scratch directory. **Track T owns that**, because it is
+a question about the host and the harness, not about the compiler. The next
+`native` or `full` run on seven decides it: a second red makes it real and
+gives it a second data point, a pass clears it. Deliberately NOT resolved —
+resolving it on 208 green runs somewhere else would be exactly the exculpation
+that names no owner for "then what?".
