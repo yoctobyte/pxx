@@ -4,12 +4,12 @@ title: "Rung 4: the 257-applet busybox userland — every applet the tree can bu
 track: C
 prio: 70
 type: feature
-status: open
+status: done
 created: 2026-09-02
 found-by: frankD
 owner: frankD
 blocked-by: [feature-c-gnu-inline-asm-with-a-non-empty-template]
-summary: "Rung 4, above the 141-applet rung 3 (done 2026-09-02): 257 applets, 400 translation units, one object each, one real link, byte-identical to the gcc oracle. Started at 13 failing TUs from 5 causes. As of 2026-09-02 ONE non-crtl cause remains — networking/tls_sp_c32.c's real x86-64 inline asm, whose failure is also the link failure. Everything else is closed: tcsetpgrp/statfs/select/posix_fallocate/cmsghdr/the PACKET constants/SSIZE_MAX in crtl, a 256-byte cap on block-scope string-initialised arrays, __VA_ARGS__ not being macro-expanded before substitution, and the host's inline-asm <asm/swab.h> reached through <linux/filter.h>. aarch64 stays out until --emit-obj has an object writer for it."
+summary: "MET 2026-09-02, x86-64: 257 applets, 400 translation units, one object each, one real link, and the linked binary byte-identical to the gcc oracle over all 619 cases (an oracle that itself agrees with busybox's own separately-linked build). Rung 4, above the 141-applet rung 3. Started at 13 failing TUs from 5 causes; every one was named by attempting the target. Closed on the way: tcsetpgrp/statfs/select/posix_fallocate/cmsghdr/the PACKET constants/SSIZE_MAX in crtl, the crtl impl splice point (a header included from the middle of another header spliced its impl ahead of the outer header's own declarations), a 256-byte cap on block-scope string-initialised arrays, __VA_ARGS__ not being macro-expanded before substitution, the host's inline-asm <asm/swab.h> reached through <linux/filter.h>, GNU inline asm with a non-empty template (a peer), and a FILE-SCOPE array initialiser past 256 elements dropped silently, which sized the generated applet_main[] to ONE entry and segfaulted every applet that did real work. aarch64 stays out until --emit-obj has an object writer for it."
 ---
 
 # Rung 4: 257 applets
@@ -65,16 +65,35 @@ else. `--separate` is required: `coreutils/test.c` and `shell/ash.c` claim
 ordinary identifiers through their `globals` macros and collide in both include
 orders, so no unity can hold the whole corpus — gcc's ceiling too, not pxx's.
 
-## What is left
+## Met, 2026-09-02
 
-`networking/tls_sp_c32.c` takes an x86-64 inline-asm arm because pxx announces
-`__GNUC__`. Its failure IS the link failure: the undefined
-`curve_P256_compute_pubkey_and_premaster` is that one object missing, not a
-separate defect. See `feature-c-gnu-inline-asm-with-a-non-empty-template`, and
-do NOT "fix" it by un-announcing `__GNUC__`.
+`tools/busybox_diff.sh --targets x86_64 --separate --applets <all 257>` at
+compiler `20953dc0444e`: **GREEN**. 400 objects, one real link, and the linked
+binary agrees with the gcc oracle over all 619 cases — an oracle that itself
+agrees with busybox's own separately-linked build.
+
+The last two blockers, both named by the attempt rather than by triage:
+
+- `networking/tls_sp_c32.c`'s x86-64 inline asm, taken because pxx announces
+  `__GNUC__`. Resolved by a peer
+  (`feature-c-gnu-inline-asm-with-a-non-empty-template`); the undefined
+  `curve_P256_compute_pubkey_and_premaster` was that one object missing and
+  not a separate defect. It was never right to "fix" it by un-announcing
+  `__GNUC__`.
+- **A file-scope array initialiser past 256 elements, dropped silently.**
+  This one only exists at this rung: `include/applet_tables.h` is GENERATED,
+  one `<applet>_main` per applet, so `applet_main[]` crossed 256 for the
+  first time at 257 applets. All 400 objects compiled AND LINKED, and then
+  every applet that did real work segfaulted through a one-element table —
+  while the identical build at 141 applets had been byte-identical to gcc.
+  Fixed in the same-day commit that adds
+  `test/c_global_array_init_over_256.c`.
 
 ## Scope
 
 x86-64 only, like rung 3. aarch64 needs an `--emit-obj` object writer
 (`feature-a-object-output-for-arm32-and-aarch64`) and nothing smaller — 141-way
 unity is impossible for gcc too, measured.
+
+## Log
+- 2026-09-02 — resolved, commit PENDING-COMMIT. GREEN: 400 translation units, 400 objects, one real link, all 619 cases byte-identical to the gcc oracle, at compiler 20953dc0444e.

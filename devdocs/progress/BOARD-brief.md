@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:7 unfinished:28 blocked:6 backlog:4 backlog-umbrella:6 backlog-core:138 backlog-nilpy:96 backlog-tools:4 backlog-pascal:58 backlog-decide:29 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 divergence:1 float:25 done-followup:3 decided:144 done:3122 rejected:72`
+`working:7 unfinished:28 blocked:6 backlog:4 backlog-umbrella:6 backlog-core:138 backlog-nilpy:96 backlog-tools:4 backlog-pascal:58 backlog-decide:29 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 divergence:1 float:25 done-followup:3 decided:144 done:3123 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -74,7 +74,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [P]` bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
-- `[p 70] [C]` feature-c-corpus-busybox-257-applets-linked
 - `[p 70] [A]` regression-test-c-conformance-shard2-6-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
@@ -89,5 +88,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [C]` bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero
 - `[p 60] [N]` bug-n-a-frozenset-returned-from-a-def-arrives-empty
+- `[p 60] [N]` bug-n-a-lambda-returning-a-captured-heap-value-yields-none
 
 _359 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
