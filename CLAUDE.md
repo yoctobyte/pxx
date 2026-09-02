@@ -430,6 +430,17 @@ session **a rejection and a denial-by-policy are the same string** — *"The use
 doesn't want to proceed with this tool use."* A peer's self-report is its
 BELIEF; its transcript is the record. Ask for the record.
 
+**AND WHEN YOU READ THAT RECORD, READ *WHO* REFUSED.** "Is there a refusal in
+your transcript" is not sufficient, because a **HOOK decline arrives as a
+tool-result error and wears the same shape as a user denial.** Measured
+2026-09-02: frankc-af, asked for the record, found exactly one refusal all
+session — `.claude/hooks/no-full-suite.sh` declining a shell loop over a `test/`
+glob — and it was **not a blockage at all**: it re-ran with
+`PXX_ALLOW_FULL_SUITE=1`, which is a SPEED guardrail the agent lifts
+autonomously, and said why in the commit. So the transcript has three things
+that read alike — a user rejection, a denial-by-policy, and a guardrail the
+agent may lift itself — and only the first two are a session being stuck.
+
 **"NO COMMITS IN N HOURS" HAS TWO CAUSES THAT LOOK IDENTICAL — blocked, and
 ENDED ITS TURN.** Commit count cannot separate them and neither can the tree;
 the discriminator is whether the session has an **unanswered turn**, which it
