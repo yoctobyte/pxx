@@ -43,3 +43,6 @@ expect_same: MISMATCH [test_npy_clone26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-02 — the seven watcher saw `test-threads#src:test/test_nilpy_thread_clone.npy` GREEN at 5ad048c2d9ae (tier native) and did NOT close this: this is a repeat stub (`regression-test-threads-test-nilpy-thread-clone-2`, not `regression-test-threads-test-nilpy-thread-clone`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
