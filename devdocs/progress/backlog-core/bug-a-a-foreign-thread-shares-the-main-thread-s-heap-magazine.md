@@ -119,3 +119,19 @@ precisely to fix that class, and its own note says the other half of the fix is
 "a fresh thread gets a ZEROED block from the clone stub" — which a libc pthread
 never runs. So the exception fix covers pxx-created threads and is defeated for
 the kind DOSBox will make.
+
+## 2026-09-02 (frankA) — option 1's detection half is narrower than the correction above says
+
+The frankC section corrects this ticket's dismissal of detection: the
+rsp-against-recorded-bounds discriminator shipped and works. True, and it is the
+right correction for the question the I/O lock asks.
+
+It does not carry to the question option 1 needs answered. **A pxx stackful
+generator body runs on a HEAP stack** — `lib/rtl/coroutine.pas` `CoAlloc` does
+`GetMem(65536)` — measured 13TB from the thread's own frame, so inside a
+generator the rsp test reads "foreign" on the thread that owns the block. For
+the I/O lock a miss falls back to `gettid` and is merely slower; for option 1's
+"do I need to install a block" test the same miss installs a second block and
+zeroes a live exception chain. Detection for THIS purpose is still open, and the
+numbers are on
+[[decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part]].
