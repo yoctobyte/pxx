@@ -861,6 +861,52 @@ fixed") that could be measured and came back **0 of 178**. **A theory that
 explains the data and predicts nothing testable is where this failure lives.**
 
 
+## A process query whose pattern matches its OWN command line
+
+A member of the family above with a closed form, so it can be checked rather
+than noticed: **any `pgrep -f` / `pkill -f` / `ps | grep` whose pattern appears
+in the query's own command line has a guaranteed false positive of exactly one,
+and it is the one that never goes away.** The querying shell's `/bin/bash -c
+...` argv contains the pattern, because the pattern is what it was asked about.
+
+The consequence is not "the count is off by one". It is that **a count is
+unusable and a boolean is wrong in exactly the case where the answer should be
+NO**: the instrument reports "running" forever, most confidently once the real
+process is gone and its own shell is the only match left.
+
+Measured twice on 2026-09-02, by two agents, hours apart:
+
+- `pgrep -f pdiff3.sh` reported four corpus differentials alive. They had been
+  dead for twenty minutes, killed by this session's own earlier `pkill`. The
+  session then blocked on a marker file that could never be written. What broke
+  the loop was not a better process check but asking what the claim would look
+  like if it were false — `ps` on the actual pids showed one process, the query.
+- `pgrep -c -f 'make test-core'` answered 3 for one job: the wrapper shell, the
+  real `make`, and the querying shell. `-c 1` would have been the dangerous
+  reading, since it looks exactly like a healthy single process.
+
+**`pkill -f` with a self-matching pattern is a different and worse bug**, not a
+misreading: it kills the shell issuing it. Since `/bin/sh` reads a script
+INCREMENTALLY (see the section on editing a running script), everything after
+the `pkill` in that same compound command never runs — so edits you watched
+"succeed" were never applied, and the next command reads a tree that does not
+have them. `exit 144` is the tell, but it is not a distinctive one: it is also
+what a deliberately killed background poller returns.
+
+The fixes, in order of preference:
+
+1. **Do not ask by pattern.** Keep the pid (`$!`), or have the job write a
+   marker file on completion and test for the marker. A completion marker also
+   fails in the right direction: absent means "not finished", never "finished".
+2. If you must match, exclude yourself: `pgrep -f pat | grep -v ^$$`, or match
+   on something the query cannot contain.
+3. **Never `pkill -f` a pattern your own command line contains.** Kill by pid,
+   or by the task id the harness gave you.
+
+The positive control is free and it is the one to run before believing any of
+these: issue the same query with the target definitely stopped. A query that
+still answers "running" is answering about itself.
+
 ## Assert the PRECONDITION, not just the comparison
 
 The section above says what goes wrong. This is the form of the fix, and it
