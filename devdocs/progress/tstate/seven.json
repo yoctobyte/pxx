@@ -12538,7 +12538,7 @@
    "status": "fail"
   },
   {
-   "bad": "25b8325d4b832de70e4ff573533882edd95e0dca",
+   "bad": "fca437d4daaf06a806f2ce1234ed031610be804f",
    "bad_untestable": true,
    "first_seen": false,
    "good": "cdae8cf6580bc5dd40f603391a4e98c5d8317c09",
@@ -12550,8 +12550,7 @@
    "pin_axis": 0,
    "pin_built": false,
    "range": [
-    "fca437d4daaf06a806f2ce1234ed031610be804f",
-    "0a67028264f4ab8621f2f8c1002c60cdeb00772c"
+    "fca437d4daaf06a806f2ce1234ed031610be804f"
    ],
    "src": "test/test_nilpy_import_c_header_still_works.npy tools/expect_same.sh",
    "status": "fail"
