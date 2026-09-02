@@ -129,11 +129,15 @@ for whoever closes the two survivor tickets** — not a task to hand anyone now.
   by ISOLATION: only `ir_codegen386.inc` reverted, **10/10 emitted i386 binaries
   byte-identical**, two genuinely different compilers (`4ba5c77aacc7` vs
   `6d8211360923`), positive control **5 of 8 differ in flag mode** so the
-  comparison can fail. **Comparison is CORRECT on i386** — `s = 'hello'` is TRUE,
-  matching FPC, where x86-64 and arm32 are FALSE; what does it is resolving the
-  kind at the `PXXStrEq`/`PXXStrCmp3` **decompose**. (An earlier draft added
-  that arm32 still needed this at four call sites — it does not, they read
-  `IRStrTkOf` since `764dc3a30`; see the corrected comparison section.)
+  comparison can fail. **Comparison against a literal is GREEN on all five runnable
+  targets** — x86-64, i386, arm32, aarch64, riscv32 — re-measured with one fresh
+  binary. i386 gets there by resolving the kind at the `PXXStrEq`/`PXXStrCmp3`
+  **decompose**, which is **necessary and NOT sufficient**: i386 resolves there
+  and *still* crashes on `r.f = 'hello'`. (An earlier draft of this document said
+  x86-64 and arm32 were still FALSE and that arm32 passed `IntToTypeKind` at four
+  call sites. Both halves were stale — those sites read `IRStrTkOf` since
+  `764dc3a30`. The correction originally sat *beside* the false sentence instead
+  of replacing it, which is the same failure one rung down.)
   Three things that did NOT copy from the 64-bit spec and would bite a copyist:
   the wide prefix is **two stores** on 32-bit; the concat **scratch buffer** must
   KEEP its wide prefix (written unconditionally, returned as a `tyString` value);
