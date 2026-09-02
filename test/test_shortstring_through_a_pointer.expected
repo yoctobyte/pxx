@@ -1,0 +1,31 @@
+ok   length deref
+ok   length field
+ok   length field-through-pointer
+ok   length array element
+ok   length array-element pointer
+ok   index direct
+ok   index deref
+ok   index field
+ok   compare direct to literal
+ok   compare deref to literal
+ok   compare field to literal
+ok   assign from deref
+ok   assign from field
+ok   assign to managed
+ok   param var
+ok   param const
+ok   param value
+ok   pos direct
+ok   copy direct
+write  <hello> <hello>
+writew <   hello> <   hello>
+ok   char store through deref writes a direct store's bytes
+ok   char store through deref reads back
+ok   direct char store puts the length at offset 0
+ok   direct char store puts the char at offset pfx
+ok   deref char store puts the length at offset 0
+ok   deref char store puts the char at offset pfx
+ok   string store through deref writes a direct store's bytes
+ok   compare field to variable
+ok   copy deref
+total ok 28 / 28

@@ -16318,6 +16318,21 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/ssmw_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a64_ssmw_s
 	tools/expect_same.sh aarch64/ssmw_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
+	# EVERY READER of a frozen string's length prefix, asserted as RELATIONS
+	# (Length(p^) = Length(s)) so one file carries no per-target constant. The
+	# censuses this feature ran all counted PXXWriteFrozenW -- WRITERS -- and the
+	# defects are in readers: comparison, Copy and Pos appear in no count.
+	# DEFAULT MODE ONLY for now. Under -dPXX_SHORTSTRING this file is red on all
+	# four converted backends and dies partway on three, which is the state
+	# frankb-a9's IRFrozenKindOfAddr fix has to close -- wiring the flag rows
+	# before the fix would just paint every lane red. The default rows are real
+	# coverage today and are byte-identical to the FPC 3.2.2 oracle.
+	# x86-64 is deliberately NOT wired: all 21 assertions pass there but
+	# Write(p^) prints hundreds of bytes of garbage, which reproduces on the
+	# PINNED compiler with no flag, so it predates phase 2 entirely.
+	# bug-a-write-of-a-frozen-string-through-a-typed-pointer-prints-garbage-on-x86-64
+	./$(COMPILER) --target=aarch64 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a64_ssthp
+	tools/expect_same.sh aarch64/shortstring_through_a_pointer "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
 	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
 	# correct throughout and is the control that the fix changed nothing there.
@@ -17839,6 +17854,21 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/ssmw_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_rv32_ssmw_s
 	tools/expect_same.sh riscv32/ssmw_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
+	# EVERY READER of a frozen string's length prefix, asserted as RELATIONS
+	# (Length(p^) = Length(s)) so one file carries no per-target constant. The
+	# censuses this feature ran all counted PXXWriteFrozenW -- WRITERS -- and the
+	# defects are in readers: comparison, Copy and Pos appear in no count.
+	# DEFAULT MODE ONLY for now. Under -dPXX_SHORTSTRING this file is red on all
+	# four converted backends and dies partway on three, which is the state
+	# frankb-a9's IRFrozenKindOfAddr fix has to close -- wiring the flag rows
+	# before the fix would just paint every lane red. The default rows are real
+	# coverage today and are byte-identical to the FPC 3.2.2 oracle.
+	# x86-64 is deliberately NOT wired: all 21 assertions pass there but
+	# Write(p^) prints hundreds of bytes of garbage, which reproduces on the
+	# PINNED compiler with no flag, so it predates phase 2 entirely.
+	# bug-a-write-of-a-frozen-string-through-a-typed-pointer-prints-garbage-on-x86-64
+	./$(COMPILER) --target=riscv32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp
+	tools/expect_same.sh riscv32/shortstring_through_a_pointer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 
 
 # ---------------------------------------------------------------------------
@@ -19011,6 +19041,21 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/ssmw_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a32_ssmw_s
 	tools/expect_same.sh arm32/ssmw_short "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
+	# EVERY READER of a frozen string's length prefix, asserted as RELATIONS
+	# (Length(p^) = Length(s)) so one file carries no per-target constant. The
+	# censuses this feature ran all counted PXXWriteFrozenW -- WRITERS -- and the
+	# defects are in readers: comparison, Copy and Pos appear in no count.
+	# DEFAULT MODE ONLY for now. Under -dPXX_SHORTSTRING this file is red on all
+	# four converted backends and dies partway on three, which is the state
+	# frankb-a9's IRFrozenKindOfAddr fix has to close -- wiring the flag rows
+	# before the fix would just paint every lane red. The default rows are real
+	# coverage today and are byte-identical to the FPC 3.2.2 oracle.
+	# x86-64 is deliberately NOT wired: all 21 assertions pass there but
+	# Write(p^) prints hundreds of bytes of garbage, which reproduces on the
+	# PINNED compiler with no flag, so it predates phase 2 entirely.
+	# bug-a-write-of-a-frozen-string-through-a-typed-pointer-prints-garbage-on-x86-64
+	./$(COMPILER) --target=arm32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a32_ssthp
+	tools/expect_same.sh arm32/shortstring_through_a_pointer "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
 	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
 	# correct throughout and is the control that the fix changed nothing there.
