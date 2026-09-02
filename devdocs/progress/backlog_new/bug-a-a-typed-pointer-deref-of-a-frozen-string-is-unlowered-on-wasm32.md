@@ -56,6 +56,34 @@ wasm32  :   1 0 0 0 0 0 0 0 88 0 0     { 'X' at offset 8, not 1 }
 So the two directions have different causes and only the read one is a wasm32
 lowering gap. **Do not fix them together.**
 
+The write half is a defect `0973746b0` **exposes, not introduces**. It created a
+new caller of `IRFrozenKindOfAddr` (`WasmEmitStoreMem` asks it for the
+destination kind), and that function answers tyString for a `p^` destination, so
+the backend does the wide thing correctly with a wrong answer. Nothing in that
+commit's own acceptance set routes through a typed-pointer deref — the 8/8
+oracle matrix, the 35/35 byte-identity and its positive control are all
+unaffected — which is why the conversion was not re-verified over it.
+
+**The wasm32 corruption differs from native's while sharing the cause**, and
+that is useful rather than confusing: a fix that turns both into `1 88` is
+checkable on two shapes instead of one. Note also that wasm32's is the quieter
+of the two — the low byte of the 8-byte word reads back as a correct
+`Length` of 1 — so a fix asserting on `Length` passes while still broken.
+
+## Method note, because this ticket was nearly filed with the opposite claim
+
+The first version of this finding said wasm32 did **not** acquire the walker
+defect. The read side had been measured, and the sentence "the shape never
+reaches the width question" was allowed to cover a write that had not been. It
+was load-bearing for two minutes: another lane's fix was scoped to six targets
+on it before the correction landed.
+
+The reusable part is not "measure both directions". It is that **a mechanism
+sounds like it generalises and an absence does not** — so reporting the bare
+absence would have been SAFER here than reporting the correct why for half the
+shape. A `why` invites the reader to extend it; a `didn't see it` does not. When
+you have a mechanism for part of a shape, name the part.
+
 ## The consequence that matters to someone else
 
 `IRFrozenKindOfAddr`'s read-side fix cannot turn wasm32 green on a `Length(p^)`
