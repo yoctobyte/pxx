@@ -756,6 +756,62 @@ Recovery if the flip does break the fixedpoint: reseed from the pin and `touch`
 the sources — the pinned binary predates the flip by construction, so it is
 always a valid seed. Say which pin in the commit.
 
+### ANSWERED: "IS THE WALKER ONE FIX OR THE FIRST OF A CLASS?" — A CLASS, FOUR CAUSES
+
+frankuser's question, 2026-09-02, and the answer matters more than any of the
+four fixes: **a walker-only fix would have closed ONE of four and left three.**
+All four present as "a frozen prefix read at the wrong width" and they have
+genuinely different causes:
+
+| # | site | cause | scope |
+| --- | --- | --- | --- |
+| 1 | `IRFrozenKindOfAddr` (`ir.inc`) | `p^` lowers to a pointer LOAD tagged tyPointer, matched neither arm, fell to the tyString default | **shared — all 7** |
+| 2 | `EmitStrCmpReg` (`symtab.inc`) | signature had **no kind at all**; hardcoded the layout 4 times | x86-64 |
+| 3 | arm32 compare callers `:2055 :2095 :2140 :2190` | extractor was width-aware; **all four callers passed `IntToTypeKind`** | arm32 |
+| 4 | x86-64 `IR_STORE_MEM` | never converted, **and read its dest kind from a stale `symIdx` belonging to another arm** | x86-64 |
+
+**(1) closes READ and WRITE together on every target**, which franks-ab's
+evidence predicted before the fix existed: the corrupted memory from
+`p^ := c` was BYTE-IDENTICAL across two word sizes and four independently
+written backends. Nothing but a shared cause produces that. The pointee's kind
+was never missing — it is `PtrElemTk` on the pointer's own symbol and no
+reader asked. **The arm lives in the walker so i386 inherits the fix rather
+than the hole**, since it is not a caller yet.
+
+**(3) is the one that should not have happened**, and it is the design finding.
+`IRStrTkOf`'s docstring already prescribes the remedy verbatim — one
+substitution rather than one per site — the fix was designed, named,
+documented and applied on aarch64, and arm32's four sites simply never got it.
+
+**THREE SITES NOW CARRY A COMMENT WARNING THE NEXT AUTHOR NOT TO USE
+`IntToTypeKind` HERE — aarch64 `:2022-2027`, riscv32 `:503-507`, arm32
+`:1299` — AND ARM32 VIOLATED ITS OWN COMMENT AT FOUR CALL SITES.** Two is a
+smell, three is a design flaw, and a comment is not a mechanism. **The real
+question for the morning is why asking a frozen prefix its width is a per-site
+decision at all** — the same shape as `normalise-dont-special-case`. Banked
+deliberately rather than acted on: this is a normalisation decision, not a
+fix, and it is the owner's.
+
+**Measured after all four: 24/24 four-mode configurations against the FPC
+3.2.2 oracle on x86-64/aarch64/arm32/riscv32, plus the write probe giving
+FPC's exact bytes on all SIX runnable targets, plus six comparison shapes
+green on five of six.**
+
+### NOT IN THIS CLASS: wasm32's comparison bug is PRE-EXISTING
+
+**`var_var`, `diffcap` and `var_ne` are wrong on wasm32 while `var_lit` and
+`lit_var` are correct** — literal operands right, variable operands wrong.
+That is operand selection in `WasmStrParts`, not prefix width.
+
+**Proven not ours: the pinned compiler, with NO flag, produces byte-identical
+wrong answers.** It predates every commit of this feature. Do not merge it
+with the width class — merging is what would send the next reader to operand
+selection when arm32's problem was one identifier. frankwasm owns it.
+
+**Correction to a population figure in circulation: riscv32 does NOT refuse the
+flag.** It accepts it and passes all four modes plus all six comparison shapes;
+it is a converted backend, measured here.
+
 ### PHASE 2 STATUS — SAY IT AS "N VERIFIED", NEVER AS "SEVEN CONVERTED"
 
 **The count and the qualification must be ONE phrase, because the count is the
