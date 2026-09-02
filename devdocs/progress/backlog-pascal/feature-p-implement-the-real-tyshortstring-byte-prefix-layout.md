@@ -146,6 +146,44 @@ required. That is a much stronger claim than "sizes get closer": records
 containing fixed strings become byte-compatible, which is what `file of T`
 interop actually needs.
 
+## CONSTANTS: the landing order, and it is narrower than it looks
+
+The owner named the sequencing risk: *"the big catch is — constant strings.
+right now we all parse them as fixedstring (i think, or do we convert them all
+to ansistring?). so, all plumbing has to be in place before we convert short
+string constants to shortstrings."* Measured — and it is **neither**:
+
+**An untyped string LITERAL types as `tyString`.** Three source comments say so
+(`pasparser_expr.inc:631`, `:5590`, `:9539`). It has no storage of its own and
+is converted at the point of use, so a `tyShortString` destination needs only a
+conversion ARM — one of the nine sites above. **Nothing about literals has to
+change at all.**
+
+**A TYPED constant is what forces the issue.** `const T: string[10] = 'hello'`
+measures **18** — real `.data`, emitted at compile time, byte-identical in
+layout to a var of the same type. These are what must not change representation
+before the readers understand the new one.
+
+```
+                          pxx     FPC
+typed const string[10]     18      11
+var plain string            8     256
+var string[10]             18      11
+```
+
+**LANDING ORDER, each step independently green:**
+1. byte-prefix codegen per backend (load/store the length as a byte)
+2. the nine conversion/enumeration arms, including `tyString -> tyShortString`
+3. only then, typed constants for `N <= 255`
+
+**AND ONE THING NOT TO DO.** That table shows FPC's plain `string` is **256
+bytes** — its default string genuinely IS a shortstring, which is the `{$H}`
+default. Ours is an 8-byte managed handle. Someone will read the 8-vs-256 row
+as the last piece of parity and map plain `string` onto `tyShortString`. **That
+would replace managed strings with 256-byte stack blocks, and it is not part of
+this ticket.** The owner asked for a second kind alongside `tyFixedString`, not
+a new default.
+
 ## Why it is cheaper than "a later codegen slice" suggests
 
 `tyShortString` is **not** a new kind to build. 63 sites, 18 files:
