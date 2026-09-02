@@ -74,6 +74,23 @@ exactly what it was built for — it named the readers the fix does not reach.
 What separated the layers was **franks-ab's falsifiable prediction** — that the
 walker fix would NOT repair comparison. It didn't; comparison needed (2) and (3).
 
+## TWO different "unwired rows" facts — they sound alike and mean opposites
+
+Both phrases appear tonight. **Do not let them merge.**
+
+- **wasm32 (CLOSED, `a322f1552`)** — coverage that was **absent while reading as
+  covered**. Its one standing row ran at DEFAULT, the proven no-op path. Nothing
+  was withheld; nobody had noticed. Now 26 rows, with a control proving the pair
+  is distinguishable.
+- **The reader matrix (`40646620c`, OPEN and correct)** — coverage **deliberately
+  withheld**, because the rows are known-red on the two surviving readers. That
+  session was asked to wire them on the strength of the greens, **ran the matrix
+  first, and declined.** Wiring known-red rows paints every lane red and tells
+  nobody anything they cannot read in the commit.
+
+The first is a gap. The second is judgement. **Wiring the second is a one-liner
+for whoever closes the two survivor tickets** — not a task to hand anyone now.
+
 ## Open, with owners
 
 - **i386** — frankA. Last backend.
