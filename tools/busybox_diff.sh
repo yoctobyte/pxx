@@ -442,7 +442,30 @@ else
 fi
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/bbdiff-XXXXXX")"
-cleanup() { rm -f "${CTEST:-}"; [ "$KEEP" -eq 1 ] && printf 'busybox-diff: work dir kept at %s\n' "$WORK" || rm -rf "$WORK"; }
+# ON A FAILURE, THE LOGS SURVIVE -- because every `die' below cites a path
+# INSIDE $WORK, and the same exit that prints the message used to delete it.
+# Measured 2026-09-02: the 394-applet run said "see /tmp/bbdiff-KhMYud/
+# oracle_sep.log" and that file was already gone, so the one diagnostic the run
+# produced pointed at nothing. Not an error -- a correct-looking instruction to
+# look somewhere empty, which costs a whole re-run to recover.
+#
+# Keeping the WHOLE dir is not the fix: they are ~530MB each (obj/ and the two
+# per-target output trees are ~500MB of that) and 4.6GB of them had already
+# accumulated here. So on a nonzero exit we keep the top-level *.log and *.txt
+# -- every path a `die' can cite -- and drop everything else. --keep still
+# keeps all of it, for when the objects are the thing you need.
+cleanup() {
+  st=$?
+  rm -f "${CTEST:-}"
+  if [ "$KEEP" -eq 1 ]; then
+    printf 'busybox-diff: work dir kept at %s\n' "$WORK"
+  elif [ "$st" -ne 0 ] && [ -d "$WORK" ]; then
+    find "$WORK" -mindepth 1 -maxdepth 1 ! -name '*.log' ! -name '*.txt' -exec rm -rf {} + 2>/dev/null
+    printf 'busybox-diff: logs kept at %s (objects dropped; --keep retains them)\n' "$WORK"
+  else
+    rm -rf "$WORK"
+  fi
+}
 trap cleanup EXIT
 
 # The compiler under test is COPIED here and every build below runs the copy.
