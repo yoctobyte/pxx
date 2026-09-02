@@ -1384,6 +1384,11 @@ begin
   { The emitted AnsiString runtime is x86-64 machine code; i386 string IR ops
     call the builtinheap Pascal helpers directly instead, so skip the shim
     emission there (its AnsiStr*Addr labels stay 0 and are never referenced). }
+  { The heap lock's contended path and its deadlock diagnosis. BEFORE the
+    AnsiString runtime below, which emits five heap-lock acquires of its own;
+    an acquire emitted while HeapLockSlowAddr is 0 takes the undiagnosed
+    fallback. See EmitHeapLockSlowStub on why this is a per-driver call. }
+  if ThreadSafeMode and (TargetArch = TARGET_X86_64) then EmitHeapLockSlowStub;
   if needsAnsiRuntime and (TargetArch = TARGET_X86_64) then EmitAnsiStringRuntime;
   { Integer div-by-zero abort stub (Runtime error 200): referenced by div/mod
     sites that have no builtinheap PXXDivZero to call. Emitted only when the

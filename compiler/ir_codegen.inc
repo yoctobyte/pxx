@@ -81,10 +81,14 @@ procedure EmitAcquireHeapLock;
   recording, since the first reading sends you looking for an accessor that is
   already here.
 
-  Slot budget: 0..11 are taken and TLS_SLOT_FIRST_FREE = 12, so four map slots
-  are free. The magazine did not need them -- it took a 64-slot TAIL past the
-  map (TLS_SLOT_HEAP_MAG = 16) and TLS_BLOCK_SIZE grew to 640 to hold it, which
-  is stack the thread already owns.
+  Slot budget, RE-READ from defs.inc rather than carried forward: 0..12 are
+  taken (the magazine's own busy flag is 12) and TLS_SLOT_FIRST_FREE = 13, so
+  THREE map slots are free, not four. The magazine did not need them -- it took
+  a 64-slot TAIL past the map (TLS_SLOT_HEAP_MAG = 16) and TLS_BLOCK_SIZE grew
+  to 1152 to hold it, which is stack the thread already owns. Both numbers in
+  this paragraph were one lower when it was written; a slot count in prose is a
+  census with an owner elsewhere, and it goes stale the next time someone takes
+  a slot.
 
   THE REAL CONSTRAINT IS THE TARGET SET. `__pxxTlsBase` refuses on everything
   but x86-64 — the others have a readable thread register (aarch64 tpidr_el0,
@@ -104,8 +108,16 @@ procedure EmitAcquireHeapLock;
   and freeing only (274a9da6c). The 400k-GetMem/FreeMem-pair table below was
   always an allocator benchmark and so is unaffected, but a whole-program
   measurement taken before that change was measuring both. }
+var jzPatch, callStart: Integer;
 begin
-  if ThreadSafeMode then
+  if not ThreadSafeMode then Exit;
+  { NO STUB, NO DIAGNOSIS -- the old unbounded loop, unchanged. Reachable when
+    the acquire is emitted before the prologue got to EmitHeapLockSlowStub, and
+    the alternative is calling address 0. Falling back is the whole reason the
+    stub address is tested rather than assumed: the div-zero stub's own comment
+    records what "the address stayed 0" cost the last time. }
+  if HeapLockSlowAddr = 0 then
+  begin
     EmitAsmX64([
       'push rax',
     '.spin:',
@@ -122,6 +134,28 @@ begin
     '.got:',
       'pop rax'
     ]);
+    Exit;
+  end;
+  { The fast path, BYTE-IDENTICAL to the loop above: push/mov/xchg/test, then a
+    branch over one thing. What changed is what it branches over -- a 5-byte
+    call to the contended path instead of an unbounded wait loop -- so every
+    number measured on the uncontended path still stands. }
+  EmitAsmX64([
+    'push rax',
+    'mov eax, 1',
+    'lock xchg [@glob], eax', BSS_HEAP_LOCK,
+    'test eax, eax'
+  ]);
+  EmitB($74); jzPatch := CodeLen; EmitB(0);   { jz over the call }
+  callStart := CodeLen;
+  IREmitCodeCall(HeapLockSlowAddr);
+  if CodeLen - callStart <> 5 then
+    Error('compiler error: the heap-lock slow-path call must be exactly 5 bytes');
+  { PATCHED, not hand-counted. `jnz +10' over a store that grew to 7 bytes is
+    exactly how the I/O unlock landed one byte past its `ret' (see the note at
+    IOUnlockAddr), and that one at least had a comment. }
+  PatchRel8(jzPatch);
+  EmitAsmX64(['pop rax']);
 end;
 
 procedure EmitReleaseHeapLock;
@@ -2992,6 +3026,102 @@ begin
     there, and the AN_WRITE lowering does not emit IR_IO_LOCK for them either
     (see the arch test at the emission site in ir.inc), so there is nothing to
     call and a stub would be dead bytes. }
+end;
+
+procedure EmitHeapLockSlowStub;
+{ The --threadsafe heap lock's CONTENDED path, out of line, and the place a
+  deadlock gets a name instead of hanging forever.
+
+  WHAT WAS WRONG. EmitAcquireHeapLock is a plain TTAS spinlock with no owner and
+  no depth. A signal delivered while the interrupted flow holds it runs a handler
+  that spins on a lock only the interrupted flow can release -- and that flow is
+  not running. Measured (bug-a-the-threadsafe-allocator-is-not-async-signal-safe):
+  a handler that keeps its blocks in a ring and frees the batch when it wraps
+  hangs at a 20s timeout WITH NO OUTPUT AT ALL, which is the worst of the
+  available outcomes. This does not fix that -- fixing it is options 1 and 2 on
+  that ticket and both are large -- it converts the hang into a diagnosis, which
+  is the slice that ticket recommends first.
+
+  WHAT THE COUNTER MEASURES, corrected by the measurement. It RESETS on every
+  observation of a free lock, so it is not elapsed time and it does not count
+  contention: a lock being taken and released reads 0 between holders no matter
+  how many threads want it. What it counts is how long the HOLDER has been off
+  the CPU. Forever is the deadlock. A scheduler quantum is ordinary preemption,
+  and that is the false positive the limit has to clear -- 12 threads in a bare
+  GetMem/FreeMem loop with the magazine off falsely diagnose at 2^18, so the
+  margin is against a long STALL, not against heavy traffic. The numbers and the
+  box are in HEAP_LOCK_SPIN_LIMIT's comment in defs.inc.
+
+  THE FAST PATH DID NOT CHANGE. The acquire site still emits push/mov/xchg/test/
+  jz/pop and the jz still skips exactly one instruction-sized thing -- it used to
+  skip a wait loop, it now skips a 5-byte call. Uncontended allocation is
+  byte-identical, which is the property that lets the numbers in
+  EmitAcquireHeapLock stand.
+
+  CONTRACT: entered with the caller`s rax already pushed, so rax is free; rcx is
+  saved and restored here because the caller does not. Returns with the lock
+  HELD. Never returns on the diagnosis path.
+
+  Exit code 212 is NOT an FPC runtime error number and is not meant to look like
+  one -- FPC has no code for this because FPC does not have this heap manager.
+  The message is the diagnosis; the code is just something distinctive to see in
+  a harness.
+
+  FOUR CALL SITES, exactly like EmitDiv0Stub and for the same reason: the shared
+  EmitProgramPrologue covers nine frontends, and the Pascal, C and NilPy drivers
+  each roll their own prologue and must call this by hand. Every one of them must
+  call it BEFORE its EmitAnsiStringRuntime, which emits five acquires of its own.
+  A driver that forgets gets the fallback loop in EmitAcquireHeapLock -- correct,
+  silent, and with no diagnosis -- which is the same shape of hole that
+  bug-a-only-the-pascal-driver-emits-the-signal-runtime closed once already.
+  Idempotent, so a driver may call it defensively.
+
+  NOT planted lazily at the first acquire, which would need no driver change at
+  all: acquires are emitted inside proc bodies, DCE drops proc bodies, and the
+  stub would go with the first body that turned out to be dead. }
+var si: Integer;
+begin
+  if not ThreadSafeMode then Exit;
+  if TargetArch <> TARGET_X86_64 then Exit;
+  if HeapLockSlowAddr <> 0 then Exit;   { already planted for this program }
+  si := InternStr('Runtime error 212: the heap lock was never released.' + Chr(10) +
+                  'The usual cause is a signal handler that allocates while the ' +
+                  'interrupted flow held it; --threadsafe is not async-signal-safe ' +
+                  '(bug-a-the-threadsafe-allocator-is-not-async-signal-safe).' + Chr(10));
+  HeapLockSlowAddr := CodeLen;
+  EmitAsmX64([
+    'push rcx',
+    'mov ecx, %', HEAP_LOCK_SPIN_LIMIT,
+  '.wait:',
+    'pause',
+    'mov eax, [@glob]', BSS_HEAP_LOCK,
+    'test eax, eax',
+    'jz .try',
+    'dec ecx',
+    'jnz .wait',
+    'jmp .dead',
+  '.try:',
+    'mov eax, 1',
+    'lock xchg [@glob], eax', BSS_HEAP_LOCK,
+    'test eax, eax',
+    'jnz .reset',
+    'pop rcx',
+    'ret',
+  '.reset:',
+    { lost the race to another waiter -- that is ORDINARY contention and the
+      budget starts again, which is the whole reason this is not a timeout. }
+    'mov ecx, %', HEAP_LOCK_SPIN_LIMIT,
+    'jmp .wait',
+  '.dead:',
+    'mov rax, %', 1,                        { sys_write }
+    'mov rdi, %', 2,                        { stderr, not stdout: this is a diagnosis }
+    'mov rsi, @data', Strs[si].Offset + 8,
+    'mov rdx, %', Strs[si].Len,
+    'syscall',
+    'mov rax, %', 231,                      { sys_exit_group }
+    'mov rdi, %', 212,
+    'syscall'
+  ]);
 end;
 
 procedure EmitDiv0Stub;

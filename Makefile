@@ -4133,6 +4133,23 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_ts_heap_mag26 "$$($(TESTTMP)/test_ts_heap_mag26)" "MAGAZINE OK"
 	./$(COMPILER) test/test_threadsafe_heap_magazine.pas $(TESTTMP)/test_ts_heap_mag_plain26
 	tools/expect_same.sh test_ts_heap_mag_plain26 "$$($(TESTTMP)/test_ts_heap_mag_plain26)" "MAGAZINE OK"
+	# The heap lock must NAME a deadlock rather than hang: option 3 of
+	# bug-a-the-threadsafe-allocator-is-not-async-signal-safe. Measured on the
+	# PRE-FIX pin, same source: the control line prints and the program then
+	# hangs to the timeout with nothing further, which is the outcome this row
+	# exists to keep gone. `timeout` is the regression guard -- without it a
+	# revert HANGS the tier instead of failing it -- and the exit code is
+	# asserted because "stopped" is not the claim, "said why" is.
+	# -dPXX_NO_HEAP_MAG is load-bearing: with the per-thread magazine the
+	# retaining handler never reaches the lock at all (measured: 880359 handler
+	# hits, survived), so the row would pass without exercising anything.
+	# The three assertions are chained with && so that a failure of the first
+	# two is not swallowed by the exit status of the last.
+	./$(COMPILER) --threadsafe -dPXX_NO_HEAP_MAG test/test_threadsafe_heap_lock_deadlock_diag.pas $(TESTTMP)/test_ts_hl_diag26
+	out=$$(timeout 60 $(TESTTMP)/test_ts_hl_diag26 2>&1); rc=$$?; \
+	  tools/expect_same.sh test_ts_hl_diag26_exit "$$rc" "212" && \
+	  tools/expect_same.sh test_ts_hl_diag26_control "$$(printf '%s\n' "$$out" | sed -n 1p)" "contention-workers-finished=12" && \
+	  tools/expect_same.sh test_ts_hl_diag26_named "$$(printf '%s\n' "$$out" | sed -n 2p)" "Runtime error 212: the heap lock was never released."
 	# A CAUGHT exception must release its managed FIELDS, not just the object.
 	# PXXObjFree runs PXXClassFinalize, whose managed pass is compiled out under
 	# PXX_TS_HARDLOCK (x86-64 --threadsafe), and this lowering did not emit the

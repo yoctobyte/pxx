@@ -72,6 +72,14 @@ begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
   EmitProgramEntryForTarget(withHeapArena, jmpPatch);
 
+  { FIRST of the stubs, ahead of the string runtime below and NOT with the other
+    --threadsafe stubs in EmitProgramRuntimeStubsForTarget: EmitAnsiStringRuntime
+    emits heap-lock acquires of its own, and an acquire emitted while
+    HeapLockSlowAddr is still 0 takes the fallback path in EmitAcquireHeapLock --
+    correct, but with no diagnosis. Ordering is the only thing that decides which
+    acquires get one, so this goes as early as there is code to put it after. }
+  if ThreadSafeMode and (TargetArch = TARGET_X86_64) then EmitHeapLockSlowStub;
+
   { Forwards first: the emitter references builtinheap bodies that unit has not
     parsed yet, so they must exist as rows before EmitAnsiStringRuntime runs. }
   if wantAnsiRuntime and (TargetArch = TARGET_X86_64) then

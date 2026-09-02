@@ -38191,6 +38191,11 @@ begin
   { Integer div-by-zero abort stub — same latent hole as the C driver: a
     builtinheap div site compiled before PXXDivZero registers fell back to a
     zero Div0StubAddr. Python '//'/'%' always need the check; unconditional. }
+  { The heap lock's contended path and its deadlock diagnosis. BEFORE the
+    AnsiString runtime below, which emits five heap-lock acquires of its own;
+    an acquire emitted while HeapLockSlowAddr is 0 takes the undiagnosed
+    fallback. See EmitHeapLockSlowStub on why this is a per-driver call. }
+  if ThreadSafeMode and (TargetArch = TARGET_X86_64) then EmitHeapLockSlowStub;
   if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
   { --threadsafe statement-atomic I/O lock stubs. Shared dispatcher, and a
     call every frontend driver needs: without it IOLockAddr stays 0 and any

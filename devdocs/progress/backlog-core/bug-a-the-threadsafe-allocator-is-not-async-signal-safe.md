@@ -3,7 +3,7 @@ track: A
 prio: 40
 type: bug
 blocked-by: []
-summary: "A signal handler that ALLOCATES hangs a --threadsafe program, measured: SIGUSR1 hammered from a sibling thread onto a main thread in a GetMem/FreeMem loop, handler calls GetMem, 20s timeout and no output. Cause is the pre-existing non-reentrant heap spinlock -- the handler re-enters the lock the interrupted flow is holding, which is the same hazard decide-interface-members-in-aggregates-lock-strategy parked for aggregates, arriving through signals instead. NARROWED BUT NOT FIXED by the per-thread magazine (feature-a-reentrant-heap-lock-and-per-thread-arenas): a handler whose traffic fits the magazine now completes -- 11.8M handler allocations against 3M in main, no aliasing, no dirty block -- because it never reaches the lock. A handler that MISSES still deadlocks, confirmed with a handler that retains 64 blocks and releases them in a batch: hangs identically with the magazine's re-entry guard present and absent, so the magazine is not the variable. NOT a regression from that work and not caused by it; it is the residual it leaves, filed so the exculpation has an owner. The magazine's own list is protected by TLS_SLOT_HEAP_MAGBUSY, which is reasoned and NOT verified by execution -- every test shape that would expose the aliasing hits this deadlock first, which is precisely why this ticket has to exist before that one can be called done."
+summary: "A signal handler that ALLOCATES cannot proceed on a --threadsafe program: it re-enters the non-reentrant global heap spinlock the interrupted flow is holding, and that flow is not running. STILL TRUE, STILL NOT FIXED. What changed 2026-09-02 is the OUTCOME: option 3 landed, so instead of hanging with no output at all the program now writes `Runtime error 212: the heap lock was never released` naming this ticket and exit_group(212)s, measured 1.9s from the collision, 6 runs of 6. The lock itself is unchanged and the fast path is byte-identical; only the contended branch moved out of line into EmitHeapLockSlowStub. Options 1 (block signals around the locked region) and 2 (reentrancy plus instruction-boundary-consistent state) are the actual fix and are untouched, which is why this stays open. The per-thread magazine still narrows the population -- a handler whose traffic fits it never reaches the lock -- so the reproducing configuration is `--threadsafe -dPXX_NO_HEAP_MAG` with a RETAINING handler. The residual this ticket owns is unchanged: TLS_SLOT_HEAP_MAGBUSY is still reasoned and not verified by execution, because the shapes that would aim a control at it still cannot complete -- they now exit 212 instead of hanging, which makes the aiming failure visible but no less real."
 status: backlog
 owner: unassigned
 ---
@@ -79,3 +79,62 @@ variable and the control could not be aimed.
 Whoever fixes the deadlock unblocks the control. Until then the guard costs
 nothing measurable (the single-thread benchmark row is 9ms either way) and its
 absence cannot be shown to cost anything either.
+
+## 2026-09-02 — option 3 landed (frankA, Track A)
+
+The hang is now a diagnosis. Nothing else about the defect moved.
+
+**What shipped.** `EmitAcquireHeapLock`'s fast path is unchanged and
+byte-identical (push / mov / `lock xchg` / test / branch-over-one-thing); what
+the branch skips is now a 5-byte call to `EmitHeapLockSlowStub` instead of an
+unbounded wait loop. The stub spins TTAS+pause with a counter that RESETS on
+every observation of a free lock, acquires and returns with the lock held, and
+on exhaustion writes the named message to stderr and `exit_group(212)`. Four
+call sites, mirroring `EmitDiv0Stub`: the shared `EmitProgramPrologue` plus the
+Pascal, C and NilPy drivers, each of which rolls its own prologue. Verified the
+string is present in a `--threadsafe` binary from all three hand-rolled drivers
+and absent without the flag.
+
+**Not the detection this ticket recommended, deliberately.** The text proposes
+`TLS_SLOT_HEAP_MAGBUSY` as the in-allocator flag to test. That slot lives in a
+TLS block a foreign thread SHARES with its creator (measured earlier in the same
+session, on the foreign-thread work), so a slot test would false-positive and
+halt a working program. The counter needs no per-thread state at all.
+
+**`HEAP_LOCK_SPIN_LIMIT` was MEASURED, and the measurement corrected the
+reasoning.** The comment first written for it said ordinary contention could
+never approach the limit because the counter resets. That is wrong, and the
+sweep says so: what the counter really measures is *how long the holder has been
+off the CPU*, and a holder preempted mid-allocation is off it for a scheduler
+quantum. On frankA (12 cores), twelve threads in a bare `GetMem/FreeMem` loop
+with `-dPXX_NO_HEAP_MAG` — every allocation on the lock — behave like this:
+
+| limit | legitimate-contention result |
+| --- | --- |
+| 2^3 … 2^16 | **falsely diagnoses**, every run |
+| 2^18 | **falsely diagnoses**, 5 of 5 |
+| 2^20 | clean, 3 of 3 |
+| 2^22, 2^24 | clean, 3 of 3 each |
+| 2^28 (shipped) | clean; also clean at 64 threads on 12 cores, magazine off (5 runs) and on (3 runs) |
+
+So the shipped value sits 1024x above the highest limit that produced a false
+positive. The margin is against a longer STALL, not against more contention —
+more contention does not move this number.
+
+**A boundary in this ticket's own text that did not reproduce.** The summary
+said the retaining-handler program "hangs identically with the magazine's
+re-entry guard present and absent, so the magazine is not the variable". The
+shape run here — 64-entry ring, `GetMem(p, 96)`, freed as a batch on wrap, 2M
+main-thread rounds, SIGUSR1 hammered from a sibling — **survived with the
+magazine on**, `hits=880359`, rc=0, and hung only under `-dPXX_NO_HEAP_MAG`.
+Not a contradiction of the defect, and not a claim the original measurement was
+wrong: a ring whose blocks exceed the magazine's per-bin capacity would miss it
+where this one hits. It does mean the reproducing configuration has to name the
+define, which the new test row does.
+
+**Test.** `test/test_threadsafe_heap_lock_deadlock_diag.pas`, two phases in one
+binary. Phase 1 is the twelve-thread contention run above and must NOT diagnose
+— a control that demonstrably CAN fail, since it fires at a limit of 2^18.
+Phase 2 is the retaining handler and must exit 212 with the named message. On
+the pre-fix pin the same source prints the phase-1 line and then hangs to the
+60s timeout, so the row fails pre-fix on the exit code.

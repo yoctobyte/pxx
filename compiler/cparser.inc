@@ -11284,6 +11284,11 @@ begin
     the address still 0 — a silent call into the entry stub on a div-by-zero
     (latent; exposed by the feature-opt-div0-stub-on-use safety net). C
     '%'/'/' sites always need the check, so emit unconditionally. }
+  { The heap lock's contended path and its deadlock diagnosis. BEFORE the
+    AnsiString runtime below, which emits five heap-lock acquires of its own;
+    an acquire emitted while HeapLockSlowAddr is 0 takes the undiagnosed
+    fallback. See EmitHeapLockSlowStub on why this is a per-driver call. }
+  if ThreadSafeMode and (TargetArch = TARGET_X86_64) then EmitHeapLockSlowStub;
   if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
   { THE finish-the-runtime step: the signal runtime (plus its BSS block) AND the
     --threadsafe statement-atomic I/O lock stubs, which is what

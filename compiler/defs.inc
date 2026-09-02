@@ -311,6 +311,30 @@ const
   MAX_PAS_DEFINE_CHARS = 32768;
   MAX_PAS_CONDS = 64;
   MAX_INC_DEPTH = 32;
+  { Consecutive pause-loop iterations with the lock HELD before the --threadsafe
+    heap lock calls itself deadlocked (EmitHeapLockSlowStub, ir_codegen.inc).
+    The counter RESETS every time the waiter observes the lock free, so what it
+    measures is not elapsed time but "how long has the holder been off the CPU".
+    A permanently-off-CPU holder is the deadlock this exists to name -- a signal
+    handler that allocates while the interrupted flow held the lock
+    (bug-a-the-threadsafe-allocator-is-not-async-signal-safe).
+
+    MEASURED, and the measurement CORRECTED the reasoning that preceded it.
+    "Ordinary contention never approaches this" is wrong: a holder preempted
+    mid-allocation is off the CPU for a scheduler quantum, and every waiter
+    counts that quantum out at pause speed. On frankA (12 cores), 12 threads in
+    a bare GetMem/FreeMem loop with `-dPXX_NO_HEAP_MAG` -- so every allocation
+    reaches this lock -- FALSELY diagnose at 2^18 (5 runs of 5) and run clean at
+    2^20 (3 of 3). The true legitimate maximum on that box is between the two.
+
+    $10000000 is 2^28: 1024x above the highest limit that produced a false
+    positive. Checked at that value with 64 threads on 12 cores, magazine off
+    and on, 5 and 3 runs: clean, all 64 workers finishing every time. The margin
+    is against a LONGER stall than a quantum (a heavily oversubscribed box, a
+    VM steal window), not against more contention -- more contention does not
+    move this number, a longer stall does. Re-measure on a box whose pause
+    latency differs by more than an order of magnitude. }
+  HEAP_LOCK_SPIN_LIMIT = $10000000;
   SIG_ALTSTACK_SIZE = 32768;   { alt-stack bytes. Linux MINSIGSTKSZ is 2048 and SIGSTKSZ 8192, but both are advisory floors that grew with the register file (AVX-512 pushes the kernel's signal frame past the old constants), and this is zero-filled BSS with no file cost. }   { ExpandIncludes recursion brake; FPC's own limit is 16 }
   SPECIAL_IN  = 999;
 
@@ -4848,6 +4872,13 @@ var
   SigSetHookAddr  : Integer;  { code offset of the SetSignalHandler stub: edi = signal, rsi = handler address -> store hook slot, fall through into SigInstallAddr }
   IOLockAddr  : Integer;  { code offset of the --threadsafe I/O statement-lock acquire stub (reentrant owner-tid spinlock over BSS_IO_OWNER/DEPTH) }
   IOUnlockAddr: Integer;  { code offset of the matching release stub }
+  HeapLockSlowAddr : Integer; { code offset of the --threadsafe heap-lock CONTENDED path
+                                (EmitHeapLockSlowStub, ir_codegen.inc). The fast path stays
+                                inline and byte-identical; only the branch that used to enter
+                                an unbounded spin now calls here, which is what gives the
+                                deadlock diagnosis one place to live. 0 = not emitted, and
+                                every acquire site tests that and falls back to the old
+                                unbounded loop rather than calling address 0. }
   Div0StubAddr : Integer;  { code offset of the shared div-by-zero abort stub
                              (write "Runtime error 200 ..." + exit_group(200)),
                              emitted unconditionally on x86-64; the fallback
