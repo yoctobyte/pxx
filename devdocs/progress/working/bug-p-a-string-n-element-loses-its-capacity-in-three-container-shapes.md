@@ -4,8 +4,9 @@ prio: 70
 type: bug
 found: 2026-09-02
 found-by: frankB
-owner: —
+owner: frankB
 summary: "A `string[N]` ELEMENT keeps its N in a plain var array and loses it in three other containers, silently and with a wrong VALUE each time. (1) `inner: array[0..1] of string[10]` as a RECORD FIELD strides 264 bytes instead of 18 -- 264 is DEFAULT_STR_CAP+8 padded, so the declared 10 was dropped and the default substituted; SizeOf(nest.inner) says 36, correctly, so SizeOf and LAYOUT disagree by 7x on one declaration. (2) an OPEN ARRAY parameter has the RIGHT stride (18) and still reads a[2] as empty, so this one is NOT the same cause. (3) `array of array of string[10]` returns a corrupted element. All three reproduce on the PIN, so none is from the 2026-09-02 SizeOf work; FPC 3.2.2 gets all three right. Named lead for (1): UFldStrCap holds the FIELD's own capacity and ir.inc:11260 reads it as the ELEMENT's."
+status: working
 ---
 
 # A `string[N]` element keeps its capacity in one container and loses it in three
