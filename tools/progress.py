@@ -94,6 +94,12 @@ STATUSES = [
     "backlog-zig",
     "experimental",
     "rainy-day",
+    # NOT rejected (that says the ticket is WRONG) and NOT rainy-day (that says
+    # it is a future plan we intend to do). low-prio says: real, probably
+    # correct, and so far down the queue we are choosing not to carry it in the
+    # ranker. Kept rather than deleted so it is not refiled from scratch, and so
+    # one can be pulled back if it becomes relevant. Loaded, never ranked.
+    "low-prio",
     # Track F parks here. Listed so the folder is LOADED (board, check, blocker
     # resolution see it) — NOT so it is ranked: ready/next read only
     # RANKED_STATUSES (urgent/backlog/backlog_new/unfinished), which is the
