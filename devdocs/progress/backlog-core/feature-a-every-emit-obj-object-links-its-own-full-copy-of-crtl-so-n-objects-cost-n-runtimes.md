@@ -100,3 +100,66 @@ COMDAT is a choice made afterwards and cheaply. The ten shifting bytes are worth
 fixing in the same pass — they are the tell that emission order splits the
 runtime, and a "byte-identical" claim measured before that reorder would be
 false by ten bytes with no symptom.
+
+## 2026-09-02 (frankC) — the measurement this ticket asked for, and it does NOT say what the tie-breaker expected
+
+Reproduced first, at `18b3ec2a6`, x86-64, three C translation units where only
+`main` does anything (`printf("%d")`) and the others define one function each:
+
+| link line | size | delta |
+| --- | --- | --- |
+| 1 object | 369040 | — |
+| 2 objects | 488304 | +119264 |
+| 3 objects | 611648 | +123344 |
+| same program, no `--emit-obj` (pxx links it) | 307280 | — |
+
+So ~120KB per extra object, confirmed, and a single object already carries
+135208 bytes for a one-line function.
+
+**How much does a trivial program reach? 16.3%, not "most of it".** Walked the
+linked binary's call graph from `main`/`_start` over `objdump -d`: 786 FUNC
+symbols, 290262 bytes, **47237 reachable (16.3%)**. The walk follows direct
+calls only, so two things were checked before trusting it: `.data` holds
+**2** function pointers in the whole object (not a dispatch table that would
+make everything reachable), and the binary has **23** indirect call/jmp sites
+total. Positive control, drawn from this same binary: `printf` is in the
+reachable set, `qsort` and `strtod` are not.
+
+**A second source that fails differently agrees.** The compiler's own DCE report
+on the Pascal side — a call-graph table built during compilation, not a
+post-hoc disassembly — says of a `WriteLn('hello')` program:
+
+```
+dce: bodies 128  live 45 (16044B)  dead 82 (47579B)  dropping 82 (47579B)
+dce: code 64975B -> 17396B
+```
+
+**73% dead**, against the disassembly walk's 84% unreachable on the C side. Two
+instruments that can go wrong in unrelated ways, one answer.
+
+### The finding that changes the arithmetic: DCE IS SWITCHED OFF FOR EXACTLY THIS CASE
+
+`dce.inc:227` — `if EmitObjMode or EmitSharedMode then why := '-c / --shared
+carry their own code-offset relocations'`. So an `--emit-obj` object keeps
+every body, and the duplication this ticket is about is duplication of a
+runtime that was **never pruned once**. (It is also off for every non-x86-64
+target, with `-g`, and for every frontend but Pascal — so the C objects
+measured above could not have been pruned on two counts.)
+
+That reframes both options rather than choosing between them:
+
+- The archive (1) fixes only the CROSS-object half. Each member still arrives
+  whole, and the ~75% within it is untouched.
+- Function sections + `--gc-sections` (2) fixes BOTH halves with one mechanism,
+  because the linker's reachability is the same reachability DCE computes —
+  and it needs no interface change.
+- There is a **third, much smaller** step neither option lists: make DCE run
+  under `--emit-obj` by rooting it at the exported symbols. It does not
+  deduplicate across objects at all, but it would cut each object's runtime
+  contribution from ~135KB to ~20KB, which turns N×135KB into N×20KB and buys
+  time to do (2) properly.
+
+**Recommendation: (2), and (3) first if (2) is not going to be picked up
+soon.** Not started here — it is a backend-wide change and this session could
+not have verified it in the sitting it had. The measurement is banked, which is
+what the ticket asked for.
