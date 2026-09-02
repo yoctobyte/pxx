@@ -13406,6 +13406,26 @@ test-core: $(COMPILER)
 	# All rows diffed against gcc.
 	./$(COMPILER) test/c_crtl_rtnetlink.c $(TESTTMP)/c_rtnl26
 	tools/expect_same.sh c_rtnl26 "$$($(TESTTMP)/c_rtnl26)" "$$(printf '1 12 4 16 8 12\n2 24 25 26 | 16 20 28\n3 4 4 9\n4 1 8 4 4\n5 1 2 4 5 15\n6 254 255 0 253\n7 1 2 2 4\n8 1 2 3 | 1 128\n9 1 2 3 | 2 80 40\n10 3 4 7 23\n11 96 200\n12 12 0 | 1 1 15\n13 1 2 | 2 3 3')"
+	# The System V IPC family -- <sys/ipc.h>, <sys/shm.h>, <sys/sem.h>,
+	# <sys/msg.h> -- which is busybox sysklogd's shared-memory ring buffer and
+	# its guarding semaphore set. The rows are BEHAVIOURAL: the layouts were
+	# settled off-line against glibc, and the thing that actually breaks here is
+	# not a sizeof. ROW 5 IS WHY pid_t IS `int': crtl had it as `long', which is
+	# invisible in every prototype and wrong in exactly one place -- a struct --
+	# where it put shm_nattch at offset 88 against glibc's 84. Rows 8-12 are
+	# semop, and they are the rows the i386 run pays for. NOT COVERED, on
+	# purpose: every semctl command taking the fourth `union semun' argument,
+	# because pxx passes an aggregate through `...' as a POINTER to a caller temp
+	# (bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer); the
+	# crtl implementation is correct against the ABI and is not worked around,
+	# and the commands busybox uses -- semop and semctl(IPC_RMID) -- are clear.
+	# ROWS 1-20 ARE BYTE-IDENTICAL TO gcc ON BOTH WIDTHS. Row 21 is the layout
+	# row and its THIRD field is a deliberate divergence: `struct semid_ds' here
+	# is the KERNEL's semid64_ds (88 on x86-64) and glibc's is 104, because crtl
+	# hands the caller's struct straight to the kernel where glibc translates it
+	# field by field inside its own semctl. The other four match glibc.
+	./$(COMPILER) test/c_crtl_sysv_ipc.c $(TESTTMP)/c_sysvipc26
+	tools/expect_same.sh c_sysvipc26 "$$($(TESTTMP)/c_sysvipc26)" "$$(printf '1 512 1024 2048 0\n2 1\n3 1\n4 [shm] 1\n5 0 4096 1\n6 1\n7 1\n8 1\n9 5\n10 1 3\n11 1\n12 1 1\n13 1\n14 1\n15 1\n16 0 1 1\n17 4 7 [msg]\n18 1\n19 1 1\n20 -1\n21 48 112 88 120 6')"
 	# <mtd/mtd-user.h>, <sys/timex.h>, <sys/kd.h>, <linux/capability.h>. Row 1 is
 	# mtd_info_user's LAYOUT: a __u8 then five __u32 then a __u64 is 32 bytes with
 	# two holes, and a transcription that tidied them still compiles -- MEMGETINFO
@@ -15368,6 +15388,21 @@ test-i386: $(COMPILER)
 	# cannot see. Diffed against gcc -m32.
 	./$(COMPILER) --target=i386 test/c_crtl_input_hdreg_i2c_mtio_statvfs.c $(TESTTMP)/test_i386_inhims
 	tools/expect_same.sh i386/inhims "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_inhims)" "$$(printf '1 0 1 2 4 | 1 2 5 8\n2 20 | 0 8 12 16 18\n3 18 16 8000\n4 16 | 0 8 10 12\n5 0 1 2 3 5 | 1 1 1 2\n6 80044501 80084502 80404506 80604521\n7 116 142 0 3 | 10001\n8 8 24 40 16\n9 301 30d 304 31f 31c\n10 321 326 32d 31a | ec ef\n11 512 8 | 20 54 164\n12 701 702 703 706 705 707 720\n13 1 0 | 1 10 400 | 1 1000000\n14 0 1 5 12 13 14 | 20 34\n15 8 28 4 32\n16 40086d01 801c6d02 80046d03 | /dev/tape\n17 72 | 8 32 40 44\n18 0 4096 255 1 1 0')"
+	# Row 21 differs (36 84 64 88 6 against 48 112 88 120 6), which is the
+	# ordinary reason a cross row earns its place. Rows 1-20 do NOT differ, and
+	# they still discriminate -- the exception to `a same-answer cross row saw no
+	# per-target arm', so it is spelled out. i386 HAS NO semop OR
+	# semtimedop SYSCALL: Linux 5.1 gave 32-bit x86 direct numbers for semget,
+	# semctl, shmget, shmctl, shmat, shmdt and the msg* family and NOT for those
+	# two, so rows 8-12 reach the kernel through the ipc() multiplexer's fixed
+	# six-argument shape while the core run makes a direct call. The values are
+	# architecture-independent, so the ARM being taken is invisible in the
+	# output; it was proved by swapping `nsops' and `sops' in the ipc() call,
+	# which turns rows 8-12 into `8 0 / 9 0 / 10 0 0 / 11 0 / 12 1 0'. Getting
+	# that order wrong makes the kernel read a semid out of a count -- a
+	# plausible errno, never a crash. Diffed against gcc -m32.
+	./$(COMPILER) --target=i386 test/c_crtl_sysv_ipc.c $(TESTTMP)/test_i386_sysvipc
+	tools/expect_same.sh i386/sysvipc "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sysvipc)" "$$(printf '1 512 1024 2048 0\n2 1\n3 1\n4 [shm] 1\n5 0 4096 1\n6 1\n7 1\n8 1\n9 5\n10 1 3\n11 1\n12 1 1\n13 1\n14 1\n15 1\n16 0 1 1\n17 4 7 [msg]\n18 1\n19 1 1\n20 -1\n21 36 84 64 88 6')"
 	./$(COMPILER) --target=i386 test/c_crtl_select.c $(TESTTMP)/test_i386_select
 	tools/expect_same.sh i386/select "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
 	./$(COMPILER) --target=i386 test/c_crtl_fallocate.c $(TESTTMP)/test_i386_fallocate

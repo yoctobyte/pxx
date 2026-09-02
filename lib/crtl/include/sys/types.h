@@ -16,7 +16,19 @@ typedef __ssize_t ssize_t;
    and a program that does `p + n' on it must keep compiling. */
 typedef char *caddr_t;
 typedef __time_t time_t;
-typedef long pid_t;
+/* pid_t IS `int', NOT `long', and it does not follow the word size. glibc,
+   POSIX and the kernel all agree -- __kernel_pid_t is `int' on every Linux
+   architecture -- and this said `long' until 2026-09-02 with no comment saying
+   why, which is the tell that it was a default rather than a decision.
+
+   IT ONLY MATTERS IN A STRUCT, which is why it survived: as an argument or a
+   return value the extra four bytes are invisible, and `printf("%d", getpid())'
+   reads the right half of an over-wide vararg slot on a little-endian machine.
+   It was caught by <sys/shm.h>: struct shmid_ds has shm_cpid and shm_lpid, the
+   kernel writes 32 bits into each, and an 8-byte pid_t put shm_nattch four
+   bytes past where shmctl(IPC_STAT) fills it -- measured against glibc,
+   offset 88 against 84 on x86-64. */
+typedef int pid_t;
 typedef unsigned int mode_t;
 typedef unsigned int uid_t;
 typedef unsigned int gid_t;

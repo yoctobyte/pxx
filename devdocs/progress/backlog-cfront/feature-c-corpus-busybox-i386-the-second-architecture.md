@@ -8,7 +8,7 @@ status: open
 created: 2026-09-02
 found-by: frankD
 owner: frankD
-summary: "First attempt, 2026-09-02: 332 of busybox's 400 translation units already become i386 objects, and three pxx i386 objects link with `gcc -m32` and run. The 68 failures have exactly two causes and neither is about i386 codegen. 64 are crtl HEADER gaps -- 34 distinct headers, led by regex.h (7 TUs), netinet/udp.h (7), linux/fs.h (6), sched.h (5) -- that the x86-64 build never had to face because pxx falls back to the host's /usr/include there and a cross target rightly cannot. 4 are inline asm: the AT&T reader is x86-64 only and one arm needs an earlyclobber constraint. This ticket is the header set; the asm is its own."
+summary: "32 OF THE 34 HEADERS ARE IN, and the two that are left are the two that were never headers: regex.h (7 TUs) and resolv.h (1), both filed as their own tickets because they want an IMPLEMENTATION. First attempt, 2026-09-02: 332 of busybox's 400 translation units became i386 objects and three pxx i386 objects linked with `gcc -m32` and ran. Of the 68 refusals, 64 were crtl HEADER gaps across 34 distinct headers -- invisible on x86-64, where pxx falls back to the host's /usr/include and a cross target rightly cannot -- and 4 were inline asm, which is the AT&T reader's ticket, not this one. Landed since in four commits: eac7126f1 (15 headers), 037e38c64 (8 + statvfs over statfs), 0baec7bad (the rtnetlink family, 3.3k lines transcribed whole), and the SysV IPC family. A CLEAN RE-SWEEP IS OWED and the 332 above is the only number in this ticket that was measured: the counts quoted mid-session (358, 367) were taken while headers were being edited under the sweep and are withdrawn."
 ---
 
 # The second architecture, and what the first one was borrowing
@@ -81,6 +81,29 @@ The 34 headers, by how many translation units each one stops:
 it should be its own ticket the moment anyone starts it. Most of the rest are
 structs, ioctl numbers and constants.
 
+### 2026-09-02, later the same day — 32 of the 34 are in
+
+Every header in the table above now exists under `lib/crtl/include/` except
+**`regex.h`** and **`resolv.h`**, and those two were always the odd ones out:
+they want an implementation, not a transcription, and each has its own ticket
+(`feature-c-crtl-posix-regex-regcomp-regexec`,
+`feature-c-crtl-resolv-h-and-the-ns-parser`). That is a filesystem fact, checked
+by looking; **it is not a claim that the 64 TUs now compile** — the re-sweep
+that would say so has not been run against a quiet tree yet, and the two
+mid-session numbers that were quoted (358, then 367 of 396) were measured while
+headers were being edited underneath the sweep. They are withdrawn rather than
+corrected: a contaminated count is not a smaller true count.
+
+One thing the header work turned up that is NOT a header: `semctl`'s fourth
+argument. crtl's implementation reads the `union semun` slot the way glibc and
+musl do, and pxx puts a POINTER to a caller temp there for any aggregate passed
+through `...`. It is filed as
+`bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer` and is not
+worked around here. It does not block any TU from compiling, and the two
+applets that would hit it at runtime (`ipcs`, `ipcrm`) are not in the harness's
+applet list; `syslogd` and `logread`, which are, use only `semop` and
+`semctl(IPC_RMID)` and are unaffected.
+
 ## The other 4
 
 `networking/tls_pstm_mul_comba.c`, `tls_pstm_sqr_comba.c` and `tls_sp_c32.c`
@@ -92,10 +115,14 @@ a target and a constraint it does not cover yet. Not this ticket.
 
 ## The harness
 
-`tools/busybox_diff.sh --separate` needs the per-target linker (`gcc` for
-x86-64, `gcc -m32` for i386) and a refusal that distinguishes *no object
-writer* from *no linker or runner on this host* — riscv32 has a writer and no
-linker here, and one message for both reasons is how the first sentence went
-stale. The comparison itself needs no change: every target is already compared
+**Done, 2026-09-02.** `tools/busybox_diff.sh --separate` no longer names any
+target: `sep_probe` asks the tools three independent questions per target —
+can pxx emit an object for it, does a linker HERE link that object, does the
+result run HERE — and each failure gets its own sentence. Measured on this box:
+x86_64 `gcc`, i386 `gcc -m32`, riscv32 stops at the linker (it has a writer),
+aarch64/arm32 stop at the writer, and **xtensa is named in the compiler's own
+`supported:` list and stops at the compiler anyway**, on *"prologue slot
+zero-init not implemented"* — which is precisely why the question is now asked
+of the compiler instead of a list of target names. The comparison itself needs no change: every target is already compared
 against the x86-64 gcc transcript, because busybox's observable behaviour in
 these cases is not architecture-dependent.

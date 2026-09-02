@@ -1044,6 +1044,54 @@ else
   printf '  note    no separately-linked busybox in the tree; gcc unity is the only oracle\n'
 fi
 
+# ---- --separate: what this HOST can actually do, per target -------------------
+# THE OLD REFUSAL WAS ONE SENTENCE FOR THREE DIFFERENT FACTS -- "--emit-obj has
+# no object writer for this target" -- and it was false for two of the four
+# targets it printed it for, which is the third time that same list has gone
+# stale in a message. So this asks the tools instead of naming them. Three
+# INDEPENDENT questions, and a target has to answer all three:
+#
+#   1. can pxx emit an object for it?      measured by emitting one
+#   2. is there a linker HERE that links   measured by linking that object
+#      that object?
+#   3. does the result run HERE?           measured by running it
+#
+# Measured 2026-09-02 on this box: x86_64 and i386 answer yes to all three.
+# riscv32 HAS an object writer and there is no riscv linker installed, so it
+# stops at 2 -- a different sentence from aarch64/arm32, which stop at 1. And
+# xtensa is named in the compiler's own "supported:" list and stops at 1 anyway,
+# on `prologue slot zero-init not implemented' -- which is exactly why the
+# question is asked of the compiler and not of a list of target names.
+#
+# The linker CANDIDATES are the one thing that must be spelled out (you cannot
+# probe for a command you cannot name), but nothing is believed: each is tried
+# against a real object for that target and the first that links AND runs wins.
+sep_probe() {
+  spt="$1"
+  SEP_LD=""; SEP_WHY=""
+  if [ "$spt" = "x86_64" ]; then sptf=""; sprun=""
+  else sptf="--target=$spt"; sprun="$ROOT/tools/run_target.sh $spt"; fi
+  printf 'int main(void){return 0;}\n' > "$WORK/sepprobe.c"
+  if ! "$COMPILER" --emit-obj $sptf "$WORK/sepprobe.c" "$WORK/sepprobe_$spt.o" \
+       > "$WORK/sepprobe_$spt.log" 2>&1; then
+    SEP_WHY="pxx cannot emit an object for it: $(grep -a -E 'error:' "$WORK/sepprobe_$spt.log" | head -1)"
+    return 1
+  fi
+  for spld in "gcc" "gcc -m32" "$spt-linux-gnu-gcc" "$spt-linux-gcc"; do
+    command -v "${spld%% *}" >/dev/null 2>&1 || continue
+    $spld -o "$WORK/sepprobe_$spt.bin" "$WORK/sepprobe_$spt.o" \
+      >> "$WORK/sepprobe_$spt.log" 2>&1 || continue
+    # Linking is not enough: a linker that accepts the object and produces
+    # something this host cannot execute leaves the run half failing later,
+    # far from its cause.
+    $sprun "$WORK/sepprobe_$spt.bin" >> "$WORK/sepprobe_$spt.log" 2>&1 || continue
+    SEP_LD="$spld"
+    return 0
+  done
+  SEP_WHY="pxx emits objects for it, but no linker on THIS host links and runs one (tried: gcc, gcc -m32, $spt-linux-gnu-gcc, $spt-linux-gcc)"
+  return 1
+}
+
 # ---- subjects ---------------------------------------------------------------
 for t in $TARGETS; do
   out="$WORK/pxx_$t"
@@ -1051,8 +1099,8 @@ for t in $TARGETS; do
   else targflag="--target=$t"; runner="$ROOT/tools/run_target.sh $t"; fi
 
   if [ "$SEPARATE" -eq 1 ]; then
-    if [ "$t" != "x86_64" ]; then
-      printf '  note    %-8s skipped: --emit-obj has no object writer for this target\n' "$t"
+    if ! sep_probe "$t"; then
+      printf '  note    %-8s skipped: %s\n' "$t" "$SEP_WHY"
       continue
     fi
     rm -rf "$WORK/obj"; mkdir -p "$WORK/obj" "$WORK/tu"
@@ -1092,7 +1140,7 @@ for t in $TARGETS; do
     # cases, so the count is asserted rather than printed.
     nobj=$(ls "$WORK/obj"/*.o 2>/dev/null | wc -l)
     [ "$nobj" -gt 1 ] || die "separate mode produced $nobj object(s) -- there is nothing here that a unity build would not also prove"
-    if ! gcc -o "$out" "$WORK/obj"/*.o >> "$WORK/build_$t.log" 2>&1; then
+    if ! $SEP_LD -o "$out" "$WORK/obj"/*.o >> "$WORK/build_$t.log" 2>&1; then
       printf '  FAIL    %-8s %d objects did not link\n' "$t" "$nobj"
       # Two failure modes, not one. Grepping only for `undefined reference'
       # printed NOTHING for a link that died on multiple definitions -- the
@@ -1114,8 +1162,8 @@ for t in $TARGETS; do
     # crtl-per-object ticket is ranked on and `--dce' moves it by a factor. A
     # size reported without the flags that produced it is not comparable to the
     # next one anybody takes.
-    printf '  note    %-8s %d objects linked separately (%d bytes, per-TU flags: --emit-obj%s)\n' \
-      "$t" "$nobj" "$(stat -c%s "$out")" "${OBJFLAGS:+ $OBJFLAGS}"
+    printf '  note    %-8s %d objects linked separately with `%s` (%d bytes, per-TU flags: --emit-obj%s)\n' \
+      "$t" "$nobj" "$SEP_LD" "$(stat -c%s "$out")" "${OBJFLAGS:+ $OBJFLAGS}"
   elif ! ( cd "$BB" && "$COMPILER" $targflag $INC "$UNITY" "$out" ) > "$WORK/build_$t.log" 2>&1; then
     printf '  FAIL    %-8s pxx could not build the unity\n' "$t"
     grep -v '^ok:' "$WORK/build_$t.log" | head -10
