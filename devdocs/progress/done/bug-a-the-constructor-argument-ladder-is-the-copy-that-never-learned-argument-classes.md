@@ -8,7 +8,7 @@ created: 2026-09-02
 found: 2026-09-02
 found-by: frankC
 owner: frankC
-commit: PENDING-COMMIT
+commit: 093b50c05
 blocked-by: []
 summary: "Every 32-bit backend's class-instantiation arm pushed ONE WORD PER ARGUMENT, so an Int64, Double or 5..8 byte record constructor parameter lost its high word and shifted every parameter after it. i386 SEGFAULTED on all three (the reload of Self read an argument instead of the instance); arm32 and xtensa answered wrong values. arm32 additionally refused any constructor over four parameter words and riscv32 over eight. FIXED on all four: the ctor ladder now asks Arg32Class like the direct, virtual and indirect ones, and the over-the-register-boundary case keeps the overflow on the stack across the call the way those paths already do."
 ---
