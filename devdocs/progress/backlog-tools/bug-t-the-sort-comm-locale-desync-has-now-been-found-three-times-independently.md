@@ -60,7 +60,7 @@ the three; the point is that the fourth caller should not be able to write it.
 **Not filed as a fix because all three sites are already correct** — this is
 preventive and belongs to whoever owns the tooling's shared shell conventions.
 
-Related: [[bug-c-busybox-mv-treats-an-existing-plain-file-destination-as-a-directory-on-i386]]
+Related: [[bug-a-i386-a-pointer-is-register-and-memory-resident-at-once-across-a-goto-entered-loop]] (RENAMED from `bug-c-busybox-mv-treats-an-existing-plain-file-destination-as-a-directory-on-i386` and re-laned C to A on 2026-09-02 in `fbe1e7809`, once the mv symptom was traced to i386 register allocation; this link was written against the old slug)
 was re-laned away from this class after measurement; that ticket's history is
 an example of the same "instrument answering about something else" family, not
 an instance of this bug.
