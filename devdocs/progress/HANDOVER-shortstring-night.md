@@ -183,6 +183,17 @@ ticketed:
 `bug-a-comparing-a-frozen-record-field-to-a-literal-crashes-or-answers-false`
 and `bug-a-indexing-a-frozen-string-through-a-pointer-deref-reads-the-wrong-byte`.
 
+**The deref one may be landing, and its SLUG may understate it.** frankb-a9 holds
+`f9104a0cb` (22:01), *"indexing a frozen string through a pointer deref read AND
+WROTE the wrong byte"* — **committed in its checkout and not yet on origin when I
+wrote this, so it is a subject line I read, not a fix I measured.** Every
+description in this file, and the ticket slug itself, says *reads*; if the write
+side is real then this is a silent-corruption path and not a display bug, which
+is a different severity. **I have deliberately not rewritten the sections above
+from a commit subject** — frankb-a9 owns the correction and has been asked for
+one line in its own words. Treat the read-only framing as unconfirmed, not as
+established. The FIELD compare still segfaults (exit 139) at `bc0307b4e`.
+
 One population note that was resolved along the way: **riscv32 IS in the
 population.** The "riscv32 refuses the flag" figure was TRUE when measured and
 expired when riscv32 was converted — settled by the origin retracting its own
