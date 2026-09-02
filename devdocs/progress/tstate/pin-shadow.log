@@ -463,3 +463,4 @@
 2026-09-02T16:04:07Z	seven	08f7de0715a8a9cf5f2e739231b7ac7d2b18177f	would NOT pin 08f7de0715a8 — 1 red(s) the current pin does not have, 1 inherited from the current pin: test-threads#src:test/test_nilpy_thread_clone.npy
 2026-09-02T16:41:48Z	seven	662c65d29ff4558cd02461326fe5e7dbe0e6b945	would NOT pin 662c65d29ff4 — 1 red(s) the current pin does not have, 1 inherited from the current pin: test-core#src:test/test_sizeof_user_name_shadows_builtin.pas
 2026-09-02T17:10:08Z	seven	9ff7a582e01cb462064e86a5b3d3a283ed14988b	would NOT pin 9ff7a582e01c — 2 red(s) the current pin does not have, 1 inherited from the current pin: test-core#src:test/test_sizeof_user_name_shadows_builtin.pas, test-threads#src:test/test_nilpy_thread_clone.npy
+2026-09-02T17:28:53Z	seven	72184098b6146a34a5383bbfc54ec8a1a8590590	would NOT pin 72184098b614 — 1 red(s) the current pin does not have, 1 inherited from the current pin: test-core#src:test/test_sizeof_user_name_shadows_builtin.pas
