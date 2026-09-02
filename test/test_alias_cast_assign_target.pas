@@ -17,7 +17,18 @@ program test_alias_cast_assign_target;
 
   The POINTER-alias rows are the other side of the same guard: those genuinely
   ARE pointer casts and must keep using the walk, including the suffixed
-  spellings, which is what the new tkAssign condition leaves alone. }
+  spellings, which is what the new tkAssign condition leaves alone.
+
+  THE SETLENGTH ROWS (2026-09-02) are the same concept reached through a fourth
+  door: `SetLength(TS(s), n)` means `SetLength(s, n)`, because a cast to a string
+  type is a value-level no-op and there is nothing for a resize to reinterpret.
+  All three spellings used to fail, each differently -- the BUILTIN one died at
+  parse time (`undefined variable (AnsiString)`) and both alias ones reached IR
+  codegen and died there (`SetLength expects a string variable`), because that
+  lowering wants an IR_LEA and a cast node is not one. The control for that group is
+  test_setlength_cast_refusal.pas -- an INT alias cast must still be REFUSED, so
+  the drop is scoped to string TYPES rather than to casts. It lives in its own
+  file because what it asserts is a compile-time refusal. }
 
 type
   TI = Integer;
@@ -27,11 +38,15 @@ type
   PRec = ^TRec;
   TArr = array[0..3] of Integer;
   PArr = ^TArr;
+  TFz = String[20];
+  TSRec = record f: TS; end;
+  PSRec = ^TSRec;
 
 var
   bad: Integer;
   i: Integer; c: Char; s: AnsiString;
   r: TRec; pr: PRec; a: TArr; pa: PArr;
+  fz: TFz; sr: TSRec; psr: PSRec;
 
 procedure Chk(const name, got, want: AnsiString);
 begin
@@ -61,6 +76,14 @@ begin
   ChkI('str-alias-4-len', Length(s), 4);
   { assigning a VARIABLE, not a literal: the refcount path, not the constant one }
   s := 'abc'; TS(s) := c + 'k';  Chk ('str-alias-var', s, 'qk');
+
+  { SETLENGTH through a string-type cast -- the fourth spelling of the no-op }
+  s := 'abc';   SetLength(TS(s), 2);          Chk ('set-alias',      s, 'ab');
+  ChkI('set-alias-len', Length(s), 2);
+  s := 'abc';   SetLength(AnsiString(s), 1);  Chk ('set-builtin',    s, 'a');
+  sr.f := 'hello'; psr := @sr;
+  SetLength(TS(psr^.f), 3);                   Chk ('set-alias-fld',  sr.f, 'hel');
+  fz := 'hello'; SetLength(TFz(fz), 4);       Chk ('set-frozen',     fz, 'hell');
 
   { POINTER aliases must still take the pointer walk, suffixes and all }
   r.a := 0; r.b := 0; pr := @r;

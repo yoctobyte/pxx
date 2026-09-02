@@ -5454,6 +5454,17 @@ test-core: $(COMPILER)
 	# compiles, prints the int and char rows, and then dies on the string row.
 	./$(COMPILER) test/test_alias_cast_assign_target.pas $(TESTTMP)/test_aliascast26
 	tools/expect_same.sh test_aliascast26 "$$($(TESTTMP)/test_aliascast26 | tail -n 1)" "ALIAS CAST TARGET OK"
+	# ...and the CONTROL for that file's SetLength rows: the cast-drop is scoped to
+	# string TYPES, so an INT alias cast must still be refused. Greps for the
+	# diagnostic, not just a nonzero exit -- a file can fail to compile for a
+	# hundred reasons and only one of them is this one.
+	@if ./$(COMPILER) test/test_setlength_cast_refusal.pas $(TESTTMP)/test_slcastref26 2>&1 \
+	     | grep -q 'SetLength expects a string variable'; then \
+	  echo "ok: test_setlength_cast_refusal (int alias cast still refused)"; \
+	else \
+	  echo "FAIL: SetLength(TI(i), n) is no longer refused -- the cast-drop widened past string types"; \
+	  exit 1; \
+	fi
 	# ...and the INDEXED spelling of the same cast, read and written, for every
 	# string flavour a named alias can have. The index used to be DROPPED (not
 	# misparsed) so the expression silently answered the whole string; the

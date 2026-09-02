@@ -4691,6 +4691,8 @@ var
   nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
   isLn, slIsArrTarget, slIsDynArr, frDot: Boolean;
+  slCastDrop: Boolean;   { SetLength(TS(s), n): a STRING-typed cast around the target, dropped rather than reinterpreted }
+  slCastTk: TTypeKind;   { ...and the kind that decided it }
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
   aliasIdx, fieldNode, indexNode, castPrevTok, qUnit: Integer;
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
@@ -5732,6 +5734,39 @@ begin
           `SetLength` shadows this, and a plain variable named
           `setlength`/`SetLength` not followed by `(` is not the intrinsic. }
         Next; Expect(tkLParen, '(');
+        { `SetLength(TS(s), n)` where TS names a STRING type is `SetLength(s, n)`
+          -- the cast conveys nothing a resize can use, and the target underneath
+          it is an ordinary lvalue this arm already handles. Without this the
+          name went to FindVarSym, missed, and the three spellings failed three
+          different ways: the BUILTIN one (`SetLength(AnsiString(s), 7)`) died at
+          parse time with `undefined variable (AnsiString)`, while both alias
+          spellings reached IR codegen and died there with `SetLength expects a
+          string variable`, because the lowering wants an IR_LEA and a cast node
+          is not one. fpc 3.2.2 accepts all three.
+
+          This is the FOURTH spelling of one concept -- a cast to a string type
+          is a value-level no-op and must be transparent to whatever follows --
+          after the rvalue index, the assignment target and the indexed
+          assignment target. It is dropped rather than reinterpreted for the same
+          reason those are, and the same reason `SetLength(p^.s, n)` has always
+          worked: there is nothing to reinterpret.
+
+          Scoped to STRING types, which is what was measured. An array-typed
+          alias cast is a different question with no evidence behind it yet, and
+          it still reaches the error below rather than being quietly accepted.
+          uPSCompiler.pas:2753, the last of feature-embed-pascal-script's three
+          walls. }
+        slCastDrop := False;
+        if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkLParen) and
+           (FindVarSym(CurTok.SVal) < 0) then
+        begin
+          i := FindTypeAlias(CurTok.SVal);
+          if i >= 0 then slCastTk := IntToTypeKind(AliasTk[i])
+          else slCastTk := BuiltinTypeNameTk(CurTok.SVal);
+          slCastDrop := (slCastTk = tyAnsiString) or (slCastTk = tyString) or
+                        TypeIsFrozenString(slCastTk);
+        end;
+        if slCastDrop then begin Next; Expect(tkLParen, '('); end;
         if CurTok.Kind <> tkIdent then Error('SetLength: expected string or array variable');
         { Bare function name as the SetLength target = the result var (FPC: `F`
           synonym for `Result`), so `SetLength(F, n)` works like `SetLength(Result,
@@ -5750,6 +5785,7 @@ begin
           idx := FindVarSym(CurTok.SVal);
         identTokIdx := TokPos - 1; Next;
         valNode := ParseLValueAST(idx, identTokIdx);
+        if slCastDrop then Expect(tkRParen, ')');   { the string cast's own ')' }
         { The symbol the lvalue actually DENOTES, which is not always the one the
           name lookup above found. A QUALIFIED class var (`TC.V`) arrives with
           idx = -1 -- the lookup saw the CLASS name, not the member -- and the
