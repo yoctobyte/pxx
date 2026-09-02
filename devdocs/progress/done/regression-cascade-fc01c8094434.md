@@ -179,4 +179,4 @@ cascade filing gets no bisect, so it can only ever be closed by someone
 re-running it. That is Track T's to decide on, and it is not a regression.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 99cb3b1e8.

@@ -146,4 +146,4 @@ as a coverage question; it is not a regression and does not belong on this
 umbrella.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 56966df25.
