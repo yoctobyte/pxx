@@ -3675,6 +3675,10 @@ var
   guardIdx: Integer;   { CompiledUnitKey — see the note at its assignment }
   gPath: AnsiString;   { …the normalised path a path-form reference keys on }
   realIdx: Integer;    { alias-resolved unit for the already-compiled edge }
+  { True when the compiler INJECTED this `uses`, not the source. Captured at
+    the ambience site below, because UsesInjected is cleared there and the
+    file search that needs the answer runs several hundred lines later. }
+  isAmbientLoad: Boolean;
   { The RESOLVED FILE key, and the already-compiled entry holding it — what
     makes one file one unit however it was spelled. }
   pyFileIdx, pyDupIdx: Integer;
@@ -3820,6 +3824,7 @@ begin
   aliasEdgeIdx := FindUnitOrAlias(Strs[strIdx].Text);
   if (aliasEdgeIdx >= 0) and (aliasEdgeIdx <> strIdx) then
     RecordUsesEdge(CurrentUnitIdx, aliasEdgeIdx, InInterface);
+  isAmbientLoad := UsesInjected or UnitIsAmbient(CurrentUnitIdx);
   if UsesInjected then
   begin
     MarkUnitAmbient(strIdx);
@@ -4125,23 +4130,46 @@ begin
       LoadFileCI(path, UnitContent);
     end;
   end;
-  if Length(UnitContent) = 0 then
+  { The user's own source directory — for a unit the USER named, and only then.
+    A compiler-INJECTED `uses` must never bind here: the program did not ask for
+    builtinheap, so a file of that name sitting beside it is not an override, it
+    is a collision, and the compiler would silently swap its own runtime for it.
+    Measured 2026-09-02: an empty `unit builtinheap; interface implementation
+    end.` next to a five-line hello program takes over, and a STALE but valid
+    copy is the dangerous shape — it compiles, and every measurement afterwards
+    reads as "my change to the RTL did nothing". That cost a session most of an
+    afternoon; strace showed the openat and nothing else could.
+
+    The .c/.h probes in this same group take the guard too, and not on
+    principle: with only the Pascal probes guarded, a `builtinheap.c` of one
+    line beside the same program still took over (`unresolved forward:
+    PXXStrFromLit in lib/rtl/pxxcio.pas`). Every name reachable this way is an
+    RTL unit the compiler injects -- builtinheap, builtin, math, textfile,
+    pxxcio, softfloat, pylib, promocore, palthreadobj -- and `math` or
+    `textfile` beside a user's program is not a far-fetched filename.
+
+    Deliberately NOT extended to the -Fu roots below: an explicit -Fu override
+    of an RTL unit is a supported mechanism and test/aintostr_units relies on it
+    (its builtinheap.pas is a documented impostor whose whole job is to reach a
+    compiler diagnostic). The difference is that -Fu is something the user
+    typed and a file lying in a directory is not. }
+  if (Length(UnitContent) = 0) and (not isAmbientLoad) then
   begin
     ConcatThree(SourceFileDir, lo, '.pas', path);
     LoadFileCI(path, UnitContent);
   end;
-  if Length(UnitContent) = 0 then
+  if (Length(UnitContent) = 0) and (not isAmbientLoad) then
   begin
     ConcatThree(SourceFileDir, lo, '.pp', path);
     LoadFileCI(path, UnitContent);
   end;
-  if Length(UnitContent) = 0 then
+  if (Length(UnitContent) = 0) and (not isAmbientLoad) then
   begin
     ConcatThree(SourceFileDir, cName, '.c', path);
     LoadFile(path, UnitContent);
     if Length(UnitContent) > 0 then isCUnit := True;
   end;
-  if Length(UnitContent) = 0 then
+  if (Length(UnitContent) = 0) and (not isAmbientLoad) then
   begin
     ConcatThree(SourceFileDir, cName, '.h', path);
     LoadFile(path, UnitContent);

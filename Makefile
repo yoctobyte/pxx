@@ -7527,6 +7527,20 @@ test-core: $(COMPILER)
 	@# is the impostor unit doing its job and not something about this program.
 	./$(COMPILER) test/test_aintostr_negative.pas $(TESTTMP)/test_aintostr_ok26
 	tools/expect_same.sh test_aintostr_ok26 "$$($(TESTTMP)/test_aintostr_ok26)" "ok"
+	@# ...and the MIRROR of that impostor: a unit the compiler INJECTS must never
+	@# bind to a file that merely lies beside the program. test/ambient_shadow_units
+	@# holds an empty builtinheap.pas AND an empty math.pas next to prog.pas, which
+	@# names neither -- `builtinheap` is injected by pasparser_prog.inc, and `math`
+	@# is injected because the token stream contains Sqrt(. Until 2026-09-02 the
+	@# SourceFileDir probe ran for injected units too and both impostors won.
+	@# RUN POSITIVE CONTROL, measured 2026-09-02: the v400 pin compiles this exact
+	@# program correctly with the impostors ABSENT and fails with them present, so
+	@# the row can fail and it fails for this reason. The third line is the other
+	@# direction -- prog.pas NAMES realunit, which must still bind from that same
+	@# directory, so a guard that skipped SourceFileDir for every unit rather than
+	@# for injected ones fails here and nowhere else.
+	./$(COMPILER) test/ambient_shadow_units/prog.pas $(TESTTMP)/test_ambient_shadow26
+	tools/expect_same.sh test_ambient_shadow26 "$$($(TESTTMP)/test_ambient_shadow26)" "$$(printf 'hello world\n4.0\n42')"
 	@# Diagnostics have to say WHERE. Until 2026-08-21 a line number after a
 	@# {$$I} include was an offset into the include-EXPANDED text and named no
 	@# real line of any file — measured on FPC's own tree, an error at
