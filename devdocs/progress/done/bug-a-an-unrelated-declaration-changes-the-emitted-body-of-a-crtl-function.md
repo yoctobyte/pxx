@@ -170,4 +170,4 @@ That does not restore the premise — it says one measured counterexample has be
 removed, and the premise still needs establishing rather than assuming.
 
 ## Log
-- 2026-09-02 — resolved, commit PENDING-COMMIT.
+- 2026-09-02 — resolved, commit cf4281b6a.
