@@ -42,16 +42,50 @@ a **one-line call**:
 
 | backend | line | what it does |
 | --- | --- | --- |
-| x86-64 | `ir_codegen.inc:6076` | `IREmitStoreCharAsString`  { rsi = char ordinal -> [len=1][char] } |
-| i386 | `ir_codegen386.inc:4066` | `Error('... not yet supported')` |
-| aarch64 | `ir_codegen_aarch64.inc:3537` | `Error('... not yet supported')` |
-| arm32 | `ir_codegen_arm32.inc:3467` | `Error('... not yet supported')` |
+| x86-64 | `ir_codegen.inc:7509` | `IREmitStoreCharAsString`  { rsi = char ordinal -> [len=1][char] } |
+| i386 | `ir_codegen386.inc:4466` | `Error('... not yet supported')` |
+| aarch64 | `ir_codegen_aarch64.inc:3994` | `Error('... not yet supported')` |
+| arm32 | `ir_codegen_arm32.inc:3778` | `Error('... not yet supported')` |
 
 The two neighbouring arms (`tyAnsiString` source, and the general inline->inline
 copy) ARE implemented on all four backends, so this is one missing case in an
 otherwise-complete lowering, not a missing feature. Write the length word as 1,
 then the char byte, at the destination the arm has already computed — the
 aarch64 arm has the dest in `x6` and the source in `x5` before it raises.
+
+**Line numbers re-measured 2026-09-02 at `f74d2f851`** — the four filed on
+08-30 had each drifted 400-460 lines and none of them errored; they pointed
+somewhere. Anchor on the diagnostic string, which is unique:
+`grep -rn 'char-to-inline-string store through pointer' compiler/*.inc`.
+
+## The reference to copy is in the SAME FILE, not on riscv32
+
+Each of the three refusing backends **already emits this exact sequence** for
+the `IR_STORE_SYM` form (plain `s := c`), with the destination and source in
+the same registers the refusing arm has already loaded:
+
+| backend | working arm (`s := c`) | refusing arm (`p^ := c`) |
+| --- | --- | --- |
+| i386 | `ir_codegen386.inc:1900` | `:4466` |
+| aarch64 | `ir_codegen_aarch64.inc:1918` | `:3994` |
+| arm32 | `ir_codegen_arm32.inc:1671` | `:3778` |
+
+i386's working arm is six `EmitB` lines writing `[len=1][0][char]` to `edi`
+from `esi`; the refusal site two thousand lines below has already done
+`mov edi, eax` / `pop esi`. So this is a same-file, same-target, same-register
+transplant per backend — not new codegen against a foreign reference.
+
+**x86-64 has the `tyChar` arm in BOTH paths** (`IR_STORE_SYM` at
+`ir_codegen.inc:7010`, `IR_STORE_MEM` at `:7509`); the other three have it in
+`IR_STORE_SYM` only. That asymmetry is the whole bug, and it is the
+`normalise-dont-special-case` shape: one concept, two lowering sites, the
+second one left behind. Confirm `p^.s := ch` (record field through a pointer,
+the unrecorded sibling) lands on this same `IR_STORE_MEM` arm before closing —
+if it does, one edit per backend covers both; if it takes a third path, that
+path needs the same transplant and the ticket is not done without it.
+
+Verified by inspection only (grep + read at `f74d2f851`); no build was run for
+this note.
 
 ## Why this is worth the ~4 instructions per backend
 
