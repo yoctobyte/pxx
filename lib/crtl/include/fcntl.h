@@ -63,4 +63,24 @@ extern int fcntl(int fd, int cmd, ...);
 #define AT_SYMLINK_FOLLOW     0x400
 #define AT_EMPTY_PATH         0x1000
 
+/* fallocate(2) modes. Only the two busybox names are here; the rest of the
+   kernel's set is deliberately absent, because a constant that no call site
+   passes is a promise this runtime has not been asked to keep. */
+#define FALLOC_FL_KEEP_SIZE   0x01
+#define FALLOC_FL_PUNCH_HOLE  0x02
+
+/* posix_fallocate(3) RETURNS THE ERROR NUMBER AND DOES NOT SET errno. That is
+   not a quirk of this implementation; it is what POSIX specifies, and busybox
+   writes `if ((errno = posix_fallocate(fd, ofs, len)) != 0)' precisely because
+   of it. An implementation that returned -1 and set errno would make that line
+   assign -1 to errno and report "Unknown error -1" for every failure -- and
+   would look right in every diff.
+
+   fallocate(2) is the Linux call underneath and keeps the ordinary -1/errno
+   convention. Two functions, two conventions, one syscall; the divergence is
+   the reason both are declared here rather than one being written in terms of
+   the other at a call site. */
+extern int posix_fallocate(int fd, off_t offset, off_t len);
+extern int fallocate(int fd, int mode, off_t offset, off_t len);
+
 #endif

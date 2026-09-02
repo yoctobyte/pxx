@@ -1033,18 +1033,38 @@ for t in $TARGETS; do
       printf '  note    %-8s skipped: --emit-obj has no object writer for this target\n' "$t"
       continue
     fi
-    rm -rf "$WORK/obj"; mkdir -p "$WORK/obj"
+    rm -rf "$WORK/obj"; mkdir -p "$WORK/obj" "$WORK/tu"
     nobj=0; objfail=0
     while read -r src; do
       tag="$(printf '%s' "$src" | tr / _ | sed 's/\.c$//')"
+      # Each compile gets its OWN log, and the shared one is built by appending
+      # them. The previous version compiled into the shared log and reported
+      # `grep error: | tail -1' over the whole thing -- which is not this file's
+      # error, it is the most recent error ANY file produced, and it silently
+      # becomes a previous file's error the moment this compile's message is not
+      # matched. Measured 2026-09-02 at 400 TUs: six FAIL lines (httpd.c,
+      # telnetd.c, tls_sp_c32.c, dhcpc.c, fallocate.c, switch_root.c) all carried
+      # bc.c's `zbc_parse_stmt_allow_NLINE_before' error, and the four real
+      # causes (inline asm, a >256-byte local string array, statfs, tcsetpgrp)
+      # appeared nowhere against a filename. Reading that report, you fix bc.c
+      # seven times.
       if ( cd "$BB" && "$COMPILER" --emit-obj $INC "$WORK/wrap/$tag.c" "$WORK/obj/$tag.o" ) \
-           >> "$WORK/build_$t.log" 2>&1; then
+           > "$WORK/tu/$tag.log" 2>&1; then
         nobj=$((nobj+1))
       else
         objfail=$((objfail+1))
-        printf '  FAIL    %-8s %s did not become an object: %s\n' "$t" "$src" \
-               "$(grep -E 'error:' "$WORK/build_$t.log" | tail -1)"
+        # -a because a build log holds compiler output and one bad byte makes
+        # grep answer `binary file matches' and print nothing -- the same loud
+        # failure that looks like a result as in the link block below.
+        why="$(grep -a -E 'error:' "$WORK/tu/$tag.log" | head -1)"
+        # An empty `why' is a REPORT, not a blank: a compile that failed without
+        # an error: line means the compiler died some other way (a signal, an
+        # assertion), and printing nothing after the colon reads as if the tool
+        # had nothing to say rather than as the finding it is.
+        [ -n "$why" ] || why="(no error: line -- exit was nonzero, see $WORK/tu/$tag.log)"
+        printf '  FAIL    %-8s %s did not become an object: %s\n' "$t" "$src" "$why"
       fi
+      cat "$WORK/tu/$tag.log" >> "$WORK/build_$t.log"
     done < "$WORK/tulist.txt"
     # A link over zero objects is the same silent success as a diff over zero
     # cases, so the count is asserted rather than printed.

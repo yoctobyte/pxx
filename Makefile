@@ -12807,6 +12807,50 @@ test-core: $(COMPILER)
 	# All rows diffed against gcc.
 	./$(COMPILER) test/c_crtl_tzset_getopt_long.c $(TESTTMP)/c_tzgetopt26
 	tools/expect_same.sh c_tzgetopt26 "$$($(TESTTMP)/c_tzgetopt26)" "$$(printf '1 UTC UTC 0 0\n2 0 0\n3 UTC\n4 1\n5 1 1\n6 1\n7 0 - 7\n7 97 - 7\n7 98 X 7\n7 67 - 7\n8 operand\n9 a -\n9 b Y')"
+	# Found the same way, in the same 258-applet run: getty.c calls tcsetpgrp and
+	# switch_root.c calls statfs, and neither existed. Both move their payload
+	# through a POINTER in both directions, so the spelling that looks right --
+	# passing the pgrp by value, or `(void *)(long)pgrp' -- hands the kernel an
+	# address; the tty rows run on a PIPE and assert ENOTTY, which is the answer
+	# that says the ioctl was assembled correctly and refused for the right
+	# reason. Row 3 uses a bad fd so that an implementation returning -1/ENOTTY
+	# for everything fails somewhere.
+	# The statfs rows compare only what the kernel GUARANTEES between fields, not
+	# the machine's numbers, because a struct whose fields land at the wrong
+	# offsets breaks every one of those relations at once. The layout itself was
+	# settled separately against glibc (sizeof + every offsetof, both widths) --
+	# see lib/crtl/include/sys/statfs.h, whose comment used to claim the opposite.
+	# Row 7 is the row that found the real bug: crtl has TWO error conventions
+	# and they look identical at the call site. The PAL entries return -errno;
+	# syscall() has already translated and returns -1 with errno set. Applying
+	# the PAL idiom to syscall() overwrote ENOENT with EPERM, and rows 1-6 all
+	# passed while it did.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_tcpgrp_statfs.c $(TESTTMP)/c_tcpgrp26
+	tools/expect_same.sh c_tcpgrp26 "$$($(TESTTMP)/c_tcpgrp26)" "$$(printf '1 1 1\n2 -1 1\n3 1 1\n4 1 1 1\n5 1\n6 1 1\n7 -1 1')"
+	# select(2), found the same way -- telnetd stopped the 400-TU build on
+	# `call to undeclared function: FD_ZERO'. Rows 1-3 exercise the MACROS with
+	# no kernel involved, because a wrong shift width watches the wrong
+	# descriptor and every select row still passes when fd 3 and fd 67 collide.
+	# Row 7 is the one that needs fds above 63 to matter; row 9 asserts EBADF
+	# rather than a hang. Nothing asserts on the timeout after the call: Linux's
+	# select writes back the time remaining and pselect6 does not, so a row
+	# pinning it would fail on aarch64 for a reason that is not a bug.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_select.c $(TESTTMP)/c_select26
+	tools/expect_same.sh c_select26 "$$($(TESTTMP)/c_select26)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
+	# posix_fallocate/fallocate, found the same way. ONE SYSCALL, TWO ERROR
+	# CONTRACTS: fallocate returns -1 and sets errno, posix_fallocate returns the
+	# error NUMBER and leaves errno alone. busybox writes
+	# `if ((errno = posix_fallocate(...)) != 0)', so getting it wrong assigns -1
+	# to errno and prints "Unknown error -1" for every failure while reading
+	# correctly in a diff -- rows 1 and 2 are that pair. Row 3 uses a different
+	# error so an implementation returning EBADF for everything cannot pass. Row
+	# 4 accepts EOPNOTSUPP because some filesystems refuse fallocate and that is
+	# a legitimate answer; -1 is not, on any of them.
+	# All rows diffed against gcc.
+	./$(COMPILER) test/c_crtl_fallocate.c $(TESTTMP)/c_fallocate26
+	tools/expect_same.sh c_fallocate26 "$$($(TESTTMP)/c_fallocate26)" "$$(printf '1 1 1\n2 -1 1\n3 1\n4 1\n5 1')"
 	./$(COMPILER) test/c_crtl_bits_and_fdatasync.c $(TESTTMP)/c_bits26
 	tools/expect_same.sh c_bits26 "$$($(TESTTMP)/c_bits26)" "$$(printf '1 1 2 0\n2 1\n3 1\n4 0 0\n5 1\n6 1\n7 5\n8 0\n9 -1 1')"
 	./$(COMPILER) test/c_crtl_netdb_and_exec.c $(TESTTMP)/c_netdb26
@@ -14628,6 +14672,12 @@ test-i386: $(COMPILER)
 	# bug-c-labels-as-values-is-the-whole-of-the-lua-regression
 	./$(COMPILER) --target=i386 test/c_labels_as_values.c $(TESTTMP)/test_i386_labelval
 	tools/expect_same.sh i386/labelval "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_labelval)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
+	./$(COMPILER) --target=i386 test/c_crtl_tcpgrp_statfs.c $(TESTTMP)/test_i386_tcpgrp
+	tools/expect_same.sh i386/tcpgrp "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_tcpgrp)" "$$(printf '1 1 1\n2 -1 1\n3 1 1\n4 1 1 1\n5 1\n6 1 1\n7 -1 1')"
+	./$(COMPILER) --target=i386 test/c_crtl_select.c $(TESTTMP)/test_i386_select
+	tools/expect_same.sh i386/select "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
+	./$(COMPILER) --target=i386 test/c_crtl_fallocate.c $(TESTTMP)/test_i386_fallocate
+	tools/expect_same.sh i386/fallocate "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fallocate)" "$$(printf '1 1 1\n2 -1 1\n3 1\n4 1\n5 1')"
 	# The open-array parameter slot is a HANDLE, not its element -- the bug was
 	# i386-only, so this is where it has to be caught
 	# (bug-a-an-open-array-of-double-segfaults-on-i386).
@@ -15384,6 +15434,12 @@ test-aarch64: $(COMPILER)
 	# bug-c-labels-as-values-is-the-whole-of-the-lua-regression
 	./$(COMPILER) --target=aarch64 test/c_labels_as_values.c $(TESTTMP)/test_a64_labelval
 	tools/expect_same.sh aarch64/labelval "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_labelval)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
+	./$(COMPILER) --target=aarch64 test/c_crtl_tcpgrp_statfs.c $(TESTTMP)/test_a64_tcpgrp
+	tools/expect_same.sh aarch64/tcpgrp "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_tcpgrp)" "$$(printf '1 1 1\n2 -1 1\n3 1 1\n4 1 1 1\n5 1\n6 1 1\n7 -1 1')"
+	./$(COMPILER) --target=aarch64 test/c_crtl_select.c $(TESTTMP)/test_a64_select
+	tools/expect_same.sh aarch64/select "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
+	./$(COMPILER) --target=aarch64 test/c_crtl_fallocate.c $(TESTTMP)/test_a64_fallocate
+	tools/expect_same.sh aarch64/fallocate "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_fallocate)" "$$(printf '1 1 1\n2 -1 1\n3 1\n4 1\n5 1')"
 	tools/expect_same.sh aarch64/test_aarch64_hello "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_hello)" "Hello, World!"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
 	# were x86-64-only gaps, so every target must print the same line
@@ -16082,6 +16138,29 @@ test-riscv32: $(COMPILER)
 	# bug-c-labels-as-values-is-the-whole-of-the-lua-regression
 	./$(COMPILER) --target=riscv32 test/c_labels_as_values.c $(TESTTMP)/test_riscv32_labelval
 	tools/expect_same.sh riscv32/labelval "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_labelval)" "$$(printf '1 111\n2 3\n3 7\n4 12481248\n5 1\n6 1\n7 42\n8 105')"
+	# statfs is where the syscall tables stop agreeing: asm-generic slot 43 is
+	# sys_statfs64 on a 32-bit target and sys_statfs on a 64-bit one, so riscv32
+	# narrows through the kernel's statfs64 shape and everything else writes
+	# straight into the caller's struct. Cross rows are the only thing that can
+	# tell those two paths apart, and arm32 is deliberately ABSENT from them --
+	# it has no syscall table at all and REFUSES with ENOSYS, so its output
+	# legitimately differs and pinning it here would pin the refusal as if it
+	# were the answer.
+	./$(COMPILER) --target=riscv32 test/c_crtl_tcpgrp_statfs.c $(TESTTMP)/test_riscv32_tcpgrp
+	tools/expect_same.sh riscv32/tcpgrp "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_tcpgrp)" "$$(printf '1 1 1\n2 -1 1\n3 1 1\n4 1 1 1\n5 1\n6 1 1\n7 -1 1')"
+	# Three kernel spellings behind one call: x86-64 has sys_select, i386 has
+	# sys__newselect, aarch64 has only pselect6, and riscv32 has only the
+	# time64 pselect6 with a 64-bit timespec even though its `long' is 32 bits.
+	# These rows are the only thing that tells those four paths apart. arm32 is
+	# absent for the reason it is absent from the statfs rows above.
+	./$(COMPILER) --target=riscv32 test/c_crtl_select.c $(TESTTMP)/test_riscv32_select
+	tools/expect_same.sh riscv32/select "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_select)" "$$(printf '1 0 1024\n2 3 1 1 1 0\n3 2 0\n4 0 0\n5 1 1\n6 1 1\n7 2 1 1\n8 0\n9 -1 1')"
+	# The 32-bit half of the argument split: the kernel's offset and len are
+	# loff_t -- 64 bits everywhere -- so a 32-bit target passes each as a LO/HI
+	# register pair. Four arguments there does not fail, it allocates at a
+	# random multi-gigabyte offset, and only a 32-bit cross row can see it.
+	./$(COMPILER) --target=riscv32 test/c_crtl_fallocate.c $(TESTTMP)/test_riscv32_fallocate
+	tools/expect_same.sh riscv32/fallocate "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_fallocate)" "$$(printf '1 1 1\n2 -1 1\n3 1\n4 1\n5 1')"
 	# frozen inline strings (string[N]): riscv32 had NO frozen store, no frozen Length
 	# and no frozen->managed arg materialisation, so this printed len=0 and segfaulted.
 	# Output must match the x86-64 oracle exactly (b345)

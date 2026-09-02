@@ -189,6 +189,8 @@ struct winsize {
    has it: both headers reach the same asm-generic number, and a program that
    includes either gets the constant. Same token sequence in both places, which
    is what makes the duplicate legal rather than merely tolerated. */
+#define TIOCGPGRP  0x540F
+#define TIOCSPGRP  0x5410
 #define TIOCGSID   0x5429
 
 int tcgetattr(int fd, struct termios *t);
@@ -213,5 +215,20 @@ void cfmakeraw(struct termios *t);
    and nothing else; on a fd that is not a terminal the kernel says ENOTTY and
    that is the answer POSIX specifies. */
 __pid_t tcgetsid(int fd);
+
+/* tcgetpgrp(3) / tcsetpgrp(3): the FOREGROUND process group of the terminal
+   open on `fd'. TIOCGPGRP/TIOCSPGRP, the pair either side of TIOCGSID above.
+
+   Both take the pgrp THROUGH a pointer, in both directions -- the setter's
+   third ioctl argument is a `const pid_t *', not a pid_t, and passing the
+   value directly is a wild pointer the kernel reads as an address. That is why
+   they live here rather than being open-coded at each call site: getty,
+   sulogin and hush all reach for them and the mistake is invisible in a
+   diff.
+
+   tcgetpgrp returns the pgrp; -1/errno on failure, and a caller must check,
+   because a foreground pgrp of -1 is not a thing a terminal has. */
+__pid_t tcgetpgrp(int fd);
+int tcsetpgrp(int fd, __pid_t pgrp);
 
 #endif

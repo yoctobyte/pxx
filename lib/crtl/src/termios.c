@@ -116,3 +116,24 @@ pid_t tcgetsid(int fd)
   return (pid_t)sid;
 }
 
+
+/* tcgetpgrp(3) / tcsetpgrp(3) -- TIOCGPGRP / TIOCSPGRP. Same out-parameter
+   shape as tcgetsid above: the kernel moves the pgrp through the pointer and
+   the return is only the status, in BOTH directions. The setter's argument is
+   a pointer to the value it should install, so `(void *)(long)pgrp' -- the
+   obvious-looking spelling -- hands the kernel the pid as an ADDRESS. */
+pid_t tcgetpgrp(int fd)
+{
+  int pgrp = 0;
+  int rc = __pxx_ioctl(fd, TIOCGPGRP, (void *)&pgrp);
+  if (rc < 0) { errno = -rc; return (pid_t)-1; }
+  return (pid_t)pgrp;
+}
+
+int tcsetpgrp(int fd, pid_t pgrp)
+{
+  int p = (int)pgrp;
+  int rc = __pxx_ioctl(fd, TIOCSPGRP, (void *)&p);
+  if (rc < 0) { errno = -rc; return -1; }
+  return 0;
+}

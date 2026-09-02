@@ -1,19 +1,24 @@
 /* SPDX-License-Identifier: Zlib */
 /*
- * C runtime: <sys/statfs.h> -- struct statfs and the mount-flag bits. No
- * statfs()/fstatfs(): the PAL has no entry for either.
+ * C runtime: <sys/statfs.h> -- struct statfs and the mount-flag bits.
  *
- * Same rule as <pwd.h> and <sys/resource.h>, which see for the reasoning --
- * busybox pulls this header into every translation unit from
- * include/libbb.h and calls it only from df/mount. Adding the calls is PAL
- * work, not header work.
+ * THE LAYOUT WAS THE OPEN QUESTION AND IT IS NOW MEASURED (2026-09-02). This
+ * header used to say the struct below was "the 64-bit kernel's" and was "the
+ * WRONG one" on 32-bit targets, and asked whoever added the syscall to pick a
+ * layout with a differential in hand. The differential says the comment was
+ * wrong and the declaration was already right: it is written in `long' and
+ * `unsigned long', so it tracks the target's word size, which is precisely how
+ * the kernel defines __statfs_word. sizeof and every offsetof, compared
+ * against glibc:
  *
- * The layout is the 64-bit kernel's struct statfs, which is what x86-64 and
- * aarch64 pass. On the 32-bit targets the kernel's statfs and statfs64 differ
- * and this is the WRONG one -- deliberately not papered over with an #if,
- * because nothing can fill the struct yet and a fabricated layout that nobody
- * exercises is how a wrong offset gets frozen in. Whoever adds the syscall
- * picks the layout with a differential in hand.
+ *     x86-64   size 120, f_blocks at 16, f_namelen at 64   (pxx == gcc, byte for byte)
+ *     i386     size  64, f_blocks at  8, f_namelen at 36   (pxx == gcc -m32)
+ *
+ * statfs() and fstatfs() live in src/sys/statfs.c and go over the raw syscall
+ * bridge rather than a PAL entry, for the reason src/sys/sysinfo.c gives: the
+ * struct is the kernel's own and a PAL entry would be a Linux layout wearing a
+ * portable name. Read that file before changing this one -- riscv32 has no
+ * plain statfs syscall at all and takes a different path.
  */
 #ifndef _CRTL_SYS_STATFS_H
 #define _CRTL_SYS_STATFS_H
@@ -48,5 +53,8 @@ struct statfs {
 #define ST_NOATIME      0x0400
 #define ST_NODIRATIME   0x0800
 #define ST_RELATIME     0x1000
+
+int statfs(const char *path, struct statfs *buf);
+int fstatfs(int fd, struct statfs *buf);
 
 #endif

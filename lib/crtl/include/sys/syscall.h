@@ -2407,6 +2407,79 @@
 # define SYS_rseq_slice_yield             __NR_rseq_slice_yield
 # define SYS_syscalls                     __NR_syscalls
 
+/* THE __NR3264_ FAMILY -- eleven slots this file was silently missing.
+ *
+ * asm-generic/unistd.h does not spell these as `#define __NR_x <number>'. It
+ * defines `#define __NR3264_statfs 43' and then, three hundred lines later,
+ * maps it to one of TWO names depending on __BITS_PER_LONG. The generator
+ * matched the first form only, so every one of these came out of the scan as
+ * nothing at all -- not as a wrong number, as an ABSENT one, which is why it
+ * surfaced as `call to undeclared function: statfs' in a busybox build rather
+ * than as a bad call. Measured 2026-09-02: slots 25, 43, 44, 45, 46, 62, 71,
+ * 79, 80, 222 and 223 were all empty here while the x86-64 and i386 tables
+ * above have them.
+ *
+ * The NUMBER is the same in both widths -- that is the entire point of the
+ * 3264 mapping, one slot per operation -- and only the NAME and the argument
+ * types change. So the split below is not two tables; it is one table under
+ * two spellings, and a number that differed between the arms would be a bug in
+ * this comment, not a fact about the kernel.
+ *
+ * aarch64 is __BITS_PER_LONG == 64 and riscv32 is 32, which is the whole of
+ * the condition; asm-generic/unistd.h's own guard is
+ * `__BITS_PER_LONG == 64 && !defined(__SYSCALL_COMPAT)' and nothing in this
+ * runtime defines __SYSCALL_COMPAT. __riscv_xlen is the compiler's own answer
+ * (verified: pxx --target=riscv32 reports 32) rather than a target-name test,
+ * because this block already serves two architectures and would serve a third
+ * on the day riscv64 arrives. */
+# if defined(__riscv) && (__riscv_xlen == 32)
+#  define __NR_fcntl64                     25
+#  define __NR_statfs64                    43
+#  define __NR_fstatfs64                   44
+#  define __NR_truncate64                  45
+#  define __NR_ftruncate64                 46
+#  define __NR_llseek                      62
+#  define __NR_sendfile64                  71
+#  define __NR_fstatat64                   79
+#  define __NR_fstat64                     80
+#  define __NR_mmap2                       222
+#  define __NR_fadvise64_64                223
+#  define SYS_fcntl64                     __NR_fcntl64
+#  define SYS_statfs64                    __NR_statfs64
+#  define SYS_fstatfs64                   __NR_fstatfs64
+#  define SYS_truncate64                  __NR_truncate64
+#  define SYS_ftruncate64                 __NR_ftruncate64
+#  define SYS_llseek                      __NR_llseek
+#  define SYS_sendfile64                  __NR_sendfile64
+#  define SYS_fstatat64                   __NR_fstatat64
+#  define SYS_fstat64                     __NR_fstat64
+#  define SYS_mmap2                       __NR_mmap2
+#  define SYS_fadvise64_64                __NR_fadvise64_64
+# else
+#  define __NR_fcntl                       25
+#  define __NR_statfs                      43
+#  define __NR_fstatfs                     44
+#  define __NR_truncate                    45
+#  define __NR_ftruncate                   46
+#  define __NR_lseek                       62
+#  define __NR_sendfile                    71
+#  define __NR_newfstatat                  79
+#  define __NR_fstat                       80
+#  define __NR_mmap                        222
+#  define __NR_fadvise64                   223
+#  define SYS_fcntl                       __NR_fcntl
+#  define SYS_statfs                      __NR_statfs
+#  define SYS_fstatfs                     __NR_fstatfs
+#  define SYS_truncate                    __NR_truncate
+#  define SYS_ftruncate                   __NR_ftruncate
+#  define SYS_lseek                       __NR_lseek
+#  define SYS_sendfile                    __NR_sendfile
+#  define SYS_newfstatat                  __NR_newfstatat
+#  define SYS_fstat                       __NR_fstat
+#  define SYS_mmap                        __NR_mmap
+#  define SYS_fadvise64                   __NR_fadvise64
+# endif
+
 #else
 /* arm32, xtensa: see the note at the top of this file. Naming any SYS_* here
    is a compile error, which is the point. */
