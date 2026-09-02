@@ -2127,6 +2127,50 @@ begin
         else if name = '__builtin_bswap16' then name := '__pxx_builtin_bswap16'
         else if name = '__builtin_bswap32' then name := '__pxx_builtin_bswap32'
         else if name = '__builtin_bswap64' then name := '__pxx_builtin_bswap64';
+        { A FUNCTION-POINTER PARAMETER OR LOCAL OF THIS FUNCTION SHADOWS a
+          file-scope function of the same name, and it must be asked about
+          BEFORE FindProc, because FindProc cannot see scope at all.
+
+          Reached only after FindProc missed, this was a silent wrong answer in
+          ordinary C. crtl's own `qsort` calls `cmp(prv, cur)` through its
+          fourth parameter; compile any translation unit that also defines a
+          file-scope function named `cmp` -- one of the most common names in C
+          -- and that call bound to the USER'S function instead, in crtl's body,
+          with no diagnostic. Measured: a decoy `cmp` returning 0 left
+          {5,3,9,1,7} completely unsorted (pxx 53917, gcc 13579) and a decoy
+          sorting descending produced 97531 for an ASCENDING request. `bsearch`
+          the same, returning not-found for a key that is present. The decoy is
+          never passed to qsort and never called by the user.
+
+          It was found from the other end, which is why the shape is worth
+          recording: the same two crtl bodies changed SIZE (qsort 669 -> 622,
+          bsearch 473 -> 426) depending on whether an unrelated static function
+          existed in the TU. 47 bytes is the null-guard plus indirect call
+          collapsing into a direct one.
+
+          SCOPED TO THIS PROC'S OWN SLOTS on purpose. Syms[] at or above
+          Procs[CurProc].ScopeBase are this function's parameters and locals; a
+          global of the same name is NOT preferred here, so no call that
+          resolves today changes meaning unless a local genuinely shadows it,
+          which is exactly C's rule. }
+        if CurProc >= 0 then
+        begin
+          idx := FindSym(name);
+          if (idx >= Procs[CurProc].ScopeBase) and (SymProcSig[idx] >= 0) then
+          begin
+            calleeNode := AllocNode(AN_IDENT);
+            ASTIVal[calleeNode] := idx;
+            ASTTk[calleeNode] := Ord(tyPointer);
+            node := AllocNode(AN_CALL_IND);
+            ASTLeft[node]  := argHead;
+            ASTRight[node] := calleeNode;
+            ASTIVal[node]  := SymProcSig[idx];
+            ASTTk[node]    := Ord(Procs[SymProcSig[idx]].RetType);
+            ASTSLen[node]  := 0;
+            Result := node;
+            Exit;
+          end;
+        end;
         procIdx := FindProc(name);
         { `<unit>_pas_<Identifier>` — a routine of a Pascal unit this translation
           unit imported with `#include "<unit>.pas"`. Tried only after FindProc

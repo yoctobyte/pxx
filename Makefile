@@ -9648,6 +9648,19 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cstatic_two_modules.c $(TESTTMP)/cstatic_two_modules26 > $(TESTTMP)/cstatic_two_modules.log 2>&1
 	tools/expect_same.sh cstatic_two_modules.log "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_two_modules.log)" "0"
 	tools/expect_same.sh cstatic_two_modules26 "$$($(TESTTMP)/cstatic_two_modules26)" "$$(printf 'va=42\nopen=1\ndup=1\nclose=1\nclose2=1')"
+	# A FILE-SCOPE FUNCTION MUST NOT SHADOW A FUNCTION-POINTER PARAMETER, and the
+	# function whose parameter got shadowed was crtl's own. The C frontend
+	# resolved a called name by asking FindProc first and only falling back to
+	# the symbol table, so any TU defining a file-scope `cmp' re-aimed the
+	# `cmp(prv, cur)' inside crtl's qsort at the USER's function -- silently, in
+	# code the user never wrote. bsearch the same. `cmp' is one of the most
+	# common names in C.
+	# Pre-fix (90b2afd68ab7) this prints asc=53917 desc=53917 found=5 decoy=0
+	# plain=213; four of five rows wrong, and asc and desc wrong IDENTICALLY
+	# despite requesting opposite orders, which is the tell that both ran a
+	# third function. The expected text below is gcc's, verified against it.
+	./$(COMPILER) test/c_crtl_callback_param_shadowed.c $(TESTTMP)/c_cbshadow26
+	tools/expect_same.sh c_cbshadow26 "$$($(TESTTMP)/c_cbshadow26)" "$$(printf 'asc=13579\ndesc=97531\nfound=7\ndecoy=0\nplain=123')"
 	./$(COMPILER) test/cstatic_same_module_dup.c $(TESTTMP)/cstatic_same_module26 > $(TESTTMP)/cstatic_same_module.log 2>&1
 	tools/expect_same.sh cstatic_same_module.log "$$(grep -c 'duplicate definition' $(TESTTMP)/cstatic_same_module.log)" "1"
 	tools/expect_same.sh cstatic_same_module26 "$$($(TESTTMP)/cstatic_same_module26)" "2 11"
