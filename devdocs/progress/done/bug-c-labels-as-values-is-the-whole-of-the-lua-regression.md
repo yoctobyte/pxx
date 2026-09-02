@@ -3,7 +3,7 @@ slug: bug-c-labels-as-values-is-the-whole-of-the-lua-regression
 track: C
 type: bug
 prio: 70
-status: working
+status: done
 found: 2026-09-02
 found-by: frankZ
 owner: frankD
@@ -226,3 +226,6 @@ is blocked on them: `test-lua-cross`'s other three targets already build-fail on
 their variadic ABI, so implementing this there moves the failure without moving
 a verdict.
 
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

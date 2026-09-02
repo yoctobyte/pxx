@@ -3,6 +3,7 @@ prio: 70
 track: C
 blocked-by: [bug-c-labels-as-values-is-the-whole-of-the-lua-regression]
 summary: "TRIAGED, not fixed: lua 5.4 turns its computed-goto interpreter loop on with a BARE `#if defined(__GNUC__)`, so 00ab464bf's GNU C 2.7 claim reaches ljumptab.h's `&&L_OP_MOVE` and lvm.c does not compile. Labels-as-values is the ONLY blocker — `-DLUA_USE_JUMPTABLE=0` and `-U__GNUC__` each build the runner and it passes 6/6 lua programs. Blocked on the feature; do NOT add the -D to the recipe."
+status: done
 ---
 
 > **Track guessed as C from the FAILING STEP** — line 2 of 2, `if [ ! -f "library_candidates/lua/src/lua.h" ]; then \ echo "test-lua: SKIP — no lua tree at library_candidates/lua/src `, which names `test/lua/runner.c`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 3 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -57,3 +58,27 @@ jobs between them. The gtk five are fixed; these two need the feature.
 **Do not add `-DLUA_USE_JUMPTABLE=0` to the recipe to close this.** It would go
 green while hiding the gap and while no longer testing what a real lua build
 does on a GNU-announcing compiler.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## Fixed by the feature, not by the recipe — measured 2026-09-02
+
+`&&label` and `goto *expr` are implemented (native x86-64 arm in `15e4b9c0a`,
+x86-64 in `6eea46f7c`). The recipe is untouched: no `-DLUA_USE_JUMPTABLE=0`,
+no `-U__GNUC__`. The runner builds and all six lua programs match `.expected`
+on native x86-64.
+
+**Read "6/6" with its control attached.** The lua suite does not discriminate
+the two interpreter paths — a `-DLUA_USE_JUMPTABLE=0` build passes all six as
+well, which is exactly why the counter-tests in the diagnosis above worked. What
+proves the computed-goto arm is the one that compiled is a binary comparison at
+the same flags:
+
+```
+$ ./compiler/pascal26 -g -Ilib/crtl/include -Ilib/crtl/src \
+      -Ilibrary_candidates/lua/src test/lua/runner.c <out>
+  default  ==  -DLUA_USE_JUMPTABLE=1   (byte-identical)
+  default  !=  -DLUA_USE_JUMPTABLE=0
+```
+
+Without those two lines, "6/6" would be a true sentence about the wrong claim.
+

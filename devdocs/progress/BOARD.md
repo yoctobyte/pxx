@@ -8,12 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (6)
+## working (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386 | A | 45 | bug | PASCAL DONE AND PROVEN; NilPy, Rust and Zig still open. The four `fAlign := TypeAlign(fTk)` record-field sites in pasparser_decl.inc now call TypeFieldAlign, and a new mixed-link oracle (test-record-abi-mixed-link) judges the layout against gcc across a real link on x86_64 and i386, four shapes plus a value round trip through a `cvar` record global. The Track U fork this ticket flagged -- whether a Pascal record must match the C ABI -- dissolved on the first measurement: pxx's C frontend answered 12/4 and pxx's PASCAL frontend 16/8 for the same fields, same target, same compiler. It was not an FPC question, it was one compiler disagreeing with itself. N/R/Z have no export spelling and so no mixed link, and rustc/zig i686 are not on this box. | — |
-| bug-c-labels-as-values-is-the-whole-of-the-lua-regression | C | 70→85 | bug | GNU labels-as-values (`&&label` as a void*, `goto *expr`) is the ONLY thing between HEAD and a green test-lua. Lua 5.4 turns its computed-goto interpreter loop on with a BARE `#if defined(__GNUC__)` — no version test — so 00ab464bf's GNU C 2.7 claim reaches it, ljumptab.h's `&&L_OP_MOVE` initializer fails, and lvm.c does not compile. Proved both directions: `-DLUA_USE_JUMPTABLE=0` and `-U__GNUC__` each build the runner, and the resulting binary passes 6/6 lua programs. So the gap is one C-frontend feature and nothing downstream of it. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
@@ -63,7 +62,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (8)
+## backlog (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -73,8 +72,6 @@ _none_
 | regression-lib-test-lib-synapse-transitive-unit | P | 70→85 | regression | CAUSE FOUND AND FIXED IN TREE, JOB STILL RED — and it stays red until the next pin, because this job builds with $(PXX_STABLE). All three lib_synapse reds are ONE construct: `szDescription := '...'` on an `array[0..N] of Char` FIELD in synapse's ssfpc.inc. ASTCharArrayCap answered only for AN_IDENT, so the char-array-is-a-string conversion never fired for a field and the store was refused as `cannot assign ShortString to Char`. Fixed by bug-p-a-char-array-through-a-field-or-a-deref-is-not-a-string; all four synapse programs now build and match their expected output byte for byte under the tree compiler. | — |
 | regression-test-core-cfn-return-fnptr-b105 | C | 70 | regression | regression: test-core#src:test/cfn_return_fnptr_b105.c at 65b719ab48ae in step 1/2, `./compiler/pascal26 test/cfn_return_fnptr_b105.c /tmp/cfn_return_fnptr_b10526` (auto-filed by twatch) | — |
 | regression-test-core-test-exception-unhandled-3 | T | 70→85 | regression | regression: test-core#src:test/test_exception_unhandled.pas@3 at 3d4801b6abc3 in step 53/47, `/tmp/next-test_multithreading26 \| grep -q "multithreading test completed successfully"` (auto-filed by twatch) | — |
-| regression-test-lua-compiler-srchash | C | 70 | regression | TRIAGED, not fixed: lua 5.4 turns its computed-goto interpreter loop on with a BARE `#if defined(__GNUC__)`, so 00ab464bf's GNU C 2.7 claim reaches ljumptab.h's `&&L_OP_MOVE` and lvm.c does not compile. Labels-as-values is the ONLY blocker — `-DLUA_USE_JUMPTABLE=0` and `-U__GNUC__` each build the runner and it passes 6/6 lua programs. Blocked on the feature; do NOT add the -D to the recipe. | bug-c-labels-as-values-is-the-whole-of-the-lua-regression |
-| regression-test-lua-cross-compiler-srchash-2 | C | 70 | regression | TRIAGED, not fixed: lua 5.4 turns its computed-goto interpreter loop on with a BARE `#if defined(__GNUC__)`, so 00ab464bf's GNU C 2.7 claim reaches ljumptab.h's `&&L_OP_MOVE` and lvm.c does not compile. Labels-as-values is the ONLY blocker — `-DLUA_USE_JUMPTABLE=0` and `-U__GNUC__` each build the runner and it passes 6/6 lua programs. Blocked on the feature; do NOT add the -D to the recipe. | bug-c-labels-as-values-is-the-whole-of-the-lua-regression |
 
 ## backlog_new (0)
 
@@ -858,9 +855,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3099)
+## done (3102)
 
-3099 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3102 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -1405,7 +1402,6 @@ _none_
 
 ## Leverage (tickets each one unblocks)
 
-- **3** — bug-c-labels-as-values-is-the-whole-of-the-lua-regression
 - **3** — feature-port-windows-pe
 - **2** — decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual
 - **2** — feature-web-track-w-bootstrap
