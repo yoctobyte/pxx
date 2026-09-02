@@ -312,12 +312,12 @@ applets_ok() {
 enabled_applets() {
   [ -f "$BB/include/applet_tables.h" ] || return 1
   awk '/^const char applet_names/,/^;/' "$BB/include/applet_tables.h" \
-    | grep -oE '"[^"]+"' | tr -d '"' | grep -vx '\\0' | sed '/^$/d' | sort -u
+    | grep -oE '"[^"]+"' | tr -d '"' | grep -vx '\\0' | sed '/^$/d' | LC_ALL=C sort -u
 }
 
 # `busybox' is the multiplexer, not an applet entry -- comparing with it in
 # reports a phantom missing applet on every multi-applet run.
-requested_applets() { printf '%s\n' $APPLETS | grep -vx busybox | sort -u; }
+requested_applets() { printf '%s\n' $APPLETS | grep -vx busybox | LC_ALL=C sort -u; }
 
 # Does the built table hold exactly what was asked for? This replaces both the
 # NUM_APPLETS equality and applets_ok: it answers the same question about the
@@ -384,8 +384,22 @@ if [ ! -f "$BB/include/applet_tables.h" ] \
     die "could not configure the tree (log: $CFGLOG)"
   }
   if ! applet_table_matches; then
-    ABSENT="$(comm -23 <(requested_applets) <(enabled_applets) | tr '\n' ' ')"
-    EXTRA="$(comm -13 <(requested_applets) <(enabled_applets) | tr '\n' ' ')"
+    # LC_ALL=C ON BOTH THE SORTS AND THE comm, AND IT IS THE ANSWER THAT WAS
+    # WRONG, NOT JUST THE WARNING. Under en_US.UTF-8 `sort' collates with
+    # punctuation ignored at the primary level, so `run-init' lands between
+    # `runcon' and `runlevel'; comm then walks the two streams expecting its
+    # own order, prints "file 1 is not in sorted order" on stderr, AND KEEPS
+    # GOING with a merge that has desynchronised. Measured 2026-09-02 on the
+    # 420-applet set: `run-init' and `run-parts' were reported as ASKED FOR BUT
+    # NOT BUILT *and* as BUILT BUT NOT ASKED FOR, in the same sentence -- two
+    # statements that cannot both hold of one name, which is the only reason
+    # the desync was visible at all. Any set difference whose names contain a
+    # `-' or a `_' can be silently wrong here; this one merely happened to
+    # contradict itself. C collation is byte order, which is the order comm
+    # assumes, so fixing it means fixing both ends -- an LC_ALL=C comm over
+    # locale-sorted input is the same bug.
+    ABSENT="$(LC_ALL=C comm -23 <(requested_applets) <(enabled_applets) | tr '\n' ' ')"
+    EXTRA="$(LC_ALL=C comm -13 <(requested_applets) <(enabled_applets) | tr '\n' ' ')"
     MSG="the configured tree does not build the applet set that was asked for."
     [ -n "${ABSENT# }" ] && MSG="$MSG ASKED FOR BUT NOT BUILT: ${ABSENT% } (unmet dependency; a knob spelled differently in Config.in; or CONFIG_X=y with every FEATURE_ under it off, which leaves the applet with no entry at all -- tftp is exactly that)."
     [ -n "${EXTRA# }" ] && MSG="$MSG BUILT BUT NOT ASKED FOR: ${EXTRA% } (selected as a dependency of something on the list)."
