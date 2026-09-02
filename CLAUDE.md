@@ -358,6 +358,15 @@ session **a rejection and a denial-by-policy are the same string** — *"The use
 doesn't want to proceed with this tool use."* A peer's self-report is its
 BELIEF; its transcript is the record. Ask for the record.
 
+**"NO COMMITS IN N HOURS" HAS TWO CAUSES THAT LOOK IDENTICAL — blocked, and
+ENDED ITS TURN.** Commit count cannot separate them and neither can the tree;
+the discriminator is whether the session has an **unanswered turn**, which it
+cannot see about itself either. Measured 2026-09-02: frankH, idle with no commit
+for 5h45m, had no rejected call and nothing in flight — it had finished a ticket,
+written *"Continuing down the queue"*, and ended the turn. **A session that
+stopped short and a session that is stuck are the same silence.** Ask; the answer
+is free and it is the only thing that separates them.
+
 **A PANE IS NOT A SESSION, AND IT LEAVES NO RECEIPT.** `capture-pane` returns
 committed scrollback plus the live screen; a Claude Code permission dialog is
 drawn in the **redraw region and never commits**, so afterwards it is
