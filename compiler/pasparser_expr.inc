@@ -7761,6 +7761,32 @@ begin
       end
       else if (idx >= 0) and (Syms[idx].Kind = skConst) then
       begin
+        { A CONST WITH AN ARGUMENT LIST IS NOT A CALL, AND SILENTLY FOLDING IT
+          TO ITS VALUE THREW THE ARGUMENTS AWAY. Pascal is case-insensitive, so
+          `const PYITER_MAP = 4;` and `function pyiter_map(...)` in one unit are
+          ONE identifier with two meanings -- and compiler/builtin/pylib.pas had
+          four such pairs. `pyiter_map(key, v)` resolved here, answered 4, and
+          the `(key, v)` was dropped: a plausible small integer where a cursor
+          object belonged, on every target. Only i386 ever objected, and only
+          indirectly, because it alone refuses to LOAD a const symbol.
+
+          FPC rejects the declaration pair itself ("overloaded identifier
+          isn't a function"), so parity could not have found this either. We
+          keep accepting the pair -- accepting what FPC rejects is not a defect
+          here, and a tag constant beside its constructor is a real thing to
+          write -- but a CALL of the const is a mistake in any reading, and the
+          rule is to leave the mistake visible rather than to answer it.
+
+          A procedural-typed const (`const F: TFn = @Triple;` then `F(5)`) is a
+          real call and does NOT come through here: it is not folded to a
+          literal. Checked before this guard was written, both in pxx and in
+          FPC, and both answer 15.
+          bug-a-a-const-and-a-routine-of-the-same-name-silently-resolve-to-the-const }
+        if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+          Error('''' + name + ''' is a CONST and cannot be called. If a routine '
+                + 'of this name is also declared, they are the SAME identifier '
+                + '(Pascal is case-insensitive) and the const won -- rename one '
+                + 'of them');
         { A float-typed const carries its IEEE-754 bits in ConstVal — emit a
           float literal, not an int literal (an AN_INT_LIT tagged tyDouble would
           be mis-codegen'd as an integer). }

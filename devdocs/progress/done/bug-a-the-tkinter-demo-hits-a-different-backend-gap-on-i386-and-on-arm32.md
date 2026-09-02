@@ -3,12 +3,12 @@ slug: bug-a-the-tkinter-demo-hits-a-different-backend-gap-on-i386-and-on-arm32
 track: A
 prio: 40
 type: bug
-status: backlog
+status: done
 created: 2026-09-02
 found-by: frankC
 owner: ""
 blocked-by: []
-summary: "examples/tk/uses_tkinter_and_configparser builds on x86-64 and on no cross target, and the failures are not one cause. ONE REMAINS: i386 'symbol kind not supported yet (load)'. The aarch64 and arm32 ones are both FIXED, and each turned out to be a defect with reach far beyond this demo. riscv32 and xtensa refuse dynamic symbols deliberately (the demo needs libtcl at runtime), so those two are not part of this ticket."
+summary: "examples/tk/uses_tkinter_and_configparser built on x86-64 and on no cross target, on FOUR different causes. All three that were ours are fixed -- aarch64's was a silent empty-file miscompile, arm32's uncovered a broken constructor ladder on every 32-bit backend, i386's was a const/routine name collision in pylib.pas answering 4 for a cursor object. It builds on i386, arm32 and aarch64 now. riscv32 and xtensa refuse dynamic symbols deliberately (the demo needs libtcl at runtime); that is a target capability, not a gap in this program."
 ---
 
 # One program, three backend gaps
@@ -71,3 +71,30 @@ So of this demo's four causes, two were unwritten features and two were
 defects, and both defects reached far outside it. **The remaining i386 one
 (`symbol kind not supported yet (load)`) is the last, and on that record it
 deserves opening rather than ranking.**
+
+
+## Resolved 2026-09-02 (frankC) — all three of ours, and every one was a defect
+
+```
+i386    BUILDS   was: symbol kind not supported yet (load)
+arm32   BUILDS   was: constructor with more than 4 parameter words
+aarch64 BUILDS   was: call argument count mismatch
+riscv32 refuses dynamic symbols -- correct, out of scope
+xtensa  refuses dynamic symbols -- correct, out of scope
+```
+
+The ticket predicted one defect among three refusals, on the grounds that
+aarch64's message named an internal disagreement rather than an unwritten
+feature. **All three turned out to be defects, and each reached far outside this
+demo:**
+
+| cause | what it really was |
+| --- | --- |
+| aarch64 | `Write(f, x)` inside a method named `write` bound to the member whatever its arity; x86-64 emitted the call and wrote an EMPTY FILE reporting success — `bug-p-a-write-call-inside-a-method-named-write-binds-to-the-member-whatever-its-arity` |
+| arm32 | the constructor argument ladder never learned argument classes, on all four 32-bit backends; i386 segfaulted on it — `bug-a-the-constructor-argument-ladder-is-the-copy-that-never-learned-argument-classes` |
+| i386 | `PYITER_MAP` the const and `pyiter_map` the function are ONE identifier; the call answered 4 — `bug-a-a-const-and-a-routine-of-the-same-name-silently-resolve-to-the-const` |
+
+**A demo nobody runs was the best bug-finding instrument in the tree**, because
+it is the one program that touches the RTL, the NilPy builtins and a binding
+layer at once, and because three backends' refusals were reading a source
+x86-64 accepted quietly.

@@ -810,7 +810,26 @@ begin
   if (symIdx < 0) or (symIdx >= SymCount) then
     Error('target i386: bad symbol in ' + what);
   if not (Syms[symIdx].Kind in [skGlobal, skLocal, skParam]) then
-    Error('target i386: symbol kind not supported yet (' + what + ')');
+  begin
+    { NAME IT, for the reason the type branch below already gives: the reported
+      line belongs to the UNIT being parsed rather than to the file you invoked,
+      so an unnamed refusal leaves nothing to grep for. That branch was fixed
+      once and this one -- one `if` above it, same procedure, same message
+      shape -- was left saying only "symbol kind". Locating the single
+      occurrence in compiler/builtin/pyeval.pas behind
+      `examples/tk/uses_tkinter_and_configparser` meant editing this line first,
+      which is exactly the note the other branch carries. }
+    if Syms[symIdx].Name = '' then
+      whoSym := 'a compiler-minted temporary'
+    else
+      whoSym := 'symbol ''' + Syms[symIdx].Name + '''';
+    if Syms[symIdx].Kind = skConst then
+      Error('target i386: ' + whoSym + ' is a CONST symbol in ' + what +
+            ' position, which this backend does not load yet')
+    else
+      Error('target i386: ' + whoSym + ' has a symbol kind this backend does ' +
+            'not support yet (' + what + ')');
+  end;
   if Syms[symIdx].IsArray then
     Error('target i386: arrays not yet supported');
   { Ordinals plus pointer-sized handles (managed-string/pointer/class): the

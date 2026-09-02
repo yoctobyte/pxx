@@ -4,7 +4,7 @@ title: "Cross-target codegen is CORRECT — xtensa, riscv32, arm32, i386"
 track: A
 prio: 80
 type: umbrella
-blocked-by: [bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs, feature-a-port-alloca-to-i386-arm32-and-riscv32, bug-a-i386-c-main-gets-argc-and-argv-swapped, feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross, bug-a-the-tkinter-demo-hits-a-different-backend-gap-on-i386-and-on-arm32]
+blocked-by: [bug-a-hosted-xtensa-diverges-from-the-oracle-on-21-cross-programs, feature-a-port-alloca-to-i386-arm32-and-riscv32, bug-a-i386-c-main-gets-argc-and-argv-swapped, feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross]
 created: 2026-08-31
 summary: "GOAL, not a unit of work. The owner's ranking: 'cross platform has way prio above look-if-I-do-this-on-platform-that-it-would-break-z'. A program that compiles right on one target and wrong on another is the defect this umbrella exists for; a hypothetical about an untried platform is not. Measured target clusters: xtensa 11, riscv 8, arm32 5, i386."
 ---

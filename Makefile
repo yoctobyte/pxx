@@ -8678,6 +8678,15 @@ test-core: $(COMPILER)
 	# CLASSES -- the ctor ladder was a fifth copy that asked neither question
 	./$(COMPILER) test/test_ctor_arg_classes_and_arity.pas $(TESTTMP)/test_ctor_argcls26
 	tools/expect_same.sh test_ctor_argcls26 "$$($(TESTTMP)/test_ctor_argcls26)" "$$(printf 'fails=0\nWIDECTOR OK')"
+	# A const and a routine of one name are ONE identifier. NEGATIVE half first:
+	# the call must not compile, and the message must say which way it resolved.
+	@./$(COMPILER) test/test_const_shadows_routine_fail.pas $(TESTTMP)/test_constshadow26 2>&1 \
+	  | grep -q 'is a CONST and cannot be called' \
+	  || { echo 'test_const_shadows_routine_fail: FAIL - expected a refusal naming the const'; exit 1; }
+	# ...and the POSITIVE control, without which "consts cannot be called" would
+	# look like a safe blanket rule: a PROCEDURAL-typed const really is callable.
+	./$(COMPILER) test/test_typed_const_is_callable.pas $(TESTTMP)/test_typedconstcall26
+	tools/expect_same.sh test_typedconstcall26 "$$($(TESTTMP)/test_typedconstcall26)" "15"
 	./$(COMPILER) test/test_method_read_write_unqualified.pas $(TESTTMP)/test_method_rw_unqual26
 	tools/expect_same.sh test_method_rw_unqual26 "$$($(TESTTMP)/test_method_rw_unqual26)" "$$(printf 'data=42\nr=43\nspill=OK')"
 	# inside a method, the class's own method shadows a same-name plain proc (sysutils.Move vs TGame.Move)
