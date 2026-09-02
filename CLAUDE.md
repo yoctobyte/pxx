@@ -350,8 +350,13 @@ not "No", not a cancel — **not even the deny direction.** "Declining grants
 nothing" is the reasoning that gets you there and it is wrong: you cannot tell a
 pending dialog from running work, so the same keystroke either cancels one tool
 call or **destroys a sweep in progress**, and the two look identical from
-outside. If a session looks stuck, **ask it** — that costs one message and it is
-the session's own state to report.
+outside. If a session looks stuck, **ask it to CHECK ITS TRANSCRIPT** — not just
+to report its state. Asking costs one message, but **a session cannot see its own
+blockage**: measured 2026-09-02, frankA reported "not blocked, no prompt
+pending" while a Bash call of its own sat rejected, because from inside a
+session **a rejection and a denial-by-policy are the same string** — *"The user
+doesn't want to proceed with this tool use."* A peer's self-report is its
+BELIEF; its transcript is the record. Ask for the record.
 
 **A PANE IS NOT A SESSION, AND IT LEAVES NO RECEIPT.** `capture-pane` returns
 committed scrollback plus the live screen; a Claude Code permission dialog is
