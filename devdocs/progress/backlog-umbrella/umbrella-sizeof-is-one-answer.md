@@ -54,8 +54,7 @@ than the layout engine was asked how big a type is, and it answered.**
 
 **1. The oracle takes too few parameters** — so a type whose size depends on
 more than its kind is silently wrong. `SizeOf(string[N])` = 8 against a real
-stride of 18; C's `sizeof(*s.fp)` for `int (*)[4]` = 8 where gcc says 16, the
-arm never firing at all. A subrange wider than 32 bits was this shape too and is
+stride of 18. A subrange wider than 32 bits was this shape too and is
 **fixed** (`ffe20a8bc`) — `-3000000000` read back as `1294967296`, and nine days
 of probes missed it because every one used a range that happened to fit.
 
@@ -85,6 +84,46 @@ exact opposite of joining the queue. Measured 2026-09-02: three tickets were
 wired backwards (this coordinator told frankb-a9 to do it, and did it itself on
 the set split); all three vanished from `ready` at p75 and nothing errored.
 Add your slug to the list above instead.
+
+## What the three C members actually were (measured 2026-09-02, all three closed)
+
+`bug-c-a-file-scope-pointer-to-array-crashes-on-indexing` (`7d6559cd3`),
+`...-struct-field-answers-the-pointer-size` (`1769ac004`) and
+`...-reaches-a-pointee-through-one-spelling-only` (`536a3e2d0`).
+
+**They were not three bugs.** Two of them are ONE arm in two scopes: the
+parenthesised-declarator path, written for function pointers — whose pointee
+genuinely has no type — and reached by `int (*p)[4]` as well, because
+`ParseCDeclType` parks the name in `CTypeFnPtrName` for both shapes. It
+recorded no pointee at file scope and none on a struct field; the local path
+records one and has always worked. Three copies, one of them right.
+
+**This umbrella's framing survives but its C example did not.** The recorded
+`sizeof(*s.fp)` = 8 "the arm never firing at all" was already stale: it
+answered **4**, and 4 is not the element size either — it is
+`TypeStorageSize(tyUnknown)`, i.e. nothing recorded. The `int` spelling cannot
+tell those apart, because the unknown default equals `sizeof(int)`. It took
+`double (*dp)[4]` answering 4 rather than 8 to separate them. **Every C row in
+this family that is spelled with `int` is a guard that cannot fail**, and the
+same trap sits in the Pascal members: a size row whose expected value
+coincides with a default proves nothing. Rows here must use a type whose size
+is not 4 and not `sizeof(void*)`.
+
+The third was a different mechanism and worth separating from the other two:
+the token walk `CSizeofDescriptorWalk` answered `TypeSlotSize(tyUnknown)` and
+reported success, while the general expression path — which typed the operand
+correctly all along — was locked out because the walk had consumed the operand.
+That is not "too few parameters"; it is a PARALLEL path answering where it
+should decline, and the residue is banked as
+[[bug-c-the-sizeof-descriptor-walk-answers-from-tyunknown]]. It belongs to this
+umbrella's thesis all the same: it is one more thing that was asked how big a
+type is and answered.
+
+One new column was needed: `UFldPtrElemArrLen`, the field twin of
+`SymPtrElemArrLen`. That is shape 1 exactly — `TypeStorageSize(kind, recId)`
+cannot express "array pointee of extent N", so the extent had to be threaded to
+the caller instead. **A fifth oracle was NOT added**; the existing readers were
+given the parameter they were missing.
 
 ## Notes
 
