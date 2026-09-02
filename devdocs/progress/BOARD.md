@@ -463,12 +463,11 @@ _none_
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 
-## backlog-cfront (20)
+## backlog-cfront (19)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero | C | 60 | bug | x86-64, C frontend: a struct returned through a FUNCTION POINTER reads its third int back as its first when the field is used directly as a call argument. `struct P v = fp(3); printf(\"%d %d %d\", v.x, v.y, v.z)` prints `7 11 7` where gcc prints `7 11 13`. The struct in memory is CORRECT — copying the fields to locals first prints 7 11 13 — so this is the field READ in argument position, not the return. Needs an INDIRECT call: a plain local struct and a DIRECT call are both right. Silent wrong value, rc=0. Reproduces on the v399 pin, so it is not new. | — |
-| bug-c-a-file-scope-pointer-to-array-crashes-on-indexing | C | 70 | bug | A file-scope pointer-to-array SEGFAULTS on indexing; the identical local is correct | — |
 | bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning-not-an-error | C | 45 | bug | pxx's C frontend treats an undeclared identifier used as a VALUE as 0 with a warning, while an undeclared identifier used as a CALL is a hard error. gcc rejects both under -std=gnu99, which is what our own busybox oracle uses. The consequence is not cosmetic: crtl's <sys/syscall.h> defends itself with `naming any SYS_* here is a compile error, which is the point', and that sentence is false under this compiler — an arm32 build of src/sys/statfs.c compiled cleanly and called syscall number 0. Fixing it also requires filling the crtl gaps it is currently papering over (locale.h has no LC_COLLATE/LC_CTYPE/LC_MONETARY/LC_TIME, which the lua build hits today). | — |
 | bug-c-including-stdio-h-refuses-to-compile-for-xtensa | C+S | 45 | bug | `#include <stdio.h>` refuses to compile for --target=xtensa: `__pxx_read is a pxx-internal runtime symbol and cannot be imported dynamically`, raised in lib/crtl/src/unistd.c at `ssize_t write`. The identical two-line file compiles for x86-64. Reduced to `#include <stdio.h>` plus one trivial function -- nothing in the user code touches read/write. A C file with NO include compiles for xtensa fine, so this is the crtl pull, not the xtensa C backend generally. The guard is correct in what it says (the symbol needs a Pascal bridge that is not visible); what is target-specific is why the bridge is missing on xtensa and present on x86-64. | — |
 | bug-c-long-double-is-8-bytes-in-pxx-and-16-in-gcc | C | 35 | bug | C `long double` is mapped to double (clexer.inc:342), so it is 8 bytes where gcc's is 16. MEASURED both sides: `struct { long double x; }` is sizeof 16 under gcc and 8 under pxx. Any such struct crossing a real C boundary therefore disagrees about its own SIZE before any calling-convention question is reached, and psABI puts an x87 member in MEMORY class where pxx would see one SSE eightbyte. Found by writing the NEGATIVE control for the new SysV classifier: the classifier's tyExtended refusal is unreachable from C because the frontend erases the distinction first, so a guard that looks like it covers long double cannot fire. Pre-existing and independent of the aggregate-classification work. | — |
@@ -875,9 +874,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3138)
+## done (3139)
 
-3138 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3139 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -976,7 +975,6 @@ _none_
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
 - [p 75] [A] umbrella-managed-memory-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- [p 70] [C] bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [T] bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - [p 70] [B] feature-b-a-bootable-image-with-the-busybox-userland-on-it

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:8 unfinished:27 blocked:6 backlog:4 backlog-umbrella:7 backlog-core:137 backlog-nilpy:97 backlog-tools:6 backlog-pascal:56 backlog-decide:32 backlog-libs:16 backlog-cfront:20 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3138 rejected:72`
+`working:8 unfinished:27 blocked:6 backlog:4 backlog-umbrella:7 backlog-core:137 backlog-nilpy:97 backlog-tools:6 backlog-pascal:56 backlog-decide:32 backlog-libs:16 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:44 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3139 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -57,7 +57,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 393, ranked
+## Ready — top 30 of 392, ranked
 
 - `[p 90] [C]` umbrella-compile-and-run-dosbox
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
@@ -77,7 +77,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [A]` umbrella-managed-memory-is-correct
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
-- `[p 70] [C]` bug-c-a-file-scope-pointer-to-array-crashes-on-indexing
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
@@ -89,5 +88,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
+- `[p 65] [C]` feature-c-corpus-busybox-i386-the-second-architecture
 
-_363 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_362 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

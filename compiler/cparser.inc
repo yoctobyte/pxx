@@ -9257,6 +9257,8 @@ var baseTk: TTypeKind; name: AnsiString; depth, idx, recBase, fldI, fOff, fTk, f
     clWrap, clSavedPos: Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     declSawExtern, declSawStatic, declSymIsNew: Boolean;
+    gPaLen, gPaNDims, gElemTkOrd, gElemRec, gPtrBaseTk, gPtrBaseRec, gmdi: Integer;
+    gPaDim: array[0..MAX_ARR_DIMS-1] of Integer;
 begin
   { Read the storage class BEFORE the type is consumed: both keywords are
     skipped without being recorded, so the token stream is the only place the
@@ -9267,6 +9269,25 @@ begin
   baseTk := ParseCDeclType;
   recId := CTypeBaseRec;
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 g` -> [4]), else -1 }
+  { POINTER-TO-ARRAY `elem (*name)[N]` at FILE SCOPE. Captured HERE, beside the
+    other CType* reads, for the reason ParseCLocalDeclAST states at its own
+    copy: an initializer can contain a cast, a cast re-runs ParseCDeclType, and
+    that resets every one of these globals before the recording site is reached.
+    ParseCGlobalVarDecl recorded NONE of this -- there is not one SymPtrElem*
+    write in the whole procedure -- while the local and parameter paths both do,
+    so the pointee extent existed for `int (*p)[4]` in a function and vanished
+    for the byte-identical declaration outside one. That single omission is both
+    halves of the observed damage: sizeof(*gp) answered the ELEMENT size (4, not
+    16) and `gp[2][3]` strided by the element instead of the row and SEGFAULTED,
+    where the identical local returns 23.
+    bug-c-a-file-scope-pointer-to-array-crashes-on-indexing }
+  gPaLen      := CTypePtrElemArrLen;
+  gPaNDims    := CTypePtrElemNDims;
+  gElemTkOrd  := CTypeElemTk;
+  gElemRec    := CTypeElemRec;
+  gPtrBaseTk  := CTypePtrBaseTk;
+  gPtrBaseRec := CTypePtrBaseRec;
+  for gmdi := 0 to MAX_ARR_DIMS - 1 do gPaDim[gmdi] := CTypePtrElemDim[gmdi];
   { Inline function-pointer (array) global `ret (*name[N])(params) [= {..}];`
     (sqlite's sqlite3BuiltinExtensions[]). ParseCDeclType already consumed the
     whole declarator — the name into CTypeFnPtrName and any `[..]` into
@@ -9415,6 +9436,21 @@ begin
         EnsureCGIArrCapacity(0);
         CGIArrKind[0] := 3; CGIArrSym[0] := FindProc(CurTok.SVal); nArrElems := 1; Next;
       end
+      { A named GLOBAL, the same `CGIArrKind = 2` slot the braced arm above
+        records -- this arm only ever knew function names, so `int (*q)[4] = gm;`
+        and `= &ga;` fell to the skip below and the pointer stayed 0. Every
+        pointer-to-array global takes THIS arm (a braced initializer is not
+        legal for one), so the whole shape linked to nil and `q[i][j]` read
+        address 0. Bind only when the name is the WHOLE initializer -- the
+        semicolon must follow it -- so `= gm + 1` still falls through to the
+        skip rather than silently binding the wrong address. }
+      else if (CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkSemicolon) and
+              (CurTok.SVal <> 'NULL') and (FindSym(CurTok.SVal) >= 0) then
+      begin
+        EnsureCGIArrCapacity(0);
+        CGIArrKind[0] := 2; CGIArrSym[0] := FindSym(CurTok.SVal);
+        CGIArrTgt[0] := 0; nArrElems := 1; Next;
+      end
       else
         while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkEOF) do Next;
     end;
@@ -9472,6 +9508,25 @@ begin
         SetSymPointerType(idx, tyUnknown, REC_NONE,
                           1, Ord(tyUnknown), REC_NONE);
       end;
+    end;
+    { The pointer-to-array half of this branch, and it must come AFTER the block
+      above: that block resets EVERY scalar pointer global to a tyUnknown
+      pointee unconditionally, so a pointee recorded before it is overwritten
+      with the generic 8-byte default -- `sizeof(*gp)` for `int (*gp)[4]`
+      answered 32 (8 x 4) rather than 16 that way. `int (*gp)[4]` arrives here
+      with the name in CTypeFnPtrName and NO call signature, exactly as it does
+      in ParseCLocalDeclAST -- which records the pointee LAST and then works.
+      Same values, same order, so the two scopes answer alike rather than this
+      one growing a private rule. }
+    if (idx >= 0) and (gPaLen > 0) then
+    begin
+      SymPtrElemArrLen[idx] := gPaLen;
+      SymPtrElemNDims[idx]  := gPaNDims;
+      if gPaNDims > 1 then
+        for gmdi := 0 to gPaNDims - 1 do
+          SymArrDimSpan[idx * MAX_ARR_DIMS + gmdi] := gPaDim[gmdi];
+      SetSymPointerType(idx, IntToTypeKind(gElemTkOrd), gElemRec,
+                        1, gPtrBaseTk, gPtrBaseRec);
     end;
     for ei := 0 to nArrElems - 1 do
     begin
