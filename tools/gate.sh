@@ -328,6 +328,24 @@ else
   echo "  SKIP  this push wires the tests it adds (no origin/$GATE_BRANCH ref)"
 fi
 
+# A frozen-string operand kind fed to a width-aware normaliser must come from
+# IRStrTkOf/IRFrozenKindOfAddr, never IntToTypeKind(IRTk[...]) -- the latter
+# reads the IR's generic tyString tag, which means an 8-byte prefix, so under
+# -dPXX_SHORTSTRING the site reads eight bytes of [len][chars] as a length.
+# It fails FALSE rather than loudly: the length mismatch short-circuits before
+# any character is compared, so nothing crashes and nothing prints garbage.
+#
+# Three normalisers already carried a COMMENT saying this and arm32 violated
+# its own comment at four sites (fixed 764dc3a30 / 64f230d12). Prose telling
+# the next author what not to do is not a mechanism preventing it, and this is
+# a call-site PATTERN rather than a semantic judgement, so it can be checked.
+# ~0.1s; carries its own positive control AND a negative control, and refuses
+# (exit 2) if a fenced normaliser has been renamed away under it.
+if [ -f tools/check_frozen_kind_resolution.py ]; then
+  step "frozen kind via IRStrTkOf, not IntToTypeKind" "$LOGDIR/frozen-kind.log" \
+       python3 tools/check_frozen_kind_resolution.py                  || RC=1
+fi
+
 # The .inc files with TWO including configurations: compiler.pas, and a
 # standalone oracle harness that MOCKS the defs.inc environment. A new reference
 # from one of these into defs.inc compiles in the compiler and breaks the
