@@ -1,5 +1,5 @@
 ---
-summary: "NOT one layout family -- THREE separate issues bundled (owner, 2026-09-02), and none is known-incompat. Re-measured at 27e983d24, compiler 468194333634: subranges are 4 bytes where FPC is 1 (TSmall 0..255 and TNeg -128..127 both 4; a record of two is 8 vs 2); `set of 0..7` is 32 bytes where FPC is 1, i.e. NOT BITPACKED, a 32x waste that is an efficiency defect in its own right; and `string[10]` is 8 -- POINTER SIZE, not the 11 inline bytes FPC gives, so a short string is not stored inline at all. That last one is NOT fixed, contrary to a reasonable assumption. Blocks feature-pascal-typed-and-untyped-files [p70]: `file of T` writes record layout to DISK, where layout stops being an intermediate and becomes the value, so this must be settled BEFORE an on-disk format."
+summary: "ONE OF THE THREE IS DONE. **Subranges are now stored in the narrowest ordinal that spans the declared range** -- SizeOf(0..255) and SizeOf(-128..127) are 1, `packed record a,b,c` is 3, `array[0..3] of 0..255` is 4, all matching FPC 3.2.2, on x86-64 and on i386/aarch64/arm32/riscv32 byte-identically. AND IT WAS NOT A FOOTPRINT ITEM: `TBig = -3000000000..3000000000` was given four bytes, so storing -3000000000 read back **1294967296** -- ordinary declared source, no diagnostic, wrong number, reproducible on the pin. STILL OPEN, and they do not share a cause: (2) sets are NOT BITPACKED -- `set of 0..7` is 32 bytes where FPC is 4, a 32x waste that is an efficiency defect on its own terms; (3) `string[10]` is 8 bytes, POINTER SIZE, where FPC gives 11 inline, so a short string is not stored inline at all -- a wrong REPRESENTATION rather than a generous width, and the ticket body routes that one to Track U as a storage-model decision. Blocks feature-pascal-typed-and-untyped-files [p70]: `file of T` writes record layout to DISK, so layout stops being an intermediate and becomes the value."
 type: bug
 track: P
 prio: 25
@@ -444,3 +444,85 @@ sizes before an on-disk format, or silently invalidate written data.
 **Splitting is left to whoever takes it**, deliberately: this ticket carries the
 `blocked-by` edge from `feature-pascal-typed-and-untyped-files`, and re-wiring
 that graph half-done is worse than a bundle that says it is a bundle.
+
+
+---
+
+## 2026-09-02 (frankB) — the SUBRANGE third is FIXED, and it was a wrong-value bug
+
+Landed. `SubrangeStorageTk(lo, hi)` in `pasparser_decl.inc` picks the narrowest
+ordinal spanning the declared range — unsigned when `lo >= 0`, signed otherwise
+— and **both** parser arms call it: the named `T = lo..hi` in `ParseTypeSection`
+and the inline `var x: lo..hi` in `ParseTypeKind`. They are two spellings of one
+construct, and `normalise-dont-special-case` is exactly the trap here: fixing
+one alone leaves the other broken for months while the headline case works.
+
+Measured at `a1e916acf`, compiler `ea9f0ee2a3b7`, oracle `fpc -O- -Mobjfpc` 3.2.2:
+
+| | before | after | FPC |
+| --- | ---: | ---: | ---: |
+| `SizeOf(0..255)` | 4 | **1** | 1 |
+| `SizeOf(-128..127)` | 4 | **1** | 1 |
+| `SizeOf(10..20)` | 4 | **1** | 1 |
+| `SizeOf(0..70000)` | 4 | 4 | 4 |
+| `packed record a: 0..255; b: -128..127; c: 0..255` | 12 | **3** | 3 |
+| `array[0..3] of 0..255` | 16 | **4** | 4 |
+
+### It is not a compat item. It computed a wrong value
+
+The pre-existing behaviour gave EVERY subrange four bytes, including ones whose
+declared range does not fit in four bytes. On the pin:
+
+```pascal
+type TBig = -3000000000..3000000000;
+var g: TBig;
+begin g := -3000000000; WriteLn(g); end.
+```
+
+    pin      1294967296     SizeOf 4
+    fixed   -3000000000     SizeOf 8
+    fpc     -3000000000     SizeOf 8
+
+Ordinary declared source, clean compile, no diagnostic, wrong number. That row
+is why this third is a `bug-` and not the `compat-` its ranking assumed — and it
+is the row that nobody measured, because every probe in this ticket's history
+used ranges that happen to fit.
+
+### What was NOT changed, deliberately
+
+The **declared bounds stay a separate fact.** `AliasSubLo`/`AliasSubHi` (named)
+and `LastTypeSubLo`/`LastTypeSubHi` (inline) still drive `{$R+}`, `Low`, `High`,
+`Ord`, `Succ`, `Pred`. `10..20` stores in a byte and still answers 10 and 20,
+not 0 and 255, and `{$R+}` still rejects 201 for a `0..200`. Both verified
+against FPC, including that `{$R-}` truncation matches FPC exactly and `{$R+}`
+exits 201 on both.
+
+A **char subrange keeps `tyChar`** — its storage is already one byte and its
+values must stay chars.
+
+The result is an **ordinary ordinal kind**, not a new subrange kind: `tyUInt8`
+is what `Byte` already resolves to, so every load, store, widen, compare and
+record-layout path this reaches is one the compiler already exercises. That is
+what made this a sizing change rather than the codegen slice the ticket feared.
+
+### Verification
+
+- `test/test_subrange_storage.pas`, wired into `test-core`, output byte-identical
+  to FPC 3.2.2 across 14 rows.
+- **Positive control**: with the two narrowing calls removed and the compiler
+  rebuilt, the test goes red on the size rows (`4 4 4 4 4` vs `1 1 1 4 8`) AND on
+  the `TBig` value row. Restored and re-verified byte-identical.
+- **Cross targets**: i386, aarch64, arm32 and riscv32 each produce output
+  byte-identical to x86-64 and to FPC. The ticket's Gate asks for this
+  specifically, because a size change is where a suite goes green while the ABI
+  moves underneath it.
+- Self-host fixedpoint converged; `gate.sh quick` GREEN with the FPC seed canary
+  RUN rather than SKIPped; `--tier quick` GREEN.
+
+### One correction to this ticket's own 2026-09-02 note
+
+It records `set of 0..7  SizeOf 32  fpc 1`. FPC 3.2.2 answers **4**, not 1 —
+measured again here, and the ticket's ORIGINAL table (2026-08-20) says 4 in
+every row too. The 32x figure in the prose is right; the `fpc 1` is a typo that
+would send whoever implements bitpacking after a one-byte target FPC does not
+use. FPC sizes a set by its element range **with a 4-byte floor**.

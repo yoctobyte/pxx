@@ -5435,6 +5435,20 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_promoint_overflow.pas $(TESTTMP)/test_promoint_overflow26
 	tools/expect_same.sh test_promoint_overflow26 "$$($(TESTTMP)/test_promoint_overflow26)" "15511210043330985984000000"
 	# nested variant part + tagged discriminant + const case labels (TVarSin, bug-pascal-nested-variant-record-tagged)
+	# A SUBRANGE IS STORED IN THE NARROWEST ORDINAL THAT SPANS IT, not in the
+	# 4-byte default. Every size row below is FPC 3.2.2's own answer and every
+	# one MOVED with the fix (4->1 three times, 12->3 packed, 16->4 array), so
+	# reverting the narrowing turns this red on the sizes alone — which a value
+	# test could not do, since every value was already correct before.
+	# The one value row that DID move is the reason this is a bug and not a
+	# footprint item: `TBig = -3000000000..3000000000` was given four bytes, so
+	# storing -3000000000 read back 1294967296. Ordinary declared source,
+	# no diagnostic, wrong number.
+	# Both parser arms are exercised, the named `T = lo..hi` and the inline
+	# `var x: lo..hi`: they are two spellings of one construct and fixing one
+	# alone is how the other stays broken.
+	./$(COMPILER) test/test_subrange_storage.pas $(TESTTMP)/test_subrange_storage26
+	tools/expect_same.sh test_subrange_storage26 "$$($(TESTTMP)/test_subrange_storage26)" "$$(printf '1 1 1 4 8 1\n3 4\n0 255 -128 127\n10 20 0 70000\n200 250\n-50\n-2999999999\n250 -120 7\n60 210 540\n8\n1515\n250 1\n-95 1\nq 113')"
 	./$(COMPILER) test/test_nested_variant_record.pas $(TESTTMP)/test_nested_variant_record26
 	tools/expect_same.sh test_nested_variant_record26 "$$($(TESTTMP)/test_nested_variant_record26)" "$$(printf '28\n2\n8080\nTRUE\n7')"
 	# cast-deref (PChar(s)^) as by-ref method arg (bug-cast-deref-as-varparam-arg)

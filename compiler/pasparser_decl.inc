@@ -16,6 +16,54 @@
 
 { ===== Declaration parsing ===== }
 
+{ The STORAGE kind for an ordinal subrange `lo..hi` — the narrowest ordinal that
+  spans the declared range, signed when the low bound is negative.
+
+  WHY THE STORAGE KIND IS NOT THE DECLARED RANGE. `T = 0..255` is a type whose
+  values need one byte; giving it tyInteger stored four, so an
+  `array[0..N] of 0..255` cost 4x the memory the declaration asks for and every
+  record containing a subrange field was wider than the language implies. That
+  is the whole reason a program writes `array[0..N] of 0..255` instead of
+  `array of Integer`. FPC 3.2.2 answers 1 for `0..255`, `-128..127` and `10..20`,
+  and pxx answered 4 for all three.
+
+  THE DECLARED BOUNDS ARE A SEPARATE FACT AND STAY SEPARATE. AliasSubLo/AliasSubHi
+  (named form) and LastTypeSubLo/LastTypeSubHi (inline form) keep lo..hi for
+  {$R+} checks, Low, High, Ord, Succ and Pred. This function answers only "how
+  many bytes does one value occupy", and a {$R+} check must keep using the
+  DECLARED bounds — `0..200` stores in a byte and still must reject 201.
+
+  THE RESULT IS AN ORDINARY ORDINAL KIND, deliberately, rather than a new
+  subrange kind: tyUInt8 is what `Byte` already resolves to, so every load,
+  store, widen, compare and record-layout path this reaches is one the compiler
+  already exercises. Mapping onto an existing representation is what makes this
+  a sizing change instead of a codegen slice.
+
+  compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees }
+function SubrangeStorageTk(lo, hi: Int64): TTypeKind;
+begin
+  if lo > hi then
+  begin
+    { An empty or malformed range: do not guess a narrow width for it. }
+    Result := tyInteger;
+    Exit;
+  end;
+  if lo >= 0 then
+  begin
+    if hi <= 255 then Result := tyUInt8
+    else if hi <= 65535 then Result := tyUInt16
+    else if hi <= 4294967295 then Result := tyUInt32
+    else Result := tyUInt64;
+  end
+  else
+  begin
+    if (lo >= -128) and (hi <= 127) then Result := tyInt8
+    else if (lo >= -32768) and (hi <= 32767) then Result := tyInt16
+    else if (lo >= -2147483648) and (hi <= 2147483647) then Result := tyInt32
+    else Result := tyInt64;
+  end;
+end;
+
 { Parse the element spec of `set of <X>` — CurTok is the token after `of`.
   Records BOTH halves of the element identity in the LastTypeSet* globals:
   the enum id (or -1) and the element TTypeKind ordinal. Shared by the inline
@@ -177,6 +225,13 @@ begin
       Expect(tkDotDot, '..');
       LastTypeSubHi := ConstEvalOrdBound;      { high bound }
       LastTypeIsSub := True;
+      { …and STORE it in the narrowest ordinal that spans it. A char subrange
+        keeps tyChar: its storage is already one byte and its VALUES must stay
+        chars. See SubrangeStorageTk, and keep this arm and the named-alias one
+        in ParseTypeSection in step -- they are the two spellings of one
+        construct and fixing one alone is how the other stays broken. }
+      if Result <> tyChar then
+        Result := SubrangeStorageTk(LastTypeSubLo, LastTypeSubHi);
       Exit;
     end;
     tkRecord, tkPacked:
@@ -6459,6 +6514,9 @@ begin
         subLoVal := ConstEvalOrdBound;     { low bound }
         Expect(tkDotDot, '..');
         subHiVal := ConstEvalOrdBound;     { high bound }
+        { The narrowest ordinal spanning the range -- the sibling of the inline
+          arm in ParseTypeKind, and the two must move together. }
+        if fTk <> tyChar then fTk := SubrangeStorageTk(subLoVal, subHiVal);
         RegisterGeneralAlias(tnOff, tnLen, Ord(fTk), REC_NONE);
         { RETAIN the bounds ({$R+} checks stores against them —
           feature-pascal-range-checks-r-plus; they used to be dropped). }
