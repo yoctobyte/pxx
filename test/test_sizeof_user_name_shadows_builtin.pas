@@ -25,20 +25,44 @@ program test_sizeof_user_name_shadows_builtin;
 
   Checked against FPC 3.2.2 ({$MODE OBJFPC}{$H+}): identical output.
 
-  NOT asserted here, deliberately: `SizeOf(v)` where v is a user RECORD variable
-  answers 8 rather than 12 on this compiler, before and after this fix. That is
-  a separate and older defect with its own ticket; baking 8 in here would freeze
-  it, and baking 12 in would make this test fail for a reason it is not about. }
+  The DECLARATION side (rows j..m) was the second half and is now fixed too.
+  ParseTypeKind guarded its builtin-name chain with `FindTypeAlias(lo) >= 0`
+  alone, while the SizeOf site above consults six tables -- the same predicate
+  in two places, one narrow, which is the second path that stays broken. So an
+  ALIAS beat a builtin name and a RECORD did not:
+
+      SizeOf(Currency)  12 in an expression, 8 inside an array bound, SAME
+                        program, ten lines apart -- self-inconsistent, so it
+                        needs no oracle to be obviously wrong
+      var v: Currency;  `v.a := 1` refused outright with
+                        "a value of this type has no members"
+
+  This file's earlier revision recorded row j as deliberately NOT asserted,
+  because `SizeOf(v)` on a user record variable answered 8 both before and after
+  that fix. That is the defect now closed, so the row is asserted rather than
+  described. bug-p-a-user-type-whose-name-shadows-a-builtin-is-unusable
+
+  NO EXPECTED VALUE BELOW IS 4 OR 8 WHERE IT COULD BE A DEFAULT. The sizes that
+  matter here are 12, 10 and 6, none of which a fallback produces; 8 appears
+  only in the control rows, where it is the answer being guarded rather than
+  the answer under test. A row expecting the same number the broken path
+  returns cannot fail. }
 
 type
   Currency  = record a, b, c: Integer; end;   { shadows the builtin float name }
   TDateTime = array[0..9] of Byte;            { shadows the builtin alias      }
   Comp      = (cOne, cTwo, cThree);           { shadows the builtin Int64 name }
+  TCurArr   = array[0..SizeOf(Currency) - 1] of Byte;  { the const-eval path }
 
 var
   longbool: Boolean;      { a VARIABLE whose name is a builtin type }
   wordbool: Char;
   variant:  Int64;
+  wc: WideChar;           { CONTROL: an unshadowed builtin still resolves }
+  bb: ByteBool;
+  cv: Currency;           { a VARIABLE of the shadowing record type }
+  dv: TDateTime;          { ...and of the shadowing array type    }
+  av: TCurArr;
 
 begin
   { user TYPE names beat the builtin table }
@@ -64,4 +88,21 @@ begin
 
   longbool := True; wordbool := 'x'; variant := 5;
   WriteLn('i ', longbool, ' ', wordbool, ' ', variant);
+
+  { THE DECLARATION SIDE. A name the builtin table knows must resolve to the
+    user's type when the program declares one -- as a variable's type, and in
+    a constant expression. }
+  cv.a := 1; cv.b := 2; cv.c := 3;      { refused outright before the fix }
+  WriteLn('j ', SizeOf(cv));            { the record: 12, not the builtin 8 }
+  WriteLn('k ', cv.a + cv.b + cv.c);    { 6 -- the members exist at all }
+  WriteLn('l ', SizeOf(av), ' ', Length(av));   { 12 12, not 8 8 }
+  WriteLn('m ', SizeOf(dv));            { the array: 10, not the builtin 8 }
+
+  { ...and the control for THIS half: a builtin name the program does NOT
+    shadow must still resolve to the builtin when used as a variable's type.
+    This is the row that goes missing, and the one a fix that simply stopped
+    consulting the builtin table would break while every row above still
+    passed. WideChar (2) and ByteBool (1) are chosen because no fallback in
+    this area produces 2 or 1. }
+  WriteLn('n ', SizeOf(wc), ' ', SizeOf(bb));
 end.

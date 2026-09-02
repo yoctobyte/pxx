@@ -3,10 +3,10 @@ slug: bug-p-a-user-type-whose-name-shadows-a-builtin-is-unusable
 track: P
 type: bug
 prio: 45
-status: backlog
+status: done
 found: 2026-08-31
 found-by: frank-rust
-owner: unassigned
+owner: frankC
 blocked-by: []
 summary: "SELF-INCONSISTENT, no oracle needed: with `type Currency = record a,b,c: Integer end`, `SizeOf(Currency)` answers 12 in an expression and 8 inside an array bound in the SAME program (`12 8 8`; fpc `12 12 12`) — ParseTypeKind still consults the builtin type name before the user's own type tables, so such a type is also unusable as a variable's type (`v.a := 1` gives 'a value of this type has no members'). Declaration-side twin of the SizeOf precedence bug fixed in 582e4de09; that fix covered SizeOf only. Because it is self-inconsistency rather than an FPC disagreement, it cannot be ranked as a compat item."
 ---
@@ -148,3 +148,78 @@ answered 8 by FPC too, because the name genuinely is not declared yet there.
 **Measured both directions rather than assumed**; whoever fixes `ParseTypeKind`
 should re-ask that question for the declaration path, where forward references
 inside one type section are ordinary.
+
+## Fixed 2026-09-02
+
+`ParseTypeKind` already had the guard and it was one table too narrow:
+
+```pascal
+tnHasAlias := FindTypeAlias(lo) >= 0;
+```
+
+Its own comment said "a source/RTL alias of this name beats every builtin
+name", and every builtin arm in the chain is guarded with `not tnHasAlias`. So
+an ALIAS beat a builtin and a RECORD did not. The SizeOf site fixed in
+`582e4de09` consults six tables for the same question. **Same predicate, two
+places, one narrow** — the umbrella's second shape (duplicated tables that
+disagree), not a second arm, so the fix is the seam and not a special case.
+
+Now `FindTypeAlias or IsRecordType or FindUClass or IsClassType or
+FindArrayType or FindEnumType`, and renamed `tnUserDecl`, because "HasAlias"
+was an 80%-accurate name for what it now tests and those are worse than
+0%-accurate ones. It asks the TYPE tables only: SizeOf legitimately also checks
+`FindVarSym`, but a variable named `Currency` does not make `Currency` a type
+in a type position.
+
+The guarded-branch shape is unchanged, so this can still only ever make a
+declaration WIN, never the reverse.
+
+## Verified
+
+Extended `test/test_sizeof_user_name_shadows_builtin.pas` — the sibling test
+from `582e4de09` — rather than adding a second file, since it is the same
+question. Its own comment recorded row j as deliberately NOT asserted because
+`SizeOf(v)` on a user record variable answered 8 before and after that fix;
+that is this defect, so the row is now asserted and the comment updated.
+
+New rows: `SizeOf(cv)` = 12, member access `cv.a + cv.b + cv.c` = 6 (a hard
+compile error before), the const-eval path `array[0..SizeOf(Currency)-1]` = 12
+(the `12 8 8` self-inconsistency), and the shadowing ARRAY type = 10. Plus the
+control that goes missing: an UNSHADOWED builtin must still resolve as a
+variable's type — `WideChar` (2) and `ByteBool` (1), chosen because no fallback
+here produces 2 or 1.
+
+**No expected value under test is 4 or 8.** 12, 10, 6, 2, 1 — none is a number
+a fallback returns, so no row can pass by the machinery doing nothing.
+
+- pxx output is byte-identical to FPC 3.2.2 `-Mobjfpc -Sh` across all 14 rows.
+- Positive control: the **pinned** compiler REFUSES TO BUILD the test —
+  `error: a value of this type has no members`, a build-time rejection rather
+  than a wrong value.
+- `gate.sh quick` GREEN, FPC seed canary PASS.
+
+**Blast radius measured rather than assumed.** The change can only affect a
+program that declares a type whose name collides with a builtin. Across
+`lib/rtl` and `lib/pcl` (265 declared type names) there is exactly ONE such
+name: `Text`, declared as a record in `lib/rtl/textfile.pas` and as a class in
+`lib/pcl/tkinter.pas`. A `Text`/`TextFile` round-trip compiles to byte-identical
+code/data/bss before and after. That is why the quick tier is proportionate here
+and the gate was not widened.
+
+Worth recording: the first version of that collision measurement was a
+`comm` whose builtin-name list had several names per line, so it compared whole
+lines and could never match. It reported zero collisions — the right-looking
+answer — and only an injected must-be-reported name exposed it. The real answer
+was one collision, not zero.
+
+## FPC's default mode is not a disagreement
+
+`fpc selfinc.pas` with no mode switch prints `6 6 6` where pxx prints
+`12 12 12`, which looks like a fresh divergence and is not: mode `fpc` has
+`Integer` = 2 bytes (measured: `SizeOf(Integer)` is 2 there, 4 under
+`-Mobjfpc`). Under `-Mobjfpc`/`-Mdelphi` FPC prints `12 12 12`, matching. The
+ticket's recorded `fpc 3.2.2 : 12 12 12` is right; it was measured in a
+comparable mode.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

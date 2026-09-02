@@ -178,7 +178,7 @@ function ParseTypeKind: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     qtOuter, qtNested: Integer;   { `TOuter.TInner` — the nested-type lookup }
     nestCi: Integer;              { the BARE `TInner` lookup, inside TOuter's own body }
-    tnHasAlias: Boolean;   { a source/RTL alias of this name beats every builtin name }
+    tnUserDecl: Boolean;   { a source/RTL DECLARATION of this name -- alias, record, class, array type or enum -- beats every builtin name }
     childDepth, childBaseTk, childBaseRec: Integer;
     ptrArrAi: Integer;   { `^TFixed`: the pointee's ArrType index, else -1 }
     childPtrAlias: Integer;   { `^TP`: the pointee's own pointer-alias index, else -1 }
@@ -502,21 +502,42 @@ begin
         redeclares them, and fatal for PWord, which this compiler declares as ^NativeInt. Guarding each
         branch (rather than reordering) can only ever make an alias WIN, never the reverse: the class,
         record and alias handling in the final else stays reachable exactly as before. See b303/b304. }
-      tnHasAlias := FindTypeAlias(lo) >= 0;
-      if (not tnHasAlias) and (CaseEqual(lo, 'textfile') and (IsRecordType('text') <> REC_NONE)) then
+      { ...and "alias" was too narrow a reading of "a source declaration". This
+        was `FindTypeAlias(lo) >= 0` alone, so an alias beat a builtin name and a
+        RECORD did not: with `type Currency = record a, b, c: Integer; end`,
+        `SizeOf(Currency)` answered 12 in an expression and 8 inside an array
+        bound TEN LINES APART in the same program, and `v: Currency` then refused
+        `v.a := 1` with "a value of this type has no members". Self-inconsistent,
+        so no oracle is needed to see it is wrong.
+
+        The SizeOf site was fixed first (582e4de09) and consults SIX tables; this
+        one consulted one. Same predicate, two places, one narrow -- which is the
+        second path that stays broken (normalise-dont-special-case). It asks the
+        TYPE tables only: a variable named `Currency` does not make `Currency` a
+        type, whereas SizeOf legitimately takes a variable and so checks
+        FindVarSym too.
+
+        Widening cannot cost a builtin its name unless something really is
+        declared under it, and the guarded-branch shape is unchanged, so this can
+        only ever make a DECLARATION win -- never the reverse.
+        bug-p-a-user-type-whose-name-shadows-a-builtin-is-unusable }
+      tnUserDecl := (FindTypeAlias(lo) >= 0) or (IsRecordType(lo) <> REC_NONE) or
+                    (FindUClass(lo) >= 0) or IsClassType(lo) or
+                    (FindArrayType(lo) >= 0) or (FindEnumType(lo) >= 0);
+      if (not tnUserDecl) and (CaseEqual(lo, 'textfile') and (IsRecordType('text') <> REC_NONE)) then
       begin
         { FPC: TextFile = Text. Resolve to the RTL `text` record — previously
           the unknown name fell through to a 4-byte integer slot. }
         LastTypeRecId := IsRecordType('text');
         Result := tyRecord;
       end
-      else if (not tnHasAlias) and (CaseEqual(lo, 'file')) then
+      else if (not tnUserDecl) and (CaseEqual(lo, 'file')) then
         { untyped `file` / `file of T`: no file-variable model in pxx (the
           textfile RTL covers Text I/O). Reject at the type reference instead
           of silently minting an integer-sized slot
           (bug-pascal-missing-diagnostics-fail-tests / tdefault4). }
         Error('file types are not supported (use TextFile for text I/O)')
-      else if (not tnHasAlias) and (CaseEqual(lo, 'shortstring')) then
+      else if (not tnUserDecl) and (CaseEqual(lo, 'shortstring')) then
       begin
         { Interim: `shortstring` maps to a 255-cap tyFixedString (word-prefix
           layout, so sizing matches the reused frozen codegen). The true
@@ -532,7 +553,7 @@ begin
         reasoning; the arms that survive below it are the ones that do more
         than name a kind (LastTypeStrCap, LastTypePointerElemTk, an Error).
         bug-a-the-builtin-type-name-table-exists-twice-and-the-two-disagree }
-      else if (not tnHasAlias) and (BuiltinScalarTypeKind(lo) <> tyUnknown) then
+      else if (not tnUserDecl) and (BuiltinScalarTypeKind(lo) <> tyUnknown) then
       begin
         Result := BuiltinScalarTypeKind(lo);
         { THE ALIAS BREAK. WideString/UnicodeString keep the same KIND as
@@ -580,7 +601,7 @@ begin
            (CaseEqual(lo, 'widestring') or CaseEqual(lo, 'unicodestring')) then
           LastTypeStrElemTk := tyWideChar;
       end
-      else if (not tnHasAlias) and (CaseEqual(lo, 'pwidechar')) then
+      else if (not tnUserDecl) and (CaseEqual(lo, 'pwidechar')) then
       begin
         { tyWideChar, not tyUInt16 — the element of a PWideChar IS a WideChar,
           and `WriteLn(p^)` printed the ordinal for exactly as long as this said
@@ -604,7 +625,7 @@ begin
 
         (The chain's ordering is wrong in general and should be fixed at the top rather than
         per-name — filed as bug-pascal-builtin-typename-shadows-source-alias.) }
-      else if (not tnHasAlias) and (BuiltinPtrNameElemTk(lo) <> tyUnknown) then
+      else if (not tnUserDecl) and (BuiltinPtrNameElemTk(lo) <> tyUnknown) then
       begin
         LastTypePointerElemTk := BuiltinPtrNameElemTk(lo);
         LastTypePointerElemRec := REC_NONE;
@@ -633,7 +654,7 @@ begin
         record-with-methods — which real FPC source uses and we could not parse.
         Write `TObject` for the reference. See
         decided/decide-revisit-object-types-rtl-generics-fired-the-trigger. }
-      else if (not tnHasAlias) and (CaseEqual(lo, 'pchar') or CaseEqual(lo, 'pansichar')) then
+      else if (not tnUserDecl) and (CaseEqual(lo, 'pchar') or CaseEqual(lo, 'pansichar')) then
       begin
         LastTypePointerElemTk := tyChar;
         { see the depth/base note on the builtin-pointer-name arm above }
@@ -649,7 +670,7 @@ begin
         levels over a char base, so `p^` is a PChar and everything that
         recognises one — WriteLn, concat, Length, comparison — answers for it.
         refactor-centralize-managed-string-pchar-conversion }
-      else if (not tnHasAlias) and (CaseEqual(lo, 'ppchar') or CaseEqual(lo, 'ppansichar')) then
+      else if (not tnUserDecl) and (CaseEqual(lo, 'ppchar') or CaseEqual(lo, 'ppansichar')) then
       begin
         LastTypePointerElemTk := tyPointer;
         LastTypePointerDepth := 2;
@@ -661,7 +682,7 @@ begin
         so no existing Pascal program changes behaviour by naming nothing.
         `PromoInt` picks the target's default storage class; the numbered names
         pin a class explicitly, and the number IS the usable inline width. }
-      else if (not tnHasAlias) and (CaseEqual(lo, 'promoint') or CaseEqual(lo, 'promoint32')
+      else if (not tnUserDecl) and (CaseEqual(lo, 'promoint') or CaseEqual(lo, 'promoint32')
                                     or CaseEqual(lo, 'promoint64')) then
       begin
         { PromoInt32 is reserved but not yet declarable: its arithmetic would
@@ -681,7 +702,7 @@ begin
                 + 'numbered spelling does not exist here — write PromoInt');
 
       end
-      else if (not tnHasAlias) and (EnableAutoVar and CaseEqual(lo, 'auto')) then Result := tyAuto
+      else if (not tnUserDecl) and (EnableAutoVar and CaseEqual(lo, 'auto')) then Result := tyAuto
       else
       begin
         { `Text`/`TextFile` resolve here as the record from the implicitly-loaded
