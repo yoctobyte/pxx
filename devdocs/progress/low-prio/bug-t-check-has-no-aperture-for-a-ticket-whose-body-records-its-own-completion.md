@@ -208,3 +208,31 @@ BOTH `backlog/` and `done/`, byte-identical apart from the auto-close Log entry
 reproducing exactly as it predicted, on 2026-09-02, while the ranker kept
 offering the `backlog/` copies. Removed. `tools/ticket_path.sh --check-dupes`
 now reports the board clean; it is what surfaced both.
+
+### Track T's reading of the same numbers, which reverses what they argue for
+
+Relayed by the Track T session after the run above, and it is right:
+
+> "the filter only catches 1 of 3" reads as a reason not to build it and your
+> data says the opposite for the population that actually matters.
+
+The precision table was measured against the three RECORDED instances, and all
+three were found because a dispatch was about to happen — a population where a
+false positive costs an agent's turn and precision therefore matters. The
+`prio: 25` find is from a different population: nobody was going to be handed
+that ticket, so nothing else was ever going to catch it, and the only cost of a
+false positive there is one glance at a summary that a human is not reading
+anyway.
+
+**So the aperture's value does not depend on its precision, and the 17-hits /
+3-true row is not the argument against it that it looks like.** 14 false
+positives on a board scan are 14 glances; the alternative is a ticket sitting in
+the ranker at zero value forever, which is the exact failure CLAUDE.md invokes
+to argue for a terminal folder over a low prio. Report-never-auto-close (already
+this ticket's design) is what makes a loose filter safe: the filter decides who
+gets LOOKED at, and the verification decides who gets closed.
+
+Which does NOT rehabilitate the wording-only filter for the dispatch population
+— the "subject of the sentence" finding above stands, and `feature-embed-pascal-script`
+is still a correctly-open ticket saying FIXED twice. It means the two
+populations want different thresholds, and only one of them wants a tight one.
