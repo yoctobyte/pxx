@@ -146,6 +146,56 @@ required. That is a much stronger claim than "sizes get closer": records
 containing fixed strings become byte-compatible, which is what `file of T`
 interop actually needs.
 
+## THE PREFIX IS 8 BYTES ON EVERY TARGET — and tyShortString is not a byte prefix TODAY
+
+The owner asked whether `tyString` uses a *word* for the length. Measured, and
+the word "word" is the confusing part: it means a **machine word**, not Pascal's
+2-byte `Word`. `FrozenStrSlotSize` returns **`cap + 8` hardcoded** — NOT
+`cap + TARGET_PTR_SIZE` — so the prefix is 8 bytes on every target despite the
+comment calling it "NativeInt".
+
+**And `tyShortString` has no byte-prefix semantics today.** A normaliser in
+`symtab.inc` makes fixed/short strings present as a plain frozen `tyString`
+*value*: *"they are codegen-identical (same inline word-prefixed layout); only
+the slot SIZE differs, and that is carried by the storage kind + SymStrCap.
+Normalising the node value-kind here keeps every existing `= tyString` value
+check (write, concat, compare, ...) working without widening ~150 sites."* So
+`FrozenStrSlotSize(tyShortString, cap)` already returns `cap+1` while the
+codegen writes a word. Nothing exercises the mismatch yet.
+
+### The cost structure, corrected
+
+An earlier version of this ticket quoted **9 sites** for the mixed-kind work.
+That number is right for what it measured (enumeration lists omitting
+`tyShortString`) and **was not measuring the load-bearing thing.** The real
+structure:
+
+| number | what it is | does it change? |
+| --- | --- | --- |
+| **306** | `tyString` comparisons (252 `=`, 54 `in [...]`) | **NO** — the normaliser exists to keep them working. That is the design. |
+| **13** | refs to the named `EmitStoreStrLen`/`EmitLoadStrLen` pair (symtab 7, ir_codegen 2, one each in 386/aarch64/arm32, pasparser_lval 1) | **YES** — this is where the prefix width lives |
+| **9** | enumeration lists omitting `tyShortString` | yes, but they are kind lists |
+
+**The design already anticipated this**: value kind normalised, storage kind
+carries the width. That is why every measurement has come out cheaper than
+expected.
+
+### THE HAZARD — name it before starting
+
+The normaliser's justification is that fixed and short strings are
+**"codegen-identical"**. A byte prefix makes that **false**. Any site that reads
+the length through the normalised VALUE kind, rather than through
+`EmitStoreStrLen`/`EmitLoadStrLen`, then uses the wrong width **silently** —
+and the concentration is not total: aarch64 emits `str x9, [x6] (length word)`
+inline in at least two places, and 16 comments across the backends name the
+length word directly.
+
+**First job is therefore an audit, not an edit**: find every site that assumes
+the prefix is 8 bytes without going through the named pair. Per the guard rules,
+a test for this must assert the STRIDE and a `string[N]` whose content length
+differs from its capacity — a value check cannot see a wrong prefix width when
+the string happens to fill its slot.
+
 ## CONSTANTS: the landing order, and it is narrower than it looks
 
 The owner named the sequencing risk: *"the big catch is — constant strings.
