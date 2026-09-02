@@ -80,6 +80,48 @@ the owner wants for file IO and the fast form for registers do not have to be
 the same form, and coupling them is the mistake that is cheap to avoid now and
 expensive later.
 
+## The owner's proposal, and the two forks inside it
+
+Owner, 2026-09-02: *"we keep internal structure at 32 byte, always. and we
+offset and truncate on file output and the reverse on input."*
+
+**Agreed on the shape** — decouple, and derive the disk form from the DECLARED
+TYPE so the format is a function of the source rather than of codegen. That is
+the cheap version of question (3) and it is strictly safer than narrowing
+memory: no ABI change, no `IR_SET_COPY` contract change, none of the 115
+`tySet` sites move.
+
+**Fork A — it drops the ESP win the owner himself raised.** `set of 0..7` still
+costs 32 bytes of RAM on xtensa, and an array or record of them still costs 8x.
+Disk gets compact; memory does not. Question (1) is the only thing that buys
+the low-memory target, and this proposal declines it. That may well be the
+right call — it is the expensive half — but it should be declined knowingly,
+not absorbed.
+
+**Fork B — offsetting and FPC-readable files are mutually exclusive.** FPC
+truncates (small-set word, high bound ≤ 31 → 4 bytes) but **does not rebase to
+`lo`** (frankb-a9, measured), so `set of 200..207` is 32 bytes in an FPC file.
+Rebasing gives us 1 byte and a file FPC cannot read. `feature-pascal-typed-and-
+untyped-files` names a **byte-for-byte comparison against FPC's written file**
+as its acceptance test, so the two cannot both hold. **This is NOT the
+FPC-parity nitpicking the 2026-09-02 rules retired**: a file is an outward
+artifact another program reads, so the format is a contract rather than an
+intermediate, and matching it buys real interop. Recommend **truncate, do not
+offset** unless the owner would rather have the smaller file.
+
+## Consequence that lands under EVERY option
+
+**If any type's on-disk form differs from its in-memory form, `file of T` is a
+field-by-field MARSHALLER, not a blit.** Decide it now — the feature is not
+built, so this is the cheap moment. It is more RTL work, and it changes what
+`BlockRead`/`BlockWrite` mean over a typed handle.
+
+It also creates a documented trap: `SizeOf(s)` answers **32** while `Write(f,s)`
+puts 1 or 4 bytes on disk, so `BlockWrite(f, s, SizeOf(s))` writes 32 and
+desynchronises the file. Under the 2026-09-02 `SizeOf` rule that 32 is a
+TRUE statement about our representation and not a defect — but the gap between
+it and the on-disk width is a hazard the RTL docs must name.
+
 ## Not blocking
 
 The split ticket can proceed on (1) without this decide closing — narrowing the
