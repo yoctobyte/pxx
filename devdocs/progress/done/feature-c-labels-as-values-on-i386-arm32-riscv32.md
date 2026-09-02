@@ -159,4 +159,4 @@ program links on them yet, and wasm32 has no indirect branch to an arbitrary
 code address at all.
 
 ## Log
-- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1f4003e56.
