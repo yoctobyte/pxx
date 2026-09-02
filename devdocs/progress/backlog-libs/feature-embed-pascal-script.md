@@ -326,3 +326,42 @@ A repro built from a ticket's PROSE is a repro of the prose. The ticket said
 with `tstring` declared as a string — the one substitution that made it a
 different bug. **The file was three commands away the whole time.** Re-run the
 target, not the description of it.
+
+### Independently re-derived 2026-09-02 (second session, different reasoning)
+
+The correction above was checked rather than taken on trust, against a fresh
+`--depth 1` clone. Every load-bearing claim holds:
+
+| claim | check |
+| --- | --- |
+| `10: (tstring: Pointer)` in the variant record | `uPSCompiler.pas:147`, verbatim |
+| line 2753 is the `SetLength` on `tbtstring(vari^.tstring)` | verbatim |
+| 93 uses in `uPSCompiler.pas` | 93 lines match `tbtstring(` (96 occurrences; 78 wrap a plain lvalue) |
+| `uPSRuntime.pas` does the same | 45 uses, incl. `tbtstring(dest^) := ...` (4762) and `tbtstring(temp.Dta^)[i]` (9553) |
+| the attempt still stops at 2753 | reproduced, message verbatim |
+
+**The repro, which the ticket did not carry — this is the reusable part:**
+
+```sh
+git clone --depth 1 https://github.com/remobjects/pascalscript.git ps   # outside the repo
+printf 'program drv;\nuses uPSCompiler;\nbegin\nend.\n' > drv.pas       # pxx has no standalone-unit output
+./compiler/pascal26 --mimic-fpc -Mobjfpc \
+    -Fups/Source -Fulib/rtl -Fulib/rtl/platform/posix drv.pas drv
+```
+
+`pascal26:2753: error: SetLength expects a string variable in IR codegen`
+(compiler `a6207eb98ae6`, tree at `3b04e6e19`).
+
+**A second, free finding from the same run: the PIN cannot reach 2753 at all.**
+`stable_linux_amd64/default/pinned` stops 823 lines earlier, at
+`uPSCompiler.pas:1930`, on `tbtwidestring(p^.twidestring)[1]` — wall (2). So the
+two fixes that landed on 2026-09-02 are load-bearing for getting this far and
+are not yet in any `$(PXX_STABLE)` consumer's hands. **Anyone re-running this
+must build `compiler/pascal26`; probing the pin reproduces the OLD wall and
+would read as a regression.**
+
+Note that 1930 is the same animal as 2753 — `twidestring` is
+`18: (twidestring: Pointer)`, one line below `tstring` in the same variant
+record. Wall (2) and wall (3) were always ONE capability seen through two
+statements; the index arm happened to be reachable without it and the
+`SetLength` arm is not.
