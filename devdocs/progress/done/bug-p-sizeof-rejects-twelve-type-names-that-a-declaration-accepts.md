@@ -3,12 +3,12 @@ slug: bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts
 track: P
 type: bug
 prio: 40
-status: backlog
+status: done
 found: 2026-08-31
 found-by: frank-rust
 owner: unassigned
 blocked-by: []
-summary: "A PATTERN, not a site: a builtin type name is settled against the builtin TABLE rather than against the PROGRAM. BOTH known instances are now fixed -- SizeOf (582e4de09) and ParseTypeKind (2026-09-02, bug-p-a-user-type-whose-name-shadows-a-builtin-is-unusable: the guard was `FindTypeAlias(lo) >= 0` alone where SizeOf consults six tables, so an alias beat a builtin name and a record did not). THE TICKET STAYS OPEN BECAUSE ITS OWN CENSUS WAS STALE: re-measured 2026-09-02, eleven of the twelve names are fixed and ShortString is NOT, despite 582e4de09 adding a fallback naming it. Four more names behave identically and were not recorded here -- PChar, PAnsiChar, PWideChar, TextFile. All five accept `var v: N` and reject `SizeOf(N)`, which is exactly the defect this ticket is named for. They share a cause the ordering fix cannot reach: the fallback is `TypeSize(kind)`, and a KIND cannot carry ShortString's 263 or TextFile's 4128 -- the declaration side answers those correctly because it resolves a TYPE. That is umbrella-sizeof-is-one-answer shape 1 (the oracle takes too few parameters), so the residue wants SizeOf(name) to resolve the name the way a declaration does, not another table entry. ORDERING IS NECESSARY AND NOT SUFFICIENT -- frankwasm hit the same family at 19bb32f31 with ordering already correct."
+summary: "DONE. A PATTERN, not a site: a builtin type name settled against the builtin TABLE rather than against the PROGRAM. BOTH instances are fixed -- SizeOf (582e4de09) and ParseTypeKind (2ba37ba91: its guard was `FindTypeAlias(lo) >= 0` alone where SizeOf consults six tables, so an alias beat a builtin name and a RECORD did not, and `SizeOf(Currency)` on a user record answered 12 in an expression and 8 in an array bound in the same program). Of the twelve names it opened on, eleven are fixed. THE RESIDUE IS NOT THIS PATTERN and is split out as bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size [umbrella-sizeof-is-one-answer]: ShortString plus PChar/PAnsiChar/PWideChar/TextFile (four this ticket never recorded) accept `var v: N` and reject `SizeOf(N)`, and no ordering fix reaches them because 582e4de09's fallback is TypeSize(KIND) and no kind carries 263 or 4128. Ordering was necessary and not sufficient, as this ticket said from the start -- it just turned out the insufficiency was a sizing-model question rather than a parse-order one."
 ---
 
 # `SizeOf(N)` rejects twelve builtin type names that `var v: N` accepts
@@ -162,3 +162,31 @@ something a kind cannot carry, which is why `BuiltinTypeNameTk`'s header states
 the rule that only side-effect-free names live in the shared table — these five
 are precisely the names that break it, and `TextFile` proves a width table alone
 would not be enough.
+
+
+## Closed 2026-09-02 — both instances fixed, residue split out
+
+The second instance (`ParseTypeKind`) is fixed in `2ba37ba91`. Eleven of the
+twelve names are resolved.
+
+**The five that remain are a different defect and now have their own slug**,
+[[bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size]],
+wired under [[umbrella-sizeof-is-one-answer]] at the coordinator's routing call.
+Split rather than left here because a ticket titled "twelve type names" whose
+twelve names are resolved reads as done, and CLAUDE.md is explicit that the
+summary is the only part everyone reads — leaving a live sizing-model question
+as residue on a closed-looking ticket is how it gets skipped.
+
+**This ticket's own census had gone stale before that split**, which is worth
+keeping visible: it recorded all twelve as fixed when eleven were, and did not
+list four names in the same family at all. Re-measured against the pinned binary
+`766b99f98`, which postdates `582e4de09` and is therefore a valid control, and
+corroborated by frankb-a9 through array STRIDE rather than `SizeOf` — a second
+instrument chosen precisely because `SizeOf` is the operator under repair.
+
+The header's own warning held all the way through: *ordering is necessary and
+not sufficient*. What it could not have known is that the insufficiency was not
+a parse-order problem at all.
+
+## Log
+- 2026-09-02 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

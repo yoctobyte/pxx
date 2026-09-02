@@ -9,6 +9,7 @@ blocked-by:
   - compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
   - bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts
   - bug-p-a-user-type-whose-name-shadows-a-builtin-is-unusable
+  - bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size
   - bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size
   - bug-c-sizeof-reaches-a-pointee-through-one-spelling-only
   - refactor-a-the-const-cast-width-table-is-the-third-copy

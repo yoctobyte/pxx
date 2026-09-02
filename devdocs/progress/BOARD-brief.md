@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:9 unfinished:27 blocked:6 backlog:4 backlog-umbrella:7 backlog-core:135 backlog-nilpy:97 backlog-tools:6 backlog-pascal:55 backlog-decide:32 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3143 rejected:72`
+`working:9 unfinished:27 blocked:6 backlog:4 backlog-umbrella:7 backlog-core:135 backlog-nilpy:97 backlog-tools:6 backlog-pascal:55 backlog-decide:32 backlog-libs:16 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:2 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3144 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -68,7 +68,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [A]` bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets (unblocks 1)
 - `[p 75] [N]` bug-n-nilpy-carries-its-own-copies-of-the-float-type-table (unblocks 1)
 - `[p 75] [P]` bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes (unblocks 1)
-- `[p 75] [P]` bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts (unblocks 1)
+- `[p 75] [P]` bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [A]` umbrella-managed-memory-is-correct
