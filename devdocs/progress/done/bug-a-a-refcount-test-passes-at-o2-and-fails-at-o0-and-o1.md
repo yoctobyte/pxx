@@ -227,4 +227,4 @@ level was the only one this program was built at. The Makefile now builds it at
 duplicate somebody can tidy away.
 
 ## Log
-- 2026-09-02 — postscript, -O0 arm and control aiming, commit PENDING-COMMIT.
+- 2026-09-02 — postscript, -O0 arm and control aiming, commit ad55e4dcc.
