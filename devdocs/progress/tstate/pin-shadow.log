@@ -449,3 +449,4 @@
 2026-09-02T09:37:21Z	seven	cb6ea0dc9d9ec0e7eea25ba708ff55e4fc2b2f84	would NOT pin cb6ea0dc9d9e — 3 red(s) the current pin does not have, 2 inherited from the current pin: lib-test#src:test/lib_synapse.pas, lib-test#src:test/lib_synapse_ssl.pas, lib-test#src:test/lib_synapse_transitive_unit.pas
 2026-09-02T10:41:16Z	seven	bb524e1abd1fc6f21f44c9cc48637719785316cb	would-pin PENDING bb524e1abd1f — qualifies, streak 1/2
 2026-09-02T11:00:53Z	seven	2d6e7d5c26dbf04eb318b4fb509a672903fde6eb	would NOT pin 2d6e7d5c26db — 1 red(s) the current pin does not have, 1 inherited from the current pin: test-core#src:test/c_asm_in_inline_body.c@2
+2026-09-02T11:19:35Z	seven	cdae8cf6580bc5dd40f603391a4e98c5d8317c09	would NOT pin cdae8cf6580b — 2 red(s) the current pin does not have, 1 inherited from the current pin: lib-test#src:tools/crtl_reachability.py, test-core#src:test/c_asm_in_inline_body.c@2
