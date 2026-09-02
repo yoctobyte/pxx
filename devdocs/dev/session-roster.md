@@ -209,16 +209,41 @@ path for a confident wrong answer in the fleet.**
 
 Two habits, both cheap, both measured to work that same evening:
 
-- **Before relaying a NEGATIVE capability claim ("X cannot", "X has no"), spend
-  one command asking the tree.** Every one of the six was answerable that way
-  and none was asked. The xtensa premise was refuted by two green Makefile rows
-  that had compiled frozen-string programs for xtensa all along.
+- **Before writing "X cannot", try the second invocation.** Two sessions reached
+  this wording independently the same evening, which is most of the argument for
+  it. Every one of the six was answerable by one command and none was asked; the
+  xtensa premise was refuted by two green Makefile rows that had been compiling
+  frozen-string programs for xtensa all along. Both of that session's errors have
+  the same shape: `run_target.sh` has no `wasm32)` arm — a fact about the
+  HARNESS — reported as "no runner exists"; a default profile refuses — a fact
+  about the PROFILE — reported as "the backend cannot compile this". **The
+  instrument was correct about something NARROWER than the claim drawn from it.**
+- **ORIGINATING a wrong instrument is worse than relaying one**, and the
+  dispatcher is the one most able to do it. The receiver of a relay can at least
+  ask who measured it; the receiver of an origination has no such handle. Tonight
+  the two claims that reached five briefs were originated, not relayed, and one
+  was baked into an unattended callback that would have re-asserted it hourly
+  until morning. **A false premise does not sit in a document — it re-sequenced a
+  session**, onto a prerequisite that did not exist. That is the cost of a claim,
+  not of a note.
 - **When you relay a decision, the premise travels with it and can rot
   separately.** I relayed a descope one hop after the measurement that broke its
   premise had already reversed it — correct decision, correct relay, stale by
   minutes, and it told a working session to stop. Name the premise in the relay
   so the receiver can notice it is dead; a decision quoted without its premise
   cannot be checked by the person receiving it.
+
+A fourth, which is the same defect one layer down: **a systematic inflation
+reads as a distribution.** The `grep -c` that produced "wasm32 has 6 call sites,
+3x any other" was counting the `if procIdx < 0 then Error(...)` guard that
+follows every `FindProc` in this codebase — so it double-counts every real site
+**by construction**, and the RATIOS between backends survive the doubling
+untouched. Random noise would have looked like noise. A uniform artefact looks
+like a finding. Real sites were wasm32 2, one each elsewhere.
+
+Not a fifth: "a probe answer is live at READ TIME and cannot be carried forward"
+is already recorded, one section up, as *every count is a snapshot*. Restating
+it here would be the exact failure this section is about.
 
 ## Standing constraints
 
