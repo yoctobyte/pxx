@@ -5,7 +5,7 @@
 #
 #   tools/run_target.sh <arch> <binary> [args...]
 #
-# arch: x86_64 | i386 | aarch64 | arm32 | riscv32 | riscv64 | xtensa
+# arch: x86_64 | i386 | aarch64 | arm32 | riscv32 | riscv64 | xtensa | wasm32
 #
 # Exit code is the program's exit code (QEMU passes it through), so the
 # existing `test "$(...)" = ...` Makefile assertions work unchanged.
@@ -103,6 +103,34 @@ case "$arch" in
     # MUL32 at all, and lx106 (the ESP8266 core) has no windowed ABI option.
     need qemu-xtensa
     exec qemu-xtensa "$bin" "$@"
+    ;;
+  wasm32)
+    # wasm32 is the only arm that is NOT qemu: the artifact is a .wasm module,
+    # not an ELF, so there is no CPU to emulate and wasmtime is the runtime.
+    #
+    # WHY THIS ARM EXISTS AT ALL: two sessions independently concluded wasm32
+    # had no runner -- one from an inference it had not checked, one from this
+    # script's silence -- and both were wrong. wasmtime 48.0.1 runs a
+    # PXX-emitted frozen-string module correctly. The Makefile having no
+    # test-wasm32 target was evidence about the Makefile, not about wasm32.
+    #
+    # EXIT CODE PASSTHROUGH IS MEASURED, NOT ASSUMED, because every Makefile
+    # assertion here reads it and a runner that swallowed it would make each of
+    # them unable to fail: `Halt(7)` returns 7 and `Halt(0)` returns 0 through
+    # wasmtime, matching the QEMU arms' contract above.
+    #
+    # wasmtime is commonly installed under ~/.local/bin, which is on an
+    # interactive PATH but not on the default one a non-login shell inherits,
+    # so resolve it explicitly rather than failing with "not found" on a box
+    # that has it.
+    if command -v wasmtime >/dev/null 2>&1; then
+      exec wasmtime "$bin" "$@"
+    elif [ -x "$HOME/.local/bin/wasmtime" ]; then
+      exec "$HOME/.local/bin/wasmtime" "$bin" "$@"
+    else
+      echo "wasmtime not found (looked on PATH and in ~/.local/bin)" >&2
+      exit 2
+    fi
     ;;
   *)
     echo "unknown arch: $arch" >&2

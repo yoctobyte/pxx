@@ -154,7 +154,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 derefshape: compiler/pascal26
 	tools/derefshape_matrix.sh compiler/pascal26
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-xtensa test-c-abi-glibc-oracle test-selfcompile-odiff test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-xtensa test-wasm32 test-c-abi-glibc-oracle test-selfcompile-odiff test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos tools-devtest tools-devtest-sh c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -17952,6 +17952,105 @@ test-riscv32: $(COMPILER)
 # That is the point rather than a disappointment: a missing thing hides every
 # bug in the programs it stops from compiling, and what a sweep like this buys
 # is usually NAMED DEFECTS, not green rows.
+test-wasm32: $(COMPILER)
+	# wasm32's cross row. It did not exist until 2026-09-02, and its ABSENCE was
+	# read three times as a statement about the TARGET: frankb-a9, then the
+	# coordinator, then a briefed deliverable for frankwasm, all concluded
+	# "wasm32 has no runner". It had no Makefile target and no tools/run_target.sh
+	# arm; wasmtime 48.0.1 has run PXX modules correctly the whole time. The
+	# missing target was evidence about the Makefile, not about wasm32.
+	#
+	# Oracle is the NATIVE x86-64 build of the same source, as in test-riscv32:
+	# the point of a cross row is that the answer does not depend on the target.
+	#
+	# THE 22 ROWS BELOW ARE THE MEASURED-GREEN SUBSET of a 27-candidate sweep.
+	# The 5 that are NOT here are excluded deliberately and are NOT an oversight:
+	#
+	#   test_char_into_shortstring_via_pointer   rc=3   comparison, see below
+	#   test_write_string_field_width_cross      wrong  a `Write(s:w)` loses s
+	#   test_cross_sets                          rc=134 trap via SetLength
+	#   test_frozen_string_cross_b305            rc=134 trap via SetLength
+	#   test_static_string_literal               rc=134 trap via SetLength
+	#
+	# Two pre-existing wasm32-ONLY defects account for all five, both confirmed
+	# under the PINNED compiler (so they predate the phase-2 shortstring work)
+	# and both correct on riscv32 and x86-64:
+	#
+	#   1. Shortstring COMPARISON is wrong at every length. `a := lit; a = lit`
+	#      for `const lit: string[8]` is FALSE for lengths 1..8. The store is
+	#      fine -- identical bytes, Length and s[1] to native, and it PRINTS
+	#      correctly; only the compare differs. So this is a READER of the
+	#      length prefix, and the phase-2 call-site census counted WRITERS.
+	#   2. SetLength on a shortstring traps (`wasm trap: unreachable`).
+	#
+	# Do not wire those five green-by-editing-the-expectation. They are real.
+	./$(COMPILER) --target=wasm32 test/hello.pas $(TESTTMP)/w32_hello.wasm
+	./$(COMPILER) test/hello.pas $(TESTTMP)/w32_hello_x64
+	tools/expect_same.sh wasm32/hello "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_hello.wasm)" "$$($(TESTTMP)/w32_hello_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_case_range.pas $(TESTTMP)/w32_case_range.wasm
+	./$(COMPILER) test/test_cross_case_range.pas $(TESTTMP)/w32_case_range_x64
+	tools/expect_same.sh wasm32/case_range "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_case_range.wasm)" "$$($(TESTTMP)/w32_case_range_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_const_alias.pas $(TESTTMP)/w32_const_alias.wasm
+	./$(COMPILER) test/test_cross_const_alias.pas $(TESTTMP)/w32_const_alias_x64
+	tools/expect_same.sh wasm32/const_alias "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_const_alias.wasm)" "$$($(TESTTMP)/w32_const_alias_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_dynarray.pas $(TESTTMP)/w32_dynarray.wasm
+	./$(COMPILER) test/test_cross_dynarray.pas $(TESTTMP)/w32_dynarray_x64
+	tools/expect_same.sh wasm32/dynarray "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_dynarray.wasm)" "$$($(TESTTMP)/w32_dynarray_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/w32_frozen_strlen_deref.wasm
+	./$(COMPILER) test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/w32_frozen_strlen_deref_x64
+	tools/expect_same.sh wasm32/frozen_strlen_deref "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_frozen_strlen_deref.wasm)" "$$($(TESTTMP)/w32_frozen_strlen_deref_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_global_init.pas $(TESTTMP)/w32_global_init.wasm
+	./$(COMPILER) test/test_cross_global_init.pas $(TESTTMP)/w32_global_init_x64
+	tools/expect_same.sh wasm32/global_init "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_global_init.wasm)" "$$($(TESTTMP)/w32_global_init_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_in_operator.pas $(TESTTMP)/w32_in_operator.wasm
+	./$(COMPILER) test/test_cross_in_operator.pas $(TESTTMP)/w32_in_operator_x64
+	tools/expect_same.sh wasm32/in_operator "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_in_operator.wasm)" "$$($(TESTTMP)/w32_in_operator_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_int64.pas $(TESTTMP)/w32_int64.wasm
+	./$(COMPILER) test/test_cross_int64.pas $(TESTTMP)/w32_int64_x64
+	tools/expect_same.sh wasm32/int64 "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_int64.wasm)" "$$($(TESTTMP)/w32_int64_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_multidim.pas $(TESTTMP)/w32_multidim.wasm
+	./$(COMPILER) test/test_cross_multidim.pas $(TESTTMP)/w32_multidim_x64
+	tools/expect_same.sh wasm32/multidim "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_multidim.wasm)" "$$($(TESTTMP)/w32_multidim_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_record.pas $(TESTTMP)/w32_record.wasm
+	./$(COMPILER) test/test_cross_record.pas $(TESTTMP)/w32_record_x64
+	tools/expect_same.sh wasm32/record "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_record.wasm)" "$$($(TESTTMP)/w32_record_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_setlen_str.pas $(TESTTMP)/w32_setlen_str.wasm
+	./$(COMPILER) test/test_cross_setlen_str.pas $(TESTTMP)/w32_setlen_str_x64
+	tools/expect_same.sh wasm32/setlen_str "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_setlen_str.wasm)" "$$($(TESTTMP)/w32_setlen_str_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_shortcircuit.pas $(TESTTMP)/w32_shortcircuit.wasm
+	./$(COMPILER) test/test_cross_shortcircuit.pas $(TESTTMP)/w32_shortcircuit_x64
+	tools/expect_same.sh wasm32/shortcircuit "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_shortcircuit.wasm)" "$$($(TESTTMP)/w32_shortcircuit_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_string_cow.pas $(TESTTMP)/w32_string_cow.wasm
+	./$(COMPILER) test/test_cross_string_cow.pas $(TESTTMP)/w32_string_cow_x64
+	tools/expect_same.sh wasm32/string_cow "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_string_cow.wasm)" "$$($(TESTTMP)/w32_string_cow_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_string.pas $(TESTTMP)/w32_string.wasm
+	./$(COMPILER) test/test_cross_string.pas $(TESTTMP)/w32_string_x64
+	tools/expect_same.sh wasm32/string "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_string.wasm)" "$$($(TESTTMP)/w32_string_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_str_length_index.pas $(TESTTMP)/w32_str_length_index.wasm
+	./$(COMPILER) test/test_cross_str_length_index.pas $(TESTTMP)/w32_str_length_index_x64
+	tools/expect_same.sh wasm32/str_length_index "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_str_length_index.wasm)" "$$($(TESTTMP)/w32_str_length_index_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_strresult.pas $(TESTTMP)/w32_strresult.wasm
+	./$(COMPILER) test/test_cross_strresult.pas $(TESTTMP)/w32_strresult_x64
+	tools/expect_same.sh wasm32/strresult "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_strresult.wasm)" "$$($(TESTTMP)/w32_strresult_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_typed_const.pas $(TESTTMP)/w32_typed_const.wasm
+	./$(COMPILER) test/test_cross_typed_const.pas $(TESTTMP)/w32_typed_const_x64
+	tools/expect_same.sh wasm32/typed_const "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_typed_const.wasm)" "$$($(TESTTMP)/w32_typed_const_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_var_param_scalar_kinds.pas $(TESTTMP)/w32_var_param_scalar_kin.wasm
+	./$(COMPILER) test/test_cross_var_param_scalar_kinds.pas $(TESTTMP)/w32_var_param_scalar_kin_x64
+	tools/expect_same.sh wasm32/var_param_scalar_kin "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_var_param_scalar_kin.wasm)" "$$($(TESTTMP)/w32_var_param_scalar_kin_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_var_string_param.pas $(TESTTMP)/w32_var_string_param.wasm
+	./$(COMPILER) test/test_cross_var_string_param.pas $(TESTTMP)/w32_var_string_param_x64
+	tools/expect_same.sh wasm32/var_string_param "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_var_string_param.wasm)" "$$($(TESTTMP)/w32_var_string_param_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_write_pchar.pas $(TESTTMP)/w32_write_pchar.wasm
+	./$(COMPILER) test/test_cross_write_pchar.pas $(TESTTMP)/w32_write_pchar_x64
+	tools/expect_same.sh wasm32/write_pchar "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_write_pchar.wasm)" "$$($(TESTTMP)/w32_write_pchar_x64)"
+	./$(COMPILER) --target=wasm32 test/test_halt_exit_code.pas $(TESTTMP)/w32_halt_exit_code.wasm
+	./$(COMPILER) test/test_halt_exit_code.pas $(TESTTMP)/w32_halt_exit_code_x64
+	tools/expect_same.sh wasm32/halt_exit_code "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_halt_exit_code.wasm; echo "exit=$$?")" "$$($(TESTTMP)/w32_halt_exit_code_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=wasm32 test/test_shortstring_trunc.pas $(TESTTMP)/w32_shortstring_trunc.wasm
+	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/w32_shortstring_trunc_x64
+	tools/expect_same.sh wasm32/shortstring_trunc "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_shortstring_trunc.wasm)" "$$($(TESTTMP)/w32_shortstring_trunc_x64)"
+	@echo "wasm32: 22 rows green (5 excluded, see comment above)"
 test-xtensa: $(COMPILER)
 	# `var` parameter of every scalar kind + var->var forwarding — the twin of
 	# the riscv32 row; both backends had the same subsumed arm ahead of
