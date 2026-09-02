@@ -331,6 +331,28 @@ are correct after a fetch; anything reading a PATH is not.
 claim travelling beside it inherits that credibility. Name the facts you checked,
 or claim none.
 
+**"NOTHING OBSERVABLY DIFFERS" IS A CLAIM ABOUT ONE TARGET, AND IT IS HOW REAL
+BUGS GET RANKED AS REFACTORS.** Measured 2026-09-02, twice in one hour by one
+session: `refactor-a-the-const-cast-width-table-is-the-third-copy` was filed at
+**prio 35** with *"not a bug today: nothing observably differs"* — and
+`NativeInt`/`PtrInt` were 8 bytes unconditionally, so `const A =
+NativeInt(2^32+5)` folded to 4294967301 on i386, arm32 and riscv32 while the
+runtime cast of the same expression **in the same program** gave 5. A const
+that does not fit its own type, no diagnostic, three targets.
+`bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets` was
+**prio 20** and wrong on riscv32, which its own body had listed as *"same code
+path, not run"*. **Both authors were honest and both measured on x86-64.**
+The dev loop, `gate.sh quick` and the pin all run there, so a whole defect
+class — anything whose width, alignment or pointer size is native-only — is
+**structurally invisible to the instrument that would normally catch it**: the
+pinned control on the method-pointer fix PASSES on x86-64 and fails two rows on
+i386. A ticket saying "no observable difference" has usually established "no
+difference **where I looked**", and where anyone looks by default is the 64-bit
+host. **Before ranking one down, ask which target the absence was measured
+on** — and prefer a test asserting RELATIONS (`SizeOf(P) = 2 * SizeOf(Pointer)`)
+over per-target constants, so it carries no expected width and passes
+everywhere while printing a different correct number on each.
+
 **An EXCULPATION NEEDS AN OWNER FOR THE RESIDUAL QUESTION.** "Not X" is half a
 finding — name who owns "then what?" before closing.
 
