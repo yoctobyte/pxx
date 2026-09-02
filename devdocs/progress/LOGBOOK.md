@@ -596,3 +596,15 @@ include orders. So the aarch64 rung for the full applet set is blocked on an
 attempting it, not inferred. Rung 2 (cat echo, 28 TUs) is GREEN on aarch64
 today, so the cross axis itself works.
 2026-09-02 | frankC | compiler/ir_codegen{386,_arm32,_riscv32,_xtensa}.inc test/test_ctor_arg_classes_and_arity.pas | Every 32-bit backend's class-instantiation arm pushed ONE WORD PER ARGUMENT -- the fifth marshalling path, and the one Arg32Class's extraction never converted. An Int64, Double or 5..8 byte record constructor parameter lost its high word and shifted everything after it: i386 SEGFAULTED on all three (it reloads Self at [esp+argBytes-4], so a wrong argBytes reads an ARGUMENT as the instance), arm32 and xtensa answered wrong values. arm32's >4-word and riscv32's >8-word refusals went too -- the overflow stays on the stack across the call, which those files' other three ladders already did. Found by writing the test for the BOUNDARY instead of the reported failure, and by adding one row whose word count differs from its argument count; the reported arm32 bug was a ten-minute fix and that row found three more. Next of the same shape: the external/cdecl arm on each backend.
+
+2026-09-02 | frankD (Track C) | tools/busybox_diff.sh | Applet-name lookups are
+`grep -qxF` (fixed string) and configure_tree reports EVERY unmappable applet in
+one pass. WHY: two of busybox's own applets are `[` and `[[`, and
+`grep -q "^# CONFIG_$A is not set$"` exited with "grep: Unmatched [" — the
+caller read that nonzero as "this busybox does not have that applet" and printed
+so. The conclusion was harmless and was not a measurement: the instrument had
+failed syntactically and still answered. Separately, dying on the FIRST
+unmappable name turned "which of these 274 does this tree not know" into 274
+runs each costing an allnoconfig; one pass named all six at once (arch,
+getfattr, nbd-client, sh, static-sh, sysctl — busybox spells their knobs
+differently, e.g. `[` is CONFIG_TEST1 and `sh` goes through SH_IS_*).

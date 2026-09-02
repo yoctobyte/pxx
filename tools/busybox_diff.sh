@@ -138,18 +138,43 @@ ASH_OFF="ASH_TEST ASH_RANDOM_SUPPORT ASH_JOB_CONTROL ASH_IDLE_TIMEOUT \
 # applet (rung 1's configuration, unchanged); ON as soon as there is more than
 # one, because `busybox <applet>` dispatch and `busybox --list` are half of what
 # rung 2 exists to test -- the other half being argv[0].
+# Every applet-name lookup below is `grep -qxF' -- FIXED string, whole line.
+# An applet name is not a regex and two of busybox's are not even close: `['
+# and `[[' made `grep -q "^# CONFIG_$A is not set$"' exit with
+# "grep: Unmatched [", and the caller read that nonzero as "this busybox does
+# not have that applet" and said so. The conclusion happened to be harmless and
+# the reasoning was not measurement at all -- the instrument had failed
+# syntactically and still answered. Measured 2026-09-02 by feeding this script
+# the host's full `busybox --list'.
 configure_tree() {
   local log="$1" a
   printf 'busybox-diff: configuring %s for applets: %s\n' "$BB" "$APPLETS"
   (
     cd "$BB" || exit 1
     make allnoconfig >/dev/null 2>&1 || exit 1
+    # Collect EVERY unmappable applet before giving up, rather than dying on
+    # the first. The mapping here is a naive uppercase-and-underscore, and
+    # busybox does not always agree with it -- `[' is CONFIG_TEST1, `sh' is
+    # selected through SH_IS_*, several aliases live under a FEATURE_ knob of
+    # the applet they alias. Exiting on the first one turns "which of these 274
+    # names does this tree not know" into 274 sequential runs, each costing an
+    # allnoconfig. The whole answer is in one pass over .config.
+    unmapped=""
     for a in $APPLETS; do
       A=$(printf '%s' "$a" | tr 'a-z-' 'A-Z_')
-      grep -q "^# CONFIG_$A is not set$" .config \
-        || { printf 'no CONFIG_%s in this busybox\n' "$A" >&2; exit 1; }
-      sed -i "s/^# CONFIG_$A is not set\$/CONFIG_$A=y/" .config
+      if grep -qxF "# CONFIG_$A is not set" .config; then
+        sed -i "s/^# CONFIG_$A is not set\$/CONFIG_$A=y/" .config
+      elif grep -qxF "CONFIG_$A=y" .config; then
+        : # already on (allnoconfig left it on, or an earlier name selected it)
+      else
+        unmapped="$unmapped $a"
+      fi
     done
+    if [ -n "$unmapped" ]; then
+      printf 'this busybox has no CONFIG_ symbol under the harness spelling for:%s\n' "$unmapped" >&2
+      printf '(the mapping is uppercase-with-underscores; an applet whose knob is named differently -- `[` is CONFIG_TEST1, `sh` goes through SH_IS_*, aliases live under a FEATURE_ of the applet they alias -- has to be dropped from the list or spelled the way its Config.in spells it)\n' >&2
+      exit 1
+    fi
     if [ "$NAPPLETS" -gt 1 ]; then
       sed -i 's/^# CONFIG_BUSYBOX is not set$/CONFIG_BUSYBOX=y/' .config
     fi
@@ -222,7 +247,7 @@ missing_applets() {
   [ -f "$BB/.config" ] || { printf '%s\n' $APPLETS; return 0; }
   for a in $APPLETS; do
     A="$(printf '%s' "$a" | tr 'a-z-' 'A-Z_')"
-    grep -qx "CONFIG_$A=y" "$BB/.config" || printf '%s\n' "$a"
+    grep -qxF "CONFIG_$A=y" "$BB/.config" || printf '%s\n' "$a"
   done
 }
 
@@ -231,7 +256,7 @@ applets_ok() {
   [ -f "$BB/.config" ] || return 1
   for a in $APPLETS; do
     A="$(printf '%s' "$a" | tr 'a-z-' 'A-Z_')"
-    grep -qx "CONFIG_$A=y" "$BB/.config" || return 1
+    grep -qxF "CONFIG_$A=y" "$BB/.config" || return 1
   done
   # Nothing EXTRA needs no separate check: this asks that every requested
   # applet is on, and the NUM_APPLETS test beside it asks that the total is
@@ -243,8 +268,8 @@ ash_features_ok() {
   local f
   printf '%s\n' $APPLETS | grep -qx ash || return 0
   [ -f "$BB/.config" ] || return 1
-  for f in $ASH_ON;  do grep -qx "CONFIG_$f=y" "$BB/.config" || return 1; done
-  for f in $ASH_OFF; do grep -qx "CONFIG_$f=y" "$BB/.config" && return 1; done
+  for f in $ASH_ON;  do grep -qxF "CONFIG_$f=y" "$BB/.config" || return 1; done
+  for f in $ASH_OFF; do grep -qxF "CONFIG_$f=y" "$BB/.config" && return 1; done
   return 0
 }
 
@@ -273,11 +298,11 @@ fi
 # getting it -- and the symptom would be a GREEN run over a stub shell.
 if printf '%s\n' $APPLETS | grep -qx ash; then
   for f in $ASH_ON; do
-    grep -qx "CONFIG_$f=y" "$BB/.config" \
+    grep -qxF "CONFIG_$f=y" "$BB/.config" \
       || die "oldconfig dropped CONFIG_$f -- the shell under test is not the one asked for (without FEATURE_SH_MATH, \$((arith)) is a syntax error and the whole comparison is over a stub)"
   done
   for f in $ASH_OFF; do
-    grep -qx "CONFIG_$f=y" "$BB/.config" \
+    grep -qxF "CONFIG_$f=y" "$BB/.config" \
       && die "CONFIG_$f is on and must not be -- it is either nondeterministic across runs or collides in the unity (see configure_tree)"
   done
 fi
