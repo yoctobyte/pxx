@@ -119,4 +119,4 @@ The arm is x86-64-only (see `IRValueKind`'s note in ir.inc, which describes
 the same arm catching a different defect first). `gate.sh quick` GREEN.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a17421a84.
