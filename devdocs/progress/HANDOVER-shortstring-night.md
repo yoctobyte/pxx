@@ -758,3 +758,60 @@ to walk back to — the node's own tag WAS the width).
 tag may be lossy. **Normalise onto a representation that still carries what the
 callee needs to know**, or the second path is broken in a new way instead of the
 old one.
+
+## The family note, SHARPENED — kinds were one axis of two (frankb-78)
+
+The note above says the defect is *"a guard that ENUMERATES KINDS where the
+concept has several"*. **That is necessary and not sufficient, and the grep that
+goes with it finds only half the family.**
+
+**The invariant is: A FACT THAT LIVES IN N PLACES WAS ASKED OF ONE OF THEM.**
+
+| instance | what was enumerated | axis |
+| --- | --- | --- |
+| `TypesCompatible` | one of three kinds | kind |
+| the `-O1` imm-fold arm | one of two result kinds | kind |
+| `IRFrozenKindOfAddr` | no arm for a field | **entity** |
+| `ASTFrozenArgTk` | one of three places a width is recorded | **entity** |
+| `IR_ARG` at 17 sites | the AST's type, not the lowered value's | **entity** |
+| the AN_INDEX arm | a comment claiming a sibling AN_FIELD arm **never written** | **entity** |
+
+**A `= tyString` grep does not find the entity gaps** — there is no kind name to
+grep. What finds them is asking, of any width-reading function: **"which
+spellings of this value reach here, and does each carry the fact by the same
+route?"** The symbol, `RecFieldType`, and an array symbol's own `TypeKind` are
+three different routes to one fact.
+
+### The hold produced a defect nobody predicted — that is why the rule is right
+
+`-uPXX_MANAGED_STRING` makes `AnsiString` ITSELF frozen, so a `string[10]`
+argument to `Show(const a: AnsiString)` is a frozen→frozen WIDTH mismatch that
+**never reaches the conversion at all**. `ASTFrozenArgTk` had one arm (AN_IDENT);
+`ASTTk` for `a[i]` is the generic `tyString`, which EQUALS the frozen formal, so
+no mismatch was seen and no copy emitted — a 1-byte-prefixed element handed to a
+callee reading an 8-byte prefix.
+
+**Neither session could have found it alone.** franka-29 could not reach that
+corner (`Pos`/`Copy` does not compile under `-u`, at the pin, unrelated to
+either); frankb-78 could not reach it without its own fix. **The ordering is
+what turned a hand-off into a measurement instead of a merge.**
+
+And frankb-78's own correction, which is the expensive half: it first reported
+that corner as *"the frozen→managed conversion is wrong"*. **The conversion was
+never entered.** It read a wrong value at a call site and named the mechanism it
+expected rather than the one it had measured — right about the symptom, wrong
+about the owner, which is what misroutes work when handing it over.
+
+### Coordinator near-miss: absence read as a compile FAILURE
+
+Verifying the gate, a probe reported `overload=N` on five targets in BOTH modes
+— including default, where it had compiled an hour earlier. That reads exactly
+like a five-target regression from the fix just landed. **The file was not
+there**: it lived in a different scratchpad directory, and pxx said so plainly
+(`cannot read input file`) while the harness collapsed the result to `Y/N`,
+which cannot distinguish *refused* from *absent*.
+
+**Third time in two days this session has read an absence as a measurement**
+(`head`-truncated list as a zero count; a glob over all folders; now a missing
+file as a compile refusal). **The fix is never a better eye — it is to make the
+harness assert the input EXISTS before it reports on the output.**
