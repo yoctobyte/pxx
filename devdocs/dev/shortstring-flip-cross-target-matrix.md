@@ -174,3 +174,56 @@ out byte-identical.
 `pasparser_decl.inc` is a different binary that behaves differently for every
 program it compiles. Its fixedpoint is `make compiler/pascal26` on the flip
 commit, and it is franka-29's gate, not this measurement.
+
+
+---
+
+# AFTER THE FOUR FIXES — 2026-09-04, the same measurement re-run
+
+All four defects above are closed (`b97167982`, `157b02b90`, `15b9abdcf`,
+`8b6c2280d`). The identical sweep, on the same seven targets and both modes,
+now reports **exactly two differing rows per target, and they are the two the
+flip is supposed to change** — `test_shortstring_byte_prefix` and
+`test_sizeof_array_field`, both `=ON`, meaning FPC 3.2.2 agrees with the
+flip's answer and not with today's.
+
+**Zero RC-DIFFERS on any target.** Before the fixes there were six, including a
+SIGSEGV on six of seven.
+
+```
+test                                             x86_ i386 aarc arm3 risc xten wasm  FPC
+test_array_and_scalar_overload_binding           .    .    .    .    .    b-   b-    =BOTH
+test_array_of_const_cross_unit_overload          .    .    .    .    .    .    .     !BOTH
+test_char_array_field_is_a_string                .    .    .    .    .    b-   b-    =BOTH
+test_clone_entry_with_a_hidden_result            b-   b-   b-   b-   b-   b-   b-    n/a
+test_indexing_a_string_value                     .    .    .    .    .    b-   b-    =BOTH
+test_indexing_length_for_new_inc_positive        .    .    .    .    .    .    b-    =BOTH
+test_loadfile_shortstring                        .    b-   b-   b-   b-   b-   .     n/a
+test_out_parameter_of_a_managed_type_is_cleared  .    .    .    .    .    b-   b-    =BOTH
+test_result_by_function_name_converts            .    .    .    .    .    b-   b-    =BOTH
+test_rtti_reg                                    .    ~    .    .    .    .    .     n/a
+test_shortstring_byte_prefix                     OUT  OUT  OUT  OUT  OUT  OUT  OUT   =ON
+test_sizeof_array_field                          OUT  OUT  OUT  OUT  OUT  OUT  OUT   =ON
+test_sizeof_stringn_matches_storage              .    .    .    .    .    .    .     !BOTH
+test_variant_widechar_store                      .    .    .    .    .    .    .     !BOTH
+
+rows where the flip changes NOTHING on any target and FPC agrees: 58 of 72
+x86_64   BUILD-OFF-FAIL=1  OUTPUT-DIFFERS=2  SAME=69
+i386     BUILD-OFF-FAIL=2  NOISE=1  OUTPUT-DIFFERS=2  SAME=67
+aarch64  BUILD-OFF-FAIL=2  OUTPUT-DIFFERS=2  SAME=68
+arm32    BUILD-OFF-FAIL=2  OUTPUT-DIFFERS=2  SAME=68
+riscv32  BUILD-OFF-FAIL=2  OUTPUT-DIFFERS=2  SAME=68
+xtensa   BUILD-OFF-FAIL=7  OUTPUT-DIFFERS=2  SAME=63
+wasm32   BUILD-OFF-FAIL=7  OUTPUT-DIFFERS=2  SAME=63
+```
+
+The population is 72 rather than 71 because
+`test_frozen_string_char_compare_shapes` was added with the fourth fix.
+
+`~` is still the one measured-NOISE row (i386 `test_rtti_reg` prints a stack
+address; the same binary differs from itself under ASLR). `b-` rows still fail
+to compile in the OFF mode and were re-checked: none of them builds in the ON
+mode either, so nothing changes buildability.
+
+**The flip is now measurable as a pure improvement on this corpus:** two rows
+move toward FPC, nothing moves away, and nothing that ran stops running.
