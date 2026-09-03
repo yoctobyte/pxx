@@ -2032,3 +2032,73 @@ rather than an error. (The window is also narrow: seven's 50 entries span only
 run"*, and the answer above rests on that instead. **The vacuous zero is in the
 logbook beside the result, because a bare "no skips in history" would have read
 as the strongest sentence in the report.**
+
+## 2026-09-03 — the goto-loop fix (`72c431bd9`), and A REVIEW GATE THAT FIRED ONLY WHERE NOBODY LOOKS
+
+### The refinement that makes the probe rule usable
+
+*"Dirty the stack first"* is **not enough as a rule.** frankb-78's first for-loop
+probe called `dirty()` **inside the function under test**, which writes BELOW
+that frame and changes nothing — **it passed on every target while the bug was
+live.**
+
+> **The dirtying call must come FROM THE CALLER: leave the bytes where the frame
+> under test will SIT.**
+
+A probe that dirties its own frame is the same shape as a guard aimed inside the
+population — it is doing work in a place the defect cannot see.
+
+### The discriminator, and a trace that was wrong invisibly
+
+The busybox `mv` row went **FAIL -> byte-identical to the gcc oracle over all 14
+cases ON THE FRONTEND CHANGE ALONE**. So the instrumented trace's
+"pointer-is-register-and-memory-resident-at-once" reading was **wrong, and wrong
+in a way invisible from the trace itself**: the extra pass never evaluated the
+condition, so `*++argv` never ran, so `argv` legitimately held one address at
+both prints. **No i386 residual** — if one appears later it is a new defect.
+
+**A trace can be internally consistent and describe a phenomenon that does not
+exist**, when the thing it failed to record is a statement that never executed.
+
+### THE ONE TO BROADCAST — a red shipped while every gate said green
+
+`d49de34b6` (this afternoon) added **two legitimate AST child writes** and left
+`test/ast_slot_writes.expected` stale. **That census only ran in `make
+test-core`, which the per-fix loop does not run** — so `make compiler/pascal26`
+and `gate.sh quick` were both GREEN over a red row for hours, and it surfaced
+only because a later change happened to need the full tier.
+
+> **A REVIEW GATE THAT FIRES ONLY WHERE NOBODY LOOKS REVIEWS NOTHING.**
+
+And this one is not bookkeeping: it guards `ASTLeft`/`ASTRight` being **children
+for most kinds and a payload for a few** — i.e. **generic-walker memory
+corruption.**
+
+Now a `gate.sh quick` step (~5s, `tools/gate.sh:311-315`, verified present),
+running its own `--self-check` as the positive control.
+
+**FLEET NOTICE:** anyone editing AST slot writes will now see a RED there that
+nobody has seen before. **`tools/ast_slot_overloads.py --update` after READING
+the diff** is the correct response when every new row is a real child node.
+
+### Verification status, stated with one row still in flight
+
+`gate.sh quick` GREEN with `compiler/**` uncommitted (FPC seed canary ran);
+self-host `converged after 1 round`; busybox i386 green with both fixes; both new
+tests match gcc on native + i386 + aarch64 + arm32 + riscv32 **with the pinned
+control firing**. `make test-core` was **still running and unread** at report
+time, and frankb-78 said so rather than implying a verdict — committing ahead of
+it deliberately rather than sitting on a dirty tree.
+
+### A PARTIAL PUSH LOOKS EXACTLY LIKE A COMPLETE ONE FROM INSIDE
+
+frankb-78 reported *"three commits, all verified on origin"*. **One was.** The
+other two — the epitaph and the corpus ticket — were still local, `frankB`
+`ahead=2`, **while a full tier ran that a restart could have interrupted.**
+
+The fix pushed, so the sync LOOKED like it worked. Checked by SUBJECT on
+`origin/master` as well as by sha, because this repo rebases nearly every sync
+and a pre-push sha is a ghost by construction — **neither subject was there, and
+the ticket file did not exist in another checkout.** That is the discriminator
+between a ghost sha and genuinely unpushed work: **a ghost has a twin with the
+same subject; unpushed work has nothing at all.**
