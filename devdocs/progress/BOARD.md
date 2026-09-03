@@ -341,7 +341,7 @@ _none_
 | refactor-n-two-import-handlers-are-twins | N | 45 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 
-## backlog-tools (8)
+## backlog-tools (9)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -352,6 +352,7 @@ _none_
 | bug-t-the-sort-comm-locale-desync-has-now-been-found-three-times-independently | T | 40 | bug | Under a UTF-8 locale `sort` ignores punctuation at the primary level while `comm` compares bytes, so a name containing `-`, `_` or `/` sorts into a position `comm` does not expect. comm prints `file 1 is not in sorted order` to STDERR and KEEPS MERGING out of step, so the caller gets a wrong answer and a zero exit. Three tools here hit it INDEPENDENTLY and each fixed it in place with its own explanatory comment: elf_alloc_same.sh, selfhost_stamp_devtest.sh, and busybox_diff.sh (44e7ea61f, today). All three are correct NOW. This ticket is that there is no shared helper and no lint, so the fourth caller will write the bug again — two is a smell, three is a design flaw. | — |
 | feature-t-a-test-s-expected-transcript-should-live-beside-the-pas-not-in-the-makefile-recipe | T | 50 | feature | A whole-transcript test's expected output lives in an inline printf inside a 12000-line Makefile, so EXTENDING THE TEST LOOKS COMPLETE FROM INSIDE THE TEST -- you add rows to the .pas, the .pas is self-consistent and its own comments agree, and the assertion it is judged by is in a file you never opened. That is what cost 18 hours of RED on the native tier (2ba37ba91 added rows j..n; the printf still said a..i). Proposal: let a `.expected` file beside the .pas be the default source, as several tests already do, and keep the inline printf only where the transcript is target-dependent. NOT started -- filed at frankuser's suggestion and explicitly not to be done without asking, since it touches many recipes. | — |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | UNBLOCKED 2026-09-01 -- the permission it waited on was APPROVED 2026-08-31 (decide-install-qemu-system-and-a-freebsd-image-on-plexus) and this ticket was never moved out of blocked/. Owner restated it 2026-09-01: 'we are allowed to install a bsd image on qemu, i thought we already answered that. or maybe i only answered for openbsd, either way, same answer' -- so it covers OpenBSD too. Stays prio 20: permission granted is not priority raised, and BSD is demoted under the linux-only focus. ORIGINAL: Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | — |
+| feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing | T | 55 | feature | feature(T): twatch should assert its `## Repro` selector resolves to exactly the job it is filing | — |
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 
 ## backlog-pascal (54)
@@ -1068,6 +1069,7 @@ _none_
 - [p 55] [P] feature-p-assertions-directive-and-position
 - [p 55] [P] feature-p-tmethod-record-for-method-pointers
 - [p 55] [P] feature-p-uses-a-unit-in-an-explicit-file
+- [p 55] [T] feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing
 - [p 55] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 55] [P] refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins
