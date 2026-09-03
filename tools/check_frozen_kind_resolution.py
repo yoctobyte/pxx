@@ -45,6 +45,49 @@ NOT COVERED, AND DELIBERATELY
 This checks today's convention. It is deliberately silent on whether asking a
 frozen prefix its width should be a per-site decision at all; it stays correct
 under either answer.
+
+THE SECOND RULE: THE RIGHT RESOLVER ON THE WRONG NODE
+-----------------------------------------------------
+Added 2026-09-03 after the first rule watched two backends ship the defect it
+exists to prevent. i386 and riscv32 both wrote `IRStrTkOf(argNode)` -- the
+CORRECT resolver, applied to the IR_ARG node instead of to the value node. Rule
+one calls that clean, because the spelling it forbids is not there.
+
+It cannot ever be right. IRFrozenKindOfAddr's own header says a frozen string's
+ARG node is tagged tyString generically, so a resolver handed one returns the
+8-byte default unconditionally -- the same wrong answer as the fenced spelling,
+reached by a route the fence could not see. The value node is `IRA[argNode]`,
+which is what every backend passes to IREmitNode* one line earlier.
+
+It also could not fail in the DEFAULT mode, where a frozen operand IS tyString:
+right answer and failure value collide, so no default-mode test could catch it
+either. i386 segfaulted on `Copy`/`Pos` under the flag; riscv32 handed a C
+callee a char pointer seven bytes into the buffer.
+(bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode, fixed 21544412b.)
+
+This half is a pure name-and-shape check over the backends, so it carries its
+own aim assertion: `IRA[argNode]` must still appear in compiler/*.inc, or the
+identifier no longer means what the rule assumes and it exits 2 rather than
+printing PASS about a convention that has moved.
+
+Verified the way a test written after a fix has to be: run over compiler/*.inc
+as of 482b714d0 it names ir_codegen386.inc:4124, :4125 and
+ir_codegen_riscv32.inc:3307 -- the three real sites -- and it is silent on the
+tree today.
+
+WHAT NEITHER RULE COVERS, AND IT IS THE THIRD FORM OF THE SAME BUG
+------------------------------------------------------------------
+A guard that is too NARROW rather than wrong: `IntToTypeKind(IRTk[argNode]) =
+tyString` deciding WHETHER to convert at all. x86-64 carried that at five sites
+and skipped the conversion outright for a tyShortString operand, sending a raw
+[len][chars] buffer to a callee as a managed handle (fixed 2026-09-03; `Pos` on
+a record field answered 0 for 3). Run over the pre-fix tree this checker calls
+ir_codegen.inc CLEAN, because the resolver is not involved -- nothing is.
+
+Deliberately not fenced: `= tyString` is a legitimate test in plenty of places
+and telling the two apart is a semantic judgement, not a call-site pattern. The
+honest statement is that this guard sees two of the three forms. Widening it to
+the third needs a way to recognise the ladder, not a broader regex.
 """
 import re
 import sys
@@ -101,17 +144,67 @@ def call_args(line, fname):
     return None
 
 
-def strip_comments(line):
-    """Blank out { ... } comments so a mention inside prose is not a call."""
-    return re.sub(r"\{[^}]*\}", " ", line)
+def strip_comments_text(text):
+    """Blank out Pascal comments across the WHOLE file, keeping line numbers.
+
+    Per-LINE stripping is not enough and the difference is not theoretical: the
+    commit that fixed the arg-node defect left a `{ ... }` comment spanning six
+    lines whose text says `IRStrTkOf(argNode)` in order to warn the next author
+    off it. A line-at-a-time regex cannot see that the line is inside a comment,
+    so it would report the warning as the violation. Newlines are preserved so
+    reported line numbers stay true.
+    """
+    out = []
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "{":
+            j = text.find("}", i)
+            j = n if j < 0 else j + 1
+            out.append("".join(ch if ch == "\n" else " " for ch in text[i:j]))
+            i = j
+        elif text.startswith("(*", i):
+            j = text.find("*)", i)
+            j = n if j < 0 else j + 2
+            out.append("".join(ch if ch == "\n" else " " for ch in text[i:j]))
+            i = j
+        elif text.startswith("//", i):
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            out.append(" " * (j - i))
+            i = j
+        elif c == "'":
+            j = text.find("'", i + 1)
+            j = n if j < 0 else j + 1
+            out.append(text[i:j])
+            i = j
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+# RULE TWO: the correct resolver applied to the node that cannot answer.
+# `argNode` / `argNodeArr[k]` name the IR_ARG node in every backend; the value
+# node is IRA[...] of it. Both spellings are matched, and IRA[...] is what makes
+# a site clean.
+ARG_NODE_MISUSE = re.compile(
+    r"\b(IRStrTkOf|IRFrozenKindOfAddr)\s*\(\s*"
+    r"(argNode|argNodeArr\s*\[[^\]]*\])\s*\)")
 
 
 def check_file(path):
     """Return a list of (lineno, fname, kindexpr, why) violations."""
     with open(path, encoding="utf-8", errors="replace") as fh:
-        raw = fh.readlines()
-    lines = [strip_comments(l) for l in raw]
+        text = fh.read()
+    lines = strip_comments_text(text).split("\n")
     bad = []
+    for n, line in enumerate(lines):
+        m = ARG_NODE_MISUSE.search(line)
+        if m:
+            bad.append((n + 1, m.group(1), m.group(2),
+                        "an IR_ARG node cannot answer; pass IRA[%s]"
+                        % m.group(2)))
     for n, line in enumerate(lines):
         for fname, pos in NORMALISERS.items():
             args = call_args(line, fname)
@@ -168,6 +261,14 @@ begin
 end;
 """
 
+# The line i386 shipped, and riscv32's twin. Rule one calls it clean.
+ARG_SELF_TEST = """\
+procedure FakeArg;
+begin
+  EmitLoadStrLen386(1, 0, IRStrTkOf(argNode));
+end;
+"""
+
 
 def self_test():
     """POSITIVE CONTROL, drawn from the population this guard is about.
@@ -203,6 +304,32 @@ def self_test():
         print("FAIL self-test: the checker flagged the CORRECT spelling.")
         print("  It fires unconditionally, so a red run would mean nothing either.")
         return False
+
+    # RULE TWO's own pair, drawn from ITS population -- rule one's controls say
+    # nothing about it, and a control from the wrong population certifies a
+    # broken instrument. The positive is the exact line i386 shipped; the
+    # negative is the line that replaced it.
+    for src, want_hit, label in (
+            (ARG_SELF_TEST, True, "did NOT flag the arg-node misuse"),
+            (ARG_SELF_TEST.replace("IRStrTkOf(argNode)",
+                                   "IRStrTkOf(IRA[argNode])"),
+             False, "flagged the CORRECT arg-node spelling"),
+            # ...and the comment that the fix left behind, which NAMES the bad
+            # spelling in prose. If this one is flagged, the comment stripper
+            # regressed to per-line and the guard reports its own documentation.
+            ("{ never write\n  IRStrTkOf(argNode)\n  here }\n", False,
+             "flagged a mention inside a multi-line comment"),
+    ):
+        with tempfile.NamedTemporaryFile("w", suffix=".inc", delete=False) as fh:
+            fh.write(src)
+            tmp = fh.name
+        try:
+            hits = [h for h in check_file(tmp) if "IR_ARG" in h[3]]
+        finally:
+            os.unlink(tmp)
+        if bool(hits) != want_hit:
+            print("FAIL self-test (rule two): the checker %s." % label)
+            return False
     return True
 
 
@@ -231,14 +358,26 @@ def main():
         print("  is checking call sites that no longer exist and cannot fail.")
         return 2
 
+    # RULE TWO is a NAME check, so assert the name still means what it assumes.
+    # If no backend spells `IRA[argNode]` any more, either the convention moved
+    # or the arg loops were rewritten, and this rule would then be checking a
+    # spelling nobody writes -- a guard that cannot fire, printing PASS.
+    if "IRA[argNode]" not in blob:
+        print("FAIL: no `IRA[argNode]` anywhere in compiler/*.inc.")
+        print("  The arg-node rule assumes `argNode` names the IR_ARG node and")
+        print("  `IRA[argNode]` its value. That convention is gone, so the rule")
+        print("  can no longer fire. Re-derive it before trusting a PASS.")
+        return 2
+
     violations = []
     for t in targets:
         for (ln, fname, expr, why) in check_file(t):
             violations.append((os.path.relpath(t, root), ln, fname, expr, why))
 
     if violations:
-        print("FAIL: frozen-string kind resolved with IntToTypeKind(IRTk[...])")
-        print("      where IRStrTkOf/IRFrozenKindOfAddr is required.\n")
+        print("FAIL: a frozen-string prefix kind read from something that cannot")
+        print("      answer -- IntToTypeKind(IRTk[...]), or a resolver handed an")
+        print("      IR_ARG node instead of IRA[] of it.\n")
         for (f, ln, fname, expr, why) in violations:
             print("  %s:%d  %s  <- %s" % (f, ln, fname, expr))
             print("      (%s)" % why)
@@ -247,6 +386,9 @@ def main():
         print("  site reads eight bytes of [len][chars] as a length. It does not")
         print("  crash -- the length mismatch short-circuits and the compare just")
         print("  answers no. Substitute IRStrTkOf(<node>).")
+        print("\n  For an IR_ARG line: the arg node is tagged tyString generically,")
+        print("  so the resolver returns the 8-byte default every time. Pass the")
+        print("  VALUE node -- IRA[argNode] -- the one IREmitNode* was just given.")
         return 1
 
     n = sum(1 for t in targets
