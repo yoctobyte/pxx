@@ -1378,3 +1378,42 @@ is wrong and the trap is worth the file. The `done/` ticket's "filed, not fixed"
 section was corrected in the same commit so it stops pointing at a defect that
 never existed. **The other ticket stands unchanged:** the container-strides case
 is compiled and never asserted, `dyn2dvals` red at the pin and at HEAD.
+
+### CORRECTION — the strides case IS asserted, and my own grep said otherwise first
+
+Track T filed a NEW-RED at `71a66c7d1` (`eefa9aa4b`, ticket `26c24332a`) for the
+container-strides job: **`-dyn2dvals 1 | +dyn2dvals 0`**. That contradicts what
+was banked an hour ago from frankb-78 — *"compiled by the Makefile and NEVER
+ASSERTED"* — so one of the two is wrong. It is the banked claim.
+
+**The recipe has BOTH rows**, and `291defbfd` (2026-09-02, frankb-78's own
+commit) added them together:
+
+```
+./$(COMPILER) test/test_string_n_container_strides.pas $(TESTTMP)/test_strn_container26
+tools/expect_same.sh test_strn_container26 "$(...)" "$(printf '... dyn2dvals  1 ...')"
+```
+
+**THE COMPARE ROW KEYS ON THE BINARY NAME (`test_strn_container26`), NOT THE
+SOURCE PATH.** So `grep 'string_n_container_strides' Makefile` returns exactly
+one hit — the compile — and reads as proof that nothing asserts it. I ran that
+grep, got one row, and was one commit from banking "confirmed: compiled and never
+asserted" as a second source. It is the same instrument failure this file already
+names: **a grep answering truthfully about a literal string, and being read as an
+answer about a concept.** Two readings that fail the same way are one reading, and
+frankb-78 and I made the identical one.
+
+**What is actually established:** the row exists and asserts `dyn2dvals 1`; the
+job is NEW-RED at `71a66c7d1` with actual `0`; `291defbfd` and `18b92fac9` are
+both ancestors of that sha. **What is NOT established:** when it went red, or
+what took it there. Nobody has bisected it and this note does not claim to.
+
+**One more thing for whoever takes it — a comment/code disagreement.** The
+Makefile comment above these rows says every row *"is a MEASURED stride compared
+against another measured stride, never a constant, so the byte-prefix relayout
+cannot turn it red."* A row is red. Either the comment is wrong about `dyn2dvals`
+or the value is, and per the handbook the fix is to decide which BEFORE touching
+either — matching the comment to the broken row would destroy the evidence.
+
+The parked ticket's stated reason for not acting no longer stands: it was not
+"a guard that cannot fail", it was a guard that failed.
