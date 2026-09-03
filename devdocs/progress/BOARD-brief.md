@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:9 unfinished:26 blocked:6 backlog:5 backlog_new:2 backlog-umbrella:7 backlog-core:139 backlog-nilpy:96 backlog-tools:11 backlog-pascal:54 backlog-decide:35 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3184 rejected:74`
+`working:9 unfinished:26 blocked:7 backlog:5 backlog_new:2 backlog-umbrella:7 backlog-core:138 backlog-nilpy:96 backlog-tools:11 backlog-pascal:54 backlog-decide:36 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3184 rejected:74`
 
 ## Held now (working/ — do not touch these files)
 
@@ -48,8 +48,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (6) — has an unmet blocker; do not claim
+## blocked (7) — has an unmet blocker; do not claim
 
+- `bug-a-address-of-an-open-array-element-points-at-the-marshalling-temp` [A] — blocked-by: decide-should-an-open-array-parameter-become-a-two-word-descriptor
 - `bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file` [B+S] — blocked-by: feature-pal-esp-posix-fd-semantics
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `feature-esp-gpio-and-adc-callback-slices` [B+S]

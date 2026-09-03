@@ -2,10 +2,10 @@
 track: A
 prio: 55
 type: bug
-blocked-by: []
+blocked-by: [decide-should-an-open-array-parameter-become-a-two-word-descriptor]
 found: 2026-09-02
 found-by: frankB
-summary: "`@a[0]` inside a callee does NOT equal the caller's `@arr[0]` for a `var` or `const` open-array parameter whose argument is a STATIC array -- on every element type and for a global, a local and a record field alike; FPC answers TRUE for all of them. CORRECTED 2026-09-03 by its own author: a DYNAMIC array argument already aliases correctly (1/1, matching FPC), and a VALUE parameter answers FALSE in FPC TOO, so that row was never a divergence -- the original summary claimed both. Cause is representational: a pxx open-array param is a pointer with its length at [ptr-8], so only an argument that already carries that header can be passed by reference; FPC passes (ptr, high) as two words and therefore aliases everything. NOT a wrong value -- the temp is a faithful, writable, correctly-strided view whose writes are copied back -- it bites only when an address ESCAPES the call. THE FIX IS A REPRESENTATION CHANGE, NOT A PATCH: 633 IsArray sites across 27 files, so do not start it casually."
+summary: "ESCALATED TO TRACK U 2026-09-03 — do not attempt this from the queue. The fix is a representation change (633 `IsArray` sites, 27 files, 6 backends) and the fork is now `decide-should-an-open-array-parameter-become-a-two-word-descriptor`, with both arms, their costs and a recommendation; three sessions had stopped at this ticket's own 'do not start it casually' sentence and each stop looked like difficulty rather than mis-filing. `@a[0]` inside a callee does NOT equal the caller's `@arr[0]` for a `var` or `const` open-array parameter whose argument is a STATIC array -- on every element type and for a global, a local and a record field alike; FPC answers TRUE for all of them. CORRECTED 2026-09-03 by its own author: a DYNAMIC array argument already aliases correctly (1/1, matching FPC), and a VALUE parameter answers FALSE in FPC TOO, so that row was never a divergence -- the original summary claimed both. Cause is representational: a pxx open-array param is a pointer with its length at [ptr-8], so only an argument that already carries that header can be passed by reference; FPC passes (ptr, high) as two words and therefore aliases everything. NOT a wrong value -- the temp is a faithful, writable, correctly-strided view whose writes are copied back -- it bites only when an address ESCAPES the call. THE FIX IS A REPRESENTATION CHANGE, NOT A PATCH: 633 IsArray sites across 27 files, so do not start it casually."
 
 status: open
 ---
@@ -130,3 +130,16 @@ can carry a bug fix.
 
 Re-measured shapes worth keeping: element access, write-through, `Length` and
 `High` are correct throughout, on every row above, in both compilers.
+
+# 2026-09-03 — escalated to Track U, and why it is not a queue item
+
+Three sessions read this independently and all three stopped at the same
+sentence. That is the tell for a mis-filed ticket rather than a hard one: the
+work is not a bug fix, it is a decision about the parameter REPRESENTATION, and
+a p55 slot in `ready --track A` guarantees a fourth reader repeats the pass.
+
+The fork, both arms, their costs and a recommendation are in
+`decide-should-an-open-array-parameter-become-a-two-word-descriptor`. Nothing
+about the diagnosis below changed; it is complete and it was corrected against
+FPC on 2026-09-03. `blocked-by` now names the decision, so this drops out of the
+ranked queue until the fork is settled.
