@@ -1,8 +1,9 @@
 ---
-summary: "ONE OF THE THREE IS DONE. **Subranges are now stored in the narrowest ordinal that spans the declared range** -- SizeOf(0..255) and SizeOf(-128..127) are 1, `packed record a,b,c` is 3, `array[0..3] of 0..255` is 4, all matching FPC 3.2.2, on x86-64 and on i386/aarch64/arm32/riscv32 byte-identically. AND IT WAS NOT A FOOTPRINT ITEM: `TBig = -3000000000..3000000000` was given four bytes, so storing -3000000000 read back **1294967296** -- ordinary declared source, no diagnostic, wrong number, reproducible on the pin. STILL OPEN, and they do not share a cause: (2) THE SET THIRD HAS MOVED OUT to [[bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so]] (Track A) -- it is a codegen/ABI slice, not a Pascal sizing one, and bundled here it inherited a tractability the string half earned; (3) `string[10]` is 8 bytes, POINTER SIZE, where FPC gives 11 inline, so a short string is not stored inline at all -- a wrong REPRESENTATION rather than a generous width, and the ticket body routes that one to Track U as a storage-model decision. Blocks feature-pascal-typed-and-untyped-files [p70]: `file of T` writes record layout to DISK, so layout stops being an intermediate and becomes the value."
+summary: "ONE OF THE THREE IS DONE. **Subranges are now stored in the narrowest ordinal that spans the declared range** -- SizeOf(0..255) and SizeOf(-128..127) are 1, `packed record a,b,c` is 3, `array[0..3] of 0..255` is 4, all matching FPC 3.2.2, on x86-64 and on i386/aarch64/arm32/riscv32 byte-identically. AND IT WAS NOT A FOOTPRINT ITEM: `TBig = -3000000000..3000000000` was given four bytes, so storing -3000000000 read back **1294967296** -- ordinary declared source, no diagnostic, wrong number, reproducible on the pin. STILL OPEN, and they do not share a cause: (2) THE SET THIRD HAS MOVED OUT to [[bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so]] (Track A) -- it is a codegen/ABI slice, not a Pascal sizing one, and bundled here it inherited a tractability the string half earned; (3) `string[10]` is 8 bytes, POINTER SIZE, where FPC gives 11 inline, so a short string is not stored inline at all -- a wrong REPRESENTATION rather than a generous width, and the ticket body routes that one to Track U as a storage-model decision -- SUPERSEDED: that decision is TAKEN and item (3) is the declared deliverable of [[feature-p-implement-the-real-tyshortstring-byte-prefix-layout]] (p100, phase 2 done, seven backends emitting a one-byte prefix under -dPXX_SHORTSTRING). Now `blocked-by` it, because until 2026-09-03 this ticket was the #1 item on `ready --track P` at effective p75 with no edge to it, and its only remaining item IS the flip -- which the OWNER has reserved and nobody may start. Blocks feature-pascal-typed-and-untyped-files [p70]: `file of T` writes record layout to DISK, so layout stops being an intermediate and becomes the value."
 type: bug
 track: P
 prio: 25
+blocked-by: [feature-p-implement-the-real-tyshortstring-byte-prefix-layout]
 ---
 
 > **`prio: 25` is correct and must not be raised to match the ranked output.**
@@ -588,3 +589,19 @@ Contrast with the SET third, which really is a Track A codegen/ABI slice: 115
 `tySet` sites, 32 bytes baked into every backend, the by-value ABI class,
 `IR_SET_COPY`/`IR_SET_LIT`, constant baking and default parameters. The two
 remaining thirds are NOT the same size of job and should not be ranked as one.
+
+## Why the `blocked-by` edge was added, 2026-09-03 (frankA)
+
+Item (1) is done, item (2) moved out to its own Track A ticket, so **everything
+still open here is item (3)** — and item (3) is not a Track P sizing question
+any more, it is `feature-p-implement-the-real-tyshortstring-byte-prefix-layout`,
+whose definition of done is exactly "`string[N<=255]` is a real byte-prefixed
+`tyShortString`". The edge is therefore exact, not approximate: no part of this
+ticket can be finished before that one lands.
+
+It was load-bearing and not paperwork. Measured before the edit: this was the
+**top row of `ready --track P`** at effective p75 (own prio 25, inherited from
+`feature-pascal-typed-and-untyped-files` p70 and `umbrella-sizeof-is-one-answer`
+p75 through two separate paths). A Track P agent pulling the top of its own
+queue was being handed the flip — the one piece of work the owner has kept for
+himself and which serialises the fleet.

@@ -2,6 +2,7 @@
 prio: 40
 track: P
 type: bug
+status: done
 ---
 
 # `r.v[0]` on a field of type `array of array of T` types as T, not `array of T`
@@ -64,3 +65,35 @@ loop in `pasparser_decl.inc` counts the nested `array of`s), and `UFldTk` is
 the LEAF type by design. So the depth is available and the indexing path is
 simply not consuming it: one index into a depth-2 field must yield a depth-1
 array, not the leaf. The local path already does this, and is the oracle.
+
+## Fixed by `45391912a`, measured 2026-09-03 (frankA)
+
+Same defect, one element class over. `45391912a` closed
+[[bug-a-a-field-rooted-array-of-array-of-string-n-indexes-as-a-char]] — a field
+of `array of array of string[10]` indexing as a Char — by deleting the second
+dyn-depth walker: `symtab.inc`'s `DynArrayNodeDepth` had no `AN_FIELD` arm, so
+`IsNodeArray` got depth 0 for `r.v` and the selector chain took the
+index-a-STRING branch. That is exactly the mechanism this ticket's "Where to
+look" predicted — the depth is recorded and was not consumed — and the walker is
+element-type-blind, so the AnsiString spelling here went with it.
+
+Positive control, both modes, on the ticket's own repro plus a
+type-discriminating row (`Two(r.v[0])` where `Two` takes `array of AnsiString`,
+which cannot typecheck if `r.v[0]` is the leaf):
+
+| compiler | default | `-dPXX_SHORTSTRING` |
+| --- | --- | --- |
+| pin v401 `766b99f98` (ancestor of the fix) | `error: cannot assign ShortString to Char` | same error |
+| HEAD `7ee75c8e1` | `INNER <ab><cd>` `PARAM <ab/cd>` `CHAR <a>` | identical |
+
+The pinned arm reproduces the ticket's error string verbatim, so this is a real
+fix and not a mis-filed repro. `r.v[0][0][1]` still indexes a CHARACTER at depth
+3, so consuming the depth did not cost the leaf its string indexing.
+
+Regression cover already exists and needs nothing added:
+`test/test_field_rooted_nested_dyn_frozen_index.pas` carries the `ANSI` row
+(`ra: record m: array of array of AnsiString`) beside the `string[10]` and
+`Integer` ones, asserting VALUES rather than lengths.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

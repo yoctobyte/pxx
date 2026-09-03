@@ -6,6 +6,7 @@ status: open
 created: 2026-09-02
 found-by: frankA
 owner: ""
+blocked-by: [feature-p-implement-the-real-tyshortstring-byte-prefix-layout]
 summary: "i386, aarch64 and arm32 each hold the frozen `string[N]` store body TWICE — once in IR_STORE_SYM (`s := v`) and once in IR_STORE_MEM (`p^ := v`) — identical instruction for instruction, differing only in where the capacity comes from (SymStrCap[si] against Integer(IRIVal[node])). MEASURED, not asserted: after e4cba526a the tyChar arm now appears twice in each of the three files, six copies where there were three, so the duplication GREW as a side effect of fixing the bug it caused. That bug is exactly what duplication predicts: only the SYM copy had ever grown a tyChar arm, so `s := c` compiled and `p^ := c` did not, on precisely the three backends with no second copy of it (bug-a-char-into-shortstring-through-a-pointer-is-x86-64-only). THE EXTRACTION IS ALREADY WRITTEN AND WAS MEASURED: one EmitFrozenStrStoreBody<arch> per backend called by both arms, byte-identical across 32 corpus binaries on each of i386/aarch64/arm32 with ZERO changed. Net line change was measured at -12 / -8 / +7 (i386 / aarch64 / arm32) on the PRE-transplant tree, where that diff was extraction AND the char fix together; the deletion against today's tree is larger because a second copy now exists per file, and that number is NOT measured. It is NOT landed — the transplant won the race and the tree is in a stand-down window for the prio-100 shortstring relayout. THE TRANSPLANT'S OWN AUTHOR ARGUES FOR THIS: frankC, 2026-09-02, *\"the author of the transplant thinks the extraction supersedes it... I would rather the tree ended up right than that my version stayed in it\"*, having named normalise-dont-special-case in the transplant commit itself. The banked patch is REFERENCE ONLY and does NOT apply — it was cut against the pre-transplant tree; re-derive rather than git apply."
 ---
 
@@ -116,3 +117,12 @@ differently with and without it — frankC, 2026-09-02:
 > change now" is not the same claim as "right shape" ... when that window
 > reopens, land it over mine ... I would rather the tree ended up right than
 > that my version stayed in it.
+
+## The prose trigger is now an edge, 2026-09-03 (frankA)
+
+This body already said do not start during the P4 window, and to close as
+done-by if the relayout collapses the two arms. **Nothing watched that
+sentence** — the ranker offered the ticket regardless. It now carries
+`blocked-by: feature-p-implement-the-real-tyshortstring-byte-prefix-layout`, so
+the condition is enforced by the instrument that hands out work rather than by
+whoever happens to read down this far.
