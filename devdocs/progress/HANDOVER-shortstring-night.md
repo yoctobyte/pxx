@@ -1321,3 +1321,60 @@ is (2) and the prio is wrong by a lot.
 
 Not measured here: the coordinator does not measure. Handed to frankb-78, which
 holds the tree and the context.
+
+### ARCHAEOLOGY, RESOLVED — and my own framing above was wrong
+
+`a82c87c40`, verified on origin. The discriminator answered **8**: `record case
+k: LongInt of 0: (i: LongInt) end` measures 8 in the default mode and 8 in FPC,
+so **`1a2db4cfc` has NOT regressed.**
+
+**But the section above offered two possibilities and the answer was a third.**
+Neither "a path the fix missed" nor "a regression" — **the report was FALSE**, and
+frankb-78 moved it to `rejected/` an hour after filing it. The 8 it had compared
+against came from `fpc -O2` **with no `-M` flag, where `Integer` is TWO bytes**
+for Turbo Pascal compatibility. Its record had a 4-byte `Integer` and FPC's had a
+2-byte one: **the two compilers were laying out different records.** With
+`LongInt` on both sides they agree at 12, in FPC's default mode and under
+`-Mobjfpc`; `record case k: Byte of 0: (s: string[4]) end` is 6 in both. There
+was never a residual divergence — the field-size fix took this shape 16 -> 12 and
+**12 is correct.**
+
+So the honest version: the field half was broken, it was fixed, and then **the
+correct answer was reported as a defect because the oracle was answering about a
+different type.**
+
+### THE ORACLE LIED BY BEING CORRECT ABOUT A DIFFERENT PROGRAM
+
+`tools/fpc_diff_probe.sh` passes `-Mobjfpc` on every compile. frankb-78 invoked
+`fpc` by hand for a one-off record comparison — a minute's convenience — and
+**lost the flag the tool carries.** It did not error. It compiled, ran, and
+printed a true number about a program nobody had written.
+
+> **The tool is not slower than the shortcut. It IS the shortcut, with the flag
+> in it.**
+
+This is the differential-probe form of the rule this file already states three
+ways, and it was walked into by someone who could quote the rule. Worth noting
+that the failure is not skipping a check — the check RAN, and its result was
+true.
+
+**The discriminator, for anyone comparing a LAYOUT against FPC by hand: print
+`SizeOf(Integer)` beside the number. Where it says 2, the record under test is
+not the one you declared.**
+
+### Why `18b92fac9` is untouched by this — re-checked, not assumed
+
+Those records hold only `Byte` and `string[N]` fields, so no bare `Integer`
+appears in them, and the layout test **prints no sizes at all**: its FPC
+agreement is over booleans and strings, which carry no width.
+
+**The design choice that made one `.expected` serve both modes is the same one
+that made it immune to this.** That was luck in origin and is worth keeping
+deliberately: **a test that prints no number cannot be fooled by a compiler that
+disagrees about what a number means.**
+
+Filed to `rejected/` rather than deleted, per the four-folders rule — the report
+is wrong and the trap is worth the file. The `done/` ticket's "filed, not fixed"
+section was corrected in the same commit so it stops pointing at a defect that
+never existed. **The other ticket stands unchanged:** the container-strides case
+is compiled and never asserted, `dyn2dvals` red at the pin and at HEAD.
