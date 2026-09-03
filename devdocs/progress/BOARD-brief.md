@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:9 unfinished:26 blocked:6 backlog:7 backlog_new:2 backlog-umbrella:7 backlog-core:143 backlog-nilpy:96 backlog-tools:7 backlog-pascal:54 backlog-decide:33 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3157 rejected:72`
+`working:9 unfinished:26 blocked:6 backlog:7 backlog_new:2 backlog-umbrella:7 backlog-core:145 backlog-nilpy:96 backlog-tools:7 backlog-pascal:54 backlog-decide:33 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3157 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -57,15 +57,17 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 402, ranked
+## Ready — top 30 of 404, ranked
 
 - `[p 85] [A]` bug-a-string-concat-segfaults-on-x86-64-under-the-byte-prefix-mode
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
+- `[p 80] [A]` bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 2)
 - `[p 75] [P]` bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size (unblocks 1)
+- `[p 75] [A]` bug-a-i386-refuses-a-frozen-record-field-write-under-the-byte-prefix-mode
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [A]` umbrella-managed-memory-is-correct
@@ -87,7 +89,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
-- `[p 65] [P]` feature-pascal-corpus-generics
-- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 
-_372 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_374 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
