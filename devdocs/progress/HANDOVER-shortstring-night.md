@@ -3026,3 +3026,83 @@ move in this repo and the one that keeps a record honest.**
 
 Ticket stays in `working/`, claimed, genuinely blocked — the `blocked-by` edge is
 what the ranker reads, and `owner:` here names a **real session**, not a checkout.
+
+## 2026-09-03 19:47 — `9fb5655f7`: a TRUE clause, scoped to a narrower question, invented work on two tickets
+
+`1c2219596` — the aarch64 variadic float fix, all three sites — is **landed and
+verified on origin**: `make test-core` rc=0 with the ten new rows inside it,
+`gate.sh quick` GREEN **with the FPC seed canary actually RUNNING rather than
+SKIP**, because it gated while `compiler/**` was still dirty. That is this file's
+own *gate-before-you-commit* rule executed correctly, and the canary is the only
+thing that catches the declaration-order class. `converged after 1 round(s)`,
+sha `a85892f216a9`.
+
+### The find: two tickets said their first deliverable was AN ORACLE
+
+Both carried *"there is no gcc cross for aarch64 on this box, so no mixed link is
+constructible and the only available verification is pxx-against-pxx."*
+
+**The clause about a LINK is TRUE.** There is no cross gcc and no `lld`, so
+nothing can be linked. **It was answering a narrower question than either ticket
+asks.** `clang` is a cross compiler by construction — no sysroot, no cross
+binutils — and **if the callees are `extern` and never defined, you are reading
+the CALL SITE, so nothing has to link or run.** `llvm-objdump-21` was already
+installed and reads pxx's own aarch64/arm32/riscv32 ELF for the other column.
+
+> **A true statement, scoped to a narrower question than the one being asked,
+> does not read as an error — it reads as a finding, and it INVENTS WORK.** Two
+> tickets each grew an oracle as their first deliverable, and the oracle was
+> installed.
+
+This is the file's *"every instrument that lies, lies by being CORRECT ABOUT
+SOMETHING ELSE"* — applied not to a tool but to **a reasoned premise sitting in a
+ticket summary**, where nothing will ever return an error to contradict it. The
+discriminator is the same one as always: **ask what question the sentence
+actually answers, not whether it is true.**
+
+### FIVE SHAPES, FOUR WRONG, AND THE FIFTH RIGHT BY ACCIDENT
+
+Measured on aarch64: pxx emits `x0 = &temp, x1 = tail` for **all five** by-value
+aggregate shapes. Four are wrong. **The fifth is right by accident** — a 24-byte
+struct really IS passed indirectly on AAPCS64.
+
+**And a big struct is exactly the shape someone writing one hand probe would
+reach for.**
+
+Banked, at frankb-78's explicit request, **as an INSTANCE of this repo's
+"choose a probe whose right answer differs from the default" and NOT as a new
+rule** — seen from the other side. There it is the test's expected value
+colliding with the failure value; here it is **the BUG's answer colliding with
+the SPECIFICATION**, on the single most likely probe. (It declined to promote its
+own finding to a new rule. Worth noting on a day when this seat inflated a peer's
+hedged inference into a tally twice.)
+
+### FOUR ROWS THAT ARE NOT GUESSABLE FROM THE psABI
+
+The argument for RUNNING an oracle rather than reasoning from a document:
+
+- aarch64 and riscv32 go indirect past a size limit; **arm32 never does.**
+- The tail integer lands in `w0`/`r0` after an HFA, because **the two banks
+  allocate independently** — so a fix that places the HFA correctly and still
+  advances the GP index is wrong **in a way no single-argument probe can see.**
+- riscv32 takes `{double,double}` in FP registers but `{float,float,float}`
+  **indirectly.**
+- `long` is four bytes on the 32-bit targets, so **a struct named for its 64-bit
+  size is a different shape there** — the name travels, the layout does not.
+
+### THE SCOPE LIMIT IS WRITTEN ON BOTH TICKETS AND IN THE DOC
+
+> **This is a PLACEMENT oracle, read off the call site, and it NEVER RUNS.**
+
+It cannot catch a placement that is right and **read back** wrong. And the
+outcome oracle — the glibc dynamic call — **cannot reach either ticket at all**,
+because no libc entry point takes a large aggregate by value. **Both are needed;
+neither substitutes.** Writing the limit into the artifact is the part that
+matters: the half a reader supplies wrongly is the half nobody wrote down.
+
+Section: `devdocs/dev/differential-probes.md:655`. Both ticket summaries rewritten
+to record the old premise **AS FALSE rather than deleted**.
+
+No compiler change in `9fb5655f7` — docs and tickets. Next is
+`ABIA64CdeclArgSlot`'s fixed 8-per-argument becoming a real AAPCS64 aggregate
+classification, landing **incrementally, not as one drop.**
