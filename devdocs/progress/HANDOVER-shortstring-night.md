@@ -1058,3 +1058,55 @@ defects lived.
 
 **Do not extend it by adding probes of the same shape.** The gap is an AXIS, not
 a count.
+
+## The commit that broke it was CORRECT (frankb-78, `2bd82200e`)
+
+Both compare defects fixed. The i386 one bisected to **`450f4b52a` — and that
+commit is not wrong.** It had to start tagging an `IR_INDEX` with the kind the
+ARRAY records, because that tag is where the prefix width comes from. **What
+broke is every guard that had been asking a DIFFERENT QUESTION of the same
+tag:**
+
+```pascal
+if ((op = tkEq) or (op = tkNeq)) and
+   ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) or ...
+```
+
+That means *"is this a string at all"* — and its comment said so, and said it
+was safe **because the IR's generic `tyString` tag answers that.** True when
+written. **A correct change to what a tag MEANS breaks every reader that was
+using it to mean something else, and none of them are wrong either.**
+
+### ITS SECOND VICTIM WAS BIGGER THAN THE ONE REPORTED
+
+The same enumeration in `ir.inc`'s case lowering: **`case arr[0] of 'lit'`
+STOPPED COMPILING on all seven targets in both modes** — `case label does not
+match the ordinal selector type`, a **hard error on valid code**, correct at the
+pin. `case r.f of` had it too under the flag.
+
+**Live in every `$(PXX_STABLE)` build, and nobody reported it** — because no
+test had a non-trivial `case` selector. **The absent-column pattern again, in a
+new construct.** Both the i386 wrong answer and an all-target compile error are
+one root, and **the compile error is the bigger defect**.
+
+### THE FIX IS A PREDICATE, NOT THREE EDITS
+
+`TypeIsAnyString` in `symtab.inc`, beside `TypeIsFrozenString` (*"does it carry
+an inline prefix"*) and `StrValTk` (*"what does it present as"*). **A guard
+meaning "is this a string" must not enumerate kinds, because the SET OF KINDS is
+exactly what this feature keeps changing.** Three questions, three named
+predicates, no enumerations.
+
+**And it left arm32's identical enumeration alone** — `s := arr[0]` and
+`s := r.f` are correct there on every target in both modes. **Widening a guard
+with no measured defect behind it is a change nobody can verify.** That is the
+right call and the harder one.
+
+### A FIFTH STALE-BINARY ROUTE: A BISECT LEAVES THE BINARY BEHIND
+
+`git bisect reset` returns the TREE to master and **leaves whatever the last
+bisect step built on disk**, and `make` does not necessarily rebuild it.
+frankb-78 nearly reported *"i386 is fixed already"* off three probes that all
+said TRUE. **The sha said `a81084690bac` where a HEAD build gives
+`60710c8ee103`** — printing the sha beside the result is the only reason it was
+caught. Add to the four routes in the handbook.
