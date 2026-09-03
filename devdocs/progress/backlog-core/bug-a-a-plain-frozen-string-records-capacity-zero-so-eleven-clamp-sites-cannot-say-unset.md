@@ -98,3 +98,66 @@ the assert fixes one arm and leaves the other, which is the double case
 aarch64 + arm32 + riscv32) and `test_shortstring_trunc.pas` are the rows a
 change here can regress; the frozen model (`-uPXX_MANAGED_STRING`) is where a
 plain `string` is frozen at all and is where the 255 has to keep working.
+
+## Half done, 2026-09-03 — the SYMBOL writers, and why that enables nothing yet
+
+Both writer sites now record the real capacity:
+
+```pascal
+if TypeIsFrozenString(tk) then
+begin
+  if tk = tyString then SymStrCap[SymCount] := DEFAULT_STR_CAP
+  else SymStrCap[SymCount] := LastTypeStrCap;
+end;
+```
+
+**Behaviourally neutral in all three modes** (default, `-uPXX_MANAGED_STRING`,
+`-dPXX_SHORTSTRING`) — the readers substitute the same 255 they now find
+recorded — and `gate.sh quick` GREEN with `test_shortstring_cap_through_a_pointer`,
+`test_shortstring_trunc` and the frozen-model rows unchanged.
+
+**PROVEN LIVE, because a change that measures as no change is otherwise
+indistinguishable from an unreached edit.** Poisoned to `99` and rebuilt: under
+`-uPXX_MANAGED_STRING` a `var s: string` reports `len=99 high=99` and a `string`
+PARAMETER reports `high=99`. So both writers are reached and both are read, by
+the clamp and by `High`. Restored, and the restored binary's sha matches the
+pre-poison one.
+
+### It enables NOTHING yet, and nobody may act as if it does
+
+The eleven `if cap <= 0 then cap := DEFAULT_STR_CAP` sites do not read
+`SymStrCap` alone — they take a capacity from whichever carrier the shape
+provides, and **the FIELD and ELEMENT carriers still write 0 for a plain frozen
+string.** So the overload is halved, not removed, and no reader can be made
+strict.
+
+Worse than "not yet": **two sites in `ir.inc` deliberately depend on the 0**,
+which this ticket did not know when it was filed —
+
+- `ir.inc:2638` — `if ... RecFieldStrCap(...) > 0 then elemSize :=
+  FrozenStrSlotSize(...) else <the plain-string stride>`, with the comment
+  *"RecFieldStrCap answers 0 for a genuine bare `string` field, so that keeps
+  the existing stride."*
+- `ir.inc:11216` — the record-field store clamp, *"RecFieldStrCap answers 0 for
+  a plain `string` field, which is the existing no-clamp behaviour."*
+
+Both branch on `0` as a MEANING. Recording 255 in `RecFieldStrCap` without
+converting them changes a stride (`FrozenStrSlotSize(tyFixedString, 255)` is
+not the same number as the plain-string arm's `STRING_CAP + 8` /
+`LOCAL_STR_CAP + 8`) and turns a deliberate no-clamp into a clamp. That is a
+real behaviour change and it is the work that remains.
+
+### What remains, in order
+
+1. `ArrTypeElemStrCap` (`pasparser_decl.inc` 6553/6631) and the record/class
+   field capacity, both of which currently write 0 for a plain frozen string.
+2. Convert `ir.inc:2638` and `ir.inc:11216` to ask the KIND rather than the
+   zero — `SizeOfSlot` already shows the shape (`TypeIsFrozenString(tk) and
+   (cap > 0)`, falling back on the kind).
+3. Only then may any of the eleven refuse instead of substituting.
+
+Doing 1 without 2 is a silent stride change. Doing 3 before both is a compiler
+that rejects every plain frozen string. The symbol half is landed on its own
+because it is the one piece that is true in isolation: 255 really is a plain
+frozen `string`'s capacity, so recording it is a more truthful encoding than
+recording its absence — measured, not assumed.

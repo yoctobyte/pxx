@@ -4712,8 +4712,30 @@ begin
   SymPtrElemDynDepth[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
-  if TypeIsFrozenString(tk) and (tk <> tyString) then
-    SymStrCap[SymCount] := LastTypeStrCap;
+  { A PLAIN FROZEN `string` RECORDS ITS REAL CAPACITY, 255, rather than being
+    left at 0. It used to be excluded here on the grounds that it has no
+    declared N -- and 255 IS its N, measured: under -uPXX_MANAGED_STRING a
+    `var s: string` taking a 300-character store comes back Length 255 with the
+    neighbour intact. Leaving it at 0 made the eleven downstream `if cap <= 0
+    then cap := DEFAULT_STR_CAP` sites carry that fact instead, which meant 0
+    had TWO meanings and only one of them was an answer: a plain `string`, for
+    which 255 is right, and a `string[N]` whose N was never recorded, for which
+    the same substitution is a silent buffer OVERRUN. Three of those were found
+    one at a time (`a[0] :=`, `r.f :=`, `p^ :=`). With the capacity written
+    here, 0 means UNSET everywhere and a missing carrier can be refused instead
+    of guessed at.
+    TWO WRITERS, NOT ELEVEN READERS -- the readers cannot decline while the
+    encoding is overloaded. And the two are IDENTICAL TEXT in AllocVar and
+    AllocParam: an edit that does not assert its match count fixes one arm and
+    leaves the other.
+    bug-a-a-plain-frozen-string-records-capacity-zero-so-eleven-clamp-sites-cannot-say-unset }
+  if TypeIsFrozenString(tk) then
+  begin
+    if tk = tyString then
+      SymStrCap[SymCount] := DEFAULT_STR_CAP
+    else
+      SymStrCap[SymCount] := LastTypeStrCap;
+  end;
   SymRTTIOff[SymCount] := -1;
   SymIsHiddenArgTemp[SymCount] := False;
   SymIsCtorResultTemp[SymCount] := False;
@@ -5014,8 +5036,30 @@ begin
   SymPtrElemDynDepth[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
-  if TypeIsFrozenString(tk) and (tk <> tyString) then
-    SymStrCap[SymCount] := LastTypeStrCap;
+  { A PLAIN FROZEN `string` RECORDS ITS REAL CAPACITY, 255, rather than being
+    left at 0. It used to be excluded here on the grounds that it has no
+    declared N -- and 255 IS its N, measured: under -uPXX_MANAGED_STRING a
+    `var s: string` taking a 300-character store comes back Length 255 with the
+    neighbour intact. Leaving it at 0 made the eleven downstream `if cap <= 0
+    then cap := DEFAULT_STR_CAP` sites carry that fact instead, which meant 0
+    had TWO meanings and only one of them was an answer: a plain `string`, for
+    which 255 is right, and a `string[N]` whose N was never recorded, for which
+    the same substitution is a silent buffer OVERRUN. Three of those were found
+    one at a time (`a[0] :=`, `r.f :=`, `p^ :=`). With the capacity written
+    here, 0 means UNSET everywhere and a missing carrier can be refused instead
+    of guessed at.
+    TWO WRITERS, NOT ELEVEN READERS -- the readers cannot decline while the
+    encoding is overloaded. And the two are IDENTICAL TEXT in AllocVar and
+    AllocParam: an edit that does not assert its match count fixes one arm and
+    leaves the other.
+    bug-a-a-plain-frozen-string-records-capacity-zero-so-eleven-clamp-sites-cannot-say-unset }
+  if TypeIsFrozenString(tk) then
+  begin
+    if tk = tyString then
+      SymStrCap[SymCount] := DEFAULT_STR_CAP
+    else
+      SymStrCap[SymCount] := LastTypeStrCap;
+  end;
   SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType := tk;
   Syms[SymCount].RecName  := LastTypeRecId;
