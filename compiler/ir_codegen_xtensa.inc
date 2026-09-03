@@ -2874,6 +2874,40 @@ begin
           EmitHeapFreeLockedXtensa;
           Exit;
         end;
+        if procIdx = -101 then
+        begin
+          { SetLength(s, n) on a FROZEN inline string: store n into the length
+            prefix at [buffer+0], at the string's OWN prefix width. The sibling
+            of -102 below, and it was simply never written here -- the call fell
+            through to the generic refusal at the bottom of this dispatch and
+            came out as "this builtin has no arm in the xtensa backend (builtin
+            -101)", which is at least honest about being a missing arm; the
+            riscv32 twin said "bare-metal stage 1" for the same gap, on a hosted
+            target, and that one read as a platform limit.
+
+            Found by measuring the ticket's claim rather than taking it: it was
+            filed as riscv32-only, and xtensa refuses the identical program.
+            EmitStoreStrLenXtensa owns the width choice, so this arm is correct
+            under both prefix modes without knowing which is on. Its third
+            argument is a scratch the WIDE form clobbers to write the zero high
+            word; a4 is free here, and the byte form does not touch it.
+            bug-a-setlength-on-a-frozen-string-is-unsupported-on-riscv32 }
+          argNode := IRB[node];
+          valNode := IRB[argNode];
+          left := IRA[argNode];
+          if IRKind[left] <> IR_LEA then
+            Error('target xtensa: SetLength expects a string variable');
+          si := IRA[left];
+          argBase := XtSpillDepth;
+          IREmitNodeXtensa(left);                    { a2 = buffer addr }
+          XtensaPushA2;                              { buffer @ argBase }
+          IREmitNodeXtensa(IRA[valNode]);            { a2 = new length }
+          xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 1));
+          XtensaDropSlots(argBase, 1);
+          EmitStoreStrLenXtensa(reg_xtensa_a2, reg_xtensa_a3, reg_xtensa_a4,
+                                Syms[si].TypeKind);
+          Exit;
+        end;
         if procIdx = -102 then
         begin
           { SetLength(arr, n) -> PXXDynSetLen(slotAddr, n, desc). SetLength on a

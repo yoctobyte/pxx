@@ -48,7 +48,7 @@ program test_shortstring_through_a_pointer;
   moved once already: before 764dc3a30 the first killer was `assign from
   field`; after it, it is `compare field to literal`.
 
-  Verified against FPC 3.2.2, which prints `total ok 28 / 28`.
+  Verified against FPC 3.2.2, which prints `total ok 33 / 33`.
   feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
 
 type
@@ -87,6 +87,8 @@ var
   pr: PRec;
   pa: PS;
   m: AnsiString;
+  sl: TS10;            { SetLength target -- kept separate so shortening it
+                           cannot perturb any row above }
   d, viaP: TS10;         { the store-shape pair: same start, two spellings }
   pv: PS;
   ch: Char;
@@ -193,15 +195,38 @@ begin
   Write('write  <'); Write(p^);   Write('> <'); Write(s);   WriteLn('>');
   Write('writew <'); Write(p^:8); Write('> <'); Write(s:8); WriteLn('>');
 
-  { ---- READER: SetLength IS ABSENT FROM THIS FILE ON PURPOSE, and its absence
-    is a finding rather than an omission. It reads the prefix before it writes
-    one and appears in no census, so it belongs in this matrix -- but riscv32
-    refuses it outright: `target riscv32: standard builtin calls not supported
-    in bare-metal stage 1 (builtin id 101)`. That is a MISSING FEATURE, not a
-    width bug, it predates phase 2, and keeping the rows here would cost the
-    whole matrix on riscv32 to assert something that is already a hard error.
-    Pos and Copy were checked the same way and both compile there.
-    bug-a-setlength-on-a-frozen-string-is-unsupported-on-riscv32 ---- }
+  { ---- READER-THEN-WRITER: SetLength. It READS the prefix to find the buffer
+    and WRITES one back, so it is the only builtin in this file that is on both
+    sides of the layout, and it appeared in no census. These rows were absent
+    until riscv32 and xtensa grew a `-101` arm
+    (bug-a-setlength-on-a-frozen-string-is-unsupported-on-riscv32): both
+    refused the builtin outright at compile time, so carrying the rows would
+    have cost the whole matrix on two targets to assert a hard error.
+
+    ONLY THE DIRECT SPELLING IS HERE, and that is a second finding rather than
+    a gap in the matrix: `SetLength(p^, n)`, `SetLength(r.f, n)` and
+    `SetLength(arr[0], n)` are refused on EVERY target including x86-64, in
+    BOTH modes, and reproduce at the pin --
+    `error: SetLength expects a string variable in IR codegen`. Every backend's
+    arm requires an IR_LEA of a symbol. That is universal and predates the
+    byte-prefix work, so it is not a width bug and not this file's subject;
+    bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol.
+
+    The byte row is the one that would catch a half-converted writer: a length
+    written at the wrong WIDTH still reads back correctly through Length() on a
+    little-endian target, because the low byte is in the same place either way
+    -- what differs is whether the bytes ABOVE it were cleared. The relation
+    that holds under both layouts is that offset 0 carries the count and the
+    first character stays at offset pfx, untouched by the shortening. ---- }
+  pfx := SizeOf(sl) - 10;
+  sl := 'hello';
+  SetLength(sl, 3);
+  Chk('setlength shortens', Length(sl) = 3);
+  Chk('setlength keeps the leading bytes', sl = 'hel');
+  Chk('setlength writes the length at offset 0', PByteOf(@sl, 0) = 3);
+  Chk('setlength leaves the first char at offset pfx', PByteOf(@sl, pfx) = Ord('h'));
+  SetLength(sl, 0);
+  Chk('setlength to zero empties', Length(sl) = 0);
 
 
   { ---- THE STORE SHAPE, ASSERTED AS BYTES AND NOT AS OUTPUT ----

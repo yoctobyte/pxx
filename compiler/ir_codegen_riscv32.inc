@@ -2813,6 +2813,41 @@ begin
           EmitCallProc(procIdx);
           Exit;
         end;
+        if procIdx = -101 then
+        begin
+          { SetLength(s, n) on a FROZEN inline string: store n into the
+            length prefix at [buffer+0], at the string's OWN prefix width.
+            Mirrors the x86-64 / aarch64 / arm32 arms; it was simply never
+            written here, so `SetLength(s, 3)` on a `string[10]` reached the
+            generic builtin refusal at the bottom of this dispatch and came out
+            as "standard builtin calls not supported in bare-metal stage 1
+            (builtin id 101)" -- a message about bare metal for a construct that
+            has nothing to do with bare metal, on a hosted target, which is why
+            it read as a platform limit rather than a missing arm.
+
+            -102 (dynamic array / managed AnsiString) has always been here; only
+            the frozen sibling was absent. Pos and Copy on the same type both
+            compiled, which is what said "one missing arm" rather than "no
+            frozen support".
+
+            The width comes from the SYMBOL, so the byte-prefix mode gets `sb`
+            and the wide mode `sw` + a zero high word -- EmitStoreStrLenRISCV32
+            owns that choice, and asking it here is what keeps this arm correct
+            under both modes without knowing which is on.
+            bug-a-setlength-on-a-frozen-string-is-unsupported-on-riscv32 }
+          argNode := IRB[node];
+          valNode := IRB[argNode];
+          left := IRA[argNode];
+          if IRKind[left] <> IR_LEA then
+            Error('target riscv32: SetLength expects a string variable');
+          si := IRA[left];
+          IREmitNodeRISCV32(left);                                    { a0 = buffer addr }
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push buffer }
+          IREmitNodeRISCV32(IRA[valNode]);                            { a0 = new length }
+          rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop -> a1 }
+          EmitStoreStrLenRISCV32(reg_a0, reg_a1, Syms[si].TypeKind);
+          Exit;
+        end;
         if procIdx = -Ord(tkLength) then
         begin
           argNode := IRB[node];

@@ -19,6 +19,11 @@ ok   pos direct
 ok   copy direct
 write  <hello> <hello>
 writew <   hello> <   hello>
+ok   setlength shortens
+ok   setlength keeps the leading bytes
+ok   setlength writes the length at offset 0
+ok   setlength leaves the first char at offset pfx
+ok   setlength to zero empties
 ok   char store through deref writes a direct store's bytes
 ok   char store through deref reads back
 ok   direct char store puts the length at offset 0
@@ -28,4 +33,4 @@ ok   deref char store puts the char at offset pfx
 ok   string store through deref writes a direct store's bytes
 ok   compare field to variable
 ok   copy deref
-total ok 28 / 28
+total ok 33 / 33

@@ -11213,6 +11213,15 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_ffdr_fm26 "$$($(TESTTMP)/test_ffdr_fm26)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
 	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/test_ffdr_fs26
 	tools/expect_same.sh test_ffdr_fs26 "$$($(TESTTMP)/test_ffdr_fs26)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
+	# The frozen-string-through-a-pointer matrix, NATIVE. It was cross-only
+	# because Write(p^) printed garbage on x86-64 -- that is fixed and closed
+	# (bug-a-write-of-a-frozen-string-through-a-typed-pointer-prints-garbage-on-x86-64),
+	# so the host now carries the same rows the three cross targets do, in BOTH
+	# modes. The .expected is byte-identical to FPC 3.2.2 on this file.
+	./$(COMPILER) test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_ssthp_d26
+	tools/expect_same.sh test_ssthp_d26 "$$($(TESTTMP)/test_ssthp_d26)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_ssthp_s26
+	tools/expect_same.sh test_ssthp_s26 "$$($(TESTTMP)/test_ssthp_s26)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26
@@ -16471,17 +16480,18 @@ test-aarch64: $(COMPILER)
 	# (Length(p^) = Length(s)) so one file carries no per-target constant. The
 	# censuses this feature ran all counted PXXWriteFrozenW -- WRITERS -- and the
 	# defects are in readers: comparison, Copy and Pos appear in no count.
-	# DEFAULT MODE ONLY for now. Under -dPXX_SHORTSTRING this file is red on all
-	# four converted backends and dies partway on three, which is the state
-	# frankb-a9's IRFrozenKindOfAddr fix has to close -- wiring the flag rows
-	# before the fix would just paint every lane red. The default rows are real
-	# coverage today and are byte-identical to the FPC 3.2.2 oracle.
-	# x86-64 is deliberately NOT wired: all 21 assertions pass there but
-	# Write(p^) prints hundreds of bytes of garbage, which reproduces on the
-	# PINNED compiler with no flag, so it predates phase 2 entirely.
-	# bug-a-write-of-a-frozen-string-through-a-typed-pointer-prints-garbage-on-x86-64
+	# BOTH MODES now. The flag rows were held out while this file was red under
+	# -dPXX_SHORTSTRING on all four converted backends; that state is closed
+	# (IRFrozenKindOfAddr, then the SetLength arms) and the two modes now print
+	# the SAME 33 lines on native, i386, arm32, aarch64 and riscv32 (and on
+	# xtensa under the flag, wired in the xtensa battery) --
+	# byte-identical to the FPC 3.2.2 oracle, which is the point of a file whose
+	# rows are all RELATIONS and carry no per-target constant.
+	# x86-64 is wired natively next to the other frozen-string rows, above.
 	./$(COMPILER) --target=aarch64 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a64_ssthp
 	tools/expect_same.sh aarch64/shortstring_through_a_pointer "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
+	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a64_ssthp_s
+	tools/expect_same.sh aarch64/shortstring_through_a_pointer_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssthp_s)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
 	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
 	# correct throughout and is the control that the fix changed nothing there.
@@ -18080,6 +18090,8 @@ test-riscv32: $(COMPILER)
 	# bug-a-write-of-a-frozen-string-through-a-typed-pointer-prints-garbage-on-x86-64
 	./$(COMPILER) --target=riscv32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp
 	tools/expect_same.sh riscv32/shortstring_through_a_pointer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
+	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp_s
+	tools/expect_same.sh riscv32/shortstring_through_a_pointer_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssthp_s)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 
 
 # ---------------------------------------------------------------------------
@@ -18367,6 +18379,19 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/ffdr_d "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_ffdr_d)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/xt_ffdr_s
 	tools/expect_same.sh xtensa/ffdr_s "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_ffdr_s)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
+	# The through-a-pointer matrix on xtensa, FLAG MODE ONLY, and the asymmetry
+	# is deliberate: in DEFAULT mode this file bus-errors on qemu before it
+	# prints line one, and it does so at HEAD without the SetLength rows too --
+	# pre-existing, unrelated to the byte prefix, and not something a flag row
+	# should be held hostage to. This row is the only coverage the xtensa `-101`
+	# SetLength arm has (bug-a-setlength-on-a-frozen-string-is-unsupported-on-riscv32
+	# was filed riscv32-only; xtensa refused the identical builtin). Verified
+	# under BOTH xtensa ABIs -- the windowed default and --xtensa-abi=call0 --
+	# because XtensaSlotOff exists precisely because they index the expression
+	# stack in opposite directions, so a hand-written offset is silently wrong
+	# on exactly one of them.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_xt_ssthp_s
+	tools/expect_same.sh xtensa/shortstring_through_a_pointer_short "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssthp_s)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_xt_ssmw_d
 	tools/expect_same.sh xtensa/ssmw_default "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_xt_ssmw_s
@@ -19308,6 +19333,8 @@ test-arm32: $(COMPILER)
 	# bug-a-write-of-a-frozen-string-through-a-typed-pointer-prints-garbage-on-x86-64
 	./$(COMPILER) --target=arm32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a32_ssthp
 	tools/expect_same.sh arm32/shortstring_through_a_pointer "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
+	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a32_ssthp_s
+	tools/expect_same.sh arm32/shortstring_through_a_pointer_short "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssthp_s)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
 	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
 	# correct throughout and is the control that the fix changed nothing there.

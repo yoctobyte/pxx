@@ -133,7 +133,7 @@ _none_
 | bug-a-pxxcoswitch-and-pxxclone-are-missing-on-riscv32 | A | 25 | bug | `__pxxcoswitch(@a, @b)` compiles for x86-64 and arm32 and gives `pascal26: error: target riscv32: unsupported node in IR codegen: coswitch` on riscv32; `__pxxclone` has the same missing arm. Compile-time error, not a wrong answer. Found while auditing what else riscv32 lacked after adding IR_RTTI_REG/IR_RESOURCES — the other four absent node kinds are all unreachable on riscv32, these two are not. | — |
 | bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body | A | 30 | bug |  | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
-| bug-a-setlength-on-a-frozen-string-is-unsupported-on-riscv32 | A | 40 | bug | SetLength(s, n) on a `string[N]` is a hard compile error on riscv32 -- `standard builtin calls not supported in bare-metal stage 1 (builtin id 101)`. Pre-existing, unrelated to the byte prefix, and it compiles on x86-64/aarch64/arm32. Pos and Copy on the same type DO compile on riscv32, so this is one missing builtin rather than a general gap. It cost the frozen-string reader matrix its two SetLength rows, which would otherwise cover a reader that appears in no census. | — |
+| bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol | A | 40 | bug | SetLength on a frozen string compiles only for a plain symbol. `SetLength(p^, n)`, `SetLength(r.f, n)` and `SetLength(arr[0], n)` are refused with `error: SetLength expects a string variable in IR codegen` on EVERY target including x86-64, in both modes, and reproduce on the pinned compiler -- every backend's builtin -101 arm requires the argument to lower to an IR_LEA of a symbol. Pre-existing and unrelated to the byte prefix; it is why the reader matrix carries only the direct SetLength spelling. | — |
 | bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug | A | 20 | bug | Sweep of every comment that ENUMERATES targets, checked against a derived backend list. Three miscounts: PXXVarBinOp's 'the other four targets' (five call it), symtab.inc's 'Every 32-bit backend (i386, arm32, riscv32)' (xtensa is a fourth and does NOT consult the shared decision), and PXXStrCmp3's 'the four cross backends' — that last one already filed as a live bug. A count reads as a complete enumeration, so nobody counts. | — |
 | bug-a-test-tthread-fails-under-full-tier-load-but-never-in-isolation | A | 3 | bug | test_tthread failed once as test-threads#08 in a full tier and cannot be reproduced in isolation — 0 failures in 8 runs — so it is load-dependent, not a regression | — |
 | bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture | A | 40 | bug | Five Makefile guards check the pinned stable with `test -x`, which tests the executable BIT — a property of the file, not of whether this CPU can run it. On a non-x86-64 host every guard reports healthy and the recipe then dies at exec with `Exec format error`, after printing a message saying there is no pinned stable at a path where one demonstrably is. Found on `via` (aarch64), where the repo ships only `stable_linux_amd64`. A reader would reasonably conclude the checkout is broken. | — |
@@ -887,9 +887,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3165)
+## done (3166)
 
-3165 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3166 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (72)
 
@@ -1143,7 +1143,7 @@ _none_
 - [p 40] [A] bug-a-c-the-variadic-struct-abi-is-still-a-pointer-on-aarch64-arm32-and-riscv32
 - [p 40] [A] bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse
 - [p 40] [A] bug-a-nilpy-on-cross-targets-four-remaining-walls [parked — re-claim, do not duplicate]
-- [p 40] [A] bug-a-setlength-on-a-frozen-string-is-unsupported-on-riscv32
+- [p 40] [A] bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol
 - [p 40] [A] bug-a-test-x-on-the-pinned-stable-passes-on-a-foreign-architecture
 - [p 40] [A] bug-a-the-clone-stub-registers-a-signal-alt-stack-on-x86-64-only
 - [p 40] [A] bug-a-the-threadsafe-allocator-is-not-async-signal-safe
