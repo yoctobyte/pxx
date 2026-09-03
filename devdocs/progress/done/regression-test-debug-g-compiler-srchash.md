@@ -39,3 +39,6 @@ Recover with:  rm -f compiler/.pascal26.fixedpoint && make compiler/pascal26
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-03 — auto-closed by the seven watcher: `test-debug-g#src:tools/compiler_srchash.sh` passes at 71a66c7d1437 (tier native); it was red at 5d083bd91f9a. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
