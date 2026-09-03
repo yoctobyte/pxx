@@ -1,6 +1,7 @@
 ---
 prio: 75
 track: P
+status: done
 ---
 
 > **Track T by default: the FAILING STEP named no owner.** Line 2 of 2 is `tools/expect_same.sh test_sizeof_shadow26 "$(/tmp/test_sizeof_shadow26)" "$(printf 'a 12\nb 10\nc TRUE\nd 1\ne 1\nf 8\ng`. The job's own `src` (`test/test_sizeof_user_name_shadows_builtin.pas`, 2 file(s)) is NOT used here on purpose: it is what the job compiles, not what broke, and guessing a lane from it is what sent three reds in one job to the wrong lane. This is a FALLBACK, not a finding — nothing says the defect is Track T's. Re-lane it before working it.
@@ -95,3 +96,4 @@ again". STILL-RED rows are listed separately from NEW-RED precisely so this is
 survivable, and it is; the cost is that the top-line word stopped discriminating.
 **A red left standing because it is understood is indistinguishable, at a glance,
 from one nobody has looked at.**
+- 2026-09-03 — resolved, commit extend the Makefile assertion to the five rows 2ba37ba91 added.

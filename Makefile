@@ -12666,7 +12666,7 @@ test-core: $(COMPILER)
 	# heard of cannot fail. Byte-identical to FPC 3.2.2.
 	# bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts
 	./$(COMPILER) test/test_sizeof_user_name_shadows_builtin.pas $(TESTTMP)/test_sizeof_shadow26
-	tools/expect_same.sh test_sizeof_shadow26 "$$($(TESTTMP)/test_sizeof_shadow26)" "$$(printf 'a 12\nb 10\nc TRUE\nd 1\ne 1\nf 8\ng 4 8 2\nh 4 8 8\ni TRUE x 5')"
+	tools/expect_same.sh test_sizeof_shadow26 "$$($(TESTTMP)/test_sizeof_shadow26)" "$$(printf 'a 12\nb 10\nc TRUE\nd 1\ne 1\nf 8\ng 4 8 2\nh 4 8 8\ni TRUE x 5\nj 12\nk 6\nl 12 12\nm 10\nn 2 1')"
 	./$(COMPILER) test/test_sizeof.pas $(TESTTMP)/test_sizeof26
 	# Row 21 is SizeOf(Extended) and it is 8, not 10, since ce4d9004c made SizeOf
 	# and declarations share one builtin type table. That is the intended fix of
