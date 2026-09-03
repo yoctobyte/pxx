@@ -1983,3 +1983,52 @@ was taken — the other worker had told it directly that morning. **Peer-to-peer
 carried a fact the coordinator never saw.** That is the arrangement working as
 designed, not a gap to close by routing more through the seat; the correct output
 is *"no KNOWN hold"*, never *"no hold"*.
+
+### RETRACTED — the C-conformance "coverage hole" was PAPERWORK, and this seat escalated it wrongly
+
+`2f58b23be`, verified on origin. **The section above surfaced this to the owner
+as a battery that had "measured nothing for an unknown period" and needed a
+network fetch. That was wrong, and the escalation should not have been made.**
+
+seven publishes all 30 `test-c-conformance*` jobs as `pass`, with
+`job_last_pass` equal to `0975f200bd17` — its most recent FULL tier, today
+12:57Z. **The battery ran, on the host that runs Track T, at the current tip.**
+Not a stale green from an older sha: the last-pass sha IS the last-run sha.
+
+**WHY BOTH READINGS LOOKED RIGHT — the corpus is gitignored, so its presence is
+PER-CHECKOUT, not per-box.** Present in 6 of the 24 checkouts under `/home/neo`
+(`pxx`, `frank1`, `frankC`, `frankD`, `frankZ`, and `trackt-watch` — **the clone
+that PRODUCES those reports**), 879 files each. Absent in `frankA` and `frankB`,
+which is where the SKIP was seen. **Nothing was uncovered for any period; a
+session ran the battery in a checkout that never had the corpus.**
+
+So there are no defects hiding behind it and **the owner needs to fetch
+nothing** — only if he wants that battery runnable in every checkout.
+
+**The defect that IS real and must not be discounted by this retraction:**
+`test-c-conformance-cross` printed `all targets green` over four skips. **A
+summary line that cannot say no** — the class this repo already has a rule for,
+and the reason a local skip read as a coverage hole in the first place.
+
+**What this seat got wrong:** it took one session's observation of a local SKIP
+and reported it as a property of the harness, to the owner, as something needing
+his authority. The observation was accurate and the inference crossed a boundary
+the evidence did not — **per-checkout state read as per-box state.** The
+discriminator cost one grep and was available before the escalation.
+
+### A VACUOUS ZERO, CHECKED AND RECORDED AS VACUOUS RATHER THAN REPORTED
+
+To answer *"how long has it been skipping"*, franka-29 grepped each host's
+`history` array for a past c-conformance skip and got **zero across all four
+hosts** — and threw the number away rather than reporting it.
+
+**History entries carry `date`, `sha`, `tier`, `verdict`, `new_red` and `fixed`,
+and NO per-job status at all**, so they are **physically unable to record a
+skip.** The instrument cannot observe the quantity and returns a clean zero
+rather than an error. (The window is also narrow: seven's 50 entries span only
+2026-09-02T20:01Z to now.)
+
+`job_last_pass` is the field that can answer *"when did this job last really
+run"*, and the answer above rests on that instead. **The vacuous zero is in the
+logbook beside the result, because a bare "no skips in history" would have read
+as the strongest sentence in the report.**
