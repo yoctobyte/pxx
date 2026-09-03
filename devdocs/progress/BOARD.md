@@ -71,7 +71,7 @@ _none_
 | regression-lib-test-crtl-reachability-8 | C | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py at cdae8cf6580b in step 23/88, `python3 tools/gen_crtl_map.py --check` (auto-filed by twatch) | — |
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-pointer-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_c_pointer.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_c_pointer.npy /tmp/test_nilpy_c_pointer26` (auto-filed by twatch) | — |
-| regression-test-core-test-sizeof-user-name-shadows-builtin | T | 70 | regression | regression: test-core#src:test/test_sizeof_user_name_shadows_builtin.pas at 5ad048c2d9ae in step 2/2, `tools/expect_same.sh test_sizeof_shadow26 "$(/tmp/test_sizeof_shadow26)" "$(printf 'a 12\nb 10\nc TRUE\nd 1\ne 1\nf 8\n…` (auto-filed by twatch) | — |
+| regression-test-core-test-sizeof-user-name-shadows-builtin | P | 75 | regression | regression: test-core#src:test/test_sizeof_user_name_shadows_builtin.pas at 5ad048c2d9ae in step 2/2, `tools/expect_same.sh test_sizeof_shadow26 "$(/tmp/test_sizeof_shadow26)" "$(printf 'a 12\nb 10\nc TRUE\nd 1\ne 1\nf 8\n…` (auto-filed by twatch) | — |
 | regression-test-emit-obj-test-esp-hello | A+S | 70 | regression | regression: test-emit-obj#src:test/test_esp_hello.pas@1 at 7fff15ddc1eb in step 27/8, `for t in "--target=riscv32 --platform=esp" "--target=xtensa --platform=esp"; do \ ./compiler/pascal26 --emit-obj $t tes…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-c-header-still-works-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_import_c_header_still_works.npy /tmp/test_nilpy_imphdr26` (auto-filed by twatch) | — |
 | regression-test-threads-test-nilpy-thread-clone-2 | A | 70 | regression | regression: test-threads#src:test/test_nilpy_thread_clone.npy at 08f7de0715a8 in step 2/6, `tools/expect_same.sh test_npy_clone26 "$(/tmp/test_npy_clone26)" "$(printf 'tid nonzero = True\nchild ran = 7')"` (auto-filed by twatch) | — |
@@ -981,6 +981,7 @@ _none_
 - [p 75] [P] bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size (unblocks 1)
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
+- [p 75] [P] regression-test-core-test-sizeof-user-name-shadows-builtin
 - [p 75] [A] umbrella-managed-memory-is-correct [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
@@ -988,7 +989,6 @@ _none_
 - [p 70] [C] regression-lib-test-crtl-reachability-8 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-optdiff-shard6-12
 - [p 70] [N] regression-test-core-test-nilpy-c-pointer-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [T] regression-test-core-test-sizeof-user-name-shadows-builtin
 - [p 70] [A+S] regression-test-emit-obj-test-esp-hello
 - [p 70] [N] regression-test-nilpy-test-nilpy-import-c-header-still-works-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [A] regression-test-threads-test-nilpy-thread-clone-2

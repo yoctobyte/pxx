@@ -69,6 +69,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [P]` feature-pascal-corpus-expansion
+- `[p 75] [P]` regression-test-core-test-sizeof-user-name-shadows-builtin
 - `[p 75] [A]` umbrella-managed-memory-is-correct
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
@@ -76,7 +77,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [C]` regression-lib-test-crtl-reachability-8
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [N]` regression-test-core-test-nilpy-c-pointer-2
-- `[p 70] [T]` regression-test-core-test-sizeof-user-name-shadows-builtin
 - `[p 70] [A+S]` regression-test-emit-obj-test-esp-hello
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
 - `[p 70] [A]` regression-test-threads-test-nilpy-thread-clone-2
