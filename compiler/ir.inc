@@ -2729,8 +2729,37 @@ begin
     { A dynamic-array field slot holds a heap handle (pointer); tag the address
       node tyPointer so Length / indexing treat it as a handle slot, like a
       nested sub-array element. }
+    { ...and a FROZEN-STRING FIELD takes its kind from the RECORD, exactly as
+      the array arm above takes an element's kind from the ARRAY. The index
+      arm's own comment says "same shape as the FIELD case one arm below" --
+      it was not; the field arm trusted ASTTk, and ASTTk is not always the
+      field's own kind by the time lowering sees it.
+
+      The eraser is a normalisation that fixed a different bug. A concat
+      OPERAND is retagged in pasparser_expr.inc -- `ASTTk[left] :=
+      StrValTk(...)` -- so that `P + '!'` on a frozen string stops falling into
+      pointer arithmetic. For an AN_IDENT that is free: the value's kind is
+      generic but IRFrozenKindOfAddr walks back to the SYMBOL for the width.
+      A FIELD has no symbol to walk back to; its own tag WAS the width, and
+      the retag overwrote it with the generic tyString. So `u := s + r.f`
+      SIGSEGVed under -dPXX_SHORTSTRING on x86-64 -- a byte prefix read as an
+      8-byte word -- while `r.f` read, assigned and compared correctly in the
+      same program, and while the identical concat over a plain VARIABLE was
+      fine. One normalisation, correct at the node type it was written for and
+      lossy one node type over.
+
+      Fixed HERE rather than by narrowing the retag, for the reason the array
+      arm was: the aggregate records the kind, so lowering can always recover
+      it, and every future consumer that flattens ASTTk inherits the repair
+      instead of rediscovering this. Narrowed to frozen strings and to a
+      DISAGREEMENT, so ASTTk stays authoritative for everything else.
+      bug-a-a-frozen-record-field-as-a-concat-operand-segfaults }
     if RecFieldDynDepth(recName, fieldName) > 0 then
       Result := IRAppend(IR_FIELD, baseAddr, -1, -1, RecFieldOffset(recName, fieldName), Ord(tyPointer))
+    else if TypeIsFrozenString(RecFieldType(recName, fieldName)) and
+            (RecFieldType(recName, fieldName) <> IntToTypeKind(ASTTk[node])) then
+      Result := IRAppend(IR_FIELD, baseAddr, -1, -1, RecFieldOffset(recName, fieldName),
+                         Ord(RecFieldType(recName, fieldName)))
     else
       Result := IRAppend(IR_FIELD, baseAddr, -1, -1, RecFieldOffset(recName, fieldName), ASTTk[node]);
   end

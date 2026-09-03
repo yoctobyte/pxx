@@ -11161,14 +11161,22 @@ test-core: $(COMPILER)
 	# -uPXX_MANAGED_STRING, CORRECT at -O0, so these two rows are the only ones
 	# here that need the DEFAULT -O to stay meaningful.
 	# bug-a-a-one-char-string-literal-in-a-frozen-concat-folds-to-integer-addition
+	# The `field*` rows are a THIRD defect: a record field has no symbol for
+	# IRFrozenKindOfAddr to walk back to, so its own IR tag is the only record of
+	# its prefix width -- and the concat-operand normalisation retags every
+	# frozen operand tyString, which is free for a variable and lossy for a
+	# field. `u := s + r.f` SIGSEGVed while `r.f` read, assigned and compared
+	# correctly in the same program. `elemc` is the array sibling, which already
+	# defended itself and must stay correct.
+	# bug-a-a-frozen-record-field-as-a-concat-operand-segfaults
 	./$(COMPILER) test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_dm26
-	tools/expect_same.sh test_sscat_dm26 "$$($(TESTTMP)/test_sscat_dm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nempty    [cd] 2\nemptyr   [ab] 2')"
+	tools/expect_same.sh test_sscat_dm26 "$$($(TESTTMP)/test_sscat_dm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nfieldr   [abFLD] 5\nfieldl   [FLDab] 5\nfieldm   [FLDz] 4\nelemc    [abELM] 5\nempty    [cd] 2\nemptyr   [ab] 2')"
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_ds26
-	tools/expect_same.sh test_sscat_ds26 "$$($(TESTTMP)/test_sscat_ds26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nempty    [cd] 2\nemptyr   [ab] 2')"
+	tools/expect_same.sh test_sscat_ds26 "$$($(TESTTMP)/test_sscat_ds26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nfieldr   [abFLD] 5\nfieldl   [FLDab] 5\nfieldm   [FLDz] 4\nelemc    [abELM] 5\nempty    [cd] 2\nemptyr   [ab] 2')"
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_fm26
-	tools/expect_same.sh test_sscat_fm26 "$$($(TESTTMP)/test_sscat_fm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nempty    [cd] 2\nemptyr   [ab] 2')"
+	tools/expect_same.sh test_sscat_fm26 "$$($(TESTTMP)/test_sscat_fm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nfieldr   [abFLD] 5\nfieldl   [FLDab] 5\nfieldm   [FLDz] 4\nelemc    [abELM] 5\nempty    [cd] 2\nemptyr   [ab] 2')"
 	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_fs26
-	tools/expect_same.sh test_sscat_fs26 "$$($(TESTTMP)/test_sscat_fs26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nempty    [cd] 2\nemptyr   [ab] 2')"
+	tools/expect_same.sh test_sscat_fs26 "$$($(TESTTMP)/test_sscat_fs26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nfieldr   [abFLD] 5\nfieldl   [FLDab] 5\nfieldm   [FLDz] 4\nelemc    [abELM] 5\nempty    [cd] 2\nemptyr   [ab] 2')"
 	# THE TWO READERS THAT SURVIVED THE FOUR-CAUSE FIX, and every row has a
 	# NEGATIVE partner. This family fails by answering a CONSTANT -- the
 	# pre-fix field-vs-field compare answered TRUE for every input because it

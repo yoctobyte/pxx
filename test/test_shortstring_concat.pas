@@ -52,6 +52,18 @@ program test_shortstring_concat;
              `self` rows cannot see it.
              bug-a-a-one-char-string-literal-in-a-frozen-concat-folds-to-integer-addition
 
+    field    a record FIELD as a concat operand, and `elemc` the array-element
+             sibling. A field has NO SYMBOL to walk back to, so its own IR tag
+             is the only record of its prefix width -- and the concat-operand
+             normalisation in pasparser_expr.inc retags every frozen operand
+             tyString, which is free for a variable (IRFrozenKindOfAddr asks
+             the symbol) and lossy for a field. `u := s + r.f` SIGSEGVed under
+             -dPXX_SHORTSTRING while `r.f` read, assigned and compared
+             correctly in the same program. The array arm already defended
+             itself; the field arm did not, and the array arm's own comment
+             claimed it did.
+             bug-a-a-frozen-record-field-as-a-concat-operand-segfaults
+
   THE `onechar` AND `loop1` ROWS ARE -O SENSITIVE and every other row is not,
   so run this at more than one level or the fold arm is untested: the whole
   defect lives at -O1..-O3 and disappears at -O0. }
@@ -63,14 +75,20 @@ begin
   WriteLn('constarg [', q, '] ', Length(q));
 end;
 
+type
+  R = record f: string[10]; end;
+  TArr = array[0..2] of string[10];
+
 var
   s, t, u: string[10];
   big: string[220];
   m: AnsiString;
   ch: Char;
   i: Integer;
+  r: R;
+  arr: TArr;
 begin
-  s := 'ab'; t := 'XY'; ch := 'z';
+  s := 'ab'; t := 'XY'; ch := 'z'; r.f := 'FLD'; arr[1] := 'ELM';
 
   s := s + 'cd';          WriteLn('self     [', s, '] ', Length(s));
   s := 'ab'; s := s + t;  WriteLn('both     [', s, '] ', Length(s));
@@ -91,6 +109,11 @@ begin
   s := 'ab'; u := s + 'q'; WriteLn('onechar  [', u, '] ', Length(u));
   u := ''; for i := 1 to 200 do u := u + 'x';
   WriteLn('loop1    ', Length(u), ' ', u[1], u[10]);
+
+  s := 'ab'; u := s + r.f;   WriteLn('fieldr   [', u, '] ', Length(u));
+  s := 'ab'; u := r.f + s;   WriteLn('fieldl   [', u, '] ', Length(u));
+  m := r.f + ch;             WriteLn('fieldm   [', m, '] ', Length(m));
+  i := 1; s := 'ab'; u := s + arr[i]; WriteLn('elemc    [', u, '] ', Length(u));
 
   s := ''; s := s + t;    WriteLn('empty    [', s, '] ', Length(s));
   s := 'ab'; t := ''; s := s + t; WriteLn('emptyr   [', s, '] ', Length(s));
