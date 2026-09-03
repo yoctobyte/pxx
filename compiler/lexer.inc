@@ -313,22 +313,17 @@ begin
       fixes, one token over. Same for the C attribute slots: a synthesized
       token carries no attribute.
 
-      IT IS NOT THE RIGHT ANSWER FOR THE SPECIALIZER, AND THAT IS MEASURED, NOT
-      SUSPECTED. A generic specialization splices tokens that are VERBATIM
-      COPIES of template tokens, each with a real source range -- so zeroing
-      loses it, and the fallback holds text only for identifiers and strings.
-      The window inside a specialized body therefore prints its identifiers and
-      drops its punctuation:
-
-        near: Integer   var q  >>> TNoSuchTypeAnywhere  begin
-
-      -- the `:` and `;` blanked. That is the same defect TokSrcOff/TokSrcLen
-      were added to fix, scoped to specialized bodies, and it is still strictly
-      better than the stale window it replaces (which printed an
-      un-substituted `T` from a token six positions away). The fix is to carry
-      the span through the specializer for verbatim copies and zero it only for
-      SUBSTITUTED ones; a caller with real spans cannot express that through
-      this procedure, which is why it is the next commit and not this one. }
+      IT IS NOT THE RIGHT ANSWER FOR EVERY CALLER, AND THAT WAS MEASURED HERE
+      RATHER THAN REASONED. A generic specialization splices tokens that are
+      VERBATIM COPIES of template tokens, each with a real source range, so
+      zeroing lost it and the window inside a specialized body printed its
+      identifiers with its punctuation blanked -- the same defect
+      TokSrcOff/TokSrcLen exist to fix, one scope down. A caller that HAS real
+      spans cannot say so through this procedure, so it does not try to: the
+      specializer overwrites these two slots itself, right after this shift,
+      carrying the span for verbatim copies and leaving the zero for
+      substituted ones (95c98db70). Any future caller splicing real tokens owes
+      the same overwrite; a caller splicing synthesized ones owes nothing. }
     src := atPos - 1;
     if src < 0 then src := atPos + delta;
     if (src >= 0) and (src < TokCount + delta) then
