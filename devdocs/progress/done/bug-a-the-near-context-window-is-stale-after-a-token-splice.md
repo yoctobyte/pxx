@@ -149,4 +149,4 @@ blocks from `make -n test-core` were run under their own recipes: 266 logical
 commands, 0 failures.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b294f903a.
