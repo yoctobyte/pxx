@@ -2082,6 +2082,7 @@ end;
 
 function IRLowerAddress(node: Integer): Integer;
 var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
+    elemCap: Integer;   { frozen-string element capacity of an indexed base }
     rcSym, rcPi, rcArg, rcArg2: Integer;
     fieldName: AnsiString;
     isArr: Boolean;
@@ -2649,8 +2650,34 @@ begin
       else if (tk = tyFixedString) or (tk = tyShortString) then
       begin
         { array-of-string[N] element stride: the per-element frozen slot size,
-          from the array symbol's capacity (matches AllocArray's sizing). }
-        if ASTKind[baseNode] = AN_IDENT then
+          from the array symbol's capacity (matches AllocArray's sizing).
+
+          THE RECORD-FIELD BASE IS ASKED FIRST, AND IT IS THE ARM THE SIBLING
+          BRANCH ABOVE ALREADY GREW. That branch carries a long comment about
+          `r.a[i]` being "the THIRD base kind of one case" and about the arm
+          nobody wrote being the one that stays broken -- and then this branch,
+          eight lines down, was written without it. Under -dPXX_SHORTSTRING a
+          `string[10]` field is tyShortString rather than tyString, so it
+          arrives HERE, fell through both arms to FrozenStrSlotSize(tk, 0), and
+          strode by the DEFAULT capacity: measured 256 bytes for an 11-byte
+          slot, against 11 for a plain variable of the identical array type.
+          `record inner: array[0..1] of string[10]; tail: LongInt` is 28 bytes,
+          so `@inner[1]` lands 245 bytes past the end of the record and
+          `r.inner[1] := s` writes over whatever follows.
+
+          Asked through FrozenStrElemCapOf, which is the function this file
+          already introduced to hold exactly this three-shape lookup in ONE
+          place (AN_IDENT -> SymStrCap, AN_FIELD -> RecFieldStrCap, `p^[i]` ->
+          SymPtrElemStrCap). The two arms below stay as the fallback and are
+          provably unreachable-with-a-different-answer: for AN_IDENT the helper
+          returns SymStrCap or 0, and for a deref it returns the same
+          SymPtrElemStrCap expression -- so this changes nothing for the shapes
+          that already worked and adds the one that did not.
+          devdocs/dev/normalise-dont-special-case.md }
+        elemCap := FrozenStrElemCapOf(baseNode);
+        if elemCap > 0 then
+          elemSize := FrozenStrSlotSize(tk, elemCap)
+        else if ASTKind[baseNode] = AN_IDENT then
           elemSize := FrozenStrSlotSize(tk, SymStrCap[ASTIVal[baseNode]])
         else if DerefPtrArraySym(baseNode) >= 0 then
           { `p^[i]`, p: ^array[..] of string[N]. The capacity is the SLOT
