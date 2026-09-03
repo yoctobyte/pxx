@@ -9,17 +9,22 @@
    these by name via FindProc when lowering __builtin_va_start / __builtin_va_arg. */
 #include <stdarg.h>
 
-/* va_start, in plain C: seed the control block. ngp/nfp = number of named GP /
-   FP(XMM) params already consumed (so the first variadic arg of each class is
-   read next). The GP save region starts at offset 0, the XMM region at 48, so
-   gp_offset skips ngp 8-byte slots and fp_offset skips nfp 16-byte XMM slots
-   past the region base. overflow points at the first caller stack slot past the
-   six GP registers. */
+/* va_start, in plain C: seed the control block with the BYTE offsets at which
+   the first variadic argument of each class sits inside the register save area,
+   already past the named params that consumed slots ahead of it.
+
+   THE OFFSETS ARRIVE AS BYTES, computed by the frontend, because the save-area
+   LAYOUT is per-target and a seeder that converts slot counts can only know one
+   of them: SysV x86-64 is a 48-byte GP region then 8 XMM slots of 16, aarch64 is
+   a 64-byte GP region then 8 d slots of 8. This used to take ngp/nfp and hard-
+   code the SysV arithmetic, which is why aarch64 could not have an FP region at
+   all. overflow points at the first caller stack slot past the register banks.
+   bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero */
 void __pxx_va_start_impl(struct __pxx_va_elem *ap, void *save,
-                                unsigned int ngp, void *overflow,
-                                unsigned int nfp) {
-  ap->gp_offset = ngp * 8;
-  ap->fp_offset = 48 + nfp * 16;
+                                unsigned int gpoff, void *overflow,
+                                unsigned int fpoff) {
+  ap->gp_offset = gpoff;
+  ap->fp_offset = fpoff;
   ap->reg_save_area = save;
   ap->overflow_arg_area = overflow;
 }
@@ -115,17 +120,42 @@ void __pxx_va_arg_agg(struct __pxx_va_elem *ap, void *dst,
   }
 }
 
-/* Cross-target (aarch64) variadic model: the pxx value model passes every scalar
-   — floats included — as bits in a general argument register, so there is ONE
-   register save area of 8 eight-byte slots (x0..x7 = 64 bytes) and no separate
-   FP region. va_arg reads that area for every type, then spills to overflow.
-   Seeded via __pxx_va_start_impl (gp_offset = nnamed*8, reg_save_area, overflow;
-   fp_offset unused). x86-64 keeps its two-class SysV helpers above. */
+/* aarch64 variadic model: TWO banks, as AAPCS64 §6.4.2 describes and as the
+   target's own glibc demonstrates — x0..x7 for integers and pointers, v0..v7 for
+   floating point. The save area is 8 GP slots of 8 bytes at offset 0 and 8 FP
+   slots of 8 bytes at offset 64 (a d register is the whole of a pxx float value,
+   so the 16-byte q slots of the real AAPCS64 layout would be padding).
+
+   This one walks the GP bank. It reads EVERY type on the pointer/integer side,
+   including a struct-by-value tail argument, which this target passes as a
+   pointer to the caller's copy.
+
+   It used to be the only walk, on the belief that pxx's GP-bits value model
+   extended to the calling convention. It does, between two pxx frames, which is
+   exactly why no pxx-vs-pxx test could see it: `printf("%.2f")` through crtl was
+   green while the same call into glibc printed 0.00.
+   bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero */
 void *__pxx_va_arg_cross(struct __pxx_va_elem *ap) {
   void *addr;
   if (ap->gp_offset < 64) {
     addr = (char *)ap->reg_save_area + ap->gp_offset;
     ap->gp_offset = ap->gp_offset + 8;
+  } else {
+    addr = ap->overflow_arg_area;
+    ap->overflow_arg_area = (char *)ap->overflow_arg_area + 8;
+  }
+  return addr;
+}
+
+/* aarch64 FP bank: 8 slots of 8 bytes at save-area offset 64, so the region ends
+   at 128. Past it the argument was placed on the caller's stack, in the ONE
+   shared NSAA both banks overflow into — which is why this advances the same
+   overflow_arg_area by the same 8 bytes the GP walk does. */
+void *__pxx_va_arg_a64_fp(struct __pxx_va_elem *ap) {
+  void *addr;
+  if (ap->fp_offset < 128) {
+    addr = (char *)ap->reg_save_area + ap->fp_offset;
+    ap->fp_offset = ap->fp_offset + 8;
   } else {
     addr = ap->overflow_arg_area;
     ap->overflow_arg_area = (char *)ap->overflow_arg_area + 8;

@@ -551,6 +551,26 @@ begin
   end;
 end;
 
+{ The 16-byte-aligned AAPCS64 stack-argument bytes implied by a class VECTOR,
+  the vector-sourced twin of ABIA64CdeclStackBytes below. A variadic call cannot
+  use that one: it derives every class from the parameter list and there is no
+  parameter for a tail argument, so it would under-count the stack whenever a
+  float in the tail displaced a GP slot.
+  bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero }
+function ABIA64VecStackBytes(const argFp: array of Boolean; nArgs: Integer): Integer;
+var i, regIdx, stackOff, hiOff: Integer;
+    isFp: Boolean;
+begin
+  hiOff := -1;
+  for i := 0 to nArgs - 1 do
+  begin
+    ABIA64SlotWalk(argFp, i, isFp, regIdx, stackOff);
+    if stackOff > hiOff then hiOff := stackOff;
+  end;
+  if hiOff < 0 then ABIA64VecStackBytes := 0
+  else ABIA64VecStackBytes := ((hiOff + 8 + 15) div 16) * 16;
+end;
+
 function ABIA64ParamIsFp(procIdx, pi: Integer): Boolean;
 var r: Boolean;
 begin
@@ -597,4 +617,28 @@ begin
   end;
   if hiOff < 0 then ABIA64CdeclStackBytes := 0
   else ABIA64CdeclStackBytes := ((hiOff + 8 + 15) div 16) * 16;
+end;
+
+{ How many BYTES of a variadic function's own incoming stack area its NAMED
+  parameters occupy -- i.e. where the variadic tail's overflow area begins,
+  measured from the first incoming stack argument.
+
+  NOT the same as ABIA64CdeclStackBytes: that one is 16-byte aligned because it
+  sizes an outgoing block that sp must sit on, and this one is an OFFSET into an
+  area the caller already laid out, so rounding it up skips a real argument.
+  A named parameter reaches the stack only when its OWN bank is full, which is
+  why this walks rather than comparing a total against 8 -- the all-GP form
+  (ProcNamedGP + ProcNamedFP > 8) counted a float against the GP bank.
+  bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero }
+function ABIA64NamedStackBytes(procIdx: Integer): Integer;
+var i, regIdx, stackOff, n: Integer;
+    isFp: Boolean;
+begin
+  n := 0;
+  for i := 0 to Procs[procIdx].ParamCount - 1 do
+  begin
+    ABIA64CdeclArgSlot(procIdx, i, 0, isFp, regIdx, stackOff);
+    if stackOff >= 0 then Inc(n);
+  end;
+  ABIA64NamedStackBytes := n * 8;
 end;

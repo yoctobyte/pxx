@@ -4,12 +4,12 @@ title: "aarch64: a float in a VARIADIC argument tail is passed in an FP register
 track: A
 prio: 55
 type: bug
-status: working
+status: done
 created: 2026-09-03
 found-by: frankB
 owner:
 blocked-by: []
-summary: "`sprintf(buf, '[%.2f]', 3.5)` through a dynamic import of the target's own glibc prints `[0.00]` on aarch64 and `[3.50]` on arm32, x86-64 and fpc 3.2.2. With a following integer, `'[%d %.2f %d]', 1, 3.5, 2` gives `[1 0.00 0]` — THE ARGUMENT AFTER THE FLOAT IS LOST AS WELL, which is the signature of a slot-counting disagreement rather than a value bug. AAPCS64 §6.4.2 puts every VARIADIC argument, floating-point included, in the general registers and then the stack; pxx appears to route a double into v0 as it would for a fixed parameter, so the callee reads the untouched general slot. INVISIBLE TO EVERY pxx-vs-pxx TEST because pxx's own crtl `sprintf` reads it back from the same wrong place: the identical C program built with pxx's crtl instead of `--system-libs` prints `[3.50]` on aarch64, self-consistently and wrongly. IT IS TWO HALVES AND THEY MUST LAND TOGETHER -- I BUILT THE CALLER HALF, MEASURED IT GREEN AGAINST GLIBC, AND REVERTED IT, because the callee half is the same defect and pxx's own crtl `printf` is a variadic callee on that same path: with the caller fixed, `printf("%.2f", one(1.5))` through crtl prints 0.00 on aarch64 while glibc becomes correct. The two are self-consistently all-GP today (the callee prologue at cparser.inc says so in as many words: "aarch64 saves x0..x7 as one 8-byte GP area (the pxx value model carries floats as GP bits)"), so a caller-only fix trades one broken pair for the other. The enabling refactor IS landed: ABIA64SlotWalk. THE ORACLE IS A DYNAMIC CALL INTO THE TARGET'S REAL GLIBC and it needs no cross compiler and no linker — see the note below, which also corrects my own claim of an hour ago that aarch64 has no constructible oracle."
+summary: "FIXED 2026-09-03, all three sites at once. `sprintf(buf, '[%.2f]', 3.5)` through a dynamic import of the target's own glibc printed `[0.00]` on aarch64 against `[3.50]` everywhere else, and with a following integer `'[%d %.2f %d]', 1, 3.5, 2` gave `[1 0.00 0]` -- THE ARGUMENT AFTER THE FLOAT LOST TOO, the signature of a slot-counting disagreement rather than a value bug. AAPCS64 puts a variadic floating-point argument in the FP bank on AArch64 Linux, which this ticket settled BY MEASUREMENT against glibc and not by reading the spec; pxx routed it through x0..x7 on both sides. INVISIBLE TO EVERY pxx-vs-pxx TEST because caller and callee were wrong in the same direction: the same program through crtl's own `sprintf` printed `[3.50]`, self-consistently, and every C variadic test in the suite was native-only where the defect does not exist. THE FIRST ATTEMPT FIXED THE CALLER ALONE, MEASURED GREEN AGAINST GLIBC, AND WAS REVERTED -- it inverted which side was broken (`printf(\"%.2f\", x)` through crtl went 3.00 -> 0.00) rather than reducing the number of broken sides. The landed fix is caller (one per-ARGUMENT class vector feeding the one ABIA64SlotWalk, replacing a variadic arm that used pxx's internal all-GP convention), callee (the variadic-save prologue stores d0..d7 at save-area offset 64, and the overflow anchor asks the placement walk instead of comparing a combined named count against 8) and va_arg/va_start (`__pxx_va_arg_a64_fp` for the FP region; `__pxx_va_start_impl` now takes BYTE offsets, because a seeder that converts slot counts can only know one target's layout). Both directions are wired and green at once: the aarch64 row of `test_pascal_varargs_external` (foreign callee, fpc oracle) and the new `test/cvararg_fp_bank_cross.c` on five targets (pxx callee, gcc oracle). Positive control run: disabling the callee's FP selection alone makes both fire on aarch64 and neither on native."
 ---
 
 # The measurement
@@ -176,3 +176,82 @@ of `make test-core` is unchanged — and it is the mechanism step 1 needs, so th
 next attempt starts from one walk with two sources rather than writing a second
 walk. `PXXDBG=a.a64fp` prints the class each parameter gets, which is how I
 established the classification was correct before looking at placement.
+
+# 2026-09-03, later still — FIXED, ALL THREE SITES, BOTH DIRECTIONS GREEN AT ONCE
+
+The three sites the previous section listed, in the order they appear in a call:
+
+1. **Caller** (`ir_codegen_aarch64.inc`) — the variadic arm that called
+   `EmitCallArgRegsA64` (pxx's INTERNAL all-GP convention) is **gone**, not
+   fixed. Both the direct and the indirect C-ABI arms now build one per-ARGUMENT
+   class vector and run one `ABIA64SlotWalk` over it: `A64CdeclArgIsFp` takes the
+   class from the PARAMETER inside the declared list (so a by-ref float stays
+   integer-class) and from the ARGUMENT's own type past it, which is exactly
+   `Arm32CdeclArgKind`'s shape on the 32-bit target that already got this right.
+   One placement path on this target instead of two rules that disagreed past
+   `ParamCount`.
+2. **Callee** (`cparser.inc`, the `TARGET_AARCH64` variadic-save prologue) — now
+   stores `d0..d7` at save-area offsets 64..120 beside `x0..x7` at 0..56, and the
+   overflow anchor asks `ABIA64NamedStackBytes` instead of comparing
+   `ProcNamedGP + ProcNamedFP` against 8. A named parameter spills to the caller
+   stack when its OWN bank fills; the combined count is the all-GP model and it
+   put the anchor in the wrong place the moment a named float existed.
+3. **`va_arg` / `va_start`** — `__pxx_va_arg_a64_fp` walks the FP region
+   (8 slots of 8 at offset 64, so it ends at 128) and `__pxx_va_arg_cross` keeps
+   the GP one. `__pxx_va_start_impl` now takes **byte offsets** rather than slot
+   counts: the save-area layout is per-target and a seeder that converts counts
+   can only know one target's, which is the mechanical reason aarch64 could not
+   have an FP region before. x86-64's numbers are unchanged, just computed in
+   the frontend.
+
+`ABIA64VecStackBytes` is the vector-sourced twin of `ABIA64CdeclStackBytes` — a
+variadic call cannot use the parameter-sourced one, because a float in the tail
+displaces a GP slot and the stack block would be under-counted.
+
+## The two directions, measured together
+
+| | before | now |
+| --- | --- | --- |
+| `sprintf(b,'[%.2f]',3.5)` into glibc, aarch64 | `[0.00]` | `[3.50]` |
+| `'[%d %.2f %d]',1,3.5,2` into glibc, aarch64 | `[1 0.00 0]` | `[1 3.50 2]` |
+| 9 ints then a double, into glibc, aarch64 | — | `[1 2 3 4 5 6 7 8 9 2.25]` |
+| 9 doubles (one past the FP bank), into glibc | — | `[1.00 ... 9.50]` |
+| `test_pascal_varargs_external` on aarch64 | one row differs | matches fpc 3.2.2 |
+| `cvararg_fp_bank_cross.c` through crtl, aarch64 | (not covered) | matches gcc |
+
+Both are wired: the aarch64 row of `test_pascal_varargs_external` (foreign
+callee) and the new `test/cvararg_fp_bank_cross.c` on native/aarch64/arm32/
+i386/riscv32 (pxx callee). **Neither alone can tell a correct convention from
+two sides wrong in the same direction**, which is the entire history of this
+ticket — every C variadic test in the suite was native-only, and on x86-64 the
+defect does not exist.
+
+## The positive control, run
+
+Disabling ONE line of the fix — the callee's FP-bank selection in `va_arg`,
+leaving the caller half in, which is precisely the half-change that was reverted
+on the first attempt — and rebuilding:
+
+```
+c1/native   PASS  (control does not fire here)
+c2/native   PASS
+c1/aarch64  FAIL   separate=3.00 -> 0.00 ; mix d=2.25 -> 0.00, b=9 -> 0
+c2/aarch64  FAIL   scaled=6.00 -> 2.00 ; inter 1:1.50 -> 1:0.00 ; many=55.00 -> 0.00
+```
+
+So the new guard fires on the target it is about and stays silent on the one it
+is not, and it fires on the specific wrong state that looked green before. The
+compiler was restored and rebuilt to the same binary sha (`a85892f216a9`) before
+anything was committed.
+
+## One thing found and deliberately not fixed
+
+The hidden-destination block on this same arm saves `x0..x7` across the
+destination evaluation and not `v0..v7`, and its own comment says the arguments
+are in both. Wider now than it was, still not reachable by any program:
+`bug-a-aarch64-an-aggregate-result-s-destination-is-evaluated-with-the-fp-argument-bank-unsaved`,
+filed with the shape that would reach it and an explicit "do not land it without
+a program that fails first".
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

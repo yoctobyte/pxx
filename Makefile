@@ -9299,19 +9299,37 @@ test-core: $(COMPILER)
 	# directive and the marshalling is the C ABI, not ours to define.
 	# CROSS ROWS ARE A REAL ABI TEST, NOT A COMPILE CHECK: the callee is the
 	# target's own glibc out of ~/.cache/pxx-cross, so pxx's arguments cross a
-	# boundary into gcc-built code. AARCH64 IS DELIBERATELY NOT WIRED HERE and
-	# that is not an oversight -- it fails the `%.2f` row (and loses the
-	# argument AFTER the float), which is
+	# boundary into gcc-built code. AARCH64 WAS DELIBERATELY NOT WIRED until
+	# 2026-09-03: it failed the `%.2f` row and lost the argument AFTER the
+	# float, which was
 	# bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero.
-	# Wiring it green would mean writing today's wrong answer into .expected;
-	# add the row when that ticket closes. riscv32 and xtensa refuse dynamic
-	# symbols outright, so there is nothing to wire there at all.
+	# It is wired now that the ticket is closed, and it is the FOREIGN-CALLEE
+	# half of that fix's verification -- cvararg_fp_bank_cross.c is the other
+	# half (pxx as the callee, through crtl), and neither alone can tell a
+	# correct convention from two sides wrong in the same direction. riscv32 and
+	# xtensa refuse dynamic symbols outright, so there is nothing to wire there.
 	./$(COMPILER) test/test_pascal_varargs_external.pas $(TESTTMP)/pvarargs26
 	tools/expect_same.sh pvarargs26 "$$($(TESTTMP)/pvarargs26)" "$$(cat test/test_pascal_varargs_external.expected)"
 	./$(COMPILER) --target=i386 test/test_pascal_varargs_external.pas $(TESTTMP)/pvarargs_i386
 	tools/expect_same.sh i386/pvarargs_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/pvarargs_i386)" "$$(cat test/test_pascal_varargs_external.expected)"
 	./$(COMPILER) --target=arm32 test/test_pascal_varargs_external.pas $(TESTTMP)/pvarargs_arm32
 	tools/expect_same.sh arm32/pvarargs_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/pvarargs_arm32)" "$$(cat test/test_pascal_varargs_external.expected)"
+	./$(COMPILER) --target=aarch64 test/test_pascal_varargs_external.pas $(TESTTMP)/pvarargs_aarch64
+	tools/expect_same.sh aarch64/pvarargs_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/pvarargs_aarch64)" "$$(cat test/test_pascal_varargs_external.expected)"
+	# THE OTHER DIRECTION, and the one no existing C variadic test covered:
+	# every one of them is native-only, and on x86-64 this defect is
+	# unobservable because pxx's caller and pxx's callee were wrong the same
+	# way. .expected is gcc's, identical at -O0, -O2 and -m32.
+	./$(COMPILER) test/cvararg_fp_bank_cross.c $(TESTTMP)/cvarargfp26
+	tools/expect_same.sh cvarargfp26 "$$($(TESTTMP)/cvarargfp26)" "$$(cat test/cvararg_fp_bank_cross.expected)"
+	./$(COMPILER) --target=aarch64 test/cvararg_fp_bank_cross.c $(TESTTMP)/cvarargfp_aarch64
+	tools/expect_same.sh aarch64/cvarargfp_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/cvarargfp_aarch64)" "$$(cat test/cvararg_fp_bank_cross.expected)"
+	./$(COMPILER) --target=arm32 test/cvararg_fp_bank_cross.c $(TESTTMP)/cvarargfp_arm32
+	tools/expect_same.sh arm32/cvarargfp_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/cvarargfp_arm32)" "$$(cat test/cvararg_fp_bank_cross.expected)"
+	./$(COMPILER) --target=i386 test/cvararg_fp_bank_cross.c $(TESTTMP)/cvarargfp_i386
+	tools/expect_same.sh i386/cvarargfp_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/cvarargfp_i386)" "$$(cat test/cvararg_fp_bank_cross.expected)"
+	./$(COMPILER) --target=riscv32 test/cvararg_fp_bank_cross.c $(TESTTMP)/cvarargfp_riscv32
+	tools/expect_same.sh riscv32/cvarargfp_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/cvarargfp_riscv32)" "$$(cat test/cvararg_fp_bank_cross.expected)"
 	# NEGATIVE HALF, and the arity clause is untested without it: a callee with
 	# NO `varargs` must still refuse an extra argument. fpc refuses the same
 	# line ("Wrong number of parameters specified for call to fflush").

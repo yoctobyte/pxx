@@ -1936,9 +1936,19 @@ begin
           end;
         end;
         if TargetArch <> TARGET_X86_64 then
-          { Cross (aarch64): single GP-style save area (floats carried as GP bits),
-            so every type reads through the one 8-byte-slot cross helper. }
-          helper := FindProc('__pxx_va_arg_cross')
+        begin
+          { Cross (aarch64): TWO banks, like SysV but 8+8 eight-byte slots --
+            integers and pointers from the GP region at [0..56], floating point
+            from the FP region at [64..120]. A struct-by-value tail argument is a
+            POINTER on this target (see vaRecId below), so it reads GP whatever
+            the record contains. Reading a double out of the GP area was the
+            receiving half of the same defect the caller half had.
+            bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero }
+          if TypeIsFloat(vt) and (vaRecId = REC_NONE) then
+            helper := FindProc('__pxx_va_arg_a64_fp')
+          else
+            helper := FindProc('__pxx_va_arg_cross');
+        end
         else if TypeIsFloat(vt) then
           helper := FindProc('__pxx_va_arg_fp')
         else
@@ -1961,7 +1971,8 @@ begin
       end
       else if (name = '__builtin_va_start') and (CurTok.Kind = tkLParen) then
       begin
-        { __builtin_va_start(ap, last) -> __pxx_va_start_impl(&ap, &__va_save, NGP, __va_overflow, NFP) }
+        { __builtin_va_start(ap, last) -> __pxx_va_start_impl(&ap, &__va_save, GPOFF, __va_overflow, FPOFF)
+          -- the two counts are BYTE offsets into the save area, not slot counts. }
         Next;
         apNode := ParseCExpr; Eat(tkComma);
         valNode := ParseCExpr;   { `last` named param — discarded }
@@ -1970,11 +1981,12 @@ begin
         idx := FindSym('__va_save');
         a2 := AllocNode(AN_IDENT); ASTIVal[a2] := idx; ASTTk[a2] := Ord(tyRecord);
         node := AllocNode(AN_ADDR); ASTLeft[node] := a2; ASTTk[node] := Ord(tyPointer);
-        { Seed counts are capped at the register-class capacity (6 GP / 8 FP):
-          named params beyond those spill to the caller stack and never occupy
-          the register save area — an uncapped seed (e.g. gp_offset = 7*8)
-          would misindex it. The stack-spilled named params are skipped via
-          the __va_overflow anchor instead (prologue). }
+        { Seed counts are capped at the register-class capacity (SysV 6 GP / 8
+          FP, aarch64 8 / 8) before being turned into byte offsets: named params
+          beyond those spill to the caller stack and never occupy the register
+          save area — an uncapped seed (e.g. gp_offset = 7*8) would misindex it.
+          The stack-spilled named params are skipped via the __va_overflow
+          anchor instead (prologue). }
         a3 := AllocNode(AN_INT_LIT);
         if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32] then
         begin
@@ -2002,17 +2014,18 @@ begin
         end
         else if TargetArch <> TARGET_X86_64 then
         begin
-          { Cross (aarch64): one GP save area, every named param (any class)
-            consumed one slot, so seed gp_offset past ALL named args (capped to
-            the 8-slot area). fp_offset is unused by __pxx_va_arg_cross. }
-          if CurProc >= 0 then ASTIVal[a3] := ProcNamedGP[CurProc] + ProcNamedFP[CurProc]
-          else ASTIVal[a3] := 0;
+          { Cross (aarch64): 8 GP slots of 8 bytes at offset 0. Seed past the
+            named GP params only -- a named FLOAT consumes an FP slot and not a
+            GP one, which is the whole point of the two-bank model. }
+          if CurProc >= 0 then ASTIVal[a3] := ProcNamedGP[CurProc] else ASTIVal[a3] := 0;
           if ASTIVal[a3] > 8 then ASTIVal[a3] := 8;
+          ASTIVal[a3] := ASTIVal[a3] * 8;
         end
         else
         begin
           if CurProc >= 0 then ASTIVal[a3] := ProcNamedGP[CurProc] else ASTIVal[a3] := 0;
           if ASTIVal[a3] > 6 then ASTIVal[a3] := 6;
+          ASTIVal[a3] := ASTIVal[a3] * 8;
         end;
         ASTTk[a3] := Ord(tyInteger);
         idx := FindSym('__va_overflow');
@@ -2024,6 +2037,15 @@ begin
         begin
           if CurProc >= 0 then ASTIVal[a5] := ProcNamedFP[CurProc] else ASTIVal[a5] := 0;
           if ASTIVal[a5] > 8 then ASTIVal[a5] := 8;
+          { The FP region's BASE differs per target and its slot size with it:
+            SysV saves 8 XMM registers of 16 bytes past a 48-byte GP region;
+            aarch64 saves 8 d registers of 8 bytes past a 64-byte GP one. Both
+            are byte offsets into the same __va_save, and __pxx_va_start_impl
+            now takes them as BYTES rather than recomputing one target's layout
+            from a slot count -- a seeder that knows a layout can only know one.
+            bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero }
+          if TargetArch = TARGET_X86_64 then ASTIVal[a5] := 48 + ASTIVal[a5] * 16
+          else ASTIVal[a5] := 64 + ASTIVal[a5] * 8;
         end;
         ASTTk[a5] := Ord(tyInteger);
         if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32] then
@@ -12830,10 +12852,27 @@ begin
     end;
     TARGET_AARCH64:
     begin
-      { AAPCS64: x0..x7 hold the first 8 args (named + variadic), floats included
-        as GP bits. Save them into __va_save[0..56] (one 8-byte slot each). The
-        overflow area is the caller stack args just above the frame: [x29+16],
-        pushed past any named args that spilled there (namedTotal>8). }
+      { AAPCS64 has TWO argument banks and the variadic tail uses both: x0..x7
+        for integers and pointers, v0..v7 for floating point -- measured against
+        the target's own glibc, not read off the spec. So the save area is two
+        regions: 8 GP slots at [0..56] and 8 FP slots at [64..120], 8 bytes each
+        (the pxx value model carries a float as double bits, so a d register is
+        the whole of it and the 16-byte q slots of the real AAPCS64 va_list
+        layout would only add padding -- this save area is private to pxx's own
+        va_list, never handed to a foreign frame).
+
+        THE CALLER HALF AND THIS ONE MOVE TOGETHER. Until 2026-09-03 both banks
+        were one GP area here and the caller pushed floats through x0..x7 to
+        match, which is self-consistent and wrong at any foreign boundary:
+        `sprintf(b,"[%.2f]",3.5)` into the target's real glibc printed [0.00],
+        and the argument AFTER the float was lost too because the two sides
+        disagreed about slot COUNT and not merely about bytes.
+        bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero
+
+        The overflow area is the caller stack args just above the frame,
+        [x29+16], pushed past any NAMED args that spilled there -- and a named
+        arg spills only when its OWN bank fills, which is why the anchor asks
+        the placement walk instead of comparing a combined count against 8. }
       EmitLoadImmA64(9, Syms[vaSaveSym].Offset);
       EmitI32($8B0903A9);                                { add x9, x29, x9 (&__va_save) }
       EmitI32($F9000120);                                { str x0, [x9, #0] }
@@ -12844,9 +12883,15 @@ begin
       EmitI32($F9001525);                                { str x5, [x9, #40] }
       EmitI32($F9001926);                                { str x6, [x9, #48] }
       EmitI32($F9001D27);                                { str x7, [x9, #56] }
-      sz := 16;
-      if ProcNamedGP[procIdx] + ProcNamedFP[procIdx] > 8 then
-        sz := 16 + (ProcNamedGP[procIdx] + ProcNamedFP[procIdx] - 8) * 8;
+      EmitI32($FD002120);                                { str d0, [x9, #64] }
+      EmitI32($FD002521);                                { str d1, [x9, #72] }
+      EmitI32($FD002922);                                { str d2, [x9, #80] }
+      EmitI32($FD002D23);                                { str d3, [x9, #88] }
+      EmitI32($FD003124);                                { str d4, [x9, #96] }
+      EmitI32($FD003525);                                { str d5, [x9, #104] }
+      EmitI32($FD003926);                                { str d6, [x9, #112] }
+      EmitI32($FD003D27);                                { str d7, [x9, #120] }
+      sz := 16 + ABIA64NamedStackBytes(procIdx);
       EmitLoadImmA64(10, sz);
       EmitI32($8B0A03AA);                                { add x10, x29, x10 (overflow) }
       EmitLoadImmA64(9, Syms[vaOverflowSym].Offset);

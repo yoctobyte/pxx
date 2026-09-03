@@ -15,9 +15,12 @@ typedef struct __pxx_va_elem {
 
 typedef struct __pxx_va_elem va_list[1];
 
-/* 176-byte register-save area: 6 GP slots (48) + 8 XMM slots (16 each). The
-   variadic prologue stores the incoming arg registers here; one of these is
-   declared as a hidden local in every variadic function. */
+/* 176-byte register-save area. The variadic prologue stores the incoming arg
+   registers here; one of these is declared as a hidden local in every variadic
+   function. The LAYOUT inside it is per-target and the frontend owns it:
+   SysV x86-64 is 6 GP slots (48 bytes) then 8 XMM slots of 16; aarch64 is 8 GP
+   slots of 8 (64 bytes) then 8 FP slots of 8. Both fit; nothing outside pxx ever
+   sees this block, so the two need not agree. */
 typedef struct __pxx_va_save { char bytes[176]; } __pxx_va_save;
 
 /* The implementations live in lib/crtl/src/stdarg.c, auto-pulled as this
@@ -32,10 +35,11 @@ typedef struct __pxx_va_save { char bytes[176]; } __pxx_va_save;
    friends in cparser.inc), so they must keep external linkage — declaring them
    `static` here again would break `va_arg` lowering, not merely re-bloat it. */
 void __pxx_va_start_impl(struct __pxx_va_elem *ap, void *save,
-                         unsigned int ngp, void *overflow, unsigned int nfp);
+                         unsigned int gpoff, void *overflow, unsigned int fpoff);
 void *__pxx_va_arg_gp(struct __pxx_va_elem *ap);
 void *__pxx_va_arg_fp(struct __pxx_va_elem *ap);
 void *__pxx_va_arg_cross(struct __pxx_va_elem *ap);
+void *__pxx_va_arg_a64_fp(struct __pxx_va_elem *ap);
 void __pxx_va_arg_agg(struct __pxx_va_elem *ap, void *dst,
                      unsigned int neight, unsigned int ssemask,
                      unsigned int size);

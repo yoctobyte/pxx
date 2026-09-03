@@ -1833,6 +1833,47 @@ begin
   EmitCallProc(procIdx);
 end;
 
+{ Is ARGUMENT argIdx of a C-ABI aarch64 call floating-point class?
+
+  Inside the declared parameter list the answer comes from the PARAMETER (so a
+  by-ref float, which travels as a pointer, stays integer-class -- ABIA64ParamIsFp
+  asks ABIParamSlotIsPointer for exactly that). Past it there IS no parameter, so
+  the class has to come from the ARGUMENT's own type under C's default argument
+  promotions. That is the shape arm32 has had all along (Arm32CdeclArgKind), and
+  arm32 is the 32-bit target that gets a variadic double right.
+
+  `selfCount` shifts argument index to parameter index, as everywhere else on
+  this target. Below the parameter range is an injected Self: integer-class.
+  bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero }
+function A64CdeclArgIsFp(procIdx, argIdx, selfCount, argNode: Integer): Boolean;
+var pi: Integer;
+begin
+  pi := argIdx - selfCount;
+  if (pi >= 0) and (pi >= Procs[procIdx].ParamCount) and
+     ProcVariadic[procIdx] and (argNode <> -1) then
+    A64CdeclArgIsFp := TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]]))
+  else
+    A64CdeclArgIsFp := ABIA64ParamIsFp(procIdx, pi);
+end;
+
+{ Build the whole class vector for a C-ABI call: `argChain` is the IR argument
+  chain (IRB[node]), walked in the same order the push loop walked it. One
+  vector, then ONE ABIA64SlotWalk over it -- rather than a variadic arm that
+  places by a different rule from the fixed arm. }
+procedure A64BuildArgFpVec(procIdx, selfCount, argChain, nArgs: Integer;
+                           var argFp: array of Boolean);
+var i, an: Integer;
+begin
+  an := argChain;
+  for i := 0 to nArgs - 1 do
+  begin
+    if i > MAX_PROC_PARAMS + 7 then
+      Error('target aarch64: argument index past the AAPCS64 class vector');
+    argFp[i] := A64CdeclArgIsFp(procIdx, i, selfCount, an);
+    if an <> -1 then an := IRB[an];
+  end;
+end;
+
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
@@ -1846,6 +1887,7 @@ var
   cdeclDropA64: Integer;   { bytes the C-ABI call arm must drop after the call }
   cdeclBlkA64: Integer;    { AAPCS64 outgoing stack-argument block bytes }
   a64Fp: Boolean;          { AAPCS64: this argument takes the FP bank }
+  argFpA64: array[0..MAX_PROC_PARAMS + 7] of Boolean;  { AAPCS64 per-ARGUMENT class vector }
   sVal: AnsiString;
   tk, lhsTk, rhsTk: TTypeKind;
   nArgTotal: Integer;   { -O3 W1 last-argument collapse (aarch64): args counted BEFORE the push loop }
@@ -3505,82 +3547,75 @@ begin
           end;
           if (nArgs <> Procs[procIdx].ParamCount) and not ProcVariadic[procIdx] then
             Error('target aarch64: external call argument count mismatch');
-          if ProcVariadic[procIdx] then
+          { AAPCS64 placement, register and STACK halves, both from the shared
+            oracle so the callee's prologue cannot disagree
+            (EmitParamSpillsForTarget's ProcCdecl arm asks the same function).
+            This arm used to REFUSE past eight of either bank, and the two
+            refusals -- ParamCount > 8 and (lo > 8) or (hi > 8) -- are gone
+            with it; a nine-int C function is ordinary code and lua's lcode.c
+            has one.
+
+            THE VARIADIC CALL TAKES THIS SAME PATH. It used to have an arm of
+            its own that called EmitCallArgRegsA64 -- pxx's INTERNAL all-GP
+            convention -- on the belief that AArch64-Linux passes the whole
+            variadic tail in x0..x7. It does not: measured against the target's
+            own glibc, a variadic double goes in the FP bank exactly as a named
+            one does, and passing it in a GP register made `sprintf("%.2f",3.5)`
+            print 0.00 AND shifted every argument after it. The only thing that
+            differs is where each argument's CLASS comes from, which is now a
+            vector built once, so there is one placement walk on this target
+            rather than two rules that disagree past ParamCount.
+            devdocs/dev/normalise-dont-special-case.md
+            bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero
+
+            The temps are read by OFFSET rather than popped, because the
+            outgoing block has to be built while they are all still live: the
+            same shape EmitCallArgRegsA64 uses for the internal convention,
+            and for the same reason. Everything is dropped in one add after
+            the call. Argument i's temp sits at sp + blk + (nArgs-1-i)*16
+            once the block is reserved (arg0 was pushed deepest).
+            bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds }
+          A64BuildArgFpVec(procIdx, 0, IRB[node], nArgs, argFpA64);
+          cdeclBlkA64 := ABIA64VecStackBytes(argFpA64, nArgs);
+          if cdeclBlkA64 + nArgs * 16 > 32760 then
+            Error('target aarch64: cdecl call with ' + AIntToStr(nArgs) +
+                  ' arguments needs a temp block past the 32760-byte reach of '
+                  + 'a scaled LDR immediate');
+          if cdeclBlkA64 > 0 then
+            EmitI32($D10003FF or (cdeclBlkA64 shl 10));   { sub sp, sp, #blk }
+          { Stack half first: it only reads temps, so it cannot disturb an
+            argument register that the register half has already loaded. }
+          for i := 0 to nArgs - 1 do
           begin
-            { Variadic external (e.g. fcntl/open declared `int f(int,int,...)`):
-              AArch64-Linux passes the variadic tail in x0..x7 then the stack,
-              same as GP named args -- which is EXACTLY what
-              EmitCallArgRegsA64 already does, arg0 in x0 and args 8.. in an
-              outgoing block at sp, built by offset from the same 16-byte temps
-              this arm pushes.
-
-              THE FIFTH SPELLING. That helper's own comment says stack-argument
-              passing "used to be the DIRECT call's alone, and constructor,
-              indirect and virtual calls each refused with an Error of their
-              own -- one rule spelt four times, and three of the spellings did
-              not have it." This arm was the fourth that did not have it, missed
-              because it is the C-ABI path rather than the internal one. It is
-              the same mechanism and it is now the same code.
-              bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds
-
-              nArgTotal is -1: the -O3 last-argument collapse is a property of
-              the internal convention's push loop, and this arm does not do it. }
-            cdeclDropA64 := EmitCallArgRegsA64(nArgs, -1, -1, -1);
-          end
-          else
-          begin
-            { AAPCS64 placement, register and STACK halves, both from the shared
-              oracle so the callee's prologue cannot disagree
-              (EmitParamSpillsForTarget's ProcCdecl arm asks the same function).
-              This arm used to REFUSE past eight of either bank, and the two
-              refusals -- ParamCount > 8 and (lo > 8) or (hi > 8) -- are gone
-              with it; a nine-int C function is ordinary code and lua's lcode.c
-              has one.
-
-              The temps are read by OFFSET rather than popped, because the
-              outgoing block has to be built while they are all still live: the
-              same shape EmitCallArgRegsA64 uses for the internal convention,
-              and for the same reason. Everything is dropped in one add after
-              the call. Argument i's temp sits at sp + blk + (nArgs-1-i)*16
-              once the block is reserved (arg0 was pushed deepest).
-              bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds }
-            cdeclBlkA64 := ABIA64CdeclStackBytes(procIdx, Procs[procIdx].ParamCount, 0);
-            if cdeclBlkA64 + nArgs * 16 > 32760 then
-              Error('target aarch64: cdecl call with ' + AIntToStr(nArgs) +
-                    ' arguments needs a temp block past the 32760-byte reach of '
-                    + 'a scaled LDR immediate');
-            if cdeclBlkA64 > 0 then
-              EmitI32($D10003FF or (cdeclBlkA64 shl 10));   { sub sp, sp, #blk }
-            { Stack half first: it only reads temps, so it cannot disturb an
-              argument register that the register half has already loaded. }
-            for i := 0 to nArgs - 1 do
+            ABIA64SlotWalk(argFpA64, i, a64Fp, lo, hi);
+            if hi >= 0 then
             begin
-              ABIA64CdeclArgSlot(procIdx, i, 0, a64Fp, lo, hi);
-              if hi >= 0 then
-              begin
-                sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
-                EmitI32($F94003E9 or ((sz div 8) shl 10));   { ldr x9, [sp, #sz] }
-                EmitI32($F90003E9 or ((hi div 8) shl 10));   { str x9, [sp, #off] }
-              end;
-            end;
-            { Register half, high index first so x0 is written last. }
-            for i := nArgs - 1 downto 0 do
-            begin
-              ABIA64CdeclArgSlot(procIdx, i, 0, a64Fp, lo, hi);
-              if hi >= 0 then Continue;
               sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
-              EmitI32($F94003E9 or ((sz div 8) shl 10));     { ldr x9, [sp, #sz] }
-              if a64Fp then
-              begin
-                EmitI32($9E670120 + lo);           { fmov d[lo], x9 }
-                if Procs[procIdx].Params[i].TypeKind = tySingle then
-                  EmitI32($1E624000 + (lo shl 5) + lo); { fcvt s[lo], d[lo] }
-              end
-              else
-                EmitI32($AA0903E0 + lo);           { mov x[lo], x9 }
+              EmitI32($F94003E9 or ((sz div 8) shl 10));   { ldr x9, [sp, #sz] }
+              EmitI32($F90003E9 or ((hi div 8) shl 10));   { str x9, [sp, #off] }
             end;
-            cdeclDropA64 := cdeclBlkA64 + nArgs * 16;
           end;
+          { Register half, high index first so x0 is written last. }
+          for i := nArgs - 1 downto 0 do
+          begin
+            ABIA64SlotWalk(argFpA64, i, a64Fp, lo, hi);
+            if hi >= 0 then Continue;
+            sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
+            EmitI32($F94003E9 or ((sz div 8) shl 10));     { ldr x9, [sp, #sz] }
+            if a64Fp then
+            begin
+              EmitI32($9E670120 + lo);           { fmov d[lo], x9 }
+              { A single NARROWS only where a declared parameter says so; a
+                variadic tail has no parameter and C promotes float to double
+                there, so the tail is always a full d[n]. }
+              if (i < Procs[procIdx].ParamCount) and
+                 (Procs[procIdx].Params[i].TypeKind = tySingle) then
+                EmitI32($1E624000 + (lo shl 5) + lo); { fcvt s[lo], d[lo] }
+            end
+            else
+              EmitI32($AA0903E0 + lo);           { mov x[lo], x9 }
+          end;
+          cdeclDropA64 := cdeclBlkA64 + nArgs * 16;
           { AGGREGATE RESULT via the AAPCS indirect-result register x8, which the
             callee prologue reads whatever the convention. This arm never set it,
             and until the C-ABI gate flipped nothing returning a struct reached
@@ -3591,7 +3626,20 @@ begin
             loaded, so a nested call inside it cannot disturb them; on this arm
             the args are already in x0..x7 and v0..v7, so x9 (the marshalling
             scratch) and x8 are the only registers still free.
-            bug-c-a-c-function-s-calling-convention-depends-on-the-target }
+            bug-c-a-c-function-s-calling-convention-depends-on-the-target
+
+            THE SAVE BELOW COVERS x0..x7 AND NOT v0..v7, and the sentence above
+            is the one that says why that is a gap: a float argument sits in a
+            d register across the destination evaluation with nothing protecting
+            it. NOT FIXED HERE BECAUSE IT IS NOT REACHABLE TODAY and a codegen
+            change nothing can exercise is a change made on belief -- this arm
+            serves EXTERNALS and Pascal-mode C prototypes only (a bodied C
+            function in C mode takes the internal convention), and an external
+            that returns an aggregate BY VALUE and takes a float is a shape no
+            libc offers, so the probe for it cannot be written yet. The variadic
+            FP bank makes it wider than it was, which is why it is written down
+            rather than left implicit.
+            bug-a-aarch64-an-aggregate-result-s-destination-is-evaluated-with-the-fp-argument-bank-unsaved }
           if ABIRetViaHiddenDestProc(procIdx) then
           begin
             EmitI32($A9BF07E0);              { stp x0, x1, [sp, #-16]! }
@@ -3731,7 +3779,8 @@ begin
             reserved argument i sits at sp + blk + (nArgs-1-i)*16 and the callee
             at sp + blk + nArgs*16. Everything drops in one add after the call.
             bug-a-aarch64-has-no-stack-argument-passing-for-the-three-c-abi-call-kinds }
-          cdeclBlkA64 := ABIA64CdeclStackBytes(procIdx, nArgs, Integer(IRC[node]));
+          A64BuildArgFpVec(procIdx, Integer(IRC[node]), IRB[node], nArgs, argFpA64);
+          cdeclBlkA64 := ABIA64VecStackBytes(argFpA64, nArgs);
           if cdeclBlkA64 + (nArgs + 1) * 16 > 32760 then
             Error('target aarch64: cdecl indirect call with ' + AIntToStr(nArgs) +
                   ' arguments needs a temp block past the 32760-byte reach of ' +
@@ -3742,7 +3791,7 @@ begin
             argument register the register half has already loaded. }
           for i := 0 to nArgs - 1 do
           begin
-            ABIA64CdeclArgSlot(procIdx, i, Integer(IRC[node]), a64Fp, lo, hi);
+            ABIA64SlotWalk(argFpA64, i, a64Fp, lo, hi);
             if hi >= 0 then
             begin
               sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
@@ -3753,7 +3802,7 @@ begin
           { Register half, high index first so x0 is written last. }
           for i := nArgs - 1 downto 0 do
           begin
-            ABIA64CdeclArgSlot(procIdx, i, Integer(IRC[node]), a64Fp, lo, hi);
+            ABIA64SlotWalk(argFpA64, i, a64Fp, lo, hi);
             if hi >= 0 then Continue;
             sz := cdeclBlkA64 + (nArgs - 1 - i) * 16;
             EmitI32($F94003E9 or ((sz div 8) shl 10));     { ldr x9, [sp, #sz] }
@@ -3761,7 +3810,9 @@ begin
             begin
               { by-REF float = pointer -> int bank; see the direct path above. }
               EmitI32($9E670120 + lo);                     { fmov d[lo], x9 }
-              if Procs[procIdx].Params[i - Integer(IRC[node])].TypeKind = tySingle then
+              if (i - Integer(IRC[node]) >= 0) and
+                 (i - Integer(IRC[node]) < Procs[procIdx].ParamCount) and
+                 (Procs[procIdx].Params[i - Integer(IRC[node])].TypeKind = tySingle) then
                 EmitI32($1E624000 + (lo shl 5) + lo);      { fcvt s[lo], d[lo] }
             end
             else
