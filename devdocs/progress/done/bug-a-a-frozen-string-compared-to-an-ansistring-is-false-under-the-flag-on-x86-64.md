@@ -89,4 +89,4 @@ FPC 3.2.2. Positive control: fix reverted, compiler rebuilt, the row returns to
 FALSE.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2bd82200e.
