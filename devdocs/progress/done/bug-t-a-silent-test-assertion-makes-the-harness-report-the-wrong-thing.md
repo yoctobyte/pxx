@@ -3,7 +3,8 @@ track: A+T
 prio: 45
 type: bug
 blocked-by: []
-summary: "2461 Makefile assertions are a bare `test \"$$(...)\" = \"...\"`, which prints NOTHING when it fails. job_reason() is the log tail by deliberate design, so for those jobs the reason it records is whatever the recipe printed just before — and for the 480 cross-target ones that is two compile summaries with different code sizes, which reads exactly like a codegen divergence. It misled a Track T session for hours. The repo already uses `diff -u` in 362 places; the good pattern exists and is not reached. Fix edits Makefile, which is Track A's file-lane."
+summary: "FIXED. A bare `test` prints NOTHING when it fails, so job_reason()'s log tail records whatever preceded it -- for a compile-then-assert row, two compile summaries, which reads as a codegen divergence. The bulk conversion to tools/expect_same.sh had already landed (~3900 rows); this closes the residual 14 silent and 4 vacuous assertions and adds tools/silent_assertion_check.py to gate.sh quick so the conversion is a property of the file, not a one-time cleanup."
+status: done
 ---
 
 # A silent `test` assertion makes the harness report something else, confidently
@@ -715,3 +716,54 @@ that passes is not evidence both targets exercised it. **Not filed as a ticket
 by me** — I have not measured which of the two actually produces the logs, and a
 ticket asserting a defect I have not confirmed is the failure mode this whole
 family is about.
+
+## Resolved 2026-09-03 (frankb-78, Track A)
+
+**What was left.** The bulk conversion to `tools/expect_same.sh` had already
+happened — 3880 recipe lines call it, against 472 `diff -u` — so the 2461 in the
+summary above was long stale. What remained, measured with a scanner rather than
+a grep, was **14 silent and 4 vacuous** logical recipe lines. All are converted
+or given a fail branch, and `tools/silent_assertion_check.py` runs in
+`gate.sh quick` so they cannot come back.
+
+**The scanner reads LOGICAL lines, and that is the whole finding.** Its first
+draft read PHYSICAL ones and reported ten offenders; four of those carry their
+`|| { echo ...; exit 1; }` on the *next* continued line and were never silent.
+The scanner was answering a narrower question than the shell asks — the exact
+defect this ticket is about, committed by the guard written to prevent it.
+`t_a_fail_branch_on_a_continued_line_is_not_silent` pins it.
+
+**And the population had to be widened once more.** The first rule was
+"equality with a command-substitution operand", which reported **OK** — while
+four `test "$(grep -c ...)" -ge N` assertions on the `a.reload` marker counts
+(duplicated in `test-core` and `test-nilpy`, so eight lines) sat silent behind
+`-ge`. `test` prints nothing for `-ge` exactly as it does for `=`. A scan
+reporting zero is indistinguishable from an absence of defects unless its
+population is stated, so the rule is now "an assertion whose operand is a
+command substitution and which prints nothing on failure", over `=` and every
+numeric operator.
+
+**Positive control** (drawn from the population the question is about): the
+extended scanner against `git show HEAD:Makefile` reports `14 silent, 4 vacuous`
+and exits 1; against the working tree, 0 and exits 0.
+
+**Two defects, deliberately kept apart.**
+- SILENT — fails without explaining, so the harness explains something else.
+- VACUOUS — `test A; test B`: make checks only the last status, so A **cannot
+  fail**. A green suite while the defect ships. Four of these, including the two
+  `cvararg_*` rows whose *rc* assertion was the one being discarded.
+
+**What was verified, and what could not be.**
+- The six `expect_same.sh` conversions: four (`test_writeln_nonfinite`,
+  `cvararg_overflow_b9326`, `cvararg_many_args_b13526`,
+  `test_unit_finalization_halt26`) green in a live `make test-core`; the two
+  NilPy rows re-run by hand, both green.
+- The four `-ge` rows: run by hand — `marked=269 bo=1 c=5 declined=6`, all pass —
+  and the new fail branch exercised against an empty log (prints the count,
+  exits 1).
+- The four `|| exit 1` additions at the `c_prune` / `c_aterm` **else** branches
+  are **unreachable on this box** — gcc is present, so the `then` arm runs.
+  They are `sh -n` clean; nothing here executed them. That is the honest scope.
+- `tools/silent_assertion_check_devtest.py`: 12 guards, green, auto-run by the
+  `tools/*devtest*.py` glob in `tools-devtest`.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

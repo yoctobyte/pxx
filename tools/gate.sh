@@ -315,6 +315,22 @@ else
   echo "  SKIP  AST slot-write census (no ast_slot_overloads.py)"
 fi
 
+# EVERY MAKEFILE ASSERTION CAN FAIL, AND CAN SAY WHY. ~3900 recipe lines
+# already assert through tools/expect_same.sh; a bare `test "$(a)" = "$(b)"`
+# prints NOTHING on mismatch, so testmgr's log-tail reason records the two
+# preceding compile summaries instead and reads as a codegen divergence. Six
+# stragglers are converted alongside this guard -- a conversion on its own is a
+# one-time cleanup, and this makes it a property of the file. It also refuses
+# an assertion whose exit status is discarded by a following `;`, the worse
+# sibling: that one cannot fail at all.
+# bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
+if [ -x tools/silent_assertion_check.py ]; then
+  step "every Makefile assertion can fail and can say why" "$LOGDIR/silent-assertion.log" \
+       tools/silent_assertion_check.py                                 || RC=1
+else
+  echo "  SKIP  Makefile assertion check (no silent_assertion_check.py)"
+fi
+
 # THE FULL-SUITE HOOK'S OWN CASES. That hook runs on EVERY Bash call in every
 # session in the fleet and had no test at all until 2026-09-03, which is how it
 # reached four open tickets: each fix was checked by hand against the case that

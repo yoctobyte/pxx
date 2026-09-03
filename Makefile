@@ -990,17 +990,17 @@ test-nilpy: $(COMPILER)
 	# reload was elided at every level.
 	# bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements
 	PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3b 2>&1 | grep 'a.reload marked' > $(TESTTMP)/test_opt_sr_marks.log
-	test "$$(grep -c 'a.reload marked' $(TESTTMP)/test_opt_sr_marks.log)" -ge 6
+	test "$$(grep -c 'a.reload marked' $(TESTTMP)/test_opt_sr_marks.log)" -ge 6 || { echo "test_opt_store_reload: 'a.reload marked' count is $$(grep -c 'a.reload marked' $(TESTTMP)/test_opt_sr_marks.log), want >= 6"; exit 1; }
 	# ...and the two WIDENED statement kinds each fired: `bo` is only ever
 	# reloaded by a non-fused conditional branch, and `c` by the fused compare
 	# plus the three IR_STORE_MEM destinations (array elem / field / deref).
-	test "$$(grep -c ' bo$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 1
-	test "$$(grep -c ' c$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 5
+	test "$$(grep -c ' bo$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 1 || { echo "test_opt_store_reload: ' bo' reload count is $$(grep -c ' bo$$' $(TESTTMP)/test_opt_sr_marks.log), want >= 1"; exit 1; }
+	test "$$(grep -c ' c$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 5 || { echo "test_opt_store_reload: ' c' reload count is $$(grep -c ' c$$' $(TESTTMP)/test_opt_sr_marks.log), want >= 5"; exit 1; }
 	# ...and the emit-time refusal fired: a guard that never declines is a guard
 	# that cannot be shown to work, and this pass's whole failure mode is a
 	# prediction nobody checked.
 	PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3c 2>&1 | grep 'a.reload DECLINED' > $(TESTTMP)/test_opt_sr_declined.log
-	test "$$(grep -c 'a.reload DECLINED' $(TESTTMP)/test_opt_sr_declined.log)" -ge 1
+	test "$$(grep -c 'a.reload DECLINED' $(TESTTMP)/test_opt_sr_declined.log)" -ge 1 || { echo "test_opt_store_reload: 'a.reload DECLINED' count is $$(grep -c 'a.reload DECLINED' $(TESTTMP)/test_opt_sr_declined.log), want >= 1 -- the emit-time refusal never fired"; exit 1; }
 	# A NilPy class may be NAMED after the imported class it derives from. The
 	# unit's declaration used to fill the forward row the shell pre-pass had
 	# registered for the program's own class -- one row for two classes, so the
@@ -3170,7 +3170,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_float_repeat_typeerror.npy $(TESTTMP)/test_nilpy_float_repeat_typeerror26
 	@out=$$(timeout 20 $(TESTTMP)/test_nilpy_float_repeat_typeerror26 2>&1); rc=$$?; \
 	  if [ "$$rc" = "124" ]; then echo "test_nilpy_float_repeat_typeerror: TIMEOUT after 20s (not a wrong diagnostic)"; exit 1; fi; \
-	  test "$$out" = "$$(printf 'ababab ababab ababab\nUnhandled exception: TypeError: expected an integer to repeat a str by, got float')"
+	  tools/expect_same.sh test_nilpy_float_repeat_typeerror "$$out" "$$(printf 'ababab ababab ababab\nUnhandled exception: TypeError: expected an integer to repeat a str by, got float')"
 	@# ...and the same diagnostics are CATCHABLE — PyTypeError raises, it no
 	@# longer Halt(219)s (bug-nilpy-pytypeerror-halts-instead-of-raising)
 	./$(COMPILER) test/test_nilpy_typeerror_is_catchable.npy $(TESTTMP)/test_nilpy_typeerror_catch26
@@ -3334,7 +3334,7 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_str_repeat_linear.npy $(TESTTMP)/test_nilpy_str_repeat26
 	@out=$$(timeout 60 $(TESTTMP)/test_nilpy_str_repeat26); rc=$$?; \
 	  if [ "$$rc" = "124" ]; then echo "test_nilpy_str_repeat: TIMEOUT after 60s (not a wrong value)"; exit 1; fi; \
-	  test "$$out" = "$$(printf 'xxxxx ababab abcabc\nababab\n[] [] []\n1 1000\n80000\n200000\n1000000\n300000 a b c c')"
+	  tools/expect_same.sh test_nilpy_str_repeat "$$out" "$$(printf 'xxxxx ababab abcabc\nababab\n[] [] []\n1 1000\n80000\n200000\n1000000\n300000 a b c c')"
 	@# a nested def that CAPTURES and then ESCAPES must carry its captures: the
 	@# bridge marshals the body's own arity before them, not a hardcoded one
 	# `def w` TWICE in one enclosing def: Python rebinds the name, so the later
@@ -5504,7 +5504,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_writeln_nonfinite_float.pas $(TESTTMP)/test_writeln_nonfinite26
 	@out=$$(timeout 20 $(TESTTMP)/test_writeln_nonfinite26); rc=$$?; \
 	  if [ "$$rc" = "124" ]; then echo "test_writeln_nonfinite: TIMEOUT after 20s (not a wrong value)"; exit 1; fi; \
-	  test "$$out" = "$$(printf ' Inf\n Inf\n[ Inf]\n Inf\n Inf\n-Inf\n[-Inf]\n-Inf\n Nan\n[ Nan]\n Nan\n 1.0000000000000000E+000\n-2.5000000000000000E+000\n 0.0000000000000000E+000\n 1.0000000000000001E+300\n3.50\n  -0.125')"
+	  tools/expect_same.sh test_writeln_nonfinite "$$out" "$$(printf ' Inf\n Inf\n[ Inf]\n Inf\n Inf\n-Inf\n[-Inf]\n-Inf\n Nan\n[ Nan]\n Nan\n 1.0000000000000000E+000\n-2.5000000000000000E+000\n 0.0000000000000000E+000\n 1.0000000000000001E+300\n3.50\n  -0.125')"
 	./$(COMPILER) test/test_promoint_minint64_div.pas $(TESTTMP)/test_promoint_minint26
 	tools/expect_same.sh test_promoint_minint26 "$$($(TESTTMP)/test_promoint_minint26)" "$$(printf '9223372036854775808\n9223372036854775808\n0\n-9223372036854775808\n0\n-9223372036854775808\n9223372036854775807\n9223372036854775807\n-1180591620717411303424')"
 	./$(COMPILER) test/test_promoint_parameter.pas $(TESTTMP)/test_promoint_param26
@@ -9885,9 +9885,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Ilib/crtl/include test/ctypedef_sys_ssize_b92.c $(TESTTMP)/ctypedef_sys_ssize_b9226
 	$(TESTTMP)/ctypedef_sys_ssize_b9226; tools/expect_same.sh ctypedef_sys_ssize_b9226-rc "$$?" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cvararg_overflow_b93.c $(TESTTMP)/cvararg_overflow_b9326
-	out="$$($(TESTTMP)/cvararg_overflow_b9326)"; status="$$?"; test "$$out" = "$$(printf '1 2 3 4 5 6\n7 8')"; test "$$status" = "42"
+	out="$$($(TESTTMP)/cvararg_overflow_b9326)"; status="$$?"; \
+	  tools/expect_same.sh cvararg_overflow_b9326 "$$out" "$$(printf '1 2 3 4 5 6\n7 8')" && \
+	  tools/expect_same.sh cvararg_overflow_b9326-rc "$$status" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cvararg_many_args_b135.c $(TESTTMP)/cvararg_many_args_b13526
-	out="$$($(TESTTMP)/cvararg_many_args_b13526)"; status="$$?"; test "$$out" = "$$(printf '300 78 110\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18')"; test "$$status" = "42"
+	out="$$($(TESTTMP)/cvararg_many_args_b13526)"; status="$$?"; \
+	  tools/expect_same.sh cvararg_many_args_b13526 "$$out" "$$(printf '300 78 110\n1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18')" && \
+	  tools/expect_same.sh cvararg_many_args_b13526-rc "$$status" "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cvariadic_struct_b208.c $(TESTTMP)/cvariadic_struct_b20826
 	$(TESTTMP)/cvariadic_struct_b20826; tools/expect_same.sh cvariadic_struct_b20826-rc "$$?" "42"
 	# a file-scope `static` in two different crtl MODULES is legal C (internal
@@ -10940,7 +10944,7 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_unit_finalization26 "$$($(TESTTMP)/test_unit_finalization26)" "$$(printf 'init runs\ninit2 runs\nmain done\nfinalization2 runs\nfinalization runs')"
 	./$(COMPILER) -Itest/unitinit test/test_unit_finalization_halt.pas $(TESTTMP)/test_unit_finalization_halt26
 	out="$$($(TESTTMP)/test_unit_finalization_halt26; echo "rc=$$?")"; \
-	test "$$out" = "$$(printf 'init runs\ninit2 runs\nbefore halt\nfinalization2 runs\nfinalization runs\nrc=3')"
+	tools/expect_same.sh test_unit_finalization_halt26 "$$out" "$$(printf 'init runs\ninit2 runs\nbefore halt\nfinalization2 runs\nfinalization runs\nrc=3')"
 	./$(COMPILER) test/test_static_array_length.pas $(TESTTMP)/test_static_array_length26
 	tools/expect_same.sh test_static_array_length26 "$$($(TESTTMP)/test_static_array_length26)" "$$(printf '3\n2\n64\n60\n3\n2\n0\n5\n9\n5')"
 	./$(COMPILER) -Itest/builtin_shadow test/test_builtin_name_demote.pas $(TESTTMP)/test_builtin_name_demote26
@@ -13401,8 +13405,8 @@ test-core: $(COMPILER)
 	  tools/expect_same.sh c_prune_o2 "$$($(TESTTMP)/c_prune_o2)" "$$($(TESTTMP)/c_prune_gcc)" || exit 1; \
 	  echo "c_const_if_dead_arm_prune: matches the gcc oracle at -O0 and -O2"; \
 	else \
-	  tools/expect_same.sh c_prune_o0 "$$($(TESTTMP)/c_prune_o0)" "$$(printf 'skipped the arm\nN ran\nhits=1')"; \
-	  tools/expect_same.sh c_prune_o2 "$$($(TESTTMP)/c_prune_o2)" "$$(printf 'skipped the arm\nN ran\nhits=1')"; \
+	  tools/expect_same.sh c_prune_o0 "$$($(TESTTMP)/c_prune_o0)" "$$(printf 'skipped the arm\nN ran\nhits=1')" || exit 1; \
+	  tools/expect_same.sh c_prune_o2 "$$($(TESTTMP)/c_prune_o2)" "$$(printf 'skipped the arm\nN ran\nhits=1')" || exit 1; \
 	fi
 	# `-OO` -- the source-1:1 reference, part 3 of the same ticket. The -OO row
 	# asserts a FAILURE on purpose and that is the flag's positive control: a
@@ -13462,8 +13466,8 @@ test-core: $(COMPILER)
 	  tools/expect_same.sh c_aterm_o2 "$$($(TESTTMP)/c_aterm_o2)" "$$($(TESTTMP)/c_aterm_gcc)" || exit 1; \
 	  echo "c_unreachable_after_terminator: matches the gcc oracle at -O0 and -O2"; \
 	else \
-	  tools/expect_same.sh c_aterm_o0 "$$($(TESTTMP)/c_aterm_o0)" "$$(printf 'g=5\nlbl=7\npick=10 20 99\npick2=10 20 99')"; \
-	  tools/expect_same.sh c_aterm_o2 "$$($(TESTTMP)/c_aterm_o2)" "$$(printf 'g=5\nlbl=7\npick=10 20 99\npick2=10 20 99')"; \
+	  tools/expect_same.sh c_aterm_o0 "$$($(TESTTMP)/c_aterm_o0)" "$$(printf 'g=5\nlbl=7\npick=10 20 99\npick2=10 20 99')" || exit 1; \
+	  tools/expect_same.sh c_aterm_o2 "$$($(TESTTMP)/c_aterm_o2)" "$$(printf 'g=5\nlbl=7\npick=10 20 99\npick2=10 20 99')" || exit 1; \
 	fi
 	# A CONSTANT LEFT OPERAND OF `and`/`or`, AND `not` OVER A BOOLEAN LITERAL,
 	# fold in the PARSER, because Pascal short-circuits and that is the language's
@@ -14974,17 +14978,17 @@ test-core: $(COMPILER)
 	# reload was elided at every level.
 	# bug-a-o3-drops-the-first-of-two-chained-qword-multiply-xor-statements
 	PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3b 2>&1 | grep 'a.reload marked' > $(TESTTMP)/test_opt_sr_marks.log
-	test "$$(grep -c 'a.reload marked' $(TESTTMP)/test_opt_sr_marks.log)" -ge 6
+	test "$$(grep -c 'a.reload marked' $(TESTTMP)/test_opt_sr_marks.log)" -ge 6 || { echo "test_opt_store_reload: 'a.reload marked' count is $$(grep -c 'a.reload marked' $(TESTTMP)/test_opt_sr_marks.log), want >= 6"; exit 1; }
 	# ...and the two WIDENED statement kinds each fired: `bo` is only ever
 	# reloaded by a non-fused conditional branch, and `c` by the fused compare
 	# plus the three IR_STORE_MEM destinations (array elem / field / deref).
-	test "$$(grep -c ' bo$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 1
-	test "$$(grep -c ' c$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 5
+	test "$$(grep -c ' bo$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 1 || { echo "test_opt_store_reload: ' bo' reload count is $$(grep -c ' bo$$' $(TESTTMP)/test_opt_sr_marks.log), want >= 1"; exit 1; }
+	test "$$(grep -c ' c$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 5 || { echo "test_opt_store_reload: ' c' reload count is $$(grep -c ' c$$' $(TESTTMP)/test_opt_sr_marks.log), want >= 5"; exit 1; }
 	# ...and the emit-time refusal fired: a guard that never declines is a guard
 	# that cannot be shown to work, and this pass's whole failure mode is a
 	# prediction nobody checked.
 	PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3c 2>&1 | grep 'a.reload DECLINED' > $(TESTTMP)/test_opt_sr_declined.log
-	test "$$(grep -c 'a.reload DECLINED' $(TESTTMP)/test_opt_sr_declined.log)" -ge 1
+	test "$$(grep -c 'a.reload DECLINED' $(TESTTMP)/test_opt_sr_declined.log)" -ge 1 || { echo "test_opt_store_reload: 'a.reload DECLINED' count is $$(grep -c 'a.reload DECLINED' $(TESTTMP)/test_opt_sr_declined.log), want >= 1 -- the emit-time refusal never fired"; exit 1; }
 	# A NilPy class may be NAMED after the imported class it derives from. The
 	# unit's declaration used to fill the forward row the shell pre-pass had
 	# registered for the program's own class -- one row for two classes, so the
