@@ -163,4 +163,4 @@ identical under the pin):
 `bug-a-a-one-char-string-literal-in-a-frozen-concat-folds-to-integer-addition`.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ecab9580f.
