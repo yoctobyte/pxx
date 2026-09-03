@@ -97,3 +97,29 @@ segfault before the parent completes a write.
 - 2026-09-03 — the seven watcher saw `test-threads#src:test/test_nilpy_thread_clone.npy` GREEN at cd694bdc4de9 (tier full) and did NOT close this: this is a repeat stub (`regression-test-threads-test-nilpy-thread-clone-2`, not `regression-test-threads-test-nilpy-thread-clone`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-03 — the seven watcher saw `test-threads#src:test/test_nilpy_thread_clone.npy` GREEN at a24a521145b0 (tier full) and did NOT close this: this is a repeat stub (`regression-test-threads-test-nilpy-thread-clone-2`, not `regression-test-threads-test-nilpy-thread-clone`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
 - 2026-09-03 — the seven watcher saw `test-threads#src:test/test_nilpy_thread_clone.npy` GREEN at 35b96158ce91 (tier full) and did NOT close this: this is a repeat stub (`regression-test-threads-test-nilpy-thread-clone-2`, not `regression-test-threads-test-nilpy-thread-clone`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+
+## RE-VERIFIED AT HEAD 2026-09-03 (frankB): still red, and it is a SEGFAULT
+
+`43e8edb74`, native x86-64, `--threadsafe`, the Makefile's own two lines:
+
+```
+100 consecutive runs of $(TESTTMP)/test_npy_clone26
+  nonzero rc: 29        all of them rc=139 (SIGSEGV)
+  output when it dies:  "tid nonzero =" or "tid nonzero = True", truncated
+```
+
+So the failure is a CRASH in the child-thread path, not a wrong value, and the
+expected output is produced right up to the point where it dies.
+
+**MY FIRST TEN RUNS WERE ALL GREEN AND I ALMOST REPORTED IT FIXED.** Ten passes
+against a ~29% per-run failure rate is a 3% event, and I had already typed
+"10/10 green at HEAD" before running more. `f3cb2cb3c` refused to close this on
+ONE green for exactly this reason and was right; ten is not different in kind.
+**A race gets a failure RATE, never a verdict** — and the rate is the number to
+put in a ticket, because it is the only thing that makes the next reader's
+sample interpretable.
+
+Not diagnosed further: parked here rather than microfixed, and NOT closed. The
+lane is still wrong on the frontmatter (Track T by fallback, and the failing step
+named no owner); the defect is in the thread-clone path, so it is A or N.

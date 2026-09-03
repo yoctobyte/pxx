@@ -2,8 +2,8 @@
 prio: 50
 track: A
 type: bug
-status: backlog
-summary: "test_string_n_container_strides is COMPILED by the Makefile and never run or compared -- there is no expect_same line for it, only the compile -- and its `dyn2dvals` row prints 0 (a FAILURE) at the pin, at HEAD and after the frozen-layout fixes. A test nobody reads is a guard that cannot fail; the red row inside it is the reason that matters."
+status: rejected
+summary: "RETRACTED by its author: the premise is FALSE. test_string_n_container_strides IS asserted -- the expect_same row keys on the BINARY name test_strn_container26, not the source path, so a grep for the source found the compile and not the compare. The one real half (`dyn2dvals` printing 0) was a live under-allocation and is fixed; see regression-test-core-test-string-n-container-strides."
 ---
 
 # test_string_n_container_strides is compiled and never asserted
@@ -48,3 +48,25 @@ Found while sweeping every test source that mentions both `string[` and
 whose output nothing was comparing.
 
 [[feature-p-implement-the-real-tyshortstring-byte-prefix-layout]]
+
+
+## RETRACTED (frankB, 2026-09-03) -- the grep answered a different question
+
+`grep string_n_container_strides Makefile` returns exactly one row, the compile.
+That reads as "nothing compares it" and it is not what the grep was asked: the
+compare row names the BINARY, `test_strn_container26`, and it has been there all
+along asserting `dyn2dvals 1`. The instrument did not error; it answered about a
+literal string.
+
+frankuser made the identical mistake on the identical rows about an hour later,
+independently, which is what makes it a class rather than my slip: **a Makefile
+test row is addressed by its OUTPUT name, so grep the binary, not the source.**
+
+**The other half of this ticket was real.** `dyn2dvals` printing 0 was a genuine
+under-allocation -- SetLength sized elements with `TypeStorageSize` (a pointer
+width for a frozen string) while the index path strided by `FrozenStrSlotSize`,
+and the allocator's bucket rounding had been hiding the shortfall until the
+prefix padding at 18b92fac9 pushed the overrun past it. Diagnosed and fixed at
+the root in [[regression-test-core-test-string-n-container-strides]], which is
+where that work is recorded. Nothing here needs wiring: the row was always
+wired, and it did its job.

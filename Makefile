@@ -11106,11 +11106,18 @@ test-core: $(COMPILER)
 	# loop, so a `string[N]` param got the LAST parameter's capacity -- the
 	# following parameter's type decided the preceding one's layout), and the
 	# INNER dimension of `array of array of string[N]` (DynElemSize asked
-	# TypeSlotSize: 8 bytes for an 18-byte element). Every row is a MEASURED
-	# stride compared against another measured stride, never a constant, so the
-	# byte-prefix relayout cannot turn it red. Positive control: 5 of these 8 rows
-	# go 0 when built with the pinned compiler; `openvals` and `guard` do not, and
-	# the test says why.
+	# TypeSlotSize: 8 bytes for an 18-byte element). No row compares against a
+	# CONSTANT -- every stride row measures one stride against another -- so a
+	# relayout cannot turn a STRIDE row red. That immunity does NOT extend to the
+	# whole test and the original wording said it did: `openvals` and `dyn2dvals`
+	# are VALUE rows, and a value row goes red whenever a write lands outside its
+	# own block, whatever the widths are. `dyn2dvals` did exactly that at
+	# 18b92fac9 (frozen slot padded 18 -> 24) and it was RIGHT to: SetLength was
+	# allocating by TypeStorageSize while the index path strided by
+	# FrozenStrSlotSize, and the allocator's bucket rounding had been covering the
+	# 2-byte shortfall. Read a red here as a bug found, never as a stale expected
+	# value. Positive control: 5 of these 8 rows go 0 when built with the pinned
+	# compiler; `openvals` and `guard` do not, and the test says why.
 	./$(COMPILER) test/test_string_n_container_strides.pas $(TESTTMP)/test_strn_container26
 	# THE BYTE-PREFIX LAYOUT, compiled BOTH ways, because the flag is the only
 	# thing that can produce a tyShortString today and untested machine code is
@@ -21829,8 +21836,25 @@ test-emit-obj: $(COMPILER)
 	#    THE CONTROL IS THE COUNT, NOT THE COMPILE. A row asserting only that the
 	#    fixture builds passes on a backend that emitted no reference at all, so
 	#    the fixture carries BOTH shapes and a call-only variant is generated
-	#    from it: taking the address must cost exactly two more relocations
+	#    from it: taking the address must cost exactly ONE more relocation
 	#    naming the external than calling it does.
+	#
+	#    IT SAID TWO UNTIL 2026-09-03, AND TWO WAS THE DUPLICATE. The expected
+	#    count was measured when the address-materialisation sequence was emitted
+	#    TWICE, back to back -- riscv32 `auipc a0,0 / j +8 / <literal> / lw a0,8(a0)`
+	#    appeared at 0xb4 and again at 0xc4, the second copy loading the same
+	#    value into the same register, and xtensa had the same duplicate literal.
+	#    adbe33db8 (one IRKindIsStatement replaces five drifted per-backend
+	#    denylists) stopped emitting the value node twice, the count went 3 -> 2,
+	#    and this row went RED for the improvement. Verified byte for byte
+	#    against the pinned compiler: HEAD's .text is the pin's with exactly that
+	#    16-byte sequence removed and everything after it shifted down.
+	#
+	#    THE FIXTURE'S OWN COMMENT SAID ONE ALL ALONG ("Every target must emit one
+	#    more relocation naming the external for the first than for the second").
+	#    Comment and code disagreed and the comment was right -- the code had
+	#    encoded what the defect produced.
+	#    regression-test-emit-obj-test-esp-hello
 	rm -f $(TESTTMP)/exa_*.o
 	@sed -e 's/^int call_it.*$$//' test/c_obj_extern_addr.c > $(TESTTMP)/exa_callonly.c
 	@for t in "--target=riscv32 --platform=esp" "--target=xtensa --platform=esp"; do \
@@ -21839,8 +21863,8 @@ test-emit-obj: $(COMPILER)
 	  b=$$(readelf -rW $(TESTTMP)/exa_both.o | grep -ci gcc_thing); \
 	  c=$$(readelf -rW $(TESTTMP)/exa_call.o | grep -ci gcc_thing); \
 	  [ "$$c" -ge 1 ] || { echo "test-emit-obj: [$$t] the call-only control names gcc_thing in $$c relocations -- it emits no external reference at all, so the difference below is meaningless"; exit 1; }; \
-	  [ "$$b" = "$$(($$c + 2))" ] || { echo "test-emit-obj: [$$t] taking an external's address adds $$(($$b - $$c)) relocations, not 2 (call-only $$c, both $$b)"; exit 1; }; \
-	 done; echo "test-emit-obj: @external emits its address literal on riscv32 and xtensa, two relocations more than a bare call"
+	  [ "$$b" = "$$(($$c + 1))" ] || { echo "test-emit-obj: [$$t] taking an external's address adds $$(($$b - $$c)) relocations, not 1 (call-only $$c, both $$b)"; exit 1; }; \
+	 done; echo "test-emit-obj: @external emits its address literal on riscv32 and xtensa, one relocation more than a bare call"
 	#    NOT RUN, and the reason is worth a line rather than a silent gap: an
 	#    xtensa EXECUTABLE refuses external dynamic symbols outright (no dynamic
 	#    segment), and the C frontend has no xtensa entry stub, so there is no

@@ -677,6 +677,25 @@ begin
       elSize := TARGET_PTR_SIZE
     else if baseKind = 3 then
       elSize := UClsSize_[SymTR[symIdx].ElemRec - REC_UCLASS_BASE]
+    else if TypeIsFrozenString(IntToTypeKind(SymTR[symIdx].ElemTk)) and
+            (SymStrCap[symIdx] > 0) then
+      { A FROZEN STRING IS THE ONE ELEMENT KIND TypeStorageSize CANNOT ANSWER --
+        it reports a pointer width for a slot that is prefix + capacity, rounded
+        to the prefix's alignment. This descriptor is what PXXDynSetLen
+        ALLOCATES with, while the index path strides by DynElemSize, which has
+        always asked FrozenStrSlotSize. The two disagreed, so every row of
+        `array of array of string[10]` was allocated short and the last element
+        of each row was written past the end of its own block.
+
+        It has been wrong since the descriptor existed and it went VISIBLE when
+        the slot gained alignment padding: at 18 bytes strided against 16
+        allocated the overrun was 6 bytes and landed in the allocator's rounding
+        slack, so the values row passed. At 24 against 16 the overrun is 24 and
+        lands in the NEXT row. A latent under-allocation whose only symptom was
+        that it had not been noticed yet.
+        bug-a-storing-into-an-element-of-an-array-of-frozen-strings-bus-errors-on-xtensa }
+      elSize := FrozenStrSlotSize(IntToTypeKind(SymTR[symIdx].ElemTk),
+                                  SymStrCap[symIdx])
     else
       elSize := TypeStorageSize(IntToTypeKind(SymTR[symIdx].ElemTk),
                                 SymTR[symIdx].ElemRec);
@@ -698,6 +717,46 @@ begin
   SymRTTIOff[symIdx] := AnonDynArrayOff[anonIdx];
   Inc(AnonDynArrayCount);
   Result := SymRTTIOff[symIdx];
+end;
+
+{ ELEMENT SIZE FOR AN IR_SETLEN_DYN TARGET -- one answer, because there were
+  two and they disagreed. The portable path (GetOrAllocNodeDynDesc, used by
+  every cross backend) and x86-64's INLINE IR_SETLEN_DYN arm each derived the
+  stride from the node, and only the portable one knew that a frozen string's
+  slot is prefix + capacity rather than a pointer width. x86-64 therefore
+  allocated 8 bytes per element for an `array of array of string[10]` whose
+  index path strides by 24, and the last element of every row was written past
+  the end of its own block.
+
+  The overrun was 6 bytes and landed in the allocator's rounding slack while the
+  slot was 18 bytes; it became 24 bytes -- into the next row -- when the slot
+  gained its alignment padding. A latent under-allocation whose only symptom was
+  that nothing had stepped on it yet.
+
+  This is the third copy of one decision (DynElemSize in ir.inc is the first,
+  for the INDEX path); collapsing all three wants the descriptor machinery
+  reworked and is not this fix.
+  bug-a-storing-into-an-element-of-an-array-of-frozen-strings-bus-errors-on-xtensa }
+function SetLenDynElemSize(depth, baseTk, baseRec, symIdx: Integer): Integer;
+begin
+  if depth > 1 then
+    Result := TARGET_PTR_SIZE
+  else if IntToTypeKind(baseTk) = tyRecord then
+    Result := RecSize(baseRec)
+  else if TypeIsFrozenString(IntToTypeKind(baseTk)) and (symIdx >= 0) and
+          (SymStrCap[symIdx] > 0) then
+    Result := FrozenStrSlotSize(IntToTypeKind(baseTk), SymStrCap[symIdx])
+  else
+    { A FIELD- OR NESTED-ROOTED target (symIdx < 0) carries no capacity on the
+      node, so a frozen element still gets the kind-only answer. Not fixed
+      blind: `SetLength(rec.matrix[i], n)` for a frozen element is the shape,
+      and carrying the size would mean a new side table beside IRSetLenBaseRec.
+      Left measured-and-known rather than guessed at -- and NOT fixable against
+      a repro today: that spelling does not compile at all
+      (`r.matrix[0][0] := 'a0'` is refused with "cannot assign ShortString to
+      Char", the second index resolving as a CHARACTER index).
+      bug-a-a-field-rooted-array-of-array-of-string-n-indexes-as-a-char }
+    Result := TypeStorageSize(IntToTypeKind(baseTk), baseRec);
 end;
 
 { Descriptor for an IR_SETLEN_DYN target. Symbol root -> reuse the symbol's
@@ -753,14 +812,13 @@ begin
 
   baseKind := ManagedElemKindLocked(baseTk, baseRec);   { locked walk — see the note in GetOrAllocSymRTTI }
 
-  if depth > 1 then
+  if (depth = 1) and ((baseKind = 1) or (baseKind = 4)) then
+    { string handle or COM interface reference -- one pointer either way }
     elSize := TARGET_PTR_SIZE
-  else if (baseKind = 1) or (baseKind = 4) then
-    elSize := TARGET_PTR_SIZE
-  else if baseKind = 3 then
+  else if (depth = 1) and (baseKind = 3) then
     elSize := UClsSize_[baseRec - REC_UCLASS_BASE]
   else
-    elSize := TypeStorageSize(IntToTypeKind(baseTk), baseRec);
+    elSize := SetLenDynElemSize(depth, baseTk, baseRec, symIdx);
   AnonDynArrayElSize[anonIdx] := elSize;
 
   for i := 0 to 19 do
@@ -11407,12 +11465,11 @@ begin
           slBaseTk := IntToTypeKind(IRTk[node]);
           slBaseRec := IRSetLenBaseRec[node];
         end;
-        if slDepth > 1 then
-          slElemSize := 8
-        else if slBaseTk = tyRecord then
-          slElemSize := RecSize(slBaseRec)
-        else
-          slElemSize := TypeSlotSize(slBaseTk);
+        { ONE answer with the portable path, see SetLenDynElemSize. This arm
+          used to spell its own `TypeSlotSize(slBaseTk)`, which is a pointer
+          width for a frozen string -- so x86-64 allocated 8 bytes per element
+          for a row the index path strides by 24. }
+        slElemSize := SetLenDynElemSize(slDepth, Ord(slBaseTk), slBaseRec, symIdx);
 
         if AnonDynArrayCount >= 8192 then Error('too many anonymous dynamic arrays');
         anonIdx := AnonDynArrayCount;
