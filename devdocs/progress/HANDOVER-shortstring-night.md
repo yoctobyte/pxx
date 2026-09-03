@@ -646,3 +646,58 @@ unreachable from the repro and from `{$H-}` — and `-uPXX_MANAGED_STRING
 segfaults. The revert was right about the path and **wrong about reachability**,
 and the coordinator relayed it onward as settled fact. *Not on this path* must
 never travel as *dead*.
+
+## The family, named (frankb-78) — and a census that nearly lied
+
+**The generalisable form: a guard that ENUMERATES KINDS where the concept has
+several.** Four independent instances in one day, three of them x86-64-only:
+
+1. concat — three arms, each `= tyString`
+2. the call-argument conversion — five sites, `IntToTypeKind(...) = tyString`
+3. i386 `IR_WRITE` — the last bare `tk = tyString` in any backend
+4. the `-O1` imm-fold arm — excluded float and `tyAnsiString` results, and a
+   concat also results in a FROZEN `tyString`. **Two string result kinds, one of
+   them named.** Its own comment said *"Excludes float / tyAnsiString results
+   (concat + ucomisd paths)"* — it knew about the concat path and enumerated
+   half of it.
+
+**The grep that finds them is `= tyString` / `= tyAnsiString` in a width- or
+path-SELECTING position** — not `IntToTypeKind` alone, which is what the
+existing Track T guard keys on.
+
+### `-O` INVARIANCE IS A CLAIM, NOT A PROPERTY
+
+The concat ticket recorded *"-O invariant, so the `CmpFusible` tell does not
+fire"*. **True for that SIGSEGV and the wrong prior for the bug in the same file,
+in the same expression, in the same session** — the imm-fold defect is `-O0`
+correct and `-O1`/`-O2`/`-O3` wrong. frankb-78 had not varied `-O` when it filed
+that ticket and had already written a plausible cause into the summary.
+**Vary `-O` before recording a cause, even when the neighbouring bug was `-O`
+invariant.**
+
+### The census, and how it nearly produced a false structural finding
+
+Predicate calls vs. kind-equality tests, per backend:
+
+| backend | predicate | `= tyString`/`= tyAnsiString` |
+| --- | --- | --- |
+| x86-64 `ir_codegen.inc` | 71 | 76 |
+| i386 | 60 | 41 |
+| aarch64 | 44 | 38 |
+| xtensa | 44 | 25 |
+| arm32 | 40 | 36 |
+| riscv32 | 38 | 26 |
+| wasm32 | 22 | 16 |
+
+**x86-64 has the lowest predicate-to-equality ratio (0.93; every other backend
+is 1.1–1.8).** That is CONSISTENT with three of four instances being
+x86-64-only. It is a weak signal and not a defect count — most of the 664
+tree-wide equality tests are ordinary parser type checks, not width selection.
+
+**The near-miss is the part worth keeping.** The first run of this census piped
+`grep -c` through `head -10`, which cut `ir_codegen.inc` and `ir_codegen386.inc`
+off the list — and the coordinator read that absence as ZERO and was one step
+from recording *"the x86-64 and i386 backends never adopted the predicate"* as a
+structural explanation. It is a tidy, plausible story that explains the observed
+clustering, and it is false. **`head` does not error; it answers.** Committed
+while measuring the very family of instruments-that-answer-a-different-question.
