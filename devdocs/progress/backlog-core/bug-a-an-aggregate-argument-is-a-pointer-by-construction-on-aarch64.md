@@ -181,3 +181,81 @@ never runs, so it cannot catch a placement that is right and read back wrong. Th
 running-program oracle on this target is the glibc dynamic call, and it cannot
 reach this ticket at all, because no libc entry point takes a large aggregate by
 value. Both halves are needed and neither substitutes for the other.
+
+## Step 1 of 2, landed: the classifier, proven before anything reads it
+
+`ABIA64RecordClass` in `abi.inc` answers the AAPCS64 question for a by-value
+composite:
+
+- **HFA first, because it is not a size question.** `{double,double}` and
+  `{long,long}` are both 16 bytes and go to different banks; only the member
+  types separate them. `ABIA64WalkHfa` flattens nested records and static arrays
+  and requires every member to be the SAME fundamental FP type, at most four of
+  them, with `size = count * TypeSlotSize` so padding cannot masquerade as
+  homogeneity.
+- otherwise `size <= 16` → 1 or 2 X registers holding the aggregate's own bytes,
+- otherwise **indirect** — one GP slot holding a pointer.
+- and it REFUSES (`-1`) rather than guessing on: alignment > 8 (AAPCS64 rounds
+  NGRN up to an even number for a 16-aligned composite and that is not modelled
+  yet, so an answer would place the argument one register early), an unknown
+  size, `tyExtended` (pxx's is 8 bytes and C's `long double` is 16 on this ABI —
+  the same refusal `ABISysVMergeScalar` makes, for the same reason), a dynamic
+  array member, or a builtin record id.
+
+**It has no production consumer yet, deliberately.** `PXXDBG=a.a64cls` prints it
+per C record parameter — the exact shape `a.sysvcls` already has for SysV, whose
+own comment says the point is that the classifier can be checked against an
+oracle *before any codegen is built on it, rather than debugging the classifier
+and the marshalling at the same time*. `test/caarch64_aggregate_class.c` asserts
+eleven shapes in `make test-core`.
+
+Every asserted row disagrees with what the compiler currently does. A classifier
+that did nothing would print `REFUSE` on all eleven, so the guard cannot pass on
+an inert one.
+
+### Verified against clang, row by row — and the .expected's provenance
+
+The `.expected` was PRODUCED by the probe and then CHECKED against
+`clang --target=aarch64-linux-gnu -O1 -S`; it is not a transcript of clang's
+output, and the test says so, because claiming otherwise would be the same error
+as writing today's answer into a `.expected` and calling it an oracle.
+
+Tail-argument register per shape (which names how many slots of each bank the
+aggregate ahead of it consumed), clang 21.1.8:
+
+| shape | size | clang tail | classifier |
+| --- | --- | --- | --- |
+| `{int}` | 4 | `w1` | 1 GP |
+| `{int,int}` | 8 | `w1` | 1 GP |
+| `{int,int,int}` | 12 | `w2` | 2 GP |
+| `{long,long}` | 16 | `w2` | 2 GP |
+| `{long,long,long}` | 24 | `w1` + `mov x0, sp` | INDIRECT |
+| `{double}` | 8 | `w0` | HFA 1 x double |
+| `{double,double}` | 16 | `w0` | HFA 2 x double |
+| `{float,float,float}` | 12 | `w0` | HFA 3 x single |
+| `{float,float,float,float}` | 16 | `w0` | HFA 4 x single |
+| `{float x5}` | 20 | `w1` + `mov x0, sp` | INDIRECT |
+| `{double,int}` | 16 | `w2` | 2 GP |
+
+`hfa5` is the row that shows the member LIMIT is four and not the size, and
+`mix` is 16 bytes with a double first and still not an HFA.
+
+## Step 2, and the two facts it must not lose
+
+The by-value switch is `ABICRecordParamByValue`, which returns False for aarch64
+today, so a C record parameter is marked `IsRef` and both sides agree on a
+pointer. **Flipping it moves the caller and the callee at once, because it is one
+decision** — the variadic-float attempt on this same target proved what a
+caller-only half does, and that lesson is one commit old.
+
+Two placement facts measured from the same oracle that classification does not
+model and step 2 must:
+
+1. **An HFA that does not fit the remaining FP bank goes to the stack ENTIRELY.**
+   Five `{double,double}` arguments put four in `d0..d7` and the fifth wholly on
+   the stack. Same all-or-nothing rule `ABISysVArgPlace` states for SysV, and the
+   same failure if restated per slot: the first half placed, the second stranded.
+2. **The banks allocate independently, so the tail integer after an HFA lands in
+   `w0`.** A fix that places the HFA in `d0,d1` and still advances the GP index
+   puts that tail in `w2` — wrong in a way NO SINGLE-ARGUMENT PROBE CAN SEE.
+   Every probe for step 2 needs a trailing scalar.

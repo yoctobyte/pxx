@@ -551,6 +551,128 @@ begin
   end;
 end;
 
+{ Walk one record's fields deciding whether it is a HOMOGENEOUS FLOATING-POINT
+  AGGREGATE: every member, after nested records and static arrays are flattened,
+  is the SAME fundamental floating-point type. `fpTk` starts tyUnknown and is
+  fixed by the first member seen; `cnt` counts flattened members. `ok` goes
+  False the moment anything is not that -- an integer member, a second FP type,
+  a dynamic array, a shape the walk does not model.
+
+  Mirrors ABISysVWalkRec's shape deliberately (same field arrays, same union
+  handling by shared offsets, same depth cap, same refusal on a BUILTIN record
+  id) so the two classifiers can be read against each other. What differs is the
+  QUESTION: SysV merges members into eightbyte classes, AAPCS64 asks whether
+  they are all one FP type, and those do not reduce to each other.
+  bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+procedure ABIA64WalkHfa(recId, base: Integer; var fpTk: TTypeKind;
+                        var cnt: Integer; var ok: Boolean; depth: Integer);
+var ci, k, i, f, n, arrCnt: Integer; ftk: TTypeKind; frec: Integer;
+begin
+  if not ok then Exit;
+  if depth > 8 then begin ok := False; Exit; end;
+  if recId < REC_UCLASS_BASE then begin ok := False; Exit; end;
+  ci := recId - REC_UCLASS_BASE;
+  n := UClsFCount[ci];
+  if n <= 0 then begin ok := False; Exit; end;
+  for k := 0 to n - 1 do
+  begin
+    f := UClsFBase[ci] + k;
+    ftk := IntToTypeKind(UFldTk[f]);
+    frec := UFldRec_[f];
+    if UFldDynDepth[f] > 0 then begin ok := False; Exit; end;
+    arrCnt := 1;
+    if UFldIsArray[f] then
+    begin
+      arrCnt := UFldArrLen[f];
+      if arrCnt < 0 then begin ok := False; Exit; end;
+    end;
+    for i := 0 to arrCnt - 1 do
+    begin
+      if ftk = tyRecord then
+        ABIA64WalkHfa(frec, base, fpTk, cnt, ok, depth + 1)
+      else
+      begin
+        { tyExtended is refused for the same reason ABISysVMergeScalar refuses
+          it: pxx's `Extended` is 8 bytes and a C `long double` is 16 on this
+          ABI, so any answer here would be about a different type.
+          bug-c-long-double-is-8-bytes-in-pxx-and-16-in-gcc }
+        if (not TypeIsFloat(ftk)) or (ftk = tyExtended) then begin ok := False; Exit; end;
+        if fpTk = tyUnknown then fpTk := ftk
+        else if fpTk <> ftk then begin ok := False; Exit; end;
+        Inc(cnt);
+        if cnt > 4 then begin ok := False; Exit; end;
+      end;
+      if not ok then Exit;
+    end;
+  end;
+end;
+
+{ AAPCS64 classification of a by-value COMPOSITE argument -- where does it go?
+    > 0  in that many registers of ONE bank. `isFp` says which: an FP answer is
+         1..4 registers of the same fundamental type (an HFA), a GP answer is
+         1 or 2 X registers holding the aggregate's own bytes.
+    = 0  INDIRECTLY -- one GP slot holding a pointer to a copy the caller makes.
+         This is what pxx does for EVERY aggregate today, which is why a probe
+         built around a large struct reports no defect.
+    < 0  NOT CLASSIFIABLE. The caller must keep whatever it does now and must
+         not guess: an ABI guess is not one wrong argument, it is every argument
+         after it.
+
+  Refusals, and each is a real shape rather than defensive padding:
+  - alignment > 8. AAPCS64 rounds NGRN up to an even number for a 16-aligned
+    composite, and that rounding is not modelled here yet; answering without it
+    would place the argument one register early.
+  - size <= 0, or a walk that refused (see ABIA64WalkHfa).
+
+  NO PRODUCTION CONSUMER YET -- see the ticket. This lands with a PXXDBG probe
+  and a test that checks it against clang's placement for the same shapes, so
+  that the classifier is PROVEN BEFORE anything depends on it. The by-value
+  switch (ABICRecordParamByValue) and the caller/callee halves move together in
+  the next step, because they are one decision: a caller and a callee that
+  disagree about what a slot CONTAINS desynchronise everything after it.
+  bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+function ABIA64RecordClass(recId: Integer; var nRegs: Integer;
+                           var isFp: Boolean; var fpTk: TTypeKind): Integer;
+var sz, cnt: Integer; ok: Boolean;
+begin
+  nRegs := 0; isFp := False; fpTk := tyUnknown;
+  ABIA64RecordClass := -1;
+  if TargetArch <> TARGET_AARCH64 then Exit;
+  sz := RecSize(recId);
+  if sz <= 0 then Exit;
+  if recId >= REC_UCLASS_BASE then
+    if UClsAlign[recId - REC_UCLASS_BASE] > 8 then Exit;
+
+  { HFA first: it is not a size question. `struct { double x, y; }` is 16 bytes
+    and goes in d0,d1, while `struct { long a, b; }` is 16 bytes and goes in
+    x0,x1 -- same size, different bank, and only the member types separate them. }
+  cnt := 0; ok := True;
+  ABIA64WalkHfa(recId, 0, fpTk, cnt, ok, 0);
+  if ok and (cnt >= 1) and (cnt <= 4) and (fpTk <> tyUnknown) and
+     (sz = cnt * TypeSlotSize(fpTk)) then
+  begin
+    { The size equality is the guard against padding: a homogeneous aggregate
+      whose bytes are not exactly its members is not what AAPCS64 describes, and
+      pxx's own record layout is the thing that would have to be trusted. }
+    nRegs := cnt; isFp := True;
+    ABIA64RecordClass := cnt;
+    Exit;
+  end;
+  fpTk := tyUnknown;
+
+  if sz <= 16 then
+  begin
+    nRegs := (sz + 7) div 8;
+    if nRegs < 1 then nRegs := 1;
+    isFp := False;
+    ABIA64RecordClass := nRegs;
+    Exit;
+  end;
+  { > 16 bytes: indirect. One GP slot, a pointer to the caller's copy. }
+  nRegs := 1; isFp := False;
+  ABIA64RecordClass := 0;
+end;
+
 { The 16-byte-aligned AAPCS64 stack-argument bytes implied by a class VECTOR,
   the vector-sourced twin of ABIA64CdeclStackBytes below. A variadic call cannot
   use that one: it derives every class from the parameter list and there is no

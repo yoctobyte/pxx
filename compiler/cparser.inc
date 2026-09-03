@@ -11958,6 +11958,7 @@ var
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
   sysvN, sysvC0, sysvC1: Integer; { PXXDBG=a.sysvcls readout only }
+  a64N, a64Regs: Integer; a64IsFp: Boolean; a64FpTk: TTypeKind;  { PXXDBG=a.a64cls readout only }
   plInt, plSse, plN, plR0, plR1: Integer;   { PXXDBG=a.sysvplace readout only }
   plMem, plS0, plS1, plAgg: Boolean;
   byValRec: Boolean;                        { step 2: register-classified struct param }
@@ -12736,6 +12737,35 @@ begin
           end;
           WriteLn;
         end;
+      end;
+      { PXXDBG=a.a64cls -- the SAME idea as a.sysvcls above, for AAPCS64, and
+        for the same reason: the classifier is checked against an oracle BEFORE
+        any codegen reads it, so that the classifier and the marshalling are
+        never being debugged at the same time. The oracle here is
+        `clang --target=aarch64-linux-gnu -O1 -S` on the same prototypes, which
+        needs nothing installed and reads the CALL SITE, so it neither links nor
+        runs -- devdocs/dev/differential-probes.md, "A CROSS-TARGET ABI ORACLE
+        EXISTS ON THIS BOX".
+
+        pxx passes EVERY aggregate as one pointer slot on this target today, so
+        every line this prints disagrees with what the compiler does, on purpose.
+        The one row where they agree is a struct over 16 bytes, which really is
+        indirect on AAPCS64 -- and that is the shape a single hand-written probe
+        would pick, so the agreement is a hazard rather than a comfort.
+        bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+      if PxxDbgEnabled('a.a64cls') then
+      begin
+        a64N := ABIA64RecordClass(precid[i], a64Regs, a64IsFp, a64FpTk);
+        Write('PXXDBG a.a64cls ', Procs[procIdx].Name, ' param ', pnames[i],
+              ' size=', RecSize(precid[i]), ' -> ');
+        if a64N < 0 then WriteLn('REFUSE (not classifiable)')
+        else if a64N = 0 then WriteLn('INDIRECT (pointer in 1 GP register)')
+        else if a64IsFp then
+        begin
+          if a64FpTk = tySingle then WriteLn('HFA ', a64Regs, ' x single (s registers)')
+          else WriteLn('HFA ', a64Regs, ' x double (d registers)');
+        end
+        else WriteLn(a64Regs, ' GP register(s)');
       end;
       { STEP 2. A record the SysV classifier places in REGISTERS is a genuine
         by-value parameter: its frame slot holds the struct's own bytes and the

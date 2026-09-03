@@ -9336,6 +9336,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh i386/cvarargfp_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/cvarargfp_i386)" "$$(cat test/cvararg_fp_bank_cross.expected)"
 	./$(COMPILER) --target=riscv32 test/cvararg_fp_bank_cross.c $(TESTTMP)/cvarargfp_riscv32
 	tools/expect_same.sh riscv32/cvarargfp_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/cvarargfp_riscv32)" "$$(cat test/cvararg_fp_bank_cross.expected)"
+	# AAPCS64 by-value aggregate CLASSIFICATION, asserted before any codegen
+	# reads it — the same discipline as PXXDBG=a.sysvcls for SysV. Every row
+	# disagrees with what the compiler currently DOES (pxx passes every
+	# aggregate as one pointer slot on aarch64); the point is that the
+	# classifier is proven against clang first, so the classifier and the
+	# marshalling are never debugged together. The compile is its own line so
+	# its exit status is make's to check — the capture below reads a FILE, not
+	# a pipe, because a pipe would swallow it.
+	PXXDBG=a.a64cls ./$(COMPILER) --target=aarch64 test/caarch64_aggregate_class.c $(TESTTMP)/caarch64aggcls > $(TESTTMP)/caarch64aggcls.log 2>&1
+	tools/expect_same.sh aarch64/caarch64aggcls "$$(grep '^PXXDBG a.a64cls' $(TESTTMP)/caarch64aggcls.log)" "$$(cat test/caarch64_aggregate_class.expected)"
 	# NEGATIVE HALF, and the arity clause is untested without it: a callee with
 	# NO `varargs` must still refuse an extra argument. fpc refuses the same
 	# line ("Wrong number of parameters specified for call to fflush").
