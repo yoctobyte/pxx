@@ -488,3 +488,4 @@
 2026-09-03T12:37:05Z	seven	5ec8dd609436fcdf8f02037ece4bb5854e96d955	WOULD PIN 5ec8dd609436 — 1 red(s), none new, 1 inherited from the current pin, self-host clean, streak 2/2
 2026-09-03T12:57:14Z	seven	0975f200bd17fedce4734c1939c6afa176c15e8c	WOULD PIN 0975f200bd17 — 1 red(s), none new, 1 inherited from the current pin, self-host clean, streak 3/2
 2026-09-03T15:27:45Z	seven	8000b96eab368edf9befedfab20021249eaff158	would NOT pin 8000b96eab36 — 1 red(s) the current pin does not have, 1 inherited from the current pin: test-core#src:test/c_asm_in_inline_body.c@2
+2026-09-03T15:44:08Z	seven	addffd2608d3d41aba324f6df2fd6101fe8c665a	would-pin PENDING addffd2608d3 — qualifies, streak 1/2
