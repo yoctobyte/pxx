@@ -1,6 +1,6 @@
 ---
 prio: 70
-track: P
+track: A
 ---
 
 > **Track guessed as P from the FAILING STEP** — line 7 of 3, `if ./compiler/pascal26 test/test_setlength_cast_refusal.pas /tmp/test_slcastref26 2>&1 \ | grep -q 'SetLength expects a `, which names `test/test_setlength_cast_refusal.pas`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 3 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -35,3 +35,7 @@ FAIL: SetLength(TI(i), n) is no longer refused -- the cast-drop widened past str
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+> **RE-LANED T/P -> A by the coordinator, 2026-09-03, on COMMIT CONTENT, not on the failing step.** The only code commit between the last GREEN native (`5e2dcc37c253`) and this RED (`91b4b77ec631`) is `0dedfb86c` "fix(A): SetLength through a field, an element or a deref", which touches `Makefile`, `compiler/ir_codegen.inc` and the 386/aarch64/arm32/riscv32/xtensa arms plus `compiler/pasparser_stmt.inc`. The other five commits in the window touch no code at all. That is a suspect established by ref arithmetic with zero builds — it is NOT a measured cause, and the author (franka-29) has been told and may reject it.
+
+> **This may not be a regression.** The alias-cast row fails on a REFUSAL grep (`SetLength expects a`), and `0dedfb86c` deliberately widened what `SetLength` accepts. A refusal test going red is exactly what an intended widening looks like; if that is what happened, the TEST is what needs updating and there is no defect here. Establish which before treating any of these three as a bug.

@@ -2580,3 +2580,56 @@ any of which can be read as a session hold and become a reason to wait on nobody
 
 A relayed future constraint is easily heard as a present one. The seat must say
 which.
+
+## 2026-09-03 16:51 — four NEW native reds, and a suspect found without building anything
+
+`native` went GREEN (`5e2dcc37c253`) -> RED (`91b4b77ec631`). Four new rows, all
+in the frozen/SetLength family: `test_alias_cast_assign_target`,
+`test_field_rooted_nested_dyn_frozen_index` @1 and @2, and
+`test_string_n_container_strides`. Three tickets auto-filed under
+`devdocs/progress/backlog/`, prio 70.
+
+### The window had exactly one code commit, and refs alone said so
+
+Six commits sit between the two tested shas. Diffing each for `compiler/`,
+`lib/`, `test/`, `tools/` or `Makefile`: **five touch none.** The sixth is
+`0dedfb86c` — the SetLength fix banked two hours earlier — touching the Makefile,
+`ir_codegen.inc`, five backend arms and `pasparser_stmt.inc`.
+
+**A bisect by construction, at the cost of one `merge-base` and five `show
+--stat`.** No build, no repro, no compiler. Worth naming as a technique: when the
+green and red shas are both known, the window is usually mostly bookkeeping, and
+**the set of commits that touch code is often a single element.** Reach for that
+before reaching for a build.
+
+### AND IT MAY NOT BE A REGRESSION AT ALL
+
+The alias-cast row's failing step is a `grep -q 'SetLength expects a'` — **it
+asserts the compiler still REFUSES something.** `0dedfb86c` deliberately WIDENED
+what `SetLength` accepts. **A refusal test going red is exactly what an intended
+widening looks like**, and in that case the test is the thing to update and there
+is no defect.
+
+So the same four-row RED is consistent with two opposite stories — a real
+regression, or a correct change meeting a stale assertion — and **the verdict
+cannot tell them apart, because a refusal test and a value test both just say
+`fail`.** The discriminator is the author's INTENT, which lives in no instrument.
+Routed to franka-29 as a question, not a verdict.
+
+### Re-laned on commit content, not on the failing step
+
+The auto-filer guessed P, T and T from the failing STEP, flagging each as a
+fallback and inviting correction. All three moved to **A**: the suspect commit is
+`fix(A)` in codegen and `pasparser_stmt`. Metadata only — the ranker reads
+frontmatter, so a mis-laned ticket is a routing defect, which is the one kind of
+defect this seat owns.
+
+### Range hygiene, relayed
+
+frankb-78 is bisecting pin v401..HEAD for the x86-64 `frozenVar = ansiVar`
+regression, and `0dedfb86c` landed INSIDE that range while it was measuring. If
+its BAD endpoint is a fixed sha, nothing moved; if it resolves HEAD fresh each
+build, the endpoint drifted six commits. **A bisect whose endpoint moves does not
+fail loudly — it converges on the wrong commit and prints a confident answer.**
+`0dedfb86c` did not touch the x86-64 arm by name, so it may be irrelevant to that
+bug; the point relayed was hygiene, not a claim.
