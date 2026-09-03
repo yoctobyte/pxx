@@ -11153,14 +11153,22 @@ test-core: $(COMPILER)
 	# passes all four: it predates the byte-prefix layout entirely, so
 	# -dPXX_SHORTSTRING is a no-op there and its green is about a different
 	# compiler. bug-a-string-concat-segfaults-on-x86-64-under-the-byte-prefix-mode
+	# The `onechar` and `loop1` rows are a SECOND defect and an -O one: `s + 'q'`
+	# with a ONE-CHARACTER literal lowers to IR_CONST_INT and was claimed by the
+	# -O1 imm-fold arm, which excluded tyAnsiString results and not the frozen
+	# tyString one -- `lea rax,[s]; add rax,$$71`, the address plus Ord('q'),
+	# then Exit past the concat arms. Empty string at -O1..-O3 under
+	# -uPXX_MANAGED_STRING, CORRECT at -O0, so these two rows are the only ones
+	# here that need the DEFAULT -O to stay meaningful.
+	# bug-a-a-one-char-string-literal-in-a-frozen-concat-folds-to-integer-addition
 	./$(COMPILER) test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_dm26
-	tools/expect_same.sh test_sscat_dm26 "$$($(TESTTMP)/test_sscat_dm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nempty    [cd] 2\nemptyr   [ab] 2')"
+	tools/expect_same.sh test_sscat_dm26 "$$($(TESTTMP)/test_sscat_dm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nempty    [cd] 2\nemptyr   [ab] 2')"
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_ds26
-	tools/expect_same.sh test_sscat_ds26 "$$($(TESTTMP)/test_sscat_ds26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nempty    [cd] 2\nemptyr   [ab] 2')"
+	tools/expect_same.sh test_sscat_ds26 "$$($(TESTTMP)/test_sscat_ds26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nempty    [cd] 2\nemptyr   [ab] 2')"
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_fm26
-	tools/expect_same.sh test_sscat_fm26 "$$($(TESTTMP)/test_sscat_fm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nempty    [cd] 2\nemptyr   [ab] 2')"
+	tools/expect_same.sh test_sscat_fm26 "$$($(TESTTMP)/test_sscat_fm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nempty    [cd] 2\nemptyr   [ab] 2')"
 	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_fs26
-	tools/expect_same.sh test_sscat_fs26 "$$($(TESTTMP)/test_sscat_fs26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nempty    [cd] 2\nemptyr   [ab] 2')"
+	tools/expect_same.sh test_sscat_fs26 "$$($(TESTTMP)/test_sscat_fs26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nempty    [cd] 2\nemptyr   [ab] 2')"
 	# THE TWO READERS THAT SURVIVED THE FOUR-CAUSE FIX, and every row has a
 	# NEGATIVE partner. This family fails by answering a CONSTANT -- the
 	# pre-fix field-vs-field compare answered TRUE for every input because it

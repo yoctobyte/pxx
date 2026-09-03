@@ -4,7 +4,7 @@ title: "A one-char string literal on the right of a frozen concat folds to integ
 track: A
 prio: 70
 type: bug
-status: backlog
+status: done
 owner: ""
 created: 2026-09-03
 summary: Under -uPXX_MANAGED_STRING, `u := s + 'q'` on frozen strings emits `lea rax,[s];
@@ -73,3 +73,50 @@ backend.
 `test/test_shortstring_concat.pas` documents this in a comment and deliberately
 uses a `Char` variable rather than a one-char literal, so that test stays a
 test of concat widths rather than of this.
+
+## FIXED — the -O1 imm-fold arm named ONE of the two string result kinds (frankB, 2026-09-03)
+
+Not a typing bug and not the parser. **The AST is correct in both spellings**
+(`PXXDBG=a.ast` gives the identical BINOP tk=tyString / right tk=tyChar for
+`s + c` and `s + 'q'`; only the right child's node kind differs, load vs
+const), and **`-O0` is correct while `-O1`, `-O2` and `-O3` are wrong** — which
+is the tell that says optimiser, and which the original report missed because
+it never varied `-O`.
+
+`compiler/ir_codegen.inc`, the `-O1 imm-fold` arm: a constant right operand
+folds into the instruction's immediate and `Exit`s past everything below,
+including both concat arms. Its guard read
+
+```
+not TypeIsFloat(IntToTypeKind(IRTk[node])) and
+(IntToTypeKind(IRTk[node]) <> tyAnsiString) and
+```
+
+and its own comment said *"Excludes float / tyAnsiString results (concat +
+ucomisd paths)"*. **There are TWO string result kinds and it named one.** A
+concat also results in a frozen tyString, which is exactly what
+`-uPXX_MANAGED_STRING` makes `s + 'q'` produce, so the arm claimed it and
+emitted `add rax, $71`. Now excludes `TypeIsFrozenString` as well — the
+exclusion follows the CONCEPT (a string-typed result is never integer
+arithmetic) rather than enumerating kinds, so tyShortString and tyFixedString
+come along.
+
+**Why only that one spelling.** A `Char` VARIABLE is an IR_LOAD_SYM, not an
+IR_CONST_INT, so it never reached the arm; a two-character literal is not an
+ordinal at all. The one-char literal is the only operand shape that is both a
+string concat operand and an integer constant.
+
+Rows `onechar` and `loop1` added to `test/test_shortstring_concat.pas`.
+Positive control, measured: fix reverted (compiler `2f9096bb2bd4`) → the two
+`-uPXX_MANAGED_STRING` rows print `onechar  [zzzzzzzzzz] 10` / `loop1 10 zz`
+at the default `-O` and are CORRECT at `-O0`, while the two default-mode rows
+are unchanged. Restored → `2965c25fe0a6`. **These two rows are the only ones
+in that file that need the default `-O` to stay meaningful.**
+
+Verified 16 configurations (4 modes x -O0/-O1/-O2/-O3) byte-identical on
+x86-64, and both byte-prefix modes on i386, arm32 and aarch64 — same output.
+The arm is x86-64-only (see `IRValueKind`'s note in ir.inc, which describes
+the same arm catching a different defect first). `gate.sh quick` GREEN.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -41,13 +41,20 @@ program test_shortstring_concat;
              length and 0 is the value a wrong-width read is least likely to
              produce.
 
-  NO SINGLE-CHARACTER STRING LITERAL APPEARS ON THE RIGHT OF A `+` HERE, and
-  that is deliberate: `u := s + 'q'` is folded to integer addition under
-  -uPXX_MANAGED_STRING (it emits `lea rax,[s]; add rax,0x71` -- the address of
-  s plus Ord('q')) and prints an empty string. That is a TYPING bug on the
-  managed-vs-frozen axis, identical under the pinned compiler and identical in
-  both byte-prefix modes, so it is not this test's subject; it has its own
-  ticket. `ch` below is a Char VARIABLE, which is the working spelling. }
+    onechar  a ONE-CHARACTER string literal on the right, which lowers to an
+             IR_CONST_INT and was therefore claimed by the -O1 imm-fold arm:
+             `u := s + 'q'` emitted `lea rax,[s]; add rax,$71` -- the address
+             plus Ord('q') -- and printed an empty string under
+             -uPXX_MANAGED_STRING at -O1 and above, CORRECT at -O0. The arm
+             excluded tyAnsiString results and there are two string result
+             kinds. A Char variable and a two-character literal were both
+             always fine, so only this one spelling was wrong; the `char` and
+             `self` rows cannot see it.
+             bug-a-a-one-char-string-literal-in-a-frozen-concat-folds-to-integer-addition
+
+  THE `onechar` AND `loop1` ROWS ARE -O SENSITIVE and every other row is not,
+  so run this at more than one level or the fold arm is untested: the whole
+  defect lives at -O1..-O3 and disappears at -O0. }
 procedure Show(const q: string[12]);
 { const-argument position: the concat result is materialised into a parameter
   slot rather than into a variable of its own, which is where the OOM shape
@@ -80,6 +87,10 @@ begin
   WriteLn('loop     ', Length(big), ' ', big[1], big[200]);
 
   s := 'ab'; t := 'cd'; u := s + t;  WriteLn('frozen   [', u, '] ', Length(u));
+
+  s := 'ab'; u := s + 'q'; WriteLn('onechar  [', u, '] ', Length(u));
+  u := ''; for i := 1 to 200 do u := u + 'x';
+  WriteLn('loop1    ', Length(u), ' ', u[1], u[10]);
 
   s := ''; s := s + t;    WriteLn('empty    [', s, '] ', Length(s));
   s := 'ab'; t := ''; s := s + t; WriteLn('emptyr   [', s, '] ', Length(s));

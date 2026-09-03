@@ -8264,12 +8264,27 @@ begin
           pass 1's separate `mov rcx, imm` — `mov rcx,k; add rax,rcx` becomes
           `add rax, k`. All these forms sign-extend imm32 to 64 bits, identical
           to the mov+op they replace, so no width fixup is needed. Excludes
-          float / tyAnsiString results (concat + ucomisd paths), comparisons
-          (cmp/fusion path), div/mod (no imm form) and shifts (width fixup). }
+          float / EVERY STRING result (concat + ucomisd paths), comparisons
+          (cmp/fusion path), div/mod (no imm form) and shifts (width fixup).
+
+          tyAnsiString WAS THE ONLY STRING KIND EXCLUDED, and there are two:
+          a concat also results in a FROZEN tyString, which is what
+          `-uPXX_MANAGED_STRING` makes `s + 'q'` produce. A one-character
+          literal lowers to IR_CONST_INT, so this arm claimed it and emitted
+          `lea rax,[s]; add rax,$71` -- the string's address plus Ord('q') --
+          then Exited past the concat arms entirely. `u := s + 'q'` printed an
+          empty string at -O1 and above and was CORRECT at -O0, which is the
+          tell that says optimiser rather than codegen. A Char VARIABLE was
+          always fine (not IR_CONST_INT) and so was a two-character literal
+          (not an ordinal at all), so only the one-char literal spelling was
+          wrong. The exclusion follows the CONCEPT -- a string-typed result is
+          never integer arithmetic -- rather than naming one of its kinds.
+          bug-a-a-one-char-string-literal-in-a-frozen-concat-folds-to-integer-addition }
         if (OptLevel >= 1) and (IRKind[right] = IR_CONST_INT) and
            (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) and
            not TypeIsFloat(IntToTypeKind(IRTk[node])) and
            (IntToTypeKind(IRTk[node]) <> tyAnsiString) and
+           not TypeIsFrozenString(IntToTypeKind(IRTk[node])) and
            (IRIVal[node] = 0) and  { {$Q+}-checked ops take the general path below }
            ((op = tkPlus) or (op = tkMinus) or (op = tkStar) or
             (op = tkAnd) or (op = tkOr) or (op = tkXor)) then
