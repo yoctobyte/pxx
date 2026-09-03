@@ -766,4 +766,4 @@ and exits 1; against the working tree, 0 and exits 0.
   They are `sh -n` clean; nothing here executed them. That is the honest scope.
 - `tools/silent_assertion_check_devtest.py`: 12 guards, green, auto-run by the
   `tools/*devtest*.py` glob in `tools-devtest`.
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 8ccaf9532.
