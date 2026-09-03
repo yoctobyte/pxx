@@ -3,7 +3,7 @@ track: A
 prio: 60
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 8b6c2280d
 summary: "FIXED. x86-64's `String = Char` / `Char = String` arms guarded on `lhsTk = tyString` — a test for the GENERIC frozen tag, not for membership. A variable's IR_LEA carries that legacy tag so `s = 'X'` matched; an array ELEMENT and a record FIELD are tagged with their real frozen kind and fell through to EmitStrCmpReg, which dereferences the Char's ORDINAL as a string address. `a[0] = 'X'` for `a: array[0..1] of string[8]` SIGSEGVs on the PINNED compiler in DEFAULT mode — this ships today and is not a flip defect. The same arms also read the length as an 8-byte word, which under -dPXX_SHORTSTRING made every such comparison answer 'not equal' in both directions."
 ---
 
