@@ -1110,3 +1110,91 @@ frankb-78 nearly reported *"i386 is fixed already"* off three probes that all
 said TRUE. **The sha said `a81084690bac` where a HEAD build gives
 `60710c8ee103`** — printing the sha beside the result is the only reason it was
 caught. Add to the four routes in the handbook.
+
+## 2026-09-03 — PChar closed (`61b12b89c`), and the four findings that outlive it
+
+Banked by the coordinator from frankb-78's report. Verified `61b12b89c` is an
+ancestor of `origin/master` before writing this.
+
+### 1. Six arms, not four — and ONE ARM WAS COVERING FOR ANOTHER
+
+The ticket named four. `AN_CAST`'s `PChar` arm was the fifth, and no probe could
+see it: **whenever the cast arm declines to fire, the CALL arm rescues the cast
+downstream**, because the cast not firing is exactly what leaves the node still
+tagged frozen for the call arm to catch. `f(PChar(r.f))` was green all day;
+`q := PChar(r.f)` — the same cast with no call to rescue it — pointed at the
+length byte.
+
+**Every probe written for this ticket passed the value to a function.** That is
+not carelessness, it is the natural shape of a probe: you print what you get, and
+printing is a call. The lesson generalises past this family — **when two arms can
+each handle a node, a probe that always takes the same route through them tests
+one arm and reports on both.** The discriminating spelling is the one that
+consumes the value without passing it anywhere.
+
+### 2. The sixth arm was PRE-EXISTING, DEFAULT-MODE, and the fix would have WIDENED it
+
+`@r.f` and `@arr[0]` lower to `IR_FIELD`/`IR_INDEX` still tagged with the
+aggregate's string kind, so the call arm fired on an **address-of** and added the
+prefix to it — `Take(@r.f)` handed the callee base+8 **in the default mode**,
+shipping today. `@s` was correct only by accident: `IR_LEA` on a symbol already
+yields `tyPointer`. **Three spellings of one operation disagreed, and the two
+broken ones were the two that go through an aggregate.**
+
+The part worth keeping: **widening the guard in the first four arms extended the
+bug to `@arr[0]`**, and the offset row in the author's own new test caught that
+regression on its first run. The arm already carried the sentence *"the address
+VALUE is a pointer no matter what it points at"* for the float case; the fix was
+applying a rule already written down to the place it was equally true.
+
+### 3. THE INSTRUMENT LIED BY RENDERING — this is a second half for the measurement rules
+
+frankb-78's BEFORE matrix printed `cast fld [abcde]` and it read as a pass. The
+pointer was one byte low and the first byte was `#5` — **invisible in a
+terminal**. The control run on the same bytes now prints `[<005>abcde] FALSE`,
+because the test **asserts** `walked = 'abcde'` instead of showing it.
+
+`cat -v` is already in the measurement rules, and it was run — on the AFTER
+output. The BEFORE was eyeballed. So the rule needs its second half:
+
+> **A string row must be ASSERTED, not READ.** A rendered row hides exactly the
+> leading-byte errors this family produces, and it hides them **in the direction
+> that reads as success**.
+
+This is the same animal as the assertion-class rule (a leak cannot fail a value
+check) one level down: here the assertion class was right and the **rendering**
+destroyed the evidence before the eye got to it.
+
+### 4. The test carries NO WIDTH, so the default mode is a real control
+
+Four rows assert `PChar(x) - @x = SizeOf(TS) - 8`, which is true at a prefix of 8
+**and** at 1. One `.expected` therefore serves both modes, and the default-mode
+rows are a genuine control rather than rows passing for the old reason. 21
+assertions, 7 targets x 2 modes x xtensa's two ABIs, 16/16. Positive control run
+rather than asserted: fix stashed, stamp removed, rebuilt (`c55894ef5e11`) —
+fails in both modes; restored (`b9a8bb0c5f2c`) — matches. **FPC 3.2.2 rejects
+every frozen spelling in the file** (`Illegal type conversion: "TS" to "PChar"`),
+so there is no oracle here and the test header says so.
+
+### 5. The FPC seed canary earned its rule again, live
+
+First gate run failed on a missing `forward` for `IRStrTkOf` — declared at
+`compiler.pas:16160`, called at `6205`. **`make compiler/pascal26` and
+`--tier quick` were both GREEN.** That is the declaration-order class in the
+wild: PXX prescans headers, FPC is single-pass, and the canary only runs while
+`compiler/**` is UNCOMMITTED. Gate before you commit, not after — it would have
+been invisible for as long as nobody touched the seed.
+
+### Residual, explicitly NOT closed
+
+The xtensa element-store bus error (prio 60) was re-measured at frankb-78's tip
+and is **still signal 7**. It was a near-hit on this ticket, not a consequence of
+it.
+
+### P4 status — the blocked-by list is empty and that is NOT a release signal
+
+Every filed blocker is closed. **The list records what has been FILED**, and each
+phase of this overhaul has ended with a defect nobody had filed yet — the six
+arms above being the fourth instance. The flip is the owner's alone, it
+serialises the fleet, and "the axis looks clean" is the exact cue that would
+misread it.
