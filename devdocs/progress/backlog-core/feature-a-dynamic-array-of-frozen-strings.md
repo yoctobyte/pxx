@@ -63,3 +63,56 @@ have been a microfix on the symptom
 Low (30). The frozen model exists for the self-host build, and the compiler's
 own source does not use `array of string` — it would have hit this. Ordinary
 user code runs in the managed model, where the shape already works.
+
+## Re-measured 2026-09-03 (frankA) — the scope moved, in both directions
+
+Still refused under `-uPXX_MANAGED_STRING` at HEAD. But the population it
+refuses is not what this body describes, and the half that WAS the hard part is
+already done.
+
+| declaration | `-uPXX_MANAGED_STRING` |
+| --- | --- |
+| `array of string[10]` | **works** — 4 elements, values correct, no overlap |
+| `array of string` | `SetLength: dynamic array of record/string not yet supported` |
+| `array of AnsiString` | **same refusal** |
+
+**THE CAPPED SPELLING NOW WORKS AND THIS TICKET DID NOT KNOW.** `array of
+string[10]` allocates and strides correctly in all three modes (default,
+`-u`, `-dPXX_SHORTSTRING`), asserted with four 10-char elements read back —
+the shape that shows overlap if the stride is wrong. So "the element stride is
+the declared capacity plus its header and that number is not what
+`TypeSize(tyString)` answers" has been solved for every element that HAS a
+declared capacity. What is left is the element that has none.
+
+**AND `array of AnsiString` FAILS FOR THE SAME ONE REASON, WHICH THIS BODY
+IMPLIES IT WOULD NOT.** It says "managed mode (`tyAnsiString` elements, the
+default) is fine", which reads as though an explicitly-declared `AnsiString`
+element stays managed under `-u`. It does not: **the flag freezes the whole
+string family, not just bare `string`.** Measured — appending 'x' 300 times:
+
+    default                 ansi=300  plain=300
+    -uPXX_MANAGED_STRING    ansi=255  plain=255
+
+So under `-u` an `AnsiString` is a 255-cap frozen buffer that truncates
+silently, and `array of AnsiString` hits the same `ElemTk = tyString` guard.
+One refusal, two spellings — not two gaps. (Whether the silent truncation of an
+explicitly-declared `AnsiString` is chosen or a defect is a separate question
+and not this ticket's; the mode's premise is "no heap strings", so it is at
+least deliberate in direction.)
+
+**WHAT IS ACTUALLY LEFT, AND IT IS A DECISION BEFORE IT IS A PATCH.** Both IR
+paths are identical (`PXXDBG=a.ir`: the capped and uncapped spellings produce
+byte-identical IR down to the `-102` call), so the whole difference is the
+guard and the `elemSize` line beside it. Giving a plain frozen element the
+stride it would have as a VARIABLE means `FrozenStrSlotSize(tyString,
+DEFAULT_STR_CAP)` — **264 bytes per element**, so `SetLength(a, 1000)` is
+264 KB. That is consistent with what a frozen `string` local costs and it is
+still a number somebody should choose rather than inherit from a default,
+which is why this was left rather than patched: the same `0`-means-unset
+encoding is the subject of
+[[bug-a-a-plain-frozen-string-records-capacity-zero-so-eleven-clamp-sites-cannot-say-unset]],
+and deciding it there decides it here.
+
+Not started for a second reason too: this is the `-uPXX_MANAGED_STRING` axis,
+which the phase-4 byte-prefix flip does not touch, so it neither blocks the
+flip nor is released by it.
