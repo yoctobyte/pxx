@@ -18,10 +18,29 @@ program test_frozen_field_and_deref_readers;
 type
   TS10 = string[10]; PS10 = ^TS10;
   TR = record f: TS10; g: TS10; end;
+  TWide = string[300];
 var
   r, t: TR; s: TS10; p: PS10; i: Integer;
   a8: array[0..2] of string[8];
   a4: array[0..1] of string[4];
+  w: TWide; n10: TS10;
+
+{ A `const` frozen-string parameter is passed BY REFERENCE and read through the
+  PARAMETER's prefix width, so an argument of a different width is read at one
+  size and its payload at another. `const` guards against ALIASING, never
+  against LAYOUT -- which is why the by-value copy funnel's `const` escape
+  hatch was correct for years and stopped being correct the moment
+  -dPXX_SHORTSTRING made two widths exist. }
+procedure CNarrow(const n: TS10);
+begin
+  WriteLn('cp1  [', n, '] ', n = 'hello', ' ', n = 'nope');
+end;
+
+procedure CWide(const n: TWide);
+begin
+  WriteLn('cp3  ', Length(n), ' ', n = 'hello', ' ', n = 'nope');
+end;
+
 begin
   r.f := 'hello'; r.g := 'hello'; t.f := 'world'; s := 'hello'; p := @s;
   a8[0] := 'zero'; a8[1] := 'one'; a8[2] := 'two';
@@ -84,6 +103,30 @@ begin
   WriteLn('lt3  ', a4[1] < a4[0], ' ', a4[1] > a4[0]);
   a4[1] := 'abc';
   WriteLn('lt4  ', a4[0] < a4[1], ' ', a4[0] > a4[1], ' ', a4[0] = a4[1]);
+
+  { CONST PARAM, cross-width. Assert the VALUE, never only the length: the
+    narrowing direction keeps a CORRECT length -- 5 is the low byte of the
+    8-byte length word on a little-endian target -- while the payload reads as
+    NUL bytes, so a Length()-only row passes with the bug fully present. Five
+    NULs also render as an empty field in a terminal, which reads as a
+    formatting quirk rather than as corruption.
+
+    BOTH DIRECTIONS ARE ASSERTED, because they fail for different reasons and
+    a fix for one left the other broken. Narrowing (cp1/cp2) is a literal or a
+    wide variable into a 1-byte-prefix parameter. Widening (cp3) is a narrow
+    variable into an 8-byte-prefix one -- and that row is the one that catches
+    a width test asking ASTTk instead of the symbol, because a narrow
+    variable's NODE carries the legacy tyString alias whose prefix is 8, which
+    MATCHES a wide parameter and skips the copy. It answered
+    Length = 122511465736197.
+
+    A FRESH narrow variable, not `s`: the deref-write row above stores 'H'
+    THROUGH p into s, so `s = 'hello'` is legitimately FALSE by this point and
+    a row reading it would assert the wrong thing for the right reason. }
+  w := 'hello'; n10 := 'hello';
+  CNarrow('hello');   { literal (8-byte prefix) -> narrow const }
+  CNarrow(w);         { wide var (8-byte prefix) -> narrow const, printed cp1 }
+  CWide(n10);         { narrow var (1-byte prefix) -> wide const }
 
   for i := 1 to 5 do Write(r.f[i]);
   WriteLn;

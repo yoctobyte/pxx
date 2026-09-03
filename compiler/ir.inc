@@ -1801,6 +1801,31 @@ begin
     Result := SymPtrElemStrCap[DerefPtrArraySym(base)];
 end;
 
+{ The ARGUMENT's TRUE frozen kind, for the call-boundary width test below.
+
+  ASTTk is not usable for that question on its own: a genuinely narrow variable
+  carries the LEGACY tyString alias on its node — the frozen-kind migration's
+  two spellings of one thing, the same ambiguity the by-value copy funnel
+  documents. Measured (x86-64, -dPXX_SHORTSTRING) with `s: string[12]` passed to
+  a `const string[300]` parameter: ASTTk answered tyString, whose prefix is 8,
+  the parameter's is 8, so the width test saw a MATCH and skipped the copy — and
+  the callee then read the 1-byte-prefixed object with an 8-byte load and
+  reported Length = 122511465736197, dumping 16MB of the stack.
+
+  The SYMBOL's TypeKind is not aliased, so ask it wherever there is a symbol to
+  ask. Everything else keeps ASTTk, which is correct for the two shapes that
+  matter there: a string LITERAL really is 8-byte-prefixed, and an expression
+  temp really is whatever it was built as. }
+function ASTFrozenArgTk(node: Integer): TTypeKind;
+begin
+  Result := IntToTypeKind(ASTTk[node]);
+  if node < 0 then Exit;
+  if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+     (ASTIVal[node] < SymCount) and
+     TypeIsFrozenString(Syms[ASTIVal[node]].TypeKind) then
+    Result := Syms[ASTIVal[node]].TypeKind;
+end;
+
 function ASTStrElemTkOf(node: Integer): Integer;
 begin
   Result := 0;
@@ -3968,11 +3993,50 @@ begin
        aliasing, which is how the distinction was found. }
      (not ProcParamExplicitByRef[cpi * MAX_PROC_PARAMS + pathIdx]) and
      (not Procs[cpi].Params[pathIdx].IsArray) and
-     (not ProcParamIsConst[cpi * MAX_PROC_PARAMS + pathIdx]) and
-     (((Procs[cpi].Params[pathIdx].TypeKind = tySet) and
-       (IntToTypeKind(ASTTk[argAST]) = tySet)) or
+     { `const` is the escape hatch for ALIASING, and that is all it ever was:
+       the callee cannot write, so a copy made purely to protect the caller's
+       value would be pure cost. It is NOT an escape hatch for LAYOUT. A frozen
+       string is read through the PARAMETER's prefix width, so when the argument
+       carries a different width the callee reads the length at one size and the
+       payload at another — const or not. That could not happen while every
+       frozen kind was 8 bytes wide; under -dPXX_SHORTSTRING it is two widths
+       and the second clause below is what pays for it.
+
+       Measured (x86-64, -dPXX_SHORTSTRING, both PXX_MANAGED_STRING settings),
+       `procedure C(const n: string[12])`:
+         C(s)       narrow -> narrow   ok
+         C('hello') LITERAL -> narrow  len=5 and FIVE NUL BYTES
+         C(b)       string[300] -> narrow  the same five NULs
+         CBig(s)    narrow -> string[300]  len=122511465736197
+       The length survives in the narrowing direction because 5 is the low byte
+       of the 8-byte length word on a little-endian target — which is why this
+       reads as "payload gone, length fine" rather than as a width bug, and why
+       a Length()-only probe passes with it present.
+
+       Keying on the PREFIX WIDTH rather than on the kinds keeps the default
+       mode free: every frozen kind is 8 bytes there, so the clause is never
+       true and the non-shortstring build is unaffected.
+
+       The width must be taken from ASTFrozenArgTk, NOT from ASTTk. I wrote the
+       opposite here first — that the legacy tyString alias on a narrow
+       variable's node would misread as a width DIFFERENCE and copy, which is
+       safe because copying a const argument only ever costs a temp. That is
+       true of the narrowing direction and false of the widening one, and the
+       four rows above are what caught it: the alias is 8, so `C12(s)` differs
+       from a 1-byte parameter and copies, while `CBig(s)` MATCHES an 8-byte
+       parameter and does not — leaving row four of the table above unfixed
+       while the other three went green. An alias that reads as the right
+       answer half the time is worse than one that is always wrong, because the
+       half you check confirms it. }
+     (((not ProcParamIsConst[cpi * MAX_PROC_PARAMS + pathIdx]) and
+       (((Procs[cpi].Params[pathIdx].TypeKind = tySet) and
+         (IntToTypeKind(ASTTk[argAST]) = tySet)) or
+        (TypeIsFrozenString(Procs[cpi].Params[pathIdx].TypeKind) and
+         TypeIsFrozenString(IntToTypeKind(ASTTk[argAST]))))) or
       (TypeIsFrozenString(Procs[cpi].Params[pathIdx].TypeKind) and
-       TypeIsFrozenString(IntToTypeKind(ASTTk[argAST])))) then
+       TypeIsFrozenString(ASTFrozenArgTk(argAST)) and
+       (FrozenStrPrefixSize(Procs[cpi].Params[pathIdx].TypeKind) <>
+        FrozenStrPrefixSize(ASTFrozenArgTk(argAST))))) then
   begin
     if Procs[cpi].Params[pathIdx].TypeKind = tySet then
       tmpSym := AllocVar('', tySet)
