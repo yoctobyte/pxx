@@ -2,7 +2,7 @@
 type: bug
 track: A
 prio: 92
-status: open
+status: done
 summary: On i386/arm32/aarch64/riscv32 a string[N] passed to an AnsiString
   parameter of a CONSTRUCTOR or a VIRTUAL method arrives EMPTY — silently, in
   the DEFAULT mode, and it reproduces at the pin. x86-64 is correct.
@@ -198,12 +198,9 @@ An unbounded per-call leak on every target, on the paths that were *right*.
 
 ### What is NOT done
 
-**The ~15 inline backend arms are still there.** They are now unreachable for
-everything that funnels through `IRLowerCallArg` — the arg node no longer
-carries a frozen tag — but "believed dead" is not "proven dead", so they are
-left standing rather than deleted on a reading. Deleting them wants a canary
-build per backend that turns each arm into an `Error` and a run that must stay
-green. That is the remaining work on this ticket.
+**The inline backend arms are still there — and the canary pass says they MUST
+be.** See "The canary pass" at the end of this ticket. There are TEN of them,
+not ~15; five are proven LIVE, and deleting all ten is measurable damage.
 
 **Two shapes could not be exercised at all today**, and neither is this fix's
 doing:
@@ -262,3 +259,69 @@ reachable under `-uPXX_MANAGED_STRING`.
 Deleting them wants a per-backend canary turning each arm into an `Error` with a
 run that must stay green. **The ticket stays OPEN for this reason**, not because
 the bug survives.
+
+
+## The canary pass (2026-09-03) — the arms are LIVE, and the census was wrong
+
+Done as asked: each inline frozen->managed argument arm was replaced by an
+`Error` carrying a per-site id, and a control build with `IRLowerCallArg`'s arm
+gated off proved every id can fire before any silence was read as evidence.
+
+**Result: five of the ten arms fire. The deletion is rejected.** With all ten
+removed the self-host fixedpoint still held (1 round) and `gate.sh quick` went
+RED: `test/quick_canary_nilpy.npy` printed `ok 23` and segfaulted where it
+should print `total ok 36 / 36`. Root cause and the full fire table are in
+`refactor-a-nilpy-const-str-bypasses-both-the-literal-fast-path-and-the-call-arg-funnel`:
+`IRLowerCallArg` excludes `AN_STR_LIT`, which is a Pascal node, so a NilPy
+literal reaches the backend arm instead. `x = "a" * 3` is the one-line repro.
+
+### Three corrections to what this ticket previously claimed
+
+1. **TEN arms, not ~15.** Four on x86-64 (ordered args, direct, constructor,
+   method/indirect) plus the ordered-args deferrability predicate, one each on
+   i386/arm32/aarch64/riscv32/xtensa, none on wasm32. A grep for every other
+   spelling finds nothing outside those, so the census is closed. The two
+   riscv32/xtensa external-C arms are a DIFFERENT conversion (frozen -> PChar)
+   and were never part of this.
+2. **"Unreachable through IRLowerCallArg" was the wrong question.** The funnel
+   covers Pascal. It does not cover a frontend whose constant strings are not
+   Pascal AST nodes.
+3. **The comment in `ir.inc` saying a literal "already reaches the callee
+   correctly on every target" was scoped to Pascal and worded as a claim about
+   the compiler.** Corrected in the same commit as this note.
+
+### How the first answer came out wrong, which is the reusable part
+
+The first sweep was 100,560 compiles — the whole test corpus x 6 targets x 4
+mode corners x -O0/-O2/-O3 — and reported ZERO fires. It enumerated only the
+Pascal half of the corpus (test/*.pas): 1676 files. The corpus also holds
+**818 `.npy`, 583 `.c`, 26 `.rs`, 6 `.zig`**, none of which were compiled once.
+Nearly half the corpus was invisible to the instrument.
+
+**The hole and the defect had the same shape.** The claim under test was
+"every call argument now funnels through one function", and the frontends that
+do NOT funnel are exactly the ones a Pascal-only population cannot contain. A
+random gap would have been lucky to hide this; that one was guaranteed to. The
+number was a true statement about Pascal sources and was read as a statement
+about the compiler.
+
+Two guards that did work, and one thing neither could see:
+
+- **Per-site ids.** Two arms first shared one label; the corpus fired it and
+  every fire came from one of the two. A probe's identity has to be at least as
+  fine as the decision it feeds.
+- **Replaying the control-firing rows** under the armed binary, requiring
+  `rc=0` AND no fire. 12 of 76 came back `rc=1` — a whole backend's control
+  population refusing to compile, which is a silence that means nothing. (ESP
+  image writer, after codegen; `--platform=posix` cleared it.)
+- **Neither could see the population hole**, because both are aimed INSIDE the
+  population. `gate.sh quick` caught it on the first test outside — which is an
+  argument for gating before believing a census, not after.
+
+Three ways a source contributes no fire and only one is a finding: never
+compiled, compiled and refused by a later stage, genuinely dead. A source never
+ENUMERATED is a fourth, and the quietest — it leaves no rc, no log line, no
+trace at all.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

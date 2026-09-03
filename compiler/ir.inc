@@ -4369,11 +4369,28 @@ begin
     site releases the previous one, and scope exit releases the last. The inline
     backend arms leaked one handle per call because nothing owned their result.
 
-    A STRING LITERAL IS EXCLUDED DELIBERATELY. An AN_STR_LIT already reaches the
-    callee correctly on every target and every backend has a static-handle fast
-    path for it (EmitStaticLitHandle) -- no allocation, no copy. Routing it
-    through a temp would trade a rodata pointer for a runtime allocation at every
-    literal call site, which is a pessimisation and not a fix.
+    A PASCAL STRING LITERAL IS EXCLUDED DELIBERATELY. An AN_STR_LIT already
+    reaches the callee correctly on every target and every backend has a
+    static-handle fast path for it (EmitStaticLitHandle) -- no allocation, no
+    copy. Routing it through a temp would trade a rodata pointer for a runtime
+    allocation at every literal call site, which is a pessimisation and not a
+    fix.
+
+    THAT EXCLUSION IS WHY THE PER-BACKEND ARMS ARE LOAD-BEARING AND MUST NOT BE
+    DELETED. It is scoped to AN_STR_LIT, which is a PASCAL node. A Nil-Python
+    string literal lowers to an IR const_str tagged tyString -- frozen, never
+    AN_STR_LIT -- so it matches neither this arm nor the literal fast path, and
+    the backend's own frozen->managed arm is the only thing that converts it.
+    Measured 2026-09-03: deleting those arms turns `x = "a" * 3` into a wrong
+    value and takes test/quick_canary_nilpy.npy from `total ok 36 / 36` to
+    `ok 23` plus a segfault. A canary build fires five of the ten arms
+    (x86-64/direct, x86-64's ordered-args deferrability predicate, and
+    i386/arm32/aarch64 direct) on 30 distinct .npy sources; riscv32 and xtensa
+    stay silent only because NilPy cannot build for them at all
+    (bug-a-nilpy-on-cross-targets-four-remaining-walls), so their silence says
+    nothing. The fix that would retire the arms is to normalise the non-Pascal
+    frontends' constant strings, not to widen this one:
+    refactor-a-nilpy-const-str-bypasses-both-the-literal-fast-path-and-the-call-arg-funnel
 
     BY-REF IS EXCLUDED because a `var`/`out` AnsiString parameter is the callee's
     channel back to the caller's slot; handing it a temp would silently discard

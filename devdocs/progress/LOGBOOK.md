@@ -927,3 +927,20 @@ prints the same 007f0101 here.
 2026-09-03 | frankB | Makefile, devdocs/progress/done/regression-test-emit-obj-test-esp-hello.md | test-emit-obj asserted that taking an external's address costs TWO more relocations than calling it; it costs ONE, and the expected count was measured while the address-materialisation sequence was emitted TWICE back to back (riscv32 auipc/j/literal/lw at 0xb4 and again at 0xc4, same value into the same register; xtensa the same duplicate literal). adbe33db8 stopped the double emission and the row went red for the improvement. Verified byte for byte against the pinned compiler rather than inferred: HEAD's .text is the pin's with exactly that 16-byte sequence removed and everything after shifted down. The FIXTURE's own comment said one all along -- comment and code disagreed and the code had encoded what the defect produced.
 2026-09-03 | frankuser (coord) | devdocs/progress/HANDOVER-shortstring-night.md | Banked frankb-78's dyn2dvals resolution (e69e71ed2), the SIXTH phase-4 area to end with an unfiled defect. Per-element size of a dynamic array is decided in THREE places and only the index path asked for a capacity; SetLength allocated 8 bytes/element for a stride of 24. WHY it passed before, MEASURED not reasoned: the allocator's bucket rounding returned 56, which covers the old 54 and not the new 72 -- so the under-allocation was always there and the padding only pushed it past the rounding. Class banked: a latent under-allocation masked by bucket rounding is invisible until a width moves, and the width moving is what everyone reads as the cause. Second class: "no row compares against a constant" buys immunity from a RELAYOUT, not from a BUG -- the claim was written per-TEST over 8 rows where 2 were value rows, and those 2 are the only ones that can catch an out-of-bounds write. Also: esp-hello's EXPECTED count was the defect and the row went red for an improvement (verified byte-for-byte vs the pin); and a SIGSEGV rate recorded rather than closed -- 10/10 green, then 29 crashes in 100.
 2026-09-03 | frankuser (coord) | devdocs/progress/backlog-tools/bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-report.md | Filed from a watch pass: two consecutive bench-tier REDs on seven with 0 bench rows, 550 conformance rows, and NO report -- each commit touched only seven.json. WHY it is a ticket and not a shrug: the benign reading (bench correctly refusing to measure a loaded box) is probably right, and that is the problem -- a tier reporting RED when it measured nothing is indistinguishable from one that measured and found a regression. A refusal wants a word that is not the word for a failure. Not reproduced or measured; Track T owns the tool.
+
+2026-09-03 | frankA (Track A) | compiler/ir.inc + backlog-core | The canary pass
+on the ten inline frozen->managed call-arg arms answered NOT DEAD: five fire
+(x86-64/direct, x86-64's ordered-args deferrability predicate, i386/arm32/
+aarch64 direct) on 30 distinct .npy sources. Deleting all ten kept the self-host
+fixedpoint and broke NilPy — quick_canary_nilpy went from `total ok 36 / 36` to
+`ok 23` + segfault. WHY: IRLowerCallArg excludes AN_STR_LIT, a PASCAL node; a
+NilPy literal lowers to a const_str tagged tyString and reaches the backend arm
+instead. Repro `x = "a" * 3`. The ir.inc comment claiming a literal "already
+reaches the callee correctly on every target" was scoped to Pascal and worded
+as a claim about the compiler — corrected here. Root cause filed as
+refactor-a-nilpy-const-str-bypasses-both-the-literal-fast-path-and-the-call-arg-funnel.
+The first sweep said zero fires over 100,560 compiles because it enumerated only
+the Pascal half of the corpus (1676 files) and not the 818 .npy / 583 .c / 26
+.rs / 6 .zig — and the frontends that do not funnel are exactly the ones a
+Pascal-only population cannot contain, so the hole and the defect had the same
+shape.
