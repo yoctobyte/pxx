@@ -254,4 +254,4 @@ filed with the shape that would reach it and an explicit "do not land it without
 a program that fails first".
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1c2219596.
