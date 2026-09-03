@@ -4,6 +4,8 @@ track: A
 type: bug
 blocked-by: []
 summary: "A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops."
+status: done
+owner: frankb-78
 ---
 
 # A variadic C function imported into Pascal is callable only with its fixed prefix
@@ -93,3 +95,6 @@ and verified against real GTK3: `gtk_message_dialog_new(nil, 1, 0, 1, nil)` and
 and the callee's `va_start` finds an empty list. So the import is not producing
 a *wrong* call — it is producing a *narrower* one. That is why this is a missing
 capability rather than a miscompile, and why it is prio 45 rather than higher.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -103,3 +103,17 @@ linker that targets aarch64/arm32/riscv32, and the rest of the rig is buildable
 from parts already on the box.** `test-c-abi-mixed-link` is already written to
 skip a target it cannot build and to go RED if every target skips, so extending
 its target list costs nothing until the linker exists.
+**CORRECTION, same day, to the note above.** It concludes that the missing piece
+is a LINKER. That is true of a static mixed LINK and it is not the answer to "is
+there an oracle", because **a mixed CALL is enough and it already works**:
+`~/.cache/pxx-cross/{aarch64,arm32}/lib/` holds a complete glibc that
+`run_target.sh` already puts on `QEMU_LD_PREFIX`, pxx already emits dynamic
+imports for those targets, and a pxx caller into gcc-built glibc is a real ABI
+boundary with the callee's own output as the observable. Worked instance, found
+that way within the hour:
+`bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero`
+— `[0.00]` against arm32's and x86-64's `[3.50]`, where the pxx-vs-pxx version of
+the same program is self-consistently wrong. Read that ticket's ORACLE section
+before concluding this one is blocked. The linker is still needed for the other
+direction (a pxx-compiled CALLEE receiving from gcc-compiled code), and riscv32
+and xtensa are covered by neither — both refuse dynamic symbols outright.

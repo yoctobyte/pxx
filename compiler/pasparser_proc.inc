@@ -589,6 +589,7 @@ var
   isGenerator, isStackless, isAsync: Boolean;
   isIram, isInterrupt: Boolean;
   sawIram, sawCdecl, sawRegister, sawStackful, sawReintroduce: Boolean;
+  sawVarargs: Boolean;
   savedGenIsGen, savedGenSeen, savedGenStackless, savedProcIsAsync: Boolean;
   savedGenSelf, savedGenTry, savedGenStateCtr, savedGenSlotNext: Integer;
   genBodyAST, genStepAST, declElemTk: Integer;
@@ -1230,6 +1231,7 @@ begin
   declFlexColumn := False;
   declInline := False;
   sawIram := False; sawCdecl := False; sawRegister := False;
+  sawVarargs := False;
   sawStackful := False; sawReintroduce := False;
   while ((CurTok.Kind = tkIdent) and
          ((CurTok.SVal = 'inline') or (CurTok.SVal = 'Inline') or (CurTok.SVal = 'INLINE') or
@@ -1249,7 +1251,8 @@ begin
           CaseEqual(CurTok.SVal, 'platform') or
           CaseEqual(CurTok.SVal, 'experimental') or
           CaseEqual(CurTok.SVal, 'unimplemented') or
-          CaseEqual(CurTok.SVal, 'library'))) or
+          CaseEqual(CurTok.SVal, 'library') or
+          CaseEqual(CurTok.SVal, 'varargs'))) or
         (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok or
         IsInertRoutineDirectiveTok do
   begin
@@ -1263,6 +1266,14 @@ begin
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'iram') then
     begin isIram := True; sawIram := True; end;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'cdecl') then sawCdecl := True;
+    { `varargs` -- FPC's spelling for the trailing `...` of a C callee. NOT in
+      IsInertRoutineDirectiveTok, whose comment names it as the first of the
+      directives it refuses to swallow BECAUSE it changes how a call marshals;
+      that refusal was correct while nothing could record the fact and it is
+      what this now records. Accepted in both FPC orders: here, before the
+      `external` clause (`cdecl; varargs; external 'c'`), and after it at the
+      sibling site below (`external 'c'; varargs`). }
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'varargs') then sawVarargs := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'register') then sawRegister := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'stackful') then sawStackful := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'reintroduce') then sawReintroduce := True;
@@ -1452,9 +1463,20 @@ begin
       if CurTok.Kind = tkString then begin extSym := CurTok.SVal; Next; end;
     end;
     Eat(tkSemicolon);
+    { The other legal order: `external 'c'; varargs;`. The directive loop above
+      ran before the external clause, so this spelling arrives here. Both are in
+      the wild -- FPC's own headers use each. }
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'varargs') and
+       (TokPos < TokCount) and (Tokens[TokPos].Kind = tkSemicolon) then
+    begin
+      sawVarargs := True;
+      Next;
+      Eat(tkSemicolon);
+    end;
     procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, parr, pbyref);
     if procIdx < 0 then
       procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
+    if sawVarargs then ProcVariadic[procIdx] := True;
     ProcRetRecId[procIdx] := retRecId;
     { Record the return-element metadata like the normal registration paths do —
       without this an external `function f(...): PAnsiChar` leaves ProcRetPtrElemTk

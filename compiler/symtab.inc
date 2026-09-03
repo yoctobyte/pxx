@@ -9080,14 +9080,42 @@ begin
   end;
 end;
 
+function ProcMatchArgCount(i, nArgs: Integer): Integer;
+{ How many of a call's arguments have a DECLARED parameter to match against.
+  That is `nArgs` for every ordinary routine, because ProcArityMatches has
+  already rejected a call carrying more arguments than the candidate has
+  parameters -- so the min below is reached ONLY through the variadic clause it
+  grew below, where the trailing arguments have no `Params[]` slot at all.
+
+  A match loop running to `nArgs-1` on such a candidate reads
+  `Procs[i].Params[j]` past ParamCount: not out of bounds (the row is
+  MAX_PROC_PARAMS wide) but whatever that row last held, which is the worst
+  shape -- it does not crash, it answers. Written as an unconditional min rather
+  than as `if ProcVariadic[i]` so it cannot drift away from the arity rule it
+  mirrors. }
+begin
+  if nArgs > Procs[i].ParamCount then Result := Procs[i].ParamCount
+  else Result := nArgs;
+end;
+
 function ProcArityMatches(i, nArgs: Integer): Boolean;
 { Exact arity, OR a call that omits trailing args whose params all carry a default
-  value (`f(a; b: T = d)` callable as `f(x)`). The type-match phases only check
-  the supplied args[0..nArgs-1]; the omitted ones are filled with their defaults
-  at call lowering. }
+  value (`f(a; b: T = d)` callable as `f(x)`), OR a variadic C callee called with
+  its fixed prefix and any number of extra arguments. The type-match phases only
+  check args[0..ProcMatchArgCount-1]; omitted ones are filled with their defaults
+  at call lowering, and a variadic tail has no parameter to be checked against.
+
+  THE VARIADIC CLAUSE IS THE WHOLE OF bug-a-a-c-headers-variadic-tail-is-dropped-
+  on-import, and nothing was dropped: `ProcVariadic` has always been set by
+  cparser.inc on every C proc it declares, and four backends already permit
+  `nArgs <> ParamCount` when it is set. The Pascal-side matcher simply never
+  asked, so `printf` imported callable as `printf(Pointer)` and every variadic
+  function in every header was reachable only through its fixed prefix. }
 var k: Integer;
 begin
   if Procs[i].ParamCount = nArgs then begin Result := True; Exit; end;
+  if (nArgs > Procs[i].ParamCount) and ProcVariadic[i] then
+  begin Result := True; Exit; end;
   if (nArgs >= 0) and (nArgs < Procs[i].ParamCount) then
   begin
     Result := True;
@@ -10164,7 +10192,7 @@ begin
       if ProcArityMatches(i, nArgs) then
       begin
         match := True;
-        for j := 0 to nArgs-1 do
+        for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         begin
           if ((not MatchParamExact(Procs[i].Params[j].TypeKind, argTypes[j])) and
              not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) or
@@ -10199,7 +10227,7 @@ begin
       if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
       begin
         match := True;
-        for j := 0 to nArgs-1 do
+        for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         begin
           if ((not MatchParamExact(Procs[i].Params[j].TypeKind, argTypes[j])) and
              not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) or
@@ -10228,7 +10256,7 @@ begin
     if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) and ProcArityMatches(i, nArgs) then
     begin
       match := True;
-      for j := 0 to nArgs-1 do
+      for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
       begin
         if (not ((Procs[i].Params[j].TypeKind = argTypes[j]) or
                 ProcParamUntyped[i * MAX_PROC_PARAMS + j] or
@@ -10279,7 +10307,7 @@ begin
          ProcArityMatches(i, nArgs) then
       begin
         match := True;
-        for j := 0 to nArgs-1 do
+        for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         begin
           if ProcParamUntyped[i * MAX_PROC_PARAMS + j] then
             { untyped: neutral }
@@ -10337,7 +10365,7 @@ begin
          ProcArityMatches(i, nArgs) then
       begin
         match := False;   { at least one argument must be the int->int case }
-        for j := 0 to nArgs-1 do
+        for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         begin
           if ProcParamUntyped[i * MAX_PROC_PARAMS + j] then
             { untyped: neutral }
@@ -10376,7 +10404,7 @@ begin
             keeps a narrowing candidate winning when it is the only one. }
           w := 0;
           fits := True;
-          for j := 0 to nArgs-1 do
+          for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
             if (not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) and
                TypeIsMachineInt(Procs[i].Params[j].TypeKind) then
             begin
@@ -10412,7 +10440,7 @@ begin
       if ProcArityMatches(i, nArgs) then
       begin
         match := True;
-        for j := 0 to nArgs-1 do
+        for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         begin
           if (not (MatchParamCompatible(i, j, argTypes[j]) or
                   ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or
@@ -10440,7 +10468,7 @@ begin
       if ProcArityMatches(i, nArgs) then
       begin
         match := True;
-        for j := 0 to nArgs-1 do
+        for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         begin
           if (not (MatchParamCompatible(i, j, argTypes[j]) or
                   ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or
@@ -10466,7 +10494,7 @@ begin
       if (Procs[i].ParamCount > nArgs) and (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
       begin
         match := True;
-        for j := 0 to nArgs-1 do
+        for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         begin
           if (not (MatchParamCompatible(i, j, argTypes[j]) or
                   ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or
@@ -10492,7 +10520,7 @@ begin
     if MatchElig(i, name, demote, bIdx, userOnly, dropLateDef) and ProcArityMatches(i, nArgs) then
     begin
       match := True;
-      for j := 0 to nArgs-1 do
+      for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
       begin
         if (not (MatchParamCompatible(i, j, argTypes[j]) or
                 (ProcParamIsInterface(i, j) and (argTypes[j] = tyClass)) or
@@ -10537,6 +10565,15 @@ begin
           if j > 0 then OverloadReport := OverloadReport + ', ';
           OverloadReport := OverloadReport + TypeKindSpelling(Procs[i].Params[j].TypeKind);
         end;
+        { A variadic candidate spells its tail. Without it the report reads as a
+          flat refusal of the extra arguments -- `printf(Pointer)` against a call
+          passing four -- when the candidate in fact accepts them and something
+          else about the FIXED prefix is what failed. }
+        if ProcVariadic[i] then
+        begin
+          if Procs[i].ParamCount > 0 then OverloadReport := OverloadReport + ', ';
+          OverloadReport := OverloadReport + '...';
+        end;
         OverloadReport := OverloadReport + ')';
       end;
       i := ProcHashNext[i];
@@ -10557,7 +10594,7 @@ begin
        (Procs[i].ParamCount = nArgs) then
     begin
       match := True;
-      for j := 0 to nArgs - 1 do
+      for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         if ((Procs[i].Params[j].TypeKind <> argTypes[j]) and not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) or MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
       if match then
       begin
@@ -10577,7 +10614,7 @@ begin
        (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
     begin
       match := True;
-      for j := 0 to nArgs - 1 do
+      for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         if ((Procs[i].Params[j].TypeKind <> argTypes[j]) and not ProcParamUntyped[i * MAX_PROC_PARAMS + j]) or MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
       if match then
       begin
@@ -10593,7 +10630,7 @@ begin
        (Procs[i].ParamCount = nArgs) then
     begin
       match := True;
-      for j := 0 to nArgs - 1 do
+      for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         if (not (MatchParamCompatible(i, j, argTypes[j]) or ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
       if match then
       begin
@@ -10611,7 +10648,7 @@ begin
        (ProcParamPtrDepth[i * MAX_PROC_PARAMS + nArgs] = 2) then
     begin
       match := True;
-      for j := 0 to nArgs - 1 do
+      for j := 0 to ProcMatchArgCount(i, nArgs)-1 do
         if (not (MatchParamCompatible(i, j, argTypes[j]) or ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
       if match then
       begin

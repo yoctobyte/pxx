@@ -9290,6 +9290,33 @@ test-core: $(COMPILER)
 	tools/expect_same.sh aarch64/cforpost_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/cforpost_aarch64)" "$$(cat test/cfor_post_goto_entry.expected)"
 	./$(COMPILER) --target=riscv32 test/cfor_post_goto_entry.c $(TESTTMP)/cforpost_riscv32
 	tools/expect_same.sh riscv32/cforpost_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/cforpost_riscv32)" "$$(cat test/cfor_post_goto_entry.expected)"
+	# A variadic C callee reached from PASCAL, both faces of one concept: a
+	# `uses`d C header and a hand-written `external ...; varargs;`. Neither
+	# worked -- the import produced `printf(Pointer)` because the overload
+	# matcher never consulted ProcVariadic (which cparser has always set), and
+	# the directive was a hard PARSE ERROR. .expected is fpc 3.2.2's output,
+	# which is the right oracle here twice over: `varargs` is FPC's own
+	# directive and the marshalling is the C ABI, not ours to define.
+	# CROSS ROWS ARE A REAL ABI TEST, NOT A COMPILE CHECK: the callee is the
+	# target's own glibc out of ~/.cache/pxx-cross, so pxx's arguments cross a
+	# boundary into gcc-built code. AARCH64 IS DELIBERATELY NOT WIRED HERE and
+	# that is not an oversight -- it fails the `%.2f` row (and loses the
+	# argument AFTER the float), which is
+	# bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero.
+	# Wiring it green would mean writing today's wrong answer into .expected;
+	# add the row when that ticket closes. riscv32 and xtensa refuse dynamic
+	# symbols outright, so there is nothing to wire there at all.
+	./$(COMPILER) test/test_pascal_varargs_external.pas $(TESTTMP)/pvarargs26
+	tools/expect_same.sh pvarargs26 "$$($(TESTTMP)/pvarargs26)" "$$(cat test/test_pascal_varargs_external.expected)"
+	./$(COMPILER) --target=i386 test/test_pascal_varargs_external.pas $(TESTTMP)/pvarargs_i386
+	tools/expect_same.sh i386/pvarargs_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/pvarargs_i386)" "$$(cat test/test_pascal_varargs_external.expected)"
+	./$(COMPILER) --target=arm32 test/test_pascal_varargs_external.pas $(TESTTMP)/pvarargs_arm32
+	tools/expect_same.sh arm32/pvarargs_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/pvarargs_arm32)" "$$(cat test/test_pascal_varargs_external.expected)"
+	# NEGATIVE HALF, and the arity clause is untested without it: a callee with
+	# NO `varargs` must still refuse an extra argument. fpc refuses the same
+	# line ("Wrong number of parameters specified for call to fflush").
+	! ./$(COMPILER) test/pascal_varargs_not_declared_rejected.pas $(TESTTMP)/pvarargs_neg26 > $(TESTTMP)/pvarargs_neg.log 2>&1
+	grep -q "no overload of fflush matches these arguments" $(TESTTMP)/pvarargs_neg.log
 	./$(COMPILER) test/cfnptr_b6.c $(TESTTMP)/cfnptr_b626
 	$(TESTTMP)/cfnptr_b626; tools/expect_same.sh cfnptr_b626-rc "$$?" "91"
 	./$(COMPILER) test/cfnptr_call_via_ptr_cast_b236.c $(TESTTMP)/cfnptr_call_via_ptr_cast_b23626
