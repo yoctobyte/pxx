@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-02T16:14:36Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "cf5d1e52933b64d85eb06a1618797a2e7def93c6",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "RED"
-  },
-  {
    "date": "2026-09-02T16:18:40Z",
    "fixed": [],
    "new_red": [],
@@ -493,6 +484,17 @@
    "tier": "slow",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-09-03T07:28:07Z",
+   "fixed": [
+    "optdiff#shard6/12"
+   ],
+   "new_red": [],
+   "sha": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+   "tier": "opt",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "seven",
@@ -709,18 +711,18 @@
   "lib-test#src:test/test_tcomponent.pas": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
   "lib-test#src:test/test_tlist_notify.pas": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
   "lib-test#src:tools/crtl_reachability.py": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
-  "optdiff#shard0/12": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "optdiff#shard1/12": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "optdiff#shard10/12": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "optdiff#shard11/12": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "optdiff#shard2/12": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "optdiff#shard3/12": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "optdiff#shard4/12": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "optdiff#shard5/12": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "optdiff#shard6/12": "8476a51575575eb0dace4c162f7b1ff5d94444f6",
-  "optdiff#shard7/12": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "optdiff#shard8/12": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "optdiff#shard9/12": "26db8523e829a1078e5663fc72d1d0687864688c",
+  "optdiff#shard0/12": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "optdiff#shard1/12": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "optdiff#shard10/12": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "optdiff#shard11/12": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "optdiff#shard2/12": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "optdiff#shard3/12": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "optdiff#shard4/12": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "optdiff#shard5/12": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "optdiff#shard6/12": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "optdiff#shard7/12": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "optdiff#shard8/12": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "optdiff#shard9/12": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
   "size-canary#src:tools/size_canary.py": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
   "test-aarch64#src:compiler/.pascal26.fixedpoint": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
@@ -4053,11 +4055,11 @@
   "test-nilpy#src:test/test_uses_order_pylib_exception_b.pas": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
   "test-nilpy#src:test/test_wide_payload_pulls_builtinwide_for_a_used_unit.pas": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
   "test-nilpy#src:tools/compiler_srchash.sh": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
-  "test-opt#src:compiler/compiler.pas@1": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "test-opt#src:compiler/compiler.pas@2": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "test-opt#src:compiler/compiler.pas@3": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "test-opt#src:test/test_atomic64.pas": "26db8523e829a1078e5663fc72d1d0687864688c",
-  "test-opt#src:tools/compiler_srchash.sh": "26db8523e829a1078e5663fc72d1d0687864688c",
+  "test-opt#src:compiler/compiler.pas@1": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "test-opt#src:compiler/compiler.pas@2": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "test-opt#src:compiler/compiler.pas@3": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "test-opt#src:test/test_atomic64.pas": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
+  "test-opt#src:tools/compiler_srchash.sh": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
   "test-pascal-conformance#shard0/6": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
   "test-pascal-conformance#shard1/6": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
   "test-pascal-conformance#shard2/6": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
@@ -4556,7 +4558,6 @@
   "tools-devtest-sh#00": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea"
  },
  "job_reason": {
-  "optdiff#shard6/12": "OPT DIFF -O3: test/test_shortstring_through_a_pointer.pas (rc 0 vs 0) | optdiff skip SKIPLIST: test_rtti_method_call_by_name.pas | optdiff skip TIMEOUT-O0: c_const_and_chain_dead_arm.c cgeneric_array_decay.c | optdiff skip BUILD-FAIL: c_obj_data_dup_b.c c_obj_extern_addr.c cprep_lib.c csqlite_schema_exec_probe.c cundeclared_type_cast_fail.c i386_pcrel_globals.c lib_synapse_transitive_unit.pas my_\u2026",
   "test-core#src:test/test_sizeof_user_name_shadows_builtin.pas": "i TRUE x 5 | +j 12 | +k 6 | +l 12 12 | +m 10 | +n 2 1",
   "test-emit-obj#src:test/test_esp_hello.pas@1": "test-emit-obj: an unmarked ESP program still exports app_main and nothing else | test-emit-obj: [--target=riscv32 --platform=esp] taking an external's address adds 1 relocations, not 2 (call-only 1, both 2)",
   "tools-devtest#00": "FAILED 4 check(s): the real commit landed on origin; says so explicitly, since the reflex is to reach for it; says what actually happened instead; exits 0, so fill_pending_commits still runs | tools-devtest: tools/twatch_timeout_staleness_devtest.py | tools-devtest: tools/twatch_timeout_verdict_devtest.py | tools-devtest: tools/twatch_verify_request_devtest.py | tools-devtest: tools/verify_assert\u2026"
@@ -8824,7 +8825,7 @@
   "optdiff#shard3/12": "pass",
   "optdiff#shard4/12": "pass",
   "optdiff#shard5/12": "pass",
-  "optdiff#shard6/12": "fail",
+  "optdiff#shard6/12": "pass",
   "optdiff#shard7/12": "pass",
   "optdiff#shard8/12": "pass",
   "optdiff#shard9/12": "pass",
@@ -12587,14 +12588,14 @@
  },
  "last": {
   "code_fp": "065bb7eaf0d5",
-  "date": "2026-09-03T07:22:07Z",
+  "date": "2026-09-03T07:28:07Z",
   "deadline": 7200.0,
   "sha": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
-  "tier": "slow",
+  "tier": "opt",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 205.4
+  "wall": 345.9
  },
  "last_bench": {
   "conf_rows": 550,
@@ -12634,14 +12635,14 @@
   },
   "opt": {
    "code_fp": "065bb7eaf0d5",
-   "date": "2026-09-02T21:15:31Z",
+   "date": "2026-09-03T07:28:07Z",
    "deadline": 7200.0,
-   "sha": "26db8523e829a1078e5663fc72d1d0687864688c",
+   "sha": "c23dcf1cfd42d97dcf67bc31e3dad51d3e654dea",
    "tier": "opt",
    "timed_out": false,
    "unreached": 0,
-   "verdict": "RED",
-   "wall": 668.8
+   "verdict": "GREEN",
+   "wall": 345.9
   },
   "slow": {
    "code_fp": "065bb7eaf0d5",
