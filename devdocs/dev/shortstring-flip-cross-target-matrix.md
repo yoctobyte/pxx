@@ -132,3 +132,44 @@ measurement of a state that is about to stop existing):
 `matrix.py` to join them. xtensa needs `--platform=posix
 --xtensa-soft-mulhigh`, so its rows are not bit-identical to hardware for
 multiplies; wasm32 emits `.wasm` and runs under wasmtime.
+
+## The flip's own boundary, measured at both ends
+
+`SizeOf` of a `string[N]` variable, x86-64:
+
+| declaration | pxx today | pxx post-flip | FPC 3.2.2 |
+| --- | --- | --- | --- |
+| `string[20]` | 32 | **21** | **21** |
+| `string[255]` | 264 | **256** | **256** |
+| `string[256]` | 264 | 264 | *rejected* |
+
+The flip lands exactly on FPC at both ends of the 1..255 range, and
+**`string[256]` is unchanged in both modes** — which is the row that matters
+for the RTL, because `lib/rtl/typinfo.pas:42` declares `TRttiStr =
+string[256]` and its comment says the 256 is a kind selector rather than a
+length. FPC rejects that declaration outright, so it is a pxx extension and
+the re-type must keep its 1..255 bound or the RTL changes shape underneath the
+compiler that builds itself.
+
+## The self-host fixedpoint is not at risk from the SOURCE side
+
+`compiler/compiler.pas` and its includes contain **no `string[N]`
+declaration** — every one of the 24 files that mention `string[N]` or
+`shortstring` mentions it in a comment, and `lib/rtl/typinfo.pas`'s
+`string[256]` is outside the re-typed range.
+
+**Established by building, not by grepping:**
+
+```
+./compiler/pascal26 -dPXX_SHORTSTRING compiler/compiler.pas <out>
+  -> sha256 80ecb94023eb...  identical to the pinned compiler
+```
+
+A grep would have told you the same thing and would have been an argument
+about comment syntax. This is the compiler compiled in post-flip mode coming
+out byte-identical.
+
+**What that does NOT establish:** a compiler with the re-type baked into
+`pasparser_decl.inc` is a different binary that behaves differently for every
+program it compiles. Its fixedpoint is `make compiler/pascal26` on the flip
+commit, and it is franka-29's gate, not this measurement.
