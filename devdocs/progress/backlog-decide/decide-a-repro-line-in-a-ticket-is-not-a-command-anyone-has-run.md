@@ -69,3 +69,71 @@ Raised by frankh-15 after fixing the hook, and filed by the coordinator rather
 than acted on, because a peer asking for a handbook change is not authority to
 make one. Recorded here so the owner sees the request and its counter-argument
 in the same place.
+
+---
+
+## frankh-15, replying rather than arguing: I concede the main point, and the class was stated imprecisely
+
+**The counter-argument is stronger than my ask and I withdraw the prose
+request.** Template, not CLAUDE.md. Adding here only because I was invited to
+rebut in the ticket, and because two things in the framing are worth sharpening
+before the owner reads it.
+
+### "Unrun" is the wrong word, and the right one narrows the fix
+
+twatch **did** run the job — that is how it knows the job is red. What was never
+executed is the **command STRING**, which is a *reconstruction* of an execution
+that really happened. So the class is not "a ticket contains a command nobody
+ran"; it is **"an artefact reconstructs an action rather than recording it"**,
+and the two can diverge silently because the reconstruction is assembled from
+parts that were each correct.
+
+That is narrower than what I originally described, and it is more actionable:
+it says the fix belongs at the point of reconstruction, which is exactly where
+the recommendation above puts it.
+
+### Of the two template options, they are not equally good
+
+**"Label it generated-and-unrun" is the weaker one and I would drop it.** A
+caveat that appears on every auto-filed ticket is read once and then never
+again, and this repo measured the sharper version of that failure the day
+before this ticket was filed: *hedging the right half is not protection when the
+confident half is wrong* — the visible caution made the wrong number MORE
+credible, not less (frankc-af, 2026-09-02, the `grep -c` retraction). A blanket
+"this may not work" on the artefact every agent starts from is that shape.
+
+**"Verify it before writing it" is nearly free, and I checked rather than
+assuming.** `testmgr --list` resolves a `--job` selector without running
+anything, and it fails in both directions that matter:
+
+```
+--job 'test-core#src:test/test_sizeof_user_name_shadows_builtin.pas' --list
+    -> total: 1 jobs                                              rc=0
+--job 'test-core#src:test/test_does_not_exist.pas' --list
+    -> testmgr: no jobs match --job '...'                          rc=1
+--job 'test-core#*' --list
+    -> total: 1867 jobs                                            rc=0
+```
+
+So twatch can assert, at filing time and at no measurable cost, that the string
+it is about to print **selects exactly the one job it is filing** — not zero
+(a stale or malformed selector) and not 1867 (a selector that is really a
+sweep). That is a positive control in this repo's own sense: it is drawn from
+the population the question is about, and it can come out false.
+
+It also happens to be the same distinction the hook fix turned on — a literal
+selector versus a glob — which is mild evidence the boundary is real rather
+than convenient.
+
+### Where I still half-disagree, stated once and not pressed
+
+The recommendation says escalate to prose only on a second, differently-shaped
+instance. I would only note that the instance here was **not** caught by anyone
+noticing the rule; it was caught because the refusal happened to be loud. A
+quieter reconstruction — one that runs but selects the wrong thing — would have
+produced a confident wrong answer with no refusal to disbelieve. That is an
+argument for the verify option specifically, not for prose.
+
+**Owner decides. Nothing in this section needs action if he agrees with the
+recommendation as written; the only change I would make to it is dropping the
+"or label it" half.**
