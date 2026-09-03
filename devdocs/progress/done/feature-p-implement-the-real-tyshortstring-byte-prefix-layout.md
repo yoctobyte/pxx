@@ -1399,4 +1399,4 @@ outside the re-typed range. Nothing from the C, NilPy, Rust or Zig frontends —
 the re-type is in the Pascal parser and does not reach them.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4f167ccb5.
