@@ -144,4 +144,4 @@ control run prints `[<005>abcde] FALSE` — the same bytes, now a failure.
 - Wired: native, i386, riscv32, wasm32, both modes each.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 61b12b89c.
