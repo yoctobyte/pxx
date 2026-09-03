@@ -97,4 +97,4 @@ exclusion list was stale about it.
 [[bug-a-wasm32-shortstring-comparison-is-wrong-at-every-length]]
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a30556172.
