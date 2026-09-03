@@ -194,10 +194,18 @@ begin
     THE REPORT PRINTS: this collects the refusals that are REACHED, and the
     latch below short-circuits most of the walk, so a second reason arrives
     only down a path that does not guard on it. Measured 2026-09-03 over 300
-    sources: 91 reached the report and 86 of those recorded exactly one
-    refusal, so the list is an improvement on the ceiling and NOT a complete
-    gap census. It cannot be one without letting the walk continue past a
-    refusal, which is a codegen-robustness change and is not this. }
+    sources: 14 had a broken body at all, and 5 OF THOSE 14 had a body with a
+    second distinct gap. So the list is a real improvement on the ceiling and
+    NOT a complete gap census; it cannot be one without letting the walk
+    continue past a refusal, which is a codegen-robustness change and is not
+    this.
+
+    THE DENOMINATOR IS PROGRAMS WITH A GAP, NOT PROGRAMS THAT COMPILED. The
+    first version of this comment said "91 of 300 reached the report, 86 of
+    them recorded one reason", which was measured with a probe that printed
+    UNCONDITIONALLY -- so 77 of that 91 had nothing broken and could not have
+    recorded a second reason. 5-in-91 reads as a rarity and 5-in-14 does not.
+    The zero was vacuous for most of the population it was counted over. }
   if WasmBodyReasonCnt < 8 then
   begin
     if Pos(Chr(10) + why + Chr(10), WasmBodyReasons) = 0 then
@@ -6328,8 +6336,8 @@ begin
       up as `trap via SetLength` when two of them had never reached
       SetLength. WasmUnsupported latches and most of the walk guards on that
       latch, so a body's later gaps are only seen down paths that do not.
-      Measured over 300 sources: 91 reached this report and 86 recorded
-      exactly one reason. }
+      Measured over 300 sources: 14 have a broken body, and 5 of those 14
+      have a body whose second gap only this listing can show. }
     WriteLn('wasm32: ', WasmLoweredCount, ' of ',
             WasmLoweredCount + WasmBrokenCount,
             ' bodies lowered; ', WasmBrokenCount,

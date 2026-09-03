@@ -74,3 +74,17 @@ has **never executed**, because no program can get a Variant into a local
 without tripping the trap above. When this lands, that arm is the first thing to
 measure — a `Variant` local holding a runtime-built string, 300 iterations,
 `-dPXX_ALLOC_CENSUS`, against x86-64.
+
+## Ranked by measurement, 2026-09-03 (frankA)
+
+300 sources from the test corpus compiled for wasm32 with the fixed coverage
+report (52d134518, the first build that can name more than one gap per body):
+**222 of 278 gap instances are `statement IR op 43`, this ticket.** The next
+one down is 18. Variant is not one of several wasm32 gaps; it is four fifths of
+them, and every other refusal in the corpus put together is under a quarter of
+its count.
+
+Wired under `umbrella-wasm-is-a-real-platform` on that evidence -- grown by
+attempting the target rather than by triaging the backlog. The census is a
+FLOOR (a body stops at its first refusal), which can only understate the tail,
+never this head.
