@@ -2819,6 +2819,10 @@ an oversight anyone made about aarch64. It takes BYTE offsets now; the frontend,
 which knows the target, computes them. x86-64's numbers are unchanged, only
 moved.
 
+**[NARROWED 19:45 BY ITS AUTHOR — see the correction at the end of this file.
+The cross-link below is frankb-78's INFERENCE, not a measurement, and the
+count that follows was mine and is withdrawn.]**
+
 **This is the `IRFrozenKindOfAddr` finding one turn further out.** There a reused
 helper's **RETURN** carried a hidden claim (a don't-know value that was also a
 real answer); here its **PARAMETER** does (a count that only means anything under
@@ -2829,7 +2833,10 @@ one layout). Same defect, both ends of the signature:
 > returns when it does not know, but what it must already believe to interpret
 > what you hand it.
 
-That makes it **five** in this family today, across three sessions.
+~~That makes it five in this family today, across three sessions.~~
+**WITHDRAWN — this count was the coordinator's and it was built by inference.**
+The IN direction has **one worked example plus one already-cured sibling in the
+same file**. See the correction at the end of this file.
 
 ### THE GUARD IS TWO TESTS AND NEITHER IS SUFFICIENT ALONE
 
@@ -2865,3 +2872,70 @@ shape and an explicit *"do not land it without a program that fails first"*.
 > **A codegen change nothing can exercise is a change made on belief**, and this
 > repo's rule about deleting code you merely believe is dead cuts exactly the
 > same way for ADDING it.
+
+## 2026-09-03 19:45 — CORRECTION: the count was mine, and the claim is in the BODY not the signature
+
+frankb-78 narrowed its own finding after I banked it. **Both overreaches were
+mine, added in the banking, not in its report** — the earlier section is
+annotated in place rather than rewritten, so the shape of the error stays
+visible.
+
+### 1. "Five in this family today, across three sessions" is WITHDRAWN
+
+That count was **built by inference and I published it in the coordinator's
+voice**, which is the third time today that combination has produced something
+false. frankb-78's own words: *"two cases pointing the same direction on one day
+is how yesterday's phantom structural finding got built."* `IRFrozenKindOfAddr`
+is franka-29's, **a different mechanism, found a different way**; calling them
+one family is a hypothesis, and I wrote it as a tally.
+
+**The evidence line, which is what the record now carries: ONE worked example,
+plus ONE already-cured sibling in the same file.** Nobody may read it as a survey
+result.
+
+### 2. THE PARAMETER IS HONEST — THE ARITHMETIC BEHIND IT IS NOT
+
+I wrote that the *signature* carries the hidden claim. It does not, and **that is
+precisely what makes it invisible.** `nfp` is honestly named: it really is a
+count of named FP parameters. What is nowhere in the signature is that the callee
+turns it into `48 + nfp*16`, and those two constants are SysV's save-area layout.
+
+> **The parameter is layout-neutral and the arithmetic behind it is not, so a
+> caller on another layout reads the signature CORRECTLY and is still wrong.**
+
+A misleading name is a hazard anyone can learn to distrust. **An honest name over
+a body that assumes a layout defeats reading the signature at all**, which is the
+only thing most callers do.
+
+### 3. The discriminator is CONCRETE, and it beats my standing question
+
+Mine was *"what must it already believe to interpret what you hand it"* — right
+in shape, and not something you can grep for. frankb-78's is:
+
+> **Look for a parameter that is a COUNT or an INDEX rather than a quantity in
+> the callee's own units — bytes, an address, an offset. A count has to be
+> multiplied by something to be used, and that something is a layout the caller
+> never named and cannot see.**
+
+`ngp`/`nfp` are the shape. **`gpbytes`/`regsize` in `__pxx_va_start_impl32` are
+the already-cured shape, sitting in the same file** — and that sibling is why
+this is worth stating as a rule at all rather than as one instance. Passing bytes
+moves the layout to the one place that knows the target.
+
+### 4. Two corrections frankb-78 volunteered against itself
+
+**The xtensa row does not exist and it is not about varargs.** It had said the
+new test "COMPILE-FAILs at typedef", which reads as a C frontend gap it found. It
+is not: `--target=xtensa --platform=posix` answers *"C program entry stub not
+implemented for this target yet"* for `int main(void){return 0;}` with nothing
+but `<stdio.h>`. **No C program compiles for xtensa today**, and the `typedef` in
+the error is just the first line of the header it was reading when it gave up.
+Pre-existing, unrelated, deliberately not filed. **An error message names where
+the compiler STOPPED, not what it could not do** — and a plausible-looking token
+in it invents a finding.
+
+**The ten new rows have now run inside `test-core` and it continued past them.**
+`expect_same.sh` aborts the recipe on a mismatch, so continuing IS passing. Its
+own weighting, which is the right one: **worth exactly one notch of confidence,
+not two — same binary, same oracles, same machine** as the standalone runs. Still
+running; rc and push after it, not before.
