@@ -12962,6 +12962,22 @@ test-core: $(COMPILER)
 	# DECLARES A GOTO TARGET, which an over-eager fold deletes while every row
 	# above it stays green. Unreachable by fall-through is not unreachable.
 	# bug-a-a-constant-if-condition-keeps-its-dead-arm-and-the-binary-will-not-start
+	# TWO WIDTHS A 64-BIT HOST CANNOT SEE BEING WRONG. Both of these were
+	# written with their fixes on 2026-09-02 and NEITHER WAS EVER WIRED -- the
+	# defect the wiring gate exists for: writing a test and watching it pass are
+	# both true, and neither makes it gated. They are wired on i386, arm32 and
+	# riscv32 as well as here, and that is the entire point: `const A =
+	# NativeInt(2^32+5)` folded to 4294967301 on those three while the runtime
+	# cast of the same expression in the same program gave 5, and a method
+	# pointer was hard-sized 16 bytes where the equivalent two-pointer record
+	# answered 8. Every assertion is a RELATION -- fold against runtime cast,
+	# method pointer against a hand-written {Code, Data} record and against
+	# 2 * SizeOf(Pointer) -- so the files carry no expected width and print a
+	# different correct number on each target.
+	./$(COMPILER) test/test_const_cast_width_matches_runtime.pas $(TESTTMP)/x64_ccwidth
+	tools/expect_same.sh const_cast_width "$$($(TESTTMP)/x64_ccwidth)" "CONST CAST OK ptr=8 native=4294967301"
+	./$(COMPILER) test/test_method_pointer_size_is_two_pointers.pas $(TESTTMP)/x64_methptr
+	tools/expect_same.sh method_pointer_size "$$($(TESTTMP)/x64_methptr)" "METHPTR OK 16 8"
 	@echo "=== sizeof(*p) where the pointee is an ARRAY ==="
 	# `int (*p)[4]` answered the ELEMENT size, 4 where gcc says 16 -- the same
 	# pointer-to-array reader gap as the Pascal side, in the C sizeof arm alone.
@@ -12970,6 +12986,26 @@ test-core: $(COMPILER)
 	# bug-c-sizeof-of-a-dereferenced-pointer-to-array-answers-the-element-size
 	./$(COMPILER) test/c_sizeof_deref_ptr_to_array.c $(TESTTMP)/c_szderef26
 	tools/expect_same.sh c_szderef26 "$$($(TESTTMP)/c_szderef26)" "$$(printf 'A 16\nB 24\nC 7\nM 48\nS 4\nD 8\nE 16')"
+	# THE SAME POINTER-TO-ARRAY READER GAP IN THREE MORE PLACES, all three
+	# written with their fixes on 2026-09-02 and none of them wired until now.
+	# A file-scope `int (*gp)[4]` recorded no pointee at all; a STRUCT MEMBER of
+	# that type hit the parenthesised-declarator arm built for function
+	# pointers, whose pointee has no type; and `sizeof(p2[0][0])` on a
+	# `struct big **` peeled one pointer level per subscript while carrying only
+	# one level of pointee. All three are also wired on i386 below, where the
+	# subscript-chain row is the one that MOVES (44 4 rather than 44 8) and is
+	# therefore the row that proves the answer is computed rather than defaulted.
+	# The int spelling cannot detect any of this on its own: tyUnknown's slot
+	# size is 4, which is exactly sizeof(int), and a pointer's is 8, which is
+	# exactly the correct answer one subscript short. Both files carry double
+	# and char rows for that reason. Diffed against gcc, and against gcc -m32
+	# for the i386 rows: identical on all six.
+	./$(COMPILER) test/c_file_scope_pointer_to_array.c $(TESTTMP)/c_fsptrarr26
+	tools/expect_same.sh c_fsptrarr26 "$$($(TESTTMP)/c_fsptrarr26)" "PTRARR OK stride=16"
+	./$(COMPILER) test/c_sizeof_ptr_to_array_field.c $(TESTTMP)/c_szfldptrarr26
+	tools/expect_same.sh c_szfldptrarr26 "$$($(TESTTMP)/c_szfldptrarr26)" "FIELD PTRARR OK 16 32 7 24"
+	./$(COMPILER) test/c_sizeof_subscript_through_pointer_chain.c $(TESTTMP)/c_szchain26
+	tools/expect_same.sh c_szchain26 "$$($(TESTTMP)/c_szchain26)" "PTR CHAIN OK 44 8"
 	# One operand, many spellings. sizeof(**p) answered 8 while sizeof **p
 	# answered 16 -- the same operand, wrong with parentheses and right without,
 	# because the parenthesised form ran token-pattern arms and the
@@ -15785,6 +15821,22 @@ test-i386: $(COMPILER)
 	# passed on x86-64 and aarch64 while failing on every 32-bit target.
 	./$(COMPILER) --target=i386 test/test_frozen_string_layout.pas $(TESTTMP)/i386_fsl_d
 	tools/expect_same.sh i386/frozen_string_layout_default "$$(tools/run_target.sh i386 $(TESTTMP)/i386_fsl_d)" "$$(cat test/test_frozen_string_layout.expected)"
+	# TWO WIDTHS A 64-BIT HOST CANNOT SEE BEING WRONG. Both of these were
+	# written with their fixes on 2026-09-02 and NEITHER WAS EVER WIRED -- the
+	# defect the wiring gate exists for: writing a test and watching it pass are
+	# both true, and neither makes it gated. They are wired on i386, arm32 and
+	# riscv32 as well as here, and that is the entire point: `const A =
+	# NativeInt(2^32+5)` folded to 4294967301 on those three while the runtime
+	# cast of the same expression in the same program gave 5, and a method
+	# pointer was hard-sized 16 bytes where the equivalent two-pointer record
+	# answered 8. Every assertion is a RELATION -- fold against runtime cast,
+	# method pointer against a hand-written {Code, Data} record and against
+	# 2 * SizeOf(Pointer) -- so the files carry no expected width and print a
+	# different correct number on each target.
+	./$(COMPILER) --target=i386 test/test_const_cast_width_matches_runtime.pas $(TESTTMP)/i386_ccwidth
+	tools/expect_same.sh i386/const_cast_width "$$(tools/run_target.sh i386 $(TESTTMP)/i386_ccwidth)" "CONST CAST OK ptr=4 native=5"
+	./$(COMPILER) --target=i386 test/test_method_pointer_size_is_two_pointers.pas $(TESTTMP)/i386_methptr
+	tools/expect_same.sh i386/method_pointer_size "$$(tools/run_target.sh i386 $(TESTTMP)/i386_methptr)" "METHPTR OK 8 4"
 	./$(COMPILER) --target=i386 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_i386_ssbp_d
 	tools/expect_same.sh i386/ssbp_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_d)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# The mixed-width rows carry `s:9` -- a NONZERO field width, deliberately.
@@ -15823,6 +15875,16 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/tcpgrp "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_tcpgrp)" "$$(printf '1 1 1\n2 -1 1\n3 1 1\n4 1 1 1\n5 1\n6 1 1\n7 -1 1')"
 	./$(COMPILER) --target=i386 test/c_local_string_array_init.c $(TESTTMP)/test_i386_lsarr
 	tools/expect_same.sh i386/lsarr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_lsarr)" "$$(printf '1 277 28 0\n2 6 104 111 0\n3 97 97\n4 6 119 0\n5 4 97 100 99\n6 12 11 116\n7 3 233 120')"
+	# The 32-bit half of the pointer-to-array sizeof family wired natively above.
+	# `PTR CHAIN OK 44 4` is the row that carries the target: the one-subscript-
+	# short size must equal a POINTER, so it is 8 on x86-64 and 4 here, and a
+	# walk that ended at tyUnknown would answer 8 on both. Matches gcc -m32.
+	./$(COMPILER) --target=i386 test/c_file_scope_pointer_to_array.c $(TESTTMP)/test_i386_fsptrarr
+	tools/expect_same.sh i386/fsptrarr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fsptrarr)" "PTRARR OK stride=16"
+	./$(COMPILER) --target=i386 test/c_sizeof_ptr_to_array_field.c $(TESTTMP)/test_i386_szfldptrarr
+	tools/expect_same.sh i386/szfldptrarr "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_szfldptrarr)" "FIELD PTRARR OK 16 32 7 24"
+	./$(COMPILER) --target=i386 test/c_sizeof_subscript_through_pointer_chain.c $(TESTTMP)/test_i386_szchain
+	tools/expect_same.sh i386/szchain "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_szchain)" "PTR CHAIN OK 44 4"
 	./$(COMPILER) --target=i386 test/c_crtl_cmsg_and_socket_levels.c $(TESTTMP)/test_i386_cmsg
 	tools/expect_same.sh i386/cmsg "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cmsg)" "$$(printf '1 0 2 17 16\n2 17 16 2\n3 1 0 263 270\n4 255\n5 8 1\n6 12 12 4\n7 12 12 13 16\n8 1 1 111\n8 263 8 222\n9 2\n10 1\n11 1 0')"
 	# The 32-bit half of the linux/fs.h ioctls. BLKBSZGET, BLKBSZSET and
@@ -16719,6 +16781,22 @@ test-aarch64: $(COMPILER)
 	# bug-a-char-vs-frozen-string-comparison-misses-every-shape-but-a-variable
 	./$(COMPILER) --target=aarch64 test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_a64_fscc_d
 	tools/expect_same.sh aarch64/frozen_char_compare_shapes_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_fscc_d)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
+	# TWO WIDTHS A 64-BIT HOST CANNOT SEE BEING WRONG. Both of these were
+	# written with their fixes on 2026-09-02 and NEITHER WAS EVER WIRED -- the
+	# defect the wiring gate exists for: writing a test and watching it pass are
+	# both true, and neither makes it gated. They are wired on i386, arm32 and
+	# riscv32 as well as here, and that is the entire point: `const A =
+	# NativeInt(2^32+5)` folded to 4294967301 on those three while the runtime
+	# cast of the same expression in the same program gave 5, and a method
+	# pointer was hard-sized 16 bytes where the equivalent two-pointer record
+	# answered 8. Every assertion is a RELATION -- fold against runtime cast,
+	# method pointer against a hand-written {Code, Data} record and against
+	# 2 * SizeOf(Pointer) -- so the files carry no expected width and print a
+	# different correct number on each target.
+	./$(COMPILER) --target=aarch64 test/test_const_cast_width_matches_runtime.pas $(TESTTMP)/a64_ccwidth
+	tools/expect_same.sh aarch64/const_cast_width "$$(tools/run_target.sh aarch64 $(TESTTMP)/a64_ccwidth)" "CONST CAST OK ptr=8 native=4294967301"
+	./$(COMPILER) --target=aarch64 test/test_method_pointer_size_is_two_pointers.pas $(TESTTMP)/a64_methptr
+	tools/expect_same.sh aarch64/method_pointer_size "$$(tools/run_target.sh aarch64 $(TESTTMP)/a64_methptr)" "METHPTR OK 16 8"
 	./$(COMPILER) --target=aarch64 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a64_ssthp
 	tools/expect_same.sh aarch64/shortstring_through_a_pointer "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
@@ -18352,6 +18430,22 @@ test-riscv32: $(COMPILER)
 	# bug-a-char-vs-frozen-string-comparison-misses-every-shape-but-a-variable
 	./$(COMPILER) --target=riscv32 test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_rv32_fscc_d
 	tools/expect_same.sh riscv32/frozen_char_compare_shapes_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_fscc_d)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
+	# TWO WIDTHS A 64-BIT HOST CANNOT SEE BEING WRONG. Both of these were
+	# written with their fixes on 2026-09-02 and NEITHER WAS EVER WIRED -- the
+	# defect the wiring gate exists for: writing a test and watching it pass are
+	# both true, and neither makes it gated. They are wired on i386, arm32 and
+	# riscv32 as well as here, and that is the entire point: `const A =
+	# NativeInt(2^32+5)` folded to 4294967301 on those three while the runtime
+	# cast of the same expression in the same program gave 5, and a method
+	# pointer was hard-sized 16 bytes where the equivalent two-pointer record
+	# answered 8. Every assertion is a RELATION -- fold against runtime cast,
+	# method pointer against a hand-written {Code, Data} record and against
+	# 2 * SizeOf(Pointer) -- so the files carry no expected width and print a
+	# different correct number on each target.
+	./$(COMPILER) --target=riscv32 test/test_const_cast_width_matches_runtime.pas $(TESTTMP)/rv32_ccwidth
+	tools/expect_same.sh riscv32/const_cast_width "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_ccwidth)" "CONST CAST OK ptr=4 native=5"
+	./$(COMPILER) --target=riscv32 test/test_method_pointer_size_is_two_pointers.pas $(TESTTMP)/rv32_methptr
+	tools/expect_same.sh riscv32/method_pointer_size "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_methptr)" "METHPTR OK 8 4"
 	./$(COMPILER) --target=riscv32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp
 	tools/expect_same.sh riscv32/shortstring_through_a_pointer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 
@@ -19676,6 +19770,22 @@ test-arm32: $(COMPILER)
 	# bug-a-char-vs-frozen-string-comparison-misses-every-shape-but-a-variable
 	./$(COMPILER) --target=arm32 test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_a32_fscc_d
 	tools/expect_same.sh arm32/frozen_char_compare_shapes_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_fscc_d)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
+	# TWO WIDTHS A 64-BIT HOST CANNOT SEE BEING WRONG. Both of these were
+	# written with their fixes on 2026-09-02 and NEITHER WAS EVER WIRED -- the
+	# defect the wiring gate exists for: writing a test and watching it pass are
+	# both true, and neither makes it gated. They are wired on i386, arm32 and
+	# riscv32 as well as here, and that is the entire point: `const A =
+	# NativeInt(2^32+5)` folded to 4294967301 on those three while the runtime
+	# cast of the same expression in the same program gave 5, and a method
+	# pointer was hard-sized 16 bytes where the equivalent two-pointer record
+	# answered 8. Every assertion is a RELATION -- fold against runtime cast,
+	# method pointer against a hand-written {Code, Data} record and against
+	# 2 * SizeOf(Pointer) -- so the files carry no expected width and print a
+	# different correct number on each target.
+	./$(COMPILER) --target=arm32 test/test_const_cast_width_matches_runtime.pas $(TESTTMP)/a32_ccwidth
+	tools/expect_same.sh arm32/const_cast_width "$$(tools/run_target.sh arm32 $(TESTTMP)/a32_ccwidth)" "CONST CAST OK ptr=4 native=5"
+	./$(COMPILER) --target=arm32 test/test_method_pointer_size_is_two_pointers.pas $(TESTTMP)/a32_methptr
+	tools/expect_same.sh arm32/method_pointer_size "$$(tools/run_target.sh arm32 $(TESTTMP)/a32_methptr)" "METHPTR OK 8 4"
 	./$(COMPILER) --target=arm32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a32_ssthp
 	tools/expect_same.sh arm32/shortstring_through_a_pointer "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
