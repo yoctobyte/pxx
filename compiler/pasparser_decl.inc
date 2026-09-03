@@ -422,52 +422,26 @@ begin
         Expect(tkLBrack, '[');
         LastTypeStrCap := ConstEval;
         Expect(tkRBrack, ']');
-        { -dPXX_SHORTSTRING BINDS `string[N]`, N <= 255, TO tyShortString -- the
-          byte-length-prefix FPC layout. OFF BY DEFAULT: this is phase 4 of
-          feature-p-implement-the-real-tyshortstring-byte-prefix-layout, and
-          flipping the default is that phase's whole content.
+        { `string[N]`, 1 <= N <= 255, IS tyShortString: FPC's layout, a ONE-BYTE
+          length prefix followed by N characters. This is phase 4 of
+          feature-p-implement-the-real-tyshortstring-byte-prefix-layout and it
+          landed 2026-09-04; the -dPXX_SHORTSTRING scaffolding flag and the
+          per-backend TargetHasByteStrPrefixCodegen gate that guarded it are
+          both gone, because there is no longer a second mode for them to
+          select.
 
-          IT EXISTS DURING PHASE 2 FOR ONE REASON: THE CODEGEN IS OTHERWISE
-          UNTESTABLE. Phase 2 makes tyShortString store a 1-byte length across
-          seven backends, and its own instructions say "nothing re-types yet, so
-          nothing observes it" -- which means writing raw machine code for every
-          backend with no way to run any of it. A positive control was required
-          and there was no spelling that could produce one. This is that
-          spelling. It is not a shortcut into phase 4: the DEFAULT is untouched,
-          so the self-host fixedpoint, the pin and every existing test still
-          build tyFixedString exactly as before, and phase 4 remains the
-          serialising step it was.
-
-          N > 255 stays tyFixedString under the flag too, and that is not a
-          fallback -- a 1-byte prefix CANNOT count past 255, so the wide kind is
-          the only correct answer there and remains so permanently. That is also
-          why lib/rtl's TRttiStr was moved to string[256] in phase 1: the cap is
-          a kind selector, and 256 is the side of the boundary that cannot
-          change. }
-        if PasDefineExists('PXX_SHORTSTRING') and (LastTypeStrCap >= 1) and
-           (LastTypeStrCap <= 255) then
-        begin
-          { REFUSES OFF x86-64, DELIBERATELY. Phase 2 has converted the x86-64
-            length-prefix sites; the other six backends still write the 8-byte
-            word as a literal, so under this flag they would produce a slot
-            sized for a 1-byte prefix and codegen that reads and writes an
-            8-byte one. That is a silent buffer overrun, not a missing feature.
-
-            An error is the whole point: a scaffolding flag that quietly
-            miscompiles on six of seven targets is a guard that cannot fail, and
-            the width-and-alignment class is exactly what hides on the 64-bit
-            host everything is measured on. Delete this check as each backend is
-            converted, and it disappears entirely at phase 4 along with the
-            flag. }
-          if not TargetHasByteStrPrefixCodegen(TargetArch) then
-            Error('-dPXX_SHORTSTRING: the byte-length-prefix codegen does not ' +
-                  'exist for target ' + TargetArchName(TargetArch) + ' yet. It ' +
-                  'still emits an 8-byte length word, which would silently ' +
-                  'overrun the smaller slot. Build without the flag, or finish ' +
-                  'phase 2 for this backend ' +
-                  '(feature-p-implement-the-real-tyshortstring-byte-prefix-layout)');
-          Result := tyShortString;
-        end
+          N > 255 STAYS tyFixedString AND THE BOUND IS LOAD-BEARING, not tidy-up
+          waiting to happen. A one-byte prefix cannot count past 255, so the
+          wide kind is the only correct answer above it and remains so
+          permanently. `lib/rtl/typinfo.pas` declares `TRttiStr = string[256]`
+          for exactly this reason: there the cap is a KIND SELECTOR rather than
+          a length, FPC rejects the declaration outright, and it sits one past
+          the boundary on the side that cannot change. Removing this bound
+          changes the RTL's shape underneath the compiler that builds itself.
+          Measured 2026-09-04: SizeOf is 21 for string[20] and 256 for
+          string[255], both FPC's answers, while string[256] stays 264. }
+        if (LastTypeStrCap >= 1) and (LastTypeStrCap <= 255) then
+          Result := tyShortString
         else
           Result := tyFixedString;
         Exit;

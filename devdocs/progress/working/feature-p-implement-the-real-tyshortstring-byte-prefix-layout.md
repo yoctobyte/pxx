@@ -1335,3 +1335,65 @@ was rebuilt.**
 open and is his. It does not block this ticket (`blocked-by: []` is real here —
 the capacity question is about a plain frozen `string`, not about `string[N]`'s
 prefix width). **Do not settle it as a side effect of the flip.**
+
+## PHASE 4 LANDED — 2026-09-04 (frankb-78, Track A)
+
+`string[N]`, `1 <= N <= 255`, is `tyShortString` unconditionally.
+`-dPXX_SHORTSTRING` and `TargetHasByteStrPrefixCodegen` are both deleted:
+there is no second mode left for either to select. `tools/flip-shortstring/`
+went in the same diff, for the same reason.
+
+**The 1..255 bound is load-bearing and is not tidy-up waiting to happen.** A
+one-byte prefix cannot count past 255, so `tyFixedString` is the only correct
+answer above it and remains so permanently. `lib/rtl/typinfo.pas:42` declares
+`TRttiStr = string[256]` precisely because the cap is a KIND SELECTOR there
+rather than a length, and FPC rejects that declaration outright — it is a pxx
+extension parked one past the boundary, on the side that cannot change.
+Removing the bound changes the RTL's shape underneath the compiler that builds
+itself. Measured at both ends: `SizeOf(string[20])` = 21 and
+`SizeOf(string[255])` = 256, both FPC 3.2.2's answers, while `string[256]`
+stays 264.
+
+### What the flip was gated on, and what it was NOT gated on
+
+**THE GATE WAS THE SEVEN-TARGET MATRIX** in
+`devdocs/dev/shortstring-flip-cross-target-matrix.md`: 72 files that declare
+`string[N]`/`shortstring`, on x86-64, i386, aarch64, arm32, riscv32, xtensa and
+wasm32, in both modes while both still existed, with FPC 3.2.2 as the oracle.
+Final state before the flag went: **two differing rows per target and they are
+the two the flip is FOR** (`test_shortstring_byte_prefix`,
+`test_sizeof_array_field`), both with FPC on the flip's side; **zero
+RC-DIFFERS on any target**, against six before the fixes including a SIGSEGV on
+six of seven.
+
+**THE SELF-HOST FIXEDPOINT IS NOT THAT GATE AND MUST NOT BE QUOTED AS ONE.**
+`793b38646` established BY BUILDING — not by grepping — that the compiler's own
+source is unaffected: all 24 `compiler/` files that mention `string[N]` or
+`shortstring` mention it in a comment, and building `compiler.pas` with the
+flag produced a byte-identical binary. That is exactly the documented limit
+that the fixedpoint **cannot see a construct the compiler never writes**. So
+`converged after N round(s)` on the flip commit proves the compiler still
+builds itself and proves **nothing about the flip**. It is a safety check. The
+matrix is the gate.
+
+### The four defects the measurement found, and what they had in common
+
+Four, in three files, with four different mechanisms — `b97167982`,
+`157b02b90`, `15b9abdcf`, `8b6c2280d`. **Not one bug.** What repeated was a
+habit: in every one of the four the fact needed was already recorded somewhere
+and the reader did not ask it — `FrozenStrPrefixSize`, `RecFieldStrCap`,
+`Procs[].RetType`, the node's own tag. **Nothing was missing. Four readers
+were.** Two of the four were additionally the SAME reading error in different
+files: `= tyString` and the walker's wide default, both used as MEMBERSHIP
+tests when they are WIDTH answers.
+
+**One of the four was never a flip defect at all** and is committed separately
+so it is findable: `a[0] = 'X'` for `a: array[0..1] of string[8]` SIGSEGVs on
+the PINNED compiler in DEFAULT mode. It ships today. The flip only widened it.
+
+### Coverage this does not claim
+
+72 Pascal files. Nothing from `examples/` (checked: no example declares a
+`string[N]`) and nothing from `lib/` beyond typinfo's `string[256]`, which is
+outside the re-typed range. Nothing from the C, NilPy, Rust or Zig frontends —
+the re-type is in the Pascal parser and does not reach them.

@@ -11279,37 +11279,32 @@ test-core: $(COMPILER)
 	# value. Positive control: 5 of these 8 rows go 0 when built with the pinned
 	# compiler; `openvals` and `guard` do not, and the test says why.
 	./$(COMPILER) test/test_string_n_container_strides.pas $(TESTTMP)/test_strn_container26
-	# THE BYTE-PREFIX LAYOUT, compiled BOTH ways, because the flag is the only
-	# thing that can produce a tyShortString today and untested machine code is
-	# not reviewable. Default must stay the 8-byte word (layout row `5 0 0 0 0 0`,
-	# prefix 8); -dPXX_SHORTSTRING must be BYTE-IDENTICAL TO FPC 3.2.2, layout
-	# row included -- every observable matches and only `sizeof` legitimately
-	# differs between the two modes. The layout row is the only one that sees the
-	# prefix directly: an implementation can pass every other row by being
-	# self-consistently wrong.
+	# THE BYTE-PREFIX LAYOUT, and it is now the DEFAULT -- phase 4 landed
+	# 2026-09-04 and there is no second mode left to compile. This row was a
+	# PAIR until then: the default asserted the 8-byte word (`layout 5 0 0 0 0 0`,
+	# prefix 8) and -dPXX_SHORTSTRING asserted FPC 3.2.2's bytes. The flag row's
+	# expectation is the one that survived, unchanged, which is the whole claim
+	# of the flip in one line.
+	# The layout row is the only one that sees the prefix DIRECTLY: an
+	# implementation can pass every other row by being self-consistently wrong.
 	./$(COMPILER) test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_ssbp_default26
-	tools/expect_same.sh test_ssbp_default26 "$$($(TESTTMP)/test_ssbp_default26)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_ssbp_short26
-	tools/expect_same.sh test_ssbp_short26 "$$($(TESTTMP)/test_ssbp_short26)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
+	tools/expect_same.sh test_ssbp_default26 "$$($(TESTTMP)/test_ssbp_default26)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	tools/expect_same.sh test_strn_container26 "$$($(TESTTMP)/test_strn_container26)" "$$(printf 'openp1     1\nopenp2     1\nopenp20    1\nopenvals   1\ndyn1d      1\ndyn2d      1\ndyn2dvals  1\nguard      1')"
-	# TWO FROZEN WIDTHS IN ONE PROGRAM, all FOUR combinations of the two string
-	# build axes. PXX_MANAGED_STRING chooses what bare `string` is and
-	# PXX_SHORTSTRING chooses what `string[N]` is, so the widths are furthest
-	# apart in the frozen x shortstring corner -- which is the corner no default
-	# build visits. The SAME rows in every mode, and they are FPC 3.2.2's: the
-	# two default modes prove nothing moved, the two shortstring modes prove the
-	# cross-width conversion. Only the narrow->wide direction ever broke, because
-	# tyString is also the fallback both readers use, so a single-width test
-	# cannot see this at all.
+	# TWO FROZEN WIDTHS IN ONE PROGRAM. There were FOUR corners here until the
+	# phase-4 flip: two string build axes, PXX_MANAGED_STRING choosing what bare
+	# `string` is and PXX_SHORTSTRING choosing what `string[N]` is. The second
+	# axis is gone -- `string[N]` is the byte prefix unconditionally -- so TWO
+	# rows remain and BOTH now carry the narrow width. That is not a loss of
+	# coverage for the thing this file is for: the corner where the widths are
+	# furthest apart used to be the one no default build visited, and it is now
+	# the DEFAULT. The SAME rows in every mode, and they are FPC 3.2.2's. Only
+	# the narrow->wide direction ever broke, because tyString is also the
+	# fallback both readers use, so a single-width test cannot see this at all.
 	./$(COMPILER) test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_dm26
 	tools/expect_same.sh test_ssmw_dm26 "$$($(TESTTMP)/test_ssmw_dm26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_ds26
-	tools/expect_same.sh test_ssmw_ds26 "$$($(TESTTMP)/test_ssmw_ds26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_fm26
 	tools/expect_same.sh test_ssmw_fm26 "$$($(TESTTMP)/test_ssmw_fm26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
-	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_fs26
-	tools/expect_same.sh test_ssmw_fs26 "$$($(TESTTMP)/test_ssmw_fs26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
-	# CONCAT over frozen strings, the same four corners. `s := s + 'cd'` on a
+	# CONCAT over frozen strings, the same corners. `s := s + 'cd'` on a
 	# plain string[10] SEGFAULTED on x86-64 under -dPXX_SHORTSTRING and was
 	# correct on every cross target, because x86-64 is the only backend that
 	# prepares the concat operands inline. Positive control, measured: with the
@@ -11338,13 +11333,9 @@ test-core: $(COMPILER)
 	# bug-a-a-frozen-record-field-as-a-concat-operand-segfaults
 	./$(COMPILER) test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_dm26
 	tools/expect_same.sh test_sscat_dm26 "$$($(TESTTMP)/test_sscat_dm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nfieldr   [abFLD] 5\nfieldl   [FLDab] 5\nfieldm   [FLDz] 4\nelemc    [abELM] 5\nempty    [cd] 2\nemptyr   [ab] 2')"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_ds26
-	tools/expect_same.sh test_sscat_ds26 "$$($(TESTTMP)/test_sscat_ds26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nfieldr   [abFLD] 5\nfieldl   [FLDab] 5\nfieldm   [FLDz] 4\nelemc    [abELM] 5\nempty    [cd] 2\nemptyr   [ab] 2')"
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_fm26
 	tools/expect_same.sh test_sscat_fm26 "$$($(TESTTMP)/test_sscat_fm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nfieldr   [abFLD] 5\nfieldl   [FLDab] 5\nfieldm   [FLDz] 4\nelemc    [abELM] 5\nempty    [cd] 2\nemptyr   [ab] 2')"
-	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_fs26
-	tools/expect_same.sh test_sscat_fs26 "$$($(TESTTMP)/test_sscat_fs26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nfieldr   [abFLD] 5\nfieldl   [FLDab] 5\nfieldm   [FLDz] 4\nelemc    [abELM] 5\nempty    [cd] 2\nemptyr   [ab] 2')"
-	# A FROZEN ARGUMENT REACHING OVERLOAD RESOLUTION, four corners. Under
+	# A FROZEN ARGUMENT REACHING OVERLOAD RESOLUTION. Under
 	# -dPXX_SHORTSTRING `Show(r.f)` against `Show(const a: AnsiString)` was
 	# REFUSED on all seven targets while `Show(s)` on a plain variable of the same
 	# type was accepted in the same program -- the only byte-prefix defect that was
@@ -11359,12 +11350,8 @@ test-core: $(COMPILER)
 	# bug-a-a-frozen-record-field-is-refused-by-overload-resolution-against-an-ansistring-parameter
 	./$(COMPILER) test/test_frozen_arg_overload.pas $(TESTTMP)/test_faov_dm26
 	tools/expect_same.sh test_faov_dm26 "$$($(TESTTMP)/test_faov_dm26)" "$$(printf 'plain   A[plain]\nfield   A[field]\nnested  A[nested]\nelem    A[elem]\nelemvar A[elem]\nret     A[ret]\npick    AI[field]\nint     I[7]')"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_arg_overload.pas $(TESTTMP)/test_faov_ds26
-	tools/expect_same.sh test_faov_ds26 "$$($(TESTTMP)/test_faov_ds26)" "$$(printf 'plain   A[plain]\nfield   A[field]\nnested  A[nested]\nelem    A[elem]\nelemvar A[elem]\nret     A[ret]\npick    AI[field]\nint     I[7]')"
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_frozen_arg_overload.pas $(TESTTMP)/test_faov_fm26
 	tools/expect_same.sh test_faov_fm26 "$$($(TESTTMP)/test_faov_fm26)" "$$(printf 'plain   A[plain]\nfield   A[field]\nnested  A[nested]\nelem    A[elem]\nelemvar A[elem]\nret     A[ret]\npick    AI[field]\nint     I[7]')"
-	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_frozen_arg_overload.pas $(TESTTMP)/test_faov_fs26
-	tools/expect_same.sh test_faov_fs26 "$$($(TESTTMP)/test_faov_fs26)" "$$(printf 'plain   A[plain]\nfield   A[field]\nnested  A[nested]\nelem    A[elem]\nelemvar A[elem]\nret     A[ret]\npick    AI[field]\nint     I[7]')"
 	# THE TWO READERS THAT SURVIVED THE FOUR-CAUSE FIX, and every row has a
 	# NEGATIVE partner. This family fails by answering a CONSTANT -- the
 	# pre-fix field-vs-field compare answered TRUE for every input because it
@@ -11374,18 +11361,14 @@ test-core: $(COMPILER)
 	# the level that catches it and -O0 is the level that hides it.
 	./$(COMPILER) test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/test_ffdr_dm26
 	tools/expect_same.sh test_ffdr_dm26 "$$($(TESTTMP)/test_ffdr_dm26)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/test_ffdr_ds26
-	tools/expect_same.sh test_ffdr_ds26 "$$($(TESTTMP)/test_ffdr_ds26)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/test_ffdr_fm26
 	tools/expect_same.sh test_ffdr_fm26 "$$($(TESTTMP)/test_ffdr_fm26)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
-	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/test_ffdr_fs26
-	tools/expect_same.sh test_ffdr_fs26 "$$($(TESTTMP)/test_ffdr_fs26)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
 	# The frozen-string-through-a-pointer matrix, NATIVE. It was cross-only
 	# because Write(p^) printed garbage on x86-64 -- that is fixed and closed
 	# (bug-a-write-of-a-frozen-string-through-a-typed-pointer-prints-garbage-on-x86-64),
-	# so the host now carries the same rows the three cross targets do, in BOTH
-	# modes. The .expected is byte-identical to FPC 3.2.2 on this file.
-	# CHAR vs a frozen string, EVERY lvalue shape, both directions, both modes.
+	# so the host now carries the same rows the three cross targets do. The
+	# .expected is byte-identical to FPC 3.2.2 on this file.
+	# CHAR vs a frozen string, EVERY lvalue shape, both directions.
 	# The x86-64 arms guarded on `lhsTk = tyString`, the GENERIC frozen tag --
 	# so a variable matched and an array ELEMENT and a record FIELD did not,
 	# and those fell through to EmitStrCmpReg, which dereferences the Char's
@@ -11398,20 +11381,16 @@ test-core: $(COMPILER)
 	# bug-a-char-vs-frozen-string-comparison-misses-every-shape-but-a-variable
 	./$(COMPILER) test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_fscc26_d
 	tools/expect_same.sh test_frozen_string_char_compare_shapes_default "$$($(TESTTMP)/test_fscc26_d)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_fscc26_s
-	tools/expect_same.sh test_frozen_string_char_compare_shapes_short "$$($(TESTTMP)/test_fscc26_s)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
 	./$(COMPILER) test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_ssthp_d26
 	tools/expect_same.sh test_ssthp_d26 "$$($(TESTTMP)/test_ssthp_d26)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_ssthp_s26
-	tools/expect_same.sh test_ssthp_s26 "$$($(TESTTMP)/test_ssthp_s26)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
-	# EVERY OPERAND SHAPE ON EITHER SIDE OF A FROZEN COMPARISON, both modes, plus
+	# EVERY OPERAND SHAPE ON EITHER SIDE OF A FROZEN COMPARISON, plus
 	# the CASE statement asking the same question a different way. Three defects
 	# were found by this file within an hour of it existing, and none of them was
 	# reachable from a comparison against a literal:
 	#
 	#   i386      `arr[0] = arr[1]` FALSE, both modes  (an address compare)
 	#   ALL       `case arr[0] of 'lit'` did not COMPILE
-	#   x86-64    `frozenVar = ansiVar` FALSE under the flag
+	#   x86-64    `frozenVar = ansiVar` FALSE under the byte prefix
 	#
 	# The i386 and case rows are REGRESSIONS from 450f4b52a, which had to start
 	# tagging an array element with the kind the ARRAY records because that tag
@@ -11425,28 +11404,24 @@ test-core: $(COMPILER)
 	# string row above and turns those three into content comparisons.
 	./$(COMPILER) test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/test_fcos_d26
 	tools/expect_same.sh test_fcos_d26 "$$($(TESTTMP)/test_fcos_d26)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/test_fcos_s26
-	tools/expect_same.sh test_fcos_s26 "$$($(TESTTMP)/test_fcos_s26)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
-	# PChar OF A FROZEN STRING, EVERY SPELLING, BOTH MODES against ONE .expected.
-	# The file prints no width: each offset row asserts
-	# `PChar(x) - @x = SizeOf(TS) - 8`, true at 8 and at 1, so the default mode
-	# is a real control here rather than a row that passes for the old reason.
-	# The default mode is NOT merely a control: `imp elem` and `off fld` were
-	# broken there too, which is why both modes run everywhere this is wired.
+	# PChar OF A FROZEN STRING, EVERY SPELLING, against ONE .expected. The file
+	# prints no width: each offset row asserts `PChar(x) - @x = SizeOf(TS) - 8`,
+	# which is true at a prefix of 8 and at a prefix of 1. That is why one
+	# .expected covered both layouts while both existed, and it is why this file
+	# survived the phase-4 flip unedited -- an assertion that carries no width
+	# cannot be invalidated by changing one. `imp elem` and `off fld` were broken
+	# under the WIDE prefix too, so this was never a flip-only file.
 	./$(COMPILER) test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/test_pcfs_d26
 	tools/expect_same.sh test_pcfs_d26 "$$($(TESTTMP)/test_pcfs_d26)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/test_pcfs_s26
-	tools/expect_same.sh test_pcfs_s26 "$$($(TESTTMP)/test_pcfs_s26)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
 	# THE LAYOUT OF A FROZEN STRING as relations -- stride = SizeOf, every element
 	# prefix-aligned, no field overlapping its neighbour, a truncating store
 	# staying inside its field, and the first character in ONE place under all
-	# four spellings. No number in the compared output, so both modes AND FPC
-	# 3.2.2 produce the same lines; `tools/fpc_diff_probe.sh` on this file is a
+	# four spellings. No number in the compared output, so the 8-byte and 1-byte
+	# layouts AND FPC 3.2.2 all produce the same lines; `tools/fpc_diff_probe.sh`
+	# on this file is a
 	# real oracle rather than a formality.
 	./$(COMPILER) test/test_frozen_string_layout.pas $(TESTTMP)/test_fsl_d26
 	tools/expect_same.sh test_fsl_d26 "$$($(TESTTMP)/test_fsl_d26)" "$$(cat test/test_frozen_string_layout.expected)"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_string_layout.pas $(TESTTMP)/test_fsl_s26
-	tools/expect_same.sh test_fsl_s26 "$$($(TESTTMP)/test_fsl_s26)" "$$(cat test/test_frozen_string_layout.expected)"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26
@@ -12776,8 +12751,6 @@ test-core: $(COMPILER)
 	# bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode
 	./$(COMPILER) test/test_frozen_arg_and_field_write.pas $(TESTTMP)/sweep_frozenargfld_d
 	tools/expect_same.sh sweep_frozenargfld_default "$$($(TESTTMP)/sweep_frozenargfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/sweep_frozenargfld_s
-	tools/expect_same.sh sweep_frozenargfld_bytepfx "$$($(TESTTMP)/sweep_frozenargfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	# A frozen string[N] into a MANAGED parameter through EVERY CALL PATH the
 	# backends emit separately -- direct, ordered two-arg, constructor,
 	# non-virtual method, virtual (base and overridden), proc-var indirect. The
@@ -12788,16 +12761,10 @@ test-core: $(COMPILER)
 	# bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
 	./$(COMPILER) test/test_frozen_arg_call_paths.pas $(TESTTMP)/sweep_frozenargpaths_d
 	tools/expect_same.sh sweep_frozenargpaths_default "$$($(TESTTMP)/sweep_frozenargpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/sweep_frozenargpaths_s
-	tools/expect_same.sh sweep_frozenargpaths_bytepfx "$$($(TESTTMP)/sweep_frozenargpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
 	./$(COMPILER) test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/sweep_fieldrooted_frozen_d
 	tools/expect_same.sh sweep_fieldrooted_frozen_default "$$($(TESTTMP)/sweep_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/sweep_fieldrooted_frozen_s
-	tools/expect_same.sh sweep_fieldrooted_frozen_bytepfx "$$($(TESTTMP)/sweep_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	./$(COMPILER) test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/sweep_dynfrozencap_d
 	tools/expect_same.sh sweep_dynfrozencap_default "$$($(TESTTMP)/sweep_dynfrozencap_d)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
-	./$(COMPILER) -dPXX_SHORTSTRING test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/sweep_dynfrozencap_s
-	tools/expect_same.sh sweep_dynfrozencap_bytepfx "$$($(TESTTMP)/sweep_dynfrozencap_s)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
 	# see the cross rows: the leak is the half no value assertion can observe
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_frozen_arg_no_leak.pas $(TESTTMP)/sweep_frozenargleak
 	tools/assert_no_leak.sh sweep_frozen_arg_no_leak 200 $(TESTTMP)/sweep_frozenargleak
@@ -15795,37 +15762,31 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_char_string_equality_both_directions.pas $(TESTTMP)/test_i386_chareq
 	tools/expect_same.sh i386/chareq "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_chareq)" "$$(cat test/test_char_string_equality_both_directions.expected)"
 	# PHASE 2 BACKEND SIX: the byte length prefix on i386.
-	# Four configurations. The DEFAULT rows are the no-op control -- every wide
+	# Four configurations WHEN THIS WAS WRITTEN; the default/flag pairs collapsed
+	# to one row each at the phase-4 flip. The DEFAULT rows were the no-op
+	# control -- every wide
 	# form the helpers emit was derived against the literal it replaced and
 	# checked with GNU as, and the whole module was proved unchanged by building
 	# the same HEAD twice and comparing emitted i386 binaries: 11/11 identical.
-	# The operand-shape matrix, both modes. i386 is the target the
+	# The operand-shape matrix. i386 is the target the
 	# element-vs-element defect was FOUND on and is the row that must not
 	# go quiet again.
 	./$(COMPILER) --target=i386 test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/i386_fcos_d
 	tools/expect_same.sh i386/frozen_compare_shapes_default "$$(tools/run_target.sh i386 $(TESTTMP)/i386_fcos_d)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
-	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/i386_fcos_s
-	tools/expect_same.sh i386/frozen_compare_shapes_short "$$(tools/run_target.sh i386 $(TESTTMP)/i386_fcos_s)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
-	# ...and the PChar spellings, both modes. The fix is entirely pre-backend
+	# ...and the PChar spellings. The fix is entirely pre-backend
 	# (ir.inc), so a cross cell cannot fail here while x86-64 passes for a
 	# codegen reason -- what it does catch is a 32-bit ARGUMENT-MARSHALLING
 	# assumption about a pointer that has just had a byte added to it.
 	./$(COMPILER) --target=i386 test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/i386_pcfs_d
 	tools/expect_same.sh i386/pchar_frozen_default "$$(tools/run_target.sh i386 $(TESTTMP)/i386_pcfs_d)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
-	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/i386_pcfs_s
-	tools/expect_same.sh i386/pchar_frozen_short "$$(tools/run_target.sh i386 $(TESTTMP)/i386_pcfs_s)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
 	# ...and the layout relations. A 32-BIT row is not a formality here: the
 	# 8-byte prefix is written as two machine words, so the alignment it needs is
 	# 4 and not 8 -- an earlier draft of this test asserted `stride mod 8` and
 	# passed on x86-64 and aarch64 while failing on every 32-bit target.
 	./$(COMPILER) --target=i386 test/test_frozen_string_layout.pas $(TESTTMP)/i386_fsl_d
 	tools/expect_same.sh i386/frozen_string_layout_default "$$(tools/run_target.sh i386 $(TESTTMP)/i386_fsl_d)" "$$(cat test/test_frozen_string_layout.expected)"
-	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_frozen_string_layout.pas $(TESTTMP)/i386_fsl_s
-	tools/expect_same.sh i386/frozen_string_layout_short "$$(tools/run_target.sh i386 $(TESTTMP)/i386_fsl_s)" "$$(cat test/test_frozen_string_layout.expected)"
 	./$(COMPILER) --target=i386 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_i386_ssbp_d
-	tools/expect_same.sh i386/ssbp_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
-	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_i386_ssbp_s
-	tools/expect_same.sh i386/ssbp_short "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
+	tools/expect_same.sh i386/ssbp_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_d)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# The mixed-width rows carry `s:9` -- a NONZERO field width, deliberately.
 	# The pad is max(0, wid - len), a RUNTIME quantity, so the shared helper is
 	# what reads the prefix; at width 0 i386 never calls it (the `if wid > 0`
@@ -15833,8 +15794,6 @@ test-i386: $(COMPILER)
 	# with it broken because width 0 was all any test had.
 	./$(COMPILER) --target=i386 test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_i386_ssmw_d
 	tools/expect_same.sh i386/ssmw_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
-	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_i386_ssmw_s
-	tools/expect_same.sh i386/ssmw_short "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	# The cross half of the statement-vs-value classification guard, and the half
 	# that can fail: x86-64 has no statement-level catch-all, so only a target
 	# that HAS one can regress. Exits 81 if a value kind is mis-classified.
@@ -16125,8 +16084,6 @@ test-i386: $(COMPILER)
 	# bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode
 	./$(COMPILER) --target=i386 test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_i386_frozen_argfld_d
 	tools/expect_same.sh i386/frozen_arg_field_write_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
-	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_i386_frozen_argfld_s
-	tools/expect_same.sh i386/frozen_arg_field_write_bytepfx "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	# A frozen string[N] into a MANAGED parameter through EVERY CALL PATH the
 	# backends emit separately -- direct, ordered two-arg, constructor,
 	# non-virtual method, virtual (base and overridden), proc-var indirect. The
@@ -16137,16 +16094,10 @@ test-i386: $(COMPILER)
 	# bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
 	./$(COMPILER) --target=i386 test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_i386_frozen_argpaths_d
 	tools/expect_same.sh i386/frozen_arg_call_paths_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
-	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_i386_frozen_argpaths_s
-	tools/expect_same.sh i386/frozen_arg_call_paths_bytepfx "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
 	./$(COMPILER) --target=i386 test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_i386_fieldrooted_frozen_d
 	tools/expect_same.sh i386/fieldrooted_nested_frozen_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
-	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_i386_fieldrooted_frozen_s
-	tools/expect_same.sh i386/fieldrooted_nested_frozen_bytepfx "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	./$(COMPILER) --target=i386 test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_i386_dynfrozencap_d
 	tools/expect_same.sh i386/dyn_frozen_field_capacity_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dynfrozencap_d)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
-	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_i386_dynfrozencap_s
-	tools/expect_same.sh i386/dyn_frozen_field_capacity_bytepfx "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dynfrozencap_s)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
 	# ...and the LEAK, which every row above passes with fully present: the old
 	# inline conversion allocated a handle per call and nothing owned it
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
@@ -16735,33 +16686,27 @@ test-aarch64: $(COMPILER)
 	# encoding was checked to reproduce the literal it replaced bit-for-bit, so
 	# default aarch64 must be byte-identical to before the conversion.
 	./$(COMPILER) --target=aarch64 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a64_ssbp_d
-	tools/expect_same.sh aarch64/ssbp_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
-	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a64_ssbp_s
-	tools/expect_same.sh aarch64/ssbp_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
+	tools/expect_same.sh aarch64/ssbp_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssbp_d)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# ... and the cross-width conversion, which is what actually broke on this
 	# backend: Length() read the prefix at a fixed 8 and answered
 	# 0x6F6C6C654805 -- the length byte followed by the characters of 'hello'.
 	./$(COMPILER) --target=aarch64 test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/a64_ffdr_d
 	tools/expect_same.sh aarch64/ffdr_d "$$(tools/run_target.sh aarch64 $(TESTTMP)/a64_ffdr_d)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
-	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/a64_ffdr_s
-	tools/expect_same.sh aarch64/ffdr_s "$$(tools/run_target.sh aarch64 $(TESTTMP)/a64_ffdr_s)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
 	./$(COMPILER) --target=aarch64 test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a64_ssmw_d
 	tools/expect_same.sh aarch64/ssmw_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
-	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a64_ssmw_s
-	tools/expect_same.sh aarch64/ssmw_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	# EVERY READER of a frozen string's length prefix, asserted as RELATIONS
 	# (Length(p^) = Length(s)) so one file carries no per-target constant. The
 	# censuses this feature ran all counted PXXWriteFrozenW -- WRITERS -- and the
 	# defects are in readers: comparison, Copy and Pos appear in no count.
-	# BOTH MODES now. The flag rows were held out while this file was red under
-	# -dPXX_SHORTSTRING on all four converted backends; that state is closed
-	# (IRFrozenKindOfAddr, then the SetLength arms) and the two modes now print
-	# the SAME 33 lines on native, i386, arm32, aarch64 and riscv32 (and on
-	# xtensa under the flag, wired in the xtensa battery) --
-	# byte-identical to the FPC 3.2.2 oracle, which is the point of a file whose
-	# rows are all RELATIONS and carry no per-target constant.
+	# The byte-prefix rows were held out for a while because this file was red
+	# under -dPXX_SHORTSTRING on all four converted backends; that was closed
+	# (IRFrozenKindOfAddr, then the SetLength arms) and the two layouts then
+	# printed the SAME 33 lines on native, i386, arm32, aarch64, riscv32 and
+	# xtensa -- byte-identical to the FPC 3.2.2 oracle, which is the point of a
+	# file whose rows are all RELATIONS and carry no per-target constant. That
+	# agreement is what let the phase-4 flip leave this row untouched.
 	# x86-64 is wired natively next to the other frozen-string rows, above.
-	# CHAR vs a frozen string, EVERY lvalue shape, both directions, both modes.
+	# CHAR vs a frozen string, EVERY lvalue shape, both directions.
 	# The x86-64 arms guarded on `lhsTk = tyString`, the GENERIC frozen tag --
 	# so a variable matched and an array ELEMENT and a record FIELD did not,
 	# and those fell through to EmitStrCmpReg, which dereferences the Char's
@@ -16774,12 +16719,8 @@ test-aarch64: $(COMPILER)
 	# bug-a-char-vs-frozen-string-comparison-misses-every-shape-but-a-variable
 	./$(COMPILER) --target=aarch64 test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_a64_fscc_d
 	tools/expect_same.sh aarch64/frozen_char_compare_shapes_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_fscc_d)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
-	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_a64_fscc_s
-	tools/expect_same.sh aarch64/frozen_char_compare_shapes_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_fscc_s)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
 	./$(COMPILER) --target=aarch64 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a64_ssthp
 	tools/expect_same.sh aarch64/shortstring_through_a_pointer "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
-	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a64_ssthp_s
-	tools/expect_same.sh aarch64/shortstring_through_a_pointer_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssthp_s)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
 	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
 	# correct throughout and is the control that the fix changed nothing there.
@@ -16931,8 +16872,6 @@ test-aarch64: $(COMPILER)
 	# bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode
 	./$(COMPILER) --target=aarch64 test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_a64_frozen_argfld_d
 	tools/expect_same.sh aarch64/frozen_arg_field_write_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
-	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_a64_frozen_argfld_s
-	tools/expect_same.sh aarch64/frozen_arg_field_write_bytepfx "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	# A frozen string[N] into a MANAGED parameter through EVERY CALL PATH the
 	# backends emit separately -- direct, ordered two-arg, constructor,
 	# non-virtual method, virtual (base and overridden), proc-var indirect. The
@@ -16943,16 +16882,10 @@ test-aarch64: $(COMPILER)
 	# bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
 	./$(COMPILER) --target=aarch64 test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_a64_frozen_argpaths_d
 	tools/expect_same.sh aarch64/frozen_arg_call_paths_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
-	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_a64_frozen_argpaths_s
-	tools/expect_same.sh aarch64/frozen_arg_call_paths_bytepfx "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
 	./$(COMPILER) --target=aarch64 test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_aarch64_fieldrooted_frozen_d
 	tools/expect_same.sh aarch64/fieldrooted_nested_frozen_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
-	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_aarch64_fieldrooted_frozen_s
-	tools/expect_same.sh aarch64/fieldrooted_nested_frozen_bytepfx "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	./$(COMPILER) --target=aarch64 test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_aarch64_dynfrozencap_d
 	tools/expect_same.sh aarch64/dyn_frozen_field_capacity_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dynfrozencap_d)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
-	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_aarch64_dynfrozencap_s
-	tools/expect_same.sh aarch64/dyn_frozen_field_capacity_bytepfx "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dynfrozencap_s)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
 	# ...and the LEAK, which every row above passes with fully present: the old
 	# inline conversion allocated a handle per call and nothing owned it
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
@@ -17638,8 +17571,6 @@ test-riscv32: $(COMPILER)
 	# bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode
 	./$(COMPILER) --target=riscv32 test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_rv32_frozen_argfld_d
 	tools/expect_same.sh riscv32/frozen_arg_field_write_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
-	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_rv32_frozen_argfld_s
-	tools/expect_same.sh riscv32/frozen_arg_field_write_bytepfx "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	# A frozen string[N] into a MANAGED parameter through EVERY CALL PATH the
 	# backends emit separately -- direct, ordered two-arg, constructor,
 	# non-virtual method, virtual (base and overridden), proc-var indirect. The
@@ -17650,16 +17581,10 @@ test-riscv32: $(COMPILER)
 	# bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
 	./$(COMPILER) --target=riscv32 test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_rv32_frozen_argpaths_d
 	tools/expect_same.sh riscv32/frozen_arg_call_paths_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
-	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_rv32_frozen_argpaths_s
-	tools/expect_same.sh riscv32/frozen_arg_call_paths_bytepfx "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
 	./$(COMPILER) --target=riscv32 test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_riscv32_fieldrooted_frozen_d
 	tools/expect_same.sh riscv32/fieldrooted_nested_frozen_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
-	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_riscv32_fieldrooted_frozen_s
-	tools/expect_same.sh riscv32/fieldrooted_nested_frozen_bytepfx "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	./$(COMPILER) --target=riscv32 test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_riscv32_dynfrozencap_d
 	tools/expect_same.sh riscv32/dyn_frozen_field_capacity_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_dynfrozencap_d)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
-	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_riscv32_dynfrozencap_s
-	tools/expect_same.sh riscv32/dyn_frozen_field_capacity_bytepfx "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_dynfrozencap_s)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
 	# ...and the LEAK, which every row above passes with fully present: the old
 	# inline conversion allocated a handle per call and nothing owned it
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
@@ -18370,13 +18295,12 @@ test-riscv32: $(COMPILER)
 	# backend would emit one and leave garbage in the high half. Unlike arm32 it
 	# has a zero register, so the store helper needs no scratch parameter.
 	# Expected values DERIVED, not transplanted: the slot is cap + prefix, so
-	# sizeof is 10+8=18 by default and 10+1=11 under the flag (FPC 3.2.2's
-	# answer), and `layout` reads the first six raw bytes -- a little-endian
-	# 8-byte word shows `5 0 0 0 0 0`, the byte prefix shows 5 then 'hello'.
+	# sizeof is 10+1=11 -- FPC 3.2.2's answer, and since the phase-4 flip the
+	# only one. It was 10+8=18 while the wide prefix was the default. `layout`
+	# reads the first six raw bytes -- a little-endian 8-byte word showed
+	# `5 0 0 0 0 0`, the byte prefix shows 5 then the characters of 'hello'.
 	./$(COMPILER) --target=riscv32 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_rv32_ssbp_d
-	tools/expect_same.sh riscv32/ssbp_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
-	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_rv32_ssbp_s
-	tools/expect_same.sh riscv32/ssbp_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
+	tools/expect_same.sh riscv32/ssbp_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssbp_d)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# The cross-width conversion, carrying the NONZERO FIELD WIDTH rows from the
 	# start. aarch64 was certified complete while `WriteLn(s:9)` was broken,
 	# because the pad is max(0, wid - len) -- a runtime quantity the SHARED
@@ -18388,44 +18312,34 @@ test-riscv32: $(COMPILER)
 	# pad/w2n/trunc all print <> and the other rows stay green.
 	./$(COMPILER) --target=riscv32 test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/rv32_ffdr_d
 	tools/expect_same.sh riscv32/ffdr_d "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_ffdr_d)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
-	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/rv32_ffdr_s
-	tools/expect_same.sh riscv32/ffdr_s "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_ffdr_s)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
 	./$(COMPILER) --target=riscv32 test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_rv32_ssmw_d
 	tools/expect_same.sh riscv32/ssmw_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
-	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_rv32_ssmw_s
-	tools/expect_same.sh riscv32/ssmw_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	# EVERY READER of a frozen string's length prefix, asserted as RELATIONS
 	# (Length(p^) = Length(s)) so one file carries no per-target constant. The
 	# censuses this feature ran all counted PXXWriteFrozenW -- WRITERS -- and the
 	# defects are in readers: comparison, Copy and Pos appear in no count.
-	# BOTH MODES, EVERYWHERE, and that is recent. This block said "DEFAULT MODE
-	# ONLY for now -- under -dPXX_SHORTSTRING this file is red on all four
-	# converted backends and dies partway on three", and separately that x86-64
-	# was "deliberately NOT wired" because Write(p^) printed garbage. Both were
-	# true when written and both are now false: the reader fix landed (3b0f71ccd,
-	# "the write path is a THIRD reader"), the flag rows below are wired, and the
-	# x86-64 flag row is wired above. Re-measured 2026-09-03 on the pinned
-	# compiler: the flag-mode output matches test_shortstring_through_a_pointer.
-	# expected on x86-64, i386, aarch64, arm32, riscv32 AND xtensa -- six for six.
-	# A stale "this is red under the flag" is the worst possible comment to leave
-	# standing while the phase-4 flip is being sequenced off exactly that
-	# question: it does not error, it just tells the next reader the flip has a
-	# blocker it does not have.
-	# The operand-shape matrix, both modes -- a 32-bit non-x86 control for a
+	# EVERYWHERE, and the road here is worth keeping. This block once said
+	# "DEFAULT MODE ONLY for now -- under -dPXX_SHORTSTRING this file is red on
+	# all four converted backends and dies partway on three", and separately that
+	# x86-64 was "deliberately NOT wired" because Write(p^) printed garbage. Both
+	# were true when written and both went false under them: the reader fix
+	# landed (3b0f71ccd, "the write path is a THIRD reader"), and re-measured
+	# 2026-09-03 on the pinned compiler the byte-prefix output matched
+	# test_shortstring_through_a_pointer.expected on x86-64, i386, aarch64,
+	# arm32, riscv32 AND xtensa -- six for six. That six-for-six is one of the
+	# rows the phase-4 flip was decided on. A stale "this is red under the flag"
+	# would have been the worst possible comment to leave standing while the flip
+	# was being sequenced off exactly that question: it does not error, it just
+	# tells the next reader the flip has a blocker it does not have.
+	# The operand-shape matrix -- a 32-bit non-x86 control for a
 	# family whose defects have all been width- or tag-shaped.
 	./$(COMPILER) --target=riscv32 test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/rv32_fcos_d
 	tools/expect_same.sh riscv32/frozen_compare_shapes_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_fcos_d)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
-	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/rv32_fcos_s
-	tools/expect_same.sh riscv32/frozen_compare_shapes_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_fcos_s)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
 	./$(COMPILER) --target=riscv32 test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/rv32_pcfs_d
 	tools/expect_same.sh riscv32/pchar_frozen_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_pcfs_d)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
-	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/rv32_pcfs_s
-	tools/expect_same.sh riscv32/pchar_frozen_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_pcfs_s)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
 	./$(COMPILER) --target=riscv32 test/test_frozen_string_layout.pas $(TESTTMP)/rv32_fsl_d
 	tools/expect_same.sh riscv32/frozen_string_layout_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_fsl_d)" "$$(cat test/test_frozen_string_layout.expected)"
-	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_string_layout.pas $(TESTTMP)/rv32_fsl_s
-	tools/expect_same.sh riscv32/frozen_string_layout_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_fsl_s)" "$$(cat test/test_frozen_string_layout.expected)"
-	# CHAR vs a frozen string, EVERY lvalue shape, both directions, both modes.
+	# CHAR vs a frozen string, EVERY lvalue shape, both directions.
 	# The x86-64 arms guarded on `lhsTk = tyString`, the GENERIC frozen tag --
 	# so a variable matched and an array ELEMENT and a record FIELD did not,
 	# and those fell through to EmitStrCmpReg, which dereferences the Char's
@@ -18438,12 +18352,8 @@ test-riscv32: $(COMPILER)
 	# bug-a-char-vs-frozen-string-comparison-misses-every-shape-but-a-variable
 	./$(COMPILER) --target=riscv32 test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_rv32_fscc_d
 	tools/expect_same.sh riscv32/frozen_char_compare_shapes_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_fscc_d)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
-	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_rv32_fscc_s
-	tools/expect_same.sh riscv32/frozen_char_compare_shapes_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_fscc_s)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
 	./$(COMPILER) --target=riscv32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp
 	tools/expect_same.sh riscv32/shortstring_through_a_pointer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
-	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp_s
-	tools/expect_same.sh riscv32/shortstring_through_a_pointer_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssthp_s)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 
 
 # ---------------------------------------------------------------------------
@@ -18568,15 +18478,18 @@ test-wasm32: $(COMPILER)
 	# Oracle is the NATIVE x86-64 build of the same source, as in test-riscv32:
 	# the point of a cross row is that the answer does not depend on the target.
 	#
-	# CONFIG: every row here is the DEFAULT layout -- no -dPXX_SHORTSTRING.
-	# Stated because a byte pattern is a fact ABOUT A LAYOUT, and the layout is
-	# chosen by a flag that appears nowhere in a program's output. Two sessions
-	# compared correct wasm32 and xtensa byte dumps on 2026-09-02, reached
-	# opposite conclusions, and each nearly retracted a valid finding: same probe
-	# text, different config, and neither table carried the config that made its
-	# numbers mean anything. If a -dPXX_SHORTSTRING variant is ever added here,
-	# make the ROW LABEL carry the config -- a label is all that distinguishes
-	# two otherwise identical rows, and the program itself will not tell you.
+	# CONFIG: every row here is the byte-prefix layout, which since phase 4
+	# (2026-09-04) is the only one -- `string[N]`, N <= 255, is tyShortString
+	# unconditionally and the -dPXX_SHORTSTRING selector is gone.
+	# THE WARNING THAT MADE THIS PARAGRAPH SURVIVES THE FLAG. A byte pattern is
+	# a fact ABOUT A LAYOUT, and the layout appears nowhere in a program's
+	# output. Two sessions compared correct wasm32 and xtensa byte dumps on
+	# 2026-09-02, reached opposite conclusions, and each nearly retracted a
+	# valid finding: same probe text, different config, and neither table
+	# carried the config that made its numbers mean anything. `string[256]` is
+	# still tyFixedString and still 8-byte-prefixed, so this file has not
+	# stopped having two layouts -- it has stopped choosing between them with a
+	# flag. Any row that dumps bytes must say which kind it dumped.
 	#
 	# THE ROWS BELOW ARE THE MEASURED-GREEN SUBSET of a 27-candidate sweep.
 	# Three of the five that were excluded are now wired at the end of this
@@ -18689,9 +18602,7 @@ test-wasm32: $(COMPILER)
 	# becomes meaningless WHILE STILL PASSING. Do not drop either row as
 	# redundant -- the pair is the only thing proving the flag took effect.
 	./$(COMPILER) --target=wasm32 test/test_shortstring_byte_prefix.pas $(TESTTMP)/w32_ssbp_d.wasm
-	tools/expect_same.sh wasm32/ssbp_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssbp_d.wasm)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
-	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/w32_ssbp_s.wasm
-	tools/expect_same.sh wasm32/ssbp_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssbp_s.wasm)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
+	tools/expect_same.sh wasm32/ssbp_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssbp_d.wasm)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# Cross-width conversion. ssmw_short being IDENTICAL to ssmw_default is the
 	# POINT, not a copy-paste error: converting between widths must produce the
 	# same VALUES at either prefix width. Someone will eventually "fix" the
@@ -18702,8 +18613,6 @@ test-wasm32: $(COMPILER)
 	# and it is how aarch64 was certified complete while broken.
 	./$(COMPILER) --target=wasm32 test/test_shortstring_mixed_widths.pas $(TESTTMP)/w32_ssmw_d.wasm
 	tools/expect_same.sh wasm32/ssmw_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssmw_d.wasm)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
-	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/w32_ssmw_s.wasm
-	tools/expect_same.sh wasm32/ssmw_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssmw_s.wasm)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	# --- THE THREE ROWS THE TWO COMPARISON/SetLength DEFECTS HAD EXCLUDED ---
 	# Each is compared against the x86-64 build of the SAME source rather than
 	# against a literal expectation, so no row here carries a hand-written
@@ -18733,19 +18642,13 @@ test-wasm32: $(COMPILER)
 	# this area will not be, which is why both are here.
 	./$(COMPILER) --target=wasm32 test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/w32_fcos_d.wasm
 	tools/expect_same.sh wasm32/frozen_compare_shapes_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_fcos_d.wasm)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
-	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/w32_fcos_s.wasm
-	tools/expect_same.sh wasm32/frozen_compare_shapes_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_fcos_s.wasm)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
 	# PChar of a frozen string. wasm32 has no native pointer arithmetic on a
 	# linear-memory offset that differs from a host pointer, so the +1/+8 the fix
 	# emits is the row worth having on this backend specifically.
 	./$(COMPILER) --target=wasm32 test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/w32_pcfs_d.wasm
 	tools/expect_same.sh wasm32/pchar_frozen_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_pcfs_d.wasm)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
-	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/w32_pcfs_s.wasm
-	tools/expect_same.sh wasm32/pchar_frozen_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_pcfs_s.wasm)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
 	./$(COMPILER) --target=wasm32 test/test_frozen_string_layout.pas $(TESTTMP)/w32_fsl_d.wasm
 	tools/expect_same.sh wasm32/frozen_string_layout_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_fsl_d.wasm)" "$$(cat test/test_frozen_string_layout.expected)"
-	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_frozen_string_layout.pas $(TESTTMP)/w32_fsl_s.wasm
-	tools/expect_same.sh wasm32/frozen_string_layout_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_fsl_s.wasm)" "$$(cat test/test_frozen_string_layout.expected)"
 	# THE COVERAGE REPORT MUST NAME MORE THAN ONE GAP PER BODY. It kept the
 	# FIRST refusal and discarded the rest, so a body with three unrelated gaps
 	# reported one -- and three tests were excluded from this target with the
@@ -18797,18 +18700,14 @@ test-xtensa: $(COMPILER)
 	# qemu's core -- and --platform=posix is required because the xtensa DEFAULT
 	# platform is bare-metal ESP, which has no libc and no dynamic segment.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_xt_ssbp_d
-	tools/expect_same.sh xtensa/ssbp_default "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
-	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_xt_ssbp_s
-	tools/expect_same.sh xtensa/ssbp_short "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
+	tools/expect_same.sh xtensa/ssbp_default "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssbp_d)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# The cross-width conversion, with the NONZERO-field-width rows (`pad`,
 	# `padw`) that certified aarch64 complete by their absence. On xtensa these
 	# share the helper with the plain writes above rather than reaching new code.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/xt_ffdr_d
 	tools/expect_same.sh xtensa/ffdr_d "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_ffdr_d)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
-	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/xt_ffdr_s
-	tools/expect_same.sh xtensa/ffdr_s "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_ffdr_s)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
-	# The through-a-pointer matrix on xtensa, BOTH MODES. The default row was
-	# flag-only until 2026-09-03 because this file bus-errored at its THIRD
+	# The through-a-pointer matrix on xtensa. The wide-prefix row was held out
+	# until 2026-09-03 because this file bus-errored at its THIRD
 	# statement, `arr[1] := 'hello'`: SizeOf(string[10]) was 18, so element 1 of
 	# an array of them began 2 mod 4 and the 8-byte prefix access was unaligned,
 	# while arr[0] and arr[2] were fine. Fixed by rounding a frozen slot's size
@@ -18823,20 +18722,14 @@ test-xtensa: $(COMPILER)
 	# on exactly one of them.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_xt_ssthp_d
 	tools/expect_same.sh xtensa/shortstring_through_a_pointer_default "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssthp_d)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
-	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_xt_ssthp_s
-	tools/expect_same.sh xtensa/shortstring_through_a_pointer_short "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssthp_s)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	# THE LAYOUT ITSELF, as relations rather than numbers -- and xtensa is the
 	# target that turns a layout defect into a crash rather than a wrong value,
 	# which is why it is wired here first. Both modes; FPC 3.2.2 runs the same
 	# file unmodified and prints the same lines.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_frozen_string_layout.pas $(TESTTMP)/xt_fsl_d
 	tools/expect_same.sh xtensa/frozen_string_layout_default "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_fsl_d)" "$$(cat test/test_frozen_string_layout.expected)"
-	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_frozen_string_layout.pas $(TESTTMP)/xt_fsl_s
-	tools/expect_same.sh xtensa/frozen_string_layout_short "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_fsl_s)" "$$(cat test/test_frozen_string_layout.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_xt_ssmw_d
 	tools/expect_same.sh xtensa/ssmw_default "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
-	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_xt_ssmw_s
-	tools/expect_same.sh xtensa/ssmw_short "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	# `var` parameter of every scalar kind + var->var forwarding — the twin of
 	# the riscv32 row; both backends had the same subsumed arm ahead of
 	# ABIParamSlotHoldsValueAddr, removed 2026-08-31 byte-identically.
@@ -19744,39 +19637,33 @@ test-arm32: $(COMPILER)
 	# most -- every helper encoding was checked against the literal it replaced
 	# and against clang, so default arm32 must be unchanged by the conversion.
 	./$(COMPILER) --target=arm32 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a32_ssbp_d
-	tools/expect_same.sh arm32/ssbp_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
-	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a32_ssbp_s
-	tools/expect_same.sh arm32/ssbp_short "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
+	tools/expect_same.sh arm32/ssbp_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssbp_d)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# The cross-width conversion, including the FIELD WIDTH rows -- the padding
 	# is a runtime quantity, so four backends hand it to a shared helper that
 	# reads the length prefix itself, and that helper hardcoded a machine word.
 	# Verified as a positive control: `pad` collapses to <> without the fix.
 	./$(COMPILER) --target=arm32 test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/a32_ffdr_d
 	tools/expect_same.sh arm32/ffdr_d "$$(tools/run_target.sh arm32 $(TESTTMP)/a32_ffdr_d)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
-	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/a32_ffdr_s
-	tools/expect_same.sh arm32/ffdr_s "$$(tools/run_target.sh arm32 $(TESTTMP)/a32_ffdr_s)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
 	./$(COMPILER) --target=arm32 test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a32_ssmw_d
 	tools/expect_same.sh arm32/ssmw_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
-	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_a32_ssmw_s
-	tools/expect_same.sh arm32/ssmw_short "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssmw_s)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	# EVERY READER of a frozen string's length prefix, asserted as RELATIONS
 	# (Length(p^) = Length(s)) so one file carries no per-target constant. The
 	# censuses this feature ran all counted PXXWriteFrozenW -- WRITERS -- and the
 	# defects are in readers: comparison, Copy and Pos appear in no count.
-	# BOTH MODES, EVERYWHERE, and that is recent. This block said "DEFAULT MODE
-	# ONLY for now -- under -dPXX_SHORTSTRING this file is red on all four
-	# converted backends and dies partway on three", and separately that x86-64
-	# was "deliberately NOT wired" because Write(p^) printed garbage. Both were
-	# true when written and both are now false: the reader fix landed (3b0f71ccd,
-	# "the write path is a THIRD reader"), the flag rows below are wired, and the
-	# x86-64 flag row is wired above. Re-measured 2026-09-03 on the pinned
-	# compiler: the flag-mode output matches test_shortstring_through_a_pointer.
-	# expected on x86-64, i386, aarch64, arm32, riscv32 AND xtensa -- six for six.
-	# A stale "this is red under the flag" is the worst possible comment to leave
-	# standing while the phase-4 flip is being sequenced off exactly that
-	# question: it does not error, it just tells the next reader the flip has a
-	# blocker it does not have.
-	# CHAR vs a frozen string, EVERY lvalue shape, both directions, both modes.
+	# EVERYWHERE, and the road here is worth keeping. This block once said
+	# "DEFAULT MODE ONLY for now -- under -dPXX_SHORTSTRING this file is red on
+	# all four converted backends and dies partway on three", and separately that
+	# x86-64 was "deliberately NOT wired" because Write(p^) printed garbage. Both
+	# were true when written and both went false under them: the reader fix
+	# landed (3b0f71ccd, "the write path is a THIRD reader"), and re-measured
+	# 2026-09-03 on the pinned compiler the byte-prefix output matched
+	# test_shortstring_through_a_pointer.expected on x86-64, i386, aarch64,
+	# arm32, riscv32 AND xtensa -- six for six. That six-for-six is one of the
+	# rows the phase-4 flip was decided on. A stale "this is red under the flag"
+	# would have been the worst possible comment to leave standing while the flip
+	# was being sequenced off exactly that question: it does not error, it just
+	# tells the next reader the flip has a blocker it does not have.
+	# CHAR vs a frozen string, EVERY lvalue shape, both directions.
 	# The x86-64 arms guarded on `lhsTk = tyString`, the GENERIC frozen tag --
 	# so a variable matched and an array ELEMENT and a record FIELD did not,
 	# and those fell through to EmitStrCmpReg, which dereferences the Char's
@@ -19789,12 +19676,8 @@ test-arm32: $(COMPILER)
 	# bug-a-char-vs-frozen-string-comparison-misses-every-shape-but-a-variable
 	./$(COMPILER) --target=arm32 test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_a32_fscc_d
 	tools/expect_same.sh arm32/frozen_char_compare_shapes_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_fscc_d)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
-	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_a32_fscc_s
-	tools/expect_same.sh arm32/frozen_char_compare_shapes_short "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_fscc_s)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
 	./$(COMPILER) --target=arm32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a32_ssthp
 	tools/expect_same.sh arm32/shortstring_through_a_pointer "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
-	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a32_ssthp_s
-	tools/expect_same.sh arm32/shortstring_through_a_pointer_short "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssthp_s)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	# frozen-string PARAMETER + SetLength: x86-64 corrupted the slot, aarch64
 	# double-dereferenced a `var` one, i386 refused the by-value form. arm32 was
 	# correct throughout and is the control that the fix changed nothing there.
@@ -19939,8 +19822,6 @@ test-arm32: $(COMPILER)
 	# bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode
 	./$(COMPILER) --target=arm32 test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_a32_frozen_argfld_d
 	tools/expect_same.sh arm32/frozen_arg_field_write_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
-	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_a32_frozen_argfld_s
-	tools/expect_same.sh arm32/frozen_arg_field_write_bytepfx "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	# A frozen string[N] into a MANAGED parameter through EVERY CALL PATH the
 	# backends emit separately -- direct, ordered two-arg, constructor,
 	# non-virtual method, virtual (base and overridden), proc-var indirect. The
@@ -19951,16 +19832,10 @@ test-arm32: $(COMPILER)
 	# bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
 	./$(COMPILER) --target=arm32 test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_a32_frozen_argpaths_d
 	tools/expect_same.sh arm32/frozen_arg_call_paths_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
-	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_a32_frozen_argpaths_s
-	tools/expect_same.sh arm32/frozen_arg_call_paths_bytepfx "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
 	./$(COMPILER) --target=arm32 test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_arm32_fieldrooted_frozen_d
 	tools/expect_same.sh arm32/fieldrooted_nested_frozen_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
-	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_arm32_fieldrooted_frozen_s
-	tools/expect_same.sh arm32/fieldrooted_nested_frozen_bytepfx "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	./$(COMPILER) --target=arm32 test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_arm32_dynfrozencap_d
 	tools/expect_same.sh arm32/dyn_frozen_field_capacity_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dynfrozencap_d)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
-	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_arm32_dynfrozencap_s
-	tools/expect_same.sh arm32/dyn_frozen_field_capacity_bytepfx "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dynfrozencap_s)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
 	# ...and the LEAK, which every row above passes with fully present: the old
 	# inline conversion allocated a handle per call and nothing owned it
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).

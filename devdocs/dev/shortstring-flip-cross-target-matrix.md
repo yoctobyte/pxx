@@ -125,12 +125,15 @@ deterministic", and both produce the same tidy table.
 
 ## Reproducing
 
-`tools/flip-shortstring/` — `sweep.sh <out.tsv> <artifactdir> <target>` for
-each of the seven, `oracle_fpc.sh` for the FPC column, `noise.sh` for the
-self-comparison control, `matrix.py` to join them. **That directory dies with
-the flag**: the commit that deletes `PXX_SHORTSTRING` should delete it in the
-same diff, because after that there is no "off" mode and every script there
-measures one thing twice. xtensa needs `--platform=posix
+**Not reproducible any more, by design.** `tools/flip-shortstring/` held the
+sweep, the FPC oracle, the self-comparison noise control and the matrix
+builder, and it was deleted in the same commit as the flag — after the flip
+there is no "off" mode, so every script there would measure one thing twice and
+report SAME for everything. Recover them from the history of that commit if a
+future two-layout question needs the same shape.
+
+This file is therefore the record, not a recipe: it is the last state in which
+the comparison could be made at all. xtensa needs `--platform=posix
 --xtensa-soft-mulhigh`, so its rows are not bit-identical to hardware for
 multiplies; wasm32 emits `.wasm` and runs under wasmtime.
 
