@@ -218,7 +218,7 @@ begin
     -- what differs is whether the bytes ABOVE it were cleared. The relation
     that holds under both layouts is that offset 0 carries the count and the
     first character stays at offset pfx, untouched by the shortening. ---- }
-  pfx := SizeOf(sl) - 10;
+  pfx := PtrUInt(@sl[1]) - PtrUInt(@sl);   { see the note below on why not SizeOf - 10 }
   sl := 'hello';
   SetLength(sl, 3);
   Chk('setlength shortens', Length(sl) = 3);
@@ -269,12 +269,20 @@ begin
 
     So the width is derived instead and the bytes are asserted ABSOLUTELY. The
     prefix size is not a constant that can be written here, but it is COMPUTABLE
-    from the declaration: SizeOf(TS10) is prefix + 10, so the prefix is
-    SizeOf - 10, which is 8 in the default mode and 1 under the flag without
-    either number appearing in the source. The length byte then lives at offset
-    0 under both, and the first character at offset `pfx` -- which is exactly
-    what a walker that picks the wrong width gets wrong. }
-  pfx := SizeOf(d) - 10;
+    from the declaration. It USED to be derived as `SizeOf(TS10) - 10`, and that
+    identity no longer holds: a frozen slot's size is now rounded up to the
+    prefix's alignment, because the size is also the ARRAY STRIDE and an odd
+    element of `array of string[10]` was landing 2 mod 4 and bus-erroring on
+    xtensa. SizeOf(string[10]) is 24 on x86-64, not 18.
+
+    So the prefix is taken from the language instead of from the layout:
+    `@d[1]` is where Pascal says the first character lives, whatever the prefix
+    width or the padding is. It is 8 in the default mode and 1 under the flag
+    without either number appearing in the source, and it stays true if the
+    padding changes again. The length byte then lives at offset 0 under both,
+    and the first character at offset `pfx` -- which is exactly what a walker
+    that picks the wrong width gets wrong. }
+  pfx := PtrUInt(@d[1]) - PtrUInt(@d);
   Chk('direct char store puts the length at offset 0', PByteOf(@d, 0) = 1);
   Chk('direct char store puts the char at offset pfx', PByteOf(@d, pfx) = Ord('X'));
   Chk('deref char store puts the length at offset 0', PByteOf(@viaP, 0) = 1);

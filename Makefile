@@ -11115,15 +11115,15 @@ test-core: $(COMPILER)
 	# THE BYTE-PREFIX LAYOUT, compiled BOTH ways, because the flag is the only
 	# thing that can produce a tyShortString today and untested machine code is
 	# not reviewable. Default must stay the 8-byte word (layout row `5 0 0 0 0 0`,
-	# sizeof 18); -dPXX_SHORTSTRING must be BYTE-IDENTICAL TO FPC 3.2.2, layout
+	# prefix 8); -dPXX_SHORTSTRING must be BYTE-IDENTICAL TO FPC 3.2.2, layout
 	# row included -- every observable matches and only `sizeof` legitimately
 	# differs between the two modes. The layout row is the only one that sees the
 	# prefix directly: an implementation can pass every other row by being
 	# self-consistently wrong.
 	./$(COMPILER) test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_ssbp_default26
-	tools/expect_same.sh test_ssbp_default26 "$$($(TESTTMP)/test_ssbp_default26)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	tools/expect_same.sh test_ssbp_default26 "$$($(TESTTMP)/test_ssbp_default26)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_ssbp_short26
-	tools/expect_same.sh test_ssbp_short26 "$$($(TESTTMP)/test_ssbp_short26)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	tools/expect_same.sh test_ssbp_short26 "$$($(TESTTMP)/test_ssbp_short26)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	tools/expect_same.sh test_strn_container26 "$$($(TESTTMP)/test_strn_container26)" "$$(printf 'openp1     1\nopenp2     1\nopenp20    1\nopenvals   1\ndyn1d      1\ndyn2d      1\ndyn2dvals  1\nguard      1')"
 	# TWO FROZEN WIDTHS IN ONE PROGRAM, all FOUR combinations of the two string
 	# build axes. PXX_MANAGED_STRING chooses what bare `string` is and
@@ -11255,6 +11255,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_pcfs_d26 "$$($(TESTTMP)/test_pcfs_d26)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/test_pcfs_s26
 	tools/expect_same.sh test_pcfs_s26 "$$($(TESTTMP)/test_pcfs_s26)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
+	# THE LAYOUT OF A FROZEN STRING as relations -- stride = SizeOf, every element
+	# prefix-aligned, no field overlapping its neighbour, a truncating store
+	# staying inside its field, and the first character in ONE place under all
+	# four spellings. No number in the compared output, so both modes AND FPC
+	# 3.2.2 produce the same lines; `tools/fpc_diff_probe.sh` on this file is a
+	# real oracle rather than a formality.
+	./$(COMPILER) test/test_frozen_string_layout.pas $(TESTTMP)/test_fsl_d26
+	tools/expect_same.sh test_fsl_d26 "$$($(TESTTMP)/test_fsl_d26)" "$$(cat test/test_frozen_string_layout.expected)"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_string_layout.pas $(TESTTMP)/test_fsl_s26
+	tools/expect_same.sh test_fsl_s26 "$$($(TESTTMP)/test_fsl_s26)" "$$(cat test/test_frozen_string_layout.expected)"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26
@@ -15614,10 +15624,18 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/pchar_frozen_default "$$(tools/run_target.sh i386 $(TESTTMP)/i386_pcfs_d)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
 	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/i386_pcfs_s
 	tools/expect_same.sh i386/pchar_frozen_short "$$(tools/run_target.sh i386 $(TESTTMP)/i386_pcfs_s)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
+	# ...and the layout relations. A 32-BIT row is not a formality here: the
+	# 8-byte prefix is written as two machine words, so the alignment it needs is
+	# 4 and not 8 -- an earlier draft of this test asserted `stride mod 8` and
+	# passed on x86-64 and aarch64 while failing on every 32-bit target.
+	./$(COMPILER) --target=i386 test/test_frozen_string_layout.pas $(TESTTMP)/i386_fsl_d
+	tools/expect_same.sh i386/frozen_string_layout_default "$$(tools/run_target.sh i386 $(TESTTMP)/i386_fsl_d)" "$$(cat test/test_frozen_string_layout.expected)"
+	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_frozen_string_layout.pas $(TESTTMP)/i386_fsl_s
+	tools/expect_same.sh i386/frozen_string_layout_short "$$(tools/run_target.sh i386 $(TESTTMP)/i386_fsl_s)" "$$(cat test/test_frozen_string_layout.expected)"
 	./$(COMPILER) --target=i386 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_i386_ssbp_d
-	tools/expect_same.sh i386/ssbp_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	tools/expect_same.sh i386/ssbp_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
 	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_i386_ssbp_s
-	tools/expect_same.sh i386/ssbp_short "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	tools/expect_same.sh i386/ssbp_short "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# The mixed-width rows carry `s:9` -- a NONZERO field width, deliberately.
 	# The pad is max(0, wid - len), a RUNTIME quantity, so the shared helper is
 	# what reads the prefix; at width 0 i386 never calls it (the `if wid > 0`
@@ -16510,9 +16528,9 @@ test-aarch64: $(COMPILER)
 	# encoding was checked to reproduce the literal it replaced bit-for-bit, so
 	# default aarch64 must be byte-identical to before the conversion.
 	./$(COMPILER) --target=aarch64 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a64_ssbp_d
-	tools/expect_same.sh aarch64/ssbp_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	tools/expect_same.sh aarch64/ssbp_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
 	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a64_ssbp_s
-	tools/expect_same.sh aarch64/ssbp_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	tools/expect_same.sh aarch64/ssbp_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# ... and the cross-width conversion, which is what actually broke on this
 	# backend: Length() read the prefix at a fixed 8 and answered
 	# 0x6F6C6C654805 -- the length byte followed by the characters of 'hello'.
@@ -18103,9 +18121,9 @@ test-riscv32: $(COMPILER)
 	# answer), and `layout` reads the first six raw bytes -- a little-endian
 	# 8-byte word shows `5 0 0 0 0 0`, the byte prefix shows 5 then 'hello'.
 	./$(COMPILER) --target=riscv32 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_rv32_ssbp_d
-	tools/expect_same.sh riscv32/ssbp_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	tools/expect_same.sh riscv32/ssbp_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_rv32_ssbp_s
-	tools/expect_same.sh riscv32/ssbp_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	tools/expect_same.sh riscv32/ssbp_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# The cross-width conversion, carrying the NONZERO FIELD WIDTH rows from the
 	# start. aarch64 was certified complete while `WriteLn(s:9)` was broken,
 	# because the pad is max(0, wid - len) -- a runtime quantity the SHARED
@@ -18146,6 +18164,10 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/pchar_frozen_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_pcfs_d)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/rv32_pcfs_s
 	tools/expect_same.sh riscv32/pchar_frozen_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_pcfs_s)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
+	./$(COMPILER) --target=riscv32 test/test_frozen_string_layout.pas $(TESTTMP)/rv32_fsl_d
+	tools/expect_same.sh riscv32/frozen_string_layout_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_fsl_d)" "$$(cat test/test_frozen_string_layout.expected)"
+	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_string_layout.pas $(TESTTMP)/rv32_fsl_s
+	tools/expect_same.sh riscv32/frozen_string_layout_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_fsl_s)" "$$(cat test/test_frozen_string_layout.expected)"
 	./$(COMPILER) --target=riscv32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp
 	tools/expect_same.sh riscv32/shortstring_through_a_pointer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp_s
@@ -18389,15 +18411,15 @@ test-wasm32: $(COMPILER)
 	# unwired backend then stops being a coverage gap and becomes an UNVERIFIED
 	# DEFAULT (frankb-a9's point, and the reason these went in tonight).
 	#
-	# `sizeof 18` vs `sizeof 11` IS THE POSITIVE CONTROL FOR THIS WHOLE SET.
+	# `prefix 8` vs `prefix 1` IS THE POSITIVE CONTROL FOR THIS WHOLE SET.
 	# 18 = cap 10 + 8-byte prefix; 11 = cap 10 + 1. If ssbp_short ever prints 18
 	# the backend silently ignored the flag, and every other row in that config
 	# becomes meaningless WHILE STILL PASSING. Do not drop either row as
 	# redundant -- the pair is the only thing proving the flag took effect.
 	./$(COMPILER) --target=wasm32 test/test_shortstring_byte_prefix.pas $(TESTTMP)/w32_ssbp_d.wasm
-	tools/expect_same.sh wasm32/ssbp_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssbp_d.wasm)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	tools/expect_same.sh wasm32/ssbp_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssbp_d.wasm)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
 	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/w32_ssbp_s.wasm
-	tools/expect_same.sh wasm32/ssbp_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssbp_s.wasm)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	tools/expect_same.sh wasm32/ssbp_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssbp_s.wasm)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# Cross-width conversion. ssmw_short being IDENTICAL to ssmw_default is the
 	# POINT, not a copy-paste error: converting between widths must produce the
 	# same VALUES at either prefix width. Someone will eventually "fix" the
@@ -18448,7 +18470,11 @@ test-wasm32: $(COMPILER)
 	tools/expect_same.sh wasm32/pchar_frozen_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_pcfs_d.wasm)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
 	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/w32_pcfs_s.wasm
 	tools/expect_same.sh wasm32/pchar_frozen_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_pcfs_s.wasm)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
-	@echo "wasm32: 32 rows green (26 default + 6 shortstring; 2 excluded, see comment above)"
+	./$(COMPILER) --target=wasm32 test/test_frozen_string_layout.pas $(TESTTMP)/w32_fsl_d.wasm
+	tools/expect_same.sh wasm32/frozen_string_layout_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_fsl_d.wasm)" "$$(cat test/test_frozen_string_layout.expected)"
+	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_frozen_string_layout.pas $(TESTTMP)/w32_fsl_s.wasm
+	tools/expect_same.sh wasm32/frozen_string_layout_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_fsl_s.wasm)" "$$(cat test/test_frozen_string_layout.expected)"
+	@echo "wasm32: 34 rows green (27 default + 7 shortstring; 2 excluded, see comment above)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
@@ -18471,9 +18497,9 @@ test-xtensa: $(COMPILER)
 	# qemu's core -- and --platform=posix is required because the xtensa DEFAULT
 	# platform is bare-metal ESP, which has no libc and no dynamic segment.
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_xt_ssbp_d
-	tools/expect_same.sh xtensa/ssbp_default "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	tools/expect_same.sh xtensa/ssbp_default "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_xt_ssbp_s
-	tools/expect_same.sh xtensa/ssbp_short "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	tools/expect_same.sh xtensa/ssbp_short "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# The cross-width conversion, with the NONZERO-field-width rows (`pad`,
 	# `padw`) that certified aarch64 complete by their absence. On xtensa these
 	# share the helper with the plain writes above rather than reaching new code.
@@ -18481,23 +18507,32 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa/ffdr_d "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_ffdr_d)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/xt_ffdr_s
 	tools/expect_same.sh xtensa/ffdr_s "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_ffdr_s)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
-	# The through-a-pointer matrix on xtensa, FLAG MODE ONLY, and the asymmetry
-	# is deliberate: in DEFAULT mode this file bus-errors at its THIRD statement,
-	# `arr[1] := 'hello'` -- element 1 of an array of string[10] starts at offset
-	# 18 (SizeOf is 18 in that mode) and the 8-byte prefix store is unaligned;
-	# arr[0] and arr[2] are fine. Reproduces on the PIN, so the byte prefix is NOT
-	# the reason this row is flag-only:
+	# The through-a-pointer matrix on xtensa, BOTH MODES. The default row was
+	# flag-only until 2026-09-03 because this file bus-errored at its THIRD
+	# statement, `arr[1] := 'hello'`: SizeOf(string[10]) was 18, so element 1 of
+	# an array of them began 2 mod 4 and the 8-byte prefix access was unaligned,
+	# while arr[0] and arr[2] were fine. Fixed by rounding a frozen slot's size
+	# up to the prefix's alignment, so the size is also a legal stride:
 	# bug-a-storing-into-an-element-of-an-array-of-frozen-strings-bus-errors-on-xtensa
-	# Restore the default-mode row here when that lands.
-	# This row is the only coverage the xtensa `-101`
+	# These rows are the only coverage the xtensa `-101`
 	# SetLength arm has (bug-a-setlength-on-a-frozen-string-is-unsupported-on-riscv32
 	# was filed riscv32-only; xtensa refused the identical builtin). Verified
 	# under BOTH xtensa ABIs -- the windowed default and --xtensa-abi=call0 --
 	# because XtensaSlotOff exists precisely because they index the expression
 	# stack in opposite directions, so a hand-written offset is silently wrong
 	# on exactly one of them.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_xt_ssthp_d
+	tools/expect_same.sh xtensa/shortstring_through_a_pointer_default "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssthp_d)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_xt_ssthp_s
 	tools/expect_same.sh xtensa/shortstring_through_a_pointer_short "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssthp_s)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
+	# THE LAYOUT ITSELF, as relations rather than numbers -- and xtensa is the
+	# target that turns a layout defect into a crash rather than a wrong value,
+	# which is why it is wired here first. Both modes; FPC 3.2.2 runs the same
+	# file unmodified and prints the same lines.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_frozen_string_layout.pas $(TESTTMP)/xt_fsl_d
+	tools/expect_same.sh xtensa/frozen_string_layout_default "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_fsl_d)" "$$(cat test/test_frozen_string_layout.expected)"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_frozen_string_layout.pas $(TESTTMP)/xt_fsl_s
+	tools/expect_same.sh xtensa/frozen_string_layout_short "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_fsl_s)" "$$(cat test/test_frozen_string_layout.expected)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_xt_ssmw_d
 	tools/expect_same.sh xtensa/ssmw_default "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xt_ssmw_d)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_xt_ssmw_s
@@ -19409,9 +19444,9 @@ test-arm32: $(COMPILER)
 	# most -- every helper encoding was checked against the literal it replaced
 	# and against clang, so default arm32 must be unchanged by the conversion.
 	./$(COMPILER) --target=arm32 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a32_ssbp_d
-	tools/expect_same.sh arm32/ssbp_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
+	tools/expect_same.sh arm32/ssbp_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    8')"
 	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a32_ssbp_s
-	tools/expect_same.sh arm32/ssbp_short "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    11')"
+	tools/expect_same.sh arm32/ssbp_short "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssbp_s)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
 	# The cross-width conversion, including the FIELD WIDTH rows -- the padding
 	# is a runtime quantity, so four backends hand it to a shared helper that
 	# reads the length prefix itself, and that helper hardcoded a machine word.

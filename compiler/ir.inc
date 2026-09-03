@@ -2481,6 +2481,18 @@ begin
         shortstring pointee put index 1 at base+8 when its first character is
         at base+1.
         bug-a-indexing-a-frozen-string-through-a-pointer-deref-reads-the-wrong-byte }
+      { ...and an ARRAY-ELEMENT base, `a[0][1]`, for the same reason one node
+        type over: the element carries the kind the ARRAY records and the base
+        node's own ASTTk is the generic tyString, which means an 8-byte prefix.
+        Measured under -dPXX_SHORTSTRING: `a[0][1]` read base+8 where the first
+        character is at base+1, so it answered a blank and `@a[0][1]` was seven
+        bytes past the character it names -- while the variable, field and
+        pointer-deref spellings of the same index were all correct. ASTFrozenArgTk
+        is the existing "ask the ENTITY, not the node" answer and already has
+        the array arm; this site was asking the node.
+        bug-a-indexing-a-character-of-a-frozen-array-element-uses-an-8-byte-prefix }
+      if TypeIsFrozenString(ASTFrozenArgTk(baseNode)) then
+        tk := ASTFrozenArgTk(baseNode);
       dfsSym := DerefFrozenStrPtrSym(baseNode);
       if dfsSym >= 0 then tk := Syms[dfsSym].PtrElemTk;
     end;
@@ -11171,8 +11183,20 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         begin
           lhsStoreTk := RecFieldType(slFldRec, slFldName);
           { `string[N]` field: capacity rides the store node's IVal so codegen
-            clamps the copy to N (truncating shortstring assignment). }
-          if lhsStoreTk = tyString then
+            clamps the copy to N (truncating shortstring assignment).
+
+            ASKED OF THE FROZEN FAMILY, NOT OF tyString. A tyFixedString field is
+            RECORDED as tyString, so the old spelling covered it by accident; a
+            tyShortString field keeps its own tag (that tag is where its one-byte
+            prefix width comes from) and got no clamp at all. `r.f := 'abcdefgh'`
+            into a `string[4]` field wrote all eight bytes under
+            -dPXX_SHORTSTRING -- past the field, into its neighbour, which came
+            back holding 'e'. The VARIABLE and ARRAY ELEMENT spellings of the
+            same assignment both truncate correctly in both modes, so only the
+            field spelling could show it.
+            RecFieldStrCap answers 0 for a plain `string` field, which is the
+            existing no-clamp behaviour. }
+          if TypeIsFrozenString(lhsStoreTk) then
             lhsStrCap := RecFieldStrCap(slFldRec, slFldName);
         end;
         if (lhsTk = tyUnknown) or (lhsTk = tyAuto) then

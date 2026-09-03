@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:9 unfinished:26 blocked:6 backlog:6 backlog_new:2 backlog-umbrella:7 backlog-core:141 backlog-nilpy:96 backlog-tools:9 backlog-pascal:54 backlog-decide:34 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3173 rejected:72`
+`working:9 unfinished:26 blocked:6 backlog:7 backlog_new:2 backlog-umbrella:7 backlog-core:142 backlog-nilpy:96 backlog-tools:9 backlog-pascal:54 backlog-decide:34 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3174 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -57,7 +57,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 402, ranked
+## Ready — top 30 of 404, ranked
 
 - `[p 92] [A]` bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
@@ -75,6 +75,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [C]` regression-lib-test-crtl-reachability-8
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [N]` regression-test-core-test-nilpy-c-pointer-2
+- `[p 70] [A]` regression-test-debug-g-compiler-srchash
 - `[p 70] [A+S]` regression-test-emit-obj-test-esp-hello
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
 - `[p 70] [A]` regression-test-threads-test-nilpy-thread-clone-2
@@ -88,6 +89,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
-- `[p 62] [N]` feature-nilpy-enum-class
 
-_372 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_374 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

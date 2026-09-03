@@ -36,11 +36,21 @@ program test_shortstring_byte_prefix;
              prefix the chars can land outside an 11-byte slot while every read
              of the string itself still agrees with every write.
 
-  THE EXPECTED OUTPUT IS THE SAME TEXT IN BOTH MODES except for the `sizeof`
+  THE EXPECTED OUTPUT IS THE SAME TEXT IN BOTH MODES except for the `prefix`
   row, and that is the point rather than a coincidence: the layout is an
-  implementation detail and every OBSERVABLE must be identical. `sizeof` is the
-  one legitimate difference -- 18 against 11 -- and 11 is FPC's answer.
-  Verified against FPC 3.2.2, which produces this file's output with `sizeof 11`. }
+  implementation detail and every OBSERVABLE must be identical. The prefix WIDTH
+  is the one legitimate difference -- 8 against 1 -- and 1 is FPC's answer.
+  Verified against FPC 3.2.2, which produces this file's output with `prefix 1`.
+
+  IT USED TO PRINT SizeOf(s) -- 18 against 11 -- and that row had to be spelled
+  seven times in the Makefile because each target hardcoded its own copy. It
+  stopped being portable when a frozen slot's size gained ALIGNMENT PADDING (24
+  on a 64-bit target, 20 on a 32-bit one, because the size is also the array
+  stride and an unaligned element bus-errors on xtensa), so the number would now
+  need to differ per target while saying nothing more than it did.
+  `@s[1] - @s` is the prefix itself: 8 or 1 on every target, in every mode, and
+  it discriminates the two layouts exactly as well as SizeOf did.
+  bug-a-storing-into-an-element-of-an-array-of-frozen-strings-bus-errors-on-xtensa }
 var
   s: string[10];
   guard: array[0..7] of LongInt;
@@ -72,5 +82,5 @@ begin
     if guard[i] <> 700 + i then bad := bad + 1;
   WriteLn('guard     ', bad);
 
-  WriteLn('sizeof    ', SizeOf(s));
+  WriteLn('prefix    ', PtrUInt(@s[1]) - PtrUInt(@s));
 end.

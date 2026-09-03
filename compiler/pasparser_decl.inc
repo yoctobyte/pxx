@@ -3380,7 +3380,7 @@ begin
         fStrCap := LastTypeStrCap;
         if fStrCap <= 0 then fStrCap := DEFAULT_STR_CAP;
         fSize := FrozenStrSlotSize(fTk, fStrCap);
-        fAlign := TARGET_PTR_SIZE;
+        fAlign := FrozenStrAlign(fTk);
       end
       else
       begin
@@ -3394,7 +3394,12 @@ begin
         branchFieldOff := AlignTo(branchFieldOff, fAlign);
         if fStrCap > 0 then
         begin
-          AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(tyString), fRec);
+          { tyShortString KEEPS ITS OWN TAG -- recording it as tyString would
+            hand every reader an 8-byte prefix for a one-byte one. }
+          if fTk = tyShortString then
+            AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(fTk), fRec)
+          else
+            AddUField(ci, fldNOffs[fni], fldNLens[fni], branchFieldOff, Ord(tyString), fRec);
           UFldStrCap[UFldCount-1] := fStrCap;
         end
         else
@@ -4172,15 +4177,23 @@ begin
         fSize := LOCAL_STR_CAP + 8;
         fAlign := TARGET_PTR_SIZE;
       end
-      else if fTk = tyFixedString then
+      else if (fTk = tyFixedString) or (fTk = tyShortString) then
       begin
-        { `string[N]` field: inline [len:8][chars:N] slot, same layout as a
+        { `string[N]` field: inline [len][chars:N] slot, same layout as a
           tyString field but capacity N. Stored as tyString (identical read/
-          write codegen) with UFldStrCap = N driving the truncating store. }
+          write codegen) with UFldStrCap = N driving the truncating store.
+
+          tyShortString WAS MISSING FROM THIS TEST and fell through to
+          TypeSlotSize, which answers a POINTER WIDTH for a string kind: under
+          -dPXX_SHORTSTRING a `record x, y: string[10]` measured 16 bytes with y
+          at offset 8, so y OVERLAPPED x by three bytes and writing y silently
+          truncated x. FPC says 22 and offset 11. The variant-part arm a few
+          hundred lines up already tested both kinds; this one and its class
+          sibling did not. }
         fStrCap := LastTypeStrCap;
         if fStrCap <= 0 then fStrCap := DEFAULT_STR_CAP;
         fSize := FrozenStrSlotSize(fTk, fStrCap);
-        fAlign := TARGET_PTR_SIZE;
+        fAlign := FrozenStrAlign(fTk);
       end
       else if fTk = tyRecord then
       begin
@@ -4211,9 +4224,17 @@ begin
       for fni := 0 to nFldNames - 1 do
       begin
         curFieldOff := AlignTo(curFieldOff, fAlign);
-        if fTk = tyFixedString then
+        { A FROZEN FIELD CARRIES ITS CAPACITY WHICHEVER KIND IT IS. tyFixedString
+          is recorded AS tyString (identical read/write codegen, the capacity in
+          UFldStrCap); tyShortString must keep its OWN tag, because that tag is
+          where its one-byte prefix width comes from -- but it needs the cap
+          just the same, and it was getting neither the cap nor a real size. }
+        if (fTk = tyFixedString) or (fTk = tyShortString) then
         begin
-          AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(tyString), fRec);
+          if fTk = tyFixedString then
+            AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(tyString), fRec)
+          else
+            AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
           UFldStrCap[UFldCount-1] := fStrCap;
         end
         else
@@ -6021,14 +6042,15 @@ begin
               fSize := LOCAL_STR_CAP + 8;
               fAlign := TARGET_PTR_SIZE;
             end
-            else if fTk = tyFixedString then
+            else if (fTk = tyFixedString) or (fTk = tyShortString) then
             begin
               { `string[N]` field: see ParseRecordFields — tyString layout,
-                capacity N via UFldStrCap. }
+                capacity N via UFldStrCap, and BOTH frozen kinds (a class field
+                had the same overlap a record field did). }
               fStrCap := LastTypeStrCap;
               if fStrCap <= 0 then fStrCap := DEFAULT_STR_CAP;
               fSize := FrozenStrSlotSize(fTk, fStrCap);
-              fAlign := TARGET_PTR_SIZE;
+              fAlign := FrozenStrAlign(fTk);
             end
             else if fTk = tyRecord then
             begin
@@ -6045,9 +6067,13 @@ begin
             for fni := 0 to nFldNames - 1 do
             begin
               curFieldOff := AlignTo(curFieldOff, fAlign);
-              if fTk = tyFixedString then
+              { both frozen kinds, see ParseRecordFields }
+              if (fTk = tyFixedString) or (fTk = tyShortString) then
               begin
-                AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(tyString), fRec);
+                if fTk = tyFixedString then
+                  AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(tyString), fRec)
+                else
+                  AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
                 UFldStrCap[UFldCount-1] := fStrCap;
               end
               else

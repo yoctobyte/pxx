@@ -1,0 +1,23 @@
+ok   stride equals SizeOf(element)
+ok   stride is uniform across the array
+ok   stride is a multiple of the prefix alignment
+ok   every element base is prefix-aligned
+ok   all four elements read back
+ok   lengths survive the round trip
+ok   second field does not clobber the first
+ok   and the second field is itself
+ok   fields are at least a slot apart
+ok   field store truncates to the declared capacity
+ok   and reports the truncated length
+ok   the byte after the field is untouched
+ok   the field after that is untouched
+ok   a variable truncates the same way
+ok   an element truncates the same way
+ok   char index: variable
+ok   char index: array element
+ok   char index: record field
+ok   char index: pointer deref
+ok   first char offset: element agrees with variable
+ok   first char offset: field agrees with variable
+ok   first char offset: deref agrees with variable
+ok   control: a neighbour still differs

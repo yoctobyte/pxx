@@ -238,6 +238,7 @@ function TypeIsFrozenString(tk: TTypeKind): Boolean; forward;
 function TypeIsAnyString(tk: TTypeKind): Boolean; forward;
 { The length-prefix WIDTH the two frozen kinds disagree about; see its body. }
 function FrozenStrPrefixSize(tk: TTypeKind): Integer; forward;
+function FrozenStrAlign(tk: TTypeKind): Integer; forward;
 { Sizing a frozen string needs its CAPACITY as well as its kind, and
   RecFieldByteSize -- which is above both -- is one of the callers that has one.
   bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more }
@@ -3679,6 +3680,27 @@ begin
     Result := 8;
 end;
 
+function FrozenStrAlign(tk: TTypeKind): Integer;
+{ STORAGE ALIGNMENT of a frozen string slot, and the padding its SIZE is rounded
+  up to -- one fact, two consumers, deliberately not two constants.
+
+  tyString / tyFixedString: the length prefix is a wide scalar, read and written
+  as machine words, so the slot aligns like a pointer. tyShortString: one length
+  BYTE followed by chars, so its alignment is 1 -- and that is not a
+  simplification, it is the FPC shortstring ABI, which packs `record a: Byte;
+  f: string[10]` with f at offset ONE. Aligning it would be a silent layout
+  divergence in exactly the mode built to reproduce that ABI.
+
+  Record fields asked TARGET_PTR_SIZE directly and FrozenStrSlotSize padded to
+  nothing at all, which is how SizeOf and the field layout came to disagree.
+  bug-a-storing-into-an-element-of-an-array-of-frozen-strings-bus-errors-on-xtensa }
+begin
+  if tk = tyShortString then
+    Result := 1
+  else
+    Result := TARGET_PTR_SIZE;
+end;
+
 function FrozenStrSlotSize(tk: TTypeKind; cap: Integer): Integer;
 { Byte size of an inline frozen fixed-string slot: the length prefix plus cap
   chars. tyFixedString's 8-byte word matches today's frozen tyString layout, so
@@ -3688,6 +3710,27 @@ function FrozenStrSlotSize(tk: TTypeKind; cap: Integer): Integer;
 begin
   if cap <= 0 then cap := DEFAULT_STR_CAP;
   Result := cap + FrozenStrPrefixSize(tk);
+  { ...ROUNDED UP TO THE PREFIX'S OWN ALIGNMENT, because this size is also the
+    ARRAY STRIDE and the prefix is a wide scalar. `array[0..2] of string[10]`
+    in the default mode strode 18 bytes, so element 1 began 2 mod 4 and the
+    8-byte length word landed unaligned: xtensa BUS-ERRORS on the store and on
+    Length(), both ABIs, while element 0 and element 2 were fine. Only an ODD
+    element traps, so a repro without the aligned pair reads as "array element
+    stores are broken on this backend".
+
+    The record path had already reached the right answer by a different route
+    (it aligns each FIELD start to TARGET_PTR_SIZE), which is exactly the
+    two-mechanisms-for-one-concept smell: SizeOf said 18, the field layout
+    behaved as if 24, and only an array could tell them apart. Padding the size
+    makes stride = SizeOf again -- the rule every Pascal program may assume and
+    the one FPC guarantees -- and both mechanisms now agree by construction.
+
+    tyShortString is EXCLUDED and must stay excluded: its prefix is one byte and
+    its content is bytes, so it needs no alignment, and padding it would break
+    the FPC shortstring ABI the flag exists to reproduce (FPC: SizeOf 11,
+    `record a: Byte; f: string[10]` puts f at offset 1).
+    bug-a-storing-into-an-element-of-an-array-of-frozen-strings-bus-errors-on-xtensa }
+  Result := AlignTo(Result, FrozenStrAlign(tk));
 end;
 
 function SizeOfSlot(tk: TTypeKind; cap: Integer): Integer;

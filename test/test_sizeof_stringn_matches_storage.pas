@@ -66,12 +66,22 @@ begin
 
     An absolute bracket on the slot. A `string[10]` must hold a length prefix
     and ten chars, so it cannot be smaller than 11; and the prefix is a length
-    word, so it cannot be larger than 8+10. Both ends are the DECLARED capacity,
-    not a measurement, and the bracket is deliberately wide enough to survive
-    the pending change of the prefix from eight bytes to one (18 -> 11, still
-    inside it) while rejecting the 263/264 defaults this family keeps
-    substituting when a capacity goes missing. }
-  WriteLn('bracket    ', Ord((stride >= 11) and (stride <= 18)));
+    word, so it cannot be larger than 8+10 PLUS the padding that rounds the slot
+    up to a machine word. Both ends are the DECLARED capacity, not a
+    measurement, and the bracket is deliberately wide enough to survive the
+    pending change of the prefix from eight bytes to one (18 -> 11, still inside
+    it) while rejecting the 263/264 defaults this family keeps substituting when
+    a capacity goes missing.
+
+    THE UPPER BOUND USED TO BE A BARE 18 AND THAT WAS AN ASSUMPTION, not a
+    derivation: the slot is also the array STRIDE, so it is rounded up to the
+    prefix's alignment (24 on a 64-bit target, 20 on a 32-bit one) -- otherwise
+    an odd element of `array of string[10]` starts 2 mod 4 and xtensa
+    bus-errors on it. Written as prefix + cap + (word - 1) so it stays derived
+    and stays target-independent.
+    bug-a-storing-into-an-element-of-an-array-of-frozen-strings-bus-errors-on-xtensa }
+  WriteLn('bracket    ', Ord((stride >= 11) and
+                             (stride <= 8 + 10 + SizeOf(Pointer) - 1)));
 
   { CONTAINMENT: the last element must END INSIDE the array. This is the row a
     self-consistent pair cannot satisfy by being wrong together -- an
