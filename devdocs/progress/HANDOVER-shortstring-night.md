@@ -2704,3 +2704,88 @@ must not widen into.
 
 Quick runs none of the four. **Not a complaint about quick** — it is the argument
 for T's ~8-commit sampling, which caught this in about forty minutes.
+
+## 2026-09-03 19:00 — the bisect nobody was running, and a predicate layer that has now failed four times
+
+### THE MISATTRIBUTION, AND IT WAS MINE
+
+I told frankb-78 its bisect range had moved under it. **frankb-78 is not running
+a bisect and never was this session.** I took the claim from my own recurring
+watch prompt's STATE block and relayed it **in the coordinator's voice**, which
+is what made it credible — the same class already banked twice today, third
+instance, and this time the seat that banked it was the one that did it.
+
+**The tell was free and I did not take it:** nothing frankb-78 had reported all
+session mentioned a bisect, a v401 range, or a comparison under the flag. A
+STATE block describes what someone BELIEVED at the time it was written; it is
+not a live reading, and **a standing brief is exactly the kind of instrument
+that does not error when it goes stale.**
+
+### AND THE BISECT WAS NOT REAL — BOTH BLOCKERS WERE ALREADY CLOSED
+
+Chased it because frankb-78 asked the right question: *if that bisect is real,
+someone else is running it and did not get your warning.* Nobody is.
+
+- `bug-a-i386-comparing-two-elements-of-an-array-of-frozen-strings-is-false`
+  (prio 80) — **`done/`**.
+- `bug-a-a-frozen-string-compared-to-an-ansistring-is-false-under-the-flag-on-x86-64`
+  (prio 70) — **`done/`**, and its summary records the bisect as **already
+  complete**: first bad commit `eadf214725a`, the commit that introduced the
+  x86-64 byte prefix. **Wrong since the feature landed, not a regression.**
+
+Both resolved by `2bd82200e` at **11:47:06** and moved to `done/` at `68c168230`
+at **11:47:15** — nine seconds apart. **The STATE block is stamped "corrected
+11:47".** It captured the tree in the last seconds before the close and has been
+carried forward every thirty minutes since, asserting two open blockers and a
+bisect in progress. **A brief written during the close reads exactly like a brief
+written after it.**
+
+**THIS DOES NOT MEAN THE PHASE-4 GATE IS CLEAR AND NOBODY MAY READ IT THAT WAY.**
+Two named blockers being closed is a fact about those two tickets. Six phases
+have each ended with a defect nobody had filed, and **`f199ca260` — seven hours
+after the close — is the seventh.** An empty blocker list has never once been a
+release signal in this project. **NO PIN, and the flip stays the owner's.**
+
+### FOUR GUARDS, ONE CONCEPT, TWO COMMITS SEVEN HOURS APART
+
+`2bd82200e` is titled *"three guards asked 'is this a string' of a tag that
+stopped answering."* `f199ca260` fixed a membership test reading
+`IRFrozenKindOfAddr`, whose don't-know default is `tyString`.
+
+**That is four guards in one day, in one layer, all asking "is this a string" of
+something that cannot answer the question they are asking** — one tag that
+stopped answering, one width oracle that always answers yes. This repo's own
+rule: two mechanisms serving one concept is a smell, three is a design flaw.
+**We are at four, and they were found by two different sessions who did not know
+they were on the same defect.** The next one should be a search for the
+REMAINING callers of every kind-ish oracle used as a predicate, not another
+point fix.
+
+### frankb-78: the aarch64 variadic float fix, BUILT GREEN AND REVERTED
+
+`c7c5cbf65` (Pascal-side variadic, landed) and **`08b0f50df`**, which is the one
+to read. It **built the aarch64 variadic-float fix, measured it GREEN against
+glibc, and took it back out.** AAPCS64 §6.4.2 is now settled by MEASUREMENT:
+glibc went `[0.00]` -> `[3.50]` and `[1 0.00 0]` -> `[1 3.50 2]`, and the new
+varargs test matched fpc on aarch64.
+
+**Then the positive control it nearly skipped, which is the whole story:** a
+plain `printf("%.2f", x)` C program on aarch64 went **3.00 -> 0.00**. `lib/crtl`'s
+printf is a pxx-compiled variadic CALLEE on the same arm, and its aarch64
+register-save prologue stores `x0..x7` only, deliberately. **Caller and callee
+are self-consistently all-GP today, so pxx->crtl works and only a FOREIGN callee
+sees the bug. Fixing the caller alone INVERTS the pair.**
+
+> **A change that makes glibc right and crtl wrong is not progress**, so it is
+> out of the tree rather than parked in it.
+
+Kept: `ABIA64SlotWalk` (`compiler/abi.inc`), the placement walk split to run over
+a per-argument class vector — behaviour-identical, green, and the mechanism the
+real fix needs, **so the next attempt starts from one walk with two sources
+rather than writing a second.** That is `normalise-dont-special-case` executed in
+advance of the change that needs it.
+
+Its tree was at `45397c903` throughout, predating both `0dedfb86c` and
+`f199ca260`, and it did not pull during the run — **which is the only reason it
+can say its rc=0 is about a known tree.** It scoped the claim to its own tree and
+explicitly did not claim it about HEAD.
