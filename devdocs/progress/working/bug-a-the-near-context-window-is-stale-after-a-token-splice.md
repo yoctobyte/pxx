@@ -3,10 +3,10 @@ slug: bug-a-the-near-context-window-is-stale-after-a-token-splice
 track: A
 prio: 45
 type: bug
-status: backlog
+status: working
 blocked-by: []
 summary: "`InsertTokens`/`RemoveTokens` shift `Tokens[]` and adjust the source-range and DWARF tables, but do NOT shift the parallel `TokSrcOff[]`/`TokSrcLen[]` arrays that `WriteTokenContext` prefers for a token's source spelling. After any splice, every `near:` window past the edit prints the spelling that used to live at that index. Visible today on a generic specialization: the window prints `< T > = class public >>> Val : T` — un-substituted `T`, which cannot occur in a substituted body — for an error whose token is `TNoSuchTypeAnywhere` in the spliced body. Filed by Track P; the fix is in lexer.inc, which is Track A ground."
-owner: unassigned
+owner: franka-29
 ---
 
 # The `near:` context window is stale after a token splice

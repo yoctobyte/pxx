@@ -8776,6 +8776,12 @@ test-core: $(COMPILER)
 	grep -q "unknown type: TNoSuchTypeAnywhere" $(TESTTMP)/test_generic_errloc.log
 	grep -q "^  in: .*uerrtmpl\.pas" $(TESTTMP)/test_generic_errloc.log
 	grep -q "^pascal26:22: " $(TESTTMP)/test_generic_errloc.log
+	# The `near:` window must contain the OFFENDING token, not a stale one: the
+	# splice that specializes a generic body shifts Tokens[] and owes the same
+	# shift to the ten positional arrays beside it, TokSrcOff/TokSrcLen included.
+	# Before the fix this printed `< T > = class public >>> Val : T` -- an
+	# un-substituted `T`, impossible in a substituted body.
+	grep -q "near: .*TNoSuchTypeAnywhere" $(TESTTMP)/test_generic_errloc.log
 	# a generic argument that is the ENCLOSING template's parameter must not be
 	# minted as a concrete alias -- and a genuinely concrete one still must be
 	./$(COMPILER) test/test_generic_arg_is_enclosing_template_param.pas $(TESTTMP)/test_generic_encl_param26

@@ -252,6 +252,116 @@ begin
   TokCapacity := n;
 end;
 
+procedure ShiftTokParallel(atPos, delta: Integer);
+{ Move the TEN token-parallel arrays to match a shift of Tokens[] by `delta` at
+  `atPos` -- positive for an insert, negative for a remove. Call it with the OLD
+  TokCount still in place, which is what both splice sites do.
+
+  ALL TEN ARE POSITIONAL, checked one at a time rather than assumed: defs.inc
+  documents every one of them as state "at this token" -- the six directive
+  states ({$PACKRECORDS}, {$Q}, {$R}, {$I}, {$N}, {$SCOPEDENUMS}), the two
+  source-spelling channels and the two C attribute slots. Not one is a side
+  table keyed by anything but the token index, so a splice moves all of them or
+  desynchronises all of them.
+
+  IT MOVED EXACTLY ONE OF ELEVEN. InsertTokens and RemoveTokens shifted
+  Tokens[] and nothing else, so the FIRST splice of a compile desynchronised the
+  other ten and they stayed that way for the rest of it. The loud symptom was
+  the `near:` window printing the text that used to live at those indices --
+  on a generic specialization it printed un-substituted `T`, which cannot occur
+  in a substituted body, so the output convicted itself without reading any
+  code. The directive states are the quiet half and nobody had looked: a {$R+}
+  region's boundary moves by the splice width, and range checking silently
+  starts or stops at the wrong token.
+
+  EnsureTokCapacity above already says "ALL 11 token arrays grow in lockstep --
+  a missed one is a silent out-of-bounds". This is the same list and the same
+  hazard one operation over, which is why the two now sit together: a new
+  parallel array must be added to BOTH, and separating them is what let one
+  list run ahead of the other.
+  bug-a-the-near-context-window-is-stale-after-a-token-splice }
+var i, src: Integer;
+begin
+  if delta > 0 then
+  begin
+    for i := TokCount - 1 downto atPos do
+    begin
+      TokPackRecords[i + delta] := TokPackRecords[i];
+      TokQChecks[i + delta]     := TokQChecks[i];
+      TokRChecks[i + delta]     := TokRChecks[i];
+      TokIChecks[i + delta]     := TokIChecks[i];
+      TokNChecks[i + delta]     := TokNChecks[i];
+      TokScopedEnums[i + delta] := TokScopedEnums[i];
+      TokSrcOff[i + delta]      := TokSrcOff[i];
+      TokSrcLen[i + delta]      := TokSrcLen[i];
+      CAttrFlags[i + delta]     := CAttrFlags[i];
+      CAttrAlignValues[i + delta] := CAttrAlignValues[i];
+    end;
+    { THE GAP, and the two halves of it are filled DIFFERENTLY on purpose.
+
+      Directive state is LEXICALLY CONTINUOUS, so a spliced token inherits the
+      state in effect immediately before it -- the token at atPos-1, or the one
+      it displaced when it is being inserted at the very front. Leaving the gap
+      as whatever those slots happened to hold is how a {$R+} region acquires a
+      hole the source never wrote.
+
+      The SPELLING channels are zeroed instead. For a SYNTHESIZED token that is
+      the correct answer and not a default: WriteTokenContext falls back to the
+      raw token's own SOffset/SLen when TokSrcLen is 0, and there is no source
+      range to point at because the token was never in the file. Copying a
+      neighbour's spelling here would reproduce the very bug this procedure
+      fixes, one token over. Same for the C attribute slots: a synthesized
+      token carries no attribute.
+
+      IT IS NOT THE RIGHT ANSWER FOR THE SPECIALIZER, AND THAT IS MEASURED, NOT
+      SUSPECTED. A generic specialization splices tokens that are VERBATIM
+      COPIES of template tokens, each with a real source range -- so zeroing
+      loses it, and the fallback holds text only for identifiers and strings.
+      The window inside a specialized body therefore prints its identifiers and
+      drops its punctuation:
+
+        near: Integer   var q  >>> TNoSuchTypeAnywhere  begin
+
+      -- the `:` and `;` blanked. That is the same defect TokSrcOff/TokSrcLen
+      were added to fix, scoped to specialized bodies, and it is still strictly
+      better than the stale window it replaces (which printed an
+      un-substituted `T` from a token six positions away). The fix is to carry
+      the span through the specializer for verbatim copies and zero it only for
+      SUBSTITUTED ones; a caller with real spans cannot express that through
+      this procedure, which is why it is the next commit and not this one. }
+    src := atPos - 1;
+    if src < 0 then src := atPos + delta;
+    if (src >= 0) and (src < TokCount + delta) then
+      for i := atPos to atPos + delta - 1 do
+      begin
+        TokPackRecords[i] := TokPackRecords[src];
+        TokQChecks[i]     := TokQChecks[src];
+        TokRChecks[i]     := TokRChecks[src];
+        TokIChecks[i]     := TokIChecks[src];
+        TokNChecks[i]     := TokNChecks[src];
+        TokScopedEnums[i] := TokScopedEnums[src];
+        TokSrcOff[i]      := 0;
+        TokSrcLen[i]      := 0;
+        CAttrFlags[i]     := 0;
+        CAttrAlignValues[i] := 0;
+      end;
+  end
+  else if delta < 0 then
+    for i := atPos to TokCount + delta - 1 do
+    begin
+      TokPackRecords[i] := TokPackRecords[i - delta];
+      TokQChecks[i]     := TokQChecks[i - delta];
+      TokRChecks[i]     := TokRChecks[i - delta];
+      TokIChecks[i]     := TokIChecks[i - delta];
+      TokNChecks[i]     := TokNChecks[i - delta];
+      TokScopedEnums[i] := TokScopedEnums[i - delta];
+      TokSrcOff[i]      := TokSrcOff[i - delta];
+      TokSrcLen[i]      := TokSrcLen[i - delta];
+      CAttrFlags[i]     := CAttrFlags[i - delta];
+      CAttrAlignValues[i] := CAttrAlignValues[i - delta];
+    end;
+end;
+
 procedure RecordTokSpan(idx, startPos, endPos: Integer);
 { Record token `idx`'s SOURCE SPELLING -- Source[startPos..endPos-1] -- into
   TokSrcOff/TokSrcLen. THE one implementation, called by every frontend's lexer.
@@ -3095,6 +3205,7 @@ begin
   for i := TokCount - 1 downto insertPos do
     Tokens[i + count] := Tokens[i];
   { Copy }
+  ShiftTokParallel(insertPos, count);
   for i := 0 to count - 1 do
     Tokens[insertPos + i] := srcTokens[i];
   Inc(TokCount, count);
@@ -3107,6 +3218,7 @@ end;
 procedure RemoveTokens(atPos, count: Integer);
 var i: Integer;
 begin
+  ShiftTokParallel(atPos, -count);
   for i := atPos to TokCount - count - 1 do
     Tokens[i] := Tokens[i + count];
   Dec(TokCount, count);

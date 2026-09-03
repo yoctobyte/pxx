@@ -649,6 +649,15 @@ var i, subCount: Integer;
 begin
   subCount := SpecializeToBuffer(tokStart, count, specName);
   EnsureTokCapacity(TokCount + subCount + 1);
+  { THE TEN TOKEN-PARALLEL ARRAYS, and this is the SECOND implementation of the
+    shift -- fixing InsertTokens alone left this one broken, which is the double
+    case devdocs/dev/normalise-dont-special-case.md is about. Measured: with
+    InsertTokens repaired and this line absent, the repro's `near:` window was
+    UNCHANGED, because a specialization never goes through InsertTokens at all.
+    Called while TokCount is still the OLD count, which is what the helper
+    expects and what the Tokens[] loop below also assumes.
+    bug-a-the-near-context-window-is-stale-after-a-token-splice }
+  ShiftTokParallel(at, subCount);
   i := TokCount - 1;
   while i >= at do
   begin
