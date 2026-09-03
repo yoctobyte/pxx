@@ -124,6 +124,42 @@ Constraints in this version:
 An optional policy clause tunes distribution (worker count, chunking); omit it
 for the default that fans the range evenly across the pool.
 
+### `reduction` and `private`
+
+Two clauses sit between the range and `do`, and both exist because capture is by
+reference:
+
+```pascal
+  parallel for i := 0 to N-1 reduction(+: total) private(scratch) do
+  begin
+    scratch := 0;
+    while scratch < 3 do begin total := total + 1; scratch := scratch + 1; end;
+  end;
+```
+
+- **`reduction(op: v, ...)`** — each worker accumulates into a private partial
+  and folds it into `v` under a lock after the loop, so a shared accumulator is
+  race-free. Ops are `+`, `or`, `xor`, `and`, `min`, `max` and `mul` (spelled as
+  a word, because `(*` opens a comment).
+- **`private(v, ...)`** — each worker gets its own copy of `v`, and nothing is
+  written back. This is the clause for **scratch** storage: a temporary the body
+  assigns on every iteration. Without it that temporary is one shared variable
+  and the loop silently loses work.
+
+Two things to know about `private`:
+
+- It is **per worker**, not per iteration. Seed it in the body if the body needs
+  a known starting value each time round, exactly as the example does.
+- Each copy starts **zero / `False` / `nil` / empty**, where OpenMP's `private`
+  leaves it uninitialised. Copying the enclosing value in (OpenMP's
+  `firstprivate`) is not offered.
+
+A variable may not appear in both clauses — `reduction` already gives it a
+private, plus the combine.
+
+Scalars and `AnsiString` may be private. Arrays, records and classes may not
+yet; index a shared array by the loop variable instead, which needs no clause.
+
 ## Next
 
 - [Coroutines & async](./async.md)

@@ -93,7 +93,7 @@ _none_
 | umbrella-sizeof-is-one-answer | A | 75 | umbrella | GOAL: a program can trust SizeOf. `FillChar(x, SizeOf(x), 0)` and `Move(a, b, SizeOf(a))` are correct for EVERY type in every frontend, and `file of T` can write a layout that reads back. Today they are not: SizeOf answers 8 for every `string[N]` while pxx's OWN layout engine gives that type 18, so `FillChar` on an `array[0..2] of string[10]` clears 24 of 54 bytes and leaves a[2] intact -- silent, and correct under FPC so no differential probe sees it. Root cause is measured and structural: FOUR functions answer `how big is this type`, each adding one more parameter because the kind alone was not enough -- TypeSlotSize(tk) at 363 sites, TypeStorageSize(tk, recId), SizeOfSlot(tk, cap), FrozenStrSlotSize(tk, cap). SizeOfSlot's own comment says it: `A FROZEN STRING'S SIZE IS NOT A FUNCTION OF ITS KIND`. Two is a smell, three is a design flaw; this is four, plus duplicated builtin type tables in A, N and P that disagree with each other. | bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets, bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386, bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size, bug-c-sizeof-reaches-a-pointee-through-one-spelling-only, bug-n-nilpy-carries-its-own-copies-of-the-float-type-table, bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes, bug-p-a-user-type-whose-name-shadows-a-builtin-is-unusable, bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more, bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size, bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts, compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees, refactor-a-the-const-cast-width-table-is-the-third-copy |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (140)
+## backlog-core (139)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -167,7 +167,6 @@ _none_
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 15 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | compat-pascal-overload-prefers-signed-for-an-unsigned-argument | A | 12 | compat | Overload resolution picks the signed arm for an unsigned argument | — |
-| feature-a-a-private-clause-for-parallel-for | A | 50 | feature | `parallel for` has `reduction(op: v)` and nothing else, so a captured local the body ASSIGNS cannot be made per-worker. That is not a defect -- docs/library/concurrency.md documents capture-by-reference and says an unguarded shared write is a data race -- but it means a whole class of loop body cannot be written at all: the natural `s := ''; SetLength(s, 8); use(s)` scratch variable has no race-free spelling with a captured scalar. A `private(v)` clause giving each worker its own copy (initialised empty/zero, discarded at the end) would close it; the reduction machinery already builds exactly this, a per-worker private plus a combine, so private is that minus the combine. | — |
 | feature-a-a-refusal-is-a-claim-with-a-date-on-it | A | 35 | feature |  | — |
 | feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile | A+S | 35 | feature | xtensa is the only hosted target with NO signal runtime — EmitSignalRuntimeForTarget has arms for five arches and falls through for xtensa, on purpose, because `FreeRTOS is not a Unix`. That rationale was written before the hosted xtensa profile existed, and under --platform=posix xtensa IS a Unix running on Linux via qemu. Not the 8-line IR_SET_SIGNAL port it looks like: the arm depends on a ~155-line runtime that does not exist. Unblocks 4 programs, not 1, because the three SA_SIGINFO refusals are gated on the same fact. | — |
 | feature-a-a-variant-has-no-null-tag | A | 45 | feature | pxx has one no-value variant tag (VT_EMPTY), so VarIsNull and VarIsEmpty are the same question and `v := Null; VarIsEmpty(v)` answers True where FPC says False. variants.pas states the approximation in its header and asks for a ticket rather than a silent guess — this is that ticket. A VT_NULL tag is a compiler change, and decide-variant-tag-space-is-a-language-wide-commitment already settled that the tag space is Track A\'s to renumber freely. | — |
@@ -890,9 +889,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3183)
+## done (3184)
 
-3183 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3184 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (74)
 
@@ -1084,7 +1083,6 @@ _none_
 - [p 50] [T] bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-report
 - [p 50] [U] decide-what-should-a-shared-gate-do-when-its-watched-number-grows-from-normal-work
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
-- [p 50] [A] feature-a-a-private-clause-for-parallel-for
 - [p 50] [T] feature-t-a-test-s-expected-transcript-should-live-beside-the-pas-not-in-the-makefile-recipe
 - [p 50] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)

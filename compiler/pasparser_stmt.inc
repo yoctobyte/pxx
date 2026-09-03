@@ -3889,6 +3889,13 @@ var
   redTypeTokA: array[0..MAX_REDVARS-1] of TTokenKind;
   redVarNameA: array[0..MAX_REDVARS-1] of AnsiString;
   redOpTok: TTokenKind; redThisMinMax, redThisMax, redThisAnd: Boolean; redThisIdent: Integer;
+  { private(v, ...) -- names only at clause-parse time; they are resolved and
+    turned into worker-private locals in the same pre-scan that handles an inner
+    `for`'s control variable, because that is where the body's token span is
+    known and where the capture list is built. }
+  pvtN, pj, emptyStrOff: Integer;
+  pvtNameA: array[0..MAX_PFCAP-1] of AnsiString;
+  privSeed: array[0..MAX_PFCAP-1] of Boolean;
 begin
   ln := CurTok.Line;
   Next;  { consume 'parallel' }
@@ -3987,9 +3994,45 @@ begin
     repeated `reduction(...)` clauses stack entries with different ops. NOTE `*` is
     NOT offered: `(*` is Pascal's comment opener, so `reduction(*:...)` lexes as a
     comment (`*`/`and` need a different spelling — follow-up). }
-  redN := 0;
-  while (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'reduction') do
+  redN := 0; pvtN := 0;
+  while (CurTok.Kind = tkIdent) and
+        (CaseEqual(CurTok.SVal, 'reduction') or CaseEqual(CurTok.SVal, 'private')) do
   begin
+    { `private(v, ...)` -- each worker gets its own copy, seeded to zero/empty
+      and never combined. That is exactly `reduction` minus the fold, and it is
+      the clause a body needs for SCRATCH storage: without it a captured local
+      the body assigns is shared by reference, which concurrency.md documents
+      as a race but which has no race-free spelling for a per-iteration
+      temporary. Measured before this existed: a body incrementing a captured
+      `j` through a `while` lost iterations silently -- 5 runs of a loop that
+      must total 300000 gave 299674, 299015, 295718, 298575, 296181.
+
+      SEEDED, where OpenMP's `private` is explicitly UNINITIALISED. Two reasons
+      and the second is the load-bearing one: this dialect has managed types,
+      for which "uninitialised" is not a state we want; and an uninitialised
+      local reads its stack slot, which in a freshly-entered worker frame is
+      usually zero -- so the wrong behaviour would be RIGHT most of the time and
+      wrong under load, which is the shape that costs days to find. `firstprivate`
+      (copy the enclosing value in) is a separate ask and is not this.
+      feature-a-a-private-clause-for-parallel-for }
+    if CaseEqual(CurTok.SVal, 'private') then
+    begin
+      Next; Expect(tkLParen, '(');
+      while True do
+      begin
+        if CurTok.Kind <> tkIdent then Error('private: expected a variable name');
+        if pvtN >= MAX_PFCAP then Error('private: too many private variables');
+        for pj := 0 to pvtN - 1 do
+          if CaseEqual(pvtNameA[pj], CurTok.SVal) then
+            Error('private: variable ''' + CurTok.SVal + ''' is listed twice');
+        pvtNameA[pvtN] := CurTok.SVal;
+        Inc(pvtN);
+        Next;
+        if CurTok.Kind = tkComma then Next else Break;
+      end;
+      Expect(tkRParen, ')');
+      Continue;
+    end;
     Next; Expect(tkLParen, '(');
     redThisMinMax := False; redThisMax := False; redThisAnd := False;
     redOpTok := tkPlus; redThisIdent := 0;
@@ -4033,6 +4076,15 @@ begin
     end;
     Expect(tkRParen, ')');
   end;
+
+  { A variable cannot be both. `reduction` already gives it a private partial
+    AND a combine; `private` would silently drop the combine, so the two clauses
+    name incompatible intents rather than composable ones. }
+  for pj := 0 to pvtN - 1 do
+    for rj := 0 to redN - 1 do
+      if CaseEqual(pvtNameA[pj], redVarNameA[rj]) then
+        Error('private: ''' + pvtNameA[pj] + ''' is also a reduction variable '
+            + '(reduction already gives it a per-worker private, plus a combine)');
 
   Expect(tkDo, 'do');
 
@@ -4096,6 +4148,51 @@ begin
     clause, feature-a-a-private-clause-for-parallel-for.
     bug-a-a-nested-for-loop-in-a-parallel-for-body-is-a-compile-error }
   privN := 0;
+  emptyStrOff := NestStrOff('');
+  { the `private(...)` clause first, so an inner `for` over the same variable
+    finds it already private and does not add a second entry. }
+  for pj := 0 to pvtN - 1 do
+  begin
+    privNm := pvtNameA[pj];
+    if CaseEqual(privNm, Vname) then
+      Error('private: ''' + privNm + ''' is the loop variable, which is already '
+          + 'per-worker');
+    si := FindSym(privNm);
+    if (si < 0) or (si < scopeBase) then
+    begin
+      ErrorIdent := privNm;
+      Error('private: ''' + privNm + ''' is not an enclosing local');
+    end;
+    kw := '';
+    if (not Syms[si].IsArray) and (SymDynDepth[si] = 0) then
+    begin
+      kw := PFScalarKw(Syms[si].TypeKind);
+      if (kw = '') and (Syms[si].TypeKind = tyAnsiString) then kw := 'AnsiString';
+    end;
+    if kw = '' then
+    begin
+      ErrorIdent := privNm;
+      Error('private: ''' + privNm + ''' has a type this cannot declare '
+          + 'per-worker yet (scalars and AnsiString only; index a shared array '
+          + 'by the loop variable instead)');
+    end;
+    privSi[privN] := si;
+    privNmOff[privN] := NestStrOff(privNm);
+    privNmLen[privN] := Length(privNm);
+    privKwOff[privN] := NestStrOff(kw);
+    privKwLen[privN] := Length(kw);
+    privSeed[privN] := True;
+    case Syms[si].TypeKind of
+      tyInteger, tyInt32: privTypeTok[privN] := tkInteger_T;
+      tyBoolean:          privTypeTok[privN] := tkBoolean_T;
+      tyChar:             privTypeTok[privN] := tkChar_T;
+      tyUInt32:           privTypeTok[privN] := tkLongWord_T;
+      tySingle:           privTypeTok[privN] := tkSingle_T;
+      tyDouble:           privTypeTok[privN] := tkDouble_T;
+    else                  privTypeTok[privN] := tkIdent;
+    end;
+    Inc(privN);
+  end;
   for i := bodyStart to bodyEnd - 3 do
     if (Tokens[i].Kind = tkFor) and (Tokens[i+1].Kind = tkIdent) and
        (Tokens[i+2].Kind = tkAssign) then
@@ -4126,6 +4223,7 @@ begin
       privNmLen[privN] := Length(privNm);
       privKwOff[privN] := NestStrOff(kw);
       privKwLen[privN] := Length(kw);
+      privSeed[privN] := False;   { a `for` control is written before it is read }
       { the private local needs the type's KEYWORD token where one exists -- the
         same rule the reduction accumulators below follow, and for the same
         reason: a bare tkIdent('Integer') does not resolve as a named type. }
@@ -4379,6 +4477,46 @@ begin
     PFStash(tkRParen, 0, 0, ln);              { ) closing Pointer( }
     PFStash(tkSemicolon, 0, 0, ln);
   end;
+  { private(...): <v> := 0 / False / nil / Chr(0). An inner `for`'s control
+    variable is NOT seeded -- `for v := lo to hi` writes it before any read --
+    so only the clause's own entries carry privSeed. }
+  for pk := 0 to privN - 1 do
+    if privSeed[pk] then
+    begin
+      PFStash(tkIdent, privNmOff[pk], privNmLen[pk], ln);
+      PFStash(tkAssign, 0, 0, ln);
+      case Syms[privSi[pk]].TypeKind of
+        tyBoolean:     PFStash(tkFalse, 0, 0, ln);
+        tyPointer:     PFStash(tkNil, 0, 0, ln);
+        tyAnsiString:  PFStash(tkString, emptyStrOff, 0, ln);   { s := '' }
+        tyChar:
+          begin
+            { `Char(0)` and NOT `Chr(0)`. tkChr greps as thoroughly live -- six
+              backends test `-Ord(tkChr)` -- but every one of those is an
+              INTRINSIC ID stored in ASTIVal, and the lexer never emits tkChr as
+              a TOKEN. So a stashed tkChr reaches the parser as something no
+              expression arm accepts, and the worker fails to parse inside
+              palthread.pas, which is where the synthesized body lands: an error
+              in a file this statement never mentions. A type cast is a real
+              expression on every path. }
+            PFStash(tkChar_T, 0, 0, ln);
+            PFStash(tkLParen, 0, 0, ln);
+            if PendNestCount >= MAX_NESTED_TOKENS then Error('parallel for: nested token buffer overflow');
+            PendNestTok[PendNestCount].Kind := tkInteger; PendNestTok[PendNestCount].IVal := 0;
+            PendNestTok[PendNestCount].Line := ln; PendNestTok[PendNestCount].SOffset := 0; PendNestTok[PendNestCount].SLen := 0;
+            Inc(PendNestCount);
+            PFStash(tkRParen, 0, 0, ln);
+          end;
+      else
+        begin
+          if PendNestCount >= MAX_NESTED_TOKENS then Error('parallel for: nested token buffer overflow');
+          PendNestTok[PendNestCount].Kind := tkInteger; PendNestTok[PendNestCount].IVal := 0;
+          PendNestTok[PendNestCount].Line := ln; PendNestTok[PendNestCount].SOffset := 0; PendNestTok[PendNestCount].SLen := 0;
+          Inc(PendNestCount);
+        end;
+      end;
+      PFStash(tkSemicolon, 0, 0, ln);
+    end;
   { reduction: __pfred<K> := <identity> (+/or/xor)  or  := v^ (min/max) ; }
   for rk := 0 to redN - 1 do
   begin

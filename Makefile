@@ -4896,6 +4896,8 @@ test-threads: $(COMPILER)
 	# exact deterministic +/xor results (a race would flake the sum).
 	./$(COMPILER) --threadsafe test/test_parallel_reduction.pas $(TESTTMP)/test_parallel_reduction26
 	tools/expect_same.sh test_parallel_reduction26 "$$($(TESTTMP)/test_parallel_reduction26)" "PARRED OK"
+	./$(COMPILER) --threadsafe test/test_parallel_for_private.pas $(TESTTMP)/test_parallel_for_private26
+	tools/expect_same.sh test_parallel_for_private26 "$$($(TESTTMP)/test_parallel_for_private26)" "$$(cat test/test_parallel_for_private.expected)"
 	# a `for` INSIDE a parallel-for body. The control variable of a loop is
 	# written by the loop, so N workers sharing one is a race by construction,
 	# and all three spellings were broken: a captured local was rewritten to
@@ -16429,6 +16431,8 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/test_i386_parpollang "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parpollang)" "PARPOLLANG OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_reduction.pas $(TESTTMP)/test_i386_parred
 	tools/expect_same.sh i386/test_i386_parred "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parred)" "PARRED OK"
+	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_for_private.pas $(TESTTMP)/test_i386_parpriv
+	tools/expect_same.sh i386/test_i386_parpriv "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parpriv)" "$$(cat test/test_parallel_for_private.expected)"
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_policy_named.pas $(TESTTMP)/test_i386_parnamed
 	tools/expect_same.sh i386/test_i386_parnamed "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_parnamed)" "PARNAMED OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_parallel_writeln_atomic.pas $(TESTTMP)/test_i386_pwa
@@ -17253,6 +17257,8 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/test_aarch64_parpollang "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parpollang)" "PARPOLLANG OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_reduction.pas $(TESTTMP)/test_aarch64_parred
 	tools/expect_same.sh aarch64/test_aarch64_parred "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parred)" "PARRED OK"
+	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_for_private.pas $(TESTTMP)/test_aarch64_parpriv
+	tools/expect_same.sh aarch64/test_aarch64_parpriv "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parpriv)" "$$(cat test/test_parallel_for_private.expected)"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_policy_named.pas $(TESTTMP)/test_aarch64_parnamed
 	tools/expect_same.sh aarch64/test_aarch64_parnamed "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parnamed)" "PARNAMED OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_writeln_atomic.pas $(TESTTMP)/test_aarch64_pwa
@@ -20186,6 +20192,8 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/test_arm32_parpollang "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parpollang)" "PARPOLLANG OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_reduction.pas $(TESTTMP)/test_arm32_parred
 	tools/expect_same.sh arm32/test_arm32_parred "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parred)" "PARRED OK"
+	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_for_private.pas $(TESTTMP)/test_arm32_parpriv
+	tools/expect_same.sh arm32/test_arm32_parpriv "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parpriv)" "$$(cat test/test_parallel_for_private.expected)"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_policy_named.pas $(TESTTMP)/test_arm32_parnamed
 	tools/expect_same.sh arm32/test_arm32_parnamed "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parnamed)" "PARNAMED OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_writeln_atomic.pas $(TESTTMP)/test_arm32_pwa
