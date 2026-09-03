@@ -324,4 +324,4 @@ ENUMERATED is a fourth, and the quietest — it leaves no rc, no log line, no
 trace at all.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 86bc8e33d.
