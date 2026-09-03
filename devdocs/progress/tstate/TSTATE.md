@@ -4,18 +4,18 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 4d6h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `08b0f50df2ac` | 2026-09-03T17:08:10Z | GREEN (native) | 188.6s | `91b4b77ec631` RED |
+| seven | `08b0f50df2ac` | 2026-09-03T17:22:37Z | RED (full) | 819.7s | `08b0f50df2ac` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `91b4b77ec631` on seven, 2026-09-03T17:03:30Z (4m ago).**
+**Newest full tier in the fleet: `08b0f50df2ac` on seven, 2026-09-03T17:22:37Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `91b4b77ec631` | RED | 4m | — (newest) |
+| seven | `08b0f50df2ac` | RED | 0m | — (newest) |
 | plexus | `27424c927b65` | RED | 4d6h | 4d6h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
@@ -43,14 +43,6 @@ Reading a staler host's map for a cross-target job answers a question about an O
   - `test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint`
   - `tools-devtest#00`
   </details>
-- **test-aarch64#src:test/test_field_rooted_nested_dyn_frozen_index.pas@1** — test/test_field_rooted_nested_dyn_frozen_index.pas tools/expect_same.sh +2 (seven): bad `91b4b77ec631`, last good `5e2dcc37c253`, 1 commit(s) in range
-- **test-aarch64#src:test/test_field_rooted_nested_dyn_frozen_index.pas@2** — test/test_field_rooted_nested_dyn_frozen_index.pas tools/expect_same.sh +2 (seven): bad `91b4b77ec631`, last good `5e2dcc37c253`, 1 commit(s) in range
-- **test-arm32#src:test/test_field_rooted_nested_dyn_frozen_index.pas@1** — test/test_field_rooted_nested_dyn_frozen_index.pas tools/expect_same.sh +2 (seven): bad `91b4b77ec631`, last good `5e2dcc37c253`, 1 commit(s) in range
-- **test-arm32#src:test/test_field_rooted_nested_dyn_frozen_index.pas@2** — test/test_field_rooted_nested_dyn_frozen_index.pas tools/expect_same.sh +2 (seven): bad `91b4b77ec631`, last good `5e2dcc37c253`, 1 commit(s) in range
-- **test-i386#src:test/test_field_rooted_nested_dyn_frozen_index.pas@1** — test/test_field_rooted_nested_dyn_frozen_index.pas tools/expect_same.sh +2 (seven): bad `91b4b77ec631`, last good `5e2dcc37c253`, 1 commit(s) in range
-- **test-i386#src:test/test_field_rooted_nested_dyn_frozen_index.pas@2** — test/test_field_rooted_nested_dyn_frozen_index.pas tools/expect_same.sh +2 (seven): bad `91b4b77ec631`, last good `5e2dcc37c253`, 1 commit(s) in range
-- **test-riscv32#src:test/test_field_rooted_nested_dyn_frozen_index.pas@1** — test/test_field_rooted_nested_dyn_frozen_index.pas tools/expect_same.sh +2 (seven): bad `91b4b77ec631`, last good `5e2dcc37c253`, 1 commit(s) in range
-- **test-riscv32#src:test/test_field_rooted_nested_dyn_frozen_index.pas@2** — test/test_field_rooted_nested_dyn_frozen_index.pas tools/expect_same.sh +2 (seven): bad `91b4b77ec631`, last good `5e2dcc37c253`, 1 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
 
