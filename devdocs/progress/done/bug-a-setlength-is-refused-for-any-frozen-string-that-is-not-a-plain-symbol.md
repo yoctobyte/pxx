@@ -2,7 +2,7 @@
 prio: 40
 track: A
 type: bug
-status: backlog
+status: done
 summary: "SetLength on a frozen string compiles only for a plain symbol. `SetLength(p^, n)`, `SetLength(r.f, n)` and `SetLength(arr[0], n)` are refused with `error: SetLength expects a string variable in IR codegen` on EVERY target including x86-64, in both modes, and reproduce on the pinned compiler -- every backend's builtin -101 arm requires the argument to lower to an IR_LEA of a symbol. Pre-existing and unrelated to the byte prefix; it is why the reader matrix carries only the direct SetLength spelling."
 ---
 
@@ -105,10 +105,72 @@ wrong error and onto the right broken arm — no program compiles that did not
 compile before. The two halves land together or not at all, which is why this
 was banked rather than half-done.
 
-**NOT STARTED, DELIBERATELY, AND THIS IS THE COORDINATION THE TICKET NEEDS.**
-`SetLength` is the only builtin on BOTH sides of the layout — it reads the
-prefix to find the buffer and writes one back — so its `-101` arms are the ones
-most exposed to the phase-4 flip, which is unreleased, the owner's alone, and
-sequenced to go last with nothing else in flight. Six backend arms rewritten
-underneath it is the collision that sequencing exists to prevent. Start this
-the moment the flip lands; frankb-78 was told before the diagnosis began.
+**~~NOT STARTED, DELIBERATELY~~ — THAT PARAGRAPH WAS WRONG AND IS LEFT HERE
+BECAUSE A FALSE LIMIT GETS BELIEVED.** It said the `-101` arms could not be
+touched without colliding with in-flight phase-4 work. There is no in-flight
+phase-4 work: `owner: frankB` on that ticket names a CHECKOUT, not a session,
+and nobody holds it — the flip is unreleased and the owner's alone. Same
+misreading of the same field, twice in one day, by the same session; the
+discriminator was one message. And the owner's sequencing says the opposite of
+what I read into it: *complete work on shortstring as best we can, THEN pause
+everything and make the flip.* This work is the "before", not the collision.
+Fixed below.
+
+## Fixed — seven targets, both modes, FPC-identical
+
+**wasm32 ALREADY DID IT, AND THAT IS THE WHOLE DESIGN.** Its `-101` arm has
+never asked for an `IR_LEA`: it emits the argument as a value (the address),
+asks `WasmStrTypeOf` for the width, and stores. Measured before writing a line
+of the fix — wasm32 compiles AND RUNS the field and deref shapes at the pin's
+tree. So this was six backends catching up with a seventh, and with the managed
+`IR_SETLEN_STR` path that had all three shapes working beside them. Nothing
+here is a new mechanism.
+
+**THE ADDRESS AND THE WIDTH ARE TWO QUESTIONS AND ONLY ONE NEEDED A SYMBOL.**
+The old arms took both from `Syms[IRA[left]]`. A field, an element and a `p^`
+deref are address nodes whose VALUE is the buffer (measured with `PXXDBG=a.ir`:
+`IR_FIELD`, `IR_INDEX` and a bare `IR_LOAD_SYM` of the pointer), so the address
+needs no symbol at all — only the prefix width does, and `IRFrozenKindOfAddr`
+answers it from the node, including the `PtrElemTk` route for a deref.
+
+- `ir_codegen.inc` (x86-64) and `ir_codegen386.inc`, `_aarch64`, `_arm32`: a
+  second path for a non-`IR_LEA` target. The LEA path is left byte-identical,
+  because it also answers a question the address path does not have — whether a
+  by-VALUE frozen-string param's slot holds a pointer to its buffer.
+- `ir_codegen_riscv32.inc`, `_xtensa`: these already emitted the address with
+  `IREmitNode*(left)` and used the symbol for the width alone, so they needed
+  only the guard relaxed and the width re-sourced. No second path.
+- `symtab.inc`: `EmitStoreStrLenAt(tk)` — the width-only sibling of
+  `EmitStoreStrLen(idx)`, kind-agnostic on purpose so the flip changes one
+  prefix-width fact rather than re-deriving how to find a field.
+- `pasparser_stmt.inc`: the classifier's `AN_INDEX` arm now asks
+  `ASTTk[valNode]` instead of answering "array" unconditionally. A MANAGED
+  element deliberately stays on the array path — `-102` handles `tyAnsiString`,
+  which is why `msa[0]` always worked.
+
+**MEASURED, 14 CELLS.** x86-64, i386, aarch64, arm32, riscv32, xtensa and
+wasm32, each in default and `-dPXX_SHORTSTRING`, all seven rows correct and
+byte-identical to **FPC 3.2.2** on the same program. xtensa needs
+`--platform=posix --xtensa-soft-mulhigh`, which the verdict names because under
+that flag the emulator is not bit-identical to hardware for multiplies.
+
+**THE GUARD COLUMNS ARE THE POINT.** A frozen string's length prefix lives
+inside the slot, so a store at the wrong address or the wrong WIDTH lands in the
+NEIGHBOUR rather than failing. `sa[1]` and `da[1]` are read back after every
+write; a value-only assertion could not have seen that class.
+
+Regression: `test/test_setlength_frozen_lvalue_shapes.pas`, wired native plus
+i386/aarch64/arm32/riscv32. Positive control: the pinned compiler refuses to
+compile it. The managed rows sit in the same file as the oracle they were
+verified against.
+
+**ONE INSTRUMENT NOTE, because it cost fifteen minutes and reads as a defect.**
+`--target=xtensa --platform=posix` SIGILLs on any numeric output, and reducing
+it gives `WriteLn('INT ', i)` crashing with no string in the program at all.
+That is documented in `tools/run_target.sh` (no qemu-xtensa core implements
+`MUL32HIGH`, and integer formatting strength-reduces div-by-10 into a 64-bit
+multiply) and is fixed by `--xtensa-soft-mulhigh`. It is the emulator, not the
+backend, and not this ticket.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

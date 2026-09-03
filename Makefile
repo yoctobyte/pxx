@@ -11018,6 +11018,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_dyn_comma26 "$$($(TESTTMP)/test_dyn_comma26)" "$$(printf 'm=138 m12=12 brk=12\nalias=9 t11=2')"
 	./$(COMPILER) test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_sscap_ptr26
 	tools/expect_same.sh test_sscap_ptr26 "$$($(TESTTMP)/test_sscap_ptr26)" "$$(printf 'sym       8 abcdefgh\nelem      8 abcdefgh\nfieldelem 8 abcdefgh\nptrelem   8 abcdefgh\nneighbour keep\nrecptrelem 8 abcdefgh n=zz tail=12345\nptrdirect 8 abcdefgh g=GUARD')"
+	./$(COMPILER) test/test_setlength_frozen_lvalue_shapes.pas $(TESTTMP)/test_slfshapes26
+	tools/expect_same.sh test_slfshapes26 "$$($(TESTTMP)/test_slfshapes26)" "$$(printf 'sym   3 abc\nderef 2 ab\nfield 3 hij\nselem 4 opqr g=GUARD\ndelem 5 vwxyz g=DGUARD\nmsym  3 man\nmelem 3 mgd')"
 	./$(COMPILER) test/test_set_subrange.pas $(TESTTMP)/test_set_subrange26
 	tools/expect_same.sh test_set_subrange26 "$$($(TESTTMP)/test_set_subrange26)" "$$(printf 'union: 1 2 3 4 5 6 10 15 20\ninter: 3 4 15\ndiff: 1 2 10\n15in')"
 	./$(COMPILER) test/test_cross_float_const.pas $(TESTTMP)/test_float_const26
@@ -16204,6 +16206,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_i386_sscap
 	./$(COMPILER) test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_i386_sscap_x64
 	tools/expect_same.sh i386/test_shortstring_cap_through_a_pointer "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sscap)" "$$($(TESTTMP)/test_i386_sscap_x64)"
+	./$(COMPILER) --target=i386 test/test_setlength_frozen_lvalue_shapes.pas $(TESTTMP)/test_i386_slfshapes
+	./$(COMPILER) test/test_setlength_frozen_lvalue_shapes.pas $(TESTTMP)/test_i386_slfshapes_x64
+	tools/expect_same.sh i386/test_setlength_frozen_lvalue_shapes "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_slfshapes)" "$$($(TESTTMP)/test_i386_slfshapes_x64)"
 	./$(COMPILER) --target=i386 test/test_classref.pas $(TESTTMP)/test_i386_classref
 	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_i386_classref_x64
 	tools/expect_same.sh i386/test_i386_classref "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_classref)" "$$($(TESTTMP)/test_i386_classref_x64)"
@@ -17043,6 +17048,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_aarch64_sscap
 	./$(COMPILER) test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_aarch64_sscap_x64
 	tools/expect_same.sh aarch64/test_shortstring_cap_through_a_pointer "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sscap)" "$$($(TESTTMP)/test_aarch64_sscap_x64)"
+	./$(COMPILER) --target=aarch64 test/test_setlength_frozen_lvalue_shapes.pas $(TESTTMP)/test_aarch64_slfshapes
+	./$(COMPILER) test/test_setlength_frozen_lvalue_shapes.pas $(TESTTMP)/test_aarch64_slfshapes_x64
+	tools/expect_same.sh aarch64/test_setlength_frozen_lvalue_shapes "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_slfshapes)" "$$($(TESTTMP)/test_aarch64_slfshapes_x64)"
 	./$(COMPILER) --target=aarch64 test/test_classref.pas $(TESTTMP)/test_aarch64_classref
 	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_aarch64_classref_x64
 	tools/expect_same.sh aarch64/test_aarch64_classref "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_classref)" "$$($(TESTTMP)/test_aarch64_classref_x64)"
@@ -17549,6 +17557,9 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_riscv32_sscap
 	./$(COMPILER) test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_riscv32_sscap_x64
 	tools/expect_same.sh riscv32/test_shortstring_cap_through_a_pointer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sscap)" "$$($(TESTTMP)/test_riscv32_sscap_x64)"
+	./$(COMPILER) --target=riscv32 test/test_setlength_frozen_lvalue_shapes.pas $(TESTTMP)/test_riscv32_slfshapes
+	./$(COMPILER) test/test_setlength_frozen_lvalue_shapes.pas $(TESTTMP)/test_riscv32_slfshapes_x64
+	tools/expect_same.sh riscv32/test_setlength_frozen_lvalue_shapes "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_slfshapes)" "$$($(TESTTMP)/test_riscv32_slfshapes_x64)"
 	# A frozen record FIELD written with WriteLn, and a frozen string handed to a
 	# MANAGED string parameter (directly, and through Copy/Pos which lower to
 	# helper calls). BOTH modes: the argument defect could not fail in the
@@ -19976,6 +19987,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_arm32_sscap
 	./$(COMPILER) test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_arm32_sscap_x64
 	tools/expect_same.sh arm32/test_shortstring_cap_through_a_pointer "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sscap)" "$$($(TESTTMP)/test_arm32_sscap_x64)"
+	./$(COMPILER) --target=arm32 test/test_setlength_frozen_lvalue_shapes.pas $(TESTTMP)/test_arm32_slfshapes
+	./$(COMPILER) test/test_setlength_frozen_lvalue_shapes.pas $(TESTTMP)/test_arm32_slfshapes_x64
+	tools/expect_same.sh arm32/test_setlength_frozen_lvalue_shapes "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_slfshapes)" "$$($(TESTTMP)/test_arm32_slfshapes_x64)"
 	./$(COMPILER) --target=arm32 test/test_classref.pas $(TESTTMP)/test_arm32_classref
 	./$(COMPILER) test/test_classref.pas $(TESTTMP)/test_arm32_classref_x64
 	tools/expect_same.sh arm32/test_arm32_classref "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_classref)" "$$($(TESTTMP)/test_arm32_classref_x64)"

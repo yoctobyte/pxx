@@ -7041,6 +7041,27 @@ begin
   end;
 end;
 
+procedure EmitStoreStrLenAt(tk: TTypeKind);
+{ Store rax (the length) into the frozen-string prefix at [rcx], at the width
+  the KIND declares. The symbol-based sibling above answers three questions at
+  once -- where the buffer is, whether the slot holds a pointer to it, and how
+  wide the prefix is -- and only the third has to be answered for a target that
+  is not a symbol. A record field, an array element and a `p^` deref all arrive
+  as an address node whose VALUE is the buffer; the caller emits it and puts it
+  in rcx, and the only thing left is the width.
+
+  KIND-AGNOSTIC ON PURPOSE (frankb-78's steer, taken): SetLength is the only
+  builtin on both sides of the layout, so when the byte-prefix flip re-touches
+  these arms it should be changing one prefix-width fact and not re-deriving
+  how to find a field or an element.
+  bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
+begin
+  if FrozenStrPrefixSize(tk) = 1 then
+    begin EmitB($88); EmitB($01); end                { mov [rcx], al }
+  else
+    begin EmitB($48); EmitB($89); EmitB($01); end;   { mov [rcx], rax }
+end;
+
 procedure EmitLoadStrLen(idx: Integer);
 { Load length of string variable into rcx, at the width its kind declares.
   The byte form is a ZERO-EXTENDING load (movzx), not a byte mov: rcx is used as

@@ -3062,7 +3062,22 @@ begin
           valNode := IRB[argNode];
           left := IRA[argNode];
           if IRKind[left] <> IR_LEA then
-            Error('target aarch64: SetLength expects a string variable');
+          begin
+            { THE NON-SYMBOL SHAPES -- field, array element, `p^` deref -- arrive
+              as an address node whose VALUE is the buffer; only the prefix
+              WIDTH needs a source, and IRFrozenKindOfAddr answers it from the
+              node. wasm32 has always done it this way and runs all three
+              shapes today; the managed path does too via IR_SETLEN_STR.
+              bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
+            if not TypeIsFrozenString(IRFrozenKindOfAddr(left)) then
+              Error('target aarch64: SetLength expects a string variable');
+            IREmitNodeAarch64(left);             { x0 = buffer address }
+            EmitI32($F81F0FE0);                  { str x0, [sp, #-16]! }
+            IREmitNodeAarch64(IRA[valNode]);     { x0 = new length }
+            EmitI32($F84107E1);                  { ldr x1, [sp], #16 (buffer addr) }
+            EmitStoreStrLenA64(0, 1, IRFrozenKindOfAddr(left));
+            Exit;
+          end;
           si := IRA[left];
           EmitLoadVarAddrA64(si);              { x0 = buffer addr, or &slot for a BY-VALUE frozen-string param }
           { `not IsRef`, not `not IsArray`. EmitLoadVarAddrA64 ALREADY derefs a

@@ -10547,6 +10547,23 @@ begin
               IREmitNode(IRA[arg2Node]);
               EmitStoreStrLen(IRA[val1Node]);
             end
+            else if TypeIsFrozenString(IRFrozenKindOfAddr(val1Node)) then
+            begin
+              { THE NON-SYMBOL SHAPES. A record field, an array element and a `p^`
+              deref all arrive as an address node whose VALUE is the buffer, so
+              the address needs no symbol at all -- only the prefix WIDTH does,
+              and IRFrozenKindOfAddr answers that from the node. wasm32 has
+              always done it this way (WasmStrTypeOf + a plain value emit) and
+              compiles and RUNS all three shapes today; the managed AnsiString
+              path does too, through IR_SETLEN_STR. This arm is the frozen half
+              catching up with both, not new machinery.
+              bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
+              IREmitNode(val1Node);            { rax = buffer address }
+              EmitB($50);                      { push rax }
+              IREmitNode(IRA[arg2Node]);       { rax = new length }
+              EmitB($59);                      { pop rcx = buffer address }
+              EmitStoreStrLenAt(IRFrozenKindOfAddr(val1Node));
+            end
             else
               Error('SetLength expects a string variable in IR codegen');
           end

@@ -2895,17 +2895,29 @@ begin
           argNode := IRB[node];
           valNode := IRB[argNode];
           left := IRA[argNode];
-          if IRKind[left] <> IR_LEA then
+          { THE LEA REQUIREMENT IS GONE, and this arm needed the least for it:
+            it already took the buffer address by EMITTING the node, and used
+            the symbol for one thing only -- the prefix WIDTH. A field, an array
+            element and a `p^` deref are address nodes whose value is the
+            buffer, so they were always emittable here; only the width had no
+            source, and IRFrozenKindOfAddr is it. The LEA case still reads the
+            symbol so its behaviour is byte-identical.
+            bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
+          if (IRKind[left] <> IR_LEA) and
+             not TypeIsFrozenString(IRFrozenKindOfAddr(left)) then
             Error('target xtensa: SetLength expects a string variable');
-          si := IRA[left];
           argBase := XtSpillDepth;
           IREmitNodeXtensa(left);                    { a2 = buffer addr }
           XtensaPushA2;                              { buffer @ argBase }
           IREmitNodeXtensa(IRA[valNode]);            { a2 = new length }
           xtensa_l32i(reg_xtensa_a3, reg_xtensa_sp, XtensaSlotOff(argBase, 0, 1));
           XtensaDropSlots(argBase, 1);
-          EmitStoreStrLenXtensa(reg_xtensa_a2, reg_xtensa_a3, reg_xtensa_a4,
-                                Syms[si].TypeKind);
+          if IRKind[left] = IR_LEA then
+            EmitStoreStrLenXtensa(reg_xtensa_a2, reg_xtensa_a3, reg_xtensa_a4,
+                                  Syms[IRA[left]].TypeKind)
+          else
+            EmitStoreStrLenXtensa(reg_xtensa_a2, reg_xtensa_a3, reg_xtensa_a4,
+                                  IRFrozenKindOfAddr(left));
           Exit;
         end;
         if procIdx = -102 then

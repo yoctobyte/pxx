@@ -5960,7 +5960,20 @@ begin
                            (RecFieldType(ResolveNodeRec(ASTLeft[valNode]),
                               GetASTIdentName(valNode)) = tyAnsiString)
         else if ASTKind[valNode] = AN_INDEX then
-          slIsArrTarget := True   { nested dynamic sub-array }
+          { `x[0]` IS AMBIGUOUS and this arm used to assume. For `array of array
+            of Integer` the target is the nested sub-array; for an array of
+            FROZEN strings it is the string, and answering "array" sent it to
+            the -102 arm, which refused it as `SetLength expects an ARRAY
+            variable` -- a diagnostic about a different concept, which is why
+            the ticket recorded all three non-symbol shapes as dying in the
+            string arm when this one never reached it.
+            Ask the resolved lvalue what it IS, the way the AN_FIELD and
+            AN_DEREF neighbours already do (RecFieldType, SymPtrElemStrTk); the
+            index arm was the only one that guessed. A MANAGED element stays on
+            the array path deliberately -- -102 handles tyAnsiString, which is
+            why `msa[0]` has always worked.
+            bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
+          slIsArrTarget := not TypeIsFrozenString(IntToTypeKind(ASTTk[valNode]))
         else if (ASTKind[valNode] = AN_DEREF) and (idx >= 0) and
                 (SymPtrElemStrTk[idx] <> 0) then
           { `p^` where the pointee is a MANAGED STRING. Routed to the

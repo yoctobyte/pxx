@@ -2838,14 +2838,25 @@ begin
           argNode := IRB[node];
           valNode := IRB[argNode];
           left := IRA[argNode];
-          if IRKind[left] <> IR_LEA then
+          { THE LEA REQUIREMENT IS GONE, and this arm needed the least for it:
+            it already took the buffer address by EMITTING the node, and used
+            the symbol for one thing only -- the prefix WIDTH. A field, an array
+            element and a `p^` deref are address nodes whose value is the
+            buffer, so they were always emittable here; only the width had no
+            source, and IRFrozenKindOfAddr is it. The LEA case still reads the
+            symbol so its behaviour is byte-identical.
+            bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
+          if (IRKind[left] <> IR_LEA) and
+             not TypeIsFrozenString(IRFrozenKindOfAddr(left)) then
             Error('target riscv32: SetLength expects a string variable');
-          si := IRA[left];
           IREmitNodeRISCV32(left);                                    { a0 = buffer addr }
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push buffer }
           IREmitNodeRISCV32(IRA[valNode]);                            { a0 = new length }
           rv32_lw(reg_a1, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop -> a1 }
-          EmitStoreStrLenRISCV32(reg_a0, reg_a1, Syms[si].TypeKind);
+          if IRKind[left] = IR_LEA then
+            EmitStoreStrLenRISCV32(reg_a0, reg_a1, Syms[IRA[left]].TypeKind)
+          else
+            EmitStoreStrLenRISCV32(reg_a0, reg_a1, IRFrozenKindOfAddr(left));
           Exit;
         end;
         if procIdx = -Ord(tkLength) then
