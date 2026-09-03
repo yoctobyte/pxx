@@ -115,9 +115,32 @@ fi
 # job) and `opt` (the optdiff sweep) — each of them the ten minutes this hook was
 # written to prevent. `slow` had been created the same day the gap was found,
 # which is exactly how a maintained list goes stale.
+#
+# A TIER NAME IS NOT A DURATION, and `--job` is where the two come apart. It
+# narrows a tier to the cases matching one glob, so
+# `--tier native --job 'test-core#src:test/x.pas'` is a single ~0.5s run
+# wearing the word `native`. This rule refused it and argued, at length and
+# without hedging, that it cost ten minutes — true of the tier, false of the
+# command. That is not a nuisance: it is the `## Repro` line EVERY auto-filed
+# regression ticket prints, so an agent's first act on a fresh regression was
+# to disbelieve a specific, confident refusal. Measured 2026-09-03: 6 of 6
+# tickets in backlog/, which is where twatch files them, i.e. the whole
+# auto-filed population.
+#
+# THE APERTURE IS WILDCARD-FREE ON PURPOSE. `--job` takes a GLOB, so a bare
+# `--job '*'` selects every job and is the full sweep with an exemption
+# attached; `--job 'test-core#*'` is a whole target. Only a value with no `*`
+# and no `?` names a bounded set the caller has actually written down, which is
+# exactly the shape twatch emits (`src:<path>`, a literal). A hand-widened
+# exemption that a wildcard defeats is the guard that stops being able to fail.
+job_is_literal=''
+if printf '%s' "$scan" | grep -Eq -- "--job[[:space:]]+['\"]?[^[:space:]'\"*?]+['\"]?([[:space:]]|\$)"; then
+  job_is_literal=1
+fi
 if printf '%s' "$scan" | grep -Eq 'testmgr\.py.*--tier[[:space:]]+[a-z]+' \
+   && [ -z "$job_is_literal" ] \
    && ! printf '%s' "$scan" | grep -Eq -- '--tier[[:space:]]+quick([[:space:]]|$)|--quick([[:space:]]|$)'; then
-  deny "REFUSED: every testmgr tier except quick is Track T's sweep — native, slow and opt cost the same ten minutes as full and limited. $loop --tier quick is allowed; to pin, use make stabilize-fast && make pin. $hatch"
+  deny "REFUSED: every testmgr tier except quick is Track T's sweep — native, slow and opt cost the same ten minutes as full and limited. $loop --tier quick is allowed, and so is any tier narrowed to one named case with --job <literal> (no glob) — that is the repro line auto-filed regression tickets print. To pin, use make stabilize-fast && make pin. $hatch"
 fi
 
 # --- 2b. a pin that can silently become a matrix run -------------------------

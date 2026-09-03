@@ -295,6 +295,21 @@ else
   echo "  SKIP  IROpName names every IR op (no iropname_lint.py)"
 fi
 
+# THE FULL-SUITE HOOK'S OWN CASES. That hook runs on EVERY Bash call in every
+# session in the fleet and had no test at all until 2026-09-03, which is how it
+# reached four open tickets: each fix was checked by hand against the case that
+# prompted it, so each one left a neighbouring shape wrong. The rows that earn
+# this its place are the `deny` ones -- an over-widened guardrail fails SILENTLY,
+# because a hook that allows everything looks exactly like a hook nobody
+# tripped. Sub-second; it runs no suite, it only feeds the hook payloads.
+# bug-t-the-full-suite-hook-keys-on-the-tier-name-so-it-refuses-every-auto-filed-repro
+if [ -x tools/test_no_full_suite_hook.sh ]; then
+  step "the full-suite hook still refuses a sweep" "$LOGDIR/no-full-suite-hook.log" \
+       tools/test_no_full_suite_hook.sh                               || RC=1
+else
+  echo "  SKIP  the full-suite hook still refuses a sweep (no test script)"
+fi
+
 # THE UNWIRED-TEST CANARY. Same placement argument as the two blocks above --
 # before the case, so no mode can forget it -- and the same failure it fixes as
 # the forwardlint block: the checker already existed, already exited 1, and was

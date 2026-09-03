@@ -1,6 +1,7 @@
 ---
 prio: 60
 track: T
+status: done
 ---
 
 # bug(T): the full-suite hook keys on the TIER NAME, so it refuses the repro line every auto-filed regression ticket prints
@@ -72,3 +73,6 @@ against one 200-line hook is the smell the handbook names** — count how many
 mechanisms serve one concept. Whoever takes this should read all four before
 editing, and consider whether the answer is a fifth patch or one rewrite that
 decides on the ESTIMATED COST of the command rather than on the words in it.
+
+## Log
+- 2026-09-03 — resolved, commit wildcard-free --job aperture, plus the hook's first test wired into gate.sh quick.
