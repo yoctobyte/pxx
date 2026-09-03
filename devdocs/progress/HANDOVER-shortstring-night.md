@@ -3106,3 +3106,94 @@ to record the old premise **AS FALSE rather than deleted**.
 No compiler change in `9fb5655f7` — docs and tickets. Next is
 `ABIA64CdeclArgSlot`'s fixed 8-per-argument becoming a real AAPCS64 aggregate
 classification, landing **incrementally, not as one drop.**
+
+## 2026-09-03 20:30 — the prescribed fix measured as NO CHANGE, and that was the finding
+
+`575e71ccf` + `95c98db70` + `b294f903a`, all verified on origin.
+`ShiftTokParallel` is in `lexer.inc`; `CaptureTemplateTokenFrom` in
+`pasparser_generic.inc`.
+
+### A NO-CHANGE RESULT CAN NAME A SECOND IMPLEMENTATION, NOT ONLY A SECOND CONSUMER
+
+The ticket prescribed: shift `TokSrcOff`/`TokSrcLen` alongside `Tokens[]` in
+`InsertTokens`/`RemoveTokens`. franka-29 did exactly that, **generalised to all
+ten positional arrays** — checking each of the eleven against its declaration in
+`defs.inc`, and every non-`Tokens` one documents state *"at this token"*, so
+every one owes the shift. Rebuilt. **The symptom did not move by a character.**
+
+Because **a generic specialization never goes through `InsertTokens`.**
+`pasparser_generic.inc` carries a SECOND, hand-rolled splice — **and its own
+comment says it "owes the same bookkeeping". It did not pay it.**
+
+> **The ticket's prescription was right about the MECHANISM and wrong about the
+> POPULATION, which is the ordinary way a precise instruction misleads.**
+
+This repo already reads a no-change result as data about your model. **The
+sharpening: the model that was wrong may be "there is one implementation of
+this."** A second consumer is the case people look for; a second *implementation*
+with a comment promising the bookkeeping it never does is the one that survives,
+and it is `normalise-dont-special-case`'s "the second path is the one that stays
+broken" caught in the act.
+
+### THEN THE FIX EXPOSED ITS OWN RESIDUAL — the part to keep
+
+The window went from **stale-and-complete to correct-and-punctuationless**:
+
+```
+before      near: < T > = class public >>> Val : T
+after       near: Integer   var q  >>> TNoSuchTypeAnywhere  begin
+```
+
+Those double spaces are blanked punctuation. **The gap a splice opens gets its
+spelling channel ZEROED — correct for a SYNTHESIZED token** (no source range
+exists, and the printer's fallback to `SOffset`/`SLen` is its text) — **and wrong
+for the specializer, whose tokens are VERBATIM COPIES of template tokens with
+real ranges.** `SOffset`/`SLen` holds text only for identifiers and strings.
+
+> **So the first fix reproduced the exact defect that channel was ADDED to fix,
+> one scope down.** A correct rule applied to a population it was not written for
+> regenerates the original bug — and it looks like progress, because the window
+> did improve.
+
+`95c98db70` carries the span through the template and specialize pools: **kept
+for verbatim copies, zeroed for SUBSTITUTED ones** so the fallback prints their
+NEW text. Carrying it there would print **the old word one token over** — the
+same bug in a different hat, a third time in one ticket.
+
+```
+95c98db70   near: Integer ) ; var q : >>> TNoSuchTypeAnywhere ; begin
+substituted near: z : LongInt ; w : >>> TNoSuchTypeAtAll ; begin
+```
+
+The second row is **a probe built for the zeroing arm** — template says `z: T`,
+specialization is `<LongInt>`, it prints `LongInt` — **so that arm is shown live
+rather than merely untested.**
+
+**Three sites buffered a template token, not one — found ONLY because an edit
+asserted a unique match and FAILED.** A uniqueness assertion used as a census is
+a free instrument, and it is one of the few that errors instead of answering.
+They go through `CaptureTemplateTokenFrom` now.
+
+### GATE DISCIPLINE, and one instrument that lied in its own favour
+
+1. The ticket's grep was added to the recipe and **run THROUGH the recipe**
+   (`make -n`, then execute) rather than by hand, and **the pinned compiler is
+   the positive control: it FAILS the row, so the row can fail.**
+2. `gate.sh quick` GREEN with `compiler/**` uncommitted, so the **FPC canary ran
+   (PASS, not SKIP)** — but **quick does not exercise the specializer AT ALL, and
+   the self-host fixedpoint cannot, because `compiler.pas` has no generics.**
+   That is this file's *"it cannot see a construct the compiler never writes"*
+   with a named construct. So it ran the 47 generic test blocks out of
+   `make -n test-core` under their own recipes: **266 logical commands, 0
+   failures**, guardrail lifted deliberately and the reason in the commit.
+
+**And the sweep first reported a failure that was ITS OWN.** It wrapped the
+extracted lines in `set -e`, and one recipe's assertion is
+`decl=$(... | grep -c ...)` **expecting ZERO**.
+
+> **`make` does not run a recipe line under `-e`; it checks the line's FINAL
+> status. Emulate make, not bash.**
+
+A harness that adds a shell option the real runner does not use **manufactures
+failures that look exactly like findings**, and it fails toward alarm — which is
+the direction that gets believed and acted on.
