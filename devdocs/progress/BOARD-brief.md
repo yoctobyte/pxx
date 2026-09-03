@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:9 unfinished:26 blocked:6 backlog:5 backlog_new:2 backlog-umbrella:7 backlog-core:141 backlog-nilpy:96 backlog-tools:10 backlog-pascal:54 backlog-decide:35 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3178 rejected:74`
+`working:9 unfinished:26 blocked:6 backlog:4 backlog_new:2 backlog-umbrella:7 backlog-core:143 backlog-nilpy:96 backlog-tools:10 backlog-pascal:54 backlog-decide:35 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3179 rejected:74`
 
 ## Held now (working/ — do not touch these files)
 
@@ -57,7 +57,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 403, ranked
+## Ready — top 30 of 404, ranked
 
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
@@ -75,7 +75,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [N]` regression-test-core-test-nilpy-c-pointer-2
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
-- `[p 70] [A]` regression-test-threads-test-nilpy-thread-clone-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
@@ -89,5 +88,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 62] [N]` feature-nilpy-enum-class
 - `[p 60] [B]` bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS (unblocks 1)
 - `[p 60] [C]` bug-c-ir-unsupported-ast-node-kind-1-in-flash-eraseall (unblocks 1)
+- `[p 60] [B]` feature-b-crtl-function-gaps-at-394-busybox-applets (unblocks 1)
 
-_373 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_374 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

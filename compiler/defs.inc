@@ -716,6 +716,25 @@ const
     empty", which is the correct initial state and not a special case.
     feature-a-reentrant-heap-lock-and-per-thread-arenas }
   TLS_BLOCK_SIZE   = 1152;
+  { The child's HIDDEN-DESTINATION SCRATCH, carved off the very top of a cloned
+    thread's stack (above the alt stack) by the same stub.
+
+    The trampoline calls an entry it knows nothing about, and a callee that
+    returns through the caller-owned hidden destination (RetViaHiddenDest: a
+    record, a set, a frozen string, a Variant, a promo int) reads that pointer
+    out of a REGISTER the caller is obliged to set -- r10 on x86-64, ecx on
+    i386, x8 on aarch64, r12 on arm32. Nothing in the stub set it, so the
+    callee's epilogue copied its result through whatever the clone syscall
+    sequence had left there. On x86-64 that register is r10, which the stub
+    loads with ctidptr for the syscall, so `__pxxclone(..., 0)` made every
+    NilPy def -- they all return a Variant -- copy 16 bytes to address 0.
+    regression-test-threads-test-nilpy-thread-clone-2
+
+    The child never returns, so its result has nowhere to go: this is a
+    write-only sink whose only job is to be VALID. 256 bytes is the largest
+    result an entry may return; AN_CLONE refuses a bigger one at compile time
+    where the entry is a named routine. }
+  CLONE_RETBUF_SIZE = 256;
   { THE slot map. Every runtime user of the block takes its index from here --
     an ad-hoc offset is how two consumers end up sharing a slot, which is a
     silent wrong VALUE, not a crash. Slots 13..15 are unclaimed. }

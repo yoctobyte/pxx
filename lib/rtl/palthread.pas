@@ -49,8 +49,9 @@ type
 const
   PAL_DEFAULT_STACK = 1024 * 1024;   { 1 MiB default child stack }
   { What the clone stub carves off the top before the child's first instruction
-    -- a 1152-byte TLS block and a 32768-byte signal alt stack -- plus a 64KB
-    working floor. Stated as one number here rather than derived from the
+    -- a 1152-byte TLS block, a 32768-byte signal alt stack and a 256-byte
+    hidden-destination scratch for an entry that returns an aggregate -- plus a
+    64KB working floor. Stated as one number here rather than derived from the
     compiler's constants because the RTL cannot see them; if either grows, this
     is the second copy and the stub is the first. }
   PAL_MIN_STACK = 128 * 1024;

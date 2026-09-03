@@ -18,11 +18,18 @@
                         the child tid into *ctidptr at clone time and clears it +
                         futex-wakes on exit (the join handshake).
     childStack(arg2) -> highest address of the child's stack (grows down); must be
-                        16-byte aligned. The stub carves the child's TLS_BLOCK_SIZE-byte
-                        TLS block off the top (x86-64), then stages [entry][arg] just
+                        16-byte aligned. The stub carves the child's hidden-destination
+                        scratch (CLONE_RETBUF_SIZE, every leg) and TLS_BLOCK_SIZE-byte
+                        TLS block (x86-64) off the top, then stages [entry][arg] just
                         below that, so the caller must provide at least
-                        TLS_BLOCK_SIZE + 16 usable bytes.
+                        CLONE_RETBUF_SIZE + TLS_BLOCK_SIZE + 16 usable bytes.
     entry     (arg3) -> ^procedure(arg: Pointer); cdecl-free, called with arg in rdi.
+                        An entry that RETURNS something through the caller-owned hidden
+                        destination is called correctly too -- the stub points that
+                        register at the scratch above and the child discards the result
+                        by exiting. Every NilPy `def` is such an entry (they all return a
+                        Variant), which is why nothing set the register was a crash and
+                        not a curiosity.
     arg       (arg4) -> opaque pointer handed to entry.
     ctidptr   (arg5) -> &tidword, the CLONE_*_*TID futex word used by join.
   Returns the child tid in the parent; the child path never returns.
@@ -39,7 +46,8 @@
 procedure EnsureCloneStub;
 var
   jmpOver: Integer;
-  pParent: Integer;   { rel8 placeholder: the child/parent split in the x86-64 stub }
+  pParent: Integer;   { the child/parent split, patched in ALL FOUR legs: rel8 on
+                        x86-64/i386, a branch immediate on aarch64/arm32 }
 begin
   if CloneStubAddr <> 0 then Exit;
   if TargetArch = TARGET_X86_64 then
@@ -86,9 +94,16 @@ begin
 
       Costs SIG_ALTSTACK_SIZE of every thread's stack (32KB of palthread's 1MB
       default) and one syscall per thread. The floor a caller must now supply is
-      TLS_BLOCK_SIZE + SIG_ALTSTACK_SIZE plus whatever the thread actually uses;
+      TLS_BLOCK_SIZE + SIG_ALTSTACK_SIZE + CLONE_RETBUF_SIZE plus whatever the
+      thread actually uses;
       __pxxclone is reachable directly, so a caller passing a stack smaller than
       that was already carving a TLS block out of nothing. }
+    { ---- carve the child's HIDDEN-DESTINATION SCRATCH, above everything ----
+      Topmost on purpose: every other offset in this leg is expressed from the
+      child's rsp, so putting the new region at the TOP leaves all of them
+      unchanged and the scratch is the one address computed with the full sum.
+      See CLONE_RETBUF_SIZE for why the register must be set at all. }
+    EmitB($48); EmitB($81); EmitB($EE); EmitI32(CLONE_RETBUF_SIZE);  { sub rsi, CLONE_RETBUF_SIZE }
     EmitB($48); EmitB($81); EmitB($EE); EmitI32(SIG_ALTSTACK_SIZE);  { sub rsi, SIG_ALTSTACK_SIZE }
     EmitB($48); EmitB($81); EmitB($EE); EmitI32(TLS_BLOCK_SIZE);  { sub rsi, TLS_BLOCK_SIZE }
     EmitB($FC);                                       { cld }
@@ -152,6 +167,13 @@ begin
     EmitB($B8); EmitI32(131);                         { mov eax, 131 (sigaltstack) }
     EmitB($0F); EmitB($05);                           { syscall }
     EmitB($48); EmitB($83); EmitB($C4); EmitB($20);   { add rsp, 32 }
+    { r10 = the hidden-destination scratch, BEFORE the two pops move rsp.
+      An entry with no result ignores r10; one that returns a record/set/frozen
+      string/Variant/promo-int copies its result there and the child discards
+      it by exiting. rsp is still the stage area here, so the scratch is
+      stage + 16 (past entry/arg) + the TLS block + the alt stack. }
+    EmitB($4C); EmitB($8D); EmitB($94); EmitB($24);
+      EmitI32(16 + TLS_BLOCK_SIZE + SIG_ALTSTACK_SIZE); { lea r10, [rsp+16+TLS+ALT] }
     EmitB($58);                                       { pop rax  (entry) }
     EmitB($5F);                                       { pop rdi  (arg -> first int arg) }
     EmitB($FF); EmitB($D0);                           { call rax (entry(arg)) }
@@ -183,6 +205,9 @@ begin
     EmitB($57);                                       { push edi }
     EmitB($8B); EmitB($5C); EmitB($24); EmitB($20);   { mov ebx, [esp+32]  (flags) }
     EmitB($8B); EmitB($4C); EmitB($24); EmitB($1C);   { mov ecx, [esp+28]  (childStack) }
+    { carve the hidden-destination scratch off the top first — see
+      CLONE_RETBUF_SIZE. i386 carries that pointer in ecx. }
+    EmitB($81); EmitB($E9); EmitI32(CLONE_RETBUF_SIZE); { sub ecx, CLONE_RETBUF_SIZE }
     EmitB($83); EmitB($E9); EmitB($08);               { sub ecx, 8         (stage area) }
     EmitB($8B); EmitB($44); EmitB($24); EmitB($18);   { mov eax, [esp+24]  (entry) }
     EmitB($89); EmitB($01);                           { mov [ecx], eax }
@@ -200,6 +225,9 @@ begin
     EmitB($75); pParent := CodeLen; EmitB(0);         { jnz .parent }
     { ---- child: esp = childStack-8, [esp]=entry [esp+4]=arg ---- }
     EmitB($58);                                       { pop eax  (entry; arg stays at [esp]) }
+    { ecx = the hidden-destination scratch. esp now points at arg, which sits
+      immediately below the scratch, so the scratch base is esp+4. }
+    EmitB($8D); EmitB($4C); EmitB($24); EmitB($04);   { lea ecx, [esp+4] }
     EmitB($FF); EmitB($D0);                           { call eax (entry(arg), caller-cleans convention) }
     EmitB($31); EmitB($DB);                           { xor ebx, ebx  (exit code 0) }
     EmitB($B8); EmitB($01); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 1  (SYS_exit) }
@@ -223,6 +251,7 @@ begin
     EmitI32($14000000);                 { b .parent-skip — patched below (branch over stub) }
     jmpOver := CodeLen - 4;
     CloneStubAddr := CodeLen;
+    EmitI32($D1040021);                 { sub  x1, x1, #256       (hidden-dest scratch) }
     EmitI32($D1004021);                 { sub  x1, x1, #16        (stage area) }
     EmitI32($F9000022);                 { str  x2, [x1]           (entry) }
     EmitI32($F9000423);                 { str  x3, [x1, #8]       (arg) }
@@ -230,15 +259,25 @@ begin
     EmitI32($D2800003);                 { mov  x3, #0             (tls = NULL) }
     EmitI32($D2801B88);                 { mov  x8, #220           (SYS_clone) }
     EmitI32($D4000001);                 { svc  #0 }
-    EmitI32($B50000E0);                 { cbnz x0, .parent  (+7 words) }
+    { cbnz x0, .parent -- COMPUTED, like the x86-64 and i386 legs. It was a
+      hand-counted +7 words over the child sequence below, and the very next
+      line added to that sequence (the x8 scratch) made it land one instruction
+      short -- inside the child path, in the PARENT. Three legs had already
+      been converted for exactly this reason and this one had not. }
+    pParent := CodeLen; EmitI32($B5000000);   { cbnz x0, .parent (patched) }
     { ---- child: sp = childStack-16, [sp]=entry [sp+8]=arg ---- }
     EmitI32($F94003E1);                 { ldr  x1, [sp]           (entry) }
     EmitI32($F94007E0);                 { ldr  x0, [sp, #8]       (arg -> x0) }
+    { x8 = the hidden-destination scratch (AAPCS XR, which is also what this
+      compiler's own aggregate-return convention uses) — see CLONE_RETBUF_SIZE.
+      sp is the 16-byte stage area, so the scratch begins just above it. }
+    EmitI32($910043E8);                 { add  x8, sp, #16        (scratch) }
     EmitI32($D63F0020);                 { blr  x1                 (entry(arg)) }
     EmitI32($D2800000);                 { mov  x0, #0             (exit code 0) }
     EmitI32($D2800BA8);                 { mov  x8, #93            (SYS_exit) }
     EmitI32($D4000001);                 { svc  #0                 (thread exits here) }
     { ---- .parent: x0 = child tid ---- }
+    Patch32(pParent, $B5000000 or ((((CodeLen - pParent) div 4) and $7FFFF) shl 5));
     EmitI32($D65F03C0);                 { ret }
     { patch the leading branch to land here (past the stub). B imm26 in words. }
     Patch32(jmpOver, $14000000 or (((CodeLen - jmpOver) div 4) and $03FFFFFF));
@@ -253,6 +292,7 @@ begin
       -march=armv7-a. }
     EmitI32($EA000000); jmpOver := CodeLen - 4;   { b .end (patched below) }
     CloneStubAddr := CodeLen;
+    EmitI32($E2411C01);                 { sub r1, r1, #256      (hidden-dest scratch) }
     EmitI32($E2411010);                 { sub r1, r1, #16       (stage area) }
     EmitI32($E5812000);                 { str r2, [r1]          (entry) }
     EmitI32($E5813004);                 { str r3, [r1, #4]      (arg) }
@@ -261,15 +301,20 @@ begin
     EmitI32($E3A07078);                 { mov r7, #120          (SYS_clone) }
     EmitI32($EF000000);                 { svc 0 }
     EmitI32($E3500000);                 { cmp r0, #0 }
-    EmitI32($1A000005);                 { bne .parent  (+7) }
+    { bne .parent -- COMPUTED, same story as the aarch64 leg above: the +7 was
+      correct until the child sequence grew by one instruction. }
+    pParent := CodeLen; EmitI32($1A000000);   { bne .parent (patched) }
     { ---- child: sp = childStack-16, [sp]=entry [sp+4]=arg ---- }
     EmitI32($E59D1000);                 { ldr r1, [sp]          (entry) }
     EmitI32($E59D0004);                 { ldr r0, [sp, #4]      (arg -> r0) }
+    { r12 (ip) = the hidden-destination scratch — see CLONE_RETBUF_SIZE. }
+    EmitI32($E28DC010);                 { add r12, sp, #16      (scratch) }
     EmitI32($E12FFF31);                 { blx r1                (entry(arg)) }
     EmitI32($E3A00000);                 { mov r0, #0            (exit code 0) }
     EmitI32($E3A07001);                 { mov r7, #1            (SYS_exit) }
     EmitI32($EF000000);                 { svc 0                 (thread exits here) }
     { ---- .parent: r0 = child tid ---- }
+    Patch32(pParent, $1A000000 or (((((CodeLen - pParent) div 4) - 2)) and $00FFFFFF));
     EmitI32($E1A01FC0);                 { mov r1, r0, asr #31   sign-extend tid into Int64 hi word }
     EmitI32($E12FFF1E);                 { bx lr }
     { patch the leading branch to land here (ARM pc is 2 instr ahead). }

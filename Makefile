@@ -4179,6 +4179,25 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_ts_exc_2t26 "$$($(TESTTMP)/test_ts_exc_2t26)" "TS EXC TWO THREADS OK"
 	./$(COMPILER) --threadsafe test/test_palthread.pas $(TESTTMP)/test_palthread26
 	tools/expect_same.sh test_palthread26 "$$($(TESTTMP)/test_palthread26)" "$$(printf 'thread 0 -> 1000\nthread 1 -> 1001\nthread 2 -> 1002\nthread 3 -> 1003\ntotal ok 4 / 4\nPALTHREAD OK')"
+	# A THREAD ENTRY THAT RETURNS THROUGH THE CALLER-OWNED HIDDEN DESTINATION.
+	# Every TThreadEntry in this tree is a `procedure`, so no Pascal thread had
+	# ever exercised the register the clone stub is obliged to set for a
+	# record/set/frozen-string/Variant/promo-int result -- and the stub set none
+	# of them, so the child copied its result through whatever the clone syscall
+	# sequence had left there (r10 = ctidptr on x86-64). Every NilPy `def` is
+	# such an entry, which is why test_nilpy_thread_clone.npy caught it as a
+	# ~30% SIGSEGV and nothing else caught it at all.
+	# THE ASSERTION IS ON THE HANDLE, NOT ON SURVIVAL. Scribbling over a join
+	# handle is usually silent, so "did not crash" was a 70%-pass coin toss on
+	# the pinned compiler (5/20, then 9/30). Comparing StackSize across the join
+	# fails 10/10 there -- and half those runs HANG rather than crash, which is
+	# the other reason a crash-only row was the wrong instrument.
+	# Positive control, measured 2026-09-03 with stable_linux_amd64 pinned:
+	# native 10/10 fail, i386 SIGSEGV, aarch64 SIGSEGV, arm32 PASSES 5/5 (r12
+	# happens to hold something valid there) -- so the arm32 row below is
+	# regression cover, not a reproduction.
+	./$(COMPILER) --threadsafe test/test_clone_entry_with_a_hidden_result.pas $(TESTTMP)/test_clonehidden26
+	tools/expect_same.sh test_clonehidden26 "$$($(TESTTMP)/test_clonehidden26)" "$$(cat test/test_clone_entry_with_a_hidden_result.expected)"
 	./$(COMPILER) --threadsafe test/test_atomic_counter.pas $(TESTTMP)/test_atomic_counter26
 	tools/expect_same.sh test_atomic_counter26 "$$($(TESTTMP)/test_atomic_counter26)" "$$(printf 'xchg old=10 now=99\ncas hit old=99 now=7\ncas miss old=7 now=7\nadd old=7 now=12\ncounter=800000 expected=800000\nATOMIC OK')"
 	./$(COMPILER) --threadsafe test/test_mutex.pas $(TESTTMP)/test_mutex26
@@ -15793,6 +15812,10 @@ test-i386: $(COMPILER)
 	# i386 --threadsafe: clone trampoline + softlock heap/ARC + TThread (feature-i386-threadsafe-locks)
 	./$(COMPILER) --threadsafe --target=i386 test/test_palthread.pas $(TESTTMP)/test_i386_palthread
 	tools/expect_same.sh i386/test_i386_palthread "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_palthread | tail -1)" "PALTHREAD OK"
+	# the hidden-destination entry on i386 (ecx) -- see the native row's comment;
+	# the pinned compiler SIGSEGVs on this one.
+	./$(COMPILER) --threadsafe --target=i386 test/test_clone_entry_with_a_hidden_result.pas $(TESTTMP)/test_i386_clonehidden
+	tools/expect_same.sh i386/test_i386_clonehidden "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_clonehidden | tail -1)" "CLONEHIDDENRET OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_mutex.pas $(TESTTMP)/test_i386_mutex
 	tools/expect_same.sh i386/test_i386_mutex "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mutex | tail -1)" "MUTEX OK"
 	./$(COMPILER) --threadsafe --target=i386 test/test_atomic_counter.pas $(TESTTMP)/test_i386_atomiccnt
@@ -17115,6 +17138,10 @@ test-aarch64: $(COMPILER)
 	# parallel for + capture on aarch64. Multi-aggregate capture bus-errored until
 	# bug-a-parallel-for-aarch64-multi-capture: BSS base was not 8-aligned, so the
 	# --threadsafe I/O lock's 64-bit ldaxr SIGBUS'd for some CodeLen parities.
+	# the hidden-destination entry on aarch64 (x8) -- see the native
+	# test_clonehidden26 row's comment; the pinned compiler SIGSEGVs on this one.
+	./$(COMPILER) --threadsafe --target=aarch64 test/test_clone_entry_with_a_hidden_result.pas $(TESTTMP)/test_aarch64_clonehidden
+	tools/expect_same.sh aarch64/test_aarch64_clonehidden "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_clonehidden | tail -1)" "CLONEHIDDENRET OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_for_lang.pas $(TESTTMP)/test_aarch64_parfor
 	tools/expect_same.sh aarch64/test_aarch64_parfor "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_parfor | tail -n 1)" "PARFORLANG OK"
 	./$(COMPILER) --threadsafe --target=aarch64 test/test_parallel_for_capture.pas $(TESTTMP)/test_aarch64_parcap
@@ -20030,6 +20057,10 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_asm_arm32_sum.asm $(TESTTMP)/test_arm32_asmfront
 	tools/run_target.sh arm32 $(TESTTMP)/test_arm32_asmfront; tools/expect_same.sh arm32/test_arm32_asmfront-rc "$$?" "55"
 	# parallel for + full capture (scalar/array/record/string) — data-parallel loop on arm32
+	# the hidden-destination entry on arm32 (r12 (ip)) -- see the native
+	# test_clonehidden26 row's comment; the pinned compiler PASSES this 5/5 -- r12 happens to hold something valid on arm32, so this row is regression cover rather than a reproduction.
+	./$(COMPILER) --threadsafe --target=arm32 test/test_clone_entry_with_a_hidden_result.pas $(TESTTMP)/test_arm32_clonehidden
+	tools/expect_same.sh arm32/test_arm32_clonehidden "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_clonehidden | tail -1)" "CLONEHIDDENRET OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_for_lang.pas $(TESTTMP)/test_arm32_parfor
 	tools/expect_same.sh arm32/test_arm32_parfor "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_parfor | tail -n 1)" "PARFORLANG OK"
 	./$(COMPILER) --threadsafe --target=arm32 test/test_parallel_for_capture_aggr.pas $(TESTTMP)/test_arm32_parcap
