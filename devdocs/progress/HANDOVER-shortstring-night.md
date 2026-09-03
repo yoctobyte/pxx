@@ -926,3 +926,65 @@ here, something was measured and it was the wrong stage.
 **Both sessions are writing these up as a CLAUDE.md PROPOSAL for the owner
 rather than editing that file on a peer's say-so.** That is the right call and
 the proposal is queued for him, not applied.
+
+## THE GATE REPORT IS SUPERSEDED — two silent regressions at HEAD
+
+**"The phase-4 gate is clear" was true when measured and is no longer true.**
+frankb-78 found two wrong-value regressions at HEAD that are **correct on pin
+v401**. Both silent: no diagnostic, no crash, just `FALSE`.
+
+1. **i386, BOTH modes** — `arr[0] = arr[1]` for `array[0..1] of string[8]`
+   holding equal strings answers FALSE. `arr[0] = a` against a plain variable is
+   correct, so it is **element-vs-element specifically**.
+2. **x86-64 native, `-dPXX_SHORTSTRING` ONLY** — `frozenVar = ansiVar` answers
+   FALSE for equal contents. Default mode correct; every other target correct in
+   both modes.
+
+`bug-a-i386-comparing-two-elements-of-an-array-of-frozen-strings-is-false` and
+`bug-a-a-frozen-string-compared-to-an-ansistring-is-false-under-the-flag-on-x86-64`,
+both prio 70. **Not yet bisected.** They arrived with the frozen work of
+2026-09-02/03 — frankb-78's, franka-29's and frankh-15's — and nobody is
+assuming whose.
+
+**#2 IS THE ONE THAT MUST NOT BE FOUND AFTER THE FLIP.** It is the
+cross-representation compare, wrong **only in the mode phase 4 makes the
+default**, on **the backend everything is measured on**, with the default-mode
+row green beside it. **A pin taken now would freeze it.**
+
+**My 20-probe suite scores these targets clean and does not construct either
+shape** — no element-vs-element compare, no frozen-vs-AnsiString compare. Third
+time the suite has been cited as evidence for something it does not cover.
+
+### THE FAILURE VALUE IS NOT CONSTANT — and that is how it hid
+
+For the frozen/AnsiString compare:
+
+| shape | answer | correct? |
+| --- | --- | --- |
+| two equal strings | FALSE | **wrong** |
+| `a = a` | TRUE | right — *the addresses ARE equal* |
+| `a < b`, equal contents | TRUE | right by accident |
+| `p^ = a`, `p` pointing at `a` | TRUE | right — **and this is what a repro naturally writes** |
+
+**A must-be-TRUE suite catches half, a must-be-FALSE suite the other half, and
+a repro that points its pointer at its own comparand catches none of it.**
+Every previous rule in this file assumed a fixed wrong answer that a control
+could pin down; this one's wrongness depends on operand IDENTITY.
+
+### Two wasm32 tickets whose recorded CAUSE measurement did not support
+
+Both closed at `a30556172` (26 → 30 wired rows), and in both the ticket named a
+mechanism that was never entered:
+
+- Frozen comparison compiled to an **`i32.eq` of two ADDRESSES** —
+  `wasm2wat` shows `i32.const / i32.const / i32.eq` and **no `PXXStrEq` call at
+  all**. `WasmStrParts`, the ticket's named cause, was never reached, and
+  *"wrong at every length"* was never it either.
+- `SetLength` had no `-101` arm — the same absent arm as riscv32 and xtensa. The
+  ticket blamed `WasmEmitSetLenStr`; a frozen `SetLength` never reaches it.
+  frankb-78 **wrote the arm there first, measured that it never fires, and
+  removed it.**
+
+**And the exclusion note on two remaining rows was wrong because the COVERAGE
+REPORT PRINTS ONE REFUSAL PER BODY AND THE FIRST WINS** — which is how three
+unrelated causes collected under one `rc=134` and were written up as one.
