@@ -1727,3 +1727,85 @@ is right rather than merely untested.
   checked and rejected — the test's `SYS_mmap = 9` is the x86-64 number, and
   rebuilding with 222/192 changes nothing. Pascal threading is fine on both, so
   it is specific to the NilPy raw-syscall route.
+
+## 2026-09-03 — the argument half (`d49de34b6`): a thunk where the callee is KNOWN
+
+Banked from frankb-78; `d49de34b6` verified on origin. **The design argument is
+the deliverable here, not the fix.**
+
+### Why NOT the stub
+
+The trampoline is reached by Pascal, C, Rust and Zig entries as well as NilPy
+ones, so its single contract — `entry(arg)`, a raw word in the first integer
+argument register — **is the property that makes it work at all.** Teaching it a
+second calling convention would mean **four legs learning a question only one
+frontend can answer.**
+
+So the adaptation goes where the callee is KNOWN: the `__pxxclone` arm of the
+NilPy factor parser. `PyGetOrMakeCloneThunk` synthesizes `procedure
+$pyclonethunk_N(arg: Pointer)` with body `REALPROC(Int64(arg))`, on the
+callable-value wrapper's existing pending-body queue with a second sentinel
+beside its first.
+
+### Three choices, each defended separately
+
+- **The parameter is `tyPointer`, NOT `tyInt64`** — one machine word on every
+  target, where an `Int64` parameter is **two stack slots on i386 and arm32** and
+  the second would be read past the staged word. **That would have been a
+  cross-target-only bug of exactly the class this file spent the morning on** —
+  invisible on the 64-bit host every gate runs on.
+- **The `Int64` cast in the body** makes the coercion the ORDINARY one a written
+  `worker(41)` gets, instead of a second unboxing path that can drift from the
+  first. (Normalise, don't special-case.)
+- **It is a PROCEDURE**, so the call is not wrapped in `AN_EXIT`: the callee's
+  `Variant` result is discarded **on purpose**, because the child never returns
+  and a result has nowhere to go.
+
+A proc that already fits the contract passes through untouched — the gate is
+*"first parameter is a Variant, or it returns via the hidden destination"*, i.e.
+it is a NilPy `def` — so a Pascal `procedure(arg: Pointer)` from a `uses`'d unit
+still gets its raw address. **A `def` with more than one parameter is now a
+compile error naming the arity**, rather than a miscall.
+
+### THE PROBE VALUE — this extends the `sizeof(int)` class with its sharpest case
+
+The assertion is **12345**, not 0 and not 1, **and the worker adds one so the
+printed number is not the literal either.**
+
+> **A thread entry handed the wrong word almost always gets 0 — the clone stub's
+> own registers are full of zeroes.** So a row expecting 0 would pass whether the
+> argument was delivered or not, and a row expecting the literal would pass if
+> the constant were copied into the wrong place.
+
+Same question as frankc-af's: *if the machinery did nothing at all, would this
+row still pass?* **Here the answer was YES for the two values a person reaches
+for first.** The general form is now sharper than "avoid a type's default": **the
+failure value is whatever the surrounding machinery happens to leave behind —
+zero, a pointer width, `sizeof(int)` — and those are exactly the values that feel
+natural to assert.**
+
+Measured: `child saw = 12346` at HEAD on native and i386; **3/3 SIGSEGV on the
+pinned compiler, deterministic, with `tid nonzero = True` already printed.**
+
+### Broad check RUN AND READ — plus a near-miss on this file's own rule
+
+`make test-nilpy` in full under `PXX_ALLOW_FULL_SUITE=1`, because quick does not
+cover the NilPy frontend and this edits its factor parser AND
+`PyCompileLambdaBody`, which the callable-value wrappers share — so *"my repro
+passed"* was a different claim from *"the frontend still works"*.
+
+**The near-miss:** it was piped through `tail -15`, so the notification's
+`exit code 0` was **the PIPELINE's** and said nothing about `make`. frankb-78
+checked which recipe line the output ended on instead. **Same wrapper-versus-
+verdict shape as the backgrounded gate**, which this file already records — and
+it arrived through a different tool, which is what makes it a class rather than a
+`gate.sh` quirk.
+
+### Two mechanisms kept ON PURPOSE, and said so in the ticket
+
+The `CLONE_RETBUF_SIZE` scratch **is not made redundant** by the thunk: it covers
+a computed entry pointer, and a C or Rust entry returning a struct — neither of
+which the parser can resolve to a proc index. **The thunk makes the NilPy path
+correct; the scratch makes every other path survivable.** Different populations,
+recorded in the ticket **so nobody deletes one as dead** — which is precisely the
+mistake the canary pass spent a day disproving.
