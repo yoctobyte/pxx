@@ -1903,3 +1903,83 @@ its eight rows are stride rows that cannot see a value bug. `gate.sh quick` GREE
 Coordination: franka-29 messaged frankb-78 directly before entering
 `SetLenDynElemSize` and was cleared. **Peer-to-peer, no routing through the
 coordinator, which is the arrangement working as intended.**
+
+## 2026-09-03 — a real topic collision, and a RE-LANE justified by probes that could not fail
+
+Not shortstring. Banked here because the second half is this file's central class
+arriving in a new place: **a conclusion drawn from an absence the instrument
+manufactured.**
+
+### The collision — the one thing git cannot show
+
+Both worker checkouts held uncommitted work on
+`bug-a-i386-a-pointer-is-register-and-memory-resident-at-once-across-a-goto-entered-loop`:
+one a **staged rename** into `working/` (a claim), the other `compiler/cparser.inc`,
+`Makefile`, `tools/gate.sh` and **four new C test cases** (the work).
+
+**Both diffs would have applied cleanly.** A rename and edits to the same file do
+not conflict, so the ticket would have landed in `working/` owned by one session
+while the other's fix landed under it — noticed only when two half-fixes appeared
+with different test names. Confirmed by both sessions as **not coordinated**; the
+claim was ~4 minutes old and had no code behind it. Released cleanly, tree back
+at HEAD, and the releasing session **messaged the other directly rather than
+leaving it to discover the slot was free.**
+
+### The finding: the ticket's TITLE and LANE were both wrong
+
+It is **not i386, not register allocation, not the backend.** `ParseCDoWhileAST`
+desugared do-while through a **first-iteration FLAG**, and a `goto` into the body
+skips both writes to it, so the back edge short-circuits `flag or cond` and takes
+an extra pass **without evaluating `cond`**. Now `AN_REPEAT`.
+
+**The sibling, same defect, found by looking for it rather than by it failing:**
+`ParseCForAST` guarded a `for`'s post-expression with the identical flag, so a
+`goto` into the body **skips the post on the first back edge** — and that one
+reproduces on x86-64 too. Fourth time today the *"an enumeration exists beside a
+complete one"* tell has paid, and the first time it was applied **prospectively**.
+
+Anyone starting from that title instruments i386 codegen and finds nothing, which
+is what the last three passes did. Title, summary and lane corrected in the same
+commit.
+
+### A PROBE FOR THIS MUST DIRTY THE STACK FIRST — and this explains the re-lane
+
+Five earlier minimal probes — **including one that was exactly a `goto` into a
+do-while body** — cleared a shape they had in fact caught, because **in a fresh
+frame the uninitialised flag reads ZERO, and zero is accidentally the correct
+value.**
+
+> **MINIMISING A REPRO CAN DESTROY IT.** The failure value is whatever the
+> surrounding machinery leaves behind, and a minimal probe is the most likely
+> thing to leave behind exactly the value you were hoping to see.
+
+**The two halves nobody held together.** One session had the re-lane's
+provenance: the ticket was explicitly moved to Track A carrying the sentence
+*"this is i386 backend code generation, not the C frontend"*, **on the strength
+of four probes that failed to reproduce it at C level.** The other had the reason
+those probes were empty. Neither could see the other's half.
+
+So the re-lane was **not sloppy reasoning** — it was a sound inference from four
+instruments that could not fail, and its conclusion was drawn from an absence the
+probes' own cleanliness produced. **A re-lane justified by non-reproduction is
+only as good as the probes' ability to reproduce**, and this family's probes go
+quiet precisely when minimised. Recorded so the ticket's CONCLUSION is corrected,
+not merely its status.
+
+### Surfaced to the owner, deliberately not acted on
+
+**`test-c-conformance` is SKIPPING ENTIRELY** — the gitignored `c-testsuite`
+corpus is not installed on this box — so that battery has **measured nothing for
+an unknown period, while a summary line printed "all targets green" over four
+skips.** The summary line is fixed; **installing the corpus needs a network fetch
+and is the owner's call**, so nobody ran it. The open, non-fetch half is
+establishing how long it has been skipping and what it would have covered, which
+decides whether this is paperwork or a hole with real defects behind it.
+
+### Coordinator note, logged against itself
+
+The seat recommended the p55 open-array ticket to a session that already knew it
+was taken — the other worker had told it directly that morning. **Peer-to-peer
+carried a fact the coordinator never saw.** That is the arrangement working as
+designed, not a gap to close by routing more through the seat; the correct output
+is *"no KNOWN hold"*, never *"no hold"*.
