@@ -2594,7 +2594,7 @@ begin
               node. wasm32 has always done it this way and runs all three
               shapes today; the managed path does too via IR_SETLEN_STR.
               bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
-            if not TypeIsFrozenString(IRFrozenKindOfAddr(left)) then
+            if not IRNodeIsFrozenStrAddr(left) then
               Error('target arm32: SetLength expects a string variable');
             IREmitNodeArm32(left);         { r0 = buffer address }
             EmitI32($E92D0001);            { push {r0} buffer addr }

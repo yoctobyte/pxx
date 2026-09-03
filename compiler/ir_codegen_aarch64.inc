@@ -3069,7 +3069,7 @@ begin
               node. wasm32 has always done it this way and runs all three
               shapes today; the managed path does too via IR_SETLEN_STR.
               bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
-            if not TypeIsFrozenString(IRFrozenKindOfAddr(left)) then
+            if not IRNodeIsFrozenStrAddr(left) then
               Error('target aarch64: SetLength expects a string variable');
             IREmitNodeAarch64(left);             { x0 = buffer address }
             EmitI32($F81F0FE0);                  { str x0, [sp, #-16]! }

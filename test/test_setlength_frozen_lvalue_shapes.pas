@@ -27,6 +27,7 @@ type
 var
   r: TRec; sa: array[0..1] of TS10; da: array of TS10; p: ^TS10; s: TS10;
   ms: AnsiString; msa: array[0..1] of AnsiString;
+  nest: array of array of TS10;
 begin
   SetLength(da, 2);
   s := 'abcdefg'; r.f := 'hijklmn';
@@ -39,6 +40,16 @@ begin
   SetLength(r.f, 3);   WriteLn('field ', Length(r.f), ' ', r.f);
   SetLength(sa[0], 4); WriteLn('selem ', Length(sa[0]), ' ', sa[0], ' g=', sa[1]);
   SetLength(da[0], 5); WriteLn('delem ', Length(da[0]), ' ', da[0], ' g=', da[1]);
+
+  { THE COUNTER-CASE, and it is the row that keeps the fix honest. `x[0]` on a
+    depth-2 dynamic array is a SUB-ARRAY, not a string, even though its element
+    kind is frozen -- so the classifier must answer "array" here and "string"
+    for `sa[0]` above. Asking only "is the element frozen" sends this one to the
+    string arm, which writes a length prefix over the sub-array's handle and
+    segfaults. It did, on origin, for one commit. }
+  SetLength(nest, 2); SetLength(nest[0], 2); SetLength(nest[1], 1);
+  nest[0][0] := 'n00'; nest[0][1] := 'n01'; nest[1][0] := 'GUARD';
+  WriteLn('nest  ', Length(nest), ' ', Length(nest[0]), ' ', nest[0][0], ' ', nest[0][1], ' g=', nest[1][0]);
 
   ms := 'managed';     SetLength(ms, 3);     WriteLn('msym  ', Length(ms), ' ', ms);
   msa[0] := 'mgdelem'; SetLength(msa[0], 3); WriteLn('melem ', Length(msa[0]), ' ', msa[0]);

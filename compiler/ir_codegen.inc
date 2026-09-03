@@ -10547,7 +10547,7 @@ begin
               IREmitNode(IRA[arg2Node]);
               EmitStoreStrLen(IRA[val1Node]);
             end
-            else if TypeIsFrozenString(IRFrozenKindOfAddr(val1Node)) then
+            else if IRNodeIsFrozenStrAddr(val1Node) then
             begin
               { THE NON-SYMBOL SHAPES. A record field, an array element and a `p^`
               deref all arrive as an address node whose VALUE is the buffer, so

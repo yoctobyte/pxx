@@ -2904,7 +2904,7 @@ begin
             symbol so its behaviour is byte-identical.
             bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
           if (IRKind[left] <> IR_LEA) and
-             not TypeIsFrozenString(IRFrozenKindOfAddr(left)) then
+             not IRNodeIsFrozenStrAddr(left) then
             Error('target xtensa: SetLength expects a string variable');
           argBase := XtSpillDepth;
           IREmitNodeXtensa(left);                    { a2 = buffer addr }

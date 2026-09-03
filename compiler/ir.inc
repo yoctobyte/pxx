@@ -937,6 +937,7 @@ function IRAddrMayCall(n, depth: Integer): Boolean; forward;
   the lowering above it -- `make compiler/pascal26` and --tier quick are both
   happy without this and only gate.sh's FPC seed canary sees it. }
 function IRStrTkOf(node: Integer): TTypeKind; forward;
+function IRNodeIsFrozenStrAddr(node: Integer): Boolean; forward;
 function IRAssignIsSharedCompound(node: Integer): Boolean; forward;
 function IRLowerCompoundAssign(node: Integer): Integer; forward;
 function CNodeIsDecayedRow(node: Integer): Boolean; forward;
@@ -16217,6 +16218,40 @@ begin
     Result := Syms[IRA[node]].PtrElemTk
   else if TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
     Result := IntToTypeKind(IRTk[node]);
+end;
+
+function IRNodeIsFrozenStrAddr(node: Integer): Boolean;
+{ Does this address node point at a frozen string? IRFrozenKindOfAddr WITHOUT
+  its wide default, and the two must not be confused.
+
+  THE WALKER'S DEFAULT IS A REAL ANSWER, SO IT CANNOT SAY "NOT A STRING".
+  IRFrozenKindOfAddr returns tyString when it cannot determine the kind -- the
+  8-byte width, deliberately, because wrong-wide is recoverable and wrong-narrow
+  is not. That is right for a READER that already knows it has a string and only
+  needs the width. It is wrong as a MEMBERSHIP TEST, because
+  TypeIsFrozenString(tyString) is True, so `TypeIsFrozenString(IRFrozenKindOfAddr(n))`
+  is True for EVERY node -- an Integer included.
+
+  Measured 2026-09-03: used as the guard on the address path of SetLength's -101
+  arm, it accepted `SetLength(TI(i), 5)` for `TI = Integer`, which the compiler
+  had refused since the cast-drop was scoped to string types. A test asserting
+  that refusal caught it; nothing else could, because the acceptance is silent
+  and writes a length prefix over the integer's storage.
+  a-flag-whose-default-is-a-real-answer-cannot-say-not-applicable
+
+  Same arms, same order, False where the walker defaults. }
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if (IRKind[node] = IR_LEA) or (IRKind[node] = IR_SLOTADDR) then
+    Result := (IRA[node] >= 0) and (IRA[node] < SymCount) and
+              TypeIsFrozenString(Syms[IRA[node]].TypeKind)
+  else if (IRKind[node] = IR_LOAD_SYM) and
+          (IRA[node] >= 0) and (IRA[node] < SymCount) and
+          TypeIsFrozenString(Syms[IRA[node]].PtrElemTk) then
+    Result := True
+  else
+    Result := TypeIsFrozenString(IntToTypeKind(IRTk[node]));
 end;
 
 function IRStrTkOf(node: Integer): TTypeKind;

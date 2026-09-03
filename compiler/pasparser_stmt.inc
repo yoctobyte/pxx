@@ -5973,7 +5973,18 @@ begin
             the array path deliberately -- -102 handles tyAnsiString, which is
             why `msa[0]` has always worked.
             bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
-          slIsArrTarget := not TypeIsFrozenString(IntToTypeKind(ASTTk[valNode]))
+          { ...AND IT IS STILL AN ARRAY TARGET IF IT IS AN ARRAY. One index into
+            a depth-2 dynamic array yields a depth-1 ARRAY, and ASTTk reports
+            the ELEMENT's kind for it -- so asking only "is the element frozen"
+            sent `SetLength(v[0], 1)` on `array of array of string[10]` to the
+            string arm, which wrote a length prefix over the sub-array's handle
+            and segfaulted. Two live tests caught it within the hour
+            (test_field_rooted_nested_dyn_frozen_index, test_string_n_container_strides).
+            The depth question comes FIRST because it is the one that decides
+            what the target IS; the element kind only distinguishes the two
+            leaf cases. }
+          slIsArrTarget := (NodeDynDepth(valNode) > 0) or
+                           not TypeIsFrozenString(IntToTypeKind(ASTTk[valNode]))
         else if (ASTKind[valNode] = AN_DEREF) and (idx >= 0) and
                 (SymPtrElemStrTk[idx] <> 0) then
           { `p^` where the pointee is a MANAGED STRING. Routed to the

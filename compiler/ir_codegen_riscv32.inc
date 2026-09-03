@@ -2847,7 +2847,7 @@ begin
             symbol so its behaviour is byte-identical.
             bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
           if (IRKind[left] <> IR_LEA) and
-             not TypeIsFrozenString(IRFrozenKindOfAddr(left)) then
+             not IRNodeIsFrozenStrAddr(left) then
             Error('target riscv32: SetLength expects a string variable');
           IREmitNodeRISCV32(left);                                    { a0 = buffer addr }
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push buffer }

@@ -3280,7 +3280,7 @@ begin
               path does too, through IR_SETLEN_STR. This arm is the frozen half
               catching up with both, not new machinery.
               bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol }
-            if not TypeIsFrozenString(IRFrozenKindOfAddr(left)) then
+            if not IRNodeIsFrozenStrAddr(left) then
               Error('target i386: SetLength expects a string variable');
             IREmitNode386(left);           { eax = buffer address }
             EmitB($50);                    { push eax }

@@ -11019,7 +11019,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_sscap_ptr26
 	tools/expect_same.sh test_sscap_ptr26 "$$($(TESTTMP)/test_sscap_ptr26)" "$$(printf 'sym       8 abcdefgh\nelem      8 abcdefgh\nfieldelem 8 abcdefgh\nptrelem   8 abcdefgh\nneighbour keep\nrecptrelem 8 abcdefgh n=zz tail=12345\nptrdirect 8 abcdefgh g=GUARD')"
 	./$(COMPILER) test/test_setlength_frozen_lvalue_shapes.pas $(TESTTMP)/test_slfshapes26
-	tools/expect_same.sh test_slfshapes26 "$$($(TESTTMP)/test_slfshapes26)" "$$(printf 'sym   3 abc\nderef 2 ab\nfield 3 hij\nselem 4 opqr g=GUARD\ndelem 5 vwxyz g=DGUARD\nmsym  3 man\nmelem 3 mgd')"
+	tools/expect_same.sh test_slfshapes26 "$$($(TESTTMP)/test_slfshapes26)" "$$(printf 'sym   3 abc\nderef 2 ab\nfield 3 hij\nselem 4 opqr g=GUARD\ndelem 5 vwxyz g=DGUARD\nnest  2 2 n00 n01 g=GUARD\nmsym  3 man\nmelem 3 mgd')"
 	./$(COMPILER) test/test_set_subrange.pas $(TESTTMP)/test_set_subrange26
 	tools/expect_same.sh test_set_subrange26 "$$($(TESTTMP)/test_set_subrange26)" "$$(printf 'union: 1 2 3 4 5 6 10 15 20\ninter: 3 4 15\ndiff: 1 2 10\n15in')"
 	./$(COMPILER) test/test_cross_float_const.pas $(TESTTMP)/test_float_const26
