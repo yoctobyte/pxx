@@ -3700,3 +3700,71 @@ walker's wide default, **both used as membership tests when they are width
 answers.**
 
 > **Not one bug; one habit.**
+
+## 2026-09-04 — PHASE 4 IS LANDED AND PINNED. v403.
+
+`fd186a975` (the flip) + `4f167ccb5` (ticket/logbook/board) + **`ce63beeeb`
+(pin v403, binary `c31d03b202da`)**. The owner's `pin -> flip -> re-pin` is
+complete. **`string[1..255]` IS `tyShortString`, unconditionally, with no flag.**
+
+### Verified independently before pinning, not taken on report
+
+- `PasDefineExists('PXX_SHORTSTRING')` — **gone from `compiler/` entirely.**
+- `TargetHasByteStrPrefixCodegen` — **no longer defined**; its one remaining
+  mention is a comment at `pasparser_decl.inc:429` **recording the gate's
+  removal**, which is evidence kept rather than deleted.
+- `tools/flip-shortstring/` — **gone**, in the same diff, as it must be: after
+  the flag there is no "off" mode and every script in it measures one thing twice.
+- **The bound is live** at `pasparser_decl.inc:443`:
+  `if (LastTypeStrCap >= 1) and (LastTypeStrCap <= 255)`.
+- `stabilize-fast` reached **`c31d03b202da` — the same binary sha frankb-78
+  reported from its own build.** Two independent builds, one sha: the fixedpoint
+  is corroborated rather than asserted.
+
+### THE PIN SAYS WHAT IT DOES NOT ASSERT
+
+Written into the pin commit rather than left here: **the fixedpoint does not
+validate the flip and cannot.** `compiler.pas` declares no `string[N]` at all —
+established **by building**, in `793b38646` — so `converged after 1 round` is
+**structurally incapable of observing the change under test.** The gate is the
+matrix. A future reader will find a green fixedpoint on the flip commit and it
+will look like validation; the commit now says why it is not.
+
+### Grade: reds(3), none introduced by the flip, none a self-host failure
+
+`testmgr --tier full` **3957 of 3964 ok**. Three `tools-devtest` scanners, all
+other lanes': `exit_observable` (stdout-only 94.13% vs 92.69% cap),
+`test_wiring_gate` (5 test files no rule runs), `testmgr_hardcoded_tmp` (`/tmp`
+literals in two C tests).
+
+**They were established as pre-existing by running all three against a pristine
+`git archive HEAD` tree — NOT by reading the flip's diff and judging them
+unrelated.** That is the difference between a control and an opinion, and it is
+the reading frankb-78 explicitly said it did not want to trust. On
+`exit_observable` the flip is an **improvement it declined to claim credit for**
+(94.13% -> 93.79%, still over cap).
+
+### The diff contained ~18 stale COMMENT blocks nobody had asked about
+
+Found by grepping for `PXX_SHORTSTRING` **after staging, expecting nothing**:
+Makefile comment blocks describing the two-mode world in the present tense —
+*"BOTH MODES"*, *"the flag rows below are wired"*, *"all FOUR combinations"*,
+*"sizeof is 10+8=18 by default and 10+1=11 under the flag"*.
+
+**None errors. Each tells the next reader the tree still has a mode selector.**
+And **two of them are the blocks written because a stale "this file is red under
+the flag" nearly stalled this very flip once** — the same defect, in the same
+place, that its own remediation had documented. Evidence kept and moved to past
+tense, and **the pass was verified mechanically to have moved no recipe line**
+rather than by reading the diff.
+
+> **A comment that describes a world the tree no longer has is a stale
+> imperative: obeyed by the next reader, contradicted by nothing.**
+
+### Left owned, not bundled
+
+The three harness reds were **deliberately not fixed inside the flip** — they
+need owners. frankb-78 offered to take `testmgr_hardcoded_tmp` first, being two
+literals and mechanically verifiable. Step 2 (`ABICRecordParamByValue`) stays
+parked **as a patch**, and the hand-back offer to franka-29 — silent throughout —
+remains open; nothing landed forecloses anything it holds.
