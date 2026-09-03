@@ -3529,3 +3529,89 @@ today — and this time it was the scan's own author reporting the zero.**
 **Positive control now stated IN the tool:** against `git show HEAD:Makefile` it
 reports 14 silent, 4 vacuous, exit 1; against the tree, 0, exit 0. Devtest at 12
 guards, wired into `gate.sh quick` so the ~3900 conversions cannot rot.
+
+## 2026-09-04 — all four flip defects diagnosed and fixed, and one of them was never a flip defect
+
+`b97167982` and `157b02b90` verified on origin. Fixes 3 and 4 are in frankb-78's
+tree pending the seven-target sweep — `test_frozen_string_char_compare_shapes` is
+**not yet on origin**, which is consistent with that and is how I checked the
+account rather than taking it.
+
+**Native sweep is 69 SAME of 71.** The only two rows still differing are
+`test_shortstring_byte_prefix` and `test_sizeof_array_field` — **the two the flip
+is SUPPOSED to change, both toward FPC.** Each fix verified in both modes against
+FPC 3.2.2 on all seven targets, each rebuilt to `converged after 1 round` and
+gated GREEN with the FPC seed canary running.
+
+| # | test | cause |
+| --- | --- | --- |
+| 1 | `test_char_string_equality_both_directions` | x86-64 Char<->String arms hardcoded the 8-byte prefix |
+| 2 | `test_string_n_array_field_stride` | record-field arm missing from the `tyShortString` stride branch |
+| 3 | `test_frozen_string_concat_operand` | `IRFrozenKindOfAddr` had no `IR_CALL` arm |
+| 4 | `test_char_into_shortstring_via_pointer` | Char arms guarded on `= tyString`, the GENERIC tag |
+
+### FIXING THE SILENT ONE FIRST CHANGED WHAT THE CRASH LOOKED LIKE
+
+The ordering argument was that a silent wrong value outranks a crash because only
+a value assertion can see it. **It turned out to matter for a second and better
+reason.**
+
+Before (1) was fixed, `test_char_into_shortstring_via_pointer` printed `a FAIL`
+**and then segfaulted.** After (1), **the FAIL was gone and the segfault moved to
+a later row** — and that is what led to the real cause.
+
+> **A silent wrong value upstream does not merely hide; it RELOCATES the crash
+> downstream of it.** Starting with the crashes would have meant chasing a
+> symptom that the other fix was going to move anyway.
+
+So "fix the silent one first" is not only about shipping risk. **It is about not
+diagnosing a crash whose position is a function of a bug you have not fixed yet.**
+
+### FOUR DEFECTS, FOUR MECHANISMS, THREE FILES — A SHARED SHAPE, NOT A SHARED CAUSE
+
+Both frankb-78 and this seat refused to guess whether they shared a cause. **They
+did not.** What they share is a shape, in frankb-78's words:
+
+> **In every one of the four, the information needed was ALREADY RECORDED
+> somewhere and the reader did not ask.** The prefix width was in
+> `FrozenStrPrefixSize`; the field capacity in `RecFieldStrCap`; the return kind
+> in `Procs[].RetType`; the frozen kind in the node's own tag.
+>
+> **Nothing was missing. Four readers were.**
+
+That is the day's theme stated better than anything else in this file: the defect
+is not an absent fact but **an available fact nobody consulted** — the same
+family as a width oracle used as a membership test and as guards asking a tag
+that stopped answering. **Recorded as a SHAPE and deliberately not as a tally**,
+because a count built by inference is exactly what this seat got wrong twice
+today.
+
+### AND ONE OF THE FOUR IS A SHIPPING BUG, NOT A FLIP DEFECT
+
+Chasing (4): **`a[0] := 'X'` for `a: array[0..1] of string[8]` SIGSEGVs on the
+PINNED compiler in DEFAULT mode** — verified against
+`stable_linux_amd64/default/pinned`. **It ships today and has nothing to do with
+the flip.**
+
+The x86-64 Char arms guarded on `lhsTk = tyString` — **a test for the GENERIC
+frozen tag rather than for membership.** A variable's `IR_LEA` carries that legacy
+tag, so `s = 'X'` matched; **an array element and a record field are tagged with
+their real kind** and fell through to `EmitStrCmpReg`, which dereferences the
+Char's ORDINAL as a string address.
+
+> **The flip did not introduce it. The flip WIDENED it**, by re-tagging every
+> `string[N]` field — which is how a latent crash became visible.
+
+Fixed in both modes, with `test_frozen_string_char_compare_shapes` wired for
+x86-64/aarch64/arm32/riscv32 in both modes and its `.expected` taken from FPC.
+**The pinned-compiler crash is that test's positive control** — a control drawn
+from the population the question is about, which is the standard this file keeps
+asking for and rarely gets handed.
+
+### Coordination note
+
+franka-29 never answered. frankb-78 messaged it directly first, as instructed,
+before taking the four. Everything is on origin with full commit messages,
+nothing will be half-done in its tree once the last two land, and it has offered
+to hand back anything franka-29 wants. **That is the right shape for taking work
+from an unresponsive peer: try direct, land publicly, offer it back.**
