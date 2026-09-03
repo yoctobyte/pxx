@@ -3197,3 +3197,86 @@ extracted lines in `set -e`, and one recipe's assertion is
 A harness that adds a shell option the real runner does not use **manufactures
 failures that look exactly like findings**, and it fails toward alarm — which is
 the direction that gets believed and acted on.
+
+## 2026-09-03 21:00 — the denominator trap, shipped and then caught by its own author
+
+`52d134518` + `c6b3b8204`, both verified on origin.
+
+### The ticket's proposed fix was NEARLY VACUOUS, and the report now says so in its own output
+
+Both shapes the ticket offered assume a body's later refusals are **REACHED**.
+`WasmUnsupported` **latches**, and about forty sites guard on that latch, so a
+second reason only arrives down a path that does not guard. Implemented anyway —
+**because the measurement said it buys something real**, not because the ticket
+asked. The header now carries a gap count beside the body count **with the word
+FLOOR in it**.
+
+### A PRINT STATEMENT'S POSITION IS A POPULATION CHOICE
+
+The number shipped in the fix commit and in two source comments was *"91 of 300
+sources reached the report, 86 recorded exactly one reason"*. It was measured
+with a probe printed **UNCONDITIONALLY — above the report's `if nothing is broken
+then Exit`** — so it counted every program that **COMPILED**. **77 of that 91 had
+nothing broken at all and could not have recorded a second reason.**
+
+Recomputed over the population that could produce a two: **5 of 14.**
+
+> **Same numerator, opposite decisions.** 5-in-91 says *"barely worth keeping a
+> list"*. 5-in-14 says *"a third of affected programs"*.
+
+> **A print statement's POSITION is a population choice, and the widening lands
+> ENTIRELY in the vacuous half.** Moving a probe one line up the function does not
+> error, does not change the numerator, and silently swaps the question.
+
+This is the repo's denominator rule with a new mechanism: not a wrong glob, not a
+wrong folder — **a correct probe at the wrong height.** Both comments corrected
+in place; `c6b3b8204` **says so rather than quietly restating**.
+
+### THE CHEAP CONTROL FAILED IN THE BELIEVABLE DIRECTION
+
+It nearly justified the new test row with *"`and also` does not occur in the
+pre-fix source"* — and **grepping the pre-fix file for it HITS, in a prose
+comment.** A source-level control that would have read as **refuting a claim that
+is in fact true.**
+
+So it built the pre-fix compiler instead: stash, rebuild `d5a7b5d3ce4d` — the row
+fails there and prints the single shadowed cause; restored, rebuild
+`eac2ad1a536b`, it passes. **A control that can be defeated by a comment is not a
+control**, and this one would have failed toward *abandoning a correct fix*.
+
+### THEN IT USED THE FIXED INSTRUMENT AS ONE — and that is the group part
+
+300 sources compiled for wasm32: **278 gap instances, and 222 are `statement IR
+op 43` — IR_VAR_STORE, the Variant family.** Next down is 18 (`IR_SYSCALL`), then
+8 (`IR_SET_LIT`).
+
+> **Variant is four fifths of wasm32's entire gap surface**, and the ticket for it
+> sat at prio 30 with `blocked-by: []` and no umbrella edge.
+
+Wired under `umbrella-wasm-is-a-real-platform` (edge on the UMBRELLA's
+`blocked-by`, which is the correct direction) **and its prio deliberately NOT
+touched** — the edge is what the ranker reads and the umbrella prio is the
+owner's number. **An umbrella grown by ATTEMPTING THE TARGET rather than by
+triaging the backlog**, which is exactly what this repo asks for and rarely gets.
+
+**COORDINATOR NOTE — the edge is correct and it changes NOTHING for the ranker.**
+`effective_prio` is the max of a ticket's own prio and everything it unblocks:
+the Variant ticket is **30**, `umbrella-wasm-is-a-real-platform` is **25**, so
+max(30, 25) = **30, unchanged**. The measurement that Variant is 4/5 of the gap
+surface **cannot move the work up the queue, because the umbrella expressing the
+goal is ranked BELOW the ticket serving it.** Only the owner can change that —
+umbrella prio is the only number a human sets. **This is a case FOR a re-rank,
+and it is his call, not mine; I have not touched either number.**
+
+### Scope limit, and what was left open on purpose
+
+**278 is a FLOOR by construction** — a body stops at its first refusal, so the
+census **can understate the tail and never the head.** Stated on both tickets.
+
+Making it a true census means letting the walk continue past a refusal. **Cheap
+in output terms** (the emitted bytes are discarded anyway) **and not cheap in
+robustness terms** — the forty guards exist because a refused lookup leaves state
+a later site reads.
+
+> **Whoever takes it should expect to be measuring compiler crashes, not report
+> quality.** Written into the closed ticket, which is the right place for it.
