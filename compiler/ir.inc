@@ -16243,6 +16243,29 @@ begin
       recoverable" reasoning is about a truncated length, and here the wrong
       width produces a length in the billions. }
     Result := Syms[IRA[node]].PtrElemTk
+  { A CALL RESULT. A frozen-string-returning call is tagged with the GENERIC
+    tyString on its node -- ASTTk[callNode] is set from Procs[sig].RetType, and
+    for a `string[N]` alias that arrives as the legacy alias -- so this walker
+    fell to the wide default and every reader of the result used an 8-byte
+    prefix. Measured under -dPXX_SHORTSTRING for
+    `function S8: TStr8; TStr8 = string[8]`: `v + S8` faulted with
+    rdx = $646302, which is the length byte 2 followed by the characters of
+    'cd' read as one word -- the exact signature the concat arm in
+    ir_codegen.inc records for the same mistake one shape over.
+
+    The callee's declared kind is not missing; it is on the proc and nothing
+    asked. Same finding as the PtrElemTk arm above, in the fourth shape: the
+    carrier was present, the reader absent. IR_CALL keeps the proc index in
+    IRA; IR_CALL_IND keeps its SIGNATURE proc in IRIVal (see defs.inc), which
+    is the one that carries Params/RetType for an indirect call. }
+  else if (IRKind[node] = IR_CALL) and
+          (IRA[node] >= 0) and (IRA[node] < ProcCount) and
+          TypeIsFrozenString(Procs[IRA[node]].RetType) then
+    Result := Procs[IRA[node]].RetType
+  else if (IRKind[node] = IR_CALL_IND) and
+          (IRIVal[node] >= 0) and (IRIVal[node] < ProcCount) and
+          TypeIsFrozenString(Procs[IRIVal[node]].RetType) then
+    Result := Procs[IRIVal[node]].RetType
   else if TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
     Result := IntToTypeKind(IRTk[node]);
 end;
