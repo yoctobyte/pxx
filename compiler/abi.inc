@@ -518,23 +518,27 @@ end;
   NGRN/NSRN/NSAA walk -- it had one, register-only, and growing an NSAA into
   it would have made two mechanisms for one convention.
   devdocs/dev/normalise-dont-special-case.md }
-procedure ABIA64CdeclArgSlot(procIdx, argIdx, selfCount: Integer; var isFp: Boolean;
-                             var regIdx, stackOff: Integer);
-var i, pi, ngrn, nsrn, nsaa: Integer;
-    fp: Boolean;
+procedure ABIA64SlotWalk(const argFp: array of Boolean; argIdx: Integer;
+                         var isFp: Boolean; var regIdx, stackOff: Integer);
+{ THE AAPCS64 placement walk, over a per-ARGUMENT class vector rather than over
+  a parameter list. NGRN and NSRN advance independently and share one NSAA, and
+  the answer for argument `argIdx` is whatever the walk holds when it gets there.
+
+  Split out of ABIA64CdeclArgSlot so that a VARIADIC call can ask the same
+  question. That walk derived the class from `Procs[procIdx].Params[pi]` and
+  therefore answered "not floating point" for every argument past ParamCount --
+  correct for a fixed signature and wrong for a variadic tail, where the class
+  has to come from the ARGUMENT's own type because there is no parameter. One
+  walk with two sources for the vector, not two walks.
+  bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero }
+var i, ngrn, nsrn, nsaa: Integer;
 begin
   ngrn := 0; nsrn := 0; nsaa := 0;
   isFp := False; regIdx := -1; stackOff := -1;
   for i := 0 to argIdx do
   begin
-    pi := i - selfCount;
-    fp := (pi >= 0) and (pi < Procs[procIdx].ParamCount) and
-          TypeIsFloat(Procs[procIdx].Params[pi].TypeKind) and
-          (not ABIParamSlotIsPointer(Procs[procIdx].Params[pi].TypeKind,
-                                     Procs[procIdx].Params[pi].IsRef,
-                                     Procs[procIdx].Params[pi].IsArray));
-    isFp := fp; regIdx := -1; stackOff := -1;
-    if fp then
+    isFp := argFp[i]; regIdx := -1; stackOff := -1;
+    if isFp then
     begin
       if nsrn < 8 then begin regIdx := nsrn; Inc(nsrn); end
       else begin nsrn := 8; stackOff := nsaa; Inc(nsaa, 8); end;
@@ -545,6 +549,35 @@ begin
       else begin ngrn := 8; stackOff := nsaa; Inc(nsaa, 8); end;
     end;
   end;
+end;
+
+function ABIA64ParamIsFp(procIdx, pi: Integer): Boolean;
+var r: Boolean;
+begin
+  r := (pi >= 0) and (pi < Procs[procIdx].ParamCount);
+  if r then
+    r := TypeIsFloat(Procs[procIdx].Params[pi].TypeKind) and
+         (not ABIParamSlotIsPointer(Procs[procIdx].Params[pi].TypeKind,
+                                    Procs[procIdx].Params[pi].IsRef,
+                                    Procs[procIdx].Params[pi].IsArray));
+  if PxxDbgEnabled('a.a64fp') then
+    WriteLn('A64FP pi=', pi, ' pc=', Procs[procIdx].ParamCount,
+            ' tk=', Ord(Procs[procIdx].Params[pi].TypeKind), ' r=', Ord(r));
+  ABIA64ParamIsFp := r;
+end;
+
+procedure ABIA64CdeclArgSlot(procIdx, argIdx, selfCount: Integer; var isFp: Boolean;
+                             var regIdx, stackOff: Integer);
+var i: Integer;
+    argFp: array[0..MAX_PROC_PARAMS + 7] of Boolean;
+begin
+  for i := 0 to argIdx do
+  begin
+    if i > MAX_PROC_PARAMS + 7 then
+      Error('target aarch64: argument index past the AAPCS64 class vector');
+    argFp[i] := ABIA64ParamIsFp(procIdx, i - selfCount);
+  end;
+  ABIA64SlotWalk(argFp, argIdx, isFp, regIdx, stackOff);
 end;
 
 { The 16-byte-aligned size of the AAPCS64 stack argument area for `procIdx`'s
