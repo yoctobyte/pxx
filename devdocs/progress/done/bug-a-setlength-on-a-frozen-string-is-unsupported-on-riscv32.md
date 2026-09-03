@@ -93,4 +93,4 @@ that reproduces on this file at HEAD without the SetLength rows, so it is
 pre-existing and unrelated, and the flag row is not held hostage to it.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a3c26785f.
