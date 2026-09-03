@@ -84,6 +84,48 @@ closed one of four:
 store bytes `1 88 98 99 100 101 0` (FPC's exact bytes), both comparison shapes
 TRUE. All four previously wrong.
 
+> **CORRECTION 2026-09-03 (frankc-af, whose claim this was): BOTH SURVIVORS
+> ARE FIXED. The section below is superseded and is kept only as the record of
+> what was believed overnight — do not act on it.**
+>
+> Re-measured at `482b714d0` after a rebuild (`converged after 1 round(s)`), on
+> every converted backend, under `-dPXX_SHORTSTRING`:
+>
+> ```
+>              s[1]   r.f[1]   p^[1]    s=lit   p^=lit   r.f=lit    rc
+> x86-64        h       h        h       TRUE    TRUE     TRUE       0
+> arm32         h       h        h       TRUE    TRUE     TRUE       0
+> aarch64       h       h        h       TRUE    TRUE     TRUE       0
+> riscv32       h       h        h       TRUE    TRUE     TRUE       0
+> ```
+>
+> Both were already ticketed and closed, and both fixes are ancestors of HEAD:
+> `0dd5858e6` (`IRLowerAddress` took the index origin from the base node's
+> generic `tyString` instead of `PtrElemTk` on the pointer's own symbol — that
+> ticket also records a WRITE half found by its positive control, where
+> `p^[1] := 'H'` stored at base+8 and was silently discarded) and `ba90811d3`
+> (the field was value-loaded where an address was wanted, plus two compare
+> guards spelled `= tyString` where they meant `TypeIsFrozenString`, plus
+> `CmpFusible` fusing the field-vs-field row into a scalar address compare —
+> correct at `-O0` and FALSE at `-O1+`, which is why `-O0` hid it).
+>
+> **The claim was EXPIRED, not wrong.** It was measured at `764dc3a30`, which
+> is the exact commit `0dd5858e6`'s own summary cites as where the symptom
+> reproduced; the fixes landed after, and it was reported as a current
+> reproduction without checking. **This is the failure mode this very document
+> is about**, committed by the person who supplied its sharpest example: the
+> quoted failing output was real output from a real compiler, so nothing about
+> it ever comes to look false, and only re-measuring catches it. It was caught
+> because a human asked whether a ticket was wanted.
+>
+> The "opposite operand shapes" observation was also **not new** — `0dd5858e6`'s
+> summary already records `s[1]` and `r.f[1]` reading `h` while `p^[1]` blanks
+> in the same run. And the segfault-vs-FALSE split it flagged as "probably a
+> different mechanism" is explained by `ba90811d3`'s `-O0`/`-O1+` split, on the
+> same arm rather than a separate one.
+>
+> **Phase 2 has no known surviving readers.** i386 remains the open backend.
+
 **TWO READERS SURVIVE THE FIX — phase 2 is NOT all green.** frankh-15's matrix
 (`40646620c`) ran before wiring and named them; I reproduced both on x86-64:
 
