@@ -295,6 +295,26 @@ else
   echo "  SKIP  IROpName names every IR op (no iropname_lint.py)"
 fi
 
+# AST SLOT-WRITE CENSUS. ASTLeft/ASTRight are children for most kinds and a
+# PAYLOAD for a few, so a generic walker that recurses on them corrupts memory
+# for exactly the overloading kinds -- the census declares which is which and
+# snapshots every write, so a new one is REVIEWED rather than discovered.
+#
+# It is wired here because it only ran in `test-core`, which the per-fix loop
+# does not run: d49de34b6 added two legitimate child writes, left the snapshot
+# stale, and shipped test-core RED with `make compiler/pascal26` and
+# `gate.sh quick` both green. A review gate that fires only where nobody looks
+# reviews nothing. --self-check is its positive control (an injected payload
+# write into a slot the table calls a child must be flagged); ~5s, builds
+# nothing. A RED here on your own change usually means `--update` after reading
+# the diff, which is what its message says.
+if [ -x tools/ast_slot_overloads.py ]; then
+  step "AST slot-write census matches its snapshot" "$LOGDIR/ast-slot-census.log" \
+       tools/ast_slot_overloads.py --self-check                        || RC=1
+else
+  echo "  SKIP  AST slot-write census (no ast_slot_overloads.py)"
+fi
+
 # THE FULL-SUITE HOOK'S OWN CASES. That hook runs on EVERY Bash call in every
 # session in the fleet and had no test at all until 2026-09-03, which is how it
 # reached four open tickets: each fix was checked by hand against the case that

@@ -1,15 +1,15 @@
 ---
 slug: bug-a-i386-a-pointer-is-register-and-memory-resident-at-once-across-a-goto-entered-loop
-title: "i386: a pointer variable is register- and memory-resident at once across a goto-entered loop, so ++ updates one and the loop test reads the other"
-track: A
+title: "C do-while desugared through a first-iteration FLAG, and a `goto` into the body skips both writes to it: the back edge short-circuits `flag || cond`, takes an extra pass and never evaluates cond"
+track: C
 prio: 55
 type: bug
-status: open
+status: done
 created: 2026-09-02
 found-by: frankD
 owner:
 blocked-by:
-summary: "INSTRUMENTED AND LOCALISED. On i386, `mv A NEW` moves the file and then takes one extra loop pass. The instrumented trace shows `argv` holding the SAME address at both evaluations of `while (*++argv && *argv != last)` while the loop still terminates after two -- which is only consistent with `argv` being register- and memory-resident at once: the `++` advances a REGISTER (pass 1 to the `NEW` slot, pass 2 to the NULL terminator, which short-circuits and ends the loop), while the `!= last` comparison and the body both re-read the MEMORY slot the `++` never wrote back, so the test asks `"A" != "NEW"` and grants the extra pass. That is also why the message reads `NEW/A` and not `NEW/NEW`. argc, optind, flags and last are all correct, so getopt32 and its varargs are exonerated along with stat/lstat/S_ISDIR/errno and argv pointer identity. Five minimal programs failed to reproduce it standalone; busybox itself is the reproducer, seconds per iteration via the single-TU rig in the body. RE-LANED TO A: i386 code generation, not the C frontend."
+summary: "FIXED 2026-09-03 in `ParseCDoWhileAST` (`compiler/cparser.inc`), which now builds an `AN_REPEAT`. The old desugar was `flag := 1; while (flag or cond) do begin flag := 0; body end`, correct for every entry through the top and wrong for C's one legal way INTO a loop body -- a `goto` to a label inside it -- because the jump skips BOTH assignments and the flag holds whatever its stack slot contained. Non-zero, and the back edge short-circuits `flag or cond` to true, TAKING AN EXTRA PASS WITHOUT EVALUATING `cond` AT ALL. That is why busybox `mv A NEW` concatenated `NEW/A` and not `NEW/NEW`: the increment lives in `*++argv` inside cond, so `*argv` was still the first argument on the extra pass. NOT a register/memory split, NOT i386, NOT the backend -- the earlier title said all three. i386, aarch64, arm32 and riscv32 all reproduce; x86-64 does not, because its frame layout leaves that slot zero, which is the whole reason five minimal probes and the whole quick tier missed it. `AN_REPEAT` has no flag, so no state a jump can bypass. THE SIBLING WAS FIXED IN THE SAME COMMIT: `ParseCForAST` guarded a `for`'s post-expression with the identical flag, so a `goto` into the body SKIPPED THE POST on the first back edge -- `for (; i < 3; i++)` ran four passes with i = 0, 0, 1, 2 where gcc runs three, and THAT ONE REPRODUCES ON x86-64 TOO. Verified: `test/cdo_while_goto_entry.c` matches gcc on native+i386+aarch64+riscv32 (pinned control fires on i386 and aarch64), and `busybox_diff.sh --separate --targets i386 --applets 'mv cp'` went FAIL -> byte-identical to the gcc oracle over all 14 cases."
 ---
 
 # The case
@@ -281,3 +281,129 @@ This is i386 backend code generation, not the C frontend: the frontend's own
 loop and jump lowering is correct in isolation on this target at both `-O0` and
 `-O2`, and the divergence is between two storage locations for one variable.
 Track C found it and has taken it as far as source-level measurement can.
+
+# 2026-09-03 — FIXED. It was the do-while desugar's flag, not a register
+
+Every section above is a correct measurement and the conclusion of the last two
+is wrong. Recording why, because the wrong conclusion was *reasonable*: an
+uninitialised flag produces observations indistinguishable from a stale copy of
+the variable the skipped condition would have advanced.
+
+## The mechanism
+
+`ParseCDoWhileAST` desugared `do body while (cond)` to
+
+```pascal
+flag := 1;
+while (flag or cond) do begin flag := 0; body end
+```
+
+Correct for every entry through the top. C has exactly one other way in — a
+`goto` to a label inside the body — and that jump lands BELOW `flag := 1` and
+ABOVE nothing, because `flag := 0` is the first statement of the body and is
+skipped too. So at the back edge `flag` holds whatever its stack slot contained.
+
+Non-zero, and `flag or cond` short-circuits to true. The loop takes one extra
+pass **and never evaluates `cond`**. `mv`'s terminator is
+`while (*++argv && *argv != last)`, so the increment never happened: the extra
+pass saw `*argv` still pointing at `A`, concatenated `NEW/A`, and `cp_mv_stat`
+on that path answered ENOTDIR. Then the pass after it did run the condition
+(flag was 0 by then), walked to the NULL terminator and ended the loop — which
+is why it terminated instead of spinning, the fact that made a register copy
+look like the only explanation.
+
+## Why x86-64 was clean and five probes failed
+
+The slot is read uninitialised, so the answer is frame layout. x86-64 left it
+zero; i386, aarch64, arm32 and riscv32 did not. Measured 2026-09-03, 30 lines
+of C with a helper that dirties 8KB of stack first:
+
+| build | no goto | goto into body |
+| --- | --- | --- |
+| gcc | `passes=1` | `passes=1` |
+| pxx x86-64 | `passes=1` | `passes=1` |
+| pxx i386 / aarch64 / arm32 / riscv32 | `passes=1` | **`passes=2`** |
+
+The dirtying helper is the whole difference between this repro and the five that
+failed. A `goto`-into-`do-while` probe in a fresh frame reads a zero and passes
+on every target — which is exactly what the third row of the night section's
+table measured, honestly, and it is why that row exonerated the shape it had in
+fact caught. **A probe for an uninitialised read has to dirty the stack first,
+or its expected value collides with the failure value.**
+
+## The fix
+
+`AN_REPEAT` — `repeat body until (cond = 0)`. Body, condition, jump back: no
+flag, therefore no state a jump can bypass, and `continue`'s label already sits
+between body and condition, which is where C wants it. The node is what the
+Pascal frontend uses for the same loop, so this deletes a path rather than
+adding one.
+
+## Verification
+
+- `test/cdo_while_goto_entry.c` (new, `.expected` is **gcc's** output): normal
+  entry, `goto` entry after a stack-dirtying call, and a `continue` that must
+  re-test the condition. MATCH on native, i386, aarch64, riscv32; the pinned
+  compiler DIFFERS on i386 and aarch64, so the control fires.
+- `busybox_diff.sh --separate --targets i386 --applets "mv cp"`: FAIL before
+  (`mv: can't stat '.../moved.txt/copy.txt'`), **byte-identical to the gcc
+  oracle over all 14 cases** after.
+- `gate.sh quick` GREEN with `compiler/**` uncommitted (FPC seed canary ran).
+- C tier + `test-c-conformance-cross`.
+
+## Re-laned back to C
+
+The lane the night section moved it out of. Nothing in the backend was wrong;
+the frontend's loop lowering was, and the isolated probes that cleared it were
+measuring a zeroed frame.
+
+# 2026-09-03 — THE SIBLING, same commit: `for` did it too, and on x86-64
+
+Grepped for the second arm before closing (`normalise-dont-special-case`, "fixed
+one arm of a double case? grep for the sibling"). `ParseCForAST` used the
+IDENTICAL flag whenever the `for` has a post-expression, because a `continue`
+must still run it:
+
+```
+init; first = 1;
+while (1) { if (!first) post; first = 0; if (!cond) break; body; }
+```
+
+A `goto` into the body skips both writes, so on the first back edge `!first` is
+false and **the post is SKIPPED** — one extra pass with the induction variable
+unchanged. Measured, `for (; i < 3; i++)` entered by a `goto` to a label inside
+the body:
+
+| build | top entry | goto entry |
+| --- | --- | --- |
+| gcc (`-O0`, `-O2`, `-m32`) | `i=0,1,2 passes=3` | `i=0,1,2 passes=3` |
+| pxx x86-64 / i386 / aarch64 / arm32 / riscv32 | `passes=3` | **`i=0,0,1,2 passes=4`** |
+
+**This one is NOT cross-target-only.** The do-while flag sat at a fixed frame
+offset that x86-64 happened to leave zero; this flag reads whatever the previous
+call left at its offset, so native reproduces as well. The pinned compiler
+DIFFERS on all four measured targets, native included.
+
+## Fix — AN_REPEAT again, with the post in the until-condition
+
+```
+init; repeat if (!cond) break; body; until (post, 0)
+```
+
+`(post, 0)` is an AN_COMMA: it runs post for its side effects and yields false,
+so the loop always returns to the top where cond is tested. **The until-condition
+is exactly where `IRLowerAST` emits the continue label** (`compiler/ir.inc`,
+`AN_REPEAT`), so a `continue` runs post and re-checks cond — which is the whole
+reason the flag existed. `break` leaves. No flag, no state a jump can bypass.
+
+The for's third clause is now parsed with `ParseCCommaExpr` rather than
+`ParseCCommaStmt`: it is one comma EXPRESSION by the C grammar, and it has to be
+an expression to be the comma's left arm.
+
+`test/cfor_post_goto_entry.c` — top entry, goto entry, `continue` (post must run
+or the row hangs), `break`, a two-expression post, and a post whose left arm is a
+void call. `.expected` is gcc's, identical at `-O0`, `-O2` and `-m32`. MATCH on
+native, i386, aarch64, arm32, riscv32.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

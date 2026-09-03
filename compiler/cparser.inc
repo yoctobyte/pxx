@@ -6881,18 +6881,29 @@ end;
 
 { `for (init; cond; post) body`.
   - No post: desugars to `init; while (cond) body` (continue->cond is correct).
-  - With post: a `continue` must still run `post`, but the loop machinery's
-    continue target is the while condition. So we desugar to a constant-true
-    loop that runs `post` at the TOP (guarded by a first-iteration flag) before
-    re-checking the condition:
-        init; first = 1;
-        while (1) { if (!first) post; first = 0; if (!cond) break; body; }
-    A continue jumps to the while head, runs post, re-checks cond — exactly C
-    semantics. An empty cond is constant-true. }
+  - With post: a `continue` must still run `post`, and the one place a loop node
+    gives us that is AN_REPEAT's until-condition -- IRLowerAST emits the continue
+    label immediately before it. So:
+        init; repeat if (!cond) break; body; until (post, 0)
+    `(post, 0)` is an AN_COMMA: it runs post for its side effects and yields
+    false, so the loop ALWAYS returns to the top, where cond is tested. A
+    continue jumps to the until, runs post, returns to the top and re-checks
+    cond -- exactly C semantics. An empty cond is constant-true.
+
+  IT USED TO GUARD post WITH A FIRST-ITERATION FLAG: `first = 1; while (1) { if
+  (!first) post; first = 0; if (!cond) break; body; }`. Same defect as
+  ParseCDoWhileAST's flag and found by grepping for the sibling after fixing it:
+  a `goto` into a label inside the body skips `first = 1` AND `first = 0`, so at
+  the back edge the flag holds whatever its stack slot contained. Non-zero, and
+  `if (!first) post` SKIPS THE POST on the first back edge -- measured
+  2026-09-03, `goto` into `for (; i < 3; i++)` ran the body four times with
+  i = 0, 0, 1, 2 where gcc runs three. This one reproduces on x86-64 too, since
+  the slot it reads is whatever the previous call left there rather than a fixed
+  frame offset. AN_REPEAT carries no flag, so there is no state a jump can
+  bypass. }
 function ParseCForAST: Integer;
-var initNode, cond, post, body, loop, whileBody, outer, trueCond: Integer;
-    oHead, oTail, bHead, bTail, flagVar, flagSet, flagClr, ifPost, ifBrk, brk: Integer;
-    idn1, idn2: Integer;
+var initNode, cond, post, body, loop, whileBody, outer: Integer;
+    oHead, oTail, bHead, bTail, ifBrk, brk, postComma: Integer;
 begin
   Next; { for }
   Expect(tkLParen, '(');
@@ -6917,7 +6928,10 @@ begin
   Expect(tkSemicolon, ';');
 
   post := -1;
-  if CurTok.Kind <> tkRParen then post := ParseCCommaStmt;
+  { ParseCCommaExpr and not ParseCCommaStmt: `for (...; ...; i++, j++)` is one
+    comma EXPRESSION by the C grammar, and it has to be an expression here
+    because it becomes the left arm of the AN_COMMA below. }
+  if CurTok.Kind <> tkRParen then post := ParseCCommaExpr;
   Expect(tkRParen, ')');
 
   body := ParseCStatementAST;
@@ -6935,32 +6949,7 @@ begin
   end
   else
   begin
-    flagVar := AllocVar('', tyBoolean);
-
-    { first = 1 }
-    idn1 := AllocNode(AN_IDENT); ASTIVal[idn1] := flagVar; ASTTk[idn1] := Ord(tyBoolean);
-    flagSet := AllocNode(AN_ASSIGN); ASTLeft[flagSet] := idn1;
-    ASTRight[flagSet] := AllocNode(AN_INT_LIT); ASTIVal[ASTRight[flagSet]] := 1;
-    ASTTk[ASTRight[flagSet]] := Ord(tyInteger); ASTTk[flagSet] := Ord(tyBoolean);
-    CSeqAppend(flagSet, oHead, oTail);
-
     bHead := -1; bTail := -1;
-
-    { if (!first) post  ->  if (first == 0) post }
-    idn2 := AllocNode(AN_IDENT); ASTIVal[idn2] := flagVar; ASTTk[idn2] := Ord(tyBoolean);
-    ifPost := AllocNode(AN_IF);
-    ASTLeft[ifPost] := CMakeIsZero(idn2);
-    ASTRight[ifPost] := AllocNode(AN_PAIR);
-    ASTLeft[ASTRight[ifPost]] := post;
-    ASTRight[ASTRight[ifPost]] := -1;
-    CSeqAppend(ifPost, bHead, bTail);
-
-    { first = 0 }
-    idn1 := AllocNode(AN_IDENT); ASTIVal[idn1] := flagVar; ASTTk[idn1] := Ord(tyBoolean);
-    flagClr := AllocNode(AN_ASSIGN); ASTLeft[flagClr] := idn1;
-    ASTRight[flagClr] := AllocNode(AN_INT_LIT); ASTIVal[ASTRight[flagClr]] := 0;
-    ASTTk[ASTRight[flagClr]] := Ord(tyInteger); ASTTk[flagClr] := Ord(tyBoolean);
-    CSeqAppend(flagClr, bHead, bTail);
 
     { if (!cond) break }
     ifBrk := AllocNode(AN_IF);
@@ -6975,10 +6964,18 @@ begin
     CSeqAppend(body, bHead, bTail);
 
     whileBody := AllocNode(AN_BLOCK); ASTLeft[whileBody] := bHead;
-    trueCond := AllocNode(AN_INT_LIT); ASTIVal[trueCond] := 1; ASTTk[trueCond] := Ord(tyBoolean);
-    loop := AllocNode(AN_WHILE);
-    ASTLeft[loop] := trueCond;
-    ASTRight[loop] := whileBody;
+
+    { until (post, 0) -- the continue target, and never true }
+    postComma := AllocNode(AN_COMMA);
+    ASTLeft[postComma] := post;
+    ASTRight[postComma] := AllocNode(AN_INT_LIT);
+    ASTIVal[ASTRight[postComma]] := 0;
+    ASTTk[ASTRight[postComma]] := Ord(tyBoolean);
+    ASTTk[postComma] := Ord(tyBoolean);
+
+    loop := AllocNode(AN_REPEAT);
+    ASTLeft[loop] := whileBody;
+    ASTRight[loop] := postComma;
     CSeqAppend(loop, oHead, oTail);
   end;
 
@@ -6987,47 +6984,57 @@ begin
   Result := outer;
 end;
 
-{ `do body while (cond);` — body runs once, then repeats while cond. Desugared
-  with a first-iteration flag to a constant-checked while so break/continue keep
-  C semantics: `flag=1; while (flag || cond) { flag=0; body }`. A continue jumps
-  to the while head, where flag is 0, so cond is re-checked (correct). }
+{ `do body while (cond);` — body runs once, then repeats while cond. }
 function ParseCDoWhileAST: Integer;
-var body, cond, flagVar, loop, whileBody, outer: Integer;
-    oHead, oTail, bHead, bTail, flagSet, flagClr, orCond, idn1, idn2: Integer;
+{ `do body while (cond);` -> AN_REPEAT, which is the same loop.
+
+  IT USED TO DESUGAR TO A FLAG: `first := 1; while (first or cond) do begin
+  first := 0; body end`. That is correct for every entry through the top and
+  WRONG for a `goto` into a label inside the body -- C's one legal way in --
+  because the jump skips BOTH assignments, so the flag holds whatever its stack
+  slot happened to contain. Non-zero, and the back edge short-circuits `first or
+  cond` to true and takes an EXTRA PASS WITHOUT EVALUATING cond AT ALL.
+
+  Measured 2026-09-03 in 30 lines of C, after a helper dirtied the stack:
+  `goto` into a `do { L: ... } while (*++argv && *argv != last)` ran the body
+  twice with `*argv` unchanged between them -- the increment lives in cond and
+  cond was never evaluated. gcc runs it once. i386, aarch64, arm32 and riscv32
+  all reproduced; x86-64 did not, because its frame layout left that slot zero.
+  That is the whole of the busybox `mv A NEW` divergence
+  (bug-a-i386-a-pointer-is-register-and-memory-resident-at-once-across-a-goto-
+  entered-loop, whose title is wrong: nothing was register-resident and it was
+  never i386-specific -- an uninitialised flag reads like a stale copy of the
+  variable the skipped condition would have advanced).
+
+  AN_REPEAT has no flag and therefore no state a jump can bypass: body, then the
+  condition, then a jump back. Its `continue` label sits between the two, which
+  is exactly where C wants it, and its `break` label after the loop.
+
+  AN_REPEAT is `repeat body until X` -- it loops while X is FALSE -- and C loops
+  while cond is TRUE, so the until-condition is `cond == 0`: the identical node
+  `!cond` builds a few hundred lines up. }
+var body, cond, notCond, loop: Integer;
 begin
   Next; { do }
   body := ParseCStatementAST;
   if CurTok.Kind = tkWhile then Next else Error('while expected after do');
   Expect(tkLParen, '(');
-  cond := ParseCCommaExpr;   { C `expression`: do..while (++p, f); — tcc }
+  cond := ParseCCommaExpr;   { C `expression`: do..while (++p, f); -- tcc }
   Expect(tkRParen, ')');
   Eat(tkSemicolon);
 
-  flagVar := AllocVar('', tyBoolean);
-  oHead := -1; oTail := -1;
+  notCond := AllocNode(AN_BINOP);
+  ASTIVal[notCond] := Ord(tkEq);
+  ASTLeft[notCond] := cond;
+  ASTRight[notCond] := AllocNode(AN_INT_LIT);
+  ASTIVal[ASTRight[notCond]] := 0;
+  ASTTk[ASTRight[notCond]] := Ord(tyInteger);
+  ASTTk[notCond] := Ord(tyBoolean);
 
-  idn1 := AllocNode(AN_IDENT); ASTIVal[idn1] := flagVar; ASTTk[idn1] := Ord(tyBoolean);
-  flagSet := AllocNode(AN_ASSIGN); ASTLeft[flagSet] := idn1;
-  ASTRight[flagSet] := AllocNode(AN_INT_LIT); ASTIVal[ASTRight[flagSet]] := 1;
-  ASTTk[ASTRight[flagSet]] := Ord(tyInteger); ASTTk[flagSet] := Ord(tyBoolean);
-  CSeqAppend(flagSet, oHead, oTail);
-
-  bHead := -1; bTail := -1;
-  idn2 := AllocNode(AN_IDENT); ASTIVal[idn2] := flagVar; ASTTk[idn2] := Ord(tyBoolean);
-  flagClr := AllocNode(AN_ASSIGN); ASTLeft[flagClr] := idn2;
-  ASTRight[flagClr] := AllocNode(AN_INT_LIT); ASTIVal[ASTRight[flagClr]] := 0;
-  ASTTk[ASTRight[flagClr]] := Ord(tyInteger); ASTTk[flagClr] := Ord(tyBoolean);
-  CSeqAppend(flagClr, bHead, bTail);
-  CSeqAppend(body, bHead, bTail);
-  whileBody := AllocNode(AN_BLOCK); ASTLeft[whileBody] := bHead;
-
-  idn1 := AllocNode(AN_IDENT); ASTIVal[idn1] := flagVar; ASTTk[idn1] := Ord(tyBoolean);
-  orCond := CMakeBinop(Ord(tkOr), idn1, cond);
-  loop := AllocNode(AN_WHILE); ASTLeft[loop] := orCond; ASTRight[loop] := whileBody;
-  CSeqAppend(loop, oHead, oTail);
-
-  outer := AllocNode(AN_BLOCK); ASTLeft[outer] := oHead;
-  Result := outer;
+  loop := AllocNode(AN_REPEAT);
+  ASTLeft[loop] := body;
+  ASTRight[loop] := notCond;
+  Result := loop;
 end;
 
 { A comma-separated expression sequence in statement position (expression

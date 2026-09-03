@@ -9248,6 +9248,46 @@ test-core: $(COMPILER)
 	tools/expect_same.sh ccast_call_arg26 "$$($(TESTTMP)/ccast_call_arg26)" "v=20 s=22"
 	./$(COMPILER) test/cloop_b5.c $(TESTTMP)/cloop_b526
 	$(TESTTMP)/cloop_b526; tools/expect_same.sh cloop_b526-rc "$$?" "28"
+	# A `goto` INTO a do-while body -- C's one legal way in, and the shape
+	# busybox's `mv` uses. pxx desugared `do body while (cond)` into a FLAG
+	# (`first = 1; while (first || cond) { first = 0; body }`), correct for
+	# every entry through the top and wrong for the jump, which skips BOTH
+	# assignments and leaves the flag holding whatever its stack slot had.
+	# Non-zero, and the back edge short-circuits true and takes an extra pass
+	# WITHOUT EVALUATING cond -- so the `*++argv` in the condition never runs.
+	# THE TEST DIRTIES THE STACK FIRST OR IT CANNOT FAIL: the flag is an
+	# ordinary uninitialised local, so in a small program its slot is usually
+	# zero. Five earlier minimal programs missed it for exactly that reason and
+	# it was filed as an i386 register-allocation bug; it is neither i386 nor
+	# register allocation. Positive control on the pinned compiler: i386 and
+	# aarch64 both DIFFER, x86-64 does not (its frame left the slot zero), so
+	# the cross rows are the ones that reproduce and the native row is cover.
+	# .expected is gcc's output, not pxx's.
+	./$(COMPILER) test/cdo_while_goto_entry.c $(TESTTMP)/cdwgoto26
+	tools/expect_same.sh cdwgoto26 "$$($(TESTTMP)/cdwgoto26)" "$$(cat test/cdo_while_goto_entry.expected)"
+	./$(COMPILER) --target=i386 test/cdo_while_goto_entry.c $(TESTTMP)/cdwgoto_i386
+	tools/expect_same.sh i386/cdwgoto_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/cdwgoto_i386)" "$$(cat test/cdo_while_goto_entry.expected)"
+	./$(COMPILER) --target=aarch64 test/cdo_while_goto_entry.c $(TESTTMP)/cdwgoto_aarch64
+	tools/expect_same.sh aarch64/cdwgoto_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/cdwgoto_aarch64)" "$$(cat test/cdo_while_goto_entry.expected)"
+	./$(COMPILER) --target=riscv32 test/cdo_while_goto_entry.c $(TESTTMP)/cdwgoto_riscv32
+	tools/expect_same.sh riscv32/cdwgoto_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/cdwgoto_riscv32)" "$$(cat test/cdo_while_goto_entry.expected)"
+	# THE SIBLING, found by grepping for it after the do-while fix landed:
+	# `for (init; cond; post)` guarded its `post` with the same first-iteration
+	# flag, so a `goto` into the body skipped the post on the first back edge
+	# and the loop ran an extra pass with the induction variable unchanged.
+	# NOT cross-target-only -- the slot holds whatever the previous call left at
+	# that offset, so x86-64 reproduces too and the native row is a real row.
+	# Now desugared to AN_REPEAT with the post in the until-condition, which is
+	# where IRLowerAST puts the continue label, hence the `continue` row.
+	# .expected is gcc's output (identical at -O0, -O2 and -m32).
+	./$(COMPILER) test/cfor_post_goto_entry.c $(TESTTMP)/cforpost26
+	tools/expect_same.sh cforpost26 "$$($(TESTTMP)/cforpost26)" "$$(cat test/cfor_post_goto_entry.expected)"
+	./$(COMPILER) --target=i386 test/cfor_post_goto_entry.c $(TESTTMP)/cforpost_i386
+	tools/expect_same.sh i386/cforpost_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/cforpost_i386)" "$$(cat test/cfor_post_goto_entry.expected)"
+	./$(COMPILER) --target=aarch64 test/cfor_post_goto_entry.c $(TESTTMP)/cforpost_aarch64
+	tools/expect_same.sh aarch64/cforpost_aarch64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/cforpost_aarch64)" "$$(cat test/cfor_post_goto_entry.expected)"
+	./$(COMPILER) --target=riscv32 test/cfor_post_goto_entry.c $(TESTTMP)/cforpost_riscv32
+	tools/expect_same.sh riscv32/cforpost_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/cforpost_riscv32)" "$$(cat test/cfor_post_goto_entry.expected)"
 	./$(COMPILER) test/cfnptr_b6.c $(TESTTMP)/cfnptr_b626
 	$(TESTTMP)/cfnptr_b626; tools/expect_same.sh cfnptr_b626-rc "$$?" "91"
 	./$(COMPILER) test/cfnptr_call_via_ptr_cast_b236.c $(TESTTMP)/cfnptr_call_via_ptr_cast_b23626
@@ -20818,7 +20858,16 @@ test-c-conformance-arm32: $(COMPILER)
 test-c-conformance-riscv32: $(COMPILER)
 	tools/run_c_conformance.sh ./$(COMPILER) library_candidates/c-testsuite/tests/single-exec --target riscv32
 test-c-conformance-cross: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32
-	@echo "test-c-conformance-cross: all targets green"
+	@# THE SUMMARY USED TO BE UNCONDITIONAL, and each of the four targets SKIPs
+	@# when the gitignored c-testsuite is absent -- so `all targets green` was
+	@# printed over four rows that measured nothing, and it was read as coverage
+	@# (2026-09-03, verifying a do-while codegen change). Same discipline as
+	@# test-c-abi-glibc-oracle above: say what actually ran.
+	@if [ -d library_candidates/c-testsuite/tests/single-exec ]; then \
+	  echo "test-c-conformance-cross: all targets green"; \
+	else \
+	  echo "test-c-conformance-cross: NOTHING MEASURED -- SKIPPED on all four targets, no suite at library_candidates/c-testsuite/tests/single-exec (tools/install_lib_candidates.sh c-testsuite)"; \
+	fi
 
 # Track C gate bundle: the base gate (test-core self-host + C unit tests) PLUS
 # the c-testsuite conformance battery. Run this before pushing a C-frontend
@@ -20826,7 +20875,11 @@ test-c-conformance-cross: test-c-conformance-i386 test-c-conformance-aarch64 tes
 # change can pass test-core + self-host and still silently regress c-testsuite
 # (e.g. the 00022 typedef-shadow regression, 2026-07-06).
 test-c: test-core test-c-conformance
-	@echo "test-c: base gate + c-conformance green"
+	@if [ -d library_candidates/c-testsuite/tests/single-exec ]; then \
+	  echo "test-c: base gate + c-conformance green"; \
+	else \
+	  echo "test-c: base gate green; c-conformance SKIPPED (no suite at library_candidates/c-testsuite/tests/single-exec)"; \
+	fi
 
 # zlib v1.3.1 bring-up (feature-c-corpus-zlib, corpus step 2). Unity-builds
 # crtl + the zlib TUs + zlib's own test/example.c and diffs stdout+exit against

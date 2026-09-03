@@ -1,0 +1,8 @@
+normal entry:
+  top   *argv=A
+  body  *argv=A
+  passes=1
+goto entry:
+  body  *argv=A
+  passes=1
+continue: i-passes=3

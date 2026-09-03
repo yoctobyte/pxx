@@ -1,0 +1,14 @@
+top entry:
+  i=0 n=1
+  i=1 n=2
+  i=2 n=3
+  passes=3
+goto entry:
+  i=0 n=1
+  i=1 n=2
+  i=2 n=3
+  passes=3
+continue: n=3
+break: i=2
+two-expr post: 3103
+void-call post: 5
