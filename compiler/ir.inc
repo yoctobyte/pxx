@@ -3924,6 +3924,34 @@ begin
   end;
 end;
 
+{ The kind an IR_ARG node should carry.
+
+  Normally the ARGUMENT's static type -- but IRLowerCallArg may have CONVERTED
+  the operand on the way past, and then the AST's type describes something that
+  is no longer what the call receives. The frozen-to-managed argument conversion
+  is exactly that case: the AST says `string[10]`, the value handed over is a
+  heap HANDLE, and every backend's marshalling ladder keys off the ARG node's
+  kind -- so a stale frozen tag makes each of them convert a SECOND time,
+  reading the handle pointer as a [len][chars] buffer. Measured on the one-line
+  repro before this existed: `pxx: out of memory (heap arena mmap failed)`,
+  rc=203, from a length invented out of a pointer's own bytes.
+
+  Deliberately NARROW. It retags only the one direction the lowering actually
+  performs -- a frozen-typed AST whose lowered value came back tyAnsiString --
+  and returns ASTTk untouched for everything else, so no other argument shape
+  changes tag. Seventeen sites build ARG nodes from ASTTk; asking here means
+  they cannot disagree about it, which is the property the marshalling ladders
+  themselves lack and the reason this whole family exists.
+  bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend }
+function IRArgTk(value: Integer; argAST: Integer): Integer;
+begin
+  Result := ASTTk[argAST];
+  if (value >= 0) and (argAST >= 0) and
+     TypeIsFrozenString(IntToTypeKind(Result)) and
+     (IntToTypeKind(IRTk[value]) = tyAnsiString) then
+    Result := IRTk[value];
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -4257,6 +4285,74 @@ begin
     value := IRLowerAST(argAST);
     IRAppend(IR_STORE_SYM, tmpSym, value, -1, 0, Ord(tyString));
     Result := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyString));
+    Exit;
+  end;
+  { THE MIRROR: a FROZEN string argument to a MANAGED (tyAnsiString) parameter.
+    The callee's slot is a heap HANDLE and a frozen argument is a [len][chars]
+    BUFFER ADDRESS, so something has to materialise one from the other.
+
+    DONE HERE, ONCE, BECAUSE IT IS NOT A TARGET QUESTION. Every backend used to
+    re-derive this in its `Params[n].TypeKind = tyAnsiString` ladder, and each
+    backend carries that ladder ONCE PER CALL PATH -- ordered args, direct call,
+    constructor, method/vmt, proc-var indirect. That is fifteen-odd copies of one
+    decision and four of them were right: on i386, arm32, aarch64 and riscv32 a
+    `string[N]` handed to a constructor or a virtual method arrived EMPTY, in the
+    DEFAULT mode, reproducing at the pin; the proc-var indirect path was empty on
+    x86-64 too. A plain routine and a non-virtual method were correct beside them
+    in the same program, and a string LITERAL was correct through every route,
+    which is why the class tests never saw it.
+
+    The same ladder had already drifted twice on other axes -- a by-value SET
+    case and a cdecl RECORD case, each landing at one site -- so patching eleven
+    copies buys a fourth drift. `root-cause-over-microfix`, and this deletes
+    cases rather than adding them.
+    bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
+
+    IT REUSES THE ASSIGNMENT PATH RATHER THAN GROWING A SECOND ONE. `m := s` for
+    a managed m and a frozen s already works on all seven backends (that is the
+    IR_STORE_SYM arm that calls PXXStrFromLit and resolves the source width with
+    IRStrTkOf), so the conversion is a hidden owning local plus a store, exactly
+    the shape IRStrWidthConv uses one screen up and for the same ownership
+    reason: the store publishes a real handle, the NEXT execution of this call
+    site releases the previous one, and scope exit releases the last. The inline
+    backend arms leaked one handle per call because nothing owned their result.
+
+    A STRING LITERAL IS EXCLUDED DELIBERATELY. An AN_STR_LIT already reaches the
+    callee correctly on every target and every backend has a static-handle fast
+    path for it (EmitStaticLitHandle) -- no allocation, no copy. Routing it
+    through a temp would trade a rodata pointer for a runtime allocation at every
+    literal call site, which is a pessimisation and not a fix.
+
+    BY-REF IS EXCLUDED because a `var`/`out` AnsiString parameter is the callee's
+    channel back to the caller's slot; handing it a temp would silently discard
+    what it writes. `const` is not by-ref here and does convert, which is what
+    FPC does too. }
+  if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
+     (not isRefArg) and
+     (not Procs[cpi].Params[pathIdx].IsRef) and
+     (not Procs[cpi].Params[pathIdx].IsArray) and
+     (Procs[cpi].Params[pathIdx].TypeKind = tyAnsiString) and
+     TypeIsFrozenString(IntToTypeKind(ASTTk[argAST])) and
+     (ASTKind[argAST] <> AN_STR_LIT) then
+  begin
+    tmpSym := AllocVar('', tyAnsiString);
+    SymIsHiddenArgTemp[tmpSym] := True;
+    { Synthesise `tmp := arg` as AST and lower THAT, exactly as the frozen-param
+      arm below does -- not a hand-built IR_STORE_SYM. The assignment path owns
+      more than the store node: which operand shape yields the buffer address,
+      the frozen-source width via IRStrTkOf, the release-of-previous. A bare
+      IR_STORE_SYM over IRLowerAST(argAST) looks equivalent and is not -- it
+      handed the store a value where the arm wanted an address, and the callee
+      allocated on a garbage length until the heap arena refused (measured:
+      `pxx: out of memory`, rc=203, on the one-line repro). }
+    caIdent := AllocNode(AN_IDENT);
+    ASTIVal[caIdent] := tmpSym;
+    ASTTk[caIdent] := Ord(tyAnsiString);
+    caSlCall := AllocNode(AN_ASSIGN);
+    ASTLeft[caSlCall] := caIdent;
+    ASTRight[caSlCall] := argAST;
+    IRLowerAST(caSlCall);
+    Result := IRAppend(IR_LOAD_SYM, tmpSym, -1, -1, 0, Ord(tyAnsiString));
     Exit;
   end;
   { A MANAGED string argument to a FROZEN-string parameter (Pascal Script's
@@ -8716,7 +8812,7 @@ begin
       while item <> -1 do
       begin
         value := IRLowerAST(ASTLeft[item]);
-        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
         if first < 0 then first := argNode
         else IRB[last] := argNode;
         last := argNode;
@@ -8735,7 +8831,7 @@ begin
       while item <> -1 do
       begin
         value := IRLowerAST(ASTLeft[item]);
-        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
         if first < 0 then first := argNode
         else IRB[last] := argNode;
         last := argNode;
@@ -8755,7 +8851,7 @@ begin
       while item <> -1 do
       begin
         value := IRLowerAST(ASTLeft[item]);
-        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
         if first < 0 then first := argNode
         else IRB[last] := argNode;
         last := argNode;
@@ -8774,7 +8870,7 @@ begin
       while item <> -1 do
       begin
         value := IRLowerAST(ASTLeft[item]);
-        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
         if first < 0 then first := argNode
         else IRB[last] := argNode;
         last := argNode;
@@ -8843,7 +8939,7 @@ begin
         IRCoerceCharArrayArg(cpi, pathIdx, item);
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
-        argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+        argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
         if first < 0 then first := argNode else IRB[last] := argNode;
         last := argNode;
         if pathIdx = 0 then selfVal := value;   { the blob }
@@ -9294,7 +9390,7 @@ begin
         if cpi >= 0 then
         begin
           left  := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
-          first := IRAppend(IR_ARG, left, -1, -1, 0, ASTTk[ASTLeft[node]]);
+          first := IRAppend(IR_ARG, left, -1, -1, 0, IRArgTk(left, ASTLeft[node]));
           Result := IRAppendCall(cpi, first, -1, ASTTk[node]);
           Exit;
         end;
@@ -9501,7 +9597,7 @@ begin
         if cpi >= 0 then
         begin
           left  := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
-          first := IRAppend(IR_ARG, left, -1, -1, 0, ASTTk[ASTLeft[node]]);
+          first := IRAppend(IR_ARG, left, -1, -1, 0, IRArgTk(left, ASTLeft[node]));
           Result := IRAppendCall(cpi, first, -1, ASTTk[node]);
           Exit;
         end;
@@ -9948,7 +10044,7 @@ begin
           disagrees with the parameter, build with just your edit and run
           `x = "a" * 3` before you believe it.
           perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call }
-        first := IRAppend(IR_ARG, left, -1, -1, 0, ASTTk[argVal]);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, IRArgTk(left, argVal));
         { IRLowerCallArg, not a raw IRLowerAST: parameter 1 is an Int64, so a
           PROMO count narrows through PXXPromoToInt64Wrap there. Lowered raw it
           would hand pystr_repeat the slot ADDRESS as the count. }
@@ -10319,9 +10415,9 @@ begin
       if cpi >= 0 then
       begin
         left  := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
-        first := IRAppend(IR_ARG, left, -1, -1, 0, ASTTk[ASTLeft[node]]);
+        first := IRAppend(IR_ARG, left, -1, -1, 0, IRArgTk(left, ASTLeft[node]));
         right := IRLowerCallArg(cpi, 1, ASTRight[node], Procs[cpi].Params[1].IsRef);
-        last  := IRAppend(IR_ARG, right, -1, -1, 0, ASTTk[ASTRight[node]]);
+        last  := IRAppend(IR_ARG, right, -1, -1, 0, IRArgTk(right, ASTRight[node]));
         IRB[first] := last;
         Result := IRAppendCall(cpi, first, -1, ASTTk[node]);
       end
@@ -12659,7 +12755,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
               argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
             end
             else
-              argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+              argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
             IRB[last] := argNode;
             last := argNode;
             item := ASTRight[item];
@@ -12964,7 +13060,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
         end
         else
-          argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
         if first < 0 then first := argNode
         else IRB[last] := argNode;
         last := argNode;
@@ -13023,7 +13119,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             value := IRLowerCallArg(cpi, pathIdx, dfltAST,
                        (pathIdx < Procs[cpi].ParamCount) and
                        Procs[cpi].Params[pathIdx].IsRef);
-            argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[dfltAST]);
+            argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, dfltAST));
           end
           else if (Procs[cpi].Params[pathIdx].TypeKind = tyVariant) and
              (not Procs[cpi].Params[pathIdx].IsArray) then
@@ -13351,7 +13447,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
         end
         else
-          argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
         if first < 0 then first := argNode
         else IRB[last] := argNode;
         last := argNode;
@@ -13478,7 +13574,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
         end
         else
-          argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
         IRB[last] := argNode; last := argNode;
         item := ASTRight[item];
         Inc(pathIdx);
@@ -14881,7 +14977,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
         end
         else
-          argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
         if first < 0 then first := argNode
         else IRB[last] := argNode;
         last := argNode;
@@ -15006,7 +15102,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyAnsiString));
         end
         else
-          argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
+          argNode := IRAppend(IR_ARG, value, -1, -1, 0, IRArgTk(value, ASTLeft[item]));
         IRB[last] := argNode;
         last := argNode;
         item := ASTRight[item];

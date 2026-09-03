@@ -128,3 +128,86 @@ RECORD case), each landing at ONE site. The conversion is target-independent
 ("this argument is a frozen buffer and the callee wants a handle"), so the
 answer is `IRLowerCallArg` once and delete the arms. `root-cause-over-microfix`,
 and the overhaul is the smaller job because it deletes cases.
+
+
+## FIXED at the root — the conversion moved into IRLowerCallArg (2026-09-03)
+
+`IRLowerCallArg` grew the mirror of the arm that was already there. It had the
+MANAGED -> FROZEN direction (frozen param, AnsiString arg: hidden frozen temp,
+`tmp := arg`, pass the temp's address); it now has FROZEN -> MANAGED the same
+way — a hidden owning `tyAnsiString` local, `tmp := arg` lowered through the
+ordinary assignment path, and a load of the temp as the argument.
+
+**It reuses the assignment path rather than growing a second one.** `m := s` for
+a managed `m` and a frozen `s` was already correct on all seven backends, so the
+conversion is a store plus a load and no backend learns anything new.
+
+### Two things this needed that reading would not have found
+
+**1. A hand-built `IR_STORE_SYM` is not the assignment path.** The first version
+did `IRAppend(IR_STORE_SYM, tmp, IRLowerAST(argAST), ...)`, which looks
+equivalent and is not — the store arm wants an address where `IRLowerAST` gave a
+value. Every call OOM'd: `pxx: out of memory (heap arena mmap failed)`, rc=203,
+on the one-line repro. Synthesising `AN_ASSIGN` and lowering THAT is what the
+neighbouring arm does, and for this reason.
+
+**2. THE ARG NODE'S TAG IS NOT THE VALUE'S.** `IRAppend(IR_ARG, value, ..., ASTTk[argAST])`
+— seventeen sites — takes the kind from the AST, so after the conversion the arg
+node still said `string[10]` while carrying a heap handle, and every backend
+ladder converted a SECOND time, reading the handle pointer as a `[len][chars]`
+buffer. Same OOM, different cause; the IR dump is what separated them
+(`3: store_sym tmp <- lea s (tk=23)` then `5: arg ... tk=4`). Added `IRArgTk`,
+deliberately narrow — it retags only a frozen-typed AST whose lowered value came
+back `tyAnsiString` — and put all seventeen sites through it, so they cannot
+disagree about the one question they all ask.
+
+### Verified
+
+**40 measured cells.** Five targets (x86_64 native, four under qemu) x the modes
+each program compiles in, values asserted against a written `.expected`.
+
+| program | modes | result |
+| --- | --- | --- |
+| all shapes x all call paths | default, `-uPXX_MANAGED_STRING` | 10/10 PASS |
+| variable x all call paths | all four modes | 20/20 PASS |
+| aggregates via `Pos`/`Copy` | default, `-dPXX_SHORTSTRING` | 10/10 PASS |
+
+Shapes: variable, record field, field-of-field, array element with a CONSTANT
+index and with a VARIABLE index, field of an array element. Paths: direct,
+ordered two-arg, constructor, non-virtual method, virtual (base and overridden),
+proc-var indirect.
+
+**Negative control — a rebuilt pre-fix compiler (`009ba51e751c`) fails these**,
+and it corrected the ticket: the proc-var indirect row is empty on **x86-64
+too**, so this was five targets on that path, not four.
+
+### AND A LEAK THAT EVERY VALUE ROW ABOVE PASSES WITH FULLY PRESENT
+
+The inline conversions called `PXXStrFromLit` per call and nothing owned the
+result. Measured with `tools/assert_no_leak.sh`, 3000 calls:
+
+| | allocs | frees |
+| --- | --- | --- |
+| pre-fix (x86-64, printing CORRECT values on every one) | 3000 | **0** |
+| fixed, each of x86-64 / i386 / arm32 / aarch64 / riscv32 | 3000 | 2998 |
+
+An unbounded per-call leak on every target, on the paths that were *right*.
+
+### What is NOT done
+
+**The ~15 inline backend arms are still there.** They are now unreachable for
+everything that funnels through `IRLowerCallArg` — the arg node no longer
+carries a frozen tag — but "believed dead" is not "proven dead", so they are
+left standing rather than deleted on a reading. Deleting them wants a canary
+build per backend that turns each arm into an `Error` and a run that must stay
+green. That is the remaining work on this ticket.
+
+**Two shapes could not be exercised at all today**, and neither is this fix's
+doing:
+- Anything but a plain variable under `-dPXX_SHORTSTRING`: overload resolution
+  refuses it (`bab799137`, frankb-78, unlanded by agreement so this lands first).
+- A frozen FUNCTION RESULT in any mode: same refusal, and it is the shape that
+  reaches this conversion by a third route (`Procs[].RetType`, the storage kind).
+- `-uPXX_MANAGED_STRING` + the `Pos`/`Copy` intrinsics: `builtin/builtin.pas`
+  does not compile in that mode, **at the pin as well**, for an unrelated reason
+  (`a Char VALUE is not a PChar`). Blank, not green.

@@ -12523,6 +12523,21 @@ test-core: $(COMPILER)
 	tools/expect_same.sh sweep_frozenargfld_default "$$($(TESTTMP)/sweep_frozenargfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/sweep_frozenargfld_s
 	tools/expect_same.sh sweep_frozenargfld_bytepfx "$$($(TESTTMP)/sweep_frozenargfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
+	# A frozen string[N] into a MANAGED parameter through EVERY CALL PATH the
+	# backends emit separately -- direct, ordered two-arg, constructor,
+	# non-virtual method, virtual (base and overridden), proc-var indirect. The
+	# constructor and virtual rows arrived EMPTY on this target in the DEFAULT
+	# mode until the conversion moved into IRLowerCallArg, and the proc-var row
+	# was empty on x86-64 too. BOTH modes: the defect is not flag-gated, and a
+	# flag-only row would not notice the default path regressing.
+	# bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
+	./$(COMPILER) test/test_frozen_arg_call_paths.pas $(TESTTMP)/sweep_frozenargpaths_d
+	tools/expect_same.sh sweep_frozenargpaths_default "$$($(TESTTMP)/sweep_frozenargpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/sweep_frozenargpaths_s
+	tools/expect_same.sh sweep_frozenargpaths_bytepfx "$$($(TESTTMP)/sweep_frozenargpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	# see the cross rows: the leak is the half no value assertion can observe
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_frozen_arg_no_leak.pas $(TESTTMP)/sweep_frozenargleak
+	tools/assert_no_leak.sh sweep_frozen_arg_no_leak 200 $(TESTTMP)/sweep_frozenargleak
 	./$(COMPILER) test/test_generic_constraint_tobject_root.pas $(TESTTMP)/sweep_gentobj26
 	tools/expect_same.sh sweep_gentobj26 "$$($(TESTTMP)/sweep_gentobj26)" "$$(printf 'implicit 1\nexplicit 2\ndeep     3\ntobject  TRUE\nlater    5\nuserbase 6')"
 	./$(COMPILER) test/test_length_of_a_dynamic_array_of_char.pas $(TESTTMP)/sweep_dynchar26
@@ -15822,6 +15837,23 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/frozen_arg_field_write_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_i386_frozen_argfld_s
 	tools/expect_same.sh i386/frozen_arg_field_write_bytepfx "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
+	# A frozen string[N] into a MANAGED parameter through EVERY CALL PATH the
+	# backends emit separately -- direct, ordered two-arg, constructor,
+	# non-virtual method, virtual (base and overridden), proc-var indirect. The
+	# constructor and virtual rows arrived EMPTY on this target in the DEFAULT
+	# mode until the conversion moved into IRLowerCallArg, and the proc-var row
+	# was empty on x86-64 too. BOTH modes: the defect is not flag-gated, and a
+	# flag-only row would not notice the default path regressing.
+	# bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
+	./$(COMPILER) --target=i386 test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_i386_frozen_argpaths_d
+	tools/expect_same.sh i386/frozen_arg_call_paths_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_i386_frozen_argpaths_s
+	tools/expect_same.sh i386/frozen_arg_call_paths_bytepfx "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	# ...and the LEAK, which every row above passes with fully present: the old
+	# inline conversion allocated a handle per call and nothing owned it
+	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
+	./$(COMPILER) --target=i386 -dPXX_ALLOC_CENSUS test/test_frozen_arg_no_leak.pas $(TESTTMP)/test_i386_frozen_argpaths_lk
+	tools/assert_no_leak.sh i386/frozen_arg_no_leak 200 tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argpaths_lk
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	./$(COMPILER) --target=i386 test/test_shortstring_trunc.pas $(TESTTMP)/test_i386_sstrunc
@@ -16582,6 +16614,23 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/frozen_arg_field_write_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_a64_frozen_argfld_s
 	tools/expect_same.sh aarch64/frozen_arg_field_write_bytepfx "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
+	# A frozen string[N] into a MANAGED parameter through EVERY CALL PATH the
+	# backends emit separately -- direct, ordered two-arg, constructor,
+	# non-virtual method, virtual (base and overridden), proc-var indirect. The
+	# constructor and virtual rows arrived EMPTY on this target in the DEFAULT
+	# mode until the conversion moved into IRLowerCallArg, and the proc-var row
+	# was empty on x86-64 too. BOTH modes: the defect is not flag-gated, and a
+	# flag-only row would not notice the default path regressing.
+	# bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
+	./$(COMPILER) --target=aarch64 test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_a64_frozen_argpaths_d
+	tools/expect_same.sh aarch64/frozen_arg_call_paths_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_a64_frozen_argpaths_s
+	tools/expect_same.sh aarch64/frozen_arg_call_paths_bytepfx "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	# ...and the LEAK, which every row above passes with fully present: the old
+	# inline conversion allocated a handle per call and nothing owned it
+	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
+	./$(COMPILER) --target=aarch64 -dPXX_ALLOC_CENSUS test/test_frozen_arg_no_leak.pas $(TESTTMP)/test_a64_frozen_argpaths_lk
+	tools/assert_no_leak.sh aarch64/frozen_arg_no_leak 200 tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argpaths_lk
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	./$(COMPILER) --target=aarch64 test/test_shortstring_trunc.pas $(TESTTMP)/test_aarch64_sstrunc
@@ -17249,6 +17298,23 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/frozen_arg_field_write_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_rv32_frozen_argfld_s
 	tools/expect_same.sh riscv32/frozen_arg_field_write_bytepfx "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
+	# A frozen string[N] into a MANAGED parameter through EVERY CALL PATH the
+	# backends emit separately -- direct, ordered two-arg, constructor,
+	# non-virtual method, virtual (base and overridden), proc-var indirect. The
+	# constructor and virtual rows arrived EMPTY on this target in the DEFAULT
+	# mode until the conversion moved into IRLowerCallArg, and the proc-var row
+	# was empty on x86-64 too. BOTH modes: the defect is not flag-gated, and a
+	# flag-only row would not notice the default path regressing.
+	# bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
+	./$(COMPILER) --target=riscv32 test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_rv32_frozen_argpaths_d
+	tools/expect_same.sh riscv32/frozen_arg_call_paths_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_rv32_frozen_argpaths_s
+	tools/expect_same.sh riscv32/frozen_arg_call_paths_bytepfx "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	# ...and the LEAK, which every row above passes with fully present: the old
+	# inline conversion allocated a handle per call and nothing owned it
+	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
+	./$(COMPILER) --target=riscv32 -dPXX_ALLOC_CENSUS test/test_frozen_arg_no_leak.pas $(TESTTMP)/test_rv32_frozen_argpaths_lk
+	tools/assert_no_leak.sh riscv32/frozen_arg_no_leak 200 tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argpaths_lk
 	# Int64/QWord -> Double at full 64-bit width incl. unsigned top-bit values
 	# (bug-cross-32bit-int64-to-double-low-word / bug-pascal-qword-to-double-signed)
 	./$(COMPILER) --target=riscv32 test/test_u64_to_double.pas $(TESTTMP)/test_riscv32_u64d
@@ -19367,6 +19433,23 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/frozen_arg_field_write_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_a32_frozen_argfld_s
 	tools/expect_same.sh arm32/frozen_arg_field_write_bytepfx "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
+	# A frozen string[N] into a MANAGED parameter through EVERY CALL PATH the
+	# backends emit separately -- direct, ordered two-arg, constructor,
+	# non-virtual method, virtual (base and overridden), proc-var indirect. The
+	# constructor and virtual rows arrived EMPTY on this target in the DEFAULT
+	# mode until the conversion moved into IRLowerCallArg, and the proc-var row
+	# was empty on x86-64 too. BOTH modes: the defect is not flag-gated, and a
+	# flag-only row would not notice the default path regressing.
+	# bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
+	./$(COMPILER) --target=arm32 test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_a32_frozen_argpaths_d
+	tools/expect_same.sh arm32/frozen_arg_call_paths_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_a32_frozen_argpaths_s
+	tools/expect_same.sh arm32/frozen_arg_call_paths_bytepfx "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	# ...and the LEAK, which every row above passes with fully present: the old
+	# inline conversion allocated a handle per call and nothing owned it
+	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
+	./$(COMPILER) --target=arm32 -dPXX_ALLOC_CENSUS test/test_frozen_arg_no_leak.pas $(TESTTMP)/test_a32_frozen_argpaths_lk
+	tools/assert_no_leak.sh arm32/frozen_arg_no_leak 200 tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argpaths_lk
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	# `Write(s:w)` on a string VARIABLE: this target dropped the field width
