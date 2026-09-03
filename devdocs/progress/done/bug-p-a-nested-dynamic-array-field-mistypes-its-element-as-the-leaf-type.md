@@ -96,4 +96,4 @@ Regression cover already exists and needs nothing added:
 `Integer` ones, asserting VALUES rather than lengths.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 49ce033d0.
