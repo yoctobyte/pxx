@@ -166,4 +166,4 @@ silent truncation whose length depends on an unrelated neighbouring
 declaration. That is the argument that took the i386 compare from 70 to 80.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit aee455a16.
