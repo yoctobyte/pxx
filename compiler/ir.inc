@@ -11228,7 +11228,18 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           reading back with a length that is not the slot's. Both bases — an
           array SYMBOL and an array FIELD — are asked in FrozenStrElemCapOf;
           only the symbol one used to be handled here. }
-        lhsStrCap := FrozenStrElemCapOf(ASTLeft[ASTLeft[node]]);
+        lhsStrCap := FrozenStrElemCapOf(ASTLeft[ASTLeft[node]])
+      else if (ASTKind[ASTLeft[node]] = AN_DEREF) and TypeIsFrozenString(lhsTk) then
+        { `p^ := s` where `p: ^string[N]` -- the FOURTH shape, and the one this
+          chain's own comment kept predicting. Unlike the three above it needed a
+          NEW carrier and not just a reader: the parser recorded the pointee's
+          KIND (LastTypePointerElemTk) and nothing recorded its N, so the store
+          copied the SOURCE length. `p^ := <16 chars>` into a `^string[8]` wrote
+          sixteen, over the neighbour's length prefix -- measured on x86-64,
+          i386, aarch64, arm32 and riscv32 in both modes, ten cells, with a
+          neighbouring 'GUARD' coming back EMPTY in the default mode.
+          bug-a-a-store-through-a-pointer-loses-the-shortstring-capacity-clamp }
+        lhsStrCap := FrozenStrCapOfDeref(ASTLeft[node]);
       if ASTKind[ASTRight[node]] = AN_DEFAULT then
       begin
         if (lhsTk = tyUnknown) or (lhsTk = tyAuto) then

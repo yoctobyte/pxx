@@ -187,6 +187,7 @@ begin
   LastTypeRecId := REC_NONE;
   LastTypePointerElemTk := tyUnknown;
   LastTypePointerStrElemTk := 0;
+  LastTypePointerStrCap := 0;
   LastTypeStrElemTk := tyUnknown;
   LastTypePointerElemRec := REC_NONE;
   LastTypePointerAlias := -1;
@@ -358,6 +359,18 @@ begin
         if LastTypeStrElemTk = tyWideChar then LastTypePointerStrElemTk := Ord(tyWideChar)
         else LastTypePointerStrElemTk := Ord(tyChar);
       end;
+      { ...and the FROZEN pointee's CAPACITY, in the same window and for the same
+        reason. `p: ^string[8]` recorded the pointee kind and nothing else, so the
+        store had no N to clamp to and wrote the SOURCE length -- sixteen chars
+        into an eight-char slot, over the neighbour's length prefix, on every
+        target and in both modes. A PLAIN frozen `string` pointee stays 0 rather
+        than taking DEFAULT_STR_CAP, matching what AllocVar does for SymStrCap:
+        0 means "no declared N", one meaning, and the 255 substitution stays
+        where it already is.
+        bug-a-a-store-through-a-pointer-loses-the-shortstring-capacity-clamp }
+      LastTypePointerStrCap := 0;
+      if TypeIsFrozenString(elemTk) and (elemTk <> tyString) then
+        LastTypePointerStrCap := LastTypeStrCap;
       LastTypePointerElemRec := LastTypeRecId;
       if (elemTk = tyPointer) and (childDepth > 0) then
       begin
@@ -868,6 +881,7 @@ begin
                   where a pointer type is almost always spelled, so without this
                   the capture above reaches nothing. }
                 LastTypePointerStrElemTk := AliasPtrStrElemTk[aliasIdx];
+                LastTypePointerStrCap := AliasPtrStrCap[aliasIdx];
                 LastTypeProcSig := AliasProcSig[aliasIdx];
                 Result := tyPointer;
               end
@@ -6367,6 +6381,13 @@ begin
           The two arms differ in WHERE the width lives, so both are handled:
           a parsed pointee leaves it in the channel, an array-type pointee has
           it in that type's ArrTypeStrElemTk row (6b's carrier). }
+        { The frozen twin, and it reads the same channel for the same reason:
+          both arms above parse the POINTEE directly, so LastTypeStrCap describes
+          it. `PStr = ^string[8]` is the spelling this serves, and an alias is
+          where a pointer type is almost always written. }
+        AliasPtrStrCap[AliasCount-1] := 0;
+        if TypeIsFrozenString(fTk) and (fTk <> tyString) then
+          AliasPtrStrCap[AliasCount-1] := LastTypeStrCap;
         AliasPtrStrElemTk[AliasCount-1] := 0;
         if fTk = tyAnsiString then
         begin

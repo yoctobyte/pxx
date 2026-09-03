@@ -4619,6 +4619,15 @@ end;
 procedure SetPtrElemArrayInfo(si: Integer);
 var ptrArrDimI: Integer;
 begin
+  { A DIRECT frozen pointee (`PStr = ^string[8]`) shares this slot with the
+    array-element case below -- see SymPtrElemStrCap in defs.inc for why one
+    slot and not two. It is written HERE, above the array early-exit, precisely
+    because this procedure is the one place all four allocators pass through:
+    the sibling fields are zeroed at FOUR sites, and a fifth allocator that
+    missed one would record 0, which the clamp helpers read as
+    DEFAULT_STR_CAP -- a silent overrun rather than a diagnostic.
+    bug-a-a-store-through-a-pointer-loses-the-shortstring-capacity-clamp }
+  if LastTypePointerStrCap > 0 then SymPtrElemStrCap[si] := LastTypePointerStrCap;
   if LastTypePointerElemArrAi < 0 then Exit;
   { The ROW, before any of the copies below. It answers every question they do
     and one they cannot -- the per-dim shape of the pointee when `si` is an
@@ -14375,6 +14384,28 @@ begin
   Result := ASTIVal[ASTLeft[node]];
   if (Result < 0) or (Result >= SymCount) then begin Result := -1; Exit; end;
   if not TypeIsFrozenString(Syms[Result].PtrElemTk) then Result := -1;
+end;
+
+function FrozenStrCapOfDeref(node: Integer): Integer;
+{ `p^` where the pointee IS a `string[N]`: that N, or 0 when there is none.
+
+  The companion to FrozenStrElemCapOf's deref arm, which answers for `p^[i]` --
+  a pointer to an ARRAY of them. Two different questions about the same slot
+  (see SymPtrElemStrCap in defs.inc), told apart by the shape of the target
+  rather than by anything on the symbol: `p^` is the string, `p^[i]` is an
+  element of it.
+
+  Deliberately NOT routed through DerefPtrArraySym, which requires
+  SymPtrElemArrLen > 0 and therefore answers -1 for exactly this case.
+  bug-a-a-store-through-a-pointer-loses-the-shortstring-capacity-clamp }
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_DEREF then Exit;
+  if ASTLeft[node] < 0 then Exit;
+  if ASTKind[ASTLeft[node]] <> AN_IDENT then Exit;
+  if (ASTIVal[ASTLeft[node]] < 0) or (ASTIVal[ASTLeft[node]] >= SymCount) then Exit;
+  Result := SymPtrElemStrCap[ASTIVal[ASTLeft[node]]];
 end;
 
 function DerefPtrArraySymAny(node: Integer): Integer;

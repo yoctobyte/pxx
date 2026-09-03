@@ -8,21 +8,36 @@
   SymPtrElemStrCap already holds that N and the INDEX path has read it for the
   element SLOT STRIDE all along. The carrier was present and the reader absent.
 
-  Every row here must print 8 and match FPC. `p^ := <too long>` on a bare
-  ^string[N] is DELIBERATELY ABSENT: it still copies 16 and needs a carrier that
-  does not exist yet --
-  bug-a-a-store-through-a-pointer-loses-the-shortstring-capacity-clamp.
+  THE FOURTH ARM, `p^ := <too long>` on a bare `^string[N]`, IS THE ONE THAT
+  NEEDED A CARRIER and is now here as `ptrdirect`. The parser recorded the
+  pointee's KIND and nothing recorded its N, so the store copied the SOURCE
+  length: sixteen characters into an eight-character slot, on x86-64, i386,
+  aarch64, arm32 and riscv32 in both modes -- ten cells. That N now rides
+  LastTypePointerStrCap from the one general `^T` arm, through AliasPtrStrCap
+  (an alias is where a pointer type is almost always spelled), into
+  SymPtrElemStrCap via SetPtrElemArrayInfo, which is the one procedure all four
+  allocators call.
 
-  bug-a-a-store-through-a-pointer-loses-the-shortstring-capacity-clamp (partial) }
+  EVERY ROW ASSERTS A NEIGHBOUR, and that is the point of the file rather than
+  a flourish: this defect writes PAST the slot, so a length check alone passes
+  over a clamp that bounded the length word and not the copy. `ptrdirect`'s
+  neighbour is `guard`, which came back EMPTY in the default mode before the fix
+  (its 8-byte length prefix overwritten) and printed hundreds of bytes of
+  adjacent memory under -dPXX_SHORTSTRING.
+
+  Every row must print 8 and match FPC.
+  bug-a-a-store-through-a-pointer-loses-the-shortstring-capacity-clamp }
 program test_shortstring_cap_through_a_pointer;
 type
   TS   = string[8];
   TA   = array[0..1] of TS;
   PArr = ^TA;
   TR   = record a: TA; tail: LongInt; end;
+  PStr = ^TS;
 const LONG = 'abcdefghijklmnop';
 var
   s: TS; a: TA; pa: PArr; r: TR; pr: ^TR;
+  d: TS; guard: TS; ps: PStr;
 begin
   { the shapes that already clamped -- here so a fix cannot regress them }
   s := LONG;                      WriteLn('sym       ', Length(s), ' ', s);
@@ -46,4 +61,12 @@ begin
   pr := @r;
   pr^.a[0] := LONG;
   WriteLn('recptrelem ', Length(r.a[0]), ' ', r.a[0], ' n=', r.a[1], ' tail=', r.tail);
+
+  { the arm that needed the carrier: the pointee IS the string, not an array of
+    them. `guard` is declared right after `d` so an unclamped 16-char copy runs
+    into it. }
+  d := ''; guard := 'GUARD';
+  ps := @d;
+  ps^ := LONG;
+  WriteLn('ptrdirect ', Length(d), ' ', d, ' g=', guard);
 end.

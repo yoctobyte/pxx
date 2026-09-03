@@ -2,11 +2,25 @@
 track: A
 prio: 45
 type: bug
-status: working
+status: done
 created: 2026-09-02
 found-by: frankA
 owner: frankA
-summary: "HALF FIXED 2026-09-02, half open, and the two halves had DIFFERENT CAUSES — which is the correction this ticket exists to record. FIXED: `pa^[0] := <too long>` where pa points at an `array of string[N]` copied the SOURCE length and wrote past the element, on all five targets. It needed NO new carrier — SymPtrElemStrCap already holds that N and the INDEX path has read it for the element SLOT STRIDE all along; the carrier was present and the READER absent. One arm in FrozenStrElemCapOf, the one place the codebase already says this question is asked. STILL OPEN: `p^ := <too long>` where `p: ^string[8]` writes SIXTEEN chars into an eight-char buffer, past the slot, on x86-64 / i386 / aarch64 / arm32 / riscv32 alike, where FPC gives 8. That one DOES need a new carrier: the parser records the pointee KIND (LastTypePointerElemTk) and nothing records the pointee CAPACITY, and SymPtrElemStrCap means a different fact. NOT the question 058e559e9 withdrew — SymSubHi answers for the string a SYMBOL IS, and a pointer never is one. THE DEEPER POINT, worth more than either half: every clamp helper opens `if cap <= 0 then cap := DEFAULT_STR_CAP`, so a MISSING capacity is read as a PERMISSIVE one and each future missing arm is silently a buffer overrun rather than a diagnostic — ELEVEN sites decide that independently (7 backend clamp helpers, 3 in pasparser_decl.inc, FrozenStrSlotSize), and DEFAULT_STR_CAP=255 makes the substituted slot 263, aligning to the 264 in frankb-a9 record-field finding the same morning. CORRECTED 2026-09-03: the eleven are NOT the fix. 0 is a DELIBERATE encoding written by AllocVar and AllocParam, which leave a plain frozen `string` at 0 on purpose, and the substitution is CORRECT for it — measured, `-uPXX_MANAGED_STRING`, `var s: string` with a 300-char store gives Length 255 and an intact neighbour. The readers cannot separate `plain string, 255 is right` from `string[N] whose N was lost` because the WRITER chose one encoding for both, so the fix is TWO writer sites, not eleven readers. Parked: both halves are carrier questions inside feature-p-implement-the-real-tyshortstring-byte-prefix-layout (prio 100, working/, owner frankB), which re-types string[N]; asked it directly rather than building a parallel carrier."
+summary: "FIXED, both halves. `p^ := <too long>` on a `^string[N]` wrote the
+  SOURCE length -- sixteen characters into an eight-character slot, past the
+  slot and over the NEIGHBOUR's length prefix (a `g` holding 'GUARD' came back
+  EMPTY in the default mode), on x86-64/i386/aarch64/arm32/riscv32 in both
+  modes: ten cells. It needed a carrier, and now shares SymPtrElemStrCap with
+  the pointer-to-array case rather than growing a third convention -- via
+  LastTypePointerStrCap at the one general `^T` arm, AliasPtrStrCap at alias
+  registration, and SetPtrElemArrayInfo, the one procedure all four allocators
+  call. Reader is FrozenStrCapOfDeref. Ten cells green, FPC byte-identical on
+  all seven test rows, and the pre-fix compiler fails the new row for the right
+  reason. STILL OPEN AND SEPARATE: AllocVar and AllocParam leave a plain frozen
+  `string` at SymStrCap 0 on purpose, so the eleven `if cap <= 0 then cap :=
+  DEFAULT_STR_CAP` sites cannot tell `255 is correct` from `the N was lost` --
+  the fix there is TWO writers, not eleven readers, and it is a behaviour change
+  wanting its own control."
 ---
 
 # A store through a pointer loses the `string[N]` capacity clamp
@@ -196,15 +210,79 @@ which is the outcome this ticket wanted. **Two sites, not eleven**
 guard the few writes, not the many reads), plus `pasparser_proc.inc:2177`, which
 already guards on `> 0` and needs no change.
 
-Not landed, and not because it is large. **It is inside
+Not landed with the store fix below, and the reason I first gave for parking it
+was WRONG in a way worth keeping. I read `owner: frankB` on
 `feature-p-implement-the-real-tyshortstring-byte-prefix-layout` (prio 100,
-`working/`, owner frankB), which re-types `string[N]`** — and both halves of
-this ticket are carrier questions that work either lands or moves. Asked
-directly rather than guessed; parked here until it answers, exactly as this
-ticket's own closing note said to.
+`working/`) as naming a session and parked on "wait for its work to land the
+carrier". **`owner:` there names the CHECKOUT, not a session** — frankb-78 is
+not doing that work, nobody is, and P4 is unreleased and the owner's alone. So
+the wait would have been indefinite. That is the third time in one day that
+per-checkout state was read as a property of something else on this box (the
+C-conformance corpus twice, this once); the tell each time is that the answer
+came from asking, and cost one message.
 
 **A note on how the two writer sites were found:** by an edit that ASSERTED its
 match was unique and failed, not by reading. The guard appears twice with
 identical text, in `AllocVar` and `AllocParam` — the double case
 `normalise-dont-special-case.md` is about, and a `replace` without the assert
 would have fixed one arm and left the other.
+
+## 2026-09-03, later — the open half is FIXED
+
+Ten cells red became ten cells green, and FPC agrees byte-for-byte on all seven
+rows of the regression test.
+
+**It needed a carrier and it now has one, in the slot that already existed.**
+frankb-78's steer, taken: rather than a third convention for "the N behind a
+pointer", the direct `^string[N]` case shares `SymPtrElemStrCap` with the
+pointer-to-array case. The two are disjoint — a pointer is to an array or to a
+string, never both — and the shape of the assignment target tells them apart
+(`p^` is the string, `p^[i]` an element of it), so one slot answers both.
+
+The chain, all of it following `LastTypePointerStrElemTk`'s existing convention
+rather than inventing one:
+
+- `LastTypePointerStrCap` — captured in the ONE general `^T` arm, in the same
+  one-statement window as the pointee kind.
+- `AliasPtrStrCap` — an alias is where a pointer type is almost always spelled.
+  Read from `LastTypeStrCap` and NOT from the pointer-side channel, because at
+  alias registration both arms parse the POINTEE directly; the note above
+  `AliasPtrStrElemTk`'s own assignment makes that argument at length and it
+  applies unchanged.
+- `SetPtrElemArrayInfo` — filled there, ABOVE the array early-exit, because it
+  is the one procedure all four allocators call. Its siblings are zeroed at four
+  separate sites, and an allocator that missed one would record 0, which the
+  clamp helpers read as `DEFAULT_STR_CAP` — a silent overrun, not a diagnostic.
+  (frankb-78 flagged that trap before I hit it.)
+- `FrozenStrCapOfDeref` — the reader, beside `FrozenStrElemCapOf`. Deliberately
+  not routed through `DerefPtrArraySym`, which requires `SymPtrElemArrLen > 0`
+  and therefore answers −1 for exactly this case.
+
+**A plain frozen `string` pointee records 0, not 255**, matching what `AllocVar`
+does for `SymStrCap` — so this change does not add a second reading of 0, and
+the writer-side correction above stays exactly as stated.
+
+### Verification
+
+- `p: ^string[8]`, `p^ := <16 chars>`: **len 8, neighbour intact**, on x86-64,
+  i386, aarch64, arm32 and riscv32, in BOTH modes. Ten cells.
+- **FPC 3.2.2 prints the test's seven lines byte-identically.**
+- **Positive control:** the pre-fix compiler on the SAME test prints
+  `ptrdirect 16 abcdefghijklmnop g=` — wrong length AND the guard clobbered
+  empty — while the six pre-existing rows are unchanged. The row can fail, and
+  it fails for the right reason.
+- `test_shortstring_cap_through_a_pointer.pas` gains `ptrdirect` and is now
+  wired for riscv32 as well as native/i386/aarch64/arm32.
+
+### What is still open, and it is now its own ticket
+
+The writer-side correction — `AllocVar` and `AllocParam` leaving a plain frozen
+`string` at 0, so the eleven clamp sites cannot tell "255 is right" from "the N
+was lost" — is filed as
+[[bug-a-a-plain-frozen-string-records-capacity-zero-so-eleven-clamp-sites-cannot-say-unset]]
+rather than left inside a closed ticket, so it stays in the ranker. It is
+unblocked; it is a behaviour change across every consumer of `SymStrCap` and
+wants its own control rather than riding along with a carrier fix.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -10990,7 +10990,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_dyn_comma.pas $(TESTTMP)/test_dyn_comma26
 	tools/expect_same.sh test_dyn_comma26 "$$($(TESTTMP)/test_dyn_comma26)" "$$(printf 'm=138 m12=12 brk=12\nalias=9 t11=2')"
 	./$(COMPILER) test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_sscap_ptr26
-	tools/expect_same.sh test_sscap_ptr26 "$$($(TESTTMP)/test_sscap_ptr26)" "$$(printf 'sym       8 abcdefgh\nelem      8 abcdefgh\nfieldelem 8 abcdefgh\nptrelem   8 abcdefgh\nneighbour keep\nrecptrelem 8 abcdefgh n=zz tail=12345')"
+	tools/expect_same.sh test_sscap_ptr26 "$$($(TESTTMP)/test_sscap_ptr26)" "$$(printf 'sym       8 abcdefgh\nelem      8 abcdefgh\nfieldelem 8 abcdefgh\nptrelem   8 abcdefgh\nneighbour keep\nrecptrelem 8 abcdefgh n=zz tail=12345\nptrdirect 8 abcdefgh g=GUARD')"
 	./$(COMPILER) test/test_set_subrange.pas $(TESTTMP)/test_set_subrange26
 	tools/expect_same.sh test_set_subrange26 "$$($(TESTTMP)/test_set_subrange26)" "$$(printf 'union: 1 2 3 4 5 6 10 15 20\ninter: 3 4 15\ndiff: 1 2 10\n15in')"
 	./$(COMPILER) test/test_cross_float_const.pas $(TESTTMP)/test_float_const26
@@ -17519,6 +17519,9 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_shortstring_trunc.pas $(TESTTMP)/test_riscv32_sstrunc
 	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/test_riscv32_sstrunc_x64
 	tools/expect_same.sh riscv32/test_riscv32_sstrunc "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sstrunc)" "$$($(TESTTMP)/test_riscv32_sstrunc_x64)"
+	./$(COMPILER) --target=riscv32 test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_riscv32_sscap
+	./$(COMPILER) test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_riscv32_sscap_x64
+	tools/expect_same.sh riscv32/test_shortstring_cap_through_a_pointer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sscap)" "$$($(TESTTMP)/test_riscv32_sscap_x64)"
 	# A frozen record FIELD written with WriteLn, and a frozen string handed to a
 	# MANAGED string parameter (directly, and through Copy/Pos which lower to
 	# helper calls). BOTH modes: the argument defect could not fail in the
