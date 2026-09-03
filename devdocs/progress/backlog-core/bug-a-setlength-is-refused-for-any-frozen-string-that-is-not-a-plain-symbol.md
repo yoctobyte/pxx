@@ -53,3 +53,62 @@ FPC accepts all four spellings.
 
 [[feature-p-implement-the-real-tyshortstring-byte-prefix-layout]]
 [[bug-a-setlength-on-a-frozen-string-is-unsupported-on-riscv32]]
+
+## It is TWO causes, not one arm — measured 2026-09-03 (frankA), HEAD `f8797c139`
+
+The body above says all three shapes die in the `-101` arm. They do not. The
+element shape never reaches it: it is misrouted by the CLASSIFIER and reports a
+different error, about a different concept.
+
+| target | frozen `string[10]` | managed `AnsiString` |
+| --- | --- | --- |
+| plain symbol | ok | ok |
+| `p^` (deref) | `SetLength expects a string variable in IR codegen` | ok |
+| `r.f` (field) | `SetLength expects a string variable in IR codegen` | ok |
+| `sa[0]` (static array element) | **`SetLength expects an ARRAY variable`** | ok |
+| `da[0]` (dyn array element) | **`SetLength expects an ARRAY variable`** | ok |
+
+**THE MANAGED COLUMN IS THE ORACLE AND IT IS ALL GREEN.** That is the most
+useful thing in this table: the address-based path already exists, is already
+proven through a field, an element and a deref, and this ticket is the frozen
+ANALOGUE of a working mechanism rather than new machinery. `IR_SETLEN_STR` is
+that path (`defs.inc:1137`: "reached through ANY lvalue (symbol, record/class
+field, var-param field, index, deref); IRA = target slot-ADDRESS node") — but
+it calls `PXXStrSetLen(addr, n)`, which reallocates a heap block, so a frozen
+inline string cannot ride it. The same line says so: "Frozen inline strings
+keep the `-101` store-length path." The frozen analogue is a store, not a
+realloc.
+
+**CAUSE 1 — the classifier, `pasparser_stmt.inc` (the `slIsArrTarget` block).**
+The `AN_INDEX` arm is `slIsArrTarget := True` unconditionally, commented
+"nested dynamic sub-array". `x[0]` is genuinely ambiguous — for `array of array
+of Integer` it IS the sub-array — so the arm has to ask what the ELEMENT is,
+and it never asks. A frozen element therefore goes to the dyn-array `-102` arm
+and is refused as not-an-array. The managed element survives only because
+`-102` also handles `tyAnsiString`. The neighbouring `AN_FIELD` and `AN_DEREF`
+arms already interrogate the target (`RecFieldType`, `SymPtrElemStrTk`); the
+index arm is the one that assumes.
+
+**CAUSE 2 — the writer, six backends.** `EmitStoreStrLen(idx)` in `symtab.inc`
+is symbol-based and x86-64 alone calls it that way; the five cross backends
+already have address-based helpers (`EmitStoreStrLen386(lenReg, bufReg, dstTk)`
+and siblings, all taking a buffer REGISTER and a kind, not a symbol). So the
+writer half is smaller than "six backends" suggests — x86-64 needs an
+address-based variant, and the six `-101` arms need to accept an address node
+instead of requiring `IRKind = IR_LEA` and reading the symbol out of it. The
+model is two arms up in the same file: `specialId = 100` already reaches
+through an `IR_LOAD_MEM` to the `IR_INDEX`/`IR_FIELD` underneath and publishes
+to that address.
+
+**FIXING ONLY CAUSE 1 IS NOT LANDABLE.** It moves the element shape off the
+wrong error and onto the right broken arm — no program compiles that did not
+compile before. The two halves land together or not at all, which is why this
+was banked rather than half-done.
+
+**NOT STARTED, DELIBERATELY, AND THIS IS THE COORDINATION THE TICKET NEEDS.**
+`SetLength` is the only builtin on BOTH sides of the layout — it reads the
+prefix to find the buffer and writes one back — so its `-101` arms are the ones
+most exposed to the phase-4 flip, which is unreleased, the owner's alone, and
+sequenced to go last with nothing else in flight. Six backend arms rewritten
+underneath it is the collision that sequencing exists to prevent. Start this
+the moment the flip lands; frankb-78 was told before the diagnosis began.
