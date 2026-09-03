@@ -108,7 +108,10 @@ overhaul:
 - **It is the DEFAULT mode.** Every byte-prefix ticket in this family needs
   `-dPXX_SHORTSTRING` to bite. This one ships today, in the build every consumer
   of `$(PXX_STABLE)` uses.
-- **It is four of seven targets, and x86-64 is the correct one** — so the dev
+- **It is four of seven targets on the ctor/virtual rows, and x86-64 is correct
+  on THOSE** — but see the correction below: the proc-var indirect row was empty
+  on x86-64 too, so that row is five targets, not four. The blindness argument
+  holds for the rows it was made about and was stated too broadly. — so the dev
   loop, `gate.sh quick` and the pin are all blind to it by construction.
 - **A constructor taking a string is not an edge case.** `the-goal-cross-cross`
   is pxx hosting itself somewhere that is not Linux/x86-64 and compiling DOSBox
@@ -211,3 +214,51 @@ doing:
 - `-uPXX_MANAGED_STRING` + the `Pos`/`Copy` intrinsics: `builtin/builtin.pas`
   does not compile in that mode, **at the pin as well**, for an unrelated reason
   (`a Char VALUE is not a PChar`). Blank, not green.
+
+
+## Corrections and additions after the fix (2026-09-03)
+
+**MY "x86-64 IS THE CORRECT ONE" WAS ONE ROW TOO BROAD.** franka-29's negative
+control found the **proc-var indirect** path empty on x86-64 as well, so that
+row is five targets. The priority reasoning survives — the ctor and virtual rows
+really are cross-target-only and really are invisible to an x86-64 dev loop —
+but the sentence claimed more than was measured. **Found by the control, not by
+anyone's reading, including mine.**
+
+**IT WAS ALSO AN UNBOUNDED LEAK, ON THE PATHS THAT WERE ALREADY RIGHT.** The
+inline conversions called `PXXStrFromLit` per call and nothing owned the result:
+
+```
+pre-fix,  x86-64, printing the CORRECT string every time   allocs=3000 frees=0
+post-fix, each of x86-64/i386/arm32/aarch64/riscv32        allocs=3000 frees=2998
+```
+
+**Every value assertion in this family passes against `frees=0`.** This is
+exactly the class CLAUDE.md names — a leak does not corrupt, it just never gives
+memory back — and it was looked for *because* the handbook says to. There is now
+a wired `assert_no_leak` row per target.
+
+**THE SAME DEFECT EXISTED ONE LEVEL UP, IN THE LAYER THAT FEEDS THE LADDERS.**
+Seventeen sites built `IR_ARG` from `ASTTk[argAST]` — **the AST's type, not the
+lowered value's**. After the conversion the arg node still said `string[10]`
+while carrying a heap handle, so every backend ladder converted a SECOND time
+and read the handle pointer as a `[len][chars]` buffer: `out of memory`, rc=203.
+**Seventeen copies of one question, each free to disagree — the same shape as
+the fifteen ladders, in the layer above them.** Now routed through `IRArgTk`.
+
+**Method note worth more than the fix:** that `out of memory` was hit twice from
+two entirely different causes, and **reading could not separate them**. The IR
+dump did, in one line — `store_sym tmp <- lea s (tk=23)` then `arg ... tk=4`.
+
+## Remaining work — deliberately not done
+
+**The ~15 inline backend arms are still standing.** They are unreachable for
+anything funnelling through `IRLowerCallArg`, and **believed-dead is not
+proven-dead**; CLAUDE.md is explicit that deleting code you believe is dead is
+still wrong. **This family has already paid for that mistake once** — a session
+widened the inline frozen-concat arm, banked it as unreachable, and it was
+reachable under `-uPXX_MANAGED_STRING`.
+
+Deleting them wants a per-backend canary turning each arm into an `Error` with a
+run that must stay green. **The ticket stays OPEN for this reason**, not because
+the bug survives.
