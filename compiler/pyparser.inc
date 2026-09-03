@@ -14547,6 +14547,59 @@ begin
   Result := wrapPi;
 end;
 
+{ A THREAD ENTRY the clone trampoline can actually call.
+
+  `__pxxclone`'s trampoline has exactly one contract -- `entry(arg)`, with arg a
+  raw machine word in the first integer argument register -- and it must keep
+  exactly one, because Pascal, C, Rust and Zig entries all reach it too. A NilPy
+  `def` does not fit that contract in either direction:
+
+    RESULT   every def returns a Variant, which rides the caller-owned hidden
+             destination. The trampoline now hands every entry a valid scratch
+             for that (CLONE_RETBUF_SIZE), so this half is no longer fatal.
+    ARGUMENT every NilPy parameter is a by-REFERENCE Variant (PyCompileLambdaBody
+             sets IsRef for tyVariant), so the callee reads the raw word as the
+             ADDRESS of a Variant and dereferences it. A worker that so much as
+             mentions `arg` was a deterministic SIGSEGV; one that ignores it ran,
+             which is why the tree's only NilPy thread test never saw it.
+
+  So the adaptation goes where the callee is KNOWN, which is here. Synthesizes
+  (and caches by name) a `procedure $pyclonethunk_N(arg: Pointer)` whose body is
+  `REALPROC(Int64(arg))` -- the ordinary Int64 -> Variant argument coercion, the
+  same one a written `worker(41)` gets, and no new runtime. The thunk returns
+  nothing, so the entry the trampoline calls now matches its contract exactly
+  rather than being made survivable by the scratch.
+
+  Body hand-built by PyCompileLambdaBody's bStart = -2 branch, on the same
+  pending queue as the callable-value wrappers and for the same timing reason.
+  bug-a-a-nilpy-clone-entry-receives-a-raw-word-where-it-expects-a-variant-address }
+function PyGetOrMakeCloneThunk(realPi: Integer): Integer;
+var thunkName: AnsiString; thunkPi: Integer;
+    pnames: array[0..MAX_PROC_PARAMS - 1] of AnsiString;
+    ptypes: array[0..MAX_PROC_PARAMS - 1] of TTypeKind;
+begin
+  thunkName := '$pyclonethunk_' + AIntToStr(realPi);
+  thunkPi := FindProc(thunkName);
+  if thunkPi >= 0 then begin Result := thunkPi; Exit; end;
+  { ONE machine word, whatever the target: the trampoline stages a single slot.
+    tyPointer rather than tyInt64 for exactly that reason -- an Int64 parameter
+    is two stack slots on i386/arm32 and the second one would be read out of
+    whatever follows. }
+  pnames[0] := 'arg';
+  ptypes[0] := tyPointer;
+  thunkPi := RegisterProc(thunkName, False, tyUnknown, 1, pnames, ptypes);
+  Procs[thunkPi].BodyAddr := -1;
+  if PyPendLamCount >= PY_MAX_NESTED then
+    Error('Nil Python: too many pending callable-value wrappers/lambdas');
+  PyPendLamTok[PyPendLamCount] := -2;    { sentinel: hand-built CLONE THUNK body }
+  PyPendLamProc[PyPendLamCount] := thunkPi;
+  PyPendLamWrapReal[PyPendLamCount] := realPi;
+  PyPendLamPfx[PyPendLamCount] := PyNestPrefix;
+  PyPendLamSelf[PyPendLamCount] := CurSelfClass;
+  Inc(PyPendLamCount);
+  Result := thunkPi;
+end;
+
 { The function-object VALUE for an ALREADY-RESOLVED proc. Split out of
   PyMakeFuncValue so a caller holding a proc index but no token to consume —
   the `from mod import f as g` alias desugar — builds the identical value
@@ -30483,7 +30536,7 @@ end;
 
 procedure PyCompileLambdaBody(procIdx, bStart, realProcIdx: Integer);
 var i, idx, patchPos, savedSC, savedFS, nparams, node, seqNode, exitNode,
-    wArgSeq, wArgLast, wArgNode, wIdentNode, wCallNode: Integer;
+    wArgSeq, wArgLast, wArgNode, wIdentNode, wCallNode, wCastNode: Integer;
     savedExprMode: Boolean;
 begin
   { NilPy expression rules must be ON while this body parses — the module-level
@@ -30554,7 +30607,35 @@ begin
   EmitParamSpillsForTarget(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
-  if bStart = -1 then
+  if bStart = -2 then
+  begin
+    { A CLONE THUNK (PyGetOrMakeCloneThunk): hand-build `REALPROC(Int64(arg))`.
+      The cast is what makes the raw word an ordinary NilPy integer, so the
+      Int64 -> by-ref-Variant argument coercion is the SAME one a written
+      `worker(41)` gets and nothing here unboxes anything itself. A def taking
+      no parameter is called with none (the __pxxclone arm refuses any other
+      arity, so 0 and 1 are the only cases that reach here). }
+    wArgSeq := -1;
+    if Procs[realProcIdx].ParamCount >= 1 then
+    begin
+      wIdentNode := AllocNode(AN_IDENT);
+      ASTIVal[wIdentNode] := Procs[procIdx].Params[0].SymIdx;
+      ASTTk[wIdentNode] := Ord(tyPointer);
+      wCastNode := AllocNode(AN_PTR_CAST);
+      ASTLeft[wCastNode] := wIdentNode;
+      ASTIVal[wCastNode] := -1;               { width-truncating VALUE cast }
+      ASTTk[wCastNode] := Ord(tyInt64);
+      wArgSeq := AllocNode(AN_ARG);
+      ASTLeft[wArgSeq] := wCastNode; ASTRight[wArgSeq] := -1;
+    end;
+    wCallNode := AllocNode(AN_CALL);
+    ASTIVal[wCallNode] := realProcIdx;
+    ASTTk[wCallNode] := Ord(Procs[realProcIdx].RetType);
+    ASTRight[wCallNode] := ProcRetRecId[realProcIdx];
+    ASTLeft[wCallNode] := wArgSeq;
+    CurASTNode := wCallNode;
+  end
+  else if bStart = -1 then
   begin
     { A CALLABLE-VALUE WRAPPER (feature-nilpy-callable-value-unified-dispatch):
       no source span to parse -- hand-build `return REALPROC(a0, a1, ...)`,
@@ -30614,7 +30695,13 @@ begin
     construction ref, so there is no second owner to unbalance — and being
     swept up by the blanket refusal made every such lambda return None, silently
     (bug-nilpy-a-tuple-returned-from-a-lambda-becomes-a-list). }
-  if (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) and
+  { A CLONE THUNK is a PROCEDURE: there is no $pyresult to store into and the
+    callee's Variant result is discarded on purpose (the child never returns, so
+    a result has nowhere to go). Wrapping it in AN_EXIT would store through a
+    result symbol this proc does not have. }
+  if bStart = -2 then
+    node := CurASTNode
+  else if (IntToTypeKind(ASTTk[CurASTNode]) in [tyClass, tyRecord]) and
      not PyLambdaResultIsOwnedTemp(CurASTNode, procIdx) then
     node := CurASTNode
   else
@@ -42671,6 +42758,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     altPi, wpj: Integer; paramsAllVariant: Boolean;   { callable-value wrapper selection }
     vcNode: Integer;   { a typecast of a VARIANT, rewritten as the conversion }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
+    entryPi: Integer;   { __pxxclone's thread entry, before and after the thunk }
     pyLateDefPi: Integer;   { NilPy def not yet bound at this call site; -1 = none }
 begin
   LastExprTk := tyInteger;
@@ -46205,8 +46293,29 @@ begin
              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkComma) and
              (FindProcExactCase(PyQualifyNested(CurTok.SVal)) >= 0) then
           begin
+            entryPi := FindProcExactCase(PyQualifyNested(CurTok.SVal));
+            { ...AND ITS ADDRESS IS STILL NOT CALLABLE BY THE TRAMPOLINE, which
+              is the half this arm originally stopped at. The raw address is the
+              right VALUE and the wrong ABI: a NilPy def takes its parameter as
+              a by-REFERENCE Variant, so the raw word the trampoline passes is
+              dereferenced as an address, and it returns a Variant through the
+              caller-owned hidden destination. Route such a def through a thunk
+              that has the trampoline's own signature -- see
+              PyGetOrMakeCloneThunk. A proc that already fits the contract (a
+              Pascal `procedure(arg: Pointer)` reached through a uses'd unit)
+              is passed straight through, unchanged. }
+            if ((Procs[entryPi].ParamCount >= 1) and
+                (Procs[entryPi].Params[0].TypeKind = tyVariant)) or
+               ABIRetViaHiddenDestProc(entryPi) then
+            begin
+              if Procs[entryPi].ParamCount > 1 then
+                Error('__pxxclone: the thread entry `' + CurTok.SVal +
+                      '` takes ' + AIntToStr(Procs[entryPi].ParamCount) +
+                      ' parameters; a thread entry receives exactly one (the arg)');
+              entryPi := PyGetOrMakeCloneThunk(entryPi);
+            end;
             exprNode := AllocNode(AN_PROCADDR);
-            ASTIVal[exprNode] := FindProcExactCase(PyQualifyNested(CurTok.SVal));
+            ASTIVal[exprNode] := entryPi;
             ASTTk[exprNode] := Ord(tyPointer);
             Next;   { consume the name }
           end

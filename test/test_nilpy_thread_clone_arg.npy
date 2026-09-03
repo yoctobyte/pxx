@@ -1,0 +1,43 @@
+# THE ARG A NILPY THREAD ENTRY ACTUALLY RECEIVES.
+#
+# __pxxclone's trampoline has exactly one contract -- entry(arg), with arg a raw
+# machine word in the first integer argument register -- and it keeps exactly
+# one, because Pascal, C, Rust and Zig entries reach the same stub. A NilPy def
+# does not fit it: every NilPy parameter is a by-REFERENCE Variant, so the
+# callee read that raw word as the ADDRESS of a Variant and dereferenced it.
+#
+# Measured before the fix, this exact shape: 3 runs of 3 SIGSEGV with nothing
+# printed. test_nilpy_thread_clone.npy passes 0 and its worker never mentions
+# arg, so the tree's only NilPy thread test could not reach this at all -- the
+# defect and the hole had the same shape.
+#
+# THE VALUE IS 12345 AND NOT 0 OR 1 ON PURPOSE. A thread entry handed a wrong
+# word most often gets 0 (the clone stub's own registers are full of zeroes) and
+# an assertion expecting 0 could not tell a delivered argument from an undeliv-
+# ered one. 12345 is reachable only by actually carrying the caller's word
+# through, and the worker adds one so the printed number is not the literal
+# either -- a copy of the constant into the wrong place still fails the row.
+
+SYS_mmap = 9
+CLONE_VM = 0x00000100
+CLONE_FS = 0x00000200
+CLONE_FILES = 0x00000400
+CLONE_SIGHAND = 0x00000800
+CLONE_THREAD = 0x00010000
+flags = CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD
+
+seen = 0
+
+
+def worker(arg):
+    global seen
+    seen = arg + 1
+
+
+stk = __pxxrawsyscall(SYS_mmap, 0, 1048576, 3, 0x22, -1, 0)
+tid = __pxxclone(flags, stk + 1048576, worker, 12345, 0)
+print("tid nonzero =", tid > 0)
+i = 0
+while i < 400000000 and seen == 0:
+    i = i + 1
+print("child saw =", seen)

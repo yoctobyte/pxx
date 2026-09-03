@@ -4273,6 +4273,19 @@ test-threads: $(COMPILER)
 	# and not merely that clone returned a tid.
 	./$(COMPILER) --threadsafe test/test_nilpy_thread_clone.npy $(TESTTMP)/test_npy_clone26
 	tools/expect_same.sh test_npy_clone26 "$$($(TESTTMP)/test_npy_clone26)" "$$(printf 'tid nonzero = True\nchild ran = 7')"
+	# ...AND THE ARG THAT ENTRY ACTUALLY RECEIVES, which the row above cannot
+	# see: it passes 0 and its worker never mentions arg. Every NilPy parameter
+	# is a by-REFERENCE Variant, so the raw machine word the trampoline hands
+	# over was dereferenced as an address -- 3 runs of 3 SIGSEGV on the pinned
+	# compiler, deterministic, with `tid nonzero = True` already printed. Fixed
+	# by a thunk with the trampoline's own signature (PyGetOrMakeCloneThunk):
+	# the stub keeps ONE contract, which is what makes it work for Pascal, C,
+	# Rust and Zig entries, and the frontend adapts its own callee.
+	# The value is 12345 because a wrongly-delivered word is nearly always 0.
+	./$(COMPILER) --threadsafe test/test_nilpy_thread_clone_arg.npy $(TESTTMP)/test_npy_clonearg26
+	tools/expect_same.sh test_npy_clonearg26 "$$($(TESTTMP)/test_npy_clonearg26)" "$$(cat test/test_nilpy_thread_clone_arg.expected)"
+	./$(COMPILER) --threadsafe --target=i386 test/test_nilpy_thread_clone_arg.npy $(TESTTMP)/test_npy_clonearg_i386
+	tools/expect_same.sh i386/test_npy_clonearg_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_npy_clonearg_i386)" "$$(cat test/test_nilpy_thread_clone_arg.expected)"
 	# heap contract: thread creation without --threadsafe is a clear compile error, not a heisencrash
 	! ./$(COMPILER) test/test_thread_clone.pas $(TESTTMP)/test_thread_clone_guard26 > $(TESTTMP)/test_thread_clone_guard.log 2>&1
 	grep -q "requires --threadsafe" $(TESTTMP)/test_thread_clone_guard.log
