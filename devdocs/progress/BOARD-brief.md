@@ -59,6 +59,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 401, ranked
 
+- `[p100] [A]` bug-a-pchar-of-a-frozen-string-skips-8-bytes-whatever-the-prefix-width-is (unblocks 1)
 - `[p 92] [A]` bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
@@ -81,7 +82,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` regression-test-threads-test-nilpy-thread-clone-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
-- `[p 65] [A]` bug-a-pchar-of-a-frozen-string-skips-8-bytes-whatever-the-prefix-width-is
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [C]` feature-c-corpus-busybox-i386-the-second-architecture

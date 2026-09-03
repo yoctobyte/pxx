@@ -1,5 +1,5 @@
 ---
-prio: 65
+prio: 88
 track: A
 type: bug
 status: open
@@ -57,3 +57,20 @@ the default layout, and the failure is silent: the callee sees an empty string,
 not a crash.
 
 [[feature-p-implement-the-real-tyshortstring-byte-prefix-layout]]
+
+## Prio raised 65 -> 88 and wired as a P4 BLOCKER (coordinator, 2026-09-03)
+
+**This gates the flip.** P4's definition of done is deleting
+`-dPXX_SHORTSTRING`, i.e. making the 1-byte prefix THE layout — at which point
+`PChar(s)` is wrong for **every** `string[N]`, on **every** target, permanently.
+frankb-78's own framing is the reason: *"it is how every C binding takes a
+Pascal string."*
+
+Today it is a defect behind a flag most programs never set. **After the flip it
+is the default behaviour of the interop path**, and it fails in the worst
+direction — the callee sees an empty string rather than crashing, because it
+lands seven bytes into a NUL-padded tail.
+
+Left at 88 rather than higher because it is not wrong in what ships today; the
+flip is what promotes it. Wired `blocked-by` on the P4 ticket so the ranker
+carries that rather than this paragraph.
