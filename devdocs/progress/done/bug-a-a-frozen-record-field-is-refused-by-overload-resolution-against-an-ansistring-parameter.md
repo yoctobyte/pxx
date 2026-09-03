@@ -301,4 +301,4 @@ believed-dead is not proven-dead; deleting them wants a per-backend canary.
 Nothing here assumes they are dead.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 5a926ec19.
