@@ -128,6 +128,15 @@ begin
   CNarrow(w);         { wide var (8-byte prefix) -> narrow const, printed cp1 }
   CWide(n10);         { narrow var (1-byte prefix) -> wide const }
 
+  { THE DIRECT WRITE, which is a THIRD reader and not covered by any row above.
+    `Length(p^)`, `p^ = 'hello'`, `p^[1]` and `t := p^` were all correct in the
+    same binary while `Write(p^)` printed a huge length followed by NUL bytes,
+    because those four resolve the pointee through PtrElemTk and the writer
+    instead consumes the operand node as a bare address. Re-pointed at n10, so
+    this does not read the `s` that the deref-WRITE row above stores 'H' into. }
+  p := @n10;
+  WriteLn('drfw [', p^, ']');
+
   for i := 1 to 5 do Write(r.f[i]);
   WriteLn;
 end.

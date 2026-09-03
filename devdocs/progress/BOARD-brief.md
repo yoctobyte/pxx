@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:9 unfinished:26 blocked:6 backlog:7 backlog_new:2 backlog-umbrella:7 backlog-core:145 backlog-nilpy:96 backlog-tools:7 backlog-pascal:54 backlog-decide:33 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3157 rejected:72`
+`working:9 unfinished:26 blocked:6 backlog:7 backlog_new:2 backlog-umbrella:7 backlog-core:143 backlog-nilpy:96 backlog-tools:7 backlog-pascal:54 backlog-decide:33 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3159 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -57,7 +57,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 404, ranked
+## Ready — top 30 of 402, ranked
 
 - `[p 85] [A]` bug-a-string-concat-segfaults-on-x86-64-under-the-byte-prefix-mode
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
@@ -90,4 +90,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 
-_374 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_372 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -8428,7 +8428,24 @@ begin
           string[8] came to be STORED correctly at a 9-byte stride and READ at
           an 8-byte one, with Length answering 4 beside data printed from the
           wrong offset. Wrong-wide is not recoverable here; it walks off the
-          slot. Only tag when nothing better is present. }
+          slot. Only tag when nothing better is present.
+
+          THIS TAG IS READ BY TWO CONSUMERS THAT WANT DIFFERENT THINGS, and the
+          `p^` case is where they pull apart. To the comparison path it answers
+          "what kind is this expression", and it must say frozen — excluding
+          IR_LOAD_SYM here made `p^ = 'hello'` answer FALSE under
+          -dPXX_SHORTSTRING. To codegen it also decides how the operand is
+          COMPUTED: a frozen kind on a LOAD means "this symbol IS a frozen
+          string, take its address", so the same tag turns `load p` into
+          `lea p`. That is harmless for `a[i]` and `r.f`, which arrive as an
+          IR_INDEX / IR_FIELD and are address computations either way, and
+          wrong for a deref, where it hands a consumer the address of the
+          POINTER VARIABLE instead of the pointee.
+
+          So the tag stays, and the ONE consumer that takes this node as a bare
+          address — the write path — asks for the address itself instead. See
+          the AN_DEREF arm in the AN_WRITE lowering.
+          bug-a-a-frozen-string-pointer-deref-prints-blanks-in-a-direct-write }
         if TypeIsFrozenString(IntToTypeKind(ASTTk[node])) and
            not TypeIsFrozenString(IntToTypeKind(IRTk[Result])) then
           IRTk[Result] := ASTTk[node];
@@ -14607,6 +14624,27 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             { a wide literal must not reach the machine-int lowering (it would
               reject a value past UInt64); box it from its digit text }
             value := IRPromoAddrOf(ASTLeft[item])
+          else if (ASTKind[ASTLeft[item]] = AN_DEREF) and
+                  TypeIsFrozenString(IntToTypeKind(ASTTk[ASTLeft[item]])) then
+            { `Write(p^)` for `p: ^string[N]`. The writer consumes this operand
+              as the ADDRESS OF THE STRING, and for a deref that address is the
+              pointer's VALUE — an ordinary load of `p`. Going through
+              IRLowerAST instead returns the same load with a frozen kind
+              stamped on it (see the retag in the AN_DEREF rvalue arm), and
+              codegen reads a frozen kind on a load as "take this symbol's
+              address", producing `lea p`. The writer then read its length
+              prefix out of the pointer variable itself: a huge length followed
+              by NUL bytes, which is why this printed blanks while Length(p^),
+              `p^ = 'hello'`, `p^[1]` and `t := p^` were all correct in the same
+              program — every one of those resolves the pointee through
+              PtrElemTk rather than through this operand's tag.
+
+              IRLowerAddress is exactly the right question here and needs no
+              new machinery: for AN_DEREF it already yields the pointer load,
+              untagged. The IR_WRITE built below still carries the frozen kind
+              from ASTTk, so the writer knows what it is being handed.
+              bug-a-a-frozen-string-pointer-deref-prints-blanks-in-a-direct-write }
+            value := IRLowerAddress(ASTLeft[item])
           else
             value := IRLowerAST(ASTLeft[item]);
           value := IRWideWriteValue(value, ASTLeft[item]);   { 7c: UTF-16 -> UTF-8 }
@@ -15899,8 +15937,27 @@ function IRStrTkOf(node: Integer): TTypeKind;
   before it existed, in two places at once — the frozen->frozen store arm
   printed 255 blanks and the frozen->managed conversion handed a billions-long
   length to the allocator.
-  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout
+
+  A tyPointer NODE RESOLVES TOO, and that is not a special case bolted on — it
+  is the same question. `Write(p^)` for `p: ^string[N]` hands the writer the
+  pointer's VALUE as the string's address, so the node is an honest pointer
+  load and its own tag says tyPointer. Asking only frozen-tagged nodes left the
+  backends picking PXXWriteFrozenW, the 8-byte sibling, for a 1-byte string:
+  `Write(p^)` printed an empty field on aarch64, arm32, riscv32 and xtensa under
+  -dPXX_SHORTSTRING while every other reader of the same pointer was correct.
+  IRFrozenKindOfAddr already answers this from PtrElemTk on the pointer's own
+  symbol; only the gate in front of it did not let the question through. The
+  result is taken ONLY when it comes back frozen, so an ordinary pointer is
+  unaffected.
+  bug-a-a-frozen-string-pointer-deref-prints-blanks-in-a-direct-write }
 begin
   Result := IntToTypeKind(IRTk[node]);
-  if TypeIsFrozenString(Result) then Result := IRFrozenKindOfAddr(node);
+  if TypeIsFrozenString(Result) then
+    Result := IRFrozenKindOfAddr(node)
+  else if Result = tyPointer then
+  begin
+    if TypeIsFrozenString(IRFrozenKindOfAddr(node)) then
+      Result := IRFrozenKindOfAddr(node);
+  end;
 end;

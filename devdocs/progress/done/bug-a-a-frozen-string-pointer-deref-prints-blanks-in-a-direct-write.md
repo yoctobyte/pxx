@@ -7,6 +7,7 @@ found: 2026-09-02
 found-by: frankB
 owner: —
 summary: "CAUSE CORRECTED 2026-09-02 -- my first analysis was WRONG and the bug is FOUR TIMES WIDER than filed. I reported this as a PShortString-specific prefix-offset mismatch (pointee tyShortString, cap+1, vs storage tyFixedString, cap+8). Measured after making those two names agree: the mapping WAS inconsistent and is now fixed, and THE BUG DID NOT MOVE. It is general to every frozen-string POINTER DEREF -- `var s: string[10]; p: ^string[10]; p := @s; WriteLn(p^)` prints blanks exactly like the ShortString spelling, where FPC prints the string. So the prefix mismatch was real but incidental; PShortString was simply the first spelling I tried. THE SHAPE THAT MATTERS IS UNCHANGED AND IS WHY THIS IS STILL WORTH A TICKET: only the DIRECT-WRITE path is wrong. `t := p^` and `Length(p^)` are both CORRECT for both spellings, and `lib/rtl/typinfo.pas` derefs RTTI name pointers exclusively as `result := ps^` -- the correct path. So an RTTI name test passes today, and would keep passing through that half after the byte-prefix flip: a guard that cannot fail, drawn from exactly the population the question is about. Assert the CHARS on the DIRECT path or this is invisible. Track A rather than P: the divergence is in deref codegen, not in the parser."
+status: done
 ---
 
 # `PShortString` derefs a `ShortString` at the wrong prefix offset
@@ -68,3 +69,34 @@ it does not disturb the capacity thread — see the note on
 
 `make test` + self-host + cross. Assert the CHARS, not just `Length` — `Length`
 is correct today and would certify this as working.
+
+## RESOLVED — the write path was the third reader, and it needed TWO fixes
+
+`Length(p^)`, `p^ = 'hello'`, `p^[1]` and `t := p^` were all correct in the same
+binary while `Write(p^)` was not, because those four resolve the pointee through
+PtrElemTk and the writer instead consumes the operand node as a bare ADDRESS.
+
+1. x86-64: the AN_DEREF rvalue arm retags its address node with the frozen kind
+   (correct, and the comparison path depends on it — removing it made
+   `p^ = 'hello'` answer FALSE). But on an IR_LOAD_SYM that tag also decides how
+   the operand is COMPUTED: codegen reads a frozen kind on a load as "this
+   symbol IS a frozen string, take its address", turning `load p` into `lea p`
+   and handing the writer the address of the POINTER VARIABLE — a huge length
+   read out of the pointer value, then NULs. The write path now asks
+   IRLowerAddress directly, which for AN_DEREF already yields the pointer load.
+
+2. That alone fixed x86-64 and left aarch64, arm32, riscv32 and xtensa printing
+   an EMPTY field under -dPXX_SHORTSTRING: those backends pick between
+   PXXWriteFrozenW and its one-byte sibling PXXWriteFrozenBW via IRStrTkOf,
+   which only consulted IRFrozenKindOfAddr when the node was ALREADY tagged
+   frozen — so an honest pointer load fell through to the 8-byte helper.
+   IRStrTkOf now resolves a tyPointer node too, taking the answer only when it
+   comes back frozen. One substitution, all seven backends, no per-backend edit.
+
+Verified against the FPC 3.2.2 oracle in both modes, and the wired test matches
+its expected block byte-for-byte on all 12 configurations (4 native modes;
+x86-64, aarch64, arm32, riscv32, xtensa x 2 modes). New `drfw` row. gate quick
+GREEN, FPC seed canary PASS.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
