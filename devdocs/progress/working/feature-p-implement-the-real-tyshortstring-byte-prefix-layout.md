@@ -7,7 +7,7 @@ type: feature
 status: working
 created: 2026-09-02
 found-by: owner (raised 2026-09-02), measured by frankuser
-owner: UNASSIGNED — "frankB" named a CHECKOUT, not a session, and was read as a holder for a day
+owner: franka-29 (implementation) + frankb-78 (cross-target verification) — assigned 2026-09-03 22:xx by the coordinator on the OWNER'S EXPLICIT INSTRUCTION, given twice: "let's pin. then flip. and re-pin", then "tomorrow morning i expect a compiler that implemented shortstrings". This is the authorisation that was missing all day; it is NOT a coordinator release.
 blocked-by: []   # EMPTY IS NOT PERMISSION — see "the empty list" below
 summary: "NOBODY HOLDS THIS TICKET. The `owner:` field said `frankB`, which names a CHECKOUT DIRECTORY and not a session — no session has ever claimed it, and for a day 'wait for frankB's layout work' was an indefinite wait on nobody. If you are told to wait on this ticket's holder, there is not one. PHASE 2 IS DONE — all SEVEN backends emit a one-byte prefix. Read `TargetHasByteStrPrefixCodegen` in `util.inc` for that count, never a commit message. THE READER DEFECTS OF 09-02/03 ARE CLOSED: the walker, the x86-64/arm32/aarch64 compare guards, `CmpFusible`, the frozen-field value-load, the deref index and its WRITE side, the array stride, `const` parameters, the call-argument conversion (root-caused in `IRLowerCallArg`, not the ~15 inline arms), the constructor/virtual ladder, overload resolution for a frozen field against an AnsiString parameter, `SetLength` on riscv32/xtensa, and wasm32 comparing two frozen strings by ADDRESS. BOTH COMPARE DEFECTS ARE FIXED (`2bd82200e`): the x86-64 cross-representation compare (never worked, `eadf214725a`, one missed call site of a three-site helper family) and the i386 element-vs-element compare. That second bisected to `450f4b52a`, WHICH IS NOT WRONG — it correctly began tagging an `IR_INDEX` with the kind the array records, and what broke was every guard asking a DIFFERENT question of that same tag. ITS SECOND VICTIM WAS BIGGER THAN THE ONE REPORTED: `case arr[0] of 'lit'` STOPPED COMPILING on all seven targets in both modes, a hard error on valid code, live in every `$(PXX_STABLE)` build and unreported because no test had a non-trivial `case` selector. Fixed with a PREDICATE (`TypeIsAnyString`), not three edits — a guard meaning "is this a string" must not enumerate kinds, because the kind set is exactly what this feature keeps changing. `PChar` IS CLOSED (`61b12b89c`) AND IT WAS SIX ARMS, NOT THE FOUR ITS OWN TICKET NAMED. The fifth (`AN_CAST`) was invisible to every probe because THE CALL ARM RESCUES THE CAST: the cast arm declining to fire is exactly what leaves the node tagged frozen for the call arm to catch, so `f(PChar(r.f))` read green all day while `q := PChar(r.f)` — same cast, no call — pointed at the length byte. The sixth (`AN_ADDR`) is PRE-EXISTING AND DEFAULT-MODE: `@r.f` and `@arr[0]` lower to `IR_FIELD`/`IR_INDEX` still tagged with the aggregate's string kind, so the call arm fired on an ADDRESS-OF and handed the callee base+8; `@s` was correct only because `IR_LEA` on a symbol already yields `tyPointer` — three spellings of one operation disagreeing, and the two broken ones both go through an aggregate. SO THE TICKET'S OWN SUMMARY WAS WRONG ABOUT THE MODE: three wrong rows were DEFAULT mode, not flag-gated. THE BLOCKED-BY LIST IS NOW EMPTY AND THAT IS NOT A RELEASE SIGNAL — it records what has been FILED, and every phase of this overhaul has ended with a defect nobody had filed yet. THE GENERAL FORM, which is the finding of this whole phase: A FACT THAT LIVES IN N PLACES WAS ASKED OF ONE OF THEM — kinds AND entities, and the entity half is invisible to a `= tyString` grep. And the suite gap that let it all through: BINARY OPERATIONS BETWEEN TWO NON-TRIVIAL OPERANDS. `eadf21472` verified the frozen path against literals and against itself; the pair it never constructed was frozen-against-managed, and that is the one that shipped wrong. P4 (THE FLIP) IS UNRELEASED, IS THE OWNER'S ALONE, and serialises the fleet — it re-types every string in the compiler and is judged against the tree it lands on, so it goes last with nothing else in flight; its definition of done includes DELETING `-dPXX_SHORTSTRING`. Narrative in `devdocs/progress/HANDOVER-shortstring-night.md`; this body is append-only history whose older sections describe defects since closed."
 ---
@@ -1300,3 +1300,38 @@ arm32, riscv32, xtensa (`fe8662e24`), wasm32 (`0973746b0`). **Only
 `TARGET_I386` is missing.** Note that `0973746b0`'s message lists xtensa as
 still open — it was already in; read the function, not a commit message, for
 what is converted.
+
+## 2026-09-03 22:xx — ASSIGNED AND AUTHORISED
+
+**The owner authorised the flip directly** before going to sleep, having already
+proposed pin -> flip -> re-pin. **Pin v402 is taken** (`9edd70d02`, binary sha256
+`80ecb94023eb`, graded `reds(1)` — `tools-devtest#00` alone, Track T's own
+devtests, no compiler behaviour). That is the "pin" leg. This ticket is the
+"flip" leg.
+
+**The precondition is met and it is checkable, not believed:**
+`TargetHasByteStrPrefixCodegen` (`compiler/util.inc`) now returns True for **all
+seven targets** — x86_64, aarch64, arm32, riscv32, xtensa, wasm32, i386 — and its
+own comment states that the whole function disappears at phase 4 once every
+backend is converted. It is.
+
+**Split by TOPIC, so two sessions do not edit one question:**
+- **franka-29 — implementation.** The gate is ONE site:
+  `pasparser_decl.inc:447`, `PasDefineExists('PXX_SHORTSTRING') and ...`.
+  Re-type `string[N]` unconditionally, then delete
+  `TargetHasByteStrPrefixCodegen` and every caller. `PXX_SHORTSTRING` appears in
+  no `{$IFDEF}`; everything downstream is kind-driven.
+- **frankb-78 — cross-target verification.** All seven targets, BOTH modes while
+  both still exist, against the FPC oracle. It built today's cross-target
+  oracles and this is the same instrument work.
+
+**The real gate is the self-host fixedpoint**, because the flip re-types every
+string in `compiler.pas` itself. `make compiler/pascal26` must print `converged
+after N round(s)` — **not `verified`, which is the stamp path and means nothing
+was rebuilt.**
+
+**Not blocking, and NOT decided in the owner's absence:**
+[[decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes]] is
+open and is his. It does not block this ticket (`blocked-by: []` is real here —
+the capacity question is about a plain frozen `string`, not about `string[N]`'s
+prefix width). **Do not settle it as a side effect of the flip.**

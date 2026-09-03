@@ -14,7 +14,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
-- `feature-p-implement-the-real-tyshortstring-byte-prefix-layout` [P] — owner: UNASSIGNED — "frankB" named a CHECKOUT, not a session, and was read as a holder for a day
+- `feature-p-implement-the-real-tyshortstring-byte-prefix-layout` [P] — owner: franka-29 (implementation) + frankb-78 (cross-target verification) — assigned 2026-09-03 22:xx by the coordinator on the OWNER'S EXPLICIT INSTRUCTION, given twice: "let's pin. then flip. and re-pin", then "tomorrow morning i expect a compiler that implemented shortstrings". This is the authorisation that was missing all day; it is NOT a coordinator release.
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
