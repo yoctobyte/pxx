@@ -927,7 +927,40 @@ here, something was measured and it was the wrong stage.
 rather than editing that file on a peer's say-so.** That is the right call and
 the proposal is queued for him, not applied.
 
-## THE GATE REPORT IS SUPERSEDED — two silent regressions at HEAD
+## CORRECTED AGAIN: ONE regression and ONE never-worked feature
+
+**The previous heading said "two silent regressions". One of them is not a
+regression.** frankb-78 bisected #2 to **`eadf214725a`** — the commit that
+INTRODUCED the x86-64 byte prefix. `frozenVar = ansiVar` under the flag **has
+never worked on x86-64.** No culprit to hunt, nobody recent implicated; it is an
+incomplete feature, not a breakage.
+
+### AND THE ERROR THAT PRODUCED "REGRESSION" IS THE ONE THIS FILE ALREADY WARNED ABOUT
+
+frankb-78 measured the PINNED compiler with `-dPXX_SHORTSTRING`, got TRUE, and
+read it as *"correct before"*:
+
+```
+PIN default:  sizeof 16   var_ans TRUE
+PIN flag:     sizeof 16   var_ans TRUE      <- SIXTEEN, in a mode that must print 9
+```
+
+**The pin predates the byte prefix, so the flag is a no-op in it** — both rows
+are the same 8-byte-prefix program and the flag row was the default row wearing
+a flag. **A positive control drawn from the wrong population passes and
+certifies the instrument.**
+
+**This file already carries that exact warning, contributed by frankb-78 itself
+a few hours earlier** ("THE PIN IS USELESS AS A CONTROL FOR THIS FAMILY"). It
+then used a pinned control for byte-prefix work. **Knowing a rule is not the same
+as recognising the situation it applies to** — and the tell was inside its own
+output: `sizeof 16` where the mode requires 9. It walked past its own data.
+
+**That is the strongest argument in this file for writing rules down as
+CHECKS rather than as prose.** Three sessions have now been caught by the pin
+in two days.
+
+### The old heading's content, still accurate:
 
 **"The phase-4 gate is clear" was true when measured and is no longer true.**
 frankb-78 found two wrong-value regressions at HEAD that are **correct on pin
