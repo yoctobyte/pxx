@@ -4615,8 +4615,8 @@ begin
   if IRA[IRA[valueNode]] <> symIdx then Exit;
   if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then Exit;
   if not ScratchSafeSubtree(IRB[valueNode]) then Exit;
-  rhsTk := IntToTypeKind(IRTk[IRB[valueNode]]);
-  IRIsSelfStrAppend := (rhsTk = tyAnsiString) or (rhsTk = tyString) or
+  rhsTk := IRStrTkOf(IRB[valueNode]);
+  IRIsSelfStrAppend := (rhsTk = tyAnsiString) or TypeIsFrozenString(rhsTk) or
                        (rhsTk = tyChar);
 end;
 
@@ -4655,7 +4655,14 @@ end;
 procedure EmitAnsiStrAppendToSym(symIdx, rhs: Integer);
 var rhsTk: TTypeKind;
 begin
-  rhsTk := IntToTypeKind(IRTk[rhs]);
+  { IRStrTkOf, for the reason spelled out at the concat arm in IREmitNode: a
+    frozen operand is tagged tyString generically, and tyString means an
+    8-byte prefix. `m := m + s` for a byte-prefixed s read eight bytes of
+    [len][chars] as the append length and died in the allocator
+    ("out of memory (heap arena mmap failed)"), which is the SECOND symptom
+    recorded on
+    bug-a-string-concat-segfaults-on-x86-64-under-the-byte-prefix-mode. }
+  rhsTk := IRStrTkOf(rhs);
   IREmitNode(rhs);
   EmitB($50);                                       { push rhs value }
   if rhsTk = tyAnsiString then
@@ -4666,11 +4673,19 @@ begin
     EmitB($74); EmitB($04);                         { jz +4 (nil -> len 0) }
     EmitB($48); EmitB($8B); EmitB($56); EmitB($F8); { mov rdx, [rsi-8] }
   end
-  else if rhsTk = tyString then
+  else if TypeIsFrozenString(rhsTk) then
   begin
     EmitB($48); EmitB($8B); EmitB($34); EmitB($24); { mov rsi, [rsp] }
-    EmitB($48); EmitB($8B); EmitB($16);             { mov rdx, [rsi] }
-    EmitB($48); EmitB($83); EmitB($C6); EmitB($08); { add rsi, 8 }
+    if FrozenStrPrefixSize(rhsTk) = 1 then
+    begin
+      EmitB($48); EmitB($0F); EmitB($B6); EmitB($16);   { movzx rdx, byte [rsi] }
+    end
+    else
+    begin
+      EmitB($48); EmitB($8B); EmitB($16);               { mov rdx, [rsi] }
+    end;
+    EmitB($48); EmitB($83); EmitB($C6);
+    EmitB(FrozenStrPrefixSize(rhsTk));              { add rsi, prefix }
   end
   else
   begin
@@ -8516,8 +8531,19 @@ begin
         
         if (IntToTypeKind(IRTk[node]) = tyAnsiString) and (op = tkPlus) then
         begin
-          lhsTk := IntToTypeKind(IRTk[left]);
-          rhsTk := IntToTypeKind(IRTk[right]);
+          { IRStrTkOf, not IntToTypeKind: the IR tags every frozen string
+            tyString generically, so a tyShortString operand answered neither
+            `= tyAnsiString` nor `= tyString` below and fell into the bare CHAR
+            arm -- a whole string concatenated as one character, with rdx
+            pointing at a stack slot instead of at string data. That is the
+            SIGSEGV in
+            bug-a-string-concat-segfaults-on-x86-64-under-the-byte-prefix-mode
+            (rdx = $626102 at the fault: the length byte 2 followed by 'ab',
+            i.e. a byte-prefixed string read as a wide word). x86-64 only,
+            because it is the only backend that prepares the operands inline;
+            the others hand PXXStrConcat lengths their own helpers computed. }
+          lhsTk := IRStrTkOf(left);
+          rhsTk := IRStrTkOf(right);
           EmitB($50); { push lhs value }
           EmitB($51); { push rhs value }
 
@@ -8529,11 +8555,19 @@ begin
             EmitB($74); EmitB($04);                         { jz +4 }
             EmitB($48); EmitB($8B); EmitB($4A); EmitB($F8); { mov rcx, [rdx-8] }
           end
-          else if rhsTk = tyString then
+          else if TypeIsFrozenString(rhsTk) then
           begin
             EmitB($48); EmitB($8B); EmitB($14); EmitB($24); { mov rdx, [rsp] }
-            EmitB($48); EmitB($8B); EmitB($0A);             { mov rcx, [rdx] }
-            EmitB($48); EmitB($83); EmitB($C2); EmitB($08); { add rdx, 8 }
+            if FrozenStrPrefixSize(rhsTk) = 1 then
+            begin
+              EmitB($48); EmitB($0F); EmitB($B6); EmitB($0A);   { movzx rcx, byte [rdx] }
+            end
+            else
+            begin
+              EmitB($48); EmitB($8B); EmitB($0A);               { mov rcx, [rdx] }
+            end;
+            EmitB($48); EmitB($83); EmitB($C2);
+            EmitB(FrozenStrPrefixSize(rhsTk));              { add rdx, prefix }
           end
           else
           begin
@@ -8549,11 +8583,19 @@ begin
             EmitB($74); EmitB($04);                                     { jz +4 }
             EmitB($48); EmitB($8B); EmitB($7E); EmitB($F8);             { mov rdi, [rsi-8] }
           end
-          else if lhsTk = tyString then
+          else if TypeIsFrozenString(lhsTk) then
           begin
             EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($08); { mov rsi, [rsp+8] }
-            EmitB($48); EmitB($8B); EmitB($3E);                         { mov rdi, [rsi] }
-            EmitB($48); EmitB($83); EmitB($C6); EmitB($08);             { add rsi, 8 }
+            if FrozenStrPrefixSize(lhsTk) = 1 then
+            begin
+              EmitB($48); EmitB($0F); EmitB($B6); EmitB($3E);           { movzx rdi, byte [rsi] }
+            end
+            else
+            begin
+              EmitB($48); EmitB($8B); EmitB($3E);                       { mov rdi, [rsi] }
+            end;
+            EmitB($48); EmitB($83); EmitB($C6);
+            EmitB(FrozenStrPrefixSize(lhsTk));                          { add rsi, prefix }
           end
           else
           begin
@@ -8590,18 +8632,41 @@ begin
         end
         else if (IntToTypeKind(IRTk[node]) = tyString) and (op = tkPlus) then
         begin
-          lhsTk := IntToTypeKind(IRTk[left]);
-          rhsTk := IntToTypeKind(IRTk[right]);
+          { IRStrTkOf for the OPERANDS, and the literal 8s below split into
+            operand-side (the kind's prefix) and temp-side (always 8).
+
+            REACHABLE, and it segfaults: `-uPXX_MANAGED_STRING
+            -dPXX_SHORTSTRING` makes bare `string` frozen AND `string[N]`
+            byte-prefixed, and `u := s + t` over three `string[10]`s then
+            lands here rather than on the managed arm above. Read a 1-byte
+            prefix as an 8-byte word and the copy length is in the billions.
+            The corner is exactly the one test_shortstring_mixed_widths
+            already documents as "the corner no default build visits".
+
+            The TEMP keeps its 8-byte prefix deliberately: the result is an
+            IR_BINOP node tagged tyString, IRFrozenKindOfAddr answers tyString
+            for it, and every downstream reader therefore expects 8. Only the
+            operand reads follow the operand's own width. }
+          lhsTk := IRStrTkOf(left);
+          rhsTk := IRStrTkOf(right);
 
           EmitB($49); EmitB($89); EmitB($CA); { mov r10, rcx }
           EmitB($48); EmitB($81); EmitB($EC); EmitI32(272);
           EmitB($49); EmitB($89); EmitB($E3); { mov r11, rsp }
 
-          if lhsTk = tyString then
+          if TypeIsFrozenString(lhsTk) then
           begin
-            EmitB($4C); EmitB($8B); EmitB($00);
-            EmitB($48); EmitB($8D); EmitB($70); EmitB($08);
-            EmitB($49); EmitB($8D); EmitB($7B); EmitB($08);
+            if FrozenStrPrefixSize(lhsTk) = 1 then
+            begin
+              EmitB($4C); EmitB($0F); EmitB($B6); EmitB($00);   { movzx r8, byte [rax] }
+            end
+            else
+            begin
+              EmitB($4C); EmitB($8B); EmitB($00);               { mov r8, [rax] }
+            end;
+            EmitB($48); EmitB($8D); EmitB($70);
+            EmitB(FrozenStrPrefixSize(lhsTk));                  { lea rsi, [rax+prefix] }
+            EmitB($49); EmitB($8D); EmitB($7B); EmitB($08);     { lea rdi, [r11+8] }
             EmitB($4C); EmitB($89); EmitB($C1);
             EmitB($48); EmitB($85); EmitB($C9);
             EmitB($74); EmitB(15);
@@ -8618,11 +8683,19 @@ begin
             EmitB($41); EmitB($88); EmitB($43); EmitB($08);
           end;
 
-          if rhsTk = tyString then
+          if TypeIsFrozenString(rhsTk) then
           begin
-            EmitB($4D); EmitB($8B); EmitB($0A);
-            EmitB($49); EmitB($8D); EmitB($72); EmitB($08);
-            EmitB($49); EmitB($8D); EmitB($7B); EmitB($08);
+            if FrozenStrPrefixSize(rhsTk) = 1 then
+            begin
+              EmitB($4D); EmitB($0F); EmitB($B6); EmitB($0A);   { movzx r9, byte [r10] }
+            end
+            else
+            begin
+              EmitB($4D); EmitB($8B); EmitB($0A);               { mov r9, [r10] }
+            end;
+            EmitB($49); EmitB($8D); EmitB($72);
+            EmitB(FrozenStrPrefixSize(rhsTk));                  { lea rsi, [r10+prefix] }
+            EmitB($49); EmitB($8D); EmitB($7B); EmitB($08);     { lea rdi, [r11+8] }
             EmitB($4C); EmitB($01); EmitB($C7);
             EmitB($4C); EmitB($89); EmitB($CA);
             EmitB($48); EmitB($85); EmitB($D2);

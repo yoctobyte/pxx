@@ -2,9 +2,10 @@
 type: bug
 track: A
 prio: 85
-status: open
+status: done
 summary: Under -dPXX_SHORTSTRING, `s := s + 'cd'` on a plain string[10] segfaults on
   x86-64 and is correct on i386, arm32, aarch64 and riscv32.
+owner: frankB
 ---
 
 # String concat segfaults on x86-64 under the byte-prefix mode
@@ -108,3 +109,58 @@ edit in the concat hot path is worse than an accurate handover.
   `PXXStrConcat` with lengths rather than reading them.
 - -O invariant, so `CmpFusible`'s "-O0 correct, -O1+ wrong" tell correctly does
   not fire.
+
+## FIXED — the substitution, in THREE arms, not one (frankB, 2026-09-03)
+
+The located arm was right and it was not alone. All three are in
+`compiler/ir_codegen.inc`, all three are x86-64-only, and all three keyed on a
+bare `= tyString` while the IR tags every frozen operand tyString generically.
+Each now asks `IRStrTkOf` for the operand kind, `TypeIsFrozenString` for the
+branch and `FrozenStrPrefixSize` for the length load and the pointer bump
+(`movzx r64, byte [m]` at width 1).
+
+1. **The managed concat arm** (`IREmitNode`, the `IRTk[node] = tyAnsiString`
+   `tkPlus` arm) — the diagnosed one. A tyShortString matched neither test and
+   took the bare CHAR `else`. **This is the SIGSEGV.**
+2. **`EmitAnsiStrAppendToSym`** and its gate `IRIsSelfStrAppend` — the in-place
+   append behind `m := m + s`. Here the generic tyString tag DID match, so the
+   arm read eight bytes of `[len][chars]` as a length: **this is the
+   `out of memory (heap arena mmap failed)` symptom** recorded above, not a
+   second guess at the same one. Fixing (1) alone left this live and the two
+   fail differently, which is why the OOM shape existed at all.
+3. **The inline frozen-concat arm** (`IRTk[node] = tyString`, the 272-byte
+   stack temp). **My predecessor's revert was right about the path and wrong
+   about reachability, and that is worth recording:** it is unreachable from
+   the repro *and* from `{$H-}`, but `-uPXX_MANAGED_STRING -dPXX_SHORTSTRING`
+   reaches it — bare `string` frozen AND `string[N]` byte-prefixed — and
+   `u := s + t` over three `string[10]`s segfaults there. Verified by the
+   `sub rsp,272` byte pattern being present in the emitted binary in that
+   corner and absent in the others. The temp KEEPS its 8-byte prefix: the
+   result is an IR_BINOP node tagged tyString and `IRFrozenKindOfAddr` answers
+   tyString for it, so every downstream reader expects 8. Only the operand
+   reads follow the operand's own width.
+
+**Test: `test/test_shortstring_concat.pas`, wired four ways** (default /
+`-dPXX_SHORTSTRING` / `-uPXX_MANAGED_STRING` / both) in `test-core`, same
+expected text in all four.
+
+**Positive control, measured, not assumed.** Fix reverted → compiler
+`7f95d3b1c5c2` → the two `-dPXX_SHORTSTRING` rows SIGSEGV with no output and
+the two default rows are unchanged. Restored → `6a01584e19b4`, byte-identical
+to the pre-control build, so the revert cycle drifted no seed.
+**THE PINNED COMPILER PASSES ALL FOUR ROWS AND IS USELESS AS A CONTROL HERE:**
+it predates the byte-prefix layout, so `-dPXX_SHORTSTRING` is a no-op in it —
+`test_shortstring_byte_prefix` prints the wide layout row `5 0 0 0 0 0` under
+the flag. A green that is correct about a different compiler.
+
+**Both modes, five targets, 11 rows, all identical and correct:** x86-64, i386,
+arm32, aarch64 (riscv32 refuses the `-u` corner at compile time with a loud
+`frozen tyString concat unsupported`, mode-invariantly — pre-existing, not
+this). `tools/gate.sh quick` GREEN with the FPC seed canary run, not skipped.
+
+**Found on the way and NOT this bug** (mode-invariant on the byte-prefix axis,
+identical under the pin):
+`bug-a-a-one-char-string-literal-in-a-frozen-concat-folds-to-integer-addition`.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

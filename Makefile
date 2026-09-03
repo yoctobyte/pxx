@@ -11142,6 +11142,25 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_ssmw_fm26 "$$($(TESTTMP)/test_ssmw_fm26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/test_ssmw_fs26
 	tools/expect_same.sh test_ssmw_fs26 "$$($(TESTTMP)/test_ssmw_fs26)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
+	# CONCAT over frozen strings, the same four corners. `s := s + 'cd'` on a
+	# plain string[10] SEGFAULTED on x86-64 under -dPXX_SHORTSTRING and was
+	# correct on every cross target, because x86-64 is the only backend that
+	# prepares the concat operands inline. Positive control, measured: with the
+	# ir_codegen.inc fix reverted (compiler 7f95d3b1c5c2) the two -dPXX_SHORTSTRING
+	# rows below SIGSEGV with no output at all and the two default rows are
+	# unchanged -- so this cannot pass by being self-consistently wrong, and it
+	# cannot pass for a reason other than the fix. NOTE the PINNED compiler
+	# passes all four: it predates the byte-prefix layout entirely, so
+	# -dPXX_SHORTSTRING is a no-op there and its green is about a different
+	# compiler. bug-a-string-concat-segfaults-on-x86-64-under-the-byte-prefix-mode
+	./$(COMPILER) test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_dm26
+	tools/expect_same.sh test_sscat_dm26 "$$($(TESTTMP)/test_sscat_dm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nempty    [cd] 2\nemptyr   [ab] 2')"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_ds26
+	tools/expect_same.sh test_sscat_ds26 "$$($(TESTTMP)/test_sscat_ds26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nempty    [cd] 2\nemptyr   [ab] 2')"
+	./$(COMPILER) -uPXX_MANAGED_STRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_fm26
+	tools/expect_same.sh test_sscat_fm26 "$$($(TESTTMP)/test_sscat_fm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nempty    [cd] 2\nemptyr   [ab] 2')"
+	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_fs26
+	tools/expect_same.sh test_sscat_fs26 "$$($(TESTTMP)/test_sscat_fs26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nempty    [cd] 2\nemptyr   [ab] 2')"
 	# THE TWO READERS THAT SURVIVED THE FOUR-CAUSE FIX, and every row has a
 	# NEGATIVE partner. This family fails by answering a CONSTANT -- the
 	# pre-fix field-vs-field compare answered TRUE for every input because it
