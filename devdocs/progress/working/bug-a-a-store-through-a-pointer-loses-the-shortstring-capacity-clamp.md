@@ -2,11 +2,11 @@
 track: A
 prio: 45
 type: bug
-status: open
+status: working
 created: 2026-09-02
 found-by: frankA
-owner: ""
-summary: "HALF FIXED 2026-09-02, half open, and the two halves had DIFFERENT CAUSES — which is the correction this ticket exists to record. FIXED: `pa^[0] := <too long>` where pa points at an `array of string[N]` copied the SOURCE length and wrote past the element, on all five targets. It needed NO new carrier — SymPtrElemStrCap already holds that N and the INDEX path has read it for the element SLOT STRIDE all along; the carrier was present and the READER absent. One arm in FrozenStrElemCapOf, the one place the codebase already says this question is asked. STILL OPEN: `p^ := <too long>` where `p: ^string[8]` writes SIXTEEN chars into an eight-char buffer, past the slot, on x86-64 / i386 / aarch64 / arm32 / riscv32 alike, where FPC gives 8. That one DOES need a new carrier: the parser records the pointee KIND (LastTypePointerElemTk) and nothing records the pointee CAPACITY, and SymPtrElemStrCap means a different fact. NOT the question 058e559e9 withdrew — SymSubHi answers for the string a SYMBOL IS, and a pointer never is one. THE DEEPER POINT, worth more than either half: every clamp helper opens `if cap <= 0 then cap := DEFAULT_STR_CAP`, so a MISSING capacity is read as a PERMISSIVE one and each future missing arm is silently a buffer overrun rather than a diagnostic — ELEVEN sites decide that independently (7 backend clamp helpers, 3 in pasparser_decl.inc, FrozenStrSlotSize), and DEFAULT_STR_CAP=255 makes the substituted slot 263, aligning to the 264 in frankb-a9 record-field finding the same morning. SizeOfSlot in symtab.inc already does the OPPOSITE — it guards on cap > 0 and declines to guess — so the model for fixing the eleven is already in the tree and this is not a call for a blanket change."
+owner: frankA
+summary: "HALF FIXED 2026-09-02, half open, and the two halves had DIFFERENT CAUSES — which is the correction this ticket exists to record. FIXED: `pa^[0] := <too long>` where pa points at an `array of string[N]` copied the SOURCE length and wrote past the element, on all five targets. It needed NO new carrier — SymPtrElemStrCap already holds that N and the INDEX path has read it for the element SLOT STRIDE all along; the carrier was present and the READER absent. One arm in FrozenStrElemCapOf, the one place the codebase already says this question is asked. STILL OPEN: `p^ := <too long>` where `p: ^string[8]` writes SIXTEEN chars into an eight-char buffer, past the slot, on x86-64 / i386 / aarch64 / arm32 / riscv32 alike, where FPC gives 8. That one DOES need a new carrier: the parser records the pointee KIND (LastTypePointerElemTk) and nothing records the pointee CAPACITY, and SymPtrElemStrCap means a different fact. NOT the question 058e559e9 withdrew — SymSubHi answers for the string a SYMBOL IS, and a pointer never is one. THE DEEPER POINT, worth more than either half: every clamp helper opens `if cap <= 0 then cap := DEFAULT_STR_CAP`, so a MISSING capacity is read as a PERMISSIVE one and each future missing arm is silently a buffer overrun rather than a diagnostic — ELEVEN sites decide that independently (7 backend clamp helpers, 3 in pasparser_decl.inc, FrozenStrSlotSize), and DEFAULT_STR_CAP=255 makes the substituted slot 263, aligning to the 264 in frankb-a9 record-field finding the same morning. CORRECTED 2026-09-03: the eleven are NOT the fix. 0 is a DELIBERATE encoding written by AllocVar and AllocParam, which leave a plain frozen `string` at 0 on purpose, and the substitution is CORRECT for it — measured, `-uPXX_MANAGED_STRING`, `var s: string` with a 300-char store gives Length 255 and an intact neighbour. The readers cannot separate `plain string, 255 is right` from `string[N] whose N was lost` because the WRITER chose one encoding for both, so the fix is TWO writer sites, not eleven readers. Parked: both halves are carrier questions inside feature-p-implement-the-real-tyshortstring-byte-prefix-layout (prio 100, working/, owner frankB), which re-types string[N]; asked it directly rather than building a parallel carrier."
 ---
 
 # A store through a pointer loses the `string[N]` capacity clamp
@@ -141,3 +141,70 @@ when the open half lands.
 (prio 100), which re-types `string[N]` and will touch this area. Whoever takes
 the remaining half should check whether that work lands the carrier for free
 before adding one.
+
+## 2026-09-03 — the open half re-measured, and the ELEVEN-SITES finding is corrected
+
+**The open half still reproduces at HEAD, on every target, in both modes.**
+`p: ^string[8]`, `p^ := 'abcdefghijklmnop'`:
+
+| target | default | `-dPXX_SHORTSTRING` |
+| --- | --- | --- |
+| x86-64, i386, aarch64, arm32, riscv32 | len 16 | len 16 |
+
+Ten cells, all red, and **the overrun is visible in a neighbour rather than
+inferred**: a `g: TS` holding `'GUARD'` prints EMPTY in the default mode (its
+8-byte length prefix clobbered) and, under `-dPXX_SHORTSTRING`, prints hundreds
+of bytes of adjacent memory.
+
+### The eleven sites do NOT want `SizeOfSlot`'s treatment, and this ticket said they did
+
+The claim above — eleven places "each deciding independently that absence means
+255", with `SizeOfSlot` as the model that declines to guess — is half wrong, and
+the half that is wrong is the actionable half.
+
+**`0` is not absence at those sites. It is a DELIBERATE encoding written one
+level up, and it is CORRECT.** `symtab.inc`'s `AllocVar` (4706) and `AllocParam`
+(5008) both spell:
+
+```pascal
+if TypeIsFrozenString(tk) and (tk <> tyString) then
+  SymStrCap[SymCount] := LastTypeStrCap;
+```
+
+so a plain frozen `string` is left at 0 ON PURPOSE, and the `cap <= 0 then cap
+:= DEFAULT_STR_CAP` downstream is what gives it its capacity. Measured rather
+than read off the guard: under `-uPXX_MANAGED_STRING` (the frozen model, the
+self-host build), `var s: string` with a 300-character store comes back
+**Length 255 with the neighbour intact** — the substitution is doing real work
+and 255 is that type's real capacity.
+
+So the eleven readers cannot tell "plain frozen string, 255 is right" from
+"`string[N]` whose N was lost", because **the WRITER chose the same encoding for
+both.** Making them decline would break every plain frozen string. This is
+[[a-flag-whose-default-is-a-real-answer-cannot-say-not-applicable]] exactly:
+membership needs its own bit, and here the bit exists — it is the destination
+KIND, which is what `SizeOfSlot` actually keys on (`TypeIsFrozenString(tk) and
+(cap > 0)`, falling back to `TypeSlotSize(tk)`), not on the zero.
+
+### Which moves the fix from eleven readers to two writers
+
+Give a plain frozen `string` its real `DEFAULT_STR_CAP` at allocation. Then `0`
+means *unset* everywhere downstream, the eleven substitutions become dead for
+every legitimate case, and each can become a diagnostic instead of an overrun —
+which is the outcome this ticket wanted. **Two sites, not eleven**
+([[a-count-that-grows-under-enumeration-means-the-fix-is-in-the-wrong-place]]:
+guard the few writes, not the many reads), plus `pasparser_proc.inc:2177`, which
+already guards on `> 0` and needs no change.
+
+Not landed, and not because it is large. **It is inside
+`feature-p-implement-the-real-tyshortstring-byte-prefix-layout` (prio 100,
+`working/`, owner frankB), which re-types `string[N]`** — and both halves of
+this ticket are carrier questions that work either lands or moves. Asked
+directly rather than guessed; parked here until it answers, exactly as this
+ticket's own closing note said to.
+
+**A note on how the two writer sites were found:** by an edit that ASSERTED its
+match was unique and failed, not by reading. The guard appears twice with
+identical text, in `AllocVar` and `AllocParam` — the double case
+`normalise-dont-special-case.md` is about, and a `replace` without the assert
+would have fixed one arm and left the other.
