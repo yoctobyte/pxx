@@ -2173,3 +2173,80 @@ argument's storage — **is impossible for a record field or a 2-D row.**
 position guarantees a fourth will. This is a Track U decision or an umbrella,
 not a session's ticket, and the recommendation is to move it there before
 someone takes it as ordinary work.
+
+## 2026-09-03 — the capacity-carrier group (`fe68c75cc`, parked): TWO WRITERS, NOT ELEVEN READERS
+
+franka-29 holds the frozen-string capacity carriers and is **parked, not idle**.
+No compiler change in that commit. Verified on origin.
+
+### Re-measured at HEAD before touching anything
+
+`p: ^string[8]` storing 16 characters gives **len 16 on x86-64, i386, aarch64,
+arm32 and riscv32 in both modes — ten cells** — and the overrun is **visible
+rather than inferred**: a neighbouring `g` holding `'GUARD'` prints EMPTY in the
+default mode, and hundreds of bytes of adjacent memory under
+`-dPXX_SHORTSTRING`.
+
+### IT CORRECTED ITS OWN LARGEST FINDING — the count was right, the DIRECTION was wrong
+
+The ticket said eleven sites spell `if cap <= 0 then cap := DEFAULT_STR_CAP`, so
+a missing capacity is read as a permissive one, and offered `SizeOfSlot` — which
+guards on `cap > 0` and declines to guess — as the model for fixing all eleven.
+
+**The count is right. The direction is wrong: `0` is not ABSENCE at those sites,
+it is a deliberate ENCODING written one level up.** `AllocVar` and `AllocParam`
+both spell `if TypeIsFrozenString(tk) and (tk <> tyString) then SymStrCap :=
+LastTypeStrCap`, leaving a plain frozen `string` at 0 **on purpose**, and the
+downstream substitution is what gives it its capacity.
+
+**Measured rather than read off the guard:** under `-uPXX_MANAGED_STRING`, `var
+s: string` with a 300-character store comes back **Length 255 with the neighbour
+intact.** So making the eleven decline **would break every plain frozen string.**
+
+The bit that separates the two meanings **already exists and is the destination
+KIND** — which is what `SizeOfSlot` actually keys on, **not the zero**.
+
+> **The fix is TWO WRITERS, not eleven readers.** Give a plain frozen `string`
+> its real 255 at allocation; then `0` means unset everywhere and each of the
+> eleven can become a **diagnostic** instead of a silent overrun.
+
+**This is a deliberate counterweight to today's other class.** Most of this
+file's findings are *"a fact that lives in N places was asked of one of them"*,
+whose fix is to make the N agree. Here, fixing the N readers is the WRONG move,
+because the value they read is meaningful and the ambiguity was introduced by two
+writers. **Count the writers before fixing the readers** — an overloaded value is
+a writer-side defect wearing a reader-side symptom.
+
+### THE SECOND WRITER WAS FOUND BY AN EDIT THAT ASSERTED ITS MATCH WAS UNIQUE
+
+The guard appears **twice with identical text**, in `AllocVar` and `AllocParam`.
+franka-29 was about to make a one-line change; **the uniqueness assert turned it
+into a two-site change before anything was built.** A plain replace would have
+fixed one arm and left the other — the exact double case
+`normalise-dont-special-case.md` names.
+
+> **An edit tool that asserts its match is unique is a SIBLING DETECTOR, and it
+> fires before the build rather than after the cross run.**
+
+That is the cheapest instance of today's recurring tell. The others cost a
+canary pass, a bisect, and three passes on a mis-titled ticket; this one cost a
+failed edit.
+
+### Parked for SEQUENCING, and that is the right call
+
+Both halves are carrier questions, and both sit inside
+`feature-p-implement-the-real-tyshortstring-byte-prefix-layout` (prio 100,
+`working/`, owner frankB), **which re-types `string[N]`**. The ticket's own
+closing note says to check whether that work lands the carrier for free before
+adding one.
+
+So franka-29 **asked frankb-78 directly and is waiting**, rather than building a
+parallel `LastTypePointerStrCap` that the layout change may invalidate or collide
+with — and told it that today's `IRSetLenBaseCap` gives `SetLenDynElemSize` a
+**second capacity carrier**, since the layout change touches the same conversion.
+
+**It is touching the prio-100 area only through a question**, and is nowhere near
+P3 or the flip. If the answer is "the layout work lands the carrier", it closes
+the open half against that; if not, it builds one following
+`LastTypePointerStrElemTk`'s existing convention **rather than inventing a
+second**.
