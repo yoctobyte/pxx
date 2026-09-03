@@ -18380,10 +18380,14 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh -dPXX_SHORTSTRING test/test_frozen_field_and_deref_readers.pas $(TESTTMP)/xt_ffdr_s
 	tools/expect_same.sh xtensa/ffdr_s "$$(tools/run_target.sh xtensa $(TESTTMP)/xt_ffdr_s)" "$$(printf 'var  TRUE FALSE\nfld  TRUE FALSE\ndrf  TRUE FALSE\nfv   TRUE FALSE\nff   TRUE FALSE\nne   TRUE FALSE\nidx  [hhh]\nlen  555\nlen0 5\nwr   [Hello]\narr  [zero|one|two]\narrn [ab|cd]\narrc TRUE FALSE\nlt1  TRUE FALSE\nlt2  TRUE FALSE\nlt3  FALSE TRUE\nlt4  FALSE FALSE TRUE\ncp1  [hello] TRUE FALSE\ncp1  [hello] TRUE FALSE\ncp3  5 TRUE FALSE\ndrfw [hello]\nhello')"
 	# The through-a-pointer matrix on xtensa, FLAG MODE ONLY, and the asymmetry
-	# is deliberate: in DEFAULT mode this file bus-errors on qemu before it
-	# prints line one, and it does so at HEAD without the SetLength rows too --
-	# pre-existing, unrelated to the byte prefix, and not something a flag row
-	# should be held hostage to. This row is the only coverage the xtensa `-101`
+	# is deliberate: in DEFAULT mode this file bus-errors at its THIRD statement,
+	# `arr[1] := 'hello'` -- element 1 of an array of string[10] starts at offset
+	# 18 (SizeOf is 18 in that mode) and the 8-byte prefix store is unaligned;
+	# arr[0] and arr[2] are fine. Reproduces on the PIN, so the byte prefix is NOT
+	# the reason this row is flag-only:
+	# bug-a-storing-into-an-element-of-an-array-of-frozen-strings-bus-errors-on-xtensa
+	# Restore the default-mode row here when that lands.
+	# This row is the only coverage the xtensa `-101`
 	# SetLength arm has (bug-a-setlength-on-a-frozen-string-is-unsupported-on-riscv32
 	# was filed riscv32-only; xtensa refused the identical builtin). Verified
 	# under BOTH xtensa ABIs -- the windowed default and --xtensa-abi=call0 --
