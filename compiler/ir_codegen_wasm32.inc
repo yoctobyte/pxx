@@ -56,6 +56,17 @@ var
   WasmLoweredCount  : Integer = 0;
   WasmBrokenNames   : AnsiString = '';
   WasmBrokenUnlisted: Integer = 0;   { broken bodies past the listing cap }
+{ Every DISTINCT reason the body being lowered has refused for, LF-separated
+  with a leading LF so a membership test is a substring test. `WasmBrokenReason`
+  is the first of them and stays, because it is the one a body is named by.
+
+  A body is not a unit of coverage -- a whole program's `main` is one body --
+  so one reason per body made `N of M bodies lowered` read as a gap census when
+  it is a body census. Now the gaps are counted too. }
+  WasmBodyReasons   : AnsiString = '';
+  WasmBodyReasonCnt : Integer = 0;
+  WasmGapCount      : Integer = 0;   { distinct (body, reason) pairs, module-wide }
+  WasmBodyReasonsOver: Integer = 0;  { reasons past the per-body cap }
   WasmStubCount     : Integer = 0;   { declaration-only stubs — NOT a coverage gap }
   WasmStubNames     : AnsiString = '';
   WasmGSp           : Integer = -1;   { the $sp global's index }
@@ -148,12 +159,58 @@ var
   WasmRecDescCell   : array[0..511] of Integer;
   WasmRecDescCount  : Integer;
 
+{ The current body's refusals as report lines: the first on the body's own
+  line, any further ones indented under it. One reason per line rather than a
+  joined string, because these get grepped -- a `grep <op>` over the report
+  must find a shadowed gap, which is the whole point of keeping more than one. }
+function WasmBodyReasonList: AnsiString;
+var i: Integer; r: AnsiString;
+begin
+  WasmBodyReasonList := WasmBrokenReason + Chr(10);
+  if WasmBodyReasonCnt <= 1 then Exit;
+  r := '';
+  i := 2;   { skip the leading LF }
+  while i <= Length(WasmBodyReasons) do
+  begin
+    if WasmBodyReasons[i] = Chr(10) then
+    begin
+      if (r <> '') and (r <> WasmBrokenReason) then
+        WasmBodyReasonList := WasmBodyReasonList + '        and also — ' + r
+                              + Chr(10);
+      r := '';
+    end
+    else
+      r := r + WasmBodyReasons[i];
+    Inc(i);
+  end;
+end;
+
 { Mark the body being emitted as not-yet-lowerable. Deliberately NOT Error:
   Error aborts the compile, and one unimplemented op in a builtin would then
   block every test of every op that IS implemented. }
 procedure WasmUnsupported(const why: AnsiString);
 begin
-  if WasmBodyBroken then Exit;     { keep the FIRST reason, not the last }
+  { Every distinct reason is kept, not just the first -- but READ THE CAVEAT
+    THE REPORT PRINTS: this collects the refusals that are REACHED, and the
+    latch below short-circuits most of the walk, so a second reason arrives
+    only down a path that does not guard on it. Measured 2026-09-03 over 300
+    sources: 91 reached the report and 86 of those recorded exactly one
+    refusal, so the list is an improvement on the ceiling and NOT a complete
+    gap census. It cannot be one without letting the walk continue past a
+    refusal, which is a codegen-robustness change and is not this. }
+  if WasmBodyReasonCnt < 8 then
+  begin
+    if Pos(Chr(10) + why + Chr(10), WasmBodyReasons) = 0 then
+    begin
+      if WasmBodyReasons = '' then WasmBodyReasons := Chr(10);
+      WasmBodyReasons := WasmBodyReasons + why + Chr(10);
+      Inc(WasmBodyReasonCnt);
+      Inc(WasmGapCount);
+    end;
+  end
+  else
+    Inc(WasmBodyReasonsOver);
+  if WasmBodyBroken then Exit;     { keep the FIRST reason as the body's name }
   WasmBodyBroken := True;
   WasmBrokenReason := why;
 end;
@@ -5965,6 +6022,8 @@ begin
     the reset, not before it. }
   WasmBodyBroken := False;
   WasmBrokenReason := '';
+  WasmBodyReasons := '';
+  WasmBodyReasonCnt := 0;
 
   if CurProc >= 0 then
   begin
@@ -6206,7 +6265,7 @@ begin
       time after a grep of this report said they were fine. }
     if Length(WasmBrokenNames) < 65536 then
       WasmBrokenNames := WasmBrokenNames + '    ' + nm + ' — '
-                         + WasmBrokenReason + Chr(10)
+                         + WasmBodyReasonList
     else
       Inc(WasmBrokenUnlisted);
   end
@@ -6258,11 +6317,29 @@ begin
   if (WasmBrokenCount = 0) and (WasmStubCount = 0) then Exit;
   if WasmBrokenCount > 0 then
   begin
+    { TWO COUNTS, BECAUSE THEY ARE TWO QUESTIONS AND ONE OF THEM WAS BEING
+      ANSWERED WITH THE OTHER'S NUMBER. `bodies lowered` is honest and was
+      read as a measure of GAPS: a whole program's `main` is ONE body, so
+      `128 of 129` can mean one program-sized hole. The gap count is the
+      distinct refusal reasons behind those bodies.
+
+      IT IS STILL A FLOOR, NOT A CENSUS, and saying so is the point -- a
+      number that reads as complete is how three excluded tests were written
+      up as `trap via SetLength` when two of them had never reached
+      SetLength. WasmUnsupported latches and most of the walk guards on that
+      latch, so a body's later gaps are only seen down paths that do not.
+      Measured over 300 sources: 91 reached this report and 86 recorded
+      exactly one reason. }
     WriteLn('wasm32: ', WasmLoweredCount, ' of ',
             WasmLoweredCount + WasmBrokenCount,
             ' bodies lowered; ', WasmBrokenCount,
-            ' emitted as `unreachable` (op coverage is incomplete):');
+            ' emitted as `unreachable`; ', WasmGapCount,
+            ' distinct gap(s) seen (a FLOOR -- a body stops at its first'
+            + ' refusal, so later gaps in it stay hidden):');
     Write(WasmBrokenNames);
+    if WasmBodyReasonsOver > 0 then
+      WriteLn('    ... and ', WasmBodyReasonsOver,
+              ' further reason(s) past the per-body cap');
     if WasmBrokenUnlisted > 0 then
       WriteLn('    ... and ', WasmBrokenUnlisted,
               ' more not listed (listing capped)');

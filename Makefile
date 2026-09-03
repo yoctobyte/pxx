@@ -18683,6 +18683,34 @@ test-wasm32: $(COMPILER)
 	tools/expect_same.sh wasm32/frozen_string_layout_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_fsl_d.wasm)" "$$(cat test/test_frozen_string_layout.expected)"
 	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_frozen_string_layout.pas $(TESTTMP)/w32_fsl_s.wasm
 	tools/expect_same.sh wasm32/frozen_string_layout_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_fsl_s.wasm)" "$$(cat test/test_frozen_string_layout.expected)"
+	# THE COVERAGE REPORT MUST NAME MORE THAN ONE GAP PER BODY. It kept the
+	# FIRST refusal and discarded the rest, so a body with three unrelated gaps
+	# reported one -- and three tests were excluded from this target with the
+	# note `trap via SetLength` when two of them had never reached SetLength.
+	# They shared an EXIT CODE, and the report gave each a single cause that was
+	# true only of the first gap it hit.
+	#
+	# test_static_string_literal is one of those three and is still excluded from
+	# RUNNING; it is compiled here for its report alone. Its `main$$0` has two
+	# distinct gaps and the second was invisible. Asserting the second reason's
+	# TEXT, not the count: a count row passes on a body that refuses the same op
+	# twice, which is the shape the dedup exists to prevent.
+	#
+	# RUN AGAINST THE PRE-FIX COMPILER, not argued from the source. Built d5a7b5d3ce4d
+	# with the change stashed: this row fails there and prints
+	#     main$$0 — string operand of type QWord
+	# and nothing else -- the second gap shadowed, which is the defect. It passes
+	# on eac2ad1a536b. Worth saying why the source argument was dropped: grepping
+	# the old file for `and also` returns a hit, in a PROSE COMMENT, so the cheap
+	# control would have been read as refuting a claim that is in fact true.
+	# bug-a-the-wasm32-coverage-report-shows-one-refusal-per-body
+	@out=$$(./$(COMPILER) --target=wasm32 test/test_static_string_literal.pas $(TESTTMP)/w32_cov_multi.wasm 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "0" \
+	   && printf '%s\n' "$$out" | grep -q 'main\$$0 — string operand of type QWord' \
+	   && printf '%s\n' "$$out" | grep -q 'and also — `=` on strings' \
+	   && printf '%s\n' "$$out" | grep -q 'distinct gap(s) seen' \
+	   || { echo "wasm32 coverage report: FAIL - a body's SECOND gap is not listed (rc=$$rc)"; printf '%s\n' "$$out"; exit 1; }
 	@echo "wasm32: 34 rows green (27 default + 7 shortstring; 2 excluded, see comment above)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
