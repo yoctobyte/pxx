@@ -8593,6 +8593,32 @@ end;
 
 function TypesCompatible(pType, aType: TTypeKind): Boolean;
 begin
+  { A FROZEN-STRING ARGUMENT PRESENTS AS A tyString VALUE, and that is asked
+    ONCE here rather than at each rule below.
+
+    Every string rule in this function names `tyString` and there are three
+    frozen kinds. A bare VARIABLE never exposed the gap because StrValTk
+    normalises a symbol read to tyString at the AST; a record FIELD keeps
+    tyShortString, so under -dPXX_SHORTSTRING `Show(r.f)` against
+    `Show(const a: AnsiString)` was refused -- on ALL SEVEN targets, while
+    `Show(s)` on a plain variable of the same type was accepted in the same
+    program. A compile-time refusal, so it blocked the phase-4 flip everywhere.
+
+    NORMALISED HERE AND NOT AT THE FIELD NODE. The field's own tag is
+    LOAD-BEARING: IRFrozenKindOfAddr has no symbol to walk back to for an
+    IR_FIELD and falls through to the node's own kind for the prefix width, so
+    retagging the field the way the concat operands are retagged in
+    pasparser_expr.inc would fix overload resolution and break every width
+    below it. This function asks about VALUE compatibility, where the width is
+    not the question -- IRLowerCallArg converts, and it already does so for the
+    tyString spelling this maps onto.
+
+    Argument side only: the PARAMETER's frozen kind still selects its own rule
+    below, so `P(a: ShortString)` keeps its exact-match rank in
+    OverloadArgRank, which reads the raw kinds.
+    bug-a-a-frozen-record-field-is-refused-by-overload-resolution-against-an-ansistring-parameter }
+  if TypeIsFrozenString(aType) then
+    aType := IntToTypeKind(StrValTk(aType));
   if pType = aType then
   begin
     Result := True;

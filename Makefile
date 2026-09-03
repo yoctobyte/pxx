@@ -11177,6 +11177,27 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_sscat_fm26 "$$($(TESTTMP)/test_sscat_fm26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nfieldr   [abFLD] 5\nfieldl   [FLDab] 5\nfieldm   [FLDz] 4\nelemc    [abELM] 5\nempty    [cd] 2\nemptyr   [ab] 2')"
 	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_shortstring_concat.pas $(TESTTMP)/test_sscat_fs26
 	tools/expect_same.sh test_sscat_fs26 "$$($(TESTTMP)/test_sscat_fs26)" "$$(printf 'self     [abcd] 4\nboth     [abXY] 4\nchar     [abz] 3\ncharl    [zab] 3\nmixed    [abmm] 4\nappend   [mmab] 4\nconstarg [abQQ] 4\nloop     200 zz\nfrozen   [abcd] 4\nonechar  [abq] 3\nloop1    10 xx\nfieldr   [abFLD] 5\nfieldl   [FLDab] 5\nfieldm   [FLDz] 4\nelemc    [abELM] 5\nempty    [cd] 2\nemptyr   [ab] 2')"
+	# A FROZEN ARGUMENT REACHING OVERLOAD RESOLUTION, four corners. Under
+	# -dPXX_SHORTSTRING `Show(r.f)` against `Show(const a: AnsiString)` was
+	# REFUSED on all seven targets while `Show(s)` on a plain variable of the same
+	# type was accepted in the same program -- the only byte-prefix defect that was
+	# a compile-time refusal everywhere rather than a wrong value somewhere, so it
+	# gated the phase-4 flip. `ret` is the row that was broken with NO FLAG AT ALL,
+	# at the pin, and `elem`/`elemvar` are the rows that stayed wrong in the -u/-d
+	# corner after the refusal lifted (no arm for an array element's width, so no
+	# mismatch was seen against a frozen formal and no copy was emitted).
+	# NO LITERAL IS EVER THE ARGUMENT here: a string literal is correct through
+	# every route on every target, so a suite built from literals passes with the
+	# bug fully present.
+	# bug-a-a-frozen-record-field-is-refused-by-overload-resolution-against-an-ansistring-parameter
+	./$(COMPILER) test/test_frozen_arg_overload.pas $(TESTTMP)/test_faov_dm26
+	tools/expect_same.sh test_faov_dm26 "$$($(TESTTMP)/test_faov_dm26)" "$$(printf 'plain   A[plain]\nfield   A[field]\nnested  A[nested]\nelem    A[elem]\nelemvar A[elem]\nret     A[ret]\npick    AI[field]\nint     I[7]')"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_arg_overload.pas $(TESTTMP)/test_faov_ds26
+	tools/expect_same.sh test_faov_ds26 "$$($(TESTTMP)/test_faov_ds26)" "$$(printf 'plain   A[plain]\nfield   A[field]\nnested  A[nested]\nelem    A[elem]\nelemvar A[elem]\nret     A[ret]\npick    AI[field]\nint     I[7]')"
+	./$(COMPILER) -uPXX_MANAGED_STRING test/test_frozen_arg_overload.pas $(TESTTMP)/test_faov_fm26
+	tools/expect_same.sh test_faov_fm26 "$$($(TESTTMP)/test_faov_fm26)" "$$(printf 'plain   A[plain]\nfield   A[field]\nnested  A[nested]\nelem    A[elem]\nelemvar A[elem]\nret     A[ret]\npick    AI[field]\nint     I[7]')"
+	./$(COMPILER) -uPXX_MANAGED_STRING -dPXX_SHORTSTRING test/test_frozen_arg_overload.pas $(TESTTMP)/test_faov_fs26
+	tools/expect_same.sh test_faov_fs26 "$$($(TESTTMP)/test_faov_fs26)" "$$(printf 'plain   A[plain]\nfield   A[field]\nnested  A[nested]\nelem    A[elem]\nelemvar A[elem]\nret     A[ret]\npick    AI[field]\nint     I[7]')"
 	# THE TWO READERS THAT SURVIVED THE FOUR-CAUSE FIX, and every row has a
 	# NEGATIVE partner. This family fails by answering a CONSTANT -- the
 	# pre-fix field-vs-field compare answered TRUE for every input because it

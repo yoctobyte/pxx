@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:10 unfinished:26 blocked:6 backlog:7 backlog_new:2 backlog-umbrella:7 backlog-core:141 backlog-nilpy:96 backlog-tools:7 backlog-pascal:54 backlog-decide:33 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3164 rejected:72`
+`working:9 unfinished:26 blocked:6 backlog:7 backlog_new:2 backlog-umbrella:7 backlog-core:141 backlog-nilpy:96 backlog-tools:7 backlog-pascal:54 backlog-decide:33 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3165 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-a-frozen-record-field-is-refused-by-overload-resolution-against-an-ansistring-parameter` [A] — owner: frankB
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA

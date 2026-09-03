@@ -2,7 +2,7 @@
 type: bug
 track: A
 prio: 90
-status: working
+status: done
 summary: Under -dPXX_SHORTSTRING, passing a frozen record FIELD to an AnsiString
   parameter is refused by overload resolution on ALL SEVEN targets; a plain
   variable of the same type is accepted, and both compile in the default mode.
@@ -241,3 +241,64 @@ failed, the previous run's executable was still there, and `&&` on the compile
 was missing, so a confident-looking eight-row block went in that was the
 `-u -d` corner's garbage. Same failure as the handover's rule 2. Branch on the
 compile, and use a fresh output path.
+
+## LANDED — and the array element needed a THIRD arm nobody had written
+
+franka-29's conversion unification (`5e7c7eab2`) went in first, as agreed. On
+top of it the widening is two hunks, and re-measuring the held corner found a
+third defect that only became reachable once the refusal lifted.
+
+**`-uPXX_MANAGED_STRING` MAKES `AnsiString` ITSELF FROZEN**, so in the `-u/-d`
+corner `Show(const a: AnsiString)` has a tyString formal and a `string[10]`
+argument is a WIDTH MISMATCH between two frozen kinds, not a frozen→managed
+conversion at all. That copy is decided by `ASTFrozenArgTk`, and it had ONE
+arm — `AN_IDENT`. The IR said it plainly:
+
+```
+-d only            -u -d
+store_sym tk=23    (nothing)
+load_sym  tk=23    index tk=25
+arg       tk=23    arg   tk=4      <- the raw element address, tagged tyString
+```
+
+A variable and a field each got a temp; an array element did not, because
+`ASTTk` for `a[i]` is the generic tyString, that EQUALS the frozen formal, no
+mismatch was seen and no copy was emitted — a 1-byte-prefixed element handed
+to a callee reading an 8-byte prefix. `ASTFrozenArgTk` now has three arms, one
+per ENTITY that records the width: the symbol, `RecFieldType`, and the array
+symbol's own `TypeKind`. The field arm is added even though `ASTTk` happens to
+be right for a field today — that is luck, and
+`bug-a-a-frozen-record-field-as-a-concat-operand-segfaults` is the same tag
+being flattened one node type over.
+
+**Three entities, three routes, and the sibling nobody wrote is the one that
+stays broken** — the fourth instance of that shape in this family today.
+
+## Verification
+
+- `test/test_frozen_arg_overload.pas` wired FOUR ways; `test_shortstring_concat`
+  still green in its four.
+- **Positive control: with all three compiler hunks reverted (compiler
+  `6ef083d371d8`, franka-29's tip) every one of the three test files is
+  REFUSED AT COMPILE TIME in every mode, the default included** — the function
+  result row is what makes even the no-flag rows fail without this. No row can
+  pass for another reason.
+- Five runnable targets × both modes × two programs: byte-identical output,
+  20 cells. wasm32 and xtensa compile in both modes.
+- **Leak-checked, because a value row cannot see ownership**: each of the four
+  argument spellings materialises its own hidden owning temp, so a
+  variable-only loop proved ownership for one of four. `test_frozen_arg_no_leak`
+  extended to all four; `allocs=10975 frees=10970 live=5` against a bound of
+  200. The allocation count rising from ~3000 to ~11000 is also the evidence
+  that the new loops actually reach the path rather than passing vacuously.
+- `tools/gate.sh quick` GREEN with the FPC seed canary run, not skipped.
+
+## Left standing, deliberately
+
+The ~15 inline backend conversion arms franka-29 left in place. They are
+believed unreachable for anything funnelling through `IRLowerCallArg` and
+believed-dead is not proven-dead; deleting them wants a per-backend canary.
+Nothing here assumes they are dead.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

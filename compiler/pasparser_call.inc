@@ -1294,9 +1294,18 @@ begin
   if pTk = aTk then begin Result := 0; Exit; end;
 
   { char -> string, and string flavour -> string flavour (a frozen tyString
-    literal onto a managed AnsiString param) }
+    literal onto a managed AnsiString param).
+
+    TypeIsFrozenString on the ARGUMENT, not `= tyString`: a record field of a
+    `string[N]` keeps tyShortString where a bare variable normalises to
+    tyString, so the field sank to rank 2 (merely compatible) while the
+    variable got rank 1 in the same program -- a ranking asymmetry between two
+    spellings of one type, which is how an overload gets chosen differently for
+    `P(r.f)` than for `P(s)`. The PARAMETER side stays as it is: a frozen
+    formal keeps its own exact match at rank 0 above.
+    bug-a-a-frozen-record-field-is-refused-by-overload-resolution-against-an-ansistring-parameter }
   if ((pTk = tyString) or (pTk = tyAnsiString)) and
-     ((aTk = tyString) or (aTk = tyAnsiString) or (aTk = tyChar)) then
+     (TypeIsFrozenString(aTk) or (aTk = tyAnsiString) or (aTk = tyChar)) then
   begin Result := 1; Exit; end;
 
   { numeric widening between non-character ordinals }

@@ -1817,13 +1817,48 @@ end;
   matter there: a string LITERAL really is 8-byte-prefixed, and an expression
   temp really is whatever it was built as. }
 function ASTFrozenArgTk(node: Integer): TTypeKind;
+{ THE FROZEN WIDTH OF AN ARGUMENT, asked of the ENTITY that records it rather
+  than of the node's own tag. ASTTk is the generic tyString for an aggregate
+  member, and tyString means an 8-byte prefix.
+
+  Three arms because there are three entities, and the ARRAY one is not
+  cosmetic: with only AN_IDENT here, `P(a[1])` for
+  `a: array[0..2] of string[10]` against a frozen `AnsiString` parameter under
+  `-uPXX_MANAGED_STRING -dPXX_SHORTSTRING` saw ASTTk = tyString, compared it
+  against a tyString formal, found NO width mismatch and emitted no copy — so a
+  1-byte-prefixed element was handed to a callee reading an 8-byte prefix. The
+  IR made it visible: `arg` straight off the `index` node where the variable
+  and field spellings each got a `store_sym` + `lea` temp first.
+
+  The FIELD arm asks RecFieldType even though ASTTk happens to be right for a
+  field today. That is luck, not a rule — the concat-operand normalisation in
+  pasparser_expr.inc flattens exactly that tag one node type over
+  (bug-a-a-frozen-record-field-as-a-concat-operand-segfaults), so the entity is
+  the answer here for the same reason it is there.
+
+  Narrowed to frozen results in every arm, so ASTTk stays authoritative for
+  everything that is not a frozen string.
+  bug-a-a-frozen-record-field-is-refused-by-overload-resolution-against-an-ansistring-parameter }
 begin
   Result := IntToTypeKind(ASTTk[node]);
   if node < 0 then Exit;
   if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
      (ASTIVal[node] < SymCount) and
      TypeIsFrozenString(Syms[ASTIVal[node]].TypeKind) then
-    Result := Syms[ASTIVal[node]].TypeKind;
+    Result := Syms[ASTIVal[node]].TypeKind
+  else if (ASTKind[node] = AN_FIELD) and (ASTLeft[node] >= 0) and
+          TypeIsFrozenString(RecFieldType(ResolveNodeRec(ASTLeft[node]),
+                                          GetASTIdentName(node))) then
+    Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  else if (ASTKind[node] = AN_INDEX) and (ASTLeft[node] >= 0) and
+          (ASTKind[ASTLeft[node]] = AN_IDENT) and
+          (ASTIVal[ASTLeft[node]] >= 0) and (ASTIVal[ASTLeft[node]] < SymCount) and
+          Syms[ASTIVal[ASTLeft[node]]].IsArray and
+          TypeIsFrozenString(Syms[ASTIVal[ASTLeft[node]]].TypeKind) then
+    { the array symbol's TypeKind IS its element kind for
+      `array[0..N] of string[M]` — the same row IRLowerAddress's AN_INDEX arm
+      reads for the element stride. }
+    Result := Syms[ASTIVal[ASTLeft[node]]].TypeKind;
 end;
 
 function ASTStrElemTkOf(node: Integer): Integer;
