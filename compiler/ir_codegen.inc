@@ -6483,6 +6483,7 @@ end;
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     wrFrozenPfx: Integer;   { length-prefix width of the frozen string being written }
+    chrCmpPfx: Integer;     { length-prefix width of the frozen string in a Char<->String comparison }
     srcFrozenTk: TTypeKind; { frozen kind of a copy's SOURCE — its prefix width may differ from the dest's }
     memFrozenTk: TTypeKind; { frozen kind of a store-through-an-address DESTINATION }
     scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
@@ -9194,12 +9195,32 @@ begin
                 if (lhsTk = tyString) and (rhsTk = tyChar) then
                 begin
                   { String = Char: rax = string struct, rcx = char ordinal.
-                    Equal iff len=1 and the single byte matches. }
+                    Equal iff len=1 and the single byte matches.
+
+                    THE PREFIX WIDTH IS A QUANTITY, NOT THE CONSTANT 8. Both
+                    Char arms read `mov rcx, [rax]` and `byte [rax+8]`, which
+                    is a byte-prefixed string's length byte plus seven bytes of
+                    its characters -- never 1, so `'a' = s` and `s = 'a'` were
+                    BOTH False under -dPXX_SHORTSTRING while the test that
+                    watches them asserts only that the two directions AGREE.
+                    They agreed, wrongly, on every row. FPC 3.2.2 says True.
+                    x86-64 only, and for the same reason the concat arm above
+                    was: it is the only backend that reads the operand inline
+                    instead of handing a helper a length it computed itself. }
+                  chrCmpPfx := FrozenStrPrefixSize(IRStrTkOf(left));
                   EmitB($51);                                                  { push rcx }
-                  EmitB($48); EmitB($8B); EmitB($08);                          { mov rcx, [rax] }
+                  if chrCmpPfx = 1 then
+                  begin
+                    EmitB($48); EmitB($0F); EmitB($B6); EmitB($08);            { movzx rcx, byte [rax] }
+                  end
+                  else
+                  begin
+                    EmitB($48); EmitB($8B); EmitB($08);                        { mov rcx, [rax] }
+                  end;
                   EmitB($48); EmitB($83); EmitB($F9); EmitB($01);              { cmp rcx, 1 }
                   EmitB($0F); EmitB($85); nextJmp := CodeLen; EmitI32(0);      { jne not_equal }
-                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($48); EmitB($08);  { movzx rcx, byte [rax+8] }
+                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($48);
+                  EmitB(chrCmpPfx);                                            { movzx rcx, byte [rax+prefix] }
                   EmitB($58);                                                  { pop rax }
                   EmitB($48); EmitB($39); EmitB($C1);                          { cmp rcx, rax }
                   if op = tkEq then begin EmitB($0F); EmitB($94); EmitB($C0); end
@@ -9213,12 +9234,23 @@ begin
                 end
                 else if (lhsTk = tyChar) and (rhsTk = tyString) then
                 begin
-                  { Char = String: rax = char ordinal, rcx = string struct. }
+                  { Char = String: rax = char ordinal, rcx = string struct.
+                    Same prefix-width fix as the sibling arm above; this is the
+                    direction the test names, and it was wrong identically. }
+                  chrCmpPfx := FrozenStrPrefixSize(IRStrTkOf(right));
                   EmitB($50);                                                  { push rax }
-                  EmitB($48); EmitB($8B); EmitB($01);                          { mov rax, [rcx] }
+                  if chrCmpPfx = 1 then
+                  begin
+                    EmitB($48); EmitB($0F); EmitB($B6); EmitB($01);            { movzx rax, byte [rcx] }
+                  end
+                  else
+                  begin
+                    EmitB($48); EmitB($8B); EmitB($01);                        { mov rax, [rcx] }
+                  end;
                   EmitB($48); EmitB($83); EmitB($F8); EmitB($01);              { cmp rax, 1 }
                   EmitB($0F); EmitB($85); nextJmp := CodeLen; EmitI32(0);      { jne not_equal }
-                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($41); EmitB($08);  { movzx rax, byte [rcx+8] }
+                  EmitB($48); EmitB($0F); EmitB($B6); EmitB($41);
+                  EmitB(chrCmpPfx);                                            { movzx rax, byte [rcx+prefix] }
                   EmitB($5A);                                                  { pop rdx }
                   EmitB($48); EmitB($39); EmitB($D0);                          { cmp rax, rdx }
                   if op = tkEq then begin EmitB($0F); EmitB($94); EmitB($C0); end
