@@ -11222,6 +11222,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_ssthp_d26 "$$($(TESTTMP)/test_ssthp_d26)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_ssthp_s26
 	tools/expect_same.sh test_ssthp_s26 "$$($(TESTTMP)/test_ssthp_s26)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
+	# EVERY OPERAND SHAPE ON EITHER SIDE OF A FROZEN COMPARISON. Host row, DEFAULT
+	# MODE ONLY, and the missing flag row is a live defect rather than a choice:
+	# under -dPXX_SHORTSTRING x86-64 answers FALSE for `frozenVar = ansiVar`,
+	# which is correct at pin v401 and wrong at HEAD.
+	# bug-a-a-frozen-string-compared-to-an-ansistring-is-false-under-the-flag-on-x86-64
+	# i386 is not wired for the same reason in the other direction: it answers
+	# FALSE for `arr[0] = arr[1]` in BOTH modes, also a regression since the pin.
+	# bug-a-i386-comparing-two-elements-of-an-array-of-frozen-strings-is-false
+	./$(COMPILER) test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/test_fcos_d26
+	tools/expect_same.sh test_fcos_d26 "$$($(TESTTMP)/test_fcos_d26)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26
@@ -18226,27 +18236,33 @@ test-wasm32: $(COMPILER)
 	# make the ROW LABEL carry the config -- a label is all that distinguishes
 	# two otherwise identical rows, and the program itself will not tell you.
 	#
-	# THE 22 ROWS BELOW ARE THE MEASURED-GREEN SUBSET of a 27-candidate sweep.
-	# The 5 that are NOT here are excluded deliberately and are NOT an oversight:
+	# THE ROWS BELOW ARE THE MEASURED-GREEN SUBSET of a 27-candidate sweep.
+	# Three of the five that were excluded are now wired at the end of this
+	# recipe; the two still out are out for reasons that have nothing to do with
+	# strings, and each is named by its own diagnostic rather than by a guess:
 	#
-	#   test_char_into_shortstring_via_pointer   rc=3   comparison, see below
-	#   test_write_string_field_width_cross      wrong  a `Write(s:w)` loses s
-	#   test_cross_sets                          rc=134 trap via SetLength
-	#   test_frozen_string_cross_b305            rc=134 trap via SetLength
-	#   test_static_string_literal               rc=134 trap via SetLength
+	#   test_cross_sets            rc=134  `main$$0 -- value IR op 33`
+	#   test_static_string_literal rc=134  `main$$0 -- string operand of type QWord`
 	#
-	# Two pre-existing wasm32-ONLY defects account for all five, both confirmed
-	# under the PINNED compiler (so they predate the phase-2 shortstring work)
-	# and both correct on riscv32 and x86-64:
+	# BOTH WERE LISTED HERE AS "trap via SetLength" AND NEITHER IS. Measured
+	# 2026-09-03 with the SetLength arm both absent and present: the diagnostic
+	# does not change, so SetLength was never their blocker -- the report prints
+	# ONE refusal per body and the first one wins, which is how a shared symptom
+	# (rc=134) collected three unrelated causes under one name. Read the named
+	# op, not the exit code.
 	#
-	#   1. Shortstring COMPARISON is wrong at every length. `a := lit; a = lit`
-	#      for `const lit: string[8]` is FALSE for lengths 1..8. The store is
-	#      fine -- identical bytes, Length and s[1] to native, and it PRINTS
-	#      correctly; only the compare differs. So this is a READER of the
-	#      length prefix, and the phase-2 call-site census counted WRITERS.
-	#   2. SetLength on a shortstring traps (`wasm trap: unreachable`).
+	# The two defects that did account for the other three are FIXED (this file's
+	# own rows now cover them):
 	#
-	# Do not wire those five green-by-editing-the-expectation. They are real.
+	#   1. Frozen COMPARISON took an operand's VALUE type, and a frozen string's
+	#      value is an ADDRESS -- so `a = b` was an i32.eq of two addresses.
+	#      Filed as "wrong at every length"; length was never the variable.
+	#   2. SetLength on a frozen string had no `-101` arm and was emitted as
+	#      `unreachable`. Filed as WasmEmitSetLenStr calling the managed
+	#      routine; that procedure is not on the frozen path at all.
+	#
+	# Do not wire the remaining two green-by-editing-the-expectation. They are
+	# real.
 	./$(COMPILER) --target=wasm32 test/hello.pas $(TESTTMP)/w32_hello.wasm
 	./$(COMPILER) test/hello.pas $(TESTTMP)/w32_hello_x64
 	tools/expect_same.sh wasm32/hello "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_hello.wasm)" "$$($(TESTTMP)/w32_hello_x64)"
@@ -18346,7 +18362,38 @@ test-wasm32: $(COMPILER)
 	tools/expect_same.sh wasm32/ssmw_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssmw_d.wasm)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
 	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_shortstring_mixed_widths.pas $(TESTTMP)/w32_ssmw_s.wasm
 	tools/expect_same.sh wasm32/ssmw_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssmw_s.wasm)" "$$(printf 'w2n      5 <hello>\nn2w      5 <world>\ntrunc    10 <abcdefghij>\ntrunc2w  10 <abcdefghij>\nempty    0 <>\nemptyw2n 0\npad      <    world>\npadw     <    world>\nchars    120 121 ')"
-	@echo "wasm32: 26 rows green (22 default + 4 shortstring; 5 excluded, see comment above)"
+	# --- THE THREE ROWS THE TWO COMPARISON/SetLength DEFECTS HAD EXCLUDED ---
+	# Each is compared against the x86-64 build of the SAME source rather than
+	# against a literal expectation, so no row here carries a hand-written
+	# answer that could be edited green.
+	#
+	#   char_into_shortstring_via_pointer  was rc=3      -> the compare fix
+	#   frozen_string_cross_b305           was rc=134    -> the compare fix
+	#   write_string_field_width_cross     already green -> the exclusion note
+	#                                      was stale, but it is NOT wired: it
+	#                                      prints 180KB and two copies of that
+	#                                      through `$$(...)` blow the argument
+	#                                      list. Re-measure it by hand.
+	#
+	# Measured both ways: with the wasm32 fix reverted and the compiler rebuilt,
+	# the first two go back to rc=3 and rc=134.
+	./$(COMPILER) --target=wasm32 test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/w32_char_into_ss.wasm
+	./$(COMPILER) test/test_char_into_shortstring_via_pointer.pas $(TESTTMP)/w32_char_into_ss_x64
+	tools/expect_same.sh wasm32/char_into_shortstring_via_pointer "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_char_into_ss.wasm)" "$$($(TESTTMP)/w32_char_into_ss_x64)"
+	./$(COMPILER) --target=wasm32 test/test_frozen_string_cross_b305.pas $(TESTTMP)/w32_b305.wasm
+	./$(COMPILER) test/test_frozen_string_cross_b305.pas $(TESTTMP)/w32_b305_x64
+	tools/expect_same.sh wasm32/frozen_string_cross_b305 "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_b305.wasm)" "$$($(TESTTMP)/w32_b305_x64)"
+	# EVERY OPERAND SHAPE ON EITHER SIDE OF A FROZEN COMPARISON, with each row's
+	# negative partner, plus the three POINTER comparisons that must not become
+	# string comparisons. Both modes: the defect this replaces was mode-blind
+	# (an address compare does not care how wide a prefix is), so a flag-only or
+	# default-only row would have caught it either way -- and the NEXT one in
+	# this area will not be, which is why both are here.
+	./$(COMPILER) --target=wasm32 test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/w32_fcos_d.wasm
+	tools/expect_same.sh wasm32/frozen_compare_shapes_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_fcos_d.wasm)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
+	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/w32_fcos_s.wasm
+	tools/expect_same.sh wasm32/frozen_compare_shapes_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_fcos_s.wasm)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
+	@echo "wasm32: 30 rows green (25 default + 5 shortstring; 2 excluded, see comment above)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through

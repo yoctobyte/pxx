@@ -1,0 +1,19 @@
+var_var   TRUE FALSE
+fld_fld   TRUE FALSE
+fld_var   TRUE FALSE
+elm_elm   TRUE FALSE
+elm_var   TRUE FALSE
+drf_drf   TRUE FALSE
+drf_var   TRUE FALSE
+var_ans   TRUE FALSE
+var_lit   TRUE FALSE
+self      TRUE FALSE
+ord       FALSE FALSE TRUE
+addr      FALSE TRUE
+ptr       FALSE TRUE
+sl local  3 [hel]
+sl byval  2 [he]
+sl after  5 [hello]
+sl byref  2 [he]
+sl afterr 2 [he]
+sl zero   0 []

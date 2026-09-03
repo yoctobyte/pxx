@@ -1360,6 +1360,42 @@ end;
   check happened to succeed first; here, a non-string operation IS recognised
   because a related check happens to be true of one operand. Both come from
   asking a question about the pieces instead of about the operation. }
+{ THE TYPE A COMPARISON SEES for one operand, which is not the type its VALUE
+  has.
+
+  WasmNodeResultType answers about the value a node produces, and a frozen
+  string's value IS an address — so for IR_LEA / IR_FIELD / IR_INDEX it says
+  tyPointer, and for the IR_LOAD_SYM of a `p^` it says what the POINTER
+  symbol's type is. Both are right about the value and wrong about the
+  comparison. `a = b` on two `string[8]` variables lowers to two LEAs, so the
+  predicate below saw two pointers and emitted an i32.eq of two ADDRESSES: the
+  failure the note above describes in the abstract, reached through the operand
+  SHAPE rather than through the operator.
+
+  Four wrong answers came out of that one question, and no single expected row
+  catches them: FALSE for two equal strings, TRUE for `a = a` (the addresses
+  ARE equal), TRUE for `a < b` with a and b equal, and — the one that hid the
+  rest — TRUE for `p^ = a` when p happens to point AT a, which is what a repro
+  writes.
+
+  So this asks the IR's own tag, which is the only thing here that carries the
+  distinction: `a` lowers to a LEA tagged tyString and `@a` to a LEA tagged
+  tyPointer over the SAME symbol, and `p^` to a LOAD_SYM tagged tyString where
+  `p` alone is tagged tyPointer. Reading the SYMBOL instead is what
+  WasmStrTypeOf does — correctly, because it wants a prefix WIDTH — and it
+  cannot tell those pairs apart; asking it here would turn `@a = @b` into a
+  comparison of characters. Only a tag that already NAMES a string widens the
+  answer, so this can classify nothing as a string that the IR did not. }
+function WasmCompareOperandType(node: Integer): TTypeKind;
+var tag: TTypeKind;
+begin
+  WasmCompareOperandType := WasmNodeResultType(node);
+  if node < 0 then Exit;
+  tag := IntToTypeKind(IRTk[node]);
+  if TypeIsFrozenString(tag) or (tag = tyAnsiString) then
+    WasmCompareOperandType := tag;
+end;
+
 function WasmBinopIsString(node: Integer): Boolean;
 var op: TTokenKind; rtk: TTypeKind;
 begin
@@ -1367,10 +1403,10 @@ begin
   rtk := IntToTypeKind(IRTk[node]);
   if WasmIsCompare(op) then
     WasmBinopIsString :=
-      TypeIsFrozenString(WasmNodeResultType(IRA[node]))
-      or TypeIsFrozenString(WasmNodeResultType(IRB[node]))
-      or (WasmNodeResultType(IRA[node]) = tyAnsiString)
-      or (WasmNodeResultType(IRB[node]) = tyAnsiString)
+      TypeIsFrozenString(WasmCompareOperandType(IRA[node]))
+      or TypeIsFrozenString(WasmCompareOperandType(IRB[node]))
+      or (WasmCompareOperandType(IRA[node]) = tyAnsiString)
+      or (WasmCompareOperandType(IRB[node]) = tyAnsiString)
   else if op = tkPlus then
     WasmBinopIsString := (rtk = tyAnsiString) or TypeIsFrozenString(rtk)
   else
@@ -2115,6 +2151,15 @@ begin
   end
   else if (IRKind[node] = IR_FIELD) or (IRKind[node] = IR_INDEX) then
     WasmStrTypeOf := IntToTypeKind(IRTk[node])
+  { `p^` for `p: ^string[10]` is an IR_LOAD_SYM whose VALUE is the buffer
+    address, so the arm above answers about `p` — tyPointer — and every reader
+    that asked was told the operand is not a string at all. The node's own tag
+    says tyString, generically, and the refinement below turns that into the
+    width by walking to PtrElemTk. Without this arm a deref operand reaching
+    WasmStrParts is refused as `string operand of type Pointer`. }
+  else if (IRKind[node] = IR_LOAD_SYM)
+          and TypeIsFrozenString(IntToTypeKind(IRTk[node])) then
+    WasmStrTypeOf := IntToTypeKind(IRTk[node])
   ;
   { A concat needs no case here: WasmBinopIsString stops the width oracle
     unifying two handles into a LongWord, so WasmNodeResultType already falls
@@ -2800,7 +2845,7 @@ end;
 
 function WasmEmitBuiltin(node, p: Integer; isStmt: Boolean): Boolean;
 var argNode: Integer; ctk: TTypeKind; atk: TTypeKind; want: Byte; wide: Boolean;
-    fl: Integer;
+    fl: Integer; dtk: TTypeKind;
 begin
   WasmEmitBuiltin := False;
 
@@ -2929,6 +2974,49 @@ begin
     a `var s: string` parameter too (the ABI oracle derefs the frame slot).
     That is the whole of the var-param case the register backends spell out by
     hand (ir_codegen_riscv32.inc:2350). --- }
+  { --- SetLength on a FROZEN string: builtin -101, and NOT the -102 above ---
+
+    A frozen string owns its buffer and its length IS the inline prefix, so
+    setting it is one store at that prefix's own width: no allocator, no
+    handle, nothing to release, and no RTL call. That is why it has its own
+    builtin code rather than a type test inside -102.
+
+    This backend had no arm, so the body was emitted as `unreachable` and the
+    program died with rc=134 the moment it reached SetLength on a `string[N]`.
+    THE REFUSAL WAS CORRECT AND ITS NAME WAS NOT: the ticket recorded the cause
+    as WasmEmitSetLenStr calling the managed PXXStrSetLen with an inline
+    buffer, which is a real hazard in that procedure and is not this path —
+    a frozen SetLength never reaches IR_SETLEN_STR at all. The diagnostic this
+    backend already printed named the builtin correctly (`builtin SetLength on
+    a frozen string (IR_CALL with proc index -101)`); the ticket's cause came
+    from reading the plausible neighbour instead.
+
+    riscv32 and xtensa had the identical hole and were closed the same way
+    (a3c26785f). Three backends, one missing arm each, three unlike symptoms.
+    WasmFrozenStoreLen owns the width, so no prefix size is named here.
+    bug-a-wasm32-setlength-on-a-shortstring-traps }
+  if p = -101 then
+  begin
+    if IRB[argNode] = -1 then
+    begin
+      WasmUnsupported('SetLength on a frozen string with no length argument');
+      Exit;
+    end;
+    dtk := WasmStrTypeOf(IRA[argNode]);
+    if not TypeIsFrozenString(dtk) then
+    begin
+      WasmUnsupported('SetLength on a frozen string whose destination is '
+                      + WasmTypeKindName(dtk));
+      Exit;
+    end;
+    WasmEmitValueAs(IRA[argNode], WT_I32, 'buffer address of SetLength');
+    WasmEmitValueAs(IRA[IRB[argNode]], WT_I32, 'SetLength count');
+    if WasmBodyBroken then Exit;
+    WasmFrozenStoreLen(dtk);
+    WasmEmitBuiltin := True;
+    Exit;
+  end;
+
   if p = -102 then
   begin
     if (IRKind[IRA[argNode]] = IR_LOAD_SYM)
