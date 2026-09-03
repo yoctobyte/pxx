@@ -157,9 +157,15 @@ was already being asked one arm away.
 ### Filed, not fixed here
 
 - [[bug-a-a-variant-record-with-a-shortstring-branch-is-four-bytes-larger-than-fpc]]
-  -- 16 before, 12 after, FPC says 8. The field half is fixed; the variant part's
-  base is a different mechanism and may duplicate
-  [[bug-p-a-tagged-variant-record-is-padded-to-eight]].
+  -- **RETRACTED the same day, `rejected/`, false premise.** It read 12 against
+  FPC's 8, and the 8 came from `fpc -O2` with no `-M` flag, where `Integer` is
+  TWO BYTES: the two compilers were laying out different records. With `LongInt`
+  on both sides they agree at 12, and `record case k: LongInt of 0: (i: LongInt)`
+  is 8 in both, which independently confirms
+  [[bug-p-a-tagged-variant-record-is-padded-to-eight]] has not regressed. The
+  field-size half of this commit did improve it (16 -> 12); there was never a
+  residual divergence. `tools/fpc_diff_probe.sh` passes `-Mobjfpc` and never had
+  this hazard -- I ran fpc by hand and lost the flag the tool carries.
 - [[bug-a-test-string-n-container-strides-is-compiled-and-never-asserted]] -- no
   expect_same line names it, and its `dyn2dvals` row is 0 at the pin and at HEAD.
 
