@@ -516,3 +516,34 @@ the decision above:
 - **Fitting the distribution earns a discriminating run, not a promotion.** The
   walker theory predicted the surviving field bug's split exactly and was still
   wrong.
+
+## Ready-to-dispatch slices (coordinator, 2026-09-03 08:1x)
+
+**14 open byte-prefix tickets.** The owner asked why one session was doing this
+work while eleven sat idle — a fair hit, and the answer is that the two-mode
+sweep is embarrassingly parallel and was never routed. These slices are
+**non-overlapping by FILE and by TOPIC**, which is the only division that
+matters; git merges files, it does not merge two agents on one question.
+
+| # | slice | files | collides with |
+| --- | --- | --- | --- |
+| 1 | **concat**, x86-64 managed arm | builtin concat path | frankb-a9 — it diagnosed this and stopped deliberately; **hand over, do not race** |
+| 2 | **ordering `<` `>` `<=` `>=`**, x86-64 | the ordering compare path | **frankb-a9 — DO NOT SPLIT OUT.** Same address-comparison shape as `CmpFusible`, which it holds. Almost certainly one cause |
+| 3 | **`const` param arrives NUL**, all targets | param passing / reference deref | none known — clean slice |
+| 4 | **wasm32 pair** — `setlength traps`, `comparison wrong at every length` | wasm32 backend | none — clean, and wasm32 is unmeasured in every table here |
+| 5 | **riscv32 `SetLength` unsupported** | riscv32 backend | none — clean |
+| 6 | **pointer/deref group (4 tickets)** — store loses capacity, deref prints blanks, typed-pointer write prints garbage, deref index | shared read/write paths | **one owner for all four** — they smell like one cause; `normalise-dont-special-case` |
+| 7 | **extend the two-mode sweep** | none — writes only probes | **zero collision risk, any number of sessions** |
+
+**Slice 7 is the one to hand out first and widest.** It found three of tonight's
+four blockers in about twenty minutes, it edits nothing, and it is the only slice
+where two sessions cannot get in each other's way. The probes live in this
+session's scratchpad and are trivially rebuilt from the tickets' repros.
+
+**The rule that makes slice 7 work, and it is the night's main lesson:** run
+every probe in BOTH modes and diff, and read output through `cat -v` — three of
+the four blockers print as blanks, padding, or an empty field in a terminal, and
+one of them (`const` param) is five NUL bytes that look like nothing at all.
+
+**Sequencing:** only slices 1 and 2 serialise, and both belong to frankb-a9.
+3 through 7 are independent of each other and of frankb-a9.
