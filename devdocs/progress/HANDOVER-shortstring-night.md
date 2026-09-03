@@ -701,3 +701,60 @@ from recording *"the x86-64 and i386 backends never adopted the predicate"* as a
 structural explanation. It is a tidy, plausible story that explains the observed
 clustering, and it is false. **`head` does not error; it answers.** Committed
 while measuring the very family of instruments-that-answer-a-different-question.
+
+## An ordering rule, from a fix that was correct and had to WAIT (frankb-78)
+
+`44a61dfc9`'s fix is written and verified on all seven targets and is being
+**deliberately held**, because franka-29's ladder must land first. The reason is
+measured, not prudential:
+
+```pascal
+type TArr = array[0..2] of string[10];
+procedure ShowA(const q: AnsiString);
+a[1] := 'elem';  ShowA(a[1]);
+```
+
+**Refused today.** With the widening it compiles — and in the
+`-uPXX_MANAGED_STRING -dPXX_SHORTSTRING` corner prints sixteen NULs, then a WIDE
+length word of 4, then `elem`: the handle points **22 bytes before** the real
+prefix. `WriteLn(a[1])`, `m := a[1]` and a frozen `string[10]` parameter are all
+correct in the same program and the same corner. Only the frozen→managed
+ARGUMENT conversion is wrong — franka-29's ladder, reached by a route nothing
+could call before.
+
+### THE HONEST-REFUSAL PROPERTY IS A RANKING FACT, NOT A CONSOLATION
+
+This file praised `44a61dfc9` for declining rather than emitting something wrong.
+**That is precisely why fixing it in the wrong order would be worse than leaving
+it**: the refusal is the only thing currently stopping a silent wrong value on a
+path with no test.
+
+**A fix that converts a loud failure into a quiet one is a regression in
+observability even when it is progress in capability.** The rule that falls out:
+**when a refusal is the only guard over an untested path, fix the path first.**
+
+### `grep -c | head` REPORTS NOTHING, NOT ZERO (frankb-78, on my error)
+
+Absence from a truncated list is indistinguishable from a zero count, and that
+is how *"the x86-64 and i386 backends never adopted the predicate"* nearly got
+recorded as the structural explanation for the clustering. Same family as
+CLAUDE.md's `ls devdocs/progress/*/` glob: **the instrument answered a different
+question and did not error.**
+
+**The tell that was available: a file you KNOW is 12k lines of backend code was
+missing from a list of backend files.** Absence of an expected member is the
+check, not the count.
+
+### NORMALISING CAN ERASE THE THING IT NORMALISES (frankb-78, open)
+
+`Show(s + r.f)` — a record FIELD as a concat operand — dies with the heap-arena
+OOM under the flag. `pasparser_expr.inc` normalises frozen concat operands by
+retagging them `tyString`, which is **correct for a VARIABLE** (`IRFrozenKindOfAddr`
+walks back to the symbol) and **erases the width for a FIELD** (there is nothing
+to walk back to — the node's own tag WAS the width).
+
+**The same normalisation that fixed one bug created another one node type over.**
+`normalise-dont-special-case` says share the path; it does not say the shared
+tag may be lossy. **Normalise onto a representation that still carries what the
+callee needs to know**, or the second path is broken in a new way instead of the
+old one.
