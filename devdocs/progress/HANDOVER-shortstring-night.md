@@ -2511,3 +2511,72 @@ Writing today's wrong answer into a `.expected` would have made the suite green
 over a live divergence. **The Makefile says which target is excluded and names
 the ticket** — the same call as the strides row this morning, made without
 prompting.
+
+## 2026-09-03 — `SetLength` through a field, element or deref (`0dedfb86c`), and the `owner:` field claims a third victim
+
+Verified on origin.
+
+### The fix, for the owner's "complete shortstring as best we can" tally
+
+`SetLength(p^, n)`, `SetLength(r.f, n)` and `SetLength(arr[i], n)` on a frozen
+string were **refused everywhere but wasm32** — an FPC-accepted idiom that simply
+did not compile. Now works on all seven targets in both modes: **14 cells (7
+targets x 2 prefix modes), all byte-identical to FPC 3.2.2**, regression wired
+native + four cross. **The pinned compiler REFUSES TO COMPILE that test, which is
+the control.**
+
+### wasm32 ALREADY DID IT — and that is a new shape of absent column
+
+Its arm has never required the symbol-shaped operand the other six demanded; it
+compiles and runs the field and deref shapes **at the pin's tree**, and the
+managed AnsiString path had all three working beside it. So the work was a copy,
+not a design.
+
+> **A ticket's target list is written from the targets that FAILED — so a backend
+> that has drifted toward CORRECT is the one systematically absent from it.**
+
+This file already records absent columns as places a defect hides. This is the
+inverse: **the absent column was the working implementation**, and it sat
+unnoticed because nothing writes down a target that did not fail. **Running the
+repro on all seven cost a minute.**
+
+### The ticket was wrong about the COUNT OF CAUSES
+
+It recorded all three shapes dying in the `-101` arm. **The element shape never
+reached it.** The classifier's `AN_INDEX` arm answered *"array"* unconditionally
+and sent it to the dyn-array builtin, so it surfaced as `SetLength expects an
+ARRAY variable` — **a diagnostic about a different concept, which is exactly how
+it stayed invisible in the ticket's own summary.**
+
+A wrong diagnostic does not merely fail to help; **it re-describes the defect as
+belonging to another subsystem**, and the summary then carries that description
+forward.
+
+### THE `owner:` FIELD HAS NOW MISLED THREE READERS IN ONE DAY
+
+franka-29, an hour before fixing it, **wrote into that ticket that the arms could
+not be touched without colliding with in-flight phase-4 work, and parked.** There
+is no in-flight phase-4 work. `owner: frankB` names a **checkout** — the same
+misreading of the same field the coordinator made, and that frankb-78 had to
+correct twice.
+
+**The paragraph is struck through in the ticket rather than deleted**, with the
+reason: **a false LIMIT is quieter than a false FIX and gets believed by the next
+reader.** A wrong fix fails a test; a wrong reason not to act produces nothing at
+all, and nothing looks like diligence.
+
+Its standing rule, adopted: **an `owner:` field may never be a reason to park.**
+
+**Census, because this is not a one-off.** Open tickets carrying a CHECKOUT name
+in `owner:`: **`frankS` 7, `frankA` 6, `frankC` 3, `frankwasm` 2 — 18 tickets**
+any of which can be read as a session hold and become a reason to wait on nobody.
+(30 say `unassigned` and ~55 are empty, which are both honest.)
+
+### A SEQUENCING WARNING AIMED AT THE COORDINATOR, and it is right
+
+> The owner's plan is **complete shortstring work FIRST, then pause and flip.**
+> **"Pause everything" is NOT in force yet, and reading it as already in force is
+> an argument for doing nothing.**
+
+A relayed future constraint is easily heard as a present one. The seat must say
+which.
