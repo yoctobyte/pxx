@@ -1198,3 +1198,126 @@ phase of this overhaul has ended with a defect nobody had filed yet — the six
 arms above being the fourth instance. The flip is the owner's alone, it
 serialises the fleet, and "the axis looks clean" is the exact cue that would
 misread it.
+
+## 2026-09-03 — xtensa (`18b92fac9`), and the tell sharpened into something greppable
+
+Banked by the coordinator from frankb-78's report; `18b92fac9` verified as an
+ancestor of `origin/master` first. The crash was one line. **The sweep for its
+fallout found three more, all silent, all in the layout the flip makes the
+default, none filed by anyone.**
+
+### The crash, and why only an ARRAY could tell two mechanisms apart
+
+`SizeOf(string[N])` was cap+prefix with nothing rounding it up, and **that size is
+also the array stride** — so `array of string[10]` strode 18, element 1 began at
+2 mod 4, and the 8-byte length word was unaligned. The ticket offered two fixes
+and said nothing had established which; `Length(arr[1])` traps identically, so the
+READ is the same access and **the backend-split option was never sufficient.**
+
+The part to keep: the record path had already reached the right answer by a
+different route — `SizeOf` said 18 while the field layout behaved as if 24.
+**Only an array could tell those two apart**, because only an array multiplies
+the size. Padding the slot makes stride = `SizeOf` again and the two mechanisms
+agree by construction rather than by agreement.
+
+### The three, all `-dPXX_SHORTSTRING`, all silent
+
+- **`record x, y: string[10]` OVERLAPPED** — 16 bytes with `y` at offset 8 (FPC:
+  22 and 11), so writing `y` truncated `x` to seven characters. The field-size
+  test named `tyFixedString` only, so the flag's kind fell through to
+  `TypeSlotSize` — **a POINTER WIDTH for a string.**
+- **A truncating store into a `string[4]` FIELD wrote all eight source bytes**,
+  into the neighbour. The clamp asked `= tyString`, which covered `tyFixedString`
+  only because a fixed-string field is RECORDED as `tyString`.
+- **`a[0][1]` read base+8** where the first character is at base+1.
+
+### THE TELL, SHARPENED — "an enumeration exists BESIDE a complete one"
+
+This is the fifth phase-4 area to end with a defect nobody had filed, and
+frankb-78's contribution is to say what four of them had in common instead of
+adding to the count. **In three of the four, the entity that knows was already
+being asked ONE ARM AWAY:** the variant-part field path tested both kinds while
+the main and class paths tested one; `ASTFrozenArgTk` already had the array arm
+the char-index site needed; the deref spelling of that same index had been fixed
+here before.
+
+> So the tell is not *"an enumeration exists"* — it is **"an enumeration exists
+> BESIDE a complete one."**
+
+That matters because it is **greppable in a way the kind axis is not**: you are
+looking for two sibling arms of one construct that test different sets, not for
+every `= tyString` in the tree. It is where to look for a sixth.
+
+### Two existing tests held ASSUMPTIONS, and only a size change could expose them
+
+- The byte-prefix test used `SizeOf` (18 vs 11) as its positive control,
+  **hardcoded in seven Makefile rows**. It now prints the PREFIX (`@s[1] - @s`,
+  8 vs 1): one expected string for every target, and a stronger control because
+  it names the thing the flag actually changes.
+- The sizeof-matches-storage test bracketed the slot at `<= 18` — **the unpadded
+  size wearing the shape of a derivation.**
+- The through-a-pointer test derived its prefix as `SizeOf - 10`; it now asks
+  `@d[1]`.
+
+> **A derivation that stops being true is worse than a constant, because it keeps
+> answering.**
+
+### The new test's design is the reusable part
+
+**23 relations, no number anywhere in the compared output** — so ONE `.expected`
+serves both modes AND **FPC 3.2.2**, which compiles and runs the file unmodified
+and prints the same lines. A layout test with a real oracle.
+
+And it caught its own author: the first draft asserted `stride mod 8`, **passed
+on x86-64 and aarch64 and failed on all five 32-bit targets** — the 8-byte prefix
+is two words there, so 4-alignment is what it needs. Second time in one day a new
+row caught its own author's wrong premise on the first cross run (the PChar
+offset row was the first).
+
+### Filed, not fixed
+
+- A variant record with a shortstring branch is 12 bytes where FPC says 8 (16
+  before the field fix, so the field half is done and the variant BASE is a
+  separate mechanism). **See the archaeology note below — this is not a plain
+  new defect.**
+- The container-strides case **is compiled by the Makefile and NEVER ASSERTED**,
+  with `dyn2dvals` red at the pin and at HEAD. A case nobody compares is a guard
+  that cannot fail. frankb-78 deliberately did NOT wire it with today's output,
+  because that bakes the red row in as expected — the correct call, and worth
+  naming, since wiring it would have LOOKED like closing it.
+
+### Banked beside frankb-78's own rule, from franka-29
+
+franka-29's 100,560-compile zero was measured over Pascal sources only,
+**missing 1433 non-Pascal ones**. Nothing of frankb-78's was measured that way.
+The general point is a sharper form of the refusal-downstream rule: **a source
+that was never ENUMERATED leaves no trace at all** — not a skip, not a refusal,
+not an rc. The absence is invisible in a way even a wrong exit code is not.
+
+### ARCHAEOLOGY — the variant-record ticket is not new, and the discriminator is one line
+
+Dedup check by the coordinator, by folder. The slug frankb-78 suspected,
+`bug-p-a-tagged-variant-record-is-padded-to-eight`, is in **`done/`** — resolved
+**2026-08-16 as `1a2db4cfc`**, and its summary is:
+
+> *"`record case k: Integer of 0: (i: Integer)` measured 12 bytes where FPC says
+> 8: the variant part was always aligned to 8, charging the tag's own padding
+> twice."*
+
+**Same numbers, same mechanism, no shortstring in it.** So today's report is one
+of two very different things, and nobody has established which:
+
+1. the shortstring branch reaches the variant base by a path `1a2db4cfc` did not
+   cover — a new, flag-only, prio-45 defect, which is how it is currently filed; or
+2. **`1a2db4cfc` has REGRESSED** — in which case the defect is default-mode, has
+   nothing to do with this overhaul, affects every tagged variant record rather
+   than shortstring ones, and a `done/` ticket has been silently false for some
+   time.
+
+**The discriminator is one compile with no shortstring in it:** does the ORIGINAL
+repro — `record case k: Integer of 0: (i: Integer) end` — still measure 8 today,
+in the DEFAULT mode? If 8, it is (1) and the prio-45 filing is right. If 12, it
+is (2) and the prio is wrong by a lot.
+
+Not measured here: the coordinator does not measure. Handed to frankb-78, which
+holds the tree and the context.
