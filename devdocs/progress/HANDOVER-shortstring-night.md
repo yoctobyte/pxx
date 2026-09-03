@@ -2250,3 +2250,93 @@ P3 or the flip. If the answer is "the layout work lands the carrier", it closes
 the open half against that; if not, it builds one following
 `LastTypePointerStrElemTk`'s existing convention **rather than inventing a
 second**.
+
+## 2026-09-03 — tier green, and TWO SESSIONS MADE THE SAME SCOPE ERROR FROM OPPOSITE DIRECTIONS
+
+All shas below verified on origin.
+
+### The verdict
+
+`make test-core` rc=0, **1912 ok rows**, at the tree carrying both loop fixes and
+the updated census snapshot. Full record for `72c431bd9`: test-core green,
+`gate.sh quick` GREEN with `compiler/**` uncommitted, self-host `converged after
+1 round`, busybox i386 byte-identical to the gcc oracle over all 14 cases, both
+new tests matching gcc on native+i386+aarch64+arm32+riscv32 **with the pinned
+control firing on all four for the `for` case.**
+
+### A self-correction worth more than the verdict
+
+frankb-78 on its own earlier report: *"I told you 'three commits, all verified on
+origin' and I had run `sync.sh` ONCE, before two of them existed."*
+
+> **That was not a ghost-sha misreading. It was an UNMEASURED CLAIM IN THE
+> SENTENCE THAT WAS SUPPOSED TO CARRY THE MEASUREMENT** — the exact shape it had
+> spent the day cataloguing in other people's instruments.
+
+The phrase "verified on origin" is doing the work of a check that never ran, and
+it is *more* credible than a bare claim precisely because it names a
+verification. **A claim that describes its own verification is the hardest kind
+to doubt, and the cheapest kind to write without doing.**
+
+### THE SCOPE SYMMETRY — the same error, twice in one hour, from opposite ends
+
+- frankb-78 **read a DIRECTORY LISTING as a property of the harness** ("the
+  corpus is absent, so the battery has measured nothing").
+- this seat **read frankb-78's REPORT as a property of the fleet**, and escalated
+  it to the owner as a coverage hole needing a network fetch.
+
+> **Neither of us asked what the thing we were measuring was actually SCOPED
+> TO.** Both observations were accurate. Both inferences crossed a boundary the
+> evidence did not.
+
+Two independent sessions making the identical inference from the identical skip
+is why the false claim is **written up as false rather than quietly deleted.**
+
+**The corpus ticket was rewritten BEFORE it landed** (`6edb97dc2`): retitled to
+name per-CHECKOUT state, **prio 50 -> 25**, carrying the `job_last_pass`
+measurement — *a job cannot pass without its corpus, which is stronger than any
+directory listing.* What survives is small, real and stays p25: **`make test-c`
+in the two affected checkouts delivers its test-core half and silently drops its
+conformance half**, which costs a Track C worker following the documented gate.
+Still a network fetch, still the owner's.
+
+### The NEW-RED was not his, and the TELL is a docs-only commit
+
+`f81021cb1` / `1d5db3093`, `test-core#src:test/c_asm_in_inline_body.c@2`. It
+compiled clean at `-O2` and `-O3` in frankb-78's run, and `8acf737e3` has it
+**GREEN at `addffd2608d3` — a docs-only commit.**
+
+> **A red that clears across a commit which changed no code is the flake's own
+> signature.** `e340f51b9` already calls it race-unsafe-on-one-green and declines
+> to close it, which is right.
+
+### The open-array fork, moved by its own owner (`72ea3dcc8`)
+
+`decide-should-an-open-array-parameter-become-a-two-word-descriptor`. The bug is
+now `blocked-by` it and in `blocked/`, **so `ready --track A` stops offering the
+wall** three sessions walked into.
+
+**Arm A is NOT an open-array change** — the one-word `[ptr-8]` convention is
+shared with dyn arrays and AnsiString handles, so it is a **wire-format change**
+across 633 `IsArray` sites in 27 files and 6 backends.
+
+**Arm B was kept visible precisely BECAUSE it looks cheap.** Prefixing the
+argument's own storage works for a local or a global and is **impossible for a
+record field or a 2-D row** — so it would leave two behaviours for one construct
+**with the second still broken AND LOOKING FIXED.** Documenting the attractive
+wrong arm, rather than omitting it, is what stops the next reader re-deriving it.
+
+Recommendation is **C, keep the convention**, on the goal's own test: *the
+evidence that settles a compat question is real source that wants the behaviour*,
+and every `@a[i]` on an open-array parameter found so far is confined to the
+call, where we are already correct.
+
+### AN AUTHORITY BOUNDARY, CORRECTLY DRAWN BY A WORKER
+
+frankb-78 **deliberately did not file it to `known-incompat/`**: that folder
+asserts *"ours is CHOSEN"*, and **choosing to spend an FPC-compatible idiom is
+above a worker's line.** It routed the choice to Track U instead.
+
+That is the four-folders rule used as a statement about **authority**, not
+taxonomy — and it is the distinction that keeps `known-incompat/` meaning
+something.
