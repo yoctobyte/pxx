@@ -2437,3 +2437,77 @@ AnsiString` — cannot typecheck if the intermediate is the leaf).
 franka-29 is **not** waiting on frankb-78 for the pointer-clamp carrier. It was
 answered, built, and landed at `c2ad9761e`; the writer-side third finding is
 filed separately at p45.
+
+## 2026-09-03 — `owner:` NAMED A CHECKOUT, NOT A SESSION — and a real ABI oracle was already installed
+
+### THE STRUCTURAL ONE: P4 has no holder, and "wait for frankB" was a wait on nobody
+
+`feature-p-implement-the-real-tyshortstring-byte-prefix-layout` carried
+`owner: frankB`. **That names a CHECKOUT DIRECTORY, not a session.** No session
+has ever claimed it; frankb-78 has never touched it and has been under a standing
+instruction to stay off anything that re-types strings.
+
+**For a day, the coordinator read that field as a session and routed on it** —
+telling one worker to wait for "frankB's layout work" before building a carrier.
+**That was an indefinite wait on nobody**, and the only reason it cost nothing is
+that the two workers settled it peer-to-peer before the relay arrived.
+
+> **This repo's own rule, on its own ticket metadata: the name is not the thing.**
+> `owner:` is ambiguous between a checkout and a session, and both are spelled
+> the same way. A wait routed through an `owner:` field can be a wait on an empty
+> string.
+
+Corrected in the frontmatter and hoisted to the front of the summary, because
+**the flip is the one ticket where "who holds this" will be asked at exactly the
+wrong moment.**
+
+### And the relay was stale three times
+
+The coordinator relayed *"franka-29 is still parked waiting on your answer"*
+**three times against a session that had been unblocked for hours** — the answer
+was given, the carrier built and landed (`c2ad9761e`), and the classification
+taken. **Peer-to-peer beat the relay exactly as the roster says it should; the
+fact simply never reached the seat.** A relay repeating a stale premise is worse
+than silence, because it is asserted in the coordinator's voice.
+
+### A REAL ABI ORACLE WAS ALREADY INSTALLED — and the earlier note was too narrow
+
+`~/.cache/pxx-cross/{aarch64,arm32}/lib/` holds a **complete glibc** (verified:
+`ld-linux-aarch64.so.1`, `libc.so.6`, and the arm32 equivalents), `run_target.sh`
+already points `QEMU_LD_PREFIX` at it, and pxx already emits dynamic imports for
+those targets. **So a pxx caller and a gcc-built glibc exchange arguments across
+a real ABI boundary, observable through the callee's own output — with NO cross
+compiler and NO linker.**
+
+frankb-78's own note an hour earlier (`2dd981a7b`) concluded the missing piece
+was a **linker**. **That is true of a static mixed LINK and is not the answer to
+"is there an oracle"**, which is what the two ABI tickets actually ask.
+
+> **Same error shape as the corpus one, by the same session, within the hour: a
+> narrower question was answered and the answer was allowed to stand for the
+> wider one.** Corrected in both tickets rather than rewritten.
+
+### It found a defect within the hour
+
+On aarch64 `sprintf(buf, '[%.2f]', 3.5)` prints **`[0.00]`** where arm32, x86-64
+and FPC all print `[3.50]` — and with a trailing integer, **`[1 0.00 0]`: the
+argument AFTER the float is lost too**, so it is a **slot-counting**
+disagreement, exactly what AAPCS64 §6.4.2 predicts if a variadic `double` goes to
+`v0` instead of the general/stack path. **arm32 is the control that makes this a
+finding rather than a harness complaint.**
+
+**And the pxx-vs-pxx version is self-consistently WRONG:** the same C program
+built against `lib/crtl` prints `[3.50]` on aarch64, because our own `sprintf`
+reads the argument back from the same wrong place. **That is a worked example of
+why self-consistency is worthless as evidence for a calling convention** — the
+claim the by-value-struct ticket has been making in the abstract.
+
+Filed as `bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero`,
+p55 (verified present).
+
+### The aarch64 row was deliberately NOT wired green
+
+Writing today's wrong answer into a `.expected` would have made the suite green
+over a live divergence. **The Makefile says which target is excluded and names
+the ticket** — the same call as the strides row this morning, made without
+prompting.

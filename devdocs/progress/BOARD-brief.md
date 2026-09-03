@@ -13,7 +13,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
-- `feature-p-implement-the-real-tyshortstring-byte-prefix-layout` [P] — owner: frankB
+- `feature-p-implement-the-real-tyshortstring-byte-prefix-layout` [P] — owner: UNASSIGNED — "frankB" named a CHECKOUT, not a session, and was read as a holder for a day
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
