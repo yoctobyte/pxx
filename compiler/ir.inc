@@ -930,6 +930,11 @@ function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer; forward
 function IRLowerBitFieldRead(fieldNode: Integer; storageAddr: Integer; storageTk: TTypeKind): Integer; forward;
 function IRLowerBitFieldStore(fieldNode, rhsValue: Integer; storageTk: TTypeKind): Integer; forward;
 function IRAddrMayCall(n, depth: Integer): Boolean; forward;
+{ FORWARD BECAUSE FPC IS SINGLE-PASS AND PXX PRESCANS. Defined near the bottom
+  of this file beside IRFrozenKindOfAddr, but the prefix-width call sites are in
+  the lowering above it -- `make compiler/pascal26` and --tier quick are both
+  happy without this and only gate.sh's FPC seed canary sees it. }
+function IRStrTkOf(node: Integer): TTypeKind; forward;
 function IRAssignIsSharedCompound(node: Integer): Boolean; forward;
 function IRLowerCompoundAssign(node: Integer): Integer; forward;
 function CNodeIsDecayedRow(node: Integer): Boolean; forward;
@@ -6193,10 +6198,16 @@ begin
         Keyed on the LOWERED value's tk, exactly like the call path, so a
         managed tyAnsiString (already a char pointer) is correctly passed
         as-is. }
+      { THE SKIP IS THE PREFIX WIDTH, NOT 8, and the guard is TypeIsFrozenString,
+        not `= tyString`. See the AN_CALL arm's note for what each half cost:
+        a literal keeps its 8-byte pool prefix while a `string[N]` variable goes
+        narrow under -dPXX_SHORTSTRING, so the two spellings genuinely differ in
+        width in the same program. }
       if (ptk = tyPointer) and (aval >= 0) and (aval < IRCount) and
-         (IntToTypeKind(IRTk[aval]) = tyString) then
+         TypeIsFrozenString(IntToTypeKind(IRTk[aval])) then
         aval := IRAppend(IR_BINOP, aval,
-                         IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                         IRAppend(IR_CONST_INT, -1, -1, -1,
+                                  FrozenStrPrefixSize(IRStrTkOf(aval)), Ord(tyInteger)),
                          Ord(tkPlus), 0, Ord(tyPointer));
       IRAppend(IR_STORE_SYM, tsym, aval, -1, 0, Ord(ptk));
       identNode := AllocNode(AN_IDENT);
@@ -8695,14 +8706,35 @@ begin
           handle reaches a slot that retains nothing. Asks the node's dyn depth,
           not its type tag, because a dyn-array node already reads tyPointer. }
         Result := IRParkManagedDyn(Result, ASTLeft[node]);
-      { PChar(stringExpr): an inline-length string value points at its 8-byte
-        length prefix; a C `const char*` needs the char data, which sits at +8
-        (now guaranteed NUL-terminated by InternStr). Sentinel -2 in ASTIVal
-        marks the PChar/PAnsiChar adapter; only adjust for inline-string
-        operands so PChar(somePointer) stays a pure reinterpret. }
-      if (ASTIVal[node] = -2) and (ASTTk[ASTLeft[node]] = Ord(tyString)) then
+      { PChar(stringExpr): a frozen string's value points at its LENGTH PREFIX;
+        a C `const char*` needs the char data, which sits at prefix+0 (NUL-
+        terminated by InternStr). Sentinel -2 in ASTIVal marks the PChar/
+        PAnsiChar adapter; only adjust for frozen operands so PChar(somePointer)
+        stays a pure reinterpret.
+
+        BOTH HALVES WERE tyString-SHAPED AND BOTH WERE WRONG UNDER
+        -dPXX_SHORTSTRING. The width was the literal 8 for a prefix that is one
+        byte there, so PChar(s) landed seven bytes into the NUL-padded tail and
+        every C callee saw an EMPTY string -- no crash, on the path every C
+        binding takes. And the guard asked `= tyString`, which a record FIELD of
+        a `string[N]` does not answer (it carries the kind the record records),
+        so `q := PChar(r.f)` was left pointing AT the length byte.
+
+        The field spelling looked green in a probe and was not: as a call
+        ARGUMENT it was rescued downstream by the AN_CALL prefix-skip arm, which
+        fires precisely because this arm did not re-tag the node tyPointer.
+        Assigning the same cast to a variable had nothing to rescue it. Two
+        arms, one of them silently covering for the other on one spelling.
+
+        IRStrTkOf resolves the operand's real width (symbol, element, field or
+        typed-pointer deref) and correctly leaves a LITERAL at 8, which lives in
+        the pool with a permanent 8-byte prefix.
+        bug-a-pchar-of-a-frozen-string-skips-8-bytes-whatever-the-prefix-width-is }
+      if (ASTIVal[node] = -2) and
+         TypeIsFrozenString(IntToTypeKind(ASTTk[ASTLeft[node]])) then
       begin
-        right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
+        right := IRAppend(IR_CONST_INT, -1, -1, -1,
+                          FrozenStrPrefixSize(IRStrTkOf(Result)), Ord(tyInteger));
         Result := IRAppend(IR_BINOP, Result, right, Ord(tkPlus), 0, Ord(tyPointer));
       end
       else if (ASTIVal[node] = -1) or (ASTIVal[node] = -3) then
@@ -9356,6 +9388,23 @@ begin
         float case (minimal surface; ordinal-tagged addresses behave). }
       if CProgramMode and (Result >= 0) and
          TypeIsFloat(IntToTypeKind(IRTk[Result])) then
+        IRTk[Result] := Ord(tyPointer);
+      { ...and a FROZEN STRING pointee, which leaks the same way and into the
+        same marshalling. `@r.f` and `@arr[0]` lower to IR_FIELD / IR_INDEX
+        tagged with the string kind the aggregate records, and the call-argument
+        prefix skip fires on that tag -- so `Take(@r.f)` handed the callee the
+        address of the CHARACTERS where the source asked for the address of the
+        STRING, eight bytes out, with no diagnostic. `@s` was correct only
+        because IR_LEA on a symbol already yields tyPointer, so the three
+        spellings of one operation disagreed.
+
+        This is the arm's own sentence applied where it was already true: the
+        address VALUE is a pointer no matter what it points at. Nothing loses
+        information -- a reader that wants the pointee's width asks the POINTER
+        symbol's PtrElemTk (IRFrozenKindOfAddr), never the address expression's
+        tag.
+        bug-a-pchar-of-a-frozen-string-skips-8-bytes-whatever-the-prefix-width-is }
+      if (Result >= 0) and TypeIsFrozenString(IntToTypeKind(IRTk[Result])) then
         IRTk[Result] := Ord(tyPointer);
     end;
 
@@ -13059,15 +13108,38 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           cast, so C bindings pass a Pascal string without PChar() boilerplate.
           The string data at Offset+8 is NUL-terminated by InternStr. }
         if (not isRefArg) and (cpi >= 0) and
-           (IntToTypeKind(IRTk[value]) = tyString) and
+           TypeIsFrozenString(IntToTypeKind(IRTk[value])) and
            (((pathIdx < Procs[cpi].ParamCount) and
              (Procs[cpi].Params[pathIdx].TypeKind = tyPointer)) or
             (ProcVariadic[cpi] and (pathIdx >= Procs[cpi].ParamCount))) then
         begin
           { A string passed to a Pointer param OR as a variadic arg (the callee's
-            va_arg(char*) wants C char data, not the Pascal length prefix) gets the
-            +8 length-prefix skip. }
-          right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
+            va_arg(char*) wants C char data, not the Pascal length prefix) gets
+            the length-prefix skip -- AT ITS OWN WIDTH.
+
+            TWO defects lived in this expression and they failed in opposite
+            directions, which is why one row could not show both.
+
+            The literal 8 was wrong under -dPXX_SHORTSTRING: a `string[N]`
+            variable has a ONE-byte prefix there, so the skip landed seven bytes
+            into the NUL-padded tail and the callee saw an empty string. Not a
+            crash -- the quietest possible failure, on the path every C binding
+            takes.
+
+            The `= tyString` guard was wrong in BOTH modes for an array element,
+            which carries the kind the ARRAY records (tyFixedString /
+            tyShortString) rather than the generic tag: the skip was not applied
+            at all and the callee got the length prefix as its first character.
+
+            IRStrTkOf resolves the width and correctly leaves a LITERAL at 8 --
+            literals live in the pool with a permanent 8-byte prefix, so a
+            literal and a variable in the same call genuinely differ in width.
+            A managed tyAnsiString is already a char pointer and is excluded by
+            TypeIsFrozenString, which is the point of asking that rather than
+            TypeIsAnyString here.
+            bug-a-pchar-of-a-frozen-string-skips-8-bytes-whatever-the-prefix-width-is }
+          right := IRAppend(IR_CONST_INT, -1, -1, -1,
+                            FrozenStrPrefixSize(IRStrTkOf(value)), Ord(tyInteger));
           value := IRAppend(IR_BINOP, value, right, Ord(tkPlus), 0, Ord(tyPointer));
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
         end
@@ -13445,12 +13517,13 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           passes as-is. Without this, `p("literal")` through a `char*` function
           pointer passed the length prefix and the callee printed nothing. }
         if (not isRefArg) and (cpi >= 0) and
-           (IntToTypeKind(IRTk[value]) = tyString) and
+           TypeIsFrozenString(IntToTypeKind(IRTk[value])) and
            (((pathIdx < Procs[cpi].ParamCount) and
              (Procs[cpi].Params[pathIdx].TypeKind = tyPointer)) or
             (ProcVariadic[cpi] and (pathIdx >= Procs[cpi].ParamCount))) then
         begin
-          right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
+          right := IRAppend(IR_CONST_INT, -1, -1, -1,
+                            FrozenStrPrefixSize(IRStrTkOf(value)), Ord(tyInteger));
           value := IRAppend(IR_BINOP, value, right, Ord(tkPlus), 0, Ord(tyPointer));
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
         end
@@ -14979,11 +15052,12 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           (garbage length; blcksock's SendString hang), and a string literal
           to a Pointer param missed the +8 skip. }
         if (not isRefArg) and (pathIdx > 0) and
-           (IntToTypeKind(IRTk[value]) = tyString) and
+           TypeIsFrozenString(IntToTypeKind(IRTk[value])) and
            (pathIdx < Procs[cpi].ParamCount) and
            (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) then
         begin
-          right := IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger));
+          right := IRAppend(IR_CONST_INT, -1, -1, -1,
+                            FrozenStrPrefixSize(IRStrTkOf(value)), Ord(tyInteger));
           value := IRAppend(IR_BINOP, value, right, Ord(tkPlus), 0, Ord(tyPointer));
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
         end

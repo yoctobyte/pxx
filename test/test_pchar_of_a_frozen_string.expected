@@ -1,0 +1,21 @@
+cast var  [abcde] TRUE
+cast elem [abcde] TRUE
+cast fld  [abcde] TRUE
+cast drf  [abcde] TRUE
+cast lit  [abcde] TRUE
+cast ansi [abcde] TRUE
+imp  var  [abcde] TRUE
+imp  elem [abcde] TRUE
+imp  fld  [abcde] TRUE
+imp  lit  [abcde] TRUE
+imp  ansi [abcde] TRUE
+asg  var  [abcde] TRUE
+asg  elem [abcde] TRUE
+asg  fld  [abcde] TRUE
+asg  drf  [abcde] TRUE
+off  var  isprefix=TRUE
+off  elem isprefix=TRUE
+off  fld  isprefix=TRUE
+off  drf  isprefix=TRUE
+ctl  ptr  adds0=TRUE
+ctl  elem1 [zz] TRUE

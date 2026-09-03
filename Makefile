@@ -11245,6 +11245,16 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_fcos_d26 "$$($(TESTTMP)/test_fcos_d26)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/test_fcos_s26
 	tools/expect_same.sh test_fcos_s26 "$$($(TESTTMP)/test_fcos_s26)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
+	# PChar OF A FROZEN STRING, EVERY SPELLING, BOTH MODES against ONE .expected.
+	# The file prints no width: each offset row asserts
+	# `PChar(x) - @x = SizeOf(TS) - 8`, true at 8 and at 1, so the default mode
+	# is a real control here rather than a row that passes for the old reason.
+	# The default mode is NOT merely a control: `imp elem` and `off fld` were
+	# broken there too, which is why both modes run everywhere this is wired.
+	./$(COMPILER) test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/test_pcfs_d26
+	tools/expect_same.sh test_pcfs_d26 "$$($(TESTTMP)/test_pcfs_d26)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/test_pcfs_s26
+	tools/expect_same.sh test_pcfs_s26 "$$($(TESTTMP)/test_pcfs_s26)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26
@@ -15596,6 +15606,14 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/frozen_compare_shapes_default "$$(tools/run_target.sh i386 $(TESTTMP)/i386_fcos_d)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
 	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/i386_fcos_s
 	tools/expect_same.sh i386/frozen_compare_shapes_short "$$(tools/run_target.sh i386 $(TESTTMP)/i386_fcos_s)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
+	# ...and the PChar spellings, both modes. The fix is entirely pre-backend
+	# (ir.inc), so a cross cell cannot fail here while x86-64 passes for a
+	# codegen reason -- what it does catch is a 32-bit ARGUMENT-MARSHALLING
+	# assumption about a pointer that has just had a byte added to it.
+	./$(COMPILER) --target=i386 test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/i386_pcfs_d
+	tools/expect_same.sh i386/pchar_frozen_default "$$(tools/run_target.sh i386 $(TESTTMP)/i386_pcfs_d)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
+	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/i386_pcfs_s
+	tools/expect_same.sh i386/pchar_frozen_short "$$(tools/run_target.sh i386 $(TESTTMP)/i386_pcfs_s)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
 	./$(COMPILER) --target=i386 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_i386_ssbp_d
 	tools/expect_same.sh i386/ssbp_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
 	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_i386_ssbp_s
@@ -18124,6 +18142,10 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/frozen_compare_shapes_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_fcos_d)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/rv32_fcos_s
 	tools/expect_same.sh riscv32/frozen_compare_shapes_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_fcos_s)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
+	./$(COMPILER) --target=riscv32 test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/rv32_pcfs_d
+	tools/expect_same.sh riscv32/pchar_frozen_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_pcfs_d)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
+	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/rv32_pcfs_s
+	tools/expect_same.sh riscv32/pchar_frozen_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_pcfs_s)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
 	./$(COMPILER) --target=riscv32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp
 	tools/expect_same.sh riscv32/shortstring_through_a_pointer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp_s
@@ -18419,7 +18441,14 @@ test-wasm32: $(COMPILER)
 	tools/expect_same.sh wasm32/frozen_compare_shapes_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_fcos_d.wasm)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
 	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/w32_fcos_s.wasm
 	tools/expect_same.sh wasm32/frozen_compare_shapes_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_fcos_s.wasm)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
-	@echo "wasm32: 30 rows green (25 default + 5 shortstring; 2 excluded, see comment above)"
+	# PChar of a frozen string. wasm32 has no native pointer arithmetic on a
+	# linear-memory offset that differs from a host pointer, so the +1/+8 the fix
+	# emits is the row worth having on this backend specifically.
+	./$(COMPILER) --target=wasm32 test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/w32_pcfs_d.wasm
+	tools/expect_same.sh wasm32/pchar_frozen_default "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_pcfs_d.wasm)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
+	./$(COMPILER) --target=wasm32 -dPXX_SHORTSTRING test/test_pchar_of_a_frozen_string.pas $(TESTTMP)/w32_pcfs_s.wasm
+	tools/expect_same.sh wasm32/pchar_frozen_short "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_pcfs_s.wasm)" "$$(cat test/test_pchar_of_a_frozen_string.expected)"
+	@echo "wasm32: 32 rows green (26 default + 6 shortstring; 2 excluded, see comment above)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
