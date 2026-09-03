@@ -116,4 +116,4 @@ proc index. This thunk makes the NilPy path *correct*; the scratch makes every
 other path *survivable*.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d49de34b6.
