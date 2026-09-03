@@ -737,36 +737,42 @@ end;
   for the INDEX path); collapsing all three wants the descriptor machinery
   reworked and is not this fix.
   bug-a-storing-into-an-element-of-an-array-of-frozen-strings-bus-errors-on-xtensa }
-function SetLenDynElemSize(depth, baseTk, baseRec, symIdx: Integer): Integer;
+function SetLenDynElemSize(depth, baseTk, baseRec, symIdx, nodeCap: Integer): Integer;
+{ Per-element stride for a SetLength/whole-store on a dynamic array. TWO
+  capacity carriers, because a frozen string's stride is NOT a function of its
+  kind and the two rootings record it in different places: a SYMBOL root has
+  SymStrCap, a FIELD- or NESTED-rooted target has none and must be handed the
+  capacity on the IR node (IRSetLenBaseCap, written at the three non-symbol
+  lowering sites in ir.inc).
+
+  The node carrier used to be absent and the field arm fell through to the
+  kind-only answer -- a pointer width. That was the SMALLER half of a matched
+  pair of wrongs: the STORE path (DynElemSize, via NodeDynBaseStrCap) had the
+  same hole at declaration time, so both halves under-strode together and
+  malloc granularity absorbed the overrun. Fixing only the declaration made it
+  FATAL rather than merely wrong -- `SetLength(r.row, 1); r.row[0] := <26
+  chars>` over `array of string[20]` then stored 28 bytes into an 8-byte
+  element and the NEXT allocation took the SIGSEGV, a crash whose cause is two
+  statements earlier. Measured 2026-09-03 on x86-64 in the default mode.
+  So this arm is not free to stay kind-only once the declaration is honest.
+  bug-a-a-frozen-dynamic-array-field-records-a-junk-element-capacity }
+var slElemCap: Integer;
 begin
+  slElemCap := 0;
+  if symIdx >= 0 then slElemCap := SymStrCap[symIdx] else slElemCap := nodeCap;
   if depth > 1 then
     Result := TARGET_PTR_SIZE
   else if IntToTypeKind(baseTk) = tyRecord then
     Result := RecSize(baseRec)
-  else if TypeIsFrozenString(IntToTypeKind(baseTk)) and (symIdx >= 0) and
-          (SymStrCap[symIdx] > 0) then
-    Result := FrozenStrSlotSize(IntToTypeKind(baseTk), SymStrCap[symIdx])
+  else if TypeIsFrozenString(IntToTypeKind(baseTk)) and (slElemCap > 0) then
+    Result := FrozenStrSlotSize(IntToTypeKind(baseTk), slElemCap)
   else
-    { A FIELD- OR NESTED-ROOTED target (symIdx < 0) carries no capacity on the
-      node, so a frozen element still gets the kind-only answer -- a pointer
-      width. The shape COMPILES now (its second index used to resolve as a
-      CHARACTER index) and is measurably wrong: `SetLength(r.matrix[i], 3)`
-      over `array of array of string[10]` strides 8 bytes, so `v00xxxxxx` reads
-      back as `v00xxxxx<TAB>` -- the TAB is the next element's length byte.
-      Every target including x86-64; the identical VARIABLE spelling is right.
-
-      A SIDE TABLE HERE IS NOT THE MISSING PIECE, and that is measured rather
-      than reasoned: threading the capacity down to this function was built and
-      probed, and what arrives is JUNK. RecFieldStrCap answers 3 for
-      `row: array of string[10]` and 1 for `m: array of array of string[10]`,
-      where both want 10, because the three field-declaration sites take
-      `fStrCap := LastTypeStrCap` and that channel is not set when the element
-      is a NAMED frozen alias -- so the field records whatever the last
-      unrelated declaration left behind. Consuming it would make the stride
-      WRONGER than the pointer-width default, so the carrier was reverted
-      rather than landed. Fix the capacity at declaration time and this arm is
-      a three-line change.
-      bug-a-a-frozen-dynamic-array-field-records-a-junk-element-capacity }
+    { Still reachable and still deliberate: a dyn array returned by a CALL has
+      no capacity carrier at all (ProcRet* records the element KIND only), so
+      NodeDynBaseStrCap leaves 0 and 0 routes here rather than inventing a
+      width. The answer is wrong for a frozen element and it is the answer that
+      was always given; narrowing it needs a carrier on the return, not a guess
+      here. }
     Result := TypeStorageSize(IntToTypeKind(baseTk), baseRec);
 end;
 
@@ -829,7 +835,7 @@ begin
   else if (depth = 1) and (baseKind = 3) then
     elSize := UClsSize_[baseRec - REC_UCLASS_BASE]
   else
-    elSize := SetLenDynElemSize(depth, baseTk, baseRec, symIdx);
+    elSize := SetLenDynElemSize(depth, baseTk, baseRec, symIdx, IRSetLenBaseCap[node]);
   AnonDynArrayElSize[anonIdx] := elSize;
 
   for i := 0 to 19 do
@@ -11480,7 +11486,8 @@ begin
           used to spell its own `TypeSlotSize(slBaseTk)`, which is a pointer
           width for a frozen string -- so x86-64 allocated 8 bytes per element
           for a row the index path strides by 24. }
-        slElemSize := SetLenDynElemSize(slDepth, Ord(slBaseTk), slBaseRec, symIdx);
+        slElemSize := SetLenDynElemSize(slDepth, Ord(slBaseTk), slBaseRec, symIdx,
+                                        IRSetLenBaseCap[node]);
 
         if AnonDynArrayCount >= 8192 then Error('too many anonymous dynamic arrays');
         anonIdx := AnonDynArrayCount;

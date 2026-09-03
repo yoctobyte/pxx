@@ -10,13 +10,15 @@ program test_field_rooted_nested_dyn_frozen_index;
   index-a-STRING branch. The twins are now one function.
   bug-a-a-field-rooted-array-of-array-of-string-n-indexes-as-a-char
 
-  ONE element per row on purpose. A field-rooted row with SEVERAL frozen
-  elements is allocated with a pointer-wide stride and the elements overlap --
-  a SEPARATE defect that this shape could not reach before, because it did not
-  compile: bug-a-a-frozen-dynamic-array-field-records-a-junk-element-capacity.
-  Asserting a multi-element row here would wire a known-red row; asserting the
-  VAR spelling beside the FIELD one is what keeps this honest, because the two
-  must agree and the variable arm is the one that was always right. }
+  ONE element per row, which was once forced and is now only a scope: a
+  field-rooted row with SEVERAL frozen elements was allocated at a pointer-wide
+  stride and the elements overlapped -- a separate defect this shape could not
+  reach until the fix above made it compile. That one is fixed too and the
+  multi-element rows live in test_dyn_frozen_field_capacity.pas, which is where
+  a stride regression should be caught; this file stays a one-element INDEXING
+  test so the two failures cannot wear each other's face. Asserting the VAR
+  spelling beside the FIELD one is what keeps it honest, because the two must
+  agree and the variable arm is the one that was always right. }
 type
   TS10 = string[10];
   TR = record matrix: array of array of TS10; end;

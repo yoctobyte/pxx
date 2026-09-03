@@ -12670,6 +12670,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh sweep_fieldrooted_frozen_default "$$($(TESTTMP)/sweep_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/sweep_fieldrooted_frozen_s
 	tools/expect_same.sh sweep_fieldrooted_frozen_bytepfx "$$($(TESTTMP)/sweep_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
+	./$(COMPILER) test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/sweep_dynfrozencap_d
+	tools/expect_same.sh sweep_dynfrozencap_default "$$($(TESTTMP)/sweep_dynfrozencap_d)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/sweep_dynfrozencap_s
+	tools/expect_same.sh sweep_dynfrozencap_bytepfx "$$($(TESTTMP)/sweep_dynfrozencap_s)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
 	# see the cross rows: the leak is the half no value assertion can observe
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_frozen_arg_no_leak.pas $(TESTTMP)/sweep_frozenargleak
 	tools/assert_no_leak.sh sweep_frozen_arg_no_leak 200 $(TESTTMP)/sweep_frozenargleak
@@ -16015,6 +16019,10 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/fieldrooted_nested_frozen_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_i386_fieldrooted_frozen_s
 	tools/expect_same.sh i386/fieldrooted_nested_frozen_bytepfx "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
+	./$(COMPILER) --target=i386 test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_i386_dynfrozencap_d
+	tools/expect_same.sh i386/dyn_frozen_field_capacity_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dynfrozencap_d)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
+	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_i386_dynfrozencap_s
+	tools/expect_same.sh i386/dyn_frozen_field_capacity_bytepfx "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dynfrozencap_s)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
 	# ...and the LEAK, which every row above passes with fully present: the old
 	# inline conversion allocated a handle per call and nothing owned it
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
@@ -16797,6 +16805,10 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/fieldrooted_nested_frozen_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_aarch64_fieldrooted_frozen_s
 	tools/expect_same.sh aarch64/fieldrooted_nested_frozen_bytepfx "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
+	./$(COMPILER) --target=aarch64 test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_aarch64_dynfrozencap_d
+	tools/expect_same.sh aarch64/dyn_frozen_field_capacity_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dynfrozencap_d)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
+	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_aarch64_dynfrozencap_s
+	tools/expect_same.sh aarch64/dyn_frozen_field_capacity_bytepfx "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dynfrozencap_s)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
 	# ...and the LEAK, which every row above passes with fully present: the old
 	# inline conversion allocated a handle per call and nothing owned it
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
@@ -17489,6 +17501,10 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/fieldrooted_nested_frozen_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_riscv32_fieldrooted_frozen_s
 	tools/expect_same.sh riscv32/fieldrooted_nested_frozen_bytepfx "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
+	./$(COMPILER) --target=riscv32 test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_riscv32_dynfrozencap_d
+	tools/expect_same.sh riscv32/dyn_frozen_field_capacity_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_dynfrozencap_d)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
+	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_riscv32_dynfrozencap_s
+	tools/expect_same.sh riscv32/dyn_frozen_field_capacity_bytepfx "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_dynfrozencap_s)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
 	# ...and the LEAK, which every row above passes with fully present: the old
 	# inline conversion allocated a handle per call and nothing owned it
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
@@ -19720,6 +19736,10 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/fieldrooted_nested_frozen_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_arm32_fieldrooted_frozen_s
 	tools/expect_same.sh arm32/fieldrooted_nested_frozen_bytepfx "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
+	./$(COMPILER) --target=arm32 test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_arm32_dynfrozencap_d
+	tools/expect_same.sh arm32/dyn_frozen_field_capacity_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dynfrozencap_d)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
+	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_dyn_frozen_field_capacity.pas $(TESTTMP)/test_arm32_dynfrozencap_s
+	tools/expect_same.sh arm32/dyn_frozen_field_capacity_bytepfx "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dynfrozencap_s)" "$$(cat test/test_dyn_frozen_field_capacity.expected)"
 	# ...and the LEAK, which every row above passes with fully present: the old
 	# inline conversion allocated a handle per call and nothing owned it
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).

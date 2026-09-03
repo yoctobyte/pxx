@@ -4105,6 +4105,21 @@ begin
           fTk := ParseTypeKind;
           fRec := LastTypeRecId;
           fEnumId := LastTypeEnumId;
+          { THE ELEMENT'S CAPACITY, CAPTURED HERE BECAUSE NOTHING ELSE WILL.
+            `fIsDyn` short-circuits the frozen-field arm below, which is the one
+            place fStrCap was ever assigned -- so a dynamic-array field kept
+            whatever the PREVIOUS field in the same record had left in it.
+            Measured: `record row: array of string[N] end` clamped every store
+            at 3 for every N (3 being the leftover from the builtin prelude,
+            hence constant across programs and easy to mistake for a real
+            answer), and putting `pad: string[17]` in front of it made the same
+            field clamp at 17. LastTypeStrCap is correct HERE and only here --
+            ParseTypeKind has just run on the element.
+            bug-a-a-frozen-dynamic-array-field-records-a-junk-element-capacity }
+          if (fTk = tyFixedString) or (fTk = tyShortString) then
+            fStrCap := LastTypeStrCap
+          else
+            fStrCap := 0;
         end;
       end
       else
@@ -4122,6 +4137,9 @@ begin
           fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
           fRec := ArrTypeElemRec[fAi];
           fEnumId := ArrTypeElemEnumId[fAi];
+          { The alias row is the carrier here -- same reason as the inline arm
+            above, one spelling over. }
+          fStrCap := ArrTypeElemStrCap[fAi];
           { AddUField reads the pointee record for a tyPointer field straight off
             the LastTypePointerElemRec global -- prime it here (see
             ArrTypePtrElemRec's comment in defs.inc for the general landmine). }
@@ -5973,6 +5991,22 @@ begin
                 fTk := ParseTypeKind;
                 fRec := LastTypeRecId;
                 fEnumId2 := LastTypeEnumId;
+                { The class face of the same capture -- see ParseRecordFields.
+                  Same missing assignment, and it shows BOTH signs depending on
+                  what the previous field left behind. Measured with a 26-char
+                  store into an `array of string[20]` class field: with a
+                  `pad: string[17]` in front the store clamped at 17 and with
+                  `string[9]` at 9 -- the leftover, short. With NO preceding
+                  frozen field the leftover is 0, which the store path reads as
+                  "no limit", so all 26 characters went into the 20-capacity
+                  element and OVERRAN it. The 26 there is the literal's length,
+                  not a capacity: an absent answer and a wrong one, from one
+                  hole.
+                  bug-a-a-frozen-dynamic-array-field-records-a-junk-element-capacity }
+                if (fTk = tyFixedString) or (fTk = tyShortString) then
+                  fStrCap := LastTypeStrCap
+                else
+                  fStrCap := 0;
               end;
             end
             else
@@ -5990,6 +6024,9 @@ begin
                 fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
                 fRec := ArrTypeElemRec[fAi];
                 fEnumId2 := ArrTypeElemEnumId[fAi];
+                { The alias row is the carrier here -- same reason as the inline
+                  arm above, one spelling over. }
+                fStrCap := ArrTypeElemStrCap[fAi];
                 LoadPointeeFromArrType(fAi);
                 Next;   { consume the named array type }
               end

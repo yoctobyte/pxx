@@ -5278,6 +5278,7 @@ var
     none selected, keep the old first-name-match. }
   IRCtorProc : array of Integer;
   IRSetLenBaseRec : array of Integer; { IR_SETLEN_DYN on a non-symbol (field) target: base element record id when IRIVal<0; -1/REC_NONE otherwise }
+  IRSetLenBaseCap : array of Integer; { ...and the base element's frozen `string[N]` CAPACITY, 0 when it is not a frozen string or is unknown. A frozen string's STRIDE is not a function of its kind, and for a symbol root SymStrCap carries it -- a FIELD root had no carrier at all, so the allocation strode a pointer width while the store strode the real slot. bug-a-a-frozen-dynamic-array-field-records-a-junk-element-capacity }
   { Pending open-array copy-out (writeback) for a static array passed to a
     `var`/`out` open-array parameter. The call site copies the static array into
     a header'd dyn temp (so Length/High and indexing work over the param), then

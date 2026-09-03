@@ -246,6 +246,7 @@ begin
   SetLength(IRKind, n);         SetLength(IRA, n);         SetLength(IRB, n);
   SetLength(IRC, n);            SetLength(IRIVal, n);      SetLength(IRTk, n);
   SetLength(IRCallDest, n);     SetLength(IRCtorProc, n);  SetLength(IRSetLenBaseRec, n);
+  SetLength(IRSetLenBaseCap, n);
   SetLength(IRArgRecId, n);
   SetLength(IRStmtRoot, n);     SetLength(IRLine, n);      SetLength(IRFile, n);
   SetLength(IRLoadRedundant, n);
@@ -268,6 +269,7 @@ begin
   IRCallDest[IRCount] := -1;
   IRArgRecId[IRCount] := REC_NONE;
   IRCtorProc[IRCount] := -1;
+  IRSetLenBaseCap[IRCount] := 0;
   Result := IRCount;
   Inc(IRCount);
 end;
@@ -11896,6 +11898,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
                              NodeDynDepth(ASTLeft[node]), -1,
                              Ord(NodeDynBaseTk(ASTLeft[node])));
           IRSetLenBaseRec[Result] := NodeDynBaseRec(ASTLeft[node]);
+          IRSetLenBaseCap[Result] := NodeDynBaseStrCap(ASTLeft[node]);
         end
         else
           Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(tyPointer));
@@ -12571,6 +12574,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
             Result := IRAppend(IR_SETLEN_DYN, slTargetAddr, slCountNode,
                                slFldDepth, -1, Ord(slFldBaseTk));
             IRSetLenBaseRec[Result] := slFldBaseRec;
+            IRSetLenBaseCap[Result] := RecFieldStrCap(slFldRec, slFldName);
             Exit;
           end;
         end;
@@ -12590,6 +12594,7 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           Result := IRAppend(IR_SETLEN_DYN, slTargetAddr, slCountNode, slDepth,
                              -1, Ord(NodeDynBaseTk(slTargetAST)));
           IRSetLenBaseRec[Result] := NodeDynBaseRec(slTargetAST);
+          IRSetLenBaseCap[Result] := NodeDynBaseStrCap(slTargetAST);
           Exit;
         end;
       end;

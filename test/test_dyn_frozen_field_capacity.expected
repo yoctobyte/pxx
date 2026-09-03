@@ -1,0 +1,8 @@
+INLINE <inl0xxxxx><inl1xxxxx><inl2xxxxx><inl3xxxxx>
+ALIAS  <als0yyyyy><als1yyyyy><als2yyyyy><als3yyyyy>
+NAMED  <nam0zzzzz><nam1zzzzz><nam2zzzzz><nam3zzzzz>
+CLASS  <cls0wwwww><cls1wwwww><cls2wwwww><cls3wwwww>
+ORDER  <0123456789><abcdefghij><0123456789><abcdefghij>
+PAD    <pad><pad>
+CLAMP  <ABCDEFGHIJ><ABCDEFGHIJ>
+TAIL   <tail0><tail1><tail2>
