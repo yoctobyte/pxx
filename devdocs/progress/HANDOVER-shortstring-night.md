@@ -2102,3 +2102,74 @@ and a pre-push sha is a ghost by construction — **neither subject was there, a
 the ticket file did not exist in another checkout.** That is the discriminator
 between a ghost sha and genuinely unpushed work: **a ghost has a twin with the
 same subject; unpushed work has nothing at all.**
+
+## 2026-09-03 — `private` for parallel-for (`b67d943eb`), and a SEED CONTROL that proved itself accidental
+
+### The control is the finding
+
+franka-29 chose to SEED where OpenMP deliberately leaves `private`
+uninitialised, then asked whether the seed could be **shown** to matter — by
+building a compiler with the seed emission disabled and changing nothing else.
+
+**The SEED row printed 11, not 0.** The `Integer` and the `Double` came back
+dirty; **the `Boolean` and the `Char` landed on zero bytes and PASSED.** Two of
+four components fired.
+
+> **The unseeded behaviour is accidentally correct most of the time** — the same
+> sentence as the do-while flag, from the other end. **Which components catch it
+> is a property of the FRAME LAYOUT, not of the defect**, which is why the test
+> keeps all four with distinct weights rather than the two that happened to fire.
+
+Without that control, a seed believed-in would have shipped beside a row nobody
+could tell from a guard that cannot fail. **This is the third instance today of
+a probe whose failure value collides with its correct value, and the first where
+the author manufactured the collision deliberately to measure it.**
+
+The motivating shape: a loop that must total 300000 gave 298051 / 298141 /
+299650 / 299462 / 299233 over five runs with the clause removed, **exit 0 every
+time**, and 300000 over twenty with it.
+
+### The managed half used the RIGHT instrument, not the convenient one
+
+A private `AnsiString` had to be pinned to one worker. **Every `expect_same` row
+would have passed over a per-iteration leak**, so it ran `-dPXX_ALLOC_CENSUS`:
+4000 iterations `allocs=10975 frees=10972 live=3`; 16000 iterations
+`allocs=45116 frees=45111 live=5`. **Four times the work, live flat.** Assertion
+class matched to defect class — the open-array-leak rule applied without being
+told.
+
+### `Char(0)` not `Chr(0)` — the name-is-not-the-thing rule in miniature
+
+`tkChr` **greps as thoroughly live**: six backends test `-Ord(tkChr)`. **Every
+one of those is an INTRINSIC ID stored in `ASTIVal`. The lexer never emits
+`tkChr` as a token.**
+
+And the diagnostic points at the wrong file: a stashed `tkChr` fails as
+`expected expression` **INSIDE `lib/rtl/palthread.pas`**, which is where the
+synthesized worker body lands — **an error in a file the statement under edit
+never mentions.** Cost one rebuild; noted at the site.
+
+### Group discipline
+
+Grepped the clause set before starting: genuinely **one** open Track A ticket
+(`feature-opt-heap-per-thread-cache` p48 is in `working/` and someone else's; the
+other three are NilPy-lane at p10/p5). **A single ticket is fine — the rule is
+against not looking, and it looked.**
+
+`gate.sh quick` GREEN, self-host `converged after 1 round`, verified
+x86-64/i386/aarch64/arm32. **riscv32 refuses `--threadsafe` outright and has no
+parallel rows, which is why it is not wired** — stated rather than left as an
+absent column.
+
+### FLAGGED FOR A DECISION, NOT TAKEN — the p55 open-array ticket is a design fork
+
+`bug-a-address-of-an-open-array-element-points-at-the-marshalling-temp` sits at
+**p55 in the ordinary queue**, and its own summary says the fix is a
+representation change across **633 `IsArray` sites in 27 files and 6 backends**,
+with *"do not start it casually"*. The only alternative — prefixing the
+argument's storage — **is impossible for a record field or a 2-D row.**
+
+**Three sessions have now looked at that wall independently.** A p55 queue
+position guarantees a fourth will. This is a Track U decision or an umbrella,
+not a session's ticket, and the recommendation is to move it there before
+someone takes it as ordinary work.
