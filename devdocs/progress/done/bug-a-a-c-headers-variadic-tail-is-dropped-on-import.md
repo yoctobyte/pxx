@@ -97,4 +97,4 @@ a *wrong* call — it is producing a *narrower* one. That is why this is a missi
 capability rather than a miscompile, and why it is prio 45 rather than higher.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c7c5cbf65.
