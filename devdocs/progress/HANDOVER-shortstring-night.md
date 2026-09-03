@@ -873,3 +873,56 @@ Filed prio 40, unclaimed, pre-existing, not a width bug.
 `--platform=posix --xtensa-soft-mulhigh`, and reproduces at HEAD without the new
 rows. Pre-existing, unrelated to the byte prefix, and it is why the xtensa row
 is flag-only.
+
+## Narrowing changed what the bug WAS (frankb-78, `59ff9a277`)
+
+The xtensa crash was not "this file dies on xtensa". It is an ALIGNMENT bug:
+
+```pascal
+type TS10 = string[10];
+var arr: array[0..2] of TS10;
+arr[0] := 'zero';  { ok }
+arr[2] := 'two';   { ok }
+arr[1] := 'one';   { Bus error }
+```
+
+`SizeOf(TS10)` is 18 in the default mode and the stride IS the size, so element
+1 starts at offset 18 — **2 mod 4** — and the 8-byte prefix store is unaligned.
+Elements 0 and 36 are 4-aligned and correct.
+
+**THE ALIGNED PAIR IS THE FINDING, NOT THE CRASH.** With only `arr[1]` the
+repro reads as *"array element stores are broken on xtensa"* and sends the next
+person into the store path. With all three, the predicate is `SizeOf(T) mod 4`
+and **every odd element of any `array of string[N]` of odd-ish size is
+suspect** — not just this type. Correct under `-dPXX_SHORTSTRING` (a 1-byte
+prefix has nothing wide to misalign), correct on the six other targets, both
+ABIs, and reproduces at pin v401.
+
+**A REAL FORK, DELIBERATELY NOT PICKED** — pad the type on alignment-requiring
+targets (changes `SizeOf` and layout, and fixes every other wide access to a
+misaligned element) versus split the prefix store in the xtensa backend (local,
+no layout change, and **assumes the prefix store is the only wide access, which
+nothing has established**). Both are named in the ticket; whoever takes it
+should see both.
+
+## The refusal family has a THIRD member, and it is about STAGE
+
+1. riscv32/xtensa refused a builtin with a reason that was **false**
+   (`bare-metal stage 1`, when `Pos` and `Copy` compile there).
+2. A comment claimed a sibling arm that had **never been written**.
+3. **franka-29's xtensa canary rows returned `rc=1` from the ESP IMAGE WRITER** —
+   downstream of the thing under test, *after* the backend had already emitted.
+
+**So a row can produce no observation because it never compiled, because it
+compiled and was refused at a LATER STAGE, or because the arm is genuinely
+dead — and only the third is a finding.** An `rc` alone cannot separate them;
+**the STAGE can.** A canary proving code dead must assert WHERE the failure
+came from, not merely that one occurred.
+
+This is the same shape as the coordinator's three absence-as-measurement errors,
+seen from the other side: there, nothing was measured and it read as a result;
+here, something was measured and it was the wrong stage.
+
+**Both sessions are writing these up as a CLAUDE.md PROPOSAL for the owner
+rather than editing that file on a peer's say-so.** That is the right call and
+the proposal is queued for him, not applied.
