@@ -105,4 +105,4 @@ Char` in BOTH modes at `7bb56a21f826` and after, not `AnsiString` in the default
 mode.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 45391912a.
