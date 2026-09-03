@@ -141,3 +141,97 @@ symptom was a compile refusal, so compiling IS the assertion there). xtensa
 needs `--platform=posix --xtensa-soft-mulhigh`.
 
 **Re-measure the `-u -d` array-element corner before landing.**
+
+## WIDER THAN THE FLAG: a frozen FUNCTION RESULT is refused in the DEFAULT mode, at the pin
+
+Found while writing the acceptance rows, and it changes this ticket's scope.
+
+```pascal
+program fr;
+function Mk: string[10]; begin Mk := 'ret'; end;
+procedure Show(const a: AnsiString); begin WriteLn('A[', a, ']'); end;
+var s: string[10];
+begin s := 'plain'; Show(s); Show(Mk); end.
+```
+
+```
+error: no overload of Show matches these arguments
+  argument types: (string[N])
+```
+
+**No flag. Default mode. Identical under `stable_linux_amd64/default/pinned`**
+(`1eec4dc5e0a7`), so this ships today in every `$(PXX_STABLE)` build. The
+table at the top of this ticket says the default mode compiles on all seven
+targets — that is true for a record FIELD and false for a function RESULT,
+because the two arrive narrow by different routes: a field carries
+`ASTTk`, a call node carries `Procs[].RetType`, the STORAGE kind, and only the
+latter is narrow in the default build (tyFixedString) as well as under the
+flag (tyShortString).
+
+So this is not only a phase-4 blocker. The same normalisation fixes a
+default-mode refusal that is live at the pin.
+
+## The held test program, so a restart cannot take it
+
+Written as `test/test_frozen_arg_overload.pas`, UNTRACKED until this lands.
+The header comment on the real file explains why each row fails differently;
+the rows themselves are the part that must survive.
+
+```pascal
+type
+  Inner = record g: string[10]; end;
+  R = record f: string[10]; n: Inner; end;
+  TArr = array[0..2] of string[10];
+
+procedure Show(const a: AnsiString);
+begin WriteLn('A[', a, ']'); end;
+
+procedure ShowI(const a: Integer);
+begin WriteLn('I[', a, ']'); end;
+
+procedure ShowI(const a: AnsiString);
+begin WriteLn('AI[', a, ']'); end;
+
+function Mk: string[10];
+begin Mk := 'ret'; end;
+
+var
+  r: R; a: TArr; s: string[10]; i: Integer;
+begin
+  r.f := 'field'; r.n.g := 'nested'; a[1] := 'elem'; s := 'plain'; i := 1;
+  Write('plain   '); Show(s);
+  Write('field   '); Show(r.f);
+  Write('nested  '); Show(r.n.g);
+  Write('elem    '); Show(a[1]);
+  Write('elemvar '); Show(a[i]);
+  Write('ret     '); Show(Mk);
+  Write('pick    '); ShowI(r.f);
+  Write('int     '); ShowI(7);
+end.
+```
+
+Expected output, measured identical in the default, `-dPXX_SHORTSTRING` and
+`-uPXX_MANAGED_STRING` modes with the fix applied:
+
+```
+plain   A[plain]
+field   A[field]
+nested  A[nested]
+elem    A[elem]
+elemvar A[elem]
+ret     A[ret]
+pick    AI[field]
+int     I[7]
+```
+
+**The fourth mode, `-uPXX_MANAGED_STRING -dPXX_SHORTSTRING`, gives `elem` and
+`elemvar` as garbage** — that is the frozen→managed argument conversion, not
+this fix, and it is the reason this is held. Wire the first three modes when
+this lands and add the fourth once the conversion is unified.
+
+**A CAUTION PAID FOR TWICE TODAY**: the first version of this section pasted an
+"expected output" read off a STALE binary at a scratch path — the compile had
+failed, the previous run's executable was still there, and `&&` on the compile
+was missing, so a confident-looking eight-row block went in that was the
+`-u -d` corner's garbage. Same failure as the handover's rule 2. Branch on the
+compile, and use a fresh output path.
