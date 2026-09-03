@@ -227,4 +227,4 @@ arm32 — all pass, which is what says the branch-offset conversion is right.
   is known.
 - [[bug-a-nilpy-thread-clone-cannot-start-a-thread-on-aarch64-or-arm32]] —
   `tid nonzero = False` on both, at the pin as well, so not a regression.
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 817cac4ef.
