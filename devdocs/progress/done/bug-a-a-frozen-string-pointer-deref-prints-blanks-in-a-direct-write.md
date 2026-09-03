@@ -99,4 +99,4 @@ x86-64, aarch64, arm32, riscv32, xtensa x 2 modes). New `drfw` row. gate quick
 GREEN, FPC seed canary PASS.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 3b0f71ccd.
