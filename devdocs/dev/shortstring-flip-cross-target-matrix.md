@@ -125,11 +125,12 @@ deterministic", and both produce the same tidy table.
 
 ## Reproducing
 
-Scripts are in the session scratchpad, not the repo (they are a one-shot
-measurement of a state that is about to stop existing):
-`sweep_cross.sh <out.tsv> <artifactdir> <target>` for each of the seven,
-`oracle_fpc.sh` for the FPC column, `noise.sh` for the self-comparison control,
-`matrix.py` to join them. xtensa needs `--platform=posix
+`tools/flip-shortstring/` — `sweep.sh <out.tsv> <artifactdir> <target>` for
+each of the seven, `oracle_fpc.sh` for the FPC column, `noise.sh` for the
+self-comparison control, `matrix.py` to join them. **That directory dies with
+the flag**: the commit that deletes `PXX_SHORTSTRING` should delete it in the
+same diff, because after that there is no "off" mode and every script there
+measures one thing twice. xtensa needs `--platform=posix
 --xtensa-soft-mulhigh`, so its rows are not bit-identical to hardware for
 multiplies; wasm32 emits `.wasm` and runs under wasmtime.
 

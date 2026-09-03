@@ -18368,15 +18368,19 @@ test-riscv32: $(COMPILER)
 	# (Length(p^) = Length(s)) so one file carries no per-target constant. The
 	# censuses this feature ran all counted PXXWriteFrozenW -- WRITERS -- and the
 	# defects are in readers: comparison, Copy and Pos appear in no count.
-	# DEFAULT MODE ONLY for now. Under -dPXX_SHORTSTRING this file is red on all
-	# four converted backends and dies partway on three, which is the state
-	# frankb-a9's IRFrozenKindOfAddr fix has to close -- wiring the flag rows
-	# before the fix would just paint every lane red. The default rows are real
-	# coverage today and are byte-identical to the FPC 3.2.2 oracle.
-	# x86-64 is deliberately NOT wired: all 21 assertions pass there but
-	# Write(p^) prints hundreds of bytes of garbage, which reproduces on the
-	# PINNED compiler with no flag, so it predates phase 2 entirely.
-	# bug-a-write-of-a-frozen-string-through-a-typed-pointer-prints-garbage-on-x86-64
+	# BOTH MODES, EVERYWHERE, and that is recent. This block said "DEFAULT MODE
+	# ONLY for now -- under -dPXX_SHORTSTRING this file is red on all four
+	# converted backends and dies partway on three", and separately that x86-64
+	# was "deliberately NOT wired" because Write(p^) printed garbage. Both were
+	# true when written and both are now false: the reader fix landed (3b0f71ccd,
+	# "the write path is a THIRD reader"), the flag rows below are wired, and the
+	# x86-64 flag row is wired above. Re-measured 2026-09-03 on the pinned
+	# compiler: the flag-mode output matches test_shortstring_through_a_pointer.
+	# expected on x86-64, i386, aarch64, arm32, riscv32 AND xtensa -- six for six.
+	# A stale "this is red under the flag" is the worst possible comment to leave
+	# standing while the phase-4 flip is being sequenced off exactly that
+	# question: it does not error, it just tells the next reader the flip has a
+	# blocker it does not have.
 	# The operand-shape matrix, both modes -- a 32-bit non-x86 control for a
 	# family whose defects have all been width- or tag-shaped.
 	./$(COMPILER) --target=riscv32 test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/rv32_fcos_d
@@ -19714,15 +19718,19 @@ test-arm32: $(COMPILER)
 	# (Length(p^) = Length(s)) so one file carries no per-target constant. The
 	# censuses this feature ran all counted PXXWriteFrozenW -- WRITERS -- and the
 	# defects are in readers: comparison, Copy and Pos appear in no count.
-	# DEFAULT MODE ONLY for now. Under -dPXX_SHORTSTRING this file is red on all
-	# four converted backends and dies partway on three, which is the state
-	# frankb-a9's IRFrozenKindOfAddr fix has to close -- wiring the flag rows
-	# before the fix would just paint every lane red. The default rows are real
-	# coverage today and are byte-identical to the FPC 3.2.2 oracle.
-	# x86-64 is deliberately NOT wired: all 21 assertions pass there but
-	# Write(p^) prints hundreds of bytes of garbage, which reproduces on the
-	# PINNED compiler with no flag, so it predates phase 2 entirely.
-	# bug-a-write-of-a-frozen-string-through-a-typed-pointer-prints-garbage-on-x86-64
+	# BOTH MODES, EVERYWHERE, and that is recent. This block said "DEFAULT MODE
+	# ONLY for now -- under -dPXX_SHORTSTRING this file is red on all four
+	# converted backends and dies partway on three", and separately that x86-64
+	# was "deliberately NOT wired" because Write(p^) printed garbage. Both were
+	# true when written and both are now false: the reader fix landed (3b0f71ccd,
+	# "the write path is a THIRD reader"), the flag rows below are wired, and the
+	# x86-64 flag row is wired above. Re-measured 2026-09-03 on the pinned
+	# compiler: the flag-mode output matches test_shortstring_through_a_pointer.
+	# expected on x86-64, i386, aarch64, arm32, riscv32 AND xtensa -- six for six.
+	# A stale "this is red under the flag" is the worst possible comment to leave
+	# standing while the phase-4 flip is being sequenced off exactly that
+	# question: it does not error, it just tells the next reader the flip has a
+	# blocker it does not have.
 	./$(COMPILER) --target=arm32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a32_ssthp
 	tools/expect_same.sh arm32/shortstring_through_a_pointer "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a32_ssthp_s
