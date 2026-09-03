@@ -1537,3 +1537,76 @@ as banked at `884a51fbc`: **a Makefile test row is addressed by its OUTPUT name*
 so grepping the SOURCE path finds the compile and not the compare — hit
 independently by two sessions an hour apart, which is what makes it a class
 rather than one session's slip.
+
+## 2026-09-03 — the canary pass (`86bc8e33d`): FIVE arms were reachable, and nothing was deleted
+
+Banked from franka-29; `86bc8e33d` verified on origin. **The ticket stayed open
+until proven and the proof came back negative — believed-dead was not
+proven-dead, for the second time in this family.**
+
+### What fires
+
+Each inline frozen->managed argument arm became an `Error` with a **per-site
+id**, and every id was **first shown able to fire** under a control build with
+`IRLowerCallArg`'s arm gated off — before any silence was read as evidence.
+
+| arm | fires | population |
+| --- | --- | --- |
+| x86-64 / direct | 61 | 30 distinct `.npy` sources |
+| x86-64 / ordered-predicate | 60 | same, `-O3` only |
+| i386 / direct | 120 | same |
+| arm32 / direct | 120 | same |
+| aarch64 / direct | 120 | same |
+| riscv32 / direct | 0 | of 1932 compiles — **vacuous** |
+| xtensa / direct | 0 | **of 0 compiles — entirely vacuous** |
+| x86-64 ordered / ctor / method | 0 | 5092 compiles |
+
+**TEN arms, not the ~15 the ticket claimed** — the census is closed, and the two
+riscv32/xtensa external-C arms are a different conversion (frozen -> `PChar`)
+that was never part of this.
+
+### Why they are reachable
+
+`IRLowerCallArg` excludes `AN_STR_LIT` deliberately — **and `AN_STR_LIT` is a
+PASCAL node.** A NilPy string literal lowers to a `const_str` tagged `tyString`,
+matches neither that exclusion nor any backend's literal fast path, so **the
+backend's own frozen arm is the only thing that converts it.** `x = "a" * 3`
+fires; `y = "ab"; x = y * 3` does not. With all ten deleted the self-host
+fixedpoint still held and `gate.sh quick` went RED — `quick_canary_nilpy` from
+`total ok 36 / 36` to `ok 23` plus a segfault. Root cause filed as
+`refactor-a-nilpy-const-str-bypasses-both-the-literal-fast-path-and-the-call-arg-funnel`
+(prio 45, `backlog-core`, unclaimed).
+
+### THE CORRELATED BLIND SPOT — the finding, and it outranks the fix
+
+Before that, franka-29 ran a canary sweep of **100,560 compiles** — whole corpus
+x 6 targets x 4 mode corners x `-O0/-O2/-O3` — and reported **ZERO fires**, and
+was about to close on it. **It enumerated only the Pascal half: 1676 files.** The
+corpus also holds **818 `.npy`, 583 `.c`, 26 `.rs`, 6 `.zig`**, none compiled.
+
+> The claim under test was *"every call argument now funnels through one
+> function"*, and **the frontends that do NOT funnel are exactly the ones a
+> Pascal-only population cannot contain. The hole and the defect had the same
+> shape, so the zero was clean BECAUSE the bug was there.**
+
+That is the sentence to keep. This repo already knows a zero can be vacuous; what
+is new is that **the gap was not random — it was CORRELATED with the defect.** A
+random gap would have been lucky to hide five reachable arms across five targets.
+This one was guaranteed to.
+
+### Two guards worked and still could not see it
+
+**Per-site ids** — two arms had first shared a label, and every fire came from one
+of the two. **Replaying every control-firing row under the armed binary**,
+requiring rc=0 AND no fire — 12 of 76 came back rc=1, a whole backend's control
+population refusing to compile.
+
+**Both are aimed INSIDE the population.** `gate.sh quick` caught it on the first
+test OUTSIDE it, **which is an argument for gating before believing a census
+rather than after.**
+
+### Scoping, stated by the author rather than asked for
+
+The numbers are scoped to tip `8cd3d6eb4`. frankb-78's `18b92fac9` (SizeOf
+padded to a machine word) landed after the sweep, and franka-29 said so rather
+than comparing across it.
