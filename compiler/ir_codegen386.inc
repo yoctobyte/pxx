@@ -4120,9 +4120,23 @@ begin
               end
               else if TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
               begin
+                { IRStrTkOf(IRA[argNode]), NOT IRStrTkOf(argNode). An IR_ARG node
+                  is tagged tyString generically -- IRFrozenKindOfAddr says so in
+                  its own header -- so asking the ARG node walks back to nothing
+                  and returns the 8-byte default. The value node is what
+                  IREmitNode386 just evaluated into eax and the only node that
+                  can name the width. Under -dPXX_SHORTSTRING this read a 1-byte
+                  prefix as eight, handed PXXStrFromLit a length in the billions
+                  and SIGSEGV'd: `Show(s)` for `const a: AnsiString` and every
+                  intrinsic lowered to a helper call (Copy, Pos) with it.
+                  In the DEFAULT mode the wrong answer and the right answer are
+                  both tyString, so this could not fail there -- the collision
+                  CLAUDE.md warns about, and why x86-64's suite showed nothing.
+                  xtensa already spelled it IRA[argNode]; riscv32 did not.
+                  bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode }
                 EmitB($50);                                 { push eax }
-                EmitLoadStrLen386(1, 0, IRStrTkOf(argNode));   { ecx = len }
-                EmitLeaStrData386(0, IRStrTkOf(argNode));      { eax = chars }
+                EmitLoadStrLen386(1, 0, IRStrTkOf(IRA[argNode]));   { ecx = len }
+                EmitLeaStrData386(0, IRStrTkOf(IRA[argNode]));      { eax = chars }
                 EmitB($51);                                 { push ecx (len) }
                 EmitB($50);                                 { push eax (src) }
                 j := FindProc('PXXStrFromLit');
@@ -5494,8 +5508,19 @@ begin
               PatchRel8(j);          { patch jz done }
             end;
           end
-          else if tk = tyString then
+          else if TypeIsFrozenString(tk) then
           begin
+            { TypeIsFrozenString, not `tk = tyString`: the six other backends
+              already spell it this way and i386 was the last `= tyString` in an
+              IR_WRITE arm. A frozen operand is tagged tyString only when the
+              walker had a symbol to normalise through StrValTk; a RECORD FIELD
+              load keeps its storage kind, so `WriteLn(r.f)` for
+              `r.f: string[10]` arrived as tyShortString, matched no arm and hit
+              the catch-all Error below -- an honest refusal of an operand every
+              other target writes. `WriteLn(s)` for a bare `var s: string[10]`
+              was correct beside it in the same program, which is why a
+              variable-only suite saw nothing.
+              bug-a-i386-refuses-a-frozen-record-field-write-under-the-byte-prefix-mode }
             if wid > 0 then
             begin
               { Frozen spelling of the same rule -- see the tyAnsiString arm.

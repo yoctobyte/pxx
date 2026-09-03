@@ -3304,7 +3304,13 @@ begin
               length prefix + NUL-terminated chars; pass the char data so the
               callee sees a const char*. }
             if ProcExternal[procIdx] and TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
-              EmitLeaStrDataRISCV32(reg_a0, reg_a0, IRStrTkOf(argNode));
+              { IRA[argNode], not argNode -- an IR_ARG node is tagged tyString
+                generically, so IRStrTkOf(argNode) always answers the 8-byte
+                default and the char pointer handed to the C callee pointed
+                seven bytes past the first character. The sibling of the i386
+                call-argument fix; xtensa already had it right.
+                bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode }
+              EmitLeaStrDataRISCV32(reg_a0, reg_a0, IRStrTkOf(IRA[argNode]));
             rv32_addi(reg_sp, reg_sp, -4);
             rv32_sw(reg_a0, reg_sp, 0);
             Inc(nArgs, 1);

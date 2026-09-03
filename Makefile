@@ -12476,6 +12476,18 @@ test-core: $(COMPILER)
 	tools/expect_same.sh sweep_arralias26 "$$($(TESTTMP)/sweep_arralias26)" "$$(printf 'dyn   8 8 8\nstatic 16 16\nsums  3 7 11\nlen   2 2 2\nstat  7 8 4\nnested 19 1')"
 	./$(COMPILER) test/test_frozen_str_array_elem_cap.pas $(TESTTMP)/sweep_frozencap26
 	tools/expect_same.sh sweep_frozencap26 "$$($(TESTTMP)/sweep_frozencap26)" "$$(printf 'global   abcdefgh 8\nlocal    abcdefgh 8\nparam    abcdefgh 8\nreturn   abcdefgh 8\nplainfld abcdefgh 8\naliasfld abcdefgh 8\ninlinefld abcdefgh 8\nnested   abcdefgh 8\narrofrec abcdefgh 8\ndynarr   abcdefgh 8\noverrun  abcdefgh 8\nneighbour-elem  ZZZ\nneighbour-field 12345\nnested t1=222 t2=111 arr t1=333')"
+	# A frozen record FIELD written with WriteLn, and a frozen string handed to a
+	# MANAGED string parameter (directly, and through Copy/Pos which lower to
+	# helper calls). BOTH modes: the argument defect could not fail in the
+	# default mode, because there the wrong prefix kind and the right one are the
+	# same tyString -- so a default-only row is a guard that cannot fail, and a
+	# flag-only row would not notice the default path regressing.
+	# bug-a-i386-refuses-a-frozen-record-field-write-under-the-byte-prefix-mode
+	# bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode
+	./$(COMPILER) test/test_frozen_arg_and_field_write.pas $(TESTTMP)/sweep_frozenargfld_d
+	tools/expect_same.sh sweep_frozenargfld_default "$$($(TESTTMP)/sweep_frozenargfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/sweep_frozenargfld_s
+	tools/expect_same.sh sweep_frozenargfld_bytepfx "$$($(TESTTMP)/sweep_frozenargfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	./$(COMPILER) test/test_generic_constraint_tobject_root.pas $(TESTTMP)/sweep_gentobj26
 	tools/expect_same.sh sweep_gentobj26 "$$($(TESTTMP)/sweep_gentobj26)" "$$(printf 'implicit 1\nexplicit 2\ndeep     3\ntobject  TRUE\nlater    5\nuserbase 6')"
 	./$(COMPILER) test/test_length_of_a_dynamic_array_of_char.pas $(TESTTMP)/sweep_dynchar26
@@ -15763,6 +15775,18 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -uPXX_MANAGED_STRING --target=i386 test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_i386_frozen_strlen
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_i386_frozen_strlen_x64
 	tools/expect_same.sh i386/test_i386_frozen_strlen "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_strlen)" "$$($(TESTTMP)/test_i386_frozen_strlen_x64)"
+	# A frozen record FIELD written with WriteLn, and a frozen string handed to a
+	# MANAGED string parameter (directly, and through Copy/Pos which lower to
+	# helper calls). BOTH modes: the argument defect could not fail in the
+	# default mode, because there the wrong prefix kind and the right one are the
+	# same tyString -- so a default-only row is a guard that cannot fail, and a
+	# flag-only row would not notice the default path regressing.
+	# bug-a-i386-refuses-a-frozen-record-field-write-under-the-byte-prefix-mode
+	# bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode
+	./$(COMPILER) --target=i386 test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_i386_frozen_argfld_d
+	tools/expect_same.sh i386/frozen_arg_field_write_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
+	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_i386_frozen_argfld_s
+	tools/expect_same.sh i386/frozen_arg_field_write_bytepfx "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	./$(COMPILER) --target=i386 test/test_shortstring_trunc.pas $(TESTTMP)/test_i386_sstrunc
@@ -16511,6 +16535,18 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -uPXX_MANAGED_STRING --target=aarch64 test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_aarch64_frozen_strlen
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_aarch64_frozen_strlen_x64
 	tools/expect_same.sh aarch64/test_aarch64_frozen_strlen "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_frozen_strlen)" "$$($(TESTTMP)/test_aarch64_frozen_strlen_x64)"
+	# A frozen record FIELD written with WriteLn, and a frozen string handed to a
+	# MANAGED string parameter (directly, and through Copy/Pos which lower to
+	# helper calls). BOTH modes: the argument defect could not fail in the
+	# default mode, because there the wrong prefix kind and the right one are the
+	# same tyString -- so a default-only row is a guard that cannot fail, and a
+	# flag-only row would not notice the default path regressing.
+	# bug-a-i386-refuses-a-frozen-record-field-write-under-the-byte-prefix-mode
+	# bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode
+	./$(COMPILER) --target=aarch64 test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_a64_frozen_argfld_d
+	tools/expect_same.sh aarch64/frozen_arg_field_write_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
+	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_a64_frozen_argfld_s
+	tools/expect_same.sh aarch64/frozen_arg_field_write_bytepfx "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	./$(COMPILER) --target=aarch64 test/test_shortstring_trunc.pas $(TESTTMP)/test_aarch64_sstrunc
@@ -17166,6 +17202,18 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_shortstring_trunc.pas $(TESTTMP)/test_riscv32_sstrunc
 	./$(COMPILER) test/test_shortstring_trunc.pas $(TESTTMP)/test_riscv32_sstrunc_x64
 	tools/expect_same.sh riscv32/test_riscv32_sstrunc "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sstrunc)" "$$($(TESTTMP)/test_riscv32_sstrunc_x64)"
+	# A frozen record FIELD written with WriteLn, and a frozen string handed to a
+	# MANAGED string parameter (directly, and through Copy/Pos which lower to
+	# helper calls). BOTH modes: the argument defect could not fail in the
+	# default mode, because there the wrong prefix kind and the right one are the
+	# same tyString -- so a default-only row is a guard that cannot fail, and a
+	# flag-only row would not notice the default path regressing.
+	# bug-a-i386-refuses-a-frozen-record-field-write-under-the-byte-prefix-mode
+	# bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode
+	./$(COMPILER) --target=riscv32 test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_rv32_frozen_argfld_d
+	tools/expect_same.sh riscv32/frozen_arg_field_write_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
+	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_rv32_frozen_argfld_s
+	tools/expect_same.sh riscv32/frozen_arg_field_write_bytepfx "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	# Int64/QWord -> Double at full 64-bit width incl. unsigned top-bit values
 	# (bug-cross-32bit-int64-to-double-low-word / bug-pascal-qword-to-double-signed)
 	./$(COMPILER) --target=riscv32 test/test_u64_to_double.pas $(TESTTMP)/test_riscv32_u64d
@@ -19272,6 +19320,18 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -uPXX_MANAGED_STRING --target=arm32 test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_arm32_frozen_strlen
 	./$(COMPILER) -uPXX_MANAGED_STRING test/test_cross_frozen_strlen_deref.pas $(TESTTMP)/test_arm32_frozen_strlen_x64
 	tools/expect_same.sh arm32/test_arm32_frozen_strlen "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_frozen_strlen)" "$$($(TESTTMP)/test_arm32_frozen_strlen_x64)"
+	# A frozen record FIELD written with WriteLn, and a frozen string handed to a
+	# MANAGED string parameter (directly, and through Copy/Pos which lower to
+	# helper calls). BOTH modes: the argument defect could not fail in the
+	# default mode, because there the wrong prefix kind and the right one are the
+	# same tyString -- so a default-only row is a guard that cannot fail, and a
+	# flag-only row would not notice the default path regressing.
+	# bug-a-i386-refuses-a-frozen-record-field-write-under-the-byte-prefix-mode
+	# bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode
+	./$(COMPILER) --target=arm32 test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_a32_frozen_argfld_d
+	tools/expect_same.sh arm32/frozen_arg_field_write_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argfld_d)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
+	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_frozen_arg_and_field_write.pas $(TESTTMP)/test_a32_frozen_argfld_s
+	tools/expect_same.sh arm32/frozen_arg_field_write_bytepfx "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argfld_s)" "$$(cat test/test_frozen_arg_and_field_write.expected)"
 	# string[N] truncation incl. a heap record holding a shortstring field reached
 	# through a pointer (bug-cross-pointer-store-record-with-shortstring-field)
 	# `Write(s:w)` on a string VARIABLE: this target dropped the field width
