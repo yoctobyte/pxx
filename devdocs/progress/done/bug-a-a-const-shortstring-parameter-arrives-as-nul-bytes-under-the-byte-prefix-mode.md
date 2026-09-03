@@ -50,7 +50,7 @@ of a string that might be NUL-filled needs `cat -v` or a byte comparison**, not
 an eyeball.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 05f50f9ae.
 
 ## RESOLVED — `const` guards ALIASING, never LAYOUT
 
