@@ -589,3 +589,60 @@ one of them (`const` param) is five NUL bytes that look like nothing at all.
 
 **Sequencing:** only slices 1 and 2 serialise, and both belong to frankb-a9.
 3 through 7 are independent of each other and of frankb-a9.
+
+## 2026-09-03 — the suite is clean, and that is NOT "done"
+
+20-probe both-modes sweep at `50bb77aea`, compiler `2f9096bb2bd4`:
+
+| target | built | divergences |
+| --- | --- | --- |
+| x86-64 | 20/20 | **0** |
+| i386 | 20/20 | **0** |
+| arm32 | 20/20 | **0** |
+| aarch64 | 20/20 | **0** |
+| riscv32 | 19/20 | 1 — `SetLength`, known ticket, compile-time refusal |
+
+**And the flip is still blocked on all seven targets** by
+`bug-a-a-frozen-record-field-is-refused-by-overload-resolution-against-an-ansistring-parameter`
+(`44a61dfc9`, prio 90). **The suite scores 20/20 without touching that
+construct.** A clean sweep is evidence about the constructs in the sweep and
+nothing else — the same shape as every other lesson in this file, one level up:
+the guard is now aimed at the right MODE and still does not cover the whole
+LANGUAGE.
+
+### THE PIN IS USELESS AS A CONTROL FOR THIS FAMILY (frankb-78)
+
+**`stable_linux_amd64/default/pinned` predates the byte-prefix layout, so
+`-dPXX_SHORTSTRING` is a NO-OP in it.** Under the flag it prints the WIDE layout
+(`test_shortstring_byte_prefix` gives `5 0 0 0 0 0`), and it passes every row of
+a new byte-prefix test while proving nothing.
+
+**Anyone verifying a byte-prefix fix "against the pinned control" has verified
+nothing.** It is CLAUDE.md's *"a green that is correct about a different
+compiler"* wearing a new hat, and it is the second time the pin has done this in
+three days — the first was the C `__GNUC__` case.
+
+**The control that works is the fix REVERTED and rebuilt**, then restored and
+checked byte-identical so the revert cycle drifted no seed. frankb-78 did
+exactly that: `7f95d3b1c5c2` SIGSEGVs with default rows unchanged, restored to
+`6a01584e19b4` byte-identical.
+
+### "NOT ON THIS PATH" IS NOT "DEAD" (frankb-78)
+
+Concat was **three** arms, not one, all keyed on a bare `= tyString`:
+the managed arm (the SIGSEGV), `EmitAnsiStrAppendToSym` behind `m := m + s`, and
+the inline frozen-concat arm.
+
+Two things to carry:
+
+**A crash-only assertion would have certified arm 2 as fixed.** Its symptom was
+the heap-arena OOM this file recorded as *"probably the same fault"* as the
+SIGSEGV — **same cause, different arm**, and fixing the managed arm alone left
+it live.
+
+**And the inline arm was banked as unreachable, which was half true.** It is
+unreachable from the repro and from `{$H-}` — and `-uPXX_MANAGED_STRING
+-dPXX_SHORTSTRING` reaches it, where `u := s + t` over three `string[10]`s
+segfaults. The revert was right about the path and **wrong about reachability**,
+and the coordinator relayed it onward as settled fact. *Not on this path* must
+never travel as *dead*.
