@@ -2789,3 +2789,79 @@ Its tree was at `45397c903` throughout, predating both `0dedfb86c` and
 `f199ca260`, and it did not pull during the run — **which is the only reason it
 can say its rc=0 is about a known tree.** It scoped the claim to its own tree and
 explicitly did not claim it about HEAD.
+
+## 2026-09-03 19:30 — the aarch64 variadic float, landed as a WHOLE change (reported, NOT yet pushed)
+
+**Status when reported: `test-core` still running, nothing pushed.** Recorded as
+a peer's report, not as a landed fact. The revert is `08b0f50df`; this is the
+second attempt, with all three sites in and **the two directions green at the
+same time for the first time.**
+
+- **Caller:** the variadic arm calling `EmitCallArgRegsA64` — pxx's INTERNAL
+  all-GP convention — is **deleted rather than fixed.** Both C-ABI arms build one
+  per-ARGUMENT class vector and run the single `ABIA64SlotWalk` over it, taking
+  each class from the PARAMETER inside the declared list and from the ARGUMENT's
+  own IR type past it. That is `Arm32CdeclArgKind`'s shape — **the 32-bit target
+  that already got this right** — so it is a spelling the repo already trusts.
+- **Callee:** the variadic-save prologue stores `d0..d7` at save-area offset 64
+  beside `x0..x7` at 0, and the overflow anchor **asks a placement walk instead
+  of comparing `ProcNamedGP + ProcNamedFP` against 8.** A named parameter spills
+  when its OWN bank fills; **the combined count is the all-GP model wearing a
+  different hat.**
+
+### A HELPER THAT TAKES A COUNT AND DOES THE ARITHMETIC HAS CLAIMED A LAYOUT
+
+`__pxx_va_start_impl` took slot COUNTS and computed `gp_offset = ngp*8`,
+`fp_offset = 48 + nfp*16`. **Those constants are SysV's save-area layout**, so a
+helper that looked like it took a count had silently claimed a layout — **and
+that is the mechanical reason aarch64 could not have an FP region at all**, not
+an oversight anyone made about aarch64. It takes BYTE offsets now; the frontend,
+which knows the target, computes them. x86-64's numbers are unchanged, only
+moved.
+
+**This is the `IRFrozenKindOfAddr` finding one turn further out.** There a reused
+helper's **RETURN** carried a hidden claim (a don't-know value that was also a
+real answer); here its **PARAMETER** does (a count that only means anything under
+one layout). Same defect, both ends of the signature:
+
+> **A helper's signature can carry a claim its name does not mention — on the way
+> in as well as on the way out.** Ask of a reused routine not only what it
+> returns when it does not know, but what it must already believe to interpret
+> what you hand it.
+
+That makes it **five** in this family today, across three sessions.
+
+### THE GUARD IS TWO TESTS AND NEITHER IS SUFFICIENT ALONE
+
+`test_pascal_varargs_external` gains its aarch64 row (foreign callee, glibc, fpc
+oracle) and a new `test/cvararg_fp_bank_cross.c` runs native/aarch64/arm32/i386/
+riscv32 for the pxx-callee direction through crtl (gcc oracle).
+
+**Every C variadic test in the suite was native-only — exactly where this defect
+does not exist.** And the two directions are not redundant: **one direction
+cannot tell a correct convention from two sides wrong the same way.** That is the
+self-consistency trap that made the first attempt look green, stated as a test
+requirement.
+
+### THE POSITIVE CONTROL WAS RUN, NOT REASONED ABOUT
+
+Disabling ONE line — the callee's FP-bank selection, precisely the half-change
+that was reverted — fires both probes on aarch64 (`separate=3.00->0.00`,
+`scaled=6.00->2.00`, `sumd=55.00->0.00`) and **NEITHER on native**, then restored
+to **the same binary sha `a85892f216a9`.** So the new rows fail on the population
+they are about, stay quiet on the one they are not, **and fail on the specific
+wrong state that looked green a day ago.** Restoring to an identical sha is the
+part that makes it a control rather than two builds.
+
+### FOUND AND DELIBERATELY NOT FIXED — recorded as a CHOICE
+
+The same arm saves `x0..x7` across the hidden-destination evaluation and not
+`v0..v7`, and its own comment says the arguments are in both. The change makes
+that wider. **Still reachable by no program** — the arm serves externals and
+Pascal-mode prototypes only, and no libc returns an aggregate by value while
+taking a float — and it was PROBED for and could not be reached. Filed with the
+shape and an explicit *"do not land it without a program that fails first"*.
+
+> **A codegen change nothing can exercise is a change made on belief**, and this
+> repo's rule about deleting code you merely believe is dead cuts exactly the
+> same way for ADDING it.
