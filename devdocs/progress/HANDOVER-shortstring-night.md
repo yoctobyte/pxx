@@ -2633,3 +2633,74 @@ build, the endpoint drifted six commits. **A bisect whose endpoint moves does no
 fail loudly — it converges on the wrong commit and prints a confident answer.**
 `0dedfb86c` did not touch the x86-64 arm by name, so it may be irrelevant to that
 bug; the point relayed was hygiene, not a claim.
+
+## 2026-09-03 18:59 — `f199ca260`: both regressions were real, and my "maybe a widening" caveat was right for the wrong reason
+
+Verified on origin. Both causes in `0dedfb86c`, both fixed, gate GREEN, 14 cells
+re-measured. The three auto-filed tickets are closed against it. **Neither was a
+stale assertion**, so the re-lane to A was right and the "maybe the test needs
+updating" arm was wrong — usefully wrong, see below.
+
+### Cause 1 — the depth question has to be asked BEFORE the element question
+
+The classifier asked *"is the element a frozen string"* of an `AN_INDEX` target.
+**One index into a DEPTH-2 dynamic array yields a depth-1 ARRAY, and `ASTTk`
+reports the ELEMENT's kind for it** — so `SetLength(v[0], 1)` on
+`array of array of string[10]` took the string arm and **wrote a length prefix
+over the sub-array's handle.**
+
+**Depth decides what the target IS; element kind only separates the two leaf
+cases.** Asking them in the wrong order is not a missing case — it is a
+well-formed question asked of the wrong node.
+
+### Cause 2 — A DEFAULT THAT IS A REAL ANSWER CANNOT SAY "NOT APPLICABLE"
+
+`SetLength(TI(i), 5)` for `TI = Integer` was being **ACCEPTED**. The membership
+test was `TypeIsFrozenString(IRFrozenKindOfAddr(n))`, and
+**`IRFrozenKindOfAddr` returns `tyString` when it cannot determine the kind.**
+
+That default is *deliberate and correct* for its own callers — a reader that
+already KNOWS it has a string and needs only the width. It is useless as a
+predicate, because `TypeIsFrozenString(tyString)` is True for **every** node, an
+`Integer` included. **The function never errs; it answers a different question,
+and the wide default is indistinguishable from a real hit.**
+
+This repo already says *"if the machinery did nothing at all, would this row
+still pass?"* about a TEST's expected value. **This is the same defect one level
+down, in a FUNCTION's return:** where a routine's don't-know value is also a
+legitimate answer, **every caller that reads it as a predicate is a guard that
+cannot fail.** Fixed with `IRNodeIsFrozenStrAddr` (`compiler/ir.inc:16223`,
+called from the six codegen arms): same arms, same order, **False where the
+walker defaults** — and the walker keeps its default for its own callers.
+
+**Ask of any reused helper: what does it return when it does not know, and is
+that value inside the range I am about to test?**
+
+### THE PART TO KEEP — a refusal test can be the ONLY instrument aimed at a silent write
+
+I raised, from refs alone, that a red refusal test is what an INTENDED WIDENING
+looks like, and told franka-29 the test might be the thing to update. **The
+structure of that reasoning was sound and the conclusion was wrong, and it was
+hiding something worse than the regression I was hedging about.**
+
+Accepting `SetLength` on an integer is **silent**: it compiles, it runs, and it
+writes a length prefix over the integer's storage. **Every value assertion in the
+suite still passes.** The only row that can fail is the one asserting a REFUSAL.
+
+> **A red refusal test is not merely "maybe an intended widening". It is
+> sometimes the only instrument in the tree pointed at a silent memory write.**
+
+That is the assertion-class rule again — the one the open-array leak paid for —
+in its second habitat: **a silent-accept defect cannot fail a value check, BY
+CONSTRUCTION**, exactly as a leak cannot. The test's own header says it exists
+for this, and a previous widening (`850a9e4cd`) broke a shape nobody watched the
+same way. **So the correct move on a red refusal row is to establish intent
+FIRST — never to update the assertion because the change "was meant to widen".**
+The counter-case now lives in `test_setlength_frozen_lvalue_shapes.pas` as the
+`nest` row, so the file that motivated the widening also asserts the direction it
+must not widen into.
+
+### `gate.sh quick` was GREEN before the push
+
+Quick runs none of the four. **Not a complaint about quick** — it is the argument
+for T's ~8-commit sampling, which caught this in about forty minutes.
