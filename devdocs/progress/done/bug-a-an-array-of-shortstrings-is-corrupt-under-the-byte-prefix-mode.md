@@ -2,9 +2,14 @@
 type: bug
 track: A
 prio: 80
-status: open
-summary: Under -dPXX_SHORTSTRING, elements of a static array of string[N] read back
-  corrupted, and Length() of a short element returns a garbage 64-bit value.
+status: done
+summary: FIXED `450f4b52a`. Under -dPXX_SHORTSTRING, elements of a static array of
+  string[N] read back corrupted and Length() of a short element returned garbage:
+  stored at one prefix width and read at another. THREE causes, not one — the
+  IR_INDEX element tag, a kind DOWNGRADE on an address node the walker had already
+  resolved, and a bogus IR_LOAD_MEM arm in IRFrozenKindOfAddr that indexed Syms[]
+  with a NODE index (bounds-checked, so it never errored — it answered about an
+  unrelated symbol). Re-verified against the FPC oracle in both modes.
 ---
 
 # An array of shortstrings is corrupt under the byte-prefix mode
@@ -104,3 +109,17 @@ targets where a width bug is most likely to be looked for. Assert the VALUE
 obvious explanation and is NOT measured — nobody has read the emitted load. It
 is offered as where to point gdb first, not as a diagnosis; three theories died
 on the field-compare tonight, each confirmed by source-reading first.*
+
+## RESOLVED — 450f4b52a
+
+Cause: three causes, two of them mine: the IR_INDEX element tag, the address-node kind downgrade, and a bogus IR_LOAD_MEM arm in IRFrozenKindOfAddr that indexed Syms[] with a NODE index.
+
+Re-verified at 05f50f9ae with the repro in this ticket, unchanged, against the
+FPC 3.2.2 oracle: exact match at default AND -dPXX_SHORTSTRING. Covered going
+forward by test/test_frozen_field_and_deref_readers.pas, wired into all 12
+expected blocks (4 native modes; x86-64, aarch64, arm32, riscv32, xtensa x 2
+modes) — the 32-bit targets included, since this is a width class and x86-64 is
+where width bugs hide.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

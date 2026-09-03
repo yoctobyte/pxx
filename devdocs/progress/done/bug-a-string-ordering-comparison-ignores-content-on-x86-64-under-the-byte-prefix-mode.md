@@ -2,9 +2,12 @@
 type: bug
 track: A
 prio: 85
-status: open
-summary: Under -dPXX_SHORTSTRING on x86-64, `<` `>` `<=` `>=` on string[N] answer
-  from the operand addresses, not the contents; `=` is correct. Silent, no crash.
+status: done
+summary: FIXED `1c6234031`. Under -dPXX_SHORTSTRING on x86-64, `<` `>` `<=` `>=` on
+  string[N] answered from the operand ADDRESSES, not the contents; `=` was correct
+  because a wrong prefix width is applied symmetrically to both operands, so only
+  ordering exposes it. Cause: EmitAnsiStrCmp3Reg, the SIBLING of the helper fixed
+  earlier and never grepped for. Re-verified against the FPC oracle in both modes.
 ---
 
 # String ordering comparison ignores content on x86-64 under the byte-prefix mode
@@ -51,3 +54,17 @@ pairs passes with the bug fully present.** Only an ordering whose true answer is
 `a<b=TRUE` distinguishes. Any content-blind comparison is right half the time by
 construction — so an ordering probe needs BOTH directions, asserted, or it is not
 a guard.
+
+## RESOLVED — 1c6234031
+
+Cause: EmitAnsiStrCmp3Reg, the sibling helper never grepped for after fixing EmitAnsiStrCmpReg.
+
+Re-verified at 05f50f9ae with the repro in this ticket, unchanged, against the
+FPC 3.2.2 oracle: exact match at default AND -dPXX_SHORTSTRING. Covered going
+forward by test/test_frozen_field_and_deref_readers.pas, wired into all 12
+expected blocks (4 native modes; x86-64, aarch64, arm32, riscv32, xtensa x 2
+modes) — the 32-bit targets included, since this is a width class and x86-64 is
+where width bugs hide.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

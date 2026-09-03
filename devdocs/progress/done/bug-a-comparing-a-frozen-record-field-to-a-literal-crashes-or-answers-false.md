@@ -2,8 +2,16 @@
 prio: 60
 track: A
 type: bug
-status: backlog
-summary: "A record FIELD compared against ANY NON-FIELD OPERAND crashes or answers FALSE under -dPXX_SHORTSTRING -- the summary previously said `to a literal` and that scope is measurably wrong. Isolated at `4ba5c77aacc7`, each shape in its OWN program so no crash hides a later row: `r.f = s` CRASH, `s = r.f` CRASH, `r.f = 'hello'` CRASH, `'hello' = r.f` CRASH -- and **`r.f = r.f` answers TRUE**. So a literal is not the discriminator; HOMOGENEITY of operand shape is. IT IS NOT A KIND-RESOLUTION BUG, and this is the useful half: `Length(r.f)` answers 5 and `r.f[1]` answers `h` in the same binary, so the field's PREFIX WIDTH already resolves correctly and the walker is not missing an IR_FIELD arm. That was the attractive theory and it is refuted -- do not spend the session on it. NOR IS IT AGGREGATE MEMBERS GENERALLY: `a[1] = s` for `array[1..2] of string[10]` answers rc=0, so an array element is fine and only a RECORD FIELD is not. Default mode is rc=0 throughout, so this is flag-mode-only. The surviving signature is a record field's decompose being incompatible with the two-operand compare SEQUENCE rather than with its own width -- field+field takes one path and works, field+anything-else mixes two and does not. Symmetric in operand order, which argues against a one-sided evaluation-order slip. Sits beside `bug-a-indexing-a-frozen-string-through-a-pointer-deref-reads-the-wrong-byte` as the second of the two readers that SURVIVED the four-cause fix `764dc3a30`; the two have DIFFERENT causes and must not be merged."
+status: done
+summary: FIXED `ba90811d3`. Under -dPXX_SHORTSTRING a record FIELD compared against
+  any NON-FIELD operand crashed or answered FALSE (`r.f = r.f` answered TRUE, so
+  operand HOMOGENEITY was the discriminator, not the literal). Cause: the field was
+  VALUE-LOADED where an address was wanted, plus two compare guards spelled
+  `= tyString` where they meant TypeIsFrozenString, plus CmpFusible fusing the
+  field-vs-field row into a scalar address compare — correct at -O0 and FALSE at
+  -O1+, which is why -O0 hid it. NOTE this summary previously recorded a
+  "decompose/compare sequencing mismatch"; that was my own hypothesis and it was
+  refuted by gdb — see the retraction below. Re-verified against the FPC oracle.
 ---
 
 # Comparing a frozen record FIELD to a literal crashes or answers FALSE
@@ -154,3 +162,17 @@ stuck-TRUE compare cannot pass. Gate GREEN, FPC canary PASS.
 at exactly the compiler sha it was reported passing at (`a09992a1c33f`, stashed
 tree, rebuilt): `r.f = 'hello'` exits 139 there. It closed the pointer-deref
 index and nothing else.
+
+## RESOLVED — ba90811d3
+
+Cause: the field was value-loaded; two compare guards plus CmpFusible, which fused the field-vs-field row into a scalar address compare (right at -O0, FALSE at -O1+).
+
+Re-verified at 05f50f9ae with the repro in this ticket, unchanged, against the
+FPC 3.2.2 oracle: exact match at default AND -dPXX_SHORTSTRING. Covered going
+forward by test/test_frozen_field_and_deref_readers.pas, wired into all 12
+expected blocks (4 native modes; x86-64, aarch64, arm32, riscv32, xtensa x 2
+modes) — the 32-bit targets included, since this is a width class and x86-64 is
+where width bugs hide.
+
+## Log
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
