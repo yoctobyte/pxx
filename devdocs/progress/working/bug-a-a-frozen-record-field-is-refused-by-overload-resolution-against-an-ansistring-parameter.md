@@ -173,7 +173,13 @@ default-mode refusal that is live at the pin.
 
 ## The held test program, so a restart cannot take it
 
-Written as `test/test_frozen_arg_overload.pas`, UNTRACKED until this lands.
+Written as `test/test_frozen_arg_overload.pas`. **It IS tracked as of
+`bab799137` and it is NOT wired into any build rule** — deliberately, because
+three of its four modes need this fix to compile at all. `gate.sh quick`'s
+"this push wires the tests it adds" is green (it reads the push's own diff),
+and it does not belong in `test/UNWIRED.txt`, which is for files whose end
+state is "nothing runs it". Wire it in the commit that lands the fix. The
+source is duplicated below so the rows survive even if the file does not.
 The header comment on the real file explains why each row fails differently;
 the rows themselves are the part that must survive.
 
