@@ -5,12 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:9 unfinished:26 blocked:7 backlog:5 backlog_new:2 backlog-umbrella:7 backlog-core:137 backlog-nilpy:96 backlog-tools:12 backlog-pascal:53 backlog-decide:35 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3192 rejected:74`
+`working:10 unfinished:26 blocked:7 backlog:5 backlog_new:2 backlog-umbrella:7 backlog-core:136 backlog-nilpy:96 backlog-tools:12 backlog-pascal:53 backlog-decide:36 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3192 rejected:74`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386` [A] — owner: frankA
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
+- `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-p-implement-the-real-tyshortstring-byte-prefix-layout` [P] — owner: UNASSIGNED — "frankB" named a CHECKOUT, not a session, and was read as a holder for a day

@@ -110,6 +110,25 @@ aarch64 + arm32 + riscv32) and `test_shortstring_trunc.pas` are the rows a
 change here can regress; the frozen model (`-uPXX_MANAGED_STRING`) is where a
 plain `string` is frozen at all and is where the 255 has to keep working.
 
+## The number it records is one arm of an OPEN FORK, 2026-09-03
+
+`b84e73e53` writes `DEFAULT_STR_CAP` (255) for a plain frozen `string`, and this
+ticket justified that as "255 IS its N -- measured". **The measurement was of
+the CLAMP, and the ALLOCATION disagrees with it.** Measured the same day: a
+plain frozen `string` is allocated at **8,388,616** bytes as a global
+(`STRING_CAP + 8`), 264 as a local and 264 as a record field, and clamped at 255
+in all three -- by a direct literal assignment as well as by concat, so it is
+not a concat-only clamp. If the allocation is the intent, a global's capacity is
+8 MB and recording 255 for it is recording the clamp's number, not the type's.
+
+Nothing is broken either way -- the clamp already used 255, so the write is
+neutral, which is why it stays landed. But the fork is real and is now
+[[decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes]].
+Under its arm (A) this writer must ask the storage class; under arm (B) it is
+already right. **Do not build the remaining carrier work on the 255 until that
+is settled**, because doing so writes one arm of an open fork into three more
+places.
+
 ## Half done, 2026-09-03 — the SYMBOL writers, and why that enables nothing yet
 
 Both writer sites now record the real capacity:

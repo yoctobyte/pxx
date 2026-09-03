@@ -2,7 +2,10 @@
 track: A
 prio: 45
 type: feature
-summary: "In the FROZEN-string model (-uPXX_MANAGED_STRING, the self-host build), `array of string` is refused from SetLength up: the element is an inline fixed-capacity buffer and no path knows its stride. Delete/Insert refuse it downstream of that, which is why they carry a frozen-string exclusion."
+blocked-by: [decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes]
+summary: "PREMISE REFUTED 2026-09-03: the stride IS known and it is 8388616 bytes -- STRING_CAP + 8, taken from the ARRAY VARIABLE's storage class, which is a category error for a dynamic array whose elements live on the heap. Only x86-64 refuses; i386/aarch64/arm32/riscv32 ACCEPT it, match FPC 3.2.2 on three elements and SIGSEGV at 1000, all reproducible on pin v401 -- so x86-64's refusal is the only honest behaviour of the six and this is not a missing implementation. Now blocked on [[decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes]], because the element stride IS that number: a plain frozen `string` is allocated at 8388616 (global) or 264 (local/field) and clamped at 255 in every one of them, by assignment as well as by concat. ORIGINAL TEXT, kept because it is what the ticket was filed on: In the FROZEN-string model (-uPXX_MANAGED_STRING, the self-host build), `array of string` is refused from SetLength up: the element is an inline fixed-capacity buffer and no path knows its stride. Delete/Insert refuse it downstream of that, which is why they carry a frozen-string exclusion."
+status: working
+owner: franka-29
 ---
 
 # `array of string` is unsupported in the frozen-string model
