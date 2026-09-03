@@ -285,4 +285,4 @@ unblocked; it is a behaviour change across every consumer of `SymStrCap` and
 wants its own control rather than riding along with a carrier fix.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c2ad9761e.
