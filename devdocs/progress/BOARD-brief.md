@@ -59,7 +59,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 398, ranked
+## Ready — top 30 of 397, ranked
 
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
@@ -92,4 +92,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [B]` bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS (unblocks 1)
 - `[p 60] [C]` bug-c-ir-unsupported-ast-node-kind-1-in-flash-eraseall (unblocks 1)
 
-_368 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_367 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
