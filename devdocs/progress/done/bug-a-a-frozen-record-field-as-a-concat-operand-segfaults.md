@@ -80,4 +80,4 @@ crash and is independent (measured: the repro above segfaults with that fix
 absent from the tree).
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit fc926ef27.
