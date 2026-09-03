@@ -13116,14 +13116,30 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-09-02T15:36:18Z",
+  "date": "2026-09-03T21:00:54Z",
   "red": [
+   "lib-test#src:tools/crtl_reachability.py",
+   "lib-test#src:test/cmath_nan_payload.c",
+   "lib-test#src:test/cmath_no_pascal_hijack.c",
+   "lib-test#src:test/cmath_lround.c",
+   "lib-test#src:test/cmath_integral_family.c",
+   "lib-test#src:test/crtl_poll_set.c",
+   "lib-test#src:test/crtl_atexit.c",
    "tools-devtest#00"
   ],
-  "sha": "07d196aa45eae7ad3eab752396fb2d950fb3738f",
+  "sha": "2a216b280f331540df1f67aa5fa5950ca2d46575",
   "tier": "full",
-  "ver": "v401",
-  "verdict": "RED"
+  "ver": "v402",
+  "verdict": "RED",
+  "why": {
+   "lib-test#src:test/cmath_integral_family.c": "Segmentation fault (core dumped) | -trunc(1e300)=+1e+300 | -round(-1e300)=-1e+300 | -modf(1e300) fr=+0 ip=+1e+300 | -round(0.49999999999999994)=+0 | -frexp(inf)=+inf | +",
+   "lib-test#src:test/cmath_lround.c": "+0.0 lround=-72057594037909918 llround=-1 lrint=72057594037927935 | +0.0 lround=-144115188075837854 llround=-72057594037927937 lrint=-72057594037927937 | +0.0 lround=-216172782113765790 llround=-14411",
+   "lib-test#src:test/cmath_nan_payload.c": "Segmentation fault (core dumped) | -12345      7FF8000000003039 | -0x10       7FF8000000000010 | -abc        7FF8000000000000 | -077        7FF800000000003F | -big        7FF8000000000001 | +",
+   "lib-test#src:test/cmath_no_pascal_hijack.c": "+copysign=2.27909e-317 2.07508e-322 | +isnan=18019 0 | +isinf=18019 0 | +nan=18020 0 | +hypot=0.000000000 fmod=5.92879e-323 | +sqrt=0.000000000 ceil=-0 floor=0",
+   "lib-test#src:test/crtl_atexit.c": "expect_same: MISMATCH [crtl_atexit.3] | --- expected | +++ actual | @@ -1 +1 @@ | -registered ok=100 bad=0 | +registered ok=17683 bad=0",
+   "lib-test#src:test/crtl_poll_set.c": "-zero r=0 | +timeout r=17650 rev0=0 rev1=0 | +ready r=17650 rev0=0 rev1in=0 | +both r=17651 in0=0 in1=0 | +nval r=17651 nval=0 | +zero r=17651",
+   "lib-test#src:tools/crtl_reachability.py": "Segmentation fault (core dumped) | < setenv_no_overwrite=[first] | < setenv_overwrite=[third] | < no_prefix=[third][ext] | < unset=1 sibling=[ext] | < bad=-1 -1 | FAIL: cstring_batch differs from gcc"
+  }
  },
  "watcher": {
   "testmgr": "9dbceb545285",
