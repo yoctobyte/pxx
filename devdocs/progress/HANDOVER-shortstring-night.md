@@ -988,3 +988,40 @@ mechanism that was never entered:
 **And the exclusion note on two remaining rows was wrong because the COVERAGE
 REPORT PRINTS ONE REFUSAL PER BODY AND THE FIRST WINS** — which is how three
 unrelated causes collected under one `rc=134` and were written up as one.
+
+## WHAT THE 20-PROBE SUITE DOES NOT CONSTRUCT
+
+frankb-78: *"A suite cannot report a shape it does not have; a written inventory
+of the axes it covers can."* The suite has been cited three times as evidence
+for something outside it, always by the coordinator. It is not wrong — it is a
+FIXED SET OF SHAPES, and each citation quietly promotes *"these shapes pass"*
+into *"this target is clean"*.
+
+**Covered (20 probes × 2 modes × 5 targets):** assignment; `=` against a
+literal; ordering; concat (literal and variable operands); array element read
+and `=` against a literal; record field read and `=`; deref index; deref whole;
+`const` and `var` parameters; function result; `Copy`/`Pos`; index write; deref
+write; `SetLength`; array-of-record field; `const` declaration; empty string.
+
+**NOT constructed — every one of these has hidden a real defect:**
+
+| absent shape | what it hid |
+| --- | --- |
+| element **vs element** (`arr[0] = arr[1]`) | i386 FALSE, both modes |
+| frozen **vs AnsiString** | x86-64 FALSE under the flag |
+| deref **vs deref** | unknown — untested |
+| field **vs field** | found separately by frankb-78, not by the suite |
+| frozen arg to a **constructor / virtual** call | the prio-92 ladder, four targets |
+| frozen field to an **AnsiString param** | the all-seven-target overload refusal |
+| `SetLength` on a **non-symbol** (`p^`, `r.f`, `arr[0]`) | refused on every target |
+| **odd-indexed** array element store | the xtensa alignment bus error |
+| anything under **`-uPXX_MANAGED_STRING`** | three separate defects |
+
+**The pattern in the absent column is BINARY OPERATIONS BETWEEN TWO NON-TRIVIAL
+OPERANDS.** Nearly every probe compares a computed value against a LITERAL or
+prints it. Two frozen operands, or one frozen and one managed, is the axis the
+suite has almost no coverage of — and it is where three of the last four
+defects lived.
+
+**Do not extend it by adding probes of the same shape.** The gap is an AXIS, not
+a count.

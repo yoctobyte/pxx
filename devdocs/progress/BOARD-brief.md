@@ -61,6 +61,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 - `[p 92] [A]` bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
+- `[p 80] [A]` bug-a-i386-comparing-two-elements-of-an-array-of-frozen-strings-is-false
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -71,7 +72,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [A]` umbrella-managed-memory-is-correct
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [A]` bug-a-a-frozen-string-compared-to-an-ansistring-is-false-under-the-flag-on-x86-64
-- `[p 70] [A]` bug-a-i386-comparing-two-elements-of-an-array-of-frozen-strings-is-false
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
 - `[p 70] [C]` regression-lib-test-crtl-reachability-8

@@ -1,5 +1,5 @@
 ---
-prio: 70
+prio: 80
 track: A
 type: bug
 status: open
@@ -45,3 +45,18 @@ it lands — the Makefile says so at the point they were left out.
 
 [[bug-a-a-frozen-string-compared-to-an-ansistring-is-false-under-the-flag-on-x86-64]]
 [[feature-p-implement-the-real-tyshortstring-byte-prefix-layout]]
+
+## Prio raised 70 -> 80 (coordinator, 2026-09-03)
+
+**This is wrong in the DEFAULT mode — it ships today on i386.** Its sibling
+(`...frozen-string-compared-to-an-ansistring...`) is flag-only and therefore
+gated behind a flip that has not happened; this one is not gated behind
+anything. Raised on the same reasoning used for the constructor/virtual ladder:
+**a defect that needs no flag is live in every `$(PXX_STABLE)` build, and one
+that needs the flag is not yet.**
+
+It remains BELOW that ladder (92) because it is one target rather than four, and
+below the flip blockers only in the sense that they are already closed. It is
+the more URGENT of the two regressions for anyone building i386 now; its sibling
+is the more DANGEROUS one for the flip. Those are different rankings and both
+are true.
