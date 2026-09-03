@@ -3346,3 +3346,100 @@ day's own lesson about waits on nobody. It takes
 `bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing` (p45,
 A+T), which is harness-side and cannot destabilise a pin, and **if the owner has
 not answered by the time that lands, step 2 starts.**
+
+## 2026-09-03 22:xx — BUILDING WITH THE FLAG *IS* THE FLIP, and the post-state is red today
+
+frankb-78 took the verification half and **went for the BEFORE**, which changed
+the sequence. The flip does NOT complete tonight until four defects close.
+
+### The structural fact that makes it cheap, and nobody had stated it
+
+`pasparser_decl.inc` re-types `string[N]` to `tyShortString` under
+`-dPXX_SHORTSTRING` **today**. franka-29's change makes that unconditional. So:
+
+> **BUILDING WITH THE FLAG IS THE FLIP.** No compiler change is needed to measure
+> the post-state — only the window in which BOTH modes still exist, and the one
+> thing that closes that window is **deleting the flag.**
+
+This reframes the whole job. The flip is not "a change we make and then test"; it
+is **a state we can measure before committing to it.** And the flag's deletion is
+therefore **not the last mechanical step — it is the moment the BEFORE is
+destroyed**, after which every failure has two explanations and no comparison is
+possible. It is sequenced last and separately for that reason.
+
+### THE BLAST RADIUS NOBODY HAD: 58 of 71
+
+**71 test files declare `string[N]` or `shortstring`. The Makefile builds 13 of
+them with the flag.** The other **58 have never been measured in the mode the
+flip makes the default.**
+
+13-built-with-the-flag is exactly the coverage shape that reads as *"we test
+this"* — the same animal as C variadic tests that were all native-only.
+
+### Four defects, and TWO CORRECT CHANGES SEPARATED OUT
+
+Swept all 71, native, both ways: **64 same, 4 output-differs, 2 rc-differs.**
+Re-run under the Makefile's own flags against the checked-in `.expected`:
+
+- `test_char_into_shortstring_via_pointer` — **SIGSEGV**
+- `test_frozen_string_concat_operand` — **SIGSEGV**
+- `test_char_string_equality_both_directions` — **`1char eq TRUE FALSE`**, a
+  one-char string equality **silently returns FALSE**
+- `test_string_n_array_field_stride` — `stride/fits/guard` all `1 -> 0`
+
+Two further differences are **the flip WORKING** (`SizeOf` of a shortstring field
+16->8; the byte-prefix test's own layout rows) and were separated out
+deliberately.
+
+> **That separation is the entire difference between "six differences" and "four
+> defects."** Folded together, the set reads as noise or as one regression, and
+> invites someone to dismiss or to over-unify it.
+
+### THE WRONG BOOLEAN OUTRANKS THE SEGFAULTS
+
+A crash has a location and stops the program. **`TRUE FALSE` has neither**, and
+only a value assertion **in a mode 58 files never run** can see it. Fix the
+segfaults first and that row still ships. Same shape as `SetLength` silently
+accepted on an `Integer` this morning, where the refusal row was the only
+witness — **twice in one day, a silent wrong answer hiding behind a louder
+failure in the same subsystem.**
+
+### FOUR IS A FLOOR
+
+x86-64 only so far — **the target where a width defect is LEAST likely to
+appear**, and the one the dev loop, `gate.sh quick` and the pin all run on. The
+seven-target matrix is next and is expected **worse, not better.** This is the
+repo's structurally-invisible class, which is why the matrix is not optional
+before the flag goes.
+
+**Not diagnosed, and deliberately not guessed at:** whether the four share a
+cause. *"Three symptoms in one subsystem on one day is exactly the shape that
+reads like one root cause and turns out to be three."*
+
+### The owner's instruction, honoured rather than overridden
+
+He asked for **a compiler that implemented shortstrings.** A flipped compiler
+that segfaults on two shapes and silently answers FALSE for one-char equality has
+not implemented shortstrings — it is a broken compiler with the flag removed, and
+it is the exact thing this handbook is written against. **Fixing four and
+flipping IS the instruction. Flipping over them is not.**
+
+Sequence: **fix the four -> seven-target matrix -> flip -> re-pin.**
+
+### `22fe29814`'s zero was true of the PATTERN, not of the defect
+
+*"Bare equality assertions are now 0"* — its scan required the LEFT operand to be
+a command substitution, and the six that exist are `out=$(...); test "$$out" =
+"$$(...)"`, the form you write when you also need an rc or a timeout. All six
+predate that commit.
+
+**Third instance today of one class: a TRUE statement about a NARROWER question
+than the one everyone reads it as answering** — after the clang/link premise and
+`IRFrozenKindOfAddr`'s default. **A scan reporting zero is indistinguishable from
+an absence of defects, so its population must be stated.**
+
+Landed alongside: six genuinely silent assertions converted, **four whose exit
+status was discarded by a `;` — they could not fail at all** — plus a guard tool
+with ten devtest cases wired into `gate.sh quick` so the ~3900 conversions cannot
+rot. Cleared to land: harness-only, cannot affect the flip, and it makes
+assertions louder for the matrix about to run.
