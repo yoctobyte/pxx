@@ -1417,3 +1417,123 @@ either — matching the comment to the broken row would destroy the evidence.
 
 The parked ticket's stated reason for not acting no longer stands: it was not
 "a guard that cannot fail", it was a guard that failed.
+
+## 2026-09-03 — `dyn2dvals` resolved (`e69e71ed2`): the red was RIGHT, and the mask was the ALLOCATOR
+
+Banked from frankb-78; `e69e71ed2` and `adbe33db8` verified as ancestors of
+`origin/master` first. **This is the sixth phase-4 area to end with a defect
+nobody had filed.**
+
+### `dyn2dvals` is a VALUE row, not a stride row — that distinction is the answer
+
+It writes `r{i}c{j}` into every element of a 3x3 `array of array of string[10]`
+and reads them back; the row is 1 iff every element round-trips. `dyn2d`,
+directly above it, is the stride row.
+
+**The per-element size of a dynamic array is decided in THREE places and only one
+ever asked for a capacity:**
+
+1. `DynElemSize` (`ir.inc`) — the INDEX path. Asks `FrozenStrSlotSize`. Always
+   correct.
+2. `GetOrAllocNodeDynDesc` / `GetOrAllocSymRTTI` — the portable descriptor every
+   CROSS backend hands `PXXDynSetLen`. Asked `TypeStorageSize`: **a pointer width
+   for a frozen string.**
+3. x86-64's inline `IR_SETLEN_DYN` arm — its own `TypeSlotSize`, same width, its
+   own copy of the descriptor build.
+
+`SetLength` allocated 8 bytes per element for a row the index path strides by 24,
+so **the last element of every row was written past the end of its own block.**
+
+### WHY IT PASSED BEFORE — measured, not reasoned
+
+frankb-78 rebuilt the pre-padding compiler and measured the block rather than
+arguing about it:
+
+| | stride | needs | block | result |
+| --- | --- | --- | --- | --- |
+| before | 18 | 54 | 56 | PASS |
+| after | 24 | 72 | 56 | `[r0c2]` and `[r1c2]` blank |
+| fixed | 24 | 72 | 104 | PASS |
+
+The allocation was computed from 8 bytes/element and **the ALLOCATOR'S BUCKET
+ROUNDING handed back 56 anyway** — which happens to cover 54 and does not cover
+72. The under-allocation was there the whole time; the padding is only what
+pushed the overrun past the rounding. The last row passed throughout, because
+nothing follows it.
+
+> **A latent under-allocation whose only symptom is which element the bucket
+> rounding happens to cover is invisible until a width moves — and the width
+> moving is the thing everyone reads as the cause.**
+
+That is the trap in this whole phase in one sentence: the change that reveals a
+latent defect looks exactly like the change that caused one, and only measuring
+the pre-change block tells them apart.
+
+### COMMENT VS CODE, decided before either side was touched
+
+The comment said: *"Every row is a MEASURED stride compared against another
+measured stride, never a constant, so the byte-prefix relayout cannot turn it
+red."* **The first clause is TRUE — no row compares against a constant, which is
+why the block survived the relayout. The CONCLUSION is over-broad.** `openvals`
+and `dyn2dvals` are VALUE rows, and a value row goes red whenever a write lands
+outside its own block, whatever the widths are.
+
+So both were wrong, about different things: the value (a real defect, fixed at
+the root) and the comment (wrong about its own coverage). The row stays expected
+`1`; the comment now says a red here is a bug found, never a stale expected
+value.
+
+> **"No row compares against a constant" buys immunity from a RELAYOUT, not
+> immunity from a BUG.**
+
+The immunity claim was written over an eight-row block where **six rows had it
+and two did not — and the two that did not are the only ones that can catch an
+out-of-bounds write.** **An immunity argument stated per-TEST rather than
+per-ROW is the shape to look for.**
+
+### The fix, and what was deliberately NOT merged
+
+One shared `SetLenDynElemSize`, asked by the portable descriptor and by the
+x86-64 inline arm, so **the two that disagreed cannot again**. The index path's
+`DynElemSize` was NOT collapsed in — it takes a different set of inputs and
+merging it wants the descriptor machinery reworked. **The count of three is now
+in a comment so the next reader sees it rather than rediscovering it.** 8/8 rows
+on x86-64, i386, aarch64, arm32, riscv32, xtensa.
+
+### Also landed, and both are the same animal from other sides
+
+**1. `regression-test-emit-obj-test-esp-hello` — THE EXPECTED COUNT WAS THE
+DEFECT.** The row said taking an external's address costs TWO more relocations
+than calling it; it costs ONE. The `+2` was measured while the
+address-materialisation sequence was emitted **twice back to back** (riscv32
+`auipc/j/literal/lw` at `0xb4` and again at `0xc4`, same value into the same
+register; xtensa the same duplicate literal). `adbe33db8` stopped the double
+emission and **the row went RED FOR THE IMPROVEMENT.** Verified byte for byte
+against the pin rather than inferred: HEAD's `.text` is the pin's with exactly
+that 16-byte sequence removed and everything after shifted down. **And the
+fixture's own comment said ONE all along** — comment and code disagreed, and the
+code had encoded what the defect produced.
+
+**2. A SIGSEGV RATE recorded instead of a close.** `test_npy_clone26`: 10/10
+green looked like a fix; **100 runs gave 29 crashes.** A pass rate sampled at ten
+is not a pass rate.
+
+### Filed, deliberately NOT fixed
+
+`bug-a-a-field-rooted-array-of-array-of-string-n-indexes-as-a-char` (prio 55,
+`backlog-core`). The field-rooted `SetLength` arm has no symbol to carry the
+capacity, so its frozen element still gets the kind-only size — **left unfixed on
+purpose, because `r.matrix[0][0] := 'a0'` for a record field of `array of array
+of string[10]` does not compile AT ALL in either mode** (the second index
+resolves as a CHARACTER index), while the same declaration as a plain variable
+works and FPC runs it. **There is nothing to measure a fix against until the
+parse bug is fixed, and fixing the size arm blind would be a change with no
+observable.** That is the right call and the reason belongs in the record.
+
+### Retracted
+
+The "compiled and never asserted" ticket is in `rejected/`. The correction stands
+as banked at `884a51fbc`: **a Makefile test row is addressed by its OUTPUT name**,
+so grepping the SOURCE path finds the compile and not the compare — hit
+independently by two sessions an hour apart, which is what makes it a class
+rather than one session's slip.
