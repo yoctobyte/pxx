@@ -9037,8 +9037,19 @@ begin
                  ((IntToTypeKind(IRTk[left]) = tyAnsiString) or
                   (IntToTypeKind(IRTk[right]) = tyAnsiString)) then
               begin
-                lhsTk := IntToTypeKind(IRTk[left]);
-                rhsTk := IntToTypeKind(IRTk[right]);
+                { IRStrTkOf, matching the ORDERING branch below and the
+                  frozen-only branch after it. This block asked IRTk, and a
+                  frozen operand is tagged tyString generically -- so
+                  EmitAnsiStrCmpReg was told 8 for a string[N] whose prefix is
+                  ONE byte and read the length byte plus seven characters as a
+                  length. `frozenVar = ansiVar` was FALSE for equal contents
+                  under -dPXX_SHORTSTRING, on x86-64, since the layout landed.
+                  The Char arms below are unaffected: IRStrTkOf returns tyChar
+                  for a Char node and tyAnsiString for a managed one, resolving
+                  only the frozen kinds this block was getting wrong.
+                  bug-a-a-frozen-string-compared-to-an-ansistring-is-false-under-the-flag-on-x86-64 }
+                lhsTk := IRStrTkOf(left);
+                rhsTk := IRStrTkOf(right);
                 { Saved around the WHOLE block, not around the emitter call:
                   the two char arms below compare inline and never reach
                   EmitAnsiStrCmpReg, so `F(x) = 'c'` leaks through exactly the

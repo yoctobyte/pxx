@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:9 unfinished:26 blocked:6 backlog:7 backlog_new:2 backlog-umbrella:7 backlog-core:142 backlog-nilpy:96 backlog-tools:7 backlog-pascal:54 backlog-decide:33 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3168 rejected:72`
+`working:9 unfinished:26 blocked:6 backlog:7 backlog_new:2 backlog-umbrella:7 backlog-core:142 backlog-nilpy:96 backlog-tools:7 backlog-pascal:54 backlog-decide:33 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:144 done:3170 rejected:72`
 
 ## Held now (working/ — do not touch these files)
 
@@ -59,10 +59,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 401, ranked
 
-- `[p100] [A]` bug-a-a-frozen-string-compared-to-an-ansistring-is-false-under-the-flag-on-x86-64 (unblocks 1)
 - `[p 92] [A]` bug-a-a-frozen-string-argument-is-empty-through-a-constructor-or-a-virtual-call-on-every-cross-backend
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
-- `[p 80] [A]` bug-a-i386-comparing-two-elements-of-an-array-of-frozen-strings-is-false
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -83,11 +81,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [A]` regression-test-threads-test-nilpy-thread-clone-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
+- `[p 65] [A]` bug-a-pchar-of-a-frozen-string-skips-8-bytes-whatever-the-prefix-width-is
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 - `[p 65] [C]` feature-c-corpus-busybox-i386-the-second-architecture
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
+- `[p 65] [P]` feature-pascal-corpus-generics
 
 _371 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

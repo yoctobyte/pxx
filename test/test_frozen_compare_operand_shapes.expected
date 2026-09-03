@@ -11,6 +11,11 @@ self      TRUE FALSE
 ord       FALSE FALSE TRUE
 addr      FALSE TRUE
 ptr       FALSE TRUE
+case var  hit
+case elem hit
+case fld  hit
+case drf  hit
+case neg  hit
 sl local  3 [hel]
 sl byval  2 [he]
 sl after  5 [hello]

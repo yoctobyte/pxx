@@ -14180,7 +14180,12 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         (IR_CONST_STR rebuilt from the preserved source span) and ranges are
         lexicographic (s >= lo) and (s <= hi). Char selectors keep the
         ordinal path. (bug-case-of-string-segfault-and-label-validation) }
-      caseIsStr := IntToTypeKind(IRTk[selectorValNode]) in [tyString, tyAnsiString];
+      { TypeIsAnyString, not an enumeration: `case arr[0] of 'lit'` refused to
+        compile with `case label does not match the ordinal selector type` on
+        every target once an array element started carrying tyFixedString
+        rather than the generic tyString. A selector that is a string is a
+        string whatever kind records its prefix width. }
+      caseIsStr := TypeIsAnyString(IntToTypeKind(IRTk[selectorValNode]));
 
       { EVALUATE THE SELECTOR EXACTLY ONCE (Pascal requires it; FPC does it).
 

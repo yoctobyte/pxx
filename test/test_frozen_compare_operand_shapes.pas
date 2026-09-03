@@ -95,6 +95,20 @@ begin
   WriteLn('addr      ', @a = @b, ' ', @a = @a);
   WriteLn('ptr       ', p = q,   ' ', p = p);
 
+  { ---- CASE, which is the same question asked by a different statement: the
+    lowering decides "is this selector a string" and then compares it against
+    string labels. It asked an ENUMERATION of kinds, so `case arr[0] of` stopped
+    compiling entirely -- `case label does not match the ordinal selector type`,
+    on every target, from the day an array element began carrying the kind the
+    array records. A compile error rather than a wrong answer, and from exactly
+    the same root as the FALSE above: a guard that means "is this a string"
+    must not list the kinds. ---- }
+  case a of 'abcde': WriteLn('case var  hit'); else WriteLn('case var  MISS'); end;
+  case arr[0] of 'abcde': WriteLn('case elem hit'); else WriteLn('case elem MISS'); end;
+  case r.f of 'abcde': WriteLn('case fld  hit'); else WriteLn('case fld  MISS'); end;
+  case p^ of 'abcde': WriteLn('case drf  hit'); else WriteLn('case drf  MISS'); end;
+  case c of 'abcde': WriteLn('case neg  MISS'); else WriteLn('case neg  hit'); end;
+
   { ---- the writer in the same family ---- }
   l := 'hello';
   SetLength(l, 3);

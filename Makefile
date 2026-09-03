@@ -11222,16 +11222,29 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_ssthp_d26 "$$($(TESTTMP)/test_ssthp_d26)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_ssthp_s26
 	tools/expect_same.sh test_ssthp_s26 "$$($(TESTTMP)/test_ssthp_s26)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
-	# EVERY OPERAND SHAPE ON EITHER SIDE OF A FROZEN COMPARISON. Host row, DEFAULT
-	# MODE ONLY, and the missing flag row is a live defect rather than a choice:
-	# under -dPXX_SHORTSTRING x86-64 answers FALSE for `frozenVar = ansiVar`,
-	# which is correct at pin v401 and wrong at HEAD.
-	# bug-a-a-frozen-string-compared-to-an-ansistring-is-false-under-the-flag-on-x86-64
-	# i386 is not wired for the same reason in the other direction: it answers
-	# FALSE for `arr[0] = arr[1]` in BOTH modes, also a regression since the pin.
-	# bug-a-i386-comparing-two-elements-of-an-array-of-frozen-strings-is-false
+	# EVERY OPERAND SHAPE ON EITHER SIDE OF A FROZEN COMPARISON, both modes, plus
+	# the CASE statement asking the same question a different way. Three defects
+	# were found by this file within an hour of it existing, and none of them was
+	# reachable from a comparison against a literal:
+	#
+	#   i386      `arr[0] = arr[1]` FALSE, both modes  (an address compare)
+	#   ALL       `case arr[0] of 'lit'` did not COMPILE
+	#   x86-64    `frozenVar = ansiVar` FALSE under the flag
+	#
+	# The i386 and case rows are REGRESSIONS from 450f4b52a, which had to start
+	# tagging an array element with the kind the ARRAY records because that tag
+	# is where the prefix width comes from; every guard that had been asking
+	# `IRTk in [tyString, tyAnsiString]` then answered "not a string" for
+	# `arr[0]`. The x86-64 one is not a regression: bisected to eadf214725a, the
+	# commit that introduced the layout, so it never worked.
+	#
+	# The pointer rows (`@a = @b`, `@a = @a`, `p = q`) are the other half of the
+	# guard: a fix that reads the SYMBOL rather than the IR's tag passes every
+	# string row above and turns those three into content comparisons.
 	./$(COMPILER) test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/test_fcos_d26
 	tools/expect_same.sh test_fcos_d26 "$$($(TESTTMP)/test_fcos_d26)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/test_fcos_s26
+	tools/expect_same.sh test_fcos_s26 "$$($(TESTTMP)/test_fcos_s26)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
 	./$(COMPILER) test/test_set_low_high_element_bounds.pas $(TESTTMP)/test_set_low_high26
 	tools/expect_same.sh test_set_low_high26 "$$($(TESTTMP)/test_set_low_high26)" "$$(printf 'a 0|255\nb 1|10\nc 0|2\nd 0|255\ne 1|10\nf 0|2\ng 10\nh 3\ni TRUE|FALSE\nj TRUE|FALSE\nOK')"
 	./$(COMPILER) test/test_bitscan_and_radix_str.pas $(TESTTMP)/test_bitscan_radix26
@@ -15576,6 +15589,13 @@ test-i386: $(COMPILER)
 	# form the helpers emit was derived against the literal it replaced and
 	# checked with GNU as, and the whole module was proved unchanged by building
 	# the same HEAD twice and comparing emitted i386 binaries: 11/11 identical.
+	# The operand-shape matrix, both modes. i386 is the target the
+	# element-vs-element defect was FOUND on and is the row that must not
+	# go quiet again.
+	./$(COMPILER) --target=i386 test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/i386_fcos_d
+	tools/expect_same.sh i386/frozen_compare_shapes_default "$$(tools/run_target.sh i386 $(TESTTMP)/i386_fcos_d)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
+	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/i386_fcos_s
+	tools/expect_same.sh i386/frozen_compare_shapes_short "$$(tools/run_target.sh i386 $(TESTTMP)/i386_fcos_s)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
 	./$(COMPILER) --target=i386 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_i386_ssbp_d
 	tools/expect_same.sh i386/ssbp_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_d)" "$$(printf 'layout    5 0 0 0 0 0 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nsizeof    18')"
 	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_i386_ssbp_s
@@ -18098,6 +18118,12 @@ test-riscv32: $(COMPILER)
 	# Write(p^) prints hundreds of bytes of garbage, which reproduces on the
 	# PINNED compiler with no flag, so it predates phase 2 entirely.
 	# bug-a-write-of-a-frozen-string-through-a-typed-pointer-prints-garbage-on-x86-64
+	# The operand-shape matrix, both modes -- a 32-bit non-x86 control for a
+	# family whose defects have all been width- or tag-shaped.
+	./$(COMPILER) --target=riscv32 test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/rv32_fcos_d
+	tools/expect_same.sh riscv32/frozen_compare_shapes_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_fcos_d)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
+	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_compare_operand_shapes.pas $(TESTTMP)/rv32_fcos_s
+	tools/expect_same.sh riscv32/frozen_compare_shapes_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_fcos_s)" "$$(cat test/test_frozen_compare_operand_shapes.expected)"
 	./$(COMPILER) --target=riscv32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp
 	tools/expect_same.sh riscv32/shortstring_through_a_pointer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp_s

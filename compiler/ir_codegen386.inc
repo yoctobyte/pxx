@@ -2656,13 +2656,19 @@ begin
         end;
 
         if ((op = Ord(tkEq)) or (op = Ord(tkNeq))) and
-           ((IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) or
-            (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString])) then
+           (TypeIsAnyString(IntToTypeKind(IRTk[left])) or
+            TypeIsAnyString(IntToTypeKind(IRTk[right]))) then
         begin
           { Resolved kinds, so the two one-character arms below read the length
-            and the character at the operand's own prefix width. The GUARD above
-            still asks IntToTypeKind, which is correct: it is asking "is this a
-            string at all", and the IR's generic tyString tag answers that. }
+            and the character at the operand's own prefix width. THE GUARD ABOVE
+            ASKS TypeIsAnyString AND USED TO ENUMERATE [tyAnsiString, tyString]
+            -- the comment here said that was correct because "the IR's generic
+            tyString tag answers that", and it stopped being true the day an
+            array element started carrying the kind the ARRAY records. Then
+            `arr[0] = arr[1]` fell past this guard into the scalar path and
+            compared two ADDRESSES: FALSE for equal strings, while `arr[0] = a`
+            against a plain variable stayed correct because the variable's LEA
+            is still tagged generically and the OR fired on that side. }
           lhsTk := IRStrTkOf(left);
           rhsTk := IRStrTkOf(right);
           IREmitNode386(left);  EmitB($50);            { push lhs value }
@@ -2844,8 +2850,8 @@ begin
         end;
 
         if ((op = Ord(tkLt)) or (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe))) and
-           (IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) and
-           (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString]) then
+           TypeIsAnyString(IntToTypeKind(IRTk[left])) and
+           TypeIsAnyString(IntToTypeKind(IRTk[right])) then
         begin
           { ORDERED string compare -> PXXStrCmp3 -> -1/0/1. This arm did not
             exist on ANY cross backend: only =/<> were special-cased, so `a < b`

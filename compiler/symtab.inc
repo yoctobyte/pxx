@@ -235,6 +235,7 @@ end;
 { Defined further down this include; RegisterGeneralAlias below needs it to
   recognise a frozen-string alias, and the FPC seed build wants the forward. }
 function TypeIsFrozenString(tk: TTypeKind): Boolean; forward;
+function TypeIsAnyString(tk: TTypeKind): Boolean; forward;
 { The length-prefix WIDTH the two frozen kinds disagree about; see its body. }
 function FrozenStrPrefixSize(tk: TTypeKind): Integer; forward;
 { Sizing a frozen string needs its CAPACITY as well as its kind, and
@@ -3613,6 +3614,28 @@ function TypeIsFrozenString(tk: TTypeKind): Boolean;
   the new kinds route through the frozen-string path without 250 new arms. }
 begin
   Result := (tk = tyString) or (tk = tyShortString) or (tk = tyFixedString);
+end;
+
+function TypeIsAnyString(tk: TTypeKind): Boolean;
+{ True for EVERY string kind, frozen or managed. The question "is this a string
+  at all", as opposed to TypeIsFrozenString's "does this carry an inline length
+  prefix" and StrValTk's "what does it present as".
+
+  It exists because the guards that ask the first question were spelled
+  `tk in [tyString, tyAnsiString]`, and that spelling was correct only while
+  every frozen node carried the GENERIC tyString tag. Once the IR began tagging
+  an array element and a record field with the kind the aggregate records
+  (450f4b52a, fc926ef27 -- both of which had to, because the tag is where the
+  prefix WIDTH comes from), those guards started answering "not a string" for
+  `arr[0]` and `r.f`. The failures were not subtle and they were not related to
+  each other: `arr[0] = arr[1]` became an address compare on i386, and
+  `case arr[0] of 'lit'` became `case label does not match the ordinal selector
+  type` on every target.
+
+  So a guard that means "is this a string" must not enumerate kinds -- the set
+  of kinds is exactly what the byte-prefix work keeps changing. Ask this. }
+begin
+  Result := TypeIsFrozenString(tk) or (tk = tyAnsiString);
 end;
 
 function StrValTk(tk: TTypeKind): Integer;
