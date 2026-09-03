@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: A
+status: done
 ---
 
 > **Track A from the job NAME `test-aarch64`**, not from its source. This job names a MECHANISM rather than a subject — the source it was fed (`test/test_field_rooted_nested_dyn_frozen_index.pas`) is what the mechanism was run ON, not what is being tested, so a lane guessed from it would be wrong by construction. The ranker reads frontmatter, so this line decides who works it; re-lane it if this job has changed what it covers.
@@ -49,3 +50,33 @@ expect_same: MISMATCH [aarch64/fieldrooted_nested_frozen_default]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Fixed by `f199ca260`, re-verified at HEAD (frankA, 2026-09-03)
+
+Same defect as the three `test-core` rows closed against that commit, one
+target over. It was mine: `0dedfb86c`'s SetLength classifier asked "is the
+element a frozen string" of an `AN_INDEX` target, and one index into a DEPTH-2
+dynamic array yields a depth-1 ARRAY whose `ASTTk` reports the ELEMENT's kind —
+so `SetLength(r.matrix[0], 1)` on `array of array of string[10]` was routed to
+the frozen-string arm, which wrote a length prefix over the sub-array's handle.
+`NodeDynDepth` is now asked first.
+
+Nothing aarch64-specific: the fix is in `pasparser_stmt.inc`, above codegen.
+Re-verified anyway rather than inferred from the native green, because a
+target-scoped claim needs the targets it did not fix. **The job's own
+assertion**, `expect_same` against
+`test_field_rooted_nested_dyn_frozen_index.expected`, run on every cross target
+in BOTH prefix modes:
+
+| target | default | `-dPXX_SHORTSTRING` |
+| --- | --- | --- |
+| x86-64 | OK | OK |
+| i386 | OK | OK |
+| aarch64 | OK | OK |
+| arm32 | OK | OK |
+| riscv32 | OK | OK |
+
+The header's re-lane note is right and needs no action: Track A is correct, and
+it is correct for the reason the note gives — the lane comes from the fix being
+in the compiler, not from the job name.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
