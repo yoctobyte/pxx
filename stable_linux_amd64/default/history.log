@@ -399,3 +399,4 @@
 2026-09-01T20:29:58Z  v399  954adef93a7b0e9ecec62b070b2e5727a075f52d52c0dde73bd207b354e0d64e  86c71828cd1eb8d74709bf531f3a5061621a9fa8  docs(A): bisect and settle the cdecl PChar correction, at frankA's request
 2026-09-02T09:29:42Z  v400  6c184b4bcc37f80dfad90ac158a511cd7f61e3c577c1ded86e62ac138b94e7a7  67ae9a62d567be6bddbb6c609db7c79c1d2005ff  docs(A): correct my own residual figure — 65682 was the delta, 173823 is the total
 2026-09-02T15:15:46Z  v401  1eec4dc5e0a74c6909f4e5ca326919f585c96829480b88e01b46c20dd9b09a46  07d196aa45eae7ad3eab752396fb2d950fb3738f  tstate(seven): opt 8476a5157557 done
+2026-09-03T20:32:52Z  v402  80ecb94023ebb96f83bd7133984b9903db9eb2588d91f645dc6192eea8615274  2a216b280f331540df1f67aa5fa5950ca2d46575  docs(progress): a fourth refusal shape, and a sequencing call made rather than deferred

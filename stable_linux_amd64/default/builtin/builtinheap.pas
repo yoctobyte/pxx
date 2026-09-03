@@ -475,7 +475,6 @@ procedure PXXRecordReleaseIntf(recAddr: Pointer; desc: Pointer);
 procedure PXXRecordInitialize(recAddr: Pointer; desc: Pointer);
 procedure PXXRecordFinalize(recAddr: Pointer; desc: Pointer);
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
-function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
 function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
 function PXXVarNot(dest: Pointer; src: Pointer): Int64;
 function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
@@ -2665,6 +2664,26 @@ begin
   if len > 0 then r := PXXSysWrite(1, Int64(p) + 8, len);
 end;
 
+{ The same, for a frozen string with a ONE-BYTE length prefix (tyShortString).
+
+  TWO PROCEDURES RATHER THAN A WIDTH PARAMETER, because the caller knows the
+  prefix width at COMPILE time. Passing it would put a runtime branch inside
+  every single write, and a wrong value would not be a slightly wrong number —
+  reading a 1-byte prefix as a machine word gives a length in the billions,
+  which is a write() of the whole address space rather than a misformatted
+  field.
+
+  Both survive phase 4: bare `string` stays tyString with its machine-word
+  prefix, so the wide form is not scaffolding.
+  feature-p-implement-the-real-tyshortstring-byte-prefix-layout }
+procedure PXXWriteFrozenBW(p: Pointer; wid: NativeInt);
+var len: Int64; r: Int64;
+begin
+  len := PByte(p)^;
+  if wid > len then PXXWritePad(wid - len);
+  if len > 0 then r := PXXSysWrite(1, Int64(p) + 1, len);
+end;
+
 { NUL-terminated C string (PChar), nil-safe. }
 procedure PXXWriteCStr(p: Pointer);
 var len: Int64; r: Int64;
@@ -4280,62 +4299,6 @@ begin
     baseRecDesc := nil;
 
   PXXDynArrayReleaseDepth(arrData, depth, baseKind, baseRecDesc);
-end;
-
-function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
-var
-  arrData: Pointer;
-  refCountPtr: PMachineWord;
-  lenPtr: PMachineWord;
-  rc, len, elSize, i: Int64;
-  newBlock, newArrData: Pointer;
-  depth, baseKind, baseTypeRef: Integer;
-  baseRecDesc: Pointer;
-begin
-  Result := nil;
-  if (arrSlot = nil) or (desc = nil) then Exit;
-  arrData := Pointer(PMachineWord(arrSlot)^);
-  if arrData = nil then Exit;
-
-  refCountPtr := PMachineWord(Int64(arrData) - 16);
-  rc := refCountPtr^;
-  if rc <= 1 then
-  begin
-    Result := arrData;
-    Exit;
-  end;
-
-  lenPtr := PMachineWord(Int64(arrData) - 8);
-  len := lenPtr^;
-  elSize := PInt32(Int64(desc) + 4)^;
-
-  newBlock := PXXAlloc(PXX_HDR_SIZE + len * elSize, 8);
-  PXXHdrInit(Int64(newBlock));
-  PMachineWord(Int64(newBlock) + PXX_HDR_RC)^ := 1;
-  PMachineWord(Int64(newBlock) + PXX_HDR_LEN)^ := len;
-  newArrData := Pointer(Int64(newBlock) + PXX_HDR_SIZE);
-
-  { The copy-on-write duplicate — every write to a shared dyn array lands here.
-    feature-opt-bulk-copy-is-byte-at-a-time }
-  PXXBlockCopy(Int64(newArrData), Int64(arrData), len * elSize);
-
-  depth := PInt32(Int64(desc) + 8)^;
-  baseKind := PInt32(Int64(desc) + 12)^;
-  baseTypeRef := PInt32(Int64(desc) + 16)^;
-  if baseKind = 3 then
-    baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
-  else if baseKind = 4 then
-    baseRecDesc := Pointer(baseTypeRef)   { interface id, see PXXDynArrayRelease }
-  else if (baseKind = 5) or (baseKind = 6) then
-    baseRecDesc := Pointer(baseTypeRef)   { element STRIDE, see ManagedElemRef }
-  else
-    baseRecDesc := nil;
-
-  PXXDynArrayRetainImmediate(newArrData, len, depth, baseKind, baseRecDesc);
-  PMachineWord(arrSlot)^ := Int64(newArrData);
-  PXXDynArrayRelease(arrData, desc);
-
-  Result := newArrData;
 end;
 {$endif}
 
