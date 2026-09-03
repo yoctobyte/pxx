@@ -2340,3 +2340,100 @@ above a worker's line.** It routed the choice to Track U instead.
 That is the four-folders rule used as a statement about **authority**, not
 taxonomy — and it is the distinction that keeps `known-incompat/` meaning
 something.
+
+## 2026-09-03 — THE PRE-FLIP CENSUS INVERTED THE QUESTION (`49ce033d0`)
+
+Verified on origin, and the effect verified independently: the compat ticket is
+no longer the top row of `ready --track P`.
+
+### The inversion
+
+The coordinator asked *"which open tickets does the flip PROMOTE?"* — assuming
+flag-only defects that become default-mode. **Censused by FOLDER (24 open
+tickets carry the language, not 20), the answer is NONE.**
+
+> **The flip does not PROMOTE this surface — it RELEASES it.** The edges that
+> matter are not blockers pointing OUT of P4; they are consumers pointing IN, and
+> three were missing.
+
+### The zero is NOT vacuous, and that was checked before it was reported
+
+`PXX_SHORTSTRING` appears in **exactly one open ticket: P4 itself.** The control
+is drawn from the right population — **24 tickets in `done/` name the flag**,
+most titled *"under the byte prefix mode"* — so a flag-conditional defect **does**
+name it in this repo's idiom, and the grep could have seen that shape. **The
+flag-only defects of phases 1–3 were fixed rather than filed. That is why the
+count is zero.**
+
+### THE NEAR-MISS — a Track P agent pulling its own top row was being handed the flip
+
+`compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees` was the
+**#1 row of `ready --track P`** at **effective p75** (own prio 25, inherited from
+`feature-pascal-typed-and-untyped-files` p70 and `umbrella-sizeof-is-one-answer`
+p75 **by two separate paths**) with **no edge to P4**.
+
+Item (1) is done and item (2) moved to its own Track A ticket, so its only
+remaining item is *"`string[10]` is 8 bytes where FPC gives 11 inline"* — **which
+is P4's declared deliverable.** Now `blocked-by` P4 and off the queue. Its
+summary also routed that item to Track U as an open storage-model decision **when
+the decision is taken.**
+
+The other two: `refactor-a-the-frozen-string-store-body-is-written-twice-in-three-backends`
+said **in PROSE** not to start during the P4 window — **nothing watched the
+sentence**, so it is now an edge. `umbrella-sizeof-is-one-answer` names P4 in its
+body as the `tyShortString` half of its own thesis and did not list it —
+**membership is an edge.**
+
+> **A constraint written as prose in a ticket body is not enforced by anything.
+> If it must hold, it is an edge.**
+
+### THE COORDINATOR'S LIST CONFLATED TWO INDEPENDENT FLAGS
+
+`-dPXX_SHORTSTRING` (the byte prefix; **the flip deletes it**) and
+`-uPXX_MANAGED_STRING` (the frozen-string **model**; the flip does not touch it)
+are **independent axes**. Most of the coordinator's candidate list sat on the
+second and is not promoted at all:
+
+- `feature-a-dynamic-array-of-frozen-strings` — managed-string axis.
+- `bug-a-a-plain-frozen-string-records-capacity-zero` — managed-string axis.
+- `bug-a-setlength-is-refused-for-any-frozen-string-that-is-not-a-plain-symbol` —
+  its own summary says *"in both modes, pre-existing and unrelated to the byte
+  prefix"*.
+- `bug-p-a-nested-dynamic-array-field-mistypes-its-element-as-the-leaf-type` —
+  **no frozen-string content at all**, and now closed anyway.
+- `bug-a-address-of-an-open-array-element` — its body says *"do not fix this
+  inside the byte-prefix feature"*.
+
+**And two the coordinator missed were ALREADY wired correctly** —
+`feature-pascal-typed-and-untyped-files` and `feature-d-a-representation-contract`
+both carry `blocked-by: P4`. **That is evidence the convention already runs in
+the RELEASE direction**, which is what should have told the coordinator its
+question was the wrong way round.
+
+### A hazard REFUTED rather than filed
+
+`bug-b-gtk3-pc-writes-past-its-buffer` quotes a `<skip the 8-byte prefix>` FFI
+guard, and `ir.inc` carries a dozen literal `+8` prefix skips in the PChar decay
+path — **so the flip looked like it would break them.** Measured instead of
+asserted, in both modes: `PChar(s)`, `PChar(r.f)`, `PChar(a[0])` and `@s[1]` for
+a `string[10]` all print correctly under `-dPXX_SHORTSTRING`. **The decay is
+already width-aware; the literal `+8` sites are interned-literal-pool specific.**
+Nothing added to the ticket. (Scope: the compiler's decay path, not gtk3's own
+`PC()` body.)
+
+### Closed rather than ranked
+
+`bug-p-a-nested-dynamic-array-field-mistypes-its-element-as-the-leaf-type` (p40)
+is fixed and in `done/`. **The same defect one element class over** from
+`45391912a`, which deleted the second dyn-depth walker (`DynArrayNodeDepth` had
+no `AN_FIELD` arm) — **element-type-blind, so the AnsiString spelling went with
+the `string[10]` one.** Positive control: pin v401 `766b99f98`, an ancestor of
+the fix, reproduces the ticket's error string verbatim in both modes; HEAD passes
+with a **type-discriminating** row (`Two(r.v[0])` where `Two` takes `array of
+AnsiString` — cannot typecheck if the intermediate is the leaf).
+
+### Correction to the coordinator's held state
+
+franka-29 is **not** waiting on frankb-78 for the pointer-clamp carrier. It was
+answered, built, and landed at `c2ad9761e`; the writer-side third finding is
+filed separately at p45.
