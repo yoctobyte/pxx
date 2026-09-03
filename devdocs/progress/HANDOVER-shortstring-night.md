@@ -3768,3 +3768,68 @@ need owners. frankb-78 offered to take `testmgr_hardcoded_tmp` first, being two
 literals and mechanically verifiable. Step 2 (`ABICRecordParamByValue`) stays
 parked **as a patch**, and the hand-back offer to franka-29 — silent throughout —
 remains open; nothing landed forecloses anything it holds.
+
+## 2026-09-04 — two of the three graded reds closed, and a correction to how I cited my own check
+
+`8b5eddb80` (`testmgr_hardcoded_tmp`) and `7e2dce2f8` (`test_wiring_gate`), both
+verified on origin. `exit_observable` deliberately left — a threshold argument,
+not a defect. **Pin v403's grade of `reds(3)` was accurate when taken and two of
+the three are now gone.**
+
+### MY PRE-PIN CHECK: one item stronger than I framed it, one weaker
+
+**Stronger — the two independent builds.** I recorded "two builds, one sha
+(`c31d03b202da`)" as corroboration. **The routes DIFFER, and that is the point I
+missed:** frankb-78's was `make compiler/pascal26` seeded from its local chain;
+mine was `stabilize-fast` from the pin. **Those are precisely the two routes that
+legitimately produce DIFFERENT valid fixedpoints when a local seed has walked off
+the pin-derived chain** — a documented `gate.sh quick` RED, and not a miscompile,
+since both binaries self-reproduce. So the second build did not repeat the first;
+**it ruled out the one divergence this repo has actually observed.**
+
+**Weaker — "the bound is live at `pasparser_decl.inc:443`".** A line number **in a
+file that had just been rewritten** is the citation most likely to be stale within
+the week. This repo has already measured a `make pin` line reference drifting 142
+lines in a single day and landing on a real line that explained nothing.
+
+> **The bound is load-bearing; the line is not.** Cite the predicate, not the
+> address. (Checked today and `:443` still holds — which is exactly how a citation
+> like this earns trust it will not keep.)
+
+### A GUARD THAT FIRED CORRECTLY AND EXPLAINED ITSELF WITH THE WRONG HARM
+
+`testmgr_hardcoded_tmp` rejects a hardcoded `/tmp` because *"two concurrent runs
+share the file"*. **Both offenders used `mkstemp`, so the NAME was already unique
+and that hazard never applied to them.** The real harm is the **DIRECTORY**: a
+file outside `$TESTMGR_TMP` is one testmgr did not create and does not clean up.
+
+> **Right verdict, wrong stated reason** — the "correct about something else"
+> shape, this time in an instrument's **MESSAGE** rather than in its verdict. A
+> reader who checks the stated harm against these two files concludes the guard
+> is wrong and is tempted to suppress it.
+
+**Flagged, not edited** — it is Track T's tool, and the message is accurate for
+the 61 literals it was built against. T may want to widen the wording.
+
+**The control there is the keeper:** `TESTMGR_TMP` pointed at a directory that
+does not exist, where both pxx and gcc print `mkstemp failed`. **Without it, a
+dead `getenv` would have quietly succeeded in `/tmp` and printed all four correct
+rows — a passing test certifying a change that did nothing.**
+
+### WIRING THOSE TESTS x86-64-ONLY WOULD HAVE BEEN WORSE THAN LEAVING THEM OUT
+
+All five were written alongside their own fixes on 2026-09-02 and **none was ever
+gated.** Two are the const-cast-width and method-pointer tests — **the pair
+CLAUDE.md itself holds up as the case a 64-bit host cannot see.**
+
+> **A native-only wiring of those two would have passed whether or not the fix
+> existed** — a guard that cannot fail, added in the act of closing a
+> guard-coverage red.
+
+Wired on i386, aarch64, arm32 and riscv32 as well, and **the positive control is
+that the i386 method-pointer row REFUSES the x86-64 answer.**
+
+Verified by **executing all 32 added recipe lines verbatim**, rather than
+re-running binaries already run by hand: **in a wiring commit the risk is the
+recipe TEXT, not the program.** That is the same reasoning as this file's rule
+about a `cmp` harness whose inputs were never proven to exist.
