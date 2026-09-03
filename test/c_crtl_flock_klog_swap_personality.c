@@ -45,9 +45,26 @@
 
 int main(void)
 {
-  char path[] = "/tmp/pxx_flock_XXXXXX";
+  char path[512];
+  const char *dir;
   int fd, fd2, rc, blocked;
   int p0, p1, p2;
+
+  /* The scratch file goes in the RUN'S directory, not the shared /tmp.
+   * mkstemp already makes the NAME unique, so this is not about two runs
+   * colliding on a filename -- it is about the DIRECTORY: a file written
+   * outside $TESTMGR_TMP is one testmgr did not create and does not clean up,
+   * and on a box where /tmp is small, read-only or not the tmpdir, this test
+   * fails for a reason that has nothing to do with flock.
+   * TESTMGR_TMP first: testmgr launches jobs through an environment allowlist
+   * (PXX_/TESTMGR_/LC_/QEMU_), so $TESTTMP alone does not reach the job and
+   * would silently fall back to the shared path. TESTTMP second, for
+   * `make test TESTTMP=$(mktemp -d)`. The bare-run default keeps the old
+   * behaviour byte-identical. */
+  dir = getenv("TESTMGR_TMP");
+  if (!dir) dir = getenv("TESTTMP");
+  if (!dir) dir = "/tmp";
+  snprintf(path, sizeof path, "%s/%s", dir, "pxx_flock_XXXXXX");
 
   /* LOCK_* reach us through <fcntl.h>, which is where glibc keeps them. */
   printf("1 %d %d %d %d %d %d\n", LOCK_SH, LOCK_EX, LOCK_NB, LOCK_UN,

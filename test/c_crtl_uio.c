@@ -26,11 +26,28 @@
 
 int main(void)
 {
-  char path[] = "/tmp/pxx_uio_XXXXXX";
+  char path[512];
+  const char *dir;
   struct iovec wv[3], rv[3];
   char a[8], b[8], c[8], one[8];
   int fd;
   ssize_t n;
+
+  /* The scratch file goes in the RUN'S directory, not the shared /tmp.
+   * mkstemp already makes the NAME unique, so this is not about two runs
+   * colliding on a filename -- it is about the DIRECTORY: a file written
+   * outside $TESTMGR_TMP is one testmgr did not create and does not clean up,
+   * and on a box where /tmp is small, read-only or not the tmpdir, this test
+   * fails for a reason that has nothing to do with readv/writev.
+   * TESTMGR_TMP first: testmgr launches jobs through an environment allowlist
+   * (PXX_/TESTMGR_/LC_/QEMU_), so $TESTTMP alone does not reach the job and
+   * would silently fall back to the shared path. TESTTMP second, for
+   * `make test TESTTMP=$(mktemp -d)`. The bare-run default keeps the old
+   * behaviour byte-identical. */
+  dir = getenv("TESTMGR_TMP");
+  if (!dir) dir = getenv("TESTTMP");
+  if (!dir) dir = "/tmp";
+  snprintf(path, sizeof path, "%s/%s", dir, "pxx_uio_XXXXXX");
 
   printf("1 %d %d\n", (int)sizeof(struct iovec), (int)UIO_MAXIOV / 64);
 
