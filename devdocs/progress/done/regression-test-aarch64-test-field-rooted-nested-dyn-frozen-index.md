@@ -79,4 +79,4 @@ in BOTH prefix modes:
 The header's re-lane note is right and needs no action: Track A is correct, and
 it is correct for the reason the note gives — the lane comes from the fix being
 in the compiler, not from the job name.
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7c757cfc2.
