@@ -109,4 +109,4 @@ FIELD-rooted target has no symbol to carry the capacity, so its frozen element
 still gets the kind-only size. Left unfixed deliberately: `r.matrix[0][0] := 'a0'`
 does not compile at all (the second index resolves as a CHARACTER index), so
 there is nothing to measure a fix against.
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e69e71ed2.

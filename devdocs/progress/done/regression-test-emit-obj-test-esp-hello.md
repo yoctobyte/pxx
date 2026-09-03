@@ -69,4 +69,4 @@ encoded what the defect produced.
 Row corrected to `+1`, with the duplicate-emission history written above it so
 nobody re-derives `+2` from an old object. Both targets green; the call-only
 positive control (`c >= 1`) is untouched and still fires.
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e69e71ed2.
