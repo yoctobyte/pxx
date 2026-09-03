@@ -76,4 +76,17 @@ begin
     CONSTANT is certified correct by a suite of must-be-TRUE rows alone }
   if r.f = 'field' then WriteLn('Hyes') else WriteLn('Hno');
   if r.f = 'nope' then WriteLn('Ibad') else WriteLn('Iok');
+
+  { A frozen RECORD FIELD and an ARRAY-OF-RECORD ELEMENT as the argument, not a
+    plain variable. This is the row x86-64 failed while every other target
+    passed: its conversion guard said `= tyString`, and a field or element load
+    keeps tyShortString where a variable normalises to tyString -- so the
+    conversion was skipped entirely and the raw [len][chars] buffer went to the
+    callee as a managed handle. It does not crash -- the callee reads a length
+    from [handle-8], which is whatever happens to sit before the field -- so it
+    answers a plausible wrong NUMBER. Measured against a rebuilt pre-fix x86-64
+    compiler, these two rows came back J0 K0 against the correct J3 K1, under the
+    flag only -- the default mode was right on every target. }
+  WriteLn('J', Pos('el', r.f));
+  WriteLn('K', Pos('el', arr[1].f));
 end.

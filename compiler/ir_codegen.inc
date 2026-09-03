@@ -9854,7 +9854,7 @@ begin
                 begin
                   argIsSse[i] := CallArgDeferrable(IRA[argNodeArr[i]]) and
                                  (not ((Procs[procIdx].Params[i].TypeKind = tyAnsiString) and
-                                       ((IntToTypeKind(IRTk[argNodeArr[i]]) = tyString) or
+                                       (TypeIsFrozenString(IntToTypeKind(IRTk[argNodeArr[i]])) or
                                         (IntToTypeKind(IRTk[argNodeArr[i]]) = tyChar))));
                   if not argIsSse[i] then lastOrd := i;
                 end;
@@ -9869,7 +9869,10 @@ begin
                   IREmitNode(IRA[argNodeArr[i]]);
                   if Procs[procIdx].Params[i].TypeKind = tyAnsiString then
                   begin
-                    if IntToTypeKind(IRTk[argNodeArr[i]]) = tyString then
+                    { TypeIsFrozenString, not `= tyString` -- see the note at the
+                      ordered-args conversion below; this arm and the
+                      deferrability test above it must stay in step. }
+                    if TypeIsFrozenString(IntToTypeKind(IRTk[argNodeArr[i]])) then
                       EmitAnsiStrFromInlineStringOf(IRA[argNodeArr[i]])
                     else if IntToTypeKind(IRTk[argNodeArr[i]]) = tyChar then
                     begin
@@ -9927,7 +9930,28 @@ begin
               begin
                 if Procs[procIdx].Params[i].TypeKind = tyAnsiString then
                 begin
-                  if IntToTypeKind(IRTk[argNode]) = tyString then
+                  { TypeIsFrozenString, NOT `= tyString`. x86-64 was the only
+                    backend left spelling this narrowly -- i386, arm32, aarch64,
+                    riscv32 and xtensa all ask the predicate. A frozen operand
+                    is tagged tyString only where the walker had a symbol to
+                    normalise through StrValTk; a RECORD FIELD or array-element
+                    load keeps its storage kind, so under -dPXX_SHORTSTRING the
+                    conversion was SKIPPED and the raw [len][chars] buffer
+                    address went to the callee as a managed handle. It does not
+                    crash -- the callee reads its length from [handle-8], which
+                    is whatever sits before the field: `Pos('el', r.f)` answered
+                    2 (searching from the length byte) and
+                    `Pos('el', arr[1].f)` answered 0, both silently.
+
+                    Cannot fail in the DEFAULT mode: there a frozen operand IS
+                    tyString, so the narrow test and the predicate agree.
+
+                    FIVE SITES in this file, all the same question -- ordered
+                    args and their deferrability test above, this one, the
+                    constructor path, and the method/indirect path. Widen them
+                    together or the one left behind is the arm that stays broken.
+                    bug-a-i386-copy-and-pos-segfault-under-the-byte-prefix-mode }
+                  if TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
                     EmitAnsiStrFromInlineStringOf(IRA[argNode])
                   else if IntToTypeKind(IRTk[argNode]) = tyChar then
                   begin
@@ -10066,7 +10090,8 @@ begin
                 if (i < Procs[cpi].ParamCount) and
                    (Procs[cpi].Params[i].TypeKind = tyAnsiString) then
                 begin
-                  if IntToTypeKind(IRTk[argNode]) = tyString then
+                  { TypeIsFrozenString -- see the ordered-args note above. }
+                  if TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
                     EmitAnsiStrFromInlineStringOf(IRA[argNode])
                   else if IntToTypeKind(IRTk[argNode]) = tyChar then
                   begin
@@ -11800,7 +11825,8 @@ begin
           if (pathIdx < Procs[procIdx].ParamCount) and
              (Procs[procIdx].Params[pathIdx].TypeKind = tyAnsiString) then
           begin
-            if IntToTypeKind(IRTk[argNode]) = tyString then
+            { TypeIsFrozenString -- see the ordered-args note above. }
+            if TypeIsFrozenString(IntToTypeKind(IRTk[argNode])) then
               EmitAnsiStrFromInlineStringOf(IRA[argNode])
             else if IntToTypeKind(IRTk[argNode]) = tyChar then
             begin
