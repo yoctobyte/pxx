@@ -15,9 +15,20 @@ summary: "AllocVar and AllocParam both spell `if TypeIsFrozenString(tk) and (tk
   and an intact neighbour. The cost is that 0 now means two things, so a
   `string[N]` whose N was LOST is indistinguishable from a plain string, and
   every future missing carrier is a silent buffer OVERRUN rather than a
-  diagnostic. Three have been found one at a time. Fix is TWO WRITERS, not
-  eleven readers: record the real DEFAULT_STR_CAP at allocation, after which 0
-  means unset everywhere and each of the eleven can refuse instead of guessing."
+  diagnostic. Three have been found one at a time. THE SYMBOL HALF IS DONE
+  (b84e73e53): AllocVar and AllocParam now record DEFAULT_STR_CAP for a plain
+  frozen `string`. Behaviourally neutral in all three modes -- the readers find
+  recorded what they were substituting -- and proven LIVE rather than assumed,
+  by poisoning the value to 99 and watching `var s: string` report len=99
+  high=99 under -uPXX_MANAGED_STRING. IT ENABLES NOTHING YET AND NO READER MAY
+  BE MADE STRICT: the FIELD and ELEMENT carriers still write 0, and TWO SITES IN
+  ir.inc DEPEND ON THAT 0 AS A MEANING -- 2638 selects the plain-string stride
+  on it, 11216 the deliberate no-clamp, both saying so in their own comments --
+  so recording 255 in RecFieldStrCap without converting them changes a stride
+  and turns a no-clamp into a clamp. What is left, in order: (1) the
+  array-element and record-field carriers, (2) convert those two ir.inc sites to
+  ask the KIND rather than the zero, the shape SizeOfSlot already uses, and only
+  then (3) let the eleven refuse instead of guessing."
 ---
 
 # A plain frozen `string` records capacity 0, so eleven clamp sites cannot say "unset"
