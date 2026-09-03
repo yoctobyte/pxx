@@ -56,3 +56,28 @@ the steady state, because there is no report to compare.
 Noticed by the coordinator on a fleet-watch pass, from the commit subjects
 alone. Not reproduced, not measured — Track T owns the tool and can tell in
 seconds whether a loaded box explains it.
+
+## Start here — `tools/twatch_bench_quiet_devtest.py` already exists
+
+Found on the next watch pass (the tier published a THIRD zero-row RED,
+`9c39737ea`, so this is the steady state and not a blip). There is already a
+devtest named for bench quietness — 10628 bytes, dated 2026-08-27, so it
+predates all three of these runs.
+
+**That changes the likely shape of this ticket.** If the quiet-box path is
+already modelled and tested, then zero bench rows on a loaded machine is
+probably the DESIGNED behaviour and the only defect is that it is published with
+the word `RED` and no artefact. Read that devtest before touching `twatch.py`:
+it may already say what the intended verdict is, in which case this is a
+reporting fix rather than a collection one.
+
+**And if that devtest is green while the tier publishes RED with no rows**, the
+devtest is asserting something other than what ships — which is the more
+interesting finding of the two and should be filed as its own.
+
+Unrelated but noted from the same report so nobody re-derives it: the full
+tier's `STILL-RED tools-devtest#00` is long-standing (reports back to
+2026-08-30) and is already covered by
+`bug-t-the-exit-observable-ratchet-was-red-at-its-own-arming-commit` and
+`bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names`. Not a new
+red, not unowned.
