@@ -9190,9 +9190,23 @@ begin
                   frozen buffer that owns nothing. IRStrCmpNeedsRelease would
                   be constantly False. If that guard above ever widens, this
                   block needs the save/release pair the other two have. }
-                lhsTk := IntToTypeKind(IRTk[left]);
-                rhsTk := IntToTypeKind(IRTk[right]);
-                if (lhsTk = tyString) and (rhsTk = tyChar) then
+                { IRStrTkOf, NOT IntToTypeKind, and the two Char arms below
+                  test TypeIsFrozenString rather than `= tyString`. `= tyString`
+                  is a test for the GENERIC tag, not for membership: a variable's
+                  IR_LEA carries the legacy tyString, but an ARRAY ELEMENT and a
+                  RECORD FIELD are tagged with their real frozen kind, so both
+                  arms missed them and the comparison fell through to
+                  EmitStrCmpReg -- which takes the Char's ORDINAL as a string
+                  ADDRESS and dereferences it. SIGSEGV.
+
+                  `a[0] = 'X'` for `a: array[0..1] of string[8]` crashes on the
+                  PINNED compiler in DEFAULT mode, so this is not a flip defect;
+                  the flip only widens it, because it re-tags every `string[N]`
+                  field as tyShortString and hands the same arms a shape they
+                  already could not match. }
+                lhsTk := IRStrTkOf(left);
+                rhsTk := IRStrTkOf(right);
+                if TypeIsFrozenString(lhsTk) and (rhsTk = tyChar) then
                 begin
                   { String = Char: rax = string struct, rcx = char ordinal.
                     Equal iff len=1 and the single byte matches.
@@ -9232,7 +9246,7 @@ begin
                   if op = tkNeq then MovRaxImm(1) else MovRaxImm(0);
                   Patch32(falseJmp, CodeLen - (falseJmp + 4));
                 end
-                else if (lhsTk = tyChar) and (rhsTk = tyString) then
+                else if (lhsTk = tyChar) and TypeIsFrozenString(rhsTk) then
                 begin
                   { Char = String: rax = char ordinal, rcx = string struct.
                     Same prefix-width fix as the sibling arm above; this is the

@@ -11385,6 +11385,21 @@ test-core: $(COMPILER)
 	# (bug-a-write-of-a-frozen-string-through-a-typed-pointer-prints-garbage-on-x86-64),
 	# so the host now carries the same rows the three cross targets do, in BOTH
 	# modes. The .expected is byte-identical to FPC 3.2.2 on this file.
+	# CHAR vs a frozen string, EVERY lvalue shape, both directions, both modes.
+	# The x86-64 arms guarded on `lhsTk = tyString`, the GENERIC frozen tag --
+	# so a variable matched and an array ELEMENT and a record FIELD did not,
+	# and those fell through to EmitStrCmpReg, which dereferences the Char's
+	# ORDINAL as a string address. `a[0] = 'X'` SIGSEGVs on the PINNED
+	# compiler in DEFAULT mode; that crash is this file's positive control and
+	# was never a flip defect. The same arms also read the length as an 8-byte
+	# word, so under the byte prefix every comparison answered `not equal` in
+	# BOTH directions -- which is exactly what an agreement assertion cannot
+	# see. Rows are RELATIONS, so this file carries no per-target width.
+	# bug-a-char-vs-frozen-string-comparison-misses-every-shape-but-a-variable
+	./$(COMPILER) test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_fscc26_d
+	tools/expect_same.sh test_frozen_string_char_compare_shapes_default "$$($(TESTTMP)/test_fscc26_d)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_fscc26_s
+	tools/expect_same.sh test_frozen_string_char_compare_shapes_short "$$($(TESTTMP)/test_fscc26_s)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
 	./$(COMPILER) test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_ssthp_d26
 	tools/expect_same.sh test_ssthp_d26 "$$($(TESTTMP)/test_ssthp_d26)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_ssthp_s26
@@ -16746,6 +16761,21 @@ test-aarch64: $(COMPILER)
 	# byte-identical to the FPC 3.2.2 oracle, which is the point of a file whose
 	# rows are all RELATIONS and carry no per-target constant.
 	# x86-64 is wired natively next to the other frozen-string rows, above.
+	# CHAR vs a frozen string, EVERY lvalue shape, both directions, both modes.
+	# The x86-64 arms guarded on `lhsTk = tyString`, the GENERIC frozen tag --
+	# so a variable matched and an array ELEMENT and a record FIELD did not,
+	# and those fell through to EmitStrCmpReg, which dereferences the Char's
+	# ORDINAL as a string address. `a[0] = 'X'` SIGSEGVs on the PINNED
+	# compiler in DEFAULT mode; that crash is this file's positive control and
+	# was never a flip defect. The same arms also read the length as an 8-byte
+	# word, so under the byte prefix every comparison answered `not equal` in
+	# BOTH directions -- which is exactly what an agreement assertion cannot
+	# see. Rows are RELATIONS, so this file carries no per-target width.
+	# bug-a-char-vs-frozen-string-comparison-misses-every-shape-but-a-variable
+	./$(COMPILER) --target=aarch64 test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_a64_fscc_d
+	tools/expect_same.sh aarch64/frozen_char_compare_shapes_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_fscc_d)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
+	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_a64_fscc_s
+	tools/expect_same.sh aarch64/frozen_char_compare_shapes_short "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_fscc_s)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
 	./$(COMPILER) --target=aarch64 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a64_ssthp
 	tools/expect_same.sh aarch64/shortstring_through_a_pointer "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a64_ssthp_s
@@ -18395,6 +18425,21 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/frozen_string_layout_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_fsl_d)" "$$(cat test/test_frozen_string_layout.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_string_layout.pas $(TESTTMP)/rv32_fsl_s
 	tools/expect_same.sh riscv32/frozen_string_layout_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_fsl_s)" "$$(cat test/test_frozen_string_layout.expected)"
+	# CHAR vs a frozen string, EVERY lvalue shape, both directions, both modes.
+	# The x86-64 arms guarded on `lhsTk = tyString`, the GENERIC frozen tag --
+	# so a variable matched and an array ELEMENT and a record FIELD did not,
+	# and those fell through to EmitStrCmpReg, which dereferences the Char's
+	# ORDINAL as a string address. `a[0] = 'X'` SIGSEGVs on the PINNED
+	# compiler in DEFAULT mode; that crash is this file's positive control and
+	# was never a flip defect. The same arms also read the length as an 8-byte
+	# word, so under the byte prefix every comparison answered `not equal` in
+	# BOTH directions -- which is exactly what an agreement assertion cannot
+	# see. Rows are RELATIONS, so this file carries no per-target width.
+	# bug-a-char-vs-frozen-string-comparison-misses-every-shape-but-a-variable
+	./$(COMPILER) --target=riscv32 test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_rv32_fscc_d
+	tools/expect_same.sh riscv32/frozen_char_compare_shapes_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_fscc_d)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
+	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_rv32_fscc_s
+	tools/expect_same.sh riscv32/frozen_char_compare_shapes_short "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_fscc_s)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
 	./$(COMPILER) --target=riscv32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp
 	tools/expect_same.sh riscv32/shortstring_through_a_pointer "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_rv32_ssthp_s
@@ -19731,6 +19776,21 @@ test-arm32: $(COMPILER)
 	# standing while the phase-4 flip is being sequenced off exactly that
 	# question: it does not error, it just tells the next reader the flip has a
 	# blocker it does not have.
+	# CHAR vs a frozen string, EVERY lvalue shape, both directions, both modes.
+	# The x86-64 arms guarded on `lhsTk = tyString`, the GENERIC frozen tag --
+	# so a variable matched and an array ELEMENT and a record FIELD did not,
+	# and those fell through to EmitStrCmpReg, which dereferences the Char's
+	# ORDINAL as a string address. `a[0] = 'X'` SIGSEGVs on the PINNED
+	# compiler in DEFAULT mode; that crash is this file's positive control and
+	# was never a flip defect. The same arms also read the length as an 8-byte
+	# word, so under the byte prefix every comparison answered `not equal` in
+	# BOTH directions -- which is exactly what an agreement assertion cannot
+	# see. Rows are RELATIONS, so this file carries no per-target width.
+	# bug-a-char-vs-frozen-string-comparison-misses-every-shape-but-a-variable
+	./$(COMPILER) --target=arm32 test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_a32_fscc_d
+	tools/expect_same.sh arm32/frozen_char_compare_shapes_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_fscc_d)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
+	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_frozen_string_char_compare_shapes.pas $(TESTTMP)/test_a32_fscc_s
+	tools/expect_same.sh arm32/frozen_char_compare_shapes_short "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_fscc_s)" "$$(cat test/test_frozen_string_char_compare_shapes.expected)"
 	./$(COMPILER) --target=arm32 test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a32_ssthp
 	tools/expect_same.sh arm32/shortstring_through_a_pointer "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssthp)" "$$(cat test/test_shortstring_through_a_pointer.expected)"
 	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_shortstring_through_a_pointer.pas $(TESTTMP)/test_a32_ssthp_s
