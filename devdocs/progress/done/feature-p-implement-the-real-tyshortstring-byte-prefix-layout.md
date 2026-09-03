@@ -4,7 +4,7 @@ title: "Implement the real `tyShortString` byte-length-prefix layout — the kin
 track: P
 prio: 100
 type: feature
-status: working
+status: done
 created: 2026-09-02
 found-by: owner (raised 2026-09-02), measured by frankuser
 owner: franka-29 (implementation) + frankb-78 (cross-target verification) — assigned 2026-09-03 22:xx by the coordinator on the OWNER'S EXPLICIT INSTRUCTION, given twice: "let's pin. then flip. and re-pin", then "tomorrow morning i expect a compiler that implemented shortstrings". This is the authorisation that was missing all day; it is NOT a coordinator release.
@@ -1397,3 +1397,6 @@ the PINNED compiler in DEFAULT mode. It ships today. The flip only widened it.
 `string[N]`) and nothing from `lib/` beyond typinfo's `string[256]`, which is
 outside the re-typed range. Nothing from the C, NilPy, Rust or Zig frontends —
 the re-type is in the Pascal parser and does not reach them.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
