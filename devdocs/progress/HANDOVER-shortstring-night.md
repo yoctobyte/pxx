@@ -1809,3 +1809,97 @@ which the parser can resolve to a proc index. **The thunk makes the NilPy path
 correct; the scratch makes every other path survivable.** Different populations,
 recorded in the ticket **so nobody deletes one as dead** — which is precisely the
 mistake the canary pass spent a day disproving.
+
+## 2026-09-03 — the frozen dyn-array field (`aee455a16`), raised 60 -> 85, and TWO classes that correct earlier entries
+
+Banked from franka-29; `aee455a16` and `test/test_dyn_frozen_field_capacity.pas`
+verified present. **I asked for a ranking judgement rather than re-ranking it
+myself, and the answer was worse than the commit body I had read.**
+
+### The ranking, with the measurement behind it
+
+**In the DEFAULT mode — the shipping build — it is a SIGSEGV, not silent
+truncation.** frankb-78 measured that independently before franka-29 got far in;
+the A/B is base `c709788d39ad` rc=0 **by luck**, and the same program crashes the
+moment one half of the fix lands. No diagnostic, exit 0 or a core dump depending
+on how many bytes are stored, **in a shape that has always compiled.**
+
+The flag-mode face is silent truncation **whose length depends on an unrelated
+neighbouring declaration**: `pad: string[17]` in front of the field makes a
+`string[10]` element clamp at 17; `string[9]` makes it 9.
+
+That is the i386-compare argument **plus a crash**, hence 85 rather than 80.
+
+### The cause was broader than the summary said
+
+Not *"a NAMED frozen alias"*. **Both field parsers test `fIsDyn` FIRST, and that
+arm returns before the frozen-field arm — the only place `fStrCap` is ever
+assigned.** So every spelling is broken (inline element, named element, named dyn
+type), in records AND classes, both modes, every target.
+
+**The class face fails the OTHER WAY:** with no frozen field in front of it the
+leftover is `0`, which the store path reads as *"no limit"*, so 26 characters go
+whole into a 10-character element. **One hole, both signs.**
+
+### CLASS 1 — a measured negative that was TRUE and still the wrong conclusion
+
+This one **corrects the bucket-rounding entry banked earlier today**, so read
+them together.
+
+The ticket carried *"not a missing carrier at the consumer"* as a **measured**
+negative: a past session built the carrier, wired it at all three lowering sites,
+probed it, found junk arriving, and reverted it because consuming that junk
+strode worse than the pointer-width default. **Every word of that was true.**
+
+It was still the wrong conclusion. **The carrier is not an ALTERNATIVE to fixing
+the declaration — it is the other half of the same fix, and NEITHER HALF IS
+LANDABLE ALONE.** Landing the declaration half first turned a silently-wrong
+program into a SIGSEGV: the store's stride becomes truthful while the allocation
+stays at a pointer width, 28 bytes into an 8-byte element, and **the crash lands
+at the NEXT allocation, two statements after its cause.**
+
+> **The malloc bucket was the only thing standing between two wrong numbers and a
+> crash, and fixing EITHER half alone removes it.**
+
+frankb-78 hit the mirror image from the allocation side on `dyn2dvals`. So the
+two entries in this file are one phenomenon seen from opposite ends. Two rules
+fall out:
+
+> **A new crash immediately after a size fix is evidence the fix is RIGHT.**
+>
+> **"I measured that this makes it worse" scopes to the STATE AT THE TIME OF
+> MEASUREMENT, not to the design.**
+
+That second one is the sharper of the pair, because the measurement was honest,
+reproducible, and correctly reported — and it still froze a half-fix into the
+record as a closed door.
+
+### CLASS 2 — a cause that FITS is not a cause that was OBSERVED
+
+The ticket's diagnosis blamed `LastTypeStrCap` as a stale channel — **and
+`LastTypeStrCap` genuinely IS the stale channel `defs.inc` documents at length.**
+The story fit the junk perfectly and **stopped the search one arm short of the
+arm that is never ENTERED.**
+
+What separated them was **not a probe but a two-line program**: a neighbouring
+`pad: string[17]` making the field clamp at 17 is not something any theory about
+alias resolution predicts. **A plausible mechanism that is really present in the
+codebase is the most expensive kind of wrong answer**, because every check you
+run against it confirms it.
+
+### Verification
+
+x86-64, i386, arm32, aarch64, riscv32 in both modes, plus an xtensa compile. New
+regression `test_dyn_frozen_field_capacity.pas` wired native + four cross
+batteries, both modes — **a positive control: red on `c709788d39ad` in both
+modes**, the default one printing heap descriptor bytes from inside a string.
+
+**frankb-78's acceptance rows re-run because it asked, not on franka-29's own
+census** — all eight of `test_string_n_container_strides` including `dyn2dvals`,
+green on all five runnable targets in both modes. frankb-78 was right that six of
+its eight rows are stride rows that cannot see a value bug. `gate.sh quick` GREEN
+**(grepped the log, not the wrapper)**; self-host `converged after 1 round`.
+
+Coordination: franka-29 messaged frankb-78 directly before entering
+`SetLenDynElemSize` and was cleared. **Peer-to-peer, no routing through the
+coordinator, which is the arrangement working as intended.**
