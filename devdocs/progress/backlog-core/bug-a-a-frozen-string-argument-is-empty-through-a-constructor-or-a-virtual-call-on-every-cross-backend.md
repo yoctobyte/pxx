@@ -1,7 +1,7 @@
 ---
 type: bug
 track: A
-prio: 85
+prio: 92
 status: open
 summary: On i386/arm32/aarch64/riscv32 a string[N] passed to an AnsiString
   parameter of a CONSTRUCTOR or a VIRTUAL method arrives EMPTY — silently, in
@@ -86,3 +86,45 @@ finding.
 The program above, five targets, BOTH modes, values asserted — every row must
 print its content. Add the wasm32 and xtensa rows if their runtimes can reach
 it; they are blank here, not green.
+
+
+## Prio raised 85 -> 92 (coordinator, 2026-09-03)
+
+**Reproduced independently** at `a154b5ec9`, compiler `9ce317b156e9`, DEFAULT
+mode, no flag:
+
+```
+            x86-64    i386 / arm32 / aarch64 / riscv32
+plain(s)    [hello]   [hello]
+ctor(s)     [hello]   []        <-- empty
+method(s)   [hello]   [hello]
+virtual(s)  [hello]   []        <-- empty
+virtual(lit)[hello]   [literal]
+```
+
+Raised above the phase-4 blockers, and the reasoning is the goal rather than the
+overhaul:
+
+- **It is the DEFAULT mode.** Every byte-prefix ticket in this family needs
+  `-dPXX_SHORTSTRING` to bite. This one ships today, in the build every consumer
+  of `$(PXX_STABLE)` uses.
+- **It is four of seven targets, and x86-64 is the correct one** — so the dev
+  loop, `gate.sh quick` and the pin are all blind to it by construction.
+- **A constructor taking a string is not an edge case.** `the-goal-cross-cross`
+  is pxx hosting itself somewhere that is not Linux/x86-64 and compiling DOSBox
+  for such a target. Any OOP Pascal cross-compiled today silently gets empty
+  strings into its constructors.
+
+**A literal works through both routes, which is why every class test in the tree
+passes.** That is the guard trap: the population that would catch this is
+"non-literal string argument through a constructor or virtual call", and nothing
+in the suite constructs it.
+
+**Do not microfix the ladder.** franka-29's count is the finding: the conversion
+is re-derived once per call path per backend — ordered args, direct,
+constructor, method/indirect, ~15 copies of which 4 are right — and the same
+ladder has already drifted twice on other axes (a by-value SET case, a cdecl
+RECORD case), each landing at ONE site. The conversion is target-independent
+("this argument is a frozen buffer and the callee wants a handle"), so the
+answer is `IRLowerCallArg` once and delete the arms. `root-cause-over-microfix`,
+and the overhaul is the smaller job because it deletes cases.
