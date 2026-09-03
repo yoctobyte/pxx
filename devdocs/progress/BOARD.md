@@ -414,7 +414,7 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog-decide (34)
+## backlog-decide (35)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -437,6 +437,7 @@ _none_
 | decide-release-signing-key-custody | U | 25→50 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
 | decide-shift-native-width-was-never-re-confirmed-on-the-full-table | U | 45 | decide | decide-shift-operator-promotion-width (2026-08-10) ruled that shifts happen at NATIVE width. The next day its implementer measured that the cost table the user was shown listed ONE divergence from FPC and the real number is four, wrote 'the call is worth re-confirming rather than assuming', and filed nothing — the note lives inside a file in decided/, which by construction nobody re-opens. Two agents have since hit the divergence in the wild and filed it as a bug. One question for the user: keep native width for a DECLARED narrow variable, or promote only UNTYPED operands. Untyped operands are already settled and are not in scope. | — |
 | decide-should-writeableconst-off-be-honoured | U | 20 | decide | `{$WRITEABLECONST}` is not implemented at all — the compiler contains no reference to it. Typed constants are now unconditionally writable, which is FPC's DEFAULT; the question is whether pxx should honour the OFF form and refuse the store, or document typed consts as always writable. A dialect call, not a bug fix. | — |
+| decide-state-the-population-beside-the-number-and-make-a-probe-s-identity-as-fine-as-its-decision | U | 60 | decide | decide: two CLAUDE.md rules proposed from the canary pass — state the POPULATION, and match a probe's IDENTITY to its decision | — |
 | decide-t-per-assertion-subjects-or-accept-the-file-level-label | U | 25→50 | decide | The float-red labelling mechanism is live but has zero adopters, and structurally cannot gain any: it labels a whole JOB, while every file that motivated it mixes last-digit accuracy with a NaN fault, a missing name, an 84-ulp regression or a formatting bug. The only remaining shape is per-assertion subjects -- real machinery in T's tooling plus a pass through N's files, entirely in service of the subject the owner has called low prio by definition four times, and whose motivating reds have not appeared in 259 runs. Recommendation: accept the file-level label as future-only, build nothing more. | — |
 | decide-t-should-a-skip-close-an-open-regression | U | 25 | decide | reg_open counts red -> skip as FIXED, so a regression closes when a box merely STOPS RUNNING the job — the mirror of the skip-as-last-good bug, pointing the other way. It is a deliberate existing trade (the alternative pins a regression open forever on a box that cannot run the job), so it is a policy call, not a defect. Split out of 0dec0194a rather than bundled, because a policy change smuggled in behind a bug fix is how the trade would have been lost without anyone deciding it. | — |
 | decide-t-the-full-suite-hook-refuses-prose-about-the-suite | U | 40 | decide | no-full-suite.sh matches command TEXT, so a `git commit` whose MESSAGE explains why test-nilpy is full-tier-only is refused as an attempt to run it — killing the whole command line including the `git add`. Five instances now, four of them landing on a document ABOUT the tier split. Any fix edits .claude/hooks/, which binds every agent on this box, so it is the owner's call. | — |
@@ -1016,6 +1017,7 @@ _none_
 - [p 60] [N] bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity
 - [p 60] [T] bug-t-the-exit-observable-ratchet-was-red-at-its-own-arming-commit
 - [p 60] [U] decide-a-the-smallset-mechanism-is-built-and-green-does-that-change-the-park
+- [p 60] [U] decide-state-the-population-beside-the-number-and-make-a-probe-s-identity-as-fine-as-its-decision
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
