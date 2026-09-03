@@ -68,6 +68,23 @@ begin
   WriteLn('arrn [', a4[0], '|', a4[1], ']');
   WriteLn('arrc ', a8[1] = 'one', ' ', a8[1] = 'nope');
 
+  { ORDERING. Equality survives a wrong prefix width -- both operands are read
+    at the same wrong offset, so `=` still answers correctly on the wrong bytes.
+    Only ordering, which walks characters from prefix+0, shows it. That is why
+    `a = b` was green beside `a < b` answering FALSE for every input.
+
+    TWO OF THE THREE NATURAL PAIRS ARE RIGHT BY ACCIDENT: a content-blind
+    comparison answers `lt=FALSE gt=TRUE` always, which is CORRECT for any pair
+    whose true answer is that. Both directions must be asserted, and the EQUAL
+    pair is the sharpest row of the three -- for two identical strings both `<`
+    and `>` must be FALSE, which no address comparison can produce. }
+  WriteLn('lt1  ', s < 'hello', ' ', s > 'hello');
+  a4[0] := 'abc'; a4[1] := 'abd';
+  WriteLn('lt2  ', a4[0] < a4[1], ' ', a4[0] > a4[1]);
+  WriteLn('lt3  ', a4[1] < a4[0], ' ', a4[1] > a4[0]);
+  a4[1] := 'abc';
+  WriteLn('lt4  ', a4[0] < a4[1], ' ', a4[0] > a4[1], ' ', a4[0] = a4[1]);
+
   for i := 1 to 5 do Write(r.f[i]);
   WriteLn;
 end.

@@ -7332,8 +7332,13 @@ begin
   end
   else
   begin
-    EmitB($48); EmitB($8D); EmitB($70); EmitB($08); { lea rsi, [rax+8] }
-    EmitB($48); EmitB($8B); EmitB($10);             { mov rdx, [rax] }
+    { A FROZEN operand at ITS OWN prefix width -- this helper spelled it 8.
+      bug-a-ordering-comparison-of-frozen-strings-ignores-content-on-x86-64 }
+    EmitB($48); EmitB($8D); EmitB($70); EmitB(FrozenStrPrefixSize(lhsTk)); { lea rsi,[rax+pfx] }
+    if FrozenStrPrefixSize(lhsTk) = 1 then
+      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($10); end { movzx rdx, byte [rax] }
+    else
+      begin EmitB($48); EmitB($8B); EmitB($10); end;            { mov rdx, [rax] }
   end;
 
   { --- Load RHS (rcx) -> rdi (chars), r8 (len) --- }
@@ -7359,8 +7364,11 @@ begin
   end
   else
   begin
-    EmitB($48); EmitB($8D); EmitB($79); EmitB($08); { lea rdi, [rcx+8] }
-    EmitB($4C); EmitB($8B); EmitB($01);             { mov r8, [rcx] }
+    EmitB($48); EmitB($8D); EmitB($79); EmitB(FrozenStrPrefixSize(rhsTk)); { lea rdi,[rcx+pfx] }
+    if FrozenStrPrefixSize(rhsTk) = 1 then
+      begin EmitB($4C); EmitB($0F); EmitB($B6); EmitB($01); end { movzx r8, byte [rcx] }
+    else
+      begin EmitB($4C); EmitB($8B); EmitB($01); end;            { mov r8, [rcx] }
   end;
 
   { --- Comparison --- }
@@ -7419,8 +7427,13 @@ begin
   end
   else
   begin
-    EmitB($48); EmitB($8D); EmitB($70); EmitB($08); { lea rsi, [rax+8] }
-    EmitB($48); EmitB($8B); EmitB($10);             { mov rdx, [rax] }
+    { A FROZEN operand at ITS OWN prefix width -- this helper spelled it 8.
+      bug-a-ordering-comparison-of-frozen-strings-ignores-content-on-x86-64 }
+    EmitB($48); EmitB($8D); EmitB($70); EmitB(FrozenStrPrefixSize(lhsTk)); { lea rsi,[rax+pfx] }
+    if FrozenStrPrefixSize(lhsTk) = 1 then
+      begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($10); end { movzx rdx, byte [rax] }
+    else
+      begin EmitB($48); EmitB($8B); EmitB($10); end;            { mov rdx, [rax] }
   end;
 
   { --- Load RHS (rcx) -> rdi (chars), r8 (len) --- }
@@ -7438,8 +7451,11 @@ begin
   end
   else
   begin
-    EmitB($48); EmitB($8D); EmitB($79); EmitB($08); { lea rdi, [rcx+8] }
-    EmitB($4C); EmitB($8B); EmitB($01);             { mov r8, [rcx] }
+    EmitB($48); EmitB($8D); EmitB($79); EmitB(FrozenStrPrefixSize(rhsTk)); { lea rdi,[rcx+pfx] }
+    if FrozenStrPrefixSize(rhsTk) = 1 then
+      begin EmitB($4C); EmitB($0F); EmitB($B6); EmitB($01); end { movzx r8, byte [rcx] }
+    else
+      begin EmitB($4C); EmitB($8B); EmitB($01); end;            { mov r8, [rcx] }
   end;
 
   { --- minlen in rcx --- }

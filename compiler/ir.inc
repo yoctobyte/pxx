@@ -15780,6 +15780,17 @@ begin
     The node's own tag, which the IR_INDEX / IR_FIELD arms now set correctly
     from the aggregate, is the right answer for a load and is what it falls
     through to. }
+  { A FROZEN VARIABLE loaded as a VALUE. A frozen string's value IS its address,
+    so `a < b` over two `string[10]`s lowers both operands to IR_LOAD_SYM, and
+    this walker knew IR_LEA (the symbol's TypeKind) and the pointer route
+    (PtrElemTk) but not this one -- it fell to the generic tyString default and
+    every reader downstream used an 8-byte prefix.
+
+    It stayed hidden because equality survives it. Both operands are read at the
+    same wrong width, so `=` still answers correctly on the wrong bytes; only
+    ORDERING, which walks the characters from prefix+0, shows it. That is why
+    `a = b` was green beside `a < b` returning FALSE for every input in the same
+    program, and why this looked like an ordering-specific defect. }
   else if (IRKind[node] = IR_LOAD_SYM) and
           (IRA[node] >= 0) and (IRA[node] < SymCount) and
           TypeIsFrozenString(Syms[IRA[node]].PtrElemTk) then

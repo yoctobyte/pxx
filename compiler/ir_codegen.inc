@@ -9070,7 +9070,9 @@ begin
               begin
                 strCmpRel := IRStrCmpNeedsRelease(left, right);
                 if strCmpRel then IREmitStrCmpSaveOperands;
-                EmitAnsiStrCmp3Reg(op, IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right]));
+                { IRStrTkOf, matching the equality call site above: the IR tags
+                  every frozen string tyString generically. }
+                EmitAnsiStrCmp3Reg(op, IRStrTkOf(left), IRStrTkOf(right));
                 if strCmpRel then IREmitStrCmpReleaseOperands(left, right);
               end
               else
