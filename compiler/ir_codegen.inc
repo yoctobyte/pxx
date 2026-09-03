@@ -748,14 +748,25 @@ begin
     Result := FrozenStrSlotSize(IntToTypeKind(baseTk), SymStrCap[symIdx])
   else
     { A FIELD- OR NESTED-ROOTED target (symIdx < 0) carries no capacity on the
-      node, so a frozen element still gets the kind-only answer. Not fixed
-      blind: `SetLength(rec.matrix[i], n)` for a frozen element is the shape,
-      and carrying the size would mean a new side table beside IRSetLenBaseRec.
-      Left measured-and-known rather than guessed at -- and NOT fixable against
-      a repro today: that spelling does not compile at all
-      (`r.matrix[0][0] := 'a0'` is refused with "cannot assign ShortString to
-      Char", the second index resolving as a CHARACTER index).
-      bug-a-a-field-rooted-array-of-array-of-string-n-indexes-as-a-char }
+      node, so a frozen element still gets the kind-only answer -- a pointer
+      width. The shape COMPILES now (its second index used to resolve as a
+      CHARACTER index) and is measurably wrong: `SetLength(r.matrix[i], 3)`
+      over `array of array of string[10]` strides 8 bytes, so `v00xxxxxx` reads
+      back as `v00xxxxx<TAB>` -- the TAB is the next element's length byte.
+      Every target including x86-64; the identical VARIABLE spelling is right.
+
+      A SIDE TABLE HERE IS NOT THE MISSING PIECE, and that is measured rather
+      than reasoned: threading the capacity down to this function was built and
+      probed, and what arrives is JUNK. RecFieldStrCap answers 3 for
+      `row: array of string[10]` and 1 for `m: array of array of string[10]`,
+      where both want 10, because the three field-declaration sites take
+      `fStrCap := LastTypeStrCap` and that channel is not set when the element
+      is a NAMED frozen alias -- so the field records whatever the last
+      unrelated declaration left behind. Consuming it would make the stride
+      WRONGER than the pointer-width default, so the carrier was reverted
+      rather than landed. Fix the capacity at declaration time and this arm is
+      a three-line change.
+      bug-a-a-frozen-dynamic-array-field-records-a-junk-element-capacity }
     Result := TypeStorageSize(IntToTypeKind(baseTk), baseRec);
 end;
 

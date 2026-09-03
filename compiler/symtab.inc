@@ -14566,10 +14566,10 @@ end;
 { The pointee's dynamic-array nesting, 0 when the pointee is not one. The twin
   of DerefPtrArrayInfo for the shape that has no extent: `PDyn = ^TDyn` parks
   the nesting on the symbol (SymPtrElemDynDepth) and on the ArrType row
-  (ArrTypeDynDepth), and the two dyn-depth walks -- DynArrayNodeDepth here and
-  NodeDynDepth in ast_arena.inc -- both had the symbol half and neither had the
-  row, which is why the dynamic faces SEGFAULTED where the fixed one merely
-  answered wrong. }
+  (ArrTypeDynDepth), and the dyn-depth walk had the symbol half and not the row,
+  which is why the dynamic faces SEGFAULTED where the fixed one merely answered
+  wrong. (There were TWO such walks when that was written -- this file's
+  DynArrayNodeDepth and ast_arena.inc's NodeDynDepth. There is one now.) }
 function DerefPtrArrayDynDepth(node: Integer): Integer;
 var dpaAi: Integer;
 begin
@@ -15171,71 +15171,6 @@ begin
   end;
 end;
 
-function DynArrayNodeDepth(node: Integer): Integer;
-{ Remaining dynamic-array nesting of an AST expression. Keep this parser-side
-  helper here because selectors are typed before IR lowering runs. }
-var depth: Integer;
-begin
-  Result := 0;
-  if node < 0 then Exit;
-  if ASTKind[node] = AN_IDENT then
-  begin
-    if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
-      Result := SymDynDepth[ASTIVal[node]];
-  end
-  else if ASTKind[node] = AN_DEREF then
-  begin
-    { `p^` where p: ^TDyn. The pointee's nesting lives on the POINTER symbol
-      (SymPtrElemDynDepth) because a dyn pointee has no extent to put in the
-      fixed-array slot. IR's NodeDynDepth has had this arm; this parser-side
-      twin did not -- the same split the AN_INDEX arm below records, one node
-      kind over. Without it IsNodeArray answered FALSE for `p^` over an
-      `array of AnsiString`, so the selector chain took the managed-STRING arm
-      and `p^[0] := 'x'` was refused as "cannot assign ShortString to Char" --
-      the exact face the fixed-array sibling was fixed for.
-      bug-a-a-pointer-to-a-dynamic-array-indexes-with-a-4-byte-stride
-
-      Widened from "the base is a plain identifier" to every spelling of the
-      pointer in 2026-09-01: a `^TDyn` held in a record FIELD, returned from a
-      FUNCTION or sitting in an array ELEMENT answered 0 here, so IsNodeArray
-      said FALSE and `r.q^[i]` took the managed-string arm and SEGFAULTED. Same
-      arm, same cause, three more spellings.
-      bug-a-p-caret-index-is-only-correct-when-the-pointer-is-a-plain-identifier }
-    Result := DerefPtrArrayDynDepth(node);
-  end
-  else if ASTKind[node] = AN_INDEX then
-  begin
-    depth := DynArrayNodeDepth(ASTLeft[node]);
-    if depth > 0 then Result := depth - 1
-    else if (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] >= 0) and
-            Syms[ASTIVal[ASTLeft[node]]].IsArray and
-            (Syms[ASTIVal[ASTLeft[node]]].ArrLen <> -1) and
-            (SymElemDynDepth[ASTIVal[ASTLeft[node]]] > 0) then
-      { Indexing an array whose ELEMENT is a dyn-array handle — a fixed
-        `array[..] of TRow`, or an open-array param `array of TRow`: a[i] is
-        still an array, of the element's own depth. IR's NodeDynDepth already
-        knew this; the parser-side twin did not, so `a[i][j]` was TYPED as
-        indexing the element BASE type — for a managed-string base that made
-        m[0][1] a CHAR read off an 8-byte stride (silent garbage;
-        bug-p-open-array-of-a-named-dynamic-array-reads-garbage). }
-      Result := SymElemDynDepth[ASTIVal[ASTLeft[node]]];
-  end
-  else if (ASTKind[node] = AN_DYN_COPY) or (ASTKind[node] = AN_DYN_INSERT) then
-    { `Copy(a)` yields an array of the source's shape -- and so does the
-      array-splice AN_DYN_INSERT that `a + b` / `Concat(a, b)` build
-      (feature-p-dynamic-array-concatenation). Both arms exist in the
-      ast_arena.inc twin; see the note below. }
-    Result := DynArrayNodeDepth(ASTLeft[node])
-  else if ASTKind[node] = AN_COMMA then
-    { `(side-effect, value)` yields the RIGHT operand — the same rule
-      ResolveNodeRec's comma arm states, and the same arm NodeDynDepth has in
-      ast_arena.inc. These two functions ARE twins and drift is the recurring
-      failure here (see the AN_INDEX arm's own note above); when you add a shape
-      to one, add it to the other in the same edit.
-      bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached }
-    Result := DynArrayNodeDepth(ASTRight[node]);
-end;
-
 function IsNodeArray(node: Integer): Boolean;
 { The AN_DEREF arm is the THIRD site to ask DerefPtrArrayInfo, and the reason is
   the same at all three: `p^` where `p: ^array[0..3] of T` IS an array, but the
@@ -15252,7 +15187,7 @@ function IsNodeArray(node: Integer): Boolean;
   bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds }
 begin
   Result := False;
-  if DynArrayNodeDepth(node) > 0 then
+  if NodeDynDepth(node) > 0 then
     Result := True
   else if ASTKind[node] = AN_IDENT then
     Result := Syms[ASTIVal[node]].IsArray

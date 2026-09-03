@@ -12634,6 +12634,10 @@ test-core: $(COMPILER)
 	tools/expect_same.sh sweep_frozenargpaths_default "$$($(TESTTMP)/sweep_frozenargpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
 	./$(COMPILER) -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/sweep_frozenargpaths_s
 	tools/expect_same.sh sweep_frozenargpaths_bytepfx "$$($(TESTTMP)/sweep_frozenargpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	./$(COMPILER) test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/sweep_fieldrooted_frozen_d
+	tools/expect_same.sh sweep_fieldrooted_frozen_default "$$($(TESTTMP)/sweep_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
+	./$(COMPILER) -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/sweep_fieldrooted_frozen_s
+	tools/expect_same.sh sweep_fieldrooted_frozen_bytepfx "$$($(TESTTMP)/sweep_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	# see the cross rows: the leak is the half no value assertion can observe
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_frozen_arg_no_leak.pas $(TESTTMP)/sweep_frozenargleak
 	tools/assert_no_leak.sh sweep_frozen_arg_no_leak 200 $(TESTTMP)/sweep_frozenargleak
@@ -15975,6 +15979,10 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/frozen_arg_call_paths_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
 	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_i386_frozen_argpaths_s
 	tools/expect_same.sh i386/frozen_arg_call_paths_bytepfx "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_frozen_argpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	./$(COMPILER) --target=i386 test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_i386_fieldrooted_frozen_d
+	tools/expect_same.sh i386/fieldrooted_nested_frozen_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
+	./$(COMPILER) --target=i386 -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_i386_fieldrooted_frozen_s
+	tools/expect_same.sh i386/fieldrooted_nested_frozen_bytepfx "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	# ...and the LEAK, which every row above passes with fully present: the old
 	# inline conversion allocated a handle per call and nothing owned it
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
@@ -16753,6 +16761,10 @@ test-aarch64: $(COMPILER)
 	tools/expect_same.sh aarch64/frozen_arg_call_paths_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
 	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_a64_frozen_argpaths_s
 	tools/expect_same.sh aarch64/frozen_arg_call_paths_bytepfx "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_frozen_argpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	./$(COMPILER) --target=aarch64 test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_aarch64_fieldrooted_frozen_d
+	tools/expect_same.sh aarch64/fieldrooted_nested_frozen_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
+	./$(COMPILER) --target=aarch64 -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_aarch64_fieldrooted_frozen_s
+	tools/expect_same.sh aarch64/fieldrooted_nested_frozen_bytepfx "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	# ...and the LEAK, which every row above passes with fully present: the old
 	# inline conversion allocated a handle per call and nothing owned it
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
@@ -17441,6 +17453,10 @@ test-riscv32: $(COMPILER)
 	tools/expect_same.sh riscv32/frozen_arg_call_paths_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
 	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_rv32_frozen_argpaths_s
 	tools/expect_same.sh riscv32/frozen_arg_call_paths_bytepfx "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_frozen_argpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	./$(COMPILER) --target=riscv32 test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_riscv32_fieldrooted_frozen_d
+	tools/expect_same.sh riscv32/fieldrooted_nested_frozen_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
+	./$(COMPILER) --target=riscv32 -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_riscv32_fieldrooted_frozen_s
+	tools/expect_same.sh riscv32/fieldrooted_nested_frozen_bytepfx "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	# ...and the LEAK, which every row above passes with fully present: the old
 	# inline conversion allocated a handle per call and nothing owned it
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).
@@ -19668,6 +19684,10 @@ test-arm32: $(COMPILER)
 	tools/expect_same.sh arm32/frozen_arg_call_paths_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argpaths_d)" "$$(cat test/test_frozen_arg_call_paths.expected)"
 	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_frozen_arg_call_paths.pas $(TESTTMP)/test_a32_frozen_argpaths_s
 	tools/expect_same.sh arm32/frozen_arg_call_paths_bytepfx "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_frozen_argpaths_s)" "$$(cat test/test_frozen_arg_call_paths.expected)"
+	./$(COMPILER) --target=arm32 test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_arm32_fieldrooted_frozen_d
+	tools/expect_same.sh arm32/fieldrooted_nested_frozen_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fieldrooted_frozen_d)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
+	./$(COMPILER) --target=arm32 -dPXX_SHORTSTRING test/test_field_rooted_nested_dyn_frozen_index.pas $(TESTTMP)/test_arm32_fieldrooted_frozen_s
+	tools/expect_same.sh arm32/fieldrooted_nested_frozen_bytepfx "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fieldrooted_frozen_s)" "$$(cat test/test_field_rooted_nested_dyn_frozen_index.expected)"
 	# ...and the LEAK, which every row above passes with fully present: the old
 	# inline conversion allocated a handle per call and nothing owned it
 	# (measured pre-fix: allocs=3000 frees=0, while printing correct values).

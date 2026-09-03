@@ -101,8 +101,8 @@ _none_
 | bug-a-a-bare-esp-boot-issues-clock-gettime64-into-nothing | A+S | 40 | bug | A bare ESP boot compiles a raw `clock_gettime64` into `Randomize`, behind a guard that never ran | — |
 | bug-a-a-c-headers-variadic-tail-is-dropped-on-import | A | 45 | bug | A variadic C function imported into Pascal is callable only with its FIXED prefix: printf imports as printf(Pointer). The `...` is NOT lost -- ProcVariadic[] records it and codegen honours it -- the Pascal-side overload matcher simply never consults it. One clause in ProcArityMatches plus bounding the type-match loops. | — |
 | bug-a-a-comment-claims-a-cow-check-for-dynamic-arrays-that-was-deleted | A | 25 | bug |  | — |
-| bug-a-a-field-rooted-array-of-array-of-string-n-indexes-as-a-char | A | 55 | bug | `r.matrix[0][0] := 'a0'` for a record FIELD of type `array of array of string[10]` is refused with `cannot assign ShortString to Char` -- the second index is resolved as a CHARACTER index into a frozen string instead of an element index into the inner array, so the whole shape is unreachable. The same declaration as a plain VARIABLE works on every target in both modes. FPC compiles and runs it. Blocks the only spelling that would exercise the field-rooted SetLength descriptor, which still has no frozen element capacity. | — |
 | bug-a-a-foreign-thread-shares-the-main-thread-s-heap-magazine | A | 65 | bug | A thread pxx did not create — a libc pthread, or any thread a linked C library starts — never runs the __pxxclone stub that carves and installs a per-thread TLS block, so it INHERITS its creator's gs and every `gs:` slot it touches is the creator's. Measured: gs_base is BSS_TLS_MAIN on all five threads of test_multithreading. The CRASH this caused is fixed (ba2682d2f made the heap magazine's guard atomic, so a shared magazine is correct); what is left is that the TLS block is not per-thread for foreign threads, which is a design question and touches every slot, not just the magazine. | decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part |
+| bug-a-a-frozen-dynamic-array-field-records-a-junk-element-capacity | A | 60 | bug | "A record FIELD declared `array of string[N]` records a junk element | — |
 | bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad | A | 35 | bug | UNMEASURED RESIDUAL, filed so it has an owner rather than living in a closed ticket's scope note. bug-a-a-managed-temp-in-a-frame-unwound-by-an-exception-is-never-released was fixed by asking the landing-pad gate a second time inside CompileAST, but the request is raised ONLY for a plain body: an asm body and a generator/stackless body keep the prologue decision. So a generator whose step function raises past a hidden managed argument temp should still leak one block per raise. Should -- not does: a standalone repro was attempted and did not get past a parse error unrelated to the bug, so this is reasoned from the code path and NOT measured. Verify before working it; if it does not reproduce, close as rejected rather than leaving it open at a guess. | — |
 | bug-a-a-nilpy-clone-entry-receives-a-raw-word-where-it-expects-a-variant-address | A | 55 | bug | A NilPy `def` used as a __pxxclone entry gets its `arg` parameter as a RAW MACHINE WORD, but a NilPy parameter is a by-reference Variant -- so the callee dereferences the value as an address. `__pxxclone(flags, stk, worker, 41, 0)` + a worker that reads `arg` is a deterministic SIGSEGV; a worker that ignores it is fine, which is why the existing test never saw it. | — |
 | bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
@@ -891,9 +891,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3179)
+## done (3180)
 
-3179 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3180 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (74)
 
@@ -1006,6 +1006,7 @@ _none_
 - [p 60] [B] bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS (unblocks 1)
 - [p 60] [C] bug-c-ir-unsupported-ast-node-kind-1-in-flash-eraseall (unblocks 1)
 - [p 60] [B] feature-b-crtl-function-gaps-at-394-busybox-applets (unblocks 1)
+- [p 60] [A] bug-a-a-frozen-dynamic-array-field-records-a-junk-element-capacity
 - [p 60] [C] bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero
 - [p 60] [N] bug-n-a-frozenset-returned-from-a-def-arrives-empty
 - [p 60] [N] bug-n-a-lambda-returning-a-captured-heap-value-yields-none
@@ -1030,7 +1031,6 @@ _none_
 - [p 55] [M] feature-port-windows-pe (unblocks 3)
 - [p 55] [U] decide-the-utf16-payload-fact-is-spelled-twice-kind-widestr-and-enc-ucs2 (unblocks 1)
 - [p 55] [T] feature-t-freebsd-image-and-runner (unblocks 1)
-- [p 55] [A] bug-a-a-field-rooted-array-of-array-of-string-n-indexes-as-a-char
 - [p 55] [A] bug-a-a-nilpy-clone-entry-receives-a-raw-word-where-it-expects-a-variant-address
 - [p 55] [A] bug-a-address-of-an-open-array-element-points-at-the-marshalling-temp
 - [p 55] [A] bug-a-i386-a-pointer-is-register-and-memory-resident-at-once-across-a-goto-entered-loop

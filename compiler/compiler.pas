@@ -62,6 +62,7 @@ procedure CMarkTokNoModule(startTok: Integer); forward;          { ditto }
 function CModuleOfTok(t: Integer): Integer; forward;   { real body in dbg_filetable.inc; lexer.inc asks which C translation unit a token came from, and lexer.inc is included first (ditto) }
 procedure MarkUnitPxxDialect(unitIdx: Integer); forward;   { real body in symtab.inc; lexer.inc's {$MODE PXX} handler calls it (ditto) }
 function IsNilLiteralNode(node: Integer): Boolean; forward;   { real body in ast_arena.inc; symtab.inc's overload matcher asks it about a call argument (ditto) }
+function NodeDynDepth(node: Integer): Integer; forward;   { real body in ast_arena.inc; symtab.inc's IsNodeArray asks it, and used to carry a second copy of the walk that drifted (ditto) }
 {$include lexer.inc}
 {$include util.inc}   { shared helpers owned by no frontend/backend — AIntToStr lived in aparser.inc until 2026-08-19. AFTER lexer.inc, not before: AppendChar is defined there. }
 {$ifndef PXX_NO_CFRONT}{$include clexer.inc}{$endif}
