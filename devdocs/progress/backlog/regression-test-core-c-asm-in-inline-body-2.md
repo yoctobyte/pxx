@@ -54,3 +54,6 @@ ast_slot_overloads: the slot-write census has CHANGED. If a new kind parks a non
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-03 — the seven watcher saw `test-core#src:test/c_asm_in_inline_body.c@2` GREEN at addffd2608d3 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-c-asm-in-inline-body-2`, not `regression-test-core-c-asm-in-inline-body`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
