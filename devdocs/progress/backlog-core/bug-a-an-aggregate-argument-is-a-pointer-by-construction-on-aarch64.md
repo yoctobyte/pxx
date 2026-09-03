@@ -4,7 +4,7 @@ prio: 45
 type: bug
 found: 2026-09-01
 found-by: frankC
-summary: "aarch64 is the last target where a by-value aggregate argument occupies one pointer-sized slot by CONSTRUCTION rather than by classification: ABIA64CdeclArgSlot advances the NSAA by a fixed 8 bytes per argument, so an aggregate of any size gets exactly one slot and its three readers inherit that. x86-64 and i386 were converted by bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee; this is the same defect, in the one place with NO ORACLE. There is no gcc cross for aarch64 on this box, so no mixed link is constructible and the only available verification is pxx-against-pxx -- which is exactly the self-consistency the parent ticket exists to show is worthless for a calling convention. So the FIRST deliverable here is an oracle, not a fix."
+summary: "aarch64 is the last target where a by-value aggregate argument occupies one pointer-sized slot by CONSTRUCTION rather than by classification: ABIA64CdeclArgSlot advances the NSAA by a fixed 8 bytes per argument, so an aggregate of any size gets exactly one slot and its three readers inherit that. x86-64 and i386 were converted by bug-a-c-a-by-value-struct-parameter-is-passed-as-a-pointer-to-every-c-abi-callee. THE ORACLE CLAUSE THIS TICKET WAS FILED WITH IS FALSE AND IS CORRECTED BELOW (2026-09-03): there is no cross gcc and no mixed LINK, but `clang --target=aarch64-linux-gnu -S` is a placement oracle that needs nothing installed and reads the CALL SITE, and llvm-objdump-21 reads pxx's own aarch64 ELF for the other column. MEASURED against it, five by-value shapes in one program: pxx emits `x0 = &temp, x1 = tail` for ALL FIVE, while AAPCS64 wants `{int,int}` packed in x0, `{long,long}` in x0+x1, a 24-byte struct indirect, `{double,double}` in d0+d1 and `{float,float,float}` in s0..s2 -- and after an HFA the tail integer goes to w0, because the banks allocate independently. FOUR OF FIVE ROWS WRONG AND THE FIFTH RIGHT BY ACCIDENT: a 24-byte struct really is indirect, so the always-a-pointer construction collides with the psABI on exactly the shape a single hand-written probe would choose. Work is now the classifier, not the oracle. Remaining gap: this is a PLACEMENT oracle and never runs, and the outcome oracle on aarch64 (a dynamic call into the target's glibc) cannot reach this ticket because no libc entry point takes a large aggregate by value."
 ---
 
 # An aggregate argument is a pointer by construction on aarch64
@@ -120,3 +120,64 @@ the same program is self-consistently wrong. Read that ticket's ORACLE section
 before concluding this one is blocked. The linker is still needed for the other
 direction (a pxx-compiled CALLEE receiving from gcc-compiled code), and riscv32
 and xtensa are covered by neither — both refuse dynamic symbols outright.
+
+# 2026-09-03 (frankB) — THE ORACLE EXISTS. The premise above is wrong, and the defect is now measured against it
+
+This ticket's summary says *"there is no gcc cross for aarch64 on this box, so
+no mixed link is constructible and the only available verification is
+pxx-against-pxx"*. **The clause about a LINK is true and the conclusion about an
+ORACLE is false.** `clang` is a cross compiler by construction and needs nothing
+installed:
+
+```
+clang --target=aarch64-linux-gnu -O1 -S -o - probe.c
+```
+
+Declare the callees `extern` and never define them — you are reading the CALL
+SITE, so nothing links and nothing runs. `llvm-objdump-21` (installed) reads
+pxx's own aarch64 ELF for the other column. Full method, and the arm32/riscv32
+rows, in `devdocs/dev/differential-probes.md`, "A CROSS-TARGET ABI ORACLE EXISTS
+ON THIS BOX, AND IT IS NOT A CROSS GCC".
+
+## Measured, five shapes, one program, aarch64
+
+Each call takes the aggregate by value plus a distinct integer tail, which is
+what makes the SLOT COUNT visible and not just the bytes:
+
+| shape | size | clang (AAPCS64) | pxx today |
+| --- | --- | --- | --- |
+| `struct {int a, b;}` | 8 | `x0` packed, tail `w1` | `x0 = &tmp`, tail `x1` |
+| `struct {long a, b;}` | 16 | `x0, x1`, tail `w2` | `x0 = &tmp`, tail `x1` |
+| `struct {long a, b, c;}` | 24 | POINTER `x0`, tail `w1` | `x0 = &tmp`, tail `x1` |
+| `struct {double x, y;}` (HFA) | 16 | `d0, d1`, tail `w0` | `x0 = &tmp`, tail `x1` |
+| `struct {float x, y, z;}` (HFA) | 12 | `s0, s1, s2`, tail `w0` | `x0 = &tmp`, tail `x1` |
+
+pxx emits `memcpy` to a 16-byte temp and then `x0 = &temp` for **every** row —
+one pointer slot by construction, exactly as the ticket says.
+
+**FOUR OF FIVE ROWS ARE WRONG AND THE FIFTH IS RIGHT BY ACCIDENT.** A 24-byte
+struct really does go indirectly on AAPCS64, so "always a pointer" happens to be
+correct there — and a big struct is precisely the shape a single hand-written
+probe would use. This is CLAUDE.md's "choose a probe whose right answer differs
+from the default" seen from the other side: the bug's answer collides with the
+psABI on the one case most likely to be tested. Any probe for this must vary
+SIZE and MEMBER TYPE.
+
+Note the third column of the clang rows: after an HFA the tail integer lands in
+`w0`, because the GP and FP banks allocate independently. A fix that puts an HFA
+in `d0,d1` but keeps advancing the GP index will place the tail in `w2` and be
+wrong in a way no single-argument probe can see.
+
+## What this unblocks and what it does not
+
+The oracle is here, so the "first deliverable is an oracle" clause is discharged
+and the work is now the classifier itself: `ABIA64CdeclArgSlot` advancing a fixed
+8 per argument has to become an AAPCS64 aggregate classification (HFA of 1-4
+identical FP members → that many FP registers; aggregate <= 16 bytes → one or two
+X registers; larger → indirect, one slot), and its three readers inherit it.
+
+**It is a PLACEMENT oracle, not an OUTCOME one.** It reads the call site and
+never runs, so it cannot catch a placement that is right and read back wrong. The
+running-program oracle on this target is the glibc dynamic call, and it cannot
+reach this ticket at all, because no libc entry point takes a large aggregate by
+value. Both halves are needed and neither substitutes for the other.

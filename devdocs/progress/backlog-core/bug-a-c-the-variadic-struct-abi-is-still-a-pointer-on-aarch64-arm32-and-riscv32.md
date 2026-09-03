@@ -9,7 +9,7 @@ created: 2026-09-02
 found-by: frankA
 owner: ""
 blocked-by: []
-summary: "The remaining three targets of bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer, which was fixed on x86-64 and i386 2026-09-02. A struct or union in a variadic slot still occupies one pointer-width slot holding the address of a caller temp; gcc puts the aggregate's own bytes there. Self-consistent inside pxx, so no pxx-vs-pxx test can see it, and there is no MIXED-LINK oracle on these three -- test-c-abi-mixed-link runs x86_64 and i386 only -- which is why they were not converted blind alongside the other two. Measured unchanged rather than regressed: arm32 and riscv32 print byte-identical output before and after that fix, aarch64 differs only in the garbage stack addresses the broken rows were already printing. The mechanism and all three sites are documented on the parent; what this needs first is an oracle."
+summary: "The remaining three targets of bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer, which was fixed on x86-64 and i386 2026-09-02. A struct or union in a variadic slot still occupies one pointer-width slot holding the address of a caller temp; gcc puts the aggregate's own bytes there. Self-consistent inside pxx, so no pxx-vs-pxx test can see it. Measured unchanged rather than regressed: arm32 and riscv32 print byte-identical output before and after that fix, aarch64 differs only in the garbage stack addresses the broken rows were already printing. THE 'NO ORACLE ON THESE THREE' CLAUSE IS CORRECTED BELOW (2026-09-03): the mixed LINK really is unbuildable (no cross gcc, no lld), but `clang --target=... -S` compiles for all three with nothing installed and reading the CALL SITE needs neither a link nor a run, with llvm-objdump-21 for pxx's column. Three measured facts that change what a fix must do: arm32 NEVER goes indirect (a 12-byte aggregate is r0,r1,r2 with the tail in r3, so the pointer is wrong there at every size); riscv32 DOES at 2x XLEN, so its current pointer is CORRECT for a 12-byte struct and wrong for smaller ones; and riscv32 takes {double,double} in fa0,fa1 but {float,float,float} indirectly, so the FP-struct rule does not port from aarch64. Also `long` is 4 bytes on both 32-bit targets, so size probes in explicit widths. The mechanism and all three sites are documented on the parent."
 ---
 
 # The variadic struct ABI on the three cross targets
@@ -117,3 +117,42 @@ the same program is self-consistently wrong. Read that ticket's ORACLE section
 before concluding this one is blocked. The linker is still needed for the other
 direction (a pxx-compiled CALLEE receiving from gcc-compiled code), and riscv32
 and xtensa are covered by neither — both refuse dynamic symbols outright.
+
+# 2026-09-03 (frankB) — the "no oracle on these three" premise is wrong for two of them, and half wrong for the third
+
+This ticket says *"there is no MIXED-LINK oracle on these three ... which is why
+they were not converted blind alongside the other two"*. The mixed-LINK part
+stands: there is no cross gcc and no `lld` on this box, so nothing can be linked
+for these targets. **But a mixed link was never the only oracle available.**
+
+`clang --target={aarch64-linux-gnu,arm-linux-gnueabihf,riscv32-linux-gnu} -S`
+compiles for all three with nothing installed, and reading the CALL SITE needs no
+link and no run. `llvm-objdump-21` reads pxx's own output for these targets for
+the other column. Method and the measured aggregate-placement table:
+`devdocs/dev/differential-probes.md`, "A CROSS-TARGET ABI ORACLE EXISTS ON THIS
+BOX, AND IT IS NOT A CROSS GCC". The aarch64 rows are worked through on the
+sibling ticket
+`bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64`.
+
+Three things from that table bear directly on this ticket's three targets, and
+none of them is guessable:
+
+- **arm32 never goes indirect.** A 12-byte aggregate is passed in `r0,r1,r2` with
+  the tail in `r3`. So the pointer this ticket describes is wrong on arm32 for
+  every size, not only past a limit.
+- **riscv32 does, at 2x XLEN.** A 12-byte aggregate is a pointer in `a0` with the
+  tail in `a1` — which is what pxx already emits, so on riscv32 the current
+  behaviour is CORRECT for that shape and wrong for smaller ones. A probe that
+  used a big struct would certify the bug.
+- **riscv32 takes `{double,double}` in `fa0,fa1` and `{float,float,float}`
+  indirectly.** The FP-struct rule stops at two members, so "an HFA goes in FP
+  registers" is not portable between aarch64 and riscv32.
+
+`long` is 4 bytes on the two 32-bit targets, so a struct chosen for its 64-bit
+size is a different shape there; size the probe in explicit widths.
+
+Still true and unchanged: this is a PLACEMENT oracle. It cannot see a value read
+back from the wrong place, and the running-program oracle (a dynamic call into
+the target's own glibc, aarch64 and arm32 only) cannot reach a by-value aggregate
+because no libc entry point takes one. riscv32 is covered by the placement oracle
+alone.

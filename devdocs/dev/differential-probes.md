@@ -644,6 +644,81 @@ precisely what the four probes at the top of this file are for.
 
 ---
 
+## A CROSS-TARGET ABI ORACLE EXISTS ON THIS BOX, AND IT IS NOT A CROSS GCC
+
+Several open tickets say their first deliverable is an oracle because "there is
+no gcc cross for aarch64 on this box, so no mixed link is constructible and the
+only available verification is pxx-against-pxx". **The premise about a LINK is
+correct and the conclusion about an ORACLE is not.** Measured 2026-09-03: there
+are two, they need nothing installed, and between them they answer both halves.
+
+### 1. `clang --target=... -S` — a PLACEMENT oracle, free, all three cross targets
+
+`clang` is a cross compiler by construction. No sysroot, no cross binutils, no
+`lld`:
+
+```
+clang --target=aarch64-linux-gnu   -O1 -S -o - probe.c
+clang --target=arm-linux-gnueabihf -O1 -S -o - probe.c
+clang --target=riscv32-linux-gnu   -O1 -S -o - probe.c
+```
+
+Declare the callees `extern` and never define them; you are reading the CALL
+SITE, so nothing needs to link or run. Give every call a distinct integer tail
+argument and the placement reads straight off:
+
+| shape | aarch64 | arm32 (AAPCS-VFP) | riscv32 |
+| --- | --- | --- | --- |
+| `{int,int}` (8) | `x0` packed, tail `w1` | `r0,r1`, tail `r2` | `a0,a1`, tail `a2` |
+| `{long,long}` | `x0,x1`, tail `w2` | (8 at ILP32) `r0,r1`, tail `r2` | `a0,a1`, tail `a2` |
+| `{long,long,long}` | POINTER in `x0`, tail `w1` | (12) `r0,r1,r2`, tail `r3` | POINTER in `a0`, tail `a1` |
+| `{double,double}` | `d0,d1`, tail `w0` | `d0,d1`, tail `r0` | `fa0,fa1`, tail `a0` |
+| `{float,float,float}` | `s0,s1,s2`, tail `w0` | `s0,s1,s2`, tail `r0` | POINTER in `a0`, tail `a1` |
+
+Four things in that table cannot be guessed and are why the oracle is worth
+running rather than reasoning from the psABI: aarch64 and riscv32 go INDIRECT
+past their size limit while arm32 never does; the tail integer lands in `w0`/`r0`
+after an HFA because the banks allocate independently; riscv32 takes a two-float
+struct in FP registers and a THREE-float struct indirectly; and `long` is four
+bytes on the 32-bit targets, so a struct named for its 64-bit size is a different
+shape there.
+
+**What it is NOT: an outcome oracle.** It is clang's reading of the psABI at the
+call site, so it cannot catch a placement that is right and read back wrong, and
+it never runs. Use it for "where does the argument go"; use §1 of the parity
+probes, or the glibc call below, for "what does the program print".
+
+### 2. A dynamic call into the target's own glibc — an OUTCOME oracle, aarch64 and arm32
+
+`~/.cache/pxx-cross/{aarch64,arm32}/lib/` holds a complete glibc and
+`tools/run_target.sh` already points `QEMU_LD_PREFIX` at it, so a pxx-compiled
+caller and gcc-built glibc exchange arguments across a real boundary with the
+callee's own formatted output as the observable. **A mixed LINK is what needs a
+cross linker; a mixed CALL does not.** This is what settled AAPCS64 §6.4.2 by
+experiment in
+`bug-a-aarch64-passes-a-variadic-float-in-an-fp-register-so-glibc-reads-zero`.
+Its reach is whatever libc exposes — the `printf` family covers placement,
+promotion and slot counting — and **no libc entry point takes a large aggregate
+by value**, which is exactly why the by-value-struct tickets need oracle 1.
+riscv32 and xtensa refuse dynamic symbols outright and are covered by neither.
+
+### Reading pxx's own side: `llvm-objdump-21`
+
+`objdump` here is x86-64-only, but `llvm-objdump-21` is installed and reads
+pxx's aarch64/arm32/riscv32 ELF. pxx emits a bare single-`PT_LOAD` image with no
+symbol table, so `--disassemble-symbols=main` fails; **locate the call site by a
+distinctive immediate instead** — give each call a unique constant tail argument
+and grep the disassembly for it. Worked instance: five by-value aggregate shapes
+in one program, on aarch64, all five compiled to `x0 = &temp, x1 = tail`.
+
+That measurement carries the warning from CLAUDE.md's "choose a probe whose right
+answer differs from the default", seen from the other side: **one of those five
+rows is CORRECT, and it is correct by accident.** A 24-byte struct really does go
+indirectly on aarch64, so a pointer is the right answer there — and a big struct
+is exactly the shape someone writing a single probe would pick. The always-a-
+pointer construction collides with the psABI on the one case most likely to be
+tested. Vary the SIZE and the MEMBER TYPE, or the probe certifies the bug.
+
 ## The BEFORE/AFTER probe: two commits, one source tree, and a table of subjects
 
 A third arrangement, distinct from both sections above: neither arm is another
