@@ -1,0 +1,6 @@
+dyn aliases var    TRUE
+dyn aliases const  TRUE
+value copies       TRUE
+write thru dyn     TRUE
+write thru static  TRUE
+value did not esc  TRUE

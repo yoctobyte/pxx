@@ -4708,6 +4708,25 @@ test-threads: $(COMPILER)
 	./$(COMPILER) test/test_open_array_value_param_copies.pas $(TESTTMP)/test_oavp26
 	tools/expect_same.sh test_oavp26.1 "$$($(TESTTMP)/test_oavp26 | tail -1)" "OPEN ARRAY VALUE PARAM OK"
 	tools/expect_same.sh test_oavp26.2 "$$($(TESTTMP)/test_oavp26 | head -2 | tail -1)" "open by value      : 1"
+	# ...and WHAT AN OPEN-ARRAY PARAMETER ALIASES, pinned separately because it is
+	# what a representation change would silently take away. A pxx open-array
+	# param is ONE word -- a pointer with its length at [ptr-8] -- so a DYNAMIC
+	# argument (which already carries that header) is passed by reference, while
+	# a static array must be copied into something that has one. FPC passes two
+	# words, (ptr, high), and aliases everything.
+	# THE STATIC-ARRAY ADDRESS ROWS ARE DELIBERATELY ABSENT: they diverge from
+	# FPC today and writing today's answer into the .expected would make the
+	# suite green over a live divergence
+	# (bug-a-address-of-an-open-array-element-points-at-the-marshalling-temp).
+	# The file runs unmodified under FPC and every row printed here is IDENTICAL
+	# there, so it carries its own oracle. First draft had one shared flag for
+	# two calls to the same routine and FPC caught it -- a bug in the TEST.
+	./$(COMPILER) test/test_open_array_param_aliasing.pas $(TESTTMP)/test_oaalias26
+	tools/expect_same.sh test_oaalias26 "$$($(TESTTMP)/test_oaalias26)" "$$(cat test/test_open_array_param_aliasing.expected)"
+	./$(COMPILER) --target=i386 test/test_open_array_param_aliasing.pas $(TESTTMP)/test_oaalias_i386
+	tools/expect_same.sh i386/test_oaalias_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_oaalias_i386)" "$$(cat test/test_open_array_param_aliasing.expected)"
+	./$(COMPILER) --target=riscv32 test/test_open_array_param_aliasing.pas $(TESTTMP)/test_oaalias_riscv32
+	tools/expect_same.sh riscv32/test_oaalias_riscv32 "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_oaalias_riscv32)" "$$(cat test/test_open_array_param_aliasing.expected)"
 	# function RESULTS of the aggregate kinds. A set-returning function used to
 	# answer the EMPTY set on every target, and a fixed-array one element 0 and
 	# zeros -- both silent. Every row diffed against FPC.

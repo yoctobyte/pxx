@@ -5,8 +5,9 @@ type: bug
 blocked-by: []
 found: 2026-09-02
 found-by: frankB
-owner: —
-summary: "`@a[0]` inside a callee does NOT equal the caller's `@arr[0]` for an open-array parameter, on EVERY element type (LongInt, record, string[10]) and for `var`, `const` and value alike -- FPC answers TRUE for all of them. Found as the control while fixing bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes, and it is NOT that bug: element ACCESS and WRITE-THROUGH are correct (`a[2]` reads the caller's value and `a[2] := x` propagates), so only the address-of path diverges. Cause is the copy-in/copy-out marshalling documented at `ir.inc`'s static-to-open-array arms: pxx materialises a `[len:8][data]` temp and passes it, which the comments there call 'observably equal to true aliasing unless the callee reaches the same array by another path during the call' -- `@` IS that other path, so the stated exception is reachable from one operator. LOW-ISH PRIO BECAUSE IT IS NOT A WRONG VALUE: the address is a valid, writable, correctly-strided view whose writes are copied back, so a callee that only indexes is unaffected. It bites when an address ESCAPES: stored past the call, compared against a caller address, or passed to a routine that outlives the frame. Worth filing rather than fixing inside a p100 because the honest fix is real aliasing for `var`, not a patch to `@`."
+summary: "`@a[0]` inside a callee does NOT equal the caller's `@arr[0]` for a `var` or `const` open-array parameter whose argument is a STATIC array -- on every element type and for a global, a local and a record field alike; FPC answers TRUE for all of them. CORRECTED 2026-09-03 by its own author: a DYNAMIC array argument already aliases correctly (1/1, matching FPC), and a VALUE parameter answers FALSE in FPC TOO, so that row was never a divergence -- the original summary claimed both. Cause is representational: a pxx open-array param is a pointer with its length at [ptr-8], so only an argument that already carries that header can be passed by reference; FPC passes (ptr, high) as two words and therefore aliases everything. NOT a wrong value -- the temp is a faithful, writable, correctly-strided view whose writes are copied back -- it bites only when an address ESCAPES the call. THE FIX IS A REPRESENTATION CHANGE, NOT A PATCH: 633 IsArray sites across 27 files, so do not start it casually."
+
+status: open
 ---
 
 # `@a[i]` on an open-array parameter addresses the marshalling temp, not the caller's array
@@ -73,3 +74,59 @@ prefix width and would confuse attribution there.
 
 `make test` + self-host + cross. Assert `@a[0] = @caller[0]` AND that indexing
 still works — the second is what a naive fix breaks.
+
+
+## CORRECTED BY ITS AUTHOR, 2026-09-03, binary c709788d39ad
+
+I re-measured before trying to fix it and the ticket was wrong in two ways that
+between them halve the surface. One program, four argument shapes, three
+parameter modes, pxx beside `fpc -Mobjfpc -O2`:
+
+| argument | mode | pxx | fpc |
+| --- | --- | --- | --- |
+| static global | var / const | **0 / 0** | 1 / 1 |
+| static local | var / const | **0 / 0** | 1 / 1 |
+| static record field | var / const | **0 / 0** | 1 / 1 |
+| **DYNAMIC** global | var / const | **1 / 1** | 1 / 1 |
+| any of them | **value** | 0 | **0** |
+
+**1. A DYNAMIC array argument already aliases.** The original ticket measured
+only static arrays and generalised. A dyn array IS a header'd handle, so the
+`var`/`const` path passes it straight through with no temp — which is also the
+proof that the copy exists for the header and nothing else.
+
+**2. THE `value` ROW WAS NEVER A DIVERGENCE.** The summary said FPC answers TRUE
+for `var`, `const` and value alike. FPC answers **FALSE** for value, and it is
+right to: a value open-array parameter is a copy by definition, so its elements
+have their own addresses in both compilers. I asserted a row without an oracle
+beside it and it read as three failures where there were two.
+
+### What the shape of the fix actually is, now that the oracle has been asked
+
+FPC passes an open array as **two words, (pointer, high)**. pxx passes **one**:
+a pointer whose length lives at `[ptr-8]`, the same convention AnsiString
+handles and dynamic arrays use. That single fact explains every row above —
+an argument that already carries the header is passed by reference, and one that
+does not must be copied into something that does, because the header has to be
+*adjacent*.
+
+So `@a[i]` cannot be made to answer the caller's address without either:
+
+- **changing the parameter representation to a descriptor** (the FPC answer, and
+  the correct one) — but the `[ptr-8]` convention is shared with dyn arrays and
+  managed strings, and `IsArray` appears **633 times across 27 files**,
+  6 of them backends. This is a representation change measured in weeks, not a
+  fix; and
+- **prefixing the ARGUMENT's own storage with 8 bytes** — possible for a local
+  or a global, whose slot layout the compiler owns outright, and impossible for
+  a record field or a 2-D row, whose offsets are observable. That would leave
+  two behaviours for one construct, with the second one still broken and
+  looking fixed. Rejected for that reason, not for difficulty.
+
+**Parked deliberately, not abandoned.** The diagnosis is complete and the fix
+direction is settled; what it needs is a session that can carry a
+representation change across 6 backends, which is not the same as a session that
+can carry a bug fix.
+
+Re-measured shapes worth keeping: element access, write-through, `Length` and
+`High` are correct throughout, on every row above, in both compilers.
