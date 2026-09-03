@@ -400,3 +400,4 @@
 2026-09-02T09:29:42Z  v400  6c184b4bcc37f80dfad90ac158a511cd7f61e3c577c1ded86e62ac138b94e7a7  67ae9a62d567be6bddbb6c609db7c79c1d2005ff  docs(A): correct my own residual figure — 65682 was the delta, 173823 is the total
 2026-09-02T15:15:46Z  v401  1eec4dc5e0a74c6909f4e5ca326919f585c96829480b88e01b46c20dd9b09a46  07d196aa45eae7ad3eab752396fb2d950fb3738f  tstate(seven): opt 8476a5157557 done
 2026-09-03T20:32:52Z  v402  80ecb94023ebb96f83bd7133984b9903db9eb2588d91f645dc6192eea8615274  2a216b280f331540df1f67aa5fa5950ca2d46575  docs(progress): a fourth refusal shape, and a sequencing call made rather than deferred
+2026-09-03T23:44:13Z  v403  c31d03b202da9a092ed71cf666876c698fd473e05758f26526a70665cf4b9175  214500da237a6f1d574e3591e929ee6506bd5e48  docs(progress): record the shas the resolves landed as
