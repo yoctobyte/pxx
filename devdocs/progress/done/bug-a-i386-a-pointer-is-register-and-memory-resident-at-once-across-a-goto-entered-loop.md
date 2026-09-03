@@ -407,3 +407,57 @@ native, i386, aarch64, arm32, riscv32.
 
 ## Log
 - 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 72c431bd9.
+
+# 2026-09-03 — the epitaph: the re-lane to A was CORRECT REASONING FROM AN INSTRUMENT THAT COULD NOT FAIL
+
+Raised by franka-29, which held the re-lane's provenance while this session held
+the reason its evidence was empty. Neither half is visible from the other.
+
+The night section re-laned this to A carrying the sentence *"this is i386 backend
+code generation, not the C frontend"*, and it justified that with FOUR probes
+that each failed to reproduce at C level — the terminator alone; a `goto` from
+outside into a `do-while` body; the same with eight extra live locals at `-O0`
+and `-O2`; the same with the parameter reassigned by a non-constant. The third
+row of that table is, in substance, the test that now ships as
+`test/cdo_while_goto_entry.c`.
+
+**Every one of those four probes was measuring a freshly-zeroed frame.** The
+defect is an uninitialised read: the flag holds whatever its stack slot contains,
+and in a small program that has just started, the slot contains zero — which is
+accidentally the CORRECT value, because zero means "not the first iteration" and
+the post/condition then runs. So the probes were not weak evidence; **they were
+instruments that could not produce the failure**, and they reported that
+faithfully.
+
+That makes the re-lane a correct inference from a manufactured absence, not a
+reasoning error. It is worth stating that way, because the generalisable rule is
+not "the title was wrong":
+
+> **A re-lane justified by NON-REPRODUCTION is only as good as the probe's
+> ability to reproduce, and minimising a repro is the most reliable way to
+> destroy it.** For an uninitialised read specifically, the minimal program is
+> the one guaranteed to give the right answer for the wrong reason. The probe
+> must dirty the stack first — and from the CALLER, so the bytes land where the
+> frame under test will sit; `dirty()` called from inside the function under test
+> writes below its frame and changes nothing.
+
+## The discriminator franka-29 asked for, stated plainly
+
+The instrumented trace in the section above — `argv` printing the same address at
+both `prewhile` lines while the loop still ends after two passes — reads as two
+storage locations for one variable, and a parser fix should not be able to touch
+that. **It does touch it.** `busybox_diff.sh --separate --targets i386 --applets
+"mv cp"` went from `FAIL i386 differs from the gcc oracle` to **byte-identical
+over all 14 cases** on the frontend change alone, with no backend edit in the
+commit.
+
+So the trace's reading was wrong, and it was wrong in a way that could not be
+seen from the trace: the extra pass never evaluated the condition at all, so
+`*++argv` never ran, so `argv` legitimately held one address at both prints. The
+ticket's own caveat had named the limitation exactly — *"the instrumentation
+reads `argv` the same way the body does"* — and then read the agreement as
+corroboration of a register/memory split rather than as consistent with the
+condition never running.
+
+**There is no i386 residual.** The five cross-target rows and the busybox oracle
+are the evidence; if one appears later it is a new defect and not this one.
