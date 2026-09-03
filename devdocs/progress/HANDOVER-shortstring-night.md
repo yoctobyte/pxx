@@ -1610,3 +1610,120 @@ rather than after.**
 The numbers are scoped to tip `8cd3d6eb4`. frankb-78's `18b92fac9` (SizeOf
 padded to a machine word) landed after the sweep, and franka-29 said so rather
 than comparing across it.
+
+## 2026-09-03 — the NilPy thread flake (`817cac4ef`) — NOT shortstring, but the same three classes
+
+Banked here rather than separately because its findings are direct continuations
+of this file's: **the assertion class must match the defect class**, and **the
+sibling-arm tell**. `817cac4ef` verified on origin.
+
+**It was never a race in the runtime.** `__pxxclone`'s trampoline calls an entry
+it knows nothing about. A callee whose return type is `RetViaHiddenDest` —
+record, set, frozen string, `Variant`, promo int — does not return in a register:
+it copies through a pointer **the caller is obliged to hand it**, in a register
+fixed per target (`r10` x86-64, `ecx` i386, `x8` aarch64, `r12` arm32). The stub
+set none of them, so the child copied its result through whatever the clone
+syscall sequence had left there. On x86-64 that register is `r10`, which the stub
+loads with `ctidptr` — so `__pxxclone(..., 0)` made the child **write 16 bytes to
+address 0.**
+
+### Why nobody had seen it — a gap the suite's own SHAPE could not contain
+
+> **Every NilPy `def` is such an entry (they all return a `Variant`), and no
+> Pascal thread in the tree is one (`TThreadEntry` is a `procedure`).**
+
+An entire ABI obligation went unexercised because **one frontend's threads are
+all procedures and the other frontend's are all functions.** That is not a hole
+in the test suite; it is a hole the suite's shape guaranteed. Same family as
+franka-29's correlated zero earlier today, arrived at independently.
+
+### How a flake became a diagnosis — vary the shape, do not sample harder
+
+It looked intermittent because the child's crash races the parent's exit: the
+parent normally finishes and `exit_group`s before the child reaches its epilogue.
+frankb-78 **emptied the worker so the parent spins the full 400M instead of
+exiting early — 40/40, deterministic** — and gdb then gave it in one line:
+`worker+172 rep movsb (%rsi),(%rdi)`, `rdi=0`, thread 2, at the `return`.
+
+**Varying the shape until the race disappears, rather than sampling the race
+harder, is what did it.** The obvious wrong answer was checked first and was
+wrong: pointing `arg` at valid memory changes nothing, because it is `r10`, not
+`arg`.
+
+### "DID IT CRASH" IS THE WRONG INSTRUMENT FOR A WILD WRITE
+
+Scribbling over a join handle is **silent** — `munmap` of a garbage range is
+ignored, and the kernel clears the tid word afterwards anyway. The first
+acceptance test asserted survival and **passed 70% of the time against a compiler
+that was corrupting memory on EVERY run** (5/20 failures, then 9/30 when the
+result was made four times wider). **Widening the damage did not help, because
+the damage was never the observable.**
+
+Asserting the memory the stray pointer **AIMS AT** does: `PalThreadCreate` passes
+`@h.TidWord` as `ctidptr` and `StackSize` sits 16 bytes past it, so the test
+snapshots `StackSize` while the children still spin and compares after the join.
+
+| | fixed | pinned (pre-fix) |
+| --- | --- | --- |
+| x86-64 | 25/25 pass | 10/10 fail — **5 HANG**, 5 report handles `0 / 4` |
+| i386 | pass | SIGSEGV |
+| aarch64 | pass | SIGSEGV |
+| arm32 | pass | **PASSES 5/5** |
+
+**Half the pinned x86-64 failures HANG rather than crash** — the other reason a
+crash-only row could never have been the guard. Same family as the open-array
+leak: **a wild write is observed at its TARGET, not at the process.**
+
+**arm32's positive control does NOT fire, and the Makefile row says so.** `r12`
+is untouched by that leg's syscall sequence, so it held whatever the caller left,
+which happened to be valid. **That row is regression cover, not a reproduction,
+and reading its green as proof of the fix would be exactly backwards.** Saying so
+in the recipe is what stops the next reader counting four green legs as four
+confirmations.
+
+### THE SIBLING-ARM TELL AGAIN, one level up
+
+Converting two hand-counted branch offsets: aarch64's `cbnz x0, .parent (+7
+words)` and arm32's `bne .parent (+7)` were counted by hand over the child
+sequence, so adding one instruction made both land one instruction short —
+**inside the child path, in the parent.** The x86-64 and i386 legs had already
+been converted to computed offsets **for exactly this reason**, carrying the
+comment *"a hand-counted displacement here is the arm that stays wrong the day
+someone edits the child sequence and only looks at one leg."*
+
+> **The file was carrying the warning and the bug at the same time, in different
+> legs.** A fix applied to some arms of a construct and not its siblings, with
+> the reasoning left behind in a comment as if it had been.
+
+That is the "an enumeration exists BESIDE a complete one" tell, promoted from
+kinds to code: **a comment explaining why an arm was fixed is evidence its
+siblings were not.**
+
+### The fix
+
+A 256-byte scratch carved off the top of the child's stack (above the alt stack,
+so every other offset in the leg is unchanged), with the hidden-destination
+register pointed at it. The child never returns, so **a write-only sink is the
+only meaning a result can have.** Four legs, four registers, **one contract for
+the trampoline** — which is what keeps Pascal, C, Rust and Zig entries working
+unchanged.
+
+200 runs, 0 failures and 0 wrong outputs, against 29/100 this morning. Existing
+thread coverage re-run on all four legs, which is what says the branch conversion
+is right rather than merely untested.
+
+### Filed, not fixed — both measured, neither reasoned
+
+- `bug-a-a-nilpy-clone-entry-receives-a-raw-word-where-it-expects-a-variant-address`
+  (prio 55): the ARGUMENT half of the same mismatch. A NilPy parameter is a
+  by-ref `Variant`, so a worker that actually READS `arg` dereferences the raw
+  word — **3/3 SIGSEGV, deterministic. The existing test passes 0 and ignores
+  it**, which is why it never surfaced. The stub cannot fix it: the trampoline
+  must keep exactly one contract, so the adaptation is a thunk where the callee
+  is known. Shape sketched, not built.
+- `bug-a-nilpy-thread-clone-cannot-start-a-thread-on-aarch64-or-arm32` (prio 40):
+  `tid nonzero = False` on both, clone returns <= 0, no thread at all.
+  **Reproduces on the PIN, so not a regression**, and the obvious cause was
+  checked and rejected — the test's `SYS_mmap = 9` is the x86-64 number, and
+  rebuilding with 222/192 changes nothing. Pascal threading is fine on both, so
+  it is specific to the NilPy raw-syscall route.
