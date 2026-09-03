@@ -3404,7 +3404,7 @@ accepted on an `Integer` this morning, where the refusal row was the only
 witness — **twice in one day, a silent wrong answer hiding behind a louder
 failure in the same subsystem.**
 
-### FOUR IS A FLOOR
+### FOUR IS A FLOOR — **the COUNT held; the REASON below is WRONG, see the 5af42ef0f correction at the end of this file**
 
 x86-64 only so far — **the target where a width defect is LEAST likely to
 appear**, and the one the dev loop, `gate.sh quick` and the pin all run on. The
@@ -3443,3 +3443,89 @@ status was discarded by a `;` — they could not fail at all** — plus a guard 
 with ten devtest cases wired into `gate.sh quick` so the ~3900 conversions cannot
 rot. Cleared to land: harness-only, cannot affect the flip, and it makes
 assertions louder for the matrix about to run.
+
+## 2026-09-03 23:xx — `5af42ef0f`: the matrix, and a correction to a claim THIS SEAT amplified
+
+Both verified on origin. Matrix doc: `devdocs/dev/shortstring-flip-cross-target-matrix.md`.
+
+### THE MATRIX — 71 tests x 7 targets x 2 modes, plus FPC 3.2.2 (built and ran 55)
+
+**The oracle picks a side on every differing row**, which is what makes this a
+verdict rather than a diff.
+
+**The flip FIXES two, on all seven targets:** `test_shortstring_byte_prefix` goes
+**byte-for-byte to FPC's output**, and `test_sizeof_array_field`'s `rec.S` goes
+**16 -> 8, which is FPC's answer.**
+
+**It BREAKS four, with FPC on today's side:** `frozen_string_concat_operand`
+SIGSEGVs on **six of seven** (not wasm32); `string_n_array_field_stride` prints
+`0/0/0` on **all seven**; the other two are **x86-64 ONLY**.
+
+**Checked and empty:** no BUILD-OFF-FAIL row builds in the ON mode — **the flip
+changes nothing about what compiles, on any target.**
+
+### CORRECTION — I RELAYED A FLOOR CLAIM'S REASON, AND THE REASON WAS WRONG
+
+I relayed *"four is a floor, expect the matrix worse, because x86-64 is where a
+width defect is least likely to appear"* — to franka-29, to frankb-78, into this
+file, and **to the owner.** frankb-78 asked for the correction rather than
+letting the tidy version stand.
+
+**The COUNT survived: the cross sweep found NO new defect, and two of the four do
+not reproduce on any cross target.** So "four is a floor" is still true.
+
+**The REASON does not apply.** The structurally-invisible class — the one where
+the dev loop, `gate.sh quick` and the pin all run on x86-64 and a whole defect
+family is therefore native-only-visible — is about **width, alignment and ABI**
+changes.
+
+> **A FRONT-END RE-TYPE IS NOT A WIDTH OR ABI CHANGE AND DOES NOT HAVE THAT
+> BLINDNESS SHAPE.**
+
+**A correct rule applied to a change it does not describe** — which is the same
+error franka-29's token-splice fix made against a population, one day and one
+subsystem apart. **The rule being real is exactly what makes over-applying it
+persuasive**, and a coordinator relaying it adds credibility it has not earned.
+The earlier section is annotated in place, not rewritten.
+
+### THE FINDING: SIXTEEN ROWS WERE THE INSTRUMENT, NOT THE FLIP
+
+All sixteen were **reproducible, target-specific, byte-real differences** — and
+none of them were the change:
+
+- **wasmtime prints the binary's own path in its trap message, and the two modes
+  are two files.** (12 rows.)
+- Its backtrace prints **code offsets that shift with code size.** (3 rows.)
+- **i386 `test_rtti_reg` dumps a raw RTTI blob containing a STACK ADDRESS** — the
+  **same binary differs from itself by 3 of 47557 bytes under ASLR.** (1 row.)
+
+> **A differential sweep with no self-comparison cannot separate "this change did
+> something" from "this program is not deterministic" — and both render as the
+> same tidy table.**
+
+**The control: run the OFF binary TWICE and compare it with ITSELF, before you
+compare it with anything else.** 33 rows checked: **32 STABLE, 1 NOISE.**
+
+This is the sharpest instrument finding of the day. Every other control this file
+records asks *can this guard fail* or *is the expected value distinguishable from
+the default*. **This one asks whether the measurement is repeatable AT ALL**, and
+a sweep that skips it reports nondeterminism as a finding, with a target name and
+a byte count attached to make it convincing.
+
+### The scanner had to be widened TWICE, and both widenings were its own defect
+
+`8ccaf9532`. Residual was **14 silent + 4 vacuous.**
+
+- Draft one read **PHYSICAL lines**, and called four assertions silent whose
+  `|| { echo ...; exit 1; }` sits on the **next continued line.**
+- Draft two **matched only `=`** and reported OK — while four
+  `test "$(grep -c ...)" -ge N` rows (duplicated across test-core and test-nilpy,
+  so eight lines) **sat silent behind `-ge`.** `test` prints nothing for `-ge`
+  exactly as it does for `=`.
+
+**That second one is the "true about a narrower question" class a FOURTH time
+today — and this time it was the scan's own author reporting the zero.**
+
+**Positive control now stated IN the tool:** against `git show HEAD:Makefile` it
+reports 14 silent, 4 vacuous, exit 1; against the tree, 0, exit 0. Devtest at 12
+guards, wired into `gate.sh quick` so the ~3900 conversions cannot rot.
