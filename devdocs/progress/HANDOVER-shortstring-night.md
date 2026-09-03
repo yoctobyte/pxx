@@ -815,3 +815,61 @@ which cannot distinguish *refused* from *absent*.
 (`head`-truncated list as a zero count; a glob over all folders; now a missing
 file as a compile refusal). **The fix is never a better eye — it is to make the
 harness assert the input EXISTS before it reports on the output.**
+
+## The shortstring axis is clean (frankb-78, `a3c26785f`)
+
+`SetLength` closed on riscv32 **and xtensa**. Five shapes × seven targets × both
+modes, positive control by reverting the arms.
+
+### THE TICKET WAS FILED riscv32-ONLY AND THE DEFECT WAS WIDER
+
+Two backends refused the identical builtin with completely different strings,
+**neither of which names `SetLength`**:
+
+```
+riscv32  standard builtin calls not supported in bare-metal stage 1 (builtin id 101)
+xtensa   this builtin has no arm in the xtensa backend (builtin -101)
+```
+
+**The riscv32 message blames a bare-metal stage-1 restriction THAT DOES NOT
+EXIST** — `Pos` and `Copy` are builtins too and compile there. Both backends
+already had the `-102` arm (dynamic array / managed AnsiString), **which is
+exactly why one missing arm read as target POLICY rather than as a gap.** A
+plausible-sounding refusal is a worse instrument than a crash: it explains
+itself, and the explanation was wrong.
+
+**Read a refusal's REASON as a claim needing its own check.** Two of this
+session's tickets have now been filed one target too narrow because a diagnostic
+sounded authoritative.
+
+### An ABI trap that would have been silently half-right
+
+The xtensa arm uses `XtensaSlotOff` rather than a literal stack offset: **the
+windowed and Call0 ABIs index the expression stack in OPPOSITE directions**, so
+a hand-written offset would have been correct on one and silently wrong on the
+other. Both ABIs run clean. **A constant that is right on the ABI you tested is
+the same animal as a green on the target you tested.**
+
+### The wiring was stale IN OUR FAVOUR — 3 cells became 12
+
+The matrix's Makefile comment said DEFAULT MODE ONLY because the file had been
+red under `-dPXX_SHORTSTRING` on all four converted backends. **That state is
+closed and the comment outlived it.** Both modes now print the same 33 lines
+everywhere; each cross row gained a flag twin, x86-64 is wired natively in both
+modes, xtensa is wired under the flag. All twelve byte-identical to the FPC
+3.2.2 oracle — **re-run on the extended file rather than trusting the header's
+"28 / 28"**, which is the discipline that makes the number mean anything.
+
+### Two pre-existing gaps found alongside, NEITHER gating the flip
+
+**`SetLength` is refused for any frozen string that is not a plain symbol** —
+`p^`, `r.f`, `arr[0]`, on EVERY target including x86-64, in both modes, and at
+the pin. Every backend's `-101` arm requires an `IR_LEA` of a symbol because it
+reads `Syms[si].TypeKind` off the LEA — and that kind is recoverable from the
+node without a symbol, which is how the readers were converted.
+Filed prio 40, unclaimed, pre-existing, not a width bug.
+
+**xtensa bus-errors in DEFAULT mode** on this file before line one, with
+`--platform=posix --xtensa-soft-mulhigh`, and reproduces at HEAD without the new
+rows. Pre-existing, unrelated to the byte prefix, and it is why the xtensa row
+is flag-only.
