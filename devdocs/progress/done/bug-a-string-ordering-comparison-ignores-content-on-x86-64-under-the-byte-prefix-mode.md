@@ -67,4 +67,4 @@ modes) — the 32-bit targets included, since this is a width class and x86-64 i
 where width bugs hide.
 
 ## Log
-- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-03 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 24a899f7a.
