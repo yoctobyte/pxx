@@ -6,7 +6,7 @@ status: open
 created: 2026-09-03
 found-by: frankA
 owner: ""
-blocked-by: []
+blocked-by: [decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes]
 summary: "AllocVar and AllocParam both spell `if TypeIsFrozenString(tk) and (tk
   <> tyString) then SymStrCap := LastTypeStrCap`, so a PLAIN frozen `string` is
   left at 0 on purpose and eleven downstream sites turn that 0 into
@@ -191,3 +191,5 @@ that rejects every plain frozen string. The symbol half is landed on its own
 because it is the one piece that is true in isolation: 255 really is a plain
 frozen `string`'s capacity, so recording it is a more truthful encoding than
 recording its absence — measured, not assumed.
+
+> **EDGE WIRED BY THE COORDINATOR 2026-09-03, and it is a ROUTING fix, not a judgement on the ticket.** Its body already recorded a hold pending [[decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes]] — but the hold was PROSE and `blocked-by` was `[]`, so the ranker still offered this at p45 in `ready --track A`. The next agent to take it would have written 255 — **one arm of an open fork** — into eleven clamp sites. A hold that lives in the body is a hold nothing reads. franka-29 owns this; say the word and I revert the edge.

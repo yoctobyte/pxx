@@ -2939,3 +2939,90 @@ in it invents a finding.
 own weighting, which is the right one: **worth exactly one notch of confidence,
 not two — same binary, same oracles, same machine** as the standalone runs. Still
 running; rc and push after it, not before.
+
+## 2026-09-03 20:00 — the frozen dyn-array premise was FALSE, and the target list lied in the OTHER direction
+
+franka-29 took `feature-a-dynamic-array-of-frozen-strings` and **refuted it
+instead of implementing it** (`74326e51b`, logbook `9be382451`). Now blocked on
+a Track U fork it filed the same hour.
+
+### The ticket said "no path knows its stride". The stride is 8,388,616 bytes.
+
+`STRING_CAP + 8`, taken from **the ARRAY VARIABLE's storage class** — a category
+error for a dynamic array whose elements live on the heap and are neither global
+nor stack-local.
+
+**And only x86-64 refuses.** i386, aarch64, arm32 and riscv32 all ACCEPT
+`array of string` in the frozen model, print **byte-identical to FPC 3.2.2 on
+three elements**, and **SIGSEGV at 1000**. Reproduced on **pin v401** — the
+control that says none of this is recent and none of it is franka-29's.
+
+> **So x86-64's refusal is the only honest behaviour of the six, and this was
+> never a missing implementation.**
+
+### THE TARGET LIST IS UNRELIABLE IN BOTH DIRECTIONS, AND TODAY SHOWED BOTH
+
+This morning: one backend had drifted toward **CORRECT** (wasm32 already did
+SetLength), and was therefore **absent from the ticket's target list**, because a
+list is written from the targets that FAILED.
+
+This evening, **the same class with the sign flipped**: four backends drifted
+toward a **WRONG-BUT-WORKING** answer, and **the one that refuses reads as the
+laggard.** A ticket describing x86-64 as the gap had it exactly backwards.
+
+> **Both times, "which targets fail" was the cheap question — and both times the
+> answer inverted the ticket.** Absence in a target list means nobody looked, and
+> it can hide a target that is ahead OR a majority that is wrong together.
+
+### Why it is a DECISION and not a bug
+
+A plain frozen `string` is **ALLOCATED** at 8,388,616 as a global, 264 as a
+local, 264 as a record field — and **CLAMPED at 255 in all three.**
+
+The measurement discipline is the part to copy: it checked the clamp against a
+**direct 300-char literal assignment as well as concat**, because *a concat-only
+clamp would have meant a global really could hold 8 MB* — the two are
+indistinguishable if you only test concat. And it carried a **denominator**:
+three `string` globals move bss from 38,732 to 25,204,580 against a no-string
+control, **exactly 3 x 8,388,616**. So **8,388,352 bytes of every global plain
+frozen string are unreachable by construction.**
+
+Two readings, both internally consistent, **neither derivable from the code — and
+each has a constant written as though it were already the answer.** `STRING_CAP`
+is named and commented `{ 8 MB }` and chosen by storage class at four sites;
+`LOCAL_STR_CAP`'s comment says "max string length for local/stack variables".
+Against it: every clamp uses `DEFAULT_STR_CAP`, and 264 = 255 + prefix is what a
+local and a field already get. Recommended 255, with why 8 MB is not dismissible.
+**The stride the feature needs IS this number, so guessing it would have been
+guessing the fork.**
+
+### AND IT RETROACTIVELY QUALIFIED ITS OWN LANDED COMMIT
+
+`b84e73e53` records `DEFAULT_STR_CAP` for a plain frozen string, justified as
+*"255 IS its N — measured"*. **The measurement was of the CLAMP; the ALLOCATION
+disagrees.** Neutral today because the clamp already used 255, so it stays
+landed — but it is **one arm of an open fork written into a writer**, and the
+ticket now says so.
+
+**Self-qualifying a landed commit on evidence found afterwards is the rarest
+move in this repo and the one that keeps a record honest.**
+
+### COORDINATOR ACTIONS — both routing metadata, both revertable on request
+
+1. **The fork was laned `track: A`.** 33 of 36 tickets in `backlog-decide/` are
+   `U`, and as filed it appeared at **p45 in `ready --track A`** — offering an
+   agent a fork **only the owner can settle**. Re-laned to `U`. (Two other
+   off-convention siblings exist and I left them: one `P`, one with an EMPTY
+   track.)
+2. **`bug-a-a-plain-frozen-string-records-capacity-zero...` had `blocked-by: []`
+   while its body recorded the hold.** It was live at p45, so **the next A agent
+   to take it would have written 255 — one arm of an open fork — into eleven
+   clamp sites.** Edge wired to the fork; it now correctly leaves the queue.
+
+> **A HOLD THAT LIVES IN THE BODY IS A HOLD NOTHING READS.** The ranker reads
+> frontmatter. Prose stating a constraint and an empty `blocked-by` beside it is
+> the same defect as a summary that has gone stale: honest, present, and invisible
+> to the only thing that routes.
+
+Ticket stays in `working/`, claimed, genuinely blocked — the `blocked-by` edge is
+what the ranker reads, and `owner:` here names a **real session**, not a checkout.
