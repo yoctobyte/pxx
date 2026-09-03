@@ -2313,6 +2313,16 @@ var
   Specializations    : array[0..MAX_SPECIALIZATIONS-1] of TSpecialization;
   SpecializationCount: Integer;
   TemplateTokens     : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
+  { The SOURCE SPELLING of each pooled template token, the same channel
+    TokSrcOff/TokSrcLen carry for Tokens[] and for the same reason: SOffset/SLen
+    hold text only for identifiers and strings, so a window built from them
+    alone drops a body's punctuation. A specialization splices VERBATIM COPIES
+    of these tokens into Tokens[], and a copy with no span leaves the splice
+    unable to say what the token said. Captured beside Kind/IVal/Line/SOffset,
+    zeroed for a SUBSTITUTED token because its text is no longer the
+    template's. bug-a-the-near-context-window-is-stale-after-a-token-splice }
+  TemplateSrcOff     : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;
+  TemplateSrcLen     : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;
   SpecializeTemplateName: AnsiString;
   { Active substitution set for SpecializeStream (param name -> concrete token),
     filled by each caller right before streaming. Multi-param generics
@@ -2394,6 +2404,8 @@ var
     it found is reachable from here. tgeneric96. }
   SpecUnitIdx        : array[0..MAX_SPECIALIZATIONS-1] of Integer;
   SpecializeTokens   : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
+  SpecSrcOff         : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;  { see TemplateSrcOff -- the same channel, one pool further along }
+  SpecSrcLen         : array[0..MAX_TEMPLATE_TOKENS-1] of Integer;
   TemplateTokenCount : Integer;
   { Nested routines (Approach B / lambda-lifting): a nested procedure/function is
     forward-declared in place and its full body stashed here to be re-parsed as a

@@ -546,6 +546,12 @@ begin
         SpecializeTokens[subCount].Line := TemplateTokens[tokStart + i].Line;
         SpecializeTokens[subCount].SOffset := TokCharsAppend(HoistFull[hoistHit]);
         SpecializeTokens[subCount].SLen := Length(HoistFull[hoistHit]);
+        { SUBSTITUTED: the template's span names text this token no longer
+          says, so carrying it would print the OLD word -- the same defect one
+          token over. Zeroed, and the window falls back to SOffset/SLen, which
+          for an identifier IS its text. }
+        SpecSrcOff[subCount] := 0;
+        SpecSrcLen[subCount] := 0;
         Inc(subCount);
         i := HoistEnd[hoistHit] - tokStart + 1;
         Continue;
@@ -563,6 +569,8 @@ begin
         SpecializeTokens[subCount].Line := TemplateTokens[tokStart + i].Line;
         SpecializeTokens[subCount].SOffset := TokCharsAppend(aliasNm);
         SpecializeTokens[subCount].SLen := Length(aliasNm);
+        SpecSrcOff[subCount] := 0;   { SUBSTITUTED -- see the hoist arm above }
+        SpecSrcLen[subCount] := 0;
         Inc(subCount);
         i := gEnd + 1;
         Continue;
@@ -573,6 +581,12 @@ begin
     SpecializeTokens[subCount].Line := TemplateTokens[tokStart + i].Line;
     SpecializeTokens[subCount].SOffset := TemplateTokens[tokStart + i].SOffset;
     SpecializeTokens[subCount].SLen := TemplateTokens[tokStart + i].SLen;
+    { VERBATIM: this token still says exactly what the template said, so its
+      span is still true -- and it is the only thing that can print a `:` or a
+      `;`, which SOffset/SLen does not hold. The two rewrite arms below change
+      the text and clear it again. }
+    SpecSrcOff[subCount] := TemplateSrcOff[tokStart + i];
+    SpecSrcLen[subCount] := TemplateSrcLen[tokStart + i];
 
     if SpecializeTokens[subCount].Kind = tkIdent then
     begin
@@ -597,6 +611,8 @@ begin
       begin
         SpecializeTokens[subCount].SOffset := TokCharLen;
         SpecializeTokens[subCount].SLen := Length(specName);
+        SpecSrcOff[subCount] := 0;   { rewritten to the specialization's name }
+        SpecSrcLen[subCount] := 0;
         if TokCharLen + Length(specName) > STRING_CAP then Error('token char pool overflow');
         j := 1;
         while j <= Length(specName) do
@@ -620,6 +636,8 @@ begin
             SpecializeTokens[subCount].Kind := SpecSubKinds[k];
             SpecializeTokens[subCount].SOffset := TokCharLen;
             SpecializeTokens[subCount].SLen := Length(SpecSubValues[k]);
+            SpecSrcOff[subCount] := 0;   { rewritten to the concrete argument }
+            SpecSrcLen[subCount] := 0;
             if TokCharLen + Length(SpecSubValues[k]) > STRING_CAP then Error('token char pool overflow');
             j := 1;
             while j <= Length(SpecSubValues[k]) do
@@ -676,6 +694,13 @@ begin
     Tokens[at + i].Line := SpecializeTokens[i].Line;
     Tokens[at + i].SOffset := SpecializeTokens[i].SOffset;
     Tokens[at + i].SLen := SpecializeTokens[i].SLen;
+    { ShiftTokParallel zeroed this slot's spelling, which is the right answer
+      for a SYNTHESIZED token and the wrong one here: these are copies of real
+      template tokens. Overwrite with what actually travelled -- a real span
+      for the verbatim ones, zero for the substituted ones so the fallback
+      prints their NEW text. }
+    TokSrcOff[at + i] := SpecSrcOff[i];
+    TokSrcLen[at + i] := SpecSrcLen[i];
     Inc(i);
   end;
   Inc(TokCount, subCount);
@@ -732,6 +757,34 @@ var n: Integer;
 begin
   n := SpecializeStreamAt(tokStart, count, specName, TokPos);
   if n < 0 then Error('specialize splice');   { n is used; keeps the FPC seed quiet }
+end;
+
+{ ONE token of a generic template's source into the template pool.
+
+  Three sites buffered a template token and each wrote out the same five field
+  assignments; a sixth field -- the source spelling -- had to be added to all
+  three, which is the moment the copies stop being a style question. The
+  per-site part is the counter that gets bumped afterwards (a template's
+  TokCount, a running local, a generic method's TokCount), and that stays at the
+  call site because it genuinely differs.
+
+  The spelling channel is the reason this exists: SOffset/SLen holds text only
+  for identifiers and strings, so a template buffered without TokSrcOff/
+  TokSrcLen loses every `:` and `;` in its body, and the specialization spliced
+  from it can only print a `near:` window full of holes.
+  bug-a-the-near-context-window-is-stale-after-a-token-splice }
+procedure CaptureTemplateTokenFrom(cur: Integer);
+begin
+  if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then
+    Error('generic template tokens overflow');
+  TemplateTokens[TemplateTokenCount].Kind := Tokens[cur].Kind;
+  TemplateTokens[TemplateTokenCount].IVal := Tokens[cur].IVal;
+  TemplateTokens[TemplateTokenCount].Line := Tokens[cur].Line;
+  TemplateTokens[TemplateTokenCount].SOffset := Tokens[cur].SOffset;
+  TemplateTokens[TemplateTokenCount].SLen := Tokens[cur].SLen;
+  TemplateSrcOff[TemplateTokenCount] := TokSrcOff[cur];
+  TemplateSrcLen[TemplateTokenCount] := TokSrcLen[cur];
+  Inc(TemplateTokenCount);
 end;
 
 procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean); forward;
@@ -2454,14 +2507,7 @@ begin
       exactly why it should not be left to happen -- one concept, one rule.
       bug-p-a-hint-directive-on-a-generic-type-is-a-parse-error }
     if (hintLo >= 0) and (cur >= hintLo) and (cur < hintHi) then continue;
-    if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then
-      Error('generic template tokens overflow');
-    TemplateTokens[TemplateTokenCount].Kind := Tokens[cur].Kind;
-    TemplateTokens[TemplateTokenCount].IVal := Tokens[cur].IVal;
-    TemplateTokens[TemplateTokenCount].Line := Tokens[cur].Line;
-    TemplateTokens[TemplateTokenCount].SOffset := Tokens[cur].SOffset;
-    TemplateTokens[TemplateTokenCount].SLen := Tokens[cur].SLen;
-    Inc(TemplateTokenCount);
+    CaptureTemplateTokenFrom(cur);
     Templates[TemplateCount].TokCount := Templates[TemplateCount].TokCount + 1;
   end;
 
@@ -3597,14 +3643,7 @@ begin
   tc := 0;
   for cur := fromIdx to toIdx - 1 do
   begin
-    if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then
-      Error('generic template tokens overflow');
-    TemplateTokens[TemplateTokenCount].Kind := Tokens[cur].Kind;
-    TemplateTokens[TemplateTokenCount].IVal := Tokens[cur].IVal;
-    TemplateTokens[TemplateTokenCount].Line := Tokens[cur].Line;
-    TemplateTokens[TemplateTokenCount].SOffset := Tokens[cur].SOffset;
-    TemplateTokens[TemplateTokenCount].SLen := Tokens[cur].SLen;
-    Inc(TemplateTokenCount);
+    CaptureTemplateTokenFrom(cur);
     tc := tc + 1;
   end;
 end;
@@ -3794,6 +3833,10 @@ begin
   else TemplateTokens[TemplateTokenCount].Kind := tkProcedure;
   TemplateTokens[TemplateTokenCount].SOffset := TokCharLen;
   TemplateTokens[TemplateTokenCount].SLen := 0;
+  { SYNTHETIC: no source range exists, so the spelling channel stays empty and
+    the window falls back to SOffset/SLen. }
+  TemplateSrcOff[TemplateTokenCount] := 0;
+  TemplateSrcLen[TemplateTokenCount] := 0;
   Inc(TemplateTokenCount);
   GenericFuncs[gfi].TokCount := GenericFuncs[gfi].TokCount + 1;
 
@@ -3802,6 +3845,8 @@ begin
   TemplateTokens[TemplateTokenCount].Line := 0;
   TemplateTokens[TemplateTokenCount].SOffset := TokCharLen;
   TemplateTokens[TemplateTokenCount].SLen := Length(funcName);
+  TemplateSrcOff[TemplateTokenCount] := 0;   { SYNTHETIC -- see above }
+  TemplateSrcLen[TemplateTokenCount] := 0;
   if TokCharLen + Length(funcName) > STRING_CAP then Error('token char pool overflow');
   for j := 1 to Length(funcName) do
   begin
@@ -3836,13 +3881,7 @@ begin
 
   for cur := TokPos - 1 to finalCur - 1 do
   begin
-    if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then Error('generic template tokens overflow');
-    TemplateTokens[TemplateTokenCount].Kind := Tokens[cur].Kind;
-    TemplateTokens[TemplateTokenCount].IVal := Tokens[cur].IVal;
-    TemplateTokens[TemplateTokenCount].Line := Tokens[cur].Line;
-    TemplateTokens[TemplateTokenCount].SOffset := Tokens[cur].SOffset;
-    TemplateTokens[TemplateTokenCount].SLen := Tokens[cur].SLen;
-    Inc(TemplateTokenCount);
+    CaptureTemplateTokenFrom(cur);
     GenericFuncs[gfi].TokCount := GenericFuncs[gfi].TokCount + 1;
   end;
 
