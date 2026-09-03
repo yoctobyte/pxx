@@ -3280,3 +3280,69 @@ a later site reads.
 
 > **Whoever takes it should expect to be measuring compiler crashes, not report
 > quality.** Written into the closed ticket, which is the right place for it.
+
+## 2026-09-03 22:00 — a FOURTH thing that reads like a blockage, and a right action from a wrong model
+
+### The transcript check answered (3): ended its turn
+
+frankb-78 had landed `78b320712`, read `gate.sh quick`'s verdict **out of the log
+rather than the wrapper**, reported, and stopped. Nothing in flight, no
+unanswered call.
+
+### THE FOURTH REFUSAL SHAPE — a HARNESS POLICY BLOCK
+
+This file already records three things that look alike in a transcript: a user
+rejection, a denial-by-policy, and a guardrail the agent may lift itself. There
+is a **fourth**, and it appeared today:
+
+> `sleep 120` in the foreground returned **"Blocked: ... To wait for a condition,
+> use Monitor with an until-loop ... Do not chain shorter sleeps to work around
+> this block."**
+
+A **tool-policy block**, arriving as a tool-result error with a refusal-shaped
+string — indistinguishable at a glance from the other three. **It is the only one
+of the four that ships its own remedy in the message**, which is also what makes
+it harmless: frankb-78 adapted in the same turn and it cost nothing.
+
+So the census of "refusal-shaped strings in a transcript" is now four, and **only
+two of them are a session being stuck.** Asking *"is there a refusal"* remains
+insufficient; the question is **who refused** — and now also **whether the
+refusal told you what to do instead.**
+
+`no-full-suite.sh` **never fired** in that session: `PXX_ALLOW_FULL_SUITE=1` was
+set up front on every `make test-core`, because the rows being added are
+cross-target and quick runs none of them, with the reason in both commit
+messages. That is the guardrail used as designed rather than tripped.
+
+### A RIGHT ACTION FROM A WRONG MODEL, and the peer said so
+
+I asked because a gap "looked like an incremental codegen job in progress". **It
+was not: step 2 had not started.** The action was right and my reason for it was
+wrong.
+
+> **From outside, "landed step 1 and stopped" and "step 2 is underway" are the
+> same silence** — which is exactly why the commit gap could not answer and the
+> question could. **The value of asking did not depend on my model being right,
+> and that is the argument for asking cheaply rather than modelling well.**
+
+### SEQUENCING CALL — mine, and made rather than deferred
+
+frankb-78 asked whether to start step 2 (`ABICRecordParamByValue`: a C record
+parameter stops being a pointer on aarch64, **caller and callee in one commit
+because they are one decision**) now, or hold it while a pin window may open.
+**It explicitly declined to make that call silently on the owner's behalf**,
+which is the right instinct — this repo's rule is to sequence the few things that
+genuinely serialise, and *landing order when a change is only correct as a whole*
+is named in it.
+
+**Held.** Not because it risks a broken pin — it is green-or-nothing by
+construction — but because **a pin containing a brand-new aarch64 ABI change that
+no breadth run has seen degrades exactly what a pin is FOR.** Track T samples
+every ~8 commits, not instantly, and the owner has already been told that nothing
+has measured this tree.
+
+**With a release condition it controls, not an open-ended wait on me** — the
+day's own lesson about waits on nobody. It takes
+`bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing` (p45,
+A+T), which is harness-side and cannot destabilise a pin, and **if the owner has
+not answered by the time that lands, step 2 starts.**
