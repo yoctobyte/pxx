@@ -9394,6 +9394,26 @@ test-core: $(COMPILER)
 	tools/expect_same.sh arm32/cvaagg "$$(tools/run_target.sh arm32 $(TESTTMP)/cvaagg_a32)" "$$(cat test/caarch64_variadic_aggregate.expected)"
 	./$(COMPILER) --target=riscv32 test/caarch64_variadic_aggregate.c $(TESTTMP)/cvaagg_rv32
 	tools/expect_same.sh riscv32/cvaagg "$$(tools/run_target.sh riscv32 $(TESTTMP)/cvaagg_rv32)" "$$(cat test/caarch64_variadic_aggregate.expected)"
+	# THE OTHER HALF OF THE RISCV32 THIRD, and it is not about aggregates: an
+	# 8-byte-ALIGNED variadic slot starts on an EVEN register, for a plain
+	# `double` and an `int64` as much as for a record. riscv32 applied that
+	# nowhere — v(1, 2.5, 77) packed the double into a1:a2 where clang puts it
+	# in a2:a3 — so the fix reads the alignment from one oracle rather than
+	# asking whether the argument happens to be 64-bit. Every row has an ODD
+	# word count ahead of the argument under test, so aligning and packing land
+	# in different registers; row 6 is the control whose sequence is already
+	# even and which must pass either way. The trailing integer is the only
+	# thing that reports the padding, which is invisible in the value itself.
+	./$(COMPILER) test/cvariadic_slot_align.c $(TESTTMP)/cvsalign26
+	tools/expect_same.sh cvsalign26 "$$($(TESTTMP)/cvsalign26)" "$$(cat test/cvariadic_slot_align.expected)"
+	./$(COMPILER) --target=aarch64 test/cvariadic_slot_align.c $(TESTTMP)/cvsalign_a64
+	tools/expect_same.sh aarch64/cvsalign "$$(tools/run_target.sh aarch64 $(TESTTMP)/cvsalign_a64)" "$$(cat test/cvariadic_slot_align.expected)"
+	./$(COMPILER) --target=i386 test/cvariadic_slot_align.c $(TESTTMP)/cvsalign_i386
+	tools/expect_same.sh i386/cvsalign "$$(tools/run_target.sh i386 $(TESTTMP)/cvsalign_i386)" "$$(cat test/cvariadic_slot_align.expected)"
+	./$(COMPILER) --target=arm32 test/cvariadic_slot_align.c $(TESTTMP)/cvsalign_a32
+	tools/expect_same.sh arm32/cvsalign "$$(tools/run_target.sh arm32 $(TESTTMP)/cvsalign_a32)" "$$(cat test/cvariadic_slot_align.expected)"
+	./$(COMPILER) --target=riscv32 test/cvariadic_slot_align.c $(TESTTMP)/cvsalign_rv32
+	tools/expect_same.sh riscv32/cvsalign "$$(tools/run_target.sh riscv32 $(TESTTMP)/cvsalign_rv32)" "$$(cat test/cvariadic_slot_align.expected)"
 	# NEGATIVE HALF, and the arity clause is untested without it: a callee with
 	# NO `varargs` must still refuse an extra argument. fpc refuses the same
 	# line ("Wrong number of parameters specified for call to fflush").

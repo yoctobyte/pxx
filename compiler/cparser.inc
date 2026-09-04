@@ -1608,6 +1608,8 @@ var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     vaRecId, ptrNode, diagIdx: Integer;
     vaN8, vaC0, vaC1, vaMask, vaTmp, vaSavedRec, vaSeq: Integer;
     vaA64Cnt, vaSzArg: Integer;
+    vaRvBytes, vaRvAlign: Integer;  { RV32 variadic tail slot, per ABIRV32VaArgDesc }
+    vaRvByVal: Boolean;
     vaA64Hfa: Boolean;
     vaA64Tk: TTypeKind;
     vt: TTypeKind;
@@ -1809,13 +1811,15 @@ begin
         vaPtrDepth := CTypePtrDepth;
         vaElemTk := CTypeElemTk; vaElemRec := CTypeElemRec;
         vaBaseTk := CTypePtrBaseTk; vaBaseRec := CTypePtrBaseRec;
-        { A struct passed by value through `...` is marshalled by the C caller ABI
-          as a POINTER to a private copy (IRLowerCallArg: CProgramMode records are
-          always copied to a temp and passed by address, one GP/word slot). So a
-          `va_arg(ap, struct T)` consumes ONE pointer slot (never ceil(RecSize/8)
-          eightbytes), and must deref TWICE: load the pointer out of the slot, then
-          read the record it points at. Capture the record id (from the base type,
-          before the pointer-suffix collapse) so ResolveNodeRec sizes the copy. }
+        { Capture the record id (from the base type, before the pointer-suffix
+          collapse) so ResolveNodeRec can size the copy. WHAT THE SLOT HOLDS IS
+          A PER-TARGET QUESTION and each arm below answers it by asking the same
+          ABI oracle its own caller asked -- the aggregate's own bytes where the
+          target passes it by value, a pointer to the caller's private copy where
+          it does not. This comment used to assert the pointer form for every
+          target, which was true when IRLowerCallArg's temp-and-address was the
+          only marshalling there was, and is now true only for the shapes an ABI
+          actually passes indirectly. }
         vaRecId := REC_NONE;
         if (vt = tyRecord) and (CTypePtrDepth = 0) then vaRecId := CTypeBaseRec;
         if CTypePtrDepth > 0 then vt := tyPointer;
@@ -1838,11 +1842,26 @@ begin
             (ir_codegen386.inc's variadic-tail arm, via the record identity
             IRLowerCallArg stamps on the value node) -- so the walk steps by the
             struct's size and the result is read with ONE deref below.
-            arm32 and riscv32 keep the pointer slot: their callers were not
-            converted, and a receiving half that moved alone is a crash rather
-            than a wrong value. Both are named in the ticket.
+            arm32 KEEPS THE POINTER SLOT: its caller has not been converted,
+            and a receiving half that moves alone is a crash rather than a wrong
+            value -- measured on aarch64, where converting one side segfaulted
+            the probe. It is named in the ticket.
             bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer }
-          if (vaRecId <> REC_NONE) and (TargetArch = TARGET_I386) then
+          { RISCV32 ASKS THE ORACLE ITS CALLER ASKS, for the size AND the
+            alignment: ABIRV32VaArgDesc. An aggregate that fits in 2 x XLEN now
+            arrives as its own bytes (one deref below); a larger one is still a
+            pointer to the caller's copy, because that is what riscv32 wants and
+            not a stopgap. It also answers the alignment, which nothing here
+            asked before -- an 8-byte-aligned slot starts on an even register,
+            for a double and an int64 as much as for a record, and the walk has
+            to skip the same padding word the caller pushed.
+            bug-a-c-the-variadic-struct-abi-is-still-a-pointer-on-aarch64-arm32-and-riscv32 }
+          vaRvByVal := False; vaRvBytes := 0; vaRvAlign := 4;
+          if TargetArch = TARGET_RISCV32 then
+            ABIRV32VaArgDesc(vaRecId, TypeSlotSize(vt), vaRvBytes, vaRvAlign, vaRvByVal);
+          if TargetArch = TARGET_RISCV32 then
+            ASTIVal[a3] := vaRvBytes
+          else if (vaRecId <> REC_NONE) and (TargetArch = TARGET_I386) then
             ASTIVal[a3] := RecSize(vaRecId)
           else if vaRecId <> REC_NONE then ASTIVal[a3] := TARGET_PTR_SIZE
           else ASTIVal[a3] := TypeSlotSize(vt);
@@ -1856,7 +1875,8 @@ begin
             both stay on the packed walk.
             bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area }
           a4 := AllocNode(AN_INT_LIT);
-          if (TargetArch = TARGET_ARM32) and (vaRecId = REC_NONE) and
+          if TargetArch = TARGET_RISCV32 then ASTIVal[a4] := vaRvAlign
+          else if (TargetArch = TARGET_ARM32) and (vaRecId = REC_NONE) and
              (TypeSlotSize(vt) > 4) then ASTIVal[a4] := 8 else ASTIVal[a4] := 4;
           ASTTk[a4] := Ord(tyInteger);
           argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
@@ -1864,7 +1884,9 @@ begin
           a5 := AllocNode(AN_ARG); ASTLeft[a5] := a4; ASTRight[a5] := -1; ASTRight[a2] := a5;
           callNode := AllocNode(AN_CALL); ASTIVal[callNode] := helper;
           ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
-          if (vaRecId <> REC_NONE) and (TargetArch = TARGET_I386) then
+          if (vaRecId <> REC_NONE) and
+             ((TargetArch = TARGET_I386) or
+              ((TargetArch = TARGET_RISCV32) and vaRvByVal)) then
           begin
             { The slot holds the aggregate's own bytes now: one deref. }
             node := AllocNode(AN_DEREF); ASTLeft[node] := callNode; ASTTk[node] := Ord(tyRecord);

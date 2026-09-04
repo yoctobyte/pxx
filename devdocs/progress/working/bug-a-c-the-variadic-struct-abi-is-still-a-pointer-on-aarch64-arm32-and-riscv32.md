@@ -286,7 +286,7 @@ The receiving half may already be close: `__pxx_va_arg_cross32` walks
 argument, which is exactly the split above — but it is reached with `align`
 from the frontend, and nothing has yet asked it for `align=8` on a struct.
 
-**riscv32 — pxx passes a POINTER for all four, and exactly ONE of those is wrong.**
+**riscv32 — pxx passed a POINTER for all four, and exactly ONE of those was wrong.** FIXED 2026-09-04; the table below is the state it was measured in.
 
 | shape | clang | pxx today |
 | --- | --- | --- |
@@ -304,3 +304,54 @@ one size class, not a marshaller.
 sit open looking half-fine.** A pointer is the correct answer for most shapes
 there, so any probe that happened to use a struct larger than 8 bytes measures
 GREEN on a target that is broken.
+
+
+# 2026-09-04 (frankB) — THE RISCV32 THIRD IS DONE. Only arm32 remains
+
+Two defects, one mechanism, and the second one is not about aggregates at all.
+
+**1. An aggregate that fits in 2 x XLEN travels by value.** Over that it stays a
+pointer to the caller's copy, which is what riscv32 actually wants — so only
+`{int,int}` moved. Three of four shapes were already right, and that is why this
+target could sit open looking half-fine.
+
+**2. An 8-byte-ALIGNED variadic slot starts on an EVEN register, and riscv32
+applied that NOWHERE.** `v(1, 2.5, 77)` put the double in `a1:a2` and the 77 in
+`a3`; clang puts them in `a2:a3` and `a4`. Wrong for a plain `double` and an
+`int64` exactly as much as for an 8-aligned record. Fixing only the record half
+would have left the scalar sibling wrong in the same function — the shape this
+repo keeps re-finding — so the fix reads alignment from one oracle
+(`ABIRV32VaArgDesc`) instead of asking whether the argument happens to be 64-bit.
+
+`ABIRV32VaArgDesc` is the single oracle both halves ask, the way the aarch64
+pair both ask `ABIA64RecordClass`. Measured against clang, seven shapes, tail
+register included in every row:
+
+| shape | clang | pxx now |
+| --- | --- | --- |
+| `struct{char}` 1 | `a1`, tail `a2` | same |
+| `struct{int}` 4 | `a1`, tail `a2` | same |
+| `struct{int,int}` 8 | `a1,a2`, tail `a3` | same — **was a pointer** |
+| `struct{double}` 8 | `a2,a3`, tail `a4` (**skips a1**) | same — **was a pointer, unaligned** |
+| `struct{long long}` 8 | `a2,a3`, tail `a4` | same |
+| `struct{int,int,int}` 12 | pointer `a1`, tail `a2` | same |
+| `struct{double,double}` 16 | pointer `a1`, tail `a2` | same |
+| `double` (scalar) 8 | `a2,a3`, tail `a4` | same — **was `a1:a2`** |
+| `long long` (scalar) 8 | `a2,a3`, tail `a4` | same — **was `a1:a2`** |
+
+## The `not ProcExternal` gate is gone, and it was the interesting line
+
+The riscv32 variadic-tail arm only fired for callees the linker did NOT resolve.
+That made the calling convention depend on whether a name was external — and an
+external variadic callee is exactly the case this ticket is about, because a
+pxx-to-pxx call is self-consistent whatever it does. Its measurable effect was
+that a `double` handed to an external variadic function was passed as ONE word.
+
+## Left: arm32, and it is now the only one
+
+Its table is above and it needs two rules AAPCS64 does not have — an aggregate
+SPLITS between `r1..r3` and the stack, and an 8-byte-aligned one skips an odd
+register. `ABIA64ArgPlace`'s all-or-nothing placement must not be ported to it.
+The arm32 SCALAR alignment half is already done (it is where
+`__pxx_va_arg_cross32`'s `align` argument came from); only the aggregate half
+remains.

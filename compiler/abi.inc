@@ -1001,3 +1001,73 @@ begin
   end;
   ABIA64NamedStackBytes := n * 8;
 end;
+
+{ RV32 VARIADIC TAIL PLACEMENT — ONE ORACLE, ASKED BY BOTH HALVES.
+
+  The receiving half (cparser's __builtin_va_arg -> __pxx_va_arg_cross32) and
+  the marshalling half (ir_codegen_riscv32's variadic-tail arm) have to agree
+  about two things per argument: how many bytes the slot holds, and whether the
+  slot sequence pads to an even word first. They agree by asking here, the same
+  way the aarch64 pair agrees by both asking ABIA64RecordClass.
+
+  Measured against clang --target=riscv32-unknown-linux-gnu, reading the CALL
+  SITE with a trailing int so the following argument's register is part of every
+  row (a placer that gets the argument right and does not advance the sequence
+  is a different bug that looks like this one):
+
+    struct {char}          1b  a1,          tail a2   by value, one word
+    struct {int}           4b  a1,          tail a2   by value, one word
+    struct {int,int}       8b  a1,a2,       tail a3   by value, PACKED (align 4)
+    struct {double}        8b  a2,a3,       tail a4   by value, SKIPS a1 (align 8)
+    struct {long long}     8b  a2,a3,       tail a4   ditto
+    struct {int,int,int}  12b  a1 POINTER,  tail a2   indirect, over 2 x XLEN
+    struct {double,double}16b  a1 POINTER,  tail a2   indirect -- NOT fa0,fa1
+    double (a scalar)      8b  a2,a3,       tail a4   SKIPS a1 (align 8)
+
+  Two rules, and the second one is the one that was missing entirely:
+
+  1. AN AGGREGATE IS BY VALUE IFF IT FITS IN 2 x XLEN. Over that it is a pointer
+     to the caller's copy -- INCLUDING `struct { double x, y; }`, whose FIXED
+     parameter form goes in fa0,fa1. riscv32's variadic rule is genuinely not
+     its fixed rule, which is the opposite of aarch64, where it is. Three
+     quarters of the shapes were therefore already right here, and that is
+     exactly why this could sit open looking half-fine: any probe using a struct
+     larger than 8 bytes measures GREEN on a target that is broken.
+
+  2. AN 8-BYTE-ALIGNED SLOT STARTS ON AN EVEN REGISTER. This applies to a
+     `double` and an `int64` as much as to a record, and pxx applied it to
+     NEITHER -- `v(1, 2.5, 77)` put the double in a1:a2 where clang puts it in
+     a2:a3. Fixing only the record half would have left the scalar sibling wrong
+     in the same function, which is the shape this repo keeps re-finding.
+     (arm32 already had the scalar half; see the align argument threaded into
+     __pxx_va_arg_cross32.)
+
+  slotBytes is the promoted width of a NON-record argument, ignored when recId
+  names a record. bytes is what the slot HOLDS -- 4 for the indirect case,
+  because there the slot holds a pointer and not the aggregate.
+  bug-a-c-the-variadic-struct-abi-is-still-a-pointer-on-aarch64-arm32-and-riscv32 }
+procedure ABIRV32VaArgDesc(recId, slotBytes: Integer;
+                           var bytes, align: Integer; var byValue: Boolean);
+begin
+  align := 4;
+  if recId > REC_NONE then
+  begin
+    bytes := RecSize(recId);
+    byValue := (bytes >= 1) and (bytes <= 8);
+    if not byValue then
+    begin
+      { The slot holds a POINTER to the caller's private copy. Four bytes,
+        four-byte aligned -- the aggregate's own alignment says nothing about
+        where a pointer to it sits. }
+      bytes := 4;
+      Exit;
+    end;
+    if recId >= REC_UCLASS_BASE then
+      if UClsAlign[recId - REC_UCLASS_BASE] > 4 then align := 8;
+    Exit;
+  end;
+  byValue := True;
+  bytes := slotBytes;
+  if bytes < 4 then bytes := 4;
+  if bytes > 4 then align := 8;
+end;

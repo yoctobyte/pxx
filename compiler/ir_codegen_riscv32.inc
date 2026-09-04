@@ -1463,6 +1463,8 @@ var
   srcFrozenTk: TTypeKind;   { frozen kind of a copy's SOURCE -- its prefix width may differ from the dest's }
   memFrozenTk: TTypeKind;   { frozen kind of a store-through-a-pointer DESTINATION }
   sgn, savedLVW: Boolean;
+  vaRecRV, vaBytes, vaAlign, vaWords, vaK: Integer;  { RV32 variadic tail slot, per ABIRV32VaArgDesc }
+  vaByVal: Boolean;
   sVal: AnsiString;
 begin
   case IRKind[node] of
@@ -3318,18 +3320,83 @@ begin
             rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);  { hi, word nArgs+1 }
             Inc(nArgs, 2);
           end
-          else if (procIdx >= 0) and (not ProcExternal[procIdx]) and
-             (i >= Procs[procIdx].ParamCount) and
-             Is64BitRISCV32(IntToTypeKind(IRTk[IRA[argNode]])) then
+          else if (procIdx >= 0) and (i >= Procs[procIdx].ParamCount) and
+             ((IRArgRecId[IRA[argNode]] > REC_NONE) or
+              Is64BitRISCV32(IntToTypeKind(IRTk[IRA[argNode]]))) then
           begin
-            { Variadic tail arg (past the named params) that is 64-bit (int64/
-              uint64/double): push two words lo:hi, matching the callee reg-save +
-              __pxx_va_arg_cross32's 8-byte step. Without this the high word was
-              dropped and every later variadic arg shifted by one word. }
-            EmitNode64RISCV32(IRA[argNode]);        { a0=lo, a1=hi }
-            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
-            rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);
-            Inc(nArgs, 2);
+            { VARIADIC TAIL, for the two shapes whose slot is not one plain word.
+              It asks ABIRV32VaArgDesc rather than deciding anything itself,
+              because cparser's __builtin_va_arg asks the SAME oracle to decide
+              what the slot HOLDS. Two halves that answer separately drift, and
+              a caller and a callee that disagree about a slot's contents do not
+              produce a wrong value -- they dereference an integer. That is the
+              aarch64 third of this ticket restated on a second target.
+
+              EVEN-WORD ALIGNMENT, which pxx applied nowhere on riscv32. An
+              8-byte-aligned slot starts on an even register (a0 is even), so
+              clang puts `v(1, 2.5, 77)`'s double in a2:a3 and the 77 in a4 --
+              pxx packed it into a1:a2 and put 77 in a3. It is wrong for a
+              double and an int64 exactly as much as for a record, so this arm
+              no longer decides alignment from whether the argument is 64-bit.
+              A padding word enters the pushed sequence; words 8+ spill to the
+              stack in that same sequence, so one rule covers both.
+
+              A RECORD THAT FITS IN 2 x XLEN TRAVELS BY VALUE. Larger, it stays
+              a pointer to the caller's copy -- which is what riscv32 actually
+              wants, so three of the four shapes were already right and only the
+              small one was broken. The table is in ABIRV32VaArgDesc.
+
+              The `not ProcExternal` gate this arm used to carry is gone. It
+              made the calling convention depend on whether the linker resolved
+              the callee, and an EXTERNAL variadic callee is exactly the case
+              this ticket is about -- a pxx-to-pxx call is self-consistent
+              whatever it does. Its effect was that a double handed to an
+              external variadic function was passed as ONE word.
+              bug-a-c-the-variadic-struct-abi-is-still-a-pointer-on-aarch64-arm32-and-riscv32 }
+            vaRecRV := IRArgRecId[IRA[argNode]];
+            ABIRV32VaArgDesc(vaRecRV, 8, vaBytes, vaAlign, vaByVal);
+            if (vaAlign > 4) and ((nArgs and 1) <> 0) then
+            begin
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_zero, reg_sp, 0);
+              Inc(nArgs, 1);
+            end;
+            if (vaRecRV > REC_NONE) and vaByVal then
+            begin
+              { The aggregate's OWN bytes, ceil(size/4) words. IRLowerCallArg
+                already made the private temp, so a0 is its address. Word 0 is
+                pushed first and lands at the HIGHEST address, which is where
+                the a-register load below reads the lowest-numbered register
+                from -- the same low-word-first order the int64 push uses. }
+              IREmitNodeRISCV32(IRA[argNode]);        { a0 = record address }
+              vaWords := (vaBytes + 3) div 4;
+              for vaK := 0 to vaWords - 1 do
+              begin
+                rv32_lw(reg_t1, reg_a0, vaK * 4);
+                rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_t1, reg_sp, 0);
+              end;
+              Inc(nArgs, vaWords);
+            end
+            else if vaRecRV > REC_NONE then
+            begin
+              { Over 2 x XLEN: one word holding the POINTER to the caller's copy.
+                Unchanged behaviour, written out here rather than left to the
+                generic arm so the alignment decision above is made once for
+                every tail argument instead of in two places. }
+              IREmitNodeRISCV32(IRA[argNode]);
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+              Inc(nArgs, 1);
+            end
+            else
+            begin
+              { 64-bit scalar (int64/uint64/double): two words lo:hi, matching
+                the callee reg-save and __pxx_va_arg_cross32's 8-byte step.
+                Without this the high word was dropped and every later variadic
+                arg shifted by one word. }
+              EmitNode64RISCV32(IRA[argNode]);        { a0=lo, a1=hi }
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+              rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a1, reg_sp, 0);
+              Inc(nArgs, 2);
+            end;
           end
           else
           begin
