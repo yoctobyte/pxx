@@ -607,7 +607,7 @@ queue was being handed the flip — the one piece of work the owner has kept for
 himself and which serialises the fleet.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1ecd220e6.
 
 ## Closed 2026-09-04 — all three items settled, measured not inferred
 
