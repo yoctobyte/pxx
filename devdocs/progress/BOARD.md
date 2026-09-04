@@ -338,10 +338,11 @@ _none_
 | refactor-n-two-import-handlers-are-twins | N | 45 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 
-## backlog-tools (12)
+## backlog-tools (13)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-t-a-backgrounded-tier-reports-the-wrappers-exit-code-over-the-tiers-verdict | T | 55 | bug | A backgrounded `gate.sh`/`testmgr` run reports `exit code 0` in its completion notification while its own log says `testmgr: RED` / `gate: RED (exit 1)`. SEVEN independent sightings across at least three sessions since 2026-09-02. The notification is not wrong about anything — it reports the WRAPPER's exit status, and the wrapper succeeded at running the tier. It is read as the tier's verdict, because that is the only number a completion notification usually carries. CLAUDE.md already tells every agent to grep the log instead, which is a documented workaround for a live defect, not a fix. | — |
 | bug-t-lane-attribution-has-two-instruments-that-disagree | T | 45 | bug | 33 open tickets carry no `track:` frontmatter field, 30 of them in RANKED folders. The ranker still lanes them, via a cascade of fallbacks — a `feature-track-t-*` slug prefix, a `Track X` mention in the decl line, a `Track` bullet in the body. Any tool that reads `fm.get('track')` sees nothing for all 33. Two instruments, one answering about a field that is not there. Surfaced when a backlog sweep nearly mis-filed two tickets the ranker had been lanting as T all along; progress.py's own comment records the same class biting in the opposite direction on 2026-07-15. | — |
 | bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names | T | 80 | bug | verify_pin() does clone.checkout(<the pinned TREE>), which also checks out stable_linux_amd64/** as of that tree. A pin commit is always a DESCENDANT of the tree it pins, so the checked-out binary is the PREVIOUS pin. Every pin verify therefore builds its $(PXX_STABLE) targets with pin v(N-1) while recording the verdict under vN. Evidence: one run logs `verifying PIN v400 (67ae9a62d567)` and then `testmgr: pin=399 sha256=954adef93a7b`; `pin=400` appears ZERO times in the whole watcher log. The already-closed bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label saw this exact symptom (`ver said v347 while the verified tree carried pin 346`) and fixed the LABEL. | — |
 | bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-report | T | 50 | bug | bug(T): the bench tier published RED twice with ZERO bench rows and no report | — |
@@ -1059,6 +1060,7 @@ _none_
 - [p 55] [N] bug-nilpy-calling-a-duplicated-ordinary-method-segfaults
 - [p 55] [N] bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
+- [p 55] [T] bug-t-a-backgrounded-tier-reports-the-wrappers-exit-code-over-the-tiers-verdict
 - [p 55] [U] decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit
 - [p 55] [U] decide-a-latent-defect-ticket-should-block-the-work-that-makes-it-observable
 - [p 55] [U] decide-do-we-introduce-the-named-trade-off-flag-axis-and-what-is-the-bar
