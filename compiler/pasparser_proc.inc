@@ -1949,6 +1949,22 @@ begin
       ProcRetPtrBaseRec[procIdx] := retPtrBaseRec;
       if retIsDynArr then Procs[procIdx].RetType := tyPointer; { 8-byte heap handle ABI }
     end;
+    { EVERYTHING BELOW THIS EXIT IS SKIPPED IN THE PRE-SCAN, AND THAT INCLUDES
+      THE CALLING-CONVENTION FLAGS. `sawCdecl` is read above, but ProcCdecl
+      (and ProcIram, ProcIsInterrupt) are only ASSIGNED further down, on the
+      body pass. So after declaration pass 1 every routine still reads as
+      non-cdecl -- not "unknown", but the wrong answer, silently.
+
+      This is not a bug to fix by hoisting the assignment: the pre-scan
+      deliberately registers a signature and nothing else. It is a fact anyone
+      writing a pass-1 check has to know, because the failure mode does not
+      look like one. Measured 2026-09-04: `exports` validation placed after
+      pass 1 rejected EVERY exported routine as not-`cdecl`, including ones the
+      object writer went on to export correctly under exactly the predicate the
+      check was meant to agree with -- a check contradicting its own backend,
+      with no crash and no diagnostic anywhere near the cause.
+      Ask a routine's convention after pass 2, as ValidateExports does.
+      feature-p-a-pascal-library-unit-does-not-parse }
     if preScanBody then PreScanSkipRoutineBody;
     MethImplOwnerCi := savedMIO;
     Exit;
