@@ -13740,6 +13740,41 @@ begin
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(4);                { add esp, 4 }
           end
+          else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
+                  NilPyUserCode and PyClassSymArcEligible(i) and
+                  (not CurProcIsStackless) then
+          begin
+            { NilPy-user class local: drop the binding's reference at scope exit — the
+              trigger that actually reclaims (feature-nilpy-object-reclamation
+              slice 4). The Pascal callee carries the nil check and the
+              population-tag guard, so a Pascal-created instance held here is
+              left alone.
+
+              THIS ARM AND THE PXXObjRetain IN THE VARIANT-BOXING STORE MOVE
+              TOGETHER. Alone, it drops the local's reference while a variant
+              slot holds the object without ever having retained it, and the
+              next read through that slot is a use-after-free; the retain alone
+              is a bounded leak. All five cross arms lacked it, so only x86-64
+              (EmitManagedLocalCleanup, symtab.inc) reclaimed at all.
+
+              `not CurProcIsStackless` is the x86-64 twin's whole-function
+              guard, narrowed to this arm: a generator step function RETURNS at
+              every yield and its locals are the generator's live state, so
+              releasing them here frees the objects the instance still points
+              at — silently, as an early-ending `for`. The other kinds in this
+              chain (string, variant, promo-int, record) are NOT guarded on any
+              cross target, which is the same defect for those kinds; not fixed
+              here because it needs its own probe.
+              bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
+            procIdx := FindProc('PXXObjRelease');
+            if procIdx >= 0 then
+            begin
+              EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);  { mov eax, [ebp+off] }
+              EmitB($50);                                        { push arg0 = instance }
+              EmitCallProc(procIdx);
+              EmitB($81); EmitB($C4); EmitI32(4);                { add esp, 4 }
+            end;
+          end
           else if TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
           begin
             { Promotable-int local/temp: release a heap-tier payload at scope
@@ -13896,6 +13931,43 @@ begin
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
+                NilPyUserCode and PyClassSymArcEligible(i) and
+                (not CurProcIsStackless) then
+        begin
+          { NilPy-user class local: drop the binding's reference at scope exit — the
+            trigger that actually reclaims (feature-nilpy-object-reclamation
+            slice 4). The Pascal callee carries the nil check and the
+            population-tag guard, so a Pascal-created instance held here is
+            left alone.
+
+            THIS ARM AND THE PXXObjRetain IN THE VARIANT-BOXING STORE MOVE
+            TOGETHER. Alone, it drops the local's reference while a variant
+            slot holds the object without ever having retained it, and the
+            next read through that slot is a use-after-free; the retain alone
+            is a bounded leak. All five cross arms lacked it, so only x86-64
+            (EmitManagedLocalCleanup, symtab.inc) reclaimed at all.
+
+            `not CurProcIsStackless` is the x86-64 twin's whole-function
+            guard, narrowed to this arm: a generator step function RETURNS at
+            every yield and its locals are the generator's live state, so
+            releasing them here frees the objects the instance still points
+            at — silently, as an early-ending `for`. The other kinds in this
+            chain (string, variant, promo-int, record) are NOT guarded on any
+            cross target, which is the same defect for those kinds; not fixed
+            here because it needs its own probe.
+            bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
+          procIdx := FindProc('PXXObjRelease');
+          if procIdx >= 0 then
+          begin
+            EmitLoadVarAddrArm32(i);                   { r0 = slot address }
+            EmitI32($E5900000);                        { ldr r0, [r0] = instance }
+            EmitI32($E92D000E);                        { push {r1,r2,r3} }
+            EmitCallProc(procIdx);
+            EmitI32($E8BD000E);                        { pop {r1,r2,r3} }
+          end;
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
         begin
           { Promotable-int local/temp: release a heap-tier payload at scope exit
@@ -14048,6 +14120,42 @@ begin
           procIdx := FindProc('PXXVarClear');
           if procIdx < 0 then Error('compiler error: PXXVarClear not found');
           EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
+                NilPyUserCode and PyClassSymArcEligible(i) and
+                (not CurProcIsStackless) then
+        begin
+          { NilPy-user class local: drop the binding's reference at scope exit — the
+            trigger that actually reclaims (feature-nilpy-object-reclamation
+            slice 4). The Pascal callee carries the nil check and the
+            population-tag guard, so a Pascal-created instance held here is
+            left alone.
+
+            THIS ARM AND THE PXXObjRetain IN THE VARIANT-BOXING STORE MOVE
+            TOGETHER. Alone, it drops the local's reference while a variant
+            slot holds the object without ever having retained it, and the
+            next read through that slot is a use-after-free; the retain alone
+            is a bounded leak. All five cross arms lacked it, so only x86-64
+            (EmitManagedLocalCleanup, symtab.inc) reclaimed at all.
+
+            `not CurProcIsStackless` is the x86-64 twin's whole-function
+            guard, narrowed to this arm: a generator step function RETURNS at
+            every yield and its locals are the generator's live state, so
+            releasing them here frees the objects the instance still points
+            at — silently, as an early-ending `for`. The other kinds in this
+            chain (string, variant, promo-int, record) are NOT guarded on any
+            cross target, which is the same defect for those kinds; not fixed
+            here because it needs its own probe.
+            bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
+          procIdx := FindProc('PXXObjRelease');
+          if procIdx >= 0 then
+          begin
+            EmitLoadImmA64(9, Syms[i].Offset);
+            EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = slot address) }
+            EmitI32($F9400000);  { ldr x0, [x0]     (x0 = instance) }
+            EmitCallProc(procIdx);
+          end;
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
@@ -14206,6 +14314,41 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
+                NilPyUserCode and PyClassSymArcEligible(i) and
+                (not CurProcIsStackless) then
+        begin
+          { NilPy-user class local: drop the binding's reference at scope exit — the
+            trigger that actually reclaims (feature-nilpy-object-reclamation
+            slice 4). The Pascal callee carries the nil check and the
+            population-tag guard, so a Pascal-created instance held here is
+            left alone.
+
+            THIS ARM AND THE PXXObjRetain IN THE VARIANT-BOXING STORE MOVE
+            TOGETHER. Alone, it drops the local's reference while a variant
+            slot holds the object without ever having retained it, and the
+            next read through that slot is a use-after-free; the retain alone
+            is a bounded leak. All five cross arms lacked it, so only x86-64
+            (EmitManagedLocalCleanup, symtab.inc) reclaimed at all.
+
+            `not CurProcIsStackless` is the x86-64 twin's whole-function
+            guard, narrowed to this arm: a generator step function RETURNS at
+            every yield and its locals are the generator's live state, so
+            releasing them here frees the objects the instance still points
+            at — silently, as an early-ending `for`. The other kinds in this
+            chain (string, variant, promo-int, record) are NOT guarded on any
+            cross target, which is the same defect for those kinds; not fixed
+            here because it needs its own probe.
+            bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
+          procIdx := FindProc('PXXObjRelease');
+          if procIdx >= 0 then
+          begin
+            EmitSlotAddrXtensa(XtensaArgRegN(0), i);
+            xtensa_l32i(XtensaArgRegN(0), XtensaArgRegN(0), 0);   { arg0 = instance }
+            EmitCallProc(procIdx);
+          end;
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
         begin
           { Promotable-int local/temp: release a heap-tier payload at scope exit
@@ -14336,6 +14479,41 @@ begin
           procIdx := FindProc('PXXVarClear');
           if procIdx < 0 then Error('compiler error: PXXVarClear not found');
           EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
+                NilPyUserCode and PyClassSymArcEligible(i) and
+                (not CurProcIsStackless) then
+        begin
+          { NilPy-user class local: drop the binding's reference at scope exit — the
+            trigger that actually reclaims (feature-nilpy-object-reclamation
+            slice 4). The Pascal callee carries the nil check and the
+            population-tag guard, so a Pascal-created instance held here is
+            left alone.
+
+            THIS ARM AND THE PXXObjRetain IN THE VARIANT-BOXING STORE MOVE
+            TOGETHER. Alone, it drops the local's reference while a variant
+            slot holds the object without ever having retained it, and the
+            next read through that slot is a use-after-free; the retain alone
+            is a bounded leak. All five cross arms lacked it, so only x86-64
+            (EmitManagedLocalCleanup, symtab.inc) reclaimed at all.
+
+            `not CurProcIsStackless` is the x86-64 twin's whole-function
+            guard, narrowed to this arm: a generator step function RETURNS at
+            every yield and its locals are the generator's live state, so
+            releasing them here frees the objects the instance still points
+            at — silently, as an early-ending `for`. The other kinds in this
+            chain (string, variant, promo-int, record) are NOT guarded on any
+            cross target, which is the same defect for those kinds; not fixed
+            here because it needs its own probe.
+            bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
+          procIdx := FindProc('PXXObjRelease');
+          if procIdx >= 0 then
+          begin
+            EmitSlotAddrRISCV32(reg_a0, i);
+            rv32_lw(reg_a0, reg_a0, 0);                { a0 = instance }
+            EmitCallProc(procIdx);
+          end;
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then

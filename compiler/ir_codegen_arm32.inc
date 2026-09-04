@@ -287,6 +287,19 @@ begin
   EmitI32($E8BD000F);             { pop {r0,r1,r2,r3} }
 end;
 
+procedure EmitObjRetainArm32;
+{ r0 = class instance pointer. Retain; r0-r3 preserved for expression callers,
+  exactly like EmitStrIncRefArm32 above. PXXObjRetain no-ops on an instance that
+  carries no refcount header, so a Pascal-created object is safe. }
+var procIdx: Integer;
+begin
+  EmitI32($E92D000F);             { push {r0,r1,r2,r3} }
+  procIdx := FindProc('PXXObjRetain');
+  if procIdx < 0 then Error('compiler error: PXXObjRetain not found');
+  EmitCallProc(procIdx);
+  EmitI32($E8BD000F);             { pop {r0,r1,r2,r3} }
+end;
+
 procedure EmitStrDecRefArm32;
 { r0 = managed-string handle. r0 is clobbered. }
 var procIdx: Integer;
@@ -4765,6 +4778,23 @@ begin
             end;
             EmitI32($E92D0001);                       { push {r0} (payload) }
           end
+          else if tk = tyClass then
+          begin
+            IREmitNodeArm32(IRB[node]);               { r0 = instance pointer }
+            { The slot takes its own reference — unless the source already OWNS
+              its +1 (a call result, or a NilPy construction, which arrives here
+              as a load of its conduit temp). arm32 had NO object arm at all, so
+              the slot held a pointer it had not paid for and the slot's own
+              clear dropped the local's only reference: two variant slots
+              borrowing one local segfaulted on the second read.
+              THIS RETAIN AND THE tyClass ARM IN
+              EmitManagedLocalCleanupForTarget MOVE TOGETHER — either alone
+              turns a bounded leak into a use-after-free.
+              bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
+            if not IRNodeOwnsManagedObj(IRB[node]) then
+              EmitObjRetainArm32;
+            EmitI32($E92D0001);                       { push {r0} (payload) }
+          end
           else
           begin
             { An Int64 payload must reach the slot WHOLE: EmitNode64Arm32 is the
@@ -4807,6 +4837,19 @@ begin
             IREmitNodeArm32(IRB[node]);
             EmitStrIncRefArm32;
           end;
+          EmitI32($E92D0001);                         { push {r0} (payload) }
+        end
+        else if tk = tyClass then
+        begin
+          IREmitNodeArm32(IRB[node]);                 { r0 = instance pointer }
+          { The temp variant takes its own reference; same predicate as the
+            IR_VAR_STORE arm above. x86-64's IR_VAR_BOX retains UNCONDITIONALLY
+            here (for tyAnsiString as well as tyClass) — that difference is
+            older than this change and is not created by it; riscv32 and xtensa
+            already ask the predicate in both paths, because their two paths
+            share one payload emitter. }
+          if not IRNodeOwnsManagedObj(IRB[node]) then
+            EmitObjRetainArm32;
           EmitI32($E92D0001);                         { push {r0} (payload) }
         end
         else

@@ -563,6 +563,19 @@ begin
   EmitCallProc(procIdx);
 end;
 
+procedure EmitObjRetainXtensa;
+{ a2 = class instance pointer. Retain; a2 is NOT preserved, like
+  EmitStrRefCallXtensa above — the one caller saves it itself. PXXObjRetain
+  no-ops on an instance that carries no refcount header. }
+var procIdx: Integer;
+begin
+  procIdx := FindProc('PXXObjRetain');
+  if procIdx < 0 then Error('compiler error: PXXObjRetain not found');
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+    xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+  EmitCallProc(procIdx);
+end;
+
 procedure EmitXtensaSoftDivCall(const name: AnsiString);
 { a2 = dividend (arg0), a3 = divisor (arg1) -> call helper -> result in a2.
   LX6 software div/mod path (--xtensa-cpu=lx6). }
@@ -1501,6 +1514,28 @@ begin
       end;
     end;
     xtensa_movi(reg_xtensa_a3, 0);               { high word of a handle payload }
+    XtensaPush64;
+  end
+  else if tk = tyClass then
+  begin
+    IREmitNodeXtensa(valNode);                   { a2 = instance pointer }
+    { The slot takes its own reference — unless the source already OWNS its +1
+      (a call result, or a NilPy construction arriving as a load of its conduit
+      temp). xtensa had NO object arm at all, so the slot held a pointer it had
+      not paid for and its own clear dropped the local's only reference.
+      THIS RETAIN AND THE tyClass ARM IN EmitManagedLocalCleanupForTarget MOVE
+      TOGETHER — either alone turns a bounded leak into a use-after-free.
+      Not reachable from NilPy on this target yet (no mmap arena, so `class`
+      refuses to compile — bug-a-nilpy-on-cross-targets-four-remaining-walls);
+      landed with its siblings so the three 32-bit backends do not drift again.
+      bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
+    if not IRNodeOwnsManagedObj(valNode) then
+    begin
+      XtensaPushA2;                              { save instance }
+      EmitObjRetainXtensa;
+      XtensaPopA2;                               { restore instance }
+    end;
+    xtensa_movi(reg_xtensa_a3, 0);               { high word of a pointer payload }
     XtensaPush64;
   end
   else if TypeIsFloat(tk) then

@@ -1,0 +1,60 @@
+# bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local
+#
+# TWO variant slots borrowing ONE local instance, and then one of the two
+# borrows dropped while the other must stay live.
+#
+# The point of the second slot. With ONE borrow the two cross-backend errors
+# CANCEL exactly -- the slot is under-retained by precisely the amount the
+# never-released local over-holds -- so a one-slot probe passes both before and
+# after the fix and guards nothing. With two, the arithmetic no longer cancels:
+# unfixed, the single reference the construction paid for is dropped by the
+# FIRST slot's clear and the second slot dangles.
+#
+# So this reads live in all four states and only one of them is correct:
+#   retain + release (correct):  rc 3 -> 2 at scope exit -> 1 after p.v = None
+#   neither (arm32/riscv32/xtensa before the fix): rc 1 -> freed by p.v = None,
+#                                                  q.v is then a dangling read
+#   retain only:                 one object per call never dropped -- a leak
+#   release only:                rc 0 while both slots still point at it -- UAF
+#
+# Expectations are CPython's own output.
+
+class Node:
+    def __init__(self, n):
+        self.n = n
+        self.tag = "node-" + str(n)
+
+
+class Box:
+    def __init__(self):
+        self.v = None
+
+
+def lend(p, q, k):
+    o = Node(k)
+    p.v = o
+    q.v = o
+    return o.n
+
+
+def main():
+    p = Box()
+    q = Box()
+    total = 0
+    i = 0
+    while i < 20000:
+        total = total + lend(p, q, i)
+        p.v = None
+        # read the SURVIVING borrow after the local that made it is gone and
+        # after the sibling slot has been cleared
+        total = total + q.v.n + len(q.v.tag)
+        # a fresh allocation between the drop and the next round, so a block
+        # freed too early is handed out again and the dangling read is loud
+        junk = Node(-1)
+        total = total + junk.n
+        i = i + 1
+    print(total)
+    print(q.v.n, q.v.tag)
+
+
+main()

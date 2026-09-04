@@ -1276,6 +1276,23 @@ begin
   rv32_addi(reg_sp, reg_sp, 16);
 end;
 
+procedure EmitObjRetainRISCV32;
+{ a0 = class instance pointer. Retain; a0-a3 preserved, exactly like
+  EmitStrIncRefRISCV32 above. PXXObjRetain no-ops on an instance that carries no
+  refcount header, so a Pascal-created object is safe. }
+var procIdx: Integer;
+begin
+  rv32_addi(reg_sp, reg_sp, -16);
+  rv32_sw(reg_a0, reg_sp, 0);  rv32_sw(reg_a1, reg_sp, 4);
+  rv32_sw(reg_a2, reg_sp, 8);  rv32_sw(reg_a3, reg_sp, 12);
+  procIdx := FindProc('PXXObjRetain');
+  if procIdx < 0 then Error('compiler error: PXXObjRetain not found');
+  EmitCallProc(procIdx);
+  rv32_lw(reg_a0, reg_sp, 0);  rv32_lw(reg_a1, reg_sp, 4);
+  rv32_lw(reg_a2, reg_sp, 8);  rv32_lw(reg_a3, reg_sp, 12);
+  rv32_addi(reg_sp, reg_sp, 16);
+end;
+
 procedure EmitVarHelperCallRISCV32(const name: AnsiString);
 { a0 = variant slot address (the helper's only argument). a0-a3 preserved. }
 var procIdx: Integer;
@@ -1308,6 +1325,21 @@ begin
       if not IRNodeOwnsManagedStr(valNode) then
         EmitStrIncRefRISCV32;
     end;
+    rv32_addi(reg_sp, reg_sp, -8);
+    rv32_sw(reg_a0, reg_sp, 0);
+  end
+  else if tk = tyClass then
+  begin
+    IREmitNodeRISCV32(valNode);                  { a0 = instance pointer }
+    { The slot takes its own reference — unless the source already OWNS its +1
+      (a call result, or a NilPy construction arriving as a load of its conduit
+      temp). riscv32 had NO object arm at all, so the slot held a pointer it had
+      not paid for and its own clear dropped the local's only reference.
+      THIS RETAIN AND THE tyClass ARM IN EmitManagedLocalCleanupForTarget MOVE
+      TOGETHER — either alone turns a bounded leak into a use-after-free.
+      bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
+    if not IRNodeOwnsManagedObj(valNode) then
+      EmitObjRetainRISCV32;
     rv32_addi(reg_sp, reg_sp, -8);
     rv32_sw(reg_a0, reg_sp, 0);
   end

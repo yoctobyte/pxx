@@ -3265,6 +3265,20 @@ test-nilpy: $(COMPILER)
 	  rss=$$(grep -oE 'Maximum resident set size .kbytes.: [0-9]+' $(TESTTMP)/objvarchurn.time | grep -oE '[0-9]+$$'); \
 	  if [ -n "$$rss" ] && [ "$$rss" -gt 20000 ]; then echo "object-into-variant ownership regressed: RSS $${rss}KB (>20MB over 50k constructions; fixed is ~1MB)"; exit 1; else echo "object-in-variant-slot-churn: OK (RSS $${rss}KB)"; fi; \
 	else echo "/usr/bin/time absent; object-into-variant RSS leak guard skipped"; fi
+	@# TWO variant slots borrowing ONE local instance, then one borrow dropped.
+	@# The sibling row above uses ONE slot, and with one slot the two
+	@# cross-backend errors CANCEL exactly (the slot is under-retained by
+	@# precisely what the never-released local over-holds) -- so a one-slot
+	@# probe passed before and after the fix and guarded nothing. Two slots
+	@# break the arithmetic: unfixed, arm32 SIGSEGVs here.
+	@# The value row cannot see the OTHER direction: with the retain present
+	@# and the scope-exit release absent (i386 and aarch64 on pin v403), the
+	@# output is right and 39955 objects are still live at exit. The census row
+	@# is what sees that -- 39955 -> 9 with both halves.
+	@# bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_variant_borrow_two_slots.npy $(TESTTMP)/test_nilpy_borrow226
+	tools/expect_same.sh test_nilpy_borrow226 "$$($(TESTTMP)/test_nilpy_borrow226)" "$$(cat test/test_nilpy_variant_borrow_two_slots.expected)"
+	tools/assert_no_leak.sh nilpy_variant_borrow_two_slots 200 $(TESTTMP)/test_nilpy_borrow226
 	@# `target[key] op= value` on a dict/list/Counter subscript (found already fixed)
 	./$(COMPILER) test/test_nilpy_augmented_subscript_assign.npy $(TESTTMP)/test_nilpy_augsubassign26
 	tools/expect_same.sh test_nilpy_augsubassign26 "$$($(TESTTMP)/test_nilpy_augsubassign26)" "$$(printf '{'"'"'a'"'"': 2}\n[6, 2]\n2\n14\n[1, 1, 30]')"
@@ -16838,6 +16852,16 @@ test-i386: $(COMPILER)
 	tools/assert_alloc_ceiling.sh i386/static_string_literal 600 tools/run_target.sh i386 $(TESTTMP)/ssl_i386
 	tools/assert_alloc_ceiling.sh x86-64/static_string_literal 600 $(TESTTMP)/ssl_i386_x64
 	tools/expect_same.sh i386/test_static_string_literal "$$(tools/run_target.sh i386 $(TESTTMP)/ssl_i386 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_i386_x64 | grep -v '^pxx-census')"
+	# TWO variant slots borrowing ONE local instance (the sibling of the
+	# objvarchurn row: that one BORROWS nothing, so it cannot see this).
+	# i386 had the variant-boxing retain and not the release, so
+	# it printed the right answer and leaked one object per call.
+	# The census row is the half the value row is blind to: a missing
+	# scope-exit release leaves the output correct and 39955 objects live.
+	# bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_nilpy_variant_borrow_two_slots.npy $(TESTTMP)/borrow2_i386
+	tools/expect_same.sh i386/test_nilpy_variant_borrow_two_slots "$$(tools/run_target.sh i386 $(TESTTMP)/borrow2_i386 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_variant_borrow_two_slots.expected)"
+	tools/assert_no_leak.sh i386/nilpy_variant_borrow_two_slots 200 tools/run_target.sh i386 $(TESTTMP)/borrow2_i386
 
 test-aarch64: $(COMPILER)
 	# THE BYTE PREFIX ON THE SECOND BACKEND. aarch64 is the first cross target
@@ -17164,6 +17188,16 @@ test-aarch64: $(COMPILER)
 	# direction too. feature-nilpy-object-reclamation
 	./$(COMPILER) --target=aarch64 test/test_nilpy_object_in_variant_slot_survives_churn.npy $(TESTTMP)/test_aarch64_objvarchurn
 	tools/expect_same.sh aarch64/test_aarch64_objvarchurn "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_objvarchurn)" "$$(cat test/test_nilpy_object_in_variant_slot_survives_churn.expected)"
+	# TWO variant slots borrowing ONE local instance (the sibling of the
+	# objvarchurn row: that one BORROWS nothing, so it cannot see this).
+	# aarch64 had the variant-boxing retain and not the release, so
+	# it printed the right answer and leaked one object per call.
+	# The census row is the half the value row is blind to: a missing
+	# scope-exit release leaves the output correct and 39955 objects live.
+	# bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_nilpy_variant_borrow_two_slots.npy $(TESTTMP)/borrow2_a64
+	tools/expect_same.sh aarch64/test_nilpy_variant_borrow_two_slots "$$(tools/run_target.sh aarch64 $(TESTTMP)/borrow2_a64 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_variant_borrow_two_slots.expected)"
+	tools/assert_no_leak.sh aarch64/nilpy_variant_borrow_two_slots 200 tools/run_target.sh aarch64 $(TESTTMP)/borrow2_a64
 	./$(COMPILER) --target=aarch64 test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2
 	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2_x64
 	tools/expect_same.sh aarch64/test_aarch64_conf2 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_conf2)" "$$($(TESTTMP)/test_aarch64_conf2_x64)"
@@ -20644,6 +20678,16 @@ test-arm32: $(COMPILER)
 	tools/assert_alloc_ceiling.sh arm32/static_string_literal 600 tools/run_target.sh arm32 $(TESTTMP)/ssl_a32
 	tools/assert_alloc_ceiling.sh x86-64/static_string_literal 600 $(TESTTMP)/ssl_a32_x64
 	tools/expect_same.sh arm32/test_static_string_literal "$$(tools/run_target.sh arm32 $(TESTTMP)/ssl_a32 | grep -v '^pxx-census')" "$$($(TESTTMP)/ssl_a32_x64 | grep -v '^pxx-census')"
+	# TWO variant slots borrowing ONE local instance (the sibling of the
+	# objvarchurn row: that one BORROWS nothing, so it cannot see this).
+	# arm32 had NEITHER half, and this is the row that measured it:
+	# SIGSEGV on pin v403, correct output here.
+	# The census row is the half the value row is blind to: a missing
+	# scope-exit release leaves the output correct and 39955 objects live.
+	# bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_nilpy_variant_borrow_two_slots.npy $(TESTTMP)/borrow2_a32
+	tools/expect_same.sh arm32/test_nilpy_variant_borrow_two_slots "$$(tools/run_target.sh arm32 $(TESTTMP)/borrow2_a32 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_variant_borrow_two_slots.expected)"
+	tools/assert_no_leak.sh arm32/nilpy_variant_borrow_two_slots 200 tools/run_target.sh arm32 $(TESTTMP)/borrow2_a32
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,
