@@ -29,4 +29,11 @@ extern int   mprotect(void *addr, size_t length, int prot);
 extern int   msync(void *addr, size_t length, int flags);
 extern void *mremap(void *old_address, size_t old_size, size_t new_size, int flags, ...);
 
+/* mlock/munlock(2): pin a range in RAM, and release it. BOTH, not just mlock:
+   busybox miscutils/hdparm.c pins its timing buffer at :1507 and releases it at
+   :1559, so a crtl with only mlock moves the refusal fifty lines down the same
+   file rather than clearing it. */
+extern int   mlock(const void *addr, size_t len);
+extern int   munlock(const void *addr, size_t len);
+
 #endif

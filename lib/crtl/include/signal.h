@@ -116,6 +116,12 @@ struct sigaction {
 int sigemptyset(sigset_t *set);
 int sigfillset(sigset_t *set);
 int sigaddset(sigset_t *set, int sig);
+
+/* sigisemptyset(3) is a GNU extension, not POSIX -- busybox shell/hush.c uses
+   it at :2126, :2666, :11907 and :11922 to decide whether a pending-signal set
+   needs draining. Returns 1 for empty, 0 for non-empty, and NEVER -1: there is
+   no error return, so `if (sigisemptyset(&s) < 0)' can never fire. */
+int sigisemptyset(const sigset_t *set);
 int sigdelset(sigset_t *set, int sig);
 int sigismember(const sigset_t *set, int sig);
 /* sigprocmask IS REAL -- see the note in src/signal.c. Blocking needs no

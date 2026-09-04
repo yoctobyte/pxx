@@ -14224,6 +14224,22 @@ test-core: $(COMPILER)
 	# Every row is a kernel or wire constant diffed against the host headers.
 	./$(COMPILER) test/c_crtl_uapi_headers_from_busybox_i386.c $(TESTTMP)/c_uapibb26
 	tools/expect_same.sh c_uapibb26 "$$($(TESTTMP)/c_uapibb26)" "$$(printf 'if      16 1 40 400 800 16\narphrd  0 1 772 512 ffff fffe\nvlan    1 2 4 8 10\njffs2   1985 2003 e002 | 12 2 4\nvt      5601 5602 1 2 | 8\nbond    89f0 89f1 89fd 8947 2 6 | 12 28 14\nbondoff 0 4 20 24\nmii     0 1 4 5 f | 4 400 1000 1e0 | 8 1')"
+	# crtl gaps busybox reaches at 394 applets: acct, mlock/munlock, scandir/
+	# alphasort, ether_line/ether_hostton/ether_ntohost, IN_MULTICAST, pause,
+	# nice, sched_getscheduler/getparam/setscheduler, sigisemptyset. THIRTEEN,
+	# not the nine the ticket listed: a refusal stops a TU at its FIRST
+	# undeclared identifier, so nine refusals counted nine FILES -- hdparm calls
+	# munlock fifty lines after mlock, tree.c passes alphasort to scandir, chrt
+	# calls all three scheduler entries. Rows are RELATIONS wherever root,
+	# RLIMIT_MEMLOCK or /etc/ethers would change the literal. Row 5 asserts the
+	# ORDER as well as the count, so readdir order fails it; row 6 asserts the
+	# caller's sentinel SURVIVES a failed scandir. Row 10 tests that pause()
+	# BLOCKS rather than that a handler fires -- crtl's signal/sigaction are
+	# link-only stubs (see bug-b-crtl-signal-and-sigaction-report-success-and-
+	# install-nothing), so the obvious alarm(1) version died on the default
+	# disposition. All rows diffed against gcc -D_GNU_SOURCE.
+	./$(COMPILER) test/c_crtl_busybox_394_gaps.c $(TESTTMP)/c_bb394gaps26
+	tools/expect_same.sh c_bb394gaps26 "$$($(TESTTMP)/c_bb394gaps26)" "$$(printf '1 1 0 1\n2 1 1 0 0 1\n3 0 010203040506 alpha | -1 000000000000 alpha | -1 -1 -1\n4 -1 -1\n5 5 . .. apple mango zebra\n6 -1 1\n7 0 0\n8 0 0 0 0\n9 1 1\n10 1 1\n11 -1 1')"
 	./$(COMPILER) test/c_crtl_telnet_and_prctl.c $(TESTTMP)/c_telprctl26
 	tools/expect_same.sh c_telprctl26 "$$($(TESTTMP)/c_telprctl26)" "$$(printf '1 255 254 253 252 251 250\n2 240 241 242 246 249\n3 0 1 3 24 31\n4 33 0 1 2\n5 15 16 23 38 39 47\n6 20 | 0 2 4 8 10 11 12\n7 1 2 4 8 4\n8 not-glibc\n9 0 pxxprobe')"
 	./$(COMPILER) test/c_crtl_net_headers.c $(TESTTMP)/c_nethdr26

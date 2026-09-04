@@ -118,3 +118,46 @@ int setns(int fd, int nstype)
   return -1;
 #endif
 }
+
+/* The policy trio. Every one is #ifdef'd on its own number, per this file's
+ * header rule -- arm32 and xtensa have no syscall table here and must refuse
+ * at runtime rather than call number zero.
+ *
+ * sched_getscheduler RETURNS THE POLICY, and a policy of 0 is SCHED_OTHER --
+ * a real answer, not a failure. Only -1 is an error, so `if
+ * (!sched_getscheduler(pid))' is a test for SCHED_OTHER and not for success.
+ * The SCHED_RESET_ON_FORK bit is left in place; see the header.
+ */
+int sched_getscheduler(pid_t pid)
+{
+#ifdef SYS_sched_getscheduler
+  return (int)syscall(SYS_sched_getscheduler, (long)pid);
+#else
+  (void)pid;
+  errno = ENOSYS;
+  return -1;
+#endif
+}
+
+int sched_setscheduler(pid_t pid, int policy, const struct sched_param *param)
+{
+#ifdef SYS_sched_setscheduler
+  return (int)syscall(SYS_sched_setscheduler, (long)pid, (long)policy,
+                      (long)param);
+#else
+  (void)pid; (void)policy; (void)param;
+  errno = ENOSYS;
+  return -1;
+#endif
+}
+
+int sched_getparam(pid_t pid, struct sched_param *param)
+{
+#ifdef SYS_sched_getparam
+  return (int)syscall(SYS_sched_getparam, (long)pid, (long)param);
+#else
+  (void)pid; (void)param;
+  errno = ENOSYS;
+  return -1;
+#endif
+}

@@ -87,6 +87,22 @@ int gethostname(char *name, size_t len);
 long gethostid(void);
 /* sethostname(2): root only; EPERM otherwise. */
 int sethostname(const char *name, size_t len);
+
+/* acct(2): turn process accounting on for a file, or off with NULL. Root only;
+   EPERM otherwise, and ENOSYS where the kernel was built without it.
+   busybox init/bootchartd.c:230 and :274 -- both spellings, file and NULL. */
+int acct(const char *filename);
+
+/* pause(2): sleep until a signal arrives. ALWAYS returns -1, with errno EINTR
+   -- there is no success return, so `if (pause() == -1)' is true every time
+   and is not an error check. busybox procps/mpstat.c:726. */
+int pause(void);
+
+/* nice(2): add `inc' to the calling process's nice value and return the NEW
+   value. -1 IS A LEGAL RETURN (nice value -1), so a caller must set errno to 0
+   before the call and test errno afterwards -- which is exactly what busybox
+   runit/chpst.c:468 does. See src/unistd.c for why this is not a raw syscall. */
+int nice(int inc);
 /* initgroups(3) is setgroups() over the groups `user' belongs to, plus `group'
    itself. It reads /etc/group, so the note on <grp.h> about NSS applies. */
 int initgroups(const char *user, gid_t group);

@@ -46,6 +46,19 @@ DIR *fdopendir(int fd);
 struct dirent *readdir(DIR *d);
 int closedir(DIR *d);
 void rewinddir(DIR *d);
+
+/* scandir(3) and its comparator. BOTH, for the same reason as mlock/munlock:
+   busybox miscutils/tree.c:43 is `scandir(dir, &entries, NULL, alphasort)', so
+   the two arrive together or not at all.
+
+   OWNERSHIP, because it is the part that leaks: scandir mallocs the array AND
+   each entry; the caller frees every entry and then the array. On failure
+   scandir frees everything it had taken and stores nothing through `namelist',
+   so a caller that checks the return value never sees a partial array. */
+int scandir(const char *dirp, struct dirent ***namelist,
+            int (*filter)(const struct dirent *),
+            int (*compar)(const struct dirent **, const struct dirent **));
+int alphasort(const struct dirent **a, const struct dirent **b);
 int dirfd(DIR *d);
 
 #endif

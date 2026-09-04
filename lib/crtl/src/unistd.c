@@ -13,6 +13,8 @@
 #include <pwd.h>
 #include <grp.h>
 #include <sys/utsname.h>
+#include <sys/syscall.h>
+#include <sys/resource.h>  /* nice() is getpriority + setpriority */
 #include <stdarg.h>
 
 extern int __pxx_open(const char *path, int flags, int mode);
@@ -1305,4 +1307,81 @@ long syscall(long number, ...) {
   rc = __pxx_syscall(number, a[0], a[1], a[2], a[3], a[4], a[5]);
   if (rc < 0 && rc > -4096) { errno = (int)-rc; return -1; }
   return rc;
+}
+
+/* ---- acct / pause / nice -------------------------------------------------
+ * All three found attempting busybox at 394 applets
+ * (feature-b-crtl-function-gaps-at-394-busybox-applets).
+ */
+
+/* acct(2). NULL turns accounting OFF -- it is not a missing argument, and a
+ * defensive `if (!filename) return -1;' here would break bootchartd.c:274,
+ * which is the only way it ever stops accounting. */
+int acct(const char *filename)
+{
+#ifdef SYS_acct
+  return (int)syscall(SYS_acct, (long)filename);
+#else
+  (void)filename;
+  errno = ENOSYS;
+  return -1;
+#endif
+}
+
+/* pause(2). THERE IS NO SUCCESS RETURN: it returns only when a handled signal
+ * arrives, and then it is always -1/EINTR.
+ *
+ * aarch64 and riscv HAVE NO SYS_pause -- the kernel dropped it from the
+ * generic syscall table -- so this is not a target where ENOSYS would be
+ * acceptable: mpstat would stop working on two live targets. glibc's answer is
+ * ppoll with no descriptors and no timeout, which blocks until a signal, and
+ * both targets have SYS_ppoll. The fallback is that call, not a refusal, and
+ * the ordering matters: prefer the real syscall where it exists so the strace
+ * of an x86-64 run says `pause' rather than something that merely behaves like
+ * it. */
+int pause(void)
+{
+#if defined(SYS_pause)
+  return (int)syscall(SYS_pause);
+#elif defined(SYS_ppoll)
+  return (int)syscall(SYS_ppoll, (long)0, (long)0, (long)0, (long)0);
+#else
+  errno = ENOSYS;
+  return -1;
+#endif
+}
+
+/* nice(2), over getpriority/setpriority because Linux has no nice syscall on
+ * any target pxx builds for.
+ *
+ * -1 IS A LEGAL RETURN. Callers must clear errno first and test it after, and
+ * busybox runit/chpst.c:468 does exactly that -- so this must not use -1 as
+ * its own private failure marker for anything getpriority can legitimately
+ * answer.
+ *
+ * DELIBERATE DIVERGENCE FROM GLIBC, and it is the accurate direction: glibc
+ * returns `old + inc' WITHOUT re-reading, so nice(100) reports 119 while the
+ * process is actually at 19, because the kernel clamped and glibc did not
+ * look. POSIX says nice() returns the new nice value. This re-reads and
+ * returns what the process ACTUALLY has. The two agree for every increment
+ * that does not hit a clamp, which is every call in the corpus; they disagree
+ * only where glibc's answer is untrue.
+ */
+int nice(int inc)
+{
+  int old, got;
+  errno = 0;
+  old = getpriority(PRIO_PROCESS, 0);
+  if (old == -1 && errno != 0) return -1;
+  if (setpriority(PRIO_PROCESS, 0, old + inc) == -1) {
+    /* setpriority reports a refused decrease as EACCES; nice(2) documents
+       EPERM for it, and a caller printing strerror(errno) should say
+       "Operation not permitted" rather than "Permission denied". */
+    if (errno == EACCES) errno = EPERM;
+    return -1;
+  }
+  errno = 0;
+  got = getpriority(PRIO_PROCESS, 0);
+  if (got == -1 && errno != 0) return -1;
+  return got;
 }

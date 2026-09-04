@@ -150,3 +150,107 @@ int dirfd(DIR *d)
   if (!d) { errno = EBADF; return -1; }
   return d->fd;
 }
+
+/* ---- scandir / alphasort -------------------------------------------------
+ * busybox miscutils/tree.c:43 is `scandir(dir, &entries, NULL, alphasort)'.
+ */
+
+int alphasort(const struct dirent **a, const struct dirent **b)
+{
+  return strcoll((*a)->d_name, (*b)->d_name);
+}
+
+/* A MERGE SORT RATHER THAN qsort, and the reason is an interface mismatch
+ * rather than a preference: scandir's comparator takes `const struct dirent **'
+ * and qsort's takes `const void *'. Bridging them needs the caller's function
+ * pointer inside a qsort comparator, which means either a file-scope variable
+ * -- not reentrant, and crtl has a --threadsafe mode -- or qsort_r, which is
+ * not in this crtl. Sorting the pointer array here needs neither.
+ *
+ * Stable, which qsort is not; unobservable through alphasort, because two
+ * entries in one directory cannot have the same name. */
+static void pxx_scandir_msort(struct dirent **v, struct dirent **tmp, size_t n,
+                              int (*cmp)(const struct dirent **,
+                                         const struct dirent **))
+{
+  size_t mid, i, j, k;
+  if (n < 2) return;
+  mid = n / 2;
+  pxx_scandir_msort(v, tmp, mid, cmp);
+  pxx_scandir_msort(v + mid, tmp, n - mid, cmp);
+  i = 0; j = mid; k = 0;
+  while (i < mid && j < n) {
+    if (cmp((const struct dirent **)&v[j], (const struct dirent **)&v[i]) < 0)
+      tmp[k++] = v[j++];
+    else
+      tmp[k++] = v[i++];
+  }
+  while (i < mid) tmp[k++] = v[i++];
+  while (j < n)   tmp[k++] = v[j++];
+  for (i = 0; i < n; i++) v[i] = tmp[i];
+}
+
+int scandir(const char *dirp, struct dirent ***namelist,
+            int (*filter)(const struct dirent *),
+            int (*compar)(const struct dirent **, const struct dirent **))
+{
+  DIR *d;
+  struct dirent *de, **vec = 0, **grown, **tmp;
+  size_t n = 0, cap = 0, i;
+
+  if (!dirp || !namelist) { errno = EINVAL; return -1; }
+  d = opendir(dirp);
+  if (!d) return -1;
+
+  for (;;) {
+    errno = 0;
+    de = readdir(d);
+    if (!de) {
+      /* readdir returns NULL for BOTH end-of-directory and error, and they are
+         told apart only by errno -- which is why it is cleared immediately
+         before each call. Returning the partial array on a read error would
+         report a short directory as a complete one. */
+      if (errno != 0) goto fail;
+      break;
+    }
+    if (filter && !filter(de)) continue;
+    if (n == cap) {
+      size_t ncap = cap ? cap * 2 : 32;
+      grown = (struct dirent **)realloc(vec, ncap * sizeof(*vec));
+      if (!grown) { errno = ENOMEM; goto fail; }
+      vec = grown; cap = ncap;
+    }
+    vec[n] = (struct dirent *)malloc(sizeof(struct dirent));
+    if (!vec[n]) { errno = ENOMEM; goto fail; }
+    memcpy(vec[n], de, sizeof(struct dirent));
+    n++;
+  }
+  closedir(d);
+
+  if (compar && n > 1) {
+    tmp = (struct dirent **)malloc(n * sizeof(*tmp));
+    if (!tmp) {
+      /* The entries are already taken and the caller will never see them, so
+         they are released here rather than leaked behind a -1. */
+      for (i = 0; i < n; i++) free(vec[i]);
+      free(vec);
+      errno = ENOMEM;
+      return -1;
+    }
+    pxx_scandir_msort(vec, tmp, n, compar);
+    free(tmp);
+  }
+
+  *namelist = vec;
+  return (int)n;
+
+fail:
+  {
+    int saved = errno;
+    for (i = 0; i < n; i++) free(vec[i]);
+    free(vec);
+    closedir(d);
+    errno = saved;   /* closedir/free must not overwrite why we failed */
+    return -1;
+  }
+}

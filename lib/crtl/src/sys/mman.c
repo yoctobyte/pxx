@@ -11,6 +11,8 @@
 #include <sys/mman.h>
 #include <stddef.h>
 #include <errno.h>
+#include <unistd.h>      /* syscall() */
+#include <sys/syscall.h>
 
 extern void *__pxx_mmap_anon_prot(long length, int prot);
 extern int __pxx_mprotect(void *addr, long length, int prot);
@@ -76,4 +78,35 @@ void *mremap(void *old_address, size_t old_size, size_t new_size, int flags, ...
   (void)old_address; (void)old_size; (void)new_size; (void)flags;
   errno = ENOMEM;
   return MAP_FAILED;
+}
+
+/* mlock/munlock(2). The pair, not just mlock -- busybox's hdparm pins a timing
+ * buffer and releases it fifty lines later, so shipping one of the two moves
+ * the refusal rather than clearing it.
+ *
+ * The kernel takes the range unaligned and rounds outward itself, so there is
+ * no page arithmetic here; adding some would silently lock a DIFFERENT range
+ * than the caller named. Both are ordinary -1/errno calls: EPERM without
+ * CAP_IPC_LOCK past RLIMIT_MEMLOCK, ENOMEM for an unmapped range.
+ */
+int mlock(const void *addr, size_t len)
+{
+#ifdef SYS_mlock
+  return (int)syscall(SYS_mlock, (long)addr, (long)len);
+#else
+  (void)addr; (void)len;
+  errno = ENOSYS;
+  return -1;
+#endif
+}
+
+int munlock(const void *addr, size_t len)
+{
+#ifdef SYS_munlock
+  return (int)syscall(SYS_munlock, (long)addr, (long)len);
+#else
+  (void)addr; (void)len;
+  errno = ENOSYS;
+  return -1;
+#endif
 }

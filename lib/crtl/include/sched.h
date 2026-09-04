@@ -96,6 +96,18 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize, const cpu_set_t *mask);
 int sched_get_priority_max(int policy);
 int sched_get_priority_min(int policy);
 
+/* The scheduling-policy trio busybox util-linux/chrt.c needs. chrt calls all
+   three plus the two priority bounds above, in one run: getscheduler at :154,
+   getparam at :175, setscheduler at :199.
+
+   SCHED_RESET_ON_FORK IS RETURNED BY sched_getscheduler AS A BIT IN THE POLICY,
+   not stripped -- chrt.c:164 says so in its own comment and masks it off
+   itself. So this returns the kernel's answer unmodified; helpfully clearing
+   that bit would make chrt report the wrong policy for a reset-on-fork task. */
+int sched_getscheduler(pid_t pid);
+int sched_setscheduler(pid_t pid, int policy, const struct sched_param *param);
+int sched_getparam(pid_t pid, struct sched_param *param);
+
 int unshare(int flags);
 int setns(int fd, int nstype);
 

@@ -4,10 +4,11 @@ title: "crtl is missing nine POSIX/GNU functions plus the loff_t typedef that bu
 track: B
 prio: 55
 type: feature
-status: open
+status: working
 created: 2026-09-02
 found-by: frankD
-summary: "**THE loff_t ITEM IS LANDED (`0e439aaf5`) -- NINE FUNCTIONS REMAIN.** Nine distinct undeclared-function refusals across nine busybox TUs at the 394-applet scope, each stopping one applet dead: acct, mlock, scandir, ether_hostton, IN_MULTICAST, pause, nice, sched_getscheduler, sigisemptyset -- PLUS the `loff_t` typedef, which accounts for TWO more refusals on its own (flash_eraseall.c and nandwrite.c) and so is the whole remainder together with the __BEGIN_DECLS group. None is a compiler defect -- every one is a crtl surface gap, small and independent, so this is a checklist rather than a design question. CORRECTED 2026-09-04 (frankC), TWICE, both from the same probe: nandwrite.c was listed as a missing `an MTD ioctl constant` and is not -- MEMGETBADBLOCK IS defined (mtd-abi.h:152) and is argument 2, while the diagnostic named argument THREE, `&offs`, whose declaration `loff_t offs;` never parsed; and flash_eraseall.c was filed as a compiler lowering gap and is the same typedef. Prepending `typedef long long loff_t;` alone builds BOTH (500160B and 496704B objects, controls refuse), so ten items are nine and one line clears two refusals. Re-measured at binary 75c874f301fb77c2 / HEAD a8b606a3e: 507 of 521, the same fourteen. **x86-64 ONLY** -- the host-header fallback is native-only, so i386 refuses more and these rows close per-target, not once."
+summary: "**THE CRTL SURFACE IS LANDED AND DIFFED AGAINST GLIBC (2026-09-04, franks-ab). THIRTEEN FUNCTIONS, NOT NINE.** loff_t landed earlier in 0e439aaf5. The nine the checklist named -- acct, mlock, scandir, ether_hostton, IN_MULTICAST, pause, nice, sched_getscheduler, sigisemptyset -- plus FOUR SIBLINGS the same TUs call within fifty lines: munlock (hdparm.c:1559, fifty-two lines after the mlock at :1507), alphasort (tree.c:43 passes it AS scandir's comparator), sched_getparam and sched_setscheduler (chrt.c:175 and :199, either side of the getscheduler at :154). **The count of nine was a count of FILES, not of functions** -- a refusal stops a TU at its FIRST undeclared identifier, so shipping the nine would have moved each refusal a few lines down its own file and produced nine more refusals. All thirteen are in `test/c_crtl_busybox_394_gaps.c`, eleven rows byte-identical to `gcc -D_GNU_SOURCE`, relations wherever root/RLIMIT_MEMLOCK//etc/ethers would change a literal. `make lib-test` green against stable v403; crtl-reachability and the regenerated crtl_names.inc both pass. **STILL OPEN: the corpus confirmation, which is not mine to run.** This ticket's acceptance is those nine busybox TUs compiling, and that needs a 394-applet run per target -- x86-64 AND i386, since the host-header fallback is native-only and i386 refuses more. Two findings came out of the work: ether_line REJECTS a leading blank in glibc (measured across eleven line shapes, crtl now matches byte for byte), and crtl's signal/sigaction are link-only stubs that return 0 and install nothing (bug-b-crtl-signal-and-sigaction-report-success-and-install-nothing), which is why the pause() row tests blocking rather than a handler."
+owner: franks-ab
 ---
 
 # The list, with the file that wants each
@@ -161,3 +162,88 @@ One oracle note for whoever diffs this next: **glibc gates `loff_t` behind
 `__USE_MISC`**, so a plain `gcc` build cannot see it and the row needs
 `-D_GNU_SOURCE`. crtl defines it unconditionally — the accept-more direction,
 and unobservable to a program that does not use the type.
+
+
+## LANDED 2026-09-04: the crtl surface, thirteen functions (franks-ab)
+
+**Nine became thirteen before a line was written, and the reason is the ticket's
+own method rather than a mistake in it.** The list was built from compiler
+refusals, and a refusal stops a translation unit at its FIRST undeclared
+identifier. Nine refusals across nine TUs therefore counted nine FILES. Reading
+what those files actually call:
+
+| shipped | sibling the SAME TU calls | distance |
+| --- | --- | --- |
+| `mlock` (hdparm.c:1507) | `munlock` (hdparm.c:1559) | 52 lines |
+| `scandir` (tree.c:43) | `alphasort` — passed AS its comparator | same line |
+| `sched_getscheduler` (chrt.c:154) | `sched_getparam` :175, `sched_setscheduler` :199 | same function |
+
+Shipping the nine would have cleared nine refusals and produced nine more, one
+per file, and the ticket would have looked half-done twice.
+
+### Where each body went, and why it is checkable
+
+crtl auto-pulls `lib/crtl/src/<name>.c` when `<name>.h` resolves, so a body in
+the wrong file links against **glibc's** symbol instead — right name, not
+necessarily the same ABI. `tools/crtl_reachability.py` asserts the rule and is
+the first thing `make lib-test` runs; it passes (125 headers, 60 modules).
+`compiler/crtl_names.inc` is generated and was regenerated (558 functions).
+
+- `unistd.h`/`src/unistd.c` — `acct`, `pause`, `nice`
+- `sched.h`/`src/sched.c` — `sched_getscheduler`, `sched_setscheduler`, `sched_getparam`
+- `sys/mman.h`/`src/sys/mman.c` — `mlock`, `munlock`
+- `dirent.h`/`src/dirent.c` — `scandir`, `alphasort`
+- `netinet/ether.h`/`src/netinet/ether.c` — `ether_line`, `ether_hostton`, `ether_ntohost`
+- `netinet/in.h` — `IN_MULTICAST` (macro, via `IN_CLASSD`)
+- `signal.h`/`src/signal.c` — `sigisemptyset`
+
+### Three decisions that are not obvious, recorded so they are not re-litigated
+
+**`pause` on aarch64 and riscv is `ppoll`, not `ENOSYS`.** Those targets have no
+`SYS_pause` — the kernel dropped it from the generic table — so the
+`#ifdef SYS_x / #else ENOSYS` idiom this repo uses everywhere else would have
+refused on two live targets. glibc's answer is `ppoll(NULL,0,NULL,NULL)` and
+both have `SYS_ppoll`. The real syscall is still preferred where it exists, so
+an x86-64 strace says `pause`.
+
+**`nice` re-reads and DIVERGES FROM GLIBC deliberately.** glibc returns
+`old + inc` without looking, so `nice(100)` reports 119 while the process sits
+at 19 — the kernel clamped and glibc did not check. POSIX says nice() returns
+the new nice value; this re-reads it. They agree for every increment that does
+not hit a clamp, which is every call in the corpus, and disagree only where
+glibc's answer is untrue. `EACCES` is remapped to `EPERM` per nice(2).
+
+**`ether_line` REJECTS a leading blank, and that is measured, not assumed.**
+Eleven line shapes probed against glibc: leading whitespace `-1`, comment-only
+`-1`, address-with-no-host `-1` **but with the address still written through**,
+double separators / tabs / trailing blanks / trailing newline / trailing
+comment all accepted, short hex components accepted. crtl now matches glibc on
+all eleven, byte for byte. The first implementation skipped leading blanks —
+the tolerant direction — and that was wrong here: an indented line resolving to
+a MAC address under pxx and nothing under every other libc is the wrong
+divergence for a lookup whose whole job is to agree with the rest of the system.
+
+### The test, and the one thing it cannot assert yet
+
+`test/c_crtl_busybox_394_gaps.c`, eleven rows, byte-identical to
+`gcc -D_GNU_SOURCE`. Rows are RELATIONS wherever root, `RLIMIT_MEMLOCK` or the
+presence of `/etc/ethers` would change a literal, and constants where they can
+be. Row 5 asserts scandir's ORDER as well as its count, so returning readdir
+order fails it; row 6 asserts the caller's sentinel SURVIVES a failed scandir.
+
+**Row 10 is weaker than it should be and the reason is filed.** `pause` has no
+success return, so the natural test is a handler plus `alarm(1)` — which passes
+under gcc and, under pxx, kills the process with `Alarm clock`. crtl's
+`signal`/`sigaction` are link-only stubs that return 0 and install nothing:
+[[bug-b-crtl-signal-and-sigaction-report-success-and-install-nothing]]. The row
+therefore asserts that `pause()` BLOCKS (fork, confirm the child is alive, kill
+it). **Strengthen it when that lands** rather than leaving it weak because
+nobody remembers why.
+
+### Not closed, and deliberately
+
+The acceptance here is the nine busybox TUs COMPILING, per target. That needs a
+394-applet run on x86-64 **and** i386 — the ticket's own note says the
+host-header fallback is native-only, so i386 refuses more — and that run is
+frankc-af's, not mine. Closing on "the surface is landed and the unit test is
+green" would be closing on my own half.

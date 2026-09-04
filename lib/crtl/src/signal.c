@@ -8,6 +8,7 @@
 
 #include <signal.h>
 #include <errno.h>
+#include <stddef.h>   /* size_t */
 #include <time.h>
 
 extern int __pxx_kill(int pid, int sig);
@@ -161,3 +162,22 @@ int kill(int pid, int sig) {
  * is silent, because the link then resolves strsignal from the SYSTEM libc.
  * It needs nothing from this file: the table is indexed by signal NUMBER and
  * names no SIG* constant, which is why the move costs no include. */
+
+/* sigisemptyset(3), GNU. 1 for empty, 0 for not, never -1 -- there is no error
+ * return at all, so a caller cannot distinguish "empty" from "failed" and must
+ * not try. busybox shell/hush.c relies on that at four sites.
+ *
+ * It walks the WHOLE __val array rather than the first word. sigset_t here is
+ * sixteen unsigned longs and Linux uses only the first one or two, so reading
+ * one word gives the right answer today on every target and would keep giving
+ * it after a signal above 64 was ever set -- a test that passes for the wrong
+ * reason. The loop costs nothing and cannot go stale.
+ */
+int sigisemptyset(const sigset_t *set)
+{
+  size_t i;
+  if (!set) { errno = EINVAL; return 0; }
+  for (i = 0; i < sizeof(set->__val) / sizeof(set->__val[0]); i++)
+    if (set->__val[i] != 0UL) return 0;
+  return 1;
+}

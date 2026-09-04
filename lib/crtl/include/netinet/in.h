@@ -37,6 +37,23 @@ struct sockaddr_in {
 #define INADDR_BROADCAST 0xFFFFFFFFU
 #define INADDR_NONE 0xFFFFFFFFU
 
+/* The classful address predicates. THESE TAKE A HOST-ORDER ADDRESS, which is
+   why every caller wraps the argument in ntohl() -- busybox
+   networking/libiproute/iptunnel.c:349, :353 and :357 all spell
+   `IN_MULTICAST(ntohl(p->iph.daddr))'. Handing one a network-order address
+   compiles, runs, and answers about the wrong byte.
+
+   IN_MULTICAST is defined through IN_CLASSD rather than open-coded, because
+   that is the relation that makes the constant checkable: class D is
+   224.0.0.0/4, so the test is the top four bits being 1110. */
+#define IN_CLASSA(a)       ((((uint32_t)(a)) & 0x80000000U) == 0)
+#define IN_CLASSB(a)       ((((uint32_t)(a)) & 0xC0000000U) == 0x80000000U)
+#define IN_CLASSC(a)       ((((uint32_t)(a)) & 0xE0000000U) == 0xC0000000U)
+#define IN_CLASSD(a)       ((((uint32_t)(a)) & 0xF0000000U) == 0xE0000000U)
+#define IN_MULTICAST(a)    IN_CLASSD(a)
+#define IN_EXPERIMENTAL(a) ((((uint32_t)(a)) & 0xF0000000U) == 0xF0000000U)
+#define IN_BADCLASS(a)     IN_EXPERIMENTAL(a)
+
 #define IPPROTO_ICMP   1
 #define IPPROTO_IGMP   2
 #define IPPROTO_IPIP   4
