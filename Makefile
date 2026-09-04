@@ -14528,6 +14528,78 @@ test-core: $(COMPILER)
 	# frees=115741 live=22 to frees=20535 live=313625.
 	@./$(COMPILER) -dPXX_ALLOC_CENSUS test/c_crtl_glob_no_leak.c $(TESTTMP)/c_globleak26 >/dev/null || { echo "c_globleak compile FAIL"; exit 1; }
 	@tools/assert_no_leak.sh c_globleak 300 $(TESTTMP)/c_globleak26 $$(mktemp -d) 2000
+	# inet_ntop/inet_pton for AF_INET6. THIS IS NOT A COSMETIC ADDITION: crtl
+	# refused AF_INET6 and returned NULL, and c_crtl_resolv.c's AAAA row then
+	# printed its caller's uninitialised buffer, which still held the previous
+	# record's IPv4 address -- 2001:db8::1 came out as 93.184.216.34, with
+	# nothing erroring. The rows print the 16 binary bytes AND the text they
+	# render back to, because pton and ntop can be wrong in mirror-image ways
+	# and a text-to-text round trip passes when they are.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_inet6.c $(TESTTMP)/c_inet626 >/dev/null || { echo "c_inet6 compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_inet6_gcc test/c_crtl_inet6.c || { echo "c_inet6 gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_inet626 "$$($(TESTTMP)/c_inet626)" "$$($(TESTTMP)/c_inet6_gcc)" || exit 1; \
+	  echo "=== c_inet6: 32 IPv6 conversion rows identical to glibc ==="; \
+	else \
+	  echo "=== c_inet6: gcc absent, IPv6 conversion NOT verified ==="; \
+	fi
+	# <resolv.h> + <arpa/nameser.h>: constants, name conversion and the message
+	# parser, on a CANNED packet rather than a live lookup -- a test that
+	# resolved a real name would pass on a box with DNS and fail on one
+	# without, and neither says anything about the parser.
+	#
+	# THE forward-ptr ROW IS EXCLUDED FROM THE DIFF AND ASSERTED SEPARATELY.
+	# glibc follows a compression pointer that points forward and answers 2;
+	# crtl refuses it. RFC 1035 4.1.4 says a pointer names a PRIOR occurrence,
+	# so no conforming server emits one, and following it walks the packet out
+	# of order. Chosen, and recorded in known-incompat/incompat-b-crtls-dns-
+	# parser-refuses-two-malformed-packets-glibc-accepts.
+	#
+	# The other five malformed rows are the positive controls, and two of them
+	# were demonstrated by injected fault rather than argued: dropping the
+	# strictly-backwards rule flips forward-ptr from -1 to 2, and treating the
+	# reserved 0x40 label type as a length flips reserved-len from -1 to 3.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_resolv.c $(TESTTMP)/c_resolv26 >/dev/null || { echo "c_resolv compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_resolv_gcc test/c_crtl_resolv.c -lresolv || { echo "c_resolv gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_resolv26 "$$($(TESTTMP)/c_resolv26 | grep -v forward-ptr)" "$$($(TESTTMP)/c_resolv_gcc | grep -v forward-ptr)" || exit 1; \
+	  tools/expect_same.sh c_resolv26/strict "$$($(TESTTMP)/c_resolv26 | grep forward-ptr)" "forward-ptr(STRICTER) initparse=-1 uncompress=-1" || exit 1; \
+	  echo "=== c_resolv: 63 rows identical to glibc, forward-ptr stricter by choice ==="; \
+	else \
+	  echo "=== c_resolv: gcc absent, resolver NOT verified ==="; \
+	fi
+	@for a in i386 arm32 aarch64 riscv32; do \
+	  case $$a in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$a test/c_crtl_resolv.c $(TESTTMP)/c_resolv_$$a >/dev/null || { echo "c_resolv $$a compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh $$a/c_resolv "$$(tools/run_target.sh $$a $(TESTTMP)/c_resolv_$$a)" "$$($(TESTTMP)/c_resolv26)" || exit 1; \
+	    ./$(COMPILER) --target=$$a test/c_crtl_inet6.c $(TESTTMP)/c_inet6_$$a >/dev/null || { echo "c_inet6 $$a compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh $$a/c_inet6 "$$(tools/run_target.sh $$a $(TESTTMP)/c_inet6_$$a)" "$$($(TESTTMP)/c_inet626)" || exit 1; \
+	    echo "=== c_resolv + c_inet6: $$a agrees with the native run ==="; \
+	  else \
+	    echo "=== c_resolv: $$q absent, $$a NOT verified ==="; \
+	  fi; \
+	done
+	# res_query() against a DNS server the TEST starts on 127.0.0.1. Two of its
+	# four rows are spoofing rows and they are the reason it exists: res_nsend
+	# accepts a datagram only if the id matches and the QR bit is set, and
+	# NEITHER CHECK CAN FAIL A NORMAL LOOKUP -- a well-behaved server satisfies
+	# both -- so a resolver with both deleted passes every ordinary test. The
+	# server sends a decoy carrying 6.6.6.6 before the real 10.1.2.3 reply, so
+	# the row reports which one was accepted.
+	#
+	# notresp IS EXCLUDED FROM THE DIFF: glibc accepts the QR-clear decoy on
+	# the id alone and prints 6.6.6.6; crtl skips it. Same known-incompat file
+	# as forward-ptr above.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_res_send.c $(TESTTMP)/c_ressend26 >/dev/null || { echo "c_ressend compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_ressend_gcc test/c_crtl_res_send.c -lresolv || { echo "c_ressend gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_ressend26 "$$($(TESTTMP)/c_ressend26 | grep -v notresp)" "$$($(TESTTMP)/c_ressend_gcc | grep -v notresp)" || exit 1; \
+	  tools/expect_same.sh c_ressend26/strict "$$($(TESTTMP)/c_ressend26 | grep notresp)" "notresp.example.com rc=ok h_errno=0 addr=10.1.2.3" || exit 1; \
+	  echo "=== c_ressend: res_query matches glibc, QR check stricter by choice ==="; \
+	else \
+	  echo "=== c_ressend: gcc absent, res_query NOT verified ==="; \
+	fi
 	# getrandom(2), which busybox's seedrng needs and which is a SYSCALL rather
 	# than a PAL entry because the FLAGS are the point: GRND_NONBLOCK and
 	# GRND_INSECURE select between "fail rather than wait for entropy" and

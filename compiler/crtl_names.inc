@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  578 functions across 61 headers. }
+  608 functions across 63 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -35,8 +35,8 @@ begin
       ' closelog:syslog.h connect:sys/socket.h copysign:math.h cos:math.h cosf:math.h ' +
       ' cosh:math.h creat:fcntl.h ctime:time.h ctime_r:time.h ';
     'd': Result :=
-      ' difftime:time.h dirfd:dirent.h dirname:libgen.h div:stdlib.h dprintf:stdio.h ' +
-      ' dup:unistd.h dup2:unistd.h ';
+      ' difftime:time.h dirfd:dirent.h dirname:libgen.h div:stdlib.h dn_comp:resolv.h ' +
+      ' dn_expand:resolv.h dn_skipname:resolv.h dprintf:stdio.h dup:unistd.h dup2:unistd.h ';
     'e': Result :=
       ' endgrent:grp.h endmntent:mntent.h endpwent:pwd.h endservent:netdb.h ' +
       ' ether_aton:netinet/ether.h ether_aton_r:netinet/ether.h ether_hostton:netinet/ether.h ' +
@@ -110,7 +110,13 @@ begin
       ' msync:sys/mman.h munlock:sys/mman.h munmap:sys/mman.h ';
     'n': Result :=
       ' nan:math.h nanosleep:time.h nearbyint:math.h nextafter:math.h nice:unistd.h ' +
-      ' ntohl:netinet/in.h ntohs:netinet/in.h ntp_adjtime:sys/timex.h ntp_gettime:sys/timex.h ';
+      ' ns_get16:arpa/nameser.h ns_get32:arpa/nameser.h ns_initparse:arpa/nameser.h ' +
+      ' ns_msg_getflag:arpa/nameser.h ns_name_compress:arpa/nameser.h ' +
+      ' ns_name_ntop:arpa/nameser.h ns_name_pack:arpa/nameser.h ns_name_pton:arpa/nameser.h ' +
+      ' ns_name_uncompress:arpa/nameser.h ns_name_unpack:arpa/nameser.h ' +
+      ' ns_parserr:arpa/nameser.h ns_put16:arpa/nameser.h ns_put32:arpa/nameser.h ' +
+      ' ns_skiprr:arpa/nameser.h ntohl:netinet/in.h ntohs:netinet/in.h ntp_adjtime:sys/timex.h ' +
+      ' ntp_gettime:sys/timex.h ';
     'o': Result :=
       ' open:fcntl.h openat:fcntl.h opendir:dirent.h openlog:syslog.h ';
     'p': Result :=
@@ -126,8 +132,12 @@ begin
       ' readlink:unistd.h readv:sys/uio.h realloc:stdlib.h reallocarray:stdlib.h ' +
       ' realpath:stdlib.h reboot:sys/reboot.h recv:sys/socket.h recvfrom:sys/socket.h ' +
       ' recvmsg:sys/socket.h regcomp:regex.h regerror:regex.h regexec:regex.h regfree:regex.h ' +
-      ' remainder:math.h remove:stdio.h removexattr:sys/xattr.h rename:stdio.h rewind:stdio.h ' +
-      ' rewinddir:dirent.h rint:math.h rmdir:unistd.h round:math.h roundf:math.h ';
+      ' remainder:math.h remove:stdio.h removexattr:sys/xattr.h rename:stdio.h ' +
+      ' res_close:resolv.h res_init:resolv.h res_mkquery:resolv.h res_nclose:resolv.h ' +
+      ' res_ninit:resolv.h res_nmkquery:resolv.h res_nquery:resolv.h res_nsearch:resolv.h ' +
+      ' res_nsend:resolv.h res_query:resolv.h res_randomid:resolv.h res_search:resolv.h ' +
+      ' res_send:resolv.h rewind:stdio.h rewinddir:dirent.h rint:math.h rmdir:unistd.h ' +
+      ' round:math.h roundf:math.h ';
     's': Result :=
       ' scalbn:math.h scandir:dirent.h scanf:stdio.h sched_get_priority_max:sched.h ' +
       ' sched_get_priority_min:sched.h sched_getaffinity:sched.h sched_getparam:sched.h ' +
@@ -192,7 +202,7 @@ begin
     'a': Result := 1016;
     'b': Result := 400;
     'c': Result := 143352;
-    'd': Result := 440;
+    'd': Result := 3000;
     'e': Result := 14200;
     'f': Result := 65520;
     'g': Result := 98256;
@@ -201,11 +211,11 @@ begin
     'k': Result := 144;
     'l': Result := 7928;
     'm': Result := 496;
-    'n': Result := 2616;
+    'n': Result := 352056;
     'o': Result := 208;
     'p': Result := 108792;
     'q': Result := 32;
-    'r': Result := 7152;
+    'r': Result := 8176;
     's': Result := 4620280;
     't': Result := 3064;
     'u': Result := 992;

@@ -268,16 +268,176 @@ in_addr_t inet_addr(const char *s) {
   return a.s_addr;
 }
 
+/* ---- IPv6 presentation <-> binary -------------------------------------
+   ADDED BECAUSE nslookup's AAAA BRANCH WAS DEAD WITHOUT IT, and dead in the
+   worst way: inet_ntop(AF_INET6, ...) returned NULL, the caller printed its
+   UNINITIALISED buffer, and what came out was the PREVIOUS record's IPv4
+   address -- a plausible wrong answer with no error anywhere. The stale-stack
+   read is why this is a bug rather than a missing feature.
+
+   THE OUTPUT FORM IS RFC 5952 AND IT IS NOT A FREE CHOICE. Lowercase hex, no
+   leading zeros, and the LONGEST run of zero groups replaced by "::" with the
+   LEFTMOST winning a tie -- because two spellings of one address break every
+   textual comparison a program does with them. The run must be at least two
+   groups: "::" standing for a single zero group is legal to parse and illegal
+   to emit, and glibc emits the same. */
+
+static int inet_pton6(const char *src, unsigned char *dst) {
+  unsigned char tmp[16], *tp, *endp, *colonp;
+  const char *curtok;
+  int ch, seen_xdigits;
+  unsigned int val;
+
+  memset(tp = tmp, 0, sizeof tmp);
+  endp = tp + sizeof tmp;
+  colonp = 0;
+  if (*src == ':' && *++src != ':') return 0;
+  curtok = src;
+  seen_xdigits = 0;
+  val = 0;
+  while ((ch = *src++) != 0) {
+    int digit = -1;
+    if (ch >= '0' && ch <= '9') digit = ch - '0';
+    else if (ch >= 'a' && ch <= 'f') digit = ch - 'a' + 10;
+    else if (ch >= 'A' && ch <= 'F') digit = ch - 'A' + 10;
+    if (digit >= 0) {
+      val <<= 4;
+      val |= (unsigned)digit;
+      if (++seen_xdigits > 4) return 0;
+      continue;
+    }
+    if (ch == ':') {
+      curtok = src;
+      if (!seen_xdigits) {
+        if (colonp) return 0;      /* only one "::" is allowed */
+        colonp = tp;
+        continue;
+      } else if (*src == '\0') {
+        return 0;                  /* a trailing single ':' is not an address */
+      }
+      if (tp + 2 > endp) return 0;
+      *tp++ = (unsigned char)(val >> 8);
+      *tp++ = (unsigned char)(val & 0xff);
+      seen_xdigits = 0;
+      val = 0;
+      continue;
+    }
+    /* A TRAILING DOTTED-QUAD IS PART OF THE SYNTAX, not a special case:
+       "::ffff:192.0.2.1" is how an IPv4-mapped address is written. */
+    if (ch == '.' && (tp + 4) <= endp) {
+      struct in_addr v4;
+      if (!inet_aton(curtok, &v4)) return 0;
+      memcpy(tp, &v4.s_addr, 4);
+      tp += 4;
+      seen_xdigits = 0;
+      break;
+    }
+    return 0;
+  }
+  if (seen_xdigits) {
+    if (tp + 2 > endp) return 0;
+    *tp++ = (unsigned char)(val >> 8);
+    *tp++ = (unsigned char)(val & 0xff);
+  }
+  if (colonp != 0) {
+    /* Slide everything after the "::" down to the end; the gap it leaves is
+       already zero. A zero-length gap means the address was written with
+       "::" where it was not needed, which is an error. */
+    int n = (int)(tp - colonp), i;
+    if (tp == endp) return 0;
+    for (i = 1; i <= n; i++) {
+      endp[-i] = colonp[n - i];
+      colonp[n - i] = 0;
+    }
+    tp = endp;
+  }
+  if (tp != endp) return 0;
+  memcpy(dst, tmp, 16);
+  return 1;
+}
+
+static const char *inet_ntop6(const unsigned char *src, char *dst, socklen_t size) {
+  char tmp[46], *tp;
+  unsigned int words[8];
+  int i, best = -1, bestlen = 0, cur = -1, curlen = 0;
+
+  for (i = 0; i < 8; i++)
+    words[i] = ((unsigned)src[i * 2] << 8) | (unsigned)src[i * 2 + 1];
+  for (i = 0; i < 8; i++) {
+    if (words[i] == 0) {
+      if (cur < 0) { cur = i; curlen = 1; } else curlen++;
+      /* `>' AND NOT `>=' IS WHAT MAKES THE LEFTMOST RUN WIN A TIE, which
+         RFC 5952 requires and which is the whole reason two implementations
+         can otherwise print one address two ways. */
+      if (curlen > bestlen) { best = cur; bestlen = curlen; }
+    } else {
+      cur = -1; curlen = 0;
+    }
+  }
+  if (bestlen < 2) { best = -1; bestlen = 0; }
+
+  tp = tmp;
+  for (i = 0; i < 8; i++) {
+    if (best >= 0 && i >= best && i < best + bestlen) {
+      if (i == best) *tp++ = ':';
+      continue;
+    }
+    if (i != 0) *tp++ = ':';
+    /* The last two groups print as a dotted quad for the v4-mapped and
+       v4-compatible forms, which is what glibc does and what every tool that
+       reads this output expects. */
+    if (i == 6 && best == 0 &&
+        (bestlen == 6 || (bestlen == 7 && words[7] != 0x0001) ||
+         (bestlen == 5 && words[5] == 0xffff))) {
+      const unsigned char *q = src + 12;
+      int k;
+      for (k = 0; k < 4; k++) {
+        int o = q[k];
+        if (o >= 100) *tp++ = (char)('0' + o / 100);
+        if (o >= 10)  *tp++ = (char)('0' + (o / 10) % 10);
+        *tp++ = (char)('0' + o % 10);
+        if (k < 3) *tp++ = '.';
+      }
+      i = 7;
+      break;
+    }
+    {
+      static const char hex[] = "0123456789abcdef";
+      unsigned int w = words[i];
+      int started = 0, sh;
+      for (sh = 12; sh >= 0; sh -= 4) {
+        int d = (int)((w >> sh) & 0xf);
+        if (d != 0 || started || sh == 0) { *tp++ = hex[d]; started = 1; }
+      }
+    }
+  }
+  if (best >= 0 && best + bestlen == 8) *tp++ = ':';
+  *tp = '\0';
+  if ((socklen_t)(tp - tmp + 1) > size) { errno = ENOSPC; return 0; }
+  memcpy(dst, tmp, (size_t)(tp - tmp + 1));
+  return dst;
+}
+
 int inet_pton(int af, const char *src, void *dst) {
-  if (af != 2 /* AF_INET */) return -1;
-  return inet_aton(src, (struct in_addr *)dst) ? 1 : 0;
+  if (af == 2 /* AF_INET */)
+    return inet_aton(src, (struct in_addr *)dst) ? 1 : 0;
+  if (af == 10 /* AF_INET6 */)
+    return inet_pton6(src, (unsigned char *)dst);
+  /* AN UNKNOWN FAMILY IS -1 WITH EAFNOSUPPORT, NOT 0. The two answers mean
+     different things -- 0 is "that string is not an address of this family"
+     and -1 is "I do not know this family" -- and a caller that treats them
+     alike reports a malformed address for a family it never supported. */
+  errno = EAFNOSUPPORT;
+  return -1;
 }
 
 const char *inet_ntop(int af, const void *src, char *dst, socklen_t size) {
   uint32_t v;
   int i, n = 0, o;
   char tmp[16];
-  if (af != 2 /* AF_INET */ || !src || !dst) return 0;
+  if (!src || !dst) { errno = EAFNOSUPPORT; return 0; }
+  if (af == 10 /* AF_INET6 */) return inet_ntop6((const unsigned char *)src, dst, size);
+  if (af != 2 /* AF_INET */) { errno = EAFNOSUPPORT; return 0; }
   v = ntohl(((const struct in_addr *)src)->s_addr);
   for (i = 3; i >= 0; i--) {
     o = (int)((v >> (i * 8)) & 0xFF);
@@ -286,7 +446,7 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size) {
     tmp[n++] = (char)('0' + o % 10);
     if (i > 0) tmp[n++] = '.';
   }
-  if ((socklen_t)(n + 1) > size) return 0;
+  if ((socklen_t)(n + 1) > size) { errno = ENOSPC; return 0; }
   for (i = 0; i < n; i++) dst[i] = tmp[i];
   dst[n] = 0;
   return dst;
