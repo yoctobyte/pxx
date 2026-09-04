@@ -36,6 +36,8 @@ var
   sh: ShortString;
   s5: string[5];
   an: AnsiString;
+  i: Integer;
+  churn: AnsiString;
 begin
   sh := 'short';
   writeln('plain=', Format('%s', [sh]));
@@ -60,6 +62,45 @@ begin
   { the same value through the renderer that was always right }
   sh := 'short';
   writeln('builtin=', sh);
+
+  { THE LEAK ROW'S SUBJECT, and without it that row is a guard that cannot
+    pass. Everything above is a VALUE test and allocates ~33 handles in total;
+    tools/assert_no_leak.sh needs at least 100 before it will answer at all,
+    and it refuses rather than reporting a false PASS -- `only 33 allocations
+    — too few to show anything`. So the Makefile's -dPXX_ALLOC_CENSUS row went
+    red for everyone from the commit that added it.
+
+    A leak of this class is proportional to the number of BOXINGS, so a loop is
+    the only thing that can make one visible: with the boxing arm leaking, live
+    grows with the iteration count and clears the bound by orders of magnitude;
+    with it correct, live stays in the low tens. The loop PRINTS NOTHING, so
+    every expectation above is untouched, and the `if` keeps the result used so
+    the call cannot be folded away.
+
+    THE OTHER TWO ARMS OF THIS COMMIT DO NOT BELONG IN THIS LOOP, and the reason
+    is a measurement rather than a preference (frankH, 2026-09-05, when it was
+    proposed as costing nothing):
+
+      Int64 + Single elements, 500 iterations, NO Format:   allocs=1  frees=0  live=1
+      the same two elements, THROUGH Format:                allocs=15628 frees=15623 live=5
+
+    An Int64 or Single box is a FRAME SLOT (AllocVar + IR_SLOTADDR) and produces
+    no heap traffic at all -- one allocation for the whole program. Every one of
+    those 15628 belongs to Format's own string machinery, so adding those arms
+    here would move the census by thousands while asserting nothing about the
+    boxing, and the numbers moving is exactly what would convince a later reader
+    they were leak-covered. A guard that cannot fail, wearing a large sample.
+
+    The ShortString arm belongs here for the opposite reason: its box IS a heap
+    allocation, a managed AnsiString handle, which is the one thing in this arm
+    a leak assertion can physically observe. Coverage for the other two needs a
+    DIFFERENT instrument -- a slot count or an IR assertion -- not this one. }
+  sh := 'short'; an := 'tail';
+  for i := 1 to 500 do
+  begin
+    churn := Format('%s|%d|%s', [sh, 7, an]);
+    if churn = '' then writeln('the boxing loop produced nothing');
+  end;
 
   writeln('SHORTSTRING VARREC OK');
 end.
