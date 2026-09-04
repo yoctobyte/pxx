@@ -4,7 +4,7 @@ title: "Managed memory is correct — heap, refcounts, leaks, managed fields"
 track: A
 prio: 75
 type: umbrella
-blocked-by: [bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, feature-a-reentrant-heap-lock-and-per-thread-arenas, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, bug-a-string-release-has-two-implementations-that-already-disagree, bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower, bug-a-an-interface-as-cast-retains-on-every-execution-and-releases-once-per-scope, bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in, bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad, bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells]
+blocked-by: [bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, feature-a-reentrant-heap-lock-and-per-thread-arenas, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, bug-a-string-release-has-two-implementations-that-already-disagree, bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower, bug-a-an-interface-as-cast-retains-on-every-execution-and-releases-once-per-scope, bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in, bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad, bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells, bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released, bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it, bug-a-only-the-pascal-frontend-ever-asks-for-an-unwind-landing-pad]
 created: 2026-08-31
 summary: "GOAL, not a unit of work. The owner named memory management as ranking above float-bit and parity work. This is the axis a real program hits hardest and where a wrong answer is silent: a leak, a double free, a refcount that disagrees with itself. Correctness is the case here -- the perf profile is deliberately NOT the argument."
 ---
@@ -110,3 +110,29 @@ It is: fifteen common constructs do not leak in a steady-state loop, on
 x86-64, at the default `-O`. It is not a statement about cross targets,
 `--threadsafe`, the NilPy or C frontends, or any construct not in the list —
 generics and the `lib/pcl` containers are the obvious untouched neighbours.
+
+## Attempted 2026-09-04 (frankb-78): the NilPy frontend, exception paths
+
+The Pascal sweep above says "not a statement about the NilPy frontend". Running
+the same instrument there found the gap that sweep could not:
+
+**No Nil-Python function had ever been given an unwind landing pad.** The pad
+is shared machinery and complete; `ProcCleanupFrameWanted := True` was written
+in exactly one file. Every managed local live in an `.npy` frame an exception
+unwound past leaked one heap block per raise — 1 for a string local, 2 for a
+list, 3 for three strings, 0 with no managed local and 0 when the frame is not
+unwound. Fixed; the guard is a census row, because the printed output is
+byte-identical before and after (18509 live vs 4).
+[[bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released]]
+
+**This is the umbrella's own lesson repeating one level up.** The Pascal sweep
+was fifteen honest constructs measured on a frontend that *asks* for the pad;
+it was structurally unable to observe a frontend that does not. The same grep
+says C, Rust and Zig still never ask — filed unmeasured and named as such,
+[[bug-a-only-the-pascal-frontend-ever-asks-for-an-unwind-landing-pad]], because
+the whole point of this one was that a slope, not a reading, settled it.
+
+Still open and re-measured on the fixed binary, so it is not this:
+`except X as e:` leaks 2.997 blocks per catch, identically whether the handler
+uses `e` or not.
+[[bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it]]

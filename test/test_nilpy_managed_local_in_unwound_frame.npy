@@ -1,0 +1,69 @@
+# A managed local live in a frame an exception unwinds PAST must still be
+# released. Until 2026-09-04 no Nil-Python function got an unwind landing pad
+# at all (only pasparser_proc.inc ever armed one), so every such local leaked
+# one heap block per raise, forever, with no wrong value to show for it.
+#
+# THE INSTRUMENT IS THE CENSUS, NOT THIS OUTPUT. Every line below printed
+# exactly the same before the fix -- a leak does not corrupt, it just never
+# gives memory back. The Makefile row pairs this with assert_no_leak; without
+# that row the file is a guard that cannot fail.
+# bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released
+
+def boom(k):
+    # a managed local UNRELATED to the exception argument, and a constant
+    # message: the leak is about what the frame holds, not what it raises.
+    s = "unrelated" + str(k)
+    lst = [k, k + 1]
+    if len(s) + len(lst) > 0:
+        raise ValueError("fixed")
+    return 0
+
+def deep(k):
+    # two frames unwound at once -- the pad has to fire in each
+    t = "deep" + str(k)
+    if len(t) > 0:
+        boom(k)
+    return 0
+
+class Holder:
+    def __init__(self, n):
+        self.n = n
+    def blow(self, k):
+        s = "m" + str(k)
+        if len(s) > 0:
+            raise ValueError("method")
+        return self.n
+
+def ok(k):
+    # NOT unwound: the normal-return path must keep releasing exactly as before
+    s = "ok" + str(k)
+    return len(s)
+
+def run(m):
+    t = 0
+    j = 0
+    h = Holder(7)
+    while j < m:
+        try:
+            deep(j)
+        except ValueError:
+            t = t + 1
+        try:
+            h.blow(j)
+        except ValueError:
+            t = t + 10
+        t = t + ok(j)
+        j = j + 1
+    return t
+
+def msg():
+    # the pad releases the frame's locals and RE-RAISES; the exception it
+    # re-raises must still be the one that was thrown
+    try:
+        boom(3)
+    except ValueError as e:
+        return str(e)
+    return "none"
+
+print("total=" + str(run(4000)))
+print("msg=" + msg())

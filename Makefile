@@ -3279,6 +3279,22 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_variant_borrow_two_slots.npy $(TESTTMP)/test_nilpy_borrow226
 	tools/expect_same.sh test_nilpy_borrow226 "$$($(TESTTMP)/test_nilpy_borrow226)" "$$(cat test/test_nilpy_variant_borrow_two_slots.expected)"
 	tools/assert_no_leak.sh nilpy_variant_borrow_two_slots 200 $(TESTTMP)/test_nilpy_borrow226
+	@# A managed local live in a frame an exception unwinds PAST. The landing
+	@# pad that releases those is shared machinery and was complete -- but
+	@# `ProcCleanupFrameWanted := True` was written in exactly one file,
+	@# pasparser_proc.inc, so NO Nil-Python function ever got one and every such
+	@# local leaked a heap block per raise, unbounded.
+	@# THE CENSUS ROW IS THE GUARD AND expect_same IS NOT. Both rows print
+	@# byte-identical output on pin v403 and at HEAD -- `total=66890 / msg=fixed`
+	@# either way -- while the census reads live=18509 against live=4. A leak
+	@# does not corrupt; it just never gives memory back, so a value assertion
+	@# here is a guard that cannot fail. The expect_same row is still worth its
+	@# second: the pad RE-RAISES after releasing, so `msg=fixed` is what says the
+	@# re-raise still carries the original exception.
+	@# bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_managed_local_in_unwound_frame.npy $(TESTTMP)/test_nilpy_unwpad26
+	tools/expect_same.sh test_nilpy_unwpad26 "$$($(TESTTMP)/test_nilpy_unwpad26 2>/dev/null)" "$$(cat test/test_nilpy_managed_local_in_unwound_frame.expected)"
+	tools/assert_no_leak.sh nilpy_managed_local_unwound_frame 50 $(TESTTMP)/test_nilpy_unwpad26
 	@# A generator step function's managed locals are the generator's LIVE
 	@# STATE, not locals going out of scope -- it returns at every yield and is
 	@# re-entered at the next one. x86-64 has always exited the cleanup early
@@ -17040,6 +17056,17 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_nilpy_variant_borrow_two_slots.npy $(TESTTMP)/borrow2_i386
 	tools/expect_same.sh i386/test_nilpy_variant_borrow_two_slots "$$(tools/run_target.sh i386 $(TESTTMP)/borrow2_i386 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_variant_borrow_two_slots.expected)"
 	tools/assert_no_leak.sh i386/nilpy_variant_borrow_two_slots 200 tools/run_target.sh i386 $(TESTTMP)/borrow2_i386
+	# The unwind landing pad, on this target. No .npy body ever got one --
+	# `ProcCleanupFrameWanted := True` was written only in pasparser_proc.inc
+	# -- so a managed local in a frame an exception unwound PAST was never
+	# released, on every backend at once.
+	# THE CENSUS ROW IS THE GUARD. The value row prints `total=66890 /
+	# msg=fixed` on pin v403 and at HEAD alike; the census reads live=27146
+	# against live<10. It is the pad's RE-RAISE that the value row guards.
+	# bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_nilpy_managed_local_in_unwound_frame.npy $(TESTTMP)/unwpad_i386
+	tools/expect_same.sh i386/test_nilpy_managed_local_in_unwound_frame "$$(tools/run_target.sh i386 $(TESTTMP)/unwpad_i386 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_managed_local_in_unwound_frame.expected)"
+	tools/assert_no_leak.sh i386/nilpy_managed_local_unwound_frame 50 tools/run_target.sh i386 $(TESTTMP)/unwpad_i386
 	# A managed local that SURVIVES a yield: the generator's live state, which
 	# the cross arms of EmitManagedLocalCleanupForTarget released at every
 	# yield because none of them had x86-64's CurProcIsStackless guard.
@@ -17398,6 +17425,17 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_nilpy_variant_borrow_two_slots.npy $(TESTTMP)/borrow2_a64
 	tools/expect_same.sh aarch64/test_nilpy_variant_borrow_two_slots "$$(tools/run_target.sh aarch64 $(TESTTMP)/borrow2_a64 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_variant_borrow_two_slots.expected)"
 	tools/assert_no_leak.sh aarch64/nilpy_variant_borrow_two_slots 200 tools/run_target.sh aarch64 $(TESTTMP)/borrow2_a64
+	# The unwind landing pad, on this target. No .npy body ever got one --
+	# `ProcCleanupFrameWanted := True` was written only in pasparser_proc.inc
+	# -- so a managed local in a frame an exception unwound PAST was never
+	# released, on every backend at once.
+	# THE CENSUS ROW IS THE GUARD. The value row prints `total=66890 /
+	# msg=fixed` on pin v403 and at HEAD alike; the census reads live=18509
+	# against live<10. It is the pad's RE-RAISE that the value row guards.
+	# bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_nilpy_managed_local_in_unwound_frame.npy $(TESTTMP)/unwpad_a64
+	tools/expect_same.sh aarch64/test_nilpy_managed_local_in_unwound_frame "$$(tools/run_target.sh aarch64 $(TESTTMP)/unwpad_a64 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_managed_local_in_unwound_frame.expected)"
+	tools/assert_no_leak.sh aarch64/nilpy_managed_local_unwound_frame 50 tools/run_target.sh aarch64 $(TESTTMP)/unwpad_a64
 	# A managed local that SURVIVES a yield: the generator's live state, which
 	# the cross arms of EmitManagedLocalCleanupForTarget released at every
 	# yield because none of them had x86-64's CurProcIsStackless guard.
@@ -21220,6 +21258,17 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_nilpy_variant_borrow_two_slots.npy $(TESTTMP)/borrow2_a32
 	tools/expect_same.sh arm32/test_nilpy_variant_borrow_two_slots "$$(tools/run_target.sh arm32 $(TESTTMP)/borrow2_a32 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_variant_borrow_two_slots.expected)"
 	tools/assert_no_leak.sh arm32/nilpy_variant_borrow_two_slots 200 tools/run_target.sh arm32 $(TESTTMP)/borrow2_a32
+	# The unwind landing pad, on this target. No .npy body ever got one --
+	# `ProcCleanupFrameWanted := True` was written only in pasparser_proc.inc
+	# -- so a managed local in a frame an exception unwound PAST was never
+	# released, on every backend at once.
+	# THE CENSUS ROW IS THE GUARD. The value row prints `total=66890 /
+	# msg=fixed` on pin v403 and at HEAD alike; the census reads live=18509
+	# against live<10. It is the pad's RE-RAISE that the value row guards.
+	# bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_nilpy_managed_local_in_unwound_frame.npy $(TESTTMP)/unwpad_a32
+	tools/expect_same.sh arm32/test_nilpy_managed_local_in_unwound_frame "$$(tools/run_target.sh arm32 $(TESTTMP)/unwpad_a32 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_managed_local_in_unwound_frame.expected)"
+	tools/assert_no_leak.sh arm32/nilpy_managed_local_unwound_frame 50 tools/run_target.sh arm32 $(TESTTMP)/unwpad_a32
 	# A managed local that SURVIVES a yield: the generator's live state, which
 	# the cross arms of EmitManagedLocalCleanupForTarget released at every
 	# yield because none of them had x86-64's CurProcIsStackless guard.

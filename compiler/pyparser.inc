@@ -30771,6 +30771,64 @@ begin
   end;
 end;
 
+{ THE UNWIND LANDING PAD, FOR NIL-PYTHON BODIES.
+
+  A proc that can be unwound PAST needs a landing pad or its managed locals are
+  never released: neither its own epilogue nor the eventual handler's frame
+  runs. The machinery is shared and complete (ProcCleanupFrameWanted in
+  defs.inc, EmitProcCleanupLandingPadForTarget in ir_codegen.inc) — but until
+  2026-09-04 `ProcCleanupFrameWanted := True` was written in exactly one file,
+  pasparser_proc.inc, so NO Nil-Python function ever got a pad and every
+  managed local live in an unwound .npy frame leaked, one heap block each.
+
+  Measured on 999c76dc6 (binary ca07aca86948) with -dPXX_ALLOC_CENSUS, slope of
+  live blocks between N=2000 and N=8000 raises:
+
+    raise inline in the loop, dynamic message      0.000
+    raise in a callee holding NO managed local     0.000
+    callee, 1 string local (message is constant)   0.900
+    callee, 2 string locals                        1.854
+    callee, 3 string locals                        3.022
+    callee, 1 list local                           1.897   (list + its buffer)
+    callee, 1 string local and NO raise            0.000
+
+  One block per managed heap object live in the unwound frame, and nothing when
+  the frame is not unwound — which is the pad's exact shape, not the exception
+  object's. The Pascal equivalents of all seven rows are flat, because
+  pasparser_proc.inc arms the pad.
+
+  Two helpers rather than the six lines inline at each body site: PyParseDef and
+  PyParseMethod are the two, and a third would otherwise be written without them.
+  Only the LATE gate is used (asked from inside CompileAST between IRLowerAST
+  and machine emission). The Pascal frontend also asks an early one from the
+  prologue; that one is structurally unable to see the hidden temps lowering
+  mints, and the late gate is a superset of it.
+  bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released }
+procedure PyArmCleanupFrame(var savedActive: Boolean);
+begin
+  savedActive := ProcExceptionCleanupFrameActive;
+  { A nested def is drained by re-entering PyParseDef, so this is per-invocation
+    state and must be stacked like every other bit of proc context here. }
+  ProcExceptionCleanupFrameActive := False;
+  ProcCleanupFrameLateArmed := False;
+  ProcCleanupFrameLatePatch := -1;
+  if TargetHasProcCleanupFrame and ExceptionUsed then
+    ProcCleanupFrameWanted := True;
+end;
+
+function PyTakeCleanupPad: Integer;
+{ -1 when the body needs no pad. Clears the request either way: an unconsumed
+  Wanted would arm the NEXT body compiled, which for a nested def is a body
+  that may not want one. }
+begin
+  ProcCleanupFrameWanted := False;
+  if ProcCleanupFrameLateArmed then
+    PyTakeCleanupPad := ProcCleanupFrameLatePatch
+  else
+    PyTakeCleanupPad := -1;
+  ProcCleanupFrameLateArmed := False;
+end;
+
 procedure PyParseDef;
 var isGenDef: Boolean;
     savedGenerator, savedGenStackless, savedGenSeen, savedGenIsVariant: Boolean;
@@ -30785,6 +30843,7 @@ var isGenDef: Boolean;
     savedDefGlobals: array[0..PY_MAX_DEF_GLOBALS-1] of AnsiString;
     savedDefGlobalCount, dgI, cellInit: Integer;
     retType: TTypeKind; isProc, capByRef: Boolean;
+    cleanupPad: Integer; savedCleanupActive: Boolean;
 begin
   { Captured BEFORE the header parse moves TokPos: PyParseDef is entered with
     the cursor just past the `def` keyword (the queue driver does
@@ -31158,8 +31217,13 @@ begin
   end
   else
     bodyNode := PyPrependResultZero(procIdx, bodyNode);
+  PyArmCleanupFrame(savedCleanupActive);
   CompileAST(bodyNode);
+  cleanupPad := PyTakeCleanupPad;
+  { before the ordinary epilogue, which the pad's skip-jump branches over }
+  if cleanupPad <> -1 then EmitProcCleanupLandingPadForTarget(cleanupPad);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
+  ProcExceptionCleanupFrameActive := savedCleanupActive;
   PatchProcPrologue(patchPos, FrameSize);
     { DWARF -g: same three lines every Pascal routine body ends with
     (pasparser_*.inc's routine-body tail). Without them a NilPy def had NO
@@ -34735,6 +34799,7 @@ var isGenDef: Boolean;
     pbRedo: Boolean; pbTk: TTypeKind;
     pbLocal: array[0..MAX_PROC_PARAMS - 1] of Integer;
     isClsMeth: Boolean; clsLocal, clsAsgn, clsBox, clsArg, clsPi: Integer;
+    cleanupPad: Integer; savedCleanupActive: Boolean;
 begin
   { REPLAY of a flattened base's body: a definition the derived class or an
     earlier base already supplied was skipped by the registration pass, so
@@ -35164,7 +35229,13 @@ begin
     clsAttrSeq := PyClassAttrInitSeq(ci, Procs[procIdx].Params[0].SymIdx);
     if clsAttrSeq >= 0 then bodyNode := PySeqAppend(clsAttrSeq, bodyNode);
   end;
-  CompileAST(bodyNode); EmitProcEpilog(Procs[procIdx].RetSymIdx); PatchProcPrologue(patchPos, FrameSize);
+  PyArmCleanupFrame(savedCleanupActive);
+  CompileAST(bodyNode);
+  cleanupPad := PyTakeCleanupPad;
+  if cleanupPad <> -1 then EmitProcCleanupLandingPadForTarget(cleanupPad);
+  EmitProcEpilog(Procs[procIdx].RetSymIdx);
+  ProcExceptionCleanupFrameActive := savedCleanupActive;
+  PatchProcPrologue(patchPos, FrameSize);
     ProcBodyEnd[procIdx] := CodeLen;   { DWARF -g — see PyParseDef's note }
   ProcDbgMain[procIdx] := DbgTokIsDebuggable(TokPos);
   if DebugInfo and ProcDbgMain[procIdx] then DbgCaptureProcLocals(procIdx);

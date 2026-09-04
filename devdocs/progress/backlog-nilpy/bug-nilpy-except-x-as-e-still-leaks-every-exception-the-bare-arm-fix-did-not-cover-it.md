@@ -2,6 +2,7 @@
 prio: 55
 track: N
 type: bug
+summary: "`except X as e:` leaks 3 heap blocks per caught exception -- the exception object and two it owns. Re-measured 2026-09-04 at 938d9d9dbbe6: bare `except X:` is 0.000, bound is 2.997, and it is 2.997 whether the handler USES `e` or not, so the leak is in the BINDING and not in anything done with it. Unchanged by the unwind-landing-pad fix (bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released), which is a different path: the frame here is not unwound past, the handler is in it. The obvious fix corrupts `e.args` -- see below."
 ---
 
 # `except X as e:` still leaks every exception object — the bound arm was never in the old repro
@@ -103,3 +104,27 @@ rely on the statement-head pass.
 `gate.sh quick` is not sufficient — it covers no NilPy. Run
 `PXX_ALLOW_FULL_SUITE=1 make test-nilpy` (~10 min); it is what caught the
 corruption, and `test_nilpy_exception_non_string_argument` is the specific row.
+
+## Re-measured 2026-09-04 (frankb-78), binary `938d9d9dbbe6`
+
+Slope of live blocks between N=2000 and N=8000, `-dPXX_ALLOC_CENSUS`:
+
+| arm | per raise |
+| --- | --- |
+| `except ValueError:` (bare) | 0.000 |
+| `except ValueError as e:` — handler reads `str(e)` | **2.997** |
+| `except ValueError as e:` — handler never mentions `e` | **2.997** |
+
+**The third row is the one that is new, and it narrows the fix.** An unused
+binder leaks exactly as much as a used one, so nothing the handler does with `e`
+is involved: the retain that is never balanced happens at the BIND. A fix that
+reasons about uses of `e` is aimed at the wrong statement.
+
+Three blocks is the exception object plus the two it owns. `allocs` is identical
+across all three rows (31686 at N=8000) — the same work, only the frees differ.
+
+Re-measured deliberately after
+[[bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released]] landed, in
+case that pad covered this too. It does not, and the reason is structural rather
+than incidental: the pad releases the locals of a frame an exception unwinds
+PAST, and this handler is in the frame that CATCHES. Different path, still open.
