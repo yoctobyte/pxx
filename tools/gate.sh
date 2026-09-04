@@ -326,6 +326,35 @@ else
   RC=1
 fi
 
+# crtl NAME MAP STALENESS. compiler/crtl_names.inc is GENERATED from the crtl
+# headers, and a C program's call to a crtl function resolves through it -- so a
+# stale map is a function that exists in lib/crtl and cannot be reached from C.
+# Adding a crtl function is a two-file change and only one of them is obvious.
+#
+# It is wired here because it only ran in `lib-test`, which the per-fix loop does
+# not run: the map went stale on 2026-09-02 and was auto-filed EIGHT times as
+# regression-lib-test-crtl-reachability{,-2..-8} before anyone held one. Track T
+# catches it within ~8 commits by design; that is the right cadence for a
+# breadth sweep and the wrong one for a generated file whose regenerator is one
+# command. 0.44s measured -- it parses headers and builds nothing.
+#
+# NOT crtl_reachability.py, which is the sibling check in the same lib-test job:
+# that one is 9.5s, a fifth of this whole gate, and it answers a different
+# question (is every declared function reachable from its OWN header). Wiring
+# the cheap half is the whole point; wiring both would make the gate the thing
+# people skip.
+# regression-lib-test-crtl-reachability-8
+if [ -f tools/gen_crtl_map.py ]; then
+  step "crtl name map is not stale" "$LOGDIR/crtl-map.log" \
+       python3 tools/gen_crtl_map.py --check                          || RC=1
+else
+  echo "  FAIL  crtl name map is not stale — tools/gen_crtl_map.py is MISSING"
+  echo "        It is TRACKED, so its absence is a broken tree rather than a"
+  echo "        configuration, and skipping would pass green for a tree with no"
+  echo "        checker in it."
+  RC=1
+fi
+
 # AST SLOT-WRITE CENSUS. ASTLeft/ASTRight are children for most kinds and a
 # PAYLOAD for a few, so a generic walker that recurses on them corrupts memory
 # for exactly the overloading kinds -- the census declares which is which and

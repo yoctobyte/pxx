@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: C
+status: done
 ---
 
 > **Track guessed as C from the FAILING STEP** — line 23 of 88, `python3 tools/gen_crtl_map.py --check`, which names `tools/gen_crtl_map.py`. Not from the job's name or its `src`: those describe what the job is ABOUT, and this job's recipe spans 50 source file(s). The ranker reads frontmatter, so this line — not the body — decides who works it; correct it if the guess is wrong.
@@ -77,3 +78,65 @@ a guard closer to the edit. Deliberately not widening any gate to get it; see
 CLAUDE.md, and note that auto-regenerating from the Makefile is ruled out on
 purpose (`gen_crtl_map.py`'s own docstring: the check exists so a forgotten
 regeneration **fails** rather than silently succeeding).
+
+## 2026-09-04 (frankC, Track C) — green at HEAD, and the loop is closed
+
+Reproduced at HEAD `0afaf9e0a`, not under the pin:
+
+```
+$ python3 tools/gen_crtl_map.py --check
+crtl-map: OK -- 608 crtl functions mapped to 63 headers        rc=0
+$ python3 tools/crtl_reachability.py
+crtl-reachability: OK -- 148 headers, 66 modules, every declared
+function reachable from its own header                          rc=0
+```
+
+Both halves of the job's step 23 pass. `compiler/crtl_names.inc` was last
+regenerated in `bd53b29d9`, a crtl feature commit — so the staleness was
+cleared as a side effect of someone adding crtl surface, not by anyone holding
+this ticket.
+
+**THE NUMBER IN THE SLUG IS THE FINDING.** This is
+`regression-lib-test-crtl-reachability-8`; `-2` through `-7` and the unsuffixed
+original are all in `done/`. **The same generated file went stale and was
+auto-filed eight times.** Seven were closed and the eighth is this one. Closing
+it as "green now" without asking why there were eight would guarantee a ninth.
+
+**Why there were eight: the check lived only where the per-fix loop does not
+run.** `python3 tools/gen_crtl_map.py --check` appeared exactly once in the
+tree, at `Makefile:26287`, inside the `lib-test` tier. `tools/gate.sh` never
+mentioned it. Track T samples the tip every ~8 commits, which is the right
+cadence for a breadth sweep and the wrong one for a generated file whose
+regenerator is a single command — so every crtl addition that forgot the
+regenerate step got caught a sweep later, by a watcher, as a fresh ticket with a
+fresh range, in a lane guessed from the failing step.
+
+**Fixed by wiring the cheap half into `gate.sh quick`.** Measured: 0.44s, and
+it builds nothing. Its sibling `crtl_reachability.py` is deliberately NOT wired
+— 9.5s is a fifth of the whole gate, and it answers a different question. The
+arm follows the two that were already there for exactly this shape (`IROpName
+names every IR op`, `AST slot-write census matches its snapshot`), including
+their FAIL-if-the-checker-is-missing branch, because an arm that skips on a
+tracked file passes green for a tree with no checker in it.
+
+**Positive control, and the first attempt at it was wrong in the instructive
+way.** The map is built from names that crtl both DECLARES in a header and
+DEFINES in `lib/crtl/src` — declared-but-undefined names are excluded on
+purpose. So a control that only appended a declaration to `ctype.h` left the
+map correctly unchanged and the check correctly green: a guard aimed at a
+population the defect does not live in. With both halves added:
+
+```
+crtl-map: compiler/crtl_names.inc is STALE — run: python3 tools/gen_crtl_map.py
+rc=1
+```
+
+which is the exact message in this ticket's own Log tail. Header, source and
+`crtl_names.inc` all restored afterwards and each revert verified by `cmp`
+against a pre-control copy.
+
+**What this does not fix.** The auto-file cadence itself: a ninth instance can
+still be filed by the watcher if the map goes stale on a host that is not
+running this gate. The gate arm makes it far less likely to reach a sweep, not
+impossible.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
