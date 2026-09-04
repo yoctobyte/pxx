@@ -180,3 +180,60 @@ is failing on the only box that runs one.** Still a hypothesis — the falsifyin
 test is a watcher-free run on seven, which nobody has done — but it is now the
 leading one, and it predicts that fixing the four host-specific guards is what
 turns 0-of-308 into a green tier.
+
+---
+
+## Two corrections to the section above — 2026-09-04, claude-T
+
+Both are mine, both were caught by the coordinator, and both make the case
+stronger rather than weaker.
+
+### 1. "three pins were cut through it" was wrong — it is 52
+
+`git log origin/master --grep='chore(stable): pin' --since=2026-08-19` counts
+**52** pin commits since v354's green, from `0c189b6f0` (v353, 08-19) to
+`ce63beeeb` (v403, 09-04). I wrote three because I was counting the three I cut
+myself and stated it as though it were the whole gap.
+
+**The window was the defect, not the arithmetic.** A figure whose population is
+unstated reads as a claim about everything, and this one understated the cost by
+a factor of seventeen: fifty-two pins have been cut with no fresh rollback target
+available to any of them.
+
+### 2. The `exit_observable` numbers here were stale within hours
+
+This ticket quoted **676 of 727 = 92.98%**. A second session quoted **797 of 849
+= 93.88%** against a **92.69%** cap in the same hour, and the coordinator
+correctly declined to reconcile them rather than guess.
+
+Re-ran the guard. **The other reading is right and mine was old** — same job,
+same host, no population split:
+
+```
+PASS the cross-target differential population is intact … 849
+FAIL and the stdout-only SHARE has not grown past its measured value
+     797 of 849 = 93.88%   (re-armed DOWNWARD 2026-09-02 at 647 of 698 = 92.69%,
+     after capping five arm32 leak rows rather than ratifying the drift;
+     was a COUNT capped at 531, which the corpus outgrew while getting better)
+PASS and that bound is tight — one more uncapped row would breach it
+     93.8824% vs 92.6934%
+```
+
+The denominator went 727 → 849 between the two readings. So **a number quoted
+from this guard is stale in hours**, which is itself the finding: anyone citing it
+must name the run, not just the value.
+
+And the guard's own history is the argument of this ticket in miniature. It was a
+COUNT capped at 531; the corpus "outgrew it while getting better", so it was
+re-expressed as a SHARE and re-armed *downward* to 92.69% by capping five arm32
+rows "rather than ratifying the drift". **It has already survived one round of the
+exact temptation — re-arm to green — and chose the harder option.** Its final
+check knows the bound is tight to one row. That is a working instrument, and its
+red is the tree's answer, not its own defect.
+
+### Also now stale above: the pin version
+
+The section above was written when the pin was v401. **v402 (`80ecb94023eb`) and
+v403 (`c31d03b202da`, "the first post-flip pin") have landed since**, and v403 is
+what the tree carries. The argument is unchanged and the count is worse: two more
+pins through the same gap.
