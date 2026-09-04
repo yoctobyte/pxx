@@ -1266,7 +1266,18 @@ begin
     `qemu-xtensa -strace`, every argument 2147483647 so the call is inert
     whatever it turns out to be. qemu names it `getrandom`, and the same probe
     at 12 names `read`, which is the value this table already had established
-    independently. It was previously absent, because random.pas's private copy
+    independently.
+
+    THE LIMIT OF THAT CLAIM, and it applies to every number in this xtensa block
+    rather than only to this one: `qemu-xtensa -strace` reports what QEMU's
+    syscall table calls a number, so the measurement is an oracle about qemu,
+    not about a kernel on real xtensa hardware. It is a genuinely independent
+    source -- it is not this repo's own table read back, and it caught nothing
+    circular when read=12 reproduced -- but a divergence between qemu and a real
+    xtensa kernel would be invisible to it and would look exactly like a correct
+    number. Every xtensa test in this tree runs under qemu, so the number is
+    right for the entire population that currently exercises it; a first run on
+    hardware is where this would be falsified. It was previously absent, because random.pas's private copy
     said "CPU_XTENSA (ESP32): no getrandom; use HW RNG register" -- true of
     ESP-IDF, and not of xtensa LINUX, which is this backend's population. The
     arch stood in for the platform, which is the same substitution
