@@ -73,6 +73,13 @@ and this slug. Wiring it green would mean deleting the row that found the bug.
 Un-exclude when this closes.
 
 
+## Log
+
+- 2026-09-04 - filed, commit e3919c0cb (the wasm32 by-value work whose new
+  test found this; that commit also excluded the file from xtensa).
+- 2026-09-04 - resolved, commit 724e04ea6. The exclusion is removed there and
+  the file is wired on all six cross targets.
+
 ## RESOLVED 2026-09-04 (frankA)
 
 Fixed in the same session that filed it, one commit later, because the reduction
