@@ -4,6 +4,29 @@ unit ansiterm;
 {$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
+{ THE SYSCALL NUMBERS ARE THE PAL'S, not this unit's. Until 2026-09-04 ansiterm
+  carried four private per-target tables -- GetSysIoctl, GetSysRead, GetSysWrite,
+  GetSysFcntl -- and the incident that produced two of them is recorded in
+  bug-b-ansiterm-has-no-syscall-numbers-for-riscv32-or-xtensa-so-every-tui-draws-nothing:
+  GetSysWrite returned -1 there, AnsiWrite's `if w = -1 then Exit` took it, and
+  every TUI drew NOTHING on riscv32 and xtensa while ordinary WriteLn kept
+  working. The ioctl and fcntl tables still had that hole when they were
+  deleted, with a comment saying it could not be filled because "this compiler
+  never emits ioctl or fcntl for either target, so there is no in-tree source
+  for the number". platform.pas HAS them for all six -- riscv32 29/25, xtensa
+  66/67 -- and has had them all along. The private table is what stopped anyone
+  asking.
+
+  `platform` is pulled in the IMPLEMENTATION uses below, not here: nothing in
+  this unit's interface names a PAL type, and an interface-level dependency
+  would propagate to every consumer of ansiterm for no reason.
+
+  The five bodies also stop REFUSING on a backend that simply has none. wasi's
+  PalIoctl and PalFcntl answer PAL_ERR_UNSUPPORTED, which is a defined failure
+  the callers already handle (no raw mode, 80x24, no key) -- while on wasm32
+  PalRead and PalWrite are real, so a TUI now DRAWS there instead of the whole
+  body being refused at codegen. These five were 45 of the 518 IR_SYSCALL
+  refusals in the wasm32 corpus census. }
 function AnsiColor(fg: Integer; const s: AnsiString): AnsiString;
 function AnsiRGB(fgR, fgG, fgB: Integer; const s: AnsiString): AnsiString;
 function AnsiBgRGB(r, g, b: Integer): AnsiString;
@@ -33,7 +56,7 @@ procedure AnsiWrite(const s: AnsiString);
 
 implementation
 
-uses sysutils;
+uses sysutils, platform;
 
 const
   ESC = #27;
@@ -102,147 +125,18 @@ begin
     Result := '' + ESC + '[?1049l';
 end;
 
-function GetSysIoctl: Integer;
-begin
-  Result := -1;
-  {$ifdef CPU_I386}
-    Result := 54;
-  {$endif}
-  {$ifdef CPU_AARCH64}
-    Result := 29;
-  {$endif}
-  {$ifdef CPU_ARM32}
-    Result := 54;
-  {$endif}
-  {$ifdef CPUX86_64}
-    Result := 16;
-  {$endif}
-  { riscv32 and xtensa are deliberately NOT listed here, unlike GetSysRead
-    and GetSysWrite above. This compiler never emits ioctl or fcntl for
-    either target, so there is no in-tree source for the number and the
-    only way to fill these in would be to copy one out of a header and
-    hope. A wrong syscall number does not fail like a missing one -- it
-    calls something else. -1 makes the caller take its no-terminal
-    fallback, which is the same path a redirected stdout takes on x86-64.
-    Fill them in when something needs raw mode there, against a run. }
-end;
-
-function GetSysRead: Integer;
-begin
-  Result := -1;
-  {$ifdef CPU_I386}
-    Result := 3;
-  {$endif}
-  {$ifdef CPU_AARCH64}
-    Result := 63;
-  {$endif}
-  {$ifdef CPU_ARM32}
-    Result := 3;
-  {$endif}
-  {$ifdef CPUX86_64}
-    Result := 0;
-  {$endif}
-  { riscv32 uses the asm-generic table (same numbers as aarch64); xtensa has
-    its OWN. Both taken from what this compiler actually emits for the same
-    call -- ir_codegen_riscv32.inc:3003/3005 and ir_codegen_xtensa.inc:
-    3148/3150 -- rather than from a header, so the number is the one the
-    running program uses.
-
-    THESE TWO WERE MISSING AND THE FAILURE WAS SILENT: GetSysWrite returned
-    -1, AnsiWrite's `if w = -1 then Exit` took it, and every TUI drew
-    NOTHING on riscv32 and xtensa while ordinary WriteLn kept working.
-    examples/tui/menudemo and examples/g2048/console_2048 printed their
-    final line and not one byte of screen.
-    bug-b-ansiterm-has-no-syscall-numbers-for-riscv32-or-xtensa-so-every-tui-draws-nothing }
-  {$ifdef CPU_RISCV32}
-    Result := 63;
-  {$endif}
-  {$ifdef CPU_XTENSA}
-    Result := 12;
-  {$endif}
-end;
-
-function GetSysFcntl: Integer;
-begin
-  Result := -1;
-  {$ifdef CPU_I386}
-    Result := 55;
-  {$endif}
-  {$ifdef CPU_AARCH64}
-    Result := 25;
-  {$endif}
-  {$ifdef CPU_ARM32}
-    Result := 55;
-  {$endif}
-  {$ifdef CPUX86_64}
-    Result := 72;
-  {$endif}
-  { riscv32 and xtensa are deliberately NOT listed here, unlike GetSysRead
-    and GetSysWrite above. This compiler never emits ioctl or fcntl for
-    either target, so there is no in-tree source for the number and the
-    only way to fill these in would be to copy one out of a header and
-    hope. A wrong syscall number does not fail like a missing one -- it
-    calls something else. -1 makes the caller take its no-terminal
-    fallback, which is the same path a redirected stdout takes on x86-64.
-    Fill them in when something needs raw mode there, against a run. }
-end;
-
-function GetSysWrite: Integer;
-begin
-  Result := -1;
-  {$ifdef CPU_I386}
-    Result := 4;
-  {$endif}
-  {$ifdef CPU_AARCH64}
-    Result := 64;
-  {$endif}
-  {$ifdef CPU_ARM32}
-    Result := 4;
-  {$endif}
-  {$ifdef CPUX86_64}
-    Result := 1;
-  {$endif}
-  { riscv32 uses the asm-generic table (same numbers as aarch64); xtensa has
-    its OWN. Both taken from what this compiler actually emits for the same
-    call -- ir_codegen_riscv32.inc:3003/3005 and ir_codegen_xtensa.inc:
-    3148/3150 -- rather than from a header, so the number is the one the
-    running program uses.
-
-    THESE TWO WERE MISSING AND THE FAILURE WAS SILENT: GetSysWrite returned
-    -1, AnsiWrite's `if w = -1 then Exit` took it, and every TUI drew
-    NOTHING on riscv32 and xtensa while ordinary WriteLn kept working.
-    examples/tui/menudemo and examples/g2048/console_2048 printed their
-    final line and not one byte of screen.
-    bug-b-ansiterm-has-no-syscall-numbers-for-riscv32-or-xtensa-so-every-tui-draws-nothing }
-  {$ifdef CPU_RISCV32}
-    Result := 64;
-  {$endif}
-  {$ifdef CPU_XTENSA}
-    Result := 13;
-  {$endif}
-end;
-
 function AnsiReadKeyWait: Char;
-var c: Char; res: Int64; sysReadVal: Integer;
+var c: Char;
 begin
-  sysReadVal := GetSysRead;
   c := #0;
-  if sysReadVal = -1 then
-  begin
-    Result := #0;
-    Exit;
-  end;
-  res := __pxxrawsyscall(sysReadVal, 0, Int64(@c), 1, 0, 0, 0);   { blocking read, fd 0 }
-  if res = 1 then Result := c else Result := #0;
+  if PalRead(0, @c, 1) = 1 then Result := c else Result := #0;
 end;
 
 procedure AnsiWrite(const s: AnsiString);
-var w: Integer; res: Int64;
+var ignored: Int64;
 begin
   if Length(s) = 0 then Exit;
-  w := GetSysWrite;
-  if w = -1 then Exit;
-  res := __pxxrawsyscall(w, 1, Int64(@s[1]), Length(s), 0, 0, 0);   { fd 1 = stdout }
+  ignored := PalWrite(1, @s[1], Length(s));   { fd 1 = stdout }
 end;
 
 type
@@ -262,71 +156,57 @@ var
   RawModeEnabled: Boolean = False;
 
 procedure AnsiSetRawMode(enable: Boolean);
-var
-  sysIoctlVal: Integer;
-  t: TTermios;
-  res: Int64;
+var t: TTermios;
 begin
-  sysIoctlVal := GetSysIoctl;
-  if sysIoctlVal = -1 then Exit;
-
   if enable then
   begin
     if RawModeEnabled then Exit;
-    { Read current state }
-    res := __pxxrawsyscall(sysIoctlVal, 0, $5401, Int64(@OrigTermios), 0, 0, 0); { TCGETS }
-    if res = 0 then
+    { Read current state. A backend with no ioctl -- wasi, and any ESP platform
+      -- answers PAL_ERR_UNSUPPORTED, so raw mode simply does not engage and
+      RawModeEnabled stays False. That is the same path a redirected stdout
+      takes on x86-64, and it is a DEFINED failure rather than the refusal the
+      old `if sysIoctlVal = -1 then Exit` produced from a missing table row. }
+    if PalIoctl(0, $5401, @OrigTermios) = 0 then   { TCGETS }
     begin
       t := OrigTermios;
       t.LFlag := t.LFlag and (not LongWord($00000002)); { ICANON }
       t.LFlag := t.LFlag and (not LongWord($00000008)); { ECHO }
       t.CC[6] := 1; { VMIN }
       t.CC[5] := 0; { VTIME }
-      res := __pxxrawsyscall(sysIoctlVal, 0, $5402, Int64(@t), 0, 0, 0); { TCSETS }
-      if res = 0 then
+      if PalIoctl(0, $5402, @t) = 0 then           { TCSETS }
         RawModeEnabled := True;
     end;
   end
   else
   begin
     if not RawModeEnabled then Exit;
-    res := __pxxrawsyscall(sysIoctlVal, 0, $5402, Int64(@OrigTermios), 0, 0, 0); { TCSETS }
-    if res = 0 then
+    if PalIoctl(0, $5402, @OrigTermios) = 0 then   { TCSETS }
       RawModeEnabled := False;
   end;
 end;
 
 function AnsiReadKey: Char;
-var
-  c: Char;
-  res, rd: Int64;
-  sysFcntlVal, sysReadVal: Integer;
-  flags: Int64;
+var c: Char; rd: Int64; flags, ignored: Integer;
 begin
-  sysFcntlVal := GetSysFcntl;
-  sysReadVal := GetSysRead;
   c := #0;
-  if (sysFcntlVal = -1) or (sysReadVal = -1) then
-  begin
-    Result := #0;
-    Exit;
-  end;
+  Result := #0;
 
-  { Temporarily set stdin to non-blocking }
-  flags := __pxxrawsyscall(sysFcntlVal, 0, 3, 0, 0, 0, 0); { F_GETFL }
-  res := __pxxrawsyscall(sysFcntlVal, 0, 4, flags or $800, 0, 0, 0); { F_SETFL, O_NONBLOCK }
+  { Temporarily set stdin to non-blocking. THE GUARD IS LOAD-BEARING: without
+    O_NONBLOCK this read BLOCKS, and AnsiReadKey's whole contract is that it
+    does not. So a backend with no fcntl must return #0 here rather than fall
+    through to the read -- which is what the old `if sysFcntlVal = -1` did, for
+    a different reason (a missing table row rather than a backend that says so). }
+  flags := PalFcntl(0, 3, 0);                        { F_GETFL }
+  if flags < 0 then Exit;
+  ignored := PalFcntl(0, 4, Int64(flags) or $800);   { F_SETFL, O_NONBLOCK }
 
-  { keep the read's byte count in its own var — restoring flags below must not
+  { keep the read's byte count in its own var -- restoring flags below must not
     clobber it (this once made AnsiReadKey always return #0). }
-  rd := __pxxrawsyscall(sysReadVal, 0, Int64(@c), 1, 0, 0, 0);
+  rd := PalRead(0, @c, 1);
 
-  { Restore stdin flags }
-  res := __pxxrawsyscall(sysFcntlVal, 0, 4, flags, 0, 0, 0);
+  ignored := PalFcntl(0, 4, flags);                  { restore }
 
-  if rd = 1 then
-    Result := c
-  else
-    Result := #0;
+  if rd = 1 then Result := c;
 end;
 
 function TerminalSize(var cols, rows: Integer): Boolean;
@@ -336,26 +216,19 @@ type
   end;
 var
   ws: TWinSize;
-  res: Int64;
-  sysIoctlVal: Integer;
 begin
   cols := 80;
   rows := 24;
   Result := False;
-
-  sysIoctlVal := GetSysIoctl;
-  if sysIoctlVal <> -1 then
-  begin
-    ws.Row := 0;
-    ws.Col := 0;
-    res := __pxxrawsyscall(sysIoctlVal, 1, $5413, Int64(@ws), 0, 0, 0);
-    if (res = 0) and (ws.Col > 0) and (ws.Row > 0) then
+  ws.Row := 0;
+  ws.Col := 0;
+  if PalIoctl(1, $5413, @ws) = 0 then                { TIOCGWINSZ }
+    if (ws.Col > 0) and (ws.Row > 0) then
     begin
       cols := ws.Col;
       rows := ws.Row;
       Result := True;
     end;
-  end;
 end;
 
 end.

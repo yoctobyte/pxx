@@ -15966,6 +15966,58 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_dynarray_var_param26 "$$($(TESTTMP)/test_dynarray_var_param26)" "DYNARRAY VAR PARAM OK"
 	./$(COMPILER) test/test_ansiterm_raw_write.pas $(TESTTMP)/test_ansiterm_raw_write26
 	tools/expect_same.sh test_ansiterm_raw_write26 "$$($(TESTTMP)/test_ansiterm_raw_write26)" "$$(printf 'aBcD\nRAW WRITE OK')"
+	# ANSITERM THROUGH THE PAL, and the pty row is the one that earns this block.
+	# This unit carried four private per-target syscall number tables until
+	# 2026-09-04. Two had already produced a silent failure (GetSysWrite had no
+	# riscv32/xtensa row, so every TUI drew NOTHING on those two while WriteLn
+	# kept working). The ioctl and fcntl tables STILL had that hole when they were
+	# deleted, with a comment saying it could not be filled -- "this compiler never
+	# emits ioctl or fcntl for either target, so there is no in-tree source for the
+	# number". platform.pas had them for all six the whole time.
+	#
+	# TerminalSize needs a REAL TERMINAL, so these rows run under script(1) with a
+	# forced 132x40. Without a pty every target correctly answers FALSE 80 24 --
+	# which is why a no-tty run is asserted too but cannot be the only row: it
+	# passes identically on a target that has no ioctl at all. riscv32 measured
+	# FALSE 80 24 with the old table and TRUE 132 40 through the PAL, same binary
+	# otherwise; that pair is the whole claim.
+	#
+	# wasm32 and xtensa expect FALSE 80 24 and the reasons DIFFER. wasi has no
+	# ioctl (PAL_ERR_UNSUPPORTED, a defined failure the caller handles) -- before
+	# this change all five bodies were refused at codegen and the module trapped,
+	# 45 of the 518 IR_SYSCALL refusals in the corpus census. xtensa answers
+	# -ENOTTY under qemu-xtensa for BOTH the generic $$5413 and the BSD-style
+	# $$40087468 spelling of TIOCGWINSZ, and on x86-64 that same probe separates
+	# them (0 vs -25) -- so the xtensa result is consistent with either a wrong
+	# command constant or an absent tty and this row cannot tell which. It is
+	# recorded as FALSE because that is what was measured, not because it is right.
+	NOTTY="$$(printf 'write-through-pal\nsize FALSE 80 24\nraw round-trip survived\nkey 0')"; \
+	PTY="$$(printf 'write-through-pal\nsize TRUE 132 40\nraw round-trip survived\nkey 0')"; \
+	./$(COMPILER) test/test_cross_ansiterm_through_the_pal.pas $(TESTTMP)/atpal26 >/dev/null; \
+	tools/expect_same.sh atpal26/native-no-tty "$$($(TESTTMP)/atpal26 </dev/null)" "$$NOTTY" || exit 1; \
+	if command -v script >/dev/null 2>&1; then \
+	  tools/expect_same.sh atpal26/native-pty "$$(script -qec 'stty rows 40 cols 132; $(TESTTMP)/atpal26' /dev/null </dev/null | tr -d '\r')" "$$PTY" || exit 1; \
+	else echo "  atpal: script(1) absent, every pty row NOT verified"; fi; \
+	for t in i386 arm32 aarch64 riscv32; do \
+	  case $$t in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "  atpal: $$q absent, $$t NOT verified"; continue; fi; \
+	  ./$(COMPILER) --target=$$t --platform=posix test/test_cross_ansiterm_through_the_pal.pas $(TESTTMP)/atpal_$$t >/dev/null || { echo "atpal $$t compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh atpal/$$t-no-tty "$$(tools/run_target.sh $$t $(TESTTMP)/atpal_$$t </dev/null)" "$$NOTTY" || exit 1; \
+	  if command -v script >/dev/null 2>&1; then \
+	    tools/expect_same.sh atpal/$$t-pty "$$(script -qec "stty rows 40 cols 132; tools/run_target.sh $$t $(TESTTMP)/atpal_$$t" /dev/null </dev/null | tr -d '\r')" "$$PTY" || exit 1; \
+	  fi; \
+	done; \
+	./$(COMPILER) --target=wasm32 test/test_cross_ansiterm_through_the_pal.pas $(TESTTMP)/atpal.wasm >/dev/null || { echo "atpal wasm32 compile FAIL"; exit 1; }; \
+	tools/expect_same.sh atpal/wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/atpal.wasm </dev/null)" "$$NOTTY" || exit 1; \
+	if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_cross_ansiterm_through_the_pal.pas $(TESTTMP)/atpal_xt >/dev/null || { echo "atpal xtensa compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh atpal/xtensa "$$(tools/run_target.sh xtensa $(TESTTMP)/atpal_xt </dev/null)" "$$NOTTY" || exit 1; \
+	else echo "  atpal: qemu-xtensa absent, xtensa NOT verified"; fi
+	# ...and test_ansiterm_raw_write now has a wasm32 row, which it could not have
+	# had before: all five bodies were refused and the module trapped on the first
+	# AnsiWrite. Same expected bytes as the other six targets.
+	./$(COMPILER) --target=wasm32 test/test_ansiterm_raw_write.pas $(TESTTMP)/arw_wasm32
+	tools/expect_same.sh wasm32/test_ansiterm_raw_write "$$(tools/run_target.sh wasm32 $(TESTTMP)/arw_wasm32)" "$$(printf 'aBcD\nRAW WRITE OK')"
 	./$(COMPILER) test/test_except_derived_caught_by_base.pas $(TESTTMP)/test_except_derived_caught_by_base26
 	tools/expect_same.sh test_except_derived_caught_by_base26 "$$($(TESTTMP)/test_except_derived_caught_by_base26)" "$$(printf 'caught1:derived\ncaught2:grandchild\ncaught3:exact\ncaught4-specific:specific\ncaught5:sibling\ndone')"
 	./$(COMPILER) test/test_empty_class_shorthand.pas $(TESTTMP)/test_empty_class_shorthand26
