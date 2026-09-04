@@ -64,6 +64,7 @@ begin
     signatures NAME TGuid and TObject) must find them already registered. Both
     are idempotent -- they return early when the row exists. }
   RegisterBuiltinTGuid;
+  RegisterBuiltinTMethod;
   RegisterBuiltinTObject;
 
   { ParamCount/ParamStr read argv through this slot, so it is allocated for every

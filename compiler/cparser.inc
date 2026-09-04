@@ -11884,6 +11884,7 @@ begin
       registers up front. The C path reaches builtinheap through pxxcio's uses,
       so mint the same rows here (both are idempotent no-ops if present). }
     RegisterBuiltinTGuid;
+    RegisterBuiltinTMethod;
     RegisterBuiltinTObject;
     { Hosted riscv32 has no FPU: every float op lowers to the __pxx_* soft-float
       kernels, and any C double op — plus crtl's own libm bodies — compiles

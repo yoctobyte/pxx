@@ -437,6 +437,34 @@ begin
   UClsAlign[ci] := 4;
 end;
 
+procedure RegisterBuiltinTMethod;
+{ System.TMethod — the two words a `procedure of object` value already IS, named.
+  FPC/Delphi declare it in `system`, so real code uses it with no `uses` at all:
+  to compare two event handlers, to detach one, or to build a method pointer
+  from a raw address. pxx has no System unit, so mint the row here beside TGuid
+  and TObject.
+
+  SIZE IS A RELATION, NOT A CONSTANT: two pointers, so 16 on x86-64/aarch64 and
+  8 on i386/arm32/riscv32/xtensa. Writing 16 is the exact defect
+  bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets records,
+  and it is invisible on the host every gate runs on. The Data offset is
+  TARGET_PTR_SIZE, which is what ir.inc's method-pointer stores already write.
+
+  Idempotent like its two neighbours, and a program (or sysutils/typinfo, which
+  both declare their own identical TMethod) redeclaring it is tolerated the same
+  way a redeclared TGuid is: FindUClass returns the first row and the layouts
+  agree. feature-p-tmethod-record-for-method-pointers }
+var ci: Integer;
+begin
+  if FindUClass('TMethod') >= 0 then Exit;
+  ci := AddUClass(TokCharsAppend('TMethod'), 7);
+  UClsIsRecord[ci] := True;
+  AddUField(ci, TokCharsAppend('Code'), 4, 0, Ord(tyPointer), REC_NONE);
+  AddUField(ci, TokCharsAppend('Data'), 4, TARGET_PTR_SIZE, Ord(tyPointer), REC_NONE);
+  UClsSize_[ci] := 2 * TARGET_PTR_SIZE;
+  UClsAlign[ci] := TARGET_PTR_SIZE;
+end;
+
 procedure RegisterBuiltinTObject;
 { System.TObject as a minimal instantiable class (var o: TObject;
   o := TObject.Create). Zero fields, no user methods — the VMT-pointer slot
@@ -751,6 +779,7 @@ begin
     cross-bootstrap, stabilize, manual — opts out without per-site Makefile flags. }
   if PasDefineExists('PXX_NODEFAULTRTL') then NoDefaultRtl := True;
   RegisterBuiltinTGuid;
+  RegisterBuiltinTMethod;
   RegisterBuiltinTObject;
   { Only pull the implicit textfile surface when the source actually references
     the file type. Scanning the already-lexed token stream up front for a bare

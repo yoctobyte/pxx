@@ -563,6 +563,7 @@ var
   psLo, psSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   nparams  : Integer;
   procIdx, helperPi, i, sz, retRecId, savedLastTypeRecId: Integer;
+  retProcSig: Integer;
   zeroBytes : Integer;
   zfLoop, zfDone : Integer;
   retIsDynArr : Boolean; retElemTk : TTypeKind; retElemRec : Integer;
@@ -782,7 +783,7 @@ begin
       end;
   end;
 
-  nparams := 0; retType := tyInteger; retRecId := REC_NONE;
+  nparams := 0; retType := tyInteger; retRecId := REC_NONE; retProcSig := -1;
   { A local array is stack garbage until written, and the Self/capture insertion
     paths below fill some slots without going through the typed-param branch. }
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesSetEnum[i] := -1;
@@ -1213,6 +1214,17 @@ begin
       end;
       if (retType = tyRecord) or (retType = tyClass) then
         retRecId := LastTypeRecId;
+      { …and the procedural SIGNATURE the same alias carries, for exactly the
+        same reason retRecId is captured here: a `procedure of object` return
+        type is a tyRecord whose call signature lives in LastTypeProcSig, and a
+        plain `procedure` return type is a tyPointer with the same. Without it
+        the implicit Result symbol is allocated from the return KIND alone and
+        comes out as a plain record/pointer var, so every consumer that asks
+        "is this lvalue a procedural value?" by testing SymProcSig >= 0 answers
+        no for Result and yes for a declared local of the identical type.
+        bug-p-result-is-not-a-method-pointer-lvalue }
+      if (retType = tyRecord) or (retType = tyPointer) then
+        retProcSig := LastTypeProcSig;
       if retType = tyPointer then
       begin
         retPtrElemTk := Ord(LastTypePointerElemTk);
@@ -1478,6 +1490,7 @@ begin
       procIdx := RegisterProc(name, isFunc, retType, nparams, pnames, ptypes);
     if sawVarargs then ProcVariadic[procIdx] := True;
     ProcRetRecId[procIdx] := retRecId;
+      ProcRetProcSig[procIdx] := retProcSig;
     { Record the return-element metadata like the normal registration paths do —
       without this an external `function f(...): PAnsiChar` leaves ProcRetPtrElemTk
       at tyUnknown, so IsNodePChar can't tell f() returns a char pointer and
@@ -1848,6 +1861,7 @@ begin
         if (not InInterface) and (CurrentUnitIdx < 0) then
           ProcHdrTok[procIdx] := hdrStartSOff;
         ProcRetRecId[procIdx] := retRecId;
+      ProcRetProcSig[procIdx] := retProcSig;
         ProcOverloadDirective[procIdx] := declOverload;
         Procs[procIdx].BodyAddr := -1;
         for i := 0 to nparams-1 do
@@ -1917,6 +1931,7 @@ begin
         ProcOverloadDirective[procIdx] := True;
       if declFlexColumn then ProcFlexColumn[procIdx] := True;
       ProcRetRecId[procIdx] := retRecId;
+      ProcRetProcSig[procIdx] := retProcSig;
       ProcRetIsDynArray[procIdx] := retIsDynArr;
       ProcRetDynDepth[procIdx] := retDynDepth;
   ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
@@ -1955,6 +1970,7 @@ begin
     ProcOverloadDirective[procIdx] := True;
   if declFlexColumn then ProcFlexColumn[procIdx] := True;
   ProcRetRecId[procIdx] := retRecId;
+      ProcRetProcSig[procIdx] := retProcSig;
   ProcRetIsDynArray[procIdx] := retIsDynArr;
   ProcRetDynDepth[procIdx] := retDynDepth;
   ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
@@ -2565,6 +2581,23 @@ begin
       AllocVar('Result', retType);
       Procs[procIdx].RetSymIdx := SymCount - 1;
       Syms[SymCount-1].Kind := skLocal;
+      { Furnish Result the way a DECLARED variable of the same type is furnished.
+        pasparser_decl.inc's var path stamps `SymProcSig[idx] := LastTypeProcSig`
+        for a tyRecord (method pointer) and for a tyPointer (plain procedural
+        value); the result symbol is not declared, it is minted from the return
+        KIND alone, so it carried -1 and looked like an ordinary record/pointer
+        local. Every consumer that asks "is this lvalue a procedural value?" —
+        the assignment arm that reaches for a parenless method reference, the
+        statement-level and expression-level indirect-call arms — gates on
+        `SymProcSig >= 0`, so `Result := s.Pick` was refused while
+        `t := s.Pick; Result := t` on a local of the identical type compiled.
+        The LHS spelling was a third axis nobody had furnished.
+        bug-p-result-is-not-a-method-pointer-lvalue }
+      if ((retType = tyRecord) or (retType = tyPointer)) and (retProcSig >= 0) then
+      begin
+        SymProcSig[SymCount-1] := retProcSig;
+        SymSyncTypeRef(SymCount-1);
+      end;
     end;
     LastTypeRecId := savedLastTypeRecId;
     if not retIsDynArr and (RetViaHiddenDest(retType) or (retFixedArrBytes > 0)) then
