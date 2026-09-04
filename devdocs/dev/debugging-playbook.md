@@ -6846,3 +6846,67 @@ Three things generalise:
   add a control whose row must be present (see the section on completeness
   guards) — a generated table has no natural place for "I could not see this".
 
+
+## A CONTROL PROVES NOTHING IF THE STATE YOU BELIEVE IT IS IN IS NOT THE STATE IT IS IN
+
+Sibling of "A CONTROL has to be the commit under test". That one is about
+measuring the wrong *binary*. This one is about measuring the right binary in
+the wrong *state* — and it is nastier, because the control still runs, still
+exercises a real code path, and still comes back with the verdict you wanted.
+
+Measured 2026-09-04 by frankZ, fixing `check_test_wiring.py --since`, which
+could not fail for anyone following CLAUDE.md's gate-before-commit order: it
+read git's COMMITTED additions only, so a brand-new test file — untracked at
+the moment the gate runs — was outside the population, and the arm printed
+`PASS this push wires the tests it adds` over zero rows.
+
+The fix widened the population to committed + staged + **untracked**. The
+control was to create an unwired test file and require the checker to name it.
+It named it. `rc=1`, the filename in the output, exactly the expected failure.
+
+**And the new code had never executed.** By the time that control ran, the file
+had been `git add`ed a step earlier — and `git ls-files` reads the INDEX, so a
+staged file was already in the tracked-only population the old path used. The
+widening branch was skipped by `q not in subs`, and a `TypeError` sitting
+inside it (`ROOT` is a `str`, not a `Path`) never ran. The `rc=1` was produced
+by the code being replaced, reporting the outcome the replacement was written
+to produce.
+
+The population under test and the population believed to be under test differed
+by **one `git add`**, and every observable agreed.
+
+**What separates this from an ordinary bad control:** it was drawn from the
+right population (a real unwired test file), it asserted the right quantity
+(the checker's exit code and its named output), and it discriminated — it would
+genuinely have gone green had the file been wired. Every rule about controls
+was satisfied. The one unasserted thing was the *state* the subject was in, and
+that state was set by a command run for an unrelated reason two steps earlier.
+
+**The check that caught it:** rebuild the control in a throwaway repo, where
+every state is established explicitly and nothing is inherited from the working
+tree. `mktemp -d`, `git init`, a scaffold whose one test IS wired, assert exit
+0 — that is the AIMED half, without which a scaffold error fails for a reason
+unrelated to the property and certifies a broken instrument — then add an
+untracked unwired test and require nonzero AND the filename. It failed
+immediately, on the TypeError.
+
+- **A control run in the live working tree inherits every state you set
+  earlier and did not think about**, including states set by commands whose
+  purpose was something else. `git add`, a stale build, an exported variable, a
+  file left behind by the previous experiment.
+- **Ask what state the subject is in, not just what population it came from.**
+  "Is this an untracked file?" was the whole question, and it was never asked
+  of the actual file — it was assumed from having created it that way.
+- **When a fix adds a BRANCH, assert the branch ran.** Not the outcome — the
+  outcome was reachable both ways, which is why the green was persuasive. A
+  print, a deliberate exception, or a throwaway environment where the old path
+  cannot produce the answer at all.
+- Disarming the fix afterwards is the cheap permanent version: with the union
+  removed, the control must go red and print the exact false pass
+  (`1 test file(s) added since HEAD~0, 0 of them wired into nothing`). That row
+  lives in `tools/test_wiring_gate_devtest.py` now.
+
+The one-line form, and it generalises past controls: **I had changed one
+variable less than I thought.** Same shape as reading a cross-target red on a
+box whose emulator and kernel BOTH differ from yours — you believe you are
+holding one thing fixed, and you are not, and nothing in the output says so.
