@@ -4035,3 +4035,42 @@ second time this session it has done it that way.
 A backgrounded gate/tier reported **exit code 0 over `testmgr: RED`** again.
 This is no longer an anecdote in a handover; seven independent sightings is a
 tool defect with a stable signature. Counted by frankb-78, not aggregated by me.
+
+---
+
+## Delivery check, 2026-09-04 morning — measured, not remembered
+
+The owner's ask was *"tomorrow morning I expect a compiler that implemented
+shortstrings."* Re-verified at the tip rather than quoted from last night:
+
+```
+$ cat ss.pas
+var s: string[10]; begin s := 'abc';
+WriteLn(SizeOf(s),' ',Length(s),' ',Ord(s[0]),' ',s) end.
+$ ./compiler/pascal26 ss.pas ss && ./ss
+11 3 3 abc
+```
+
+`SizeOf = 11` is one length byte plus ten chars, and **`s[0]` IS the length
+byte** — the Turbo/FPC shortstring, not a handle. **The probe discriminates:**
+under the pre-flip model `SizeOf` was a handle width, so 11 cannot be produced by
+the old path or by a type whose size was never recorded. It is not a row that
+passes when the machinery does nothing.
+
+Pin **v403** (`ce63beeeb`, binary `c31d03b202da`) is in place, graded `reds(3)`.
+
+### One thing the first pass of this check got wrong, recorded because it is the house error
+
+`grep -r PXX_SHORTSTRING compiler/` still returns **ten hits**, and the first
+reading of that was "the flag the flip was defined to delete is STILL PRESENT."
+It is not. **Every hit is a comment** — historical records of what was measured
+under the flag while it existed. The gate is gone; the grep answered about a
+literal string, which is a different question from "is there a live conditional."
+The tell was that no hit is a `PasDefineExists` call.
+
+Second slip in the same check: the probe first reported `BUILD/RUN FAILED`, which
+read as a compiler defect and was **`unknown option: -o`** — pxx takes
+`pxx <source> [output]`, no `-o`. A failing invocation and a failing compiler
+produce the same "FAILED" string when the command's own stderr is thrown away.
+**Both errors were caught by looking at what the failure would be if it were
+something else, and neither would have been caught by re-reading the conclusion.**
