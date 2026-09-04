@@ -68,3 +68,62 @@ on all six cross targets, so the row lands everywhere at once.
 
 ## Log
 - 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 49194d2ab.
+
+---
+
+## 2026-09-04 (frankH) — banked: why no signature-only entry point is needed, MEASURED rather than read
+
+Banked at frankuser's request before going idle. It was a reading when it went
+into a peer message; it is a measurement now, and the two greps that settle it
+cost less than writing the caveat would have.
+
+**1. Every `AN_CALL_IND` construction site already carries its signature.**
+All **18** `AllocNode(AN_CALL_IND)` sites in the tree set
+`ASTIVal := <signature proc index>` within three lines of the allocation —
+there is no site that builds the node and leaves the signature to be recovered
+later:
+
+| file | sites | field assigned |
+| --- | --- | --- |
+| `pasparser_lval.inc` | 5 (74, 667, 840, 1842, 3055) | `sigPi` / `fldSigPi` |
+| `pasparser_stmt.inc` | 1 (7681) | `pvSig` |
+| `cparser.inc` | 4 | `SymProcSig[idx]` / `sig` |
+| `pyparser.inc` | 7 | `sigPi` / `fldSigPi` |
+| `ir.inc` | 1 (3837) | `sig` |
+
+The five in `pasparser_lval.inc` are the ones named in the boundary with
+frankA. **The sixth Pascal site is in `pasparser_stmt.inc`** and is easy to miss
+when the boundary is quoted as "the five".
+
+**2. `ApplyCallResultPtrSuffix` needs nothing from a signature but its columns.**
+Every use of `procIdx` in the whole procedure (`pasparser_lval.inc:5011-5434`)
+is one of exactly two shapes — `Procs[procIdx].RetType`, once, and a
+`ProcRet*[procIdx]` column, everywhere else: `ProcRetPtrElemTk`,
+`ProcRetPtrElemRec`, `ProcRetPtrDepth`, `ProcRetPtrBaseTk`, `ProcRetPtrBaseRec`,
+`ProcRetIsDynArray`, `ProcRetFixedArrBytes`, `ProcRetRecId`, `ProcRetElemTk`,
+`ProcRetElemRec`, `ProcRetDynDepth`, `ProcRetArrAi`. Nothing reads a body, a
+parameter list, a scope or a name.
+
+**So the existing `(node, procIdx)` entry point IS the signature-only one.** A
+new one would take the same two things and read the same columns.
+
+### The residual risk is NOT the entry point, and this is the part to carry forward
+
+The plumbing being uniform says the signature always ARRIVES. It says nothing
+about whether the columns are FILLED, and they are not filled on every path —
+measured in this slice's own `ProcRet*` census: `ParseSubroutine` fills all 17
+columns, while the three `pasparser_decl.inc` paths fill the same 11 and drop
+the same 6. `ProcRetEnumId` and `ProcRetRecId` were fixed there; the array
+columns (`ProcRetIsDynArray`, `ProcRetFixedArrBytes`, `ProcRetElemTk`,
+`ProcRetElemRec`) and `ProcRetProcSig` remain open as
+[[bug-p-a-procedural-type-cannot-return-an-array-or-another-procedural-type]].
+
+**A signature declared by `ParseProcTypeSignature` therefore reaches this
+function correctly and finds its array columns blank** — which reads exactly
+like "this construct is not supported" rather than like a missing write.
+Whoever picks that ticket up should expect the symptom to appear HERE while the
+defect is in the writer, and should not go looking for a missing entry point.
+
+Untested claim retired: nothing above is inferred from behaviour, and no repro
+was run for this note. It is a static census of construction sites and of one
+procedure's uses of one parameter, which is the whole of what it claims.
