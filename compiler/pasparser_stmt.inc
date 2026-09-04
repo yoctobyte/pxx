@@ -1239,6 +1239,8 @@ var
   fnDyn: Integer;   { dyn-array VALUE container (a call result) — levels }
   bodyNode, elemTk, staticLen, recId, fldIdx: Integer;
   setEnumId, setElemTk: Integer;
+  fnElemCount, fnLowBound, fnFlatCount: Integer;   { `p^` extent, from DerefPtrArrayInfo }
+  fnElemTk, fnElemRec, fnElemCap: Integer;         { ...and its element, from DerefPtrArrayElem }
   contTk: TTypeKind;
   isString, isStaticArr, isArr: Boolean;
   fname: AnsiString;
@@ -1329,6 +1331,54 @@ begin
       setEnumId := UFldSetEnumId[fldIdx];
       setElemTk := UFldSetElemTk[fldIdx];
     end;
+  end
+  else if DerefPtrArrayInfo(contNode, fnElemCount, fnLowBound, fnFlatCount) and
+          (fnLowBound = 0) and
+          DerefPtrArrayElem(contNode, fnElemTk, fnElemRec, fnElemCap) then
+  begin
+    { `for x in p^` where `p: ^array[lo..hi] of T`. Every branch above keys on a
+      SYMBOL or a FIELD, and a deref is neither, so this fell to the error below
+      -- and from the bare-name dispatch it came out as "not a generator, enum
+      type, or iterable variable" instead, which is the message the ticket
+      quotes.
+
+      NOT materialised into a hidden local, which is the move the enumerator and
+      dyn-array arms above make: for a dynamic array that copies a HANDLE and
+      still aliases the same elements, but a static pointee would be copied
+      WHOLE, and iterating a private copy is observably different from what FPC
+      does the moment the body writes through the pointer. BuildForInArrayLoop
+      indexes the container node it is handed, and `p^[i]` already lowers
+      correctly, so handing it the deref node directly is both smaller and the
+      only version that keeps aliasing.
+
+      DerefPtrArrayInfo and DerefPtrArrayElem are the accessors the INDEX
+      spelling already asks; this asks the same two the same way rather than
+      reading SymPtrElem* here. The ticket's own lead -- that IsNodeArray was
+      taught this shape and something else still refused -- was right about the
+      predicate and wrong about the arm: nothing in this function consulted
+      IsNodeArray for a non-IDENT, non-FIELD node at all, because there was no
+      branch to reach.
+      RESTRICTED TO A ZERO LOW BOUND, and the restriction is measured rather
+      than cautious. BuildForInArrayLoop's comment says "AN_INDEX subtracts the
+      low bound itself, so __i in [lo..hi] is the correct domain" -- true of the
+      AN_IDENT container it was written for, and NOT of a deref: the subtraction
+      keys on tags the lvalue walk stamps on a parser-built `p^[i]`, and the
+      bare AN_INDEX this builder synthesises carries none of them. Measured with
+      the bound admitted: `p^` over `array[1..4] of Integer` holding 11 22 33 44
+      printed `22 33 44 4310536`, and over `array[5..7]` printed `0 0 4` --
+      shifted garbage, silently, which is the one outcome worth refusing over.
+      `p1^[1]` written out by hand is correct on this binary AND on pinned, so
+      the defect is the synthesised node, not the index path.
+
+      A non-zero bound therefore keeps its existing loud refusal, which is not a
+      regression -- it was refused before this change too. Filed with the table
+      as bug-p-for-in-over-a-deref-ignores-a-non-zero-low-bound rather than
+      shipped half-working.
+      bug-p-for-in-over-a-dereferenced-pointer-to-array-is-refused }
+    contTk := IntToTypeKind(fnElemTk);
+    elemTk := fnElemTk;
+    staticLen := fnFlatCount;
+    isArr := True;
   end
   else
   begin
@@ -2403,6 +2453,7 @@ end;
 
 function ParseForStatementAST: Integer;
 var forcNode, forcRec, forcSym, forcAssign, forcLoop: Integer;   { for-in over a container EXPRESSION }
+    forcElemCount, forcLowBound, forcFlatCount: Integer;   { ...and a `p^` pointee's extent }
     forcCtorTk: TTypeKind;   { non-ordinal loop var => `[...]` is an ARRAY constructor, not a set }
 var
   varIdx, initNode, limitNode, bodyNode, node: Integer;
@@ -2669,7 +2720,23 @@ begin
     { ...or a dyn-array VALUE (`for x in MakeArr do`). ONE implementation, in
       ParseForInNodeAST, so the bare spelling and the qualified one
       (`for x in o.GetArr do`, which lands there directly) cannot drift apart. }
-    if NodeDynDepth(forcNode) > 0 then
+    { ...a dyn-array VALUE, or a POINTER-TO-ARRAY deref (`for x in p^`). Both
+      hand the node to ParseForInNodeAST, which is where every "the container is
+      an expression, not a symbol" shape is decided -- adding the test HERE and
+      the handling THERE is what keeps this dispatch from growing a third
+      opinion about what is iterable.
+
+      `p^` reached this line and not ParseForInNodeAST's own error, which is why
+      the ticket quotes THIS message: the bare-name arms above all require the
+      next token to be `do`, and `p` is followed by `^`, so the deref falls to
+      the general expression path and then off the end of it. The lead in the
+      ticket -- that IsNodeArray had been taught this shape and some other test
+      still refused -- was right that the predicate was fixed and wrong about
+      where: there was no arm here to reach at all.
+      bug-p-for-in-over-a-dereferenced-pointer-to-array-is-refused }
+    if (NodeDynDepth(forcNode) > 0) or
+       (DerefPtrArrayInfo(forcNode, forcElemCount, forcLowBound, forcFlatCount)
+        and (forcLowBound = 0)) then
     begin
       Result := ParseForInNodeAST(varIdx, forcNode);
       Exit;

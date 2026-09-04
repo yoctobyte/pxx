@@ -1,0 +1,5 @@
+direct=0 10 20 30 
+deref=0 10 20 30 
+sum=60
+aliased=139
+managed=abc

@@ -4169,6 +4169,7 @@ var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     ndFlat: Integer; ndIsND: Boolean;   { fixed N-D subscript tail — ParseNDSubscriptTail }
     ci, mmi, mpi, callN, selfArg, lastA, aSeq, aNode, aIdx, mai: Integer;
     pri, i, w, margIdx: Integer; isAssign: Boolean;
+    dfIsAssign: Boolean;   { the default-property `[` is an assignment TARGET }
     cvIdx: Integer;
     thNode: Integer;   { a chained type-helper call on the value so far }
     mcCi: Integer; mcFin: Boolean;   { a metaclass-valued step in the chain }
@@ -4643,6 +4644,67 @@ begin
       if (tk = tyClass) and (recId >= REC_UCLASS_BASE) then dfCi := recId - REC_UCLASS_BASE;
       dfPri := -1;
       if dfCi >= 0 then dfPri := FindDefaultProp(dfCi);
+
+      { …and whether this `[` is an assignment TARGET, which decides getter vs
+        SETTER. The NAMED-property arm ~200 lines above has asked this since it
+        was written; this one never did and always built the getter, so
+        `TDerived(b)[3] := 206` came back here as a CALL, the caller took it for
+        a method-call statement, and the `:= 206` left over hit the
+        "cannot assign to the result of a function call" guard at
+        ParseStatementAST's exit. `TDerived(b).Items[3] := 206` — the SAME
+        property, spelled with its name — stored 206, because that spelling
+        reaches the named arm. One property, two spellings, one of them
+        write-only-in-theory: the double case normalise-dont-special-case.md
+        names, with the sibling arm already holding the answer.
+
+        The `(b as TDerived)[3] := 206` spelling failed differently and worse —
+        `IR_UNSUPPORTED: frontend could not lower AST node (kind 8)`, an
+        internal error rather than a diagnostic — and is fixed by the same
+        change, because both cast spellings hand their `[` to this walker.
+
+        Peek past the whole bracket group, not just one token: `d[i+1] := v`
+        and a multi-dimensional `d[i, j] := v` both put `:=` well past the `[`.
+        CurTok is the `[`, so the group starts at Tokens[TokPos - 1] — the same
+        convention and the same walk ParseLValueAST's own default-property arm
+        uses.
+        bug-p-a-class-cast-cannot-index-a-default-property-as-an-assignment-target }
+      dfIsAssign := False;
+      if dfPri >= 0 then
+      begin
+        dfI := TokPos - 1; w := 0;
+        while dfI < TokCount do
+        begin
+          if Tokens[dfI].Kind = tkLBrack then Inc(w)
+          else if Tokens[dfI].Kind = tkRBrack then
+          begin Dec(w); if w = 0 then begin Inc(dfI); Break; end; end;
+          Inc(dfI);
+        end;
+        if (dfI < TokCount) and (Tokens[dfI].Kind = tkAssign) then dfIsAssign := True;
+      end;
+
+      if dfIsAssign and (dfPri >= 0) then
+      begin
+        if UPropWriteMLen[dfPri] <= 0 then Error('default property is read-only');
+        dfName := '';
+        for dfI := 0 to UPropWriteMLen[dfPri] - 1 do
+          AppendChar(dfName, TokChars[UPropWriteMOff[dfPri] + dfI]);
+        dfMmi := FindUMeth(dfCi, dfName);
+        if dfMmi < 0 then Error('default property setter not found: ' + dfName);
+        dfMpi := UMthProc_[dfMmi];
+        dfIdxHead := -1; dfIdxTail := -1;
+        ParsePropIndexArgs(dfIdxHead, dfIdxTail);   { consumes [ .. ] }
+        Expect(tkAssign, ':=');
+        ParseExpr;
+        { Setter args: [index...], value; MakeAccessorCall places Self, and it
+          is the same builder the named arm uses — a virtual setter dispatches
+          through its slot rather than being called directly. }
+        callN := MakeAccessorCall(dfCi, dfMmi, dfMpi, node,
+                   AccessorArgChain(dfIdxHead, dfIdxTail, CurASTNode));
+        outTk := Procs[dfMpi].RetType;
+        Result := callN;   { a complete call statement; caller uses it as-is }
+        Exit;
+      end;
+
       if (dfPri >= 0) and (UPropReadMLen[dfPri] > 0) then
       begin
         dfName := '';

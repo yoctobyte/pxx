@@ -12528,6 +12528,24 @@ test-core: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q "^pascal26:26: error: a statement cannot start with '\['" \
 	   && test ! -e $(TESTTMP)/test_stmtstart26 \
 	  || { echo "test_statement_start_is_refused_fail: FAIL - rc=$$rc (want rc=1, a diagnostic on line 26, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# a DEFAULT property indexed as an assignment TARGET through either cast
+	@# spelling. .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_cast_default_property_target.pas $(TESTTMP)/test_cdpt26
+	tools/expect_same.sh test_cdpt26 "$$($(TESTTMP)/test_cdpt26)" "$$(cat test/test_cast_default_property_target.expected)"
+	@# `for x in p^`. The `aliased=` row is load-bearing: it writes through the
+	@# pointer before iterating, so a materialised private copy fails it.
+	./$(COMPILER) test/test_forin_deref_ptr_array.pas $(TESTTMP)/test_fdpa26
+	tools/expect_same.sh test_fdpa26 "$$($(TESTTMP)/test_fdpa26)" "$$(cat test/test_forin_deref_ptr_array.expected)"
+	@# ...and the half deliberately NOT handled: a non-zero low bound must keep
+	@# REFUSING, because the loop builder's synthesised AN_INDEX does not
+	@# subtract it and `array[1..4]` would iterate shifted garbage in silence.
+	@printf 'program p;\ntype TA = array[1..4] of Integer; PA = ^TA;\nvar a: TA; q: PA; x: Integer;\nbegin\n  a[1]:=11; q := @a;\n  for x in q^ do Write(x);\nend.\n' > $(TESTTMP)/forinlo.pas
+	@out=$$(./$(COMPILER) $(TESTTMP)/forinlo.pas $(TESTTMP)/forinlo26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q 'for-in: not a generator, enum type, or iterable variable' \
+	   && test ! -e $(TESTTMP)/forinlo26 \
+	  || { echo "for-in non-zero low bound: FAIL - rc=$$rc (want rc=1, a refusal, no binary -- a silent shifted read is the failure this guards)"; printf '%s\n' "$$out"; exit 1; }
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; tools/expect_same.sh cmath_sign_bits26-rc "$$?" "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26
