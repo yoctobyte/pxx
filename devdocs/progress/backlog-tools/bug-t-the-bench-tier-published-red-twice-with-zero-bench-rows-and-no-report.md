@@ -1,5 +1,5 @@
 ---
-prio: 50
+prio: 60
 track: T
 ---
 
@@ -120,3 +120,76 @@ Track T to set — the sibling was re-ranked 65 -> 75 on a smaller span.
 from the zero bench rows or from something among the 550 conformance rows. The
 count says the condition is standing; it says nothing about the cause. Recorded
 by the coordinator, not measured beyond the count above.
+
+---
+
+## Is this the same path as the backgrounded-wrapper bug? No — same CLASS, different paths (claude-T, 2026-09-04)
+
+Asked before the two get fixed separately. Answered from the code, and the answer
+matters because **fixing either will not fix the other.**
+
+Re-ranked 50 → 60 on the count, not on this. Deliberately not 75 like
+`tools-devtest#00`: that job decides the `full` verdict, which `pin_is_green`
+reads. **This lane is `run_bench_idle` — an idle lane that gates nothing**, so a
+constant verdict here costs information, not a gate.
+
+### The bench path
+
+`run_bench_idle` (`tools/twatch.py:5443`):
+
+```python
+proc = subprocess.Popen([sys.executable, …])
+…
+r = proc.returncode
+…
+clone.publish("tstate(%s): bench %s %s (%d bench rows, %d conf)"
+              % (…, "ok" if r == 0 else "RED", rows, conf_rows))
+```
+
+The verdict is **one bit off a process exit code**. And `grep` over the whole
+function for `write_report` / `reports/` returns **nothing** — the bench lane has
+never written a report. So the ticket's title is describing the design, not a
+failure: there is no report because this path does not make one.
+
+### Why that is the real defect, and why the cause is unestablished
+
+The original body declines to say the tier is broken, only that a RED was
+published with nothing behind it. **That restraint was right and it is also the
+whole problem**: nothing survives a bench RED except the word RED and two
+counts. There is no output, no log, no report. So "is the RED the zero bench rows
+or something among the 550 conformance rows?" is not merely unanswered — it is
+**unanswerable from the record**, and will stay so for run 34.
+
+Seven weeks of identical `RED (0 bench rows, 550 conf)` is therefore not seven
+weeks of an unnoticed bug. It is seven weeks of an instrument that reports a
+verdict and discards the only thing that could explain it.
+
+### The class, and the third instance
+
+Same family as the backgrounded wrapper reporting `exit code 0` over
+`testmgr: RED` — both take a verdict from a process's exit status rather than
+from the thing that knows the verdict. But **not the same code**: this is
+`Popen`+`returncode` inside `run_bench_idle`; the wrapper case is a background
+task's notification reporting a shell wrapper's status, outside twatch entirely.
+Two fixes, not one.
+
+What they DO share with a third finding is more useful than the class:
+
+| instrument | what it discards |
+| --- | --- |
+| bench lane | the runner's entire output, on every RED |
+| `selfhost_fixedpoint.sh:41` | `stage_2a` and `tested`, via `trap 'rm -rf "$T"' EXIT`, on FAIL |
+| backgrounded wrapper | the tier's verdict, in favour of the wrapper's rc |
+
+**Three instruments that destroy the evidence for the verdict they publish.** In
+each case the remedy is the same shape and cheaper than the diagnosis: keep the
+artifact on failure. For this ticket that is "persist the bench runner's stdout
+when `r != 0`", which would make run 34 diagnosable without answering any of the
+questions this ticket correctly refuses to guess at.
+
+### Not touched
+
+The cause. Zero bench rows with 550 conformance rows is the same pair in all 33
+runs and I did not go looking either — but note the pairing itself is a clue
+nobody has used: a run that produced 550 of one kind of row and 0 of another did
+not fail early.
