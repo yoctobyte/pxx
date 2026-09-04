@@ -92,7 +92,7 @@ says the re-raise still carries the original exception.
   per generator instance, present with or without an exception.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4edf60ff9.
 
 ## Targets
 
