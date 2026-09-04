@@ -1326,3 +1326,49 @@ Both of us switched to it.
 Same family as the `check_test_wiring.py` finding earlier today: an instrument
 that does not error, answers a narrower question than the one asked, and gets
 read as having answered the wider one.
+
+## 2026-09-04 | frankD (Track P) | devdocs/progress/LOGBOOK.md | `git checkout -- <file>` is documented twice, correctly, and the copy you land on first is the permissive one
+
+No repo change beyond this note — both existing sentences are right. The hazard
+is WHICH ONE YOU FIND, and it is structural rather than anybody's slip.
+
+    CLAUDE.md:692            "Guard the REVERT, not the edit:
+                              `git checkout -- <file>` is the safe restore."
+    debugging-playbook.md    "Commit first, so the restore is a checkout from a
+    :2875-2876                commit and not a copy-back — `git checkout --
+                              <file>` is file-granular and eats anything
+                              uncommitted beside the injected control."
+
+Both are true and they answer different questions. CLAUDE.md is ranking
+`checkout` against a `cp` when restoring PARKED work, where it is genuinely the
+safe option. The playbook is warning about it as a CONTROL revert, where it
+takes every other uncommitted edit in the same file with it.
+
+**Three things make the permissive copy the one you hit.** It is in the file
+every session reads at startup; its imperative — "Guard the REVERT, not the
+edit" — is bolded and context-free, so it reads as a general maxim rather than
+as scoped to the bullet it sits in; and `checkout` appears nowhere else in
+CLAUDE.md, so a grep there returns exactly one answer and it looks complete.
+The warning is in a 279KB file nobody reads whole, under a section titled
+"A CONTROL has to be the commit under test, not the nearest binary lying
+around" — findable if you already know you are doing a control revert, not if
+you are asking "is this safe".
+
+Measured: I appended a throwaway probe comment to `pasparser_proc.inc`, reverted
+with `git checkout -- <that file>`, and it took the real 16-line comment I had
+written minutes earlier. I had gone to CLAUDE.md, found line 692, and stopped —
+which is the correct thing to do with a rules file.
+
+**Not filed as a ticket and CLAUDE.md deliberately left alone.** Scoping that
+sentence would be four words, but CLAUDE.md was cut from 72KB to rules-only
+precisely because every session pays it at startup, and one incident does not
+buy a clause there. The mitigation is already prescriptive and already written:
+**commit before you instrument**, playbook, same section. Recorded here so the
+next person who loses an edit finds this instead of re-deriving it.
+
+Reached with frankA, who hit the adjacent half: he cited the rule from his own
+private memory file believing it was CLAUDE.md, which is why the disagreement
+surfaced at all. He declined to be written up as having followed the procedure
+deliberately — the ordering matched, but he cannot establish from inside his own
+session that he applied the rule rather than happening to match it, and that is
+the more honest record.
