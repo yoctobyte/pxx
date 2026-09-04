@@ -114,3 +114,63 @@ config of ONE corpus reached; `locale.h`'s `LC_COLLATE` and friends, named in
 this ticket's summary, are untouched by it. **Before flipping the switch, run
 the census rather than the ticket list** — `grep -c "undeclared identifier"`
 over a full corpus build log is the whole instrument, and it costs one run.
+
+# 2026-09-04 (frankC, Track C): it also blinds the TESTS THAT VERIFY crtl HEADERS
+
+The two instances above are both a *program* naming something crtl lacks. This
+one is the layer that is supposed to catch that, and it is a worse shape.
+
+`lib/crtl/include/linux/wireless.h` was written by extracting the host header
+with a script, and the extractor dropped 24 macros: `WIRELESS_EXT`, the eleven
+`IWEV*` event codes, `IW_EV_POINT_LEN`, and the `IW_EVENT_CAPA_*` / `IW_IS_*`
+helpers. The test written to verify that header — `test/c_crtl_uapi_wireless.c`,
+which prints every macro and diffs the whole file against gcc — **named twelve
+of the missing ones and compiled cleanly**, printing 0 for each. Exit code 0.
+
+So the mechanism does not merely let a wrong program through; it lets a wrong
+*header* through the instrument built to check headers. A crtl header is exactly
+the population where "the identifier does not exist" is the defect under test,
+and it is the one population where this compiler cannot say so.
+
+**And 0 is a plausible value for most of these names.** `IW_IS_SET(cmd)` at 0,
+`WIRELESS_EXT` at 0, an `IWEV*` event code at 0 — none is out of range, none
+would look wrong in a printout, and `IWEVTXDROP` is genuinely `0x8C00` which is
+also `IWEVFIRST`, so a reader checking two rows against each other finds them
+consistent. Only an oracle that produces the real numbers separates them.
+
+**What caught it, and what nearly did not.** The gcc diff caught it. Nothing
+else could: the compile step was written as
+
+    ./$(COMPILER) test/...c $(TESTTMP)/out >/dev/null
+
+copying the pattern every other `c_crtl_uapi_*` row in the Makefile uses, and
+that redirect throws away the one warning the compiler *did* print. The author
+then read `ok:` as evidence the compile was clean. The diagnostic exists and is
+correct; the harness around it discards it by convention.
+
+**The cheap mitigation, landed 2026-09-04 in `0161a0be1`, and it is not a fix
+for this ticket.** That row now greps its own compile output for `undeclared
+identifier` and fails there. It is one row. Every other `c_crtl_uapi_*` row, and
+every C test in the Makefile, still redirects the compile to `/dev/null`.
+
+**THE SECOND CENSUS IS MEASURED, NOT PROPOSED.** It is a different question from
+the census this ticket already asks for — that one counts warnings in a corpus
+build; this one counts *rows of our own test suite whose compile output is
+discarded*, i.e. how much of the C test surface cannot report this class at all.
+Measured at `0161a0be1`:
+
+    grep -c 'COMPILER).*>/dev/null' Makefile   ->  161
+    grep -o 'COMPILER) test/[a-z0-9_]*\.c' Makefile | wc -l  ->  414
+
+161 rows send a pxx compile to `/dev/null`. That is not 161 blind C rows — the
+count spans every frontend and some of those compiles are Pascal — but it is the
+right order of magnitude for "how many places would have swallowed this", and it
+is 161 more than the one that now greps. Re-run both numbers before quoting
+them; they are a property of the Makefile on the day.
+
+Raising the warning to an error makes both censuses moot, which is the argument
+for doing it rather than for adding greps. Until then, the ordering claim in
+this ticket's summary — fill the crtl gaps first — has a corollary worth
+stating: **the gaps are filled by writing headers, and the verification of those
+headers is itself subject to the bug.** Every crtl header landed while this is
+open needs a value-level oracle, not a compiles-cleanly check.
