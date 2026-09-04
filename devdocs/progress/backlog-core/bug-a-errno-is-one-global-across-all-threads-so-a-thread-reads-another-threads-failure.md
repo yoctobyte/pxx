@@ -128,9 +128,14 @@ and the first does not imply the second.
 
 ## Bound it puts on other work
 
-`feature-b-a-bootable-image-with-the-busybox-userland-on-it` (rung 3) cannot
-produce a STATICALLY linked pxx-built busybox until this is fixed, so that image
-carries a dynamic busybox plus libc. The same bound applies to frankD's i386
+**This was written as a prediction and rung 3 has since measured it, so it is
+recorded as a measurement.** [[feature-b-a-bootable-image-with-the-busybox-userland-on-it]]
+is DONE (2026-09-04) and its image does carry a dynamic busybox: `ldd` on the
+258-applet binary names `libc.so.6` and `ld-linux-x86-64.so.2`, and the
+initramfs carries both. `gcc -static` on the same objects still refuses with
+the TLS/non-TLS `errno` mismatch, so the bound held exactly as stated — it did
+not merely go untested. Anything wanting a single-file static pxx userland
+waits on this ticket. The same bound applies to frankD's i386
 axis. The kiosk finding *"pascal26 and everything it emits are statically
 linked"* is true of pxx's own ELF writer output and does NOT extend to anything
 the separate-compilation path produces, because that path ends in
