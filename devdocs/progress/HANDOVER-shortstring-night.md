@@ -4833,3 +4833,80 @@ i386/arm32) **with a pinned-compiler control**, because the change touches five
 backends' epilogues and three backends' variant boxing and **the quick tier runs
 none of that cross.** Reason stated in the commit, which is the whole
 requirement.
+
+### `f891bbe8e` — the yield bug the first fix uncovered. **Correcting my own entry above:** that hole was FILED and then FIXED, and its ticket is in `done/`, not open.
+
+A generator step function **returns at every yield**, and **its locals ARE the
+generator's live state.** x86-64's release arm has `if CurProcIsStackless then
+Exit;`; **no cross arm had it, for ANY kind.** So a NilPy generator whose string
+and list locals survive a yield came back with `acc` holding the loop counter's
+string and `parts` overwritten — on **i386, arm32 AND aarch64**, with **EXIT 0**.
+A silent wrong value, not a crash, which is why nothing had caught it. Hoisted to
+the top of the procedure, **because it is a property of the procedure, not of the
+target.**
+
+### The sibling generalisation, and it is better than the one it answers
+
+I offered: *a capability fix retires the justification for an exclusion, so grep
+for what was EXCLUDED for that reason.* frankb-78's sibling:
+
+> **Adding an arm to a chain makes you read the chain's PRECONDITIONS — and a
+> precondition the whole chain needs but no arm STATES is invisible until someone
+> adds an arm.**
+
+It found the yield bug only because it had to ask *"what does x86-64's twin do
+that these don't"* **before copying its predicate.** **Nobody was going to grep
+for it** — there is no name to search, because the missing thing is an absence
+that four arms share. That is the harder half of `normalise-dont-special-case`:
+the handbook's rule catches a **fixed one arm, sibling still broken**; this
+catches **no arm ever had it.**
+
+### The breadth sweep, and a positive control ON THE CONTROL
+
+Quick runs **no cross NilPy at all**, so: all **346** class-declaring NilPy tests
+built for i386 and arm32 against the x86-64 oracle.
+
+```
+arm32  ok=301 diff=31 skipped=14
+i386   ok=306 diff=26 skipped=14
+```
+
+**Both sum to 346 — and that sum is the precondition assert**, proving the sweep
+ran the population rather than nothing. All **57** diffs re-asked of pin v403:
+**pre-existing=57, new-on-head=0.**
+
+**Then it positive-controlled the control itself** — fed the pin-comparison two
+rows the sweep had **PASSED**, and it printed `NEW-ON-HEAD` for both. **So the
+zero is a result and not an unreachable branch.** That is the guard rule applied
+one level up, and it is the level almost nobody reaches: a clean `new-on-head=0`
+is exactly what a comparison that never runs also prints.
+
+### Two filed, not fixed, both with repros — and one deliberately left UNCHECKED
+
+- **A promo-int local in a generator truncates to 32 bits on i386/arm32**
+  (`6000000042 -> 1705032746`, **exactly -2^32**), **identical on the pin**, and
+  **correct at module scope** — so it is **the instance's state save, not the
+  arithmetic.** Filed in `backlog-core`.
+- **wasm32 exits before the new guard** and releases in
+  `WasmEmitManagedLocals`, **which nobody has asked the question of.** Recorded as
+  **UNCHECKED rather than given a verdict** — the same discipline as the
+  `EmitSignalRuntimeXtensa` comment: *an unrun question is not a known no.*
+
+### On my "seventh shape" — frankb-78 reads it as a variant, and it is right
+
+It calls the cancellation *"the same shape as the collides-with-the-default
+habitat, but the collision here is between a correct answer and a self-cancelling
+pair of bugs rather than between a value and a type default."*
+
+**That is the better framing and it reconciles the numbering:** the *rule* is one
+— **the expected value equals the failure value** — and what this page has been
+calling habitats are **SOURCES of the collision**, not separate rules. A type
+default, an alignment guarantee, a decoy address, a pair of inverse bugs. Listing
+them as seven rules overstated it; listing them as seven sources of one rule is
+what the evidence supports. **Recorded against this seat: I numbered a variant as
+a new law.**
+
+Gate: `gate.sh quick` GREEN **before each** commit (canary RAN, not SKIP);
+binaries `19acc91a61fc` then `6b8a6c493c76`, **both `converged after 1
+round(s)`.** `PXX_ALLOW_FULL_SUITE=1` lifted for the sweep with the reason in the
+commit.
