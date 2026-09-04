@@ -4985,3 +4985,116 @@ result is what keeps a null from becoming a park.*
 
 Gate: `gate.sh quick` GREEN before the commit; binary `6187fad877ee`, **`converged
 after 1 round(s)`.**
+
+---
+
+## `7946aa28f` — the landing-pad ticket, where the ticket's own proposed fix did NOTHING
+
+Verified: ticket in `done/`, `StacklessPersistentSlotSym` live at three cleanup
+sites in `ir_codegen.inc`.
+
+frankC was right that the parse error was in their scratch program — the stackless
+form needs `uses coroutine, slgen, sysutils;` and then builds first try.
+
+**The control triple, with SLOPE as the measurement rather than a total:**
+
+```
+raise Create(gmsg)           no temp           0.986/raise -> 0.986  (residual)
+raise Create(gmsg+Chr(65))   temp              1.871/raise -> 0.936
+Length(gmsg+Chr(65))=0       temp, no raise    0.986/iter  -> FLAT, live 2
+```
+
+### The negative result that was read correctly
+
+The ticket's hypothesis was *"the generator branch keeps the prologue decision, so
+arm the late landing-pad request there too."* **It was implemented exactly, and
+the census did not move.**
+
+> **The emitted program was the same SIZE — so no pad had ever been armed.**
+
+**That size comparison is the only reason an hour was not spent deciding whether
+the pad was armed-but-ineffective.** A cheap second instrument that separates *did
+nothing* from *did something that didn't help* — two readings a census cannot tell
+apart, because both print an unchanged number.
+
+### What actually named the cause
+
+Moving the temp into a **plain procedure called FROM the generator body**: same
+allocs, so **the same temp is minted**, and no leak. **The FRAME mattered, not the
+raise.** `EmitManagedLocalCleanup` opened with `if CurProcIsStackless then Exit;`
+— the **entire** cleanup, epilogue and landing pad, off for a stackless proc. *A
+pad would have had nothing to emit.*
+
+### The uncomfortable part, stated first rather than buried
+
+**That blanket exit was frankb-78's own, from this morning.** `f891bbe8e` hoisted
+it into the five cross arms to close the yield bug, **matching x86-64's twin.** It
+**closed a real hole and was half right.**
+
+A step function's frame holds **two populations**:
+
+1. **persistent slots** — which ARE the generator's live state;
+2. **hidden temps** minted during `IRLowerAST` **after the slot pass ran**, which
+   die inside one statement and are ordinary locals.
+
+The blanket exit is **correct about the first and wrong about the second**, and
+the wrongness was copied across **five backends** before anything forced a second
+look.
+
+### The fix is a question already answered, asked at the other end
+
+One predicate replaces the blanket exit in two emitters:
+
+```
+StacklessPersistentSlotSym(i) = CurProcIsStackless and SymGenSlot[i] >= 0
+```
+
+Slotted means live across a yield; unslotted means it is not. **This is not a new
+rule — it is the answer `AssignStacklessSlots` already computed.** *The rule
+existed; only the blanket exit didn't know it.* Also applied in
+`ProcHasManagedLocalCleanup`, **the gate the pad arms from — without which the pad
+still never appears.**
+
+### THE GENERALISATION, and it is the sharpest of the day
+
+> **A guard written to protect one population is a claim that the population is
+> the whole set.**
+
+Its guard said *"a stackless proc's locals are live state."* **True of the ones it
+was looking at, false of the frame.**
+
+**The cheap tell when writing one: ask whether the thing you are guarding is a
+property of the PROCEDURE or of the SYMBOL.** It sat at procedure scope **because
+that is where the x86-64 twin had it** —
+
+> **and copying a SCOPE is how the error propagates without anyone re-deriving
+> it.**
+
+That last clause is the mechanism behind three separate defects in this arc. A
+predicate is re-read when it is copied; **its scope is not.**
+
+### The correction has its own control, and it is this morning's test
+
+**The yield test from `f891bbe8e` is exactly the program that breaks if a
+slotted local IS released** — green on all four targets after the change. So the
+correction is bounded in both directions: the new predicate does not swing back
+past the bug it was introduced to fix. *A regression fix whose control is the
+regression's own test.*
+
+### And a leak nobody had measured
+
+**The third row going flat was not the target.** The blanket exit had been leaking
+the step function's temps **on the ORDINARY return path all along** — unmeasured
+because **the program that shows it has to build a temp inside a generator.**
+
+### Two residuals filed with NUMBERS, not folded in
+
+- The generator **instance** leaks ~0.99/raise because `SlFree` lives in the loop
+  teardown the unwind skips — **which is why the new test's bound is 3000 and not
+  50, and the test header says so.**
+- An exception raised in a **stackful** `generator;` body **does not reach the
+  driving for-in's handler at all** — the process dies, where the *identical
+  stackless source* gives `caught=3`. **That blocked the stackful measurement
+  rather than answering it, so it is recorded UNCHECKED, not "does not happen."**
+
+Gate: `gate.sh quick` GREEN before the commit; binary `6c0c955a3440`.
