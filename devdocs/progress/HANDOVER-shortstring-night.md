@@ -4376,3 +4376,67 @@ Second, smaller: the ticket says *"three pins were cut through it."*
 **52**. Almost certainly two different windows rather than an error — but the
 number that reaches the owner should be the one whose window is stated, and
 **52-since-v354 makes the case stronger, not weaker.**
+
+### Both flags resolved — and one of my hedges was too generous
+
+Corrections at `24c1bbfbf`, verified on origin. **Updating my two entries above,
+in place of leaving them standing.**
+
+**1. The `exit_observable` collision resolves in frankb-78's favour, and there is
+NO population split.** Same job, same host. The guard re-run:
+
+```
+population 849
+FAIL  797 of 849 = 93.88%   (re-armed DOWNWARD 2026-09-02 at 647/698 = 92.69%)
+PASS  and that bound is tight -- one more uncapped row would breach it
+```
+
+**The denominator moved 727 -> 849 between the two readings.** Track T's figure
+was simply hours old. The finding underneath is better than the collision:
+**a number quoted from this guard is stale in HOURS — cite the RUN, not the
+value.** Now in the ticket.
+
+Not reconciling it was right for a reason worth keeping: **a coin-flip between
+two good-faith numbers writes a stale one into the record as current, and the
+correct resolution was reachable only by re-measuring** — which is exactly what
+the flag caused to happen and what picking a side would have prevented.
+
+**And the guard's own history is this ticket's argument in miniature.** It was a
+**COUNT** capped at 531; the corpus *"outgrew it while getting better"*, so it was
+re-expressed as a **SHARE** and re-armed **downward** to 92.69% — **by capping
+five arm32 rows rather than ratifying the drift.** It has already faced the
+re-arm-to-green temptation once and took the harder road, and its last check
+knows the bound is tight to a single row. So of the three "censuses working
+correctly", this one is **the best-maintained instrument in the set**, and its
+red is **the tree's answer, not its own decay.**
+
+**2. "Three pins" was an ERROR, not a window difference — and I was too generous
+calling it one.** Track T counted the three pins **it cut itself** and stated the
+figure as if it covered the whole gap. The real span is **v353 (`0c189b6f0`) ->
+v403 (`ce63beeeb`)**: 51 pins after v353, 52 counting it. **Understated the cost
+by a factor of seventeen.**
+
+Its own diagnosis, which is the correct one: **"the window was the defect, not
+the arithmetic."** A figure whose population is unstated reads as a claim about
+everything.
+
+> **Against this seat, specifically.** I hedged toward the peer being right —
+> *"almost certainly two different windows rather than an error"* — and the
+> charitable reading would have left a 17x understatement standing in a ticket
+> headed for the owner. **Flagging the discrepancy was right; explaining it away
+> in the same breath nearly undid that.** Name the discrepancy and stop; the
+> owner of the number is the one who gets to say which of the two it was.
+
+**3. The ticket's pin version was stale too**, corrected in the same commit: v402
+and **v403** landed while it was writing, and **v403 is what the tree carries.**
+Its v401 reference was two behind. *Two more pins through the same gap while the
+gap was being documented.*
+
+Track T's summary of its own two errors, worth keeping because it is the thread's
+subject applied to itself: **"a true number about the wrong question. I have spent
+two days correcting other people for it and produced two instances of it in one
+ticket."**
+
+**The wrapper ticket is now CLAIMED** by Track T's tooling session. Eight
+sightings across two subsystems, and **its own `PUSHED`-over-a-rejected-push
+reproduces on demand — the cheapest positive control in the set.**
