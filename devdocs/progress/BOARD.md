@@ -370,7 +370,7 @@ _none_
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | regression-test-core-c-crtl-wait | T | 55→85 | regression | NOT A COMPILER BUG, and re-laned from C to T. riscv32's `wait4-rusage rusage=UNTOUCHED` is red on seven and deterministically green on plexus from BYTE-IDENTICAL compiler bytes (compiler_sha256 fcc5ad9a29a61c10c... both boxes) with an EMPTY `git diff` outside devdocs/. seven runs qemu-riscv32 8.2.2 where plexus runs 10.2.1; the host kernel is eliminated on seven's own box by tools/host_waitid_rusage_probe.c, which prints rusage=written there with its arg5-NULL control printing UNTOUCHED. The target-side path is four pure pass-throughs and the same riscv32 binary writes rusage under a newer emulator. Fixing it needs root on seven (owner) or a host-capability skip at ROW grain (T) — do NOT weaken the assertion. | bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain |
 
-## backlog-pascal (39)
+## backlog-pascal (38)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -397,7 +397,6 @@ _none_
 | feature-p-legacy-value-object-types | P | 15 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
 | feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus | P | 45 | feature | {$PACKENUM 1} and {$H-} are accepted and not implemented, and both are in the first nine lines of FPC 3.2.2's fpcdefs.inc — so every unit of the FPC compiler corpus is compiled with 4-byte enums and a longstring default where the source asked for 1-byte enums and shortstrings. Silent until 2026-09-04; the unknown-directive warning is what surfaced them. | — |
 | feature-p-tobject-api-classparent-instancesize-tostring | P | 15 | feature | Was six TObject members pxx rejected; five landed. Only ClassInfo is left, and it is a Track U question (decide-classinfo-returns-our-blob-or-nothing), not an implementation choice. UnitName -- not in the original six -- is the other gap, tracked in feature-pascal-builtin-tobject-class. | — |
-| feature-p-uses-a-unit-in-an-explicit-file | P | 55 | feature | `uses mymod in 'mymod.pas';` — the FPC/Delphi spelling for naming a unit's source file — does not parse. pxx has the quoted-path form (`uses './mymod.pas' as m;`, shipped 2026-06-30) but not the standard `in` one, so ordinary FPC project sources are refused at the uses clause. | — |
 | feature-pascal-builtin-tobject-class | P | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | decide-tobject-classinfo-blob-or-refusal |
 | feature-pascal-corpus-passrc | P | 30 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-management-operators-copy-and-addref | P | 30 | feature | `class operator Copy` / `AddRef` are recognised but never dispatched | — |
@@ -887,9 +886,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3275)
+## done (3276)
 
-3275 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3276 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (75)
 
@@ -1068,7 +1067,6 @@ _none_
 - [p 55] [N] feature-nilpy-no-type-inference-switch
 - [p 55] [N] feature-nilpy-str-format-named-keyword-fields
 - [p 55] [O] feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython [parked — re-claim, do not duplicate]
-- [p 55] [P] feature-p-uses-a-unit-in-an-explicit-file
 - [p 55] [T] feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing
 - [p 55] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions

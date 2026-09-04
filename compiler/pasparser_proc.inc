@@ -5311,8 +5311,73 @@ procedure ParseUsesEntry;
   registering it there is enough for ConsumeUnitQualifier to accept the prefix.
   See feature-uses-alias-as. }
 var uname, alias, realLo: AnsiString; aStrIdx, realStrIdx, i: Integer; isPath: Boolean;
+    inPath, inLo: AnsiString;
 begin
   uname := ReadDottedUsesName;
+  if CurTok.Kind = tkIn then
+  begin
+    { `uses mymod in 'mymod.pas';` -- the Delphi/FPC spelling for naming a
+      unit's source file, and the one every real .dpr uses. It is a
+      WITHIN-LANGUAGE file selector: it says where a Pascal unit lives, not
+      what language it is, so it is not an alternative to the quoted-path form
+      and does not carry that form's cross-language reach.
+
+      The two spellings differ in what they BIND, which is the whole reason
+      this is not just the alias machinery with a different keyword:
+
+        uses mymod in 'mymod.pas'   binds `mymod`, the unit's own declared name
+        uses './mymod.pas' as m     binds `m`, an alias
+
+      So the file is loaded through the ordinary path form (that is the half
+      that already works), and then the DECLARED name is wired to it. When the
+      file's basename already equals the declared name -- the overwhelmingly
+      common case, and the only one FPC projects generate -- the two names
+      intern to the same slot and the alias row below is skipped as a no-op.
+      When they differ, both names resolve. Binding the basename as well is
+      more permissive than FPC, which is not a defect (CLAUDE.md: us accepting
+      what FPC rejects is not a defect) and is what falls out of reusing one
+      loader instead of growing a second.
+      feature-p-uses-a-unit-in-an-explicit-file }
+    Next;                          { consume `in` }
+    if CurTok.Kind <> tkString then
+      Error('expected a quoted file name after `in` in a uses clause, as in '
+            + '`uses ' + uname + ' in ''' + LowerCase(uname) + '.pas'';`');
+    inPath := CurTok.SVal;
+    Next;                          { consume the file name }
+    { A BARE FILE NAME IS THE WHOLE POINT, and it is what every generated .dpr
+      writes: `uses Unit1 in 'Unit1.pas'`. FPC resolves it against the
+      directory of the file holding the clause, and `./` means exactly that
+      here -- the loader's relative paths are taken against CurUnitDir, which
+      is SourceFileDir for the program and the unit's own directory for a
+      nested one. Without the prefix the loader treats the string as a UNIT
+      NAME with a dot in it and reports `unit source not found: mymod.pas`,
+      which was the ticket's measured symptom one step further in.
+
+      Only when there is no separator at all: an author who wrote `in
+      'sub/other.pas'` already has a path, and prefixing it would be wrong for
+      an absolute one. A BACKSLASH is deliberately NOT treated as a separator
+      -- Delphi sources write `in '..\shared\Foo.pas'` and pxx's existing
+      quoted-path form does not accept that either, so it is one question about
+      Windows path spelling across both spellings rather than something to
+      answer twice, differently, here. }
+    isPath := False;
+    for i := 1 to Length(inPath) do if inPath[i] = '/' then isPath := True;
+    if not isPath then inPath := './' + inPath;
+    ParseUsesUnit(inPath);
+    { Wire the declared name to whatever the loader registered the file as.
+      Same normalisation ParseUsesEntry's `as` arm uses, and for the same
+      reason: a path-form load tags its symbols with the file's BASENAME. }
+    inLo := LowerCase(GetFileBaseName(inPath));
+    aStrIdx := InternStr(LowerCase(uname));
+    realStrIdx := InternStr(inLo);
+    if (UnitAliasCount < MAX_UNIT_ALIASES) and (aStrIdx <> realStrIdx) then
+    begin
+      UnitAliasName[UnitAliasCount] := aStrIdx;
+      UnitAliasReal[UnitAliasCount] := realStrIdx;
+      Inc(UnitAliasCount);
+    end;
+    Exit;                          { `in` and `as` do not combine }
+  end;
   ParseUsesUnit(uname);
   if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'as') then
   begin

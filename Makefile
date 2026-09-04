@@ -6149,6 +6149,15 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/test_unit_stray_end_fail.pas $(TESTTMP)/test_unit_stray_end26 2>&1 \
 	  | grep -q "unexpected \`end\` at the top level of unit unit_stray_end's implementation section" \
 	  || { echo 'test_unit_stray_end_fail: FAIL - a spare top-level end must be an error naming its unit'; exit 1; }
+	# `uses <unit> in '<file>'` -- the Delphi/FPC spelling every real .dpr writes,
+	# which did not parse at all (`expected 'begin' before 'in'` under the pin).
+	# Three entries taking different arms: a BARE file name (resolved against the
+	# using file's own directory, as FPC does), a path WITH a separator that must
+	# not be re-prefixed, and a QUALIFIED use of the declared name -- the last
+	# because a flat lookup answers the first two either way and so cannot show
+	# which name `in` actually bound. Byte-identical to FPC 3.2.2 on this file.
+	./$(COMPILER) test/test_uses_in_explicit_file.pas $(TESTTMP)/test_uses_in_explicit_file26
+	tools/expect_same.sh test_uses_in_explicit_file26 "$$($(TESTTMP)/test_uses_in_explicit_file26 | tail -n 2)" "$$(printf 'fail=0\nUSESIN OK')"
 	# `^string` — a pointer to a MANAGED string: reading p^ segfaulted (@s gave the HANDLE,
 	# not the variable's address)
 	./$(COMPILER) test/test_deref_managed_string_b302.pas $(TESTTMP)/test_deref_managed_string_b30226

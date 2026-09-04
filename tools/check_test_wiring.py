@@ -321,6 +321,10 @@ def consumed_by(wired, subject_paths, dir_refs=None):
     for p in subject_paths:
         stem.setdefault(os.path.splitext(os.path.basename(p))[0].lower(), []).append(p)
     uses_re = re.compile(r"^\s*uses\s+([^;]+);", re.I | re.M)
+    # …and the two halves of one uses ENTRY: see the split loop below.
+    # `in`/`as` are dropped by the identifier pass matching them as names that
+    # simply correspond to no test file, which is the same way the NilPy import
+    # pass already tolerates stdlib module names.
     inc_re = re.compile(r'#\s*include\s+"([^"]+)"')
     # NilPy imports a sibling .npy as a MODULE, so the reference is a bare
     # identifier with no path and no extension -- nothing the other two patterns
@@ -340,7 +344,22 @@ def consumed_by(wired, subject_paths, dir_refs=None):
             continue
         names = []
         for m in uses_re.findall(text):
-            names += [n.strip().lower() for n in m.split(",")]
+            for n in m.split(","):
+                n = n.strip().lower()
+                # A uses ENTRY is not always a bare name. Three spellings put a
+                # file where a name goes, and splitting on commas alone leaves
+                # the whole entry as one unmatchable string:
+                #     uses mymod in 'mymod.pas'      the Delphi/FPC form
+                #     uses './mymod.pas' as m        pxx's quoted-path + alias
+                #     uses './lib2.c' as c           …the cross-language one
+                # Take BOTH halves of each entry -- every bare identifier and
+                # the basename of every quoted path -- because either can be
+                # the thing that names a helper. Measured: three helpers of
+                # test_uses_in_explicit_file.pas sat in the unwired report the
+                # day `in` landed, and they are reached from a wired test.
+                names += [q.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                          for q in _quoted_re.findall(n)]
+                names += _ident_re.findall(_quoted_re.sub(" ", n))
         names += [os.path.splitext(os.path.basename(i))[0].lower()
                   for i in inc_re.findall(text)]
         for a, b in py_re.findall(text):
@@ -350,6 +369,10 @@ def consumed_by(wired, subject_paths, dir_refs=None):
             for q in stem.get(n, ()):
                 reached.add(q)
     return reached
+
+
+_quoted_re = re.compile(r"'([^']*)'")
+_ident_re = re.compile(r"[a-z_][a-z_0-9.]*")
 
 
 def subjects():
