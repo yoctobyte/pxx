@@ -84,7 +84,40 @@ and make the two by-name lookups — `IsGenericTemplateName` and the arity scan 
 the fpc testsuite corpus have not been checked for reliance on the leak, and a
 template resolved through it today would start failing. `PXXDBG=p.implleak`
 reports every row the boundary would hide instead of hiding it, which is the
-cheap way to get that census in one run once the tag exists.
+cheap way to get that census in one run.
+
+**BUT THE CENSUS COMES SECOND, AND IT NEEDS A POSITIVE CONTROL FIRST** (frankD,
+2026-09-04). The LEAK line is emitted from exactly one place, inside
+`DeclVisibleSect` (`compiler/symtab.inc`), and only when a caller hands it
+`declInImpl = True`. `Templates[]` has no caller there at all — twelve call
+sites, none of them a template — so **no template row can reach the report
+however much the corpus relies on the leak**, and a zero would mean *"no probe"*
+rather than *"no reliance"*.
+
+**Measured at `337c3935b` / binary `02b45170e723`, and it is worse than a zero.**
+Running the repro above under `PXXDBG=p.implleak` prints 48 LEAK lines, and five
+of them are about this bug:
+
+```
+LEAK specialization TPriv$Integer in=<program> decl-unit=pe at=p4:3
+LEAK class          TPriv$Integer in=<program> decl-unit=pe at=p4:3   (x4)
+LEAK template       ...                                                (none)
+```
+
+So a census run today is **not silent on a template leak — it reports it under
+the wrong table, against the mangled name `TPriv$Integer` rather than `TPriv`.**
+Those rows are the mint's byproducts, not the cause: with the report off (so
+`ImplPrivateApplies` actually hides them) the program still compiles and still
+prints `9 5`, because the importer re-mints its own specialization in its own
+section. The template lookup is the one that never asks, and it is the only one
+that matters. Read those five rows as specialization leaks and you will chase a
+table that is already correct.
+
+The order is therefore: `TemplateDeclImpl[]` stamped, the two by-name lookups
+routed through `DeclVisibleSect` with `IMPLTAB_TEMPLATE`, an arm in
+`ImplLeakTabName` and `ImplLeakRowName` for it — and *then* one assertion that
+this repro prints a `LEAK template TPriv` line. A census from a probe never seen
+to fire is not a measurement.
 
 Not folded into
 [[bug-p-a-specialization-minted-in-a-units-implementation-is-seen-by-the-importers-duplicate-test]]:
