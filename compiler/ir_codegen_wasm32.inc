@@ -1342,9 +1342,33 @@ begin
   tk := IntToTypeKind(IRTk[node]);
   if TypeIsFrozenString(tk) then
   begin
-    { A frozen string through an address — a string[N] record field. Its value
-      is the address, so the address computation IS the whole load. }
-    WasmEmitValueAs(IRA[node], WT_I32, 'address of a frozen string');
+    { A frozen string reached through an IR_LOAD_MEM. Its value IS an address,
+      so the question is only which one -- and the answer is the WORD AT IRA,
+      not IRA itself.
+
+      This arm used to skip the load, on the reading that "a frozen string
+      through an address is a string[N] record field, whose value is the
+      address". That premise is false and the IR says so: a plain `string[N]`
+      field emits `lea; field` and NO load_mem at all, because the field IS the
+      string. An IR_LOAD_MEM with a frozen result type is emitted exactly when
+      something POINTING at a frozen string had to be read -- `r.NamePtr^` for
+      `NamePtr: ^string[N]`, and the same through `p^.NamePtr^` and
+      `arr[i].NamePtr^`. So the address arithmetic reached the POINTER's slot,
+      and dropping the load handed the compare `@r.NamePtr` where it wanted
+      `r.NamePtr`: the pointer value was read as the length and the bytes
+      after it as the characters.
+
+      SILENT, which is why it survived: `WriteLn(r.NamePtr^)` prints correctly
+      (the write path dereferences), so a program printed the right string and
+      compared it wrongly in adjacent statements. Its live consumer was
+      typinfo's GetClass, whose body is `entries[i].NamePtr^ = name`.
+
+      Every other backend does exactly this and has no frozen case here at all
+      -- riscv32's IR_LOAD_MEM just loads TypeSlotSize(tk) bytes. A pointer is
+      i32 on wasm32, hence the plain i32 load. }
+    WasmEmitValueAs(IRA[node], WT_I32, 'address of a frozen-string pointer');
+    if WasmBodyBroken then Exit;
+    WasmMemOp($28, 'i32.load', 2, 0);
     Exit;
   end;
   if not WasmScalarType(tk, vt) then

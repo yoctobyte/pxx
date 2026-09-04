@@ -3,7 +3,7 @@ slug: bug-a-wasm32-a-frozen-string-through-a-pointer-in-a-record-field-compares-
 track: A
 prio: 60
 type: bug
-status: open
+status: done
 blocked-by: []
 owner: unassigned
 created: 2026-09-04
@@ -108,3 +108,6 @@ Positive controls for any fix, both directions:
   works, and a "always take the address" change breaks it.
 - a plain `string[N]` FIELD, `r.s = 'lit'`, must stay TRUE — it already works,
   and a "always load" change breaks it.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

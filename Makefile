@@ -16187,6 +16187,32 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) -Fulib/rtl --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_cross_typeinfo_dataref.pas $(TESTTMP)/tidref_xt >/dev/null || { echo "tidref xtensa compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh tidref/xtensa "$$(tools/run_target.sh xtensa $(TESTTMP)/tidref_xt)" "$$(printf 'enums OK\nheader Integer\nheader TPoint')" || exit 1; \
 	else echo "  tidref: qemu-xtensa absent, xtensa NOT verified"; fi
+	# A FROZEN STRING THROUGH A POINTER HELD IN A RECORD FIELD, on all seven
+	# targets. wasm32 answered FALSE for every such compare while PRINTING the
+	# same expression correctly -- WasmEmitLoadMem's frozen arm returned the
+	# address it was handed instead of loading through it, so the compare read
+	# the pointer VALUE as the length. Under pin v399 this file prints
+	# `printed A` and then `FROZENPTRFIELD FAIL`; both lines matter, because the
+	# first is why the defect was silent for so long.
+	#
+	# Three of the six rows always worked and are in the file to fail a careless
+	# fix in the OTHER direction: `q^` through a plain pointer variable breaks
+	# under "always take the address", and a plain string[N] field or array
+	# element breaks under "always load".
+	./$(COMPILER) test/test_cross_frozen_ptr_in_field.pas $(TESTTMP)/fpfld26
+	tools/expect_same.sh fpfld26/native "$$($(TESTTMP)/fpfld26)" "$$(printf 'printed A\nFROZENPTRFIELD OK')"
+	./$(COMPILER) --target=wasm32 test/test_cross_frozen_ptr_in_field.pas $(TESTTMP)/fpfld.wasm
+	tools/expect_same.sh fpfld26/wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/fpfld.wasm)" "$$(printf 'printed A\nFROZENPTRFIELD OK')"
+	@for t in i386 arm32 aarch64 riscv32; do \
+	  case $$t in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "  fpfld: $$q absent, $$t NOT verified"; continue; fi; \
+	  ./$(COMPILER) --target=$$t --platform=posix test/test_cross_frozen_ptr_in_field.pas $(TESTTMP)/fpfld_$$t >/dev/null || { echo "fpfld $$t compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh fpfld/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/fpfld_$$t)" "$$(printf 'printed A\nFROZENPTRFIELD OK')" || exit 1; \
+	done; \
+	if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_cross_frozen_ptr_in_field.pas $(TESTTMP)/fpfld_xt >/dev/null || { echo "fpfld xtensa compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh fpfld/xtensa "$$(tools/run_target.sh xtensa $(TESTTMP)/fpfld_xt)" "$$(printf 'printed A\nFROZENPTRFIELD OK')" || exit 1; \
+	else echo "  fpfld: qemu-xtensa absent, xtensa NOT verified"; fi
 	# ANSITERM THROUGH THE PAL, and the pty row is the one that earns this block.
 	# This unit carried four private per-target syscall number tables until
 	# 2026-09-04. Two had already produced a silent failure (GetSysWrite had no
@@ -20043,14 +20069,22 @@ test-wasm32: $(COMPILER)
 	# is itself such a body -- any wasm32 program that so much as USES typinfo,
 	# directly or through streaming, LFM or `class of`, died before its own code.
 	#
-	# test_metaclass_getclass IS DELIBERATELY NOT HERE and the reason is worth
-	# more than the row. It now compiles with ZERO gaps and validates, and it still
-	# fails -- `GetClass('TDer')` returns nil because `entries[i].NamePtr^ = name`
-	# answers FALSE on this target. Reduced to 20 lines: a frozen string reached
-	# through a pointer held in a RECORD FIELD compares as its own field ADDRESS,
-	# because the field's pointer is never LOADED; through a plain pointer VARIABLE
-	# the same expression is correct. Silent, no gap, no trap -- filed separately.
-	# Wiring it now would wire a red row for a defect these three do not have.
+	# test_metaclass_getclass IS NOW HERE, and the note it replaces is worth
+	# keeping because it says what the row is for. It used to be excluded
+	# deliberately: the file compiled with ZERO gaps and validated, and
+	# `GetClass('TDer')` still returned nil, because `entries[i].NamePtr^ = name`
+	# answered FALSE on this target -- a frozen string reached through a pointer
+	# held in a RECORD FIELD compared as its own field ADDRESS, since the field's
+	# pointer was never LOADED. Silent: no gap, no trap, and `WriteLn` of the same
+	# expression printed the name correctly.
+	#
+	# WasmEmitLoadMem's frozen arm now loads. GetClass is the row that proves it
+	# end to end rather than in a probe, which is why it is wired beside the three
+	# metaclass tests that never had the defect: they pass either way, and this
+	# one does not.
+	./$(COMPILER) --target=wasm32 test/test_metaclass_getclass.pas $(TESTTMP)/w32_mcls_getclass.wasm
+	./$(COMPILER) test/test_metaclass_getclass.pas $(TESTTMP)/w32_mcls_getclass_x64
+	tools/expect_same.sh wasm32/test_metaclass_getclass "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_mcls_getclass.wasm)" "$$($(TESTTMP)/w32_mcls_getclass_x64)"
 	./$(COMPILER) --target=wasm32 test/test_metaclass_construct.pas $(TESTTMP)/w32_mcls_construct.wasm
 	./$(COMPILER) test/test_metaclass_construct.pas $(TESTTMP)/w32_mcls_construct_x64
 	tools/expect_same.sh wasm32/test_metaclass_construct "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_mcls_construct.wasm)" "$$($(TESTTMP)/w32_mcls_construct_x64)"
