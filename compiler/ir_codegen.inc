@@ -1664,8 +1664,23 @@ begin
       rv32_sw(reg_zero, reg_t0, k * 4);
   end
   else if TargetArch = TARGET_XTENSA then
-    Error('target xtensa: prologue slot zero-init not implemented '
-          + '(refactor-a-the-missing-layer-between-frontends-and-backends)')
+  begin
+    { riscv32's arm one register file over, with the one difference that
+      matters: xtensa has NO zero register, so the constant is materialised
+      into a scratch first. a8 carries the slot address and a9 the zero --
+      the documented scratch pair, and neither is an argument register, which
+      is load-bearing because this runs INSIDE a prologue with the incoming
+      arguments still live in a2..a7.
+
+      4-byte steps like every 32-bit arm above, for the reason this routine's
+      header gives: a 4-byte local is 4-aligned with the next local right above
+      it, so rounding a count up to 8 zeroes a neighbour.
+      bug-cfront-no-entry-stub-for-xtensa }
+    EmitSlotAddrXtensa(reg_xtensa_a8, symIdx);
+    EmitLoadConstXtensa(reg_xtensa_a9, 0);
+    for k := 0 to (nbytes div 4) - 1 do
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+  end
   else
   begin
     for k := 0 to (nbytes div 8) - 1 do

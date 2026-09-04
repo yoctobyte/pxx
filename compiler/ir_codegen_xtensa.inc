@@ -1186,6 +1186,46 @@ begin
       'mov a2, a4',
       'mov a3, a5',
       '.end:' ])
+  else if op = Ord(tkShr) then          { ARITHMETIC shr on a signed Int64 }
+    { The logical arm above with two differences and no others: the HIGH half
+      shifts with `sra` so the sign propagates, and the >= 32 case fills the
+      new high word with `hi >> 31` rather than zero -- 0 or -1, which is the
+      sign. The low half stays LOGICAL in the n < 32 case because it is being
+      refilled from the high word's low bits, not sign-extended.
+
+      Measured before it was written: `long long f(long long a, int n) { return
+      a >> n; }` refused with "64-bit binop operator not yet supported" on
+      xtensa while the identical `unsigned long long` compiled, which is what
+      named the missing operator rather than the missing size.
+      bug-cfront-no-entry-stub-for-xtensa }
+    EmitAsmXtensa([
+      'movi a8, 63',
+      'and a8, a2, a8',     { n }
+      'movi a9, 32',
+      'bgeu a8, a9, .big',
+      'movi a10, 0',
+      'beq a8, a10, .zero',
+      'movi a12, 32',
+      'sub a12, a12, a8',   { 32 - n }
+      'ssr a8',             { SAR = n }
+      'srl a10, a4',        { lo >> n  (logical: refilled from hi below) }
+      'sra a3, a5',         { hi >>a n  (final hi) }
+      'ssl a12',            { SAR for << (32-n) }
+      'sll a11, a5',        { hi << (32-n) }
+      'or a2, a10, a11',    { final lo }
+      'j .end',
+      '.big:',
+      'sub a8, a8, a9',     { n - 32 }
+      'ssr a8',
+      'sra a2, a5',         { lo = hi >>a (n-32) }
+      'movi a8, 31',
+      'ssr a8',
+      'sra a3, a5',         { hi = sign fill (0 or -1) }
+      'j .end',
+      '.zero:',
+      'mov a2, a4',
+      'mov a3, a5',
+      '.end:' ])
   else if (op = Ord(tkEq)) or (op = Ord(tkNeq)) then
   begin
     EmitAsmXtensa([

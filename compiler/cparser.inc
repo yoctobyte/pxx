@@ -1833,7 +1833,7 @@ begin
           FP save area, va_arg(int/ptr) the GP area. (An earlier model pushed every
           arg through GP and read floats from gp too; that mismatched the actual
           SysV call+prologue and made %f/%g render 0 — bug-c-double-vararg.) }
-        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32] then
+        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA] then
         begin
           { 32-bit cross: 4-byte word slots; a 64-bit arg spans two. The helper is
             size-driven — pass the arg's byte size so it steps by 4 or 8. }
@@ -2091,7 +2091,7 @@ begin
           The stack-spilled named params are skipped via the __va_overflow
           anchor instead (prologue). }
         a3 := AllocNode(AN_INT_LIT);
-        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32] then
+        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA] then
         begin
           { 32-bit cross: seed gp_offset with the reg-area BYTES consumed by named
             params (one word = 4 bytes, a by-value i64/double = 8), capped at the
@@ -2099,6 +2099,7 @@ begin
             registers (regsize 0) so every named+variadic arg is on the stack. }
           if TargetArch = TARGET_ARM32 then vaRegSz := 16
           else if TargetArch = TARGET_RISCV32 then vaRegSz := 32
+          else if TargetArch = TARGET_XTENSA then vaRegSz := 24  { a2..a7 }
           else vaRegSz := 0;
           vaGpBytes := 0;
           if CurProc >= 0 then
@@ -2117,7 +2118,17 @@ begin
         end
         else if TargetArch <> TARGET_X86_64 then
         begin
-          { Cross (aarch64): 8 GP slots of 8 bytes at offset 0. Seed past the
+          { The 64-bit-slot branch. The condition is "not x86-64" and its only
+            member is aarch64; it used to be COMMENTED "Cross (aarch64)", which
+            named the occupant rather than the set and is what made a 32-bit
+            target landing here silently a measurement to see rather than a
+            reading. xtensa joined the 32-bit set above in the same commit as
+            its C entry stub, which is the trigger
+            bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet
+            was filed to fire; wasm32 is still absent and still cannot compile
+            a C program, so that half of the trigger is still armed.
+
+            8 GP slots of 8 bytes at offset 0. Seed past the
             named GP params only -- a named FLOAT consumes an FP slot and not a
             GP one, which is the whole point of the two-bank model. }
           if CurProc >= 0 then ASTIVal[a3] := ProcNamedGP[CurProc] else ASTIVal[a3] := 0;
@@ -2134,7 +2145,7 @@ begin
         idx := FindSym('__va_overflow');
         a4 := AllocNode(AN_IDENT); ASTIVal[a4] := idx; ASTTk[a4] := Ord(tyPointer);
         a5 := AllocNode(AN_INT_LIT);
-        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32] then
+        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA] then
           ASTIVal[a5] := vaRegSz                 { 5th arg = reg-area size for impl32 }
         else
         begin
@@ -2151,7 +2162,7 @@ begin
           else ASTIVal[a5] := 64 + ASTIVal[a5] * 8;
         end;
         ASTTk[a5] := Ord(tyInteger);
-        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32] then
+        if TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32, TARGET_XTENSA] then
           helper := FindProc('__pxx_va_start_impl32')
         else
           helper := FindProc('__pxx_va_start_impl');
@@ -10751,6 +10762,17 @@ begin
     EmitI32($00000513);       { li a0, 0 }
     EmitI32($00008067);       { ret }
   end;
+  TARGET_XTENSA:
+  begin
+    { a2 is the result register on both xtensa ABIs; the RETURN differs, so it
+      is asked rather than assumed. This arm's absence is why the C fenv stubs
+      could not be emitted for xtensa at all, and why they were skipped in the
+      same breath as the setjmp ones -- see the split guards at the two .c
+      pulls, which are the actual defect this arm closes.
+      bug-cfront-no-entry-stub-for-xtensa }
+    xtensa_movi(reg_xtensa_a2, 0);
+    if XtensaABI = XTENSA_ABI_WINDOWED then xtensa_retw else xtensa_ret;
+  end;
   else
     Error('EmitCReturnZeroStub: unsupported target');
   end;
@@ -11331,7 +11353,7 @@ end;
   written out twice. x86 family: E8 rel32 = target - (patch+4). arm32: BL imm24
   = (target - (patch+8)) div 4 (pc is 8 ahead of the BL). aarch64: BL imm26.
   riscv32: the auipc+jalr pair, both words. }
-procedure CPatchStubCall(patchPos, bodyAddr, procIdx: Integer);
+procedure CPatchStubCall(patchPos, anchorPc, bodyAddr, procIdx: Integer);
 { The entry stub's forward call, aimed once its callee has a body.
 
   `procIdx` is not used to compute anything -- bodyAddr already is
@@ -11342,7 +11364,22 @@ procedure CPatchStubCall(patchPos, bodyAddr, procIdx: Integer);
 var rvHi, rvLo: Integer;
 begin
   RecordEntryRoot(procIdx);
-  if TargetArch = TARGET_ARM32 then
+  { XTENSA aims a REACH-INDEPENDENT long call, so what is patched is a 32-bit
+    .text-offset DELTA in a literal, not a displacement in the instruction --
+    which is why this is the one target that needs `anchorPc`. The anchor is
+    the runtime PC the delta is added to, and xtensa has no instruction that
+    yields a PC: EmitXtensaLongCallSlot gets one from CALL0's side effect of
+    leaving PC+3 in a0, so the anchor is a value only that emitter knows and
+    the site has to carry it here. A plain CALL0 would have fitted the existing
+    one-position signature and reaches +-512KB; the long form is used anyway
+    because `main` sits past every crtl body and the entry jump is already the
+    one xtensa distance that has been measured to overflow
+    (bug-a-xtensa-entry-jump-cannot-reach-a-main-body-past-128kb, 262591 bytes
+    against a 128KB reach). Costing a literal here to not re-measure that.
+    bug-cfront-no-entry-stub-for-xtensa }
+  if TargetArch = TARGET_XTENSA then
+    Patch32(patchPos, bodyAddr - anchorPc)
+  else if TargetArch = TARGET_ARM32 then
     Patch32(patchPos, Integer($EB000000) or
       (((bodyAddr - (patchPos + 8)) div 4) and $00FFFFFF))
   else if TargetArch = TARGET_AARCH64 then
@@ -11367,6 +11404,8 @@ end;
 procedure ParseCProgram;
 var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     initPatch, initIdx: Integer;
+    callAnchor, initAnchor: Integer;   { xtensa only -- see CPatchStubCall }
+    xtFiniIdx, xtFiniLit, xtFiniAnchor: Integer;   { xtensa only, ditto }
     needInit: Boolean;
     cNeedsHeap, cNeedsAnsi, cNeedsDiv: Boolean;   { shared pre-scan; only cNeedsAnsi is read }
     cWantsSoftFloat: Boolean;   { ESP-class on-demand softfloat pull }
@@ -11392,6 +11431,7 @@ begin
     never name `environ`). }
   needInit := CNeedsEnvironInit;
   initPatch := -1;
+  callAnchor := -1; initAnchor := -1;
 
   { Program entry stub (the ELF entry at code offset 0): save the initial stack
     pointer, hand C `main(argc, argv)` the Linux initial stack ([argc][argv0]...),
@@ -11662,6 +11702,73 @@ begin
       rv32_addi(reg_a7, reg_zero, 94);    { a7 = 94 (exit_group) }
       EmitI32($00000073);                 { ecall (a0 = exit code) }
     end;
+    TARGET_XTENSA:
+    begin
+      { Xtensa call0 ABI: main(argc, argv) -> a2=argc, a3=argv. argc at [sp],
+        argv=sp+4, exactly riscv32's shape one register file over.
+
+        REFUSED rather than guessed for the two configurations this stub is not:
+        the WINDOWED ABI, whose image is entered by ESP-IDF's own startup and
+        for which we emit no entry at all, and PLATFORM_ESP, where there is no
+        kernel to take an exit_group and no argc on the stack to read. Both
+        would produce a stub that assembles and runs into garbage, which is the
+        failure mode this whole ticket exists to avoid.
+        bug-cfront-no-entry-stub-for-xtensa }
+      if XtensaABI <> XTENSA_ABI_CALL0 then
+        Error('C program entry stub on xtensa: only the call0 ABI is ' +
+              'implemented. A windowed image is entered by ESP-IDF startup, ' +
+              'not by this stub, so there is nothing here to enter it with');
+      if TargetPlatform = PLATFORM_ESP then
+        Error('C program entry stub on xtensa: hosted linux only. On the ESP ' +
+              'profile there is no argc on the stack to pass to main and no ' +
+              'kernel to take the exit_group that ends it');
+      { Save the initial sp to BSS_INITIAL_RSP for ParamCount/ParamStr, BEFORE
+        anything moves sp -- the same ordering constraint the Pascal xtensa
+        entry states. a8 is scratch and safe at process entry. }
+      EmitLoadGlobAddrXtensa(reg_xtensa_a8, BSS_INITIAL_RSP);
+      xtensa_s32i(reg_xtensa_sp, reg_xtensa_a8, 0);
+      { Pre-main initializer phase, BEFORE argc/argv are loaded, so there is
+        nothing live to save across it but sp -- which the callee preserves.
+        Same placement and same reason as every other arm. }
+      if needInit then
+      begin
+        xtensa_mov(reg_xtensa_a2, reg_xtensa_sp);   { a2 = arg1 = initial sp }
+        EmitXtensaLongCallSlot(initPatch, initAnchor);
+      end;
+      xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, 0); { a2 = argc = [sp] }
+      xtensa_addi(reg_xtensa_a3, reg_xtensa_sp, 4); { a3 = argv = sp+4 }
+      { The long form, not a bare CALL0: see CPatchStubCall. It clobbers a0,
+        a9 and a10 only, so argc and argv survive it. }
+      EmitXtensaLongCallSlot(callPatch, callAnchor);
+      { Run registered finalizers before exiting, so a plain `return` from main
+        is not a silent skip -- without this the only exit path C code normally
+        takes bypasses __pxx_run_finalizers and atexit handlers fire for exit()
+        while being dropped for `return`, the worse of the two failure modes.
+        feature-c-entry-stub-must-run-finalizers }
+      xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -16);   { save retval }
+      xtensa_s32i(reg_xtensa_a2, reg_xtensa_sp, 0);
+      { The LONG form here too, and for the same reason as the call to main --
+        but reached the other way round, because this callee's proc index IS
+        known now, so the existing forward-call fixup list can carry it.
+        EmitCallProc would emit the short CALL0 and refuse at fixup time:
+        measured, "the forward call to __pxx_run_finalizers at code offset 51
+        cannot reach its body at 642936". The runner's body is emitted after
+        every crtl body, so on this target it is ALWAYS out of CALL0's +-512KiB
+        for any program that includes <stdio.h>. Telling the user to rebuild
+        with --xtensa-long-calls, as that diagnostic does, is the wrong answer
+        for a call the compiler emits itself and can size correctly.
+        bug-cfront-no-entry-stub-for-xtensa }
+      xtFiniIdx := GetFiniRunnerProc;
+      EmitXtensaLongCallSlot(xtFiniLit, xtFiniAnchor);
+      RecordInternalCallAt(xtFiniIdx, xtFiniLit, xtFiniAnchor);
+      xtensa_l32i(reg_xtensa_a2, reg_xtensa_sp, 0);
+      xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, 16);
+      { a2 is xtensa's result register and EmitExitReg's input, so main's
+        return value is already where exit_group wants it. Shared rather than
+        hand-rolled: EmitExitReg is the one place that knows 119 is exit_group
+        and 118 is plain exit on this target, verified under qemu -strace. }
+      EmitExitReg;
+    end;
   else
     Error('C program entry stub not implemented for this target yet');
   end;
@@ -11813,17 +11920,31 @@ begin
 
   { setjmp/longjmp primitives (lua's error model). After the entry stub, before
     any C body, so __pxx_setjmp/__pxx_longjmp resolve as bodied procs. }
-  { xtensa has no setjmp/longjmp/fenv stub implementation yet (the windowed ABI
-    makes the register-save stub its own piece of work), and emitting them
-    unconditionally made EVERY C compile fail there — including the
-    overwhelming majority that never touch setjmp. Skip them instead: a TU that
-    really does call setjmp leaves `__pxx_setjmp` undefined and says so, a
-    failure that names its cause, where the old one named nothing a C author
-    could act on. bug-cfront-no-entry-stub-for-xtensa. }
-  if (not CRuntimeStubsEmitted) and (TargetArch <> TARGET_XTENSA) then
+  { SETJMP is the one xtensa cannot have yet -- its register-save stub is its
+    own piece of work on the windowed ABI -- and emitting it unconditionally
+    made EVERY C compile fail there, including the overwhelming majority that
+    never touch setjmp. Skipping it is right: a TU that really does call setjmp
+    leaves `__pxx_setjmp` undefined and says so, a failure that names its cause.
+
+    THE FENV STUBS WERE SKIPPED WITH IT AND HAD NO BUSINESS BEING. One
+    condition guarded two calls and the comment described only the first, so
+    `EmitCFenvStubs` -- which for every non-x86-64 target is two `return 0`
+    bodies and nothing else -- was dropped on xtensa for setjmp's reason.
+    Measured: crtl's stdio float formatter references __pxx_fegetround, so a C
+    program that so much as includes <stdio.h> refused with "a pxx-internal
+    runtime symbol ... no library exports it" -- the diagnostic for a MISSING
+    BRIDGE, which named nothing an author could act on. The only thing actually
+    missing was an xtensa arm in EmitCReturnZeroStub.
+
+    So the guard is split: one condition per call, each with its own reason.
+    BOTH pulls carry it. The condition had two identical copies -- this site
+    and the .c-unit pull -- and fixing one would have left a C program and a C
+    unit disagreeing about which stubs exist.
+    bug-cfront-no-entry-stub-for-xtensa }
+  if not CRuntimeStubsEmitted then
   begin
     CRuntimeStubsEmitted := True;
-    EmitCSetjmpStubs;
+    if TargetArch <> TARGET_XTENSA then EmitCSetjmpStubs;
     EmitCFenvStubs;
   end;
 
@@ -12062,7 +12183,7 @@ begin
     ErrorAt(CLastCSourceLine, 'main function not found');
   end;
   { Patch the entry stub's call-to-main with main's body address. }
-  CPatchStubCall(callPatch, Procs[mainIdx].BodyAddr, mainIdx);
+  CPatchStubCall(callPatch, callAnchor, Procs[mainIdx].BodyAddr, mainIdx);
 
   { ... and the pre-main initializer call, the same way. The stub emitted it as
     a forward because the shell's body lives in crtl, which is not pulled until
@@ -12077,7 +12198,7 @@ begin
     if initIdx < 0 then
       Error('internal: the entry stub asked for a pre-main initializer phase ' +
             'but __pxx_run_initializers was never pulled');
-    CPatchStubCall(initPatch, Procs[initIdx].BodyAddr, initIdx);
+    CPatchStubCall(initPatch, initAnchor, Procs[initIdx].BodyAddr, initIdx);
   end;
 end;
 
@@ -13190,6 +13311,44 @@ begin
       EmitLoadImmArm32(9, Syms[vaOverflowSym].Offset);
       EmitI32($E08B9009);                                { add r9, fp, r9 (&__va_overflow) }
       EmitI32($E589C000);                                { str r12, [r9, #0] }
+    end;
+    TARGET_XTENSA:
+    begin
+      { Call0 ABI: the first 6 argument words arrive in a2..a7 (named +
+        variadic, one word each; a by-value i64/double spans two). Save all six
+        into __va_save (24 bytes, 4-byte slots). va_arg walks that reg area
+        (size 24, seeded in fp_offset) then the overflow.
+
+        Overflow starts at a15+16, which is where the callee reads stack word 6
+        from -- the SAME expression the ordinary parameter spill uses
+        (ir_codegen.inc, `xtInBias + (pw - 6) * 4` with xtInBias = 16 for
+        call0, the `addi sp, sp, -16` that saves a0/a15). Taken from there
+        rather than re-derived, because riscv32's identical anchor was wrong by
+        8 for a while and the tell was a first stack-passed variadic argument
+        reading a saved-frame word.
+
+        WINDOWED IS REFUSED, not approximated: its frame pointer is a7, its
+        incoming register window is a10.. rather than a2.., and its bias is the
+        `entry` size, so every one of the three quantities here changes. A
+        silently wrong save area produces wrong VALUES from the second variadic
+        argument on, which is the failure mode with no diagnostic.
+        a8/a9 are the documented scratch pair and are not argument registers.
+        bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet }
+      if XtensaABI <> XTENSA_ABI_CALL0 then
+        Error('variadic C functions on xtensa: only the call0 ABI is ' +
+              'implemented. The windowed frame pointer, argument window and ' +
+              'incoming-stack bias all differ, and guessing them produces ' +
+              'wrong argument VALUES rather than a diagnostic');
+      EmitFrameAddrXtensa(reg_xtensa_a8, Syms[vaSaveSym].Offset); { a8 = &__va_save }
+      xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, 0);
+      xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, 4);
+      xtensa_s32i(reg_xtensa_a4, reg_xtensa_a8, 8);
+      xtensa_s32i(reg_xtensa_a5, reg_xtensa_a8, 12);
+      xtensa_s32i(reg_xtensa_a6, reg_xtensa_a8, 16);
+      xtensa_s32i(reg_xtensa_a7, reg_xtensa_a8, 20);
+      xtensa_addi(reg_xtensa_a9, reg_xtensa_a15, 16);   { a9 = first stack word }
+      EmitFrameAddrXtensa(reg_xtensa_a8, Syms[vaOverflowSym].Offset);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 0);     { *__va_overflow = a15+16 }
     end;
     else
       Error('variadic C functions (va_arg) are not yet supported on this cross target');
@@ -15447,17 +15606,31 @@ begin
     C-PROGRAM path emitted them, so any Pascal or NilPy program pulling a .c
     unit that formats a float hit exactly that.
     bug-cfront-fegetround-unresolved-float-printf, second half. }
-  { xtensa has no setjmp/longjmp/fenv stub implementation yet (the windowed ABI
-    makes the register-save stub its own piece of work), and emitting them
-    unconditionally made EVERY C compile fail there — including the
-    overwhelming majority that never touch setjmp. Skip them instead: a TU that
-    really does call setjmp leaves `__pxx_setjmp` undefined and says so, a
-    failure that names its cause, where the old one named nothing a C author
-    could act on. bug-cfront-no-entry-stub-for-xtensa. }
-  if (not CRuntimeStubsEmitted) and (TargetArch <> TARGET_XTENSA) then
+  { SETJMP is the one xtensa cannot have yet -- its register-save stub is its
+    own piece of work on the windowed ABI -- and emitting it unconditionally
+    made EVERY C compile fail there, including the overwhelming majority that
+    never touch setjmp. Skipping it is right: a TU that really does call setjmp
+    leaves `__pxx_setjmp` undefined and says so, a failure that names its cause.
+
+    THE FENV STUBS WERE SKIPPED WITH IT AND HAD NO BUSINESS BEING. One
+    condition guarded two calls and the comment described only the first, so
+    `EmitCFenvStubs` -- which for every non-x86-64 target is two `return 0`
+    bodies and nothing else -- was dropped on xtensa for setjmp's reason.
+    Measured: crtl's stdio float formatter references __pxx_fegetround, so a C
+    program that so much as includes <stdio.h> refused with "a pxx-internal
+    runtime symbol ... no library exports it" -- the diagnostic for a MISSING
+    BRIDGE, which named nothing an author could act on. The only thing actually
+    missing was an xtensa arm in EmitCReturnZeroStub.
+
+    So the guard is split: one condition per call, each with its own reason.
+    BOTH pulls carry it. The condition had two identical copies -- this site
+    and the .c-unit pull -- and fixing one would have left a C program and a C
+    unit disagreeing about which stubs exist.
+    bug-cfront-no-entry-stub-for-xtensa }
+  if not CRuntimeStubsEmitted then
   begin
     CRuntimeStubsEmitted := True;
-    EmitCSetjmpStubs;
+    if TargetArch <> TARGET_XTENSA then EmitCSetjmpStubs;
     EmitCFenvStubs;
   end;
 

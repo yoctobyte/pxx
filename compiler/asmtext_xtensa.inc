@@ -200,6 +200,13 @@ begin
   else if CaseEqual(mnem, 'ssr') then xtensa_ssr(r0)
   else if CaseEqual(mnem, 'sll') then begin r1 := AsmXtensaRegOp(op1); xtensa_sll(r0, r1); end
   else if CaseEqual(mnem, 'srl') then begin r1 := AsmXtensaRegOp(op1); xtensa_srl(r0, r1); end
+  { ARITHMETIC right shift. xtensa_sra has existed in the encoder since the C
+    signed-arithmetic work and nothing could SPELL it here, so every
+    EmitAsmXtensa caller that wanted a sign-propagating shift had to fall back
+    to a refusal -- which is what left 64-bit `>>` on a SIGNED operand
+    unimplemented while the unsigned one worked. Same operand shape as srl.
+    bug-cfront-no-entry-stub-for-xtensa }
+  else if CaseEqual(mnem, 'sra') then begin r1 := AsmXtensaRegOp(op1); xtensa_sra(r0, r1); end
   else if CaseEqual(mnem, 'mov') then begin r1 := AsmXtensaRegOp(op1); xtensa_mov(r0, r1); end
   else if CaseEqual(mnem, 'movi') then begin imm := Integer(AsmXtensaInt(op1, holes, holeCur)); xtensa_movi(r0, imm); end
   else if CaseEqual(mnem, 'addi') then begin r1 := AsmXtensaRegOp(op1); imm := Integer(AsmXtensaInt(op2, holes, holeCur)); xtensa_addi(r0, r1, imm); end
