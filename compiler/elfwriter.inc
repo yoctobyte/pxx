@@ -5801,6 +5801,22 @@ begin
       end
       else if active and CaseEqual(command, 'define') then
         PasDefine(name)
+      else if active and CaseEqual(command, 'claim') then
+        { PasDefine, NOT PasClaim — deliberately, and it is the whole reason this
+          arm exists rather than being left out. Every source file is walked
+          TWICE: once here, to resolve which {$include}s to follow, and again by
+          the lexer over the expanded text. A durable claim taken on the first
+          walk is still held on the second, so the unit's own
+          `{$IFNDEF C} {$CLAIM C} {$DEFINE I_WON} {$ENDIF}` takes the ELSE arm
+          when the lexer arrives and NOBODY ever sets I_WON — the documented
+          claim-and-skip pattern defeating itself. Measured, first cut of
+          feature-p-defineglobal-a-define-that-crosses-unit-boundaries: unit `a`
+          printed "stood down" with no other claimant in the program.
+          This pass is a PREVIEW; its define table is snapshotted and rolled back
+          at the bottom of this routine, so defining the name here gives an
+          {$IFDEF} later in the same expansion the right answer and leaves the
+          durable claim to the one authoritative walk. }
+        PasDefine(name)
       else if active and CaseEqual(command, 'undef') then
         PasUndefine(name);
 

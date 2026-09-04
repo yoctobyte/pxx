@@ -20,6 +20,7 @@ in the table. The strictness switches are explained in context on the
 | --- | --- |
 | `{$DEFINE name}` | Define a conditional symbol (optionally `{$DEFINE name := value}`). |
 | `{$UNDEF name}` | Undefine a conditional symbol. |
+| `{$CLAIM name}` | Define a conditional symbol for the **whole compilation**, not just the current unit. Set-once: `{$UNDEF}` cannot take it back. |
 | `{$IFDEF name}` | Compile the branch if `name` is defined. |
 | `{$IFNDEF name}` | Compile the branch if `name` is not defined. |
 | `{$IF expr}` | Compile the branch if `expr` is true (see below). |
@@ -27,6 +28,26 @@ in the table. The strictness switches are explained in context on the
 | `{$ELSEIF expr}` | `else`-branch guarded by `expr`, only if no prior branch was taken. |
 | `{$ELSE}` | Compile the branch if no prior branch in the chain was taken. |
 | `{$ENDIF}` / `{$IFEND}` | Close the conditional. |
+
+`{$DEFINE}` is scoped to the unit that writes it, as in FPC — a unit's define
+never reaches the program or any other unit. `{$CLAIM}` is the deliberate
+exception, for the *claim-and-skip* pattern: two units can supply the same
+capability, and whichever is compiled first claims the name so the second
+compiles itself out.
+
+```pascal
+{$IFNDEF PXX_HAS_THE_THING}
+  {$CLAIM PXX_HAS_THE_THING}
+  { …this unit provides it… }
+{$ENDIF}
+```
+
+A claim is **order-dependent by construction, and that is the point** — it is
+`#ifndef GUARD` / `#define GUARD` from C, at a spelling that says so. It is
+**not retroactive**: only sources scanned *after* the claim see it. pxx reads a
+source file whole before parsing it, so every conditional in the main program is
+resolved before its `uses` clause compiles anything — a program that wants the
+name must claim it itself, above its own `uses`.
 
 `{$IF}` / `{$ELSEIF}` expressions support `defined(NAME)`, `declared(NAME)`,
 integer literals and defined integer symbols, the comparison operators, `!`

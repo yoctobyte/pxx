@@ -11249,6 +11249,8 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_pascal_define_unit_scope_order126 "$$($(TESTTMP)/test_pascal_define_unit_scope_order126)" "$$(printf 'ua\nub does not see it')"
 	./$(COMPILER) -Futest/units_defscope test/test_pascal_define_unit_scope_order2.pas $(TESTTMP)/test_pascal_define_unit_scope_order226
 	tools/expect_same.sh test_pascal_define_unit_scope_order226 "$$($(TESTTMP)/test_pascal_define_unit_scope_order226)" "$$(printf 'ub does not see it\nua')"
+	./$(COMPILER) -Futest/units_claim test/test_pascal_claim_crosses_units.pas $(TESTTMP)/test_pascal_claim_crosses_units26
+	tools/expect_same.sh test_pascal_claim_crosses_units26 "$$($(TESTTMP)/test_pascal_claim_crosses_units26)" "$$(printf 'early: no claim yet\na: claimed\nb: stood down\nundef: claim survived\ninc: claim taken in an include\nlater: include claim crossed the boundary\nprogram: plain define stayed in the unit\nprogram: scanned before its units, no claim')"
 	./$(COMPILER) test/test_float_str_val.pas $(TESTTMP)/test_float_str_val26
 	tools/expect_same.sh test_float_str_val26 "$$($(TESTTMP)/test_float_str_val26)" "$$(printf '[3.14]\n[    3.1416]\n[-2.750]\n[1000.5]\n42.7500 code=0\n-1.5000 code=0\n100.00 code=0\n350.00 code=0\n0.1250 code=0\ncode=1\n[   42]\n-99 code=0')"
 	./$(COMPILER) test/test_float_result_loop.pas $(TESTTMP)/test_float_result_loop26

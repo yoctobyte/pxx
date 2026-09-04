@@ -1193,3 +1193,51 @@ arrives is junk, and consuming it strides worse than the current default.
 
 2026-09-04 | frankA | compiler/pasparser_expr.inc | The "if you are about to add an isNilPy arm here: it cannot fire" comment above the PyExprMode dispatch was written about nine arms and is true of 28 sites in the same function. Measured with a reachability probe over all 830 .npy programs: 0 fires inside ParseFactorCore, 3 of 3 outside it. Position relative to the dispatch is the discriminator; DUPLICATION IS NOT, and I had reported that it was — at 291 of 830 the only firing sites were the only non-duplicated strings, and a duplicated one fired at the full denominator. Deleting Pascal-arm copies on the "exists on both arms" test would remove a live one. The comment now carries the population, the split between the 17 structurally-dead and the 11 empirically-dead, and the withdrawn inference. Probe design note: the guards are all `not loaded`, so wrap the CONDITION, not the body — a probe that fires with the guard can only speak when the RTL is broken.
 2026-09-04 | frankC | tools/busybox_diff.sh | THE ORACLE HAD A WIDTH AND IT WAS ALWAYS 64. The gcc oracle is built with plain `gcc`, so diffing a 32-bit subject against it compares two WIDTHS, not two compilers. Found by the end-state i386 sweep at 394 applets: 937 of 938 cases byte-identical and the one that was not was `expr 2147483647 + 1`, gcc 2147483648 against pxx -2147483648. busybox's coreutils/expr.c has `typedef long arith_t` when CONFIG_EXPR_MATH_SUPPORT_64 is off, which is this config, so the answer IS sizeof(long) — measured all four cells: gcc native 8/2147483648, gcc -m32 4/-2147483648, pxx i386 4/-2147483648, pxx native 8/2147483648. **pxx agrees with gcc at both widths; the harness was the only thing wrong**, and had been for every 32-bit target since --targets learned to take one. Fix: build a second oracle with `gcc -m32` and pick by the target's width. WHY IT MATTERS BEYOND THE ROW: this is the SAFE direction of the failure — it cannot make a broken compiler look green, only a correct one look broken — so nothing shipped because of it, and that is exactly why it survived. What it cost is triage: the FAIL is indistinguishable from a real 64-bit-arithmetic defect until someone builds the 32-bit oracle by hand, and the i386 leg could never report GREEN at all, so the rung had no completion signal. If gcc cannot build 32-bit the harness now SKIPS the comparison and says so — falling back to the 64-bit oracle is the bug, and `no multilib` must not read as `verified`. Two guards carried with it: the two oracles must run the same number of cases (else they are not the same experiment) and the run reports `GREEN ON WHAT WAS COMPARED -- N target(s) built and were NOT compared` rather than plain GREEN, because a note above a GREEN is read as GREEN and this script already refuses that shape twice elsewhere. Three positive controls, each reverted and the revert verified by `cmp` against a pre-control copy: pointing i386 back at the 64-bit oracle reproduces the original diff exactly (rc=1, RED); forcing the no-multilib path exercises the skip branch, which had never executed; and the same forced path shows the new verdict line. NOT the compiler's ticket — no compiler change, and the sweep it unblocks is the next commit.
+
+## 2026-09-04 | frankD (Track P) | compiler/lexer.inc, compiler/defs.inc, compiler/elfwriter.inc, docs/reference/directives.md, test/units_claim/ | `{$CLAIM}` — a conditional symbol that outlives its unit
+
+`feature-p-defineglobal-a-define-that-crosses-unit-boundaries`, built as
+`{$CLAIM}` per the Track U decision. `{$DEFINEGLOBAL}` stays an unknown
+directive on purpose and still warns.
+
+**Where it lives, and why not in the define table.** `PasClaimList` is one
+`|`-delimited lowercase string in `defs.inc`. The define table is snapshotted
+and rolled back wholesale in two places — `CompileUnit` around every unit,
+`ExpandIncludes` around include expansion — so a claim stored there is undone by
+whichever restore runs next. A list nothing saves makes *whole-compilation
+scope* and *set-once, never cleared* structural rather than a list of restore
+sites someone remembered to patch, and `{$UNDEF}` cannot reach it for the same
+reason. Read through `PasDefineExists`, which now answers the union of table and
+claims — one choke point, so `{$IFDEF}`, `{$IFNDEF}`, `defined()` in `{$IF}` and
+`ExpandIncludes`' own evaluator all see a claim with no second lookup to forget.
+`PasDefine` and `PasSetDefineValue` ask the new table-only `PasDefineInTable`
+instead: they are about a ROW, and a claimed name has none, so answering the
+union there would make `{$DEFINE X}` after `{$CLAIM X}` skip the insert and
+leave `PasSetDefineValue` nothing to hang a value on.
+
+**The bug the first cut had: every Pascal source is walked twice.** Taking the
+claim in `ExpandIncludes` as well as the lexer meant the claim was already held
+when the lexer arrived, so the unit's own
+`{$IFNDEF C} {$CLAIM C} {$DEFINE I_WON} {$ENDIF}` took the ELSE arm and nobody
+ever set `I_WON` — the documented claim-and-skip pattern defeating itself with
+no other claimant in the program. Expansion is a PREVIEW pass whose define state
+is rolled back at the bottom of the routine, so that arm calls `PasDefine`.
+
+**Two things the ticket's Gate asked for that are answered differently.**
+(1) A unit's claim is NOT visible to `{$IFDEF}` in the main program. pxx lexes a
+file whole (`LexAll`) then parses the token array, so the program's conditionals
+are all resolved before its `uses` compiles anything — the program is first in
+scan order, and "not retroactive" therefore covers it. Same rule, not a hole,
+and the same reason a unit's plain `{$DEFINE}` has never reached the program.
+(2) A claim inside an include is durable but invisible to include SELECTION,
+because `ExpandIncludes` restores the define table per nesting level. Reproduced
+with a plain `{$DEFINE}` and no `{$CLAIM}` at HEAD *and under the pin*, where
+both arms of the conditional vanish silently — filed as
+`bug-p-a-define-set-in-an-include-is-invisible-to-the-includers-own-include-selection`
+(p45) rather than grown around with a third store.
+
+Gate: `converged after 1 round(s)`; `gate.sh quick` GREEN with the FPC seed
+canary PASS (gated before committing, so it was live). Positive control: the
+same test under `stable_linux_amd64/default/pinned` flips exactly the five
+discriminating rows and leaves the two that cannot fail alone — those two are
+labelled as such in the test header rather than counted as coverage.

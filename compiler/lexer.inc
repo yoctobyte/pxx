@@ -872,7 +872,49 @@ begin
   end;
 end;
 
-function PasDefineExists(const name: AnsiString): Boolean;
+{ The claim list (defs.inc has the design note). lexer.inc is included BEFORE
+  frontend_forwards.inc, so LowerCase is not in scope here — PasDefineMatches
+  lowercases inline for the same reason. }
+function PasClaimKey(const name: AnsiString): AnsiString;
+var i: Integer; c: Char;
+begin
+  Result := '|';
+  i := 1;
+  while i <= Length(name) do
+  begin
+    c := name[i];
+    if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    Result := Result + c;
+    Inc(i);
+  end;
+  Result := Result + '|';
+end;
+
+function PasClaimed(const name: AnsiString): Boolean;
+begin
+  Result := False;
+  if name = '' then Exit;
+  Result := Pos(PasClaimKey(name), PasClaimList) > 0;
+end;
+
+{ {$CLAIM X}: set-once, never cleared — a claim you can release is not a claim.
+  Idempotent, so the second unit to write it is not an error, it is the whole
+  point (it took the {$IFNDEF} arm and never got here). }
+procedure PasClaim(const name: AnsiString);
+var key: AnsiString;
+begin
+  if name = '' then Exit;
+  if PasClaimed(name) then Exit;
+  key := PasClaimKey(name);
+  if PasClaimList = '' then PasClaimList := key
+  else PasClaimList := PasClaimList + Copy(key, 2, Length(key) - 1);
+end;
+
+{ Table only. PasDefine and PasSetDefineValue ask THIS, not PasDefineExists:
+  they are about a row in the table, and a claimed name has no row. Answering
+  the union here would make {$DEFINE X} after {$CLAIM X} skip the insert, and
+  PasSetDefineValue would then have nothing to hang a value on. }
+function PasDefineInTable(const name: AnsiString): Boolean;
 var i: Integer;
 begin
   Result := False;
@@ -884,11 +926,19 @@ begin
   end;
 end;
 
+{ The one question every conditional asks — {$IFDEF}, {$IFNDEF}, defined(X) in
+  {$IF}, and ExpandIncludes' own evaluator all land here, which is why the
+  claim check lives at this choke point and nowhere else. }
+function PasDefineExists(const name: AnsiString): Boolean;
+begin
+  Result := PasDefineInTable(name) or PasClaimed(name);
+end;
+
 procedure PasDefine(const name: AnsiString);
 var i, j, len: Integer;
 begin
   if name = '' then Exit;
-  if PasDefineExists(name) then Exit;
+  if PasDefineInTable(name) then Exit;
   i := 0;
   while i < PasDefineCount do
   begin
@@ -1184,6 +1234,7 @@ var name: AnsiString;
 begin
   PasDefineCharLen := 0;
   PasDefineCount := 0;
+  PasClaimList := '';
   PasCondCount := 0;
   StrictOverload := False;
   StrictOverloadWidth := False;
@@ -2398,6 +2449,7 @@ begin
   else if PasDirectiveActive then
   begin
     if CaseEqual(command, 'define') then PasDefine(name)
+    else if CaseEqual(command, 'claim') then PasClaim(name)
     else if CaseEqual(command, 'undef') then PasUndefine(name)
     else if CaseEqual(command, 'strict_overload') then
     begin

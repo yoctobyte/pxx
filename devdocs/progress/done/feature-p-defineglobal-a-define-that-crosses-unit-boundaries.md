@@ -2,10 +2,95 @@
 track: P
 prio: 45
 type: feature
-summary: "`{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem."
+blocked-by: []
+summary: "DONE — `{$CLAIM name}` lands: a conditional symbol that outlives the unit that sets it, set-once, whole-compilation, not retroactive. `{$DEFINE}` is unchanged and still unit-scoped (FPC parity kept). Held in a claim list that no snapshot saves, so never-cleared is structural rather than a list of restore sites; read through PasDefineExists so every conditional sees it. Two Gate clauses are answered differently than the ticket assumed and both are recorded below."
+status: done
 ---
 
-# `{$DEFINEGLOBAL xyz}` — a define that crosses unit boundaries
+# `{$CLAIM xyz}` — a define that crosses unit boundaries
+
+> **RESOLVED 2026-09-04 (frankD, Track P).** Built as `{$CLAIM}`, per
+> [[decide-a-cross-unit-define-name-and-semantics]]. `{$DEFINEGLOBAL}` was NOT
+> implemented and deliberately stays an unknown directive — verified: it still
+> warns `unknown compiler directive {$DEFINEGLOBAL} — ignored` while `{$CLAIM}`
+> does not, which is the membership rule frankS asked for.
+>
+> ## What landed
+>
+> - `compiler/defs.inc` — `PasClaimList`, one `|`-delimited lowercase string.
+> - `compiler/lexer.inc` — `PasClaim` / `PasClaimed` / `PasClaimKey`; the
+>   `else if CaseEqual(command, 'claim')` arm; `PasDefineExists` split into
+>   `PasDefineInTable` (the table, what `PasDefine` and `PasSetDefineValue` ask)
+>   and the union (what every conditional asks).
+> - `compiler/elfwriter.inc` — the include-expansion pass's arm.
+> - `docs/reference/directives.md` — the row and the semantics paragraph.
+> - `test/test_pascal_claim_crosses_units.pas` + `test/units_claim/`, wired into
+>   `test-core`.
+>
+> ## Why a separate list and not a row in the define table
+>
+> The define table is snapshotted and rolled back **wholesale** in two places —
+> `CompileUnit`, around every unit, and `ExpandIncludes`, around include
+> expansion. A claim stored there is undone by whichever restore runs next. A
+> list nothing saves makes *whole-compilation scope* and *set-once, never
+> cleared* **structural**, not a list of sites someone remembered to patch;
+> `{$UNDEF}` cannot reach it for the same reason, so "a claim you can release is
+> not a claim" needs no check to enforce it.
+>
+> ## The bug the first cut had, because every file is walked TWICE
+>
+> First cut took the claim in `ExpandIncludes` too. That pass runs before the
+> lexer over the same text, so the claim was already held when the lexer arrived
+> and the unit's own `{$IFNDEF C} {$CLAIM C} {$DEFINE I_WON} {$ENDIF}` took the
+> ELSE arm — **the documented claim-and-skip pattern defeating itself**, with no
+> other claimant anywhere in the program. Measured: unit `a` printed `stood
+> down`. Expansion is a PREVIEW whose define state is rolled back at the bottom
+> of the routine, so that arm now calls `PasDefine`, not `PasClaim`, and the one
+> authoritative walk takes the claim.
+>
+> ## Two Gate clauses answered differently than the ticket assumed
+>
+> **1. "visible to `{$IFDEF X}` in the program" — NO, and it is the SAME rule,
+> not a hole.** pxx lexes a source file whole (`LexAll`) and then parses the
+> token array, so every conditional in the main program is resolved before its
+> `uses` clause has compiled a single unit. The program is, in scan order, the
+> FIRST thing compiled — so a unit's later claim is not retroactive **to it**,
+> which is answer 4 of the decision applied consistently, and the same reason a
+> unit's plain `{$DEFINE}` has never reached the program (the ticket's own
+> measured FPC-parity row). Making it work means interleaving lexing with parsing
+> for the main file: an architectural change in shared lexer territory, with no
+> motivating use — the motivating pattern is unit-to-unit and it works. A program
+> that wants the name claims it itself, above its `uses`. Documented as the rule
+> in `docs/reference/directives.md`.
+>
+> **2. A claim inside an INCLUDE is durable, but invisible to include SELECTION —
+> and that is pre-existing.** `ExpandIncludes` restores the define table per
+> nesting level, so an include's own `{$DEFINE}` does not reach its includer
+> during that pass either. Reproduced with a plain `{$DEFINE}` and no `{$CLAIM}`
+> anywhere, at HEAD **and under the pinned compiler**, where both arms of the
+> conditional vanish silently. Filed as
+> [[bug-p-a-define-set-in-an-include-is-invisible-to-the-includers-own-include-selection]]
+> (p45). `{$CLAIM}` inherits it identically rather than growing a third store to
+> special-case itself around a general bug; `test/units_claim/uclaim_c.pas`
+> records the boundary in its header.
+>
+> ## Gate
+>
+> `make compiler/pascal26` — `converged after 1 round(s)` (the recompute verb).
+> `tools/gate.sh quick` — `gate: GREEN (exit 0)` with `PASS  FPC seed canary`,
+> run before committing so the canary was live rather than SKIP.
+>
+> **Positive control, drawn from the right population:** the same test compiled
+> with `stable_linux_amd64/default/pinned`, which has no `{$CLAIM}`, flips
+> exactly the five discriminating rows — `b: claimed`,
+> `undef: UNDEF CLEARED THE CLAIM`, `inc: INCLUDE CLAIM LOST`,
+> `later: INCLUDE CLAIM DID NOT CROSS` — and leaves unchanged the two that cannot
+> fail (`early`, `program`), as the test's own header says they must. Those two
+> pin the SHAPE of the answer rather than catching a regression: "no claim yet"
+> is also what a no-op prints, so they are labelled in the test, not counted as
+> coverage.
+
+## Original ticket
 
 > **UNBLOCKED 2026-08-19 — the decision landed. Build `{$CLAIM}`, not `{$DEFINEGLOBAL}`.**
 > See [[decide-a-cross-unit-define-name-and-semantics]] in `decided/` for the full rationale.
@@ -135,3 +220,6 @@ live caller".** Filing one would need the user, so it is queued, not taken.
 Whoever picks this up should also re-read it after the current import/uses
 spelling work lands — that work is settling adjacent questions about how a unit
 declares something the rest of the compilation must respect.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

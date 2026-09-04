@@ -2904,6 +2904,23 @@ var
   PasDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
   PasDefineCharLen : Integer;
   PasDefineCount   : Integer;
+  { {$CLAIM name} — a define that outlives the unit that set it
+    (feature-p-defineglobal-a-define-that-crosses-unit-boundaries; the spelling
+    was settled in decide-a-cross-unit-define-name-and-semantics, which retired
+    `{$DEFINEGLOBAL}` because the mechanism is claim-and-skip, not "global").
+
+    Deliberately NOT a row in the define table above. That table is snapshotted
+    and rolled back WHOLESALE in two places — CompileUnit, around every unit,
+    and ExpandIncludes, around include expansion — so a claim stored there is
+    undone by whichever restore runs next. Held instead as one '|'-delimited
+    lowercase list that nothing saves and nothing restores, which makes
+    "whole-compilation scope" and "set-once, never cleared" STRUCTURAL rather
+    than a list of sites someone remembered to patch; {$UNDEF} cannot reach it
+    for the same reason. Read through PasDefineExists, which answers the union
+    of table and claims, so every {$IFDEF}/{$IF defined()} sees a claim without
+    a second lookup anyone can forget. Order-dependence is the FEATURE: the
+    first unit to arrive claims the name and every later one stands down. }
+  PasClaimList : AnsiString;
   { C command-line `-D<name>[=<value>]` / `-U<name>` predefines, captured raw at
     arg-parse time and seeded into the C preprocessor in CPreprocess (the C side
     supports macro VALUES, which the Pascal name-only define table does not). }
