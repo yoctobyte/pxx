@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 65
+prio: 75
 type: chore
 status: backlog
 found: 2026-09-03
@@ -123,3 +123,60 @@ the record for those.
 Note that (1) and (2) alone would take the job from 6 red to 3, and all three
 remaining would be censuses correctly reporting drift — which is a materially
 different thing for a reader to see than "6 RED".
+
+---
+
+## Archive measured 2026-09-04 — not a blip, and seven has NEVER passed a full tier
+
+Asked whether the constant full/RED verdict was "a two-run blip or a standing
+condition". Measured over the whole `tstate/reports` archive (1825 reports).
+Re-ranked 65 → 75 on the result.
+
+**It is standing, and worse than the question assumed.**
+
+- **12 consecutive** full runs with `tools-devtest#00` as the SOLE red, and 17 of
+  the last 20. The streak breaks only at 2026-09-03T18:44, where a cmath group
+  was also red — and those cleared.
+- **seven: 308 full-tier reports, 0 GREEN.** Spanning 2026-08-29T16:51 to
+  2026-09-04T03:26. Not one.
+
+### Green full tiers do happen — just never here
+
+| host | full reports | GREEN | most recent GREEN |
+| --- | --- | --- | --- |
+| **seven** | **308** | **0** | — |
+| plexus | 205 | 14 | 2026-08-26T16:08 (`23e3ba7435cc`) |
+| xeon | 45 | 4 | 2026-08-03T23:22 |
+| borg | 191 | 34 | 2026-07-28T21:27 (retired 08-12) |
+
+So the capability is real and the fleet has lost it: **the last green full tier
+anywhere was plexus on 2026-08-26**, eight days ago. seven began running fulls on
+08-29 — three days after that — and has never produced one.
+
+### What that costs, precisely
+
+`pin_is_green` requires a `full` run with no RED tier. Every pin since has been
+cut on seven. So **since seven became the pinning box, a fresh rollback target
+has been structurally unobtainable** — not unlucky, unobtainable. That is exactly
+why `trackt pinstatus` still answers *"last pin T found fully green: v354
+(19d5d9c7)"* from 2026-08-19, and why the recovery half of the fast-pin trade
+(`devdocs/dev/track-t.md:151` — "a bad pin is recovered, not prevented") has had
+no target for two weeks while three pins were cut through it.
+
+**This job is the whole of that gap.** In 12 of the last 12 runs it is the only
+thing standing between the tree and the first fresh fallback since v354.
+
+### And it sharpens Cause 1's host-specificity
+
+frankZ measured that four of this job's guards — `twatch_timeout_staleness`,
+`twatch_timeout_verdict`, `twatch_verify_request`, `verify_assertions` — **pass on
+plexus and fail on seven in the same `make tools-devtest` invocation**. The
+hypothesis offered then was that seven is the box where a live watcher exists, so
+guards asserting over live watcher state behave differently here.
+
+0-of-308 on seven against 14-of-205 on plexus is consistent with that and raises
+it well past a guess: **the guard set that can only fail where a live watcher runs
+is failing on the only box that runs one.** Still a hypothesis — the falsifying
+test is a watcher-free run on seven, which nobody has done — but it is now the
+leading one, and it predicts that fixing the four host-specific guards is what
+turns 0-of-308 into a green tier.
