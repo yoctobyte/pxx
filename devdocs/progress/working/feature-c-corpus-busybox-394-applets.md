@@ -194,3 +194,32 @@ the count of green cases is not the number to optimise.
 
 Rung 3's write-up should cite THIS measurement rather than the 258-applet one.
 
+
+## Real ARGUMENTS found two silent miscompiles that 516 `--help` cases could not
+
+frankD, 2026-09-04. `tools/busybox_diff.sh` grew `run_realargs_cases()` — the
+applets run against real fixtures rather than asked to print their usage. Two
+divergences on x86-64, both silent, both now fixed:
+
+**`uname -p` printed `uu` and `-i` printed `u`** (`67708bbe8`). uname.c declares
+`char processor[sizeof(((struct utsname*)NULL)->machine)]` twice; `sizeof` of an
+array field reached through a *parenthesised* base answered the ELEMENT size, so
+the info struct came out 402 bytes instead of 530 with three fields at
+consecutive offsets and each `strcpy` wrote through its neighbours. `sizeof(x.m)`
+was right and `sizeof((p)->m)` was wrong — **a parenthesis decided the answer**.
+
+**`sed 's/dogs/cats/'` SIGSEGV'd on any line that actually substituted**
+(`f9cd0039c`). `f(s.arr)` on an array-of-struct field passed the address of a
+one-element temp copy instead of decaying, so sed's `regexec(..., G.regmatch, 0)`
+filled a temp nobody read; the match offsets came back 0/0 for a match at 14..18.
+crtl's `regexec` is byte-identical to glibc in isolation on 9/9 rows, and every
+`sizeof` and offset in the program is correct — the argument was simply a
+different object. Latent because the temp path only fires for a record element
+over 8 bytes, so `char[]`, `int[]`, `double[]` and `int[][]` fields were all fine.
+
+**Both are wrong-VALUE bugs with no diagnostic, and neither is reachable by
+asking a program to print its usage.** The applet-listing and `--help` cases
+exercise argument parsing and little else; the first fixture with a digit in it
+found one and the first substitution found the other. That is an argument about
+coverage shape rather than coverage size — the 894th `--help` case would not
+have found either.
