@@ -79,4 +79,4 @@ site was added without grepping for the second — the literal stated form of
 class-enumerator `for X in C` wraps its enumerator's `Free` and never asked for
 the runtime either; such a program does not compile on pin v403. Guarded now by
 `test/test_forin_enumerator_free_without_try.pas`.
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 203b8a8e8.
