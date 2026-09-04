@@ -1299,7 +1299,19 @@ begin
     2026-08-31 and the guard went on refusing i386, arm32, aarch64 and riscv32
     for four more days, with a message that read as current. Platform is no
     better: windowed xtensa on a POSIX platform has no signal runtime either,
-    for an ABI reason, and no platform define can say so.
+    for an ABI reason, and no platform define can say so. wasm32 is the third
+    shape again -- a module with no OS to deliver a signal, and neither arch
+    nor platform names that either.
+
+    THAT THIRD ONE ARRIVED THE DAY AFTER THIS DEFINE DID, and it is the
+    argument for the define rather than an exception to it. TargetHasSignalRuntime
+    had no wasm32 arm at all (2466279ad, frankA): the predicate and
+    EmitSignalRuntimeForTarget had agreed by ACCIDENT on every target that had
+    ever asked, because wasm32's emit arm is deliberately empty, so no runtime
+    was emitted either way and nothing could tell. Making this define a third
+    consumer that asks the predicate DIRECTLY is what surfaced it -- 55 sources
+    gained a wasm32 IR_SET_SIGNAL gap in one commit. A capability question
+    routed to one predicate turns a silent disagreement into a loud one.
 
     So this asks the ONE predicate the codegen sites share, rather than letting
     a library re-derive it from what defines happen to exist. Add nothing here

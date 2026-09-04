@@ -128,8 +128,10 @@ this ticket asked for and what `root-cause-over-microfix.md` is about.
   of a handler. A real divergence, recorded in the header, the source and here.
   Refusing would reject the majority of real callers (busybox fills `sa_mask`
   routinely) over a property few of them depend on.
-- **No signal runtime → -1/ENOSYS, never 0.** ESP platforms, windowed xtensa and
-  `--no-signals` take the bridge's guarded else-arm. Measured: `sigaction rc=-1
+- **No signal runtime → -1/ENOSYS, never 0.** ESP platforms, windowed xtensa,
+  **wasm32** and `--no-signals` take the bridge's guarded else-arm. (wasm32 was
+  not on that list when this was written and joined it the next day, `2466279ad`
+  — see the postscript at the end.) Measured: `sigaction rc=-1
   errno=38`. Returning 0 was the whole defect; the fix must not reintroduce it
   on the targets it cannot serve.
 
@@ -178,4 +180,27 @@ had one. **PXX prescans and accepted it; `make compiler/pascal26` converged;
 Public/Forward`. Exactly the class CLAUDE.md says only the canary can see, and
 it only ran because `compiler/**` was still uncommitted. The fix was to MOVE the
 declaration earlier, not to add a second one.
+
+## POSTSCRIPT — this change surfaced a hole in the predicate it asks (frankA, `2466279ad`)
+
+`TargetHasSignalRuntime` had **no wasm32 arm**: ESP, then xtensa's ABI, then
+`Result := True`. A wasm module has no OS to deliver a signal, so that was
+wrong — and **invisible, because `EmitSignalRuntimeForTarget`'s wasm32 arm is
+deliberately empty.** No runtime was emitted either way, so the predicate and
+the dispatcher agreed by ACCIDENT on every target that had ever asked.
+
+`PXX_HAS_SIGNALS` became a third consumer asking the predicate DIRECTLY, so
+`pxxcio.pas` took the LIVE arm of `__pxx_c_signal` on wasm32, emitted
+IR_SET_SIGNAL, and the backend refused the body: **3 → 56 IR op 65 gaps in one
+commit, 55 of them `__pxx_c_signal`.** The `{$else}` −38 arm here is right; it
+simply was not reached there.
+
+Worth stating as the general shape: **two mechanisms that agree because neither
+is exercised are not agreeing.** Routing a capability question through one
+predicate is what converts that silence into a diagnosable failure — the hole
+was pre-existing and had no way to be seen until something asked.
+
+Confirmed here at HEAD rather than taken on report: the four cross targets are
+still byte-identical to the gcc oracle after the predicate fix, and a Pascal
+program pulling `pxxcio` now builds for wasm32.
 

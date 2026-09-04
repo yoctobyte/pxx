@@ -811,8 +811,12 @@ end;
 
 { THE WHOLE C SIGNAL BRIDGE IS BEHIND PXX_HAS_SIGNALS, and the else-arm below
   REFUSES rather than silently doing nothing -- which is the entire bug it
-  replaces. A build with no signal runtime (ESP platforms, windowed xtensa,
-  --no-signals) must TELL a C caller so, not hand it a success it will act on.
+  replaces. A build with no signal runtime must TELL a C caller so, not hand it
+  a success it will act on. THE SET IS NOT ENUMERATED HERE ON PURPOSE -- the
+  define below IS the enumeration, and a list in a comment is what goes stale.
+  (It was ESP platforms and windowed xtensa when this was written; wasm32 joined
+  the day after, 2466279ad, when TargetHasSignalRuntime got the arm it had never
+  had. Had this comment been the guard, it would have been wrong within a day.)
 
   PXX_HAS_SIGNALS is a compiler define (lexer.inc) reading the one predicate
   TargetHasSignalRuntime, so this guard cannot go stale the way signals.pas's
