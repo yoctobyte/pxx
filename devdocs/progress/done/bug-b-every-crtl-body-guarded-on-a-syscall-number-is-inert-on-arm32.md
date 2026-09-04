@@ -4,12 +4,12 @@ title: "every crtl body guarded on a SYS_ number answers ENOSYS on arm32 — 56 
 track: B
 prio: 55
 type: bug
-status: backlog
+status: done
 created: 2026-09-04
 found-by: franks-ab
 owner: ""
 blocked-by: []
-summary: "**THE MAP EXISTS (`devdocs/dev/syscall-maps/arm32.txt`, frankA `5fa3e0705`, 366 rows) AND IS NOT YET SAFE TO BUILD THE HEADER FROM: three generator-level errors found and each confirmed behaviourally.** (1) `29` is named `rt_sigreturn` and IS `pause` -- verified with a SIGALRM handler and alarm(1): it returns -1/EINTR on arm32 exactly as it does on i386, where 29 is pause too. (2) `248` is named `mmap2` and IS `exit_group` -- `syscall(248,7)` exits 7 on arm32 and does not on i386. It is misnamed because the tool anchors on the line before `exit_group(`, so probing exit_group\'s OWN number leaves the anchor pointing at the previous syscall. (3) `2` is ABSENT and IS `fork` -- it returns twice, so the sweep dropped it, and the file\'s own header says an absent row means nothing is at that number. **A FREE CONTROL CATCHES (1) AND (2) AND THE GENERATOR DOES NOT HAVE IT: no two numbers may name the same call.** The map has exactly two duplicate names, `rt_sigreturn` at 29/173 and `mmap2` at 192/248, and both duplicates are the wrong rows. All ten of this ticket\'s names ARE correct in the map and independently verified. Held: the header arm is not being generated until the map is regenerated, because a wrong number does not fail, it runs something else -- which is this ticket\'s own reason for existing. ORIGINAL: **THE STATED BLOCKER IS GONE. A cross toolchain is not needed: the numbers are MEASURABLE on this box, and all ten rows below now have verified arm32 numbers.** frankA supplied eight by `qemu-arm -strace` (number -> name, one inert syscall per process), franks-ab settled the remaining two (acct=51, statfs=99) and verified all ten BEHAVIOURALLY -- making the call by raw number on arm32 and matching errno against the same NAMED call on targets that have a real table. The two methods fail differently: strace reads QEMU\'s name table, the behavioural check asks a kernel. Numbers: sched_getscheduler 157, sched_getparam 155, sched_yield 158, mlock 150, munlock 151, flock 143, prctl 172, readv 145, acct 51, statfs 99. **A LIMIT ON THE BEHAVIOURAL HALF, found by its control FAILING TO FAIL: an ADJACENT number in the same family answers identically** -- readv=145 and writev=146 both give EBADF for a bad fd, so behaviour proves \"right family, right argument kinds\" and only strace discriminates siblings. Controls that do work: an unassigned number (399) gives ENOSYS, getpid (20) returns a pid. So the fix is a GENERATED header from a full 0..450 sweep with BOTH controls asserted in the generator -- read/write naming, plus a sibling row that must differ -- not a transcription. ORIGINAL REPORT: MEASURED on all five hosted targets with one probe: ten crtl functions (sched_getscheduler, sched_getparam, sched_yield, mlock, munlock, acct, statfs, flock, prctl, readv) answer errno=ENOSYS on arm32 and behave like the kernel on x86-64, i386, aarch64 and riscv32. Cause is not a bug in any body -- `lib/crtl/include/sys/syscall.h` has NO `__arm__` arm at all, so every `#ifdef SYS_x` in crtl takes its `#else errno = ENOSYS` path. The population is 56 guards across 19 files (sched.c, unistd.c, fcntl.c, sys/{timex,prctl,select,shm,reboot,file,msg,personality,swap,uio,mman,sem,mount,klog,statfs}.c, linux/capability.c), asking for 55 distinct SYS_ names. THE HEADER'S OWN COMMENT IS TRUE AND SHOULD NOT BE 'FIXED': it says arm32 and xtensa get nothing deliberately, because no header on this box gives either table and a guessed number is worse than a missing one -- a wrong number does not fail, it runs a DIFFERENT syscall. Confirmed there is still no source: ~/.cache/pxx-cross/arm32 holds only `lib`, no headers. THE TEMPTING FIX DOES NOT WORK AND THAT IS THE USEFUL PART: platform_backend.pas carries a hand-maintained, use-proven arm32 table of 80 numbers, and its overlap with the 55 crtl wants is THREE (SYS_fork, SYS_ioctl, SYS_ppoll, measured under LC_ALL=C after comm warned about sort order). So transcribing from the PAL buys almost nothing and spends the provenance rule. This needs a real arm32 asm/unistd.h, from a cross toolchain or an arm32 kernel-headers package, fed to the same generator that made the other four arms."
+summary: "**FIXED 2026-09-04. crtl now has a GENERATED arm32 arm and the ten-row census matches i386 exactly; aarch64 and riscv32 match it too.** All 56 syscall-guarded crtl bodies across 19 files were taking their `#else errno = ENOSYS` arm on arm32 because `<sys/syscall.h>` had no `__arm__` arm at all -- invisible because rc is -1 both for `the kernel refused` and for `there is no number`, so the probe prints ERRNO. 369 numbers now come from `devdocs/dev/syscall-maps/arm32.txt` (frankA, measured under `qemu-arm -strace`) through a new `tools/gen_crtl_arm32_syscalls.py` that GENERATES the block and REFUSES to write on a failed control: a consecutive distinct triple (3 read, 4 write, 5 open, because read+write alone cannot catch a shift within a family), the three rows this ticket audited and found wrong in the first map (2 fork, 29 pause, 248 exit_group), NO DUPLICATE NAMES -- an OUTPUT-side invariant, which is what caught those two misnamings when five input-side controls had all passed -- and a row-count floor. Both refusals demonstrated. The table is PARTIAL by design and the header says so: an absent number is still a compile error, which is the answer this header already gave for arm32 and the right one. New `test/c_crtl_syscall_guarded_bodies.c` carries NO expected constants -- the Makefile compares each target against I386\'S OUTPUT, so the assertion is agreement between two builds. Positive control run live by restoring the committed header with `git checkout --` and regenerating: 10 of 10 rows differ without the arm, 0 with it. gate.sh quick GREEN with FPC canary PASS. ORIGINAL/AUDIT HISTORY: **THE MAP EXISTS (`devdocs/dev/syscall-maps/arm32.txt`, frankA `5fa3e0705`, 366 rows) AND IS NOT YET SAFE TO BUILD THE HEADER FROM: three generator-level errors found and each confirmed behaviourally.** (1) `29` is named `rt_sigreturn` and IS `pause` -- verified with a SIGALRM handler and alarm(1): it returns -1/EINTR on arm32 exactly as it does on i386, where 29 is pause too. (2) `248` is named `mmap2` and IS `exit_group` -- `syscall(248,7)` exits 7 on arm32 and does not on i386. It is misnamed because the tool anchors on the line before `exit_group(`, so probing exit_group\'s OWN number leaves the anchor pointing at the previous syscall. (3) `2` is ABSENT and IS `fork` -- it returns twice, so the sweep dropped it, and the file\'s own header says an absent row means nothing is at that number. **A FREE CONTROL CATCHES (1) AND (2) AND THE GENERATOR DOES NOT HAVE IT: no two numbers may name the same call.** The map has exactly two duplicate names, `rt_sigreturn` at 29/173 and `mmap2` at 192/248, and both duplicates are the wrong rows. All ten of this ticket\'s names ARE correct in the map and independently verified. Held: the header arm is not being generated until the map is regenerated, because a wrong number does not fail, it runs something else -- which is this ticket\'s own reason for existing. ORIGINAL: **THE STATED BLOCKER IS GONE. A cross toolchain is not needed: the numbers are MEASURABLE on this box, and all ten rows below now have verified arm32 numbers.** frankA supplied eight by `qemu-arm -strace` (number -> name, one inert syscall per process), franks-ab settled the remaining two (acct=51, statfs=99) and verified all ten BEHAVIOURALLY -- making the call by raw number on arm32 and matching errno against the same NAMED call on targets that have a real table. The two methods fail differently: strace reads QEMU\'s name table, the behavioural check asks a kernel. Numbers: sched_getscheduler 157, sched_getparam 155, sched_yield 158, mlock 150, munlock 151, flock 143, prctl 172, readv 145, acct 51, statfs 99. **A LIMIT ON THE BEHAVIOURAL HALF, found by its control FAILING TO FAIL: an ADJACENT number in the same family answers identically** -- readv=145 and writev=146 both give EBADF for a bad fd, so behaviour proves \"right family, right argument kinds\" and only strace discriminates siblings. Controls that do work: an unassigned number (399) gives ENOSYS, getpid (20) returns a pid. So the fix is a GENERATED header from a full 0..450 sweep with BOTH controls asserted in the generator -- read/write naming, plus a sibling row that must differ -- not a transcription. ORIGINAL REPORT: MEASURED on all five hosted targets with one probe: ten crtl functions (sched_getscheduler, sched_getparam, sched_yield, mlock, munlock, acct, statfs, flock, prctl, readv) answer errno=ENOSYS on arm32 and behave like the kernel on x86-64, i386, aarch64 and riscv32. Cause is not a bug in any body -- `lib/crtl/include/sys/syscall.h` has NO `__arm__` arm at all, so every `#ifdef SYS_x` in crtl takes its `#else errno = ENOSYS` path. The population is 56 guards across 19 files (sched.c, unistd.c, fcntl.c, sys/{timex,prctl,select,shm,reboot,file,msg,personality,swap,uio,mman,sem,mount,klog,statfs}.c, linux/capability.c), asking for 55 distinct SYS_ names. THE HEADER'S OWN COMMENT IS TRUE AND SHOULD NOT BE 'FIXED': it says arm32 and xtensa get nothing deliberately, because no header on this box gives either table and a guessed number is worse than a missing one -- a wrong number does not fail, it runs a DIFFERENT syscall. Confirmed there is still no source: ~/.cache/pxx-cross/arm32 holds only `lib`, no headers. THE TEMPTING FIX DOES NOT WORK AND THAT IS THE USEFUL PART: platform_backend.pas carries a hand-maintained, use-proven arm32 table of 80 numbers, and its overlap with the 55 crtl wants is THREE (SYS_fork, SYS_ioctl, SYS_ppoll, measured under LC_ALL=C after comm warned about sort order). So transcribing from the PAL buys almost nothing and spends the provenance rule. This needs a real arm32 asm/unistd.h, from a cross toolchain or an arm32 kernel-headers package, fed to the same generator that made the other four arms."
 ---
 
 # crtl on arm32: every syscall-guarded body is inert
@@ -252,4 +252,84 @@ the tool, not a patched copy of this one.
 **Everything else stands**: the method works, no toolchain is needed, and the
 ten numbers this ticket measures are confirmed twice by instruments that fail
 differently.
+
+## FIXED — 2026-09-04, franks-ab
+
+### The census this ticket opened with
+
+    target    the ten rows
+    x86-64    errno 0,0,0,0,0,1,0,9,22,9
+    i386      identical
+    arm32     identical   <- was ENOSYS on all ten
+    aarch64   identical
+    riscv32   identical
+
+`readv`'s row changed shape on the way: the original probe used
+`readv(-1, NULL, 0)`, which answers 0 on some kernels and EBADF on others
+because with `iovcnt` 0 the fd need never be looked at. **That ambiguity read
+as a wrong syscall number for an hour.** With a real `iovec` and `iovcnt` 1,
+EBADF is the only correct answer anywhere, and all five agree.
+
+### The fix is generated, not transcribed
+
+`tools/gen_crtl_arm32_syscalls.py` emits the `#elif defined(__arm__)` block
+from `devdocs/dev/syscall-maps/arm32.txt` — 369 numbers. It **refuses to write
+at all** if any control fails, and a consumer that trusts its input has no
+guard:
+
+- **three CONSECUTIVE, DISTINCT names** (3 read, 4 write, 5 open). read+write
+  alone cannot catch a constant shift within a family — adjacent numbers in one
+  family answer alike, which is how this ticket's own behavioural control failed
+  to fail (`readv` 145 / `writev` 146 both EBADF).
+- **the three rows this ticket audited** and found wrong in the first map:
+  2 fork, 29 pause, 248 exit_group. They are the regression test for the
+  extractor bugs that produced them.
+- **no duplicate names** — an OUTPUT-side invariant. It is what caught the two
+  misnamings when five input-side controls had all passed.
+- a row-count floor, so a truncated map cannot quietly emit a short header.
+
+Both refusal paths were demonstrated before use: a map with an injected
+duplicate, and one with an audited row changed, are each rejected with the
+reason named.
+
+### The table is partial, and the header says so
+
+It holds what the sweep established, not the kernel's full table. `?unnamed`
+rows are skipped (arm32 90 / `old_mmap`: assigned, returns, and qemu prints no
+name for it). A number the sweep never saw is absent, and naming its `SYS_*` is
+**still a compile error** — the same answer this header gave for arm32 when it
+had no table at all, and the right one. `SYS_pselect6_time64` is the one name
+crtl guards on that the map does not carry; that guard still takes its ENOSYS
+arm, correctly and visibly.
+
+The header's original reasoning is intact and was never the thing that was
+wrong: *"a guessed number does not fail — it runs something else."* These are
+not guessed.
+
+### The test asserts a RELATION, not constants
+
+`test/c_crtl_syscall_guarded_bodies.c` carries no expected values. The Makefile
+compares arm32, aarch64 and riscv32 each against **i386's output**, so the
+assertion is agreement between two independent builds and there is no
+per-target literal to go stale. It prints **errno and not rc**, which is the
+only reason it can see anything at all.
+
+**Positive control, run live rather than recalled:** restoring the committed
+header with `git checkout --` (never a file copy — a restored copy has no merge
+step to fail at) and rebuilding gives **10 of 10 rows differing** from i386;
+regenerating gives 0.
+
+### Provenance, carried rather than summarised
+
+The map is an oracle about QEMU, not about a kernel on real hardware. Every
+arm32 test in this tree runs under qemu-arm, so the numbers are right for the
+whole population that exercises them; a first run on hardware is where they
+would be falsified. That sentence is stamped in the generated block, because a
+number copied out from under it stops carrying it — "measured" on its own
+overstates what was checked.
+
+### Gates
+
+`make compiler/pascal26` converged, `tools/gate.sh quick` GREEN with the FPC
+seed canary PASS, `crtl-reachability` OK at 133 headers.
 
