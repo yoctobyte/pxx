@@ -155,4 +155,4 @@ output), wired; the Makefile's inline `forinlo` row is flipped from asserting
 the refusal to asserting `11223344`, and the pinned compiler rejects that row.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ca1e6effb.

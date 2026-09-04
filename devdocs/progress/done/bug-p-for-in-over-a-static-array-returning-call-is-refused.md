@@ -135,4 +135,4 @@ when you gate before committing, as CLAUDE.md tells you to. (Thanks to frankH
 for that one; it caught none of their four either.)
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit ca1e6effb.
