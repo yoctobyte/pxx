@@ -6075,6 +6075,27 @@ begin
     IR_NOP, IR_BLOCK, IR_LABEL : ;
     IR_JUMP          : WasmEmitJump(node, blk);
     IR_TERMINATE     : WasmEmitTerminate(node, blk);
+    IR_SET_SIGNAL:
+      begin
+        { A REFUSAL WITH A REASON, not the generic `unreachable`. xtensa's arm
+          (ir_codegen_xtensa.inc) is the model and the precedent: where a target
+          cannot install a handler, saying so at COMPILE time is the whole
+          value, because the alternative is a module that compiles, validates,
+          and traps on the line that asked.
+
+          Reachable only from a program that calls SetSignalHandler directly --
+          the Pascal parser does not gate on TargetHasSignalRuntime -- so this
+          is not the arm that fixed the 55-source census regression. That was
+          the predicate itself, which now answers False here and so leaves
+          PXX_HAS_SIGNALS undefined. This arm is what a hand-written
+          SetSignalHandler call meets, and before it that call produced
+          `wasm trap: unreachable` at run time from a module that had validated
+          clean. }
+        if NoSignals then
+          Error('SetSignalHandler requires the signal runtime (built without it: --no-signals)');
+        Error('SetSignalHandler needs a signal runtime, which this build has none of'
+              + ' (a wasm module has no OS to deliver a signal)');
+      end;
     IR_CALL          : WasmEmitCall(node, True);
     IR_CALL_IND      : WasmEmitCallInd(node, True);
     IR_VIRTUAL_CALL  : WasmEmitVirtualCall(node, True);

@@ -1375,6 +1375,24 @@ function TargetHasSignalRuntime: Boolean;
 begin
   Result := False;
   if EspBareBoot or (TargetPlatform = PLATFORM_ESP) then Exit;
+  { wasm32 has no OS to deliver a signal, and this line was missing until
+    2026-09-04, so the predicate answered TRUE for it. Nothing looked wrong:
+    EmitSignalRuntimeForTarget's wasm32 arm is deliberately empty, so no runtime
+    was emitted either way, and a Pascal program that never mentions signals
+    could not tell. What it cost was measured the day crtl's signal bridge
+    landed -- PXX_HAS_SIGNALS is derived from this predicate, so pxxcio.pas took
+    the LIVE arm of `__pxx_c_signal` on wasm32, emitted IR_SET_SIGNAL, and the
+    backend refused the body: 55 sources in the corpus census gained a wasm32
+    gap in one commit, from a change that was correct everywhere it looked.
+
+    THE EMPTY DISPATCH ARM IS NOT A SECOND ANSWER TO THIS QUESTION. It is the
+    right shape for "emit no runtime" and says nothing about "can this build
+    install a handler" -- and because the two agreed by accident on every target
+    that had ever asked, the disagreement was invisible until a third consumer
+    (the define) asked the predicate directly. A centralised condition has to
+    ANSWER for every population that asks it, not just for the ones it was
+    written from. } 
+  if TargetArch = TARGET_WASM32 then Exit;
   if TargetArch = TARGET_XTENSA then
     Result := (XtensaABI = XTENSA_ABI_CALL0)
   else

@@ -19817,7 +19817,51 @@ test-wasm32: $(COMPILER)
 	./$(COMPILER) -Fulib/rtl --target=wasm32 test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/w32_sleep_lowers
 	./$(COMPILER) -Fulib/rtl test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/w32_sleep_lowers_x64
 	tools/expect_same.sh wasm32/sleep_lowers "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_sleep_lowers)" "$$($(TESTTMP)/w32_sleep_lowers_x64)"
-	@echo "wasm32: 51 rows green (44 default + 7 shortstring; 0 excluded)"
+	# THE SIGNAL-RUNTIME PREDICATE, asked on seven target/ABI combinations, and
+	# the answers DIFFER -- which is what makes this row able to fail. A check
+	# that read the same everywhere could not have caught the bug it covers.
+	#
+	# TargetHasSignalRuntime (ir_codegen.inc) had no wasm32 arm and fell through
+	# to True. Nothing looked wrong: EmitSignalRuntimeForTarget's wasm32 arm is
+	# deliberately EMPTY, so no runtime was emitted either way, and the two
+	# answers agreed by accident on every target that had ever asked. It surfaced
+	# only when a third consumer asked the predicate directly -- PXX_HAS_SIGNALS,
+	# which lexer.inc derives from it -- so pxxcio.pas's __pxx_c_signal took its
+	# LIVE arm on wasm32, emitted IR_SET_SIGNAL, and the backend refused the body.
+	# 55 sources in the corpus census gained a wasm32 gap in one commit, from a
+	# change that was correct on every target it was measured on.
+	#
+	# xtensa is here twice ON PURPOSE: same target, same platform, two ABIs, two
+	# answers. EmitSignalRuntimeXtensa is Call0-only, so a row that only built the
+	# default ABI would read `signals yes` and prove nothing about the axis.
+	./$(COMPILER) test/test_cross_signal_runtime_predicate.pas $(TESTTMP)/sigpred_x64
+	tools/expect_same.sh sigpred/x86-64 "$$($(TESTTMP)/sigpred_x64)" "signals yes"
+	./$(COMPILER) --target=wasm32 test/test_cross_signal_runtime_predicate.pas $(TESTTMP)/sigpred.wasm
+	tools/expect_same.sh sigpred/wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/sigpred.wasm)" "signals no"
+	@for a in i386 arm32 aarch64 riscv32; do \
+	  case $$a in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$a test/test_cross_signal_runtime_predicate.pas $(TESTTMP)/sigpred_$$a >/dev/null || { echo "sigpred $$a compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh sigpred/$$a "$$(tools/run_target.sh $$a $(TESTTMP)/sigpred_$$a)" "signals yes" || exit 1; \
+	  else echo "=== sigpred: $$q absent, $$a NOT verified ==="; fi; \
+	done
+	@if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_signal_runtime_predicate.pas $(TESTTMP)/sigpred_xt_call0 >/dev/null || { echo "sigpred xtensa/Call0 compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh sigpred/xtensa-call0 "$$(qemu-xtensa $(TESTTMP)/sigpred_xt_call0)" "signals yes" || exit 1; \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-abi=windowed --xtensa-soft-mulhigh test/test_cross_signal_runtime_predicate.pas $(TESTTMP)/sigpred_xt_win >/dev/null || { echo "sigpred xtensa/windowed compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh sigpred/xtensa-windowed "$$(qemu-xtensa $(TESTTMP)/sigpred_xt_win)" "signals no" || exit 1; \
+	else echo "=== sigpred: qemu-xtensa absent, the two xtensa ABI rows NOT verified ==="; fi
+	# ...and a HAND-WRITTEN SetSignalHandler on wasm32 must be a compile error with
+	# a reason, not a module that validates and traps -- which is exactly what it
+	# was. xtensa's arm is the precedent; the wording is checked, not just the rc,
+	# because "it failed" and "it failed for this reason" are different claims and
+	# a wrong-reason failure would pass an rc-only row.
+	@out=$$(./$(COMPILER) --target=wasm32 test/test_setsignalhandler_call.pas $(TESTTMP)/sigpred_bad 2>&1); rc=$$?; \
+	 test "$$rc" != "0" || { echo "FAIL: SetSignalHandler on wasm32 compiled (rc=0) -- it used to validate and trap at run time"; exit 1; }; \
+	 echo "$$out" | grep -q 'no OS to deliver a signal' \
+	   || { echo "FAIL: wasm32 refused SetSignalHandler for the wrong reason:"; echo "$$out"; exit 1; }; \
+	 echo "  sigpred: wasm32 refuses SetSignalHandler at compile time, with the reason"
+	@echo "wasm32: 53 rows green (46 default + 7 shortstring; 0 excluded)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
