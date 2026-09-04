@@ -15966,6 +15966,66 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_dynarray_var_param26 "$$($(TESTTMP)/test_dynarray_var_param26)" "DYNARRAY VAR PARAM OK"
 	./$(COMPILER) test/test_ansiterm_raw_write.pas $(TESTTMP)/test_ansiterm_raw_write26
 	tools/expect_same.sh test_ansiterm_raw_write26 "$$($(TESTTMP)/test_ansiterm_raw_write26)" "$$(printf 'aBcD\nRAW WRITE OK')"
+	# THE THREE FUTEX WRAPPERS on every target. palfutex.pas is deliberately
+	# dependency-free and cannot go through platform.pas -- its header says why --
+	# so unlike the other private syscall tables deleted this week, the fix was to
+	# FILL IN the missing arms. Before 2026-09-04 riscv32 and xtensa had none
+	# (SYS_futex = -1, all three calls -ENOSYS) and wasm32 refused all three
+	# BODIES, because a runtime -1 sits in front of an instruction that is still
+	# EMITTED. xtensa 191 and riscv32 422 were measured under `qemu-<arch> -strace`.
+	#
+	# THE longsec ROW IS THE ONE THAT COST SOMETHING. rv32 has no plain futex at
+	# all, only futex_time64, whose tv_sec is 64-bit -- and the shared
+	# `array[0..1] of NativeInt` is 4 bytes per field there. TWO PROBES SAID THE
+	# WIDTHS WERE IDENTICAL before one discriminated: a 2s timeout passes under
+	# both (tv_sec fits the low word either way, and the kernel's tv_nsec then
+	# reads stack that is zero on a fresh frame -- a legal 0ns, so the naive
+	# version waits the right 2s BY ACCIDENT), and dirtying the stack from a caller
+	# did not move it either. Only a tv_sec above 2^32 separates them, by minutes:
+	# killed at 8s versus returning in 1117ms. The row's right answer therefore
+	# DIFFERS BY TARGET -- must-not-return on x86-64/aarch64/riscv32, a CORRECT
+	# 32-bit truncation to -110 on i386/arm32/xtensa (2^32+1 seconds is simply
+	# unrepresentable in their futex ABI), and -38 on wasm32. riscv32 sitting
+	# with the 64-bit group while BEING a 32-bit target is the assertion, and
+	# asserting both directions pins the width instead of catching one error.
+	# `shortsec` is its positive control
+	# -- without a row proving the program reaches the call and comes back, "it did
+	# not return" would also be what a build that never ran looks like.
+	./$(COMPILER) test/test_cross_futex_through_the_pal.pas $(TESTTMP)/fxpal26 >/dev/null
+	@ok=0; \
+	for t in native i386 arm32 aarch64 riscv32 xtensa wasm32; do \
+	  case $$t in \
+	    native)  bin=$(TESTTMP)/fxpal26; run="";; \
+	    wasm32)  ./$(COMPILER) --target=wasm32 test/test_cross_futex_through_the_pal.pas $(TESTTMP)/fxpal.wasm >/dev/null || { echo "fxpal wasm32 compile FAIL"; exit 1; }; \
+	             bin=$(TESTTMP)/fxpal.wasm; run="tools/run_target.sh wasm32";; \
+	    xtensa)  command -v qemu-xtensa >/dev/null 2>&1 || { echo "  fxpal: qemu-xtensa absent, xtensa NOT verified"; continue; }; \
+	             ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_cross_futex_through_the_pal.pas $(TESTTMP)/fxpal_xt >/dev/null || { echo "fxpal xtensa compile FAIL"; exit 1; }; \
+	             bin=$(TESTTMP)/fxpal_xt; run="tools/run_target.sh xtensa";; \
+	    *)       case $$t in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	             command -v $$q >/dev/null 2>&1 || { echo "  fxpal: $$q absent, $$t NOT verified"; continue; }; \
+	             ./$(COMPILER) --target=$$t --platform=posix test/test_cross_futex_through_the_pal.pas $(TESTTMP)/fxpal_$$t >/dev/null || { echo "fxpal $$t compile FAIL"; exit 1; }; \
+	             bin=$(TESTTMP)/fxpal_$$t; run="tools/run_target.sh $$t";; \
+	  esac; \
+	  if [ "$$t" = wasm32 ]; then \
+	    tools/expect_same.sh fxpal/$$t-basic "$$($$run $$bin basic)" "wake=-38 wait=-38 waitto=-38" || exit 1; \
+	    tools/expect_same.sh fxpal/$$t-shortsec "$$($$run $$bin shortsec)" "shortsec=-38" || exit 1; \
+	    tools/expect_same.sh fxpal/$$t-longsec "$$($$run $$bin longsec)" "longsec RETURNED -38" || exit 1; \
+	  else \
+	    tools/expect_same.sh fxpal/$$t-basic "$$($$run $$bin basic)" "wake=0 wait=-11 waitto=-11" || exit 1; \
+	    tools/expect_same.sh fxpal/$$t-shortsec "$$($$run $$bin shortsec)" "shortsec=-110" || exit 1; \
+	    out="$$(timeout 6 $$run $$bin longsec 2>&1)"; rc=$$?; \
+	    case $$t in \
+	      native|aarch64|riscv32) \
+	        if [ "$$rc" = "124" ] && [ -z "$$out" ]; then echo "  fxpal: PASS $$t (2^32+1 s did not return -- tv_sec is 64-bit)"; \
+	        else echo "  fxpal: FAIL $$t longsec rc=$$rc out=[$$out] -- tv_sec TRUNCATED to 32 bits"; exit 1; fi;; \
+	      *) \
+	        if [ "$$out" = "longsec RETURNED -110" ]; then echo "  fxpal: PASS $$t (2^32+1 s truncated to 1 -- correct, its futex tv_sec IS 32-bit)"; \
+	        else echo "  fxpal: FAIL $$t longsec rc=$$rc out=[$$out] -- expected a 32-bit truncation"; exit 1; fi;; \
+	    esac; \
+	  fi; \
+	  ok=$$((ok+1)); \
+	done; \
+	echo "  fxpal: $$ok target(s) measured, all three modes each"
 	# OS ENTROPY THROUGH THE PAL, on all seven targets. random.pas's private
 	# getrandom table was the fifth copy of one platform.pas already had, and its
 	# hole was documented as a fact about ESP ("CPU_XTENSA (ESP32): no getrandom")
