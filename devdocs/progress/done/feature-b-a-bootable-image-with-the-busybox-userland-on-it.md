@@ -156,5 +156,22 @@ compiler.
 preference: running applets with arguments found a silent wrong-value miscompile
 that 400 objects and 621 green cases did not.
 
+**Cite frankc-af's instance rather than this one — it is strictly stronger.**
+[[feature-c-corpus-busybox-394-applets]] (`fd456ed89`, the section headed *"AND
+THAT GREEN IS THE MOST IMPORTANT NEGATIVE RESULT ON THIS TICKET"*): 374 applets,
+506 objects, **853 cases byte-identical to the gcc oracle, GREEN** — on the same
+binary whose `uname -a` printed `Linux` eight times. A wider, greener corpus,
+equally blind, with the binary sha and the `uname --help` / `uname -a` pair side
+by side. The 141 → 258 → 374 progression is the demonstration: raising the applet
+count is the obvious response to "516 of 621 cases are `--help`", it was tried
+twice, and it buys nothing this defect class can be seen from.
+
+frankD landed the answer as `d0104ec8e` — a real-argument case group, RED on
+purpose at the time — and turned up two constraints doing it: nothing in a
+differential transcript may print its own `argv[0]` (three install dirs produced
+two *correct* usage messages naming different paths, and the harness reported
+"the two oracles disagree" with both being gcc builds of one source), and
+determinism excludes mtimes, not just clocks.
+
 ## Log
 - 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 82edcc32c.
