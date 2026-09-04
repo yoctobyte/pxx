@@ -88,6 +88,17 @@ struct ip {
 #define IPTOS_PREC_ROUTINE         0x00
 
 #define IPVERSION 4
+/* IPDEFTTL added 2026-09-04: networking/udhcp/packet.c:175 assigns it straight
+   into the ttl field of a hand-built IP header, and with no definition here it
+   became 0. A datagram with ttl 0 is dropped by the first router that sees it,
+   which for a DHCP broadcast on the local wire is invisible in testing and
+   fatal one hop out. The rest of the family is here because a reader given
+   only the default has to guess the bounds. */
+#define IPDEFTTL  64    /* RFC1122 default time-to-live */
+#define IPFRAGTTL 60    /* reassembly timeout, in half-seconds per RFC791 */
+#define IPTTLDEC  1     /* subtracted per hop */
+#define MAXTTL    255   /* the field is 8 bits */
+#define IP_MSS    576   /* RFC791 minimum reassembly buffer */
 #define IP_MAXPACKET 65535
 
 #endif

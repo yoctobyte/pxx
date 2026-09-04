@@ -28,7 +28,14 @@
 #ifndef _CRTL_NETINET_ETHER_H
 #define _CRTL_NETINET_ETHER_H
 
-#include <net/ethernet.h>
+/* Via <netinet/if_ether.h> rather than <net/ethernet.h> directly, which is the
+   chain glibc has and the one arping.c depends on: it includes THIS header and
+   then names ARPHRD_ETHER, ARPOP_REQUEST and ETH_P_IP without including
+   anything that would define them. Under glibc it compiles because this file
+   pulls <netinet/if_ether.h>, which pulls <linux/if_ether.h> and
+   <net/if_arp.h>. crtl stopped at <net/ethernet.h>, so all three became 0 with
+   a warning and networking/arping.o went out with a zeroed ARP request in it. */
+#include <netinet/if_ether.h>
 
 char *ether_ntoa(const struct ether_addr *addr);
 char *ether_ntoa_r(const struct ether_addr *addr, char *buf);

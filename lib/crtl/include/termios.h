@@ -106,6 +106,42 @@ struct termios {
 #define OFILL   0000100
 #define OFDEL   0000200
 
+/* The output DELAY masks. busybox's telnetd names XTABS -- networking/telnetd.c
+   does `termbuf.c_oflag |= ONLCR | XTABS` to put the client's pty in cooked
+   mode with tab expansion ON. With no definition here XTABS became 0, so the
+   OR contributed nothing and the pty went out WITHOUT tab expansion. Nothing
+   refuses, nothing logs; a telnet client just sees raw tabs. The rest of the
+   family is here because
+   XTABS is not a flag but the top of the TABDLY field, and a reader given the
+   field's top without the field has to guess at the rest.
+
+   asm-generic values, which every target we build for uses. mips, sparc and
+   alpha place TABDLY elsewhere; none is a pxx target, and if one becomes one
+   this block is the arm to split. */
+#define NLDLY   0000400
+#define   NL0   0000000
+#define   NL1   0000400
+#define CRDLY   0003000
+#define   CR0   0000000
+#define   CR1   0001000
+#define   CR2   0002000
+#define   CR3   0003000
+#define TABDLY  0014000
+#define   TAB0  0000000
+#define   TAB1  0004000
+#define   TAB2  0010000
+#define   TAB3  0014000
+#define XTABS   0014000   /* == TAB3; the BSD spelling, which is what asks */
+#define BSDLY   0020000
+#define   BS0   0000000
+#define   BS1   0020000
+#define VTDLY   0040000
+#define   VT0   0000000
+#define   VT1   0040000
+#define FFDLY   0100000
+#define   FF0   0000000
+#define   FF1   0100000
+
 /* c_cflag — the baud rate lives in the low bits here, which is why there is no
    c_ispeed field to set. */
 #define CBAUD   0010017

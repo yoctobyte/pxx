@@ -14396,6 +14396,57 @@ test-core: $(COMPILER)
 	    echo "=== c_sysguard: $$q absent, $$a NOT verified ==="; \
 	  fi; \
 	done
+	# EIGHTEEN CONSTANTS ACROSS ELEVEN busybox TUs WERE SILENTLY 0 IN A BUILD
+	# THAT PASSED 621 DIFFERENTIAL CASES. Not "header not found" -- that shape
+	# refuses and is already ticketed. This is the other shape: the header
+	# EXISTS and lacks the name, so pxx's C frontend warns and substitutes 0
+	# (bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning-not-an-error)
+	# and the value travels to the kernel or onto the wire as something else.
+	# Measured over the 258-applet build: ETH_P_IP 0 in the DHCP client's raw
+	# socket, IPDEFTTL 0 in the IP header it hand-builds (ttl 0 = dropped at the
+	# first router), ICMP_TIMXCEED 0 in traceroute's reply classifier,
+	# O_NOFOLLOW 0 in unzip's/chattr's/lsattr's symlink guard, XTABS 0 in
+	# telnetd's pty setup, LONG_BIT 0 as a SHIFT DISTANCE in the TLS GHASH.
+	#
+	# NO EXPECTED VALUES: the same source is compiled by pxx against
+	# lib/crtl/include and by gcc against the host's headers, and the two
+	# outputs are diffed. 248 of 249 rows must match. The 249th, O_LARGEFILE,
+	# is excluded on purpose and asserted as a relation instead -- glibc makes
+	# it 0 on a 64-bit userspace and the kernel makes it 0100000, crtl takes
+	# the kernel's because crtl's callers reach the kernel directly, and both
+	# answers are correct about their own libc. That row is also this test's
+	# free proof that the diff CAN differ.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_header_constants.c $(TESTTMP)/c_hdrconst26 >/dev/null || { echo "c_hdrconst compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_hdrconst_gcc test/c_crtl_header_constants.c || { echo "c_hdrconst gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_hdrconst26 "$$($(TESTTMP)/c_hdrconst26 | grep -v O_LARGEFILE_NONZERO)" "$$($(TESTTMP)/c_hdrconst_gcc | grep -v O_LARGEFILE_NONZERO)" || exit 1; \
+	  tools/expect_same.sh c_hdrconst26/largefile "$$($(TESTTMP)/c_hdrconst26 | grep O_LARGEFILE_NONZERO)" "O_LARGEFILE_NONZERO            1" || exit 1; \
+	  echo "=== c_hdrconst: 248 constants identical to gcc, O_LARGEFILE ours by choice ==="; \
+	else \
+	  echo "=== c_hdrconst: gcc absent, constants NOT verified ==="; \
+	fi
+	# The four open() flags arm and arm64 override against asm-generic, asserted
+	# BY EFFECT so one expected output is correct on every target -- the value
+	# comparison above can only run on the host, against gcc, which is exactly
+	# the axis this row covers and that one cannot. Row 2 (a regular FILE with
+	# O_DIRECTORY, which must FAIL) is the row a zeroed or swapped flag cannot
+	# pass; row 1 alone would pass with the flag zeroed. Positive control run
+	# 2026-09-04 by forcing the generic values on arm32: rows 1, 2 and 3 all go
+	# wrong and row 3 OPENS A SYMLINK THROUGH O_NOFOLLOW, while row 4 stays ok
+	# so the harness is exonerated. Runs from $(TESTTMP) because it creates its
+	# own fixtures in the working directory.
+	./$(COMPILER) test/c_crtl_open_flags_arch.c $(TESTTMP)/c_ofa26
+	tools/expect_same.sh c_ofa26 "$$(cd $(TESTTMP) && ./c_ofa26)" "$$(printf '1 dir+O_DIRECTORY   ok\n2 file+O_DIRECTORY  ENOTDIR\n3 link+O_NOFOLLOW   ELOOP\n4 file+O_RDONLY     ok')"
+	@for a in i386 arm32 aarch64 riscv32; do \
+	  case $$a in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$a test/c_crtl_open_flags_arch.c $(TESTTMP)/c_ofa_$$a >/dev/null || { echo "c_ofa $$a compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh $$a/c_ofa "$$(cd $(TESTTMP) && $(CURDIR)/tools/run_target.sh $$a $(TESTTMP)/c_ofa_$$a)" "$$(printf '1 dir+O_DIRECTORY   ok\n2 file+O_DIRECTORY  ENOTDIR\n3 link+O_NOFOLLOW   ELOOP\n4 file+O_RDONLY     ok')" || exit 1; \
+	    echo "=== c_ofa: $$a open-flag effects correct ==="; \
+	  else \
+	    echo "=== c_ofa: $$q absent, $$a NOT verified ==="; \
+	  fi; \
+	done
 	./$(COMPILER) test/c_crtl_telnet_and_prctl.c $(TESTTMP)/c_telprctl26
 	tools/expect_same.sh c_telprctl26 "$$($(TESTTMP)/c_telprctl26)" "$$(printf '1 255 254 253 252 251 250\n2 240 241 242 246 249\n3 0 1 3 24 31\n4 33 0 1 2\n5 15 16 23 38 39 47\n6 20 | 0 2 4 8 10 11 12\n7 1 2 4 8 4\n8 not-glibc\n9 0 pxxprobe')"
 	./$(COMPILER) test/c_crtl_net_headers.c $(TESTTMP)/c_nethdr26

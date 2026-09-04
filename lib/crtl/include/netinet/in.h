@@ -75,6 +75,68 @@ struct sockaddr_in {
 #define IPPROTO_UDPLITE 136
 #define IPPROTO_RAW  255
 
+/* IPPROTO_IP level socket options -- setsockopt(fd, IPPROTO_IP, IP_x, ...).
+   NONE OF THESE EXISTED HERE BEFORE 2026-09-04, and an absent one does not
+   refuse: pxx warns and substitutes 0, and 0 is not a valid option number, so
+   the call reaches the kernel as a request for something else. Measured over
+   the 258-applet busybox build: networking/traceroute.c:1077 sets
+   IP_MULTICAST_IF and got 0. The values are the kernel's, generated from
+   include/uapi/linux/in.h rather than transcribed, and asserted row by row in
+   test/c_crtl_header_constants.c. They are uniform across every Linux
+   architecture -- this is protocol numbering, not an ABI. */
+#define IP_TOS                      1
+#define IP_TTL                      2
+#define IP_HDRINCL                  3
+#define IP_OPTIONS                  4
+#define IP_ROUTER_ALERT             5
+#define IP_RECVOPTS                 6
+#define IP_RETOPTS                  7
+#define IP_PKTINFO                  8
+#define IP_PKTOPTIONS               9
+#define IP_MTU_DISCOVER             10
+#define IP_RECVERR                  11
+#define IP_RECVTTL                  12
+#define IP_RECVTOS                  13
+#define IP_MTU                      14
+#define IP_FREEBIND                 15
+#define IP_IPSEC_POLICY             16
+#define IP_XFRM_POLICY              17
+#define IP_PASSSEC                  18
+#define IP_TRANSPARENT              19
+#define IP_ORIGDSTADDR              20
+#define IP_MINTTL                   21
+#define IP_NODEFRAG                 22
+#define IP_CHECKSUM                 23
+#define IP_BIND_ADDRESS_NO_PORT     24
+#define IP_RECVFRAGSIZE             25
+#define IP_RECVERR_RFC4884          26
+#define IP_MULTICAST_IF             32
+#define IP_MULTICAST_TTL            33
+#define IP_MULTICAST_LOOP           34
+#define IP_ADD_MEMBERSHIP           35
+#define IP_DROP_MEMBERSHIP          36
+#define IP_UNBLOCK_SOURCE           37
+#define IP_BLOCK_SOURCE             38
+#define IP_ADD_SOURCE_MEMBERSHIP    39
+#define IP_DROP_SOURCE_MEMBERSHIP   40
+#define IP_MSFILTER                 41
+#define IP_MULTICAST_ALL            49
+#define IP_UNICAST_IF               50
+#define IP_LOCAL_PORT_RANGE         51
+#define IP_PROTOCOL                 52
+
+/* IP_MTU_DISCOVER argument values, and the multicast defaults. Kept apart from
+   the option numbers above because they share the same 0..5 range and mixing
+   them into one sorted list is how a reader picks the wrong constant. */
+#define IP_PMTUDISC_DONT            0
+#define IP_PMTUDISC_WANT            1
+#define IP_PMTUDISC_DO              2
+#define IP_PMTUDISC_PROBE           3
+#define IP_PMTUDISC_INTERFACE       4
+#define IP_PMTUDISC_OMIT            5
+#define IP_DEFAULT_MULTICAST_LOOP   1
+#define IP_DEFAULT_MULTICAST_TTL    1
+
 /* IPv6 ADDRESSES ARE TYPES HERE, NOT A CLAIM THAT v6 SOCKETS WORK. The socket
    layer under <sys/socket.h> parses AF_INET only -- getsockname on a v6 peer
    answers 0.0.0.0. These exist because programs that never open a v6 socket

@@ -3,8 +3,19 @@
 #define PXX_CRTL_FCNTL_H 1
 
 /* Minimal fcntl surface for sqlite's unix VFS (file open flags + advisory
-   locking). Declarations only; unused with a `:memory:` database. Flag values
-   match the Linux asm-generic ABI (identical across the pxx cross targets). */
+   locking). Declarations only; unused with a `:memory:` database.
+
+   THE ORIGINAL NOTE HERE SAID THE FLAG VALUES ARE "identical across the pxx
+   cross targets", AND THAT IS TRUE ONLY OF THE TEN IT WAS WRITTEN ABOUT.
+   O_DIRECTORY, O_NOFOLLOW, O_DIRECT and O_LARGEFILE are the four open() flags
+   Linux does NOT define uniformly: arm and arm64 override asm-generic and
+   effectively swap O_DIRECTORY with O_DIRECT. lib/rtl/platform.pas already
+   carries the same split for PAL_OPEN_DIRECTORY, with the measurement behind
+   it -- on ARM the x86 value made a real directory return EINVAL *and* made a
+   regular file open succeed where the flag should have rejected it, so it is
+   wrong in both directions and neither shows up as a compile error.
+   Source of the values: the kernel's own arch/{arm,arm64}/include/uapi/asm/
+   fcntl.h against include/uapi/asm-generic/fcntl.h. */
 
 #include <sys/types.h>
 
@@ -21,6 +32,39 @@
 #define O_SYNC     04010000
 #define O_DSYNC    00010000
 #define O_CLOEXEC  02000000
+
+/* Uniform on every target we build for. */
+#define O_ASYNC    00020000
+#define O_NOATIME  01000000
+#define O_PATH     010000000
+#define O_NDELAY   O_NONBLOCK   /* the historical spelling; same bit */
+#define O_FSYNC    O_SYNC
+#define O_RSYNC    O_SYNC
+
+/* NOT uniform -- see the note at the top. arm and arm64 override asm-generic. */
+#if defined(__arm__) || defined(__aarch64__)
+#define O_DIRECTORY 00040000
+#define O_NOFOLLOW  00100000
+#define O_DIRECT    00200000
+#define O_LARGEFILE 00400000
+#define __O_TMPFILE 020000000
+#else
+#define O_DIRECT    00040000
+#define O_LARGEFILE 00100000
+#define O_DIRECTORY 00200000
+#define O_NOFOLLOW  00400000
+#define __O_TMPFILE 020000000
+#endif
+#define O_TMPFILE  (__O_TMPFILE | O_DIRECTORY)
+
+/* O_LARGEFILE IS THE ONE VALUE HERE THAT DISAGREES WITH GLIBC ON PURPOSE.
+   glibc defines it as 0 on a 64-bit userspace, because its off_t is already
+   64-bit and the flag would be redundant; the KERNEL value is the one above on
+   every target. crtl takes the kernel's, because crtl's callers reach the
+   kernel directly through <sys/syscall.h> rather than through glibc's
+   open(). A test comparing this name against gcc's view will differ on
+   x86-64, and that difference is correct in both directions -- so
+   test/c_crtl_header_constants.c asserts the kernel value and says why. */
 
 /* fcntl commands */
 #define F_DUPFD   0

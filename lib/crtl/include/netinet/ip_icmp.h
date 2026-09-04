@@ -141,4 +141,57 @@ struct icmp {
 #define ICMP_EXC_TTL      0
 #define ICMP_EXC_FRAGTIME 1
 
+
+/* THE BSD SPELLINGS. glibc's copy of this header carries both naming schemes:
+   the Linux one above (ICMP_DEST_UNREACH, ICMP_TIME_EXCEEDED) and the 4.4BSD
+   one below, which is what every traceroute descended from the original uses.
+   crtl had only the first, and busybox's networking/traceroute.c names only
+   the second -- so ICMP_TIMXCEED, ICMP_UNREACH and four code values all became
+   0 with a warning, and the packet classifier compared every reply against 0.
+   Measured 2026-09-04 over the 258-applet build.
+
+   THE CODE VALUES ARE NOT AN INDEPENDENT SET: they are the code field of one
+   type, so ICMP_UNREACH_NET (0) and ICMP_TIMXCEED_INTRANS (0) are both 0 and
+   both correct. Anything comparing a code without first matching the type is
+   the caller's bug and not a naming problem here.
+
+   Generated from glibc's header rather than transcribed, and every row is
+   asserted in test/c_crtl_header_constants.c. */
+#define ICMP_UNREACH                     3
+#define ICMP_SOURCEQUENCH                4
+#define ICMP_TIMXCEED                    11
+#define ICMP_PARAMPROB                   12
+#define ICMP_TSTAMP                      13
+#define ICMP_TSTAMPREPLY                 14
+#define ICMP_IREQ                        15
+#define ICMP_IREQREPLY                   16
+#define ICMP_MASKREQ                     17
+#define ICMP_MASKREPLY                   18
+#define ICMP_MAXTYPE                     18
+
+/* Code values, meaningful only against their own type. */
+#define ICMP_UNREACH_NET                 0
+#define ICMP_UNREACH_HOST                1
+#define ICMP_UNREACH_PROTOCOL            2
+#define ICMP_UNREACH_PORT                3
+#define ICMP_UNREACH_NEEDFRAG            4
+#define ICMP_UNREACH_SRCFAIL             5
+#define ICMP_UNREACH_NET_UNKNOWN         6
+#define ICMP_UNREACH_HOST_UNKNOWN        7
+#define ICMP_UNREACH_ISOLATED            8
+#define ICMP_UNREACH_NET_PROHIB          9
+#define ICMP_UNREACH_HOST_PROHIB         10
+#define ICMP_UNREACH_TOSNET              11
+#define ICMP_UNREACH_TOSHOST             12
+#define ICMP_UNREACH_FILTER_PROHIB       13
+#define ICMP_UNREACH_HOST_PRECEDENCE     14
+#define ICMP_UNREACH_PRECEDENCE_CUTOFF   15
+#define ICMP_REDIRECT_NET                0
+#define ICMP_REDIRECT_HOST               1
+#define ICMP_REDIRECT_TOSNET             2
+#define ICMP_REDIRECT_TOSHOST            3
+#define ICMP_TIMXCEED_INTRANS            0
+#define ICMP_TIMXCEED_REASS              1
+#define ICMP_PARAMPROB_OPTABSENT         1
+
 #endif

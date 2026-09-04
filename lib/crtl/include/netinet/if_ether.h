@@ -25,8 +25,16 @@
 #define _CRTL_NETINET_IF_ETHER_H
 
 #include <stdint.h>
+#include <linux/if_ether.h>
 #include <net/ethernet.h>
 #include <net/if_arp.h>
+
+/* <linux/if_ether.h> ADDED 2026-09-04, and it is the join that was missing.
+   glibc's copy of this header includes it first, and without it the ETH_P_*
+   protocol identifiers had no definition anywhere in crtl. That does not
+   refuse -- pxx warns and substitutes 0 -- so networking/udhcp/arpping.c
+   asked for `htons(0)' on its packet socket and networking/arping.c built ARP
+   frames with a zero ethertype, in a build that was green over 621 cases. */
 
 #define ETHER_ADDR_LEN  ETH_ALEN
 #define ETHER_TYPE_LEN  2

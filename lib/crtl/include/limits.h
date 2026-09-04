@@ -28,6 +28,21 @@
 #define LONG_MAX 9223372036854775807L
 #define ULONG_MAX 18446744073709551615UL
 #endif
+/* LONG_BIT and WORD_BIT -- XSI, and DERIVED rather than written down, for
+   exactly the reason the LONG_MAX split above exists. busybox's TLS AES-GCM
+   code uses it as a SHIFT DISTANCE -- networking/tls_aesgcm.c:77 and :92 build
+   the GHASH carry with `(unsigned long)0xE1 << (LONG_BIT-8)` and
+   `tt << (LONG_BIT-1)`. With no definition here LONG_BIT became 0, so both
+   shift counts went NEGATIVE. Nothing refuses: the authentication tag comes
+   out wrong, on a code path that only a real TLS handshake reaches, which is
+   why 621 green busybox cases never touched it.
+
+   A literal 64 would have been just as wrong on i386 and arm32 as the old
+   hardcoded LONG_MAX was, and would have read as correct on the host that does
+   the measuring. */
+#define LONG_BIT (__SIZEOF_LONG__ * CHAR_BIT)
+#define WORD_BIT (__SIZEOF_INT__ * CHAR_BIT)
+
 #define LLONG_MIN (-9223372036854775807LL - 1LL)
 #define LLONG_MAX 9223372036854775807LL
 #define ULLONG_MAX 18446744073709551615ULL

@@ -34,6 +34,15 @@ struct sockaddr {
 #define SOCK_RDM 4
 #define SOCK_SEQPACKET 5
 #define SOCK_RAW 3
+#define SOCK_PACKET 10   /* obsolete linux-only type, still asked for */
+
+/* Type-field FLAGS, or-ed into the type argument of socket()/socketpair()/
+   accept4(). Same bit values as O_NONBLOCK and O_CLOEXEC because the kernel
+   reuses them, and like those two they are NOT uniform: arm and arm64 keep
+   asm-generic's O_NONBLOCK, so these are uniform on every target we build for
+   and the split that <fcntl.h> needs does not apply here. */
+#define SOCK_NONBLOCK 00004000
+#define SOCK_CLOEXEC  02000000
 
 #define SOL_SOCKET 1
 

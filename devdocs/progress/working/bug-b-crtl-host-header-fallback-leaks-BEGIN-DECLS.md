@@ -4,10 +4,11 @@ title: "The host-header fallback is native-only, so x86-64 compiles busybox agai
 track: B
 prio: 65
 type: bug
-status: open
+status: working
 created: 2026-09-02
 found-by: frankD
 summary: "**THE HOST-HEADER FALLBACK IS NATIVE-ONLY, SO x86-64 HAS BEEN COMPILING busybox AGAINST GLIBC'S HEADERS AND HIDING 15 MISSING crtl HEADERS.** On x86-64 an unknown `<h>` resolves from /usr/include with a warning; on any cross target the search path has no /usr/include and it is a hard `C include file not found`. Measured 2026-09-04 at the 394-applet scope: 3 TUs refuse on x86-64 (all `stray token: __BEGIN_DECLS`, because glibc's sys/xattr.h uses it at line 25 without including <sys/cdefs.h>) and **16 TUs refuse on i386**, naming 15 headers crtl does not have. The __BEGIN_DECLS symptom was the tip: it only appears for the handful of host headers that happen to use that macro, so it undercounted the gap by five to one. Fix is to PROVIDE the headers -- making the fallback establish glibc's preamble would paper over x86-64 while i386 still cannot build those TUs at all, and the divergence would then read as an i386 defect."
+owner: franks-ab
 ---
 
 # One cause, three refusals
