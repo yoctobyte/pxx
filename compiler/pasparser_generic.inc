@@ -927,6 +927,8 @@ function OrdinalNameToTk(const nm: AnsiString): TTypeKind; forward;
 function BuiltinTypeNameTk(const nm: AnsiString): TTypeKind; forward;   { body in pasparser_lval.inc, which also CALLS it above the body (the type-helper type-name receiver). pxx pre-scans and does not need this; FPC does. }
 function QualArgAliasName(const path: AnsiString): AnsiString; forward;
 procedure EmitQualAliasDecl(const aliasNm, path: AnsiString); forward;   { both bodies live below their first CALL (the qualified-type-name-as-generic-argument arms). pxx resolves across the unit; FPC resolves in source order and the seed build fails without these. }
+procedure BeginPrereqs; forward;
+procedure FlushPrereqs(at: Integer; needsTypeKeyword: Boolean; var nInserted: Integer); forward;   { same reason: DelphiRewriteGenericUses is the one prerequisite door ABOVE the buffer's own routines. }
 
 { Every name whose meaning DEPENDS ON A SPECIALIZATION, read straight out of
   Tokens[] rather than out of Templates[]. Two kinds, one concept:
@@ -1468,7 +1470,7 @@ function DelphiRewriteGenericUses(ti: Integer; var insertAt: Integer; delphiPatt
   bug-a-a-nested-inline-specialize-is-refused-outside-a-type-section }
 const MAX_DGEN_TUPLES = 512;
 var
-  i, j, k, kk, na, np, seenCnt, insCnt, aOff, sOff, tOff: Integer;
+  i, j, k, kk, na, np, seenCnt, insCnt, aOff, sOff, tOff, nIns: Integer;
   tname, aname, key: AnsiString;
   argTok: array[0..MAX_TEMPLATE_PARAMS-1] of TRawToken;
   seenKey: array[0..MAX_DGEN_TUPLES-1] of AnsiString;
@@ -1754,16 +1756,16 @@ begin
   { qualified-argument aliases FIRST -- a tuple declaration below names one }
   if dgQCount > 0 then
   begin
-    NSpecInsCnt := 0;
+    BeginPrereqs;
     for k := 0 to dgQCount - 1 do
       EmitQualAliasDecl(dgQName[k], dgQPath[k]);
-    if NSpecInsCnt > 0 then
+    FlushPrereqs(insertAt, False, nIns);
+    if nIns > 0 then
     begin
-      InsertTokens(insertAt, NSpecIns, NSpecInsCnt);
-      insertAt := insertAt + NSpecInsCnt;
+      insertAt := insertAt + nIns;
       { every recorded use sits at or after insertAt -- the sweep starts there }
-      for k := 0 to seenCnt - 1 do seenUse[k] := seenUse[k] + NSpecInsCnt;
-      DelphiRewriteGenericUses := DelphiRewriteGenericUses + NSpecInsCnt;
+      for k := 0 to seenCnt - 1 do seenUse[k] := seenUse[k] + nIns;
+      DelphiRewriteGenericUses := DelphiRewriteGenericUses + nIns;
     end;
   end;
 
@@ -2925,6 +2927,63 @@ begin
   Inc(NSpecInsCnt);
 end;
 
+{ Open the buffer. Every filler below appends, and QUEUE ORDER IS THE ORDERING
+  RULE -- hoisted nested types, then qualified-argument aliases, then nested
+  specializations, then the re-emitted declaration itself. That sequence is
+  load-bearing and each step names the one before it: a nested prerequisite may
+  take a qualified alias as its own argument, and a hoisted type may be named by
+  either. It used to exist only as the statement order inside one begin/end,
+  where the other three doors could not see it. }
+procedure BeginPrereqs;
+begin
+  NSpecInsCnt := 0;
+end;
+
+{ Splice whatever is queued at `at` and report how many tokens went in, so a
+  caller that must shift its own indices has the number rather than reading
+  NSpecInsCnt back out.
+
+  `needsTypeKeyword` is the decision that used to live at exactly one of the four
+  doors. EmitLateNestedSpecDecls splices after the type-section loop has EXITED,
+  where a bare `X = specialize Y<Z>;` is not a declaration -- the parser reads it
+  where it expects begin/procedure/type and reports *Expected: begin*. The other
+  three splice INTO a live type section, or insert `procedure` bodies, which are
+  valid as they stand. Making it an argument means the fifth door has to answer
+  the question instead of inheriting whichever answer its author happened to
+  test. The keyword goes on at flush rather than at open so that a queue which
+  ends up empty cannot splice a lone `type`. }
+procedure FlushPrereqs(at: Integer; needsTypeKeyword: Boolean; var nInserted: Integer);
+var q: Integer;
+begin
+  nInserted := 0;
+  if NSpecInsCnt = 0 then Exit;
+  if needsTypeKeyword then
+  begin
+    PrereqReserve(1);
+    for q := NSpecInsCnt downto 1 do NSpecIns[q] := NSpecIns[q - 1];
+    NSpecIns[0].Kind := tkType; NSpecIns[0].IVal := 0;
+    NSpecIns[0].Line := Tokens[TokPos].Line;
+    NSpecIns[0].SOffset := 0; NSpecIns[0].SLen := 0;
+    Inc(NSpecInsCnt);
+  end;
+  InsertTokens(at, NSpecIns, NSpecInsCnt);
+  nInserted := NSpecInsCnt;
+  NSpecInsCnt := 0;
+end;
+
+{ "Something must be declared ahead of this." THREE counters mean it -- nested
+  specializations, qualified-argument aliases and hoisted nested types -- each
+  added by a different change with its own reset points, and a fourth kind of
+  prerequisite meant a fourth clause at every site that asks. Forgetting one is
+  silent: the declaration streams before its dependency exists. Asked in one
+  place now, so the next kind is one edit.
+  hoistPending is a parameter rather than a global because it is recomputed per
+  declaration from HoistUsed/HoistAlreadyEmitted -- "still to emit", not "used". }
+function PrereqsPending(hoistPending: Boolean): Boolean;
+begin
+  PrereqsPending := (NSpecCount > 0) or (QNeedCount > 0) or hoistPending;
+end;
+
 procedure QualPush(k: TTokenKind; const txt: AnsiString; ln: Integer);
 begin
   PrereqReserve(1);
@@ -3127,11 +3186,11 @@ end;
   compile and match FPC.
   bug-p-a-generic-specialized-before-its-declaration-is-unresolvable }
 procedure EmitLateNestedSpecDecls;
-var si, ti, k: Integer;
+var si, ti, k, nIns: Integer;
 begin
   if (GenMethImplCount = 0) or (SpecializationCount = 0) then Exit;
   NSpecCount := 0;
-  NSpecInsCnt := 0;
+  BeginPrereqs;
   for si := 0 to SpecializationCount - 1 do
   begin
     ti := -1;
@@ -3144,22 +3203,13 @@ begin
   end;
   if NSpecCount > 0 then
   begin
-    { A leading `type`. The section loop has already EXITED, so these land at top
-      level, where a bare `X = specialize Y<Z>;` is not a declaration -- the
-      parser reads it where it expects `begin`/`procedure`/`type` and reports
-      *Expected: begin*. The pending-flush path next door needs no such keyword
-      because what IT inserts is `procedure` bodies, which are valid there as
-      they stand. }
-    NSpecIns[NSpecInsCnt].Kind := tkType; NSpecIns[NSpecInsCnt].IVal := 0;
-    NSpecIns[NSpecInsCnt].Line := Tokens[TokPos].Line;
-    NSpecIns[NSpecInsCnt].SOffset := 0; NSpecIns[NSpecInsCnt].SLen := 0;
-    Inc(NSpecInsCnt);
     for k := 0 to NSpecCount - 1 do
     begin
       DbgMintTrace('late', NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
       EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
     end;
-    InsertTokens(TokPos, NSpecIns, NSpecInsCnt);
+    { THE one site that needs the leading `type` -- the reason is on FlushPrereqs. }
+    FlushPrereqs(TokPos, True, nIns);
   end;
   NSpecCount := 0;
 end;
@@ -3393,7 +3443,7 @@ var
   templateName, aliasNm: AnsiString;
   cNames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   cKinds: array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
-  nc, ti, i, j, k, na, ts, tc, gEnd, si, dfIdx: Integer;
+  nc, ti, i, j, k, na, ts, tc, gEnd, si, dfIdx, nIns: Integer;
   gmScan: Integer;   { -1 = the class body, >= 0 = a buffered method body }
   nDeclEdges: Integer;   { NSpec entries below this came from the CLASS BODY }
   dup: Boolean;
@@ -3633,13 +3683,13 @@ begin
 
   if (NSpecCount > 0) and (nDeclEdges = 0) and (QNeedCount = 0) and (not hoistPending) then
   begin
-    NSpecInsCnt := 0;
+    BeginPrereqs;
     for k := 0 to NSpecCount - 1 do
     begin
       DbgMintTrace('immediate', NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
       EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
     end;
-    InsertTokens(TokPos, NSpecIns, NSpecInsCnt);
+    FlushPrereqs(TokPos, False, nIns);
     NSpecCount := 0;
   end;
 
@@ -3651,7 +3701,7 @@ begin
     so the alias has to be a type before this declaration is parsed at all, not
     after. Deferring re-emits the declaration behind the alias, and the re-parse
     sees the minted identifier and takes the ordinary single-token path. }
-  if (NSpecCount > 0) or (QNeedCount > 0) or hoistPending then
+  if PrereqsPending(hoistPending) then
   begin
     { Defer. CurTok is this declaration's trailing ';', so TokPos is exactly
       where the type-section loop reads next: put the prerequisites there,
@@ -3681,8 +3731,9 @@ begin
               NSpecName[0] + ', which requires ' + specName + ' back')
       else
         Error('circular generic specialization: ' + specName);
-    NSpecInsCnt := 0;
-    { HOISTED nested types first of all -- the nested prerequisite emitted below
+    BeginPrereqs;
+    { QUEUE ORDER IS THE ORDERING RULE -- see BeginPrereqs.
+      HOISTED nested types first of all -- the nested prerequisite emitted below
       names one as its argument, and the re-emitted declaration's own class body
       aliases to it. }
     if hoistPending then EmitHoistedDecls(specName);
@@ -3697,7 +3748,7 @@ begin
       EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
     end;
     EmitSpecDecl(specName, templateName, (MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS, nc);
-    InsertTokens(TokPos, NSpecIns, NSpecInsCnt);
+    FlushPrereqs(TokPos, False, nIns);
     NSpecCount := 0;
     Next;
     Result := True;
