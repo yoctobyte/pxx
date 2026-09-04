@@ -7191,6 +7191,20 @@ end;
   by design: a module with trapping holes must never look like a complete one. }
 procedure WasmReportCoverage;
 begin
+  { THE SLOT-REWRITE CENSUS. A proc whose body is written twice keeps only the
+    second, and nothing else in this pipeline says so: the module validates, the
+    program runs, and one of the two bodies is simply not there. Reported beside
+    the coverage numbers because it is the same KIND of fact -- something the
+    module does not contain -- and because a count printed on every wasm32 build
+    is how the size of it stops being an impression.
+    bug-a-wasm32-emits-a-separate-function-per-compileast-call-... }
+  if WasmSlotRewrites > 0 then
+  begin
+    writeln('wasm32: ', WasmSlotRewrites, ' function slot(s) had a body written '
+          + 'more than once; only the LAST write survives, the earlier code is '
+          + 'silently absent.');
+    writeln('        affected: ', WasmSlotRewriteNames);
+  end;
   { TWO reports, because they are two different facts and only one of them is
     a defect. A body this backend could not lower is a hole in op coverage and
     the phase is not done. A DECLARATION-ONLY stub — an interface method with

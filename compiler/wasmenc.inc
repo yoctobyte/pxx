@@ -140,6 +140,10 @@ var
   WasmImpFuncCount : Integer;   { how many of the above are WEK_FUNC }
 
   { ---- defined functions ---- }
+  { A slot whose body is written more than once -- see WasmBodyEnd. Counted so
+    the size of the problem is a measurement rather than an impression. }
+  WasmSlotRewrites    : Integer = 0;
+  WasmSlotRewriteNames: AnsiString = '';
   WasmFuncCount  : Integer;
   WasmFuncType   : array[0..MAX_WASM_FUNCS-1] of Integer;
   WasmFuncName   : array[0..MAX_WASM_FUNCS-1] of AnsiString;
@@ -1019,6 +1023,20 @@ end;
 procedure WasmBodyEnd(slot: Integer);
 var i: Integer;
 begin
+  { A SLOT WRITTEN TWICE LOSES THE FIRST BODY, SILENTLY. Counted here rather
+    than refused, because the number is the thing nobody has: this is a census
+    probe for
+    bug-a-wasm32-emits-a-separate-function-per-compileast-call-so-a-proc-built-in-two-calls-loses-a-body,
+    and whether the right fix is a refusal or a rebuild of the body model
+    depends on how much of the corpus does it. }
+  if WasmFuncCodeLen[slot] > 0 then
+  begin
+    Inc(WasmSlotRewrites);
+    if WasmSlotRewriteNames = '' then
+      WasmSlotRewriteNames := WasmFuncName[slot]
+    else if Length(WasmSlotRewriteNames) < 4000 then
+      WasmSlotRewriteNames := WasmSlotRewriteNames + ' ' + WasmFuncName[slot];
+  end;
   WasmFuncText[slot] := WFTStr;
   { Flush the per-body locals and names into the pools, recording THIS slot's
     offsets — so pool order follows body-COMPLETION order and a slot reserved
