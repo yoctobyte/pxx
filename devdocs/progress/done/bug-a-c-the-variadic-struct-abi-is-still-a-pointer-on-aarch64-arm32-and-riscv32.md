@@ -404,4 +404,4 @@ Three targets, three rules, and the amount of code each needed was in no relatio
 to how different its rule looked on paper.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 96358226d.
