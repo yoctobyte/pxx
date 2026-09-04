@@ -65,7 +65,7 @@ parameterised instance of itself), and it fails loudly at compile time rather
 than silently producing a wrong value. Filed so it is not rediscovered as new.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 02a57e20e.
 
 ## Fixed 2026-09-04 (frankB) — and the ticket's premise needed correcting first
 
