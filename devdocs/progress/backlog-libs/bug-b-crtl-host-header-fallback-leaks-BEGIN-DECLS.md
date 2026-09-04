@@ -1,13 +1,13 @@
 ---
 slug: bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS
-title: "crtl has no sys/inotify.h, sys/random.h or sys/xattr.h, and the host fallback then leaks __BEGIN_DECLS"
+title: "The host-header fallback is native-only, so x86-64 compiles busybox against glibc and hides 15 missing crtl headers"
 track: B
-prio: 55
+prio: 65
 type: bug
 status: open
 created: 2026-09-02
 found-by: frankD
-summary: "Three busybox TUs refuse identically at the 394-applet scope -- miscutils/inotifyd.c, miscutils/seedrng.c and miscutils/setfattr.c, each `stray token at top level (not a declaration): '__BEGIN_DECLS'`. ONE cause, three symptoms: crtl does not provide sys/inotify.h, sys/random.h or sys/xattr.h, so pxx falls back to /usr/include (it says so, as a warning), and glibc's own sys/xattr.h uses __BEGIN_DECLS at line 25 WITHOUT including <sys/cdefs.h> -- it relies on an earlier glibc header having pulled <features.h> in, which nothing in a pxx TU does. crtl's own sys/cdefs.h defines the macro correctly; it is simply never reached. Two-line reproducer below."
+summary: "**THE HOST-HEADER FALLBACK IS NATIVE-ONLY, SO x86-64 HAS BEEN COMPILING busybox AGAINST GLIBC'S HEADERS AND HIDING 15 MISSING crtl HEADERS.** On x86-64 an unknown `<h>` resolves from /usr/include with a warning; on any cross target the search path has no /usr/include and it is a hard `C include file not found`. Measured 2026-09-04 at the 394-applet scope: 3 TUs refuse on x86-64 (all `stray token: __BEGIN_DECLS`, because glibc's sys/xattr.h uses it at line 25 without including <sys/cdefs.h>) and **16 TUs refuse on i386**, naming 15 headers crtl does not have. The __BEGIN_DECLS symptom was the tip: it only appears for the handful of host headers that happen to use that macro, so it undercounted the gap by five to one. Fix is to PROVIDE the headers -- making the fallback establish glibc's preamble would paper over x86-64 while i386 still cannot build those TUs at all, and the divergence would then read as an i386 defect."
 ---
 
 # One cause, three refusals
@@ -57,3 +57,67 @@ have no intention of shadowing.
 
 No smaller applet set pulled these three sources in. The refusal is not new;
 the coverage is.
+
+# THE i386 MEASUREMENT, which reframes this ticket
+
+Measured 2026-09-04, binary sha256 `1968c7a7da57`, commit `5f598d4a7`, at the
+394-applet scope (`tools/busybox-applets-394.txt`). Reproduced in two lines,
+independent of busybox:
+
+```
+$ pascal26              bd1.c     # #include <sys/xattr.h>
+pascal26:1: warning: ... resolved from the host system (/usr/include), not
+                     pxx's own headers -- ABI/macro mismatches may silently misbehave
+pascal26:25: error: stray token at top level: '__BEGIN_DECLS'
+
+$ pascal26 --target=i386 bd1.c
+pascal26:1: error: C include file not found: "sys/xattr.h"
+            (searched: .../lib/crtl/include/, ...)        <- no /usr/include
+```
+
+**The fallback is native-only, and that is correct** -- host headers are the
+host's ABI. The consequence is not: every crtl header gap is INVISIBLE on
+x86-64 for as long as glibc has a header of that name, and visible on every
+cross target. x86-64 was not passing those TUs; it was compiling them against
+somebody else's headers.
+
+## The 15 headers, and the 16 TUs that want them (i386)
+
+| header | busybox TU |
+| --- | --- |
+| `glob.h` | `shell/hush.c` |
+| `resolv.h` | `networking/nslookup.c` |
+| `sys/inotify.h` | `miscutils/inotifyd.c` |
+| `sys/vt.h` | `loginutils/vlock.c` |
+| `sys/xattr.h` | `miscutils/setfattr.c` |
+| `linux/fb.h` | `miscutils/fbsplash.c` |
+| `linux/if.h` | `networking/ether-wake.c`, `ifenslave.c`, `ifplugd.c` |
+| `linux/if_arp.h` | `networking/libiproute/ll_types.c` |
+| `linux/if_vlan.h` | `networking/libiproute/iplink.c` |
+| `linux/jffs2.h` | `miscutils/flash_eraseall.c` |
+| `linux/major.h` | `miscutils/raidautorun.c` |
+| `linux/random.h` | `miscutils/seedrng.c` |
+| `linux/rfkill.h` | `miscutils/rfkill.c` |
+| `mtd/ubi-user.h` | `miscutils/ubi_tools.c` |
+
+`linux/random.h` is wanted by `seedrng.c` **as well as** `sys/random.h`; the
+x86-64 run reported the latter via __BEGIN_DECLS and the i386 run stops at the
+former, so both are missing and neither run alone says so.
+
+## Why __BEGIN_DECLS was a bad name for this
+
+The macro leak happens only for host headers that spell `__BEGIN_DECLS` without
+pulling `<sys/cdefs.h>` themselves. That is 3 of the 15. **The symptom
+undercounted its own cause by five to one**, and a fix aimed at the symptom --
+pre-including crtl's `sys/cdefs.h` on the fallback path -- would have closed
+this ticket green with twelve headers still missing and i386 still refusing all
+sixteen TUs. The slug is kept so existing citations resolve; the summary is the
+part that had to change.
+
+## Consequence for anyone measuring on x86-64 only
+
+`bug-c-ir-unsupported-ast-node-kind-1-in-flash-eraseall` was root-caused on
+x86-64 as a missing `loff_t` (correct, and fixed). On i386 the same TU never
+reaches that line -- it stops at `linux/jffs2.h`. **A TU can have two
+independent blockers with only the native one visible**, so "fixed on x86-64"
+is not "fixed", and a per-target row is what closes an item here.

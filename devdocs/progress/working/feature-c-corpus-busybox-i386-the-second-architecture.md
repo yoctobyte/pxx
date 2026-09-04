@@ -8,7 +8,7 @@ status: working
 created: 2026-09-02
 found-by: frankD
 owner: frankD
-summary: "**265 OF 265 TRANSLATION UNITS BECOME i386 OBJECTS AND ALL 266 LINK** (the 266th is libbb/bb_bswap_64.c, which the host link map omits -- see below), measured 2026-09-02 at the full 140-applet scope with binary cd239178b3a0. The i386 binary RUNS and differs from the gcc oracle on ONE of 387 cases, ticketed as bug-a-i386-a-pointer-is-register-and-memory-resident-at-once-across-a-goto-entered-loop. **x86-64 at the same scope is byte-identical to the gcc oracle over all 387 cases** -- the first green full-applet separate build, previously stopped at getnameinfo. Earlier counts on this ticket (332, then 384 of 396) were taken at a different applet scope and are not comparable: busybox's .config is shared mutable state and a TU count without its scope named is not reproducible. regex.h (7 TUs) landed as 2f920dfd4 and resolv.h and the 4 inline-asm files are out of scope at this applet set."
+summary: "**i386 AT 394 APPLETS: 492 OF 521 TUs BECOME OBJECTS, 29 REFUSE -- and the refusal set is LARGER than x86-64's 14, for a reason that makes the x86-64 number unreliable rather than better.** The host-header fallback is NATIVE-ONLY: on x86-64 an unknown `<h>` resolves from /usr/include with a warning, on any cross target it is a hard `include file not found`. So 16 of the 29 are crtl headers x86-64 was silently borrowing from glibc (`bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS`, reframed and re-summarised on this evidence), 8 are the same declaration gaps x86-64 sees (`feature-b-crtl-function-gaps-at-394-busybox-applets`), and 5 are a genuine i386 compiler gap -- inline asm is x86-64-only (`bug-c-inline-asm-is-x86-64-only-so-five-busybox-tus-refuse-on-i386`). **THE NATIVE TARGET IS THE ONE WITH THE BLIND SPOT HERE**, which is the reverse of the usual asymmetry and is why this axis exists. Earlier figure on this ticket (265/265 at 141 applets) was a different, smaller scope and is not comparable; the scope is now a file, `tools/busybox-applets-394.txt`. Binary sha256 1968c7a7da57, commit 5f598d4a7."
 ---
 
 # The second architecture, and what the first one was borrowing
@@ -284,3 +284,70 @@ Every addition is printed with the symbol that caused it. Bounded at three
 rounds, and a round that resolves nothing says so out loud rather than falling
 through -- "the link failed and I found nothing to add" and "the link succeeded
 first time" are the same silence in a log skim.
+
+# 2026-09-04: the 394-applet measurement, and what it says about x86-64
+
+Scope is `tools/busybox-applets-394.txt` (394 applets, 521 TUs). Binary sha256
+`1968c7a7da57`, commit `5f598d4a7`, private tree via `PXX_BUSYBOX_DIR` with an
+isolated `TMPDIR`. The oracle on that private tree gave **521 objects, 893
+cases, agreeing with the reference busybox** -- byte-identical to what the
+shared tree produced, so the private-tree route is proven equivalent rather
+than assumed to be.
+
+**29 refusals, in three groups:**
+
+| n | group | ticket |
+| --- | --- | --- |
+| 16 | crtl header missing; masked on x86-64 by the native-only host fallback | `bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS` |
+| 8 | crtl declaration missing; identical on both targets | `feature-b-crtl-function-gaps-at-394-busybox-applets` |
+| 5 | inline asm is x86-64-only in the C frontend | `bug-c-inline-asm-is-x86-64-only-so-five-busybox-tus-refuse-on-i386` |
+
+## The finding, and it inverts the prediction this ticket was opened on
+
+I predicted the crtl gaps were width-independent and the two refusal sets would
+therefore overlap almost completely. **The gaps are width-independent; the
+MASKING is not.** `pascal26` searches `/usr/include` on a native build and not
+on a cross build -- correctly, since host headers carry the host's ABI -- so
+every missing crtl header is invisible on x86-64 for as long as glibc happens
+to have a header of that name.
+
+x86-64 was not passing those 16 TUs. It was compiling them **against glibc's
+headers**, which the compiler says out loud as a warning nobody was reading:
+
+```
+warning: #include <sys/xattr.h> resolved from the host system (/usr/include),
+         not pxx's own headers -- ABI/macro mismatches may silently misbehave
+```
+
+**So the x86-64 count of 507/521 is flattered and the i386 count of 492/521 is
+the honest one.** Not "i386 is behind"; i386 is measuring something x86-64
+cannot see. CLAUDE.md warns that width and alignment defects are structurally
+invisible on the x86-64 host -- this is the same asymmetry with the sign
+flipped, and the reason it bites harder is that here the native target is the
+DEFAULT one.
+
+## Two TUs have two blockers, and only the native one was visible
+
+`miscutils/flash_eraseall.c` was root-caused on x86-64 as a missing `loff_t`
+(correct, and fixed in `697e92745`). On i386 it never reaches that line -- it
+stops at `linux/jffs2.h`. `networking/ether-wake.c` and `shell/hush.c` are the
+same shape: x86-64 reported `ether_hostton` and `sigisemptyset`, i386 stops
+earlier at `linux/if.h` and `glob.h`.
+
+**"Fixed on x86-64" is therefore not "fixed", and a per-target row is what
+closes an item at this scope.** The failure mode is not a wrong answer, it is a
+ticket that closes green with a second blocker untouched behind it.
+
+## The link, and what is NOT yet claimed
+
+493 objects did not link -- every `*_main` belonging to a refused TU is an
+undefined reference, plus `curve_P256_compute_pubkey_and_premaster` from the
+refused tls TUs. **Nothing has RUN on i386 at this scope.** The 893 cases are
+proved against the gcc oracle only. The one runtime divergence this axis has
+ever produced is at 141 applets and is
+`bug-a-i386-a-pointer-is-register-and-memory-resident-at-once-across-a-goto-entered-loop`.
+
+The harness's cross-link resolver added `libbb/bb_bswap_64.c` again and said so
+(`the host map was short 1 translation unit(s) for this target`) -- the
+map-is-per-architecture behaviour this ticket already documents, working.
+
