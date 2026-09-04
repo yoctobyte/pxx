@@ -102,3 +102,45 @@ compiled by pxx today reads element 0 for every entry, silently.
 
 Filed from Track B, which cannot fix it (it builds with `$(PXX_STABLE)` and does
 not rebuild the compiler).
+
+## Re-measured 2026-09-04 — NOT fixed at HEAD, and the mechanism is worse than "folds to zero"
+
+Asked to weigh this as a re-pin argument, the coordinator measured both ends.
+**Not fixed at HEAD** (`44adaa79a`, compiler sha256 `6b4e2ed156d6`, from a real
+`converged after 1 round(s)` build) — identical behaviour to pinned v403. So it
+is **not** an argument for a re-pin: a re-pin would carry the same defect.
+
+**The array is TRUNCATED, not merely zeroed.** Against the gcc oracle:
+
+```
+                       pxx HEAD      gcc
+static int ofs[] = { 5, offsetof(struct S,b), 9 };
+  sizeof(ofs)          4              12
+  elements             1              3
+  ofs[0]               0              5
+
+static int szo[] = { 5, sizeof(struct S), 9 };
+  sizeof(szo)          12             12      <- sizeof in the same position is FINE
+```
+
+So one `offsetof` anywhere in a static array initializer collapses the entire
+declaration to a **single zero element**, and `sizeof` in the identical position
+is correct — this is `offsetof`-specific, not a general constant-folding defect.
+
+**Why that is worse than the filed summary, which says the value folds to zero.**
+`sizeof(arr)/sizeof(arr[0])` — the standard idiom for a table's length — silently
+becomes **1**. Every loop over such a table runs one iteration and stops. That is
+the failure shape behind `uname -a` printing `Linux` eight times from a
+pxx-built busybox: a table walk, not a value.
+
+**A correction to this session's own first reading, because the trap is the
+point.** Indexing `arr[0]`, `arr[1]`, `arr[2]` printed `0 4 0`, and I read that
+as "offsetof is correct and the literals are zeroed" — a plausible mechanism,
+confidently wrong. The array is one element long, so indices 1 and 2 were
+**out-of-bounds reads** of whatever followed; the `4` was the neighbouring
+`static int scal`. Nothing errored. `sizeof(ofs)` is what settled it, and it is
+the only probe here that cannot be answered by adjacent memory. **Reading an
+array whose length is the defect cannot measure that defect.**
+
+Summary left as its author wrote it; it understates the mechanism and the
+severity, and correcting it belongs to whoever holds the ticket.
