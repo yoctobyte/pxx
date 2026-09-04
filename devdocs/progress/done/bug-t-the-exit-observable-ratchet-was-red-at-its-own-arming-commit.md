@@ -128,4 +128,4 @@ Landed `3914444ff`. `make tools-devtest` 134 guards green, was 131 green /
 3 RED.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f5200b8a4.
