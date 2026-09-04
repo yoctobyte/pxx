@@ -4755,3 +4755,81 @@ other way.*
 Left alone, correctly: `pyparser.inc` and `pasparser_expr.inc`'s `__pxxSig*`
 refusals go through `TargetHasSignalRuntime` and **refuse a runtime that is
 genuinely absent, for a reason that is still true.**
+
+---
+
+## `53f7276a1` — TWO ERRORS THAT CANCELLED, and the probe that proved it
+
+Banked from the commit, not from a report; frankb-78 has a cross sweep still
+running against this tree.
+
+arm32/riscv32/xtensa took **no `PXXObjRetain`** when boxing an object into a
+variant, **and** none of the five cross arms of
+`EmitManagedLocalCleanupForTarget` released a NilPy `tyClass` local at scope
+exit. **Either half alone turns a bounded leak into a use-after-free**, so they
+land together — which is what the ticket existed to say.
+
+### A SEVENTH instrument shape: two defects whose arithmetic cancels
+
+> **With ONE variant slot the two errors cancel exactly** — the slot is
+> under-retained by **precisely** what the never-released local over-holds — **so
+> a one-slot probe is green before and after and guards nothing.**
+
+**The ticket's own "flat and correct on arm32" table WAS that cancellation,
+measured.** Existing evidence, honestly gathered, that was a picture of two bugs
+holding each other up. Two slots break the arithmetic.
+
+This is distinct from every earlier shape on this page. It is not a guard that
+cannot fail, not a decoy, not an unvaried dimension: **the probe is correctly
+aimed at the right quantity and the quantity is genuinely unchanged**, because
+the defects are inverse. The tell is that **the cancellation is exact only at
+n=1**; vary the multiplicity and it collapses.
+
+### And the two assertion rows see DIFFERENT halves — neither could find the other
+
+- the **value** row sees the missing **retain** (a dangling read);
+- **only** the `-dPXX_ALLOC_CENSUS` row sees the missing **release**, *because a
+  leak prints nothing.*
+
+Both wired on all four targets. This is *match the assertion class to the defect
+class* with a second turn of the screw: **one commit needed two assertion classes
+because it fixed two defects of different kinds.** A single class would have
+certified half the work.
+
+```
+target                          before            after
+x86-64                          correct, live=9   untouched by this commit
+arm32   (neither half)          SIGSEGV           correct, live=9
+i386    (retain, no release)    correct, 39955    correct, live=9
+aarch64 (retain, no release)    correct, 39955    correct, live=9
+```
+
+`allocs=208613` in every column. Measured against pin **v403** (`ce63beeeb`),
+population: NilPy source that declares a class.
+
+### What it declared rather than let look tested
+
+**riscv32 and xtensa got the retain and CANNOT be probed from NilPy** — `class`
+refuses to compile there (no mmap arena). Landed with its siblings so the three
+32-bit backends do not drift again, and **said so in the ticket rather than left
+to look like it was tested.** That is the correct handling of an unverifiable
+arm: ship it with the family, name the gap.
+
+### A stopgap, correctly labelled, with the general hole filed
+
+The release arm needed x86-64's `if CurProcIsStackless then Exit;` and **no cross
+arm has it, for any kind.** Carried inline here as a stopgap; the general hole is
+filed as
+`bug-a-a-managed-local-that-survives-a-yield-is-released-at-every-yield-on-every-cross-target`
+with a **12-line repro that SIGSEGVs on i386 and arm32 and corrupts strings on
+aarch64 today.** Fix-it-then-note-it, with the deeper diagnosis banked rather
+than microfixed away.
+
+Gate: `gate.sh quick` GREEN **before** the commit (so the FPC seed canary RAN,
+not SKIP); `make compiler/pascal26` **`converged after 1 round(s)`** — the
+recompute verb, not the stamp verb — binary `19acc91a61fc`.
+`PXX_ALLOW_FULL_SUITE=1` lifted for a class-only NilPy cross sweep (346 files x
+i386/arm32) **with a pinned-compiler control**, because the change touches five
+backends' epilogues and three backends' variant boxing and **the quick tier runs
+none of that cross.** Reason stated in the commit, which is the whole
+requirement.
