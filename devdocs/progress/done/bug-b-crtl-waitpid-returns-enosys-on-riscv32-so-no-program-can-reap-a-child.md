@@ -149,4 +149,4 @@ per-target constant appears anywhere in the test.
 cross row is wired into the Makefile loop, which is what this ticket blocked.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 68d26ecb5.
