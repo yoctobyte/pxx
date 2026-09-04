@@ -4263,3 +4263,30 @@ arithmetic does not close is a number that will be re-derived by someone else.
 `git ls-tree -r origin/master` (ref-level, correct after a fetch) found it
 immediately. CLAUDE.md records this exact reading misrouting a claim TO A PEER
 once already. **A path check after a fetch is a claim about your last pull.**
+
+### The full tier's verdict is currently decided by a Track T self-check — twice running
+
+Two consecutive full tiers, both RED, both with **no NEW-RED section** and the
+**same sole red bullet**:
+
+| sha | tier | verdict | only red |
+| --- | --- | --- | --- |
+| `2aedcd004` | full | RED | `tools-devtest#00` |
+| `8ede836c7540` | full | RED | `tools-devtest#00` |
+
+`tools-devtest#00` is a **tooling self-check**, not a compiler row, and the one
+flaky row in both runs is the same subsystem. Native and slow tiers at
+`8ede836c7540` are **GREEN**.
+
+**Scope this exactly: two observed fulls, not "always."** But within that scope
+the full tier's verdict has been **constant and independent of the compiler** —
+and CLAUDE.md's own rule is that *a gate that cannot pass is not a gate.* While
+this row is red, "full tier RED" carries no information about the tree, and the
+next real regression arrives as **no change in the verdict at all**. That is the
+expensive shape: not a false alarm, a **masked** one.
+
+`tools-devtest#00` is **unclaimed**. Routed to the idle Track T tooling session,
+which owns the subsystem; it sits beside
+`bug-t-a-backgrounded-tier-reports-the-wrappers-exit-code-over-the-tiers-verdict`
+(`b5d5f977d`) in the same "the instruments are the broken thing" neighbourhood,
+and neither has an owner.
