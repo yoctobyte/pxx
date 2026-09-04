@@ -5678,7 +5678,7 @@ var
   wantMarkers: Boolean;
   fname, command, name, exprSource: AnsiString;
   incNested, incDir, savedExpanded: AnsiString;   { see the recursive splice below }
-  cond, active: Boolean;
+  cond, active, outermost, savedNestedComments: Boolean;
   condParent, condActive, condTaken: array[0..MAX_PAS_CONDS-1] of Boolean;
   savedDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
   savedDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
@@ -5690,6 +5690,37 @@ var
 {$endif}
   fullPath: AnsiString;
 begin
+  { THE DEFINE TABLE IS SAVED AND RESTORED ONLY BY THE OUTERMOST CALL, and the
+    per-nesting-level rollback this replaces was a real bug: an include's
+    {$DEFINE} is part of the INCLUDER's textual state, not a scope of its own,
+    and FPC has no such rollback.
+
+    What it cost (bug-p-a-define-set-in-an-include-is-invisible-to-the-includers-
+    own-include-selection, found by frankD while landing {$CLAIM}): the classic
+    config-include pattern lost BOTH arms, silently.
+
+      <$I setsdef.inc>        (it holds  <$DEFINE FROM_CONFIG_INC> )
+      <$IFDEF FROM_CONFIG_INC> <$I yes.inc> <$ELSE> <$I no.inc> <$ENDIF>
+
+    (Angle brackets, not braces: this pass is a raw text scan, and spelling the
+    example literally cost a build here -- see the brace-comment scanner far
+    below, whose missing NestedComments arm that failure exposed and which is
+    now fixed. Braces would work today; angle brackets do not depend on it.)
+
+    This pass rolled the define back when setsdef.inc finished, so it spliced
+    the ELSE arm and left the yes-arm include unexpanded. The LEXER then walked
+    the result, where the DEFINE now sits INLINE, so it took the yes arm --
+    whose body nobody had expanded. Neither arm's content reached the program
+    and nothing errored, because each pass was self-consistent and they merely
+    disagreed. FPC prints `include saw the define`; pxx printed nothing.
+
+    `outermost` and not simply "always keep": the outermost restore is what
+    isolates one compilation unit from the next, which is the whole reason
+    {$CLAIM} had to be invented. IncExpandDepth is already maintained around the
+    recursive splice below, so it is exactly the discriminator wanted -- a unit's
+    own ExpandIncludes runs at depth 0 and still gets its rollback. }
+  outermost := IncExpandDepth = 0;
+  savedNestedComments := NestedComments;
   savedDefineCount := PasDefineCount;
   savedDefineCharLen := PasDefineCharLen;
   for k := 0 to MAX_PAS_DEFINES - 1 do
@@ -5818,7 +5849,24 @@ begin
           durable claim to the one authoritative walk. }
         PasDefine(name)
       else if active and CaseEqual(command, 'undef') then
-        PasUndefine(name);
+        PasUndefine(name)
+      else if active and CaseEqual(command, 'mode') then
+        { COMMENT NESTING IS MODE-DEPENDENT, so this pass has to track it or its
+          brace scanner below reads a comment the LEXER will read differently.
+          Delphi mode turns nesting off; everything else has it on, which is the
+          real fpc 3.2.2 default. Measured 2026-09-04: without this arm a
+          {$MODE DELPHI} source whose comment holds an unmatched open-brace had
+          its following {$I} swallowed as comment text by this pass while fpc
+          and the lexer both expanded it -- `undefined variable` from a file
+          that compiles under fpc. The lexer sets the same two globals from its
+          own {$mode}; we restore ours at the outermost exit so a source without
+          a mode directive still meets PasInitDefines' default. }
+        NestedComments := not CaseEqual(name, 'delphi')
+      else if active and CaseEqual(command, 'nestedcomments') then
+      begin
+        if CaseEqual(name, 'on') then NestedComments := True
+        else if CaseEqual(name, 'off') then NestedComments := False;
+      end;
 
       if active and (CaseEqual(command, 'include') or CaseEqual(command, 'i')) then
       begin
@@ -5976,15 +6024,34 @@ begin
         end
         else if src[k] = '{' then
         begin
-          { Brace comment: skip to its matching close-brace, nesting on an inner
-            directive-looking open-brace-dollar so its close-brace does not end
-            the comment early and its directive text is not taken for a real one.
-            The comment is still copied through for the real lexer pass. }
+          { Brace comment: skip to its matching close-brace. Nests on an inner
+            open-brace under NestedComments, and ALWAYS on a directive-looking
+            open-brace-dollar so its close-brace does not end the comment early
+            and its directive text is not taken for a real one. The comment is
+            still copied through for the real lexer pass.
+
+            The NestedComments half is the SIBLING ARM of lexer.inc's brace
+            scanner and was missing until 2026-09-04, so the two walks disagreed
+            about where a comment ends. Only a comment nested TWO deep shows it:
+            the inner plain open-brace was not counted, so its close-brace
+            decremented a level it never opened and this pass left the comment
+            early -- while the lexer, which counts it, did not.
+
+              { a { b <$DEFINE Q> } <$IFDEF Q> <$I yes.inc> <$ELSE> <$I no.inc> <$ENDIF> }
+
+            (angle brackets: this pass is a raw text scan and a real one here
+            would be expanded out of this comment.) Everything from the second
+            close-brace on was read as live directives by THIS pass and as
+            comment text by the lexer, so pxx tried to open no.inc from inside a
+            comment and failed the build; fpc 3.2.2 compiles it. Found by
+            writing such a comment in this very procedure. }
           j := 1;
           Inc(k);
           while (k <= Length(src)) and (j > 0) do
           begin
-            if (src[k] = '{') and (k < Length(src)) and (src[k + 1] = '$') then Inc(j)
+            if (src[k] = '{') and
+               (NestedComments or
+                ((k < Length(src)) and (src[k + 1] = '$'))) then Inc(j)
             else if src[k] = '}' then Dec(j);
             Inc(k);
           end;
@@ -5997,13 +6064,17 @@ begin
     end;
   end;
   if condCount <> 0 then ErrorNoPos('unterminated conditional directive during include expansion');
-  PasDefineCount := savedDefineCount;
-  PasDefineCharLen := savedDefineCharLen;
-  for k := 0 to MAX_PAS_DEFINES - 1 do
+  if outermost then
   begin
-    PasDefineActive[k] := savedDefineActive[k];
-    PasDefineHasValue[k] := savedDefineHasValue[k];
-    PasDefineValue[k] := savedDefineValue[k];
+    NestedComments := savedNestedComments;
+    PasDefineCount := savedDefineCount;
+    PasDefineCharLen := savedDefineCharLen;
+    for k := 0 to MAX_PAS_DEFINES - 1 do
+    begin
+      PasDefineActive[k] := savedDefineActive[k];
+      PasDefineHasValue[k] := savedDefineHasValue[k];
+      PasDefineValue[k] := savedDefineValue[k];
+    end;
   end;
   src := IncExpanded;
 end;

@@ -13594,6 +13594,28 @@ test-core: $(COMPILER)
 	grep -q "before" $(TESTTMP)/test_assertions_still_fires.log
 	grep -q "boom" $(TESTTMP)/test_assertions_still_fires.log
 	! grep -q "after" $(TESTTMP)/test_assertions_still_fires.log
+	# A define set in an INCLUDE must be visible to the includer's own include
+	# selection. Both arms exist and define DII_ARM differently, so a regression
+	# is a wrong VALUE, not only a missing identifier. fpc 3.2.2 prints `yes`;
+	# the pin (pre-fix) does not compile it at all.
+	# bug-p-a-define-set-in-an-include-is-invisible-to-the-includers-own-include-selection
+	./$(COMPILER) -Fitest test/test_pascal_define_in_include_selects.pas $(TESTTMP)/test_define_in_include_selects26
+	tools/expect_same.sh test_define_in_include_selects "$$($(TESTTMP)/test_define_in_include_selects26)" "yes"
+	# The include pre-pass and the LEXER must agree where a brace comment ends.
+	# The fixture names an include that DOES NOT EXIST from inside a two-deep
+	# comment, so a pre-pass that leaves the comment early fails this COMPILE
+	# rather than passing quietly; nested_comment_live.inc is the positive control
+	# that the pass ran at all, and the 100-vs-1 score catches a define leaking
+	# out of a comment. fpc 3.2.2 also prints 2.
+	./$(COMPILER) -Fitest test/test_pascal_nested_comment_directive.pas $(TESTTMP)/test_nested_comment_directive26
+	tools/expect_same.sh test_nested_comment_directive "$$($(TESTTMP)/test_nested_comment_directive26)" "2"
+	# ...and the OTHER side of the mode switch, which the first cut of that fix
+	# broke: in Delphi mode brace comments do NOT nest, so the include after the
+	# comment is live. The pre-pass has to track {$$MODE} to know that -- it reads
+	# NestedComments, which PasInitDefines leaves True. fpc 3.2.2 prints the same
+	# string. The pin passes this too: it guards the FIX, not the original bug.
+	./$(COMPILER) -Fitest test/test_pascal_delphi_mode_comment_include.pas $(TESTTMP)/test_delphi_mode_comment_include26
+	tools/expect_same.sh test_delphi_mode_comment_include "$$($(TESTTMP)/test_delphi_mode_comment_include26)" "delphi include expanded"
 	./$(COMPILER) test/test_pascal_conditional_include.pas $(TESTTMP)/test_pascal_conditional_include26
 	tools/expect_same.sh test_pascal_conditional_include26 "$$($(TESTTMP)/test_pascal_conditional_include26)" "$$(printf '42\n7')"
 	./$(COMPILER) test/test_directive_if_numeric.pas $(TESTTMP)/test_directive_if_numeric26
