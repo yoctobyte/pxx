@@ -3,7 +3,7 @@ slug: bug-p-a-parameterless-procedural-value-is-only-callable-bare-as-an-identif
 track: P
 prio: 40
 type: bug
-status: open
+status: done
 blocked-by: []
 owner: unassigned
 created: 2026-09-04
@@ -69,3 +69,4 @@ the bare rows.
 - 2026-09-04 | frankA | filed while writing the wasm32 method-pointer cross test
   (`99fa70c34`). Not on the wasm32 path at all — every row above was measured on
   the x86-64 build.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

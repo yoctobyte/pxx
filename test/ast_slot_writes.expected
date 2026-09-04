@@ -744,8 +744,8 @@ AN_CALL_IND Right fnode
 AN_CALL_IND Right indexNode
 AN_CALL_IND Right n
 AN_CALL_IND Right node
-AN_CALL_IND Right pvTarget
 AN_CALL_IND Right unboxCall
+AN_CALL_IND Right valNode
 AN_CASE Left condNode
 AN_CASE Right branchSeq
 AN_CLASSREF Right 0

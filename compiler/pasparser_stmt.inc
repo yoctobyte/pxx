@@ -7280,41 +7280,22 @@ begin
                 Result := node; Exit;
               end;
 
-              { Bare, PARENLESS call of a proc-var / method-pointer AS A STATEMENT:
-                `AMethod;` -- fpcunit's AssertException invokes the TRunMethod it was
-                handed exactly so.
+              { The bare parenless call of a proc-var AS A STATEMENT used to be
+                decided HERE, before the lvalue was parsed, and only for a name
+                that is a single identifier (`AMethod;` -- fpcunit's
+                AssertException invokes the TRunMethod it was handed exactly so).
+                It is now decided ONCE for every designator spelling, after the
+                lvalue walk, through PasNodeProcSig -- search for
+                bug-p-a-parameterless-procedural-value-is-only-callable-bare-as-an-identifier
+                below. The identifier-only version is DELETED rather than kept
+                alongside: it was the arm the other three spellings were missing,
+                not a fast path, and two sites deciding one thing is how `h.nul;`
+                stayed broken while `m;` worked.
 
-                POSITION is the only thing that disambiguates this, and it has to be
-                read narrowly. A bare proc-var name is a VALUE nearly everywhere:
-                `q := p`, `Foo(cb)`, `Assigned(p)`. It is a CALL only when the whole
-                statement is the name -- nothing else it could mean. So the test is
-                made HERE, in the statement path, on the token that FOLLOWS the name
-                (same shape as `obj.Free;` above), and NOT inside ParseLValueAST:
-                that runs for expression atoms too, where the next token is just as
-                often a ';' -- putting it there turned `q := p;` into a call of p.
-
-                Zero-parameter signatures only: anything taking arguments has to be
-                written with them. }
-              if (idx >= 0) and (SymProcSig[idx] >= 0) and
-                 (Tokens[TokPos].Kind in [tkSemicolon, tkEnd, tkElse, tkUntil,
-                                          tkFinally, tkExcept]) and
-                 (Procs[SymProcSig[idx]].ParamCount = 0) then
-              begin
-                pvSig := SymProcSig[idx];
-                pvIsMeth := Syms[idx].TypeKind = tyRecord;
-                Next;                      { consume the proc-var name }
-                pvTarget := AllocNode(AN_IDENT);
-                ASTIVal[pvTarget] := idx;
-                if pvIsMeth then ASTTk[pvTarget] := Ord(tyRecord)
-                else ASTTk[pvTarget] := Ord(tyPointer);
-                node := AllocNode(AN_CALL_IND);
-                ASTLeft[node]  := -1;      { no args }
-                ASTRight[node] := pvTarget;
-                ASTIVal[node]  := pvSig;
-                ASTTk[node]    := Ord(Procs[pvSig].RetType);
-                if pvIsMeth then ASTSLen[node] := 1 else ASTSLen[node] := 0;
-                Result := node; Exit;
-              end;
+                The rule it carried is unchanged and still stated at the new
+                site: POSITION is the only disambiguator, a procedural value is a
+                VALUE nearly everywhere, and the test belongs in the statement
+                path rather than in the lvalue walk. }
               { The implicit-Self FIELD twin: `FField.Free;` inside a method,
                 FField a class-typed field of the enclosing class (blcksock's
                 `FDelayedOptions.Free`). Same plain-form restriction. }
@@ -7430,6 +7411,42 @@ begin
                 else if castPrevTok = Ord(tkStarEq) then ASTIVal[node] := Ord(tkStar)
                 else ASTIVal[node] := Ord(tkSlash);
                 ASTTk[node] := ASTTk[valNode];
+              end
+              { A PARAMETERLESS procedural value called with no argument list,
+                for ANY designator spelling: `h.nul;`, `h.p;`, `a[0];`, and the
+                chains that reach one. `m;` on a bare identifier has its own
+                arm further up, decided BEFORE the lvalue is parsed; every other
+                spelling arrived here with a perfectly good lvalue node in hand
+                and no one asking the question, so the statement was read as the
+                start of an assignment and reported `expected ':=' before ';'`.
+                Asked ONCE, node-keyed, through PasNodeProcSig -- adding a
+                second parenless-call site per spelling is what
+                normalise-dont-special-case.md says to stop and count instead.
+
+                POSITION is the whole disambiguator and the rule is the one the
+                identifier arm states: a procedural value is a VALUE nearly
+                everywhere (`q := h.nul`, `Foo(h.nul)`, `Assigned(a[0])`), and a
+                CALL only when the entire statement is the designator. So the
+                test is on the token that FOLLOWS it, here in the statement path,
+                and never inside the lvalue walk -- which runs for expression
+                atoms too, where a `;` is just as common.
+                bug-p-a-parameterless-procedural-value-is-only-callable-bare-as-an-identifier }
+              else if (PasNodeProcSig(valNode) >= 0) and
+                      (Procs[PasNodeProcSig(valNode)].ParamCount = 0) and
+                      (CurTok.Kind in [tkSemicolon, tkEnd, tkElse, tkUntil,
+                                       tkFinally, tkExcept]) then
+              begin
+                pvSig := PasNodeProcSig(valNode);
+                node := AllocNode(AN_CALL_IND);
+                ASTLeft[node]  := -1;      { no args }
+                ASTRight[node] := valNode;
+                ASTIVal[node]  := pvSig;
+                ASTTk[node]    := Ord(Procs[pvSig].RetType);
+                { the method-pointer flag the indirect-call lowering reads: a
+                  {Code,Data} pair is tyRecord, a plain procedural value is a
+                  bare code pointer. }
+                if ASTTk[valNode] = Ord(tyRecord) then ASTSLen[node] := 1
+                else ASTSLen[node] := 0;
               end
               else
               begin

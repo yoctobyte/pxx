@@ -874,6 +874,73 @@ begin
   Result := (Procs[mpi].RetType = tyRecord) and (ProcRetRecId[mpi] = MethodPtrRecId);
 end;
 
+{ The procedural SIGNATURE of an arbitrary lvalue NODE: the Procs[] index to
+  marshal an indirect call through it, or -1 when the node is not a procedural
+  value. The Pascal twin of the C frontend's CNodeProcSig.
+
+  It exists because "is this designator a procedural value?" was answered
+  SPELLING BY SPELLING and never node-keyed, so each spelling had to be taught
+  separately and only the first one ever was. A bare identifier read
+  SymProcSig, a record field read UFldProcSig at its own AN_CALL_IND site, an
+  array element read SymElemProcSig at another -- five AN_CALL_IND construction
+  sites in pasparser_lval.inc plus one in pasparser_stmt.inc, each deriving the
+  fact locally from whatever it happened to have in hand. The consequence is
+  bug-p-a-parameterless-procedural-value-is-only-callable-bare-as-an-identifier:
+  `m;` called, and `h.nul;`, `h.p;` and `a[0];` were all read as the start of an
+  assignment and reported `expected ':=' before ';'`. The boundary was not `of
+  object` and not the record field -- removing each showed it was neither -- it
+  was that the designator is not a single identifier. FPC accepts all four, and
+  real Pascal writes `OnClick;` far more often than `OnClick()`.
+
+  Kinds it answers, which are the ones an lvalue walk can produce for a
+  procedural value:
+    AN_IDENT   a variable or parameter          -> SymProcSig
+    AN_FIELD   a record/class field             -> UFldProcSig, via ResolveNodeRec
+    AN_INDEX   an element of an array of them   -> SymElemProcSig / UFldProcSig
+
+  Anything else answers -1, which is the "not a procedural value" reading and
+  leaves every existing path untouched. devdocs/dev/normalise-dont-special-case.md }
+function PasNodeProcSig(node: Integer): Integer;
+var baseRec, fIdx, bi: Integer;
+begin
+  Result := -1;
+  if (node < 0) or (node >= ASTNodeCount) then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    bi := Integer(ASTIVal[node]);
+    if (bi >= 0) and (bi < SymCount) then Result := SymProcSig[bi];
+  end
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    baseRec := ResolveNodeRec(ASTLeft[node]);
+    if baseRec >= REC_UCLASS_BASE then
+    begin
+      fIdx := FindUField(baseRec - REC_UCLASS_BASE, GetASTIdentName(node));
+      if (fIdx >= 0) and (not UFldIsArray[fIdx]) then Result := UFldProcSig[fIdx];
+    end;
+  end
+  else if ASTKind[node] = AN_INDEX then
+  begin
+    if ASTKind[ASTLeft[node]] = AN_IDENT then
+    begin
+      bi := Integer(ASTIVal[ASTLeft[node]]);
+      if (bi >= 0) and (bi < SymCount) then Result := SymElemProcSig[bi];
+    end
+    else if ASTKind[ASTLeft[node]] = AN_FIELD then
+    begin
+      baseRec := ResolveNodeRec(ASTLeft[ASTLeft[node]]);
+      if baseRec >= REC_UCLASS_BASE then
+      begin
+        fIdx := FindUField(baseRec - REC_UCLASS_BASE, GetASTIdentName(ASTLeft[node]));
+        if (fIdx >= 0) and UFldIsArray[fIdx] then Result := UFldProcSig[fIdx];
+      end;
+    end;
+  end;
+  { A signature is a Procs[] row; anything outside it is the "unset" -1, whatever
+    sentinel the source column happened to carry. }
+  if (Result < 0) or (Result >= ProcCount) then Result := -1;
+end;
+
 { The same question as MethodResultSatisfiesTarget, asked about a FREE ROUTINE
   and against a procedural-valued TARGET SYMBOL: is `x := F` the CALL of F or
   the ADDRESS of F?

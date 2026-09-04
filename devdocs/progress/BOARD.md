@@ -366,7 +366,7 @@ _none_
 | feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing | T | 55 | feature | feature(T): twatch should assert its `## Repro` selector resolves to exactly the job it is filing | — |
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 
-## backlog-pascal (46)
+## backlog-pascal (45)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -378,7 +378,6 @@ _none_
 | bug-p-a-field-selection-on-a-record-cast-is-not-parsed | P | 35 | bug | `TMethod(TSel(s.Pick)).Code` — a field selected directly off a cast to a RECORD type — is `expected ')' before '.'`. Identical on pinned, so not a regression, and identical for every receiver spelling, so nothing to do with method references: the cast expression simply cannot be a postfix base. Assigning the cast to a variable first and selecting off that works. FPC compiles the direct form. This is the spelling several tickets USE to demonstrate other bugs (the `TMethod(...).Code` idiom), so it is worth fixing for the leverage as much as for itself. | — |
 | bug-p-a-forward-interface-declaration-is-not-parsed | P | 45 | bug | `IFoo = interface;` (forward) is rejected with `Expected: end, but got: ;` while the CLASS arm of the same double case, `TBar = class;`, parses fine. Pre-existing on pinned and HEAD alike -- not a regression. Costs tgenconstraint37, which is otherwise the only corpus test that exercises specializing against a forward-declared type. | — |
 | bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name | P | 45→65 | bug | A program declaring `TBox<T>` while also importing a unit that declares `TBox<T>` now parses, but every use resolves to the IMPORTED template: `b.Local` answers `no such member`. FPC takes the local declaration and prints 42. The declaration is parsed and then loses to the import. | — |
-| bug-p-a-parameterless-procedural-value-is-only-callable-bare-as-an-identifier | P | 40 | bug | A parameterless procedural value is callable with no argument list ONLY when it is spelled as a bare identifier. `m;` compiles; `h.p;`, `h.nul;` and `a[0];` all give `expected ':=' before ';'` and the statement is read as the start of an assignment. The boundary is NOT `of object` and NOT the record field -- a plain `procedure` in a record field and a method pointer in an ARRAY element fail identically, so it is any procedural-valued lvalue that is not a single identifier. `h.nul()` with empty parens works, so the value and its call machinery are fine and only the no-parens statement path is missing the shape. | — |
 | bug-p-a-stray-end-at-unit-implementation-top-level-is-silently-skipped | P | 45 | bug | pasparser_proc.inc:5247 ends a unit only on `end` IMMEDIATELY followed by `.`; any other top-level `end` in the implementation section is consumed by a bare `else Next` and NOTHING is reported. A routine body that consumes one `end` too FEW is therefore invisible -- the spare is eaten and the unit compiles. The mirror (one too MANY) errors, but at EOF, because the loop then lands on the bare `.`. Same silent-skip shape that bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped measured at 1949 events and replaced in the arm NEXT DOOR, leaving this one. Found while localising the rung-6b wall in feature-pascal-corpus-expansion. NOT yet known to hide a live bug -- the cost of turning it into an error is unmeasured and that measurement is the first task, exactly as it was for the sibling. | — |
 | bug-p-a-units-implementation-section-is-visible-to-its-importers | P | 45 | bug | pxx has no interface/implementation visibility boundary at all: a unit's implementation-section TYPES, CONSTS and ROUTINES are every one of them visible to any importer, where FPC rejects all four. Accepting what FPC rejects is normally not a defect, and the permissiveness alone is not what makes this worth fixing — the SHADOWING is. A leaked implementation name silently outranks a builtin of the same name for every importer, and that already shipped one wrong-value/memory-corruption bug: builtinheap's private `PWord = ^NativeInt` shadowed the builtin `PWord = ^UInt16` in every user program, so `PWord(p)^` read eight bytes instead of two and `PWord(p)^ := x` WROTE eight, silently, at every -O level. That instance is FIXED by renaming the RTL's alias to `PMachineWord`; this ticket is the residual mechanism, which will hand the same gun to the next RTL name that collides. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
@@ -890,9 +889,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3260)
+## done (3261)
 
-3260 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3261 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (74)
 
@@ -1162,7 +1161,6 @@ _none_
 - [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
 - [p 40] [P] bug-p-a-builtin-call-result-cannot-be-indexed-inside-parentheses
 - [p 40] [P] bug-p-a-default-value-is-accepted-on-an-open-array-parameter
-- [p 40] [P] bug-p-a-parameterless-procedural-value-is-only-callable-bare-as-an-identifier
 - [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
 - [p 40] [P] bug-p-member-access-on-a-procedural-variable-call-result-is-rejected
 - [p 40] [P] bug-p-unicodechar-is-a-4-byte-code-point-and-fpc-makes-it-a-2-byte-code-unit
