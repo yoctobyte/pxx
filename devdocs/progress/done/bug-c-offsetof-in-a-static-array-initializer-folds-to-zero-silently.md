@@ -192,4 +192,4 @@ Summary left as its author wrote it; it understates the mechanism and the
 severity, and correcting it belongs to whoever holds the ticket.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9859046df.
