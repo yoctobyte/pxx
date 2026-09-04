@@ -3,7 +3,7 @@ slug: umbrella-one-full-tier-run-with-no-red-tier
 track: T
 prio: 85
 type: umbrella
-blocked-by: [regression-lib-test-lib-synapse-3, regression-lib-test-lib-synapse-ssl, regression-lib-test-lib-synapse-transitive-unit, regression-test-core-test-exception-unhandled-3, regression-test-core-test-setlen-in-parallel-for-body-2]
+blocked-by: [regression-test-core-c-crtl-wait, bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain]
 created: 2026-09-01
 owner: frankZ
 summary: "GOAL, not a unit of work: one `full` tier run with no RED in any tier judged at that sha. That is what grades a pin `green` rather than `reds(N)`, and no PINNED sha has earned it since v354 on 2026-08-19. A pin is neither blocked nor gated by this — CLAUDE.md now says a valid pin IS the self-host fixedpoint and nothing else may block one, and rollback falls back to the most recent pin, so recovery is never empty. What a green run buys is a rollback target that is VERIFIED rather than merely recent. The umbrella ENDS when one such run comes back; it is not a standing triage desk."
@@ -1098,3 +1098,41 @@ and it is explicitly out of this session's brief. A ticket wanting a pin is
 never a reason to take one, and a peer's relay is not authority — T says the
 same about its own owner. This section exists so that whoever does decide is
 looking at a measurement rather than a red count.
+
+## 2026-09-04, frankZ — the newest full tier is TWO reds, and one is now closed
+
+`27303aeeb35c` on seven, 2026-09-04T17:20:00Z, tier `full`, 1167s. `STILL-RED`
+lists exactly two jobs. Not thirteen; the brief's starting number is thirteen
+days of work behind and every intervening ticket in the old `blocked-by` list
+is in `done/`. The list above is replaced with what is actually blocking.
+
+**1. `tools-devtest#00` — CLOSED, `3914444ff`.** Three unrelated causes, none a
+compiler bug: an unwired test (`test/c_offsetof_in_a_static_array_initializer.c`
+landed with its own fix at `62463923f` and nothing ran it), two files naming
+`/tmp` paths at runtime, and `exit_observable_devtest`'s stdout-only ratchet,
+which **had never been green in its life** — see
+[[bug-t-the-exit-observable-ratchet-was-red-at-its-own-arming-commit]], resolved
+in the same push. 134 guards green, was 131 green / 3 RED.
+
+This one mattered beyond its own row: it is the red **inherited into pin v403's
+baseline** (`pin_baseline.reds == ['tools-devtest#00']`, carried from v402), so
+it was grading every pin taken while it stood.
+
+**2. `test-core#src:test/c_crtl_wait.c` — the tree is exonerated.** riscv32's
+rusage row, red on seven and green on plexus from byte-identical compiler bytes.
+Isolated to seven's emulator being a Debian generation behind, with the host
+kernel eliminated on seven's own box by a probe carrying its own positive
+control. [[regression-test-core-c-crtl-wait]] and
+[[bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain]].
+
+**Where that leaves this umbrella.** Its target is a full run with no RED tier,
+and the remaining red **cannot be cleared from the tree** — it needs root on
+seven (the owner) or testmgr surgery to skip a row on an absent host
+capability (T). So the umbrella is one commit from its goal and the last step
+is not a lane's to take. That is worth stating plainly rather than leaving it
+to look like unfinished work.
+
+**And the shape of the finding is the reusable part:** two reds, and after
+diagnosis *neither was a compiler defect*. One was a guard that could not pass
+and one was an emulator version. A red tier does not mean a broken compiler,
+and this umbrella's whole history is that reading being made by default.
