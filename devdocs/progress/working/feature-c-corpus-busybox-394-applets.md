@@ -4,11 +4,12 @@ title: "Rung 6: busybox at 394 applets — 507 of 521 TUs, and the fourteen that
 track: C
 prio: 60
 type: feature
-status: open
+status: working
 created: 2026-09-02
 found-by: frankD
 blocked-by: [feature-b-crtl-function-gaps-at-394-busybox-applets, bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS, bug-c-ir-unsupported-ast-node-kind-1-in-flash-eraseall]
 summary: "**507 OF 521 TRANSLATION UNITS BECOME x86-64 OBJECTS AT 394 APPLETS**, up from 265 of 265 at 141. The gcc oracle links all 521 and agrees with the reference busybox over 893 differential cases (was 387), so the oracle is sound at this width and the remaining work is named. Fourteen refusals, and THIRTEEN OF THEM ARE crtl SURFACE GAPS, not compiler defects: ten missing functions, three files hitting one missing-header cause. The fourteenth is the only compiler finding -- an unlowerable AST node in flash_eraseall.c. The binary does not link yet, and it cannot until the fourteen are cleared, because busybox's applet table references every applet_main by name. Binary sha256 32a2ce1d9806."
+owner: frankC
 ---
 
 # What the widening bought
