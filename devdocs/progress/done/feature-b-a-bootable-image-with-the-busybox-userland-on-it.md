@@ -98,6 +98,18 @@ transcripts is exactly the instrument this repo warns about — it prints PASS o
 two names for one file just as happily — so the run flips one byte of the guest
 transcript and requires `cmp` to reject it before it will report the real result.
 
+**And with `--selfhost`, the owner's whole sentence runs on our own userland.**
+`--busybox --selfhost` reaches `SELF-HOST FIXEDPOINT INSIDE THE VM: stage1 ==
+stage2` in a VM where PID 1, the shell, and every tool are pxx-built — seeded by
+the pinned v403 compiler against HEAD's `compiler.pas`. Previously that
+fixedpoint ran under DEBIAN's busybox, so the compiler was the only pxx thing in
+the image.
+
+**That verdict is `cmp`, from the binary I had just found a miscompile in**, so
+it was positive-controlled before being believed: our busybox's `cmp -s` on two
+identical 10.2 MB files (a stage binary's size) returns 0, and returns 1 when
+they differ in the LAST byte only. It is not a `cmp` that always agrees.
+
 **Separately: the same run also boots the ordinary kiosk image on our busybox**
 (`--busybox` without `--cases`): our busybox mounts `/proc`, `/sys` and `/dev`,
 the in-VM pxx compiles and runs a Pascal program, and the kiosk app answers
