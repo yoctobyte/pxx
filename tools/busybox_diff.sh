@@ -1268,6 +1268,101 @@ NCASES="$(count_cases "$WORK/oracle_gcc.out")"
 [ "$NCASES" -gt 0 ] || die "the oracle transcript holds no cases -- a byte-identical result over nothing is not a result"
 printf '  ORACLE  %s%d cases)\n' "$ORACLE_KIND" "$NCASES"
 
+# ---- the ORACLE HAS A WIDTH, and until 2026-09-04 it was always 64 ----------
+# THE ORACLE ABOVE IS BUILT WITH PLAIN `gcc', SO IT IS AN x86-64 BINARY. Diffing
+# a 32-bit subject against it is not a comparison of two compilers; it is a
+# comparison of two WIDTHS, and every row whose answer depends on sizeof(long)
+# reports a FAIL that reads exactly like a code-generation bug.
+#
+# Measured 2026-09-04 at 394 applets, i386, and this is what the fix is for:
+# 937 of 938 cases were byte-identical and the one that was not was
+# `expr 2147483647 + 1'.
+#
+#     gcc native   sizeof(arith_t)=8   2147483648
+#     gcc -m32     sizeof(arith_t)=4  -2147483648
+#     pxx i386     sizeof(arith_t)=4  -2147483648
+#     pxx native   sizeof(arith_t)=8   2147483648
+#
+# busybox's coreutils/expr.c has `typedef long arith_t' whenever
+# CONFIG_EXPR_MATH_SUPPORT_64 is off, which is this config. pxx AGREES WITH gcc
+# AT BOTH WIDTHS; the harness was the only thing that was wrong, and it had been
+# wrong for every 32-bit target since --targets learned to take one.
+#
+# THE FAILURE MODE THIS REPLACES IS THE DANGEROUS DIRECTION. It cannot make a
+# broken compiler look green -- it makes a correct one look broken -- so nothing
+# shipped because of it. What it cost is triage: a FAIL on a row like this is
+# indistinguishable from a real 64-bit-arithmetic defect until someone builds
+# the 32-bit oracle by hand, and the i386 leg could never report GREEN at all.
+#
+# IF gcc CANNOT BUILD 32-BIT HERE, 32-BIT TARGETS ARE NOT COMPARED. They still
+# compile and link and those numbers still print. Falling back to the 64-bit
+# oracle is exactly the bug, and a skip that says so out loud is the only honest
+# other option -- `no multilib' must not read as `verified'.
+target_bits() {
+  case "$1" in
+    x86_64|aarch64) printf '64\n' ;;
+    *)              printf '32\n' ;;
+  esac
+}
+
+NOCMP=0        # targets that BUILT but were never compared to an oracle
+WANT32=0
+for t in $TARGETS; do
+  [ "$(target_bits "$t")" = 32 ] && WANT32=1
+done
+
+ORACLE32=""       # transcript path, empty if there is no 32-bit oracle
+ORACLE32_WHY=""   # why not, printed once per 32-bit target
+NCASES32=0
+if [ "$WANT32" -eq 1 ]; then
+  if ! printf 'int main(void){return 0;}\n' > "$WORK/m32probe.c" \
+     || ! gcc -m32 -o "$WORK/m32probe" "$WORK/m32probe.c" >> "$WORK/oracle_sep.log" 2>&1; then
+    ORACLE32_WHY="gcc cannot build 32-bit on this host (no multilib?)"
+  else
+    if [ "$SEPARATE" -eq 1 ]; then
+      rm -rf "$WORK/objg32"; mkdir -p "$WORK/objg32"
+      o32fail=""
+      while read -r src; do
+        tag="$(printf '%s' "$src" | tr / _ | sed 's/\.c$//')"
+        ( cd "$BB" && gcc -m32 -w -O2 -std=gnu99 -D_GNU_SOURCE -DBB_VER="\"$BBVER\"" $INC \
+            -c "$WORK/wrap/$tag.c" -o "$WORK/objg32/$tag.o" ) >> "$WORK/oracle_sep.log" 2>&1 \
+          || { o32fail="$src"; break; }
+      done < "$WORK/tulist.txt"
+      if [ -n "$o32fail" ]; then
+        ORACLE32_WHY="gcc -m32 could not compile $o32fail (see oracle_sep.log)"
+      elif ! gcc -m32 -o "$WORK/oracle_gcc32" "$WORK/objg32"/*.o >> "$WORK/oracle_sep.log" 2>&1; then
+        ORACLE32_WHY="the gcc -m32 objects did not link (see oracle_sep.log)"
+      fi
+    else
+      ( cd "$BB" && gcc -m32 -w -O2 -std=gnu99 -D_GNU_SOURCE -DBB_VER="\"$BBVER\"" $INC \
+          -o "$WORK/oracle_gcc32" "$UNITY" ) >> "$WORK/oracle_sep.log" 2>&1 \
+        || ORACLE32_WHY="gcc -m32 could not build the unity (see oracle_sep.log)"
+    fi
+  fi
+
+  if [ -z "$ORACLE32_WHY" ]; then
+    install_bin "$WORK/g32" "$WORK/oracle_gcc32"
+    run_cases "" "$WORK/g32" > "$WORK/oracle_gcc32.out" 2>&1
+    NCASES32="$(count_cases "$WORK/oracle_gcc32.out")"
+    if [ "$NCASES32" -ne "$NCASES" ]; then
+      die "the 32-bit oracle ran $NCASES32 cases and the 64-bit one ran $NCASES -- these two transcripts are not the same experiment and diffing a subject against either would be comparing different case sets"
+    fi
+    # POSITIVE CONTROL, and it is the reason this whole block exists: if the two
+    # oracles are byte-identical then no case in this run can tell the widths
+    # apart, and building a second oracle bought nothing. That is not a failure
+    # of the run -- it is a failure of THIS CHANGE to be load-bearing, and it
+    # must be visible rather than inferred, because a silent no-op here restores
+    # the old behaviour exactly.
+    if cmp -s "$WORK/oracle_gcc.out" "$WORK/oracle_gcc32.out"; then
+      printf '  ORACLE  gcc -m32 build, %d cases -- IDENTICAL to the 64-bit oracle, so no case in this set is width-dependent\n' "$NCASES32"
+    else
+      printf '  ORACLE  gcc -m32 build, %d cases (%d row(s) differ from the 64-bit oracle -- that is the width, not a defect)\n' \
+             "$NCASES32" "$(diff -a "$WORK/oracle_gcc.out" "$WORK/oracle_gcc32.out" | grep -c '^<')"
+    fi
+    ORACLE32="$WORK/oracle_gcc32.out"
+  fi
+fi
+
 # ---- second oracle: upstream's own separately-linked binary -----------------
 UPSTREAM=""
 for cand in "$BB/busybox_$(printf '%s' "$APPLETS" | tr 'a-z' 'A-Z')" "$BB/busybox"; do
@@ -1523,20 +1618,48 @@ for t in $TARGETS; do
   # them), so this call's own status carries no information and is ignored.
   run_cases "$runner" "$WORK/p_$t" > "$WORK/pxx_$t.out" 2>&1 || true
 
-  if cmp -s "$WORK/oracle_gcc.out" "$WORK/pxx_$t.out"; then
-    printf '  PASS    %-8s byte-identical to the gcc oracle over %d cases\n' \
-           "$t" "$NCASES"
+  # WHICH ORACLE -- see "the ORACLE HAS A WIDTH" above. A 32-bit target compared
+  # against the 64-bit oracle is a width diff wearing the shape of a verdict.
+  if [ "$(target_bits "$t")" = 32 ]; then
+    if [ -z "$ORACLE32" ]; then
+      printf '  note    %-8s NOT COMPARED: %s. The objects above built and linked; nothing here says they RUN correctly.\n' \
+             "$t" "$ORACLE32_WHY"
+      NOCMP=$((NOCMP + 1))
+      continue
+    fi
+    oracle_out="$ORACLE32"; oracle_name="gcc -m32 oracle"
   else
-    printf '  FAIL    %-8s differs from the gcc oracle\n' "$t"
+    oracle_out="$WORK/oracle_gcc.out"; oracle_name="gcc oracle"
+  fi
+
+  if cmp -s "$oracle_out" "$WORK/pxx_$t.out"; then
+    printf '  PASS    %-8s byte-identical to the %s over %d cases\n' \
+           "$t" "$oracle_name" "$NCASES"
+  else
+    printf '  FAIL    %-8s differs from the %s\n' "$t" "$oracle_name"
     # -a, like the oracle-vs-upstream diff above: a `cat bin.dat` case puts
     # NUL bytes in both transcripts, and without it this prints
     # "Binary files ... differ" and no divergence at all -- a FAIL you cannot
     # read is barely better than no FAIL.
-    diff -a "$WORK/oracle_gcc.out" "$WORK/pxx_$t.out" | head -30
+    diff -a "$oracle_out" "$WORK/pxx_$t.out" | head -30
     RC=1
   fi
 done
 
-[ "$RC" -eq 0 ] && printf 'busybox-diff: GREEN\n' || printf 'busybox-diff: RED\n'
+# THE VERDICT WORD IS WHAT GETS READ, AND `GREEN' MUST NOT BE THE WORD FOR A RUN
+# THAT COMPARED NOTHING. A target that built and linked but had no oracle of its
+# own width is not a pass -- the note above says so, and a note above a GREEN is
+# read as GREEN. This is the same failure this script already refuses in two
+# other places (a missing tree, and a transcript holding zero cases): a result
+# over nothing that looks like a result. It is not RED either, because on a host
+# without multilib no i386 run could ever be anything else, and a verdict that
+# is permanently RED teaches people to ignore RED.
+if [ "$RC" -ne 0 ]; then
+  printf 'busybox-diff: RED\n'
+elif [ "$NOCMP" -gt 0 ]; then
+  printf 'busybox-diff: GREEN ON WHAT WAS COMPARED -- %d target(s) built and were NOT compared to any oracle (see the notes above)\n' "$NOCMP"
+else
+  printf 'busybox-diff: GREEN\n'
+fi
 printf 'BUSYBOX-DIFF-COMPLETE\n'
 exit "$RC"
