@@ -150,4 +150,4 @@ fix, but they still ignore `msg_name` and control data — that is a separate,
 pre-existing limitation recorded in their own comment, not part of this ticket.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 38a0992b0.
