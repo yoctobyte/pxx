@@ -5361,3 +5361,96 @@ prio 35), last in this group. **Its body is now partly stale** — it says
 / 6.5 MB numbers before touching anything.** *Noticing that your own earlier
 commit invalidated a ticket's premise, before working it, is the cheap half of the
 staleness problem.*
+
+---
+
+## The `test_stackless_gen` NEW-REDs were `7e271ff7d`'s — and the shape is the MIRROR of the invisibility rule
+
+**Status at time of writing: the fix is NOT yet on origin** — frankb-78 reports it
+verified on all four targets with the gate running. Banked from its report;
+`test_forin_enumerator_free_without_try.pas` is not on disk here yet.
+
+### "x86-64 is not among them" was TRUE, and it pointed the WRONG WAY
+
+I relayed the NEW-RED list as **i386, riscv32, xtensa — x86-64 not among them**,
+and flagged it as CLAUDE.md's width-defect shape (the dev loop, quick and the pin
+all run on the 64-bit host, so a target-dependent defect is structurally
+invisible). **The fact was correct. The framing steered wrong.**
+
+**It was not a cross-target bug at all. x86-64 fails too, and harder** —
+`test_stackless_gen.pas` **does not COMPILE** at `7e271ff7d`:
+`compiler error: call to a runtime stub that was never emitted (code offset 0 is
+the ELF entry point)`. The three cross jobs appear in the list **because they
+compare a cross run against an x86-64 oracle**; the x86-64 job that would have
+failed on its own sits in a tier the run did not reach that way.
+
+> **A red list that omits the host can mean the host is FINE, or it can mean the
+> host's row was never PRINTED.** The natural reading is a width- or
+> target-dependent defect; the actual defect was universal.
+
+**This belongs beside the i386-invisibility rule as its mirror.** That rule warns
+a defect can hide *on* the host. This one warns that a defect can hide *from the
+list* while being worst on the host. **Both produce "x86-64 is clean" and they
+mean opposite things.** *(Recorded against this seat: I named the fact and
+declined to draw the conclusion, which is the only reason the wrong steer cost
+nothing. Naming a fact and naming what it suggests are different acts, and I did
+the second one too.)*
+
+### Mechanism
+
+`EmitExceptionRuntime` writes **CODE**, and the stubs must land **before** the
+body — so the enabling decision is made in a **token PRE-SCAN** in `ParseProgram`
+that looks for a source `try` or `raise`. The desugar **synthesises** a
+try/finally, so a program with **no `try` of its own** got `ExcRaiseAddr = 0` and
+the lowering's `IR_RAISE` compiled to **`call 0`**.
+
+**`IREmitCodeCall`'s guard turned that into a compiler error instead of the
+infinite entry-point loop it describes** — *that guard is the only reason this was
+a loud build failure rather than a silent hang.*
+
+### The obvious fix builds cleanly and segfaults
+
+Calling `EnableExceptionRuntime` from the desugar **is wrong**: the stub bytes
+land **inside the body already being emitted**. That intermediate state was
+measured before it was understood — **all four targets building, all four
+segfaulting.**
+
+> **"Now it compiles" is not a step forward on its own.**
+
+### THE PRESCAN ALREADY HAD THIS ARM, FOR A DIFFERENT SYNTHESISED TRY
+
+`class operator Finalize` desugars to a try/finally and **has a token trigger
+sitting there with a comment describing this bug almost word for word.**
+
+> **"I added a third synthesised-try site and did not grep for the second."**
+
+`normalise-dont-special-case` failing in **its literal stated form** — *"fixed one
+arm of a double case? grep for the sibling before closing"* — and **the sibling
+was not merely present, it was documented.**
+
+### And the second sibling was ALREADY BROKEN, years old
+
+The class-enumerator `for X in C` has wrapped its enumerator's `Free` in a
+try/finally **for a long time and never asked for the runtime either.** **A
+program whose only try/finally is that one does not compile on pin v403 —
+measured, not inferred.**
+
+**frankb-78 had HIT that error earlier today** writing a throwaway probe and
+**dismissed it as a naming clash with the builtin `Free`. It was this bug, and it
+filed nothing.** *A dismissed anomaly is a filed ticket you decided not to write;
+the cost is that the next encounter starts from zero.*
+
+New test `test_forin_enumerator_free_without_try.pas` **carries no `try` of its
+own on purpose** — **adding one would enable the runtime by the old path and make
+the test unable to fail.** *A test for a missing enablement must not contain the
+thing that enables it.*
+
+### The cost, stated rather than netted
+
+The trigger is **the whole `for .. in` token shape**, because a pre-scan **cannot
+tell which SOURCE a for-in has** — that needs the symbol table, and `for c in s`
+is **token-identical** to the two forms that wrap. Cost: **+4096 bytes of
+exception stubs in any program with a for-in and no `try`**, measured at exactly
++4096 on x86-64, xtensa and riscv32 for `test_forin_native`. **Narrowing it needs
+a post-parse emission point, not a better guess in the scan** — filed as a
+follow-up rather than left implied.
