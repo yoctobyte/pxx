@@ -9004,6 +9004,18 @@ test-core: $(COMPILER)
 	# Verified against the pin: `"Local": no such member` there. FPC 3.2.2: 42 11 33 4.
 	./$(COMPILER) -Futest/generic_shadow_units test/test_generic_shadow_import.pas $(TESTTMP)/test_generic_shadow_import26
 	tools/expect_same.sh test_generic_shadow_import26 "$$($(TESTTMP)/test_generic_shadow_import26)" "42 11 33 4"
+	# WHICH SECTION of a unit a generic specialization is minted in. The alias is
+	# minted at the END of a uses clause, so it inherits that clause's section:
+	# an interface `uses` publishes it (ugsectb's TIntBox names it there), an
+	# implementation `uses` keeps it to that unit (ugsectc), and the program
+	# mints the SAME alias name from the same template in a third scope.
+	# CHARACTERISATION, not a regression test: the pin passes it unchanged. It is
+	# here because the unit-section declaration boundary is moving under Track D's
+	# implementation-section work and this slice is the one that mints alias rows
+	# from a uses clause. Row 1 controlled by moving ugsectb's uses clause between
+	# sections (fails). FPC 3.2.2 prints the same line.
+	./$(COMPILER) -Futest/generic_unit_section_units test/test_generic_spec_unit_section.pas $(TESTTMP)/test_generic_spec_unit_section26
+	tools/expect_same.sh test_generic_spec_unit_section26 "$$($(TESTTMP)/test_generic_spec_unit_section26)" "101 1 202 42 4 yes"
 	# A generic constraint against a name that is NOT in the class table used to be
 	# skipped entirely, because at that point "not a class" and "not declared yet"
 	# are the same observation. Two kinds of name are not "not yet": a builtin
