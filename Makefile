@@ -8877,6 +8877,19 @@ test-core: $(COMPILER)
 	# FPC 3.2.2 prints `42 21 8 7` for the four rows it will compile.
 	./$(COMPILER) -Futest/generic_func_unit_units test/test_generic_func_in_unit.pas $(TESTTMP)/test_generic_func_in_unit26
 	tools/expect_same.sh test_generic_func_in_unit26 "$$($(TESTTMP)/test_generic_func_in_unit26)" "42 21 8 10 7"
+	# A reference to a DIFFERENT specialization of the SAME template, from inside
+	# that template's own body -- `FOther: TOuter<ShortInt>` inside `TOuter<T>`.
+	# A different TEMPLATE in that position always worked (its own desugar sweep
+	# reaches this body) and so did same-template-same-args (SelfSpecGroupEnd);
+	# only this third case had no owner, and produced `TOuter$LongInt<ShortInt>`
+	# -- an internal minted name in the diagnostic. The objfpc arm in
+	# generic_selfspec_units is the CONTROL: it always worked, and both surfaces
+	# must now print the same row. The two SizeOf columns (1 and 4) are the only
+	# assertion that can tell a real second specialization from a collapsed one.
+	# Verified against the pin: `expected ':' before '>'` there, green here.
+	# FPC 3.2.2 compiles neither arm; that is deliberate and written up in the test.
+	./$(COMPILER) -Futest/generic_selfspec_units test/test_generic_self_other_specialization.pas $(TESTTMP)/test_generic_selfspec26
+	tools/expect_same.sh test_generic_selfspec26 "$$($(TESTTMP)/test_generic_selfspec26)" "$$(printf '1000000 7 1000000 3 1 4\n1000000 7 1000000 3 1 4\nsurfaces agree')"
 	# A generic constraint against a name that is NOT in the class table used to be
 	# skipped entirely, because at that point "not a class" and "not declared yet"
 	# are the same observation. Two kinds of name are not "not yet": a builtin

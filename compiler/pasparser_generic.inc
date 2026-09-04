@@ -794,6 +794,122 @@ begin
   Inc(TemplateTokenCount);
 end;
 
+function TokSpecGroupEnd(at: Integer): Integer;
+{ Tokens[at] is `<`: the index of the `>` that closes it when what lies between
+  is a comma-separated list of CONCRETE type-argument tokens, else -1. The same
+  question NestedSpecGroup asks of the template arena, asked of the live token
+  stream. }
+var j: Integer; scanning: Boolean;
+begin
+  TokSpecGroupEnd := -1;
+  if (at >= TokCount) or (Tokens[at].Kind <> tkLt) then Exit;
+  j := at + 1;
+  scanning := True;
+  while scanning do
+  begin
+    if j >= TokCount then Exit;
+    if not IsConcreteTypeArgKind(Tokens[j].Kind) then Exit;
+    Inc(j);
+    if (j < TokCount) and (Tokens[j].Kind = tkComma) then Inc(j)
+    else scanning := False;
+  end;
+  if (j >= TokCount) or (Tokens[j].Kind <> tkGt) then Exit;
+  TokSpecGroupEnd := j;
+end;
+
+function TokGroupIsTemplateOwnParams(ti, at: Integer): Boolean;
+{ Tokens[at] is `<`: does the group spell template ti's OWN type parameters, in
+  order? `TOuter<T>` inside `TOuter<T>` means THIS specialization and is handled
+  by SelfSpecGroupEnd at substitution time; `TOuter<ShortInt>` and, for two
+  parameters, `TPair<V, K>` do not -- order is part of the identity. }
+var j, k, np: Integer;
+begin
+  TokGroupIsTemplateOwnParams := False;
+  np := TemplateNParams[ti];
+  if np <= 0 then Exit;
+  if (at >= TokCount) or (Tokens[at].Kind <> tkLt) then Exit;
+  j := at + 1;
+  for k := 0 to np - 1 do
+  begin
+    if j >= TokCount then Exit;
+    if Tokens[j].Kind <> tkIdent then Exit;
+    if not CaseEqual(GetTokenStr(j),
+                     TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + k]) then Exit;
+    Inc(j);
+    if k < np - 1 then
+    begin
+      if (j >= TokCount) or (Tokens[j].Kind <> tkComma) then Exit;
+      Inc(j);
+    end;
+  end;
+  if (j >= TokCount) or (Tokens[j].Kind <> tkGt) then Exit;
+  TokGroupIsTemplateOwnParams := True;
+end;
+
+function DelphiSelfSpecNeedsKeyword(ti, cur, limit: Integer; const templateName: AnsiString): Boolean;
+{ Does Tokens[cur] open a mode-Delphi reference to a DIFFERENT specialization of
+  the template being captured, from inside that template's own body?
+
+  A different TEMPLATE's group (`TBox<ShortInt>`) is already collapsed to an
+  alias before capture: DelphiRewriteGenericUses sweeps the rest of the stream
+  from each template's own end, so TBox's sweep reaches TOuter's body. The
+  template's OWN name is the one case no sweep covers -- ParseGenericTemplateNamed
+  starts its sweep AFTER its own tokens, deliberately, because `TOuter<T>` in
+  there means this specialization and must NOT become an alias.
+
+  That left `TOuter<ShortInt>` with no owner at all. SpecializeToBuffer rewrote
+  the bare name to the specialization being built and SelfSpecGroupEnd correctly
+  declined to drop the argument list, so the output was `TOuter$LongInt<ShortInt>`
+  and the diagnostic was `expected ':' before '>'` -- an internal minted name
+  leaking at the user.
+
+  The objfpc spelling of the same declaration, `specialize TOuter<ShortInt>`,
+  has always worked: the literal keyword is what NestedSpecGroup keys on, so the
+  prerequisite is registered and the group collapses to `TOuter$ShortInt`. So
+  this is not a missing feature, it is one surface not reaching the machinery
+  the other one reaches -- and the fix is to normalise the surface at capture
+  rather than to grow a second recognizer downstream.
+  bug-p-a-different-specialization-of-the-same-template-inside-its-own-body }
+var gEnd: Integer;
+begin
+  DelphiSelfSpecNeedsKeyword := False;
+  if Tokens[cur].Kind <> tkIdent then Exit;
+  if not CaseEqual(GetTokenStr(cur), templateName) then Exit;
+  if (cur + 1 >= limit) or (Tokens[cur + 1].Kind <> tkLt) then Exit;
+  { already spelled `specialize TOuter<...>`: nothing to normalise }
+  if (cur > 0) and (Tokens[cur - 1].Kind = tkIdent) and
+     CaseEqual(GetTokenStr(cur - 1), 'specialize') then Exit;
+  gEnd := TokSpecGroupEnd(cur + 1);
+  if (gEnd < 0) or (gEnd >= limit) then Exit;
+  if TokGroupIsTemplateOwnParams(ti, cur + 1) then Exit;
+  DelphiSelfSpecNeedsKeyword := True;
+end;
+
+procedure CaptureSyntheticSpecializeKeyword;
+{ Append the identifier `specialize` to the template arena. SYNTHETIC: no source
+  range exists for it, so the spelling channel stays empty and the `near:` window
+  falls back to SOffset/SLen -- which for an identifier IS its text. }
+const kw = 'specialize';
+var j: Integer;
+begin
+  if TemplateTokenCount >= MAX_TEMPLATE_TOKENS then
+    Error('generic template tokens overflow');
+  if TokCharLen + Length(kw) > STRING_CAP then Error('token char pool overflow');
+  TemplateTokens[TemplateTokenCount].Kind := tkIdent;
+  TemplateTokens[TemplateTokenCount].IVal := 0;
+  TemplateTokens[TemplateTokenCount].Line := 0;
+  TemplateTokens[TemplateTokenCount].SOffset := TokCharLen;
+  TemplateTokens[TemplateTokenCount].SLen := Length(kw);
+  TemplateSrcOff[TemplateTokenCount] := 0;
+  TemplateSrcLen[TemplateTokenCount] := 0;
+  for j := 1 to Length(kw) do
+  begin
+    TokChars[TokCharLen] := kw[j];
+    Inc(TokCharLen);
+  end;
+  Inc(TemplateTokenCount);
+end;
+
 procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean); forward;
 function OrdinalNameToTk(const nm: AnsiString): TTypeKind; forward;
 function BuiltinTypeNameTk(const nm: AnsiString): TTypeKind; forward;   { body in pasparser_lval.inc, which also CALLS it above the body (the type-helper type-name receiver). pxx pre-scans and does not need this; FPC does. }
@@ -2514,6 +2630,16 @@ begin
       exactly why it should not be left to happen -- one concept, one rule.
       bug-p-a-hint-directive-on-a-generic-type-is-a-parse-error }
     if (hintLo >= 0) and (cur >= hintLo) and (cur < hintHi) then continue;
+    { Normalise the mode-Delphi spelling of a reference to a DIFFERENT
+      specialization of this same template into the objfpc one, by giving it the
+      `specialize` keyword the rest of the machinery keys on. See
+      DelphiSelfSpecNeedsKeyword for why this one case has no other owner. }
+    if delphiForm and
+       DelphiSelfSpecNeedsKeyword(TemplateCount, cur, finalCur, templateName) then
+    begin
+      CaptureSyntheticSpecializeKeyword;
+      Templates[TemplateCount].TokCount := Templates[TemplateCount].TokCount + 1;
+    end;
     CaptureTemplateTokenFrom(cur);
     Templates[TemplateCount].TokCount := Templates[TemplateCount].TokCount + 1;
   end;
