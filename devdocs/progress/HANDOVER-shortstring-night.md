@@ -5098,3 +5098,62 @@ because **the program that shows it has to build a temp inside a generator.**
   rather than answering it, so it is recorded UNCHECKED, not "does not happen."**
 
 Gate: `gate.sh quick` GREEN before the commit; binary `6c0c955a3440`.
+
+### The four echoing guards are CORRECT — and the reason is the missing half of the scope rule
+
+Answering the grep question I raised: `ir_codegen.inc:12990`
+(`RegcallAssignResidency`), `:13151` (loop residency), `:13347`
+(`CalleeScratchAssign`) and `ir_codegen_aarch64.inc:932` (aarch64's twin of the
+second) are **all register-residency assignment**, all sit behind
+`if OptLevel < 3 then Exit;`, and **12990 states its own reason**: generators and
+stackless routines load params from the coroutine instance rather than the plain
+register-spill frame model, **so residency's premise does not hold for them.**
+
+> **THE DISCRIMINATOR IS WHAT OVER-BROAD COSTS.**
+
+- In the **cleanup** emitters, over-broad meant a value that should have been
+  released was not — **a leak: silent, unbounded, a wrong answer.**
+- In a **residency** pass, over-broad means a register that could have been
+  assigned was not — **an optimisation forgone, at `-O3` only, never a wrong
+  answer.**
+
+**A guard whose failure mode is "less optimal" is allowed to be conservative in a
+way that a guard whose failure mode is "leaks memory" is not.** So **the
+structural echo is real and the risk is not** — which is the half the scope rule
+was missing. *Finding the same shape elsewhere is the beginning of the question,
+not the answer; the cost of being over-broad decides whether it matters.*
+
+**And the non-claim is explicit:** whether narrowing them would buy anything is
+**unmeasured**, and frankb-78 does not claim it would not. Its reason for not
+looking — residency is about loop-carried values, and a narrowing would admit the
+unslotted temps, which by construction die inside one statement and have nothing
+to carry — is offered as **"an argument, not a measurement, and I would want a
+census before anyone acted on it."**
+
+*The question cost one file read. That is the cheap half of ask-rather-than-assume,
+and it is why the expensive half is worth paying when it comes up.*
+
+### The stackful generator: mechanism found, and correctly NOT routed to Track U
+
+`CoAlloc` builds the coroutine's initial saved frame with
+`PW(top + 0)^ := 0; { exc_top -> fresh chain on this stack }`, and `CoSwitch`
+saves/restores `BSS_EXC_TOP` per context. **So a raise inside a stackful generator
+body walks an EMPTY chain and dies** — and **the comment says the empty chain is
+deliberate**, which makes it **a design choice rather than an oversight.**
+
+**Coordinator note, because declining to route a fork is a call worth recording:
+frankb-78 is right that this is not a Track U question, and I agree.** pxx's own
+**stackless** generators already propagate to the consumer, **and so does the
+language** — so *"match the stackless form"* is **the sane default, not a fork.**
+Track U is for design/intent forks that **cannot be settled from code, request or
+a sane default**; a question the language and our own sibling implementation both
+already answer is settled. **What is genuinely its to pick is the
+implementation.**
+
+**And it named the load-bearing assumption in advance:** *"inherit the resumer's
+chain" is only obviously safe because `CoAlloc` and `CoNext` are called from
+exactly one place — the for-in desugar — so creation and resumption are always the
+same frame.* It will **state which assumption the fix rests on rather than let it
+read as unconditional.** *A fix that is correct only under a uniqueness that
+nothing enforces is a fix with a precondition, and the precondition belongs in the
+code, not in the session that wrote it.*
