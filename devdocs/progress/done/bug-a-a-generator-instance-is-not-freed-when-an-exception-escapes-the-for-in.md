@@ -157,4 +157,4 @@ them. Positive control on HEAD-before: `live=8002` against the bound of 50.
 control on HEAD-before: live=1805.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 7e271ff7d.
