@@ -3506,12 +3506,19 @@ begin
               and could not run here until IR_SET_COPY landed minutes ago. }
             IREmitNodeXtensa(IRA[argNode]);        { a2 = set address }
             xtensa_mov(reg_xtensa_a3, reg_xtensa_a2);
-            for j := 0 to 7 do
+            { The word count is derived, not written 8, because the CALLEE
+              spill (ir_codegen.inc's TARGET_XTENSA arm in
+              EmitParamSpillsForTarget) has to use the same one and a literal
+              in two files is how the two sides stop agreeing. It had no set
+              arm at all until 2026-09-04: it stored word 0 and advanced by
+              ONE, so a by-value set lost everything above bit 31 and every
+              parameter after it read 0. }
+            for j := 0 to (TypeSlotSize(tySet) div 4) - 1 do
             begin
               xtensa_l32i(reg_xtensa_a2, reg_xtensa_a3, j * 4);
               XtensaPushA2;
             end;
-            Inc(nArgs, 8);
+            Inc(nArgs, TypeSlotSize(tySet) div 4);
           end
           else if (procIdx >= 0) and
              (i < Procs[procIdx].ParamCount) and (i < MAX_PROC_PARAMS) and

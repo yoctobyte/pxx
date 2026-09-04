@@ -43,6 +43,26 @@ begin
   writeln('  ByValWide sees ', r.a, ' ', r.e);
 end;
 
+{ THE MEMBERS ABOVE BIT 31 ARE THE POINT OF THIS ONE, not the mutation.
+
+  A by-value set is EIGHT words on the targets that pass its bytes, and a
+  callee that spills only the first one still answers correctly for every
+  member under 32 -- word 0 is the word that does arrive, and a fresh frame
+  supplies zeroes for the rest of the mask, which reads as "not a member" and
+  is the right answer for a set that has no high members. So a probe built from
+  `[1,2]` is a guard that cannot fail for the mask, and `[1,2]` is exactly what
+  one writes. Measured on xtensa 2026-09-04: `[1,2,40,100,200,255]` printed
+  `count=2` where every other target said 6. }
+procedure ByValSetWide(s: TS);
+var i, n: Integer;
+begin
+  n := 0;
+  write('  ByValSetWide sees ');
+  for i := 0 to 255 do
+    if i in s then begin write(i, ' '); n := n + 1; end;
+  writeln('| count=', n);
+end;
+
 procedure ByValSet(s: TS);
 begin
   s := s + [99];
@@ -66,7 +86,8 @@ end;
 procedure Mixed(x1: Integer; r: TPlain; x2: Integer; s: TS; x3: Integer);
 begin
   r.a := 777; s := s + [99];
-  writeln('  Mixed sees ', x1, ' ', r.a, ' ', x2, ' ', 99 in s, ' ', x3);
+  writeln('  Mixed sees ', x1, ' ', r.a, ' ', x2, ' ', 99 in s, ' ', 200 in s,
+          ' ', x3);
 end;
 
 { A by-value record read WHOLE rather than field by field: the assignment is a
@@ -92,6 +113,10 @@ begin
   ByValSet(s);
   writeln('set   after byval  99=', 99 in s, ' 1=', 1 in s, '   (must be FALSE TRUE)');
 
+  { Every 32-bit word of the mask carries a member, and one is the top bit. }
+  s := [1, 2, 40, 100, 200, 255];
+  ByValSetWide(s);
+
   { The other direction: if these do NOT change, every row above is passing
     because the target copies indiscriminately. }
   VarPlain(p);
@@ -100,9 +125,9 @@ begin
   writeln('set   after var    99=', 99 in s, '   (must be TRUE)');
 
   p.a := 1; p.b := 2;
-  s := [1, 2];
+  s := [1, 2, 200];
   Mixed(10, p, 20, s, 30);
-  writeln('mixed after        ', p.a, ' ', 99 in s, '   (must be 1 FALSE)');
+  writeln('mixed after        ', p.a, ' ', 99 in s, ' ', 200 in s, '   (must be 1 FALSE TRUE)');
 
   got := CopyOut(w);
   writeln('copyout            ', got.a, ' ', got.c, ' ', got.e, '   (must be 1 3 5)');

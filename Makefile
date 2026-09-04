@@ -19647,14 +19647,19 @@ test-xtensa: $(COMPILER)
 	# `TB is TC` probe correctly on wasm32 with no IR_VMTADDR arm at all.
 	# `onlyalpha is IBeta` is the single FALSE row; every other row is TRUE and
 	# an arm returning a constant or wrong address would still print TRUE there.
-	# test_cross_byvalue_aggregate_params is NOT wired here: xtensa has a real
-	# ABI defect this file's `Mixed` row catches, and wiring it green would
-	# mean deleting the row that found it. Reduced to two lines:
-	#   procedure F(s: TS; x: Integer)  -- x reads 0, must be 30
-	# Any parameter AFTER a by-value set parameter is lost on xtensa; the same
-	# signature with the set LAST is fine, and an 8-byte record in the set's
-	# place is fine. i386 and riscv32 pass sets by value too and both pass.
-	# bug-a-a-parameter-after-a-by-value-set-parameter-reads-zero-on-xtensa
+	# BY-VALUE AGGREGATE PARAMETERS. This file found and now guards a real
+	# xtensa ABI defect: the callee spill had no by-value SET arm, so it stored
+	# word 0 into the parameter's 32-byte slot and advanced its word counter by
+	# ONE instead of eight. Two symptoms, and the LOUD one is not the dangerous
+	# one -- every parameter after the set read 0 (obvious), and the set itself
+	# lost everything above bit 31 while still answering correctly for every
+	# member under 32 (not obvious, because word 0 is the word that arrives).
+	# Measured against pin v403: `ByValSetWide` prints 26 spurious members read
+	# out of live frame bytes, and `Mixed` loses both `200 in s` and x3.
+	# A `[1,2]` probe passes on the broken compiler. Do not weaken the wide row.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_xtensa_bvap
+	./$(COMPILER) test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_xtensa_bvap_x64
+	tools/expect_same.sh xtensa/test_xtensa_byvalue_aggregate_params "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_bvap)" "$$($(TESTTMP)/test_xtensa_bvap_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_interface_is_as.pas $(TESTTMP)/test_xtensa_iisas
 	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/test_xtensa_iisas_x64
 	tools/expect_same.sh xtensa/test_xtensa_interface_is_as "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_iisas)" "$$($(TESTTMP)/test_xtensa_iisas_x64)"

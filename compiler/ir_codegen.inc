@@ -1695,6 +1695,7 @@ var i, j, k, idx, sz, pw, pnWords, whi, xtInBias, xtVReg, xtVReg2: Integer;
     sIdx, nSlotsForParam, dstOff: Integer;  { x86-64 cdecl: slots OF one param }
     plR0, plR1, slotReg: Integer;           { ABISysVArgPlace: bank index per slot }
     plMem, plS0, plS1, slotSse, plAgg: Boolean;
+    xtSetW, xtSetWords: Integer;            { xtensa: by-value set, word walk }
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -2387,7 +2388,58 @@ begin
         xtensa_l32i(reg_xtensa_a10, reg_xtensa_a15, xtInBias + (pw - 6) * 4);
         xtVReg := reg_xtensa_a10;
       end;
-      if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
+      if (Syms[idx].TypeKind = tySet) and
+         (not Syms[idx].IsRef) and (not Syms[idx].IsArray) then
+      begin
+        { A BY-VALUE SET IS EIGHT WORDS AND THIS LOOP COUNTED IT AS ONE.
+
+          The call side (ir_codegen_xtensa.inc's tySet arm) pushes all eight
+          words of the 32-byte mask inline, mirroring i386 and riscv32. This
+          spill had no set arm at all, so it fell to the one-word default: it
+          stored word 0 into the parameter's 32-byte slot, left the other 28
+          bytes as whatever the frame held, and advanced pw by ONE.
+
+          Two symptoms, and the quiet one is the dangerous half:
+
+            `procedure F(s: TS)` with s = [1,2,40,100,200,255] printed
+            `1 2 | count=2` against the oracle's `1 2 40 100 200 255 |
+            count=6`. Everything above bit 31 was gone. A probe with only low
+            members reads CORRECT -- word 0 is the word that does arrive -- so
+            the natural small test cannot see this, and the natural small test
+            is what a fresh zeroed frame makes pass for the rest of the mask.
+
+            Every parameter AFTER the set read 0, because pw was seven words
+            behind for the whole remainder of the signature. That is the loud
+            one, and it is the one that gets reported.
+
+          The word count is `TypeSlotSize(tySet) div 4` on BOTH sides rather
+          than a literal 8, because the two must agree and a literal in two
+          files is how they stop agreeing. arm32 and riscv32 record the same
+          lesson for the 5-8 byte record (three places counting one width, and
+          fixing two of three turns data loss into active corruption).
+
+          No even-word alignment skip: the caller's set arm does not emit one
+          either, and this convention is INTERNAL -- the two sides must agree
+          with each other rather than with gcc, which is the same argument the
+          record arm below makes for SHARING the 64-bit alignment branch. }
+        xtSetWords := TypeSlotSize(tySet) div 4;
+        for xtSetW := 0 to xtSetWords - 1 do
+        begin
+          if pw + xtSetW < 6 then
+            xtVReg2 := reg_xtensa_a2 + pw + xtSetW
+          else
+          begin
+            if ProcIsInterrupt[procIdx] then
+              Error('target xtensa: an interrupt handler cannot take stack arguments');
+            xtensa_l32i(reg_xtensa_a10, reg_xtensa_a15,
+                        xtInBias + (pw + xtSetW - 6) * 4);
+            xtVReg2 := reg_xtensa_a10;
+          end;
+          xtensa_s32i(xtVReg2, reg_xtensa_a8, xtSetW * 4);
+        end;
+        Inc(pw, xtSetWords);
+      end
+      else if ((Syms[idx].TypeKind = tyInt64) or (Syms[idx].TypeKind = tyUInt64) or
           (Syms[idx].TypeKind = tyDouble) or
           ((Syms[idx].TypeKind = tyRecord) and
            (RecSize(Syms[idx].RecName) > 4) and
