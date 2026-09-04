@@ -47,6 +47,16 @@ var
     bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size }
   vSS: ShortString; vPC: PChar; vPAC: PAnsiChar; vPWC: PWideChar;
   vTF: TextFile;
+  { The three character kinds, which this file did NOT pin -- the ticket that
+    sent me here said it "already pins the other two" and it pinned neither.
+    UnicodeChar sat on the ucs4char line in BOTH name tables and answered 4,
+    where fpc 3.2.2 answers 2 for all four of these rows: FPC declares
+    UnicodeChar = WideChar, a UTF-16 code UNIT, while UCS4Char is a code POINT.
+    The width is the cheap half of the difference; the kinds also stringify
+    differently and a character above the BMP takes two UnicodeChars in FPC, so
+    an array of them had a different stride AND different contents.
+    bug-p-unicodechar-is-a-4-byte-code-point-and-fpc-makes-it-a-2-byte-code-unit }
+  vWC: WideChar; vU4: UCS4Char; vUC: UnicodeChar;
   bad: Integer;
 
 procedure Chk(const nm: AnsiString; byName, byVar: Integer);
@@ -78,9 +88,16 @@ begin
   Chk('PAnsiChar',  SizeOf(PAnsiChar),  SizeOf(vPAC));
   Chk('PWideChar',  SizeOf(PWideChar),  SizeOf(vPWC));
   Chk('TextFile',   SizeOf(TextFile),   SizeOf(vTF));
+  Chk('WideChar',   SizeOf(WideChar),   SizeOf(vWC));
+  Chk('UCS4Char',   SizeOf(UCS4Char),   SizeOf(vU4));
+  Chk('UnicodeChar',SizeOf(UnicodeChar),SizeOf(vUC));
   { the widths themselves, so a silent change to one is visible too }
   Writeln(SizeOf(Extended), ' ', SizeOf(ValReal), ' ', SizeOf(Currency), ' ',
           SizeOf(Comp), ' ', SizeOf(LongBool), ' ', SizeOf(WordBool), ' ',
           SizeOf(ByteBool));
+  { ...and the three character widths, which unlike the line above are asserted
+    to AGREE with fpc 3.2.2 (2 4 2, measured both ways on 2026-09-04). 2 4 4 is
+    the pre-fix answer and the row a regression would print. }
+  Writeln(SizeOf(WideChar), ' ', SizeOf(UCS4Char), ' ', SizeOf(UnicodeChar));
   Writeln('splits ', bad);
 end.

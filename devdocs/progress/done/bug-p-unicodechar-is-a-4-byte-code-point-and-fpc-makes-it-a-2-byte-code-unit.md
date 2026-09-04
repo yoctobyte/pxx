@@ -4,9 +4,10 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-status: backlog
+status: done
 created: 2026-08-31
 summary: "`UnicodeChar` maps to tyUCS4Char (4 bytes, a code POINT) where FPC makes it an alias of WideChar (2 bytes, a UTF-16 code UNIT). Both pxx tables agree, so it is NOT a two-table split -- it is one entry that is probably wrong, sharing a line with `ucs4char`, whose 4-byte mapping IS correct and must not move. Zero in-tree declarations use the name (measured), so the change is cheap here; the decision is about out-of-tree code and about Write/string-conversion behaviour, which differs between the two kinds beyond SizeOf."
+owner: frankB
 ---
 
 # `UnicodeChar` is 4 bytes here and 2 in FPC
@@ -78,3 +79,62 @@ acted on.
 
 `make compiler/pascal26`, plus the row above added to
 `test/test_sizeof_builtin_type_names.pas`, which already pins the other two.
+
+## FIXED 2026-09-04 (frankB) — `unicodechar` moves to the widechar line
+
+`compiler/pasparser_lval.inc`, both tables: `OrdinalNameToTk` and
+`BuiltinScalarTypeKind`. `ucs4char` stays where it was and keeps `tyUCS4Char`,
+which is the constraint this ticket was most careful about.
+
+Measured after, against fpc 3.2.2 `-Mobjfpc`, every row identical:
+
+| | pxx before | pxx after | fpc |
+| --- | ---: | ---: | ---: |
+| `SizeOf(UnicodeChar)` / `SizeOf(v)` | 4 / 4 | **2 / 2** | 2 / 2 |
+| `SizeOf(array[0..3] of UnicodeChar)` | 16 | **8** | 8 |
+| `s := uc` (stringify) | `A` | `A` | `A` |
+| `SizeOf(WideChar)`, `SizeOf(UCS4Char)` | 2, 4 | 2, 4 | 2, 4 |
+
+## Two corrections to this ticket's own text
+
+**"the row above added to `test/test_sizeof_builtin_type_names.pas`, which
+already pins the other two"** — it pinned NEITHER. That file had no `WideChar`
+and no `UCS4Char` row before today; its only near miss was `PWideChar`. All
+three rows are added now, both halves each (type name and variable), plus a
+widths line asserting `2 4 2`. The pre-fix answer was `2 4 4`, so the row is
+aimed.
+
+**"one entry that is probably wrong, sharing a line with `ucs4char`"** — TWO
+entries, one in each of the two tables, on a line each. The ticket's larger
+point survives and is the reason this was cheap: they AGREED with each other, so
+this was never the two-table split its parent audit was about. It is one
+decision spelled twice.
+
+## The pin cannot be the control here
+
+`stable_linux_amd64/default/pinned` cannot compile
+`test_sizeof_builtin_type_names.pas` at all — it predates
+bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size
+and answers `SizeOf: unknown type or variable` at line 86. The before-number
+`2 4 4` is from this session's own pre-change build, not from a revert cycle.
+
+## Controls run on the kind that must NOT move
+
+`test_ucs4char`, `test_variant_widechar_store` (whose `u-emoji` row stores
+`UCS4Char($1F600)` into a Variant and still prints 😀 — the above-BMP code point
+this ticket said must keep working), `test_pwidechar_cast`,
+`test_widechar_no_cast_in_program`, `test_widechar_to_utf8_b319`,
+`test_widechar_var_concat`, `test_widechar_var_to_string` and
+`test_widechar_var_to_string_arg`. All green.
+
+The RTL-pull prescan in `pasparser_prog.inc` needed no change: it pulls
+`builtin` on any mention of `unicodechar`, and `widechar` is on the same list for
+the same helpers.
+
+## Gate
+
+`make compiler/pascal26` converged; `tools/gate.sh quick` GREEN with the FPC seed
+canary CONCURRENT.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

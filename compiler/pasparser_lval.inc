@@ -6965,9 +6965,18 @@ begin
   else if CaseEqual(nm, 'wordbool') then Result := tyUInt16
   else if CaseEqual(nm, 'bytebool') then Result := tyUInt8
   { WideChar is a UTF-16 code UNIT; UCS4Char is a CODE POINT and converts to a
-    string as UTF-8. Distinct kinds on purpose — see defs.inc. }
-  else if CaseEqual(nm, 'widechar') then Result := tyWideChar
-  else if CaseEqual(nm, 'ucs4char') or CaseEqual(nm, 'unicodechar') then Result := tyUCS4Char
+    string as UTF-8. Distinct kinds on purpose — see defs.inc.
+
+    `UnicodeChar` is FPC's ALIAS OF WIDECHAR (system unit: UnicodeChar =
+    WideChar), 2 bytes, not a code point. It sat on the ucs4char line and
+    answered 4 — measured against fpc 3.2.2, which answers 2 for both the type
+    name and a variable of it. The two kinds differ in more than width: a
+    UCS4Char stringifies as the UTF-8 of a code point, and a character above the
+    BMP takes TWO UnicodeChars in FPC, so an array of them had a different
+    stride AND different contents than the same declaration there.
+    bug-p-unicodechar-is-a-4-byte-code-point-and-fpc-makes-it-a-2-byte-code-unit }
+  else if CaseEqual(nm, 'widechar') or CaseEqual(nm, 'unicodechar') then Result := tyWideChar
+  else if CaseEqual(nm, 'ucs4char') then Result := tyUCS4Char
   else if CaseEqual(nm, 'comp') then Result := tyInt64
   else if CaseEqual(nm, 'variant') or CaseEqual(nm, 'olevariant') then Result := tyVariant
   { unicodestring/widestring: pragmatic alias to the native string type (byte
@@ -7075,11 +7084,16 @@ begin
   { WideChar — a UTF-16 code UNIT, 2 bytes. Its own kind (storage is tyUInt16's)
     so that WriteLn can tell it from a Word; see the note on tyWideChar in
     defs.inc. `WideChar(x)` is fpjson's \u escape decoder. }
-  else if CaseEqual(nm, 'widechar') then Result := tyWideChar
+  { ...and `UnicodeChar`, which FPC declares as an alias of WideChar. The SECOND
+    of the two tables that had it on the ucs4char line; they agreed with each
+    other and both disagreed with FPC, so this was never the two-table split its
+    parent audit was about — it is one entry, spelled twice.
+    bug-p-unicodechar-is-a-4-byte-code-point-and-fpc-makes-it-a-2-byte-code-unit }
+  else if CaseEqual(nm, 'widechar') or CaseEqual(nm, 'unicodechar') then Result := tyWideChar
   { UCS4Char is FPC's own name for a code point (system unit: UCS4Char = type
     LongWord) and, unlike WideChar, holds any character. Its own kind because it
     CONVERTS to a string as UTF-8 — see the note on tyUCS4Char in defs.inc. }
-  else if CaseEqual(nm, 'ucs4char') or CaseEqual(nm, 'unicodechar')
+  else if CaseEqual(nm, 'ucs4char')
        then Result := tyUCS4Char
   else Result := tyUnknown;
 end;

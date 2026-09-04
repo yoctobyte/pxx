@@ -364,7 +364,7 @@ _none_
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | regression-test-core-c-crtl-wait | T | 55→85 | regression | NOT A COMPILER BUG, and re-laned from C to T. riscv32's `wait4-rusage rusage=UNTOUCHED` is red on seven and deterministically green on plexus from BYTE-IDENTICAL compiler bytes (compiler_sha256 fcc5ad9a29a61c10c... both boxes) with an EMPTY `git diff` outside devdocs/. seven runs qemu-riscv32 8.2.2 where plexus runs 10.2.1; the host kernel is eliminated on seven's own box by tools/host_waitid_rusage_probe.c, which prints rusage=written there with its arg5-NULL control printing UNTOUCHED. The target-side path is four pure pass-throughs and the same riscv32 binary writes rusage under a newer emulator. Fixing it needs root on seven (owner) or a host-capability skip at ROW grain (T) — do NOT weaken the assertion. | bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain |
 
-## backlog-pascal (35)
+## backlog-pascal (34)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -383,7 +383,6 @@ _none_
 | bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out | P | 55 | bug | MEASURED 2026-09-04 and the ticket below is wrong in both halves. The count is not ten: it was 30 of 36 at this ticket's own commit and is 28 of 30 at HEAD -- the 10 was a `comm` artefact under the default locale, reproducible exactly and only there. And the prescribed fix is backwards: a reachability probe over all 830 .npy programs says ALL 28 Pascal-arm sites inside ParseFactorCore are UNREACHED (17 of them provably, behind the PyExprMode dispatch) while all 3 outside it are live. So the body tells its taker to preserve and share ~28 arms that should be DELETED, which is a wrong-change-lands risk rather than a mis-scheduled tidy-up, and is why this is no longer a 35. Do NOT use duplication as the test: a duplicated diagnostic (TPyList.extend) is live. Position relative to the dispatch is the only discriminator. The measured population now also lives in the pasparser_expr.inc comment above the dispatch, so it survives this ticket. | — |
 | bug-p-set-membership-item-constant-truncated-to-32-bits | P | 25 | bug |  | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
-| bug-p-unicodechar-is-a-4-byte-code-point-and-fpc-makes-it-a-2-byte-code-unit | P | 40 | bug | `UnicodeChar` maps to tyUCS4Char (4 bytes, a code POINT) where FPC makes it an alias of WideChar (2 bytes, a UTF-16 code UNIT). Both pxx tables agree, so it is NOT a two-table split -- it is one entry that is probably wrong, sharing a line with `ucs4char`, whose 4-byte mapping IS correct and must not move. Zero in-tree declarations use the name (measured), so the change is cheap here; the decision is about out-of-tree code and about Write/string-conversion behaviour, which differs between the two kinds beyond SizeOf. | — |
 | compat-pascal-the-strict-fpc-flag-family-is-incomplete | P | 15 | compat | --strict-fpc reproduces some FPC behaviours and silently not others (Abs/Sqr widths, pointer difference, TypeInfo name), and most flags ignore DialectIsPxx -- the gaps left after the umbrella landed | — |
 | feature-p-assertions-switch-and-strict-default | P | 30 | feature | Re-filed from decide-assertion-default-vs-fpc, decided 2026-08-25 (option 3, default ON). pxx evaluates Assert() always; FPC ignores it unless -Sa. The dialect contract requires every divergence to be switchable and disabled under the strict family, so the switch is mandated rather than merely preferred. Once it exists the default stops being a one-way door. | — |
 | feature-p-legacy-value-object-types | P | 15 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
@@ -877,9 +876,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3290)
+## done (3291)
 
-3290 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3291 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (76)
 
@@ -1138,7 +1137,6 @@ _none_
 - [p 40] [P] bug-p-a-distinct-type-declaration-is-parsed-but-is-not-distinct
 - [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
 - [p 40] [P] bug-p-macpas-conditional-directives-are-ignored-so-both-arms-compile
-- [p 40] [P] bug-p-unicodechar-is-a-4-byte-code-point-and-fpc-makes-it-a-2-byte-code-unit
 - [p 40] [T] bug-t-pasmith-generates-no-float-code-so-optfuzz-cannot-see-float-optimizations
 - [p 40] [T] bug-t-the-shell-loop-rule-reads-prose-as-a-loop-and-teaches-the-reflex-that-defeats-it
 - [p 40] [T] bug-t-the-sort-comm-locale-desync-has-now-been-found-three-times-independently

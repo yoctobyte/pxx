@@ -9122,7 +9122,7 @@ test-core: $(COMPILER)
 	# and 1 there and both are right. Together they are the pair; ce4d9004c had
 	# only this half and shipped a wrong-answer regression.
 	./$(COMPILER) test/test_sizeof_builtin_type_names.pas $(TESTTMP)/test_sizeof_names26
-	tools/expect_same.sh test_sizeof_names26 "$$($(TESTTMP)/test_sizeof_names26)" "$$(printf '8 8 8 8 4 2 1\nsplits 0')"
+	tools/expect_same.sh test_sizeof_names26 "$$($(TESTTMP)/test_sizeof_names26)" "$$(printf '8 8 8 8 4 2 1\n2 4 2\nsplits 0')"
 	# SysUtils.OutOfMemoryError: FPC declares the PROCEDURE (sysutilh.inc:243) and
 	# real code calls it bare in grow paths -- rtl-generics does, five times. We had
 	# EOutOfMemory and not the routine. Asserts it raises the right class, not just
