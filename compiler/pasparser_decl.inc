@@ -4475,7 +4475,17 @@ begin
         if LastTypeStrElemTk = tyWideChar then ProcRetStrElemTk[mpi] := Ord(tyWideChar)
         else ProcRetStrElemTk[mpi] := Ord(tyChar);
       end;
-      { …and the return RECORD/CLASS id, which is the SAME dropped field one type
+      { …and the ENUM identity of an enum-typed result, which is the same dropped
+        field again. A call node has no symbol and no field to ask (ProcRetEnumId's
+        own note in defs.inc says so), so the callee's row is the only place it
+        can live -- and a procedural type's row did not carry it. Measured against
+        fpc 3.2.2: `Writeln(fp(1))` for `TF = function(k: Integer): TCol` printed
+        **1** where FPC prints **cGreen**, while the DIRECT call `Writeln(Pick(1))`
+        printed cGreen on both. Silent wrong OUTPUT, no diagnostic. The
+        array-result guard ParseSubroutine's copy carries is not needed here: this
+        path cannot parse an array return type at all (see the census note below).
+
+      …and the return RECORD/CLASS id, which is the SAME dropped field one type
         kind over, in the function whose own note above already names two
         instances of the pattern. `T = function(k: Integer): TR` left
         ProcRetRecId at REC_NONE, so an indirect call through T knew it returned
@@ -4488,8 +4498,39 @@ begin
         nothing has to ask the signature. That is why this was invisible until a
         suffix asked the one question the row could not answer.
         bug-p-member-access-on-a-procedural-variable-call-result-is-rejected }
+      if mIsFunc and (mRetType = tyInteger) then
+        ProcRetEnumId[mpi] := LastTypeEnumId;
       if mIsFunc and ((mRetType = tyRecord) or (mRetType = tyClass)) then
         ProcRetRecId[mpi] := LastTypeRecId;
+      { …and the SIGNATURE of a result that is itself procedural, so `fo()(41)`
+        is an indirect call through what `fo()` returned. Same dropped field,
+        same shape: `TOuter = function: TInner` was refused outright with
+        `expected ')' before '('` where FPC answers 42. The C frontend has filled
+        this column since it was added (ProcRetProcSig's note names the C spelling
+        `fty go(void)`); the Pascal signature path never did.
+
+        CENSUS, run 2026-09-04 after this function's third dropped field in a row
+        turned out to be a live silent-wrong-value bug. ParseSubroutine (the
+        ordinary routine header) fills all 17 ProcRet* columns; the three
+        declaration paths here fill the same 11 and drop the same 6. Measured one
+        by one, each against its own DIRECT-call control:
+
+          EnumId            LIVE  prints the ordinal, not the enum name
+          ProcSig           LIVE  `fo()(41)` refused
+          IsDynArray/DynDepth/ElemTk/ElemRec
+                            LIVE  `fp(3)[2]` refused -- needs the array-return
+                                  parse this path does not have, so it is filed
+                                  rather than fixed here
+          FixedArrBytes/ArrAi
+                            LIVE  `fp(4)[2]` refused -- same cause, same ticket
+          RecId on ParseRecordMethodDecl
+                            NOT reachable: `v.M(8).c` already answers 24, because
+                            the METHOD BODY goes through ParseSubroutine and fills
+                            the row there. A real asymmetry that is not a defect.
+
+        bug-p-a-procedural-type-cannot-return-an-array is the remaining half. }
+      if mIsFunc and ((mRetType = tyPointer) or (mRetType = tyRecord)) then
+        ProcRetProcSig[mpi] := LastTypeProcSig;
       if mIsFunc and (mRetType = tyPointer) then
       begin
         ProcRetPtrElemTk[mpi] := Ord(LastTypePointerElemTk);
@@ -4814,6 +4855,7 @@ var
   mPDefaultIsFloat: array[0..MAX_PROC_PARAMS-1] of Boolean; { ...and for FLOAT defaults (`d: Double = 2.5`): mPDefaultVal holds the IEEE bits }
   mDefaultIsSet: Boolean;
   mRetRecId: Integer;      { the DECL's return-type class/record id (ProcRetRecId) }
+  mRetEnumId: Integer;     { …and its ENUM identity (ProcRetEnumId), for a DECL-ONLY method that no body will ever fill }
   mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec: Integer;   { ...and the depth + ultimate base: feature-a-typeref-migrate-consumers }
   mRetStrElemTk: Integer;   { managed-string RETURN: element width ord, 0 = not one }
   mRetPtrElemTk, mRetPtrElemRec, mRetPtrAlias: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
@@ -5062,6 +5104,7 @@ begin
             Expect(tkRParen, ')');
           end;
           mRetRecId := REC_NONE;
+          mRetEnumId := -1;
           mRetPtrElemTk := Ord(tyUnknown);
           mRetPtrAlias := -1;
           mRetPtrStrElemTk := 0;
@@ -5073,6 +5116,15 @@ begin
             Expect(tkColon, ':');
             mRetType := ParseTypeKind;
             mRetRecId := LastTypeRecId;   { the return type's class/record id }
+            { …and the enum identity, for the same reason one line up and one
+              that only bites a DECL-ONLY method: a class method's row is filled
+              again when its BODY goes through ParseSubroutine, and an INTERFACE
+              method has no body, so nothing else ever fills it. Measured against
+              fpc 3.2.2 -- `Writeln(ifc.M(1))` for an interface method returning
+              TCol printed **1** where FPC prints **cGreen**, while the same
+              method called on the CLASS printed cGreen, which is exactly the
+              body-fills-it asymmetry. }
+            mRetEnumId := LastTypeEnumId;
             if mRetType = tyAnsiString then
             begin
               if LastTypeStrElemTk = tyWideChar then mRetStrElemTk := Ord(tyWideChar)
@@ -5114,6 +5166,7 @@ begin
             result could not resolve. `.DumpJSON` silently degraded to a FIELD access, and the
             statement then demanded a ':='. }
           if (mRetType = tyClass) or (mRetType = tyRecord) then ProcRetRecId[mpi] := mRetRecId;
+          if mIsFunc and (mRetType = tyInteger) then ProcRetEnumId[mpi] := mRetEnumId;
           if mIsFunc and (mRetType = tyAnsiString) then
             ProcRetStrElemTk[mpi] := mRetStrElemTk;
           if mIsFunc and (mRetType = tyPointer) then
@@ -5711,6 +5764,7 @@ begin
               Expect(tkColon, ':');
               mRetType := ParseTypeKind;
               mRetRecId := LastTypeRecId;   { see the twin site above }
+              mRetEnumId := LastTypeEnumId; { see the twin site above }
               if mRetType = tyAnsiString then
               begin
                 if LastTypeStrElemTk = tyWideChar then mRetStrElemTk := Ord(tyWideChar)
@@ -5725,7 +5779,10 @@ begin
               mRetPtrBaseRec := LastTypePointerBaseRec;
             end
             else
+            begin
               mRetRecId := REC_NONE;
+              mRetEnumId := -1;
+            end;
             Eat(tkSemicolon);
 
             { The DECL side's twin of the impl-side Self injection: every method carries a
@@ -5798,6 +5855,7 @@ begin
                    ((mPTypes[i] = tyClass) or (mPTypes[i] = tyRecord)) then
                   ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := mPTypesRec[i];
               if (mRetType = tyClass) or (mRetType = tyRecord) then ProcRetRecId[mpi] := mRetRecId;
+              if mIsFunc and (mRetType = tyInteger) then ProcRetEnumId[mpi] := mRetEnumId;
               if mIsFunc and (mRetType = tyAnsiString) then
                 ProcRetStrElemTk[mpi] := mRetStrElemTk;
               if mIsFunc and (mRetType = tyPointer) then

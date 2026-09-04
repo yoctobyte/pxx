@@ -9938,10 +9938,25 @@ begin
     if Result < 0 then Result := ASTEnumId[node];
     Exit;
   end;
-  if (ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and (ASTIVal[node] < ProcCount) then
+  if ASTNodeIsCall(node) and (ASTIVal[node] >= 0) and (ASTIVal[node] < ProcCount) then
   begin
     { A call node has no symbol and no field, so the callee's row is the only
-      place the result's enum identity survives. }
+      place the result's enum identity survives.
+
+      ASKED THROUGH ASTNodeIsCall, not `= AN_CALL`. This arm named ONE of the
+      five call kinds, and every one of them carries a Procs[] index in IVal --
+      so an enum returned through anything but a direct call lost its identity
+      and `Writeln` printed the ORDINAL. Measured against fpc 3.2.2 with
+      `TF = function(k: Integer): TCol`: `Writeln(fp(1))` printed **1** where
+      FPC prints **cGreen**, while the direct `Writeln(Pick(1))` printed cGreen
+      on both. Silent wrong OUTPUT with no diagnostic, and the direct-call
+      control is what says it is the node shape and not the feature.
+
+      Found by a census of the ProcRet* columns (2026-09-04) rather than by a
+      report: the procedural-signature path did not fill ProcRetEnumId either,
+      and fixing only that changed nothing, because this reader could not see
+      the node. Both halves were needed and neither is sufficient -- which is
+      the argument for measuring a fix rather than reasoning about it. }
     Result := ProcRetEnumId[ASTIVal[node]];
     if Result < 0 then Result := ASTEnumId[node];
     Exit;

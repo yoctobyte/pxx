@@ -2912,6 +2912,19 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_member_access_on_an_indirect_call_result.pas $(TESTTMP)/test_indcallsel26
 	@$(TESTTMP)/test_indcallsel26 | diff -u test/test_member_access_on_an_indirect_call_result.expected - \
 	  || { echo 'test_member_access_on_an_indirect_call_result: FAIL - a selector on an indirect call result'; exit 1; }
+	@# An ENUM-typed result keeps its identity through EVERY call kind. Writeln
+	@# of an enum prints the MEMBER NAME, and that is the instrument: losing the
+	@# identity yields a plausible NUMBER, never an error. Two independent halves
+	@# were missing and neither is sufficient alone -- NodeEnumIdOf's call arm
+	@# tested `= AN_CALL` (one of five kinds), and the procedural-type and
+	@# method-DECL paths never filled ProcRetEnumId. A class method's row is
+	@# refilled when its BODY is parsed, so only a DECL-ONLY routine -- the
+	@# `intf` row -- stayed broken once the reader was fixed; that is why it is
+	@# not redundant with `meta`. On pin v403 five of these six rows print a
+	@# number. `direct` is the control. Oracle: FPC.
+	@./$(COMPILER) test/test_enum_result_through_every_call_kind.pas $(TESTTMP)/test_enumret26
+	@$(TESTTMP)/test_enumret26 | diff -u test/test_enum_result_through_every_call_kind.expected - \
+	  || { echo 'test_enum_result_through_every_call_kind: FAIL - an enum result lost its identity'; exit 1; }
 	@# A PROPERTY inside an INTERFACE: parsed at all, and then dispatched through
 	@# the IMT rather than a class VMT. The `direct` row is the control (the
 	@# ordinary-call arm, which already worked), so breaking interface dispatch
