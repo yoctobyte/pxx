@@ -4536,3 +4536,84 @@ first reading was *"someone else has taken frankb-78's measured ticket."* **The
 the reflog put the commit in the `frankB` checkout to corroborate. A warning sent
 on the author field would have been a collision alert about a session colliding
 with itself.
+
+---
+
+## xtensa windowed can raise — `2ec3e61c5`, measurement at `31a38bb2c`
+
+Both verified on origin; ticket in `done/`; the dead `(XTENSA) or (RISCV32)`
+spelling is gone from `compiler/`.
+
+`--xtensa-abi=windowed` **refused try/except and raise outright.** It now compiles
+**and runs** try/except, try/finally, nested, re-raise and **a raise 40 frames
+deep**, matching the x86-64 oracle and the Call0 control under qemu-xtensa. The
+ticket's own gate was *"show the refusal is gone by RUNNING a raise, not by
+observing that a predicate returns true"* — the rows do that.
+
+**The mechanism, and it needs no privilege.** `RETW` takes its window increment
+from **the top two bits of `a0`** and reloads the target frame through the window
+**underflow** handler — but only for a window whose `windowstart` bit is clear.
+So: spill everything, write the try frame's two save areas back as they were when
+`setjmp` ran, forge `a0` and `a1`, `RETW`, and **the hardware does the transfer.**
+No privileged instruction, no syscall.
+
+**newlib's design turns on `wsr.windowstart`, which SIGILLs in user mode.** That
+is the fact banked unmeasured last session, and **it decided the design** — the
+session that measured it is the one that then used it.
+
+### The existing exception row certified a HALF-BROKEN longjmp
+
+The two save areas live in **different places** — `a0-a3` at the callee's
+`[sp-16]`, `a4-a7` at the frame's own `[caller_sp-32]` — and this backend keeps
+the windowed frame pointer in **`a7`**. Pointing the second restore **16 bytes
+wrong** and rebuilding: `test_cross_exception` under windowed **printed 1..9 and
+PASSED**, while the new deep row returned `caught` and then `545258032 0 0 0`
+where `11 22 33 44` belonged. **Half a restore lands, prints the right first
+line, and is wrong.**
+
+The reason is structural: `test_cross_exception` **raises one frame below its
+try**, which need never overflow a 64-register file — **so it passes whether or
+not the unwind spills at all.**
+
+**This is the SECOND instance of the clone-on-the-unfixed-pin shape, not a new
+one** — frankb-78 identified it as such itself, and the pair is worth more than
+either alone. The rule is CLAUDE.md's *match the assertion class to the defect
+class*: both guards were **aimed at a real thing and physically could not observe
+the defect.** Two independent instances in one day, in unrelated subsystems, is
+what makes it a class rather than an anecdote.
+
+### NEW SHAPE: a probe that finds a PLAUSIBLE value and stops
+
+Scanning **up** from `F_sp-256` and scanning **down** from `F_sp` both reported
+the value at `F_sp-160` — **a real spilled copy at a real address, and not the
+one the underflow handler reads.** It moved to `F_sp-192` when the **spill
+chain's** frame size changed 32 -> 48, **and that is the tell**: the correct copy
+sits at `[caller_sp-32]` and does not move for either stub's frame size.
+
+This is genuinely distinct from the four collides-with-the-default habitats. Those
+are guards that **cannot fail**; this one **succeeds on a decoy.** The probe found
+something, the something was real, and it was the wrong real thing. Two scan
+directions agreeing bought nothing — *"two readings that can go wrong the same way
+are one reading"* in a new dress — and **what separated them was varying the
+GEOMETRY**, not adding a third reading.
+
+### Two pieces of hygiene done rather than filed
+
+- **A dead riscv32 arm deleted**, exposed by the change: the park-and-exit stub
+  was spelled `(XTENSA) or (RISCV32)` and the riscv32 half had been unreachable
+  since `feature-esp-bare-exceptions` gave riscv32 a real runtime. **Verified
+  before deleting**, and `test_cross_exception` re-run on riscv32 after.
+- **A comment cross-reference corrected**: the signal runtime cited
+  `TargetHasProcCleanupFrame` as *"the same fact"*, and it is not — the signal
+  stub is windowed because **the kernel enters handlers with the call4
+  convention.** Corrected rather than left to be cited next. *A wrong "same fact"
+  in a comment is a citation that will be believed by the next reader.*
+
+### Gate — and a re-run rather than a quote
+
+`make compiler/pascal26` converged, binary `62e1b024fa19`; `gate.sh quick` GREEN
+with the **FPC seed canary RUN**, gated before the commit on a dirty
+`compiler/**`; `PXX_ALLOW_FULL_SUITE=1 make test-xtensa` green end to end **on
+that exact binary — re-run after a late dead-code deletion rather than quoting
+the earlier run.** That is the correct handling: a tier result is about the tree
+it ran on, and the tree had moved.
