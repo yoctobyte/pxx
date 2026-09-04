@@ -3,9 +3,9 @@ slug: refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins
 track: P
 prio: 55
 type: refactor
-status: working
+status: done
 blocked-by: []
-summary: "`NSpecIns` — the buffer that carries 'declarations that must exist before this specialization' — is now filled by FOUR independent sites through three different emitters (EmitSpecDecl, EmitQualAliasDecl, EmitHoistedDecls) with four hand-written `NSpecInsCnt := 0` / `InsertTokens` pairs, each carrying its own capacity check, its own leading-`type` decision and its own ordering rule. One concept, four doors. Per root-cause-over-microfix.md two mechanisms is a smell and three is a design flaw — this is at four, and it got there one honest increment at a time in a single session."
+summary: "DONE (101bf561f, f905ff471). NSpecInsCnt is touched only by BeginPrereqs/FlushPrereqs; every filler appends through one push under one bound (PrereqReserve) against one named capacity (PREREQ_CAP, which the array itself derives from), the leading-`type` decision is an argument applied at flush, queue order IS the ordering rule, and PrereqsPending() asks the three counters once. EmitSpecDecl went 42 lines to 21 and now reserves a whole declaration before pushing any of it. Was: `NSpecIns` — the buffer that carries 'declarations that must exist before this specialization' — was filled by FOUR independent sites through three different emitters (EmitSpecDecl, EmitQualAliasDecl, EmitHoistedDecls) with four hand-written `NSpecInsCnt := 0` / `InsertTokens` pairs, each carrying its own capacity check, its own leading-`type` decision and its own ordering rule. One concept, four doors. Verified by emitted-code identity over all 47 test_generic_* sources (32 identical binaries, 15 identical diagnostics, 0 differing) against a control reporting 32 of 32 differing versus the pin — NOT by the compiler's own sha, which adding procedures moves by design. Per root-cause-over-microfix.md two mechanisms is a smell and three is a design flaw — this is at four, and it got there one honest increment at a time in a single session."
 owner: frankA
 ---
 
@@ -124,3 +124,56 @@ with the uncounted copy carrying two silent bugs. **The instrument has now faile
 in both directions in one week, so a holding count is a result, not a
 formality.** The greps above are the durable half; the line numbers will drift
 again.
+
+---
+
+## 2026-09-05 (frankA) — DONE, in two gated halves (`101bf561f`, `f905ff471`)
+
+Four doors are one. `NSpecInsCnt` is touched only by `BeginPrereqs` and
+`FlushPrereqs` now; every filler appends through `QualPush` / `PrereqPushRaw`
+under one bound, `PrereqReserve`, against one named capacity, `PREREQ_CAP` —
+which the buffer's own declaration derives from, so the array and its guard
+cannot disagree.
+
+Each of the four private facts the body listed, and where it went:
+
+| was | is |
+| --- | --- |
+| leading `type` known at one door | an argument to `FlushPrereqs`, applied at flush so an empty queue cannot splice a lone `type` |
+| three capacity encodings | `PrereqReserve`, one bound; `EmitHoistedDecls` keeps only its *message*, being the overflow a user can reach |
+| ordering as statement order in one `begin`/`end` | queue order, with the rule written on `BeginPrereqs` |
+| `NSpecCount` / `QNeedCount` / `hoistPending` at each asking site | `PrereqsPending(hoistPending)` |
+
+`EmitSpecDecl` went 42 lines to 21: it open-coded the same six-line slot fill
+ten times and reserved *after* the first, so a buffer filling mid-declaration
+could splice half an `alias = specialize Name<args>;`. It reserves the whole
+declaration up front now.
+
+### The gate, and why the fixedpoint is not it
+
+This adds procedures, which changes declaration order, which is exactly what
+[[refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too]] measured as the thing
+that moves the compiler's own bytes. So the sha is expected to move and says
+nothing. What must not move is the code it EMITS.
+
+All 47 `test_generic_*` sources, compiled by the compiler from **before step 1**
+and by the final one: **32 byte-identical binaries, 15 refusing with
+byte-identical diagnostics, 0 differing, 0 exit-code differences.** Comparing
+diagnostics rather than just exit status is what makes the 15 negative tests
+carry signal instead of passing by failing.
+
+Positive control on the same harness against the pinned compiler: **0 identical,
+32 differing.** `test_generic_cycle_fail` still fails with its cycle diagnostic
+naming both sides. `forwardlint` ok. `gate.sh quick` GREEN with the FPC seed
+canary concurrent — the canary matters here because two routines were
+forward-declared across their first call.
+
+### What it unblocks, which was the ranking argument
+
+[[bug-p-a-delphi-mode-generic-argument-must-be-declared-before-the-template]]
+wants *per-use anchoring* — several splices at several points instead of one
+ordered run. That is now a change to `FlushPrereqs` and its call sites rather
+than to four independent doors. Not attempted here.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

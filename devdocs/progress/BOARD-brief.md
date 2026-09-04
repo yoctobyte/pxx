@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:15 unfinished:26 blocked:7 backlog:6 backlog-umbrella:7 backlog-core:137 backlog-nilpy:97 backlog-tools:19 backlog-pascal:31 backlog-decide:37 backlog-libs:15 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3295 rejected:76`
+`working:14 unfinished:26 blocked:7 backlog:6 backlog-umbrella:7 backlog-core:137 backlog-nilpy:97 backlog-tools:19 backlog-pascal:31 backlog-decide:37 backlog-libs:15 backlog-cfront:14 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3296 rejected:76`
 
 ## Held now (working/ — do not touch these files)
 
@@ -23,7 +23,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 - `refactor-p-five-dispatch-sites-for-one-named-type-cast` [P] — owner: frankA
-- `refactor-p-one-prerequisite-emitter-not-four-doors-into-nspecins` [P] — owner: frankA
 
 ## unfinished (26) — parked mid-flight; re-claim, do not duplicate
 
