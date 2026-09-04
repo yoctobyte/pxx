@@ -6373,6 +6373,53 @@ guard.
 cannot fail the same way, and require the pattern actually used to match all of
 it.**
 
+### AND THE COMPLEMENT: TWO SOURCES THAT DO FAIL DIFFERENTLY CAN STILL BOTH BE WRONG ABOUT A POPULATION
+
+"Fails differently" is the right test and it protects against exactly one thing:
+**correlated INSTRUMENT error.** It says nothing about **sampling error**, and
+the two are easy to conflate because both wear the word "independent".
+
+Measured 2026-09-04 (frankA, with frankD and frankH). Two axes over the same
+question — which `Nil Python:` diagnostics on the Pascal arm of the
+`ParseFactorCore` carve-out are dead:
+
+| axis | what it is |
+| --- | --- |
+| string-set intersection across `pasparser_expr.inc` and `pyparser.inc` | **STATIC** — complete the moment it ran, could not move |
+| a runtime reachability probe over the `.npy` corpus | **SAMPLED** — denominator still open |
+
+They genuinely fail differently: the probe never saw the string sets and the
+intersection never ran a program. At **291 of 830** programs they agreed
+perfectly — the only sites firing were the only two strings not duplicated — and
+that agreement was reported to a peer as the most trustworthy part of the
+result, correctly hedged once and then reasoned from unconditionally.
+
+**At 830 a third site fired and it WAS duplicated.** The inference dissolved.
+Deleting Pascal-arm copies on the "exists on both arms" test would have removed
+live code.
+
+**The mechanism, and it is not "35% was too small a sample":** an agreement is
+only as settled as its **least-settled input**, and only ONE of the two axes was
+looking at the population at all. Two axes cannot corroborate each other about a
+population when just one of them is sampling it. The static axis could not have
+disagreed later no matter what the probe found, so its agreement carried no
+information about the unsampled part.
+
+**The test, and it costs nothing: when two sources agree, ask which of them can
+still change.** Label each axis static or sampled before reporting. If exactly
+one is sampled, the finding is provisional until its denominator closes — and
+say so load-bearingly, because a hedge stated once and then contradicted by
+every surrounding sentence is not a hedge.
+
+**Prefer a discriminator with a MECHANISM behind it.** The correct answer here
+was *position relative to the `PyExprMode` dispatch* — 0 of 28 inside
+`ParseFactorCore` against 3 of 3 outside — which explains WHY the zeros are
+zero, so a larger denominator could only confirm it. "Duplicated" had no
+mechanism; it was a correlation that happened to be perfect on a prefix. A
+structural discriminator is not merely better evidence, it is the kind that
+cannot dissolve under more data.
+
+
 ```sh
 nany=$(grep -oE '\.a\([^)]*\.o\)' "$MAP" | sort -u | wc -l)
 nmatched=$(grep -oE '\.a\([A-Za-z0-9_.+-]+\.o\)' "$MAP" | sort -u | wc -l)
