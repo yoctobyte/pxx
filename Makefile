@@ -11376,6 +11376,17 @@ test-core: $(COMPILER)
 	# resolver would take it in silence.
 	! ./$(COMPILER) test/test_variadic_elision_method_refusal.pas $(TESTTMP)/test_varelidemr26 > $(TESTTMP)/test_varelidemr.log 2>&1
 	grep -q 'wrong number of parameters' $(TESTTMP)/test_varelidemr.log
+	# `Str(b, s)` on a Boolean. Str's dispatch is a hand-written copy of
+	# write's and had no Boolean arm, so it fell through to StrInt and printed
+	# `1` while `writeln(b)` on the next line printed TRUE -- one compiler, one
+	# value, two renderings, and FPC says TRUE for both. StrBool already
+	# existed and was already correct; nothing routed to it. Same defect as the
+	# StrQWord row one type over, which is why fixing that sibling made this
+	# findable. The expected values are ones the broken path CANNOT produce
+	# (TRUE, not 1). The q= and i= rows guard the `<> tyBoolean` clause this
+	# fix deleted from the StrQWord arm. Byte-identical to fpc 3.2.2 -Mdelphi.
+	./$(COMPILER) test/test_str_of_boolean.pas $(TESTTMP)/test_strbool26
+	tools/expect_same.sh test_strbool26 "$$($(TESTTMP)/test_strbool26)" "$$(printf 't=TRUE\nf=FALSE\nwt=TRUE\nwf=FALSE\nw8=[    TRUE]\nw8f=[   FALSE]\nw2=[TRUE]\nwv=[  TRUE]\nq=18446744073709551615\ni=-42\nSTR BOOL OK')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas $(TESTTMP)/test_aoc_types26
 	tools/expect_same.sh test_aoc_types26 "$$($(TESTTMP)/test_aoc_types26)" "$$(printf 'vt0: 42\nvt1: TRUE\nvt2: Q\nvt16: 5000000000\nvt3: 3.50\nvt3: 0.25\nvt11: hi')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas $(TESTTMP)/test_write_pchar26

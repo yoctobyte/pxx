@@ -73,8 +73,13 @@ its file descriptor instead of stdout. Phase it:
   behind a unit or define. No default flip until byte-identical parity is proven
   and `make` / `make cross-bootstrap` stay green.
 - **Exact output parity:** newline/flush/line-buffering, integer and float
-  formatting digits, boolean rendering (PXX currently prints `1`, FPC `TRUE` —
-  decide and match). Validate against `test_conformance_*` and the cross suites.
+  formatting digits. Validate against `test_conformance_*` and the cross suites.
+  **The boolean fork this line used to state is not real** — it read *"PXX
+  currently prints `1`, FPC `TRUE` — decide and match"*, and re-measured
+  2026-09-04 `writeln(b)` prints `TRUE` on both. There is nothing to decide.
+  The `1` was true of a different instrument, `Str(b, s)`, and that WAS a real
+  bug — fixed the same day, see the log below. Sized booleans still print `1`
+  from every renderer and are a separate filed ticket.
 - **Performance:** each library `writeln` boxes a TVarRec vector (heap alloc).
   Acceptable for normal use; note it for hot logging paths; consider a fast path
   for the trivial single-scalar case if it matters.
@@ -298,3 +303,70 @@ the class only that canary catches.
 
 Phases 2 and 3, untouched. Also unchanged: the two `pyparser.inc` resolver
 sites, still deliberately out of scope.
+
+---
+
+## 2026-09-04 (frankH) — phase 3 scoped, phase 2 deliberately not taken, and one bug found scoping it
+
+Reached from the age-ordered queue as the second-oldest open ticket.
+
+### Phase 2 is in another agent's active region, and should not be first anyway
+
+`expr:w:p` splits by spelling. In the BRACKET form it is contained:
+`ParseVarRecLiteralAST` (`pasparser_lval.inc:3421`) parses each element with a
+bare `ParseExpr`, and the `:w:p` parse goes there. In the ELIDED form it is not
+contained at all — the elements are parsed by the ordinary call-argument loops
+**before** either elision hook is reached, so `ParseExpr` stops at the `:`, the
+arg loop wants `,` or `)`, and `Log('x=', x:8:2)` never reaches phase 1's
+`procIdx < 0` hook or `AbsorbVariadicTailArgs`. Covering it means loosening the
+shared argument loops, which is exactly where frankA is carving NilPy arms
+(`refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops`).
+Checked with them; **phase 2 stays unclaimed by both of us** until that lands.
+
+Independently, phase 2 first would bank a half: `vtFormatted` with no reader is
+a tag with no consumer, and phase 3 is its reader.
+
+### Phase 3 is no longer "worthless in isolation" — phase 1 is what changed that
+
+The Track B note above (2026-07-20) parks phase 3 as *"in isolation a strictly
+worse writeln nobody would call — the value is in the sugar, and the sugar is
+the compiler's."* **That was correct when written and is now stale.** The sugar
+landed 2026-09-01, both slices, so `LogLn('x=', x)` already compiles against
+`array of const`. Phase 3 is also pure `lib/rtl` — Track B, `$(PXX_STABLE)`, no
+`compiler/**` — so it collides with nobody, and `sysutils.Format` already
+dispatches on `VType` through `FmtArgInt/FmtArgStr/FmtArgFloat/FmtArgIs32`,
+which is the machinery a library `writeln` needs.
+
+### The parity target, measured rather than assumed
+
+What the builtin `writeln` actually prints, `c94252bb92cd`, all matching
+`fpc 3.2.2 -Mdelphi -O1`:
+
+| type | rendering |
+| --- | --- |
+| Integer / Int64 / QWord | plain digits, `-42`, full unsigned range |
+| Boolean | `TRUE` / `FALSE` |
+| Char / ShortString / AnsiString | the value |
+| Double | ` 3.5000000000000000E+000` (leading space, 16 digits, `E+000`) |
+
+`Str(d, s)` reproduces the float form exactly, so library code has a reachable
+route to it and does not need its own float formatter.
+
+### The bug this scoping found
+
+Building that table put `Str` and `writeln` side by side on the same value, and
+they disagreed: `Str(b, s)` printed `1` where `writeln(b)` printed `TRUE`.
+Filed and fixed as [[bug-p-str-of-a-boolean-formats-it-as-a-digit]] — one
+missing dispatch arm, `StrBool` already existed and was correct. The sized
+booleans lose the same information in all three renderers (`Str`, `writeln`,
+and `array of const` boxing, where `LongBool` boxes `vtInteger` rather than
+`vtBoolean`) for a different reason, and are
+[[bug-a-the-sized-booleans-render-as-a-digit-in-both-str-and-writeln]].
+
+**That second one lands on phase 3 directly:** a library `writeln` reads
+`VType`, so it will render a `LongBool` as a number no matter how carefully it
+is written. Whoever takes phase 3 should treat it as a known hole rather than
+re-derive it from a failing parity row.
+
+Phases 2 and 3 remain untouched. Phase 3 is scoped, not started.
+

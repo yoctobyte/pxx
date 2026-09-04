@@ -6529,11 +6529,26 @@ begin
           and stdout make. Str had none at all, so `Str(q, s)` on a QWord >= 2^63
           produced `-1` -- a silent wrong VALUE, while `writeln(q)` two lines
           away was right. bug-p-str-of-a-qword-formats-it-signed }
+        { ...and a BOOLEAN takes StrBool, which is the same dispatch write(Text)
+          and stdout already make. Str had no Boolean arm, so `Str(b, s)` fell
+          through to StrInt and produced `1`/`0` while `writeln(b)` on the line
+          above printed `TRUE`/`FALSE` -- one compiler rendering one value two
+          ways, and FPC says TRUE/FALSE for both. StrBool already existed and
+          was already correct; nothing routed to it.
+          This is the SAME DEFECT as the StrQWord row directly below, one type
+          over: Str's dispatch table is a hand-written copy of write's and has
+          been missing a case each time. Fixing the sibling is why this one was
+          findable. bug-p-str-of-a-boolean-formats-it-as-a-digit
+          The QWord arm no longer needs its `<> tyBoolean` exclusion -- that
+          clause existed ONLY to stop an unsigned Boolean landing on StrQWord,
+          and this arm now claims tyBoolean first. Leaving it would be a
+          condition that can never fire, which reads as a live guard. }
         if strIsFloat then procIdx := FindProc('StrFloat')
+        else if IntToTypeKind(ASTTk[exprNode]) = tyBoolean then
+          procIdx := FindProc('StrBool')
         else if TypeIsOrdinal(IntToTypeKind(ASTTk[exprNode])) and
                 (not TypeSigned(IntToTypeKind(ASTTk[exprNode]))) and
-                (IntToTypeKind(ASTTk[exprNode]) <> tyChar) and
-                (IntToTypeKind(ASTTk[exprNode]) <> tyBoolean) then
+                (IntToTypeKind(ASTTk[exprNode]) <> tyChar) then
           procIdx := FindProc('StrQWord')
         else procIdx := FindProc('StrInt');
         if procIdx < 0 then Error('Str: builtin unit not loaded');
