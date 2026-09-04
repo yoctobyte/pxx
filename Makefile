@@ -14437,6 +14437,55 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_hdrconst: gcc absent, constants NOT verified ==="; \
 	fi
+	# The UAPI headers crtl grew so busybox's i386 build could get past them:
+	# <linux/major.h>, <linux/random.h>, <linux/raid/md_u.h>, <linux/rfkill.h>.
+	# Same instrument as the row above and for the same reason -- these are
+	# ioctl COMMANDS and device MAJORS, and both travel to the kernel, so a
+	# wrong one is a different request rather than an error. RAID_AUTORUN is
+	# built out of MD_MAJOR, which is why the majors are here at all. Writing
+	# this row found a real one: CLUSTERED_DISK_NACK had been written as
+	# _IO(MD_MAJOR, 0x2c) from memory and the kernel says 0x35.
+	#
+	# THE LAST TWO ROWS ARE STRUCT SIZES, ON PURPOSE. RFKILL_EVENT_SIZE_V1 is
+	# sizeof(struct rfkill_event), so comparing it compares the LAYOUT: without
+	# __attribute__((packed)) that struct is 8 bytes rather than 6, and
+	# busybox's rfkill.c loops on `full_read(...) == RFKILL_EVENT_SIZE_V1' --
+	# an unpacked struct makes the applet read nothing, print nothing, and
+	# report no error. Only a value row can see that.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_uapi_constants.c $(TESTTMP)/c_uapi26 >/dev/null || { echo "c_uapi compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_uapi_gcc test/c_crtl_uapi_constants.c || { echo "c_uapi gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_uapi26 "$$($(TESTTMP)/c_uapi26)" "$$($(TESTTMP)/c_uapi_gcc)" || exit 1; \
+	  echo "=== c_uapi: 165 UAPI rows identical to gcc, layouts included ==="; \
+	else \
+	  echo "=== c_uapi: gcc absent, UAPI constants NOT verified ==="; \
+	fi
+	# getrandom(2), which busybox's seedrng needs and which is a SYSCALL rather
+	# than a PAL entry because the FLAGS are the point: GRND_NONBLOCK and
+	# GRND_INSECURE select between "fail rather than wait for entropy" and
+	# "bytes now, seeded or not", and seedrng branches on which it got. Row 4
+	# is the one a stub cannot pass -- an undefined flag must give EINVAL, so
+	# "returns some bytes" is not enough. Rows 2 and 3 are the relation that
+	# makes this a real CSPRNG and not a memset. Diffed against gcc natively;
+	# the cross rows compare against i386, no constants anywhere.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_getrandom.c $(TESTTMP)/c_grand26 >/dev/null || { echo "c_grand compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_grand_gcc test/c_crtl_getrandom.c || { echo "c_grand gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_grand26 "$$($(TESTTMP)/c_grand26)" "$$($(TESTTMP)/c_grand_gcc)" || exit 1; \
+	  echo "=== c_grand: getrandom matches glibc ==="; \
+	else \
+	  echo "=== c_grand: gcc absent, getrandom NOT verified ==="; \
+	fi
+	@for a in i386 arm32 aarch64 riscv32; do \
+	  case $$a in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$a test/c_crtl_getrandom.c $(TESTTMP)/c_grand_$$a >/dev/null || { echo "c_grand $$a compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh $$a/c_grand "$$(tools/run_target.sh $$a $(TESTTMP)/c_grand_$$a)" "$$($(TESTTMP)/c_grand26)" || exit 1; \
+	    echo "=== c_grand: $$a agrees with the native run ==="; \
+	  else \
+	    echo "=== c_grand: $$q absent, $$a NOT verified ==="; \
+	  fi; \
+	done
 	# The four open() flags arm and arm64 override against asm-generic, asserted
 	# BY EFFECT so one expected output is correct on every target -- the value
 	# comparison above can only run on the host, against gcc, which is exactly

@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  558 functions across 57 headers. }
+  559 functions across 58 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -69,10 +69,10 @@ begin
       ' getmntent_r:mntent.h getnameinfo:netdb.h getopt:unistd.h getopt_long:unistd.h ' +
       ' getopt_long_only:unistd.h getpagesize:unistd.h getpeername:sys/socket.h getpgid:unistd.h ' +
       ' getpid:unistd.h getppid:unistd.h getpriority:sys/resource.h getpwent:pwd.h ' +
-      ' getpwnam:pwd.h getpwuid:pwd.h getrlimit:sys/resource.h getservbyname:netdb.h ' +
-      ' getservbyport:netdb.h getservent:netdb.h getsid:unistd.h getsockname:sys/socket.h ' +
-      ' getsockopt:sys/socket.h gettimeofday:sys/time.h getuid:unistd.h gmtime:time.h ' +
-      ' gmtime_r:time.h ';
+      ' getpwnam:pwd.h getpwuid:pwd.h getrandom:sys/random.h getrlimit:sys/resource.h ' +
+      ' getservbyname:netdb.h getservbyport:netdb.h getservent:netdb.h getsid:unistd.h ' +
+      ' getsockname:sys/socket.h getsockopt:sys/socket.h gettimeofday:sys/time.h getuid:unistd.h ' +
+      ' gmtime:time.h gmtime_r:time.h ';
     'h': Result :=
       ' hasmntopt:mntent.h herror:netdb.h hstrerror:netdb.h htonl:netinet/in.h ' +
       ' htons:netinet/in.h hypot:math.h ';
