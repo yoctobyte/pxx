@@ -307,4 +307,4 @@ that exact binary — the quick tier does not run `test-xtensa` and every row ad
 here lives in it.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2ec3e61c5.
