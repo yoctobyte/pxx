@@ -122,6 +122,8 @@ AN_ARG Left argSeq2
 AN_ARG Left argsNode
 AN_ARG Left asrtCond
 AN_ARG Left asrtMsg
+AN_ARG Left assertMsgLit
+AN_ARG Left assertPosNode
 AN_ARG Left atDflt
 AN_ARG Left atFld
 AN_ARG Left atRecv

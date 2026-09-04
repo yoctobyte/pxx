@@ -5035,7 +5035,14 @@ var
   pfIsPF: Boolean; pfK, pfDepth: Integer;
   insSrcSym: Integer;   { Insert(srcArr, arr, i): the source array's symbol, else -1 }
   savedErrCount: Integer;   { recovered-diagnostic watermark, for statement resync }
+  assertPosNode: Integer;   { synthesised ' (file.pas, line N)' literal for __pxxAssert, or -1 }
+  assertMsgLit, assertArg: Integer;   { the empty-message literal a 1-arg Assert needs, and the AN_ARG carrying either }
+  assertPosText: AnsiString;
 begin
+  { -1 for every statement but an `Assert` the alias site below rewrites. Set
+    here rather than at that site because the arm that CONSUMES it sits in the
+    generic call path, which every call reaches. }
+  assertPosNode := -1;
   { `parallel for` soft keyword: `parallel` lexes as a plain ident, so it is a
     parallel-for only when followed by `for`, or by a policy clause `(...)` whose
     matching `)` is itself followed by `for` (`parallel(P) for`). Everywhere else
@@ -5460,6 +5467,27 @@ begin
           Exit;
         end;
         name := '__pxxAssert';
+        { The position FPC appends to the failure message, composed HERE because
+          it is a compile-time constant and passed as __pxxAssert's third
+          (defaulted) parameter. Measured against fpc 3.2.2 rather than assumed:
+          the file is the BASENAME, and when the Assert sits in an include it is
+          the INCLUDE's name and line, not the including file's --
+          `from-inc (inc1.inc, line 1).` PasSrcOfTok answers exactly that
+          question, and falls back to the main source when no range covers the
+          token (the main file before its first marker).
+          feature-p-assertions-directive-and-position }
+        assertPosText := PasSrcOfTok(TokPos - 1);
+        if assertPosText = '' then assertPosText := DbgSrcName;
+        i := Length(assertPosText);
+        while (i > 0) and (assertPosText[i] <> '/') and (assertPosText[i] <> '\') do Dec(i);
+        if i > 0 then
+          assertPosText := Copy(assertPosText, i + 1, Length(assertPosText) - i);
+        assertPosText := ' (' + assertPosText + ', line ' +
+                         AIntToStr(Tokens[TokPos - 1].Line) + ')';
+        assertPosNode := AllocNode(AN_STR_LIT);
+        ASTSOffset[assertPosNode] := StoredName(assertPosText);
+        ASTSLen[assertPosNode] := Length(assertPosText);
+        ASTTk[assertPosNode] := Ord(tyString);
       end;
       { Label definition: 'labelname:' as a statement }
       if Tokens[TokPos].Kind = tkColon then
@@ -6741,6 +6769,35 @@ begin
               Error('expected comma or close parenthesis');
           end;
           Expect(tkRParen, ')');
+          { __pxxAssert's position argument, synthesised at the `Assert` alias
+            site above. Appended HERE because this is where the argument chain
+            exists and before the type/overload pass walks it, so the extra
+            argument is checked like any other rather than smuggled past.
+
+            `Assert(cond)` MUST GET AN EMPTY MESSAGE FIRST. The parameters are
+            (cond, msg, pos) and appending one node to a one-argument call would
+            land the position in the MESSAGE slot -- a failure that prints
+            ` (f.pas, line 9)` with the message gone, which looks like a
+            formatting bug and is an off-by-one in the argument list. }
+          if assertPosNode >= 0 then
+          begin
+            if nArgs = 1 then
+            begin
+              assertMsgLit := AllocNode(AN_STR_LIT);
+              ASTSOffset[assertMsgLit] := 0; ASTSLen[assertMsgLit] := 0;
+              ASTTk[assertMsgLit] := Ord(tyString);
+              assertArg := AllocNode(AN_ARG);
+              ASTLeft[assertArg] := assertMsgLit;
+              if argsHead = -1 then argsHead := assertArg
+              else ASTRight[lastArg] := assertArg;
+              lastArg := assertArg; Inc(nArgs);
+            end;
+            assertArg := AllocNode(AN_ARG);
+            ASTLeft[assertArg] := assertPosNode;
+            if argsHead = -1 then argsHead := assertArg
+            else ASTRight[lastArg] := assertArg;
+            lastArg := assertArg; Inc(nArgs);
+          end;
           PyPackStarArgs(procIdx, argsHead, lastArg, nArgs, 0);
           PyBindKwArgs(procIdx, argsHead, lastArg, nArgs);
 

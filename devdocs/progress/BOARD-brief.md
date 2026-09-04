@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:16 unfinished:27 blocked:7 backlog:12 backlog-umbrella:7 backlog-core:132 backlog-nilpy:97 backlog-tools:18 backlog-pascal:40 backlog-decide:36 backlog-libs:15 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3270 rejected:75`
+`working:15 unfinished:27 blocked:7 backlog:12 backlog-umbrella:7 backlog-core:132 backlog-nilpy:97 backlog-tools:18 backlog-pascal:40 backlog-decide:36 backlog-libs:15 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3271 rejected:75`
 
 ## Held now (working/ — do not touch these files)
 
@@ -19,7 +19,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-c-crtl-stdio-buffering-and-setvbuf` [C] — owner: franks-ab
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-inline-float-and-record-returning-leaves` [A+O] — owner: frank-optimize
-- `feature-p-assertions-directive-and-position` [P] — owner: frankS
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA

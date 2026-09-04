@@ -1,10 +1,10 @@
 ---
-summary: "HALF 1 DONE 2026-09-04 (gating: {$ASSERTIONS ON/OFF}, {$C±}, -Sa, --no-assertions; the condition is no longer evaluated when off, verified against fpc 3.2.2). WHAT IS LEFT is half 2, the failure-message shape: FPC prints `boom (file.pas, line 4).` — the message REPLACES `Assertion failed` rather than following it — where pxx prints `Assertion failed: boom` with no position. Cosmetic parity, not a behavioural bug; re-typed and re-ranked accordingly"
+summary: "DONE 2026-09-04, both halves. Gating: {$ASSERTIONS ON/OFF}, {$C±}, -Sa, --no-assertions — the condition is no longer evaluated when off, and --no-assertions reproduces fpc 3.2.2's column exactly. Message: `boom (file.pas, line 28).` byte-identical to FPC across four shapes including an Assert inside an include, where FPC names the INCLUDE's file and line. The ticket's sketch of the message was wrong and is corrected in the body: the message REPLACES `Assertion failed` rather than following it"
 type: feature
 track: P
 prio: 30
-status: working
-owner: frankS
+status: done
+owner: 
 ---
 
 # `{$ASSERTIONS}` gating and the `(file, line N)` message suffix
@@ -167,3 +167,70 @@ ticket already says so.
 
 Unchanged from the original: this half is cosmetic parity, not a behavioural
 bug. Re-typed accordingly — the `type: bug` on this ticket was for half 1.
+
+## Parked 2026-09-04
+
+half 1 (gating) landed in e4ee8048c; what remains is half 2, the failure-message shape, which is cosmetic parity — resume by threading the source position into __pxxAssert so AssertErrorProc receives the composed text too. fpc 3.2.2's exact output is recorded in the ticket body, measured, so do not re-derive it.
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## Half 2 (the message) landed 2026-09-04 too (frankS, Track P). Ticket closed.
+
+**Landed the same session as half 1, in a separate commit, after measuring that
+the ticket's sketch of this half was wrong.** The sketch said pxx should append
+`(file.pas, line 12)` to `Assertion failed`. fpc 3.2.2 does not do that: the
+message **replaces** `Assertion failed` rather than following it, and pxx's whole
+line shape differed, not just the suffix.
+
+Measured, four shapes, all now byte-identical to fpc 3.2.2:
+
+```
+  Assert(1=2, 'boom')            boom (af.pas, line 4).                   227
+  Assert(1=2)                    Assertion failed (afn.pas, line 3).      227
+  ...with uses sysutils          EAssertionFailed: boom (afs.pas, line 4)
+  Assert inside {$i inc1.inc}    from-inc (inc1.inc, line 1).             227
+```
+
+**The include row is the one the ticket never mentioned and the one worth
+keeping.** FPC names the INCLUDE's file and its own line, not the including
+file's — `PasSrcOfTok` answers exactly that question, with a fallback to
+`DbgSrcName` for the main file before its first range marker. The file is the
+BASENAME (`sub/af.pas` prints `af.pas`), verified from a subdirectory, which is
+also what makes the test rows independent of where `TESTTMP` lives.
+
+**The trailing period belongs to the PRINTER, not to the message.** The default
+path prints `text` + `.`; the hook path passes `text` alone, which is why FPC's
+`EAssertionFailed` message has no period. Getting that backwards would have
+looked right in the common case and wrong in the caught one.
+
+**`__pxxAssert` grew a third defaulted parameter** `pos`, composed by the parser
+at the soft-alias site (the position is a compile-time constant) and injected
+into the argument chain after `Expect(tkRParen)`, before the type/overload pass
+walks it — so it is checked like any other argument rather than smuggled past.
+
+**`Assert(cond)` needs an EMPTY MESSAGE injected before the position, and that
+has its own test row.** The parameters are `(cond, msg, pos)`, so appending one
+node to a one-argument call lands the position in the MESSAGE slot: the failure
+prints ` (f.pas, line 9)` with the message gone, which reads as a formatting bug
+and is an off-by-one in the argument list. Inferring that row from the
+two-argument one is exactly how it would have shipped.
+
+**The hook gets the composed text**, which the ticket's own note demanded:
+passing the bare message would leave sysutils' `EAssertionFailed` carrying LESS
+than the bare printer does. `test_assert_raises_with_sysutils`'s expectation
+changed accordingly and now names both `Assert` lines of its own fixture.
+
+**The new fixture has filler above its `Assert` on purpose.** The line number IS
+the assertion here, and an off-by-one — or a position read off the wrong token —
+is plausible on line 1 and impossible on line 28. The full line is compared
+rather than grepped for the filename, because the defect being replaced was a
+line SHAPE and a `grep boom` passed on it throughout.
+
+Two existing expectations moved with it (`assert_fail_b264.out`,
+`test_assert_raises26`); both were pinning the old shape, and both now pin FPC's.
+No other frontend calls `__pxxAssert` — NilPy's `assert` lowers to its own
+if/raise tree — but the builtin is shared surface, so a NilPy and a C probe were
+run against the signature change and are green.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

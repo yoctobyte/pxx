@@ -261,7 +261,7 @@ type
   TAssertErrorProc = procedure(const msg: AnsiString);
 var
   AssertErrorProc: TAssertErrorProc;
-procedure __pxxAssert(cond: Boolean; const msg: AnsiString = '');
+procedure __pxxAssert(cond: Boolean; const msg: AnsiString = ''; const pos: AnsiString = '');
 
 procedure __pxxMove(const Source; var Dest; Count: Integer);
 procedure __pxxFillChar(var X; Count: Integer; Value: Byte);
@@ -707,22 +707,44 @@ begin
     s := __pxxStrCopy(s, 1, Length(s));
 end;
 
-procedure __pxxAssert(cond: Boolean; const msg: AnsiString = '');
+procedure __pxxAssert(cond: Boolean; const msg: AnsiString = ''; const pos: AnsiString = '');
+{ `pos` is ' (file.pas, line N)', composed by the parser (the position is a
+  compile-time constant) and defaulted so any caller that does not supply it
+  still compiles.
+
+  THE MESSAGE REPLACES 'Assertion failed', IT DOES NOT FOLLOW IT, and that was
+  measured against fpc 3.2.2 rather than taken from the ticket, which had
+  sketched it the other way:
+
+    Assert(1=2, 'boom')     fpc ->  boom (af.pas, line 4).            rc 227
+    Assert(1=2)             fpc ->  Assertion failed (afn.pas, line 3).  rc 227
+    ...with uses sysutils   fpc ->  EAssertionFailed: boom (afs.pas, line 4)
+
+  So the default printer appends a period and the hook path does not — the
+  period belongs to the printer, not to the message. pxx said
+  `Assertion failed: boom` with no position at all, which is a different line
+  shape and not merely a missing suffix.
+  feature-p-assertions-directive-and-position }
+var text: AnsiString;
 begin
   if cond then Exit;
+  if msg = '' then text := 'Assertion failed' else text := msg;
+  text := text + pos;
   { Installed hook wins (sysutils installs one that RAISES EAssertionFailed, so
     `try Assert(...) except` can run its handler). Unset — a program that does
     not use sysutils — keeps the print + Halt(227) below, which is exactly what
-    FPC does in that case. }
+    FPC does in that case.
+
+    THE HOOK GETS THE COMPOSED TEXT, position included. Passing the bare message
+    here would leave sysutils' EAssertionFailed carrying LESS than the bare
+    printer does, which is backwards — and FPC's exception message is the
+    composed one. }
   if Assigned(AssertErrorProc) then
   begin
-    AssertErrorProc(msg);
+    AssertErrorProc(text);
     Exit;                          { a raising hook never returns; a print-only one may }
   end;
-  if msg = '' then
-    writeln('Assertion failed')
-  else
-    writeln('Assertion failed: ', msg);
+  writeln(text, '.');
   Halt(227);                       { FPC's assertion runtime error }
 end;
 

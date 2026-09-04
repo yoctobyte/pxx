@@ -6240,7 +6240,27 @@ test-core: $(COMPILER)
 	printf 'program a; begin Assert(1=2, "boom"); end.\n' | tr '"' "'" > $(TESTTMP)/assert_fail_b264.pas
 	./$(COMPILER) $(TESTTMP)/assert_fail_b264.pas $(TESTTMP)/assert_fail_b26426
 	! $(TESTTMP)/assert_fail_b26426 > $(TESTTMP)/assert_fail_b264.out 2>&1; tools/expect_same.sh assert_fail_b26426-rc "$$?" "0"
-	tools/expect_same.sh assert_fail_b264.out "$$(cat $(TESTTMP)/assert_fail_b264.out)" "Assertion failed: boom"
+	# ...and the NO-MESSAGE shape, which takes a different arm: (cond, msg, pos)
+	# means a one-argument Assert needs an empty message injected BEFORE the
+	# position, or the position lands in the message slot and prints with the
+	# message gone. That reads as a formatting bug and is an off-by-one in the
+	# argument list, so it gets its own row rather than being inferred.
+	printf 'program b; begin Assert(1=2); end.\n' > $(TESTTMP)/assert_nomsg_pos.pas
+	./$(COMPILER) $(TESTTMP)/assert_nomsg_pos.pas $(TESTTMP)/assert_nomsg_pos26
+	! $(TESTTMP)/assert_nomsg_pos26 > $(TESTTMP)/assert_nomsg_pos.out 2>&1; tools/expect_same.sh assert_nomsg_pos-rc "$$?" "0"
+	tools/expect_same.sh assert_nomsg_pos.out "$$(cat $(TESTTMP)/assert_nomsg_pos.out)" "Assertion failed (assert_nomsg_pos.pas, line 1)."
+	# The full failure line for an assert deep in a file — byte-identical to
+	# fpc 3.2.2, verified 2026-09-04. The LINE NUMBER is the assertion: an
+	# off-by-one reads as plausible on line 1 and cannot on line 28, which is
+	# why the fixture has filler above it.
+	./$(COMPILER) test/test_assert_message_position.pas $(TESTTMP)/test_assert_message_position26
+	! $(TESTTMP)/test_assert_message_position26 > $(TESTTMP)/test_assert_message_position.out 2>&1; tools/expect_same.sh test_assert_message_position-rc "$$?" "0"
+	tools/expect_same.sh test_assert_message_position.out "$$(cat $(TESTTMP)/test_assert_message_position.out)" "$$(printf 'before 2\nboom (test_assert_message_position.pas, line 28).')"
+	# The message REPLACES 'Assertion failed' and carries the position, which is
+	# FPC's shape measured on 3.2.2 (`boom (af.pas, line 4).`) — the file is the
+	# BASENAME, so this row is independent of where TESTTMP lives.
+	# feature-p-assertions-directive-and-position
+	tools/expect_same.sh assert_fail_b264.out "$$(cat $(TESTTMP)/assert_fail_b264.out)" "boom (assert_fail_b264.pas, line 1)."
 	# `const` / `class const` sections inside a class body; qualified TFoo.K access
 	./$(COMPILER) test/test_class_const_b263.pas $(TESTTMP)/test_class_const_b26326
 	tools/expect_same.sh test_class_const_b26326 "$$($(TESTTMP)/test_class_const_b26326)" "$$(printf 'rec-x=8 rec-name=rec\nn=19\ngreeting=hi\nqualified=16 3')"
@@ -11959,7 +11979,12 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Futest/units test/test_unit_ambient_system_surface.pas $(TESTTMP)/test_unit_ambient_sys26
 	tools/expect_same.sh test_unit_ambient_sys26 "$$($(TESTTMP)/test_unit_ambient_sys26)" "$$(printf 'a 5.0000\nb 2.0000\nc 12.5664\nOK')"
 	./$(COMPILER) -Fulib/rtl test/test_assert_raises_with_sysutils.pas $(TESTTMP)/test_assert_raises26
-	tools/expect_same.sh test_assert_raises26 "$$($(TESTTMP)/test_assert_raises26)" "$$(printf 'passed\ncaught: EAssertionFailed: boom\nnomsg: EAssertionFailed: Assertion failed\nstill running\nOK')"
+	# The HOOK gets the composed text, position included — passing the bare
+	# message would leave EAssertionFailed carrying LESS than the bare printer
+	# does, which is backwards, and FPC's exception message is the composed one
+	# (`EAssertionFailed: boom (afs.pas, line 4)`, measured on 3.2.2). The line
+	# numbers are the two Assert sites in the fixture.
+	tools/expect_same.sh test_assert_raises26 "$$($(TESTTMP)/test_assert_raises26)" "$$(printf 'passed\ncaught: EAssertionFailed: boom (test_assert_raises_with_sysutils.pas, line 25)\nnomsg: EAssertionFailed: Assertion failed (test_assert_raises_with_sysutils.pas, line 31)\nstill running\nOK')"
 	./$(COMPILER) test/test_static_array_managed_scope_exit.pas $(TESTTMP)/test_static_array_managed_scope_exit26
 	tools/expect_same.sh test_static_array_managed_scope_exit26 "$$($(TESTTMP)/test_static_array_managed_scope_exit26)" "$$(printf '0\nOK')"
 	./$(COMPILER) test/test_string_array_element_charwrite.pas $(TESTTMP)/test_string_array_element_charwrite26
