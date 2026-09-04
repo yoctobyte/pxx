@@ -4,8 +4,8 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "arm32/riscv32/xtensa take NO PXXObjRetain when boxing an object into a variant, and none of the five cross arms of EmitManagedLocalCleanupForTarget releases a NilPy tyClass local at scope exit. The two errors cancel, so the observable today is bounded at one object per scope — but FIXING EITHER HALF ALONE turns that bounded leak into a use-after-free. They move together or not at all. Filed so the next person to 'add the missing retain' reads this first."
-status: backlog
-owner: frankS
+status: working
+owner: frankb-78
 ---
 
 # Cross backends: a missing retain and a missing release that cancel
