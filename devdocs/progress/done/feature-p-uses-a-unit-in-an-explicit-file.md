@@ -154,4 +154,4 @@ the basename of each quoted path. That covers `in '<file>'`, pxx's
 Positive-controlled: a planted unwired test is still reported, the scanned
 population is unchanged at 3411, the parked and advisory rows are identical,
 and both of the checker's own devtests pass.
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d87b2f0fb.
