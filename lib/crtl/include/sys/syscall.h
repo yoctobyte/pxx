@@ -3294,19 +3294,40 @@
    error -- which is the right answer, and the same one this header gave for
    xtensa before it had any table at all.
 
-   NOTHING CAN EXERCISE THIS TABLE TODAY, AND THAT IS WHY IT SAYS SO HERE.
-   pxx cannot build a C program for xtensa at all -- cparser.inc:11666
-   answers `C program entry stub not implemented for this target yet',
-   with or without --platform=posix -- and `--emit-obj --target=xtensa'
-   on a C source dies earlier still, in the backend, on crtl's own
-   ctype.c: `call0 target 56674 is not 4-aligned'. So every number below
-   is CORRECT BY THE SAME METHOD AS THE arm32 ARM AND VERIFIED BY NONE OF
-   THE SAME EVIDENCE: arm32's was confirmed by running the ten-row crtl
-   census under qemu-arm and matching i386 row for row, and that census
-   cannot be built for xtensa. Do not read the presence of this table as
-   the target working. Whoever lands the entry stub should run
-   test/c_crtl_syscall_guarded_bodies.c against i386 in the same commit;
-   that is the check this arm is waiting for.
+   THE NUMBERS BELOW HAVE NOW BEEN READ BY A RUNNING PROGRAM ON THE TARGET,
+   which is what this paragraph used to say could not be done. The ten-row
+   crtl census builds and runs for xtensa and is byte-identical to i386:
+   
+       pascal26 --target=xtensa --platform=posix --xtensa-long-calls
+                test/c_crtl_syscall_guarded_bodies.c out
+       tools/run_target.sh xtensa out        # 10/10, identical to i386
+   
+   BOTH FLAGS ARE LOAD-BEARING and a reader who drops one gets a failure
+   that looks like this table being wrong. --platform=posix because xtensa
+   defaults to the ESP profile, which deliberately has no argc and no
+   exit_group; --xtensa-long-calls because crtl alone pushes the image to
+   ~665 KB and __pxx_run_finalizers lands out of CALL0 reach.
+   
+   AND THAT IS EVIDENCE ABOUT THE SYSCALL NUMBERS, NOT ABOUT THE C SURFACE
+   ON xtensa. Every census row is `%s errno=%d' -- small ints and strings --
+   and that is exactly the shape that cannot be perturbed by a 64-bit
+   variadic argument losing its high word, which is a defect this target
+   HAD while the census was green (printf("%llx", 0x1122334455667788)
+   printed 55667788; fixed in 7574a5f8d). Ten green rows about numbers do
+   not widen into a claim about the frontend, and the four probes that did
+   catch that one -- %lld at five argument positions, doubles, 64-bit
+   shifts -- are separate evidence. (frankA, 2026-09-04, c758dea9c.)
+   
+   THE TICKET THAT ASKED FOR THIS NAMED TWO BLOCKERS AND THE REAL NUMBER
+   IS NOT KNOWN TO ANYONE -- which is the finding, not a complaint about
+   the ticket. It named the two an instrument could see from outside:
+   proc-entry alignment (0bc9d654b) and the C entry stub. Landing the stub
+   (233e693bb) turned up FIVE independent gaps in its own right, `each
+   found only by fixing the one in front of it', and a 64-bit variadic
+   argument silently losing its high word (7574a5f8d) surfaced only after
+   all of those. A blocker count is a statement about the instrument that
+   produced it, and this one was written when nothing could compile a
+   single C translation unit for the target.
 
    range: 0..470   date: 2026-09-04T15:07:05Z
    compiler: aaf09343d1cb7fd3  commit: d3ec20727263
