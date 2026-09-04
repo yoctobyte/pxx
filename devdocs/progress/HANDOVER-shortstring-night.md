@@ -4910,3 +4910,78 @@ Gate: `gate.sh quick` GREEN **before each** commit (canary RAN, not SKIP);
 binaries `19acc91a61fc` then `6b8a6c493c76`, **both `converged after 1
 round(s)`.** `PXX_ALLOW_FULL_SUITE=1` lifted for the sweep with the reason in the
 commit.
+
+### CORRECTION to my entry above: the promo-int generator bug is **NOT** i386/arm32. It is every target. `e60e61437`
+
+I banked *"truncates to 32 bits on i386/arm32 ... so it is the instance's state
+save, not the arithmetic."* **The mechanism was right and the SCOPE was wrong**,
+and frankb-78 propagated its own false premise to me before catching it.
+
+`6000000042` is past 2^32 and **not** past 2^63, so it **leaves the inline tier on
+a 32-bit target and stays inside it on a 64-bit one.** A multiply loop past 2^63
+is wrong on **x86-64 and aarch64 too**, from the 5th value, **identically on pin
+v403.** **Every target; only the THRESHOLD moves.**
+
+*(The ticket is in `done/` and its slug still reads `...-on-i386-and-arm32`. Left
+unrenamed — citable slug, same call as the bench ticket — but the slug is now
+false and the body carries the correction.)*
+
+### THE INVERSE OF A RULE CLAUDE.md ALREADY CARRIES
+
+The handbook warns that **"nothing observably differs" is usually a claim about
+x86-64 only.** This is the mirror image:
+
+> **It had two targets DISAGREEING and read the disagreement as a target split.**
+
+**A cross-target difference is not evidence of a target-specific cause.** It is
+equally consistent with **one bug whose trigger is width-dependent** — and the
+second reading never occurred **because a split was already sitting there looking
+like an answer.** The handbook's rule guards against a defect being invisible on
+the box you measure on; this guards against a defect looking *narrower* than it is
+because two boxes disagreed.
+
+**The cheap fix: when two targets disagree, ask what varies with the WIDTH before
+concluding the CAUSE varies with the target.** The test now carries **both
+thresholds in one file**, so no target's inline width can make it vacuous, and the
+pin control fires on all four.
+
+### A FALL-THROUGH IS HOW AN ENUMERATION CONTRACT FAILS OPEN
+
+The stackless-generator slot allocator has arms for by-ref, variant, string and
+record — **and then a fall-through that gives everything else ONE word.** A
+promotable int is a `{tag, payload}` pair — 8 bytes on 32-bit, 16 on 64-bit — so
+the checkpoint **persisted the payload and dropped the tag.** Fixed with the
+variant arm's shape: a blob-copied multi-word slot region.
+
+**The family already had a rule that should have caught this.** `TypeSlotSize`'s
+own comment: *"a promotable int is a {tag, payload} struct, not a machine word ...
+anything that must handle it asks for it by name — an unhandled site **errors
+instead of miscompiling**."*
+
+> **That contract is only real where sites are ENUMERATED. One `else` that accepts
+> every kind silently converts "errors instead of miscompiling" into its opposite
+> — and nothing greps for it, because the offending code is an ABSENCE OF A CASE.**
+
+This is the precondition rule's twin, from the other side: that one is *a
+precondition no arm states*; this one is *a case no arm excludes*. **Both are
+invisible to search for the same reason — there is no token to find.**
+
+The arm now **asserts its own claim**: `if TypeSlotSize(tk) > 8 then Error`. And
+**`tyExtended` at 10 bytes is next in line and will now error rather than
+truncate** — the guard catches the successor before the successor exists.
+
+### Next, same group, with the close condition stated in advance
+
+Taking `bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad`
+(`backlog-core`). **UNMEASURED**, and its only blocker was that frankC's standalone
+repro hit a parse error. frankb-78 has the for-in lowering loaded, so **the
+measurement is cheap for it and expensive for anyone else** — the correct reason to
+take a ticket out of rank order.
+
+**And it stated the close condition before measuring:** *if it does not reproduce
+I will close it `rejected` rather than leave it open at a guess* — which is what
+the ticket's own summary asks for. *Deciding the disposition before seeing the
+result is what keeps a null from becoming a park.*
+
+Gate: `gate.sh quick` GREEN before the commit; binary `6187fad877ee`, **`converged
+after 1 round(s)`.**
