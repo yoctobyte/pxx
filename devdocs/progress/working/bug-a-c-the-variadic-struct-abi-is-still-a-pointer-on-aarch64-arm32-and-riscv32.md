@@ -4,12 +4,12 @@ title: "A struct through `...` is still a POINTER on aarch64, arm32 and riscv32"
 track: A
 prio: 40
 type: bug
-status: backlog
+status: working
 created: 2026-09-02
 found-by: frankA
-owner: ""
+owner: frankb-78
 blocked-by: []
-summary: "The remaining three targets of bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer, which was fixed on x86-64 and i386 2026-09-02. A struct or union in a variadic slot still occupies one pointer-width slot holding the address of a caller temp; gcc puts the aggregate's own bytes there. Self-consistent inside pxx, so no pxx-vs-pxx test can see it. Measured unchanged rather than regressed: arm32 and riscv32 print byte-identical output before and after that fix, aarch64 differs only in the garbage stack addresses the broken rows were already printing. THE 'NO ORACLE ON THESE THREE' CLAUSE IS CORRECTED BELOW (2026-09-03): the mixed LINK really is unbuildable (no cross gcc, no lld), but `clang --target=... -S` compiles for all three with nothing installed and reading the CALL SITE needs neither a link nor a run, with llvm-objdump-21 for pxx's column. Three measured facts that change what a fix must do: arm32 NEVER goes indirect (a 12-byte aggregate is r0,r1,r2 with the tail in r3, so the pointer is wrong there at every size); riscv32 DOES at 2x XLEN, so its current pointer is CORRECT for a 12-byte struct and wrong for smaller ones; and riscv32 takes {double,double} in fa0,fa1 but {float,float,float} indirectly, so the FP-struct rule does not port from aarch64. Also `long` is 4 bytes on both 32-bit targets, so size probes in explicit widths. The mechanism and all three sites are documented on the parent."
+summary: "The remaining three targets of bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer, which was fixed on x86-64 and i386 2026-09-02. A struct or union in a variadic slot still occupies one pointer-width slot holding the address of a caller temp; gcc puts the aggregate's own bytes there. Self-consistent inside pxx, so no pxx-vs-pxx test can see it. Measured unchanged rather than regressed: arm32 and riscv32 print byte-identical output before and after that fix, aarch64 differs only in the garbage stack addresses the broken rows were already printing. THE 'NO ORACLE ON THESE THREE' CLAUSE IS CORRECTED BELOW (2026-09-03): the mixed LINK really is unbuildable (no cross gcc, no lld), but `clang --target=... -S` compiles for all three with nothing installed and reading the CALL SITE needs neither a link nor a run, with llvm-objdump-21 for pxx's column. Three measured facts that change what a fix must do: arm32 NEVER goes indirect (a 12-byte aggregate is r0,r1,r2 with the tail in r3, so the pointer is wrong there at every size); riscv32 DOES at 2x XLEN, so its current pointer is CORRECT for a 12-byte struct and wrong for smaller ones; and riscv32 takes {double,double} in fa0,fa1 but {float,float,float} indirectly, so the FP-struct rule does not port from aarch64. Also `long` is 4 bytes on both 32-bit targets, so size probes in explicit widths. THE FULL PLACEMENT TABLE FOR ALL THREE TARGETS IS NOW MEASURED AND IN THE BODY (2026-09-04), and it changes the shape of the work again: aarch64's VARIADIC rule is its FIXED rule unchanged, HFAs included ({double,double} still goes in d0,d1 on AArch64 Linux, unlike Apple's variant), so that half is exactly "make the tail ask ABIA64ArgDesc"; arm32 SPLITS one aggregate between r1-r3 and the stack, which AAPCS64 never does, so a marshaller ported from the aarch64 one places the head and strands the tail; and riscv32's VARIADIC rule is NOT its fixed rule -- everything over 2x XLEN is a pointer there including {double,double}, which the fixed-parameter row above records as fa0,fa1. Three targets, three rules, two of them differing from that same target's fixed-parameter rule. The mechanism and all three sites are documented on the parent."
 ---
 
 # The variadic struct ABI on the three cross targets
@@ -156,3 +156,60 @@ back from the wrong place, and the running-program oracle (a dynamic call into
 the target's own glibc, aarch64 and arm32 only) cannot reach a by-value aggregate
 because no libc entry point takes one. riscv32 is covered by the placement oracle
 alone.
+
+# 2026-09-04 (frankB) — THE PLACEMENT TABLE FOR ALL THREE, MEASURED. The three rules are three rules, and two of them differ from that target's own FIXED-parameter rule
+
+This ticket has said "the first piece of work is deciding what plays the oracle"
+since it was filed. The oracle is settled (clang's call site, no link, no run)
+and here is the table it produces, so nobody has to re-derive it. One variadic
+callee, `extern void v(int n, ...)`, four aggregate shapes, each call carrying a
+LEADING scalar (so the bank is already partly spent) and a TRAILING integer (so
+the bank state after the aggregate is observable). Sizes in explicit widths
+because `long` is 4 bytes on the two 32-bit targets.
+
+| shape | size | aarch64 | arm32 | riscv32 |
+| --- | --- | --- | --- | --- |
+| `{int,int}` | 8 | `x1` packed, tail `w2` | `r1,r2`, tail `r3` | `a1,a2`, tail `a3` |
+| `{int,int,int}` | 12 | `x1,x2`, tail `w3` | `r1,r2,r3`, tail on the STACK | POINTER `a1`, tail `a2` |
+| `{double,double}` | 16 | `d0,d1`, tail `w1` | `r2,r3` + STACK, split | POINTER `a1`, tail `a2` |
+| `{int x6}` | 24 | POINTER `x1`, tail `w2` | `r1,r2,r3` + STACK, split | POINTER `a1`, tail `a2` |
+
+## The three things that are not guessable, and each one breaks a port
+
+**1. aarch64's variadic rule is its FIXED rule, unchanged — including HFAs.**
+`{double,double}` still goes in `d0,d1` in the variadic tail on AArch64 Linux.
+That is worth stating because the opposite is a common belief (Apple's variant
+does drop HFA treatment past the named parameters, and Apple's is the platform
+people have read about). So the aarch64 half of this ticket is exactly what its
+own text says: make the tail ask the same oracle the fixed parameters now ask
+(`ABIA64ArgDesc` / `ABIA64ArgPlace`, landed 2026-09-04 in
+[[bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64]]), with
+the argument's `IRArgRecId` standing in for the parameter that does not exist.
+
+**2. arm32 SPLITS an aggregate between the registers and the stack.** `{int x6}`
+puts 6,7,8 in `r1,r2,r3` and 9,10,11 on the stack, in one argument. AAPCS64 is
+all-or-nothing and says so at length in `ABIA64ArgPlace`; AAPCS32 is not, and a
+marshaller ported from the aarch64 one will place the head and strand the tail —
+which is a plausible wrong answer rather than a crash. `{double,double}` is the
+same shape plus 8-byte alignment: `r2,r3` then stack, with `r1` skipped.
+
+**3. riscv32's variadic rule is NOT its fixed rule.** The fixed-parameter table
+on this ticket records `{double,double}` in `fa0,fa1`; in the variadic tail
+clang passes it INDIRECTLY. Everything over 2x XLEN is a pointer there, FP
+members included. So the one target where an earlier note said "the current
+pointer is CORRECT for a 12-byte struct" is correct for a wider set than that
+note implies — and wrong only at 8 bytes and below.
+
+**Nothing here is a proof that a value READS BACK right.** It is a placement
+oracle: it reads the call site and never runs. The receiving half
+(`__pxx_va_arg_cross`, `__pxx_va_arg_cross32`, and the straddle arm this
+ticket's body already warns about) has to agree with whatever the caller does,
+and a pxx-vs-pxx test cannot see them disagreeing in the same direction — the
+sentence this family keeps relearning, and one measured instance of it is on the
+sibling ticket, where the by-value test PASSES on the pre-fix compiler byte for
+byte.
+
+Probe kept at the shape above rather than checked in: it needs an `extern`
+callee that is never defined, so it compiles under clang and does not link, and
+the pxx column comes from `llvm-objdump-21` plus pxx's `.map`. The method is in
+`devdocs/dev/differential-probes.md`.
