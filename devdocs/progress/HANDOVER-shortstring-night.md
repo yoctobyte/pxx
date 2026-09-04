@@ -5543,3 +5543,99 @@ flag-based verification is **no longer executable** because the flag is deleted.
 confidence is unchanged by the gap. Nothing in its own view distinguishes a
 current model from a thirteen-hour-old one — that is a coordinator's job and
 almost the only one git cannot do.*
+
+---
+
+## A message-routing discrepancy — scoped, mechanism UNKNOWN, and not to be inflated
+
+**What is established:** nine messages reached franka-29 carrying
+`from-name="frankb-78"` and socket `1341089`; `ListAgents` shows **exactly one**
+`frankb-78 [4ca29a]`, no collision, no second row; and **that session has no
+record of sending them.**
+
+**What is NOT established: the mechanism.** franka-29 offered the send tool's
+*"also connected via Remote Control"* annotation as the tell and then **withdrew
+it itself within minutes** — its message to *this* session came back with the
+identical annotation, so it is **generic to peers on this machine and
+discriminates nothing.** Its own note: *formed from a single observation and
+shipped in the same message — the exact shape I have been on the other side of
+twice today.*
+
+### The datum this seat can add, which neither peer has
+
+**The frankuser <-> frankb-78 channel demonstrably works, in both directions, with
+content-specific replies.** Not "a message arrived" — *answers that could only be
+answers to the specific thing sent*:
+
+- relayed the three `test_stackless_gen` NEW-REDs -> *"YES, the three stackless-gen
+  NEW-REDs are mine, from `7e271ff7d`... thank you for relaying it immediately"*;
+- asked whether four `CurProcIsGenerator or CurProcIsStackless` sites were the same
+  defect -> answered by NAME: `RegcallAssignResidency`, loop residency,
+  `CalleeScratchAssign`, `ir_codegen_aarch64.inc:932`;
+- said the instance-leak ticket was unclaimed -> it took it;
+- sent the new `rm` rule -> *"noted, I am not blocked on one."*
+
+**So this is not "the name is broken for everyone."** One direction, one pair,
+nine messages. **Scope it there.**
+
+### Explanations still open, none chosen
+
+A restarted session has **no transcript of its earlier sends**, so *"no record of
+sending"* is **a claim about a transcript, not about the wire** — and CLAUDE.md
+already says a peer's self-report is its BELIEF while its transcript is the
+record. Equally open: a genuine transport ambiguity, or a misattribution of which
+messages are being asked about. **Picking one from here would be the thing this
+whole file keeps warning about.**
+
+**The check that would actually discriminate** is not *"do you remember sending"*
+but **"is there a record of a SEND"** — asked of frankb-78, about its own
+transcript. Sent.
+
+### The rule that stands regardless of mechanism
+
+> **A handover confirmed only by a peer's reply — or by nothing at all — is not
+> confirmed. Look for it in a COMMIT.**
+
+franka-29 handed frankb-78 all four flip defects and held none; the session now
+answering to that name has no record of receiving it. **It was moot only because
+the four were fixed and the flip landed.** Live work would have **sat unowned
+while both parties believed it was assigned** — and *nothing in either session's
+view would have shown it.*
+
+### And the line worth keeping from the same message
+
+> **A message with a wrong sender can still be right about the tree.**
+
+franka-29 did not act on those messages as authority. Told the flip had landed, it
+**checked**: `merge-base --is-ancestor ce63beeeb origin/master` YES,
+`TargetHasByteStrPrefixCodegen` alive only in map files and a past-tense comment,
+v403 an ancestor of its own commits. **That is the argument for checking the tree,
+not for distrusting the peer** — the two are easily confused and only one of them
+is cheap.
+
+## franka-29's wasm32 sets work — `c7f665f2d`
+
+**Four refusals stacked one behind another**, each invisible until the one in
+front was fixed: `IR_SET_LIT`, then `IR_SET_BINOP`, then a set-typed value
+reaching `PXXMemMove`, then `tkIn` arriving as `binary operator operator 99`.
+`test_cross_sets` un-excluded and matching the native oracle; **one exclusion left
+where there were two.**
+
+New `test/test_cross_set_shapes.pas` — comparison directions, symmetric
+difference, the mask's top bit, out-of-range and negative members, the empty set,
+a nested expression. **Measured green on all seven targets before being wired**,
+wired for six, **each run through its own recipe rather than a command line.**
+
+### The census is the number to keep
+
+> **278 gap instances -> 70 over the same 300 sources, and the count of programs
+> with a BROKEN BODY did not move at all: 14 before, 14 after.**
+
+**That is the closed coverage ticket's entire thesis demonstrated by accident.** A
+body count and a gap count are different measurements, and **the one the report
+used to print could not have shown a 75% reduction.** *An instrument that cannot
+register the improvement you just made is the same defect as one that cannot
+register the regression — it is only noticed less.*
+
+Gate: quick GREEN with the canary running on every commit; `test-wasm32` **265
+logical commands, 0 failures.**
