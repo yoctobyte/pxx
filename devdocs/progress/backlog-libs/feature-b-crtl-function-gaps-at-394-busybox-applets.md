@@ -7,7 +7,7 @@ type: feature
 status: open
 created: 2026-09-02
 found-by: frankD
-summary: "NINE distinct undeclared-function refusals across nine busybox TUs at the 394-applet scope, each stopping one applet dead: acct, mlock, scandir, ether_hostton, IN_MULTICAST, pause, nice, sched_getscheduler, sigisemptyset -- PLUS the `loff_t` typedef, which accounts for TWO more refusals on its own (flash_eraseall.c and nandwrite.c) and so is the whole remainder together with the __BEGIN_DECLS group. None is a compiler defect -- every one is a crtl surface gap, small and independent, so this is a checklist rather than a design question. CORRECTED 2026-09-04 (frankC), TWICE, both from the same probe: nandwrite.c was listed as a missing `an MTD ioctl constant` and is not -- MEMGETBADBLOCK IS defined (mtd-abi.h:152) and is argument 2, while the diagnostic named argument THREE, `&offs`, whose declaration `loff_t offs;` never parsed; and flash_eraseall.c was filed as a compiler lowering gap and is the same typedef. Prepending `typedef long long loff_t;` alone builds BOTH (500160B and 496704B objects, controls refuse), so ten items are nine and one line clears two refusals. Re-measured at binary 75c874f301fb77c2 / HEAD a8b606a3e: 507 of 521, the same fourteen. **x86-64 ONLY** -- the host-header fallback is native-only, so i386 refuses more and these rows close per-target, not once."
+summary: "**THE loff_t ITEM IS LANDED (`0e439aaf5`) -- NINE FUNCTIONS REMAIN.** Nine distinct undeclared-function refusals across nine busybox TUs at the 394-applet scope, each stopping one applet dead: acct, mlock, scandir, ether_hostton, IN_MULTICAST, pause, nice, sched_getscheduler, sigisemptyset -- PLUS the `loff_t` typedef, which accounts for TWO more refusals on its own (flash_eraseall.c and nandwrite.c) and so is the whole remainder together with the __BEGIN_DECLS group. None is a compiler defect -- every one is a crtl surface gap, small and independent, so this is a checklist rather than a design question. CORRECTED 2026-09-04 (frankC), TWICE, both from the same probe: nandwrite.c was listed as a missing `an MTD ioctl constant` and is not -- MEMGETBADBLOCK IS defined (mtd-abi.h:152) and is argument 2, while the diagnostic named argument THREE, `&offs`, whose declaration `loff_t offs;` never parsed; and flash_eraseall.c was filed as a compiler lowering gap and is the same typedef. Prepending `typedef long long loff_t;` alone builds BOTH (500160B and 496704B objects, controls refuse), so ten items are nine and one line clears two refusals. Re-measured at binary 75c874f301fb77c2 / HEAD a8b606a3e: 507 of 521, the same fourteen. **x86-64 ONLY** -- the host-header fallback is native-only, so i386 refuses more and these rows close per-target, not once."
 ---
 
 # The list, with the file that wants each
@@ -133,3 +133,31 @@ or define it in terms of it, rather than picking a width at the new site.
 
 Not fixed here: `lib/crtl` is B's lane and this was found from C. Filed rather
 than fixed on frankuser's explicit routing.
+
+## LANDED 2026-09-04: the loff_t item, with its per-target rows (frankD, `0e439aaf5`)
+
+`typedef long long loff_t;` in `lib/crtl/include/sys/types.h`. Measured on the
+real busybox TUs at binary sha256 `08f25ff41d20`, not on the reduction:
+
+| target | `flash_eraseall.c` | `nandwrite.c` |
+| --- | --- | --- |
+| x86-64 | **compiles** (30 objects linked, no refusals) | **compiles** |
+| i386 | still refuses — `linux/jffs2.h` not found | **compiles** |
+
+**This is the (TU, target) claim measured rather than predicted.** One typedef
+clears two TUs on x86-64 and one on i386, and `flash_eraseall` on i386 has a
+second, independent blocker that belongs to
+`bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS`. Closing this item on the
+x86-64 row alone would have closed it green with that blocker untouched.
+
+`long long`, never `long` or `off_t`: MEMGETBADBLOCK carries the width in its
+ioctl NUMBER via `_IOW`, so a narrower spelling compiles everywhere and issues
+a different request on every ILP32 target. Asserted as a RELATION in row 16 of
+`test/c_crtl_mtd_timex_kd_caps.c` (`sizeof(loff_t) == sizeof(long long)`), so it
+carries no per-target constant; all 16 rows are byte-identical to
+`gcc -D_GNU_SOURCE`.
+
+One oracle note for whoever diffs this next: **glibc gates `loff_t` behind
+`__USE_MISC`**, so a plain `gcc` build cannot see it and the row needs
+`-D_GNU_SOURCE`. crtl defines it unconditionally — the accept-more direction,
+and unobservable to a program that does not use the type.
