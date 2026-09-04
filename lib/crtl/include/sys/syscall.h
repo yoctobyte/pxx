@@ -8,11 +8,39 @@
  * else. x86-64 and i386 come from asm/unistd_{64,32}.h; aarch64 and riscv32
  * share asm-generic/unistd.h, which is their real table.
  *
- * ARM32 AND XTENSA GET NOTHING, DELIBERATELY. No header on this box gives
- * either table, and a guessed number is worse than a missing one: a program
- * naming SYS_ioprio_get on arm32 gets a compile error saying so, which is the
- * honest answer, rather than a call to whatever number 30 happens to mean
- * there. Whoever adds a cross runner for those targets adds the table with it.
+ * ARM32 AND XTENSA NOW HAVE TABLES, AND THE PARAGRAPH THAT USED TO SIT HERE
+ * IS WORTH KEEPING AS THE REASON THEY DO. It read: "ARM32 AND XTENSA GET
+ * NOTHING, DELIBERATELY. No header on this box gives either table, and a
+ * guessed number is worse than a missing one: a program naming SYS_ioprio_get
+ * on arm32 gets a compile error saying so, which is the honest answer, rather
+ * than a call to whatever number 30 happens to mean there. Whoever adds a
+ * cross runner for those targets adds the table with it."
+ *
+ * Every word of that is still the rule; what changed is that the numbers are
+ * no longer guessed. tools/qemu_syscall_map.sh sweeps a range under
+ * qemu -strace and writes devdocs/dev/syscall-maps/<arch>.txt, and
+ * tools/gen_crtl_syscalls.py emits these two arms from it. THAT MAKES THEM AN
+ * ORACLE ABOUT QEMU AND NOT ABOUT A KERNEL ON REAL HARDWARE -- which is the
+ * whole population that exercises them here, and is stamped into each block so
+ * a number taken out of one carries the caveat with it.
+ *
+ * THE OTHER FOUR ARMS ARE NOW CROSS-CHECKED AGAINST THAT SECOND INSTRUMENT.
+ * `tools/gen_crtl_syscalls.py i386 aarch64 riscv32' diffs the header against
+ * the sweep and reports: i386 395/395, aarch64 277/277, riscv32 242 agreeing
+ * with nine EXPECTED divergences. A kernel header and a running emulator fail
+ * in completely different ways, so their agreeing is corroboration in a way
+ * two readings of either alone can never be.
+ *
+ * THE NINE, AND THEY ARE A TRAP IN THE NAME RATHER THAN THE NUMBER. On the
+ * asm-generic pair the header spells the __NR3264_ SLOT name, because that is
+ * what asm-generic/unistd.h spells. On aarch64 the slot holds what the name
+ * says. ON riscv32 IT HOLDS THE 64-BIT-OFFSET VARIANT: 25 is fcntl64, 43
+ * statfs64, 44 fstatfs64, 45 truncate64, 46 ftruncate64, 62 llseek, 71
+ * sendfile64, 222 mmap2, 223 fadvise64_64. The NUMBER is right in both cases;
+ * llseek and mmap2 simply do not take the arguments lseek and mmap take --
+ * mmap2's offset is in PAGES -- so writing the obvious call against the name
+ * gets a wrong-shaped one that still runs. src/sys/statfs.c already carries a
+ * riscv32 arm for exactly this. The rest are unused by crtl today.
  *
  * The numbers are the KERNEL'S, not this runtime's. Everything crtl itself
  * needs goes through a named PAL entry; these exist so a program can reach a
@@ -2483,11 +2511,11 @@
 #elif defined(__arm__)
 /* arm32 EABI. NOT from a kernel header -- there is none on this box for this
    target -- but MEASURED, by tools/qemu_syscall_map.sh, and emitted here by
-   tools/gen_crtl_arm32_syscalls.py from devdocs/dev/syscall-maps/arm32.txt.
+   tools/gen_crtl_syscalls.py from devdocs/dev/syscall-maps/arm32.txt.
    Do not hand-edit: regenerate.
 
    IT IS AN ORACLE ABOUT QEMU, not about a kernel on real hardware. Every
-   arm32 test in this tree runs under qemu-arm, so these are right for the
+   arm32 test in this tree runs under qemu, so these are right for the
    whole population that exercises them; a first run on hardware is where
    they would be falsified. Carry that sentence with any number taken out
    of here -- 'measured' on its own overstates it.
@@ -2497,9 +2525,19 @@
    error -- which is the right answer, and the same one this header gave for
    arm32 before it had any table at all.
 
-   range: 0..460   date: 2026-09-04T14:32:28Z
-   compiler: 0476702436f1358a  commit: 5fa3e0705f90
+   range: 0..470   date: 2026-09-04T14:58:31Z
+   compiler: 4aa6ad7fe1fff59e  commit: d3ec20727263
  */
+
+/* ASSIGNED NUMBERS THIS INSTRUMENT COULD NOT NAME. They are listed rather
+   than dropped: a dropped row leaves a SYS_* absent for a reason nobody
+   can see, and a consumer then takes its ENOSYS arm silently. ?noreturn
+   did not come back (it blocked, or does not return by design); ?unnamed
+   returned and qemu printed no name; ?silent returned and qemu printed no
+   line at all. Look one up in the kernel's own table, not here.
+      90    ?unnamed
+ */
+
 # define __NR_restart_syscall              0
 # define __NR_exit                         1
 # define __NR_fork                         2
@@ -3240,8 +3278,699 @@
 # define SYS_pidfd_getfd                   __NR_pidfd_getfd
 # define SYS_faccessat2                    __NR_faccessat2
 #else
-/* xtensa: see the note at the top of this file. Naming any SYS_* here
-   is a compile error, which is the point. */
+/* xtensa-linux. NOT from a kernel header -- there is none on this box for this
+   target -- but MEASURED, by tools/qemu_syscall_map.sh, and emitted here by
+   tools/gen_crtl_syscalls.py from devdocs/dev/syscall-maps/xtensa.txt.
+   Do not hand-edit: regenerate.
+
+   IT IS AN ORACLE ABOUT QEMU, not about a kernel on real hardware. Every
+   xtensa test in this tree runs under qemu, so these are right for the
+   whole population that exercises them; a first run on hardware is where
+   they would be falsified. Carry that sentence with any number taken out
+   of here -- 'measured' on its own overstates it.
+
+   THE TABLE IS PARTIAL, DELIBERATELY. It holds what the sweep established.
+   A number it never saw is absent, and naming its SYS_* is still a compile
+   error -- which is the right answer, and the same one this header gave for
+   xtensa before it had any table at all.
+
+   NOTHING CAN EXERCISE THIS TABLE TODAY, AND THAT IS WHY IT SAYS SO HERE.
+   pxx cannot build a C program for xtensa at all -- cparser.inc:11666
+   answers `C program entry stub not implemented for this target yet',
+   with or without --platform=posix -- and `--emit-obj --target=xtensa'
+   on a C source dies earlier still, in the backend, on crtl's own
+   ctype.c: `call0 target 56674 is not 4-aligned'. So every number below
+   is CORRECT BY THE SAME METHOD AS THE arm32 ARM AND VERIFIED BY NONE OF
+   THE SAME EVIDENCE: arm32's was confirmed by running the ten-row crtl
+   census under qemu-arm and matching i386 row for row, and that census
+   cannot be built for xtensa. Do not read the presence of this table as
+   the target working. Whoever lands the entry stub should run
+   test/c_crtl_syscall_guarded_bodies.c against i386 in the same commit;
+   that is the check this arm is waiting for.
+
+   range: 0..470   date: 2026-09-04T15:07:05Z
+   compiler: aaf09343d1cb7fd3  commit: d3ec20727263
+ */
+
+# define __NR_open                         8
+# define __NR_close                        9
+# define __NR_dup                          10
+# define __NR_dup2                         11
+# define __NR_read                         12
+# define __NR_write                        13
+# define __NR_select                       14
+# define __NR_lseek                        15
+# define __NR_poll                         16
+# define __NR__llseek                      17
+# define __NR_epoll_wait                   18
+# define __NR_epoll_ctl                    19
+# define __NR_epoll_create                 20
+# define __NR_creat                        21
+# define __NR_truncate                     22
+# define __NR_ftruncate                    23
+# define __NR_readv                        24
+# define __NR_writev                       25
+# define __NR_fsync                        26
+# define __NR_fdatasync                    27
+# define __NR_truncate64                   28
+# define __NR_ftruncate64                  29
+# define __NR_pread64                      30
+# define __NR_pwrite64                     31
+# define __NR_link                         32
+# define __NR_rename                       33
+# define __NR_symlink                      34
+# define __NR_readlink                     35
+# define __NR_mknod                        36
+# define __NR_pipe                         37
+# define __NR_unlink                       38
+# define __NR_rmdir                        39
+# define __NR_mkdir                        40
+# define __NR_chdir                        41
+# define __NR_fchdir                       42
+# define __NR_getcwd                       43
+# define __NR_chmod                        44
+# define __NR_chown                        45
+# define __NR_stat                         46
+# define __NR_stat64                       47
+# define __NR_lchown                       48
+# define __NR_lstat                        49
+# define __NR_lstat64                      50
+# define __NR_fchmod                       52
+# define __NR_fchown                       53
+# define __NR_fstat                        54
+# define __NR_fstat64                      55
+# define __NR_flock                        56
+# define __NR_access                       57
+# define __NR_umask                        58
+# define __NR_getdents                     59
+# define __NR_getdents64                   60
+# define __NR_fcntl64                      61
+# define __NR_fallocate                    62
+# define __NR_fadvise64_64                 63
+# define __NR_utime                        64
+# define __NR_utimes                       65
+# define __NR_ioctl                        66
+# define __NR_fcntl                        67
+# define __NR_setxattr                     68
+# define __NR_getxattr                     69
+# define __NR_listxattr                    70
+# define __NR_removexattr                  71
+# define __NR_lsetxattr                    72
+# define __NR_lgetxattr                    73
+# define __NR_llistxattr                   74
+# define __NR_lremovexattr                 75
+# define __NR_fsetxattr                    76
+# define __NR_fgetxattr                    77
+# define __NR_flistxattr                   78
+# define __NR_fremovexattr                 79
+# define __NR_mmap2                        80
+# define __NR_munmap                       81
+# define __NR_mprotect                     82
+# define __NR_brk                          83
+# define __NR_mlock                        84
+# define __NR_munlock                      85
+# define __NR_mlockall                     86
+# define __NR_munlockall                   87
+# define __NR_mremap                       88
+# define __NR_msync                        89
+# define __NR_mincore                      90
+# define __NR_madvise                      91
+# define __NR_shmget                       92
+# define __NR_shmat                        93
+# define __NR_shmctl                       94
+# define __NR_shmdt                        95
+# define __NR_socket                       96
+# define __NR_setsockopt                   97
+# define __NR_getsockopt                   98
+# define __NR_shutdown                     99
+# define __NR_bind                         100
+# define __NR_connect                      101
+# define __NR_listen                       102
+# define __NR_accept                       103
+# define __NR_getsockname                  104
+# define __NR_getpeername                  105
+# define __NR_sendmsg                      106
+# define __NR_recvmsg                      107
+# define __NR_send                         108
+# define __NR_recv                         109
+# define __NR_sendto                       110
+# define __NR_recvfrom                     111
+# define __NR_socketpair                   112
+# define __NR_sendfile                     113
+# define __NR_sendfile64                   114
+# define __NR_sendmmsg                     115
+# define __NR_clone                        116
+# define __NR_execve                       117
+# define __NR_exit                         118
+# define __NR_exit_group                   119
+# define __NR_getpid                       120
+# define __NR_wait4                        121
+# define __NR_waitid                       122
+# define __NR_kill                         123
+# define __NR_tkill                        124
+# define __NR_tgkill                       125
+# define __NR_set_tid_address              126
+# define __NR_gettid                       127
+# define __NR_setsid                       128
+# define __NR_getsid                       129
+# define __NR_prctl                        130
+# define __NR_personality                  131
+# define __NR_getpriority                  132
+# define __NR_setpriority                  133
+# define __NR_setitimer                    134
+# define __NR_getitimer                    135
+# define __NR_setuid                       136
+# define __NR_getuid                       137
+# define __NR_setgid                       138
+# define __NR_getgid                       139
+# define __NR_geteuid                      140
+# define __NR_getegid                      141
+# define __NR_setreuid                     142
+# define __NR_setregid                     143
+# define __NR_setresuid                    144
+# define __NR_getresuid                    145
+# define __NR_setresgid                    146
+# define __NR_getresgid                    147
+# define __NR_setpgid                      148
+# define __NR_getpgid                      149
+# define __NR_getppid                      150
+# define __NR_getpgrp                      151
+# define __NR_times                        154
+# define __NR_acct                         155
+# define __NR_sched_setaffinity            156
+# define __NR_sched_getaffinity            157
+# define __NR_capget                       158
+# define __NR_capset                       159
+# define __NR_ptrace                       160
+# define __NR_semtimedop                   161
+# define __NR_semget                       162
+# define __NR_semop                        163
+# define __NR_semctl                       164
+# define __NR_msgget                       166
+# define __NR_msgsnd                       167
+# define __NR_msgrcv                       168
+# define __NR_msgctl                       169
+# define __NR_umount2                      171
+# define __NR_mount                        172
+# define __NR_swapon                       173
+# define __NR_chroot                       174
+# define __NR_pivot_root                   175
+# define __NR_umount                       176
+# define __NR_swapoff                      177
+# define __NR_sync                         178
+# define __NR_syncfs                       179
+# define __NR_setfsuid                     180
+# define __NR_setfsgid                     181
+# define __NR_sysfs                        182
+# define __NR_ustat                        183
+# define __NR_statfs                       184
+# define __NR_fstatfs                      185
+# define __NR_statfs64                     186
+# define __NR_fstatfs64                    187
+# define __NR_setrlimit                    188
+# define __NR_getrlimit                    189
+# define __NR_getrusage                    190
+# define __NR_futex                        191
+# define __NR_gettimeofday                 192
+# define __NR_settimeofday                 193
+# define __NR_adjtimex                     194
+# define __NR_nanosleep                    195
+# define __NR_getgroups                    196
+# define __NR_setgroups                    197
+# define __NR_sethostname                  198
+# define __NR_setdomainname                199
+# define __NR_syslog                       200
+# define __NR_vhangup                      201
+# define __NR_uselib                       202
+# define __NR_reboot                       203
+# define __NR_quotactl                     204
+# define __NR_nfsservctl                   205
+# define __NR__sysctl                      206
+# define __NR_bdflush                      207
+# define __NR_uname                        208
+# define __NR_sysinfo                      209
+# define __NR_init_module                  210
+# define __NR_delete_module                211
+# define __NR_sched_setparam               212
+# define __NR_sched_getparam               213
+# define __NR_sched_setscheduler           214
+# define __NR_sched_getscheduler           215
+# define __NR_sched_get_priority_max       216
+# define __NR_sched_get_priority_min       217
+# define __NR_sched_rr_get_interval        218
+# define __NR_sched_yield                  219
+# define __NR_restart_syscall              223
+# define __NR_sigaltstack                  224
+# define __NR_rt_sigreturn                 225
+# define __NR_rt_sigaction                 226
+# define __NR_rt_sigprocmask               227
+# define __NR_rt_sigpending                228
+# define __NR_rt_sigtimedwait              229
+# define __NR_rt_sigqueueinfo              230
+# define __NR_rt_sigsuspend                231
+# define __NR_mq_open                      232
+# define __NR_mq_unlink                    233
+# define __NR_mq_timedsend                 234
+# define __NR_mq_timedreceive              235
+# define __NR_mq_notify                    236
+# define __NR_mq_getsetattr                237
+# define __NR_io_setup                     239
+# define __NR_io_destroy                   240
+# define __NR_io_submit                    241
+# define __NR_io_getevents                 242
+# define __NR_io_cancel                    243
+# define __NR_clock_settime                244
+# define __NR_clock_gettime                245
+# define __NR_clock_getres                 246
+# define __NR_clock_nanosleep              247
+# define __NR_timer_create                 248
+# define __NR_timer_delete                 249
+# define __NR_timer_settime                250
+# define __NR_timer_gettime                251
+# define __NR_timer_getoverrun             252
+# define __NR_lookup_dcookie               254
+# define __NR_add_key                      256
+# define __NR_request_key                  257
+# define __NR_keyctl                       258
+# define __NR_readahead                    260
+# define __NR_remap_file_pages             261
+# define __NR_migrate_pages                262
+# define __NR_mbind                        263
+# define __NR_get_mempolicy                264
+# define __NR_set_mempolicy                265
+# define __NR_unshare                      266
+# define __NR_move_pages                   267
+# define __NR_splice                       268
+# define __NR_tee                          269
+# define __NR_vmsplice                     270
+# define __NR_pselect6                     272
+# define __NR_ppoll                        273
+# define __NR_epoll_pwait                  274
+# define __NR_epoll_create1                275
+# define __NR_inotify_init                 276
+# define __NR_inotify_add_watch            277
+# define __NR_inotify_rm_watch             278
+# define __NR_inotify_init1                279
+# define __NR_getcpu                       280
+# define __NR_kexec_load                   281
+# define __NR_ioprio_set                   282
+# define __NR_ioprio_get                   283
+# define __NR_set_robust_list              284
+# define __NR_get_robust_list              285
+# define __NR_openat                       288
+# define __NR_mkdirat                      289
+# define __NR_mknodat                      290
+# define __NR_unlinkat                     291
+# define __NR_renameat                     292
+# define __NR_linkat                       293
+# define __NR_symlinkat                    294
+# define __NR_readlinkat                   295
+# define __NR_utimensat                    296
+# define __NR_fchownat                     297
+# define __NR_futimesat                    298
+# define __NR_fstatat64                    299
+# define __NR_fchmodat                     300
+# define __NR_faccessat                    301
+# define __NR_signalfd                     304
+# define __NR_eventfd                      306
+# define __NR_recvmmsg                     307
+# define __NR_setns                        308
+# define __NR_signalfd4                    309
+# define __NR_dup3                         310
+# define __NR_pipe2                        311
+# define __NR_timerfd_create               312
+# define __NR_timerfd_settime              313
+# define __NR_timerfd_gettime              314
+# define __NR_eventfd2                     316
+# define __NR_preadv                       317
+# define __NR_pwritev                      318
+# define __NR_fanotify_init                320
+# define __NR_fanotify_mark                321
+# define __NR_process_vm_readv             322
+# define __NR_process_vm_writev            323
+# define __NR_name_to_handle_at            324
+# define __NR_sync_file_range2             326
+# define __NR_perf_event_open              327
+# define __NR_rt_tgsigqueueinfo            328
+# define __NR_clock_adjtime                329
+# define __NR_prlimit64                    330
+# define __NR_kcmp                         331
+# define __NR_finit_module                 332
+# define __NR_accept4                      333
+# define __NR_sched_setattr                334
+# define __NR_sched_getattr                335
+# define __NR_renameat2                    336
+# define __NR_seccomp                      337
+# define __NR_getrandom                    338
+# define __NR_memfd_create                 339
+# define __NR_bpf                          340
+# define __NR_execveat                     341
+# define __NR_userfaultfd                  342
+# define __NR_membarrier                   343
+# define __NR_mlock2                       344
+# define __NR_copy_file_range              345
+# define __NR_statx                        351
+# define __NR_rseq                         352
+# define __NR_clock_gettime64              403
+# define __NR_clock_getres_time64          406
+# define __NR_timer_settime64              409
+# define __NR_futex_time64                 422
+# define __NR_pidfd_send_signal            424
+# define __NR_pidfd_open                   434
+# define __NR_close_range                  436
+# define __NR_openat2                      437
+# define __NR_pidfd_getfd                  438
+# define __NR_faccessat2                   439
+
+# define SYS_open                          __NR_open
+# define SYS_close                         __NR_close
+# define SYS_dup                           __NR_dup
+# define SYS_dup2                          __NR_dup2
+# define SYS_read                          __NR_read
+# define SYS_write                         __NR_write
+# define SYS_select                        __NR_select
+# define SYS_lseek                         __NR_lseek
+# define SYS_poll                          __NR_poll
+# define SYS__llseek                       __NR__llseek
+# define SYS_epoll_wait                    __NR_epoll_wait
+# define SYS_epoll_ctl                     __NR_epoll_ctl
+# define SYS_epoll_create                  __NR_epoll_create
+# define SYS_creat                         __NR_creat
+# define SYS_truncate                      __NR_truncate
+# define SYS_ftruncate                     __NR_ftruncate
+# define SYS_readv                         __NR_readv
+# define SYS_writev                        __NR_writev
+# define SYS_fsync                         __NR_fsync
+# define SYS_fdatasync                     __NR_fdatasync
+# define SYS_truncate64                    __NR_truncate64
+# define SYS_ftruncate64                   __NR_ftruncate64
+# define SYS_pread64                       __NR_pread64
+# define SYS_pwrite64                      __NR_pwrite64
+# define SYS_link                          __NR_link
+# define SYS_rename                        __NR_rename
+# define SYS_symlink                       __NR_symlink
+# define SYS_readlink                      __NR_readlink
+# define SYS_mknod                         __NR_mknod
+# define SYS_pipe                          __NR_pipe
+# define SYS_unlink                        __NR_unlink
+# define SYS_rmdir                         __NR_rmdir
+# define SYS_mkdir                         __NR_mkdir
+# define SYS_chdir                         __NR_chdir
+# define SYS_fchdir                        __NR_fchdir
+# define SYS_getcwd                        __NR_getcwd
+# define SYS_chmod                         __NR_chmod
+# define SYS_chown                         __NR_chown
+# define SYS_stat                          __NR_stat
+# define SYS_stat64                        __NR_stat64
+# define SYS_lchown                        __NR_lchown
+# define SYS_lstat                         __NR_lstat
+# define SYS_lstat64                       __NR_lstat64
+# define SYS_fchmod                        __NR_fchmod
+# define SYS_fchown                        __NR_fchown
+# define SYS_fstat                         __NR_fstat
+# define SYS_fstat64                       __NR_fstat64
+# define SYS_flock                         __NR_flock
+# define SYS_access                        __NR_access
+# define SYS_umask                         __NR_umask
+# define SYS_getdents                      __NR_getdents
+# define SYS_getdents64                    __NR_getdents64
+# define SYS_fcntl64                       __NR_fcntl64
+# define SYS_fallocate                     __NR_fallocate
+# define SYS_fadvise64_64                  __NR_fadvise64_64
+# define SYS_utime                         __NR_utime
+# define SYS_utimes                        __NR_utimes
+# define SYS_ioctl                         __NR_ioctl
+# define SYS_fcntl                         __NR_fcntl
+# define SYS_setxattr                      __NR_setxattr
+# define SYS_getxattr                      __NR_getxattr
+# define SYS_listxattr                     __NR_listxattr
+# define SYS_removexattr                   __NR_removexattr
+# define SYS_lsetxattr                     __NR_lsetxattr
+# define SYS_lgetxattr                     __NR_lgetxattr
+# define SYS_llistxattr                    __NR_llistxattr
+# define SYS_lremovexattr                  __NR_lremovexattr
+# define SYS_fsetxattr                     __NR_fsetxattr
+# define SYS_fgetxattr                     __NR_fgetxattr
+# define SYS_flistxattr                    __NR_flistxattr
+# define SYS_fremovexattr                  __NR_fremovexattr
+# define SYS_mmap2                         __NR_mmap2
+# define SYS_munmap                        __NR_munmap
+# define SYS_mprotect                      __NR_mprotect
+# define SYS_brk                           __NR_brk
+# define SYS_mlock                         __NR_mlock
+# define SYS_munlock                       __NR_munlock
+# define SYS_mlockall                      __NR_mlockall
+# define SYS_munlockall                    __NR_munlockall
+# define SYS_mremap                        __NR_mremap
+# define SYS_msync                         __NR_msync
+# define SYS_mincore                       __NR_mincore
+# define SYS_madvise                       __NR_madvise
+# define SYS_shmget                        __NR_shmget
+# define SYS_shmat                         __NR_shmat
+# define SYS_shmctl                        __NR_shmctl
+# define SYS_shmdt                         __NR_shmdt
+# define SYS_socket                        __NR_socket
+# define SYS_setsockopt                    __NR_setsockopt
+# define SYS_getsockopt                    __NR_getsockopt
+# define SYS_shutdown                      __NR_shutdown
+# define SYS_bind                          __NR_bind
+# define SYS_connect                       __NR_connect
+# define SYS_listen                        __NR_listen
+# define SYS_accept                        __NR_accept
+# define SYS_getsockname                   __NR_getsockname
+# define SYS_getpeername                   __NR_getpeername
+# define SYS_sendmsg                       __NR_sendmsg
+# define SYS_recvmsg                       __NR_recvmsg
+# define SYS_send                          __NR_send
+# define SYS_recv                          __NR_recv
+# define SYS_sendto                        __NR_sendto
+# define SYS_recvfrom                      __NR_recvfrom
+# define SYS_socketpair                    __NR_socketpair
+# define SYS_sendfile                      __NR_sendfile
+# define SYS_sendfile64                    __NR_sendfile64
+# define SYS_sendmmsg                      __NR_sendmmsg
+# define SYS_clone                         __NR_clone
+# define SYS_execve                        __NR_execve
+# define SYS_exit                          __NR_exit
+# define SYS_exit_group                    __NR_exit_group
+# define SYS_getpid                        __NR_getpid
+# define SYS_wait4                         __NR_wait4
+# define SYS_waitid                        __NR_waitid
+# define SYS_kill                          __NR_kill
+# define SYS_tkill                         __NR_tkill
+# define SYS_tgkill                        __NR_tgkill
+# define SYS_set_tid_address               __NR_set_tid_address
+# define SYS_gettid                        __NR_gettid
+# define SYS_setsid                        __NR_setsid
+# define SYS_getsid                        __NR_getsid
+# define SYS_prctl                         __NR_prctl
+# define SYS_personality                   __NR_personality
+# define SYS_getpriority                   __NR_getpriority
+# define SYS_setpriority                   __NR_setpriority
+# define SYS_setitimer                     __NR_setitimer
+# define SYS_getitimer                     __NR_getitimer
+# define SYS_setuid                        __NR_setuid
+# define SYS_getuid                        __NR_getuid
+# define SYS_setgid                        __NR_setgid
+# define SYS_getgid                        __NR_getgid
+# define SYS_geteuid                       __NR_geteuid
+# define SYS_getegid                       __NR_getegid
+# define SYS_setreuid                      __NR_setreuid
+# define SYS_setregid                      __NR_setregid
+# define SYS_setresuid                     __NR_setresuid
+# define SYS_getresuid                     __NR_getresuid
+# define SYS_setresgid                     __NR_setresgid
+# define SYS_getresgid                     __NR_getresgid
+# define SYS_setpgid                       __NR_setpgid
+# define SYS_getpgid                       __NR_getpgid
+# define SYS_getppid                       __NR_getppid
+# define SYS_getpgrp                       __NR_getpgrp
+# define SYS_times                         __NR_times
+# define SYS_acct                          __NR_acct
+# define SYS_sched_setaffinity             __NR_sched_setaffinity
+# define SYS_sched_getaffinity             __NR_sched_getaffinity
+# define SYS_capget                        __NR_capget
+# define SYS_capset                        __NR_capset
+# define SYS_ptrace                        __NR_ptrace
+# define SYS_semtimedop                    __NR_semtimedop
+# define SYS_semget                        __NR_semget
+# define SYS_semop                         __NR_semop
+# define SYS_semctl                        __NR_semctl
+# define SYS_msgget                        __NR_msgget
+# define SYS_msgsnd                        __NR_msgsnd
+# define SYS_msgrcv                        __NR_msgrcv
+# define SYS_msgctl                        __NR_msgctl
+# define SYS_umount2                       __NR_umount2
+# define SYS_mount                         __NR_mount
+# define SYS_swapon                        __NR_swapon
+# define SYS_chroot                        __NR_chroot
+# define SYS_pivot_root                    __NR_pivot_root
+# define SYS_umount                        __NR_umount
+# define SYS_swapoff                       __NR_swapoff
+# define SYS_sync                          __NR_sync
+# define SYS_syncfs                        __NR_syncfs
+# define SYS_setfsuid                      __NR_setfsuid
+# define SYS_setfsgid                      __NR_setfsgid
+# define SYS_sysfs                         __NR_sysfs
+# define SYS_ustat                         __NR_ustat
+# define SYS_statfs                        __NR_statfs
+# define SYS_fstatfs                       __NR_fstatfs
+# define SYS_statfs64                      __NR_statfs64
+# define SYS_fstatfs64                     __NR_fstatfs64
+# define SYS_setrlimit                     __NR_setrlimit
+# define SYS_getrlimit                     __NR_getrlimit
+# define SYS_getrusage                     __NR_getrusage
+# define SYS_futex                         __NR_futex
+# define SYS_gettimeofday                  __NR_gettimeofday
+# define SYS_settimeofday                  __NR_settimeofday
+# define SYS_adjtimex                      __NR_adjtimex
+# define SYS_nanosleep                     __NR_nanosleep
+# define SYS_getgroups                     __NR_getgroups
+# define SYS_setgroups                     __NR_setgroups
+# define SYS_sethostname                   __NR_sethostname
+# define SYS_setdomainname                 __NR_setdomainname
+# define SYS_syslog                        __NR_syslog
+# define SYS_vhangup                       __NR_vhangup
+# define SYS_uselib                        __NR_uselib
+# define SYS_reboot                        __NR_reboot
+# define SYS_quotactl                      __NR_quotactl
+# define SYS_nfsservctl                    __NR_nfsservctl
+# define SYS__sysctl                       __NR__sysctl
+# define SYS_bdflush                       __NR_bdflush
+# define SYS_uname                         __NR_uname
+# define SYS_sysinfo                       __NR_sysinfo
+# define SYS_init_module                   __NR_init_module
+# define SYS_delete_module                 __NR_delete_module
+# define SYS_sched_setparam                __NR_sched_setparam
+# define SYS_sched_getparam                __NR_sched_getparam
+# define SYS_sched_setscheduler            __NR_sched_setscheduler
+# define SYS_sched_getscheduler            __NR_sched_getscheduler
+# define SYS_sched_get_priority_max        __NR_sched_get_priority_max
+# define SYS_sched_get_priority_min        __NR_sched_get_priority_min
+# define SYS_sched_rr_get_interval         __NR_sched_rr_get_interval
+# define SYS_sched_yield                   __NR_sched_yield
+# define SYS_restart_syscall               __NR_restart_syscall
+# define SYS_sigaltstack                   __NR_sigaltstack
+# define SYS_rt_sigreturn                  __NR_rt_sigreturn
+# define SYS_rt_sigaction                  __NR_rt_sigaction
+# define SYS_rt_sigprocmask                __NR_rt_sigprocmask
+# define SYS_rt_sigpending                 __NR_rt_sigpending
+# define SYS_rt_sigtimedwait               __NR_rt_sigtimedwait
+# define SYS_rt_sigqueueinfo               __NR_rt_sigqueueinfo
+# define SYS_rt_sigsuspend                 __NR_rt_sigsuspend
+# define SYS_mq_open                       __NR_mq_open
+# define SYS_mq_unlink                     __NR_mq_unlink
+# define SYS_mq_timedsend                  __NR_mq_timedsend
+# define SYS_mq_timedreceive               __NR_mq_timedreceive
+# define SYS_mq_notify                     __NR_mq_notify
+# define SYS_mq_getsetattr                 __NR_mq_getsetattr
+# define SYS_io_setup                      __NR_io_setup
+# define SYS_io_destroy                    __NR_io_destroy
+# define SYS_io_submit                     __NR_io_submit
+# define SYS_io_getevents                  __NR_io_getevents
+# define SYS_io_cancel                     __NR_io_cancel
+# define SYS_clock_settime                 __NR_clock_settime
+# define SYS_clock_gettime                 __NR_clock_gettime
+# define SYS_clock_getres                  __NR_clock_getres
+# define SYS_clock_nanosleep               __NR_clock_nanosleep
+# define SYS_timer_create                  __NR_timer_create
+# define SYS_timer_delete                  __NR_timer_delete
+# define SYS_timer_settime                 __NR_timer_settime
+# define SYS_timer_gettime                 __NR_timer_gettime
+# define SYS_timer_getoverrun              __NR_timer_getoverrun
+# define SYS_lookup_dcookie                __NR_lookup_dcookie
+# define SYS_add_key                       __NR_add_key
+# define SYS_request_key                   __NR_request_key
+# define SYS_keyctl                        __NR_keyctl
+# define SYS_readahead                     __NR_readahead
+# define SYS_remap_file_pages              __NR_remap_file_pages
+# define SYS_migrate_pages                 __NR_migrate_pages
+# define SYS_mbind                         __NR_mbind
+# define SYS_get_mempolicy                 __NR_get_mempolicy
+# define SYS_set_mempolicy                 __NR_set_mempolicy
+# define SYS_unshare                       __NR_unshare
+# define SYS_move_pages                    __NR_move_pages
+# define SYS_splice                        __NR_splice
+# define SYS_tee                           __NR_tee
+# define SYS_vmsplice                      __NR_vmsplice
+# define SYS_pselect6                      __NR_pselect6
+# define SYS_ppoll                         __NR_ppoll
+# define SYS_epoll_pwait                   __NR_epoll_pwait
+# define SYS_epoll_create1                 __NR_epoll_create1
+# define SYS_inotify_init                  __NR_inotify_init
+# define SYS_inotify_add_watch             __NR_inotify_add_watch
+# define SYS_inotify_rm_watch              __NR_inotify_rm_watch
+# define SYS_inotify_init1                 __NR_inotify_init1
+# define SYS_getcpu                        __NR_getcpu
+# define SYS_kexec_load                    __NR_kexec_load
+# define SYS_ioprio_set                    __NR_ioprio_set
+# define SYS_ioprio_get                    __NR_ioprio_get
+# define SYS_set_robust_list               __NR_set_robust_list
+# define SYS_get_robust_list               __NR_get_robust_list
+# define SYS_openat                        __NR_openat
+# define SYS_mkdirat                       __NR_mkdirat
+# define SYS_mknodat                       __NR_mknodat
+# define SYS_unlinkat                      __NR_unlinkat
+# define SYS_renameat                      __NR_renameat
+# define SYS_linkat                        __NR_linkat
+# define SYS_symlinkat                     __NR_symlinkat
+# define SYS_readlinkat                    __NR_readlinkat
+# define SYS_utimensat                     __NR_utimensat
+# define SYS_fchownat                      __NR_fchownat
+# define SYS_futimesat                     __NR_futimesat
+# define SYS_fstatat64                     __NR_fstatat64
+# define SYS_fchmodat                      __NR_fchmodat
+# define SYS_faccessat                     __NR_faccessat
+# define SYS_signalfd                      __NR_signalfd
+# define SYS_eventfd                       __NR_eventfd
+# define SYS_recvmmsg                      __NR_recvmmsg
+# define SYS_setns                         __NR_setns
+# define SYS_signalfd4                     __NR_signalfd4
+# define SYS_dup3                          __NR_dup3
+# define SYS_pipe2                         __NR_pipe2
+# define SYS_timerfd_create                __NR_timerfd_create
+# define SYS_timerfd_settime               __NR_timerfd_settime
+# define SYS_timerfd_gettime               __NR_timerfd_gettime
+# define SYS_eventfd2                      __NR_eventfd2
+# define SYS_preadv                        __NR_preadv
+# define SYS_pwritev                       __NR_pwritev
+# define SYS_fanotify_init                 __NR_fanotify_init
+# define SYS_fanotify_mark                 __NR_fanotify_mark
+# define SYS_process_vm_readv              __NR_process_vm_readv
+# define SYS_process_vm_writev             __NR_process_vm_writev
+# define SYS_name_to_handle_at             __NR_name_to_handle_at
+# define SYS_sync_file_range2              __NR_sync_file_range2
+# define SYS_perf_event_open               __NR_perf_event_open
+# define SYS_rt_tgsigqueueinfo             __NR_rt_tgsigqueueinfo
+# define SYS_clock_adjtime                 __NR_clock_adjtime
+# define SYS_prlimit64                     __NR_prlimit64
+# define SYS_kcmp                          __NR_kcmp
+# define SYS_finit_module                  __NR_finit_module
+# define SYS_accept4                       __NR_accept4
+# define SYS_sched_setattr                 __NR_sched_setattr
+# define SYS_sched_getattr                 __NR_sched_getattr
+# define SYS_renameat2                     __NR_renameat2
+# define SYS_seccomp                       __NR_seccomp
+# define SYS_getrandom                     __NR_getrandom
+# define SYS_memfd_create                  __NR_memfd_create
+# define SYS_bpf                           __NR_bpf
+# define SYS_execveat                      __NR_execveat
+# define SYS_userfaultfd                   __NR_userfaultfd
+# define SYS_membarrier                    __NR_membarrier
+# define SYS_mlock2                        __NR_mlock2
+# define SYS_copy_file_range               __NR_copy_file_range
+# define SYS_statx                         __NR_statx
+# define SYS_rseq                          __NR_rseq
+# define SYS_clock_gettime64               __NR_clock_gettime64
+# define SYS_clock_getres_time64           __NR_clock_getres_time64
+# define SYS_timer_settime64               __NR_timer_settime64
+# define SYS_futex_time64                  __NR_futex_time64
+# define SYS_pidfd_send_signal             __NR_pidfd_send_signal
+# define SYS_pidfd_open                    __NR_pidfd_open
+# define SYS_close_range                   __NR_close_range
+# define SYS_openat2                       __NR_openat2
+# define SYS_pidfd_getfd                   __NR_pidfd_getfd
+# define SYS_faccessat2                    __NR_faccessat2
 #endif
 
 /* The call itself is declared in <unistd.h>, as glibc declares it; a program
