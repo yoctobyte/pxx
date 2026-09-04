@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:10 unfinished:26 blocked:7 backlog:13 backlog_new:2 backlog-umbrella:7 backlog-core:128 backlog-nilpy:96 backlog-tools:13 backlog-pascal:52 backlog-decide:36 backlog-libs:18 backlog-cfront:19 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3217 rejected:74`
+`working:11 unfinished:26 blocked:7 backlog:13 backlog_new:2 backlog-umbrella:7 backlog-core:128 backlog-nilpy:96 backlog-tools:13 backlog-pascal:52 backlog-decide:36 backlog-libs:18 backlog-cfront:18 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3217 rejected:74`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,6 +13,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA
+- `feature-c-corpus-busybox-i386-the-second-architecture` [C] — owner: frankD
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
@@ -59,7 +60,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 399, ranked
+## Ready — top 30 of 398, ranked
 
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
@@ -92,4 +93,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
 
-_369 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_368 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

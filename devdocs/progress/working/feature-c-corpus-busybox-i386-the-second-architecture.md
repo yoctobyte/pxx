@@ -4,7 +4,7 @@ title: "Rung 5: busybox on i386 — the second architecture, and the 34 headers 
 track: C
 prio: 65
 type: feature
-status: open
+status: working
 created: 2026-09-02
 found-by: frankD
 owner: frankD
