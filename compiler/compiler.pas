@@ -885,6 +885,7 @@ end;
 { ===== Main ===== }
 
 var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd: Integer;
+    drStatus, drTarget, drKind: Integer; drWhy: AnsiString;   { ResolveDataRefSentinel's four outputs }
 begin
 {$ifdef FPC}
   { The exact-decimal core in exdec.inc is lib/rtl code, written for a runtime
@@ -2323,109 +2324,31 @@ begin
     if DumpRTTI then DumpRTTITables;
     EmitResources;
   end;
-  { Patch RTTIRegistryOff (-100) and ResourceTableOff (-101) relocations. A
-    sentinel with no table is dropped (the intrinsic then returns nil/0). }
+  { Resolve every negative data-ref sentinel Fixups[] carries. The eight
+    families and the order they must be tested in live in ONE place --
+    ResolveDataRefSentinel in emit.inc -- because wasm32 needs the same chain
+    for its Data[] cells and cannot use this loop at all (it has no code->data
+    relocations). A second copy of an ordering whose branches are `<=` against
+    descending bases does not fail loudly when it drifts; it resolves a PYSIG
+    sentinel as a TypeInfo request and keeps compiling.
+
+    DATAREF_DROP is the -100/-101 answer for a module with no RTTI registry or
+    no resource table: remove the fixup and the intrinsic reads nil/0. }
   i := 0;
   while i < FixCount do
   begin
-    if Fixups[i].DataOff = -100 then
+    drStatus := ResolveDataRefSentinel(Fixups[i].DataOff, drTarget, drKind, drWhy);
+    if drStatus = DATAREF_RESOLVED then
+      Fixups[i].DataOff := drTarget
+    else if drStatus = DATAREF_DROP then
     begin
-      if RTTIRegistryOff >= 0 then
-        Fixups[i].DataOff := RTTIRegistryOff
-      else
-      begin
-        for j := i to FixCount - 2 do
-          Fixups[j] := Fixups[j + 1];
-        Dec(FixCount);
-        continue;
-      end;
+      for j := i to FixCount - 2 do
+        Fixups[j] := Fixups[j + 1];
+      Dec(FixCount);
+      continue;
     end
-    else if Fixups[i].DataOff = -101 then
-    begin
-      if ResourceTableOff >= 0 then
-        Fixups[i].DataOff := ResourceTableOff
-      else
-      begin
-        for j := i to FixCount - 2 do
-          Fixups[j] := Fixups[j + 1];
-        Dec(FixCount);
-        continue;
-      end;
-    end
-    else if Fixups[i].DataOff <= -PYSIGD_DATAREF_BASE then
-    begin
-      { A NilPy def's DEFAULTS ARRAY. Before the PYSIG branch below: more
-        negative base, and that branch matches everything this one does. }
-      j := -Fixups[i].DataOff - PYSIGD_DATAREF_BASE;
-      if (j >= 0) and (j < PyDfltPendCount) and (PyDfltPendOff[j] >= 0) then
-        Fixups[i].DataOff := PyDfltPendOff[j]
-      else
-        { orphaned by a rolled-back trial parse: write it to the bit bucket. The
-          array slot stays PYSIG_DFLT_UNSET and the consumer complains, where the
-          param name is known. See PyDfltScratchOff in defs.inc. }
-        Fixups[i].DataOff := PyDfltScratchOff;
-    end
-    else if Fixups[i].DataOff <= -PYSIG_DATAREF_BASE then
-    begin
-      { A NilPy def's signature record (EmitPySignatures). Tested FIRST because
-        it is the MOST negative base -- the TypeInfo branch below matches every
-        sentinel at least as negative as its own, so it would swallow this one.
-        See the ordering notes on the branches that follow. }
-      j := -Fixups[i].DataOff - PYSIG_DATAREF_BASE;
-      if (j >= 0) and (j < ProcCount) and (ProcSigOff[j] >= 0) then
-        Fixups[i].DataOff := ProcSigOff[j]
-      else
-        { A callee that got no record -- a synthesized wrapper, or a def
-          EmitPySignatures does not recognise. Point it at the ZEROED scratch
-          record: TotN = 0, so the bridge fills nothing and behaves exactly as
-          it did before signatures existed. This was a hard Error and it FAILED
-          FOUR TESTS at once the moment a bound method crossed a module
-          boundary -- a missing signature must degrade to the old behaviour,
-          never refuse to build. }
-        Fixups[i].DataOff := PyDfltScratchOff;
-    end
-    else if Fixups[i].DataOff <= -TYPEINFO_REQ_DATAREF_BASE then
-    begin
-      { Widened TypeInfo(T) (scalar/string/class/record): resolve to the request's
-        PTypeInfo header (EmitTypeInfoHeaders). Tested BEFORE every other sentinel
-        base -- it is the most negative, and the ENUM branch below would otherwise
-        swallow it (every sentinel <= -ENUM_RTTI_DATAREF_BASE also satisfies
-        <= -TYPEINFO_REQ_DATAREF_BASE's neighbours, so order matters here exactly
-        as it does for ENUM vs CLASSREF). }
-      j := -Fixups[i].DataOff - TYPEINFO_REQ_DATAREF_BASE;
-      if (j >= 0) and (j < TypeInfoReqCount) and (TypeInfoReqOff[j] >= 0) then
-        Fixups[i].DataOff := TypeInfoReqOff[j]
-      else
-        Error('TypeInfo() of a type with no RTTI header')
-    end
-    else if Fixups[i].DataOff <= -ENUM_RTTI_DATAREF_BASE then
-    begin
-      { TypeInfo(TEnum): resolve to the enum's RTTI blob. Tested BEFORE the others because
-        the classref branch below matches every sentinel <= -CLASSREF_DATAREF_BASE. }
-      j := -Fixups[i].DataOff - ENUM_RTTI_DATAREF_BASE;
-      if (j >= 0) and (j < EnumTypeCount) and (EnumTypeRTTIOff[j] >= 0) then
-        Fixups[i].DataOff := EnumTypeRTTIOff[j]
-      else
-        Error('TypeInfo of an enum type with no RTTI');
-    end
-    else if (Fixups[i].DataOff <= -RECORD_RTTI_DATAREF_BASE) and (Fixups[i].DataOff > -SYM_RTTI_DATAREF_BASE) then
-    begin
-      j := -Fixups[i].DataOff - RECORD_RTTI_DATAREF_BASE;
-      if (j >= 0) and (j < UClsCount) and (UClsRTTIOff[j] >= 0) then
-        Fixups[i].DataOff := UClsRTTIOff[j]
-      else
-        Error('record reference to a record with no RTTI');
-    end
-
-    else if Fixups[i].DataOff <= -CLASSREF_DATAREF_BASE then
-    begin
-      { class-reference (metaclass) value: resolve to the class's RTTI blob. }
-      j := -Fixups[i].DataOff - CLASSREF_DATAREF_BASE;   { recover class index ci }
-      if (j >= 0) and (j < UClsCount) and (UClsRTTIOff[j] >= 0) then
-        Fixups[i].DataOff := UClsRTTIOff[j]
-      else
-        Error('class reference to a class with no RTTI (no published members?)');
-    end;
+    else if drStatus = DATAREF_UNRESOLVED then
+      Error(drWhy);
     Inc(i);
   end;
   { Dead-code elimination: after every emitter (RTTI included — its method

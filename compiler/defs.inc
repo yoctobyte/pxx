@@ -1582,6 +1582,28 @@ const
     bug-n-a-keyword-argument-through-a-callable-value-is-undefined }
   PYSIG_OFF_NAMES  = 40;
 
+  { ResolveDataRefSentinel's answers (emit.inc). It is the ONE decoder for the
+    families below -- compiler.pas's fixup loop and wasm32's late-cell pass both
+    ask it, rather than each carrying a copy of an ordering that is only correct
+    read top to bottom. }
+  DATAREF_NOT_SENTINEL = 0;   { off >= 0: an ordinary Data[] offset }
+  DATAREF_RESOLVED     = 1;   { the target offset is known }
+  DATAREF_DROP         = 2;   { no such table in this module; drop the fixup }
+  DATAREF_UNRESOLVED   = 3;   { a diagnostic is returned with it }
+
+  { ...and WHICH family answered, because the two callers say different things
+    about the same failure: for a record descriptor wasm32 names its customers
+    (a metaclass value, an ARC record copy) and compiler.pas names the
+    relocation. Neither wording is right for the other. }
+  DRK_NONE     = 0;
+  DRK_MODTABLE = 1;   { -100 RTTI registry, -101 resource table }
+  DRK_PYSIGD   = 2;
+  DRK_PYSIG    = 3;
+  DRK_TYPEINFO = 4;
+  DRK_ENUMRTTI = 5;
+  DRK_RECRTTI  = 6;
+  DRK_CLASSREF = 7;
+
   CLASSREF_DATAREF_BASE = 100000;
   RECORD_RTTI_DATAREF_BASE = 200000;
   SYM_RTTI_DATAREF_BASE = 300000;

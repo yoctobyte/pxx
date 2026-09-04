@@ -125,6 +125,177 @@ begin
   Inc(DataPtrFixCount);
 end;
 
+{ ===== the one decoder for a negative data-ref sentinel =====
+
+  A backend that needs the address of something EmitRTTI has not produced yet
+  emits a negative sentinel instead of an offset, and something later rewrites
+  it. There were two rewriters. compiler.pas's fixup loop resolves the eight
+  sentinel families for every register target; wasm32 cannot use it at all --
+  it has no code->data relocations, so it reaches the same addresses through a
+  Data[] cell filled by AddDataPtrFix -- and it had a resolver of its own that
+  knew exactly ONE family, the record descriptor.
+
+  Adding the other seven there would have made a second copy of an ordering
+  that is delicate for a reason the branches state: the bases are compared with
+  `<=`, so a family with a LESS negative base swallows every sentinel of a more
+  negative one, and the chain is only correct read top to bottom. A copy of
+  that goes stale silently and in one direction -- it keeps compiling, and it
+  resolves a PYSIG sentinel as a TypeInfo request.
+
+  So the chain lives here once, and both callers ask it. It reads only globals
+  that EmitRTTI / EmitPySignatures / EmitTypeInfoHeaders / EmitResources have
+  populated, so the CALLER owns the window: ask before those have run and every
+  answer is DATAREF_UNRESOLVED, which is a true statement about a wrong moment.
+
+  `kind` is returned because the two callers have different things to SAY about
+  the same failure: for a record descriptor wasm32's message names its two
+  customers (a metaclass value and an ARC record copy) and compiler.pas's names
+  the relocation. Neither wording is right for the other. }
+function ResolveDataRefSentinel(off: Integer; var target: Integer;
+                                var kind: Integer; var why: AnsiString): Integer;
+var j: Integer;
+begin
+  target := off; kind := DRK_NONE; why := '';
+  if off >= 0 then
+  begin
+    ResolveDataRefSentinel := DATAREF_NOT_SENTINEL;
+    Exit;
+  end;
+  ResolveDataRefSentinel := DATAREF_UNRESOLVED;
+
+  if off = -100 then
+  begin
+    kind := DRK_MODTABLE;
+    if RTTIRegistryOff >= 0 then
+    begin
+      target := RTTIRegistryOff;
+      ResolveDataRefSentinel := DATAREF_RESOLVED;
+    end
+    else
+      { A sentinel with no table is DROPPED, and the intrinsic then reads
+        nil/0. That is a documented answer, not a defect: a module that
+        publishes no classes has no registry. }
+      ResolveDataRefSentinel := DATAREF_DROP;
+    Exit;
+  end;
+  if off = -101 then
+  begin
+    kind := DRK_MODTABLE;
+    if ResourceTableOff >= 0 then
+    begin
+      target := ResourceTableOff;
+      ResolveDataRefSentinel := DATAREF_RESOLVED;
+    end
+    else
+      ResolveDataRefSentinel := DATAREF_DROP;
+    Exit;
+  end;
+
+  { FROM HERE THE ORDER IS THE ALGORITHM. Every test is `<=` against a base, so
+    a family listed later matches everything an earlier one does; read as a
+    chain, most negative base first, it is exact, and reordered it is silently
+    wrong. PYSIGD (700000) before PYSIG (600000) before TYPEINFO_REQ (500000)
+    before ENUM_RTTI (400000) before RECORD_RTTI (200000) before CLASSREF
+    (100000). }
+  if off <= -PYSIGD_DATAREF_BASE then
+  begin
+    kind := DRK_PYSIGD;
+    j := -off - PYSIGD_DATAREF_BASE;
+    if (j >= 0) and (j < PyDfltPendCount) and (PyDfltPendOff[j] >= 0) then
+      target := PyDfltPendOff[j]
+    else
+      { orphaned by a rolled-back trial parse: write it to the bit bucket. The
+        array slot stays PYSIG_DFLT_UNSET and the consumer complains, where the
+        param name is known. See PyDfltScratchOff in defs.inc. }
+      target := PyDfltScratchOff;
+    ResolveDataRefSentinel := DATAREF_RESOLVED;
+    Exit;
+  end;
+  if off <= -PYSIG_DATAREF_BASE then
+  begin
+    kind := DRK_PYSIG;
+    j := -off - PYSIG_DATAREF_BASE;
+    if (j >= 0) and (j < ProcCount) and (ProcSigOff[j] >= 0) then
+      target := ProcSigOff[j]
+    else
+      { A callee that got no record -- a synthesized wrapper, or a def
+        EmitPySignatures does not recognise. Point it at the ZEROED scratch
+        record: TotN = 0, so the bridge fills nothing and behaves exactly as it
+        did before signatures existed. This was a hard Error and it FAILED FOUR
+        TESTS at once the moment a bound method crossed a module boundary -- a
+        missing signature must degrade to the old behaviour, never refuse to
+        build. }
+      target := PyDfltScratchOff;
+    ResolveDataRefSentinel := DATAREF_RESOLVED;
+    Exit;
+  end;
+  if off <= -TYPEINFO_REQ_DATAREF_BASE then
+  begin
+    kind := DRK_TYPEINFO;
+    j := -off - TYPEINFO_REQ_DATAREF_BASE;
+    if (j >= 0) and (j < TypeInfoReqCount) and (TypeInfoReqOff[j] >= 0) then
+    begin
+      target := TypeInfoReqOff[j];
+      ResolveDataRefSentinel := DATAREF_RESOLVED;
+    end
+    else
+      why := 'TypeInfo() of a type with no RTTI header';
+    Exit;
+  end;
+  if off <= -ENUM_RTTI_DATAREF_BASE then
+  begin
+    kind := DRK_ENUMRTTI;
+    j := -off - ENUM_RTTI_DATAREF_BASE;
+    if (j >= 0) and (j < EnumTypeCount) and (EnumTypeRTTIOff[j] >= 0) then
+    begin
+      target := EnumTypeRTTIOff[j];
+      ResolveDataRefSentinel := DATAREF_RESOLVED;
+    end
+    else
+      why := 'TypeInfo of an enum type with no RTTI';
+    Exit;
+  end;
+  if (off <= -RECORD_RTTI_DATAREF_BASE) and (off > -SYM_RTTI_DATAREF_BASE) then
+  begin
+    kind := DRK_RECRTTI;
+    j := -off - RECORD_RTTI_DATAREF_BASE;
+    if (j >= 0) and (j < UClsCount) and (UClsRTTIOff[j] >= 0) then
+    begin
+      target := UClsRTTIOff[j];
+      ResolveDataRefSentinel := DATAREF_RESOLVED;
+    end
+    else
+      why := 'record reference to a record with no RTTI';
+    Exit;
+  end;
+  if off <= -CLASSREF_DATAREF_BASE then
+  begin
+    kind := DRK_CLASSREF;
+    j := -off - CLASSREF_DATAREF_BASE;   { recover class index ci }
+    if (j >= 0) and (j < UClsCount) and (UClsRTTIOff[j] >= 0) then
+    begin
+      target := UClsRTTIOff[j];
+      ResolveDataRefSentinel := DATAREF_RESOLVED;
+    end
+    else
+      why := 'class reference to a class with no RTTI (no published members?)';
+    Exit;
+  end;
+  { A negative offset ABOVE every base (-1 .. -99999, minus the two module
+    tables). compiler.pas's chain left these completely untouched and the
+    extraction keeps that exactly: reporting NOT_SENTINEL means the caller
+    passes the value through as it always did, so this refactor cannot change
+    what any register target emits.
+
+    It is very likely a defect wherever it appears -- a negative Data[] offset
+    is not an address -- but that is a claim this function has no evidence for,
+    and turning a silent pass-through into an Error on the strength of it would
+    be a behaviour change hidden inside a deduplication. A caller that CANNOT
+    use the value (wasm32 cannot: it must produce a real cell) refuses it at
+    the point where it knows that, and says so in its own words. }
+  ResolveDataRefSentinel := DATAREF_NOT_SENTINEL;
+end;
+
 procedure AddMethodFix(dataPos, procIdx: Integer);
 { Record a code-address relocation into Data[]: the 8-byte slot at dataPos is
   patched to the entry address of Procs[procIdx]. Every VMT slot and every RTTI

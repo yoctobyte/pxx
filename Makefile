@@ -16104,6 +16104,38 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_cross_dynarray_slot_store.pas $(TESTTMP)/dsspal_xt >/dev/null || { echo "dsspal xtensa compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh dsspal/xtensa "$$(tools/run_target.sh xtensa $(TESTTMP)/dsspal_xt)" "DYNSLOTSTORE OK" || exit 1; \
 	else echo "  dsspal: qemu-xtensa absent, xtensa NOT verified"; fi
+	# IR_CONST_DATA (`IR op 68`) ON ALL SEVEN TARGETS -- the generic data-ref
+	# constant. wasm32 had no arm and refused any body containing one, so
+	# `TypeInfo` cost the whole enclosing routine there: under pin v399 this very
+	# file reports `EnumName — value IR op 68` and `main$$0 — value IR op 68`,
+	# compiles "ok", and the module will not load. That is the positive control
+	# and it is a compiler already in the tree, not a synthetic one.
+	#
+	# TWO SENTINEL FAMILIES, deliberately: TypeInfo(TEnum) resolves against
+	# EnumTypeRTTIOff and is read by GetEnumName, TypeInfo(Integer)/TypeInfo(TRec)
+	# against TypeInfoReqOff and are PTypeInfo headers. A backend that mixed the
+	# two tables up still returns non-nil, distinct pointers, so the rows assert
+	# the NAMES that come out of the blob rather than the pointers.
+	#
+	# The header names are PRINTED and compared by this harness, never compared
+	# in-program: `p^^.NamePtr^^ = 'Integer'` answers FALSE on wasm32 while the
+	# same expression prints Integer (the open frozen-string-through-a-record-
+	# field-pointer bug). Comparing here keeps the assertion and drops the
+	# dependency on an operator this target gets wrong.
+	./$(COMPILER) -Fulib/rtl test/test_cross_typeinfo_dataref.pas $(TESTTMP)/tidref26
+	tools/expect_same.sh tidref26/native "$$($(TESTTMP)/tidref26)" "$$(printf 'enums OK\nheader Integer\nheader TPoint')"
+	./$(COMPILER) -Fulib/rtl --target=wasm32 test/test_cross_typeinfo_dataref.pas $(TESTTMP)/tidref.wasm
+	tools/expect_same.sh tidref26/wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/tidref.wasm)" "$$(printf 'enums OK\nheader Integer\nheader TPoint')"
+	@for t in i386 arm32 aarch64 riscv32; do \
+	  case $$t in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "  tidref: $$q absent, $$t NOT verified"; continue; fi; \
+	  ./$(COMPILER) -Fulib/rtl --target=$$t --platform=posix test/test_cross_typeinfo_dataref.pas $(TESTTMP)/tidref_$$t >/dev/null || { echo "tidref $$t compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh tidref/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/tidref_$$t)" "$$(printf 'enums OK\nheader Integer\nheader TPoint')" || exit 1; \
+	done; \
+	if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) -Fulib/rtl --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_cross_typeinfo_dataref.pas $(TESTTMP)/tidref_xt >/dev/null || { echo "tidref xtensa compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh tidref/xtensa "$$(tools/run_target.sh xtensa $(TESTTMP)/tidref_xt)" "$$(printf 'enums OK\nheader Integer\nheader TPoint')" || exit 1; \
+	else echo "  tidref: qemu-xtensa absent, xtensa NOT verified"; fi
 	# ANSITERM THROUGH THE PAL, and the pty row is the one that earns this block.
 	# This unit carried four private per-target syscall number tables until
 	# 2026-09-04. Two had already produced a silent failure (GetSysWrite had no

@@ -161,18 +161,20 @@ var
   share slots and only LEVELS need distinct ones. Lazily allocated, so a body
   that never nests pays for one level. }
   WasmStrPool       : array[0..15, 0..7] of Integer;
-  { recId -> the Data[] offset of its descriptor cell; see
-    WasmRecDescCellFor. Module-lifetime, not per body. }
-  WasmRecDescRec    : array[0..511] of Integer;
-  WasmRecDescCell   : array[0..511] of Integer;
-  WasmRecDescCount  : Integer;
-  { Data[] cells for the two whole-module tables, allocated on first use and
-    filled in after EmitRTTI / EmitResources, -1 while unused. Same mechanism as
-    WasmRecDescCell and for the same reason -- the offset does not exist while
-    bodies are being emitted -- but ONE cell each rather than one per id,
-    because there is one registry and one resource table in a module. }
-  WasmRttiRegCell   : Integer;
-  WasmResourcesCell : Integer;
+  { DATA-REF SENTINEL -> the Data[] offset of the cell that will hold its
+    address; see WasmLateDataCellFor. Module-lifetime, not per body.
+
+    KEYED ON THE SENTINEL and not on a record id, which is what lets one table
+    serve every family emit.inc's ResolveDataRefSentinel knows: record
+    descriptors, metaclass values, TypeInfo headers, enum RTTI blobs, NilPy
+    signature records and defaults slots, and the two whole-module tables. It
+    held record ids until 2026-09-04, when IR_CONST_DATA arrived and needed
+    five more families -- five parallel tables, or one key that already
+    distinguishes them. The sentinel IS that key: the register backends use the
+    same value as a relocation immediate. }
+  WasmLateDataSent  : array[0..511] of Integer;
+  WasmLateDataCell  : array[0..511] of Integer;
+  WasmLateDataCount : Integer;
 
 { The current body's refusals as report lines: the first on the body's own
   line, any further ones indented under it. One reason per line rather than a
@@ -536,9 +538,10 @@ const
     level; depth here is what explicit parentheses buy. Exceeding it is
     refused by name, never silently reused. }
   WASM_STR_DEPTH   = 16;
-  { Distinct records reachable by an ARC copy in one module. One cell per
-    record TYPE, not per copy site, so this counts declared types and not code. }
-  WASM_MAX_RECDESC = 512;
+  { Distinct data-ref sentinels needing a late-filled cell in one module. One
+    cell per SENTINEL, not per use site, so this counts declared types (and
+    NilPy defs) rather than code. }
+  WASM_MAX_LATEDATA = 512;
   WASM_STR_SLOTS   = 8;
   WASM_PAGE        = 65536;
 
@@ -622,9 +625,7 @@ begin
     WasmProcImpIdx[i] := -1;
   end;
   WasmHostImpCount := 0;
-  WasmRecDescCount := 0;
-  WasmRttiRegCell := -1;
-  WasmResourcesCell := -1;
+  WasmLateDataCount := 0;
   WasmGSp := WasmAddGlobal('sp', WT_I32, True, 65536);
   WasmAddExport('sp', WEK_GLOBAL, WasmGSp);
   { Immutable, and its initialiser is back-filled by WasmFinishMemory once
@@ -695,6 +696,9 @@ procedure WasmEmitVirtualCall(node: Integer; isStmt: Boolean); forward;
   BOOTSTRAP SEED fails — the one direction `make compiler/pascal26` cannot see,
   because it is already past the seed. check_forwards.sh is what caught it. }
 procedure WasmDataAddr(off: Integer); forward;
+{ The late-cell reader: needed by the IR_CONST_DATA value arm, which sits well
+  above the cell table it goes through. }
+procedure WasmLateDataAddr(sent: Integer); forward;
 { Not a dispatch target — WasmEmitGetMem calls it to marshal a constructor's
   arguments, and GetMem is lowered as a BUILTIN, which puts its call site above
   the indirect-call machinery it shares. Caught by the FPC canary, twice now
@@ -735,7 +739,6 @@ procedure WasmStrScratchPop(scr: Integer); forward;
 { The metaclass-value emitter, defined beside the descriptor-cell table it
   reuses and dispatched from the value switch well above it. }
 procedure WasmEmitClassRef(node: Integer); forward;
-procedure WasmModuleTableAddr(var cell: Integer); forward;
 { The sys* intrinsic family, defined below the builtin dispatch that calls it. }
 function WasmEmitSysCallFam(node, p: Integer; isStmt: Boolean): Boolean; forward;
 function WasmEmitLoadFile(node: Integer): Boolean; forward;
@@ -1662,6 +1665,10 @@ begin
     IR_PROCADDR      : WasmNodeResultType := tyPointer;
     { A metaclass value is the ADDRESS of the class's RTTI blob. }
     IR_CLASSREF      : WasmNodeResultType := tyPointer;
+    { And so is every generic data reference: IRTk already records tyPointer at
+      each of the nine sites that build one, but stating it here keeps the row
+      beside its siblings rather than depending on nine agreeing. }
+    IR_CONST_DATA    : WasmNodeResultType := tyPointer;
     { And a VMT address is an address too. Both rows are here rather than
       falling through to the IR's own tk, because IR_VMTADDR records tyPointer
       already and the day it does not is the day this reads a class index as a
@@ -1943,6 +1950,22 @@ begin
     IR_NOT       : WasmEmitUnary(node, False);
     IR_PROCADDR  : WasmEmitProcAddr(node);
     IR_CLASSREF  : WasmEmitClassRef(node);
+    { A generic data-reference constant, and the two halves of IRIVal mean
+      different things. A NON-NEGATIVE value is already a Data[] offset -- an
+      interned GUID blob is the case that reaches here -- and needs only the
+      data base added. A NEGATIVE value is a sentinel for an address EmitRTTI
+      and friends have not produced yet, so it goes through the same late cell
+      every record descriptor uses; this backend has no code->data relocation
+      to carry it and never will.
+
+      This op was the largest remaining wasm32 gap after the syscall work: a
+      body containing one was refused outright (`value IR op 68`), which is what
+      `p := TypeInfo(TEnum)` costs on this target. }
+    IR_CONST_DATA:
+      if IRIVal[node] >= 0 then
+        WasmDataAddr(Integer(IRIVal[node]))
+      else
+        WasmLateDataAddr(Integer(IRIVal[node]));
     { The class's VMT address -- the per-class identity stored at [instance+0],
       which is what `is` and `as` compare against.
 
@@ -1962,8 +1985,17 @@ begin
       so a wasm32 program that so much as USES typinfo died before its own
       code. Same sentence riscv32's arm carries; same fix, one indirection
       further because wasm32 cannot relocate into code. }
-    IR_RTTI_REG  : WasmModuleTableAddr(WasmRttiRegCell);
-    IR_RESOURCES : WasmModuleTableAddr(WasmResourcesCell);
+    { The two whole-module tables, through the SAME cell table as everything
+      else late-resolved -- they carry the sentinels -100 and -101 on the
+      register backends, and those are keys like any other. They used to have a
+      hand-rolled cell each and a `var cell` allocator that duplicated
+      WasmLateDataCellFor's body; what made them look like a separate mechanism
+      was not the allocation but the VERDICT ON AN EMPTY CELL, and that now
+      comes from ResolveDataRefSentinel's DATAREF_DROP rather than from a second
+      code path. A module with no classes and no resources reads nil here, which
+      is the documented answer and not a defect. }
+    IR_RTTI_REG  : WasmLateDataAddr(-100);
+    IR_RESOURCES : WasmLateDataAddr(-101);
     IR_CALL_IND  : WasmEmitCallInd(node, False);
     IR_VIRTUAL_CALL : WasmEmitVirtualCall(node, False);
     IR_ATOMIC    : WasmEmitAtomic(node);
@@ -4757,87 +4789,57 @@ end;
 
   One cell per recId, not per site: the memo is what keeps a record copied in
   forty places from reserving forty identical cells. }
-function WasmRecDescCellFor(recId: Integer): Integer;
+function WasmLateDataCellFor(sent: Integer): Integer;
 var i: Integer;
 begin
-  WasmRecDescCellFor := -1;
-  for i := 0 to WasmRecDescCount - 1 do
-    if WasmRecDescRec[i] = recId then
+  WasmLateDataCellFor := -1;
+  for i := 0 to WasmLateDataCount - 1 do
+    if WasmLateDataSent[i] = sent then
     begin
-      WasmRecDescCellFor := WasmRecDescCell[i];
+      WasmLateDataCellFor := WasmLateDataCell[i];
       Exit;
     end;
-  if WasmRecDescCount >= WASM_MAX_RECDESC then
+  if WasmLateDataCount >= WASM_MAX_LATEDATA then
   begin
-    WasmUnsupported('too many distinct records copied with ARC in one module'
-                    + ' (the descriptor-cell table holds '
-                    + WasmIntStr(WASM_MAX_RECDESC) + ')');
+    WasmUnsupported('too many distinct late-resolved data references in one'
+                    + ' module (record descriptors, metaclass values, TypeInfo'
+                    + ' headers and NilPy signatures share one table, which'
+                    + ' holds ' + WasmIntStr(WASM_MAX_LATEDATA) + ')');
     Exit;
   end;
   { 8 bytes, matching the RTTI blobs' pointer slots: WasmFillData writes the
     address into the LOW dword and leaves the high one zero, which is the same
     shape a 32-bit ELF target uses and what an i32 load at +0 reads. }
-  WasmRecDescCell[WasmRecDescCount] := DataLen;
+  WasmLateDataCell[WasmLateDataCount] := DataLen;
   for i := 0 to 7 do
   begin
     if DataLen >= MAX_DATA then Error('data overflow');
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
-  WasmRecDescRec[WasmRecDescCount] := recId;
-  WasmRecDescCellFor := WasmRecDescCell[WasmRecDescCount];
-  Inc(WasmRecDescCount);
+  WasmLateDataSent[WasmLateDataCount] := sent;
+  WasmLateDataCellFor := WasmLateDataCell[WasmLateDataCount];
+  Inc(WasmLateDataCount);
 end;
 
-{ Put the record's descriptor address on the operand stack. }
-procedure WasmRecDescAddr(recId: Integer);
+{ Put the address a sentinel stands for on the operand stack, through its cell. }
+procedure WasmLateDataAddr(sent: Integer);
 var cell: Integer;
 begin
-  cell := WasmRecDescCellFor(recId);
+  cell := WasmLateDataCellFor(sent);
   if cell < 0 then Exit;
   WasmDataAddr(cell);
   WasmMemOp($28, 'i32.load', 2, 0);
 end;
 
-{ IR_RTTI_REG and IR_RESOURCES: put a whole-module TABLE's address on the
-  operand stack, through a Data[] cell filled in after the table exists.
-
-  The register backends spell this as an immediate carrying the sentinel -100
-  (RTTI registry) or -101 (resource table), which compiler.pas rewrites once
-  EmitRTTI and EmitResources have run. wasm32 has no relocation into code, so
-  the indirection moves into DATA -- exactly what WasmRecDescAddr above already
-  does for a class descriptor, and this shares its AddDataPtrFix machinery
-  rather than adding a second scheme.
-
-  ONE CELL PER TABLE, not per site: a module has one registry and one resource
-  table, so the memo is the variable itself.
-
-  AND A ZERO CELL IS CORRECT HERE, which is the one place this differs from its
-  sibling. compiler.pas drops a -100 fixup outright when there is no registry --
-  `a sentinel with no table is dropped (the intrinsic then returns nil/0)` --
-  so a program with no RTTI must read nil and carry on. WasmResolveLateDataCells
-  FAILS LOUD on an unresolved cell because a nil record descriptor is a silently
-  missed retain; a nil registry is a documented answer. Same mechanism, opposite
-  verdict on an empty cell, and reading the sibling's guard as the rule for both
-  would break every wasm32 program that publishes no classes. }
-procedure WasmModuleTableAddr(var cell: Integer);
-var i: Integer;
+{ A record (or class) descriptor, by record id. The one caller shape that names
+  its subject rather than a sentinel, kept because six call sites read better
+  for it -- and because the id->sentinel conversion then exists once. }
+procedure WasmRecDescAddr(recId: Integer);
 begin
-  if cell < 0 then
-  begin
-    { 8 bytes and the low dword read as an i32, the same shape and the same
-      reason as WasmRecDescCellFor's cell. }
-    cell := DataLen;
-    for i := 0 to 7 do
-    begin
-      if DataLen >= MAX_DATA then Error('data overflow');
-      Data[DataLen] := 0;
-      Inc(DataLen);
-    end;
-  end;
-  WasmDataAddr(cell);
-  WasmMemOp($28, 'i32.load', 2, 0);
+  WasmLateDataAddr(-(RECORD_RTTI_DATAREF_BASE + (recId - REC_UCLASS_BASE)));
 end;
+
 
 { ===== the sys* intrinsic family =====
 
@@ -7287,56 +7289,62 @@ begin
 end;
 
 { Resolve every Data[] cell whose value is an offset that did not exist while
-  bodies were being emitted -- the per-class record descriptors, and the two
-  whole-module tables. HERE because this is the only window: UClsRTTIOff,
-  RTTIRegistryOff and ResourceTableOff are all populated by EmitRTTI /
-  EmitResources (after the whole codegen pass, so not while bodies are
-  emitted), and WasmFillData below is what turns a DataPtrFix into bytes. One
-  point in the program satisfies both.
+  bodies were being emitted -- record and class descriptors, the two
+  whole-module tables, TypeInfo headers, enum RTTI blobs, and NilPy signature
+  records and defaults slots. HERE because this is the only window: UClsRTTIOff,
+  RTTIRegistryOff, ResourceTableOff, TypeInfoReqOff, EnumTypeRTTIOff, ProcSigOff
+  and PyDfltPendOff are all populated by EmitRTTI / EmitPySignatures /
+  EmitTypeInfoHeaders / EmitResources -- after the whole codegen pass, so not
+  while bodies are emitted -- and WasmFillData below is what turns a DataPtrFix
+  into bytes. One point in the program satisfies both.
 
   NAMED FOR THE MECHANISM, not for its first customer: it was
   WasmResolveRecDescCells while descriptors were all it did, and the next
-  customer would have been added under a name that says it is not there. }
+  customer would have been added under a name that says it is not there. Six
+  families later, that is no longer a hypothetical.
+
+  IT DECIDES NOTHING ITSELF. Which sentinel belongs to which family, and the
+  order those tests must run in, live once in ResolveDataRefSentinel (emit.inc)
+  and are shared with compiler.pas's fixup loop. The branches there compare
+  `<=` against descending bases, so a family listed out of order swallows a
+  more negative one silently -- a second copy would keep compiling and resolve
+  a NilPy signature as a TypeInfo request. }
 procedure WasmResolveLateDataCells;
-var i, j: Integer;
+var i, st, target, kind, recId: Integer; why: AnsiString;
 begin
-  for i := 0 to WasmRecDescCount - 1 do
+  for i := 0 to WasmLateDataCount - 1 do
   begin
-    j := WasmRecDescRec[i] - REC_UCLASS_BASE;
-    if (j >= 0) and (j < UClsCount) and (UClsRTTIOff[j] >= 0) then
-      AddDataPtrFix(WasmRecDescCell[i], UClsRTTIOff[j])
-    else
-      { The cell stays zero, and PXXRecordRetain/Release take a nil desc as
-        "nothing to walk" — so this would be a SILENT missed retain rather than
-        a fault, which is this repo's expensive failure shape. Loud instead.
-
-        Two customers reach this table now — an ARC record copy and a metaclass
-        value (WasmEmitClassRef) — and the DEFECT is the same for both: the
-        class published no members, so EmitRTTI emitted no blob for it. Named
-        as the defect rather than as one customer's symptom, because the
-        message would otherwise be actively misleading for the other half.
-        compiler.pas:2084 says the same thing for the register targets. }
+    st := ResolveDataRefSentinel(WasmLateDataSent[i], target, kind, why);
+    if st = DATAREF_RESOLVED then
+      AddDataPtrFix(WasmLateDataCell[i], target)
+    else if st = DATAREF_DROP then
+      { The module has no RTTI registry or no resource table. compiler.pas drops
+        the fixup outright and says why -- `a sentinel with no table is dropped
+        (the intrinsic then returns nil/0)` -- and leaving the cell at zero IS
+        that same answer here. NOT the loud arm below, deliberately: an absent
+        table is a fact about a module that publishes no classes, while a nil
+        record descriptor is a retain that will never happen. Same mechanism,
+        opposite verdict on an empty cell, and reading one as the rule for both
+        would break every wasm32 program with no classes. }
+    else if kind = DRK_RECRTTI then
+    begin
+      { Named as the DEFECT rather than as one customer's symptom: two shapes
+        reach this cell -- an ARC record copy and a metaclass value
+        (WasmEmitClassRef) -- and the cause is the same for both, so a message
+        naming either one is actively misleading for the other.
+        compiler.pas says the same thing for the register targets. }
+      recId := -WasmLateDataSent[i] - RECORD_RTTI_DATAREF_BASE + REC_UCLASS_BASE;
       WasmFail('wasm32: a class used as a metaclass or copied with ARC has no'
-               + ' RTTI blob (record id ' + WasmIntStr(WasmRecDescRec[i])
+               + ' RTTI blob (record id ' + WasmIntStr(recId)
                + ') — the class publishes no members');
+    end
+    else
+      { Every other family, in the decoder's own words -- TypeInfo of a type
+        with no header, an enum with no RTTI. There is no wasm32-specific thing
+        to add to those, and inventing one would be a second wording of a fact
+        the register targets already state. }
+      WasmFail('wasm32: ' + why);
   end;
-
-  { The two whole-module tables, in the same window and for the same reason:
-    RTTIRegistryOff is set by EmitRTTI and ResourceTableOff by EmitResources,
-    both after the codegen pass.
-
-    NO `else WasmFail` HERE, deliberately, and it is not an oversight copied
-    from the loop above. compiler.pas drops a -100/-101 fixup outright when the
-    table does not exist and says why -- `a sentinel with no table is dropped
-    (the intrinsic then returns nil/0)` -- so a module that publishes no classes
-    or ships no resources must read nil and run. Leaving the cell zero IS that
-    answer. The loop above fails loud on the same shape because a nil record
-    descriptor means a retain that will never happen; these two mean the table
-    is empty, which is a fact rather than a defect. }
-  if (WasmRttiRegCell >= 0) and (RTTIRegistryOff >= 0) then
-    AddDataPtrFix(WasmRttiRegCell, RTTIRegistryOff);
-  if (WasmResourcesCell >= 0) and (ResourceTableOff >= 0) then
-    AddDataPtrFix(WasmResourcesCell, ResourceTableOff);
 end;
 
 procedure WasmFinishMemory;
