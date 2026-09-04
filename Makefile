@@ -13511,6 +13511,20 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_pascal_directive_unknown_warns.total "$$(grep -c 'warning:' $(TESTTMP)/test_pascal_directive_unknown_warns.log)" "5"
 	grep -q "unknown compiler directive {\$$PACKRECRDS}" $(TESTTMP)/test_pascal_directive_unknown_warns.log
 	tools/expect_same.sh test_pascal_directive_unknown_warns "$$($(TESTTMP)/test_pascal_directive_unknown_warns26)" "ok"
+	# The same arm across pxx's TWO WALKS of every source (ExpandIncludes, then
+	# the lexer). THE COUNT IS THE ASSERTION: a terminal arm added to
+	# elfwriter.inc's evaluator would not change any message, only DOUBLE how
+	# many times each appears, which no present-tense grep can see. The run row
+	# is the precondition — "exactly 2" is also satisfied by a run where the
+	# include was never expanded, and then the include row measured nothing.
+	./$(COMPILER) -Fitest test/test_pascal_directive_unknown_in_include.pas $(TESTTMP)/test_directive_unknown_in_include26 > $(TESTTMP)/test_directive_unknown_in_include.log 2>&1
+	tools/expect_same.sh test_directive_unknown_in_include.count "$$(grep -c 'unknown compiler directive' $(TESTTMP)/test_directive_unknown_in_include.log)" "2"
+	grep -q "pascal26:27: warning: unknown compiler directive {\$$bogusinmain}" $(TESTTMP)/test_directive_unknown_in_include.log
+	# the INCLUDE's own line 4, not the line it was pasted onto
+	grep -q "pascal26:4: warning: unknown compiler directive {\$$bogusinsideinclude}" $(TESTTMP)/test_directive_unknown_in_include.log
+	# an inactive conditional branch stays silent: the whole chain is under PasDirectiveActive
+	! grep -q "bogusinsideinactive" $(TESTTMP)/test_directive_unknown_in_include.log
+	tools/expect_same.sh test_directive_unknown_in_include "$$($(TESTTMP)/test_directive_unknown_in_include26)" "7"
 	# -Werror reaches it like any other warning, so a project can make an
 	# unrecognised directive fatal without a flag of its own.
 	! ./$(COMPILER) -Werror test/test_pascal_directive_unknown_warns.pas $(TESTTMP)/test_pascal_directive_unknown_warns_werr26 > $(TESTTMP)/test_pascal_directive_unknown_warns_werr.log 2>&1
