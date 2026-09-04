@@ -1731,6 +1731,14 @@ const
     posix or bare. See devdocs/progress/*/feature-platform-abstraction-layer.md. }
   PLATFORM_POSIX = 0;
   PLATFORM_ESP   = 1;
+  { wasi = hosted, but through IMPORTS rather than syscalls. A third value and
+    not an arm of posix, for the reason lib/rtl/platform/wasi's own header
+    gives: the posix backend reaches the kernel through __pxxrawsyscall and a
+    per-architecture table of Linux syscall NUMBERS, and wasm has no syscall
+    instruction and no number space at all. There is nothing to add a
+    {$ifdef CPU_WASM32} block to -- the MECHANISM differs, not the constants.
+    bug-n-the-nilpy-pal-issues-raw-syscalls-so-every-file-body-traps-on-wasm32 }
+  PLATFORM_WASI  = 2;
   { Bytes reserved below the windowed locals frame for the constant-sp
     expression/argument spill stack. Stage-1 nesting is shallow; 192 = 48
     slots is ample and keeps every offset inside the s32i/l32i imm range.

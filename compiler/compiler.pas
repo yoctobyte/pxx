@@ -307,6 +307,8 @@ begin
     (qemu-user) -- only the bare profile is esp. xtensa has no hosted leg. }
   if EspBareBoot or (TargetArch = TARGET_XTENSA) then
     TargetPlatform := PLATFORM_ESP
+  else if TargetArch = TARGET_WASM32 then
+    TargetPlatform := PLATFORM_WASI
   else
     TargetPlatform := PLATFORM_POSIX;
 end;
@@ -370,7 +372,9 @@ begin
     ever choosing between a hosted-POSIX and an ESP-platform build.
 
     bug-a-the-posix-pal-dir-is-added-on-esp-platform-targets }
-  if TargetPlatform = PLATFORM_ESP then pal := 'esp/' else pal := 'posix/';
+  if TargetPlatform = PLATFORM_ESP then pal := 'esp/'
+  else if TargetPlatform = PLATFORM_WASI then pal := 'wasi/'
+  else pal := 'posix/';
 
   { Tier 2b: PXX_HOME's PAL dir, matching ResolveToolchainDirs' override. Same
     all-or-nothing rule — when PXX_HOME is set, the exe-dir guesses below are
@@ -1239,6 +1243,12 @@ begin
     else if option = '--platform=posix' then
     begin
       TargetPlatform := PLATFORM_POSIX;
+      PlatformExplicit := True;
+      Inc(i);
+    end
+    else if option = '--platform=wasi' then
+    begin
+      TargetPlatform := PLATFORM_WASI;
       PlatformExplicit := True;
       Inc(i);
     end

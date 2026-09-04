@@ -215,6 +215,19 @@ const
 {$endif}
 { no table for this target — every entry point fails softly }
 {$ifndef CPUX86_64}{$ifndef CPUAARCH64}{$ifndef CPU_I386}{$ifndef CPU_ARM32}{$ifndef CPU_RISCV32}
+{ AND NO SYSCALL INSTRUCTION IS EMITTED AT ALL. `PYPAL_HAVE = False` makes every
+  entry point fail softly at RUNTIME, and that was not enough: the
+  __pxxrawsyscall call still sat in each body, so wasm32 -- which has no syscall
+  numbers and cannot have them, since wasi has imports -- refused to lower the
+  bodies and emitted fifteen of them as `unreachable`. A NilPy program then did
+  not fail softly, it failed to COMPILE, and the refusal was correct about the
+  instruction and wrong about the program: the body should never have been asked
+  to issue a raw syscall on this target.
+
+  Declared HERE, inside the very conditional that decides PYPAL_HAVE, so the two
+  cannot drift. A separate list of targets would be a second name for one fact.
+  bug-n-the-nilpy-pal-issues-raw-syscalls-so-every-file-body-traps-on-wasm32 }
+{$define PYPAL_NO_SYSCALLS}
   NR_OPEN_AT   = -1;
   NR_READ      = -1;
   NR_WRITE     = -1;
@@ -259,6 +272,31 @@ begin
   PyPalSupported := PYPAL_HAVE;
 end;
 
+{ THE ONE SYSCALL SITE IN THIS UNIT, and the reason it exists is a target that
+  has no syscalls rather than a target that has different ones.
+
+  Every body below used to spell `__pxxrawsyscall` itself. All seventeen calls
+  had the identical shape -- a number and six Int64 arguments -- so the sites
+  carried no information the funnel does not, while each was a separate place a
+  backend without an IR_SYSCALL arm had to refuse. Fifteen refusals became one,
+  and then none, because this body has no syscall in it on such a target.
+
+  The unit header promises `ADDING A TARGET = extending the table and nothing
+  else`. That promise is what this keeps: a new target with numbers gets a
+  table block and reaches the kernel through here; a new target WITHOUT them
+  gets nothing at all and every entry point returns the same -1 it already
+  documented. }
+function PyPalSys(nr, a1, a2, a3, a4, a5, a6: Int64): Int64;
+begin
+{$ifdef PYPAL_NO_SYSCALLS}
+  { every caller already guards on `NR_xxx < 0`, which is -1 on this target, so
+    this return is unreachable in practice and is the honest value if it is not }
+  PyPalSys := -1;
+{$else}
+  PyPalSys := __pxxrawsyscall(nr, a1, a2, a3, a4, a5, a6);
+{$endif}
+end;
+
 type
   TPyPalPollFd = record
     fd:      LongInt;
@@ -286,7 +324,7 @@ begin
     tsp := @ts;
   end;
   { arg 5 is the sigsetsize the kernel insists on when the mask (arg 4) is nil }
-  r := __pxxrawsyscall(NR_PPOLL, Int64(@pfd), 1, Int64(tsp), 0, 8, 0);
+  r := PyPalSys(NR_PPOLL, Int64(@pfd), 1, Int64(tsp), 0, 8, 0);
   if r < 0 then begin PyPalPoll := r; Exit; end;
   if r = 0 then begin PyPalPoll := 0; Exit; end;
   if (pfd.revents and SmallInt(events)) <> 0 then PyPalPoll := 1
@@ -300,56 +338,56 @@ function PyPalOpen(path: Pointer; flags, mode: Int64): Int64;
 begin
   PyPalOpen := -1;
   if NR_OPEN_AT < 0 then Exit;
-  PyPalOpen := __pxxrawsyscall(NR_OPEN_AT, PYPAL_AT_FDCWD, Int64(path), flags, mode, 0, 0);
+  PyPalOpen := PyPalSys(NR_OPEN_AT, PYPAL_AT_FDCWD, Int64(path), flags, mode, 0, 0);
 end;
 
 function PyPalRead(fd: Int64; buf: Pointer; n: Int64): Int64;
 begin
   PyPalRead := -1;
   if NR_READ < 0 then Exit;
-  PyPalRead := __pxxrawsyscall(NR_READ, fd, Int64(buf), n, 0, 0, 0);
+  PyPalRead := PyPalSys(NR_READ, fd, Int64(buf), n, 0, 0, 0);
 end;
 
 function PyPalWrite(fd: Int64; buf: Pointer; n: Int64): Int64;
 begin
   PyPalWrite := -1;
   if NR_WRITE < 0 then Exit;
-  PyPalWrite := __pxxrawsyscall(NR_WRITE, fd, Int64(buf), n, 0, 0, 0);
+  PyPalWrite := PyPalSys(NR_WRITE, fd, Int64(buf), n, 0, 0, 0);
 end;
 
 function PyPalClose(fd: Int64): Int64;
 begin
   PyPalClose := -1;
   if NR_CLOSE < 0 then Exit;
-  PyPalClose := __pxxrawsyscall(NR_CLOSE, fd, 0, 0, 0, 0, 0);
+  PyPalClose := PyPalSys(NR_CLOSE, fd, 0, 0, 0, 0, 0);
 end;
 
 function PyPalLseek(fd, offset, whence: Int64): Int64;
 begin
   PyPalLseek := -1;
   if NR_LSEEK < 0 then Exit;
-  PyPalLseek := __pxxrawsyscall(NR_LSEEK, fd, offset, whence, 0, 0, 0);
+  PyPalLseek := PyPalSys(NR_LSEEK, fd, offset, whence, 0, 0, 0);
 end;
 
 function PyPalFtruncate(fd, size: Int64): Int64;
 begin
   PyPalFtruncate := -1;
   if NR_FTRUNCATE < 0 then Exit;
-  PyPalFtruncate := __pxxrawsyscall(NR_FTRUNCATE, fd, size, 0, 0, 0, 0);
+  PyPalFtruncate := PyPalSys(NR_FTRUNCATE, fd, size, 0, 0, 0, 0);
 end;
 
 function PyPalUnlink(path: Pointer): Int64;
 begin
   PyPalUnlink := -1;
   if NR_UNLINKAT < 0 then Exit;
-  PyPalUnlink := __pxxrawsyscall(NR_UNLINKAT, PYPAL_AT_FDCWD, Int64(path), 0, 0, 0, 0);
+  PyPalUnlink := PyPalSys(NR_UNLINKAT, PYPAL_AT_FDCWD, Int64(path), 0, 0, 0, 0);
 end;
 
 function PyPalRename(src, dst: Pointer): Int64;
 begin
   PyPalRename := -1;
   if NR_RENAMEAT < 0 then Exit;
-  PyPalRename := __pxxrawsyscall(NR_RENAMEAT, PYPAL_AT_FDCWD, Int64(src),
+  PyPalRename := PyPalSys(NR_RENAMEAT, PYPAL_AT_FDCWD, Int64(src),
                                  PYPAL_AT_FDCWD, Int64(dst), 0, 0);
 end;
 
@@ -357,7 +395,7 @@ function PyPalReadlink(path: Pointer; buf: Pointer; bufsz: Int64): Int64;
 begin
   PyPalReadlink := -1;
   if NR_READLINKAT < 0 then Exit;
-  PyPalReadlink := __pxxrawsyscall(NR_READLINKAT, PYPAL_AT_FDCWD, Int64(path),
+  PyPalReadlink := PyPalSys(NR_READLINKAT, PYPAL_AT_FDCWD, Int64(path),
                                    Int64(buf), bufsz, 0, 0);
 end;
 
@@ -365,14 +403,14 @@ function PyPalGetcwd(buf: Pointer; n: Int64): Int64;
 begin
   PyPalGetcwd := -1;
   if NR_GETCWD < 0 then Exit;
-  PyPalGetcwd := __pxxrawsyscall(NR_GETCWD, Int64(buf), n, 0, 0, 0, 0);
+  PyPalGetcwd := PyPalSys(NR_GETCWD, Int64(buf), n, 0, 0, 0, 0);
 end;
 
 function PyPalStat(path, statbuf: Pointer): Int64;
 begin
   PyPalStat := -1;
   if NR_STAT < 0 then Exit;
-  PyPalStat := __pxxrawsyscall(NR_STAT, Int64(path), Int64(statbuf), 0, 0, 0, 0);
+  PyPalStat := PyPalSys(NR_STAT, Int64(path), Int64(statbuf), 0, 0, 0, 0);
 end;
 
 { "does this path exist" — access(F_OK) where the target has it, faccessat
@@ -383,9 +421,9 @@ var r: Int64;
 begin
   r := -1;
   if NR_ACCESS >= 0 then
-    r := __pxxrawsyscall(NR_ACCESS, Int64(path), 0, 0, 0, 0, 0)
+    r := PyPalSys(NR_ACCESS, Int64(path), 0, 0, 0, 0, 0)
   else if NR_FACCESSAT >= 0 then
-    r := __pxxrawsyscall(NR_FACCESSAT, PYPAL_AT_FDCWD, Int64(path), 0, 0, 0, 0);
+    r := PyPalSys(NR_FACCESSAT, PYPAL_AT_FDCWD, Int64(path), 0, 0, 0, 0);
   PyPalAccessOk := r = 0;
 end;
 
@@ -406,7 +444,7 @@ begin
   ts.tv_nsec := 0;
   { arg 1 is CLOCK_REALTIME (0) — the wall clock time.time() reports, not the
     monotonic one; they differ across a settimeofday and Python promises this. }
-  r := __pxxrawsyscall(NR_CLOCK_GETTIME, 0, Int64(@ts), 0, 0, 0, 0);
+  r := PyPalSys(NR_CLOCK_GETTIME, 0, Int64(@ts), 0, 0, 0, 0);
   if r < 0 then Exit;
   sec := ts.tv_sec;
   nsec := ts.tv_nsec;
@@ -422,7 +460,7 @@ function PyPalGetdents(fd: Int64; buf: Pointer; n: Int64): Int64;
 begin
   PyPalGetdents := -1;
   if NR_GETDENTS64 < 0 then Exit;
-  PyPalGetdents := __pxxrawsyscall(NR_GETDENTS64, fd, Int64(buf), n, 0, 0, 0);
+  PyPalGetdents := PyPalSys(NR_GETDENTS64, fd, Int64(buf), n, 0, 0, 0);
 end;
 
 function PyPalHasGetdents: Boolean;
