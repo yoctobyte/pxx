@@ -139,4 +139,4 @@ promocore unit and errors `runtime helper PXXPromoFromStr not found` without it.
 Different ticket shape; not this one.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 06918232c.
