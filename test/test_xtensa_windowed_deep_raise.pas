@@ -46,8 +46,24 @@ begin
   writeln(d);
 end;
 
+{ A TRY IN THE MAIN PROGRAM BODY, which is a different frame from every other
+  one in the program and was the shape that crashed.
+
+  The process entry runs in the ROOT window and reaches its frame through a
+  bare `entry`, never through a CALL8, so nothing ever writes the 16-byte block
+  below its stack pointer that every other frame gets from its caller. The
+  windowed unwind walks that chain, so this `try` dereferenced garbage and
+  SIGSEGV'd while `Run`'s identical `try` one procedure down worked. Everything
+  above this line passed the whole time. }
 begin
   total := 0;
   Run;
+  writeln(total);
+  try
+    Deep(40);
+    writeln(999);
+  except
+    writeln('caught at top level');
+  end;
   writeln(total);
 end.

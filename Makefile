@@ -19603,6 +19603,18 @@ test-xtensa: $(COMPILER)
 	tools/expect_same.sh xtensa-windowed/deep-raise "$$(cat $(TESTTMP)/xtw_deepraise.out)" "$$(cat test/test_xtensa_windowed_deep_raise.expected)"
 	tools/expect_same.sh xtensa-call0/deep-raise "$$(cat $(TESTTMP)/xtc_deepraise.out)" "$$(cat test/test_xtensa_windowed_deep_raise.expected)"
 	tools/expect_same.sh deep-raise/x86-64-oracle "$$(cat $(TESTTMP)/xtw_deepraise_x64.out)" "$$(cat test/test_xtensa_windowed_deep_raise.expected)"
+	# THE UNWIND RELEASES MANAGED LOCALS UNDER WINDOWED TOO. Both of these ran
+	# Call0-only above -- correctly, because windowed refused to compile a raise
+	# at all. They are the two programs frankS used to prove the Call0 half:
+	# the first raises 9000 times through a frame holding a 64 KiB string and a
+	# dynamic array (a leak here is a SEGFAULT, not a quiet refcount), the
+	# second prints the missing release as a NUMBER.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_managed_exception_cleanup.pas $(TESTTMP)/xtw_mexc
+	tools/expect_same.sh xtensa-windowed/test_managed_exception_cleanup "$$(tools/run_target.sh xtensa $(TESTTMP)/xtw_mexc; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_managed_exc_cleanup_x64; echo "exit=$$?")"
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_interface_arc_exc.pas $(TESTTMP)/xtw_iarc
+	tools/expect_same.sh xtensa-windowed/test_interface_arc_exc "$$(tools/run_target.sh xtensa $(TESTTMP)/xtw_iarc)" "$$(printf 'reassign created=2 freed=2\ncaught\nunwind freed=3')"
 	# MOVSP, and this row exists because NO BEHAVIOURAL TEST CAN GUARD IT.
 	# The windowed ABI lets only ENTRY's immediate and MOVSP move a1; the
 	# prologue moved it with a plain `sub a1,a1,a8` for months. Every windowed

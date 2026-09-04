@@ -175,6 +175,49 @@ def build(name, src):
     print('built', name, len(code), 'bytes')
 
 build('lj8_yes', SRC)
+
+# ---- THE ROOT WINDOW IS NOT AN ORDINARY FRAME, and it is the one the pxx main
+# body runs in. Every frame gets the 16-byte block below its stack pointer
+# written by its CALLER -- except the process entry, which reaches its frame
+# through a bare `entry` from the root window and was never CALL8'd. So
+# [F_sp-12], which setjmp reads to find the frame's caller, is whatever the
+# kernel left there, and the walk faults.
+#
+# lj8root_yes reproduces it in 30 instructions (rc 139). lj8seed_yes is the fix
+# -- four stores seeding the frame's own save area right after `entry`, with
+# the pre-entry sp as the caller pointer -- and returns 50. That is the change
+# ir_codegen.inc's windowed startup now makes.
+ROOT = SRC.replace("""\t.align\t4
+_start:
+\tcall8\tf1
+\tmovi\ta2, 119
+\tmovi\ta6, 61
+\tsyscall
+
+\t.align\t4
+f1:
+\tentry\ta1, 64""", """\t.align\t4
+_start:
+\tj\tf1
+
+\t.align\t4
+f1:
+\tentry\ta1, 288""")
+assert ROOT != SRC, 'root-frame anchor'
+build('lj8root_yes', ROOT)
+
+SEED = ROOT.replace("""\tentry\ta1, 288
+\tmovi\ta3, 1445""", """\tentry\ta1, 288
+\tmovi\ta9, 288
+\tadd\ta9, a1, a9
+\taddi\ta8, a1, -16
+\ts32i\ta0, a8, 0
+\ts32i\ta9, a8, 4
+\ts32i\ta2, a8, 8
+\ts32i\ta3, a8, 12
+\tmovi\ta3, 1445""")
+assert SEED != ROOT, 'seed anchor'
+build('lj8seed_yes', SEED)
 build('lj8_nospill', SRC.replace("""	entry	a1, 32
 	movi	a10, 16
 	call8	spin

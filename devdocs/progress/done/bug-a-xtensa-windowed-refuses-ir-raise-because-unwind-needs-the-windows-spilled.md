@@ -308,3 +308,58 @@ here lives in it.
 
 ## Log
 - 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 2ec3e61c5.
+
+
+## 2026-09-04, same session — I SHIPPED A CRASH AND THIS IS THE FOLLOW-UP
+
+`2ec3e61c5` was green on every row it wired and **wrong about a shape none of
+them had**: a `try` in the MAIN PROGRAM BODY SIGSEGV'd under windowed, where
+before the change it had refused to compile. Found within the hour by taking the
+next ticket in the same group and running the two managed-unwind programs
+(`test_managed_exception_cleanup`, `test_interface_arc_exc`) that the Call0 half
+had been proved with — both crashed, and so did a four-line reduction.
+
+**A refusal is a worse product than a working feature and a BETTER one than a
+crash**, so the first action was to close `TargetHasProcCleanupFrame` again. That
+changed nothing, which is how the first hypothesis died: the proc cleanup frame
+had just been enabled in the same commit and was the obvious suspect, and it was
+not the cause.
+
+### The cause
+
+Every frame's 16-byte block at `[sp-16]` is written **by its caller** — window
+overflow puts the caller's `a0-a3` there. Every frame gets one for free except
+one: **the process entry reaches its frame through a bare `entry` from the ROOT
+window and was never `CALL8`'d**, so nothing ever fills the block below it. The
+word at `[sp-12]` is whatever the kernel left on the stack, and `ExcSetJmp`
+reads it to find the frame's caller.
+
+Harmless for as long as nothing walked that chain, which is why it surfaced the
+moment the unwind landed and not before.
+
+Fixed in the windowed startup with four stores right after the outermost
+`entry`: `a0`, the **pre-`entry` sp**, `a2`, `a3`. The pre-`entry` sp is the
+honest value for `[sp-12]` — it is where this frame's caller's stack pointer
+would be if it had one, and it makes `[that - 32]` land inside this frame.
+
+### Reproduced outside the compiler first, and that is what named it
+
+`lj8root_yes` (rc 139) and `lj8seed_yes` (rc 50) in
+`devdocs/dev/xtensa-windowed-longjmp-probe.py`: 30 instructions, one run, the
+right frame. Guessing had already cost one wrong hypothesis and a rebuild.
+
+### What the rows now cover
+
+`test_xtensa_windowed_deep_raise` grew a main-body `try` (the crashing shape),
+and `test_managed_exception_cleanup` and `test_interface_arc_exc` — which ran
+Call0-only, correctly, because windowed could not compile a raise — are now
+windowed rows too. All match the x86-64 oracle on both ABIs.
+
+### The reusable part
+
+**The rows I wired were all about the mechanism I had just built, and the shape
+that broke was one the mechanism had never been asked about.** `test_cross_exception`
+and the deep-raise test both put their `try` inside a procedure, because that is
+what a test that is *about* exceptions looks like. Nothing in either was wrong.
+The gap was that "which FRAME is the try in" was not a dimension either of them
+varied, and the outermost frame is the one that is different on this ABI.

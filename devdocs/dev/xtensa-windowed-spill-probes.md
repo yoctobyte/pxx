@@ -251,3 +251,38 @@ The banked plan's remaining items are now moot. No `rsr`/`wsr` encoders, no
 `xtensa_call8`, `xtensa_l32i`, `xtensa_s32i`, `xtensa_addi` and `xtensa_movi`
 already exist in `compiler/xtensaenc.inc` and are the whole instruction set this
 needs. The jmpbuf grows from 3 words (Call0: a15, sp, a0) to 11.
+
+
+## The root window is not an ordinary frame, and it is the one `main` runs in
+
+Found 2026-09-04, immediately after the compiler change landed, by a `try` in
+the MAIN PROGRAM BODY: it SIGSEGV'd while the identical `try` one procedure
+down worked.
+
+Every frame's 16-byte block at `[sp-16]` is written **by its caller** — the
+window overflow handler puts the caller's `a0-a3` there. Every frame gets one
+for free except one: the process entry reaches its frame through a bare `entry`
+from the ROOT window and was never `CALL8`'d, so nothing ever fills the block
+below it. The word at `[sp-12]`, which `setjmp` reads to find the frame's
+caller, is whatever the kernel left on the stack. The walk then dereferences it.
+
+Harmless until something walks the chain, which is why it surfaced only when
+the windowed unwind landed and not before.
+
+| probe | rc |
+| --- | --- |
+| `lj8root_yes` — the try frame entered from the root window by a bare `entry` | **139** |
+| `lj8seed_yes` — the same, with four stores seeding the frame's own save area | **50** |
+
+The fix is those four stores, emitted right after the outermost `entry`
+(`ir_codegen.inc`, the windowed startup): `a0`, the **pre-`entry` sp**, `a2`,
+`a3` into `[sp-16..sp-1]`. The pre-`entry` sp is the honest value for `[sp-12]`:
+it is where this frame's caller's stack pointer would be if it had one, and it
+makes `[that - 32]` — the extended save area — land inside this frame, which is
+mapped and owned.
+
+**Reproduced outside the compiler before the compiler was touched**, which is
+the point of keeping the builder: the first hypothesis was that the PROC CLEANUP
+frame was at fault (it had just been enabled for windowed in the same commit),
+and closing that predicate again changed nothing. The 30-instruction probe named
+the real frame in one run.

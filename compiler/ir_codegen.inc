@@ -2920,6 +2920,33 @@ begin
         but the body still uses the constant-sp expression stack, so reserve
         the spill region up front (no patchable addi on this path). }
       xtensa_entry(reg_xtensa_sp, 32 + XT_EXPR_REGION + XT_OUTARG_REGION);
+      { SEED THIS FRAME'S OWN SAVE AREA, because there is no caller to have
+        written it. [sp-16] holds the CALLER's a0-a3 and every frame in the
+        program gets one for free -- except this one: the process entry runs in
+        the ROOT window and reaches its frame through a bare `entry`, never
+        through a CALL8, so nothing ever fills the block below it and the word
+        at [sp-12] that should be the caller's stack pointer is whatever the
+        kernel left there.
+
+        Harmless until something WALKS the chain. The windowed unwind does:
+        ExcSetJmp reads [sp-12] to find the frame's caller and then reads that
+        caller's frame, so a `try` in the MAIN PROGRAM BODY dereferenced
+        garbage and SIGSEGV'd while the identical `try` one procedure down
+        worked. Reproduced outside the compiler in 30 instructions and fixed by
+        exactly these four stores before any of this was written --
+        devdocs/dev/xtensa-windowed-longjmp-probe.py, lj8root_yes (139) against
+        lj8seed_yes (50).
+
+        The pre-`entry` sp is the honest value for [sp-12]: it IS where this
+        frame's caller's stack pointer would be if it had one, and it makes
+        [that - 32] land inside this frame, which is mapped and owned. }
+      xtensa_movi(reg_xtensa_a9, 32 + XT_EXPR_REGION + XT_OUTARG_REGION);
+      xtensa_add(reg_xtensa_a9, reg_xtensa_sp, reg_xtensa_a9);
+      xtensa_addi(reg_xtensa_a8, reg_xtensa_sp, -16);
+      xtensa_s32i(reg_xtensa_a0, reg_xtensa_a8, 0);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, 4);
+      xtensa_s32i(reg_xtensa_a2, reg_xtensa_a8, 8);
+      xtensa_s32i(reg_xtensa_a3, reg_xtensa_a8, 12);
       xtensa_mov(reg_xtensa_a7, reg_xtensa_sp);
       XtSpillDepth := XT_OUTARG_REGION;
       XtSpillMax := XtSpillDepth;
