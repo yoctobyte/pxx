@@ -271,3 +271,31 @@ deliberate decision: not "which lane owns this red" but **"how does a reader
 tell that four job names are one job, or that one job name is five verdicts?"**
 Nobody owned that question, which is why it cost two write-ups before anyone
 wrote it down.
+
+### A third instance, same day, third session — and that crosses a threshold
+
+`regression-test-core-test-stackless-gen-2` carried `track: P`, guessed from the
+failing step's path and never corrected. It was handed out as live Track P work;
+it was already fixed, and closed 2026-09-04 after re-verifying against the job's
+own comparison in `Makefile:10887` rather than against the step the ticket named.
+Noted on its `done/` entry so the guess is not read as a finding.
+
+So the tally for 2026-09-04 is **three instances, from three sessions that were
+each doing something else**: claude-T's `tools-devtest#00`, frankz-43's
+`lib-test#00`, and this one. CLAUDE.md's own counting rule is that two is a
+smell and three is a design flaw, and this is three — in one day, none of them
+looked for.
+
+**The property that makes it a design flaw rather than three chores is that
+nobody notices any single one.** Each instance is individually plausible: an
+unmoved verdict looks like a live red, a repeated job name looks like distinct
+work, a guessed lane looks like a routing decision someone made. None errors,
+each answers, and each is only visible from outside the session that hit it.
+Three sessions each found one and none of the three could have found the other
+two. That is the argument for fixing the naming rather than continuing to catch
+the instances — catching them does not scale, because the catch requires a
+vantage point no single session has.
+
+Recorded by the coordinator, which is the only seat that saw all three, and
+banked here rather than kept as context: the count is the finding, and a count
+held in a session's memory is not a ranking input.
