@@ -67,7 +67,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (13)
+## backlog (12)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -81,7 +81,6 @@ _none_
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
 | regression-test-core-c-asm-in-inline-body-2 | T | 70 | regression | regression: test-core#src:test/c_asm_in_inline_body.c@2 at 8000b96eab36 in step 7/3, `python3 tools/ast_slot_overloads.py --self-check` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-pointer-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_c_pointer.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_c_pointer.npy /tmp/test_nilpy_c_pointer26` (auto-filed by twatch) | — |
-| regression-test-core-test-stackless-gen-2 | P | 70 | regression | regression: test-core#src:test/test_stackless_gen.pas at cf9b14600039 in step 1/2, `./compiler/pascal26 test/test_stackless_gen.pas /tmp/test_stackless_gen26` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-c-header-still-works-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_import_c_header_still_works.npy /tmp/test_nilpy_imphdr26` (auto-filed by twatch) | — |
 
@@ -356,7 +355,7 @@ _none_
 | feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing | T | 55 | feature | feature(T): twatch should assert its `## Repro` selector resolves to exactly the job it is filing | — |
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 
-## backlog-pascal (52)
+## backlog-pascal (51)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -385,7 +384,6 @@ _none_
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
 | bug-p-unicodechar-is-a-4-byte-code-point-and-fpc-makes-it-a-2-byte-code-unit | P | 40 | bug | `UnicodeChar` maps to tyUCS4Char (4 bytes, a code POINT) where FPC makes it an alias of WideChar (2 bytes, a UTF-16 code UNIT). Both pxx tables agree, so it is NOT a two-table split -- it is one entry that is probably wrong, sharing a line with `ucs4char`, whose 4-byte mapping IS correct and must not move. Zero in-tree declarations use the name (measured), so the change is cheap here; the decision is about out-of-tree code and about Write/string-conversion behaviour, which differs between the two kinds beyond SizeOf. | — |
 | compat-pascal-distinct-type-declaration | P | 25 | compat | `type T = type byte;` — the distinct-type declaration is not parsed | — |
-| compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees | P | 25→75 | compat | ONE OF THE THREE IS DONE. **Subranges are now stored in the narrowest ordinal that spans the declared range** -- SizeOf(0..255) and SizeOf(-128..127) are 1, `packed record a,b,c` is 3, `array[0..3] of 0..255` is 4, all matching FPC 3.2.2, on x86-64 and on i386/aarch64/arm32/riscv32 byte-identically. AND IT WAS NOT A FOOTPRINT ITEM: `TBig = -3000000000..3000000000` was given four bytes, so storing -3000000000 read back **1294967296** -- ordinary declared source, no diagnostic, wrong number, reproducible on the pin. STILL OPEN, and they do not share a cause: (2) THE SET THIRD HAS MOVED OUT to [[bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so]] (Track A) -- it is a codegen/ABI slice, not a Pascal sizing one, and bundled here it inherited a tractability the string half earned; (3) `string[10]` is 8 bytes, POINTER SIZE, where FPC gives 11 inline, so a short string is not stored inline at all -- a wrong REPRESENTATION rather than a generous width, and the ticket body routes that one to Track U as a storage-model decision -- SUPERSEDED: that decision is TAKEN and item (3) is the declared deliverable of [[feature-p-implement-the-real-tyshortstring-byte-prefix-layout]] (p100, phase 2 done, seven backends emitting a one-byte prefix under -dPXX_SHORTSTRING). Now `blocked-by` it, because until 2026-09-03 this ticket was the #1 item on `ready --track P` at effective p75 with no edge to it, and its only remaining item IS the flip -- which the OWNER has reserved and nobody may start. Blocks feature-pascal-typed-and-untyped-files [p70]: `file of T` writes record layout to DISK, so layout stops being an intermediate and becomes the value. | feature-p-implement-the-real-tyshortstring-byte-prefix-layout |
 | compat-pascal-the-strict-fpc-flag-family-is-incomplete | P | 15 | compat | --strict-fpc reproduces some FPC behaviours and silently not others (Abs/Sqr widths, pointer difference, TypeInfo name), and most flags ignore DialectIsPxx -- the gaps left after the umbrella landed | — |
 | feature-p-a-pascal-library-unit-does-not-parse | P | 40 | feature | `library foo;` does not parse -- `expected 'begin' before 'library'`. It is a FRONTEND gap (Track P), not an output gap: the x86-64 object writer landed at 41045d7b4 and already exports a link surface, so `library` + `exports` would be a second, DECLARATIVE spelling of what `cdecl` on a definition says today. That makes it a compat/ergonomics feature rather than a capability one, which is why it is p40 and not p80. The real question it forces is whether `exports` may export a routine that is NOT cdecl -- FPC allows it, and the object writer deliberately refuses to, because an internal-convention routine exported under its Pascal name is callable and wrong. Answer that before implementing. | — |
 | feature-p-assertions-directive-and-position | P | 55 | feature | RE-TYPED 2026-08-19 feature -> bug for half 1: `{$ASSERTIONS OFF}` is ACCEPTED AND IGNORED — measured on v363, an Assert whose condition has a side effect still runs it (n=1 where FPC gives n=0), so the two dialects take different paths with no diagnostic. Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
@@ -890,9 +888,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3217)
+## done (3219)
 
-3217 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3219 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (74)
 
@@ -979,7 +977,6 @@ _none_
 - [p 80] [T] bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
-- [p 75] [P] compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 2)
 - [p 75] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - [p 75] [P] bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size (unblocks 1)
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
@@ -988,6 +985,7 @@ _none_
 - [p 70] [U] decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - [p 70] [N] bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - [p 70] [B] feature-b-a-bootable-image-with-the-busybox-userland-on-it
+- [p 70] [P] feature-pascal-typed-and-untyped-files
 - [p 70] [T] regression-lib-test-cmath-integral-family
 - [p 70] [T] regression-lib-test-cmath-lround
 - [p 70] [T] regression-lib-test-cmath-nan-payload
@@ -998,7 +996,6 @@ _none_
 - [p 70] [T] regression-optdiff-shard6-12
 - [p 70] [T] regression-test-core-c-asm-in-inline-body-2
 - [p 70] [N] regression-test-core-test-nilpy-c-pointer-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [P] regression-test-core-test-stackless-gen-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
 - [p 70] [N] regression-test-nilpy-test-nilpy-import-c-header-still-works-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
@@ -1377,7 +1374,6 @@ _none_
 ## Leverage (tickets each one unblocks)
 
 - **3** — feature-port-windows-pe
-- **2** — compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees
 - **2** — decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part
 - **2** — decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes
 - **2** — decide-openbsd-pinsyscalls-vs-the-rt-sigreturn-residual

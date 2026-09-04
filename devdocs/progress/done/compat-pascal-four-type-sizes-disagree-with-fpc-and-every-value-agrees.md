@@ -281,7 +281,7 @@ worth it.
 
 - **Type:** compat (FPC layout parity) — Track P, in the shared
   `compiler/parser.inc` / `symtab.inc`, so it runs under Track A's gate.
-- **Status:** backlog. **Not a new discovery so much as the missing measurement
+- **Status:** done
   for a known interim**: `ParseTypeKind` already says so in a comment —
   "`shortstring` maps to a 255-cap tyFixedString (word-prefix layout, so sizing
   matches the reused frozen codegen). The true byte-length-prefix tyShortString
@@ -605,3 +605,43 @@ It was load-bearing and not paperwork. Measured before the edit: this was the
 p75 through two separate paths). A Track P agent pulling the top of its own
 queue was being handed the flip — the one piece of work the owner has kept for
 himself and which serialises the fleet.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## Closed 2026-09-04 — all three items settled, measured not inferred
+
+Measured at HEAD `0d090cd1d`, compiler sha256 `1968c7a7da57`, from a real
+`converged after 2 round(s)` build (not the stamp path):
+
+```
+SizeOf(string[10]) = 11        <- item (3), was 8 (pointer size)
+SizeOf(TBig)       = 8
+TBig roundtrip     = -3000000000   <- the wrong-number defect, was 1294967296
+SizeOf(0..255)     = 1
+SizeOf(-128..127)  = 1         <- item (1)
+len/str            = 3 abc
+```
+
+- **(1) subranges** — done before this session, re-confirmed above.
+- **(2) sets** — deliberately out of scope, living in `rainy-day/` as
+  [[bug-a-a-set-is-32-bytes-whatever-its-bounds-and-the-ir-opcode-says-so]].
+- **(3) `string[10]` inline** — delivered by the flip. Its blocker
+  [[feature-p-implement-the-real-tyshortstring-byte-prefix-layout]] is in
+  `done/`, `-dPXX_SHORTSTRING` is deleted, and the size is 11.
+
+This ticket's own summary said its only remaining item WAS the flip. The flip
+landed, so there is nothing left to do here. Closing it unblocks
+[[feature-pascal-typed-and-untyped-files]], which is still open.
+
+**A note on why this was nearly mis-filed, because the trap is in the title.**
+It was flagged to me as a likely `known-incompat/` candidate on the strength of
+its own name — *"and every value agrees"* — which reads exactly like CLAUDE.md's
+implementation-latitude class. The body says the opposite: `TBig` stored
+-3000000000 and read back **1294967296**, ordinary declared source, no
+diagnostic, wrong number, reproducible on the pin. That is a defect by any
+reading, and it was real until it was fixed. **A title is a claim from the day
+it was written and nothing updates it** — this one described the ticket's
+framing at filing and survived a correction in its own body. Had it gone to
+`known-incompat/` on the title, a genuine wrong-value bug would have been
+recorded as a chosen divergence.
