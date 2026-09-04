@@ -123,4 +123,4 @@ filed with a pure-Pascal reproducer that shows the discriminator is `cdecl`,
 not the language.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 674bc0a1e.
