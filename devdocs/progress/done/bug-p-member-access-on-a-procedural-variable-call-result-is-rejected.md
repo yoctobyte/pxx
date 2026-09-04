@@ -96,8 +96,8 @@ frankA. **The sixth Pascal site is in `pasparser_stmt.inc`** and is easy to miss
 when the boundary is quoted as "the five".
 
 **2. `ApplyCallResultPtrSuffix` needs nothing from a signature but its columns.**
-Every use of `procIdx` in the whole procedure (`pasparser_lval.inc:5011-5434`)
-is one of exactly two shapes — `Procs[procIdx].RetType`, once, and a
+Every use of `procIdx` in the whole procedure (in `pasparser_lval.inc`; cited by
+NAME, not by line — see the re-check note below) is one of exactly two shapes — `Procs[procIdx].RetType`, once, and a
 `ProcRet*[procIdx]` column, everywhere else: `ProcRetPtrElemTk`,
 `ProcRetPtrElemRec`, `ProcRetPtrDepth`, `ProcRetPtrBaseTk`, `ProcRetPtrBaseRec`,
 `ProcRetIsDynArray`, `ProcRetFixedArrBytes`, `ProcRetRecId`, `ProcRetElemTk`,
@@ -127,3 +127,35 @@ defect is in the writer, and should not go looking for a missing entry point.
 Untested claim retired: nothing above is inferred from behaviour, and no repro
 was run for this note. It is a static census of construction sites and of one
 procedure's uses of one parameter, which is the whole of what it claims.
+
+### 2026-09-05 — re-checked after `7095ca817`, and the citation de-lined
+
+`7095ca817` (frankA, *"a `^` after a FIELD of a call result derefs the FIELD,
+not the call"*) landed four hunks inside this procedure, +38 lines. **The
+conclusion above is unchanged and was re-run, not assumed:** every `procIdx`
+use is still `Procs[procIdx].RetType` once plus the same twelve `ProcRet*`
+columns. The new code works on the node/field side and adds no signature
+coupling at all, which is a good sign about the change rather than a lucky
+escape.
+
+What DID break is the citation. This note originally said
+`pasparser_lval.inc:5011-5434`; the procedure is now at 5060-5529, so those
+numbers were wrong within a day of being written and **a stale line number does
+not error -- it points somewhere.** This repo already learned that once and
+acted on it: the `Makefile:<n>` citations in CLAUDE.md were replaced with recipe
+names after one drifted 142 lines in an evening, to `fi; \`, a real line that
+explains nothing. Same failure, same fix -- the procedure is cited by name here
+now, and anyone re-running this should bound it with a grep for its `procedure`
+line rather than trusting a number in a document.
+
+The re-check itself is the reusable part, and it is one command:
+
+```
+sed -n "<start>,<end>p" compiler/pasparser_lval.inc \
+  | grep -o "[A-Za-z_]*\[procIdx\]\|Procs\[procIdx\]\.[A-Za-z_]*" | sort -u
+```
+
+If that ever prints something outside `Procs[].RetType` and the `ProcRet*`
+family, the conclusion has expired and a signature-only entry point may be back
+on the table.
+
