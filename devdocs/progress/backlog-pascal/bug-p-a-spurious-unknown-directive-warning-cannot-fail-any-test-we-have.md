@@ -55,3 +55,35 @@ zero from a probe that never ran reads identically to a real absence.
 
 Both residuals are frankD's framing, recorded because they are the part a fix
 will be tempted to skip.
+
+## The present-tense census came back CLEAN, 2026-09-04 (frankD)
+
+The stderr-counting harness described above was built and run twice over 2166
+sources — once before this session's `{$A n}` and `{$setc}` work, once after —
+and both arms give the identical four hits:
+
+    test_pascal_directive_unknown_in_include.pas:27  {$bogusinmain}
+    test_pascal_directive_unknown_in_include.pas:4   {$bogusinsideinclude}
+    test_pascal_directive_unknown_warns.pas:27       {$PACKRECRDS}
+    test_pascal_directive_unknown_warns.pas:28       {$definitelynotadirective}
+
+**Zero in `lib/`, zero in `examples/`, zero in any non-fixture source.** So the
+inert list has no present-tense false positive in this tree, and the fixes here
+introduced none.
+
+**The four ARE the live control** — real compiles through the same harness,
+firing on the population the instrument exists to fire on, so the zero is a
+measured absence rather than a probe that never ran. No planted extra was
+needed; the existing fixtures already were one.
+
+Scope, stated exactly: the run was at `0ee4a97b8`, which does **not** contain
+`bc0ed4164`. That commit added only Makefile assertions over generated printf
+fixtures — no directive name, no classifier change — so it cannot move this
+result, but the census did not observe it.
+
+**Residual 1 above is now the whole of what is left, and is unchanged.** A clean
+tree census says nothing about the ~101-name list's long tail. `{$A n}` is the
+proof: absent from this entire tree, silently producing a different record
+layout, and no census over `lib/` could ever have reached it. That is what the
+fpc-corpus source census is for, and it is a third instrument with the opposite
+blind spot to both the compile sweep and this one.

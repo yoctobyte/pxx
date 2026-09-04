@@ -50,3 +50,29 @@ wrapper fails there too, so that row passes today and certifies nothing.
 Seven, counted by frankb-78 (which found the last of them while landing
 `2aedcd004`) and by the sessions before it; the arc is recorded in
 `devdocs/progress/HANDOVER-shortstring-night.md`, which logs several directly.
+
+## Three more sightings, 2026-09-04 (frankS) — and one that is NOT this bug
+
+Seven becomes ten. All three backgrounded `tools/gate.sh quick`, all three
+`exit code 0` in the completion notification:
+
+- two where the log agreed (`gate: GREEN (exit 0)`) — harmless, and the reason
+  the defect is easy to live with;
+- one where it did **not**: log said `gate: RED (exit 1)` on
+  `this push wires the tests it adds`, notification said `exit code 0`.
+
+The RED one is worth recording because the failure it was reporting was real and
+would otherwise have been pushed: a Makefile row had never landed, because the
+tool call carrying the patch also carried a `make test-core` that the
+no-full-suite hook refused, killing the whole call. Believing the notification
+would have banked a test file nothing runs.
+
+**A fourth run the same evening was killed by the OOM reaper mid-tier** and
+reported `status: killed`. That one is NOT this bug and should not be counted
+toward it — the log simply had no verdict line at all, which is the honest
+outcome and is distinguishable by `grep -c 'gate: \(GREEN\|RED\)'` returning 0.
+Worth stating here only because "no verdict" and "wrong verdict" arrive through
+the same channel and a fix that makes the notification carry the tier's verdict
+needs an answer for the killed case too.
+
+Running the gate in the FOREGROUND sidesteps all of it and costs the same ~90s.
