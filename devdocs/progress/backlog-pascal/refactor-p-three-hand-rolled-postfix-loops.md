@@ -141,3 +141,57 @@ that is the shape to copy, and the precedent is in the tree.
 Expect the AST slot-write census to go RED if the work adds slot writes;
 regenerate with `python3 tools/ast_slot_overloads.py --update` after reading
 every row, and grep the gate log rather than trusting the wrapper's exit code.
+
+---
+
+## 2026-09-05 (frankA) — the ESCAPE CENSUS, which is the map this refactor needs, and it found a live bug
+
+The body says the last three fixes each *"ADDED an escape from the private loop
+back into a shared routine"* and that the copies are *"already being dismantled
+one arm at a time"*. That is measurable, so I measured it. For each of the five
+Pascal loops, which shared routines does its body reach?
+
+| loop | escapes reached |
+| --- | --- |
+| `pasparser_expr.inc:7094` (pointer-alias cast) | **6** — `ParseClassRecordSelectors`, `NodePtrElem`, `FoldDerefArrayLowBound`, `ParseMetaclassMemberTail`, `ParseNDSubscriptTail`, `BuildFlatNDIndex` |
+| `pasparser_expr.inc:6627` (record-name cast) | 2 — `ParseClassRecordSelectors`, `ParseMetaclassMemberTail` |
+| `pasparser_stmt.inc:7439` | 1 — `ParseClassRecordSelectors` |
+| `pasparser_stmt.inc:7224` | 1 — `ParseClassRecordSelectors` |
+| `pasparser_lval.inc:5101` (`ApplyCallResultPtrSuffix`) | 1 — `ParseNDSubscriptTail` |
+
+Line numbers as of `db40103f2`; the census is the durable half, and it is
+`grep`-able per loop body rather than remembered.
+
+**This table is a defect predictor, and it paid immediately.** One loop reaches
+six and the rest reach one or two, so any arm present only in the rich one is a
+candidate. `FoldDerefArrayLowBound` was in exactly one of five —
+`ApplyCallResultPtrSuffix` mints an `AN_INDEX` over a deref and never subtracted
+the pointee's low bound. Probe against fpc 3.2.2, `array[1..5] of Integer`:
+`GetP^[3]` read `lo[4]`, and `GetP^[2] := 77` wrote `lo[3]`. Silent, both faces,
+in pin v403. Fixed `9e6233f18`, regression rows in
+`test/test_inline_ptr_cast_low_bound.pas`.
+
+**No repro was involved.** The table said "this loop is missing an arm its
+sibling has", and a five-line program confirmed it. That is the argument for the
+unification stated as a measurement rather than as a principle.
+
+### What this says about how to do the work
+
+The body proposes factoring ONE suffix parser taking `(node, tk, recName,
+pointee)`. The census suggests the cheaper ordering: **the rich loop at
+`expr:7094` is already most of that parser.** Rather than writing a new one and
+migrating five callers, walk the table row by row and ask, for each escape the
+rich loop has and a poorer one does not, whether the poorer one can reach the
+shape that escape exists for. Each answer is either a bug to fix now (as above)
+or a documented reason the arm is unreachable there — and either way the loops
+converge, which is what makes the eventual merge safe rather than hopeful.
+
+The five are also very unequal — 208, 96, 40, 22 and 118 lines — so "five copies
+of one loop" oversells the symmetry. Two of them are barely more than a
+`ParseClassRecordSelectors` call already.
+
+### Still true, and re-derived
+
+Five in Pascal plus two in NilPy (`pyparser.inc:48234`, `:48380`), unchanged
+since the 2026-09-04 recount. The body's "three plus a fourth" remains wrong;
+the title still says three.
