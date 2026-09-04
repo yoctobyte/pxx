@@ -60,7 +60,7 @@ line and in `test/test_generic_body_end_counting.pas`. Closing this ticket makes
 that arm testable; the regression test should gain the arm at the same time.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 71deb21d4.
 
 ## Fixed 2026-09-04 (frankB) — three copies of one dispatcher, and only the first had the arm
 

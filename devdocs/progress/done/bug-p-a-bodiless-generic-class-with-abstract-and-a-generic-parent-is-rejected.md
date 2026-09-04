@@ -76,7 +76,7 @@ the parent list contains a `<...>` group. The passing rows say each half is
 handled; only the combination is not.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 71deb21d4.
 
 ## Closed 2026-09-04 (frankB) — measured fixed, with the instrument checked first
 
