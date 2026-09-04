@@ -19668,7 +19668,37 @@ test-wasm32: $(COMPILER)
 	./$(COMPILER) --target=wasm32 test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes.wasm
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes_x64
 	tools/expect_same.sh wasm32/set_shapes "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_setshapes.wasm)" "$$($(TESTTMP)/w32_setshapes_x64)"
-	@echo "wasm32: 45 rows green (38 default + 7 shortstring; 0 excluded)"
+	# THE RTTI REGISTRY AND THE RESOURCE TABLE -- IR_RTTI_REG / IR_RESOURCES.
+	# Both are ONE whole-module table whose Data[] offset does not exist while
+	# bodies are being emitted, so the register backends carry an immediate with
+	# the sentinel -100 / -101 and compiler.pas rewrites it after EmitRTTI. wasm32
+	# has no relocation into code, so the indirection moves into DATA -- the same
+	# late cell WasmRecDescAddr already uses for a class descriptor.
+	#
+	# WITHOUT THE ARM THESE THREE FILES REFUSED `value IR op 32` and their bodies
+	# were emitted as `unreachable`, so they TRAPPED rather than printing a wrong
+	# answer. 41 refusals across the 1705-source corpus, and `lib/rtl/typinfo.pas`
+	# is itself such a body -- any wasm32 program that so much as USES typinfo,
+	# directly or through streaming, LFM or `class of`, died before its own code.
+	#
+	# test_metaclass_getclass IS DELIBERATELY NOT HERE and the reason is worth
+	# more than the row. It now compiles with ZERO gaps and validates, and it still
+	# fails -- `GetClass('TDer')` returns nil because `entries[i].NamePtr^ = name`
+	# answers FALSE on this target. Reduced to 20 lines: a frozen string reached
+	# through a pointer held in a RECORD FIELD compares as its own field ADDRESS,
+	# because the field's pointer is never LOADED; through a plain pointer VARIABLE
+	# the same expression is correct. Silent, no gap, no trap -- filed separately.
+	# Wiring it now would wire a red row for a defect these three do not have.
+	./$(COMPILER) --target=wasm32 test/test_metaclass_construct.pas $(TESTTMP)/w32_mcls_construct.wasm
+	./$(COMPILER) test/test_metaclass_construct.pas $(TESTTMP)/w32_mcls_construct_x64
+	tools/expect_same.sh wasm32/test_metaclass_construct "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_mcls_construct.wasm)" "$$($(TESTTMP)/w32_mcls_construct_x64)"
+	./$(COMPILER) --target=wasm32 test/test_metaclass_descendant.pas $(TESTTMP)/w32_mcls_descendant.wasm
+	./$(COMPILER) test/test_metaclass_descendant.pas $(TESTTMP)/w32_mcls_descendant_x64
+	tools/expect_same.sh wasm32/test_metaclass_descendant "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_mcls_descendant.wasm)" "$$($(TESTTMP)/w32_mcls_descendant_x64)"
+	./$(COMPILER) --target=wasm32 test/test_metaclass_field_receiver.pas $(TESTTMP)/w32_mcls_field_recv.wasm
+	./$(COMPILER) test/test_metaclass_field_receiver.pas $(TESTTMP)/w32_mcls_field_recv_x64
+	tools/expect_same.sh wasm32/test_metaclass_field_receiver "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_mcls_field_recv.wasm)" "$$($(TESTTMP)/w32_mcls_field_recv_x64)"
+	@echo "wasm32: 48 rows green (41 default + 7 shortstring; 0 excluded)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through

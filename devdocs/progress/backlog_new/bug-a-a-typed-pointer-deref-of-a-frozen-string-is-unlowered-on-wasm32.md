@@ -91,6 +91,20 @@ row — wasm32 traps before the width is consulted. A matrix that expects seven
 green targets on that row will read wasm32's trap as the fix failing. wasm32 IS
 a site for the WRITE-side half of that fix; it is not one for the read half.
 
+## A SILENT SIBLING WITH THE SAME CAUSE, found 2026-09-04
+
+`bug-a-wasm32-a-frozen-string-through-a-pointer-in-a-record-field-compares-as-the-fields-address`.
+`r.NamePtr^ = 'lit'` for `NamePtr: ^string[N]` in a RECORD FIELD answers FALSE
+on wasm32 and TRUE on the other five targets — no gap, no trap, and the same
+expression PRINTS the string correctly. It is why `GetClass` returns nil on
+wasm32.
+
+So the p25 rating's premise — "fails loud and produces no wrong value" — is
+true of THIS ticket's shape and not of the cause. Read the sibling before
+scoping a fix: the closing paragraph below says the address-is-the-value arm is
+"right for a `string[N]` record field", which holds only when the field IS the
+string and is exactly wrong when the field HOLDS A POINTER to one.
+
 ## Where it is
 
 The trap is a `WasmUnsupported` (`unreachable`), so it fails loud and produces

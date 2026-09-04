@@ -166,6 +166,13 @@ var
   WasmRecDescRec    : array[0..511] of Integer;
   WasmRecDescCell   : array[0..511] of Integer;
   WasmRecDescCount  : Integer;
+  { Data[] cells for the two whole-module tables, allocated on first use and
+    filled in after EmitRTTI / EmitResources, -1 while unused. Same mechanism as
+    WasmRecDescCell and for the same reason -- the offset does not exist while
+    bodies are being emitted -- but ONE cell each rather than one per id,
+    because there is one registry and one resource table in a module. }
+  WasmRttiRegCell   : Integer;
+  WasmResourcesCell : Integer;
 
 { The current body's refusals as report lines: the first on the body's own
   line, any further ones indented under it. One reason per line rather than a
@@ -616,6 +623,8 @@ begin
   end;
   WasmHostImpCount := 0;
   WasmRecDescCount := 0;
+  WasmRttiRegCell := -1;
+  WasmResourcesCell := -1;
   WasmGSp := WasmAddGlobal('sp', WT_I32, True, 65536);
   WasmAddExport('sp', WEK_GLOBAL, WasmGSp);
   { Immutable, and its initialiser is back-filled by WasmFinishMemory once
@@ -726,6 +735,7 @@ procedure WasmStrScratchPop(scr: Integer); forward;
 { The metaclass-value emitter, defined beside the descriptor-cell table it
   reuses and dispatched from the value switch well above it. }
 procedure WasmEmitClassRef(node: Integer); forward;
+procedure WasmModuleTableAddr(var cell: Integer); forward;
 { The sys* intrinsic family, defined below the builtin dispatch that calls it. }
 function WasmEmitSysCallFam(node, p: Integer; isStmt: Boolean): Boolean; forward;
 function WasmEmitLoadFile(node: Integer): Boolean; forward;
@@ -1946,6 +1956,14 @@ begin
       indirection would buy nothing. Same expression the four register 32-bit
       backends emit (ir_codegen386.inc's IR_VMTADDR is the closest twin). }
     IR_VMTADDR   : WasmDataAddr(UClsVMTOffset[IRA[node]]);
+    { The two whole-module tables. Without these arms a body reached by
+      `GetClass`, `TypeInfo`, streaming, LFM or `class of` refused as
+      `value IR op 32` -- and lib/rtl/typinfo.pas is itself such a body,
+      so a wasm32 program that so much as USES typinfo died before its own
+      code. Same sentence riscv32's arm carries; same fix, one indirection
+      further because wasm32 cannot relocate into code. }
+    IR_RTTI_REG  : WasmModuleTableAddr(WasmRttiRegCell);
+    IR_RESOURCES : WasmModuleTableAddr(WasmResourcesCell);
     IR_CALL_IND  : WasmEmitCallInd(node, False);
     IR_VIRTUAL_CALL : WasmEmitVirtualCall(node, False);
     IR_ATOMIC    : WasmEmitAtomic(node);
@@ -4781,6 +4799,46 @@ begin
   WasmMemOp($28, 'i32.load', 2, 0);
 end;
 
+{ IR_RTTI_REG and IR_RESOURCES: put a whole-module TABLE's address on the
+  operand stack, through a Data[] cell filled in after the table exists.
+
+  The register backends spell this as an immediate carrying the sentinel -100
+  (RTTI registry) or -101 (resource table), which compiler.pas rewrites once
+  EmitRTTI and EmitResources have run. wasm32 has no relocation into code, so
+  the indirection moves into DATA -- exactly what WasmRecDescAddr above already
+  does for a class descriptor, and this shares its AddDataPtrFix machinery
+  rather than adding a second scheme.
+
+  ONE CELL PER TABLE, not per site: a module has one registry and one resource
+  table, so the memo is the variable itself.
+
+  AND A ZERO CELL IS CORRECT HERE, which is the one place this differs from its
+  sibling. compiler.pas drops a -100 fixup outright when there is no registry --
+  `a sentinel with no table is dropped (the intrinsic then returns nil/0)` --
+  so a program with no RTTI must read nil and carry on. WasmResolveLateDataCells
+  FAILS LOUD on an unresolved cell because a nil record descriptor is a silently
+  missed retain; a nil registry is a documented answer. Same mechanism, opposite
+  verdict on an empty cell, and reading the sibling's guard as the rule for both
+  would break every wasm32 program that publishes no classes. }
+procedure WasmModuleTableAddr(var cell: Integer);
+var i: Integer;
+begin
+  if cell < 0 then
+  begin
+    { 8 bytes and the low dword read as an i32, the same shape and the same
+      reason as WasmRecDescCellFor's cell. }
+    cell := DataLen;
+    for i := 0 to 7 do
+    begin
+      if DataLen >= MAX_DATA then Error('data overflow');
+      Data[DataLen] := 0;
+      Inc(DataLen);
+    end;
+  end;
+  WasmDataAddr(cell);
+  WasmMemOp($28, 'i32.load', 2, 0);
+end;
+
 { ===== the sys* intrinsic family =====
 
   `sysopen` / `sysread` / `syswrite` / `sysclose` / `sysfchmod` are the raw
@@ -4971,7 +5029,7 @@ end;
   ONE cell, not eighty.
 
   The table keys on a record id, and a class's is `ci + REC_UCLASS_BASE` —
-  the same conversion WasmResolveRecDescCells applies in reverse. }
+  the same conversion WasmResolveLateDataCells applies in reverse. }
 procedure WasmEmitClassRef(node: Integer);
 begin
   WasmRecDescAddr(IRA[node] + REC_UCLASS_BASE);
@@ -5321,6 +5379,53 @@ end;
   and "unreachable by inspection" is exactly the kind of claim that stops being
   true without anything going red. If it ever fires, the refusal names the real
   missing piece instead of silently leaking. }
+{ IR_ZERO_SYM -- nil-init a managed LOCAL at its declaration, so an early exit
+  or the epilogue never DecRefs whatever the previous frame left in those bytes.
+
+  A scalar slot (a managed string handle, a dyn-array handle) is one pointer and
+  gets a single store; an array of AnsiString, or a record with managed fields,
+  zeroes its whole span through PXXMemZero. Same two cases the register backends
+  make -- riscv32's arm is the closest twin -- and the same predicate decides,
+  SymNeedsZeroing, so the wasm32 answer cannot drift from theirs.
+
+  IT IS A STATEMENT WITH NO OTHER SPELLING. `bug-a-nilpy-on-cross-targets-four-
+  remaining-walls` records what its absence costs: x86-64 and i386 had the arm,
+  the other three raised `IR op not yet supported: zero_sym`, and that ONE wall
+  stood behind 34 of the 52 NilPy tests on arm32. On wasm32 it showed up as
+  `statement IR op 51` and the whole body was emitted as `unreachable`. }
+procedure WasmEmitZeroSym(node: Integer);
+var si, sz, mz: Integer; vt: Byte;
+begin
+  si := IRA[node];
+  if (si < 0) or (Syms[si].Kind <> skLocal) then Exit;
+  if not SymNeedsZeroing(si, sz) then Exit;
+  if sz = TARGET_PTR_SIZE then
+  begin
+    WasmLValueAddr(si);
+    if WasmBodyBroken then Exit;
+    WasmI32Const(0);
+    WasmMemOp($36, 'i32.store', 2, 0);
+    Exit;
+  end;
+  if sz <= 0 then Exit;
+  mz := WasmWriteHelper('PXXMemZero');
+  if mz < 0 then Exit;
+  { The destination is a SLOT ADDRESS rather than an IR node, so this cannot go
+    through WasmWriteValueArg; the widen is the one thing that routine does for
+    us and it is one opcode. }
+  if not WasmParamValType(mz, 0, vt) then
+  begin
+    WasmUnsupported('PXXMemZero parameter 0 has no wasm value type');
+    Exit;
+  end;
+  WasmLValueAddr(si);
+  if WasmBodyBroken then Exit;
+  if vt = WT_I64 then WasmOp($AD, 'i64.extend_i32_u');
+  WasmWriteConstArg(mz, 1, sz);
+  if WasmBodyBroken then Exit;
+  WasmCall(WasmSlotForProc(mz), 'PXXMemZero');
+end;
+
 procedure WasmEmitDefaultMem(node: Integer);
 var mz: Integer;
 begin
@@ -5981,6 +6086,7 @@ begin
     IR_SET_COPY      : WasmEmitSetCopy(node);
     IR_SETLEN_DYN    : WasmEmitSetLenDyn(node);
     IR_DEFAULT_MEM   : WasmEmitDefaultMem(node);
+    IR_ZERO_SYM      : WasmEmitZeroSym(node);
     IR_EXC_ENTER     : WasmEmitExcEnter(node);
     IR_EXC_LEAVE     : WasmEmitExcLeave(node);
     IR_RAISE         : WasmEmitRaise(node, blk);
@@ -7131,11 +7237,18 @@ begin
   for i := 0 to DataLen - 1 do WasmDataSegByte(Data[i]);
 end;
 
-{ Resolve the record-descriptor cells, and do it HERE because this is the only
-  window: UClsRTTIOff is not populated until EmitRTTI has run (after the whole
-  codegen pass, so not while bodies are emitted), and WasmFillData below is what
-  turns a DataPtrFix into bytes. One point in the program satisfies both. }
-procedure WasmResolveRecDescCells;
+{ Resolve every Data[] cell whose value is an offset that did not exist while
+  bodies were being emitted -- the per-class record descriptors, and the two
+  whole-module tables. HERE because this is the only window: UClsRTTIOff,
+  RTTIRegistryOff and ResourceTableOff are all populated by EmitRTTI /
+  EmitResources (after the whole codegen pass, so not while bodies are
+  emitted), and WasmFillData below is what turns a DataPtrFix into bytes. One
+  point in the program satisfies both.
+
+  NAMED FOR THE MECHANISM, not for its first customer: it was
+  WasmResolveRecDescCells while descriptors were all it did, and the next
+  customer would have been added under a name that says it is not there. }
+procedure WasmResolveLateDataCells;
 var i, j: Integer;
 begin
   for i := 0 to WasmRecDescCount - 1 do
@@ -7158,13 +7271,30 @@ begin
                + ' RTTI blob (record id ' + WasmIntStr(WasmRecDescRec[i])
                + ') — the class publishes no members');
   end;
+
+  { The two whole-module tables, in the same window and for the same reason:
+    RTTIRegistryOff is set by EmitRTTI and ResourceTableOff by EmitResources,
+    both after the codegen pass.
+
+    NO `else WasmFail` HERE, deliberately, and it is not an oversight copied
+    from the loop above. compiler.pas drops a -100/-101 fixup outright when the
+    table does not exist and says why -- `a sentinel with no table is dropped
+    (the intrinsic then returns nil/0)` -- so a module that publishes no classes
+    or ships no resources must read nil and run. Leaving the cell zero IS that
+    answer. The loop above fails loud on the same shape because a nil record
+    descriptor means a retain that will never happen; these two mean the table
+    is empty, which is a fact rather than a defect. }
+  if (WasmRttiRegCell >= 0) and (RTTIRegistryOff >= 0) then
+    AddDataPtrFix(WasmRttiRegCell, RTTIRegistryOff);
+  if (WasmResourcesCell >= 0) and (ResourceTableOff >= 0) then
+    AddDataPtrFix(WasmResourcesCell, ResourceTableOff);
 end;
 
 procedure WasmFinishMemory;
 var top: Integer;
 begin
   if WasmGSp < 0 then Exit;
-  WasmResolveRecDescCells;
+  WasmResolveLateDataCells;
   WasmDataBase := ((WASM_BSS_BASE + BSSSize + 15) div 16) * 16;
   WasmGlobInit[WasmGData] := WasmDataBase;
   WasmFillData;
