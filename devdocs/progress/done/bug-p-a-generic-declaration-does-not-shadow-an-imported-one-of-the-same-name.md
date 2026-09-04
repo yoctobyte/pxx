@@ -86,7 +86,7 @@ shared by every unit and the main program is lexed FIRST, so "which came first"
 is not the same question for tokens as it is for symbols.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 01998adb8.
 
 ## Fixed 2026-09-04 (frankB) — and it was not the lookup
 
