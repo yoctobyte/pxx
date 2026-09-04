@@ -4475,6 +4475,21 @@ begin
         if LastTypeStrElemTk = tyWideChar then ProcRetStrElemTk[mpi] := Ord(tyWideChar)
         else ProcRetStrElemTk[mpi] := Ord(tyChar);
       end;
+      { …and the return RECORD/CLASS id, which is the SAME dropped field one type
+        kind over, in the function whose own note above already names two
+        instances of the pattern. `T = function(k: Integer): TR` left
+        ProcRetRecId at REC_NONE, so an indirect call through T knew it returned
+        a record and not WHICH record.
+
+        It did not refuse -- it answered. `h.fn(8).c` resolved REC_NONE, found no
+        field, and applied `.c` at OFFSET 0: 8 where FPC prints 24, silently, and
+        `arr[0](8).c` the same. The via-a-local spelling `r := h.fn(8)` was
+        correct throughout because the DESTINATION carries the record there and
+        nothing has to ask the signature. That is why this was invisible until a
+        suffix asked the one question the row could not answer.
+        bug-p-member-access-on-a-procedural-variable-call-result-is-rejected }
+      if mIsFunc and ((mRetType = tyRecord) or (mRetType = tyClass)) then
+        ProcRetRecId[mpi] := LastTypeRecId;
       if mIsFunc and (mRetType = tyPointer) then
       begin
         ProcRetPtrElemTk[mpi] := Ord(LastTypePointerElemTk);

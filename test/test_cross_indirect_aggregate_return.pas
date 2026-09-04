@@ -72,12 +72,18 @@ begin
     temporary. A different consumer from the assignment above, and the one that
     reads the hidden destination straight back rather than copying out of it.
 
-    `fp(7).c` is NOT here and its absence is a finding, not an omission: the
-    parser rejects member access on a PROCEDURAL-VARIABLE call result --
-    `expected ')' before '.'` -- while accepting it on a direct call and on a
-    virtual method call, the two rows below. Measured 2026-09-04 and filed as
-    bug-p-member-access-on-a-procedural-variable-call-result-is-rejected. Add
-    the row when that closes. }
-  writeln('field    ', Plain(8).e, ' ', b.Make(9).a);
+    `fp(7).c` was NOT here for a day, and its absence was a finding: the
+    procedural-variable spelling was rejected with `expected ')' before '.'`
+    while the direct and virtual spellings on the same line worked.
+    bug-p-member-access-on-a-procedural-variable-call-result-is-rejected, closed
+    2026-09-04, and the row is now in -- which makes this line the guard for
+    all THREE call kinds rather than two of them.
+
+    `fp(7).c` is 21 (7*3) and NOT 7: the field must be read at its own offset,
+    not at offset 0. That distinction is the whole point of picking `.c` here --
+    the signature row carried no return-record id, so the field resolved against
+    REC_NONE and landed at offset 0, and a `.a` row would have printed the right
+    answer for the wrong reason and passed. }
+  writeln('field    ', Plain(8).e, ' ', b.Make(9).a, ' ', fp(7).c);
   writeln('done');
 end.

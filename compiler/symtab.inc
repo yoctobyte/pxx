@@ -15154,12 +15154,25 @@ begin
   else if ASTKind[node] = AN_CLASS_CAST then
     { `TClass(obj)` hard cast yields type TClass — same record resolution. }
     Result := REC_UCLASS_BASE + Integer(ASTIVal[node])
-  else if ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
-           (ASTKind[node] = AN_CLASS_VIRTUAL_CALL) or (ASTKind[node] = AN_INTF_CALL)) and
+  else if ASTNodeIsCall(node) and
           (Integer(ASTIVal[node]) >= 0) and (Integer(ASTIVal[node]) < ProcCount) then
     { A CALL's record is its return type's. A property GETTER is a call, so without this
       `for x in o.Bag` (Bag a property) could not tell that the container was a class at all.
-      Guarded on a real proc index: the special-builtin calls carry a NEGATIVE id there. }
+      Guarded on a real proc index: the special-builtin calls carry a NEGATIVE id there.
+
+      ASKED THROUGH ASTNodeIsCall -- the list two functions above this one -- and
+      not spelled out again. This arm named four of the five kinds and left out
+      AN_CALL_IND, which is the drift that list exists to stop. An indirect call
+      carries its SIGNATURE's Procs[] index in IVal exactly as the other four
+      carry theirs, and ProcRetRecId of a signature row is set, so nothing else
+      about the arm changes.
+
+      The consequence was worse than a refusal and this is why it is not a
+      cosmetic tidy: `h.fn(8).c` for a procedural FIELD parsed fine, resolved
+      REC_NONE here, and applied `.c` at OFFSET 0 -- printing 8 where FPC prints
+      24. Same for `arr[0](8).c`. A SILENT WRONG VALUE, and the field-at-offset-0
+      signature the AN_INDEX arms below already describe twice.
+      bug-p-member-access-on-a-procedural-variable-call-result-is-rejected }
   begin
     Result := ProcRetRecId[Integer(ASTIVal[node])];
     { A RECORD-FACTORY call (TPt.Create(...) — a record CONSTRUCTOR) has no

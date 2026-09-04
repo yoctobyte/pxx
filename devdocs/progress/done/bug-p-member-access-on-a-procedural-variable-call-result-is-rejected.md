@@ -3,7 +3,7 @@ slug: bug-p-member-access-on-a-procedural-variable-call-result-is-rejected
 track: P
 prio: 40
 type: bug
-status: open
+status: done
 blocked-by: []
 owner: unassigned
 created: 2026-09-04
@@ -65,3 +65,6 @@ entry point".
 `test/test_cross_indirect_aggregate_return.pas` carries the row commented out
 with this slug beside it (`fp(7).c`). Un-comment it; the file is already wired
 on all six cross targets, so the row lands everywhere at once.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

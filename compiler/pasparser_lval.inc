@@ -49,6 +49,8 @@
   injects Data as Self and calls Code; ASTSLen carries the flag, as it did in
   both originals.
   bug-p-cannot-call-directly-through-a-procedural-type-cast }
+procedure ApplyCallResultPtrSuffix(node, procIdx: Integer); forward;   { the ONE materialisation point for a suffix on a call RESULT — the index arm below hands array-returning calls to it }
+
 function BuildIndirectCallAST(calleeNode, sigPi: Integer; isMethodPtr: Boolean): Integer;
 var argsHead, lastArg, argSeq, nArgs, callIndNode: Integer;
 begin
@@ -75,6 +77,36 @@ begin
   ASTIVal[callIndNode]  := sigPi;
   ASTTk[callIndNode]    := Ord(Procs[sigPi].RetType);
   if isMethodPtr then ASTSLen[callIndNode] := 1 else ASTSLen[callIndNode] := 0;
+
+  { …and a SUFFIX on the result -- `fp(8).c`, `mp(8).c`, `TF(p)(8).c` -- handed
+    to ApplyCallResultPtrSuffix, which its own forward declaration calls "the
+    ONE materialisation point for a suffix on a call RESULT". It takes a Procs[]
+    index and a signature row IS one, so no signature-only entry point is
+    needed: `Procs[sigPi].RetType` and every `ProcRet*[sigPi]` column it reads
+    are populated for a procedural type exactly as for a declared routine.
+
+    Here rather than at the three callers, because this function already exists
+    to stop the argument loop being written a fourth time and the suffix
+    question has the same shape -- ParseProcVarCallAST (`fp(8)`),
+    ParseLValueAST's method-pointer ident arm (`mp(8)`) and the procedural-cast
+    arm in pasparser_expr.inc (`TF(p)(8)`) all reached the `.` with a finished
+    call node in hand and none of them asked. Member access on a DIRECT call
+    result has worked since feature-member-access-on-call-result; the indirect
+    spellings just never reached the helper.
+
+    NOT in NilPy: ParseProcVarCallAST may still wrap this node
+    (PyWrapHeapCallableCall reads ASTLeft off it to rebuild the call), and a
+    suffix node would hand that wrapper the wrong shape. NilPy's selectors are
+    its own twin anyway -- PyParseClassRecordSelectors -- so this is the region
+    carve holding, not an exception being carved.
+    bug-p-member-access-on-a-procedural-variable-call-result-is-rejected }
+  if (not PyExprMode) and (CurTok.Kind in [tkDot, tkLBrack, tkCaret]) then
+  begin
+    ApplyCallResultPtrSuffix(callIndNode, sigPi);
+    BuildIndirectCallAST := CurASTNode;
+    Exit;
+  end;
+
   BuildIndirectCallAST := callIndNode;
 end;
 
@@ -184,7 +216,6 @@ end;
 procedure ResolveDerefShape(node: Integer; var tk: TTypeKind; var recName: Integer;
                             var remDepth, ptrBaseTk, ptrBaseRec: Integer); forward;
 function IndexDynArrayValue(node, elemTk, elemRec, dynDepth, tailRec: Integer; var outTk: TTypeKind): Integer; forward;   { the ONE materialisation point for a suffix on a dyn-array VALUE }
-procedure ApplyCallResultPtrSuffix(node, procIdx: Integer); forward;   { the ONE materialisation point for a suffix on a call RESULT — the index arm below hands array-returning calls to it }
 
 function OwnNameResultSym(const name: AnsiString): Integer;
 { The result variable a bare OWN NAME reads, or -1 when `name` is not the

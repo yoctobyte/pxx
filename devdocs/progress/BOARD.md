@@ -367,7 +367,7 @@ _none_
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | regression-test-core-c-crtl-wait | T | 55→85 | regression | NOT A COMPILER BUG, and re-laned from C to T. riscv32's `wait4-rusage rusage=UNTOUCHED` is red on seven and deterministically green on plexus from BYTE-IDENTICAL compiler bytes (compiler_sha256 fcc5ad9a29a61c10c... both boxes) with an EMPTY `git diff` outside devdocs/. seven runs qemu-riscv32 8.2.2 where plexus runs 10.2.1; the host kernel is eliminated on seven's own box by tools/host_waitid_rusage_probe.c, which prints rusage=written there with its arg5-NULL control printing UNTOUCHED. The target-side path is four pure pass-throughs and the same riscv32 binary writes rusage under a newer emulator. Fixing it needs root on seven (owner) or a host-capability skip at ROW grain (T) — do NOT weaken the assertion. | bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain |
 
-## backlog-pascal (42)
+## backlog-pascal (41)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -383,7 +383,6 @@ _none_
 | bug-p-error-context-near-quotes-an-unrelated-token-stream | P | 35 | bug | A compile error's `near:` excerpt can quote text from a completely unrelated token stream — RTL/builtin unit source with no relation to the file being compiled. The line number and the diagnosis are correct; only the excerpt is wrong, so it does not error and does not look wrong. Reproduces on a 10-line program: the same `undefined variable` error gives a CORRECT excerpt in a trivial program and a bogus one once the unit declares a generic specialization alias, which brackets it tightly. | — |
 | bug-p-for-in-over-a-deref-ignores-a-non-zero-low-bound | P | 40 | bug | BuildForInArrayLoop builds a bare AN_INDEX over the container node and relies on lowering to subtract the array's low bound. That works for the AN_IDENT container it was written for and NOT for a pointer deref: the subtraction keys on tags the lvalue walk stamps on a parser-built `p^[i]`, and the synthesised node carries none. Measured with the bound admitted: array[1..4] holding 11 22 33 44 iterated as `22 33 44 4310536`. Currently INERT — the p^ for-in arm refuses a non-zero bound rather than shipping the shift, and the Makefile asserts that refusal — so this ticket is the price of lifting that restriction, not a live defect. | — |
 | bug-p-for-in-over-a-static-array-returning-call-is-refused | P | 35 | bug | `for x in MkArr do` where MkArr returns array[0..3] of Integer is refused, and the method spelling `for x in o.GetArr do` is refused with a different message. The DYNAMIC-array twin of both works and has since compat-pascal-index-a-function-call-result. Split out of the p^ for-in fix rather than merged into it: the pointer-deref shape reads its extent from the pointer symbol's SymPtrElem* columns and a call result reads it from ProcRetFixedArrBytes/RetType, which is a real difference in shape SOURCE, not a spelling. | — |
-| bug-p-member-access-on-a-procedural-variable-call-result-is-rejected | P | 40 | bug | `fp(7).c` where fp is a procedural VARIABLE is rejected with `expected ')' before '.'`. The identical member access is accepted on a DIRECT call result (`Plain(8).c`) and on a VIRTUAL method call result (`b.M(8).c`), both measured working. feature-member-access-on-call-result is done and covered two of the three shapes; ApplyCallResultPtrSuffix is the one materialisation point and it takes a real procIdx, so the AN_CALL_IND sites never reach it. There are FIVE AllocNode(AN_CALL_IND) sites in pasparser_lval.inc, which is why this is not a one-line fix and is filed rather than patched at one of them. | — |
 | bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out | P | 35 | bug | ParseFactorCore's carve-out to PyParseFactorCore is partial: 36 NilPy diagnostics remain on the Pascal arm and 10 exist verbatim on BOTH arms, so a correction to one of them lands on one arm and silently leaves the other stale. | — |
 | bug-p-qword-div-by-a-literal-above-2-63-is-signed | P | 55 | bug | `QWord div` / `mod` by a literal >= 2^63 divides SIGNED and returns a wrong value | — |
 | bug-p-set-membership-item-constant-truncated-to-32-bits | P | 25 | bug |  | — |
@@ -887,9 +886,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3268)
+## done (3269)
 
-3268 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3269 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (75)
 
@@ -1157,7 +1156,6 @@ _none_
 - [p 40] [P] bug-p-a-default-value-is-accepted-on-an-open-array-parameter
 - [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
 - [p 40] [P] bug-p-for-in-over-a-deref-ignores-a-non-zero-low-bound
-- [p 40] [P] bug-p-member-access-on-a-procedural-variable-call-result-is-rejected
 - [p 40] [P] bug-p-unicodechar-is-a-4-byte-code-point-and-fpc-makes-it-a-2-byte-code-unit
 - [p 40] [T] bug-t-pasmith-generates-no-float-code-so-optfuzz-cannot-see-float-optimizations
 - [p 40] [T] bug-t-the-sort-comm-locale-desync-has-now-been-found-three-times-independently

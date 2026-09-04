@@ -2897,6 +2897,21 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_parenless_call_of_any_procedural_designator.pas $(TESTTMP)/test_pvbare26
 	@$(TESTTMP)/test_pvbare26 | diff -u test/test_parenless_call_of_any_procedural_designator.expected - \
 	  || { echo 'test_parenless_call_of_any_procedural_designator: FAIL - a parenless call of a non-identifier designator'; exit 1; }
+	@# `.field` on the result of a call whose CALLEE IS NOT A LITERAL ROUTINE
+	@# NAME -- procedural variable, method pointer, procedural cast, procedural
+	@# field, procedural element, interface method, virtual class method. The
+	@# direct spelling has worked since feature-member-access-on-call-result and
+	@# every indirect one was broken, in two different ways: three failed to
+	@# parse, two parsed and read the field at OFFSET 0, two could not lower.
+	@# THE FIELD IS `.c` AND NEVER `.a` -- `.c` is k*3, which no offset-0 read
+	@# can produce, and a `.a` row would have printed the right answer for the
+	@# wrong reason on the two rows that resolved REC_NONE. The `local` rows are
+	@# the control in the other direction: an ordinary aggregate return already
+	@# worked, because the DESTINATION carries the record type there and nothing
+	@# has to ask the signature. Oracle: FPC.
+	@./$(COMPILER) test/test_member_access_on_an_indirect_call_result.pas $(TESTTMP)/test_indcallsel26
+	@$(TESTTMP)/test_indcallsel26 | diff -u test/test_member_access_on_an_indirect_call_result.expected - \
+	  || { echo 'test_member_access_on_an_indirect_call_result: FAIL - a selector on an indirect call result'; exit 1; }
 	@# A PROPERTY inside an INTERFACE: parsed at all, and then dispatched through
 	@# the IMT rather than a class VMT. The `direct` row is the control (the
 	@# ordinary-call arm, which already worked), so breaking interface dispatch

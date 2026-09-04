@@ -2972,12 +2972,28 @@ begin
     { `obj as IFoo` is an interface lvalue: the address of its fat-pointer temp. }
     Result := IRAppend(IR_LEA, IRMaterializeIntfCast(node, True), -1, -1, 0, Ord(tyPointer));
   end
-  else if ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL)) and
+  else if ASTNodeIsCall(node) and
           ((ASTTk[node] = Ord(tyRecord)) or (ASTTk[node] = Ord(tyVariant)) or
            (ASTTk[node] = Ord(tyAnsiString)) or
            TypeIsFrozenString(IntToTypeKind(ASTTk[node]))) then
     { Aggregate/variant-returning call in an address position: its IR value IS
       the hidden-destination address (RetViaHiddenDest), so lower the call.
+
+      ASKED THROUGH ASTNodeIsCall, which is the ONE list of the five node kinds
+      that are a routine call. This arm spelled out two of them by hand and was
+      the sixth copy of that test to drift -- the failure ASTNodeIsCall's own
+      note describes, one file over. All three missing kinds were MEASURED
+      broken here, not inferred, each printing `frontend could not lower AST
+      node (kind N)` on a member access its own via-a-local spelling handles:
+
+        fp(8).c      AN_CALL_IND          (kind 53)  a procedural VARIABLE
+        i.M(8).c     AN_INTF_CALL         (kind 58)  through an interface
+        mc.CM(8).c   AN_CLASS_VIRTUAL_CALL(kind 88)  through a metaclass
+
+      Nothing about the hidden-destination ABI distinguishes them: `r := fp(8)`,
+      `r := i.M(8)` and `r := mc.CM(8)` all already worked, so the address WAS
+      being produced correctly -- only this reader could not see the node shape.
+      bug-p-member-access-on-a-procedural-variable-call-result-is-rejected
 
       STRING-returning calls join them. For a managed string the call's value is
       the HANDLE, and a handle is exactly what an index base wants — the same

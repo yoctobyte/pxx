@@ -1,0 +1,12 @@
+local  var   24
+local  intf  24
+local  meta  24
+direct var   24
+direct meth  24
+direct cast  24
+direct field 24
+direct elem  24
+direct intf  24
+direct meta  24
+all fields   8 16 24
+twice        24
