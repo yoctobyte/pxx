@@ -5157,3 +5157,95 @@ same frame.* It will **state which assumption the fix rests on rather than let i
 read as unconditional.** *A fix that is correct only under a uniqueness that
 nothing enforces is a fix with a precondition, and the precondition belongs in the
 code, not in the session that wrote it.*
+
+---
+
+## `a090fa76d` — a raise in a stackful generator reaches the for-in's handler
+
+Verified: on origin, ticket moved to `done/`, and **the assumption is written at
+`lib/rtl/coroutine.pas:62`** (in caps) plus the desugar side in
+`pasparser_stmt.inc`. *My first grep for it returned nothing because my terms were
+wrong — the fourth time this shift an absence would have been a false negative if
+trusted.*
+
+**Mechanism.** `CoAlloc` seeds the context's saved `exc_top` with 0 — its own
+comment says *"fresh chain on this stack"* — and `CoSwitch` restores it on the way
+in. So a raise on the coroutine stack **walked an EMPTY chain, found no handler
+and killed the process (rc=217)**, while the *identical source* as
+`generator; stackless;` was caught, and so was a plain procedure raising inside
+the same `try`. The fix is **three instructions in the body prologue** reading
+`[[self + CO_OFF_CALLERCTX]]` — **no new intrinsic**, because `CoNext` calls
+`CoSwitch` with `pfrom = &callerctx` and `CoSwitch` pushes `exc_top` **last**
+(lowest address) before `mov [pfrom], rsp`, so **that word IS the consumer's chain
+head.**
+
+### Five rows, and two are green before the fix ON PURPOSE
+
+```
+plain procedure raising in the same try   caught 5 -> caught 5   control
+generator; stackless;                     caught 5 -> caught 5   control
+generator;  (stackful)                    rc=217   -> caught 5   GUARD
+generator catching its OWN raise          ok       -> ok         anti-overshoot
+raise past its own non-matching handler   died     -> reaches consumer
+```
+
+> **Without rows 1-2 a reader cannot separate "the guard fires" from "the harness
+> is broken."**
+
+Verified on pin v403: **rows 1-2 pass there, row 3 dies.** The anti-overshoot row
+is the other half — it fails if the fix reaches *too* far. *A guard row, a
+must-not-move row, and a must-not-overshoot row is the complete set; most tests
+carry only the first.*
+
+### THE OBSTACLE WAS THE LOAD-BEARING EVIDENCE
+
+**What makes once-at-entry safe is not frankb-78's judgement — it is a refusal
+that exists for unrelated reasons.** `yield` inside `try`/`except`/`finally` is
+**rejected by the compiler**, so **a generator's handler frame can never be live
+across a suspension**: the one case where an inherited chain would be stale *in
+the dangerous direction* **cannot be written.**
+
+> **That refusal had blocked its own probe earlier in the session and it read the
+> refusal as an obstacle. It was the proof.**
+
+A new shape, and a good one: **a restriction that frustrates your measurement may
+be the thing that makes your fix correct.** The instinct is to route around a
+refusal; the question worth asking first is *what does this refusal guarantee?*
+
+### The assumption it DOES rest on — in the code, not in the session
+
+The link is made **once, at first entry**, so it holds **only while the resumer's
+frame outlives the coroutine.** True today because `CoAlloc` and `CoNext` have
+**exactly one caller** — the for-in desugar, which creates and resumes in the same
+frame and resumes at the **loop HEAD**, outside any `try` the loop **body**
+pushes. **Nothing enforces that uniqueness.**
+
+So it is stated at **`CoAlloc` in `lib/rtl/coroutine.pas`** and at the desugar's
+`paCoAlloc` lookup — **not only at the prologue that depends on it.** *A second
+driver must refresh the link per resume; if it doesn't, the failure is a longjmp
+into a returned frame, which would not point back here.* **The constraint now
+lives where it can be violated, not where it was understood.**
+
+### What the fix COSTS, disclosed with numbers
+
+> **It turns a process death into a working program that leaks.**
+
+An escaping raise skips the teardown that calls `CoFree`, losing the **64 KB
+coroutine stack plus the instance** — RSS **9324 kB at N=2000**, **36844 kB at
+N=8000**, a **4.59 kB/raise** slope of touched pages against the 64 KB
+reservation.
+
+That moves `bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in`
+**from UNCHECKED-for-stackful to its LARGEST case** — stackless ~0.99 blocks/raise,
+**stackful 64 KB**. It is why the new test runs **N=5 and says so in its header.**
+*Trading a fatal failure for a lesser one is a legitimate move; announcing the
+trade with the slope attached is what makes it one.*
+
+**Coordinator check on its question:** that ticket is `track: A`, `prio: 55`,
+`status: open`, **`blocked-by: []`, no `owner:`**, and no commit but its own
+mentions it. **Unclaimed — nobody is on it.**
+
+Gate: `gate.sh quick` GREEN before the commit with the **FPC seed canary RUNNING,
+not SKIP** (uncommitted `compiler/**`); `make compiler/pascal26` **`converged
+after 1 round(s)`**, binary `1f82edbd36ad`; **all four Pascal generator tests
+byte-identical in output to pin v403.**
