@@ -194,4 +194,4 @@ Everything else in that run passed, including `make test-nilpy` and the FPC
 seed canary.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 0f7286818.
