@@ -118,3 +118,44 @@ here. Both were silent before. Filed as
 
 ## Log
 - 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b4017f96d.
+
+## The lib/ and examples/ claim, re-measured 2026-09-04 with a live control
+
+frankD's point while landing `bug-p-a-stray-end-at-unit-implementation-top-level-is-silently-skipped`
+(`5981ed071`), and it applies backwards to this ticket: **a zero census from a
+probe that was never live reads identically to a real absence — both print
+nothing.** So the positive control is not optional when the answer is zero.
+
+The original claim here — "a static pass confirms every occurrence that would
+now warn is inside a COMMENT" — was **backed by the static pass alone for `lib/`
+and `examples/`**, and that was weaker than it read:
+
+- `make compiler/pascal26` corroborates `compiler/**` and nothing else.
+- **gate.sh quick's `pinned builds live lib/rtl` arm uses the PIN**, which
+  predates this change entirely, so it cannot see the new warning. That is the
+  CLAUDE.md trap about verifying under the pin, in the arm that looks most like
+  coverage of exactly this question.
+
+Re-measured with two instruments that fail differently, plus a control drawn
+from the population the question is about:
+
+1. **Static checker, positive-controlled.** A planted file with `{$PACKENUM 1}`,
+   `{$H-}` and `{$totallybogusdirective}` is reported 3/3. Re-scanned by area:
+   `lib` 0, `examples` 0, `test` 4 (the deliberate fixture), `compiler` 8 (all
+   inside this file's own new comments).
+2. **Actually compiling them, which no gate does.** 49 example programs built
+   with the NEW compiler: 31 compiled, 18 failed for unrelated reasons.
+   **The precondition is asserted** — a warning count of 0 over a corpus where
+   nothing compiled is not a measurement. 0 directive warnings across all 31,
+   which pull `lib/rtl` and `lib/pcl` in transitively.
+3. **The control that proves instrument 2 reaches `lib/rtl` at all.**
+   `{$PACKENUM 1}` planted into `lib/rtl/sysutils.pas`, then
+   `examples/calc/calcdemo.pas` recompiled: reported, at `sysutils.pas` line 3.
+   Restored with `git checkout --` (the safe direction), tree verified clean.
+
+No defect found — but the claim is falsifiable now, and it was not before.
+Note that pxx has no standalone unit output ("this file is a unit, not a
+program"), so a first attempt that compiled all 133 `lib/**` units directly
+returned **133/133 failures and 0 warnings**: a guard that could not fire,
+printing the answer I was hoping for. That is the same shape, caught by asking
+what the run would have looked like if the instrument were dead.
