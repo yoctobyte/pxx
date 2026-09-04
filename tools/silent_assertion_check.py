@@ -44,7 +44,16 @@ the same failure this whole ticket family is about, committed by its own guard.
 import re
 import sys
 
-ASSERT = re.compile(r'(?:\btest\s|\btools/expect_same\.sh\s)')
+# What counts as an assertion FOR THE VACUOUS RULE (the SILENT rule uses CMP).
+# assert_no_leak.sh and assert_alloc_ceiling.sh belong here: they are assertions,
+# 104 recipe lines invoke them, and `assert ; assert` discards the first one's
+# status exactly as it does for `test` and expect_same.sh. Measured 2026-09-05:
+# none of the 104 is currently chained that way, so this widening flags nothing
+# today -- it is a latent hole being closed before it is occupied, not a fix for
+# a live defect. Widening ASSERT cannot create SILENT false positives, because
+# the SILENT rule does not consult it; these tools always print and exit nonzero,
+# so they were never SILENT candidates in the first place.
+ASSERT = re.compile(r'(?:\btest\s|\btools/expect_same\.sh\s|\btools/assert_no_leak\.sh\s|\btools/assert_alloc_ceiling\.sh\s)')
 # An operand is a double-quoted string or a bare token; the comparison is `=`
 # or any of test(1)'s NUMERIC operators. `-ge` was outside the first draft's
 # population and four assertions on a `grep -c` count sat silent behind it --

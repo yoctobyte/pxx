@@ -54,6 +54,30 @@ def t_a_vacuous_expect_same_is_caught():
     return "the helper is not exempt from the discarded-status rule"
 
 
+def t_a_vacuous_runtime_assertion_is_caught():
+    _, vac = scan('\ttools/assert_no_leak.sh a 200 $(T)/x; tools/expect_same.sh b "$$y" "2"')
+    assert len(vac) == 1, "a discarded assert_no_leak status was not caught"
+    return "assert_no_leak.sh is an assertion for the discarded-status rule"
+
+
+def t_a_vacuous_alloc_ceiling_is_caught():
+    _, vac = scan('\ttools/assert_alloc_ceiling.sh a 50 $(T)/x; test "$$rc" = "0"')
+    assert len(vac) == 1, "a discarded assert_alloc_ceiling status was not caught"
+    return "assert_alloc_ceiling.sh is too -- 104 recipe lines use these two"
+
+
+def t_a_runtime_assertion_joined_with_and_is_accepted():
+    _, vac = scan('\ttools/assert_no_leak.sh a 200 $(T)/x && tools/expect_same.sh b "$$y" "2"')
+    assert not vac, "`&&` preserves the first status and must not be flagged"
+    return "the rule is about `;`, not about the tool"
+
+
+def t_a_runtime_assertion_does_not_become_silent():
+    sil, _ = scan('\ttools/assert_no_leak.sh a 200 $(T)/x')
+    assert not sil, "widening ASSERT must not leak into the SILENT rule"
+    return "SILENT reads CMP, not ASSERT -- these tools always print"
+
+
 def t_a_fail_branch_on_a_continued_line_is_not_silent():
     """The scanner's own bug, pinned: `||` arriving on the NEXT physical line."""
     silent, _ = scan(
@@ -128,9 +152,16 @@ def t_the_real_makefile_is_clean():
     return "the repo's own Makefile is clean"
 
 
+# EVERY t_* below must appear in this list -- a case defined and not listed is a
+# guard that silently does not run. Four were added 2026-09-05 and the tell was
+# the printed count not moving; main() now asserts the list against the module.
 TESTS = [t_a_silent_output_comparison_is_caught,
          t_a_vacuous_assertion_is_caught,
          t_a_vacuous_expect_same_is_caught,
+         t_a_vacuous_runtime_assertion_is_caught,
+         t_a_vacuous_alloc_ceiling_is_caught,
+         t_a_runtime_assertion_joined_with_and_is_accepted,
+         t_a_runtime_assertion_does_not_become_silent,
          t_a_fail_branch_on_a_continued_line_is_not_silent,
          t_an_explained_assertion_on_one_line_is_not_silent,
          t_two_literal_operands_are_not_flagged,
@@ -143,6 +174,14 @@ TESTS = [t_a_silent_output_comparison_is_caught,
 
 
 def main():
+    # A case defined and left out of TESTS reads exactly like a passing suite.
+    defined = sorted(k for k in globals() if k.startswith("t_") and callable(globals()[k]))
+    listed = sorted(f.__name__ for f in TESTS)
+    missing = [n for n in defined if n not in listed]
+    if missing:
+        print("silent-assertion devtest: %d case(s) defined but NOT in TESTS: %s"
+              % (len(missing), ", ".join(missing)))
+        return 1
     rc = 0
     print("silent-assertion devtest (%d guards)" % len(TESTS))
     for fn in TESTS:
