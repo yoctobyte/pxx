@@ -5711,3 +5711,86 @@ procedure. Deliberate machinery — `PXXIntfAddRef`, a memoised temp in
 **Kept apart from `feature-a-getinterface-refcounting` deliberately: opposite
 signs.** This one is machinery firing **too often**; that one is a **missing**
 retain. *Folding them would make one ticket whose fix is two fixes.*
+
+### Why the hedge did not transfer — frankb-78's own diagnosis, and it is the best part
+
+> **"The send felt like a memory question while the work felt like a fact about
+> myself. It was the same question both times."**
+
+That is the mechanism behind all three of today's instances. **A hedge is applied
+to claims that FEEL uncertain, not to claims that ARE uncertain** — and a fact
+about your own work feels like the most certain thing you have, precisely when it
+comes from the same reconstruction you just distrusted. *The category "things I
+know about myself" is not a reliable-source category.*
+
+It is correcting franka-29 directly rather than leaving a wrong fact about who
+holds what in its record.
+
+---
+
+## `4db0446a4` — the umbrella attempted, not triaged
+
+**All six blockers of `umbrella-managed-memory-is-correct` were already in
+`done/`** — which per CLAUDE.md means **nobody had attempted the cell.** So it ran
+the target: **sixteen managed-memory constructs, looped 2000 and 8000 times under
+the census, slope as the measurement. Fifteen flat. One was not.**
+
+`obj as IFoo` builds the interface value into a hidden temp and **AddRefs it —
+which is correct**, a `QueryInterface` returns an owning reference. But the temp
+is memoised in `ASTLiftedVar` **per cast SITE, not per execution.** So a cast in a
+loop **stores a different instance into one word every trip without releasing what
+was there: N retains, one release.**
+
+### THE LEAK IS THE BORING HALF — the destructor never ran
+
+**No output assertion and no leak bound sees this**, because the objects are
+**reachable-and-never-freed.** FPC oracle on identical source, with a destructor
+**counting its own calls**:
+
+```
+5 casts in the main body     FPC 4    pxx 0  ->  4
+3 casts inside a procedure   FPC 3    pxx 1  ->  3
+5 objects, no cast at all    FPC 5    pxx 5  ->  5
+```
+
+**Row three is the control that makes the other two readable** — the implicit
+coercion path was always right, and **without it `5 5 5` and `0 1 5` are equally
+consistent with a destructor that never increments.** Cross targets **measured,
+not argued**: i386, aarch64, arm32, riscv32 and xtensa all identical to the
+oracle.
+
+> **A THIRD defect class, beside "wrong value" and "leak": an object that is ALIVE
+> and whose destructor never runs.** A value assertion passes — the program is
+> correct. A leak bound passes — the object is reachable. **Only a destructor that
+> counts itself can see it**, and nothing prompts you to write one.
+
+### TWO INSTRUMENT FAILURES, worth more than the sweep's negative result
+
+**1. A constant-folded probe measures nothing and reports flat zero.**
+`v := 'str' + Chr(65)` allocates **nothing**, so it produced **no census line at
+all** — first read as a harness glitch rather than **as the probe reporting that
+it had no heap traffic.**
+
+**2. The precondition written to catch that was itself a guard that could not
+fail — TWICE IN A ROW, in opposite directions.**
+
+- `allocs > 0` **passes at `allocs=1`.** Useless.
+- Tightened to `allocs >= N` — and it **REJECTED SEVEN HONEST PROBES**, because
+  the census prints at **geometric thresholds** and the last line is typically
+  **~0.94 of the true total.**
+
+> **A precondition that FAILS ON GOOD INPUT is as useless as one that PASSES ON
+> BAD.** Both errors inside ten minutes — **while explicitly concentrating on
+> writing a control.**
+
+*That last clause is the finding. Every guard rule on this page assumes the
+failure comes from not thinking about the guard. This one happened at maximum
+attention, in both directions, in ten minutes. Attention is not the defence; a
+positive AND a negative case, both run, is.*
+
+### Still open in that lane
+
+- **NilPy generator slot/arg-cell leak** (p35) — measured and written up, **not
+  fixed**; the fix needs a **per-slot kind map**.
+- **`refactor-a-the-for-in-exception-runtime-trigger-is-the-whole-token-shape`**
+  (p30) — the **+4096 bytes it filed against itself** this morning.
