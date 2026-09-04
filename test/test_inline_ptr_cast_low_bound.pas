@@ -30,6 +30,15 @@ type
   TNeg  = array[-2..0] of Integer; PNeg = ^TNeg;
   TND   = array[1..2, 1..2] of Integer; PND = ^TND;
 var lo: TLo; z: TZero; ng: TNeg; nd: TND; p: PLo;
+
+{ The call-RESULT postfix loop (ApplyCallResultPtrSuffix) is a FOURTH site that
+  mints an AN_INDEX over a deref, and the three-site census missed it. Both
+  spellings, because `GetP^` and `GetP()^` take different routes in. }
+function GetP: PLo;
+begin
+  GetP := @lo;
+end;
+
 begin
   lo[2]:=88; lo[3]:=99; lo[4]:=111;
   z[0]:=10; z[1]:=20; z[2]:=30;
@@ -43,6 +52,10 @@ begin
   WriteLn('lo0      =', PZero(@z)^[1]);
   WriteLn('neg      =', PNeg(@ng)^[-1]);
   WriteLn('nd       =', PND(@nd)^[2,2]);
+  WriteLn('callres  =', GetP^[3]);
+  WriteLn('callres2 =', GetP()^[3]);
   PLo(@lo)^[2] := 55;
   WriteLn('wrote    =', lo[2]);
+  GetP^[4] := 66;
+  WriteLn('callwrote=', lo[4]);
 end.

@@ -321,9 +321,18 @@ end;
   bug-a-an-array-low-bound-is-answered-by-two-mechanisms-and-a-deref-uses-the-other.)
 
   So EVERY site that mints an AN_INDEX over a deref owes this subtraction, and
-  there are THREE of them: ParseLValueAST's chain loop, ParseClassRecordSelectors
-  (the store path), and the pointer-alias cast's private loop in
-  pasparser_expr.inc. Only the first had it. `PLo(@lo)^[3]` over `array[2..4]`
+  there are FOUR of them: ParseLValueAST's chain loop, ParseClassRecordSelectors
+  (the store path), the pointer-alias cast's private loop in pasparser_expr.inc,
+  and ApplyCallResultPtrSuffix (`GetP^[i]`). Only the first had it.
+
+  IT SAID THREE FOR A DAY, and the count is what stopped the recount -- I had
+  enumerated DerefPtrArrayInfo's callers rather than asking who ALLOCATES an
+  AN_INDEX whose left is a deref, which is the actual predicate. The fourth
+  turned up in the escape census for refactor-p-three-hand-rolled-postfix-loops:
+  tabulating which shared routines each of the five Pascal postfix loops reaches
+  shows one loop reaching six and the rest reaching one or two, and this fold was
+  in exactly one. If you add a fifth minting site, this comment is wrong again --
+  re-derive it, do not read it. `PLo(@lo)^[3]` over `array[2..4]`
   read element 3 of a 3-element array and answered 0 against fpc's 99, and
   `PLo(@lo)^[2] := 55` STORED INTO lo[4] -- a silent write to the neighbour,
   the same shape as bug-p-record-field-array-with-a-non-zero-low-bound-writes-
@@ -5147,6 +5156,13 @@ begin
           else ASTRight[sub] := CurASTNode;
           Expect(tkRBrack, ']');
         end;
+        { The FOURTH site minting an AN_INDEX over a deref, and the one the
+          three-site census missed: `GetP^[3]` read lo[4] and `GetP^[2] := 77`
+          wrote lo[3] for `array[1..5]`. Found by the escape census this
+          refactor asks for -- four of the five postfix loops were missing an
+          arm the fifth had -- not by anyone hitting it.
+          bug-p-an-inline-pointer-alias-cast-loses-the-pointees-low-bound }
+        FoldDerefArrayLowBound(sub, ndIsND, ndFlat);
         tk := IntToTypeKind(elemTk); recId := elemRec;
         { `f()[i]` spends a level exactly as `f()^` does -- indexing a `^PChar`
           result yields a PChar, not another `^PChar`. }
