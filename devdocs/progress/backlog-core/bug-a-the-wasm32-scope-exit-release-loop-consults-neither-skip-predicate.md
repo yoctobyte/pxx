@@ -43,11 +43,19 @@ The release arm that matters is gated on `NilPyUserCode` (via
 That is fixed: pypal emits no syscall on a target without a table, wasm32
 derives `PLATFORM_WASI`, and a `.npy` program now builds for wasm32.
 
-**It is now blocked one step later: such a module is not RUNNABLE.** Four
-bodies still refuse on `statement IR op 51` (IR_ZERO_SYM), `op 60` and `op 32`
-appear too, and wasmtime rejects the module outright with `invalid var_u32:
-integer representation too long`. Those are wasm32 codegen and sit under
-[[umbrella-wasm-is-a-real-platform]].
+**It is now blocked one step later: such a module is not RUNNABLE.** Two walls
+fell in one evening and this one is behind the second.
+
+The encoder wall is GONE: `invalid var_u32` was a local index of -1 and frankA
+fixed it in `f01eee6fa`
+([[bug-a-wasm32-emits-a-local-index-of-minus-one-so-every-nilpy-module-fails-validation]]).
+A NilPy module for wasm32 now VALIDATES.
+
+What remains is the codegen tail. Re-measured at `fbc02f487f6f`: both tests
+that would exercise this ticket still trap on `unreachable`, because bodies are
+still refused on `value IR op 32` (IR_RTTI_REG in `GetClass`) and `statement IR
+op 60` in the closure helpers. Those are wasm32 codegen, frankA holds them, and
+they sit under [[umbrella-wasm-is-a-real-platform]].
 
 The frontmatter edge is REMOVED rather than repointed, because no single open
 ticket names that state and a `blocked-by` to a ticket that does not gate it
