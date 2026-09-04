@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:13 unfinished:27 blocked:7 backlog:13 backlog_new:2 backlog-umbrella:7 backlog-core:129 backlog-nilpy:96 backlog-tools:14 backlog-pascal:51 backlog-decide:36 backlog-libs:17 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3222 rejected:74`
+`working:12 unfinished:27 blocked:7 backlog:13 backlog_new:2 backlog-umbrella:7 backlog-core:129 backlog-nilpy:96 backlog-tools:14 backlog-pascal:51 backlog-decide:36 backlog-libs:17 backlog-cfront:18 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3223 rejected:74`
 
 ## Held now (working/ — do not touch these files)
 
@@ -13,7 +13,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-a-stackful-coroutine-is-four-targets-only-so-examples-net-httpdemo-cannot-cross` [A] — owner: frankC
 - `feature-a-dynamic-array-of-frozen-strings` [A] — owner: franka-29
 - `feature-a-every-emit-obj-object-links-its-own-full-copy-of-crtl-so-n-objects-cost-n-runtimes` [A] — owner: frankA
-- `feature-b-a-bootable-image-with-the-busybox-userland-on-it` [B] — owner: franks-ab
 - `feature-c-corpus-busybox-394-applets` [C] — owner: frankC
 - `feature-c-corpus-busybox-i386-the-second-architecture` [C] — owner: frankD
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
@@ -63,7 +62,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 400, ranked
+## Ready — top 30 of 401, ranked
 
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -71,6 +70,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
+- `[p 75] [C]` bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [T]` chore-t-tools-devtest-00-is-six-reds-with-four-causes
 - `[p 75] [P]` feature-pascal-corpus-expansion
@@ -94,6 +94,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [B]` bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS (unblocks 1)
-- `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 
-_370 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_371 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
