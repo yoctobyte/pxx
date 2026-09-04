@@ -51,83 +51,138 @@ out of compiling real programs, not out of reading the backlog.
 Scope limit: 278 is a FLOOR by construction -- a body stops at its first refusal
 -- so the tail is understated relative to the head. It cannot overstate op 43.
 
-## Where it stands, 2026-09-04 (frankA)
+## Where it stands, 2026-09-04 (frankA) - WITH THE DENOMINATOR THIS TIME
 
-Same 300 sources, same report, re-run after each fix. **278 -> 22 gap
-instances, 14 -> 5 programs.**
+### THE CENSUS I HAVE BEEN QUOTING WAS A RATE OVER A POPULATION I NEVER STATED, AND THE POPULATION MOVED BY 109 WHILE I WAS QUOTING IT
+
+Every "N gap instances over 300 sources" figure in this section's earlier
+versions -- 278, 70, 57, 42, 26, 22, 20 -- counted refusals **among the sources
+that reached the wasm32 backend at all**. A source that fails EARLIER produces
+no coverage report, so it scored as *zero gaps* while never having been
+measured. That is the exact failure my own notes call "a zero can be vacuous",
+committed for two days against my own rule.
+
+Measured at `2eef6bc98`, immediately before `bce31c210` landed:
+
+| | count |
+| --- | --- |
+| sources attempted | 300 |
+| `is a unit, not a program` -- not applicable on any target | 31 |
+| corpus unit not present in this tree | 6 |
+| inline asm -- out of scope for this target by design | 19 |
+| **in-scope programs** | **244** |
+| **reached the wasm32 backend** | **91** |
+| failed in the FRONT END, mostly `undefined variable (SYS_openat)` | 133 |
+| coroutine context switch not implemented | 14 |
+| `{$threadsafe}` unsupported here | 6 |
+
+**So "5 programs with gaps" was 5 of 91, not 5 of 300**, and the 86 "clean"
+programs were 86 of 91. The headline that a reader takes from it -- *wasm32 is
+nearly clear* -- was false: **63% of in-scope programs never got as far as the
+backend the census measures.**
+
+The same census at `bce31c210`, which routed the Pascal RTL to the real wasi
+PAL:
+
+| | before | after |
+| --- | --- | --- |
+| in-scope programs | 244 | 242 |
+| **reached the wasm32 backend** | **91** | **200** |
+| front-end failures (the `SYS_*` wall) | 133 | 15 |
+| of those reached: clean | 86 | 110 |
+| of those reached: with gaps | 5 | **90** |
+| gap instances | 20 | 177 |
+
+**The gap count going 20 -> 177 is not a regression and nothing broke.** One
+hundred and nine more programs now get far enough to be measured, and their
+refusals became visible for the first time. A metric that improves when the
+population shrinks and worsens when it grows is not measuring what its name
+says, and mine did both without my noticing, because the denominator was never
+printed.
+
+`tools/`-side fix so the mistake cannot be re-expressed rather than merely
+noted: the census script now prints REACHED THE BACKEND as the denominator and
+labels pre-codegen failures *never measured; not zero gaps*.
+
+### What is actually left, 2026-09-04, at `bce31c210`
+
+**Forty-two in-scope programs still do not reach the backend**, and the two
+real groups are ours:
+
+| count | why | owner |
+| --- | --- | --- |
+| 21 | `coroutine context switch not implemented` | open, this target |
+| 6 | `{$threadsafe}` is x86-64/i386/aarch64/arm32 only | by design today |
+| 15 | assorted front-end, incl. `wasm: duplicate export "Loc$N"` | mixed |
+
+**Of the 200 that reach it, 90 have a gap and 110 are clean.** The 177 gap
+instances are TWELVE distinct bodies, not 177 problems:
+
+| instances | body | shape |
+| --- | --- | --- |
+| 82 | `Sleep` | `__pxxrawsyscall` with a RUNTIME `-1` guard |
+| 45 | `TerminalSize`, `AnsiWrite`, `AnsiSetRawMode`, `AnsiReadKeyWait`, `AnsiReadKey` | same |
+| 28 | `__pxx_time`, `__pxx_exit`, `__pxx_clock_gettime`, `__pxx_clock` | same |
+| 7 | `OSEntropyBytes` | same |
+| 1 | `fpgettimeofday` | same |
+
+All twelve are the shape frankb-78 named while fixing pypal: **the promise of
+soft failure is made at RUNTIME while the syscall instruction is still
+EMITTED**, so the body does not fail softly, it fails to compile. `Sleep` alone
+gates 82 of the 200. Twelve edits, not 177.
+
+The genuine wasm32 CODEGEN tail is six shapes:
 
 | count | gap | owner |
 | --- | --- | --- |
-| 18 | `value IR op 54` -- IR_SYSCALL | **filed**, `bug-n-the-nilpy-pal-issues-raw-syscalls-so-every-file-body-traps-on-wasm32` |
-| 1 | `value IR op 32` -- IR_RTTI_REG, in `GetClass` | open |
+| 4 | `value IR op 32` -- IR_RTTI_REG, in `GetClass` | open |
+| 2 | `string expression nested more than 16 deep`, and `` `+` on strings `` behind it | open |
+| 1 | `value IR op 68` | open |
+| 1 | `statement IR op 60` | open |
+| 1 | `value of type Pointer assigned to a managed string` | open |
 | 1 | `load through a pointer of type record` | **filed**, `bug-a-wasm32-refuses-a-load-of-an-interface-valued-record-field` (DO NOT WIDEN the aggregate-address family: an interface is spelled `tyRecord`) |
-| 1 | `string operand of type QWord` | open |
-| 1 | `` `=` on strings `` | open |
 
-Eighteen of the twenty-two are the NilPy PAL's raw syscalls, which is a
-ROUTING question and not a codegen one -- an IR_SYSCALL arm for wasm32 cannot
-be written, because wasi has imports rather than syscall numbers, and
-`lib/rtl/platform/wasi` already exists while `compiler/builtin/pypal.pas` has
-no platform conditional at all. **So the codegen tail on this target is four
-instances in three shapes, in two programs**: `lib_base64.pas` (`GetClass`,
-and `pystr_is_none` for both string rows) and `test_assign_lvalue_shapes_ok.pas`.
+### Earlier corrections, kept because the numbers were quoted to peers
 
-### THREE CORRECTIONS TO THE NUMBERS THIS SECTION PUBLISHED YESTERDAY
+`26 gap instances` counted two lines the report itself labels *not a coverage
+gap*; `19 IR_SYSCALL` was 18 in every saved output back to the first; and
+`value IR op 32` was never in the table at all. The last two cancel exactly --
+19 + 0 = 18 + 1 -- so the SUM reconciled with the previous run on every one of
+four re-measurements while two of six rows were wrong throughout. **A total
+that agrees is not evidence about its components.**
 
-All three are mine, all three are in how the report was COUNTED rather than in
-the report, and they are written here rather than silently overwritten because
-the wrong figures were quoted to two peers.
+### Closed to get here
 
-1. **`26 gap instances` counted two lines the report itself labels `not a
-   coverage gap`.** A declaration-only stub -- `_Unwind_Backtrace`, `getenv` --
-   prints under its own heading (`N declaration-only stub(s) trap if called`)
-   in the same indented shape as a real gap, so a grep keyed on the shape
-   matched both. The row was in the table, correctly labelled; the HEADLINE
-   number was not. 26 was 24, and it is 22 today.
-2. **`19 IR_SYSCALL` was 18, and always had been.** Every saved census output
-   from this arc says 18. Nothing changed; the number was mis-copied once and
-   then carried forward.
-3. **`value IR op 32` was never listed at all.** It is IR_RTTI_REG in
-   `GetClass`, present in every census output back to the first, and it is the
-   one remaining shape nobody has looked at. The two errors above cancelled in
-   the total, which is exactly why neither showed up in a sanity check of the
-   sum: 19 + 0 = 18 + 1.
-
-The lesson is the cheap one and it is worth the four lines: **bucket a report by
-running the tool over it, not by reading the buckets off the screen.** The sum
-agreed with the previous sum on every re-run, and two of the six rows were
-wrong throughout.
-
-Closed to get here, each with a cross row wired against the x86-64 build of
-the same source:
+Each with a cross row wired against the x86-64 build of the same source:
 
 - Variant (`IR_VAR_STORE/BOX/BINOP`) -- 222 instances, four fifths of the
-  original census. Note it did NOT move the program count at all (14 -> 14):
-  a body count and a gap count are different measurements, and only the second
-  could show a 75% reduction.
+  original census. It did NOT move the program count at all (14 -> 14): a body
+  count and a gap count are different measurements.
 - Sets -- literal, binop, compare, and `x in s` over a real set, each of the
   last three invisible until the one in front was fixed.
 - By-value aggregate parameters -- every record of 8 bytes or less and every
-  by-value set parameter. An ABI decision, not a missing arm: a wasm parameter
-  is one typed local, so there is no "push the bytes" for this target and the
-  choice is a private copy or nothing.
+  by-value set parameter.
 - `IR_VMTADDR` -- interface `is`/`as`. Found by running a peer's test, not by
-  this census: nothing in 300 corpus sources casts to an interface.
+  this census: nothing in the corpus casts to an interface.
 - Aggregate returns through an indirect or virtual call.
 - Calls through a METHOD POINTER (`99fa70c34`). The IR already carried the
-  answer -- `IRC` on `IR_CALL_IND` is documented as *extra leading Self args* --
-  and this backend was the only one that had to read it, because it is the only
-  one whose call sites are checked against a type.
+  answer -- `IRC` on `IR_CALL_IND` is *extra leading Self args* -- and this is
+  the only backend that has to read it, because it is the only one whose call
+  sites are checked against a type.
+- The compare-operand classifier (`2eef6bc98`): the IR tag could widen a
+  pointer to a string and not narrow a string to a pointer, so
+  `Pointer(s) = nil` -- which is `pystr_is_none`, how every NilPy `is None`
+  test is answered -- refused as a string compare. That closed the LAST of the
+  five tests excluded from this target.
 
-**`builtin FreeMem (-46)` LEFT THE TABLE WITHOUT ANYONE FIXING FreeMem**, and
-that is the finding rather than the row. wasm32 has had a working FreeMem arm
-throughout; `WasmEmitFreeMem` exits False on its own `if WasmBodyBroken then
-Exit`, so once the method-pointer refusal above it in the same body had
-latched, the arm reported itself and the caller named it. The report now names
-a builtin only while the body is still unbroken (`99fa70c34`). A second gap
-standing behind a first is usually the next real one -- it was, four times in
-this arc -- and it can also be a ghost of the first, so the test is whether it
-survives fixing the one in front.
+**`builtin FreeMem (-46)` LEFT THE TABLE WITHOUT ANYONE FIXING FreeMem.**
+wasm32 has had a working FreeMem arm throughout; `WasmEmitFreeMem` exits False
+on its own `if WasmBodyBroken then Exit`, so once the refusal above it in the
+same body latched, the arm reported itself. The report now names a builtin only
+while the body is still unbroken (`99fa70c34`). A second gap standing behind a
+first is usually the next real one -- it was, four times in this arc -- and it
+can also be a GHOST of the first, so the test is whether it survives fixing the
+one in front.
 
 **Two findings on OTHER targets came out of tests written for this one**, which
 is the argument for cross rows over wasm32-only ones:
