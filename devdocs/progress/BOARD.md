@@ -361,7 +361,7 @@ _none_
 | feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing | T | 55 | feature | feature(T): twatch should assert its `## Repro` selector resolves to exactly the job it is filing | — |
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 
-## backlog-pascal (50)
+## backlog-pascal (51)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -382,6 +382,7 @@ _none_
 | bug-p-error-context-near-quotes-an-unrelated-token-stream | P | 35 | bug | A compile error's `near:` excerpt can quote text from a completely unrelated token stream — RTL/builtin unit source with no relation to the file being compiled. The line number and the diagnosis are correct; only the excerpt is wrong, so it does not error and does not look wrong. Reproduces on a 10-line program: the same `undefined variable` error gives a CORRECT excerpt in a trivial program and a bogus one once the unit declares a generic specialization alias, which brackets it tightly. | — |
 | bug-p-fatal-directive-is-silently-ignored | P | 35 | bug | {$FATAL text} and {$MESSAGE FATAL text} are silently ignored: the frontend handles warning/message/error and treats every other directive as a no-op, so a guard block that means 'stop, this configuration is unsupported' compiles clean and produces a binary that should not exist. | — |
 | bug-p-for-in-over-a-dereferenced-pointer-to-array-is-refused | P | 35 | bug | `for x in p^ do` where `p: ^array[0..3] of Integer` is refused with \"for-in: not a generator, enum type, or iterable variable\". FPC accepts it and iterates the pointee; `for x in a do` over the same array works here. A clean compile-time REFUSAL, not a wrong value, so it is cheap to hit and cheap to diagnose. Measured identical on the pinned binary and at 3a53468cb267, i.e. NOT a regression from the p^[i] indexing fix that turned it up -- that work taught IsNodeArray this shape, which was necessary and evidently not sufficient: pasparser_stmt.inc's for-in arm gates on something else. | — |
+| bug-p-member-access-on-a-procedural-variable-call-result-is-rejected | P | 40 | bug | `fp(7).c` where fp is a procedural VARIABLE is rejected with `expected ')' before '.'`. The identical member access is accepted on a DIRECT call result (`Plain(8).c`) and on a VIRTUAL method call result (`b.M(8).c`), both measured working. feature-member-access-on-call-result is done and covered two of the three shapes; ApplyCallResultPtrSuffix is the one materialisation point and it takes a real procIdx, so the AN_CALL_IND sites never reach it. There are FIVE AllocNode(AN_CALL_IND) sites in pasparser_lval.inc, which is why this is not a one-line fix and is filed rather than patched at one of them. | — |
 | bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out | P | 35 | bug | ParseFactorCore's carve-out to PyParseFactorCore is partial: 36 NilPy diagnostics remain on the Pascal arm and 10 exist verbatim on BOTH arms, so a correction to one of them lands on one arm and silently leaves the other stale. | — |
 | bug-p-qword-div-by-a-literal-above-2-63-is-signed | P | 55 | bug | `QWord div` / `mod` by a literal >= 2^63 divides SIGNED and returns a wrong value | — |
 | bug-p-result-is-not-a-method-pointer-lvalue | P | 40 | bug | `Result := s.Pick` inside a function returning a method pointer is refused with `\"TSvc.Pick\" is a procedure and has no result to use in an expression`, for EVERY receiver spelling, while `t := s.Pick; Result := t` on a local of the same type compiles and runs. FPC accepts the direct form. Cause: the implicit `Result` symbol is allocated by `AllocVar('Result', retType)` (pasparser_proc.inc:2310) as a plain var, so it carries no `SymProcSig` and its `TypeKind`/`RecName` never look like a method-pointer lvalue — and the assignment arm that recognises the method-pointer context keys on exactly `SymProcSig[idx] >= 0` and `Syms[idx].TypeKind = tyRecord`. A THIRD axis, orthogonal to receiver spellings: the LHS spelling. | — |
@@ -1166,6 +1167,7 @@ _none_
 - [p 40] [P] bug-p-a-default-value-is-accepted-on-an-open-array-parameter
 - [p 40] [P] bug-p-a-generic-function-cannot-be-declared-in-a-unit
 - [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
+- [p 40] [P] bug-p-member-access-on-a-procedural-variable-call-result-is-rejected
 - [p 40] [P] bug-p-result-is-not-a-method-pointer-lvalue
 - [p 40] [P] bug-p-unicodechar-is-a-4-byte-code-point-and-fpc-makes-it-a-2-byte-code-unit
 - [p 40] [T] bug-t-pasmith-generates-no-float-code-so-optfuzz-cannot-see-float-optimizations

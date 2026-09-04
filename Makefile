@@ -16538,6 +16538,20 @@ test-i386: $(COMPILER)
 	# temp during lowering, 8 or under is the backend's own argument-word push --
 	# and the set rows straddle the ABI fork, address on x86-64/aarch64/arm32/
 	# wasm32 and 32 bytes by value on i386/riscv32/xtensa.
+	# A function returning a RECORD, called three ways: directly, through a
+	# procedural variable, and virtually. All three use the caller-owned hidden
+	# destination and differ only in where the callee's identity comes from, so
+	# a direct-call-only test proves very little here -- the convention is
+	# shared, the plumbing is not. On wasm32 the direct arm worked while BOTH
+	# indirect arms refused to compile at all.
+	# `virt der` is the row that can fail: it goes through a TDeriv in a TBase
+	# variable and its numbers are a different SHAPE from the base's (k*10+n
+	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
+	# call produces the BASE's row, which the line above already shows. Two rows
+	# differing only in value would not separate those.
+	./$(COMPILER) --target=i386 test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_i386_iagg
+	./$(COMPILER) test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_i386_iagg_x64
+	tools/expect_same.sh i386/test_i386_indirect_aggregate_return "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iagg)" "$$($(TESTTMP)/test_i386_iagg_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_i386_bvap
 	./$(COMPILER) test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_i386_bvap_x64
 	tools/expect_same.sh i386/test_i386_byvalue_aggregate_params "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_bvap)" "$$($(TESTTMP)/test_i386_bvap_x64)"
@@ -17484,6 +17498,20 @@ test-aarch64: $(COMPILER)
 	# temp during lowering, 8 or under is the backend's own argument-word push --
 	# and the set rows straddle the ABI fork, address on x86-64/aarch64/arm32/
 	# wasm32 and 32 bytes by value on i386/riscv32/xtensa.
+	# A function returning a RECORD, called three ways: directly, through a
+	# procedural variable, and virtually. All three use the caller-owned hidden
+	# destination and differ only in where the callee's identity comes from, so
+	# a direct-call-only test proves very little here -- the convention is
+	# shared, the plumbing is not. On wasm32 the direct arm worked while BOTH
+	# indirect arms refused to compile at all.
+	# `virt der` is the row that can fail: it goes through a TDeriv in a TBase
+	# variable and its numbers are a different SHAPE from the base's (k*10+n
+	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
+	# call produces the BASE's row, which the line above already shows. Two rows
+	# differing only in value would not separate those.
+	./$(COMPILER) --target=aarch64 test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_aarch64_iagg
+	./$(COMPILER) test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_aarch64_iagg_x64
+	tools/expect_same.sh aarch64/test_aarch64_indirect_aggregate_return "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iagg)" "$$($(TESTTMP)/test_aarch64_iagg_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_aarch64_bvap
 	./$(COMPILER) test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_aarch64_bvap_x64
 	tools/expect_same.sh aarch64/test_aarch64_byvalue_aggregate_params "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_bvap)" "$$($(TESTTMP)/test_aarch64_bvap_x64)"
@@ -18492,6 +18520,20 @@ test-riscv32: $(COMPILER)
 	# temp during lowering, 8 or under is the backend's own argument-word push --
 	# and the set rows straddle the ABI fork, address on x86-64/aarch64/arm32/
 	# wasm32 and 32 bytes by value on i386/riscv32/xtensa.
+	# A function returning a RECORD, called three ways: directly, through a
+	# procedural variable, and virtually. All three use the caller-owned hidden
+	# destination and differ only in where the callee's identity comes from, so
+	# a direct-call-only test proves very little here -- the convention is
+	# shared, the plumbing is not. On wasm32 the direct arm worked while BOTH
+	# indirect arms refused to compile at all.
+	# `virt der` is the row that can fail: it goes through a TDeriv in a TBase
+	# variable and its numbers are a different SHAPE from the base's (k*10+n
+	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
+	# call produces the BASE's row, which the line above already shows. Two rows
+	# differing only in value would not separate those.
+	./$(COMPILER) --target=riscv32 test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_rv32x_iagg
+	./$(COMPILER) test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_rv32x_iagg_x64
+	tools/expect_same.sh riscv32/test_rv32x_indirect_aggregate_return "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_iagg)" "$$($(TESTTMP)/test_rv32x_iagg_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_rv32x_bvap
 	./$(COMPILER) test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_rv32x_bvap_x64
 	tools/expect_same.sh riscv32/test_rv32x_byvalue_aggregate_params "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_bvap)" "$$($(TESTTMP)/test_rv32x_bvap_x64)"
@@ -19266,6 +19308,23 @@ test-wasm32: $(COMPILER)
 	# type -- so `procedure P(r: TPlain)` was refused outright and the whole
 	# body emitted as `unreachable`. A by-value SET parameter was refused the
 	# same way. Pin v403 reports both by name on this file.
+	# A function returning a RECORD, called three ways: directly, through a
+	# procedural variable, and virtually. All three use the caller-owned hidden
+	# destination and differ only in where the callee's identity comes from, so
+	# a direct-call-only test proves very little here -- the convention is
+	# shared, the plumbing is not. On wasm32 the direct arm worked while BOTH
+	# indirect arms refused to compile at all.
+	# `virt der` is the row that can fail: it goes through a TDeriv in a TBase
+	# variable and its numbers are a different SHAPE from the base's (k*10+n
+	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
+	# call produces the BASE's row, which the line above already shows. Two rows
+	# differing only in value would not separate those.
+	# Pin v403 reports `main$$0 -- indirect call returning an aggregate` on
+	# this file and traps. The signature already reserved the trailing
+	# destination slot; only the two call sites refused to fill it.
+	./$(COMPILER) --target=wasm32 test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/w32_iagg.wasm
+	./$(COMPILER) test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/w32_iagg_x64
+	tools/expect_same.sh wasm32/indirect_aggregate_return "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_iagg.wasm)" "$$($(TESTTMP)/w32_iagg_x64)"
 	./$(COMPILER) --target=wasm32 test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/w32_bvap.wasm
 	./$(COMPILER) test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/w32_bvap_x64
 	tools/expect_same.sh wasm32/byvalue_aggregate_params "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_bvap.wasm)" "$$($(TESTTMP)/w32_bvap_x64)"
@@ -19275,7 +19334,7 @@ test-wasm32: $(COMPILER)
 	./$(COMPILER) --target=wasm32 test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes.wasm
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes_x64
 	tools/expect_same.sh wasm32/set_shapes "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_setshapes.wasm)" "$$($(TESTTMP)/w32_setshapes_x64)"
-	@echo "wasm32: 40 rows green (33 default + 7 shortstring; 1 excluded, see comment above)"
+	@echo "wasm32: 41 rows green (34 default + 7 shortstring; 1 excluded, see comment above)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
@@ -19657,6 +19716,20 @@ test-xtensa: $(COMPILER)
 	# Measured against pin v403: `ByValSetWide` prints 26 spurious members read
 	# out of live frame bytes, and `Mixed` loses both `200 in s` and x3.
 	# A `[1,2]` probe passes on the broken compiler. Do not weaken the wide row.
+	# A function returning a RECORD, called three ways: directly, through a
+	# procedural variable, and virtually. All three use the caller-owned hidden
+	# destination and differ only in where the callee's identity comes from, so
+	# a direct-call-only test proves very little here -- the convention is
+	# shared, the plumbing is not. On wasm32 the direct arm worked while BOTH
+	# indirect arms refused to compile at all.
+	# `virt der` is the row that can fail: it goes through a TDeriv in a TBase
+	# variable and its numbers are a different SHAPE from the base's (k*10+n
+	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
+	# call produces the BASE's row, which the line above already shows. Two rows
+	# differing only in value would not separate those.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_xtensa_iagg
+	./$(COMPILER) test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_xtensa_iagg_x64
+	tools/expect_same.sh xtensa/test_xtensa_indirect_aggregate_return "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_iagg)" "$$($(TESTTMP)/test_xtensa_iagg_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_xtensa_bvap
 	./$(COMPILER) test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_xtensa_bvap_x64
 	tools/expect_same.sh xtensa/test_xtensa_byvalue_aggregate_params "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_bvap)" "$$($(TESTTMP)/test_xtensa_bvap_x64)"
@@ -20722,6 +20795,20 @@ test-arm32: $(COMPILER)
 	# temp during lowering, 8 or under is the backend's own argument-word push --
 	# and the set rows straddle the ABI fork, address on x86-64/aarch64/arm32/
 	# wasm32 and 32 bytes by value on i386/riscv32/xtensa.
+	# A function returning a RECORD, called three ways: directly, through a
+	# procedural variable, and virtually. All three use the caller-owned hidden
+	# destination and differ only in where the callee's identity comes from, so
+	# a direct-call-only test proves very little here -- the convention is
+	# shared, the plumbing is not. On wasm32 the direct arm worked while BOTH
+	# indirect arms refused to compile at all.
+	# `virt der` is the row that can fail: it goes through a TDeriv in a TBase
+	# variable and its numbers are a different SHAPE from the base's (k*10+n
+	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
+	# call produces the BASE's row, which the line above already shows. Two rows
+	# differing only in value would not separate those.
+	./$(COMPILER) --target=arm32 test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_arm32_iagg
+	./$(COMPILER) test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_arm32_iagg_x64
+	tools/expect_same.sh arm32/test_arm32_indirect_aggregate_return "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iagg)" "$$($(TESTTMP)/test_arm32_iagg_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_arm32_bvap
 	./$(COMPILER) test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_arm32_bvap_x64
 	tools/expect_same.sh arm32/test_arm32_byvalue_aggregate_params "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_bvap)" "$$($(TESTTMP)/test_arm32_bvap_x64)"

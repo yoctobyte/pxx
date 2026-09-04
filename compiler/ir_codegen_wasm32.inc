@@ -898,14 +898,37 @@ begin
   end;
 end;
 
-{ Is this node a DIRECT call whose result travels through the caller-owned
-  hidden destination? Such a node's value is an i32 address, whatever its
-  declared type kind says. }
-function WasmNodeIsAggRetCall(n: Integer): Boolean;
+{ Is this node a call whose result travels through the caller-owned hidden
+  destination? Such a node's value is an i32 address, whatever its declared
+  type kind says.
+
+  ALL THREE CALL KINDS, and each keeps its signature proc in a different
+  field -- IR_CALL in IRA (the callee itself), IR_CALL_IND in IRIVal, and
+  IR_VIRTUAL_CALL in IRC (a declaration used only as a signature, never
+  called). Reading the wrong field would answer about an unrelated proc and
+  the predicate would be confidently wrong rather than merely narrow, which is
+  why the extraction is a case here instead of three tests at the call sites.
+
+  It covered IR_CALL alone until 2026-09-04, deliberately: the two indirect
+  kinds refused the hidden-destination convention outright, so answering True
+  for them would have yielded whatever was on the stack. They now thread it,
+  so the narrowing has to come off in the SAME commit -- a predicate that stays
+  narrow after its reason is gone is the arm that keeps a fixed path broken. }
+function WasmNodeCallSigProc(n: Integer): Integer;
 begin
-  WasmNodeIsAggRetCall := (n >= 0) and (IRKind[n] = IR_CALL) and (IRA[n] >= 0)
-                          and (IRA[n] < ProcCount)
-                          and ABIRetViaHiddenDestProc(IRA[n]);
+  WasmNodeCallSigProc := -1;
+  if n < 0 then Exit;
+  if IRKind[n] = IR_CALL then WasmNodeCallSigProc := IRA[n]
+  else if IRKind[n] = IR_CALL_IND then WasmNodeCallSigProc := Integer(IRIVal[n])
+  else if IRKind[n] = IR_VIRTUAL_CALL then WasmNodeCallSigProc := IRC[n];
+end;
+
+function WasmNodeIsAggRetCall(n: Integer): Boolean;
+var p: Integer;
+begin
+  p := WasmNodeCallSigProc(n);
+  WasmNodeIsAggRetCall := (p >= 0) and (p < ProcCount)
+                          and ABIRetViaHiddenDestProc(p);
 end;
 
 { Emit a value and leave it on the stack at exactly `want`. Every consumer of a
@@ -945,10 +968,13 @@ begin
     already an i32 and needs no conversion, while a record-typed node of any
     other kind is still a real type error and still refused.
 
-    Narrow on purpose. It asks about THIS node being a direct call to a
-    hidden-dest proc, not about the type being aggregate, because an indirect
-    or virtual call to one is a convention this target does not thread yet and
-    must keep refusing rather than quietly yield whatever is on the stack. }
+    Narrow on purpose, and the narrowing is about the NODE not the TYPE: it
+    asks whether this node is a call to a hidden-dest proc, so a record-typed
+    node of any other kind is still a real type error and still refused. All
+    three call kinds qualify since 2026-09-04, when the indirect and virtual
+    sites started threading the destination; before that they refused it, and
+    answering True here would have handed a consumer whatever was on the
+    stack. WasmNodeIsAggRetCall carries the field-per-kind detail. }
   if WasmNodeIsAggRetCall(node) and (want = WT_I32) then Exit;
   { IR_DYNUNIQUE is the third of the same family, and the most clear-cut: the
     node's whole content is "a dynamic-array level", its value is that level's
@@ -3663,20 +3689,43 @@ begin
     WasmUnsupported('indirect call with no signature');
     Exit;
   end;
-  if IRCallDest[node] >= 0 then
-  begin
-    WasmUnsupported('indirect call returning an aggregate — the hidden-'
-                    + 'destination ABI is not chosen for this target yet');
-    Exit;
-  end;
   if not WasmEmitIndArgs(sigProc, IRB[node], 0, 'indirect call') then Exit;
+  { THE HIDDEN DESTINATION GOES ON LAST, before the table index, matching the
+    trailing slot WasmSigForProc reserved for it -- the same order the DIRECT
+    call uses, and it has to be the same order because both ends of a
+    call_indirect are checked against one signature.
+
+    Driven off ABIRetViaHiddenDestProc(sigProc), NOT off `IRCallDest >= 0`,
+    which is what the refusal this replaces tested. The signature reserves the
+    slot from the predicate, so the predicate is the only thing that can keep
+    the two in step; a call site that asked a different question would push a
+    different number of operands than the type it is being validated against
+    and fail in the wasm VALIDATOR, at the module level, naming nothing.
+    Missing dest is refused by name rather than silently skipped, exactly as
+    the direct call does. }
+  if ABIRetViaHiddenDestProc(sigProc) then
+  begin
+    if IRCallDest[node] < 0 then
+    begin
+      WasmUnsupported('indirect call returns an aggregate but the lowering'
+                      + ' supplied no hidden destination');
+      Exit;
+    end;
+    WasmEmitValueAs(IRCallDest[node], WT_I32,
+                    'hidden destination of an indirect call');
+    if WasmBodyBroken then Exit;
+  end;
   { The table index goes on TOP, after the arguments — call_indirect pops it
     first. }
   WasmEmitValueAs(IRA[node], WT_I32, 'indirect call target');
   if WasmBodyBroken then Exit;
   WasmCallIndirect(WasmSigForProc(sigProc));
   if isStmt and Procs[sigProc].IsFunc then WasmOp($1A, 'drop');
-  if not WasmProcResult(sigProc, pvt) then pvt := WT_I32;
+  { A hidden-dest call's VALUE is the destination pointer the callee hands
+    back, so it is an i32 whatever the declared result would have mapped to.
+    WasmProcResult answers about the AGGREGATE and would say no. }
+  if ABIRetViaHiddenDestProc(sigProc) then pvt := WT_I32
+  else if not WasmProcResult(sigProc, pvt) then pvt := WT_I32;
   WasmEmitPostCall(pvt, Procs[sigProc].IsFunc and not isStmt);
 end;
 
@@ -3703,12 +3752,6 @@ begin
     WasmUnsupported('virtual call with no signature');
     Exit;
   end;
-  if IRCallDest[node] >= 0 then
-  begin
-    WasmUnsupported('virtual call returning an aggregate — the hidden-'
-                    + 'destination ABI is not chosen for this target yet');
-    Exit;
-  end;
   argNode := IRA[node];
   if argNode = -1 then
   begin
@@ -3727,13 +3770,39 @@ begin
   if WasmBodyBroken then Exit;
   WasmLocalTee(WasmLocalSelf);
   if not WasmEmitIndArgs(sigProc, IRB[argNode], 1, 'virtual call') then Exit;
+  { THE HIDDEN DESTINATION GOES ON LAST, before the table index, matching the
+    trailing slot WasmSigForProc reserved for it -- the same order the DIRECT
+    call uses, and it has to be the same order because both ends of a
+    call_indirect are checked against one signature.
+
+    Driven off ABIRetViaHiddenDestProc(sigProc), NOT off `IRCallDest >= 0`,
+    which is what the refusal this replaces tested. The signature reserves the
+    slot from the predicate, so the predicate is the only thing that can keep
+    the two in step; a call site that asked a different question would push a
+    different number of operands than the type it is being validated against
+    and fail in the wasm VALIDATOR, at the module level, naming nothing.
+    Missing dest is refused by name rather than silently skipped, exactly as
+    the direct call does. }
+  if ABIRetViaHiddenDestProc(sigProc) then
+  begin
+    if IRCallDest[node] < 0 then
+    begin
+      WasmUnsupported('virtual call returns an aggregate but the lowering'
+                      + ' supplied no hidden destination');
+      Exit;
+    end;
+    WasmEmitValueAs(IRCallDest[node], WT_I32,
+                    'hidden destination of a virtual call');
+    if WasmBodyBroken then Exit;
+  end;
   { vmt := [Self];  index := [vmt + slot*8] }
   WasmLocalGet(WasmLocalSelf);
   WasmMemOp($28, 'i32.load', 2, 0);
   WasmMemOp($28, 'i32.load', 2, slot * 8);
   WasmCallIndirect(WasmSigForProc(sigProc));
   if isStmt and Procs[sigProc].IsFunc then WasmOp($1A, 'drop');
-  if not WasmProcResult(sigProc, pvt) then pvt := WT_I32;
+  if ABIRetViaHiddenDestProc(sigProc) then pvt := WT_I32
+  else if not WasmProcResult(sigProc, pvt) then pvt := WT_I32;
   WasmEmitPostCall(pvt, Procs[sigProc].IsFunc and not isStmt);
 end;
 
