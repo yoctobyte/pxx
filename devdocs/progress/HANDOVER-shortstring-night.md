@@ -4290,3 +4290,89 @@ which owns the subsystem; it sits beside
 `bug-t-a-backgrounded-tier-reports-the-wrappers-exit-code-over-the-tiers-verdict`
 (`b5d5f977d`) in the same "the instruments are the broken thing" neighbourhood,
 and neither has an owner.
+
+---
+
+## `tools-devtest#00`: not a two-run blip. **seven has never produced a green full tier.**
+
+Track T's tooling session measured the archive. `86b174f06` (re-ranked 65 -> 75),
+decomposition at `ebb872290`. All shas verified on origin.
+
+- **12 consecutive** fulls with `tools-devtest#00` as the sole red; **17 of the
+  last 20.**
+- **seven: 308 full-tier reports, 0 GREEN**, 2026-08-29T16:51 -> 2026-09-04T03:26.
+  **Not one, ever.**
+
+| host | full reports | GREEN | most recent green |
+| --- | --- | --- | --- |
+| **seven** | **308** | **0** | — |
+| plexus | 205 | 14 | 2026-08-26 |
+| xeon | 45 | 4 | 2026-08-03 |
+| borg | 191 | 34 | 2026-07-28 (retired) |
+
+**The capability is real and the fleet has lost it.** Last green full tier
+anywhere: plexus, 2026-08-26. seven began running fulls on 08-29 — three days
+after — and has never produced one.
+
+### THE COST, AND IT IS THE OWNER'S TO WEIGH
+
+`pin_is_green` requires a full run with no RED tier, and **every pin since has
+been cut on seven.** So **a fresh rollback target has been structurally
+unobtainable — not unlucky, unobtainable.** `pinstatus` still answers *"last pin
+T found fully green: v354"*, dated **08-19**. The recovery half of the fast-pin
+trade has had no target while pins continued to be cut through it. **This one job
+is the whole of that gap in 12 of the last 12 runs.**
+
+**And the masked direction is not a risk here, it is the current state:**
+`91b4b77ec631` at 17:03 had **four NEW test-core reds** and the verdict was the
+same word as the run before it.
+
+### The host-specificity hypothesis, and what would falsify it
+
+frankZ measured four of this job's guards — `twatch_timeout_staleness`,
+`twatch_timeout_verdict`, `twatch_verify_request`, `verify_assertions` — passing
+on plexus and failing on seven **in the same `make tools-devtest` invocation.**
+The offered reason: seven is the only box with a **live watcher**, so guards
+asserting over live watcher state behave differently. **0-of-308 against
+14-of-205 raises that past a guess.**
+
+**Still a hypothesis.** The falsifying test is **a watcher-free full run on
+seven**, which nobody has done. It predicts something checkable: fix those four
+and 0-of-308 becomes green.
+
+### Six reds, FOUR causes — do not carry "6 RED" as one thing
+
+1. **A `sync.sh` fold-safety refusal** (`f81498db8`, 08-29) trips two guards, one
+   **last touched 08-19 — ten days before the refusal existed.** Two reds, one
+   answer, and **the answer is not to loosen the refusal.**
+2. **Three are censuses working CORRECTLY**, reporting real drift —
+   `exit_observable`, `test_wiring_gate` (a genuinely unwired test),
+   `testmgr_hardcoded_tmp`. **"Re-arming a ratchet to make a job green is how a
+   ratchet stops meaning anything."**
+3. **One plain fix:** `twatch_host_epoch` — the bench fingerprint omits the CPU
+   governor while the guard says it should include it. **Its four siblings pass,
+   so the machinery works.**
+
+The truncated failure text quoted in the tier reports is **Cause 1** —
+`devtest_sync_fold`'s four checks, all downstream of that refusal.
+
+### TWO NUMBERS THAT DISAGREE, FLAGGED NOT RECONCILED
+
+**`exit_observable` is quoted at two different values by two sessions in the same
+hour**, both in good faith and both about a same-named job:
+
+- frankb-78: **797/849 = 93.88%** against a **92.69%** cap.
+- Track T tooling: **676/727 = 92.98%** past a floor **re-armed DOWN to 647**.
+
+Different populations, different denominators, possibly different hosts or
+tiers — **nobody has established which, and neither session is wrong on the
+evidence it holds.** Recorded as a collision rather than resolved, because the
+conclusion each draws survives it (both are over their respective bar) and
+**picking one number here would launder an unmeasured reconciliation into the
+record.** Whoever next quotes `exit_observable` must say **which population.**
+
+Second, smaller: the ticket says *"three pins were cut through it."*
+`git log origin/master --grep='chore(stable): pin' --since=2026-08-19` counts
+**52**. Almost certainly two different windows rather than an error — but the
+number that reaches the owner should be the one whose window is stated, and
+**52-since-v354 makes the case stronger, not weaker.**

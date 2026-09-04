@@ -67,6 +67,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 75] [P]` compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees (unblocks 2)
 - `[p 75] [P]` bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size (unblocks 1)
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
+- `[p 75] [T]` chore-t-tools-devtest-00-is-six-reds-with-four-causes
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [A]` umbrella-managed-memory-is-correct
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
@@ -87,7 +88,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
-- `[p 65] [T]` chore-t-tools-devtest-00-is-six-reds-with-four-causes
 - `[p 65] [C]` feature-c-corpus-busybox-i386-the-second-architecture
 - `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 
