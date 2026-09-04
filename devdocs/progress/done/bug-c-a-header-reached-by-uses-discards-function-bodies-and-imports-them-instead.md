@@ -236,15 +236,35 @@ OPERATIVE text, and the test is not where it sits but what a reader DOES with
 it.** A session arriving here would have read a stand-down order sourced from a
 blocker in `done/`.
 
-Worth noting `tools/progress.sh check` did NOT flag this one. Its STALE-PARK
-aperture found several tickets the same run, so the instrument was working — it
-simply has a shape it does not see, and the absence of a hit is not evidence.
-That is the same lesson as everything else on this ticket: **the instrument
-answered, and it answered about something else.**
+**CORRECTION, written the same hour as the paragraph it replaces.** I first
+wrote here that `tools/progress.sh check` had a blind spot and failed to flag
+this. That was wrong, and I had not checked before writing it — the same fault
+this ticket is otherwise about.
 
-Three ways the parked state could have been caught, cheapest first: the
-frontmatter `blocked-by` edge pointed at a ticket in `done/` (a pure frontmatter
-query, no prose); the prose gate named the same slug; and the repro takes
-fifteen seconds. None of them needed judgement, and none of them ran for five
-days because nothing re-reads a park.
+What is actually true, read out of `tools/progress.py`:
+
+- **`unfinished/` RANKS.** The code says so in as many words — *"unfinished/
+  ranks, but say so: it is re-claim work, not new work."* So this ticket was
+  never hidden from `ready`/`next`. My "invisible to the ranker" framing was
+  imported from the `blocked/` case and does not apply.
+- **The frontmatter aperture exists and deliberately does not fail here.**
+  `STALE-EDGE-HIDDEN` fails only for `blocked/`, because that folder MEANS
+  "has an unmet blocker" and is unscanned, so a cleared ticket there is both a
+  contradiction and hidden. Everything else gets `STALE-EDGE-CLEAR`, a
+  `--strict` warning, with a MEASURED reason in the comment: failing on those
+  would report 17 findings of which 12 cost nobody anything, *"which is how a
+  check earns the habit of being scrolled past."* That is a good decision and
+  this ticket is evidence for it, not against it.
+- **What I did not establish** is why the STALE-PARK prose aperture printed for
+  several other tickets in the same run and not for this one. I am recording
+  that as an unexplained observation for Track T, not as a defect.
+
+**So the damage here was never ranking — it was the stale SENTENCE.** The
+ticket was rankable the whole time, and a session that took it would have read
+`Do not attempt the rest of this ticket before that one lands` about a blocker
+already in `done/`. That is a documentation failure with no automated owner,
+which is exactly franks-ab's and frank-coordinator-2c's point: **the test is
+what a reader DOES with the text, and no folder or edge check measures that.**
+
+The cheapest catch was never the tooling. The repro takes fifteen seconds.
 
