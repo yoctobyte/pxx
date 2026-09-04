@@ -741,7 +741,7 @@ function WasmEmitSysCallFam(node, p: Integer; isStmt: Boolean): Boolean; forward
 function WasmEmitLoadFile(node: Integer): Boolean; forward;
 function WasmEmitPathArg(valNode: Integer): Boolean; forward;
 function WasmWriteHelper(const nm: AnsiString): Integer; forward;
-procedure WasmEmitDynStore(dstSym, valNode: Integer); forward;
+procedure WasmEmitDynStore(dstIsSym: Boolean; dstRef, valNode, descIdx: Integer); forward;
 { The proc cleanup pad releases this body's managed locals, and the release pass
   is defined with the epilogue that is its other caller -- well below the
   exception machinery the pad belongs to. Forward rather than moved, and caught
@@ -5762,7 +5762,16 @@ end;
   carrying its +1 — retaining it too would pin the block forever. That is the
   same `IRKind = IR_CALL and IRA >= 0` test riscv32 makes; `IRA >= 0` is what
   separates a real call from a builtin, whose result is not a new reference. }
-procedure WasmEmitDynStore(dstSym, valNode: Integer);
+{ dstIsSym picks how the SLOT's address is reached and, with it, WHOSE
+  descriptor the release uses -- and the second half is the part that is not
+  bookkeeping. IR_STORE_SYM's destination IS the symbol, so GetOrAllocSymRTTI
+  answers for it. IR_STORE_DYN's destination is a record field or a NESTED row,
+  which has the symbol's base element type and ONE FEWER DIMENSION; handing the
+  symbol's descriptor to PXXDynArrayRelease would release the row as if it held
+  handles. GetOrAllocNodeDynDesc reads the node's own depth, which is what
+  IR_STORE_DYN carries IRC and IRTk for. Same reasoning as WasmEmitSetLenDyn's,
+  and riscv32 shipped the bug that motivates it. }
+procedure WasmEmitDynStore(dstIsSym: Boolean; dstRef, valNode, descIdx: Integer);
 var hpRel, hpInc: Integer;
 begin
   hpRel := WasmWriteHelper('PXXDynArrayRelease');
@@ -5780,7 +5789,16 @@ begin
     WasmCall(WasmSlotForProc(hpInc), 'PXXDynArrayIncRef');
   end;
 
-  WasmLValueAddr(dstSym);
+  if dstIsSym then
+    WasmLValueAddr(dstRef)
+  else
+    { The slot ADDRESS, already lowered: an IR_FIELD or IR_INDEX whose value is
+      the address of the slot holding the inner handle. It is never the
+      auto-loading whole-symbol IR_LEA that WasmEmitSetLenDyn has to work
+      around -- that spelling is an IDENT lvalue and lowers to IR_STORE_SYM
+      (ir.inc, the `ASTKind <> AN_IDENT` guard on this op's lowering). }
+    WasmEmitValueAs(dstRef, WT_I32, 'dynamic-array store slot');
+  if WasmBodyBroken then Exit;
   WasmLocalSet(WasmScratchMsSlot);
 
   WasmLocalGet(WasmScratchMsSlot);
@@ -5795,7 +5813,7 @@ begin
     element before the block. PXXDynArrayRelease ignores nil, so the
     first-assignment case needs no guard. }
   WasmLocalGet(WasmScratchMsOld);
-  WasmDataAddr(GetOrAllocSymRTTI(dstSym));
+  WasmDataAddr(descIdx);
   WasmCall(WasmSlotForProc(hpRel), 'PXXDynArrayRelease');
 end;
 
@@ -6101,6 +6119,15 @@ begin
     IR_VIRTUAL_CALL  : WasmEmitVirtualCall(node, True);
     IR_JUMP_IF_FALSE : WasmEmitJumpIfFalse(node, blk);
     IR_STORE_MEM     : WasmEmitStoreMem(node);
+    { The ARC-correct whole-dyn-array store into a slot ADDRESS. wasm32 was the
+      last backend without it and did not fall back to IR_STORE_MEM the way
+      xtensa deliberately does -- ir.inc emits this op for every target except
+      xtensa, so wasm32 simply REFUSED the body (`IR op 60`). A refusal is the
+      good failure here; what the five other backends had before they took this
+      op was the silent one, a handle published without a retain and freed
+      under its second owner. }
+    IR_STORE_DYN     : WasmEmitDynStore(False, IRA[node], IRB[node],
+                                        GetOrAllocNodeDynDesc(node));
     IR_WRITE, IR_WRITELN : WasmEmitWrite(node);
     IR_COPY_REC      : WasmEmitCopyRec(node);
     IR_COPY_REC_MANAGED : WasmEmitCopyRecManaged(node);
@@ -6134,7 +6161,8 @@ begin
         honest answer is a refusal that names itself. READING a managed string
         stays supported: a load hands back the handle and takes no ownership. }
       if Syms[IRA[node]].IsArray and (Syms[IRA[node]].ArrLen = -1) then
-        WasmEmitDynStore(IRA[node], IRB[node])
+        WasmEmitDynStore(True, IRA[node], IRB[node],
+                         GetOrAllocSymRTTI(IRA[node]))
       else if Syms[IRA[node]].TypeKind = tyAnsiString then
         WasmEmitManagedStore(True, IRA[node], IRB[node])
       else if TypeIsFrozenString(Syms[IRA[node]].TypeKind) then

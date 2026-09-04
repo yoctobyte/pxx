@@ -16052,6 +16052,31 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_cross_os_entropy_through_the_pal.pas $(TESTTMP)/entpal_xt >/dev/null || { echo "entpal xtensa compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh entpal/xtensa "$$(tools/run_target.sh xtensa $(TESTTMP)/entpal_xt)" "ENTROPY OK" || exit 1; \
 	else echo "  entpal: qemu-xtensa absent, xtensa NOT verified"; fi
+	# IR_STORE_DYN ON ALL SEVEN TARGETS -- the ARC-correct whole-dyn-array store
+	# into a slot ADDRESS (record field, nested row). wasm32 had no arm at all
+	# and REFUSED any body containing one (`statement IR op 60`); xtensa had a
+	# complete arm in its backend that ir.inc never emitted, so what actually ran
+	# there was the non-retaining IR_STORE_MEM share -- a live use-after-free.
+	#
+	# xtensa WAS this test's positive control before the fix: it printed
+	# `r 111 222 333` where 7 8 9 was expected, the bait block handed straight
+	# back by the next SetLength. That is why the test allocates and DIRTIES a
+	# block after dropping the owner; without that step it passes on a compiler
+	# with no retain at all, because a just-freed span still holds its bytes.
+	./$(COMPILER) test/test_cross_dynarray_slot_store.pas $(TESTTMP)/dsspal26
+	tools/expect_same.sh dsspal26/native "$$($(TESTTMP)/dsspal26)" "DYNSLOTSTORE OK"
+	./$(COMPILER) --target=wasm32 test/test_cross_dynarray_slot_store.pas $(TESTTMP)/dsspal.wasm
+	tools/expect_same.sh dsspal26/wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/dsspal.wasm)" "DYNSLOTSTORE OK"
+	@for t in i386 arm32 aarch64 riscv32; do \
+	  case $$t in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "  dsspal: $$q absent, $$t NOT verified"; continue; fi; \
+	  ./$(COMPILER) --target=$$t --platform=posix test/test_cross_dynarray_slot_store.pas $(TESTTMP)/dsspal_$$t >/dev/null || { echo "dsspal $$t compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh dsspal/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/dsspal_$$t)" "DYNSLOTSTORE OK" || exit 1; \
+	done; \
+	if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_cross_dynarray_slot_store.pas $(TESTTMP)/dsspal_xt >/dev/null || { echo "dsspal xtensa compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh dsspal/xtensa "$$(tools/run_target.sh xtensa $(TESTTMP)/dsspal_xt)" "DYNSLOTSTORE OK" || exit 1; \
+	else echo "  dsspal: qemu-xtensa absent, xtensa NOT verified"; fi
 	# ANSITERM THROUGH THE PAL, and the pty row is the one that earns this block.
 	# This unit carried four private per-target syscall number tables until
 	# 2026-09-04. Two had already produced a silent failure (GetSysWrite had no

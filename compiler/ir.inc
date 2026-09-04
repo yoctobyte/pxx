@@ -12077,19 +12077,26 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
           bug-a-named-dynarray-alias-element-crashes-on-every-cross-target }
         value := IRLowerAST(ASTRight[node]);
         leftAddr := IRLowerDestAddress(ASTLeft[node]);
-        if TargetArch <> TARGET_XTENSA then
-        begin
-          { xtensa is the one holdout: it is ESP-class, has neither this op nor
-            the scope-exit release arms the other five carry, and gets its own
-            pass rather than a copy of this one. }
-          Result := IRAppend(IR_STORE_DYN, leftAddr, value,
-                             NodeDynDepth(ASTLeft[node]), -1,
-                             Ord(NodeDynBaseTk(ASTLeft[node])));
-          IRSetLenBaseRec[Result] := NodeDynBaseRec(ASTLeft[node]);
-          IRSetLenBaseCap[Result] := NodeDynBaseStrCap(ASTLeft[node]);
-        end
-        else
-          Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(tyPointer));
+        { EVERY backend, xtensa included. The exclusion that used to be here said
+          xtensa "has neither this op nor the scope-exit release arms the other
+          five carry" — and by the time it was read, `3a1c1dc73` had given xtensa
+          BOTH. The arm in ir_codegen_xtensa.inc was complete, commented, and
+          UNREACHABLE, because nothing removed the guard that stopped the op
+          being emitted; its own comment says xtensa "was the last backend still
+          taking the bare IR_STORE_MEM handle share", which was the intention and
+          not the state. Two comments disagreed about one fact and the
+          measurement settled it: with the guard in place, xtensa printed
+
+              r        111 222 333        { expected 7 8 9 }
+              rec.rows 111 222 333
+
+          on test_cross_dynarray_slot_store — a live use-after-free, the freed
+          block handed straight back to the next SetLength. }
+        Result := IRAppend(IR_STORE_DYN, leftAddr, value,
+                           NodeDynDepth(ASTLeft[node]), -1,
+                           Ord(NodeDynBaseTk(ASTLeft[node])));
+        IRSetLenBaseRec[Result] := NodeDynBaseRec(ASTLeft[node]);
+        IRSetLenBaseCap[Result] := NodeDynBaseStrCap(ASTLeft[node]);
       end
       else if (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) or
               ((ASTKind[ASTLeft[node]] = AN_IDENT) and

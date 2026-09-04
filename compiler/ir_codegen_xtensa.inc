@@ -2187,8 +2187,12 @@ begin
       begin
         { ARC-correct whole dyn-array store into a slot ADDRESS (record/class
           field or nested sub-array). Ported from riscv32, which ported it from
-          x86-64; xtensa was the last backend still taking the bare IR_STORE_MEM
-          handle share here, which does not retain.
+          x86-64. NOTE ON THIS COMMENT'S OWN HISTORY: for a while it said xtensa
+          "was the last backend still taking the bare IR_STORE_MEM handle share
+          here" while ir.inc was still refusing to EMIT the op for xtensa -- so
+          this arm was dead code and the non-retaining share was what actually
+          ran. A comment written beside a change describes the intention; the
+          guard that decides whether it is true lived in another file.
 
           That is not a missing optimisation, it is a use-after-free waiting for
           a second owner to go away:
