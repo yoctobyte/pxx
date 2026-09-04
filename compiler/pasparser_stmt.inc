@@ -1725,6 +1725,14 @@ begin
                   GenMakeIntLit(SL_OFF_SLOTS + 8 * SymGenSlot[i]),
                   GenMakeSlotAddr(i),
                   GenMakeIntLit(16), -1, -1)
+      else if TypeIsPromoInt(Syms[i].TypeKind) then
+        { {tag, payload}: blob-copy the whole pair. Persisting only the payload
+          dropped the tier and a heap-tier value came back as its inline bits. }
+        stmt := GenMakeCall6(FindProc('SlBlob'), tyInt64,
+                  GenMakeIdent(selfSym, tyPointer),
+                  GenMakeIntLit(SL_OFF_SLOTS + 8 * SymGenSlot[i]),
+                  GenMakeSlotAddr(i),
+                  GenMakeIntLit(TypeSlotSize(Syms[i].TypeKind)), -1, -1)
       else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray then
         stmt := GenMakeCall6(FindProc('SlBlob'), tyInt64,
                   GenMakeIdent(selfSym, tyPointer),
@@ -1761,6 +1769,12 @@ begin
                   GenMakeIntLit(SL_OFF_SLOTS + 8 * SymGenSlot[i]),
                   GenMakeSlotAddr(i),
                   GenMakeIntLit(16), -1, -1)
+      else if TypeIsPromoInt(Syms[i].TypeKind) then
+        stmt := GenMakeCall6(FindProc('SlUnblob'), tyInt64,
+                  GenMakeIdent(selfSym, tyPointer),
+                  GenMakeIntLit(SL_OFF_SLOTS + 8 * SymGenSlot[i]),
+                  GenMakeSlotAddr(i),
+                  GenMakeIntLit(TypeSlotSize(Syms[i].TypeKind)), -1, -1)
       else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray then
         stmt := GenMakeCall6(FindProc('SlUnblob'), tyInt64,
                   GenMakeIdent(selfSym, tyPointer),
@@ -2237,6 +2251,33 @@ begin
       Inc(CurGenSlotNext, 2);
       Continue;
     end;
+    if TypeIsPromoInt(tk) then
+    begin
+      { A PROMOTABLE INT is a {tag, payload} pair -- 8 bytes on a 32-bit target
+        (tyPromoInt32), 16 on a 64-bit one (tyPromoInt64) -- so it gets a
+        multi-word slot region and is checkpointed by BLOB COPY, for exactly
+        the reasons the variant arm above states: bitwise is refcount-neutral,
+        and the value has one live owner at a time.
+
+        It used to fall through to the ONE-WORD arm at the bottom of this
+        chain, which persisted the payload and dropped the TAG -- so a value
+        that had left the inline tier came back reading its inline bits. The
+        symptom looked target-specific and was not: on i386/arm32 the inline
+        tier is 32 bits, so `n = n + i * 1000000007` broke at 6000000042 (back
+        as 1705032746, exactly -2^32); on x86-64 the inline tier is 64 bits, so
+        the same loop was green and only a value past 2^63 showed it. The
+        defect is on every target and only its THRESHOLD moves.
+
+        This is also the promotable-int family's own contract failing open:
+        `a promotable int is a {tag, payload} struct, not a machine word, so
+        anything that must handle it asks for it by name -- an unhandled site
+        errors instead of miscompiling` (symtab.inc, TypeSlotSize). This site
+        did not ask, and did not error.
+        bug-a-a-promotable-int-local-in-a-generator-truncates-to-32-bits-on-i386-and-arm32 }
+      SymGenSlot[i] := CurGenSlotNext;
+      Inc(CurGenSlotNext, (TypeSlotSize(tk) + 7) div 8);
+      Continue;
+    end;
     if (tk = tyString) or (tk = tyAnsiString) then
     begin
       { A managed STRING local is one pointer-sized handle. Persisted as a RAW
@@ -2272,6 +2313,18 @@ begin
             AIntToStr(Ord(tk)) + ') is not supported — only ordinal, pointer '
             + 'and record locals persist across a yield '
             + '(arrays/strings/sets/variants pending)');
+    { EVERYTHING ELSE takes ONE WORD, and that is a CLAIM about its width, not
+      a default -- the promo-int bug above lived here for as long as it did
+      because this arm accepts any kind at all and then persists 8 bytes of it.
+      Assert the claim. A kind wider than a word reaching here is the same
+      defect wearing a different type, and the promotable-int family's rule is
+      that an unhandled site ERRORS rather than miscompiling. }
+    if TypeSlotSize(tk) > 8 then
+      Error('stackless generator: local `' + Syms[i].Name + '` (type kind ' +
+            AIntToStr(Ord(tk)) + ', ' + AIntToStr(TypeSlotSize(tk)) +
+            ' bytes) is wider than the one-word persistent slot this arm '
+            + 'gives it -- it needs a blob-copied slot region like a variant '
+            + 'or a record');
     SymGenSlot[i] := CurGenSlotNext;
     Inc(CurGenSlotNext);
   end;

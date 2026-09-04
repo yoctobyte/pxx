@@ -3288,6 +3288,16 @@ test-nilpy: $(COMPILER)
 	@# bug-a-a-managed-local-that-survives-a-yield-is-released-at-every-yield-on-every-cross-target
 	./$(COMPILER) test/test_nilpy_generator_managed_local_survives_yield.npy $(TESTTMP)/test_nilpy_genyield26
 	tools/expect_same.sh test_nilpy_genyield26 "$$($(TESTTMP)/test_nilpy_genyield26)" "$$(cat test/test_nilpy_generator_managed_local_survives_yield.expected)"
+	@# A promotable int is a {tag, payload} PAIR (8 bytes on a 32-bit target,
+	@# 16 on a 64-bit one) and the generator slot allocator gave it ONE word,
+	@# so the TAG was dropped and a value past the inline tier came back as its
+	@# inline bits. UNLIKE the row above, x86-64 IS a guard here: the file
+	@# carries two thresholds and the 2^63 one was wrong on x86-64 too. It was
+	@# filed as an i386/arm32 bug because 6000000042 is past 32 bits and not
+	@# past 64 -- the defect is on every target, only the threshold moves.
+	@# bug-a-a-promotable-int-local-in-a-generator-truncates-to-32-bits-on-i386-and-arm32
+	./$(COMPILER) test/test_nilpy_generator_promo_int_survives_yield.npy $(TESTTMP)/test_nilpy_genpromo26
+	tools/expect_same.sh test_nilpy_genpromo26 "$$($(TESTTMP)/test_nilpy_genpromo26)" "$$(cat test/test_nilpy_generator_promo_int_survives_yield.expected)"
 	@# `target[key] op= value` on a dict/list/Counter subscript (found already fixed)
 	./$(COMPILER) test/test_nilpy_augmented_subscript_assign.npy $(TESTTMP)/test_nilpy_augsubassign26
 	tools/expect_same.sh test_nilpy_augsubassign26 "$$($(TESTTMP)/test_nilpy_augsubassign26)" "$$(printf '{'"'"'a'"'"': 2}\n[6, 2]\n2\n14\n[1, 1, 30]')"
@@ -16879,6 +16889,13 @@ test-i386: $(COMPILER)
 	# bug-a-a-managed-local-that-survives-a-yield-is-released-at-every-yield-on-every-cross-target
 	./$(COMPILER) --target=i386 test/test_nilpy_generator_managed_local_survives_yield.npy $(TESTTMP)/genyield_i386
 	tools/expect_same.sh i386/test_nilpy_generator_managed_local_survives_yield "$$(tools/run_target.sh i386 $(TESTTMP)/genyield_i386)" "$$(cat test/test_nilpy_generator_managed_local_survives_yield.expected)"
+	# The promo-int twin of the row above: a {tag, payload} pair in a one-word
+	# persistent slot lost its tier across the yield. Two thresholds in the
+	# file (past 2^32 and past 2^63) so it fails on this target whichever
+	# inline width it has.
+	# bug-a-a-promotable-int-local-in-a-generator-truncates-to-32-bits-on-i386-and-arm32
+	./$(COMPILER) --target=i386 test/test_nilpy_generator_promo_int_survives_yield.npy $(TESTTMP)/genpromo_i386
+	tools/expect_same.sh i386/test_nilpy_generator_promo_int_survives_yield "$$(tools/run_target.sh i386 $(TESTTMP)/genpromo_i386)" "$$(cat test/test_nilpy_generator_promo_int_survives_yield.expected)"
 
 test-aarch64: $(COMPILER)
 	# THE BYTE PREFIX ON THE SECOND BACKEND. aarch64 is the first cross target
@@ -17223,6 +17240,13 @@ test-aarch64: $(COMPILER)
 	# bug-a-a-managed-local-that-survives-a-yield-is-released-at-every-yield-on-every-cross-target
 	./$(COMPILER) --target=aarch64 test/test_nilpy_generator_managed_local_survives_yield.npy $(TESTTMP)/genyield_a64
 	tools/expect_same.sh aarch64/test_nilpy_generator_managed_local_survives_yield "$$(tools/run_target.sh aarch64 $(TESTTMP)/genyield_a64)" "$$(cat test/test_nilpy_generator_managed_local_survives_yield.expected)"
+	# The promo-int twin of the row above: a {tag, payload} pair in a one-word
+	# persistent slot lost its tier across the yield. Two thresholds in the
+	# file (past 2^32 and past 2^63) so it fails on this target whichever
+	# inline width it has.
+	# bug-a-a-promotable-int-local-in-a-generator-truncates-to-32-bits-on-i386-and-arm32
+	./$(COMPILER) --target=aarch64 test/test_nilpy_generator_promo_int_survives_yield.npy $(TESTTMP)/genpromo_a64
+	tools/expect_same.sh aarch64/test_nilpy_generator_promo_int_survives_yield "$$(tools/run_target.sh aarch64 $(TESTTMP)/genpromo_a64)" "$$(cat test/test_nilpy_generator_promo_int_survives_yield.expected)"
 	./$(COMPILER) --target=aarch64 test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2
 	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2_x64
 	tools/expect_same.sh aarch64/test_aarch64_conf2 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_conf2)" "$$($(TESTTMP)/test_aarch64_conf2_x64)"
@@ -20720,6 +20744,13 @@ test-arm32: $(COMPILER)
 	# bug-a-a-managed-local-that-survives-a-yield-is-released-at-every-yield-on-every-cross-target
 	./$(COMPILER) --target=arm32 test/test_nilpy_generator_managed_local_survives_yield.npy $(TESTTMP)/genyield_a32
 	tools/expect_same.sh arm32/test_nilpy_generator_managed_local_survives_yield "$$(tools/run_target.sh arm32 $(TESTTMP)/genyield_a32)" "$$(cat test/test_nilpy_generator_managed_local_survives_yield.expected)"
+	# The promo-int twin of the row above: a {tag, payload} pair in a one-word
+	# persistent slot lost its tier across the yield. Two thresholds in the
+	# file (past 2^32 and past 2^63) so it fails on this target whichever
+	# inline width it has.
+	# bug-a-a-promotable-int-local-in-a-generator-truncates-to-32-bits-on-i386-and-arm32
+	./$(COMPILER) --target=arm32 test/test_nilpy_generator_promo_int_survives_yield.npy $(TESTTMP)/genpromo_a32
+	tools/expect_same.sh arm32/test_nilpy_generator_promo_int_survives_yield "$$(tools/run_target.sh arm32 $(TESTTMP)/genpromo_a32)" "$$(cat test/test_nilpy_generator_promo_int_survives_yield.expected)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,

@@ -1,0 +1,52 @@
+# bug-a-a-promotable-int-local-in-a-generator-truncates-to-32-bits-on-i386-and-arm32
+#
+# A promotable int is a {tag, payload} PAIR, not a machine word: 8 bytes on a
+# 32-bit target, 16 on a 64-bit one. The stackless-generator slot allocator gave
+# it ONE word and the checkpoint persisted ONE word, so the TAG was dropped and
+# a value that had left the inline tier came back reading its inline bits.
+#
+# TWO thresholds in one file, because the defect is on every target and only the
+# threshold moves -- the ticket was filed as "i386 and arm32" and that was the
+# 32-bit inline tier, not the target:
+#
+#   past 2^32   6000000042 -> 1705032746 (exactly -2^32) on i386 and arm32;
+#               x86-64 and aarch64 were GREEN here, which is what made it look
+#               target-specific
+#   past 2^63   the multiply loop below; wrong on x86-64 and aarch64 TOO, from
+#               the 5th value on, identically on pin v403
+#
+# The same arithmetic at module scope is correct on every target and always was,
+# so this is the generator instance's state save, not the bignum tier.
+#
+# Expectations are CPython's own output.
+
+def adds(k):
+    n = 0
+    i = 0
+    while i < k:
+        n = n + i * 1000000007
+        yield n
+        i = i + 1
+
+
+def muls(k):
+    n = 1
+    i = 0
+    while i < k:
+        n = n * 1000003
+        yield n
+        i = i + 1
+
+
+for v in adds(6):
+    print(v)
+for v in muls(8):
+    print(v)
+
+# the control that says the arithmetic itself was never in question
+m = 0
+j = 0
+while j < 6:
+    m = m + j * 1000000007
+    j = j + 1
+print("flat", m)
