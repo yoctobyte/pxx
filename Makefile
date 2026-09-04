@@ -15946,14 +15946,62 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/c_stat_rdev_decodes.c $(TESTTMP)/c_rdev26
 	tools/expect_same.sh c_rdev26 "$$($(TESTTMP)/c_rdev26)" "$$(printf 'null 1:3 want 1:3\nzero 1:5 want 1:5\nmakedev(7,300) 7:300\nmakedev(4096,1) 4096:1\nRDEV OK')"
 	# time_t had TWO definitions in crtl -- `long long` in <time.h> and `long`
-	# via <sys/types.h> -- and the frontend takes the LAST of two conflicting
-	# typedefs with no diagnostic (gcc errors), so the width depended on what
-	# the TU happened to pull. The global reached through both headers is the
-	# row that catches it: with the conflict restored, i386 prints matching
-	# sizeof rows and still FAILS, because the global was laid out at 8.
+	# via <sys/types.h> -- and the frontend USED TO take the LAST of two
+	# conflicting typedefs with no diagnostic (gcc errors), so the width
+	# depended on what the TU happened to pull. Both halves are closed now: the
+	# headers agree on one definition, and the frontend refuses the conflict
+	# (the three rows below). This row is still the one that catches the crtl
+	# half: with the conflict restored, i386 prints matching sizeof rows and
+	# still FAILS, because the global was laid out at 8.
 	# bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently
 	./$(COMPILER) test/c_time_t_one_definition.c $(TESTTMP)/c_timet26
 	tools/expect_same.sh c_timet26 "$$($(TESTTMP)/c_timet26)" "$$(printf 'sizeof(time_t)=8 sizeof(long)=8\nnegative=1\ny2038=2147483647\nTIME_T OK')"
+	# ...AND THE FRONTEND HALF: two conflicting typedefs for one name are now an
+	# ERROR, as C11 6.7p3 and gcc both have it. The refusal must hold on a
+	# 64-BIT target too, and that is the whole difficulty -- TTypeKind collapses
+	# `long` and `long long` onto tyInt64 wherever a pointer is eight bytes, so
+	# a check comparing only the resolved kind would refuse this on i386 and
+	# accept it here, passing exactly where everyone tests. The typedef row
+	# carries a long RANK beside the kind for that reason.
+	# The message is grepped, not just the exit status: a compile can fail for
+	# any number of reasons and a bare `!` would pass on all of them.
+	! ./$(COMPILER) test/c_typedef_conflict_refused.c $(TESTTMP)/c_tdconf26 > $(TESTTMP)/c_tdconf.log 2>&1
+	grep -q "conflicting types for typedef 'T'" $(TESTTMP)/c_tdconf.log
+	! ./$(COMPILER) --target=i386 test/c_typedef_conflict_refused.c $(TESTTMP)/c_tdconf_i386 > $(TESTTMP)/c_tdconf_i386.log 2>&1
+	grep -q "conflicting types for typedef 'T'" $(TESTTMP)/c_tdconf_i386.log
+	# THE OTHER HALF, and it is the one that keeps the refusal narrow. C11 6.7p3
+	# ALLOWS a repeated typedef that names the same type, and real headers lean
+	# on that constantly -- refusing these would be worse than the silence it
+	# replaced, because it would refuse code gcc accepts. Row 5 is an alias chain
+	# reaching the same type by two spellings, which is what caught the first
+	# draft: the long rank was read from the `long` TOKENS in the declaration
+	# being parsed, and an alias spells none, so `typedef T Alias` came out rank
+	# 0 against `typedef long Alias` rank 1 and the check refused a legal pair.
+	# gcc -O0 is the oracle at both widths; the transcript is width-independent.
+	gcc -O0 -o $(TESTTMP)/c_tdlegal_gcc test/c_typedef_repeat_is_legal.c
+	tools/expect_same.sh c_tdlegal/oracle "$$($(TESTTMP)/c_tdlegal_gcc)" "$$(cat test/c_typedef_repeat_is_legal.expected)"
+	./$(COMPILER) test/c_typedef_repeat_is_legal.c $(TESTTMP)/c_tdlegal26
+	tools/expect_same.sh c_tdlegal26/native "$$($(TESTTMP)/c_tdlegal26)" "$$(cat test/c_typedef_repeat_is_legal.expected)"
+	# ...and _Generic reads the same rank. ROW 2 is the row that changed, which
+	# the ablation had to tell me -- `typedef long long TLL;` selected the
+	# `long:` arm, because with no rank recorded the two arms are
+	# indistinguishable by kind natively (both tyInt64) and `long:` matches
+	# first. Row 3, the alias, was accidentally RIGHT by the same collapse. So
+	# three of these five rows pass on a compiler that records no rank at all,
+	# and any one of them alone would be a row that cannot fail.
+	# gcc oracle, width-independent.
+	gcc -O0 -o $(TESTTMP)/c_tdgen_gcc test/c_generic_selects_through_a_typedef_alias.c
+	tools/expect_same.sh c_tdgen/oracle "$$($(TESTTMP)/c_tdgen_gcc)" "$$(cat test/c_generic_selects_through_a_typedef_alias.expected)"
+	./$(COMPILER) test/c_generic_selects_through_a_typedef_alias.c $(TESTTMP)/c_tdgen26
+	tools/expect_same.sh c_tdgen26/native "$$($(TESTTMP)/c_tdgen26)" "$$(cat test/c_generic_selects_through_a_typedef_alias.expected)"
+	@for t in i386 riscv32 aarch64 arm32; do \
+	  case $$t in i386) q=qemu-i386;; riscv32) q=qemu-riscv32;; aarch64) q=qemu-aarch64;; arm32) q=qemu-arm;; esac; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "  c_td: $$q absent, $$t NOT verified"; continue; fi; \
+	  ./$(COMPILER) --target=$$t --platform=posix test/c_typedef_repeat_is_legal.c $(TESTTMP)/c_tdlegal_$$t >/dev/null || { echo "c_tdlegal $$t compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_tdlegal/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/c_tdlegal_$$t)" "$$(cat test/c_typedef_repeat_is_legal.expected)" || exit 1; \
+	  ./$(COMPILER) --target=$$t --platform=posix test/c_generic_selects_through_a_typedef_alias.c $(TESTTMP)/c_tdgen_$$t >/dev/null || { echo "c_tdgen $$t compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_tdgen/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/c_tdgen_$$t)" "$$(cat test/c_generic_selects_through_a_typedef_alias.expected)" || exit 1; \
+	done
 	# the same unit included twice, once spelled with a './': one file, allowed
 	./$(COMPILER) test/c_pasunit_twice.c $(TESTTMP)/c_pasunit_twice26
 	tools/expect_same.sh c_pasunit_twice26 "$$($(TESTTMP)/c_pasunit_twice26)" "42"

@@ -5253,17 +5253,60 @@ begin
 end;
 
 procedure AddCTypedefEx(const name: AnsiString; tk: TTypeKind; elemTk, rec: Integer);
-var idx, i: Integer;
+var idx, i, newRank: Integer;
+    armed: Boolean;
 begin
+  { Consume the arming flag FIRST and unconditionally, so a source typedef that
+    takes an early Exit cannot leave it set for the next builtin registration. }
+  armed := CTypedefRedefArmed;
+  newRank := CTypedefPendingRank;
+  CTypedefRedefArmed := False;
+  CTypedefPendingRank := 0;
+
   idx := FindCTypedef(name);
   if idx >= 0 then
   begin
+    { C11 6.7p3 permits a repeated typedef ONLY when it names the same type, and
+      this table used to overwrite unconditionally -- last definition wins, no
+      diagnostic. gcc rejects the conflict at both widths.
+
+      WHAT IT COST, and it is why the check is worth the risk: <time.h> declared
+      `typedef long long time_t` with a comment promising 64-bit everywhere so
+      Y2038 never appears, while <sys/types.h> had `typedef __time_t time_t`
+      with __time_t == long. Including <time.h> auto-pulls crtl/src/time.c,
+      which reaches <sys/types.h>, so `long` arrived last and won -- and the
+      damage was not the width but that the width became a function of what
+      ELSE the translation unit happened to pull in. On i386 one TU gave two
+      answers for one type: sizeof(time_t)=4 while a static time_t was laid out
+      at 8. On x86-64 it is invisible, long and long long being the same width.
+
+      ARMED ONLY FOR A SOURCE `typedef` STATEMENT. lib/crtl deliberately
+      redefines names the Pascal RTL also spells and cparser's cross-namespace
+      binding has three rungs of measured special-casing around exactly that, so
+      an unconditional check here would be a much wider claim than the defect
+      justifies. Builtin/crtl registration keeps overwriting silently; a source
+      typedef is compared against whatever is already stored, whoever wrote it.
+
+      THE RANK IS NOT REDUNDANT WITH THE KIND. TTypeKind collapses `long` and
+      `long long` onto tyInt64 on any 64-bit target, so kind-only comparison
+      would accept the ticket's own reproducer natively and reject it on i386 --
+      "the shape that passes where you test", which is the failure mode this
+      whole ticket is about. SymCLongRank already keeps the same distinction for
+      _Generic; this is that idea on the typedef row. }
+    if armed and
+       ((CTypedefTk[idx] <> Ord(tk)) or
+        (CTypedefElemTk[idx] <> elemTk) or
+        (CTypedefRec[idx] <> rec) or
+        (CTypedefLongRank[idx] <> newRank)) then
+      Error('conflicting types for typedef ''' + name +
+            ''' — a repeated typedef must name the same type');
     CTypedefTk[idx] := Ord(tk);
     CTypedefElemTk[idx] := elemTk;
     CTypedefRec[idx] := rec;
     CTypedefProcSig[idx] := -1;
     CTypedefIsFnType[idx] := False;
     CTypedefArrLen[idx] := -1;
+    CTypedefLongRank[idx] := newRank;
     Exit;
   end;
   if CTypedefCount >= MAX_CTYPEDEF then Error('C typedef table overflow');
@@ -5283,6 +5326,7 @@ begin
   CTypedefProcSig[CTypedefCount] := -1;
   CTypedefIsFnType[CTypedefCount] := False;
   CTypedefArrLen[CTypedefCount] := -1;
+  CTypedefLongRank[CTypedefCount] := newRank;
   CTypedefHashInsert(CTypedefCount, name);
   Inc(CTypedefCount);
 end;
@@ -5480,6 +5524,7 @@ var
   isUnsigned, isSigned, isFloatTy, isVoid, loop, sawBase, isTypedef, isAggBase: Boolean;
   tdIsFnType: Boolean;
   shortCount, longCount, tdIdx, depth, baseRec, tdElemTk, tdElemRec: Integer;
+  tdLongRank: Integer;   { long rank carried by a typedef-name base; see the CTypeLong assignment }
   base, fpRet, fpPType: TTypeKind;
   fpName: AnsiString;
   fpNameOff, fpNameLen: Integer;   { name token off/len, kept local — a recursive ParseCDeclType (params) resets the globals }
@@ -5503,6 +5548,7 @@ begin
   isUnsigned := False; isSigned := False; isFloatTy := False; isVoid := False;
   sawBase := False; isTypedef := False; isAggBase := False;
   CTypeBaseConst := False; CTypeLongLong := False; CTypeLong := False;
+  tdLongRank := 0;
   CTypeBaseIsEnum := False;
   shortCount := 0; longCount := 0; base := tyInt32; baseRec := REC_NONE;
   tdElemTk := Ord(tyUnknown); tdElemRec := REC_NONE;
@@ -5588,6 +5634,7 @@ begin
               CTypeProcSig := CTypedefProcSig[tdIdx]; { fn-pointer typedef carries a call signature }
               tdIsFnType := CTypedefIsFnType[tdIdx];   { function-TYPE typedef: a `*` decays, not indirects }
               CTypeTypedefArrLen := CTypedefArrLen[tdIdx]; { array typedef inherent length, else -1 }
+              tdLongRank := CTypedefLongRank[tdIdx];    { `long`/`long long` rank of the type this name denotes }
               sawBase := True; isTypedef := True;
               Next;
             end
@@ -5599,8 +5646,29 @@ begin
   end;
 
   CTypeIsVoid := isVoid;
-  CTypeLongLong := (longCount >= 2);
-  CTypeLong     := (longCount = 1);
+  { A TYPEDEF NAME INHERITS THE RANK IT WAS DEFINED WITH. `typedef long T;
+    typedef T Alias;` reaches here with longCount = 0 -- no `long` token was
+    spelled at this occurrence -- so a rank read from the token count alone
+    calls Alias rank 0, while `typedef long Alias;` is rank 1. The
+    conflicting-typedef check would then REFUSE a pair gcc ACCEPTS, because both
+    spellings do name the same type. Caught by
+    test/c_typedef_repeat_is_legal.c row 5, which was written for exactly this
+    and found it on its first run.
+
+    _Generic reads these two flags as well and wants the same answer: the rank
+    is a property of the TYPE, not of how it happened to be spelled here, so
+    `_Generic((T)0, long: ...)` selecting the `long` arm is the correct
+    behaviour and was previously missed for every aliased spelling. }
+  if isTypedef and (longCount = 0) then
+  begin
+    CTypeLongLong := (tdLongRank >= 2);
+    CTypeLong     := (tdLongRank = 1);
+  end
+  else
+  begin
+    CTypeLongLong := (longCount >= 2);
+    CTypeLong     := (longCount = 1);
+  end;
 
   if isVoid then
     Result := tyInteger          { placeholder; pointer suffix overrides below }
@@ -15574,6 +15642,28 @@ begin
       all field offsets collapse to 0. Pointer aliases likewise keep their
       pointed-at type even when aliasing an existing pointer typedef rather than
       spelling a fresh `*` here. }
+    { ARM THE CONFLICTING-REDEFINITION CHECK -- THIS ARM ONLY. `typedef long T;`
+      after `typedef long long T;` used to overwrite silently, last wins, and
+      that is what let <time.h> and <sys/types.h> disagree about time_t for the
+      whole life of the file. See AddCTypedefEx for the full account.
+
+      The aggregate arms above are deliberately NOT armed. A `typedef struct
+      {...} S;` reached twice mints a fresh anonymous record each time, so its
+      record ids differ by construction and an armed check there would reject
+      unguarded double inclusion -- a false positive on a shape that is common
+      and, as pxx parses it, harmless. Narrow beats loud: this covers the scalar,
+      pointer and alias typedefs, which is the population the defect was
+      measured in. The tag-carrying aggregate case is a separate question and
+      should be measured before it is armed.
+
+      CTypeLong / CTypeLongLong are the flags ParseCDeclType left for the call
+      that produced `tk` a few lines above -- no other ParseCDeclType runs on
+      the path to here, the two arms that do their own both Exit first.
+      bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently }
+    CTypedefRedefArmed := True;
+    if CTypeLongLong then CTypedefPendingRank := 2
+    else if CTypeLong then CTypedefPendingRank := 1
+    else CTypedefPendingRank := 0;
     if (tk = tyRecord) then
       AddCTypedefEx(nm, tk, Ord(tyUnknown), CTypeBaseRec)
     else if tk = tyPointer then

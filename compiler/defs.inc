@@ -3558,6 +3558,9 @@ var
   CTypedefProcSig : array[0..MAX_CTYPEDEF-1] of Integer; { fn-pointer typedef: signature Procs[] index (BodyAddr=-1) for indirect-call marshalling; -1 = not a fn pointer }
   CTypedefIsFnType : array[0..MAX_CTYPEDEF-1] of Boolean; { True for a function-TYPE typedef `typedef R N(args);` (vs a fn-POINTER typedef): a following `*` in a declarator DECAYS (pointer-to-function) rather than adding a level, so `N *p` is the callable, matching C function/pointer-to-function equivalence }
   CTypedefArrLen : array[0..MAX_CTYPEDEF-1] of Integer; { array typedef `typedef ELEM name[N]`: inherent length N (single dim); -1 = not an array typedef }
+  CTypedefLongRank : array[0..MAX_CTYPEDEF-1] of Integer; { 0 = not a long-family base, 1 = `long`, 2 = `long long`. TTypeKind COLLAPSES these -- both are tyInt64 on a 64-bit target -- so the kind alone cannot tell `typedef long T` from `typedef long long T`, and gcc rejects that pair at BOTH widths. Same distinction SymCLongRank already keeps for _Generic. }
+  CTypedefRedefArmed : Boolean; { set only while a C `typedef` STATEMENT is registering a name, so the conflicting-redefinition check fires for source typedefs and never for builtin/crtl registration. Consumed and cleared by AddCTypedefEx. }
+  CTypedefPendingRank : Integer; { long rank for the row AddCTypedefEx is about to write; consumed and cleared with the flag above }
   { Open-addressed name->index hash for O(1) FindCTypedef. Stores idx+1 so the
     zero-initialised state means "empty" (no -1 fill needed). Size is a power of
     two > 2*MAX_CTYPEDEF for a <=0.5 load factor. }
