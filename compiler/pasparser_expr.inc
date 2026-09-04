@@ -534,6 +534,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     dpaCount, dpaLo, dpaFlat: Integer;   { `p^` over a pointer-to-fixed-array: first-dim span, low bound, and total element count }
     mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
  szElemTk: TTypeKind; szBTk: TTypeKind; szBTkAny: TTypeKind;
+ szDeclTk: TTypeKind; szNameConsumed: Boolean;
     seEtid, seOrd: Integer;
     dfSym, dfRec, dfAi: Integer; dfTk: TTypeKind; dfSaveStatic: Boolean;  { Default(T) over an aggregate }
     dfNestCi, dfHops, dfI: Integer; dfNestName: AnsiString;   { Default(TOuter.TInner) — the SCOPED nested row }
@@ -3873,6 +3874,7 @@ begin
         if name = '' then name := GetTokenStr(TokPos - 1);
         szBTkAny := BuiltinTypeNameTk(name);
         szBTk := szBTkAny;
+        szNameConsumed := False;
         { A USER DECLARATION WINS OVER A BUILTIN NAME, and this table cannot be
           consulted before checking that. Its own header says so -- "callers must
           consult a user type alias FIRST where that matters: this answers what
@@ -4140,7 +4142,31 @@ begin
                     become a rejection. Without this, restoring user-declaration
                     precedence silently un-fixed SizeOf(ShortString).
                     bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts }
-                  if szBTkAny <> tyUnknown then
+                  if (CurTok.Kind = tkIdent) and BuiltinTypeNameNeedsDecl(name) then
+                  begin
+                    { A BUILTIN NAME THE KIND TABLE CANNOT SIZE -- resolve it
+                      the way a DECLARATION does, and size whatever comes back.
+                      `ShortString` is a 255-cap tyShortString (256 bytes),
+                      `TextFile` is the RTL `text` RECORD (4128), and the three
+                      pointer names are pointee-carrying arms; not one of those
+                      three facts is a function of a TTypeKind, so the
+                      TypeSlotSize(kind) fallback just below -- which was added
+                      for precisely this shape (582e4de09) -- cannot reach them
+                      and all five said `unknown type or variable` while
+                      `var v: N` accepted every one.
+                      Deliberately NOT a name-to-width table: ParseTypeKind's
+                      arms stay the only place these widths are decided.
+                      ParseTypeKind consumes the name itself, so the shared
+                      trailing Next is suppressed.
+                      bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size }
+                    szDeclTk := ParseTypeKind;
+                    szNameConsumed := True;
+                    if (szDeclTk = tyRecord) and (LastTypeRecId <> REC_NONE) then
+                      prevTok := RecSize(LastTypeRecId)
+                    else
+                      prevTok := SizeOfSlot(szDeclTk, LastTypeStrCap);
+                  end
+                  else if szBTkAny <> tyUnknown then
                     prevTok := TypeSlotSize(szBTkAny)
                   else
                   begin
@@ -4157,7 +4183,8 @@ begin
           Error('SizeOf: expected type name');
           prevTok := 0;
         end;
-        Next; { consume type token }
+        if not szNameConsumed then
+          Next; { consume type token — ParseTypeKind already did when it ran }
         Expect(tkRParen, ')');
         node := AllocNode(AN_INT_LIT);
         ASTIVal[node] := prevTok;

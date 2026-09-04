@@ -38,6 +38,15 @@ var
   vExt: Extended; vVal: ValReal; vDT: TDateTime; vCur: Currency; vComp: Comp;
   vLB: LongBool; vWB: WordBool; vBB: ByteBool; vOV: OleVariant;
   vReal: Real; vSng: Single; vDbl: Double; vVar: Variant;
+  { The five names whose ParseTypeKind arm carries more than a KIND -- a
+    capacity, a record id, a pointee -- so the kind-only table could not
+    size them and SizeOf(<name>) said `unknown type or variable` while
+    `var v: <name>` took every one. Same split this file is about, one
+    layer down: not two tables disagreeing, but one oracle that takes too
+    few parameters to have an answer at all.
+    bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size }
+  vSS: ShortString; vPC: PChar; vPAC: PAnsiChar; vPWC: PWideChar;
+  vTF: TextFile;
   bad: Integer;
 
 procedure Chk(const nm: AnsiString; byName, byVar: Integer);
@@ -64,6 +73,11 @@ begin
   Chk('Single',     SizeOf(Single),     SizeOf(vSng));
   Chk('Double',     SizeOf(Double),     SizeOf(vDbl));
   Chk('Variant',    SizeOf(Variant),    SizeOf(vVar));
+  Chk('ShortString',SizeOf(ShortString),SizeOf(vSS));
+  Chk('PChar',      SizeOf(PChar),      SizeOf(vPC));
+  Chk('PAnsiChar',  SizeOf(PAnsiChar),  SizeOf(vPAC));
+  Chk('PWideChar',  SizeOf(PWideChar),  SizeOf(vPWC));
+  Chk('TextFile',   SizeOf(TextFile),   SizeOf(vTF));
   { the widths themselves, so a silent change to one is visible too }
   Writeln(SizeOf(Extended), ' ', SizeOf(ValReal), ' ', SizeOf(Currency), ' ',
           SizeOf(Comp), ' ', SizeOf(LongBool), ' ', SizeOf(WordBool), ' ',

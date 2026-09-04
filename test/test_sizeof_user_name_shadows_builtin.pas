@@ -53,6 +53,18 @@ type
   TDateTime = array[0..9] of Byte;            { shadows the builtin alias      }
   Comp      = (cOne, cTwo, cThree);           { shadows the builtin Int64 name }
   TCurArr   = array[0..SizeOf(Currency) - 1] of Byte;  { the const-eval path }
+  { The three builtin names SizeOf reaches through ParseTypeKind rather
+    than through the kind table, because a capacity / a record id / a
+    pointee is not a function of a TTypeKind. That delegation is a SECOND
+    route into the builtin answer, so it needs its own shadowing row --
+    the rows above cannot reach it, and a user declaration losing to a
+    builtin on exactly these three names is what it would look like.
+    14/18/22 for the same reason as 12/10/6 above: not 4, not 8, and not
+    the builtin widths (256, 4128, 8) either, so no fallback prints them.
+    bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size }
+  ShortString = array[0..13] of Byte;   { shadows the CAPACITY-carrying name }
+  TextFile    = array[0..17] of Byte;   { shadows the RECORD-carrying name   }
+  PChar       = array[0..21] of Byte;   { shadows a POINTEE-carrying name    }
 
 var
   longbool: Boolean;      { a VARIABLE whose name is a builtin type }
@@ -86,6 +98,7 @@ begin
     would break, and nothing above would notice. }
   WriteLn('g ', SizeOf(Cardinal), ' ', SizeOf(Int64), ' ', SizeOf(WideChar));
   WriteLn('h ', SizeOf(Integer), ' ', SizeOf(Double), ' ', SizeOf(Pointer));
+  WriteLn('o ', SizeOf(ShortString), ' ', SizeOf(TextFile), ' ', SizeOf(PChar));
 
   longbool := True; wordbool := 'x'; variant := 5;
   WriteLn('i ', longbool, ' ', wordbool, ' ', variant);

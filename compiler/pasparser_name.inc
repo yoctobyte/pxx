@@ -569,6 +569,11 @@ function ParseAsmStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
 function ParseTypeKind: TTypeKind; forward;
+{ True for a builtin type NAME whose ParseTypeKind arm carries more than a
+  KIND -- a capacity, a record id, a pointee. SizeOf consults it to decide
+  whether to resolve the name through ParseTypeKind instead of through the
+  kind-only table; body beside those arms in pasparser_decl.inc. }
+function BuiltinTypeNameNeedsDecl(const nm: AnsiString): Boolean; forward;
 { materialise-and-index for a string VALUE with no addressable base — used from
   two arms in pasparser_lval.inc, one of which sits above its definition }
 function GenMakeStringValueIndex(valNode: Integer): Integer; forward;

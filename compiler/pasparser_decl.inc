@@ -174,6 +174,33 @@ end;
   and then segfaulted on the deref. BuiltinTypeNameTk was a THIRD caller that
   never asked, which is bug-p-sizeof-string-disagrees-with-the-storage-string-actually-gets. }
 
+function BuiltinTypeNameNeedsDecl(const nm: AnsiString): Boolean;
+{ The builtin type names whose arm in ParseTypeKind below sets something a
+  TTypeKind cannot carry: `shortstring` a CAPACITY, `textfile` a RECORD ID,
+  the three pointer names a POINTEE. They are exactly the names that cannot
+  live in the side-effect-free table BuiltinScalarTypeKind /
+  BuiltinTypeNameTk share, which is why `SizeOf(ShortString)` and the other
+  four answered `SizeOf: unknown type or variable` while `var v: N` accepted
+  every one of them and gave the right width.
+
+  THIS LIST HOLDS NAMES, NEVER WIDTHS -- that distinction is the whole point.
+  A fifth name-to-width table is what
+  bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size
+  forbids, and it is the drift BuiltinTypeNameTk's header already records three
+  times (`Real`, bare `string`, `Extended`): a size written down twice diverges
+  the moment one copy is edited. Here SizeOf re-parses the name through
+  ParseTypeKind and sizes whatever comes back, so the arms below stay the only
+  place a width is decided and a change to one is picked up with no edit here.
+  The residual failure mode is omission -- a SIXTH such name added below and
+  not added here -- and `test_sizeof_of_a_builtin_type_name.pas` is aimed at
+  exactly that, asserting SizeOf(N) = SizeOf(v) as a RELATION for each name
+  rather than any constant. }
+begin
+  Result := CaseEqual(nm, 'shortstring') or CaseEqual(nm, 'textfile')
+         or CaseEqual(nm, 'pchar') or CaseEqual(nm, 'pansichar')
+         or CaseEqual(nm, 'pwidechar');
+end;
+
 function ParseTypeKind: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     qtOuter, qtNested: Integer;   { `TOuter.TInner` — the nested-type lookup }
@@ -573,11 +600,22 @@ begin
         Error('file types are not supported (use TextFile for text I/O)')
       else if (not tnUserDecl) and (CaseEqual(lo, 'shortstring')) then
       begin
-        { Interim: `shortstring` maps to a 255-cap tyFixedString (word-prefix
-          layout, so sizing matches the reused frozen codegen). The true
-          byte-length-prefix tyShortString (FPC ABI) is a later codegen slice. }
+        { `shortstring` IS `string[255]` -- one type with two spellings, so it
+          takes the SAME kind the `string[N]` arm above hands back. It was
+          tyFixedString (8-byte word prefix) while that arm moved to
+          tyShortString (one-byte prefix) in phase 4 (`fd186a975`), and the
+          two spellings then disagreed about LAYOUT, not merely about SizeOf:
+          264 vs 256, data at offset 8 vs offset 1. Values still agreed
+          everywhere the compiler copied through a normalising path, which is
+          why it read green -- but `var s: ShortString` bound to a `string[255]`
+          aliases the raw storage, read the wrong prefix width, and printed
+          `Length` = 122511465736197. Ordinary declared source, no diagnostic,
+          wrong number.
+          The 255 bound is the same one the `string[N]` arm documents: a
+          one-byte prefix cannot count past 255, and `shortstring` is exactly
+          at it, never over. }
         LastTypeStrCap := 255;
-        Result := tyFixedString;
+        Result := tyShortString;
       end
       { EVERY side-effect-free builtin scalar name, from the ONE table shared
         with the built-in typecast in pasparser_expr.inc. It used to be ~40

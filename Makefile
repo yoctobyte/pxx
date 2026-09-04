@@ -11490,6 +11490,21 @@ test-core: $(COMPILER)
 	# implementation can pass every other row by being self-consistently wrong.
 	./$(COMPILER) test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_ssbp_default26
 	tools/expect_same.sh test_ssbp_default26 "$$($(TESTTMP)/test_ssbp_default26)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
+	# `SizeOf(<builtin type name>)` answers what `var v: <that name>` occupies.
+	# Five names took the DECLARATION and refused the SIZEOF -- ShortString,
+	# PChar, PAnsiChar, PWideChar, TextFile -- because SizeOf settled a name
+	# against a TTypeKind, and those five carry a capacity, a pointee or a
+	# record id that no kind holds.
+	# THE SIZE ROWS ARE RELATIONS ON PURPOSE (TextFile is 4128 here, 888 under
+	# FPC), so they cannot freeze a storage decision -- but a relation alone is
+	# not a guard: both spellings can be wrong the same way, which is how the
+	# ShortString half hid. `spelling`, `layout` and `varparam` are the rows
+	# that see it. Measured against a control compiler with only the layout fix
+	# reverted: all nine size rows read OK while those three failed, `varparam`
+	# printing Length = 122511465736197 from ordinary declared source.
+	# Transcript is FPC 3.2.2's, byte-identical.
+	./$(COMPILER) test/test_shortstring_is_string_255.pas $(TESTTMP)/test_szbtn26
+	tools/expect_same.sh test_szbtn26 "$$($(TESTTMP)/test_szbtn26)" "$$(printf 'delegated   OK\nspelling    OK\nlayout     5 104 101 108 108 111\nvarparam   5 <hello>')"
 	tools/expect_same.sh test_strn_container26 "$$($(TESTTMP)/test_strn_container26)" "$$(printf 'openp1     1\nopenp2     1\nopenp20    1\nopenvals   1\ndyn1d      1\ndyn2d      1\ndyn2dvals  1\nguard      1')"
 	# TWO FROZEN WIDTHS IN ONE PROGRAM. There were FOUR corners here until the
 	# phase-4 flip: two string build axes, PXX_MANAGED_STRING choosing what bare
@@ -13044,7 +13059,7 @@ test-core: $(COMPILER)
 	# heard of cannot fail. Byte-identical to FPC 3.2.2.
 	# bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts
 	./$(COMPILER) test/test_sizeof_user_name_shadows_builtin.pas $(TESTTMP)/test_sizeof_shadow26
-	tools/expect_same.sh test_sizeof_shadow26 "$$($(TESTTMP)/test_sizeof_shadow26)" "$$(printf 'a 12\nb 10\nc TRUE\nd 1\ne 1\nf 8\ng 4 8 2\nh 4 8 8\ni TRUE x 5\nj 12\nk 6\nl 12 12\nm 10\nn 2 1')"
+	tools/expect_same.sh test_sizeof_shadow26 "$$($(TESTTMP)/test_sizeof_shadow26)" "$$(printf 'a 12\nb 10\nc TRUE\nd 1\ne 1\nf 8\ng 4 8 2\nh 4 8 8\no 14 18 22\ni TRUE x 5\nj 12\nk 6\nl 12 12\nm 10\nn 2 1')"
 	./$(COMPILER) test/test_sizeof.pas $(TESTTMP)/test_sizeof26
 	# Row 21 is SizeOf(Extended) and it is 8, not 10, since ce4d9004c made SizeOf
 	# and declarations share one builtin type table. That is the intended fix of
@@ -16057,6 +16072,13 @@ test-i386: $(COMPILER)
 	tools/expect_same.sh i386/method_pointer_size "$$(tools/run_target.sh i386 $(TESTTMP)/i386_methptr)" "METHPTR OK 8 4"
 	./$(COMPILER) --target=i386 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_i386_ssbp_d
 	tools/expect_same.sh i386/ssbp_default "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_ssbp_d)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
+	# SizeOf(<builtin type name>) = SizeOf(var of that name), across the
+	# width boundary: the five names that refused SizeOf carry a capacity,
+	# a pointee or a record id, and two of those change size here. Rows are
+	# RELATIONS for that reason; `layout`/`varparam` are the absolute ones
+	# and are identical on every target and under FPC 3.2.2.
+	./$(COMPILER) --target=i386 test/test_shortstring_is_string_255.pas $(TESTTMP)/i386_szbtn
+	tools/expect_same.sh i386/sizeof_builtin_type_name "$$(tools/run_target.sh i386 $(TESTTMP)/i386_szbtn)" "$$(printf 'delegated   OK\nspelling    OK\nlayout     5 104 101 108 108 111\nvarparam   5 <hello>')"
 	# The mixed-width rows carry `s:9` -- a NONZERO field width, deliberately.
 	# The pad is max(0, wid - len), a RUNTIME quantity, so the shared helper is
 	# what reads the prefix; at width 0 i386 never calls it (the `if wid > 0`
@@ -17013,6 +17035,13 @@ test-aarch64: $(COMPILER)
 	# default aarch64 must be byte-identical to before the conversion.
 	./$(COMPILER) --target=aarch64 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a64_ssbp_d
 	tools/expect_same.sh aarch64/ssbp_default "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_a64_ssbp_d)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
+	# SizeOf(<builtin type name>) = SizeOf(var of that name), across the
+	# width boundary: the five names that refused SizeOf carry a capacity,
+	# a pointee or a record id, and two of those change size here. Rows are
+	# RELATIONS for that reason; `layout`/`varparam` are the absolute ones
+	# and are identical on every target and under FPC 3.2.2.
+	./$(COMPILER) --target=aarch64 test/test_shortstring_is_string_255.pas $(TESTTMP)/a64_szbtn
+	tools/expect_same.sh aarch64/sizeof_builtin_type_name "$$(tools/run_target.sh aarch64 $(TESTTMP)/a64_szbtn)" "$$(printf 'delegated   OK\nspelling    OK\nlayout     5 104 101 108 108 111\nvarparam   5 <hello>')"
 	# ... and the cross-width conversion, which is what actually broke on this
 	# backend: Length() read the prefix at a fixed 8 and answered
 	# 0x6F6C6C654805 -- the length byte followed by the characters of 'hello'.
@@ -18710,6 +18739,13 @@ test-riscv32: $(COMPILER)
 	# `5 0 0 0 0 0`, the byte prefix shows 5 then the characters of 'hello'.
 	./$(COMPILER) --target=riscv32 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_rv32_ssbp_d
 	tools/expect_same.sh riscv32/ssbp_default "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32_ssbp_d)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
+	# SizeOf(<builtin type name>) = SizeOf(var of that name), across the
+	# width boundary: the five names that refused SizeOf carry a capacity,
+	# a pointee or a record id, and two of those change size here. Rows are
+	# RELATIONS for that reason; `layout`/`varparam` are the absolute ones
+	# and are identical on every target and under FPC 3.2.2.
+	./$(COMPILER) --target=riscv32 test/test_shortstring_is_string_255.pas $(TESTTMP)/rv32_szbtn
+	tools/expect_same.sh riscv32/sizeof_builtin_type_name "$$(tools/run_target.sh riscv32 $(TESTTMP)/rv32_szbtn)" "$$(printf 'delegated   OK\nspelling    OK\nlayout     5 104 101 108 108 111\nvarparam   5 <hello>')"
 	# The cross-width conversion, carrying the NONZERO FIELD WIDTH rows from the
 	# start. aarch64 was certified complete while `WriteLn(s:9)` was broken,
 	# because the pad is max(0, wid - len) -- a runtime quantity the SHARED
@@ -20208,6 +20244,13 @@ test-arm32: $(COMPILER)
 	# and against clang, so default arm32 must be unchanged by the conversion.
 	./$(COMPILER) --target=arm32 test/test_shortstring_byte_prefix.pas $(TESTTMP)/test_a32_ssbp_d
 	tools/expect_same.sh arm32/ssbp_default "$$(tools/run_target.sh arm32 $(TESTTMP)/test_a32_ssbp_d)" "$$(printf 'layout    5 104 101 108 108 111 \nlen       5\nidx       heo\nzero      5\nwrite     <hello>\ntrunc     10 <abcdefghij>\nguard     0\nprefix    1')"
+	# SizeOf(<builtin type name>) = SizeOf(var of that name), across the
+	# width boundary: the five names that refused SizeOf carry a capacity,
+	# a pointee or a record id, and two of those change size here. Rows are
+	# RELATIONS for that reason; `layout`/`varparam` are the absolute ones
+	# and are identical on every target and under FPC 3.2.2.
+	./$(COMPILER) --target=arm32 test/test_shortstring_is_string_255.pas $(TESTTMP)/arm32_szbtn
+	tools/expect_same.sh arm32/sizeof_builtin_type_name "$$(tools/run_target.sh arm32 $(TESTTMP)/arm32_szbtn)" "$$(printf 'delegated   OK\nspelling    OK\nlayout     5 104 101 108 108 111\nvarparam   5 <hello>')"
 	# The cross-width conversion, including the FIELD WIDTH rows -- the padding
 	# is a runtime quantity, so four backends hand it to a shared helper that
 	# reads the length prefix itself, and that helper hardcoded a machine word.

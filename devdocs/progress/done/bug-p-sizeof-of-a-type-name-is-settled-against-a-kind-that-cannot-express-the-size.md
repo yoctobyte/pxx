@@ -3,10 +3,10 @@ slug: bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-
 track: P
 prio: 45
 type: bug
-status: new
+status: done
 owner: ""
 blocked-by: []
-summary: "Five builtin type names accept `var v: N` and reject `SizeOf(N)` with 'unknown type or variable': ShortString, PChar, PAnsiChar, PWideChar, TextFile. Split out of bug-p-sizeof-rejects-twelve-type-names (closed -- both INSTANCES of its ordering pattern are fixed, this is its residue and a different defect). NOT reachable by any further ordering fix: 582e4de09's fallback is `TypeSize(KIND)`, and no TTypeKind carries ShortString's 263 bytes or TextFile's 4128 -- the declaration side gets all five right because it resolves a TYPE. umbrella-sizeof-is-one-answer shape 1, on the Pascal side. DO NOT copy the declaration arms into SizeOf: that is the fourth instance of a drift BuiltinTypeNameTk's header already records three times, and TextFile settles it anyway since it needs IsRecordType('text'), which a width table cannot express. DO NOT fix toward FPC's 256/888 -- 263 and 4128 are correct about OUR storage. The carrier already exists: SizeOfSlot(tyFixedString, DEFAULT_STR_CAP) is exactly 263; what is missing is that the NAME never reaches a sizing call."
+summary: "FIXED 2026-09-04. All five names size now: SizeOf(N) = SizeOf(var of N) for ShortString, PChar, PAnsiChar, PWideChar and TextFile, on x86-64 and on i386/aarch64/arm32/riscv32. SizeOf re-parses such a name through ParseTypeKind and sizes what comes back rather than settling it against a TTypeKind; `BuiltinTypeNameNeedsDecl` holds NAMES, never widths, so the declaration arms stay the only place a width is decided and the fifth oracle this ticket forbids was not built. TWO OF THIS BODY'S OWN NUMBERS WERE STALE BY THE TIME IT WAS WORKED and the correction is the more useful half: it said ShortString is 263 and `DO NOT fix toward FPC's 256`. It is 256, and 256 is OURS -- `string[255]` has been 256 since the phase-4 flip `fd186a975`, and ShortString is that same type. The ticket was right that reaching for the oracle first is the wrong move, and wrong that the oracle disagreed. TextFile stays 4128 against FPC's 888, correctly, and only relations are asserted for it. FOUND WHILE MEASURING IT, AND BIGGER THAN IT: the flip moved the `string[N]` arm and not the `shortstring` arm nine lines below, so ONE Pascal type had TWO layouts -- 264 bytes with data at offset 8 against 256 with data at offset 1, in one program. Values agreed everywhere the compiler COPIED, so it read green; a `var` parameter ALIASES, and passing a `string[255]` to `var s: ShortString` printed Length = 122511465736197 from ordinary declared source with no diagnostic. A SIZE ROW CANNOT CATCH THAT: measured against a control compiler carrying only that revert, all nine size rows read OK while `spelling`, `layout` and `varparam` failed. Tests: `test_shortstring_is_string_255.pas` (default plus four cross), the five names added to `test_sizeof_builtin_type_names.pas`, and three shadow rows (`o 14 18 22`) added to its complement, because the delegation is a SECOND route into the builtin answer and needed its own proof that a user declaration still wins. Every transcript is FPC 3.2.2's, byte-identical. RESIDUAL, named rather than closed: a SIXTH such name added to ParseTypeKind and not to BuiltinTypeNameNeedsDecl is refused again -- a weaker mode than a drifting width, since it cannot produce a wrong NUMBER, only a rejection."
 ---
 
 # `SizeOf(<type name>)` is settled against a KIND that cannot express the size
@@ -101,3 +101,32 @@ Add to `umbrella-sizeof-is-one-answer`'s `blocked-by`. It is the same sentence
 as the C members closed on 2026-09-02 and as frankb-a9's `string[N]` work:
 something other than the layout engine was asked how big a type is, and it
 answered — or here, could not, and said "unknown type".
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+
+## Resolved 2026-09-04 (frankh-15)
+
+The lead in this body was right about the DIRECTION and stale about the
+NUMBERS. Only the direction was load-bearing, so separating them is worth a
+paragraph.
+
+**Right, and it held:** do not copy the declaration arms in, and do not grow a
+name-to-width table. The fix delegates to `ParseTypeKind` -- the declaration
+resolver itself -- so a width changed in an arm is picked up with no edit at
+the SizeOf site, and the only thing written down twice is a list of NAMES.
+`PChar`/`PAnsiChar`/`PWideChar` are worth a note against this body's own
+framing: their size IS expressible by a kind (pointer width). They failed not
+because no kind carries the answer but because their ARM carries a pointee, so
+the name never reached the shared table at all. Three of the five, not five.
+
+**Stale:** `SizeOfSlot(tyFixedString, DEFAULT_STR_CAP)` is not 263 -- it
+measured 264 before the flip -- and `do not fix toward FPC's 256` inverted
+after it. This body was written before `fd186a975` and nothing updated it.
+
+**Why that was not a footnote:** chasing the 263 is what surfaced the layout
+split. `SizeOf(ShortString)` measured 264 where this ticket said 263, and
+`SizeOf(string[255])` measured 256 -- two numbers for one Pascal type. A
+number that is merely stale reads as noise; a number that is stale in a
+direction nothing explains is a lead.

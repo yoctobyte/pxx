@@ -357,7 +357,7 @@ _none_
 | feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing | T | 55 | feature | feature(T): twatch should assert its `## Repro` selector resolves to exactly the job it is filing | — |
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 
-## backlog-pascal (51)
+## backlog-pascal (50)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -382,7 +382,6 @@ _none_
 | bug-p-qword-div-by-a-literal-above-2-63-is-signed | P | 55 | bug | `QWord div` / `mod` by a literal >= 2^63 divides SIGNED and returns a wrong value | — |
 | bug-p-result-is-not-a-method-pointer-lvalue | P | 40 | bug | `Result := s.Pick` inside a function returning a method pointer is refused with `\"TSvc.Pick\" is a procedure and has no result to use in an expression`, for EVERY receiver spelling, while `t := s.Pick; Result := t` on a local of the same type compiles and runs. FPC accepts the direct form. Cause: the implicit `Result` symbol is allocated by `AllocVar('Result', retType)` (pasparser_proc.inc:2310) as a plain var, so it carries no `SymProcSig` and its `TypeKind`/`RecName` never look like a method-pointer lvalue — and the assignment arm that recognises the method-pointer context keys on exactly `SymProcSig[idx] >= 0` and `Syms[idx].TypeKind = tyRecord`. A THIRD axis, orthogonal to receiver spellings: the LHS spelling. | — |
 | bug-p-set-membership-item-constant-truncated-to-32-bits | P | 25 | bug |  | — |
-| bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size | P | 45→75 | bug | Five builtin type names accept `var v: N` and reject `SizeOf(N)` with 'unknown type or variable': ShortString, PChar, PAnsiChar, PWideChar, TextFile. Split out of bug-p-sizeof-rejects-twelve-type-names (closed -- both INSTANCES of its ordering pattern are fixed, this is its residue and a different defect). NOT reachable by any further ordering fix: 582e4de09's fallback is `TypeSize(KIND)`, and no TTypeKind carries ShortString's 263 bytes or TextFile's 4128 -- the declaration side gets all five right because it resolves a TYPE. umbrella-sizeof-is-one-answer shape 1, on the Pascal side. DO NOT copy the declaration arms into SizeOf: that is the fourth instance of a drift BuiltinTypeNameTk's header already records three times, and TextFile settles it anyway since it needs IsRecordType('text'), which a width table cannot express. DO NOT fix toward FPC's 256/888 -- 263 and 4128 are correct about OUR storage. The carrier already exists: SizeOfSlot(tyFixedString, DEFAULT_STR_CAP) is exactly 263; what is missing is that the NAME never reaches a sizing call. | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
 | bug-p-unicodechar-is-a-4-byte-code-point-and-fpc-makes-it-a-2-byte-code-unit | P | 40 | bug | `UnicodeChar` maps to tyUCS4Char (4 bytes, a code POINT) where FPC makes it an alias of WideChar (2 bytes, a UTF-16 code UNIT). Both pxx tables agree, so it is NOT a two-table split -- it is one entry that is probably wrong, sharing a line with `ucs4char`, whose 4-byte mapping IS correct and must not move. Zero in-tree declarations use the name (measured), so the change is cheap here; the decision is about out-of-tree code and about Write/string-conversion behaviour, which differs between the two kinds beyond SizeOf. | — |
 | compat-pascal-distinct-type-declaration | P | 25 | compat | `type T = type byte;` — the distinct-type declaration is not parsed | — |
@@ -888,9 +887,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3220)
+## done (3221)
 
-3220 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3221 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (74)
 
@@ -978,7 +977,6 @@ _none_
 - [p 80] [U] decide-what-a-pin-means-and-what-may-block-one
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 75] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
-- [p 75] [P] bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size (unblocks 1)
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - [p 75] [T] chore-t-tools-devtest-00-is-six-reds-with-four-causes
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
@@ -1387,7 +1385,6 @@ _none_
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
-- **1** — bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size
 - **1** — bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
 - **1** — decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
