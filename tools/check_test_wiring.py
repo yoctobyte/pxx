@@ -371,6 +371,20 @@ def subjects():
     return sorted(keep)
 
 
+def _git_lines(args):
+    """Run a git query under ROOT. -> list of lines, or None if it could not run.
+
+    None propagates the third state up; see added_since."""
+    try:
+        out = subprocess.run(["git", "-C", ROOT] + args,
+                             capture_output=True, text=True)
+    except OSError:
+        return None
+    if out.returncode != 0:
+        return None
+    return [ln.strip() for ln in out.stdout.splitlines() if ln.strip()]
+
+
 def added_since(rev):
     """Test subjects this push ADDED, per git. -> set, or None if git cannot say.
 
@@ -378,17 +392,38 @@ def added_since(rev):
     added": a query that could not run and a query that found nothing are the
     same empty set, and treating them alike is how a check reports success by
     not running (`--since` on a fresh clone with no origin ref, for one).
+
+    THREE SOURCES, AND THE LAST TWO ARE THE POINT. The committed range alone
+    made this arm UNFAILABLE for anyone following the prescribed workflow.
+    CLAUDE.md says gate BEFORE you commit -- it has to, because gate.sh's FPC
+    seed canary only runs while `compiler/**` is dirty -- and at that moment a
+    brand-new test file is untracked, in no commit, and `rev..HEAD` is empty.
+    So `gate.sh quick` printed `PASS this push wires the tests it adds` over
+    zero rows, every time, for everybody doing it right. Found 2026-09-04 by
+    frankH after four method-pointer tests landed unwired through a green gate
+    and reddened `tools-devtest#00` in the tier instead; the same four are why
+    `bug-t-...` was not needed and this was.
+
+    A guard that cannot fail is not a guard, and this one printed PASS. The
+    working tree is where the answer lives at the moment the question is asked.
     """
-    try:
-        out = subprocess.run(["git", "-C", ROOT, "log", "--diff-filter=A",
-                              "--format=", "--name-only", "%s..HEAD" % rev,
-                              "--", "test"],
-                             capture_output=True, text=True)
-    except OSError:
+    committed = _git_lines(["log", "--diff-filter=A", "--format=",
+                            "--name-only", "%s..HEAD" % rev, "--", "test"])
+    if committed is None:
         return None
-    if out.returncode != 0:
+    # Staged adds: `git add`ed but not yet committed -- the state a gate run
+    # between `add` and `commit` sees.
+    staged = _git_lines(["diff", "--cached", "--diff-filter=A",
+                         "--name-only", "--", "test"])
+    if staged is None:
         return None
-    return {ln.strip() for ln in out.stdout.splitlines() if ln.strip()}
+    # Untracked: written and not yet added -- the state the PRESCRIBED order
+    # sees, and the one that made this unfailable.
+    untracked = _git_lines(["ls-files", "--others", "--exclude-standard",
+                            "--", "test"])
+    if untracked is None:
+        return None
+    return set(committed) | set(staged) | set(untracked)
 
 
 def main(argv=None):
@@ -437,6 +472,45 @@ def main(argv=None):
     dir_refs = set()
     wired = wired_paths(prov, dir_refs)
     subs = subjects()
+
+    # IN --since MODE THE WORKING TREE IS PART OF THE POPULATION, and without
+    # it this arm cannot fail for anyone following the prescribed workflow.
+    # subjects() is git-tracked-only on purpose (see its docstring: an
+    # untracked file in test/ is somebody's scratch, and failing a shared
+    # census on scratch teaches people to bypass the check). That reasoning is
+    # right for the CENSUS and it silently disarmed the per-push arm, because
+    # the two questions were sharing one enumeration.
+    #
+    # The window, stated exactly: a file added in a commit is inside
+    # `origin/master..HEAD` only between `git commit` and `git push` -- and
+    # CLAUDE.md says GATE BEFORE YOU COMMIT, which it must, because gate.sh's
+    # FPC seed canary only runs while `compiler/**` is dirty. So the one moment
+    # the arm could see the file is the one moment nobody runs it, and after
+    # the push the range never contains it again. A PERMANENT miss, printing
+    # `PASS this push wires the tests it adds` over zero rows.
+    #
+    # Found 2026-09-04 by frankH, after four method-pointer tests went in
+    # through a green gate and reddened tools-devtest#00 in the tier instead.
+    # The census stays tracked-only and unchanged; only --since widens, and the
+    # documented out for a file that is genuinely not a test is test/UNWIRED.txt
+    # with a reason -- scratch belongs in the session scratchpad, not in test/.
+    added = None
+    if since is not None:
+        added = added_since(since)
+        if added is None:
+            # The third state, said out loud. Never 0 with a success line:
+            # that is the shape this whole checker exists to refuse.
+            print("check-test-wiring: CANNOT SCOPE — `git log %s..HEAD` failed "
+                  "(no such rev?). Nothing was checked; this is not a pass."
+                  % since)
+            return 2
+        extra = sorted(q for q in added
+                       if q.endswith(SUBJECT_EXT)
+                       and not any(q.startswith(d) for d in SKIP_DIRS)
+                       and q not in subs
+                       and os.path.exists(os.path.join(ROOT, q)))
+        subs = sorted(set(subs) | set(extra))
+
     reached = consumed_by(wired, subs, dir_refs)
     # A PARK WHOSE TICKET HAS CLOSED IS NOT A PARK, and this is the whole
     # reason parks are a separate kind. An exemption is forever by design; a
@@ -516,17 +590,10 @@ def main(argv=None):
     # read identically. Measured 2026-08-30: `tools/test_wiring_gate_devtest.py`
     # passed against a tree containing ZERO test files.
     if since is not None:
-        added = added_since(since)
-        if added is None:
-            # The third state, said out loud. Never 0 with a success line:
-            # that is the shape this whole checker exists to refuse.
-            print("check-test-wiring: CANNOT SCOPE — `git log %s..HEAD` failed "
-                  "(no such rev?). Nothing was checked; this is not a pass."
-                  % since)
-            return 2
         scoped = sorted(p for p in unwired if p in added)
-        print("check-test-wiring: %d test file(s) added since %s, %d of them "
-              "wired into nothing" % (len(added), since, len(scoped)))
+        print("check-test-wiring: %d test file(s) added since %s (committed, "
+              "staged or untracked), %d of them wired into nothing"
+              % (len(added), since, len(scoped)))
         if not scoped:
             return 0
         print("check-test-wiring: THIS PUSH ADDS %d TEST FILE(S) THAT NOTHING "

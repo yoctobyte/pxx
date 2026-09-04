@@ -44,6 +44,64 @@ CHECKER = os.path.join(HERE, "check_test_wiring.py")
 POPULATION_FLOOR = 250
 
 
+def _since_control():
+    """A/B the `--since` arm in a throwaway repo. -> None on pass, else why.
+
+    A: a scaffold whose one test IS wired -> the checker must exit 0. This is
+       the AIMED half: if the scaffold is wrong, B would "fail" for a reason
+       that has nothing to do with the property, and the control would certify
+       a broken instrument.
+    B: add an UNTRACKED, unwired test -> the checker must exit nonzero and name
+       it. That is the exact state a gate run sees under the prescribed
+       workflow, and the state the arm used to be blind to.
+    """
+    import shutil
+    import tempfile
+    tmp = tempfile.mkdtemp(prefix="wiringgate-")
+    try:
+        os.makedirs(os.path.join(tmp, "tools"))
+        os.makedirs(os.path.join(tmp, "test"))
+        shutil.copy(CHECKER, os.path.join(tmp, "tools", "check_test_wiring.py"))
+        with open(os.path.join(tmp, "test", "UNWIRED.txt"), "w") as f:
+            f.write("# scaffold\n")
+        with open(os.path.join(tmp, "test", "wired_one.pas"), "w") as f:
+            f.write("program wired_one; begin end.\n")
+        with open(os.path.join(tmp, "Makefile"), "w") as f:
+            f.write("scaffold:\n\t./pascal26 test/wired_one.pas out\n")
+        env = dict(os.environ, GIT_AUTHOR_NAME="g", GIT_AUTHOR_EMAIL="g@g",
+                   GIT_COMMITTER_NAME="g", GIT_COMMITTER_EMAIL="g@g")
+        for cmd in (["git", "init", "-q", "-b", "master"],
+                    ["git", "add", "-A"],
+                    ["git", "commit", "-q", "-m", "scaffold"]):
+            g = subprocess.run(cmd, cwd=tmp, capture_output=True, text=True,
+                               env=env)
+            if g.returncode != 0:
+                return ("the --since control could not build its scaffold "
+                        "(%s): %s" % (" ".join(cmd), (g.stderr or "").strip()))
+        base = subprocess.run([sys.executable, "tools/check_test_wiring.py",
+                               "--since", "HEAD~0"], cwd=tmp,
+                              capture_output=True, text=True)
+        if base.returncode != 0:
+            return ("the --since control's BASELINE is not clean, so a failure "
+                    "in the next step would prove nothing: %s"
+                    % ((base.stdout or "") + (base.stderr or "")).strip())
+        with open(os.path.join(tmp, "test", "orphan_probe.pas"), "w") as f:
+            f.write("program orphan_probe; begin end.\n")
+        got = subprocess.run([sys.executable, "tools/check_test_wiring.py",
+                              "--since", "HEAD~0"], cwd=tmp,
+                             capture_output=True, text=True)
+        blob = (got.stdout or "") + (got.stderr or "")
+        if got.returncode == 0 or "orphan_probe.pas" not in blob:
+            return ("`--since` did not see an UNTRACKED unwired test. That is "
+                    "the state every gate run sees, because CLAUDE.md gates "
+                    "BEFORE the commit — so this arm would print PASS over "
+                    "zero rows for everyone following it. rc=%d, output: %s"
+                    % (got.returncode, blob.strip()))
+        return None
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     if not os.path.isfile(CHECKER):
         print("  FAIL the gate cannot find %s — the checker it exists to run "
@@ -84,6 +142,28 @@ def main():
         print("  2 guard(s), 1 red")
         return 1
 
+    # --- the PER-PUSH arm, which is a different question and was unfailable ---
+    #
+    # Everything above runs the CENSUS. `gate.sh quick` runs
+    # `--since origin/$BRANCH`, and that arm answered over git-tracked files
+    # only -- so a brand-new test file, which is UNTRACKED at the moment
+    # CLAUDE.md tells you to gate (before committing, because the FPC seed
+    # canary only runs while compiler/** is dirty), was outside the population.
+    # It printed `PASS this push wires the tests it adds` over zero rows for
+    # everybody following the prescribed order, and after the push the range
+    # never contains the file again. Fixed 2026-09-04; this is the control that
+    # proves the fix, because a bound nobody showed can fail is the failure
+    # this whole file exists to name.
+    #
+    # RUN IN A THROWAWAY REPO, never against the live tree: a control that
+    # writes into test/ to prove a point is a control that can leave the tree
+    # red when it dies. mktemp gives a directory the OS reaps.
+    since_rc = _since_control()
+    if since_rc is not None:
+        print("  FAIL %s" % since_rc)
+        print("  3 guard(s), 1 red")
+        return 1
+
     if r.returncode == 0:
         # Its advisory NOTE lines (an exemption whose only reference is a tools/
         # script naming the path) are printed on a PASS too. Pass them through:
@@ -95,7 +175,9 @@ def main():
         print("  ok   the checker examined %s test subject(s) — the negative "
               "below is over a real population" % seen.group(1))
         print("  ok   check_test_wiring: every test file is wired or explained")
-        print("  2 guard(s), 0 red")
+        print("  ok   --since sees an UNTRACKED new test — the per-push arm "
+              "can fail at the moment the gate actually runs")
+        print("  3 guard(s), 0 red")
         return 0
     print("  FAIL check_test_wiring reports a test file that no rule runs. "
           "Writing a test and confirming it passes are both true, and neither "
@@ -103,7 +185,7 @@ def main():
           "so a new file is gated only if the Makefile was edited too.")
     for ln in out.splitlines():
         print("       %s" % ln.rstrip())
-    print("  2 guard(s), 1 red")
+    print("  3 guard(s), 1 red")
     return 1
 
 
