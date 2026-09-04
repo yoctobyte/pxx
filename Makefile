@@ -13418,10 +13418,17 @@ test-core: $(COMPILER)
 	grep -q "uses 2097152 bytes of stack frame .* (warning promoted by -Werror)" $(TESTTMP)/test_warn_stack_frame_werr.log
 	! ./$(COMPILER) test/test_pascal_directive_error.pas $(TESTTMP)/test_pascal_directive_error26 > $(TESTTMP)/test_pascal_directive_error.log 2>&1
 	grep -q "requested failure" $(TESTTMP)/test_pascal_directive_error.log
-	# {$ERROR} reports the DIRECTIVE's line, not CurTok.Line (which during the
+	# {$$ERROR} reports the DIRECTIVE's line, not CurTok.Line (which during the
 	# lex pass is the last token before it -- a guard on line 3 said line 1).
 	grep -q "pascal26:3: error: requested failure" $(TESTTMP)/test_pascal_directive_error.log
-	# {$FATAL}: the directive whose whole purpose is to stop. Assert the FAILURE
+	# Every REFUSAL inside the {$$...} dispatch reports the directive's own line
+	# too, not just {$$ERROR}/{$$FATAL}: all 31 of them called Error(), which prints
+	# CurTok.Line — the last token BEFORE the directive. A bad directive value on
+	# line 5 of a 6-line file said line 1.
+	printf 'program e;\n{ filler }\n\n\n{$$rangechecks maybe}\nbegin end.\n' > $(TESTTMP)/directive_badvalue.pas
+	! ./$(COMPILER) $(TESTTMP)/directive_badvalue.pas $(TESTTMP)/directive_badvalue26 > $(TESTTMP)/directive_badvalue.log 2>&1
+	grep -q "pascal26:5: error: rangechecks requires on or off" $(TESTTMP)/directive_badvalue.log
+	# {$$FATAL}: the directive whose whole purpose is to stop. Assert the FAILURE
 	# and the text; "no binary" alone is satisfied by a compile that died of
 	# anything else. bug-p-fatal-directive-is-silently-ignored
 	! ./$(COMPILER) test/test_pascal_fatal_directive.pas $(TESTTMP)/test_pascal_fatal_directive26 > $(TESTTMP)/test_pascal_fatal_directive.log 2>&1
@@ -13454,7 +13461,7 @@ test-core: $(COMPILER)
 	# unrecognised directive fatal without a flag of its own.
 	! ./$(COMPILER) -Werror test/test_pascal_directive_unknown_warns.pas $(TESTTMP)/test_pascal_directive_unknown_warns_werr26 > $(TESTTMP)/test_pascal_directive_unknown_warns_werr.log 2>&1
 	grep -q "warning promoted by -Werror" $(TESTTMP)/test_pascal_directive_unknown_warns_werr.log
-	# {$ASSERTIONS}/{$C±} gating. THE CONDITION HAS A SIDE EFFECT: a row that only
+	# {$$ASSERTIONS}/{$$C±} gating. THE CONDITION HAS A SIDE EFFECT: a row that only
 	# checked "nothing printed" passes on a compiler that still EVALUATES the
 	# condition and declines to complain, which is what pxx did until 2026-09-04.
 	# feature-p-assertions-directive-and-position

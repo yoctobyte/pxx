@@ -2152,6 +2152,14 @@ function PasDirectiveClass(const command, name: AnsiString; sign: Char): Integer
   consequential polarity back in the silent set through its other spelling --
   the sibling-path miss this repo names normalise-dont-special-case.
 
+  A NAME WE DECIDED AGAINST IS CLASS 2, NOT CLASS 1. frankD's point while
+  taking feature-p-defineglobal, 2026-09-04, and it is the distinction this
+  split has to carry: `{$DEFINEGLOBAL}` was retired by
+  decide-a-cross-unit-define-name-and-semantics in favour of `{$CLAIM}`, so
+  calling it "recognised but not implemented" would read as a PROMISE to
+  implement a spelling nobody intends to. It stays unknown permanently. Class 1
+  is for a directive FPC gives meaning to that we have not built yet.
+
   bug-p-an-unknown-compiler-directive-is-silently-ignored }
 const
   { Space-delimited and searched WITH both delimiters, so 'h' cannot match
@@ -2354,7 +2362,7 @@ begin
   if CaseEqual(command, 'ifdef') or CaseEqual(command, 'ifndef') or
      CaseEqual(command, 'if') or CaseEqual(command, 'ifopt') then
   begin
-    if PasCondCount >= MAX_PAS_CONDS then Error('conditional directive nesting overflow');
+    if PasCondCount >= MAX_PAS_CONDS then ErrorAt(SrcLine, 'conditional directive nesting overflow');
     parent := PasDirectiveActive;
     if CaseEqual(command, 'ifopt') then
       cond := False { compiler option switches are not modelled; branch off }
@@ -2370,21 +2378,21 @@ begin
   end
   else if CaseEqual(command, 'elseif') then
   begin
-    if PasCondCount = 0 then Error('unexpected elseif directive');
+    if PasCondCount = 0 then ErrorAt(SrcLine, 'unexpected elseif directive');
     idx := PasCondCount - 1;
     PasCondActive[idx] := PasCondParent[idx] and not PasCondTaken[idx] and cond;
     if PasCondActive[idx] then PasCondTaken[idx] := True;
   end
   else if CaseEqual(command, 'else') then
   begin
-    if PasCondCount = 0 then Error('unexpected else directive');
+    if PasCondCount = 0 then ErrorAt(SrcLine, 'unexpected else directive');
     idx := PasCondCount - 1;
     PasCondActive[idx] := PasCondParent[idx] and not PasCondTaken[idx];
     PasCondTaken[idx] := True;
   end
   else if CaseEqual(command, 'endif') or CaseEqual(command, 'ifend') then
   begin
-    if PasCondCount = 0 then Error('unexpected endif directive');
+    if PasCondCount = 0 then ErrorAt(SrcLine, 'unexpected endif directive');
     Dec(PasCondCount);
   end
   else if PasDirectiveActive then
@@ -2395,7 +2403,7 @@ begin
     begin
       if CaseEqual(name, 'on') then StrictOverload := True
       else if CaseEqual(name, 'off') then StrictOverload := False
-      else Error('strict_overload requires on or off');
+      else ErrorAt(SrcLine, 'strict_overload requires on or off');
     end
     else if CaseEqual(command, 'strict_fpc') then
     begin
@@ -2412,19 +2420,19 @@ begin
         StrictVisibility := False; RequireForward := False;
         StrictShiftWidth := False; StrictVariantChar := False;
       end
-      else Error('strict_fpc requires on or off');
+      else ErrorAt(SrcLine, 'strict_fpc requires on or off');
     end
     else if CaseEqual(command, 'overflowchecks') then
     begin
       if CaseEqual(name, 'on') then QChecksVal := True
       else if CaseEqual(name, 'off') then QChecksVal := False
-      else Error('overflowchecks requires on or off');
+      else ErrorAt(SrcLine, 'overflowchecks requires on or off');
     end
     else if CaseEqual(command, 'rangechecks') then
     begin
       if CaseEqual(name, 'on') then RChecksVal := True
       else if CaseEqual(name, 'off') then RChecksVal := False
-      else Error('rangechecks requires on or off');
+      else ErrorAt(SrcLine, 'rangechecks requires on or off');
     end
     else if CaseEqual(command, 'nilchecks') then
     begin
@@ -2434,13 +2442,13 @@ begin
         directive has an opinion. feature-a-emitted-nil-checks }
       if CaseEqual(name, 'on') then NChecksVal := NILCHK_ON
       else if CaseEqual(name, 'off') then NChecksVal := NILCHK_OFF
-      else Error('nilchecks requires on or off');
+      else ErrorAt(SrcLine, 'nilchecks requires on or off');
     end
     else if CaseEqual(command, 'iochecks') then
     begin
       if CaseEqual(name, 'on') then IChecksVal := True
       else if CaseEqual(name, 'off') then IChecksVal := False
-      else Error('iochecks requires on or off');
+      else ErrorAt(SrcLine, 'iochecks requires on or off');
     end
     else if CaseEqual(command, 'assertions') then
     begin
@@ -2453,25 +2461,25 @@ begin
         feature-p-assertions-directive-and-position }
       if CaseEqual(name, 'on') then AssertionsVal := True
       else if CaseEqual(name, 'off') then AssertionsVal := False
-      else Error('assertions requires on or off');
+      else ErrorAt(SrcLine, 'assertions requires on or off');
     end
     else if CaseEqual(command, 'strict_operator') then
     begin
       if CaseEqual(name, 'on') then StrictOperator := True
       else if CaseEqual(name, 'off') then StrictOperator := False
-      else Error('strict_operator requires on or off');
+      else ErrorAt(SrcLine, 'strict_operator requires on or off');
     end
     else if CaseEqual(command, 'strict_case') then
     begin
       if CaseEqual(name, 'on') then StrictCase := True
       else if CaseEqual(name, 'off') then StrictCase := False
-      else Error('strict_case requires on or off');
+      else ErrorAt(SrcLine, 'strict_case requires on or off');
     end
     else if CaseEqual(command, 'strict_visibility') then
     begin
       if CaseEqual(name, 'on') then StrictVisibility := True
       else if CaseEqual(name, 'off') then StrictVisibility := False
-      else Error('strict_visibility requires on or off');
+      else ErrorAt(SrcLine, 'strict_visibility requires on or off');
     end
     else if CaseEqual(command, 'scopedenums') then
     begin
@@ -2481,7 +2489,7 @@ begin
         (TokScopedEnums) since directives run in the lex pass. }
       if CaseEqual(name, 'on') then ScopedEnumsVal := True
       else if CaseEqual(name, 'off') then ScopedEnumsVal := False
-      else Error('scopedenums requires on or off');
+      else ErrorAt(SrcLine, 'scopedenums requires on or off');
     end
     else if CaseEqual(command, 'threadsafe') then
     begin
@@ -2496,7 +2504,7 @@ begin
           flag form. }
         if (TargetArch <> TARGET_X86_64) and (TargetArch <> TARGET_I386)
            and (TargetArch <> TARGET_AARCH64) and (TargetArch <> TARGET_ARM32) then
-          Error('{$threadsafe on} is x86-64/i386/aarch64/arm32 only: the heap/ARC/I-O locks are not implemented on this target yet');
+          ErrorAt(SrcLine, '{$threadsafe on} is x86-64/i386/aarch64/arm32 only: the heap/ARC/I-O locks are not implemented on this target yet');
         { EVERY supported target, x86-64 included. This guarded three of four,
           and the fourth had the same defect for a different define.
 
@@ -2527,7 +2535,7 @@ begin
           cannot be. bug-p-threadsafe-directive-does-not-define-pxx-threadsafe
           fixed this same double case for PXX_THREADSAFE and left the sibling. }
         if not ThreadSafeMode then
-          Error('{$threadsafe on} must be the --threadsafe flag: the lock-implementation defines (PXX_TS_HARDLOCK on x86-64, PXX_TS_SOFTLOCK elsewhere) are applied before lexing, so the directive alone builds an RTL that disagrees with the codegen');
+          ErrorAt(SrcLine, '{$threadsafe on} must be the --threadsafe flag: the lock-implementation defines (PXX_TS_HARDLOCK on x86-64, PXX_TS_SOFTLOCK elsewhere) are applied before lexing, so the directive alone builds an RTL that disagrees with the codegen');
         ThreadSafeMode := True;
         { …and the DEFINE that goes with the mode. PasApplyTargetDefines sets
           PXX_THREADSAFE from the --threadsafe FLAG, and runs at option-parse
@@ -2546,13 +2554,13 @@ begin
         PasDefine(name);
       end
       else if CaseEqual(name, 'off') then ThreadSafeMode := False
-      else Error('threadsafe requires on or off');
+      else ErrorAt(SrcLine, 'threadsafe requires on or off');
     end
     else if CaseEqual(command, 'interfaces') then
     begin
       if CaseEqual(name, 'com') then InterfacesComMode := True
       else if CaseEqual(name, 'corba') then InterfacesComMode := False
-      else Error('interfaces requires com or corba');
+      else ErrorAt(SrcLine, 'interfaces requires com or corba');
     end
     else if CaseEqual(command, 'fastdoubles') then
     begin
@@ -2562,25 +2570,25 @@ begin
         precision) — default OFF = correct IEEE double. No-op elsewhere. }
       if CaseEqual(name, 'on') then XtensaFastDoubles := True
       else if CaseEqual(name, 'off') then XtensaFastDoubles := False
-      else Error('fastdoubles requires on or off');
+      else ErrorAt(SrcLine, 'fastdoubles requires on or off');
     end
     else if CaseEqual(command, 'cstylecomments') then
     begin
       if CaseEqual(name, 'on') then CStyleComments := True
       else if CaseEqual(name, 'off') then CStyleComments := False
-      else Error('cstylecomments requires on or off');
+      else ErrorAt(SrcLine, 'cstylecomments requires on or off');
     end
     else if CaseEqual(command, 'nestedcomments') then
     begin
       if CaseEqual(name, 'on') then NestedComments := True
       else if CaseEqual(name, 'off') then NestedComments := False
-      else Error('nestedcomments requires on or off');
+      else ErrorAt(SrcLine, 'nestedcomments requires on or off');
     end
     else if CaseEqual(command, 'casesensitive') then
     begin
       if CaseEqual(name, 'on') then CaseSensitiveMode := True
       else if CaseEqual(name, 'off') then CaseSensitiveMode := False
-      else Error('casesensitive requires on or off');
+      else ErrorAt(SrcLine, 'casesensitive requires on or off');
     end
     else if CaseEqual(command, 'maxstackframe') then
     begin
@@ -2597,7 +2605,7 @@ begin
         feature-implicit-identifier-binding-strictness-switch. }
       if CaseEqual(name, 'on') then LaxDeclOrder := False
       else if CaseEqual(name, 'off') then LaxDeclOrder := True
-      else Error('declorder requires on or off');
+      else ErrorAt(SrcLine, 'declorder requires on or off');
     end
     else if CaseEqual(command, 'strict') then
     begin
@@ -2605,7 +2613,7 @@ begin
         require-forward (routine visibility). See --strict. }
       if CaseEqual(name, 'on') then RequireForward := True
       else if CaseEqual(name, 'off') then RequireForward := False
-      else Error('strict requires on or off');
+      else ErrorAt(SrcLine, 'strict requires on or off');
     end
     else if CaseEqual(command, 'implicitvars') then
     begin
@@ -2616,13 +2624,13 @@ begin
         feature-implicit-locals-sloppy-switch. }
       if CaseEqual(name, 'on') then ImplicitVars := True
       else if CaseEqual(name, 'off') then ImplicitVars := False
-      else Error('implicitvars requires on or off');
+      else ErrorAt(SrcLine, 'implicitvars requires on or off');
     end
     else if CaseEqual(command, 'lazycasing') then
     begin
       if CaseEqual(name, 'on') then LazyCasing := True
       else if CaseEqual(name, 'off') then LazyCasing := False
-      else Error('lazycasing requires on or off');
+      else ErrorAt(SrcLine, 'lazycasing requires on or off');
     end
     else if CaseEqual(command, 'packrecords') or CaseEqual(command, 'align') then
     begin
@@ -2652,7 +2660,7 @@ begin
         Accepting it as a synonym for the default would read the same today and
         be wrong the day a 16-aligned type appears; 16 stays correct then.
         feature-p-packrecords-c-directive }
-      else Error('invalid packrecords value: ' + name);
+      else ErrorAt(SrcLine, 'invalid packrecords value: ' + name);
     end
     else if CaseEqual(command, 'R') then
     begin
@@ -2667,7 +2675,7 @@ begin
         fname := ResolveWildcardFile(fname);
         if not ResEndsWithDotRes(fname) then
         begin
-          if ResPendCount >= MAX_RESOURCES then Error('too many {$R} resources');
+          if ResPendCount >= MAX_RESOURCES then ErrorAt(SrcLine, 'too many {$R} resources');
           ResPendName[ResPendCount] := name;
           ResPendFile[ResPendCount] := fname;
           Inc(ResPendCount);
@@ -2748,7 +2756,7 @@ begin
           PasApplyMimicCompilerDefines. Implies FPC, so it sets both. }
         MimicFpcCompiler := True; IChecksVal := True; PasApplyMimicCompilerDefines;
       end
-      else Error('unknown {$MIMIC} target (only FPC and FPCCOMPILER are '
+      else ErrorAt(SrcLine, 'unknown {$MIMIC} target (only FPC and FPCCOMPILER are '
                  + 'supported): ' + name);
     end
     else if CaseEqual(command, 'asmmode') then
@@ -2776,7 +2784,7 @@ begin
       else if CaseEqual(name, 'att') or CaseEqual(name, 'direct') then
       begin PasAsmModeNonIntel := True; PasAsmModeName := name; end
       else
-        Error('unknown {$asmMode} value (intel, default, att and direct are the '
+        ErrorAt(SrcLine, 'unknown {$asmMode} value (intel, default, att and direct are the '
               + 'FPC set): ' + name);
     end
     { THE TERMINAL ARM. Without it this chain silently discarded every directive
