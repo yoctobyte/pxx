@@ -8019,7 +8019,43 @@ begin
         bug-a-the-nilpy-arms-in-the-shared-call-loop-are-dead-and-guarded-by-the-wrong-flag.
 
         If you are about to add an `isNilPy` arm here: it cannot fire. Add it to
-        PyParseFactorCore instead. }
+        PyParseFactorCore instead.
+
+        AND THIS NOTE IS FAR MORE GENERAL THAN THE NINE ARMS IT WAS WRITTEN
+        ABOUT — measured 2026-09-04, so the population is stated rather than
+        implied. A reachability probe wrapping the CONDITION of every
+        `Nil Python:` guard in this file (not its body: they are all `... not
+        loaded` guards, which can only speak when the RTL is broken), run over
+        all 830 `.npy` programs in test/:
+
+          28 sites INSIDE this procedure   -> 0 fires
+           3 sites OUTSIDE it              -> 3 fires (all of them)
+
+        Position relative to the dispatch above is a PERFECT discriminator, and
+        it is the only thing that is. The corpus is not the reason for the zero:
+        246 of those programs use `len(`, 820 use `int(`, 25 `open(`, 22
+        `float(`, 17 `round(`, 12 `getattr`, 9 `exec(` — every construct these
+        arms serve, richly represented, and not one reached the Pascal copy.
+        Controls that had to fire before the zero meant anything: the Pascal arm
+        of this dispatch 44471 times and the NilPy arm 115 times on one .npy.
+
+        17 of the 28 are dead STRUCTURALLY, not merely unobserved: they gate on
+        NilPyUserCode, which symtab.inc:25 defines as
+        `isNilPy and ((CurrentUnitIdx < 0) or PyExprMode)`. Below this dispatch
+        PyExprMode is false by construction, so the guard reduces to `isNilPy
+        and CurrentUnitIdx < 0` — the MAIN PROGRAM of a NilPy compile parsed as
+        non-Python, which a .npy cannot produce, because its main program is
+        Python and therefore left at the Exit above. The other 11 gate on plain
+        `isNilPy`, which IS true while the Pascal RTL is parsed, so those are
+        reachable in principle and their zero is empirical only. Two different
+        claims; do not let the first carry the second.
+
+        Do NOT read duplication as the test. All 28 dead ones happen to be
+        duplicated verbatim in pyparser.inc, but so is a LIVE one
+        (`TPyList.extend`, in ParseExpr), so "this string exists on both arms"
+        does not mean "this copy is dead" — only position does. That inference
+        looked perfect at 291 of 830 programs and dissolved at 830.
+        bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out }
       else if (procIdx >= 0) and (Procs[procIdx].IsFunc or isNilPy) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next;
