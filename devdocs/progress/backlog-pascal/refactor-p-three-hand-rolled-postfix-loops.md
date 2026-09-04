@@ -280,3 +280,48 @@ poorer loop:
 The census script lives in the session scratchpad and is ten lines; rebuild it
 rather than trusting this table, and **strip comments before matching**, which
 is the whole lesson of this section.
+
+---
+
+## 2026-09-05 (frankA) — the NEXT row is measured and NOT fixed, because the function is frankH's
+
+The section above names `ParseClassRecordSelectors` in `ApplyCallResultPtrSuffix`
+as the next row to probe. I probed it. **I am not fixing it**, for a reason that
+has nothing to do with the code: on 2026-09-04 I told frankH *"Take
+`ApplyCallResultPtrSuffix` and the five AN_CALL_IND sites; I'll stay out of that
+function. I'll tell you before I touch it if my boundary table forces me to."*
+I then landed inside it twice without telling anyone (`9e6233f18`, `7095ca817`).
+The measurement below is handed over rather than acted on.
+
+### The finding, so it is not lost
+
+A record METHOD reached through a call result is refused. `TRec` with
+`function Doubled: Integer`, `PRec = ^TRec`, `function GetP: PRec`:
+
+| opener | fpc 3.2.2 | pxx (HEAD and pin v403) |
+| --- | --- | --- |
+| `a.Doubled` (plain var) | 42 | 42 |
+| `vp^.Doubled` (var deref) | 42 | 42 |
+| `PRec(q)^.Doubled` (pointer-alias cast) | 42 | 42 |
+| `TRec(a).Doubled` (record-name cast) | 42 | 42 |
+| **`GetP^.Doubled` (call result)** | **42** | **`error: "Doubled": no such member on this record/class`** |
+
+Four of five openers are the negative control: the divergence is the OPENER, not
+the member and not the record. Same for a procedure member in statement
+position — `GetP^.Bump(1)` is refused while `vp^.Bump(1)` stores.
+
+**A loud refusal, not a silent wrong value**, which is why it ranks below the
+`^`-after-a-field pair fixed in `7095ca817`.
+
+### The part that is NOT a simple copy of the rich loop
+
+`ApplyCallResultPtrSuffix`'s `tkDot` arm calls `RequireRecMember` and then builds
+an `AN_FIELD`, so a non-field member cannot survive it. But the obvious remedy —
+copy the rich loop's hand-off — **does not transfer as written**: that guard is
+`(recName >= REC_UCLASS_BASE) and (FindUField(...) < 0)`, i.e. CLASSES only, and
+this case is a plain record. Whatever answers `vp^.Doubled` today is a different
+route, and that route is what should be reached here. Worth finding before
+writing the arm; the four working openers make a ready-made oracle.
+
+Probes are reconstructible from the table above in about five lines each; the
+matrix is one heredoc per opener against `fpc -Mdelphi -O1`.
