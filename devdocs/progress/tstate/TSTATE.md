@@ -4,19 +4,19 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 5d6h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `342559bceb6c` | 2026-09-04T16:28:15Z | RED (native) | 251.4s | `c728ea4e63be` RED |
+| seven | `342559bceb6c` | 2026-09-04T16:47:19Z | RED (full) | 1124.4s | `342559bceb6c` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `c728ea4e63be` on seven, 2026-09-04T16:23:00Z (5m ago).**
+**Newest full tier in the fleet: `342559bceb6c` on seven, 2026-09-04T16:47:19Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `c728ea4e63be` | RED | 5m | — (newest) |
-| plexus | `27424c927b65` | RED | 5d6h | 5d5h |
+| seven | `342559bceb6c` | RED | 0m | — (newest) |
+| plexus | `27424c927b65` | RED | 5d6h | 5d6h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -43,13 +43,6 @@ Reading a staler host's map for a cross-target job answers a question about an O
   - `test-sqlite-threads-aarch64#src:compiler/.pascal26.fixedpoint`
   - `tools-devtest#00`
   </details>
-- **test-core#src:test/test_ansiterm_raw_write.pas@2** — test/test_ansiterm_raw_write.pas tools/expect_same.sh +1 (seven): bad `124d83cf494b`, last good `unknown`, 0 commit(s) in range
-- **test-core#src:test/test_cross_os_entropy_through_the_pal.pas@2** — test/test_cross_os_entropy_through_the_pal.pas tools/expect_same.sh +2 (seven): bad `e2eece6e6f94`, last good `unknown`, 0 commit(s) in range
-- **test-core#src:test/test_cross_futex_through_the_pal.pas** — test/test_cross_futex_through_the_pal.pas tools/run_target.sh +1 (seven): bad `0f13a3b760a3`, last good `unknown`, 0 commit(s) in range
-- **test-core#src:test/test_cross_dynarray_slot_store.pas@2** — test/test_cross_dynarray_slot_store.pas tools/expect_same.sh +2 (seven): bad `8860639aa3ee`, last good `unknown`, 0 commit(s) in range
-- **test-core#src:test/test_cross_typeinfo_dataref.pas@2** — test/test_cross_typeinfo_dataref.pas tools/expect_same.sh +2 (seven): bad `11324ff49f9e`, last good `unknown`, 0 commit(s) in range
-- **test-core#src:test/test_cross_frozen_ptr_in_field.pas@2** — test/test_cross_frozen_ptr_in_field.pas tools/expect_same.sh +2 (seven): bad `57b66faf864a`, last good `unknown`, 0 commit(s) in range
-- **test-core#src:test/test_cross_frozen_ptr_narrow.pas@2** — test/test_cross_frozen_ptr_narrow.pas tools/expect_same.sh +2 (seven): bad `6b08a2ae84f2`, last good `unknown`, 0 commit(s) in range
 - **test-core#src:test/test_rtti_reg.pas** — test/test_rtti_reg.pas tools/expect_same.sh (seven): bad `6b08a2ae84f2`, last good `3d68386f85e7`, 3 commit(s) in range
 
 ## Held — quiet hosts (not actionable)
