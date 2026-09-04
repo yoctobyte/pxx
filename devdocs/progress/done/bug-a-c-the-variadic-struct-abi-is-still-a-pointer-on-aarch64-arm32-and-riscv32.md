@@ -4,12 +4,12 @@ title: "A struct through `...` is still a POINTER on aarch64, arm32 and riscv32"
 track: A
 prio: 40
 type: bug
-status: working
+status: done
 created: 2026-09-02
 found-by: frankA
 owner: frankb-78
 blocked-by: []
-summary: "The remaining three targets of bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer, which was fixed on x86-64 and i386 2026-09-02. A struct or union in a variadic slot still occupies one pointer-width slot holding the address of a caller temp; gcc puts the aggregate's own bytes there. Self-consistent inside pxx, so no pxx-vs-pxx test can see it. Measured unchanged rather than regressed: arm32 and riscv32 print byte-identical output before and after that fix, aarch64 differs only in the garbage stack addresses the broken rows were already printing. THE 'NO ORACLE ON THESE THREE' CLAUSE IS CORRECTED BELOW (2026-09-03): the mixed LINK really is unbuildable (no cross gcc, no lld), but `clang --target=... -S` compiles for all three with nothing installed and reading the CALL SITE needs neither a link nor a run, with llvm-objdump-21 for pxx's column. Three measured facts that change what a fix must do: arm32 NEVER goes indirect (a 12-byte aggregate is r0,r1,r2 with the tail in r3, so the pointer is wrong there at every size); riscv32 DOES at 2x XLEN, so its current pointer is CORRECT for a 12-byte struct and wrong for smaller ones; and riscv32 takes {double,double} in fa0,fa1 but {float,float,float} indirectly, so the FP-struct rule does not port from aarch64. Also `long` is 4 bytes on both 32-bit targets, so size probes in explicit widths. THE FULL PLACEMENT TABLE FOR ALL THREE TARGETS IS NOW MEASURED AND IN THE BODY (2026-09-04), and it changes the shape of the work again: aarch64's VARIADIC rule is its FIXED rule unchanged, HFAs included ({double,double} still goes in d0,d1 on AArch64 Linux, unlike Apple's variant), so that half is exactly "make the tail ask ABIA64ArgDesc"; arm32 SPLITS one aggregate between r1-r3 and the stack, which AAPCS64 never does, so a marshaller ported from the aarch64 one places the head and strands the tail; and riscv32's VARIADIC rule is NOT its fixed rule -- everything over 2x XLEN is a pointer there including {double,double}, which the fixed-parameter row above records as fa0,fa1. Three targets, three rules, two of them differing from that same target's fixed-parameter rule. The mechanism and all three sites are documented on the parent."
+summary: "RESOLVED 2026-09-04, all three targets. A struct through `...` occupied one pointer-width slot holding a caller temp's address on aarch64, arm32 and riscv32; each now marshals what its own ABI marshals, and BOTH HALVES of each target moved in one commit because a caller and a callee that disagree about what a slot CONTAINS do not produce a wrong value, they dereference an integer (measured: converting one aarch64 half segfaults the probe). Three targets, THREE DIFFERENT RULES, and two of them differ from that same target's fixed-parameter rule: aarch64's variadic rule IS its fixed rule unchanged, HFAs included, so {double,double} still goes in d0,d1 (the opposite is the widely-read belief and it describes Apple's variant); arm32 passes an aggregate by value at EVERY size with no indirect class and SPLITS it between r1-r3 and the stack, which AAPCS64 never does; riscv32 is by value only up to 2 x XLEN and indirect above, {double,double} included, where its own fixed rule says fa0,fa1. Each target got one oracle both halves ask (ABIA64RecordClass, ABIA32VaArgDesc, ABIRV32VaArgDesc). riscv32 also turned out to apply NO slot alignment at all -- v(1, 2.5, 77) packed the double into a1:a2 where clang uses a2:a3 -- so the fix covers a plain double and an int64 as much as a record, and dropped a `not ProcExternal` gate that made the calling convention depend on whether the linker resolved the callee. Proof is the clang call site against pxx's own disassembly, row by row with the trailing register, on all three; the three wired tests are regression guards and NOT the proof, because caller and callee are both pxx and cannot observe a wrong convention. Landed 2aedcd004 (aarch64), a9213e770 (riscv32), and the arm32 third with this resolve."
 ---
 
 # The variadic struct ABI on the three cross targets
@@ -355,3 +355,53 @@ register. `ABIA64ArgPlace`'s all-or-nothing placement must not be ported to it.
 The arm32 SCALAR alignment half is already done (it is where
 `__pxx_va_arg_cross32`'s `align` argument came from); only the aggregate half
 remains.
+
+
+# 2026-09-04 (frankB) — THE ARM32 THIRD, AND THE TICKET IS DONE
+
+AAPCS32 turned out to be the easiest of the three to emit and the one whose rule
+is least like the other two: **an aggregate travels by value at EVERY size —
+there is no indirect class — and it SPLITS across the r0..r3 window into the
+stack.** Measured against clang, five shapes, each with a trailing int:
+
+| shape | clang | pxx now |
+| --- | --- | --- |
+| `{int,int}` 8 | `r1,r2`, tail `r3` | same |
+| `{int,int,int}` 12 | `r1,r2,r3`, tail `[sp+0]` | same |
+| `{double,double}` 16 | **skips r1**: `r2,r3` + `[sp+0..7]`, tail `[sp+8]` | same |
+| `{int x6}` 24 | `r1,r2,r3` + `[sp+0..11]`, tail `[sp+12]` | same |
+| `{int x10}` 40 | `r1,r2,r3` + `[sp+0..27]`, tail `[sp+28]` | by construction |
+
+## The split needed no code, and that is the finding
+
+pxx's arm32 cdecl path already builds ONE ascending argument block in a stack
+temp and then loads `r0..r3` from its first four words. So an aggregate that
+runs past word three splits by itself; the register window is a READ of the
+block, not a partition of it. The AAPCS64 marshaller, whose placer is
+all-or-nothing by construction, could not have been ported here — and the
+ticket's own earlier note said so before either was written.
+
+The receiving half needed no code either. `__pxx_va_arg_cross32`'s straddle arm
+already assembles an argument spanning the reg-save/overflow boundary, which is
+exactly this span; it was written for an 8-byte scalar and is size-driven, so a
+24-byte struct with 12 bytes in registers assembles the same way. **Two
+mechanisms that existed for a different reason turned out to be the general
+case** — the split is not a special rule, it is what a byte range does.
+
+What was actually missing was the CLASSIFICATION: both passes of the block
+builder counted a tail struct as the four bytes of its address.
+
+## What each target ended up needing
+
+- **aarch64** — a real placer, because AAPCS64 has banks, HFAs and an indirect
+  class, and a new crtl helper because the register-save layout is not SysV's.
+- **riscv32** — a size threshold and, unexpectedly, the slot ALIGNMENT rule for
+  everything including plain scalars.
+- **arm32** — classification only. The emitter and the walker were already right
+  and had been for other reasons.
+
+Three targets, three rules, and the amount of code each needed was in no relation
+to how different its rule looked on paper.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

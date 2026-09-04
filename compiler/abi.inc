@@ -1071,3 +1071,53 @@ begin
   if bytes < 4 then bytes := 4;
   if bytes > 4 then align := 8;
 end;
+
+{ AAPCS32 VARIADIC TAIL PLACEMENT — the arm32 sibling of ABIRV32VaArgDesc, and
+  a DIFFERENT RULE, which is the whole reason this ticket has three thirds.
+
+  Measured against clang --target=armv7-linux-gnueabihf -O1 -S, reading the call
+  site with a trailing int on every row:
+
+    struct {int,int}        8b  r1,r2,              tail r3
+    struct {int,int,int}   12b  r1,r2,r3,           tail [sp+0]
+    struct {double,double} 16b  SKIPS r1: r2,r3 + [sp+0..7],  tail [sp+8]
+    struct {int x6}        24b  r1,r2,r3 + [sp+0..11],        tail [sp+12]
+    struct {int x10}       40b  r1,r2,r3 + [sp+0..27],        tail [sp+28]
+
+  TWO RULES AAPCS64 DOES NOT HAVE, and porting ABIA64ArgPlace here would get
+  both wrong:
+
+  1. AN AGGREGATE SPLITS between the core registers and the stack. AAPCS64's
+     placer is all-or-nothing -- an argument that does not fit its bank goes to
+     the stack ENTIRELY and closes the bank -- and that is simply not this ABI.
+  2. THERE IS NO INDIRECT CLASS AT ALL. However large the aggregate, its own
+     bytes travel; a 40-byte struct occupies ten words. AAPCS64 hands over a
+     pointer past 16 bytes and riscv32 past 8, so arm32 is the only one of the
+     three where size never changes the answer.
+
+  What it shares with riscv32 is the alignment rule: an 8-byte-aligned slot
+  starts on an even word, for a `double` and an `int64` as much as for a record.
+  arm32 already had that for scalars -- it is where __pxx_va_arg_cross32's
+  `align` argument came from -- and this extends it to aggregates.
+
+  bytes is the slot's own size, so a caller sizes ceil(bytes/4) words and the
+  receiving walk steps the same. slotBytes is the promoted width of a NON-record
+  argument and is ignored when recId names a record.
+  bug-a-c-the-variadic-struct-abi-is-still-a-pointer-on-aarch64-arm32-and-riscv32 }
+procedure ABIA32VaArgDesc(recId, slotBytes: Integer;
+                          var bytes, align: Integer; var byValue: Boolean);
+begin
+  align := 4;
+  byValue := True;
+  if recId > REC_NONE then
+  begin
+    bytes := RecSize(recId);
+    if bytes < 1 then bytes := 4;
+    if recId >= REC_UCLASS_BASE then
+      if UClsAlign[recId - REC_UCLASS_BASE] > 4 then align := 8;
+    Exit;
+  end;
+  bytes := slotBytes;
+  if bytes < 4 then bytes := 4;
+  if bytes > 4 then align := 8;
+end;

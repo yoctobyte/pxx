@@ -1429,6 +1429,8 @@ var
   argCls: Integer;   { Arg32Class of the argument being marshalled (A32_*) }
   classIdx, elemSize, lo, nBlock: Integer;
   blk: Integer;      { AAPCS32 cdecl argument-block size, 8-byte aligned }
+  vaBytes, vaAlign, vaWords, vaK: Integer;  { AAPCS32 variadic tail slot, per ABIA32VaArgDesc }
+  vaByVal: Boolean;
   vaRevM, vaRevP, vaRevO1, vaRevO2: Integer;
   itemNode, hi, p1, p2: Integer;
   lhsTk, rhsTk: TTypeKind;
@@ -3052,6 +3054,25 @@ begin
           i := 0;
           while argNode <> -1 do
           begin
+            { A STRUCT IN THE VARIADIC TAIL TRAVELS BY VALUE on AAPCS32 --
+              ceil(size/4) words of its OWN bytes, 8-byte aligned when the
+              record is, and with NO indirect class however large it gets. It
+              may SPLIT across the r0..r3 window into the stack part of this
+              same block, which needs no code because the block is one ascending
+              byte range and only the r0..r3 load divides it. Sized from
+              ABIA32VaArgDesc, the same oracle cparser's __builtin_va_arg asks
+              for what the slot holds -- two halves that answer separately drift.
+              bug-a-c-the-variadic-struct-abi-is-still-a-pointer-on-aarch64-arm32-and-riscv32 }
+            if ((procIdx < 0) or (i >= Procs[procIdx].ParamCount)) and
+               (IRArgRecId[IRA[argNode]] > REC_NONE) then
+            begin
+              ABIA32VaArgDesc(IRArgRecId[IRA[argNode]], 4, vaBytes, vaAlign, vaByVal);
+              if (vaAlign > 4) and ((sz and 4) <> 0) then Inc(sz, 4);
+              Inc(sz, ((vaBytes + 3) div 4) * 4);
+              Inc(i);
+              argNode := IRB[argNode];
+              Continue;
+            end;
             tk := Arm32CdeclArgKind(procIdx, i, argNode);
             if (tk = tyDouble) or (tk = tyExtended) or (tk = tyInt64) or (tk = tyUInt64) then
             begin
@@ -3077,6 +3098,29 @@ begin
           j := 0;   { running block offset }
           while argNode <> -1 do
           begin
+            { The by-value aggregate arm. It MUST reach the same alignment
+              and size decisions pass 1 reached, or every later argument lands
+              at the wrong block offset -- which is why both passes ask
+              ABIA32VaArgDesc instead of each deciding. IRLowerCallArg already
+              made the private temp, so r0 is its address; r1 carries one word
+              at a time, and nothing else in this sequence holds it yet. }
+            if ((procIdx < 0) or (nArgs >= Procs[procIdx].ParamCount)) and
+               (IRArgRecId[IRA[argNode]] > REC_NONE) then
+            begin
+              ABIA32VaArgDesc(IRArgRecId[IRA[argNode]], 4, vaBytes, vaAlign, vaByVal);
+              if (vaAlign > 4) and ((j and 4) <> 0) then Inc(j, 4);
+              IREmitNodeArm32(IRA[argNode]);        { r0 = record address }
+              vaWords := (vaBytes + 3) div 4;
+              for vaK := 0 to vaWords - 1 do
+              begin
+                EmitI32($E5901000 or (vaK * 4));       { ldr r1, [r0, #k*4] }
+                EmitI32($E58D1000 or (j + vaK * 4));   { str r1, [sp, #j+k*4] }
+              end;
+              Inc(j, vaWords * 4);
+              Inc(nArgs);
+              argNode := IRB[argNode];
+              Continue;
+            end;
             tk := Arm32CdeclArgKind(procIdx, nArgs, argNode);
             if (tk = tyDouble) or (tk = tyExtended) then
             begin
@@ -3388,6 +3432,25 @@ begin
           i := 0;
           while argNode <> -1 do
           begin
+            { A STRUCT IN THE VARIADIC TAIL TRAVELS BY VALUE on AAPCS32 --
+              ceil(size/4) words of its OWN bytes, 8-byte aligned when the
+              record is, and with NO indirect class however large it gets. It
+              may SPLIT across the r0..r3 window into the stack part of this
+              same block, which needs no code because the block is one ascending
+              byte range and only the r0..r3 load divides it. Sized from
+              ABIA32VaArgDesc, the same oracle cparser's __builtin_va_arg asks
+              for what the slot holds -- two halves that answer separately drift.
+              bug-a-c-the-variadic-struct-abi-is-still-a-pointer-on-aarch64-arm32-and-riscv32 }
+            if ((procIdx < 0) or (i >= Procs[procIdx].ParamCount)) and
+               (IRArgRecId[IRA[argNode]] > REC_NONE) then
+            begin
+              ABIA32VaArgDesc(IRArgRecId[IRA[argNode]], 4, vaBytes, vaAlign, vaByVal);
+              if (vaAlign > 4) and ((sz and 4) <> 0) then Inc(sz, 4);
+              Inc(sz, ((vaBytes + 3) div 4) * 4);
+              Inc(i);
+              argNode := IRB[argNode];
+              Continue;
+            end;
             tk := Arm32CdeclArgKind(procIdx, i, argNode);
             if (tk = tyDouble) or (tk = tyExtended) or (tk = tyInt64) or (tk = tyUInt64) then
             begin
@@ -3411,6 +3474,29 @@ begin
           j := 0;   { running block offset }
           while argNode <> -1 do
           begin
+            { The by-value aggregate arm. It MUST reach the same alignment
+              and size decisions pass 1 reached, or every later argument lands
+              at the wrong block offset -- which is why both passes ask
+              ABIA32VaArgDesc instead of each deciding. IRLowerCallArg already
+              made the private temp, so r0 is its address; r1 carries one word
+              at a time, and nothing else in this sequence holds it yet. }
+            if ((procIdx < 0) or (nArgs >= Procs[procIdx].ParamCount)) and
+               (IRArgRecId[IRA[argNode]] > REC_NONE) then
+            begin
+              ABIA32VaArgDesc(IRArgRecId[IRA[argNode]], 4, vaBytes, vaAlign, vaByVal);
+              if (vaAlign > 4) and ((j and 4) <> 0) then Inc(j, 4);
+              IREmitNodeArm32(IRA[argNode]);        { r0 = record address }
+              vaWords := (vaBytes + 3) div 4;
+              for vaK := 0 to vaWords - 1 do
+              begin
+                EmitI32($E5901000 or (vaK * 4));       { ldr r1, [r0, #k*4] }
+                EmitI32($E58D1000 or (j + vaK * 4));   { str r1, [sp, #j+k*4] }
+              end;
+              Inc(j, vaWords * 4);
+              Inc(nArgs);
+              argNode := IRB[argNode];
+              Continue;
+            end;
             tk := Arm32CdeclArgKind(procIdx, nArgs, argNode);
             if (tk = tyDouble) or (tk = tyExtended) then
             begin

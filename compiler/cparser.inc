@@ -1610,6 +1610,8 @@ var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     vaA64Cnt, vaSzArg: Integer;
     vaRvBytes, vaRvAlign: Integer;  { RV32 variadic tail slot, per ABIRV32VaArgDesc }
     vaRvByVal: Boolean;
+    vaA32Bytes, vaA32Align: Integer;  { AAPCS32 variadic tail slot, per ABIA32VaArgDesc }
+    vaA32ByVal: Boolean;
     vaA64Hfa: Boolean;
     vaA64Tk: TTypeKind;
     vt: TTypeKind;
@@ -1842,10 +1844,10 @@ begin
             (ir_codegen386.inc's variadic-tail arm, via the record identity
             IRLowerCallArg stamps on the value node) -- so the walk steps by the
             struct's size and the result is read with ONE deref below.
-            arm32 KEEPS THE POINTER SLOT: its caller has not been converted,
-            and a receiving half that moves alone is a crash rather than a wrong
-            value -- measured on aarch64, where converting one side segfaulted
-            the probe. It is named in the ticket.
+            All three 32-bit targets now marshal the aggregate rather than a
+            pointer to it, each by its own rule and each through its own oracle:
+            i386 ceil(size/4) words packed, riscv32 by value only up to 2 x XLEN,
+            arm32 by value at every size and splitting into the stack.
             bug-a-c-a-struct-through-the-variadic-tail-is-passed-as-a-pointer }
           { RISCV32 ASKS THE ORACLE ITS CALLER ASKS, for the size AND the
             alignment: ABIRV32VaArgDesc. An aggregate that fits in 2 x XLEN now
@@ -1859,8 +1861,19 @@ begin
           vaRvByVal := False; vaRvBytes := 0; vaRvAlign := 4;
           if TargetArch = TARGET_RISCV32 then
             ABIRV32VaArgDesc(vaRecId, TypeSlotSize(vt), vaRvBytes, vaRvAlign, vaRvByVal);
+          { ARM32 ASKS ITS OWN ORACLE, and AAPCS32's answer is not riscv32's: an
+            aggregate ALWAYS travels by value, however large, and may SPLIT
+            across the r0..r3 window into the stack. The split needs nothing
+            here -- __pxx_va_arg_cross32's straddle arm already assembles an
+            argument spanning the reg-save/overflow boundary, which is what that
+            arm was built for, and it is the same span. }
+          vaA32ByVal := False; vaA32Bytes := 0; vaA32Align := 4;
+          if TargetArch = TARGET_ARM32 then
+            ABIA32VaArgDesc(vaRecId, TypeSlotSize(vt), vaA32Bytes, vaA32Align, vaA32ByVal);
           if TargetArch = TARGET_RISCV32 then
             ASTIVal[a3] := vaRvBytes
+          else if TargetArch = TARGET_ARM32 then
+            ASTIVal[a3] := vaA32Bytes
           else if (vaRecId <> REC_NONE) and (TargetArch = TARGET_I386) then
             ASTIVal[a3] := RecSize(vaRecId)
           else if vaRecId <> REC_NONE then ASTIVal[a3] := TARGET_PTR_SIZE
@@ -1876,8 +1889,8 @@ begin
             bug-a-arm32-cdecl-has-no-aapcs-stack-argument-area }
           a4 := AllocNode(AN_INT_LIT);
           if TargetArch = TARGET_RISCV32 then ASTIVal[a4] := vaRvAlign
-          else if (TargetArch = TARGET_ARM32) and (vaRecId = REC_NONE) and
-             (TypeSlotSize(vt) > 4) then ASTIVal[a4] := 8 else ASTIVal[a4] := 4;
+          else if TargetArch = TARGET_ARM32 then ASTIVal[a4] := vaA32Align
+          else ASTIVal[a4] := 4;
           ASTTk[a4] := Ord(tyInteger);
           argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
           a2 := AllocNode(AN_ARG); ASTLeft[a2] := a3; ASTRight[argNode] := a2;
@@ -1886,7 +1899,8 @@ begin
           ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
           if (vaRecId <> REC_NONE) and
              ((TargetArch = TARGET_I386) or
-              ((TargetArch = TARGET_RISCV32) and vaRvByVal)) then
+              ((TargetArch = TARGET_RISCV32) and vaRvByVal) or
+              ((TargetArch = TARGET_ARM32) and vaA32ByVal)) then
           begin
             { The slot holds the aggregate's own bytes now: one deref. }
             node := AllocNode(AN_DEREF); ASTLeft[node] := callNode; ASTTk[node] := Ord(tyRecord);
