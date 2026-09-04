@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-09-04T04:38:27Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "2b79338baa86c2320dece1c0fe3ccab945d96c46",
-   "tier": "opt",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-09-04T04:48:08Z",
    "fixed": [],
    "new_red": [],
@@ -469,6 +460,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-09-04T12:16:12Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "0cebb7cfad8eb1f21a85780a5f9cc176f8e4e3fa",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "seven",
@@ -4642,7 +4642,7 @@
   "test-uforth#src:compiler/.pascal26.fixedpoint@7": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@8": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
   "test-uforth#src:compiler/.pascal26.fixedpoint@9": "cc411ceee30b6dc1fc1d53bbd2b2855fe1fc177e",
-  "test-uforth#src:tools/compiler_srchash.sh": "cf9b14600039c2f62d7251b0e05330fb74827be9",
+  "test-uforth#src:tools/compiler_srchash.sh": "0cebb7cfad8eb1f21a85780a5f9cc176f8e4e3fa",
   "test-uforth#src:tools/compiler_srchash.sh@1": "0cebb7cfad8eb1f21a85780a5f9cc176f8e4e3fa",
   "test-uforth#src:tools/compiler_srchash.sh@10": "0cebb7cfad8eb1f21a85780a5f9cc176f8e4e3fa",
   "test-uforth#src:tools/compiler_srchash.sh@11": "0cebb7cfad8eb1f21a85780a5f9cc176f8e4e3fa",
@@ -13339,14 +13339,14 @@
  },
  "last": {
   "code_fp": "065bb7eaf0d5",
-  "date": "2026-09-04T12:12:36Z",
+  "date": "2026-09-04T12:16:12Z",
   "deadline": 7200.0,
   "sha": "0cebb7cfad8eb1f21a85780a5f9cc176f8e4e3fa",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 719.5
+  "verdict": "GREEN",
+  "wall": 204.9
  },
  "last_bench": {
   "conf_rows": 550,
@@ -13397,14 +13397,14 @@
   },
   "slow": {
    "code_fp": "065bb7eaf0d5",
-   "date": "2026-09-04T07:45:24Z",
+   "date": "2026-09-04T12:16:12Z",
    "deadline": 7200.0,
-   "sha": "cf9b14600039c2f62d7251b0e05330fb74827be9",
+   "sha": "0cebb7cfad8eb1f21a85780a5f9cc176f8e4e3fa",
    "tier": "slow",
    "timed_out": false,
    "unreached": 0,
    "verdict": "GREEN",
-   "wall": 206.0
+   "wall": 204.9
   }
  },
  "last_full": {
