@@ -116,6 +116,11 @@ var
   WasmVarLocA       : Integer = -1;   { i32 -- a variant slot address, per body }
   WasmVarLocS       : Integer = -1;   { i32 -- the SOURCE slot of a variant-to-variant copy }
   WasmVarLocP       : Integer = -1;   { i64 -- the 8 payload bytes of a boxing store }
+  WasmSetLocL       : Integer = -1;   { i32 -- a set binop/compare's LEFT mask address }
+  WasmSetLocR       : Integer = -1;   { i32 -- its RIGHT mask address }
+  WasmSetLocD       : Integer = -1;   { i64 -- bits where two masks DIFFER }
+  WasmSetLocV       : Integer = -1;   { i64 -- bits violating the subset direction }
+  WasmSetLocE       : Integer = -1;   { i32 -- `x in s`: the in-range flag }
   WasmSetInLoc64    : Integer = -1;
   WasmCurNRes       : Integer = 0;    { this body's result count (0 or 1) }
   WasmCurResVt      : Byte = 0;       { ... and its wasm type when 1 }
@@ -740,6 +745,10 @@ procedure WasmEmitDynStore(dstSym, valNode: Integer); forward;
   fails the FPC seed canary -- which is exactly how these three were found,
   gating before the commit rather than after. }
 procedure WasmVariantAddr(node: Integer); forward;
+procedure WasmEmitSetMember(node: Integer); forward;
+procedure WasmEmitSetLit(node: Integer); forward;
+procedure WasmEmitSetBinop(node: Integer); forward;
+procedure WasmEmitSetCmp(node: Integer); forward;
 procedure WasmEmitVarBox(node: Integer); forward;
 procedure WasmEmitVarBinop(node: Integer); forward;
 procedure WasmEmitManagedLocals(release: Boolean; retSym: Integer); forward;
@@ -787,8 +796,12 @@ procedure WasmEmitLoadSym(si: Integer);
 var vt: Byte;
 begin
   { Reading a frozen string yields its ADDRESS — see WasmEmitValueAs. There is
-    no load: the variable IS the buffer. }
-  if TypeIsFrozenString(Syms[si].TypeKind) then
+    no load: the variable IS the buffer. A SET is the same statement about a
+    different buffer: 32 bytes of mask, and every set arm in this file consumes
+    an address. Sharing the arm rather than adding a second one beside it,
+    because the two questions are one question. }
+  if TypeIsFrozenString(Syms[si].TypeKind)
+     or (Syms[si].TypeKind = tySet) then
   begin
     WasmLValueAddr(si);
     Exit;
@@ -915,6 +928,17 @@ begin
     Only WT_I32 is accepted: a frozen string asked for as an i64 or an f64 is a
     real type error and still refused. }
   if TypeIsFrozenString(got) and (want = WT_I32) then Exit;
+  { A SET is the fourth member of this family and it arrived last: 32 bytes of
+    mask, whose every producer here — a baked literal's Data[] address, a
+    binop's scratch, a variable's own slot — leaves an i32 ADDRESS. The comment
+    above says to state it here rather than at each consumer, and this is that
+    rule being followed rather than restated: without it, `PXXMemMove(dest,
+    src, 32)` for a set assignment refused as `value of type set in write
+    argument to PXXMemMove` — the type kind being read as the node's value when
+    it describes what the node points AT, which is the same misreading the
+    IR_DYNUNIQUE arm below records. WT_I32 only, so a set asked for as an i64
+    is still a real type error. }
+  if (got = tySet) and (want = WT_I32) then Exit;
   { An aggregate-returning CALL is the same shape one line up: the node's TYPE
     is the record, and its VALUE is the ADDRESS the callee filled — the hidden
     destination it was handed and hands back. So a record-typed call node is
@@ -1613,6 +1637,22 @@ begin
     Exit;
   end;
 
+  { SET MEMBERSHIP BEFORE THE WIDTH ORACLE, because there is no one width to
+    bring the operands to: the left is an ordinal and the right is the ADDRESS
+    of a 32-byte mask, and unifying them is exactly the wrong question. Asking
+    it anyway is what produced `binary operator operator 99` -- the oracle
+    failing on a pair it should never have been shown.
+
+    `x in [a, b]` over an ALL-CONSTANT literal does not come here; it is folded
+    into SPECIAL_IN and WasmEmitSetIn compares the value against each range.
+    This is the general one -- a set variable, an expression, a non-constant
+    member -- and it is what test_cross_sets needs. }
+  if op = tkIn then
+  begin
+    WasmEmitSetMember(node);
+    Exit;
+  end;
+
   if not WasmBinopWidth(node, want, sgn) then
   begin
     { Name the operand TYPES and the IR KINDS. "operand type in binary
@@ -1846,6 +1886,9 @@ begin
     { Both leave a variant slot ADDRESS on the stack, so both answer tyPointer
       rather than whatever WasmNodeResultType made of a tyVariant node -- an
       i32 to every consumer, which is what a 32-bit address is. }
+    IR_SET_LIT   : WasmEmitSetLit(node);
+    IR_SET_BINOP : WasmEmitSetBinop(node);
+    IR_SET_CMP   : WasmEmitSetCmp(node);
     IR_VAR_BOX   : begin WasmEmitVarBox(node); WasmEmitNode := tyPointer; end;
     IR_VAR_BINOP : begin
                      WasmEmitVarBinop(node);
@@ -4827,6 +4870,210 @@ end;
   six backends, and the set representation changing would need all six found by
   grep — but it is a shared-file fix (defs.inc) and not this backend's to make
   unilaterally. Noted here so the next reader sees it was seen. }
+{ ===== sets =====
+
+  A pxx set is a 32-byte mask, and this backend already copied one and tested
+  membership in one; it could not BUILD one, combine two or compare two. Three
+  arms, measured as 11 of the 70 wasm32 gap instances left after Variant landed
+  and the reason `test_cross_sets` is excluded from test-wasm32.
+
+  FOUR i64 WORDS, NOT EIGHT i32 ONES. The register 32-bit peers unroll eight
+  because that is their word; wasm has i64 natively, so the same mask is four
+  operations and the arms read as what they are -- a bitwise op over one value.
+
+  THE OPERAND STACK IS WHY THE ADDRESSES ARE SET IN REVERSE. A set expression
+  NESTS (`a + b * c`), and a nested arm reuses these same two per-body locals.
+  Emitting the left address and immediately storing it would let the nested
+  RIGHT operand overwrite the local before it is read. So the left address
+  stays on the operand stack across the right operand's whole evaluation and
+  both locals are set afterwards, right first -- which is the order the values
+  are sitting in. Nothing nests after that point. }
+
+function WasmSetLL: Integer;
+begin
+  if WasmSetLocL < 0 then WasmSetLocL := WasmAddLocal(WT_I32, 'setl');
+  WasmSetLL := WasmSetLocL;
+end;
+
+function WasmSetRL: Integer;
+begin
+  if WasmSetLocR < 0 then WasmSetLocR := WasmAddLocal(WT_I32, 'setr');
+  WasmSetRL := WasmSetLocR;
+end;
+
+function WasmSetDL: Integer;
+begin
+  if WasmSetLocD < 0 then WasmSetLocD := WasmAddLocal(WT_I64, 'setdiff');
+  WasmSetDL := WasmSetLocD;
+end;
+
+function WasmSetVL: Integer;
+begin
+  if WasmSetLocV < 0 then WasmSetLocV := WasmAddLocal(WT_I64, 'setviol');
+  WasmSetVL := WasmSetLocV;
+end;
+
+function WasmSetEL: Integer;
+begin
+  if WasmSetLocE < 0 then WasmSetLocE := WasmAddLocal(WT_I32, 'setin');
+  WasmSetEL := WasmSetLocE;
+end;
+
+{ Both operand addresses into the two locals. See the note above for why the
+  left one is stored last rather than first. }
+procedure WasmSetOperands(node: Integer);
+begin
+  WasmEmitValueAs(IRA[node], WT_I32, 'set operand');
+  if WasmBodyBroken then Exit;
+  WasmEmitValueAs(IRB[node], WT_I32, 'set operand');
+  if WasmBodyBroken then Exit;
+  WasmLocalSet(WasmSetRL);
+  WasmLocalSet(WasmSetLL);
+end;
+
+{ The 32-byte mask of a baked set literal or a named set constant: its address
+  in Data[], which the IR carries in IRIVal. Nothing to compute -- the parser
+  wrote the bytes at declaration time. }
+procedure WasmEmitSetLit(node: Integer);
+begin
+  WasmDataAddr(Integer(IRIVal[node]));
+end;
+
+{ `x in s` for a real 32-byte set. BRANCH-FREE, and the branchlessness is a
+  memory-safety property rather than a speed one: the in-range flag gates the
+  BYTE OFFSET as well as the result, so an out-of-range element reads byte 0 of
+  the set and answers False instead of dereferencing past the 32 bytes. The
+  register peers spell it the same way for the same reason.
+
+  The range test is UNSIGNED, so a negative element wraps to a huge value and
+  is out of range -- which is what riscv32's `sltiu 256` does, and set members
+  are ordinals that a program cannot observe the difference on. }
+procedure WasmEmitSetMember(node: Integer);
+begin
+  { Left first and stored last: `x in s` can nest inside another set
+    expression, and these locals are shared per body. See WasmSetOperands. }
+  WasmEmitValueAs(IRA[node], WT_I32, 'set membership element');
+  if WasmBodyBroken then Exit;
+  WasmEmitValueAs(IRB[node], WT_I32, 'set membership set');
+  if WasmBodyBroken then Exit;
+  WasmLocalSet(WasmSetRL);            { the mask's address }
+  WasmLocalSet(WasmSetLL);            { the element }
+
+  WasmLocalGet(WasmSetLL); WasmI32Const(256); WasmOp($49, 'i32.lt_u');
+  WasmLocalSet(WasmSetEL);            { in-range, 0 or 1 }
+
+  WasmLocalGet(WasmSetRL);
+  WasmLocalGet(WasmSetLL); WasmI32Const(3); WasmOp($76, 'i32.shr_u');
+  { 0 - flag is 0 or 0xFFFFFFFF: the offset survives in range and collapses to
+    zero outside it. }
+  WasmI32Const(0); WasmLocalGet(WasmSetEL); WasmOp($6B, 'i32.sub');
+  WasmOp($71, 'i32.and');
+  WasmOp($6A, 'i32.add');
+  WasmMemOp($2D, 'i32.load8_u', 0, 0);
+
+  WasmLocalGet(WasmSetLL); WasmI32Const(7); WasmOp($71, 'i32.and');
+  WasmOp($76, 'i32.shr_u');
+  WasmI32Const(1); WasmOp($71, 'i32.and');
+  WasmLocalGet(WasmSetEL); WasmOp($71, 'i32.and');
+end;
+
+procedure WasmEmitSetBinop(node: Integer);
+var i, op: Integer;
+begin
+  WasmSetOperands(node);
+  if WasmBodyBroken then Exit;
+  op := IRC[node];
+  for i := 0 to 3 do
+  begin
+    WasmBssAddr(Integer(IRIVal[node]) + i * 8);
+    WasmLocalGet(WasmSetLL); WasmMemOp($29, 'i64.load', 3, i * 8);
+    WasmLocalGet(WasmSetRL); WasmMemOp($29, 'i64.load', 3, i * 8);
+    if op = Ord(tkPlus) then WasmOp($84, 'i64.or')
+    else if op = Ord(tkStar) then WasmOp($83, 'i64.and')
+    else if op = Ord(tkMinus) then
+    begin
+      { lhs AND NOT rhs. wasm has no i64.not, and xor with all-ones is what
+        every backend here spells it as. }
+      WasmI64Const(-1); WasmOp($85, 'i64.xor');
+      WasmOp($83, 'i64.and');
+    end
+    else if op = Ord(tkSymDiff) then WasmOp($85, 'i64.xor')
+    else
+    begin
+      WasmUnsupported('set operator ' + WasmIntStr(op));
+      Exit;
+    end;
+    WasmMemOp($37, 'i64.store', 3, 0);
+  end;
+  WasmBssAddr(Integer(IRIVal[node]));      { the result is its scratch }
+end;
+
+procedure WasmEmitSetCmp(node: Integer);
+var i, op: Integer;
+begin
+  WasmSetOperands(node);
+  if WasmBodyBroken then Exit;
+  op := IRC[node];
+  { Two accumulators over the four words, exactly the register peers' shape:
+    every bit where the masks DIFFER, and every bit that violates the subset
+    direction being asked about. }
+  WasmI64Const(0); WasmLocalSet(WasmSetDL);
+  WasmI64Const(0); WasmLocalSet(WasmSetVL);
+  for i := 0 to 3 do
+  begin
+    WasmLocalGet(WasmSetDL);
+    WasmLocalGet(WasmSetLL); WasmMemOp($29, 'i64.load', 3, i * 8);
+    WasmLocalGet(WasmSetRL); WasmMemOp($29, 'i64.load', 3, i * 8);
+    WasmOp($85, 'i64.xor');
+    WasmOp($84, 'i64.or');
+    WasmLocalSet(WasmSetDL);
+    if (op = Ord(tkLe)) or (op = Ord(tkLt)) then
+    begin
+      { lhs AND NOT rhs -- a member of lhs that rhs does not have }
+      WasmLocalGet(WasmSetVL);
+      WasmLocalGet(WasmSetLL); WasmMemOp($29, 'i64.load', 3, i * 8);
+      WasmLocalGet(WasmSetRL); WasmMemOp($29, 'i64.load', 3, i * 8);
+      WasmI64Const(-1); WasmOp($85, 'i64.xor');
+      WasmOp($83, 'i64.and');
+      WasmOp($84, 'i64.or');
+      WasmLocalSet(WasmSetVL);
+    end
+    else if (op = Ord(tkGe)) or (op = Ord(tkGt)) then
+    begin
+      WasmLocalGet(WasmSetVL);
+      WasmLocalGet(WasmSetRL); WasmMemOp($29, 'i64.load', 3, i * 8);
+      WasmLocalGet(WasmSetLL); WasmMemOp($29, 'i64.load', 3, i * 8);
+      WasmI64Const(-1); WasmOp($85, 'i64.xor');
+      WasmOp($83, 'i64.and');
+      WasmOp($84, 'i64.or');
+      WasmLocalSet(WasmSetVL);
+    end;
+  end;
+  if op = Ord(tkEq) then
+  begin
+    WasmLocalGet(WasmSetDL); WasmOp($50, 'i64.eqz');
+  end
+  else if op = Ord(tkNeq) then
+  begin
+    WasmLocalGet(WasmSetDL); WasmOp($50, 'i64.eqz');
+    WasmI32Const(1); WasmOp($73, 'i32.xor');
+  end
+  else if (op = Ord(tkLe)) or (op = Ord(tkGe)) then
+  begin
+    WasmLocalGet(WasmSetVL); WasmOp($50, 'i64.eqz');
+  end
+  else if (op = Ord(tkLt)) or (op = Ord(tkGt)) then
+  begin
+    { PROPER subset: contained AND unequal. }
+    WasmLocalGet(WasmSetVL); WasmOp($50, 'i64.eqz');
+    WasmLocalGet(WasmSetDL); WasmOp($50, 'i64.eqz');
+    WasmI32Const(1); WasmOp($73, 'i32.xor');
+    WasmOp($71, 'i32.and');
+  end
+  else
+    WasmUnsupported('set comparison ' + WasmIntStr(op));
+end;
+
 procedure WasmEmitSetCopy(node: Integer);
 var mv: Integer;
 begin
@@ -6365,6 +6612,11 @@ begin
   WasmVarLocA := -1;
   WasmVarLocS := -1;
   WasmVarLocP := -1;
+  WasmSetLocL := -1;
+  WasmSetLocR := -1;
+  WasmSetLocD := -1;
+  WasmSetLocV := -1;
+  WasmSetLocE := -1;
   WasmStrDepth := 0;
   for i := 0 to WASM_STR_DEPTH - 1 do
     for pvtI := 0 to WASM_STR_SLOTS - 1 do WasmStrPool[i][pvtI] := -1;

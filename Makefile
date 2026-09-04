@@ -16458,6 +16458,15 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_sets.pas $(TESTTMP)/test_i386_sets
 	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_i386_sets_x64
 	tools/expect_same.sh i386/test_i386_sets "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sets)" "$$($(TESTTMP)/test_i386_sets_x64)"
+	# The shapes test_cross_sets does not reach -- every comparison direction,
+	# proper vs improper, symmetric difference, the top bit of the 32-byte mask,
+	# out-of-range and NEGATIVE members, the empty set, and a nested set
+	# expression. Written for wasm32's new set arms and measured green on all
+	# seven targets before being wired, so a row here is a guard rather than a
+	# hope.
+	./$(COMPILER) --target=i386 test/test_cross_set_shapes.pas $(TESTTMP)/test_i386_setshapes
+	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/test_i386_setshapes_x64
+	tools/expect_same.sh i386/test_i386_setshapes "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_setshapes)" "$$($(TESTTMP)/test_i386_setshapes_x64)"
 	./$(COMPILER) --target=i386 test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_i386_sscap
 	./$(COMPILER) test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_i386_sscap_x64
 	tools/expect_same.sh i386/test_shortstring_cap_through_a_pointer "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sscap)" "$$($(TESTTMP)/test_i386_sscap_x64)"
@@ -17363,6 +17372,15 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_sets.pas $(TESTTMP)/test_aarch64_sets
 	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_aarch64_sets_x64
 	tools/expect_same.sh aarch64/test_aarch64_sets "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sets)" "$$($(TESTTMP)/test_aarch64_sets_x64)"
+	# The shapes test_cross_sets does not reach -- every comparison direction,
+	# proper vs improper, symmetric difference, the top bit of the 32-byte mask,
+	# out-of-range and NEGATIVE members, the empty set, and a nested set
+	# expression. Written for wasm32's new set arms and measured green on all
+	# seven targets before being wired, so a row here is a guard rather than a
+	# hope.
+	./$(COMPILER) --target=aarch64 test/test_cross_set_shapes.pas $(TESTTMP)/test_aarch64_setshapes
+	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/test_aarch64_setshapes_x64
+	tools/expect_same.sh aarch64/test_aarch64_setshapes "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_setshapes)" "$$($(TESTTMP)/test_aarch64_setshapes_x64)"
 	./$(COMPILER) --target=aarch64 test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_aarch64_sscap
 	./$(COMPILER) test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_aarch64_sscap_x64
 	tools/expect_same.sh aarch64/test_shortstring_cap_through_a_pointer "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sscap)" "$$($(TESTTMP)/test_aarch64_sscap_x64)"
@@ -18337,6 +18355,15 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_cross_sets.pas $(TESTTMP)/test_rv32x_sets
 	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_rv32x_sets_x64
 	tools/expect_same.sh riscv32/test_rv32x_sets "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_sets)" "$$($(TESTTMP)/test_rv32x_sets_x64)"
+	# The shapes test_cross_sets does not reach -- every comparison direction,
+	# proper vs improper, symmetric difference, the top bit of the 32-byte mask,
+	# out-of-range and NEGATIVE members, the empty set, and a nested set
+	# expression. Written for wasm32's new set arms and measured green on all
+	# seven targets before being wired, so a row here is a guard rather than a
+	# hope.
+	./$(COMPILER) --target=riscv32 test/test_cross_set_shapes.pas $(TESTTMP)/test_rv32x_setshapes
+	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/test_rv32x_setshapes_x64
+	tools/expect_same.sh riscv32/test_rv32x_setshapes "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_setshapes)" "$$($(TESTTMP)/test_rv32x_setshapes_x64)"
 	# SKIP test/test_classref.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_class_of.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
 	# SKIP test/test_rtti.pas on riscv32: backend feature gap (see bug-test-riscv32-thin-coverage notes)
@@ -18826,11 +18853,19 @@ test-wasm32: $(COMPILER)
 	#
 	# THE ROWS BELOW ARE THE MEASURED-GREEN SUBSET of a 27-candidate sweep.
 	# Three of the five that were excluded are now wired at the end of this
-	# recipe; the two still out are out for reasons that have nothing to do with
-	# strings, and each is named by its own diagnostic rather than by a guess:
+	# recipe; ONE is still out, and it is out for a reason that has nothing to
+	# do with strings and is named by its own diagnostic rather than by a guess:
 	#
-	#   test_cross_sets            rc=134  `main$$0 -- value IR op 33`
 	#   test_static_string_literal rc=134  `main$$0 -- string operand of type QWord`
+	#                                      and also -- `=` on strings
+	#
+	# test_cross_sets was the other and is now WIRED, at the end of this recipe.
+	# `value IR op 33` was IR_SET_LIT: this backend could copy a set and test
+	# membership in a constant one, and could not BUILD one, combine two or
+	# compare two. Three further refusals stood behind it, each invisible until
+	# the one in front was fixed -- IR_SET_BINOP, then a set-typed value reaching
+	# PXXMemMove, then `x in s` over a real set. Its second row above is the same
+	# shadowing, now visible because the report lists every distinct gap.
 	#
 	# BOTH WERE LISTED HERE AS "trap via SetLength" AND NEITHER IS. Measured
 	# 2026-09-03 with the SetLength arm both absent and present: the diagnostic
@@ -19043,7 +19078,26 @@ test-wasm32: $(COMPILER)
 	# bug-a-a-variant-assigned-to-itself-becomes-empty
 	./$(COMPILER) --target=wasm32 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/w32_varself.wasm
 	tools/expect_same.sh wasm32/variant_self_assign "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_varself.wasm | tail -1)" "ALL OK"
-	@echo "wasm32: 34 rows green (27 default + 7 shortstring; 2 excluded, see comment above)"
+	# SETS. `value IR op 33` -- IR_SET_LIT -- was 10 of the 70 wasm32 gap
+	# instances left after Variant landed, and this file is what it kept out.
+	# Four arms went in, not one: the literal, the binop, the compare and `x in s`
+	# over a real set, each of the last three invisible until the one in front of
+	# it was fixed. The masks are four i64 words rather than the register peers'
+	# eight i32 ones, because wasm has i64 and the same mask is half the work.
+	./$(COMPILER) --target=wasm32 test/test_cross_sets.pas $(TESTTMP)/w32_sets.wasm
+	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/w32_sets_x64
+	tools/expect_same.sh wasm32/sets "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_sets.wasm)" "$$($(TESTTMP)/w32_sets_x64)"
+	# ...and the shapes that file does not reach: every comparison direction,
+	# proper vs improper, symmetric difference, the top bit of the 32-byte mask,
+	# an out-of-range and a NEGATIVE member (the range test is unsigned, so a
+	# negative element must read byte 0 and answer False rather than deref past
+	# the mask), the empty set, and a NESTED set expression -- which is the one
+	# that exercises the shared per-body locals the arms store their operand
+	# addresses in.
+	./$(COMPILER) --target=wasm32 test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes.wasm
+	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes_x64
+	tools/expect_same.sh wasm32/set_shapes "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_setshapes.wasm)" "$$($(TESTTMP)/w32_setshapes_x64)"
+	@echo "wasm32: 38 rows green (31 default + 7 shortstring; 1 excluded, see comment above)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
@@ -19400,6 +19454,15 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_sets.pas $(TESTTMP)/test_xtensa_test_cross_sets
 	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_xtensa_test_cross_sets_x64
 	tools/expect_same.sh xtensa/test_cross_sets "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_cross_sets; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_cross_sets_x64; echo "exit=$$?")"
+	# The shapes test_cross_sets does not reach -- every comparison direction,
+	# proper vs improper, symmetric difference, the top bit of the 32-byte mask,
+	# out-of-range and NEGATIVE members, the empty set, and a nested set
+	# expression. Written for wasm32's new set arms and measured green on all
+	# seven targets before being wired, so a row here is a guard rather than a
+	# hope.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_set_shapes.pas $(TESTTMP)/test_xtensa_setshapes
+	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/test_xtensa_setshapes_x64
+	tools/expect_same.sh xtensa/test_cross_set_shapes "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_setshapes)" "$$($(TESTTMP)/test_xtensa_setshapes_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_lfm.pas $(TESTTMP)/test_xtensa_test_lfm
 	./$(COMPILER) test/test_lfm.pas $(TESTTMP)/test_xtensa_test_lfm_x64
 	tools/expect_same.sh xtensa/test_lfm "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_lfm; echo "exit=$$?")" "$$($(TESTTMP)/test_xtensa_test_lfm_x64; echo "exit=$$?")"
@@ -20424,6 +20487,15 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_sets.pas $(TESTTMP)/test_arm32_sets
 	./$(COMPILER) test/test_cross_sets.pas $(TESTTMP)/test_arm32_sets_x64
 	tools/expect_same.sh arm32/test_arm32_sets "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sets)" "$$($(TESTTMP)/test_arm32_sets_x64)"
+	# The shapes test_cross_sets does not reach -- every comparison direction,
+	# proper vs improper, symmetric difference, the top bit of the 32-byte mask,
+	# out-of-range and NEGATIVE members, the empty set, and a nested set
+	# expression. Written for wasm32's new set arms and measured green on all
+	# seven targets before being wired, so a row here is a guard rather than a
+	# hope.
+	./$(COMPILER) --target=arm32 test/test_cross_set_shapes.pas $(TESTTMP)/test_arm32_setshapes
+	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/test_arm32_setshapes_x64
+	tools/expect_same.sh arm32/test_arm32_setshapes "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_setshapes)" "$$($(TESTTMP)/test_arm32_setshapes_x64)"
 	./$(COMPILER) --target=arm32 test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_arm32_sscap
 	./$(COMPILER) test/test_shortstring_cap_through_a_pointer.pas $(TESTTMP)/test_arm32_sscap_x64
 	tools/expect_same.sh arm32/test_shortstring_cap_through_a_pointer "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sscap)" "$$($(TESTTMP)/test_arm32_sscap_x64)"
