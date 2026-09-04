@@ -2134,6 +2134,16 @@ begin
     IRWideWriteValue := IRStrWidthConv(value, srcNode, False, True);
 end;
 
+function ASTDerefFrozenTk(node: Integer): Integer;
+begin
+  ASTDerefFrozenTk := -1;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_DEREF then Exit;
+  if ASTSOffset[node] <> 0 then Exit;
+  if TypeIsFrozenString(IntToTypeKind(ASTSLen[node])) then
+    ASTDerefFrozenTk := ASTSLen[node];
+end;
+
 function IRLowerAddress(node: Integer): Integer;
 var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     elemCap: Integer;   { frozen-string element capacity of an indexed base }
@@ -2551,8 +2561,20 @@ begin
         bug-a-indexing-a-character-of-a-frozen-array-element-uses-an-8-byte-prefix }
       if TypeIsFrozenString(ASTFrozenArgTk(baseNode)) then
         tk := ASTFrozenArgTk(baseNode);
+      { ...and when the pointer has NO SYMBOL, the deref node answers for
+        itself. DerefFrozenStrPtrSym walks back to a pointer VARIABLE, which
+        `r.NamePtr^[1]` does not have -- the pointer came out of a record
+        FIELD -- so tk stayed the generic tyString, lo stayed at the 8-byte
+        origin -7, and the read landed on base+8 where the character is at
+        base+1: a blank, exit 0, beside `q^[1]` and `s[1]` both correct in the
+        same program. ResolveDerefShape has already recorded the ultimate base
+        kind ON the AN_DEREF node, so one question answers every pointer
+        expression shape instead of one walker per carrier.
+        bug-a-a-pointer-deref-loses-the-shortstring-kind-on-every-target }
       dfsSym := DerefFrozenStrPtrSym(baseNode);
-      if dfsSym >= 0 then tk := Syms[dfsSym].PtrElemTk;
+      if dfsSym >= 0 then tk := Syms[dfsSym].PtrElemTk
+      else if ASTDerefFrozenTk(baseNode) >= 0 then
+        tk := IntToTypeKind(ASTDerefFrozenTk(baseNode));
     end;
 
     if isArr then
@@ -2911,6 +2933,33 @@ begin
       IRLowerDestAddress and the AN_INDEX/AN_FIELD/AN_DEREF value arm all route
       their address through here -- see normalise-dont-special-case.md. }
     Result := IRWrapNilChk(IRLowerAST(ASTLeft[node]), node, False);
+    { AND THE PREFIX WIDTH, for every shape that reaches a frozen string through
+      THIS route rather than through the value arm. `Length(p^)` and `Write(p^)`
+      address the deref instead of valuing it, so the value arm's tag never
+      reached them: the node built here is the pointer's own load, tagged
+      tyPointer, and IRFrozenKindOfAddr's wide default then read a 1-byte prefix
+      as 8. Measured for `NamePtr: ^string[16]` in a record field, against FPC:
+      Length 4342018 for 2 and a garbage print, while `=` and `:=` over the SAME
+      expression in the SAME program were already correct -- which is what made
+      one missing arm look like three separate defects.
+
+      Tagging it frozen makes this node identical to the one the value arm
+      produces (measured: `load_mem a=<field> tk=25` from both), which every
+      backend already reads correctly -- a frozen string's value IS its address,
+      so no consumer of this address changes.
+
+      NARROW KINDS ONLY, and that restriction is measured rather than cautious:
+      without the `<> tyString` test the compiler could no longer lower its own
+      source (`IR_UNSUPPORTED ... AST node kind 39`), because a plain `^string`
+      deref is an ADDRESS here and consumers key on its tyPointer tag. tyString
+      is also the width IRFrozenKindOfAddr already defaults to, so there is
+      nothing to repair in that direction -- the whole defect is a 1-byte prefix
+      read as 8.
+      bug-a-a-pointer-deref-loses-the-shortstring-kind-on-every-target }
+    if (ASTDerefFrozenTk(node) >= 0) and
+       (IntToTypeKind(ASTDerefFrozenTk(node)) <> tyString) and
+       not TypeIsFrozenString(IntToTypeKind(IRTk[Result])) then
+      IRTk[Result] := ASTDerefFrozenTk(node);
   end
   else if ASTKind[node] = AN_PTR_CAST then
   begin
@@ -8827,7 +8876,11 @@ begin
           bug-a-a-frozen-string-pointer-deref-prints-blanks-in-a-direct-write }
         if TypeIsFrozenString(IntToTypeKind(ASTTk[node])) and
            not TypeIsFrozenString(IntToTypeKind(IRTk[Result])) then
+        begin
           IRTk[Result] := ASTTk[node];
+          if ASTDerefFrozenTk(node) >= 0 then
+            IRTk[Result] := ASTDerefFrozenTk(node);
+        end;
       end
       else if NodeDynDepth(node) > 0 then
         { Dynamic-array handle read (e.g. `rec.arr`, a nested sub-array): the

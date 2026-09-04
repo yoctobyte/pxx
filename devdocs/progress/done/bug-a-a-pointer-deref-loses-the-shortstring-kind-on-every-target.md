@@ -3,7 +3,7 @@ slug: bug-a-a-pointer-deref-loses-the-shortstring-kind-on-every-target
 track: A
 prio: 65
 type: bug
-status: open
+status: done
 blocked-by: []
 owner: unassigned
 created: 2026-09-04
@@ -102,3 +102,73 @@ selector. Anything that reads RTTI names is on the wide side of the cliff.
 - the `string[256]` row must stay TRUE on all seven, which is
   `test/test_cross_frozen_ptr_in_field.pas` -- it exists, it is wired, and it
   deliberately does NOT cover this width for the reason above.
+
+## FIXED 2026-09-04 — one question, asked at three sites
+
+`ASTDerefFrozenTk` (compiler/ir.inc, just above `IRLowerAddress`) returns the
+narrow kind an `AN_DEREF` node already records, or -1. Three arms ask it:
+
+1. the **value** arm shared by AN_DEREF/AN_INDEX/AN_FIELD — fixes `=`, `:=`
+   and concat;
+2. the **address** arm of `IRLowerAddress` — fixes `Length(p^)` and
+   `Write(p^)`, which address the deref instead of valuing it and so never saw
+   the value arm's tag;
+3. the **index base** kind in `IRLowerAddress`'s AN_INDEX arm, beside
+   `DerefFrozenStrPtrSym` — fixes `p^[1]`, whose origin `lo` is derived from
+   the prefix size and stayed at the 8-byte `-7`.
+
+That the same expression needed three is the finding: `=` and `:=` were already
+correct in the same program that answered `Length` 4342018, which is what made
+one missing kind look like three separate defects.
+
+**The address arm is restricted to NARROW kinds, and that is measured, not
+cautious.** Tagging a plain `^string` deref there too made the compiler unable
+to lower its own source (`IR_UNSUPPORTED ... AST node kind 39`): the node is an
+ADDRESS and consumers key on its `tyPointer` tag. `tyString` is also the width
+`IRFrozenKindOfAddr` already defaults to, so there is nothing to repair in that
+direction.
+
+`IRFrozenKindOfAddr` was NOT widened to `IR_LOAD_MEM`, as this ticket asked.
+
+## Verification
+
+- FPC oracle, six shapes × six columns (cmp / assign / Length / print / concat
+  / `[1]`) at cap 16 and cap 255: **byte-identical output**.
+- **Positive control**: the same program on the pre-fix compiler
+  (`aaf09343d1cb`) **segfaults**, exit 139, no output — the concat row reads a
+  1-byte prefix as an 8-byte length. The control was built from the commit
+  under test with `git checkout -- compiler/ir.inc`, rebuilt, and the fix
+  rebuilt after restoring (`7ba433bea4e4` before and after, so the restore is
+  proven).
+- `test/test_cross_frozen_ptr_narrow.pas`, wired into `test-core`: green on
+  **all seven targets** (x86-64, wasm32, i386, arm32, aarch64, riscv32,
+  xtensa). It prints Length and the indexed character rather than a verdict,
+  because a compare-only row passes when both sides are read at the same wrong
+  width.
+- Both control directions asserted in that file and green: `q^` at both widths,
+  a plain `string[N]` field, a plain array element.
+- The cap-256 sibling `test/test_cross_frozen_ptr_in_field.pas` re-run on all
+  seven: green. Its "still-open" paragraph is corrected in the same commit.
+- `make compiler/pascal26` converged after 1 round; `tools/gate.sh quick`
+  GREEN with the FPC seed canary running (`PASS`, uncommitted `compiler/**`).
+
+## It also closes the wasm32 sibling, and the attribution was checked
+
+`bug-a-a-typed-pointer-deref-of-a-frozen-string-is-unlowered-on-wasm32`
+(p25) recorded `Length(p^)` for `p: ^string[10]` TRAPPING on wasm32 at both
+default and `-dPXX_SHORTSTRING`, and answering 122511465736197 natively under
+the define. All four cells of its table now read `5` / `5`.
+
+**Measured which change did it rather than assuming**: its own repro on the
+pre-fix binary — HEAD, so already carrying the wasm32 frozen-load fix
+`9b67b266d` — still traps (`wasm trap: unreachable`, exit 134). So this is the
+change that closed it, and `9b67b266d` is not.
+
+The WRITE half that ticket documents and explicitly excludes (`p^ := c` giving
+`1 0 ... 88` at offset 8) was ALREADY correct before this change: both the
+pre-fix and post-fix compilers give `1 88` on native and wasm32 alike, which is
+exactly the "a fix turns both into `1 88`" outcome that ticket predicted. Not
+mine to claim.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

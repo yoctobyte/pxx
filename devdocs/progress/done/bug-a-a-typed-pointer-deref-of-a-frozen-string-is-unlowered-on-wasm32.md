@@ -4,7 +4,7 @@ prio: 25
 type: bug
 blocked-by: []
 summary: "Reading through a typed pointer to a frozen string — Length(p^) where p: ^string[10] — is unlowered on wasm32 and traps with `wasm trap: unreachable`, at DEFAULT as well as under -dPXX_SHORTSTRING. The WRITE through the same pointer (p^ := c) lowers fine, so this is a missing read lowering, not a pointer problem. Confirmed under the pinned compiler, so it predates the byte-prefix conversion. Consequence for another lane: wasm32 cannot go green on any Length(p^) row, so it must not be counted as a target for the IRFrozenKindOfAddr read-side fix."
-status: new
+status: done
 owner: ""
 ---
 
@@ -112,3 +112,40 @@ no wrong value — which is why this is p25 and not higher. Whoever takes it
 should start at `WasmEmitLoadMem` in `compiler/ir_codegen_wasm32.inc`: it has a
 `TypeIsFrozenString` arm that treats the address as the whole value, which is
 right for a `string[N]` record field and is not what a `^TS` deref needs.
+
+## FIXED 2026-09-04 — by the read-side kind fix, not by the wasm32 backend
+
+All four cells of the table above now read `5` / `5`:
+
+```
+native  default            : Length(s) 5   Length(p^) 5
+native  -dPXX_SHORTSTRING  : Length(s) 5   Length(p^) 5     (was 122511465736197)
+wasm32  default            : Length(s) 5   Length(p^) 5     (was trap: unreachable)
+wasm32  -dPXX_SHORTSTRING  : Length(s) 5   Length(p^) 5     (was trap: unreachable)
+```
+
+The fix is `ASTDerefFrozenTk` in `compiler/ir.inc`, landed for
+`bug-a-a-pointer-deref-loses-the-shortstring-kind-on-every-target`: the address
+arm of `IRLowerAddress` now tags a narrow-frozen deref with the kind the
+AN_DEREF node already records, so `Length(p^)` reaches wasm32's frozen load
+arm instead of `WasmUnsupported`.
+
+**Attribution measured, not assumed.** This ticket's own repro was re-run on
+the PRE-FIX compiler — which is HEAD and therefore already carries the wasm32
+frozen-load change `9b67b266d`, the change this ticket's closing paragraph
+points at — and it still traps (`wasm trap: unreachable`, exit 134). So
+`9b67b266d` did not close it.
+
+**The WRITE half stays out of this, and it was already correct.** `p^ := c`
+under `-dPXX_SHORTSTRING` gives `1 88 ...` on native AND wasm32 on the pre-fix
+compiler as well as the post-fix one — which is the `1 88` outcome this ticket
+predicted a correct fix would produce, arrived at before this change. Whatever
+fixed it, it was not this.
+
+Covered going forward by `test/test_cross_frozen_ptr_narrow.pas`, wired into
+`test-core` on all seven targets: its `ptr16` / `ptr255` rows are exactly
+`Length(q^)` for `q: ^string[N]`, plus the print, compare, assign, concat and
+index columns of the same expression.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

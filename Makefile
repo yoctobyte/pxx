@@ -16315,6 +16315,9 @@ test-core: $(COMPILER)
 	# fix in the OTHER direction: `q^` through a plain pointer variable breaks
 	# under "always take the address", and a plain string[N] field or array
 	# element breaks under "always load".
+	#
+	# Cap 256 here is tyString and an EIGHT-byte prefix; the narrow layout is
+	# the block below, which is a different defect with its own file.
 	./$(COMPILER) test/test_cross_frozen_ptr_in_field.pas $(TESTTMP)/fpfld26
 	tools/expect_same.sh fpfld26/native "$$($(TESTTMP)/fpfld26)" "$$(printf 'printed A\nFROZENPTRFIELD OK')"
 	./$(COMPILER) --target=wasm32 test/test_cross_frozen_ptr_in_field.pas $(TESTTMP)/fpfld.wasm
@@ -16329,6 +16332,36 @@ test-core: $(COMPILER)
 	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_cross_frozen_ptr_in_field.pas $(TESTTMP)/fpfld_xt >/dev/null || { echo "fpfld xtensa compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh fpfld/xtensa "$$(tools/run_target.sh xtensa $(TESTTMP)/fpfld_xt)" "$$(printf 'printed A\nFROZENPTRFIELD OK')" || exit 1; \
 	else echo "  fpfld: qemu-xtensa absent, xtensa NOT verified"; fi
+	# THE SAME SIX SHAPES AT THE NARROW WIDTH -- string[N] for N <= 255, which
+	# is tyShortString and ONE length byte, where the file above deliberately
+	# uses cap 256 (tyString, an eight-byte prefix). This layout was wrong on
+	# ALL SEVEN targets, not just wasm32: a deref loses the shortstring kind,
+	# because StrValTk flattens it for every value node and the width is
+	# recovered from the SYMBOL, which a pointer out of a record FIELD has not
+	# got. Against FPC before the fix: cmp FALSE, Length 4342018 for 2, an
+	# assignment of sixteen blanks, a garbage print, a blank [1] -- and the
+	# whole program SEGFAULTS on the pre-fix compiler once the concat row is
+	# reached (measured, exit 139, no output).
+	#
+	# The expected text is spelled out rather than reduced to the verdict line
+	# because `len` and the indexed character are the two quantities the wrong
+	# prefix width actually moves; a compare-only row passes when both sides
+	# are read at the same wrong width.
+	# bug-a-a-pointer-deref-loses-the-shortstring-kind-on-every-target
+	./$(COMPILER) test/test_cross_frozen_ptr_narrow.pas $(TESTTMP)/fpn26
+	tools/expect_same.sh fpn26/native "$$($(TESTTMP)/fpn26)" "$$(printf '%s\n' 'fld16  T [AB] 2 [AB] [xAB] A' 'fld255 T [AB] 2 [AB] [xAB] A' 'prec16 T [AB] 2 [AB] [xAB] A' 'elem16 T [AB] 2 [AB] [xAB] A' 'ptr16  T [AB] 2 [AB] [xAB] A' 'ptr255 T [AB] 2 [AB] [xAB] A' 'pfld16 T [AB] 2 [AB] [xAB] A' 'arr16  T [AB] 2 [AB] [xAB] A' 'FROZENPTRNARROW OK')"
+	./$(COMPILER) --target=wasm32 test/test_cross_frozen_ptr_narrow.pas $(TESTTMP)/fpn.wasm
+	tools/expect_same.sh fpn26/wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/fpn.wasm)" "$$(printf '%s\n' 'fld16  T [AB] 2 [AB] [xAB] A' 'fld255 T [AB] 2 [AB] [xAB] A' 'prec16 T [AB] 2 [AB] [xAB] A' 'elem16 T [AB] 2 [AB] [xAB] A' 'ptr16  T [AB] 2 [AB] [xAB] A' 'ptr255 T [AB] 2 [AB] [xAB] A' 'pfld16 T [AB] 2 [AB] [xAB] A' 'arr16  T [AB] 2 [AB] [xAB] A' 'FROZENPTRNARROW OK')"
+	@for t in i386 arm32 aarch64 riscv32; do \
+	  case $$t in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "  fpn: $$q absent, $$t NOT verified"; continue; fi; \
+	  ./$(COMPILER) --target=$$t --platform=posix test/test_cross_frozen_ptr_narrow.pas $(TESTTMP)/fpn_$$t >/dev/null || { echo "fpn $$t compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh fpn/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/fpn_$$t | tail -1)" "FROZENPTRNARROW OK" || exit 1; \
+	done; \
+	if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_cross_frozen_ptr_narrow.pas $(TESTTMP)/fpn_xt >/dev/null || { echo "fpn xtensa compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh fpn/xtensa "$$(tools/run_target.sh xtensa $(TESTTMP)/fpn_xt | tail -1)" "FROZENPTRNARROW OK" || exit 1; \
+	else echo "  fpn: qemu-xtensa absent, xtensa NOT verified"; fi
 	# ANSITERM THROUGH THE PAL, and the pty row is the one that earns this block.
 	# This unit carried four private per-target syscall number tables until
 	# 2026-09-04. Two had already produced a silent failure (GetSysWrite had no

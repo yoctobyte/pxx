@@ -21,10 +21,14 @@ program test_cross_frozen_ptr_in_field;
   CAP 256 IS DELIBERATE. It makes these `tyString`, the 8-byte-prefix layout
   that lib/rtl/typinfo.pas's TRttiStr uses on purpose, which is the shape whose
   failure made GetClass return nil on wasm32. The narrow layout -- string[N] for
-  N <= 255, tyShortString -- is a DIFFERENT and still-open defect: it answers
-  FALSE for these same three shapes on EVERY target, because the deref loses the
-  shortstring kind. Asserting it here would assert a wrong value as expected;
-  see bug-a-a-pointer-deref-loses-the-shortstring-kind-on-every-target. }
+  N <= 255, tyShortString -- was a DIFFERENT defect, wrong on EVERY target
+  because the deref lost the shortstring kind, and this file said so while it
+  was open. It is fixed (ASTDerefFrozenTk in compiler/ir.inc) and now has its
+  own file, test_cross_frozen_ptr_narrow.pas, which asserts the SAME shapes at
+  cap 16 and cap 255 and prints Length and the indexed character rather than a
+  verdict. Both files stay: the two prefix widths are different layouts and a
+  width table that is right for one can be wrong for the other.
+  bug-a-a-pointer-deref-loses-the-shortstring-kind-on-every-target }
 
 type
   S = string[256];
