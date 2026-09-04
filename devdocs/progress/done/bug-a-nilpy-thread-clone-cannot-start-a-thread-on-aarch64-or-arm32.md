@@ -119,4 +119,4 @@ seed canary RUN (gated before the commit, on a dirty `compiler/**`);
 does not run `test-threads`, and every row added here lives in it.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 43a8f2470.
