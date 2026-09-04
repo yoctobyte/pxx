@@ -1,9 +1,9 @@
 ---
 track: P
 prio: 65
-owner: frankA
-blocked-by: []
-status: unfinished
+owner: frankB
+blocked-by: [bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name, bug-p-a-different-specialization-of-the-same-template-inside-its-own-body]
+status: working
 type: feature
 ---
 
@@ -11,7 +11,7 @@ type: feature
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** unfinished (folder is the lock; line corrected by the coordinator 2026-08-30)
+- **Status:** working
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
@@ -1273,3 +1273,33 @@ what the 2026-08-25 recon already asked for — re-stage rtl-generics and drive 
 until the wall moves — rather than starting from any conclusion recorded above,
 since the walls have moved three times and each recorded line number was
 superseded within a session or two.
+
+## 2026-09-04 (frankB) — re-claimed, and the four generics bugs are now EDGES
+
+Re-claimed rather than re-filed: this rung already carries the history. What was
+missing is the wiring — the four Track P generics bugs sat in
+`backlog-pascal/` with `prio:` values a human set (50/45/40/35) and nothing
+connecting them to the goal that ranks them, so the ranker could not inherit
+anything. The two still open are now `blocked-by:` edges above. Two are closed:
+
+- `bug-p-a-bodiless-generic-class-with-abstract-and-a-generic-parent-is-rejected`
+  (50) — **already fixed** when I measured it. `TD<T> = class abstract(TEnumBase<T>);`
+  compiles, and so does this rung's own real shape,
+  `TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);`. Covered
+  by `test/test_generic_bodiless_class_modifier.pas`. Closed on measurement, not
+  on the test's existence — see its resolution.
+- `bug-p-a-generic-function-cannot-be-declared-in-a-unit` (40) — **fixed here.**
+
+**The structural answer, since this rung keeps asking for it.** The concept "a
+generic and its specialisations" is served by two registries in the Pascal
+frontend — `Templates[]`/`Specializations[]` for classes and records,
+`GenericFuncs[]` for routines — and both are FLAT ARRAYS KEYED BY NAME with no
+unit scope at all (`compiler/defs.inc`). `IsGenericTemplateName` and
+`FindGenericFunc` are both first-match-by-name linear scans. That single fact is
+the whole of the shadowing bug, and it is not a bug in the lookups: they are
+answering the only question the representation can answer.
+
+Whether the two specialisation-IDENTITY bugs fall out of the same
+representation is NOT established here and must not be assumed from the
+paragraph above — the shadowing one demonstrably does; the other two are being
+measured, and this line will be replaced by what the measurement says.

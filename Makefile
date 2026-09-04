@@ -8868,7 +8868,15 @@ test-core: $(COMPILER)
 	# has to be a UNIT -- the same code in a program compiles correctly even on the
 	# broken binary, which is how the first draft of this test passed pre-fix.
 	./$(COMPILER) -Futest/generic_bodyend_units test/test_generic_body_end_counting.pas $(TESTTMP)/test_generic_bodyend26
-	tools/expect_same.sh test_generic_bodyend26 "$$($(TESTTMP)/test_generic_bodyend26)" "9 9 7 5 9 100"
+	tools/expect_same.sh test_generic_bodyend26 "$$($(TESTTMP)/test_generic_bodyend26)" "$$(printf '9 9 7 5 9 100\n9 22 6 200')"
+	# A `generic function` in a UNIT -- interface header, implementation
+	# definition, and inline specialization from another unit, from the program,
+	# and via the `as` declaration form. All of it was rejected while the same
+	# code at PROGRAM level compiled: the top-level declaration dispatcher exists
+	# three times and only the program copy had a `generic` arm.
+	# FPC 3.2.2 prints `42 21 8 7` for the four rows it will compile.
+	./$(COMPILER) -Futest/generic_func_unit_units test/test_generic_func_in_unit.pas $(TESTTMP)/test_generic_func_in_unit26
+	tools/expect_same.sh test_generic_func_in_unit26 "$$($(TESTTMP)/test_generic_func_in_unit26)" "42 21 8 10 7"
 	# A generic constraint against a name that is NOT in the class table used to be
 	# skipped entirely, because at that point "not a class" and "not declared yet"
 	# are the same observation. Two kinds of name are not "not yet": a builtin
@@ -8954,6 +8962,15 @@ test-core: $(COMPILER)
 	grep -q "unknown type: TNoSuchTypeAnywhere" $(TESTTMP)/test_generic_errloc.log
 	grep -q "^  in: .*uerrtmpl\.pas" $(TESTTMP)/test_generic_errloc.log
 	grep -q "^pascal26:22: " $(TESTTMP)/test_generic_errloc.log
+	# Same question for a generic ROUTINE's body, which is a DIFFERENT region of
+	# the template arena: TemplateSrcKeyOfTok scanned Templates[] and
+	# GenericMethods[] and not GenericFuncs[], which was correct only while a
+	# `generic function` could not be declared in a unit at all. Once it could,
+	# the error printed its line with no `in:` line -- the right line of the
+	# wrong file. NEGATIVE: must not compile, and must name the unit.
+	! ./$(COMPILER) -Futest/generic_errloc_units test/test_generic_func_error_names_its_unit_fail.pas $(TESTTMP)/test_generic_gferrloc26 > $(TESTTMP)/test_generic_gferrloc.log 2>&1
+	grep -q "has no members" $(TESTTMP)/test_generic_gferrloc.log
+	grep -q "^  in: .*uerrgfunc\.pas" $(TESTTMP)/test_generic_gferrloc.log
 	# The `near:` window must contain the OFFENDING token, not a stale one: the
 	# splice that specializes a generic body shifts Tokens[] and owes the same
 	# shift to the ten positional arrays beside it, TokSrcOff/TokSrcLen included.

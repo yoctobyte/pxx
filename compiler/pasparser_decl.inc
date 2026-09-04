@@ -4842,7 +4842,18 @@ begin
     end
     else if CaseEqual(CurTok.SVal, 'generic') then
     begin
-      ParseGenericTemplate;
+      { `generic` opens a TYPE (`generic TFoo<T> = class`) or a ROUTINE
+        (`generic function F<T>(a: T): T;`), and only the token after it says
+        which. The routine form ends the type section exactly as `operator`
+        does below -- without this it reached ParseGenericTemplate and died as
+        `expected generic class name`, so a generic routine could not be
+        declared beneath a type section at all. FPC 3.2.2 accepts it.
+        bug-p-a-generic-function-cannot-be-declared-in-a-unit }
+      if (TokPos < TokCount) and
+         ((Tokens[TokPos].Kind = tkFunction) or (Tokens[TokPos].Kind = tkProcedure)) then
+        stopTypes := True
+      else
+        ParseGenericTemplate;
     end
     else if CaseEqual(CurTok.SVal, 'operator') then
       stopTypes := True  { top-level operator def follows type section }

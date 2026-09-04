@@ -21,13 +21,14 @@
      one unit, saw it fail, and credited both. Only `asm` is a regression arm;
      `record` passes pre-fix. The unit says which is which and why.
 
-  The generic-FUNCTION copy of the same counter (pasparser_generic.inc:3370) is
-  NOT exercised here, and no shape reaches it: pxx rejects a `generic function`
-  in a unit interface and in a unit implementation alike, which are the only
-  places the miscount could bite, and at program level the pre-fix binary is
-  already correct. That gap is bug-p-a-generic-function-cannot-be-declared-in-
-  a-unit. The counter there was corrected to match anyway and is unverified BY
-  CONSTRUCTION; this paragraph is the record of it.
+  4. THE GENERIC-FUNCTION COPY OF THE COUNTER IS NOW EXERCISED. It used to be
+     unverifiable BY CONSTRUCTION -- pxx rejected a `generic function` in a unit
+     interface and in a unit implementation alike, which are the only places the
+     miscount could bite, and at program level the pre-fix binary is already
+     correct. bug-p-a-generic-function-cannot-be-declared-in-a-unit removed that
+     wall, so the second output line is the positive control the earlier
+     correction never had: revert the function-side counter to [tkBegin, tkCase]
+     and ugbodyend fails to compile, at the routine BELOW the defect.
 
   Oracle: FPC 3.2.2 prints `9 9 5 9 100` for the arms it will compile -- it
   refuses the `asm` arm ("Assembler blocks not allowed inside generics") and
@@ -43,4 +44,11 @@ begin
   b := specialize TBox<Integer>.Create;
   writeln(b.TryFinally, ' ', b.TryExcept, ' ', b.WithAsm, ' ', b.LocalRecord,
           ' ', b.CaseStillWorks(1), ' ', b.Tail);
+  { The generic-FUNCTION arms. These two `specialize` uses MUST be here in the
+    program body rather than in a wrapper inside ugbodyend -- see the long note
+    at their declaration: an in-unit call cancels the defect out and the arms
+    pass with the counter reverted. }
+  writeln(specialize GFTryFinally<Integer>(4), ' ',
+          specialize GFTryExcept<Integer>(11), ' ',
+          GenFuncInUnit, ' ', GenFuncTail);
 end.

@@ -2499,6 +2499,16 @@ var
   PFScratch          : array[0..31] of TRawToken;  { `parallel for` worker-header token build buffer }
   PFScratchN         : Integer;
   GenericFuncs       : array[0..MAX_GENERIC_FUNCS-1] of TGenericFunc;
+  { KeyStrs[] index of the source file each generic ROUTINE's body was captured
+    from -- the same channel TemplateSrcKey carries for Templates[], and needed
+    for the same reason: a specialization splices the buffered body into ANOTHER
+    file's token stream, and a diagnostic inside it must still name the file the
+    code was written in. -1 when the body came from a source with no range mark
+    (the main file before its first marker). Added when `generic function` in a
+    unit became legal -- until then a routine body could not cross a file
+    boundary and inheriting the destination was always right. See
+    TemplateSrcKeyOfTok. bug-p-a-generic-function-cannot-be-declared-in-a-unit }
+  GenericFuncSrcKey  : array[0..MAX_GENERIC_FUNCS-1] of Integer;
   GenericMethods     : array[0..MAX_GENERIC_METHODS-1] of TGenericMethod;
   GenericMethodCount : Integer;
   { Class specializations seen in the current type section whose template

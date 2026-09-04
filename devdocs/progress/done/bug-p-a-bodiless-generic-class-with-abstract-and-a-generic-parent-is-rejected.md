@@ -2,11 +2,11 @@
 prio: 50
 track: P
 type: bug
-status: backlog
+status: done
 blocked-by: []
 found: 2026-08-30
 found-by: frankA
-summary: "`TD<T> = class abstract(TEnumBase<T>);` — a bodiless generic class with the `abstract` modifier and a generic parent — is rejected with `unexpected token in a unit interface section`. All three ingredients are required: dropping `abstract`, or making the parent non-generic, compiles. FPC compiles it. rtl-generics uses this exact shape."
+summary: "ALREADY FIXED when re-measured 2026-09-04 at binary 62e6e63cd05b. `TD<T> = class abstract(TEnumBase<T>);` compiles, and so does this ticket's real-world motivator `TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);` and the `sealed` sibling. Fixed by the bodiless-modifier work recorded in test/test_generic_bodiless_class_modifier.pas, which lists this exact row. Closed on a measurement with a negative control, not on the test's existence."
 ---
 
 # A bodiless generic class with `abstract` and a generic parent is rejected
@@ -74,3 +74,33 @@ The class-header parse path, where `abstract`/`sealed` modifiers are consumed
 relative to the parenthesised parent list — and specifically what happens when
 the parent list contains a `<...>` group. The passing rows say each half is
 handled; only the combination is not.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## Closed 2026-09-04 (frankB) — measured fixed, with the instrument checked first
+
+Re-measured at binary `62e6e63cd05b` while picking this rung up. All three rows
+compile:
+
+```pascal
+TD<T>                      = class abstract(TEnumBase<T>);   { the ticket's repro }
+TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);  { rtl-generics' own }
+TSealedish<T>              = class sealed(TEnumerator<T>);
+```
+
+and `var d: TD<Integer>;` in the importing program binds, so the declaration is
+not merely being skipped.
+
+**The instrument was checked before the negative was believed.** A file that
+compiles is exactly what a parser silently swallowing a declaration also
+produces. Substituting `@@@` into the same slot of the same unit reproduces this
+ticket's error verbatim — `pascal26:11: error: unexpected token in a unit
+interface section: it starts no declaration (a mistyped section header?)` —
+so the pass is a real negative and not a stray-token arm eating the row.
+
+Fixed by the bodiless-modifier work in
+`test/test_generic_bodiless_class_modifier.pas`, whose header lists
+`TDerived<T> = class abstract(TBase<T>);  FAILS before / ok after` as one of its
+measured rows. That test's existence is not what closes this; the measurement
+above is. The test is why it stays closed.

@@ -5318,7 +5318,7 @@ end;
   desugar below has to run at the END of every one of them, and a fourth copy is
   how the third site would have been the one that stayed broken. }
 procedure ParseUsesClause;
-var doneUses: Boolean;
+var doneUses, savedPreScan: Boolean;
 begin
   Next;   { consume `uses` }
   doneUses := False;
@@ -5331,6 +5331,21 @@ begin
   { Every template the clause just imported is registered now, and every use of
     one lies ahead of this point. See DesugarImportedDelphiGenericUses. }
   DesugarImportedDelphiGenericUses;
+  { The generic-ROUTINE half of the same problem, at the same point and for the
+    same reason -- a `specialize F<C>(...)` on a routine the clause just
+    imported. Two mechanisms because the two are specialized differently (a
+    class desugars to an alias declaration, a routine to an emitted body), but
+    they answer one question -- "what did this clause just make visible" -- so
+    they belong at one site rather than at two the next change can desynchronise.
+
+  PreScanPass is cleared across it because this one EMITS: the sweep splices
+    the specialized routine and calls ParseSubroutine, which under a pre-scan
+    would register the signature and skip the body. Same save/clear/restore the
+    program decl loop already does around ParseGenericFunctionDef. }
+  savedPreScan := PreScanPass;
+  PreScanPass := False;
+  SpecializeImportedGenericFuncUses;
+  PreScanPass := savedPreScan;
 end;
 
 { Compile a unit's `initialization` section into a synthesized parameterless
@@ -5495,15 +5510,24 @@ begin
   CurProc := -1;
 end;
 
-procedure SkipOperatorDeclHeader;
-{ Consume `operator <op> (params): T;` and any trailing directives, as ONE
-  declaration. Interface sections only -- the implementation form has a body and
-  goes to ParseOperatorDef. Paren depth is tracked because a two-operand header
-  spells its operands `(a: Double; b: TCx)`, with a semicolon INSIDE the parens
-  that does not end the declaration. }
+procedure SkipDeclHeaderToSemicolon;
+{ Consume one bodiless declaration HEADER -- everything from the current token
+  through the `;` that ends it, plus any trailing directives. Interface sections
+  only: the implementation forms have bodies and go to their own parsers.
+
+  Two callers, and they were one routine's worth of logic from the start:
+    `operator <op> (params): T;`     -- ParseOperatorDef handles the impl form
+    `generic function F<T>(p): T;`   -- ParseGenericFunctionDef handles the impl form
+  Paren depth is tracked because a multi-argument header spells its arguments
+  `(a: Double; b: TCx)`, with a semicolon INSIDE the parens that does not end
+  the declaration.
+
+  Named for what it does rather than for its first caller: the operator-only
+  name is what made a second caller look like it needed a second routine.
+  bug-p-a-generic-function-cannot-be-declared-in-a-unit }
 var depth: Integer;
 begin
-  Next;   { 'operator' }
+  Next;   { the keyword that opened the declaration }
   depth := 0;
   while CurTok.Kind <> tkEOF do
   begin
@@ -5542,7 +5566,7 @@ procedure UnitSectionStrayToken(const sect: AnsiString);
 
   Measured before turning this on: across test/ and lib/rtl the skip path fired
   1949 times and every event was a piece of an operator DECLARATION header, now
-  consumed as a unit by SkipOperatorDeclHeader. Nothing else relied on it, and
+  consumed as a unit by SkipDeclHeaderToSemicolon. Nothing else relied on it, and
   the implementation section's copy of this never fired at all.
   bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped }
 begin
@@ -5610,7 +5634,18 @@ begin
             `;` ...). It looked harmless only because the implementation-side
             definition registered the real thing, and it is the whole reason the
             stray-token error below could not be turned on before. }
-          SkipOperatorDeclHeader
+          SkipDeclHeaderToSemicolon
+        else if CaseEqual(CurTok.SVal, 'generic') then
+          { `generic function F<T>(a: T): T;` in the INTERFACE: a header with no
+            body, exactly like the operator declaration above. The template is
+            registered from the IMPLEMENTATION section's definition (which is
+            parsed before any importer's body), so the header carries nothing
+            this side needs -- consume it as a unit.
+
+            Without this arm the header fell to UnitSectionStrayToken and the
+            unit would not compile at all, while FPC 3.2.2 accepts it and runs.
+            bug-p-a-generic-function-cannot-be-declared-in-a-unit }
+          SkipDeclHeaderToSemicolon
         else
           UnitSectionStrayToken('interface')
       else
@@ -5721,6 +5756,23 @@ begin
               a scalar binop (bug-unit-operator-def-silently-skipped). }
             PreScanPass := False;
             ParseOperatorDef;
+            PreScanPass := True;
+          end
+          else if CaseEqual(CurTok.SVal, 'generic') then
+          begin
+            { `generic function F<T>(a: T): T; begin ... end;` -- the DEFINITION.
+              Like an operator def it buffers its own tokens and specializes
+              them in place, so it is parsed in full during the pre-scan rather
+              than body-deferred.
+
+              This is the third copy of the top-level declaration dispatcher
+              (program decls, unit interface, unit implementation) and the arms
+              had drifted: `generic` was handled at PROGRAM level only, so the
+              identical declaration compiled in a program and was rejected in a
+              unit. FPC 3.2.2 accepts both.
+              bug-p-a-generic-function-cannot-be-declared-in-a-unit }
+            PreScanPass := False;
+            ParseGenericFunctionDef;
             PreScanPass := True;
           end
           else if CaseEqual(CurTok.SVal, 'resourcestring') then

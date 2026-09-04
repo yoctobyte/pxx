@@ -17,6 +17,30 @@ type
     function Tail: Integer;
   end;
 
+{ The generic-FUNCTION arms. Until bug-p-a-generic-function-cannot-be-declared-
+  in-a-unit was fixed these could not exist: a `generic function` was accepted at
+  PROGRAM level and refused in BOTH of a unit's sections, and at program level
+  the pre-fix counter is already correct. So the function-side copy of the
+  body-extent counter -- corrected in the same change as the method-side one --
+  had no positive control and could not be given one.
+
+  WHERE THE CALL SITE IS, IS THE WHOLE TEST. The first draft of these arms
+  called them from wrappers in this unit's own implementation and PASSED with
+  the counter reverted to [tkBegin, tkCase] -- a guard that could not fail. The
+  truncated template ends one `end` early, and the specialization for an in-unit
+  use is spliced at exactly the position that leftover `end` occupies, so the
+  two cancel and the routine parses correctly by accident. Only a call from the
+  PROGRAM BODY, spliced at the program's `begin` and nowhere near the leftover,
+  exposes it -- and then this unit fails to compile with `unexpected token in a
+  unit implementation section` at the routine BELOW the defect. So the
+  specializing use of these two lives in test_generic_body_end_counting.pas,
+  deliberately, and GenFuncInUnit below is the passing CONTROL for the other
+  half. }
+generic function GFTryFinally<T>(a: T): T;
+generic function GFTryExcept<T>(a: T): T;
+function GenFuncInUnit: Integer;
+function GenFuncTail: Integer;
+
 implementation
 
 { ---- the two MEASURED regression arms: each alone makes the pinned binary
@@ -86,6 +110,48 @@ end;
 function TBox.Tail: Integer;
 begin
   Result := 100;
+end;
+
+{ ---- the generic-FUNCTION copy of the same counter, in the only place it can
+       be reached: a unit implementation. Same two block openers, same shape,
+       and each is a MEASURED regression arm -- reverting the counter to
+       [tkBegin, tkCase] makes this unit fail to compile at its last line. ---- }
+
+generic function GFTryFinally<T>(a: T): T;
+begin
+  Result := a;
+  try
+    Result := a + a;
+  finally
+    Result := Result + 1;
+  end;
+end;
+
+generic function GFTryExcept<T>(a: T): T;
+begin
+  Result := a;
+  try
+    Result := a + a;
+  except
+    Result := 0;
+  end;
+end;
+
+{ CONTROL, not a regression arm: an in-unit use of a `try`-bodied generic
+  function passes even with the counter reverted, because the specialization is
+  spliced right where the truncated body left its `end` behind. Here so the next
+  person to add an arm here does not repeat the draft that could not fail. }
+function GenFuncInUnit: Integer;
+begin
+  Result := specialize GFTryExcept<Integer>(3);
+end;
+
+{ the routine AFTER the generic definitions: a truncated body only becomes
+  damage when something follows it to be mis-parsed. With the counter reverted
+  the diagnostic lands HERE, not at the defect. }
+function GenFuncTail: Integer;
+begin
+  Result := 200;
 end;
 
 end.

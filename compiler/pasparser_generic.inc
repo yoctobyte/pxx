@@ -386,15 +386,7 @@ begin
       Exit;
     end;
   { a buffered method body carries its owning TEMPLATE's file, which is where its
-    tokens were read from -- not the unit that specializes it.
-
-    GenericFuncs[] is a THIRD kind of region in this same arena and has the same
-    gap, deliberately not covered here: a generic FUNCTION cannot be declared in
-    a unit interface at all today (`unexpected token in a unit interface section`),
-    so its body never crosses a file boundary, and inheriting the destination is
-    always inheriting the right file. There is no reachable wrong output to fix,
-    and GenericFuncs has no source-key field to answer with. Whoever makes
-    `generic function` work in an interface must add the third scan with it. }
+    tokens were read from -- not the unit that specializes it. }
   for i := 0 to GenericMethodCount - 1 do
     if (t >= GenericMethods[i].TokStart) and
        (t < GenericMethods[i].TokStart + GenericMethods[i].TokCount) and
@@ -402,6 +394,21 @@ begin
        (GenericMethods[i].TemplateIdx < TemplateCount) then
     begin
       TemplateSrcKeyOfTok := TemplateSrcKey[GenericMethods[i].TemplateIdx];
+      Exit;
+    end;
+  { GenericFuncs[] is the THIRD kind of region in this arena. It used to be left
+    out with a reason: a `generic function` could not be declared in a unit at
+    all, so its body never crossed a file boundary and inheriting the
+    destination was always inheriting the right file. That stopped being true
+    the moment the declaration became legal -- measured immediately, a bad
+    expression inside a unit's generic routine reported `pascal26:7:` with NO
+    `in:` line, i.e. line 7 of a three-line PROGRAM.
+    bug-p-a-generic-function-cannot-be-declared-in-a-unit }
+  for i := 0 to GenericFuncCount - 1 do
+    if (t >= GenericFuncs[i].TokStart) and
+       (t < GenericFuncs[i].TokStart + GenericFuncs[i].TokCount) then
+    begin
+      TemplateSrcKeyOfTok := GenericFuncSrcKey[i];
       Exit;
     end;
 end;
@@ -3799,6 +3806,46 @@ begin
   end;
 end;
 
+procedure SpecializeImportedGenericFuncUses;
+{ Re-run the inline-use rewrite over the MAIN PROGRAM'S BODY, once, for every
+  generic routine registered so far.
+
+  SpecializeInlineGenericFuncUses scans forward from the template's own position
+  and that is correct within one file -- a use before the declaration is refused,
+  as Pascal requires. Across a `uses` it is not a scoping question at all: every
+  unit's tokens are APPENDED after the main program's, so a program body calling
+  `specialize F<Integer>(4)` on a unit-declared F sits BEHIND the template in
+  Tokens[] while being ahead of it in scope. The forward scan simply never
+  reached it, and the call died as `expected ')' before 'F'` -- which reads like
+  a syntax error and is a visibility one.
+
+  Called at the end of ParseUsesClause -- the one site where "every template
+  this clause just imported is registered, and every use of one lies ahead of
+  here" is true, which is exactly why the CLASS-side desugar
+  (DesugarImportedDelphiGenericUses) is called from there too. Ahead of TokPos
+  is the only safe direction to edit in: RemoveTokens shifts token indices and
+  AdjustPass2Spans is a no-op outside the body pass, so a removal BEHIND TokPos
+  would silently invalidate TokPos and every DeclItem span already recorded.
+
+  Being on the uses clause rather than on the program is what covers a UNIT
+  calling another unit's generic routine: B's tokens are appended while A is
+  still being parsed, so there is no later point in A from which a forward sweep
+  would reach A's body -- but A's own `uses B;` is before it.
+
+  Templates declared in the importing file itself are swept again here and match
+  nothing -- their uses were already collapsed to `F_C` identifiers -- and a
+  specialization already emitted is skipped by the FindProc guard inside.
+  bug-p-a-generic-function-cannot-be-declared-in-a-unit }
+var gfi: Integer;
+begin
+  gfi := 0;
+  while gfi < GenericFuncCount do
+  begin
+    SpecializeInlineGenericFuncUses(gfi);
+    Inc(gfi);
+  end;
+end;
+
 procedure ParseGenericFunctionDef;
 var isFunc: Boolean; funcName, paramName: AnsiString;
     gfi, j, cur, finalCur, depth: Integer;
@@ -3825,6 +3872,14 @@ begin
   GenericFuncs[gfi].IsFunc   := isFunc;
   GenericFuncs[gfi].TokStart := TemplateTokenCount;
   GenericFuncs[gfi].TokCount := 0;
+  { Where this body CAME from -- captured now for the same reason
+    ParseGenericTemplateNamed captures it: at splice time the tokens have been
+    copied into the pool and the origin index is gone. TokPos-1 is the token the
+    header stopped on, which is in this routine's own file. }
+  if (TokPos > 0) and (PasSrcOfTok(TokPos - 1) <> '') then
+    GenericFuncSrcKey[gfi] := InternKey(PasSrcOfTok(TokPos - 1))
+  else
+    GenericFuncSrcKey[gfi] := -1;
 
   { Prepend synthetic 'function/procedure funcName' tokens into template buffer }
   TemplateTokens[TemplateTokenCount].IVal := 0;
@@ -3866,11 +3921,15 @@ begin
     { Same opener set as GenericMethodBodyEnd -- see the note there. A generic
       FUNCTION's body has the same shapes as a method's.
 
-      UNVERIFIED, and the reason is worth recording: no program reaches this
-      miscount today. pxx rejects a `generic function` in a unit INTERFACE and
-      in a unit IMPLEMENTATION alike, and those are the only places a short body
-      could be mis-terminated; at program level the pre-fix binary is already
-      correct. Corrected for consistency, with no positive control available.
+      This used to be unverifiable BY CONSTRUCTION -- a `generic function` was
+      rejected in both of a unit's sections, and those are the only places a
+      short body can be mis-terminated. It has a positive control now
+      (test_generic_body_end_counting, second output line), and the control is
+      narrower than it looks: only a call from the PROGRAM BODY exposes a
+      miscount. An IN-UNIT call does not, because the truncated template ends
+      one `end` early and the specialization is spliced at exactly the position
+      that leftover `end` occupies, so the two cancel and the routine parses
+      correctly by accident.
       bug-p-a-generic-function-cannot-be-declared-in-a-unit }
     if Tokens[cur].Kind in [tkBegin, tkCase, tkTry, tkAsm] then Inc(depth)
     else if Tokens[cur].Kind = tkEnd then Dec(depth);
