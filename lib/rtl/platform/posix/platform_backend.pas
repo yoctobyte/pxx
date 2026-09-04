@@ -303,7 +303,19 @@ const
   SYS_setsockopt=208; SYS_shutdown=210; SYS_fcntl=25;
   SYS_getsockopt=209; SYS_getsockname=204; SYS_getpeername=205; SYS_ioctl=29;
   SYS_sendto=206; SYS_recvfrom=207; SYS_ppoll=73;
-  SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_wait4 = 260; SYS_kill = 129;
+  SYS_clone = 220; SYS_execve = 221; SYS_pipe2 = 59; SYS_dup3 = 24; SYS_kill = 129;
+  { rv32 IS THE ONE TARGET WITH NO wait4 AT ALL, and the 260 that used to sit
+    on this line was not a wrong number -- it was an ABSENT one. asm-generic
+    assigns __NR_wait4 260 in its LEGACY block, which a 32-bit port does not
+    enable; the modern spelling is waitid. Two instruments agree and they fail
+    differently: this box's include/uapi/asm-generic/unistd.h puts wait4 behind
+    the legacy guard, and devdocs/dev/syscall-maps/riscv32.txt -- a qemu sweep,
+    not a header read -- has NOTHING at 260 and DOES have 95 waitid. Every
+    other target this repo builds for has both (i386 114/284, arm32 114/280,
+    aarch64 260/95, xtensa 121/122); rv32 has waitid alone. So the declaration
+    made PalBackendWait4 issue a call the kernel answers ENOSYS: fork() worked,
+    a real child existed, and nothing could ever reap it. }
+  SYS_waitid = 95;
   SYS_clock_gettime = 113;
   SYS_mmap = 222; SYS_munmap = 215; SYS_mprotect = 226; SYS_fchmod = 52; SYS_getpid = 172; SYS_nanosleep = 101; SYS_utimensat = 88;
   SYS_fchmodat = 53; SYS_fchownat = 54; SYS_umask = 166;
@@ -1872,10 +1884,87 @@ begin
 {$endif}
 end;
 
+{ waitid(2) REBUILT INTO A wait4 STATUS WORD -- riscv32 only, because it is the
+  one target with no wait4 (see the SYS_waitid note in its number block).
+
+  THE CONVERSION IS THE WHOLE RISK AND IT IS NOT THE EXIT CODE. wait4 hands
+  back one packed int; waitid hands back a siginfo and leaves the packing to
+  the caller. An implementation that maps CLD_EXITED and CLD_KILLED and stops
+  there passes every ordinary test -- a program that forks and reads an exit
+  code is the common case and it is the case that needs no 0x7f encoding at
+  all. The stopped, trapped and continued arms are the ones nothing exercises
+  until something stops a child, which is why test/c_crtl_wait.c stops one.
+
+  THE SIGINFO BUFFER IS ZEROED BEFORE THE CALL, and that is load-bearing rather
+  than tidy: with WNOHANG and no reapable child the kernel returns 0 and writes
+  NOTHING, so si_pid must already be 0 for "nothing happened" to be
+  distinguishable from "a child whose pid is whatever was on the stack".
+
+  OFFSETS ARE THE 32-BIT SIGINFO LAYOUT (si_signo 0, si_errno 4, si_code 8,
+  then the SIGCHLD arm: si_pid 12, si_uid 16, si_status 20). They are correct
+  for rv32 and WOULD BE WRONG on a 64-bit target, where the union is
+  pointer-aligned and si_pid sits at 16 -- so this arm stays keyed to the one
+  target that needs it rather than being offered as a generic fallback. }
 function PalBackendWait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
+{$ifdef CPU_RISCV32}
+const
+  P_ALL = 0; P_PID = 1; P_PGID = 2;
+  WI_NOHANG = 1; WI_STOPPED = 2; WI_EXITED = 4; WI_CONTINUED = 8;
+  CLD_EXITED = 1; CLD_KILLED = 2; CLD_DUMPED = 3;
+  CLD_TRAPPED = 4; CLD_STOPPED = 5; CLD_CONTINUED = 6;
+var
+  si: array[0..127] of Byte;
+  idtype, id, wopts, rc, code, cpid, cstat, st, i: Integer;
+begin
+  if pid > 0 then begin idtype := P_PID;  id := pid; end
+  else if pid = -1 then begin idtype := P_ALL; id := 0; end
+  else if pid = 0 then begin
+    { waitpid(0, ...) means "my process group". Asking the kernel for it beats
+      passing 0 through: P_PGID with id 0 only came to mean the caller's group
+      in Linux 5.4, and this has to be right on an older kernel too. }
+    idtype := P_PGID;
+    id := Integer(__pxxrawsyscall(SYS_getpgid, 0, 0, 0, 0, 0, 0));
+    if id < 0 then begin Result := id; Exit; end;
+  end else begin idtype := P_PGID; id := -pid; end;
+
+  { WEXITED is not optional -- waitid refuses with EINVAL unless at least one
+    of EXITED/STOPPED/CONTINUED is set, and wait4 always reports exits. The
+    other two bits happen to have the same values in both interfaces, and are
+    still written out rather than passed through, because "the numbers agree
+    today" is not the same statement as "these mean the same thing". }
+  wopts := WI_EXITED;
+  if (options and 1) <> 0 then wopts := wopts or WI_NOHANG;      { WNOHANG    }
+  if (options and 2) <> 0 then wopts := wopts or WI_STOPPED;     { WUNTRACED  }
+  if (options and 8) <> 0 then wopts := wopts or WI_CONTINUED;   { WCONTINUED }
+
+  for i := 0 to 127 do si[i] := 0;
+  rc := Integer(__pxxrawsyscall(SYS_waitid, idtype, id, Int64(@si[0]), wopts,
+                                Int64(rusage), 0));
+  if rc < 0 then begin Result := rc; Exit; end;
+
+  code  := PInteger(@si[8])^;
+  cpid  := PInteger(@si[12])^;
+  cstat := PInteger(@si[20])^;
+  if cpid = 0 then begin Result := 0; Exit; end;   { WNOHANG, nothing ready }
+
+  case code of
+    CLD_EXITED:    st := (cstat and $FF) shl 8;
+    CLD_KILLED:    st := cstat and $7F;
+    CLD_DUMPED:    st := (cstat and $7F) or $80;
+    CLD_TRAPPED:   st := ((cstat and $FF) shl 8) or $7F;
+    CLD_STOPPED:   st := ((cstat and $FF) shl 8) or $7F;
+    CLD_CONTINUED: st := $FFFF;
+  else
+    st := 0;
+  end;
+  if wstatus <> nil then PInteger(wstatus)^ := st;
+  Result := cpid;
+end;
+{$else}
 begin
   Result := Integer(__pxxrawsyscall(SYS_wait4, pid, Int64(wstatus), options, Int64(rusage), 0, 0));
 end;
+{$endif}
 
 function PalBackendKill(pid, sig: Integer): Integer;
 begin

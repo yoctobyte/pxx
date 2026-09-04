@@ -2,9 +2,22 @@
 #ifndef PXX_CRTL_SYS_WAIT_H
 #define PXX_CRTL_SYS_WAIT_H 1
 
-/* Process reaping. The MACROS here are real and exact — they only decode an
-   int the kernel already produced, so they are correct wherever the status
-   came from.
+/* Process reaping.
+
+   THIS COMMENT USED TO SAY "the MACROS here are real and exact -- they only
+   decode an int the kernel already produced, so they are correct wherever the
+   status came from", AND IT WAS THE THING THAT WAS WRONG.
+   WIFSIGNALED was transcribed without the `(signed char)' cast, which is the
+   whole of glibc's definition and looks like noise. For a STOPPED child the
+   low 7 bits are 0x7f, so ((s & 0x7f) + 1) is 0x80: as a signed char that is
+   -128, >>1 is -64, and the macro is false. Without the cast the same
+   expression is 64, and WIFSIGNALED answered TRUE -- with WTERMSIG 127 -- for
+   every stopped or continued child, on ALL FIVE targets, for as long as the
+   header has existed. "Only decodes an int" was true and the decode was
+   wrong; a macro reading a kernel value is not thereby correct.
+   NOTHING FOUND IT because nothing in the tree stopped a child. Every caller
+   forked, exited, and read WIFEXITED -- the arm where the cast cannot matter.
+   test/c_crtl_wait.c stops one, which is why it is there.
 
    THE CALLS ARE NOW REAL TOO. This comment used to say "the PAL exposes no
    wait4/waitid", which was the third place in crtl to state a version of that
@@ -24,7 +37,7 @@
 #define WTERMSIG(s)     ((s) & 0x7f)
 #define WSTOPSIG(s)     WEXITSTATUS(s)
 #define WIFEXITED(s)    (WTERMSIG(s) == 0)
-#define WIFSIGNALED(s)  ((((s) & 0x7f) + 1) >> 1 > 0)
+#define WIFSIGNALED(s)  (((signed char) (((s) & 0x7f) + 1) >> 1) > 0)
 #define WIFSTOPPED(s)   (((s) & 0xff) == 0x7f)
 #define WIFCONTINUED(s) ((s) == 0xffff)
 #define WCOREDUMP(s)    ((s) & 0x80)

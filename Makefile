@@ -14336,6 +14336,35 @@ test-core: $(COMPILER)
 	# All rows diffed against gcc -D_GNU_SOURCE.
 	./$(COMPILER) test/c_crtl_busybox_394_gaps.c $(TESTTMP)/c_bb394gaps26
 	tools/expect_same.sh c_bb394gaps26 "$$($(TESTTMP)/c_bb394gaps26)" "$$(printf '1 1 0 1\n2 1 1 0 0 1\n3 0 010203040506 alpha | -1 000000000000 alpha | -1 -1 -1\n4 -1 -1\n5 5 . .. apple mango zebra\n6 -1 1\n7 0 0\n8 0 0 0 0\n9 1 1\n10 1 1 1 1\n11 -1 1\n12 -1:001122330000 -1:001122000000 0:001122334455 -1:001122334400')"
+	# waitpid/wait/wait4 and the W* status macros, diffed against glibc on
+	# FIVE targets. The output is compared against the GCC ORACLE'S OWN RUN and
+	# never against a literal, because two of the twelve rows carry values this
+	# repo does not get to choose: ECHILD's number and the exact status word a
+	# stopped child produces are the kernel's, and a hardcoded expectation
+	# would be this test asserting its own implementation back at itself.
+	# THE STATUS WORD IS THE ASSERTION, NOT THE RETURN VALUE -- the bug this
+	# was written for (riscv32 waitpid -> ENOSYS) and the one it FOUND
+	# (WIFSIGNALED missing glibc's (signed char) cast, wrong on all five
+	# targets) both leave a plausible return value behind. The test pre-fills
+	# status with 0x5A5A5A5A rather than 0, because an untouched zero reads as
+	# a clean exit and would have collided with the failure value.
+	# riscv32 IS THE ROW THAT MATTERS HERE: it has no wait4 at all and reaches
+	# these results through waitid, so its stopped/continued rows exercise a
+	# status-word RECONSTRUCTION that no other target performs.
+	./$(COMPILER) test/c_crtl_wait.c $(TESTTMP)/c_wait26
+	@gcc -o $(TESTTMP)/c_wait_gcc test/c_crtl_wait.c
+	@$(TESTTMP)/c_wait_gcc > $(TESTTMP)/c_wait.oracle
+	tools/expect_same.sh c_wait26 "$$($(TESTTMP)/c_wait26)" "$$(cat $(TESTTMP)/c_wait.oracle)"
+	@for a in i386 arm32 aarch64 riscv32; do \
+	  case $$a in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if [ "$$a" = i386 ] || command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$a test/c_crtl_wait.c $(TESTTMP)/c_wait26_$$a >/dev/null || { echo "c_wait26 $$a compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh $$a/c_wait26 "$$(tools/run_target.sh $$a $(TESTTMP)/c_wait26_$$a)" "$$(cat $(TESTTMP)/c_wait.oracle)" || exit 1; \
+	    echo "=== c_wait26: $$a OK ==="; \
+	  else \
+	    echo "=== c_wait26: $$q absent, $$a NOT verified ==="; \
+	  fi; \
+	done
 	# crtl signal DISPOSITIONS -- signal(), sigaction(), raise(). These three
 	# were link-only stubs RETURNING 0 until 2026-09-04, and the return value
 	# is what made them a bug rather than a gap: rc=0 with errno untouched is
@@ -14352,15 +14381,17 @@ test-core: $(COMPILER)
 	# killed by its own raise at row 1 -- all nine rows move.
 	./$(COMPILER) test/c_crtl_signal_dispositions.c $(TESTTMP)/c_sigdisp26
 	tools/expect_same.sh c_sigdisp26 "$$($(TESTTMP)/c_sigdisp26)" "$$(printf '1 0 1 10\n2 2 1 10\n3 1 1\n4 alive\n5 1 10\n6 1 1 1 1\n7 1 1\n8 0 1 3\n9 0 1')"
-	# AND ON THREE CROSS TARGETS, byte-identical to the SAME gcc oracle -- the
+	# AND ON FOUR CROSS TARGETS, byte-identical to the SAME gcc oracle -- the
 	# signal runtime is not x86-64-only (that claim outlived its premise by
-	# four days; see lib/rtl/signals.pas). riscv32 is DELIBERATELY ABSENT and
-	# named rather than quietly dropped: eight of the nine rows pass there and
-	# row 5 cannot, because waitpid() answers -1/ENOSYS on that target while
-	# fork() works -- bug-b-crtl-waitpid-returns-enosys-on-riscv32-so-no-
-	# program-can-reap-a-child. Wire riscv32 in when that lands.
-	@for a in i386 arm32 aarch64; do \
-	  case $$a in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; esac; \
+	# four days; see lib/rtl/signals.pas). riscv32 was excluded here until
+	# 2026-09-04 for a reason that was NOT about signals: eight of nine rows
+	# passed and row 5 could not, because it watches a child DIE and waitpid()
+	# answered -1/ENOSYS on that target while fork() worked. That was
+	# bug-b-crtl-waitpid-returns-enosys-on-riscv32-so-no-program-can-reap-a-
+	# child; with the waitid arm in PalBackendWait4 all nine rows move and the
+	# target is wired in.
+	@for a in i386 arm32 aarch64 riscv32; do \
+	  case $$a in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
 	  if [ "$$a" = i386 ] || command -v $$q >/dev/null 2>&1; then \
 	    ./$(COMPILER) --target=$$a test/c_crtl_signal_dispositions.c $(TESTTMP)/c_sigdisp26_$$a >/dev/null || { echo "c_sigdisp26 $$a compile FAIL"; exit 1; }; \
 	    tools/expect_same.sh $$a/c_sigdisp26 "$$(tools/run_target.sh $$a $(TESTTMP)/c_sigdisp26_$$a)" "$$(printf '1 0 1 10\n2 2 1 10\n3 1 1\n4 alive\n5 1 10\n6 1 1 1 1\n7 1 1\n8 0 1 3\n9 0 1')" || exit 1; \
