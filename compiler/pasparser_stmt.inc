@@ -4949,6 +4949,7 @@ var
   smmiS, pvSig, pvTarget, smSelfNode, fanSym, mrefNode: Integer;
   pvIsMeth: Boolean;
   name: AnsiString;
+  stSpell: AnsiString;   { the token a statement cannot start with, as typed }
    idx, procIdx, i, si, node, valNode, stepsNode, opNode, argSeq, argIdx, exprNode, lastArg, identTokIdx: Integer;
   nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
@@ -7588,7 +7589,41 @@ begin
           nothing by construction, so there is nothing to recover. }
         Error('Default(T) is an expression, not a statement')
       else
+      begin
+        { NO STATEMENT CAN START WITH THIS TOKEN, and skipping to the `;` in
+          silence is how a whole statement disappears with exit 0. `[1];`,
+          `^;`, `.Foo;`, `);` and `,;` each compiled clean before this said
+          anything -- and the cost is not the garbage program nobody writes,
+          it is that this arm is the LANDING SITE for every construct some
+          other arm returns from with tokens still pending. `ParamStr(0)[1]`
+          is the measured one: the tkArgStr arm builds its node and returns
+          with `[` unconsumed, the assignment finishes without it, and this
+          loop ate the subscript -- so `cc := ParamStr(0)[1]` stored the low
+          byte of the string POINTER, a different wrong char on every run,
+          while `WriteLn(ParamStr(0)[1])` refused loudly because an argument
+          list has no such catch-all.
+
+          The guard directly below already learned this lesson on one shape:
+          its comment says `F1(1) := 3` "built the call, returned, and left
+          `:= 3` for the NEXT statement -- where the catch-all `else` just
+          above skips to the `;`". That fixed the one construct and left the
+          mechanism, which is the second-path-stays-broken shape
+          normalise-dont-special-case.md warns about; this is the mechanism.
+
+          Error, not ErrorRecover: this is a SYNTAX failure over a token
+          stream that is no longer meaningful, which is the line ErrorRecover's
+          own contract draws. The skip below is kept so the halt reports from
+          a settled position.
+          bug-p-a-statement-that-cannot-start-with-this-token-is-silently-skipped }
+        stSpell := CurTok.SVal;
+        if (TokPos >= 1) and (TokPos <= TokCount) and (TokSrcLen[TokPos - 1] > 0) then
+          stSpell := GetTokenStrFromRaw(TokSrcOff[TokPos - 1], TokSrcLen[TokPos - 1]);
         while not (CurTok.Kind in [tkSemicolon,tkEnd,tkElse,tkUntil,tkEOF]) do Next;
+        if stSpell <> '' then
+          Error('a statement cannot start with ''' + stSpell + '''')
+        else
+          Error('a statement cannot start with this token');
+      end;
     end;
   end;
   { A CALL is not an assignment TARGET. `F1(1) := 3;` built the call, returned,

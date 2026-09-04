@@ -12474,6 +12474,30 @@ test-core: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:51: error: cannot assign to the result of a function call' \
 	   && test ! -e $(TESTTMP)/test_scalarmisuse26 \
 	  || { echo "test_scalar_misuse_is_refused_fail: FAIL - rc=$$rc (want rc=1, eight diagnostics on lines 44-51, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# ...and the MECHANISM behind that last one: ParseStatementAST's catch-all
+	@# `else` used to skip to the `;` in silence, so any construct another arm
+	@# left tokens pending on became a silently discarded statement. Five
+	@# spellings, each its own compile because the diagnostic halts.
+	@for tok in '[1]' '^' '.Foo' ')' ','; do \
+	   printf 'program p;\nvar ii: Integer;\nbegin\n  ii := 1;\n  %s;\nend.\n' "$$tok" > $(TESTTMP)/stmtstart.pas; \
+	   out=$$(./$(COMPILER) $(TESTTMP)/stmtstart.pas $(TESTTMP)/stmtstart26 2>&1); rc=$$?; \
+	   test "$$rc" = "1" \
+	     && printf '%s\n' "$$out" | grep -q "^pascal26:5: error: a statement cannot start with " \
+	     && test ! -e $(TESTTMP)/stmtstart26 \
+	    || { echo "statement-start guard: FAIL for '$$tok' - rc=$$rc (want rc=1, a diagnostic on line 5, no binary)"; printf '%s\n' "$$out"; exit 1; }; \
+	   rm -f $(TESTTMP)/stmtstart26; \
+	 done
+	@# ...and the one whose silent face this produced: a builtin call's result,
+	@# indexed. Compares against the same char read the ordinary way, never a
+	@# literal -- ParamStr(0) is the invocation path. .expected IS fpc 3.2.2's.
+	./$(COMPILER) test/test_paramstr_index.pas $(TESTTMP)/test_paramstr_index26
+	tools/expect_same.sh test_paramstr_index26 "$$($(TESTTMP)/test_paramstr_index26)" "$$(cat test/test_paramstr_index.expected)"
+	@out=$$(./$(COMPILER) test/test_statement_start_is_refused_fail.pas $(TESTTMP)/test_stmtstart26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q "^pascal26:26: error: a statement cannot start with '\['" \
+	   && test ! -e $(TESTTMP)/test_stmtstart26 \
+	  || { echo "test_statement_start_is_refused_fail: FAIL - rc=$$rc (want rc=1, a diagnostic on line 26, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; tools/expect_same.sh cmath_sign_bits26-rc "$$?" "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

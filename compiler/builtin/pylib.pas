@@ -6621,7 +6621,6 @@ procedure PyDictHashPut(d: TPyDict; keyIdx: Integer);
   guarantees the key is not already present, so no PyVarEq dup check here. }
 var mask, pos: NativeUInt; slotp: PInteger;
 begin
-          ' hashcap=', d.FHashCap, ' fkeys=', Int64(NativeInt(d.FKeys)), ' keyIdx=', keyIdx);
   mask := NativeUInt(d.FHashCap) - 1;
   pos := PyVarHashKey(PPyVarRec(NativeInt(d.FKeys) + keyIdx * 16)) and mask;
   while True do
@@ -6797,7 +6796,6 @@ var
   i: Integer;
   src, dst: PPyVarRec;
 begin
-          ' self=', Int64(NativeInt(Pointer(Self))), ' hashcap=', FHashCap);
   i := indexof(k);
   if i < 0 then
   begin
@@ -6805,8 +6803,6 @@ begin
     i := FLen;
     src := PPyVarRec(@k);
     dst := PPyVarRec(NativeInt(FKeys) + i * 16);
-            ' fhash=', Int64(NativeInt(FHash)), ' hashcap=', FHashCap,
-            ' countermode=', Ord(FCounterMode));
     PyVarSlotSet(dst, src);
     { register the new key in the index (grow keeps load factor <= 0.5, so a
       slot is always free). FHashCap is 0 only for the never-grown empty dict,

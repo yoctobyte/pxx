@@ -1987,7 +1987,31 @@ begin
       ASTIVal[identNode] := op; ASTTk[identNode] := Ord(Syms[op].TypeKind);
       ASTRight[left] := identNode;
       ASTTk[left] := Ord(Syms[op].TypeKind);
-      CurASTNode := left;
+      { `ParamStr(i)[1]` — the SUBSCRIPT this arm used to leave in the token
+        stream. Every other string value already indexes: a literal has its own
+        loop above, a user function and `Copy` go through the call-result path,
+        and all three end at GenMakeStringValueIndex, which is what this calls.
+        NOT a sixth hand-rolled `[` walker — refactor-p-three-hand-rolled-postfix-loops
+        counts five already, and the helper is where the temp and the
+        side-effect ordering are decided once.
+
+        The old behaviour was not a parse error, which is why it survived:
+        returning here with `[` pending left it to whatever came next, and in
+        ASSIGNMENT-STATEMENT position that was ParseStatementAST's catch-all
+        `else`, which skipped to the `;` in silence. So `cc := ParamStr(0)[1]`
+        stored the low byte of the string POINTER — a different wrong character
+        on every run — while `WriteLn(ParamStr(0)[1])` refused loudly, because
+        an argument list has no catch-all. One defect, two faces, and the loud
+        face is the one that got filed.
+        bug-p-a-builtin-call-result-cannot-be-indexed-inside-parentheses }
+      if (CurTok.Kind = tkLBrack) and NodeIsIndexableStringValue(left) then
+      begin
+        left := GenMakeStringValueIndex(left);
+        CurASTNode := left;
+        LastExprTk := tyChar;
+      end
+      else
+        CurASTNode := left;
     end;
     tkIdent:
     begin
