@@ -88,4 +88,4 @@ the route. Left as a record of both, since the emitter is still a live trap for
 anyone who reintroduces a frozen caller.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a50671107.

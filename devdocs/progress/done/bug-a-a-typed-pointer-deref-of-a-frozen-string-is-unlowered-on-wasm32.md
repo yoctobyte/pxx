@@ -148,4 +148,4 @@ Covered going forward by `test/test_cross_frozen_ptr_narrow.pas`, wired into
 index columns of the same expression.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a50671107.
