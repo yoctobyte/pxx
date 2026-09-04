@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:12 unfinished:26 blocked:7 backlog:12 backlog_new:2 backlog-umbrella:7 backlog-core:128 backlog-nilpy:96 backlog-tools:13 backlog-pascal:51 backlog-decide:36 backlog-libs:18 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3219 rejected:74`
+`working:11 unfinished:27 blocked:7 backlog:12 backlog_new:2 backlog-umbrella:7 backlog-core:129 backlog-nilpy:96 backlog-tools:13 backlog-pascal:51 backlog-decide:36 backlog-libs:18 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3219 rejected:74`
 
 ## Held now (working/ — do not touch these files)
 
@@ -18,11 +18,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
-- `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — owner: frankZ
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 
-## unfinished (26) — parked mid-flight; re-claim, do not duplicate
+## unfinished (27) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -48,6 +47,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pascal-corpus-generics` [P]
 - `feature-rust-option-type` [R]
 - `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
+- `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P]
 - `refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths` [A] — blocked-by: bug-a-a-nested-routine-cannot-capture-a-fixed-size-array
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
@@ -61,7 +61,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 397, ranked
+## Ready — top 30 of 399, ranked
 
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
@@ -76,6 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
 - `[p 70] [B]` feature-b-a-bootable-image-with-the-busybox-userland-on-it
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
+- `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
 - `[p 70] [T]` regression-lib-test-cmath-integral-family
 - `[p 70] [T]` regression-lib-test-cmath-lround
 - `[p 70] [T]` regression-lib-test-cmath-nan-payload
@@ -92,6 +93,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 - `[p 65] [N]` bug-n-yield-from-is-not-implemented
-- `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
 
-_367 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_369 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -1,11 +1,11 @@
 ---
 track: P
 prio: 60
-status: working
-owner: frankZ
+status: unfinished
+owner: 
 type: perf
 blocked-by: []
-summary: "RE-MEASURE FIRST, then decide if anything is left. The premise was twice-superseded: the 9.4% is NOT the 92-arm walk (frankB — CaseEqual bails at the first differing char, so 1.58M O(1) compares cannot be 9.4%), and the measured cause that replaced it — a string LITERAL passed to an AnsiString parameter copies every call — was itself filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call and then REJECTED as superseded, because 440c822e6 promoted EmitStaticLitHandle to -O2 and does that job at codegen. So the copy this ticket is waiting on may already be gone at the default -O. FIRST ACTION IS A MEASUREMENT, not an implementation: re-profile ParseFactorCore at -O2 at HEAD. If its share has dropped, close this. Traps banked in the body if it has not: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat."
+summary: "RE-MEASURED at HEAD -O2 (frankZ, 2026-09-04): the share has NOT dropped (9.92/9.94/10.35% over three runs vs the original 9.44%), so 440c822e6 did not remove it — but the premise is refuted for a THIRD time and the ticket is now mostly in the wrong lane. Disassembled, ParseFactorCore is 1,146,385 bytes of which 84% is managed-local TEARDOWN: exactly 150 runs of exactly 532 AnsiString releases (532 locals x 150 return points), carrying 36.1% of the function's samples. The 92-arm walk this ticket is NAMED for is 114 CaseEqual call sites carrying 3.2% of the function's samples = ~0.32% of a compile; a perfect hash dispatch has a generous ceiling of ~3% only if it also took all of CaseEqual's 3.1% body, and it carries the three documented hazards (name reassigned at 8 points, 25 duplicate names, the arms are not a ladder). The teardown is bigger, is Track A codegen, and is filed as perf-a-every-return-releases-every-managed-local-even-the-untouched-ones. WHAT IS LEFT FOR P is the ~0.3-3% dispatch question, ranked below its own hazards — not the 9.4% this ticket was opened for."
 ---
 
 # `ParseFactorCore` walks a 92-arm name chain for every factor
@@ -173,3 +173,81 @@ ticket blamed for the 9.4% is plausibly already handled at the default `-O`,
 **by a different change than the one it was waiting for.** Nobody has re-measured
 `ParseFactorCore` since. That measurement is the whole of the next step, and it
 may well close this ticket.
+
+## 2026-09-04 (frankZ) — the re-measurement this ticket asked for, and it moves the work to A
+
+**The ticket's own first action, performed.** The answer is that the share has
+NOT dropped, so it does not close on that test — but the mechanism is a third
+thing, and it is not in `pasparser_expr.inc`.
+
+### Provenance, because every share below depends on it
+
+Binary built `-O2 -g` from `compiler/pascal26` at `a1536a832`
+(`1968c7a7da57...`, `converged after 2 round(s)`). `code=10178328B`,
+**identical to the plain default build** — so `-g` did not select `-O0` and this
+is the shipping configuration, per the playbook's *"Profile the SHIPPING binary"*.
+Workload: the same zero-byte `.npy`. `wall=1.87 user=1.81`, so the process is
+pure user CPU and `<outside .text / vdso>` is sampling noise — it swung
+**17.0% / 23.2% / 47.3%** across three identical runs, so every number here is
+renormalised on in-`.text` samples, after which the spread is 0.43pp.
+
+### 1. The share did not drop
+
+| | run1 | run2 | run3 |
+| --- | --- | --- | --- |
+| `ParseFactorCore` | 9.92% | 9.94% | 10.35% |
+
+Against the 9.44% that opened this ticket. **`440c822e6` did not remove it.**
+
+It did do its job on the mechanism frankB blamed, though — re-running frankB's
+own microbenchmark at HEAD `-O2`, min of 3: `ByConst('await')` is **51ms**
+against a typed `const` at 30ms. frankB measured 543ms vs 30ms. So the
+literal-copy went from **18x to 1.7x** and is no longer the story.
+
+### 2. What the 10% actually is: 84% of the function is teardown
+
+`ParseFactorCore` spans **1,146,385 bytes** — agreed by DWARF *and* by the
+compiler's own `.map` (4143 entries, exactly one of which falls in the range),
+so the extent is not a nearest-preceding-symbol artefact.
+
+Disassembled, it contains **80,385 `call AnsiStrRelease` sites in exactly 150
+runs of exactly 532** — mean = median = max = 532. That is **532 AnsiString
+locals released at each of 150 return points**, unconditionally, touched or not.
+The chain is **84% of the function's bytes** and takes **36.1% of the samples
+that land in it**.
+
+Confirmed independently by scaling rather than by sampling — a function with N
+AnsiString locals that assigns one and returns, 2M calls, min of 3 interleaved
+rounds: 4 -> 218ms, 64 -> 653ms, 256 -> 2192ms, 532 -> **4300ms**. Linear,
+**3.87ns per local per call**, for slots that are nil and never touched. The
+arithmetic back: 41,032 calls x 532 x 3.87ns = **84.5ms of 1870ms = 4.5%** of
+the compile. Two methods that fail differently, agreeing.
+
+**Filed as [[perf-a-every-return-releases-every-managed-local-even-the-untouched-ones]]
+(Track A, prio 70).** `EmitManagedLocalCleanup`, `symtab.inc:12212`. Binary-wide
+there are **308,112** such sites, ~36% of the compiler's 10.2MB `.text`. I have
+written no code there — a shared epilogue or a liveness pass across six backends
+is past one session, and A owns the shape. franka-29 has been told directly.
+
+### 3. What is actually left for P, measured
+
+The 92-arm walk this ticket is NAMED for: **114 `CaseEqual` call sites** inside
+the function, carrying **3.2% of its samples = ~0.32% of a compile**.
+`CaseEqual`'s own body is separately ~3.1% of in-`.text`, across all callers.
+
+So a perfect hash dispatch has a **generous ceiling of ~3%**, and only if it
+also took essentially all of `CaseEqual`'s body — while carrying the three
+hazards already banked above (the arms are not a ladder; `name` is reassigned at
+8 points; 25 names repeat). **It is not the 9.4% this ticket was opened for.**
+Most of that 9.4% was always the teardown standing next to the walk.
+
+**Not closed, and deliberately not microfixed.** The dispatch question is real
+but is now ranked below its own hazards, and the honest next action is A's
+ticket, not this one. Parked back to `backlog-pascal` unclaimed with a true
+summary rather than held.
+
+## Parked 2026-09-04
+
+re-measured: the 9.4% is 84% managed-local teardown, not the arm walk; the real work is now Track A's perf-a-every-return-releases-every-managed-local-even-the-untouched-ones. What is left for P measures ~0.3-3% and is ranked below its own three documented hazards.
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
