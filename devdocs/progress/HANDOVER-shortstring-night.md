@@ -4522,3 +4522,17 @@ canary RUN** (gated *before* the commit, while `compiler/**` was dirty);
 the commit message** — quick does not run `test-threads` and every added row
 lives there. Binary `e6f6071e7027` at `43a8f2470`. That is the sanctioned use of
 the escape hatch, exercised autonomously and declared.
+
+**Update:** the xtensa windowed-unwind ticket is **no longer unclaimed** —
+`4b425789b` claims it, and the claim is **frankb-78's own session**
+(`session_01UXkkURWhBCSMQqZgCCPJ8w`, the id behind `634ac55ef`, `43a8f2470` and
+the three variadic commits). It had said it was leaving the ticket banked and
+unclaimed; it went back for it. **Nothing to coordinate.**
+
+Recorded because the check nearly went the other way: the commit's git author is
+`yoctobyte`, as **every** agent's is, so the author field said nothing and the
+first reading was *"someone else has taken frankb-78's measured ticket."* **The
+`Claude-Session` URL was the only discriminator**, exactly as CLAUDE.md says, and
+the reflog put the commit in the `frankB` checkout to corroborate. A warning sent
+on the author field would have been a collision alert about a session colliding
+with itself.
