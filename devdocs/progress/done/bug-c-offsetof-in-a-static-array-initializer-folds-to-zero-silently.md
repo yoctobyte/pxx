@@ -232,4 +232,4 @@ greener, equally blind, because `--help` prints a string literal. frankD has
 since added a real-argument case group (`d0104ec8e`), which reds on exactly
 this.
 
-- 2026-09-04 — fixed and verified end to end (frankC); commit PENDING-COMMIT.
+- 2026-09-04 — fixed and verified end to end (frankC); commit 9859046df.
