@@ -4,10 +4,10 @@ title: "Rung 3: boot a kernel under qemu-system with the pxx-built busybox as it
 track: B
 prio: 70
 type: feature
-status: backlog
+status: working
 created: 2026-09-02
 found-by: frankD
-owner: ""
+owner: franks-ab
 blocked-by: []
 summary: "Rung 3 of feature-busybox-kiosk-selfhosting-target, and the live one now that rungs 1, 2 and 2b are done: a 141-applet busybox built entirely by pxx, 265 objects, one real link with no `-Wl,-z,muldefs`, byte-identical to the gcc oracle over 387 cases (feature-c-corpus-busybox-141-applets-linked, met 2026-09-02; it superseded the 80-applet/149-object/261-case figure this ticket was filed with). x86-64 only -- aarch64 waits on an --emit-obj object writer. What is missing is a KERNEL and a ROOTFS, not more compiler work. qemu-system is installed for every pxx target plus /dev/kvm. The first decision is fetch-a-kernel versus build-one, and it should be made with a measurement rather than a preference. The proof this rung owes is a boot to a shell prompt with PID 1 being our busybox -- not a chroot, which proves nothing about the kernel interface."
 ---
