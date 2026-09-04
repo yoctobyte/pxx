@@ -4955,6 +4955,16 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_vpstr26.2 "$$($(TESTTMP)/test_vpstr26 | head -1)" "scalar  1 aa 2"
 	tools/expect_same.sh test_vpstr26.3 "$$($(TESTTMP)/test_vpstr26 | head -5 | tail -1)" "trunc   abcdef 6"
 	tools/expect_same.sh test_vpstr26.4 "$$($(TESTTMP)/test_vpstr26 | head -7 | tail -1)" "no ovr  22 abcdef"
+	# ...and the TWO OTHER arms that copy was missing, found by re-deriving the
+	# count in refactor-p-the-field-declaration-parser-exists-twice: it says two
+	# copies of the field parser and there are THREE. The enum-identity stamp and
+	# any arm at all for a NAMED array type were both absent, so `0: (c: TColor)`
+	# printed an ordinal and `0: (a: TArr)` sized the whole record at 8 bytes
+	# where FPC says 20 -- writing twelve bytes past its end and reading back
+	# correctly from the same wrong place. The SIZEOF row is the one that cannot
+	# pass by accident; the value rows all printed plausible numbers on pin v403.
+	./$(COMPILER) test/test_variant_part_field_arms.pas $(TESTTMP)/test_vpfld26
+	tools/expect_same.sh test_vpfld26 "$$($(TESTTMP)/test_vpfld26)" "$$(printf 'fixed  Green 9 20\nbranch Blue 11 44\nlobnd  5 7\nenumarr Red Blue\nstr    abcdefg\nsizeof 20')"
 	# write(c:width) on a Char: x86-64 was the ONLY backend that dropped the
 	# field width (the four cross targets and FPC all pad), so the default
 	# target silently produced ragged columns.

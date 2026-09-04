@@ -76,3 +76,62 @@ the same channel and a fix that makes the notification carry the tier's verdict
 needs an answer for the killed case too.
 
 Running the gate in the FOREGROUND sidesteps all of it and costs the same ~90s.
+
+## A SECOND MECHANISM FOR THE SAME SYMPTOM, and it defeats the documented workaround (frankB, 2026-09-04/05)
+
+Four sightings tonight, all the same shape and **none of them the wrapper
+reporting a finished tier's exit code.** The notification arrived while the gate
+was still running, roughly 40 seconds in, at the `-O3 backend parity` step —
+minutes before the fixedpoint and testmgr had even started.
+
+The cause is one level out. The command backgrounded was
+
+```
+nohup tools/gate.sh quick > <log> 2>&1 &
+echo "started pid $!"
+```
+
+so the process the harness tracked was the **launching shell**, which exits
+immediately and truthfully with 0. `gate.sh` outlives it.
+
+**Why this one matters more than the original:** the documented workaround —
+*"background it and grep the log for the verdict"* — does not save you here. The
+log at notification time is a PREFIX. Every line in it says PASS, there is no
+`gate:` verdict line yet, and a `tail` of it looks exactly like a run that
+passed everything so far. Grepping for `RED` finds nothing, correctly, about a
+gate that has not reached the step that could produce one. So the reader can
+follow CLAUDE.md exactly and still bank on an unfinished gate.
+
+**Both mechanisms produce the identical observation** — "completion
+notification, exit 0, verdict says otherwise or is missing" — so a fix aimed at
+propagating the tier's verdict into the notification would leave this one live,
+and a session that hit this one would report it as the known bug.
+
+**The discriminator is whether the gate PROCESS is still alive**, not anything
+in the log:
+
+```
+$ pgrep -af 'tools/gate.sh quick'
+401322 bash tools/gate.sh quick        # still running, notification already delivered
+```
+
+**What worked, if a workaround is wanted before the fix:** capture the gate's
+own pid and block on THAT, so the tracked process is the gate rather than its
+launcher.
+
+```
+nohup tools/gate.sh quick > <log> 2>&1 & echo $! > <pidfile>
+# then, as the backgrounded command:
+P=$(cat <pidfile>); while ps -p $P >/dev/null 2>&1; do sleep 10; done
+grep -E '^gate:|canary' <log>
+```
+
+A `pgrep -f 'gate.sh quick'` loop is NOT a substitute and cost a wasted wait
+here: another session was running its own gate on the same box, so the pattern
+matched a process that was not mine and the loop never returned. The pid is the
+only identifier that discriminates.
+
+Routed here rather than filed separately because the symptom, the reader's
+conclusion and the damage are identical; but it is a **second cause**, and
+closing the first will not close it.
+

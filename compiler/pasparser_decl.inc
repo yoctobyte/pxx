@@ -3298,6 +3298,8 @@ var
   variantBaseOff, variantMax, branchFieldOff, curOff: Integer;
   arrLen, loVal, hiVal, fRec, fSize, fAlign, nFldNames, fni: Integer;
   fStrCap: Integer;
+  fEnumId: Integer;   { the field's ENUM identity -- see the stamp below }
+  fAi: Integer;       { a NAMED array type named in a branch, else -1 }
   isArr: Boolean;
   fTk: TTypeKind;
   fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
@@ -3384,9 +3386,55 @@ begin
         arrLen := hiVal - loVal + 1;
         Expect(tkRBrack, ']'); Expect(tkOf, 'of');
         fTk := ParseTypeKind; fRec := LastTypeRecId; isArr := True;
+        fEnumId := LastTypeEnumId;
       end
       else
-      begin fTk := ParseTypeKind; fRec := LastTypeRecId; end;
+      begin
+        { A NAMED array type in a branch (`0: (a: TArr)`), which this copy did
+          not have an arm for at all. ParseTypeKind answers the ELEMENT kind for
+          such a name, so the field was sized as one element: `TArr =
+          array[0..3] of Integer` in a branch made the whole record FOUR bytes
+          where FPC says 16, and `r.a[2] := 42` wrote twelve bytes past its end.
+          Silent -- it even reads back correctly, because the read goes to the
+          same wrong place.
+
+          The two other copies of this parser have had the arm for months; this
+          is the third and it is not in the ticket that counts them.
+          refactor-p-the-field-declaration-parser-exists-twice
+
+          DYNAMIC named arrays are deliberately NOT handled: FPC refuses any
+          reference-counted type in a variant part ("Data types which require
+          initialization/finalization cannot be used in variant records") and so
+          does pxx, one message earlier. That missing arm is correct. }
+        fAi := -1;
+        if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
+        if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
+        begin
+          if ArrTypeNDims[fAi] >= 2 then
+            { REFUSED rather than mis-sized. The branch's own offset bookkeeping
+              is single-dimension (one loVal, one arrLen), so a multi-dim alias
+              cannot be recorded here without the dimension table the fixed part
+              carries -- and the alternative is what this arm replaced: a
+              24-byte array silently occupying 4. The inline spelling
+              `array[0..1, 0..2] of T` is already refused in a branch, one
+              message earlier, so this makes the two spellings agree. }
+            Error('a multi-dimensional array type is not supported in a variant '
+                  + 'part yet -- it would be sized as a single element '
+                  + '(refactor-p-the-field-declaration-parser-exists-twice)');
+          isArr := True;
+          fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+          fRec := ArrTypeElemRec[fAi];
+          fEnumId := ArrTypeElemEnumId[fAi];
+          loVal := ArrTypeLo[fAi];
+          arrLen := ArrTypeHi[fAi] - ArrTypeLo[fAi] + 1;
+          Next;   { consume the named array type }
+        end
+        else
+        begin
+          fTk := ParseTypeKind; fRec := LastTypeRecId;
+          fEnumId := LastTypeEnumId;
+        end;
+      end;
       { Frozen strings, exactly as the FIXED part of the record does it a few
         hundred lines down. This arm was simply absent: a `string[N]` branch got
         TypeSlotSize(tyFixedString) = 8 bytes and was registered as tyFixedString
@@ -3433,6 +3481,15 @@ begin
         UFldIsArray[UFldCount-1] := isArr;
         UFldArrLen[UFldCount-1] := arrLen;
         UFldDynDepth[UFldCount-1] := 0;
+        { …and its ENUM IDENTITY, which is the FOURTH thing this copy was missing
+          and the one nobody counted. The enum-on-a-field work stamped
+          ParseRecordFields and ParseTypeSection's class arm -- the two copies
+          refactor-p-the-field-declaration-parser-exists-twice names -- and there
+          are THREE: `case Integer of 0: (c: TColor)` printed `1` where the same
+          field in the fixed part, and in a class, printed `Green`. FPC prints
+          Green in all three.
+          bug-p-an-enum-reached-through-a-field-or-index-still-writes-its-ordinal }
+        UFldEnumId[UFldCount-1] := fEnumId;
         { …and its LOW BOUND, exactly as the fixed part records it. This site is
           the third copy of the same concept (the comment on the bounds parse
           above says so) and it was the copy that still indexed from the raw

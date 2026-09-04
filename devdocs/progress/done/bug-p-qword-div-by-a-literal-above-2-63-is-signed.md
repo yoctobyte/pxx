@@ -140,3 +140,26 @@ Different ticket shape; not this one.
 
 ## Log
 - 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 06918232c.
+
+## The `max-div` row was RIGHT BY ACCIDENT — the collides-with-the-default rule, in a costume
+
+Worth recording separately because it is what kept the boundary looking narrow.
+The ticket's own table lists
+
+| `a div 18446744073709551615` | correct (1) |
+
+and it is correct, for the wrong reason. Both operands wrap to `-1`, the signed
+divide runs, and `-1 div -1` = 1 — the same answer the unsigned divide gives.
+**The sign error produced the expected value**, so the row could not fail no
+matter how broken the typing was.
+
+That is CLAUDE.md's "choose a probe whose right answer differs from the default"
+with a new source of the collision: not a type's default, not a zero, not
+`sizeof(int)`, but **the defect itself mapping the input onto a value the
+correct code also produces**. `18446744073709551615 div 5` — the same shape, one
+operand changed — answered **0** against FPC's 3689348814741910323.
+
+The general form: when a bug is a SIGN error, every self-paired operand
+(`x div x`, `x mod x`, `x = x`) is a fixed point of it. Pick operands that are
+not each other's mirror before reading a row as evidence.
+

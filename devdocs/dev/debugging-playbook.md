@@ -6957,3 +6957,67 @@ The one-line form, and it generalises past controls: **I had changed one
 variable less than I thought.** Same shape as reading a cross-target red on a
 box whose emulator and kernel BOTH differ from yours — you believe you are
 holding one thing fixed, and you are not, and nothing in the output says so.
+
+## A TICKET SLUG IN A COMMENT IS A CITATION OF A BUG — grepping it counts how often the bug was worth NAMING, and that number RISES with the quality of the fix
+
+Measured 2026-09-04 (frankB), closing
+`refactor-p-the-char-array-is-not-a-string-rule-is-spelled-five-times`. The
+ticket said the rule was "implemented at FIVE separate sites in `compiler/ir.inc`,
+each carrying a comment pointing at the others", cited
+`root-cause-over-microfix`'s "three copies is a design flaw", and asked for a
+consolidation.
+
+**The consolidation had already happened nine days before the ticket was
+written.** `ASTCharArrayCap` landed 2026-08-20 (`a22177c73`, `3c2d75dd5`) and its
+own header says it is *"the ONE oracle the char-array-is-a-string conversion
+asks — both directions, every site"*. There are twelve calls of it and two
+direction wrappers. What the ticket counted was the **slug**:
+
+```
+$ grep -rn 'char-array-is-not-a-string' compiler/*.inc | wc -l
+8                    # not 5 — and across FOUR files, not ir.inc alone
+$ git show 47eaf847c:compiler/ir.inc | grep -c 'char-array-is-not-a-string'
+4                    # what ir.inc held on the ticket's own filing date
+```
+
+Of today's eight: two are the predicate's own definition (a section header and a
+function header, the same routine counted twice), one is `Length()` guarding
+**against** the rule misfiring, one is the RTL-linkage prescan deciding whether
+a program needs `builtin.pas` — a different concern entirely — and four are
+CONTEXTS in `ir.inc` where a value enters a string context (call argument,
+binop, assignment, write). The four contexts each call the same predicate and
+the same wrapper; what differs is three to eight lines of context-specific
+condition, and those are not copies of one another.
+
+**The count moves the wrong way, which is what makes it dangerous.** A slug in a
+comment records that an author knew which bug a line belongs to. Applying one
+fix carefully at four contexts and documenting each produces FOUR citations;
+open-coding the rule four times and documenting none produces zero. So the
+metric is highest exactly where the work was best, and lowest where the real
+duplication is.
+
+**And the corroborating evidence points the same wrong way.** The ticket's
+strongest-sounding detail was that the sites cross-reference each other — *"the
+same way it does in an assignment or a comparison"*, *"rewritten here for the
+reason the arms below give"*. That reads as proof that each author saw the
+others and pasted anyway. It is what **one rule applied at four contexts** looks
+like when every author documented the neighbours.
+
+**The rule: to count mechanisms, grep the PREDICATE, not the ticket.**
+`root-cause-over-microfix`'s "two is a smell, three is a design flaw" is about
+mechanisms — a predicate, a table, a code path that can independently answer the
+question. A grep for the predicate's identifier answers that; a grep for a slug
+answers "how famous is this bug".
+
+**The inverse error is the same instrument, and it is worse.** The next night
+(2026-09-05), re-deriving
+`refactor-p-the-field-declaration-parser-exists-twice` the correct way found
+**three** field-declaration parsers where the ticket named two —
+`ParseRecordVariantPart` is not in it — and the uncounted copy was missing the
+enum-identity stamp and every arm for a named array type. `case Integer of 0:
+(c: TColor)` printed an ordinal, and `0: (a: TArr)` sized the whole record at
+eight bytes where FPC says twenty, writing past its end. **An undercount hides
+live defects; an overcount only wastes a session.** Both come from counting the
+wrong thing, and only the predicate grep separates them.
+
+The one-line form: **fame is not multiplicity.**
