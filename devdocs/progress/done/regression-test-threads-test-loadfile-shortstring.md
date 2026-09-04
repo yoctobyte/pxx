@@ -51,7 +51,7 @@ takes it from the repro line.*
 
 - 2026-09-04 - auto-filed by twatch at 0aaaebfefaa8, `track: T` as the documented
   FALLBACK for a failing step that named no owner.
-- 2026-09-04 - re-laned to A, root-caused and resolved, commit PENDING-COMMIT.
+- 2026-09-04 - re-laned to A, root-caused and resolved, commit 980a11a54.
 
 ## RESOLVED 2026-09-04 (frankA)
 
