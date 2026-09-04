@@ -2683,6 +2683,15 @@ function pystr_removesuffix(const s: AnsiString; const suf: AnsiString): AnsiStr
   refactor-a-one-signature-record-for-every-callable-carrier }
 function PySigFindParam(sig: Pointer; const nm: AnsiString): Integer;
 
+{ The bound slot for `name` on `cls` or any ancestor. pyeval's PyHasAttr asks
+  this unit the question rather than walking the parent chain a second time, so
+  it is exported surface; it was reachable from there only through the
+  interface leak
+  (bug-p-a-units-implementation-section-is-visible-to-its-importers). The full
+  rationale stays with the body. }
+function PyClsAttrSlotOf(cls: Pointer; const name: AnsiString;
+                         var kind: Int64): Pointer;
+
 implementation
 
 { Python's whitespace set for the argument-less strip()/isspace():

@@ -3089,6 +3089,7 @@ var
   Syms      : array of TSymbol;
   SymCaseSensitive : array of Boolean; { match this symbol name case-sensitively }
   SymUnitIdx : array of Integer; { Strs[] unit name, or -1 for main/local compiler-generated symbols }
+  SymDeclImpl : array of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   SymDynDepth : array of Integer; { dynamic-array nesting: 0=not dynamic, 1=array of T, 2=array of array of T, ... }
   { `parallel for` capture support: for a var/param declared with a SINGLE named
     type (`x: TGrid`), the type NAME's TokChars span (0 = anonymous/unnamed type).
@@ -3222,6 +3223,7 @@ var
   ProcNamedGP  : array of Integer; { count of named (non-variadic) GP params, for va_start's initial gp_offset }
   ProcNamedFP  : array of Integer; { count of named (non-variadic) FP/XMM params, for va_start's initial fp_offset }
   ProcUnitIdx : array of Integer; { Strs[] unit name, or -1 for main }
+  ProcDeclImpl : array of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   { ONE-BASED token index of a NilPy module-level `def`, or 0 for "not one".
     One-based because the sentinel and a real position would otherwise collide
     at token 0, and token 0 is not a rare case: it is the `def` of a file whose
@@ -3997,6 +3999,13 @@ var
                              source means two things and neither is announced. }
   LastExprTk : TTypeKind;
   InInterface : Boolean;
+  { Textually inside a unit's IMPLEMENTATION section (ParseUnit owns it, saves
+    and restores it around nested `uses`). NOT the complement of InInterface:
+    InInterface is also False for the main program and for every
+    compiler-injected registration that runs with CurrentUnitIdx set to a unit
+    name (the PXX* runtime stubs pre-register under `builtinheap` exactly that
+    way), and those must stay visible. Read only through DeclInImplNow. }
+  InUnitImpl : Boolean;
   WarnUsesLeak : Boolean; { --warn-uses-leak: warn whenever a name resolves through
                             a unit not reachable from the resolving unit's own
                             `uses` (transitively closed over INTERFACE-section
@@ -4105,6 +4114,27 @@ var
   LexMarkDbgLines  : Boolean;   { while True, a consumed line marker ALSO registers a DWARF range. False while lexing a `uses`d unit — see PasLexLineMarker. }
   Lexing           : Boolean;   { True inside LexAll/LexAppend: an Error raised here is at token TokCount, not at the parser's TokPos }
   DeclVisibilityProbe : Boolean;   { while True, DeclVisible answers True for everything. For DIAGNOSTICS ONLY -- asking "does a confusable name exist ANYWHERE" is a different question from "may this scope use it", and a compiler that refuses a call should still be able to say WHY. Never set around anything that RESOLVES. }
+  { PXXDBG=p.implleak -- report an implementation-section leak instead of
+    closing it, so the blast radius of the visibility rule can be COUNTED over a
+    corpus in one pass rather than discovered one failing build at a time. The
+    default is enforcement; this is the measuring instrument, not a fallback. }
+  ImplLeakReport : Boolean;
+  ImplLeakReportInit : Boolean;
+
+const
+  { Which name table a DeclVisibleSect row came from. INTEGERS, so a call site
+    pays nothing when the report is off -- the name is only materialised inside
+    the report branch. }
+  IMPLTAB_NONE     = 0;
+  IMPLTAB_ALIAS    = 1;
+  IMPLTAB_ARRTYPE  = 2;
+  IMPLTAB_ENUMTYPE = 3;
+  IMPLTAB_UCLS     = 4;
+  IMPLTAB_STRCONST = 5;
+  IMPLTAB_SETCONST = 6;
+  IMPLTAB_SYM      = 7;
+  IMPLTAB_PROC     = 8;
+var
   UsesInjected     : Boolean;   { set only around a compiler-injected load }
   VisCacheUnit  : Integer;
   VisCacheEdges : Integer;
@@ -5503,6 +5533,7 @@ var
   UClsMCount : array[0..MAX_UCLASS-1] of Integer;
   UClsParent : array[0..MAX_UCLASS-1] of Integer;
   UClsUnitIdx : array[0..MAX_UCLASS-1] of Integer; { Strs[] idx of the unit that DECLARES this class/record (CurrentUnitIdx at parse), -1 = main program. The access-control unit scope for private/protected under StrictVisibility. }
+  UClsDeclImpl : array[0..MAX_UCLASS-1] of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   UClsVirtCount : array[0..MAX_UCLASS-1] of Integer;
   UClsVMTOffset : array[0..MAX_UCLASS-1] of Integer;
   UClsPBase  : array[0..MAX_UCLASS-1] of Integer;
@@ -5666,6 +5697,7 @@ var
     only records identity + value names for RTTI/streaming. }
   EnumTypeNOff    : array[0..MAX_ENUMTYPE-1] of Integer;  { type name in TokChars }
   EnumTypeUnitIdx : array[0..MAX_ENUMTYPE-1] of Integer; { Strs[] idx of the DECLARING unit (CurrentUnitIdx at registration), -1 = compiler-registered. One more name table that has to know, or the non-transitive uses rule holds for routines and leaks here (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
+  EnumTypeDeclImpl : array[0..MAX_ENUMTYPE-1] of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   EnumTypeNLen    : array[0..MAX_ENUMTYPE-1] of Integer;
   EnumTypeValBase : array[0..MAX_ENUMTYPE-1] of Integer;  { into EnumVal* arrays }
   EnumTypeValCount: array[0..MAX_ENUMTYPE-1] of Integer;
@@ -5755,6 +5787,7 @@ var
   AliasTargetNOff : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasTargetNLen : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasUnitIdx : array[0..MAX_TYPEALIAS-1] of Integer; { Strs[] idx of the DECLARING unit (CurrentUnitIdx at registration), -1 = main program / compiler-registered. What lets FindTypeAlias apply the non-transitive uses rule the routine and class tables already apply — without it an enum or scalar type alias stayed globally visible while a record type beside it was correctly hidden (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
+  AliasDeclImpl : array[0..MAX_TYPEALIAS-1] of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   AliasCount   : Integer;
 
   { Named fixed-array types: `type TA = array[lo..hi (, lo2..hi2)] of T`.
@@ -5762,6 +5795,7 @@ var
     (0..span1*span2-1 for 2-D); 2-D dims in the Arr2* fields. }
   ArrTypeName   : array[0..MAX_TYPEALIAS-1] of AnsiString;
   ArrTypeUnitIdx : array[0..MAX_TYPEALIAS-1] of Integer; { Strs[] idx of the DECLARING unit (CurrentUnitIdx at registration), -1 = compiler-registered. One more name table that has to know, or the non-transitive uses rule holds for routines and leaks here (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
+  ArrTypeDeclImpl : array[0..MAX_TYPEALIAS-1] of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   ArrTypeLo     : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeHi     : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeElemTk : array[0..MAX_TYPEALIAS-1] of Integer;
@@ -5871,6 +5905,7 @@ var
     source span; a use of the name builds an AN_STR_LIT over that span. }
   StrConstName : array[0..MAX_TYPEALIAS-1] of AnsiString;
   StrConstUnitIdx : array[0..MAX_TYPEALIAS-1] of Integer; { Strs[] idx of the DECLARING unit (CurrentUnitIdx at registration), -1 = compiler-registered. One more name table that has to know, or the non-transitive uses rule holds for routines and leaks here (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
+  StrConstDeclImpl : array[0..MAX_TYPEALIAS-1] of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   StrConstSOff : array[0..MAX_TYPEALIAS-1] of Integer;
   StrConstSLen : array[0..MAX_TYPEALIAS-1] of Integer;
   { The routine that declared it (CurProc at registration; -1 = unit/global level). The
@@ -5886,6 +5921,7 @@ var
     carrying the data offset (lowered via IR_SET_LIT, like a literal). }
   SetConstName : array[0..MAX_TYPEALIAS-1] of AnsiString;
   SetConstUnitIdx : array[0..MAX_TYPEALIAS-1] of Integer; { Strs[] idx of the DECLARING unit (CurrentUnitIdx at registration), -1 = compiler-registered. One more name table that has to know, or the non-transitive uses rule holds for routines and leaks here (bug-pascal-uses-non-transitivity-only-covers-routines-and-types). }
+  SetConstDeclImpl : array[0..MAX_TYPEALIAS-1] of Boolean; { declared in a UNIT IMPLEMENTATION section -- see DeclInImplNow }
   SetConstOff  : array[0..MAX_TYPEALIAS-1] of Integer;   { Data[] offset of the mask }
   SetConstEnumId : array[0..MAX_TYPEALIAS-1] of Integer; { element enum type id, or -1 }
   SetConstCount: Integer;

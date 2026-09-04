@@ -598,6 +598,15 @@ procedure SetSetProp(instance: Pointer; p: PPropInfo; const v: string); overload
 function SetToString(p: PPropInfo; value: Integer; brackets: Boolean = False): string;
 function StringToSet(p: PPropInfo; const v: string): Integer;
 
+{ Decode the COMPILER's type-kind numbering (`pxxTk*`) into an ordinal's WIDTH
+  and SIGN -- the pair the doc comment at the top of this interface already
+  points callers at. They were declared in the implementation section, so that
+  comment described a surface the unit did not actually export; it worked only
+  through the visibility leak
+  (bug-p-a-units-implementation-section-is-visible-to-its-importers). }
+function TypeKindSize(tk: Int64): Integer;
+function TypeKindSigned(tk: Int64): Boolean;
+
 implementation
 
 { CompareText inlined (was `uses sysutils`) so a program can use typinfo

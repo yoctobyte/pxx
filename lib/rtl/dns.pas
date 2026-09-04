@@ -133,6 +133,14 @@ procedure DnsGlobalCachePutCname(const name, target: string; ttlSec: Integer);
   nothing matches. }
 function DnsResolveService(const name, proto: string; var port: Integer): Integer;
 
+{ Read a whole small text file (/etc/hosts, /etc/resolv.conf) into `s`, capped
+  at maxLen; returns the byte count or -1. dns_async, which `uses` this unit,
+  calls it for exactly those two files -- so it is part of this unit's surface
+  and not a private helper. It reached dns_async only through the interface
+  leak until that was closed
+  (bug-p-a-units-implementation-section-is-visible-to-its-importers). }
+function ReadFileText(path: PChar; var s: string; maxLen: Integer): Integer;
+
 implementation
 
 var

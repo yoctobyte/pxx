@@ -512,6 +512,95 @@ procedure PXXExitProcess;
   procedure, and the VMT slot is what makes it a method (same convention as
   __pxxTObjectEquals and friends). }
 procedure __pxxTObjectDestroy(Inst: Pointer);
+{ ===== The code generator's own entry points, and the trap hooks sysutils
+  installs =====
+
+  These are builtinheap's ABI with the COMPILER and with sysutils, not private
+  helpers: the backend emits calls to PXXDivZero/PXXNilRef/PXXRangeChkI64/... by
+  name, and sysutils assigns the *Hook variables to turn each trap into a
+  catchable exception. They sat in the implementation section only because
+  nothing enforced the boundary -- every importer could see the whole section,
+  so an export and a private looked identical from outside. Closing that
+  boundary (bug-p-a-units-implementation-section-is-visible-to-its-importers)
+  made the difference observable, and every name here is one the unit really
+  does export. `__pxxTObjectDestroy` and `PXXExitProcess` above are the same
+  kind of name and were already declared correctly; this is the rest of the
+  family catching up.
+
+  Safe to export precisely because of the prefix: `PXX`/`__pxx` is not a
+  spelling user code writes, so adding these to an AMBIENT unit's interface
+  cannot shadow a user's own name -- which is the hazard that keeps the pointer
+  aliases (PByte, PInt32, ...) private and unexported. }
+type
+  TPXXDivZeroProc = procedure;
+var
+  { Installed at startup by an exception-providing unit (future sysutils-style
+    hook) to convert division by zero into a raised, catchable exception —
+    mirrors FPC's System.ErrorProc design. Default nil = FPC-without-sysutils
+    behavior below. BSS, so nil without any initialization code. }
+  PXXDivZeroHook: TPXXDivZeroProc;
+
+type
+  TPXXVariantErrorProc = procedure(const msg: AnsiString);
+var
+  { Installed by sysutils' initialization to turn a failed Variant conversion
+    into a raised, catchable EVariantError — the same hook design as
+    PXXDivZeroHook, for the same reason: the conversion helpers live in the
+    builtin units, which have no exception class to raise, while the unit that
+    HAS one cannot be assumed present. Default nil = print-and-halt, which is
+    what every one of those sites did unconditionally before. }
+  PXXVariantErrorHook: TPXXVariantErrorProc;
+
+var
+  { Installed by sysutils' initialization to convert a FAILED `as` DOWNCAST into
+    a raised, catchable EInvalidCast — same design as PXXDivZeroHook above.
+    Default nil = print-and-halt below.
+
+    The `as` trap used to be a bare Halt(1) emitted inline by the AN_AS_CAST
+    lowering: no message, no exit code anyone could read, and — unlike every
+    other checked operation in this family — nothing a `try ... except` could
+    intercept. A failed safe downcast is the one shape `as` exists FOR, so the
+    program that wrote the handler was the program that died silently.
+    bug-a-a-failed-as-downcast-dies-silently-and-uncatchably }
+  PXXInvalidCastHook: TPXXDivZeroProc;
+
+var
+  { Installed by sysutils' initialization to convert a {$Q+} arithmetic
+    overflow into a raised, catchable EIntOverflow — same design as
+    PXXDivZeroHook above. Default nil = FPC-without-sysutils behavior. }
+  PXXOverflowHook: TPXXDivZeroProc;
+
+var
+  { Installed by sysutils' initialization to convert a {$R+} range violation
+    into a raised, catchable ERangeError — third of the hook family. }
+  PXXRangeErrorHook: TPXXDivZeroProc;
+  { 4th of the family: installed by sysutils to convert a {$I+} Text-I/O
+    failure into a raised EInOutError (feature-pascal-io-checks-i-plus). }
+  PXXIoErrorHook: TPXXDivZeroProc;
+
+var
+  { 5th of the family: installed by sysutils' initialization to turn a nil
+    dereference CAUGHT AT THE CALL SITE into a catchable EAccessViolation.
+    feature-a-emitted-nil-checks }
+  PXXNilRefHook: TPXXDivZeroProc;
+
+procedure PXXDivZero;
+procedure PXXVariantError(const msg: AnsiString);
+procedure PXXInvalidCast;
+procedure PXXOverflow;
+procedure PXXNilRef;
+function PXXRangeChkI64(v, lo, hi: Int64): Int64;
+function PXXDynIdxChkI64(dataPtr: Pointer; idx: Int64): Int64;
+function PXXDynLen(srcData: Pointer): NativeInt;
+function PXXDynDelNewLen(srcData: Pointer; index: NativeInt; count: NativeInt): NativeInt;
+function PXXDynDelFill(destData: Pointer; srcData: Pointer; index: NativeInt; count: NativeInt; elemSize: NativeInt): Pointer;
+function PXXDynInsFill(destData: Pointer; srcData: Pointer; index: NativeInt; elemSize: NativeInt): Pointer;
+function PXXDynInsArrFill(destData: Pointer; srcData: Pointer; insData: Pointer;
+                          index: NativeInt; elemSize: NativeInt): Pointer;
+procedure PXXArrayReleaseImmediate(arrData: Pointer; len: NativeInt; baseKind: Integer; baseRecDesc: Pointer);
+procedure PXXDynArrayRetainImmediate(arrData: Pointer; len: NativeInt; depth: Integer; baseKind: Integer; baseRecDesc: Pointer);
+procedure PXXClassFinalize(inst: Pointer);
+
 implementation
 
 
@@ -3247,7 +3336,8 @@ begin
   PXXRecordZeroManaged(recAddr, desc);
 end;
 
-procedure PXXClassFinalize(inst: Pointer); forward;
+{ PXXClassFinalize's forward used to sit here; it is declared in the
+  interface now, with the rest of the code generator's entry points. }
 {$endif}
 
 { Free an instance whichever population it belongs to: headered -> release
@@ -4671,15 +4761,6 @@ begin
   Result := destData;
 end;
 
-type
-  TPXXDivZeroProc = procedure;
-var
-  { Installed at startup by an exception-providing unit (future sysutils-style
-    hook) to convert division by zero into a raised, catchable exception —
-    mirrors FPC's System.ErrorProc design. Default nil = FPC-without-sysutils
-    behavior below. BSS, so nil without any initialization code. }
-  PXXDivZeroHook: TPXXDivZeroProc;
-
 { Integer div/mod by zero. The backend's pre-divide check calls this instead of
   letting the divide execute (x86 would raw-SIGFPE; ARM would silently yield 0).
   FPC behavior: "Runtime error 200" + exit code 200. Never returns unless a
@@ -4690,17 +4771,6 @@ begin
   writeln('Runtime error 200 (division by zero)');
   Halt(200);
 end;
-
-type
-  TPXXVariantErrorProc = procedure(const msg: AnsiString);
-var
-  { Installed by sysutils' initialization to turn a failed Variant conversion
-    into a raised, catchable EVariantError — the same hook design as
-    PXXDivZeroHook, for the same reason: the conversion helpers live in the
-    builtin units, which have no exception class to raise, while the unit that
-    HAS one cannot be assumed present. Default nil = print-and-halt, which is
-    what every one of those sites did unconditionally before. }
-  PXXVariantErrorHook: TPXXVariantErrorProc;
 
 { The one exit for "this Variant conversion cannot be done". Eight sites in
   builtin.pas each did `writeln(...); Halt(219)` inline, so a program doing the
@@ -4719,19 +4789,6 @@ begin
   Halt(219);
 end;
 
-var
-  { Installed by sysutils' initialization to convert a FAILED `as` DOWNCAST into
-    a raised, catchable EInvalidCast — same design as PXXDivZeroHook above.
-    Default nil = print-and-halt below.
-
-    The `as` trap used to be a bare Halt(1) emitted inline by the AN_AS_CAST
-    lowering: no message, no exit code anyone could read, and — unlike every
-    other checked operation in this family — nothing a `try ... except` could
-    intercept. A failed safe downcast is the one shape `as` exists FOR, so the
-    program that wrote the handler was the program that died silently.
-    bug-a-a-failed-as-downcast-dies-silently-and-uncatchably }
-  PXXInvalidCastHook: TPXXDivZeroProc;
-
 { Failed `as` downcast: the instance is not of the requested class. FPC raises
   EInvalidCast (Runtime error 219 without sysutils). Never returns unless a
   hook raises past it. }
@@ -4741,12 +4798,6 @@ begin
   writeln('Runtime error 219 (invalid typecast)');
   Halt(219);
 end;
-
-var
-  { Installed by sysutils' initialization to convert a {$Q+} arithmetic
-    overflow into a raised, catchable EIntOverflow — same design as
-    PXXDivZeroHook above. Default nil = FPC-without-sysutils behavior. }
-  PXXOverflowHook: TPXXDivZeroProc;
 
 { {$Q+} overflow trap target: the checked add/sub/mul codegen branches here
   when the operation wrapped. FPC behavior: "Runtime error 215" + exit code
@@ -4758,14 +4809,6 @@ begin
   writeln('Runtime error 215 (arithmetic overflow)');
   Halt(215);
 end;
-
-var
-  { Installed by sysutils' initialization to convert a {$R+} range violation
-    into a raised, catchable ERangeError — third of the hook family. }
-  PXXRangeErrorHook: TPXXDivZeroProc;
-  { 4th of the family: installed by sysutils to convert a {$I+} Text-I/O
-    failure into a raised EInOutError (feature-pascal-io-checks-i-plus). }
-  PXXIoErrorHook: TPXXDivZeroProc;
 
 { {$R+} range trap: FPC behavior 'Runtime error 201' + exit code 201.
   feature-pascal-range-checks-r-plus. }
@@ -4784,12 +4827,6 @@ begin
   if (v < lo) or (v > hi) then PXXRangeError;
   Result := v;
 end;
-
-var
-  { 5th of the family: installed by sysutils' initialization to turn a nil
-    dereference CAUGHT AT THE CALL SITE into a catchable EAccessViolation.
-    feature-a-emitted-nil-checks }
-  PXXNilRefHook: TPXXDivZeroProc;
 
 { Nil-reference trap. 216 is FPC's code for a memory fault, and it is what
   --fpc-mem-errors reports for a real SIGSEGV, so the emitted check and the

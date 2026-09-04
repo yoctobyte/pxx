@@ -6097,6 +6097,26 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_builtin_pointer_types_b30326 "$$($(TESTTMP)/test_builtin_pointer_types_b30326)" "$$(printf 'source PWord is ^NativeInt : TRUE\ncast via source PWord      : TRUE\nsource PInteger is ^Int64  : -5\nPByte      : 200\nPCardinal  : 4000000000\nPDouble    : 2.5\ndone')"
 	./$(COMPILER) test/test_builtin_pword_not_shadowed_by_rtl.pas $(TESTTMP)/test_builtin_pword_not_shadowed_by_rtl26
 	tools/expect_same.sh test_builtin_pword_not_shadowed_by_rtl26 "$$($(TESTTMP)/test_builtin_pword_not_shadowed_by_rtl26 | tail -n 2)" "$$(printf 'fail=0\nPWORDSHADOW OK')"
+	# ...and the MECHANISM behind that one: a unit's implementation section is
+	# private to it. Both halves, because either alone passes for the wrong
+	# reason -- hiding the interface too would satisfy the negative test, and
+	# the positive test alone cannot see a name that is merely unreachable.
+	# Positive: the interface name still resolves AND the unit's private
+	# `PWord = ^NativeInt` no longer re-types the builtin ^UInt16 (measured
+	# under the pin, which is still leaking: fail=3 there, fail=0 here).
+	./$(COMPILER) test/test_unit_impl_section_is_private.pas $(TESTTMP)/test_unit_impl_private26
+	tools/expect_same.sh test_unit_impl_private26 "$$($(TESTTMP)/test_unit_impl_private26 | tail -n 2)" "$$(printf 'fail=0\nIMPLPRIVATE OK')"
+	# Negative: FOUR kinds, four independent diagnostics. The leak was never one
+	# table with a hole -- types, consts, routines and vars each had their own
+	# lookup and each ignored the section -- so one of them standing in for the
+	# rest would let three regress unnoticed.
+	@out=$$(./$(COMPILER) test/test_unit_impl_section_is_private_fail.pas $(TESTTMP)/test_unit_impl_private_fail26 2>&1); \
+	  for want in 'SizeOf: unknown type or variable' 'undefined variable (ImplOnlyRoutine)' \
+	              'undefined variable (IMPL_ONLY_CONST)' 'undefined variable (ImplOnlyVar)'; do \
+	    case "$$out" in *"$$want"*) ;; \
+	      *) echo "test_unit_impl_section_is_private_fail: FAIL - missing diagnostic: $$want"; echo "$$out"; exit 1;; \
+	    esac; \
+	  done
 	# `^string` — a pointer to a MANAGED string: reading p^ segfaulted (@s gave the HANDLE,
 	# not the variable's address)
 	./$(COMPILER) test/test_deref_managed_string_b302.pas $(TESTTMP)/test_deref_managed_string_b30226

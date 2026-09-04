@@ -49,7 +49,37 @@ begin
   DeclCaseSensitive := CaseSensitiveMode or NilPyUserCode;
 end;
 
+function DeclInImplNow: Boolean;
+{ Is the declaration being registered RIGHT NOW private to the unit it is in?
+
+  True exactly for a declaration textually inside some unit's `implementation`
+  section, which under the Pascal rule (FPC, Delphi, and the standard) is
+  visible to that unit alone. pxx recorded no section at all until 2026-09-04,
+  so a unit's implementation types, consts, vars and routines were visible to
+  every importer -- and because FindTypeAlias is consulted BEFORE the builtin
+  chain, a leaked private alias silently outranked a builtin of the same name.
+  That shipped once: builtinheap's `PWord = ^NativeInt` re-typed the builtin
+  `PWord = ^UInt16` in every user program, so `PWord(p)^ := x` WROTE eight bytes
+  instead of two (bug-p-a-units-implementation-section-is-visible-to-its-importers).
+
+  `CurrentUnitIdx >= 0` is not redundant with InUnitImpl. The main program is
+  never InUnitImpl, but a compiler-injected registration can run with
+  CurrentUnitIdx pointing at a unit while some OTHER unit is mid-implementation;
+  the guard keeps the flag about the declaration's own unit. }
+begin
+  DeclInImplNow := InUnitImpl and (CurrentUnitIdx >= 0);
+end;
+
+function UnitNameForDiag(u: Integer): AnsiString;
+{ A unit index as something a human can read. Diagnostics only. }
+begin
+  if u < 0 then UnitNameForDiag := '<program>' else UnitNameForDiag := Strs[u].Text;
+end;
+
 function DeclVisible(declUnit: Integer): Boolean; forward;
+function DeclVisibleSect(declUnit: Integer; declInImpl: Boolean;
+                        tab, row: Integer): Boolean; forward;
+{ DeclVisible plus the interface/implementation boundary — body beside DeclVisible's. }
 { Defined beside VisibilityAllows, but the type-name tables above it call it, and
   the FPC SEED build has none of pxx's declare-anywhere laxness — it is the
   canary that catches this, not `make compiler/pascal26`
@@ -197,7 +227,7 @@ begin
       FIRST row, so a single declaration and two rows from one unit are
       unaffected. bug-p-scope-hiding-covers-routines-but-not-types-and-classes }
     if UNameMatch(AliasNOff[i], AliasNLen[i], lo) and
-       DeclVisible(AliasUnitIdx[i]) then
+       DeclVisibleSect(AliasUnitIdx[i], AliasDeclImpl[i], IMPLTAB_ALIAS, i) then
     begin
       r := UsesRankOf(CurrentUnitIdx, AliasUnitIdx[i]);
       if (Result < 0) or (r > bestRank) then begin Result := i; bestRank := r; end;
@@ -229,7 +259,7 @@ begin
   AliasTargetNOff[AliasCount] := targetNOff;
   AliasTargetNLen[AliasCount] := targetNLen;
   AliasProcSig[AliasCount] := -1;
-  AliasUnitIdx[AliasCount] := CurrentUnitIdx;
+  AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
   Inc(AliasCount);
 end;
 
@@ -320,7 +350,7 @@ begin
     AliasStrElemTk[AliasCount] := Ord(LastTypeStrElemTk)
   else
     AliasStrElemTk[AliasCount] := 0;
-  AliasUnitIdx[AliasCount] := CurrentUnitIdx;
+  AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
   Inc(AliasCount);
 end;
 
@@ -343,7 +373,7 @@ begin
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := sigPi;
-  AliasUnitIdx[AliasCount] := CurrentUnitIdx;
+  AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
   Inc(AliasCount);
 end;
 
@@ -367,7 +397,7 @@ begin
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := sigPi;
-  AliasUnitIdx[AliasCount] := CurrentUnitIdx;
+  AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
   Inc(AliasCount);
 end;
 
@@ -379,7 +409,7 @@ begin
   Result := -1;
   bestRank := -2;
   for i := 0 to ArrTypeCount - 1 do
-    if CaseEqual(ArrTypeName[i], name) and DeclVisible(ArrTypeUnitIdx[i]) then
+    if CaseEqual(ArrTypeName[i], name) and DeclVisibleSect(ArrTypeUnitIdx[i], ArrTypeDeclImpl[i], IMPLTAB_ARRTYPE, i) then
     begin
       r := UsesRankOf(CurrentUnitIdx, ArrTypeUnitIdx[i]);
       if (Result < 0) or (r > bestRank) then begin Result := i; bestRank := r; end;
@@ -413,11 +443,11 @@ begin
   Result := -1;
   for i := StrConstCount - 1 downto 0 do          { the current routine's own }
     if (StrConstOwner[i] = CurProc) and CaseEqual(StrConstName[i], name) and
-       DeclVisible(StrConstUnitIdx[i]) then
+       DeclVisibleSect(StrConstUnitIdx[i], StrConstDeclImpl[i], IMPLTAB_STRCONST, i) then
       begin Result := i; Exit; end;
   for i := StrConstCount - 1 downto 0 do          { else a unit/global-level one }
     if (StrConstOwner[i] = -1) and CaseEqual(StrConstName[i], name) and
-       DeclVisible(StrConstUnitIdx[i]) then
+       DeclVisibleSect(StrConstUnitIdx[i], StrConstDeclImpl[i], IMPLTAB_STRCONST, i) then
       begin Result := i; Exit; end;
 end;
 
@@ -426,7 +456,7 @@ var i: Integer;
 begin
   Result := -1;
   for i := 0 to SetConstCount - 1 do
-    if CaseEqual(SetConstName[i], name) and DeclVisible(SetConstUnitIdx[i]) then
+    if CaseEqual(SetConstName[i], name) and DeclVisibleSect(SetConstUnitIdx[i], SetConstDeclImpl[i], IMPLTAB_SETCONST, i) then
       begin Result := i; Exit; end;
 end;
 
@@ -455,7 +485,7 @@ begin
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := -1;
-  AliasUnitIdx[AliasCount] := CurrentUnitIdx;
+  AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
   Inc(AliasCount);
 end;
 
@@ -487,7 +517,7 @@ begin
   AliasPtrBaseTk[AliasCount] := Ord(tyClass);
   AliasPtrBaseRec[AliasCount] := classRec;
   AliasProcSig[AliasCount] := -1;
-  AliasUnitIdx[AliasCount] := CurrentUnitIdx;
+  AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
   Inc(AliasCount);
 end;
 
@@ -504,7 +534,7 @@ begin
   while i < EnumTypeCount do
   begin
     if UNameMatch(EnumTypeNOff[i], EnumTypeNLen[i], lo) and
-       DeclVisible(EnumTypeUnitIdx[i]) then
+       DeclVisibleSect(EnumTypeUnitIdx[i], EnumTypeDeclImpl[i], IMPLTAB_ENUMTYPE, i) then
     begin
       r := UsesRankOf(CurrentUnitIdx, EnumTypeUnitIdx[i]);
       if (Result < 0) or (r > bestRank) then begin Result := i; bestRank := r; end;
@@ -526,7 +556,7 @@ begin
   EnumTypeScoped[Result] := False;
   EnumTypeValCount[Result] := 0;
   EnumTypeRTTIOff[Result] := -1;
-  EnumTypeUnitIdx[Result] := CurrentUnitIdx;
+  EnumTypeUnitIdx[Result] := CurrentUnitIdx; EnumTypeDeclImpl[Result] := DeclInImplNow;
   Inc(EnumTypeCount);
 end;
 
@@ -739,7 +769,8 @@ begin
   Inc(CTUnitCount);
 end;
 
-function DeclVisibleBareRoutine(declUnit: Integer;
+function DeclVisibleBareRoutine(declUnit: Integer; declInImpl: Boolean;
+                               row: Integer;
                                const name: AnsiString): Boolean; forward;
 { DeclVisible plus the qualified-only rule — body beside DeclVisible's. }
 function PythonSideDeclaresRoutine(const name: AnsiString;
@@ -963,14 +994,128 @@ function DeclVisible(declUnit: Integer): Boolean;
   and a unit reaching the program's own routine is not a case the corpus shows.
   Same artifact ClassNameIsAmbientIntrinsic handles by name on the class side. }
 begin
-  DeclVisible := True;
-  if DeclVisibilityProbe then Exit;
-  if declUnit < 0 then Exit;
-  if declUnit = CurrentUnitIdx then Exit;
-  DeclVisible := VisibilityAllows(CurrentUnitIdx, declUnit);
+  DeclVisible := DeclVisibleSect(declUnit, False, IMPLTAB_NONE, -1);
 end;
 
-function DeclVisibleBareRoutine(declUnit: Integer;
+function ImplLeakRowName(tab, row: Integer): AnsiString;
+{ The NAME behind a rejected row, for the p.implleak report only. Called from
+  the report branch alone, so the AnsiString it builds costs nothing in a
+  normal compile -- which is why every caller passes two integers rather than a
+  string it would have to build whether or not anyone reads it. }
+begin
+  ImplLeakRowName := '?';
+  if row < 0 then Exit;
+  case tab of
+    IMPLTAB_ALIAS:    ImplLeakRowName := GetSliceName(AliasNOff[row], AliasNLen[row]);
+    IMPLTAB_ARRTYPE:  ImplLeakRowName := ArrTypeName[row];
+    IMPLTAB_ENUMTYPE: ImplLeakRowName := GetSliceName(EnumTypeNOff[row], EnumTypeNLen[row]);
+    IMPLTAB_UCLS:     ImplLeakRowName := GetSliceName(UClsNOff[row], UClsNLen[row]);
+    IMPLTAB_STRCONST: ImplLeakRowName := StrConstName[row];
+    IMPLTAB_SETCONST: ImplLeakRowName := SetConstName[row];
+    IMPLTAB_SYM:      ImplLeakRowName := Syms[row].Name;
+    IMPLTAB_PROC:     ImplLeakRowName := Procs[row].Name;
+  end;
+end;
+
+function ImplLeakTabName(tab: Integer): AnsiString;
+begin
+  ImplLeakTabName := 'other';
+  case tab of
+    IMPLTAB_ALIAS:    ImplLeakTabName := 'type';
+    IMPLTAB_ARRTYPE:  ImplLeakTabName := 'arraytype';
+    IMPLTAB_ENUMTYPE: ImplLeakTabName := 'enumtype';
+    IMPLTAB_UCLS:     ImplLeakTabName := 'class';
+    IMPLTAB_STRCONST: ImplLeakTabName := 'strconst';
+    IMPLTAB_SETCONST: ImplLeakTabName := 'setconst';
+    IMPLTAB_SYM:      ImplLeakTabName := 'var';
+    IMPLTAB_PROC:     ImplLeakTabName := 'routine';
+  end;
+end;
+
+function ImplPrivateApplies(declUnit, tab: Integer): Boolean;
+{ Does the interface/implementation boundary HIDE this row from another unit?
+
+  Yes for every unit a program actually named in a `uses` clause -- that is the
+  Pascal rule, and it is the whole point of the ticket.
+
+  No, for most tables, when the unit is AMBIENT. An ambient unit (builtin,
+  builtinheap, pylib, pyeval, promocore, ... -- UnitIsAmbient lists why) is one
+  the COMPILER injects; no user clause ever names it, so there is no `uses` for
+  the boundary to be a rule about. What there IS, is 431 sites in pyparser.inc
+  alone that resolve pxx's own runtime entry points by LITERAL NAME
+  (`FindProc('PyUnsupportedOperandError')`, `FindUClass('TPyList')`) and then
+  report `Nil Python: pylib (...) not loaded` when the lookup misses. Those are
+  the code generator asking where its own helper lives, not user source naming
+  an identifier -- and pylib declares 188 routines in its implementation section
+  with a moving subset of them wired to the backend that way. Subjecting that
+  ABI to a user-visibility rule buys a user nothing and turns every new RTL
+  helper into a build break. Measured: the quick tier's NilPy canary went red on
+  PyUnsupportedOperandError, which is one of 32 such names in pylib alone.
+
+  EXCEPT for the type-alias tables, where it applies to ambient units too, and
+  that exception is the entire reason this ticket was a bug rather than a compat
+  note. FindTypeAlias is consulted BEFORE the builtin-name chain -- deliberately,
+  so a user's own declaration wins -- and a leaked implementation-section alias
+  is indistinguishable there from a user's own. builtinheap's private
+  `PWord = ^NativeInt` therefore outranked the builtin `PWord = ^UInt16` in
+  every program that touched the heap, so `PWord(p)^ := x` WROTE eight bytes
+  where the source said two, silently, at every -O level. That is a harm the
+  ambient exemption must not restore, and it is specific to the tables that run
+  ahead of the builtin chain: a class or routine name has no builtin chain to
+  outrank. }
+begin
+  ImplPrivateApplies := True;
+  if not UnitIsAmbient(declUnit) then Exit;
+  ImplPrivateApplies := (tab = IMPLTAB_ALIAS) or (tab = IMPLTAB_ARRTYPE) or
+                        (tab = IMPLTAB_ENUMTYPE);
+end;
+
+function DeclVisibleSect(declUnit: Integer; declInImpl: Boolean;
+                         tab, row: Integer): Boolean;
+{ DeclVisible for a row that KNOWS which section of its unit it was declared in.
+
+  The implementation-section test comes FIRST, ahead of both `declUnit < 0` and
+  VisibilityAllows, and that ordering is the fix rather than an optimisation:
+  VisibilityAllows waves through any UnitIsAmbient unit, and builtinheap --- the
+  unit whose private `PWord` re-typed the builtin one in every program --- is
+  ambient. A boundary checked after the ambient escape hatch would not have
+  caught the one case that motivated it.
+
+  A row's OWN unit still sees its own implementation section: that is what
+  `declUnit = CurrentUnitIdx` exits on, above the test.
+
+  AN AMBIENT UNIT IS THE EXCEPTION, AND ONLY FOR NON-TYPE NAMES -- see
+  ImplPrivateApplies below for why.
+  bug-p-a-units-implementation-section-is-visible-to-its-importers }
+begin
+  DeclVisibleSect := True;
+  if DeclVisibilityProbe then Exit;
+  if declUnit = CurrentUnitIdx then Exit;
+  if declInImpl then
+  begin
+    if not ImplLeakReportInit then
+    begin
+      ImplLeakReportInit := True;
+      ImplLeakReport := PxxDbgEnabled('p.implleak');
+    end;
+    if ImplLeakReport then
+      WriteLn(StdErr, 'PXXDBG p.implleak LEAK ', ImplLeakTabName(tab), ' ',
+              ImplLeakRowName(tab, row),
+              ' in=', UnitNameForDiag(CurrentUnitIdx),
+              ' decl-unit=', UnitNameForDiag(declUnit),
+              ' at=', CurSrcBaseName, ':', CurTok.Line)
+    else if ImplPrivateApplies(declUnit, tab) then
+    begin
+      DeclVisibleSect := False;
+      Exit;
+    end;
+  end;
+  if declUnit < 0 then Exit;
+  DeclVisibleSect := VisibilityAllows(CurrentUnitIdx, declUnit);
+end;
+
+function DeclVisibleBareRoutine(declUnit: Integer; declInImpl: Boolean;
+                                row: Integer;
                                 const name: AnsiString): Boolean;
 { DeclVisible for a BARE ROUTINE NAME, plus the one thing Python's import rule
   changes: a Pascal unit a NilPy `import` pulled in must not AMBUSH a Python
@@ -1000,7 +1145,7 @@ function DeclVisibleBareRoutine(declUnit: Integer;
   how the `math.pow` shim still reaches Power.
   bug-nilpy-import-leaks-the-units-names-into-the-python-namespace }
 begin
-  DeclVisibleBareRoutine := DeclVisible(declUnit);
+  DeclVisibleBareRoutine := DeclVisibleSect(declUnit, declInImpl, IMPLTAB_PROC, row);
   if not DeclVisibleBareRoutine then Exit;
   if QualNameLookup or DeclVisibilityProbe then Exit;
   if not NilPyUserCode then Exit;
@@ -1105,7 +1250,7 @@ begin
     ClassRowVisibleHere := False;
     Exit;
   end;
-  ClassRowVisibleHere := DeclVisible(UClsUnitIdx[ci]);
+  ClassRowVisibleHere := DeclVisibleSect(UClsUnitIdx[ci], UClsDeclImpl[ci], IMPLTAB_UCLS, ci);
 end;
 
 function FindUClass(const name: AnsiString): Integer;
@@ -1531,7 +1676,7 @@ begin
   UClsPBase[UClsCount]  := UPropCount;
   UClsPCount[UClsCount] := 0;
   UClsParent[UClsCount] := -1;
-  UClsUnitIdx[UClsCount] := CurrentUnitIdx;   { declaring unit — access-control scope }
+  UClsUnitIdx[UClsCount] := CurrentUnitIdx; UClsDeclImpl[UClsCount] := DeclInImplNow;   { declaring unit — access-control scope }
   UClsVirtCount[UClsCount] := 0;
   UClsVMTOffset[UClsCount] := -1;
   UClsIsRecord[UClsCount] := False;
@@ -4303,7 +4448,7 @@ begin
   while i >= 0 do
   begin
     if StrEqual(Syms[i].Name, lo) and IsBlockVisible(SymBlockId[i], CurBlockId)
-       and DeclVisible(SymUnitIdx[i])
+       and DeclVisibleSect(SymUnitIdx[i], SymDeclImpl[i], IMPLTAB_SYM, i)
        and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (not SymStaticLocal[i])
                 and (SymDeclTok[i] > CurBodyHdrTok)) then
     begin
@@ -4320,7 +4465,7 @@ begin
   begin
     if (not SymCaseSensitive[i]) and CaseEqual(Syms[i].Name, lo) and
        IsBlockVisible(SymBlockId[i], CurBlockId)
-       and DeclVisible(SymUnitIdx[i])
+       and DeclVisibleSect(SymUnitIdx[i], SymDeclImpl[i], IMPLTAB_SYM, i)
        and not (DeclOrderStrict and (Syms[i].Kind = skGlobal) and (not SymStaticLocal[i])
                 and (SymDeclTok[i] > CurBodyHdrTok)) then
     begin
@@ -4484,7 +4629,7 @@ begin
   if need <= SymCapacity then Exit;
   if SymCapacity = 0 then n := 16384 else n := SymCapacity;
   while n < need do n := n * 2;
-  SetLength(Syms, n);              SetLength(SymCaseSensitive, n);  SetLength(SymUnitIdx, n);
+  SetLength(Syms, n);              SetLength(SymCaseSensitive, n);  SetLength(SymUnitIdx, n);  SetLength(SymDeclImpl, n);
   SetLength(SymDynDepth, n);       SetLength(SymDeclTypeNOff, n);   SetLength(SymDeclTypeNLen, n);
   SetLength(SymElemDynDepth, n);   SetLength(SymDynElemRowLen, n);  SetLength(SymDynElemRowLo, n);
   SetLength(SymGenSlot, n);        SetLength(SymProcSig, n);        SetLength(SymElemProcSig, n);
@@ -4771,7 +4916,7 @@ begin
   Syms[SymCount].RecName  := LastTypeRecId;
   Syms[SymCount].IsRef    := False;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
-  SymUnitIdx[SymCount] := CurrentUnitIdx;
+  SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   if tk = tyPointer then
@@ -5079,7 +5224,7 @@ begin
   Syms[SymCount].IsRef    := isRef;
   Syms[SymCount].Kind     := skParam;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
-  SymUnitIdx[SymCount] := CurrentUnitIdx;
+  SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   if tk = tyPointer then
@@ -5416,7 +5561,7 @@ begin
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
-  SymUnitIdx[SymCount] := CurrentUnitIdx;
+  SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
@@ -5551,7 +5696,7 @@ begin
   Syms[SymCount].PtrElemTk := tyUnknown;
   Syms[SymCount].PtrElemRec := REC_NONE;
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
-  SymUnitIdx[SymCount] := CurrentUnitIdx;
+  SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
   if elemType = tyPointer then
   begin
     Syms[SymCount].PtrElemTk := LastTypePointerElemTk;
@@ -5631,7 +5776,7 @@ begin
   SymEnumId[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;    { slot recycling — every Alloc* must reset EVERY parallel array }
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
-  SymUnitIdx[SymCount] := CurrentUnitIdx;
+  SymUnitIdx[SymCount] := CurrentUnitIdx; SymDeclImpl[SymCount] := DeclInImplNow;
   SymSyncTypeRef(SymCount);
   SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
   { A recycled slot could have been an `except .. as e` binder. AddConst is the
@@ -8345,7 +8490,7 @@ begin
       ProcHdrTok = 0 (builtins/units/interface/methods/nested) always passes. }
     if (Procs[i].Name = lo) and
        not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) and
-       DeclVisibleBareRoutine(ProcUnitIdx[i], name) then
+       DeclVisibleBareRoutine(ProcUnitIdx[i], ProcDeclImpl[i], i, name) then
       begin
         { LAST declaration wins, not first. The chain is FIFO = registration
           order, and used units are registered before the compiling scope's own
@@ -8395,7 +8540,7 @@ begin
     if (not ProcCaseSensitive[i]) and (not ProcExternal[i]) and
        CaseEqual(Procs[i].Name, lo) and
        not (RequireForward and (ProcHdrTok[i] > CurBodyHdrTok)) and
-       DeclVisibleBareRoutine(ProcUnitIdx[i], name) then
+       DeclVisibleBareRoutine(ProcUnitIdx[i], ProcDeclImpl[i], i, name) then
     begin
       if ProcUnitIdx[i] = CurrentUnitIdx then
       begin
@@ -9894,7 +10039,7 @@ begin
     `max(1.5, 2)` never goes through it, which is why the first cut of the fix
     hid a bare `Power` and still answered 2.0.
     bug-nilpy-import-leaks-the-units-names-into-the-python-namespace }
-  if Result and not DeclVisibleBareRoutine(ProcUnitIdx[idx], name) then
+  if Result and not DeclVisibleBareRoutine(ProcUnitIdx[idx], ProcDeclImpl[idx], idx, name) then
   begin
     { The warn instrument's blind spot, closed: FindProc is NOT the lookup a
       direct call site resolves through, so --warn-uses-leak never saw the
@@ -10275,7 +10420,7 @@ begin
         calls FloatToStr, builtin declares it, and sysutils' copy — which pylib
         cannot see — was silently doing the demoting. }
       if ProcNameMatches(i, name) and (ProcUnitIdx[i] <> bIdx) and
-         DeclVisibleBareRoutine(ProcUnitIdx[i], name) then
+         DeclVisibleBareRoutine(ProcUnitIdx[i], ProcDeclImpl[i], i, name) then
       begin demote := True; Break; end;
       i := ProcHashNext[i];
     end;
@@ -10805,7 +10950,7 @@ begin
   SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcCModule, n);  SetLength(ProcObjRuntimeCopy, n);  SetLength(ProcCStaticLink, n);
   SetLength(ProcCaseSensitive, n);  SetLength(ProcLibrary, n);  SetLength(ProcExtName, n);
   SetLength(ProcCdecl, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
-  SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcPyDefTok, n);  SetLength(ProcPyRebindTok, n);  SetLength(ProcPyAliasRebindTok, n);
+  SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcDeclImpl, n);  SetLength(ProcPyDefTok, n);  SetLength(ProcPyRebindTok, n);  SetLength(ProcPyAliasRebindTok, n);
   SetLength(ProcHdrTok, n);  SetLength(ProcRetRecId, n);  SetLength(ProcAggregateDestSym, n);
   SetLength(ProcRetIsDynArray, n);  SetLength(ProcRetFixedArrBytes, n);  SetLength(ProcRetArrAi, n);
   SetLength(ProcIsAsync, n);  SetLength(ProcIsGenerator, n);  SetLength(ProcIsStackless, n);
@@ -10865,7 +11010,7 @@ begin
   ProcLibrary[ProcCount]      := -1;
   ProcExtName[ProcCount]      := -1;
   ProcCdecl[ProcCount]        := False;
-  ProcUnitIdx[ProcCount]      := CurrentUnitIdx;
+  ProcUnitIdx[ProcCount] := CurrentUnitIdx; ProcDeclImpl[ProcCount] := DeclInImplNow;
   ProcPyDefTok[ProcCount]     := 0;   { 0 = visible everywhere; see defs.inc }
   ProcPyRebindTok[ProcCount]  := -2;  { -2 = not computed; see defs.inc }
   ProcPyAliasRebindTok[ProcCount] := -1;  { -1 = no import alias rebinds this name }

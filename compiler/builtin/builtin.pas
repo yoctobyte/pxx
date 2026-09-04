@@ -375,6 +375,26 @@ function Swap(v: QWord): QWord;
   in-place writes (e.g. through a PChar into it) cannot alias another string. }
 procedure UniqueString(var s: AnsiString);
 
+{ ===== The class/RTTI entry points the code generator emits calls to =====
+
+  Same story as builtinheap's block: the backend lowers `is`, `as`,
+  TObject.ClassName/ClassParent/InstanceSize/UnitName and the three default
+  TObject root-VMT bodies to calls on these NAMES, so they are this unit's ABI
+  with the compiler rather than private helpers. They lived in the
+  implementation section only because nothing enforced the boundary
+  (bug-p-a-units-implementation-section-is-visible-to-its-importers). The
+  `__pxx` prefix is why exporting them from an ambient unit is safe -- it is
+  not a spelling user code writes. }
+function __pxxInheritsFrom(Rtti, Other: Pointer): Boolean;
+function __pxxClassParent(Rtti: Pointer): Pointer;
+function __pxxClassName(Rtti: Pointer): AnsiString;
+function __pxxUnitName(Rtti: Pointer): AnsiString;
+function __pxxInstanceSize(Rtti: Pointer): PtrInt;
+function __pxxClassNameIs(Rtti: Pointer; const Name: AnsiString): Boolean;
+function __pxxTObjectEquals(Inst: Pointer; Obj: Pointer): Boolean;
+function __pxxTObjectGetHashCode(Inst: Pointer): PtrInt;
+function __pxxTObjectToString(Inst: Pointer): AnsiString;
+
 implementation
 
 { Advance the xorshift32 state living in RandSeed. State 0 is a fixed point of

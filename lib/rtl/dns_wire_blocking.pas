@@ -80,6 +80,14 @@ function DnsResolveAAAAListTTL(const ns: TDnsIpv4Array; nsCount, nsPort: Integer
   const name: string; var ips: TDnsIpv6Array; var count: Integer; var cname: string;
   var ttl: Integer; timeoutMs: Integer): Integer;
 
+{ A per-query transaction id, shared with dns_async -- which `uses` this unit
+  and calls it at two sites. It was in the implementation section and reachable
+  only because nothing enforced the interface boundary
+  (bug-p-a-units-implementation-section-is-visible-to-its-importers); a sibling
+  unit calling it is what makes it part of this unit's surface, so it says so
+  now. The seeding rationale stays with the body. }
+function NextQueryId: Integer;
+
 implementation
 
 var

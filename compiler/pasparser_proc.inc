@@ -3885,7 +3885,7 @@ var
   pyDotted: AnsiString;
   pyDottedIsPath: Boolean;   { it has >1 segment, so it names a file under a root }
   pyRootIdx: Integer;   { NilPy .py/.npy search over the library roots — see below }
-  savedNestedComments, savedDelphiMode: Boolean;
+  savedNestedComments, savedDelphiMode, savedUnitImplCU: Boolean;
   unitNeedsText: Boolean;
   unitNeedsRootMeth: Boolean;   { this unit calls .Equals/.GetHashCode/.ToString }
   unitNeedsMath: Boolean;       { …and sqrt/ln/exp/sin/cos/arctan/pi }
@@ -4898,6 +4898,12 @@ begin
     CurUnitDir := GetFilePath(path);
     savedCurrentUnitIdx := CurrentUnitIdx;
     CurrentUnitIdx := strIdx;
+    { A `.py` MODULE has no interface/implementation split, so nothing it
+      declares is section-private -- but the ENCLOSING scope may be a Pascal
+      unit's implementation section, and InUnitImpl is global. Cleared here for
+      the same reason the C branch below clears it. }
+    savedUnitImplCU := InUnitImpl;
+    InUnitImpl := False;
 
     startPos := PyLexAppend(UnitContent);
     { -g: give the module its own .debug_line file entry, so a breakpoint
@@ -4910,6 +4916,7 @@ begin
     ParsePyUnit(lo);
 
     CurrentUnitIdx := savedCurrentUnitIdx;
+    InUnitImpl := savedUnitImplCU;
     CurUnitDir := savedUnitDir;
     TokPos := savedTokPos;
     CurTok.Kind := savedCurTokKind;
@@ -5002,6 +5009,15 @@ begin
     savedCaseMode := CaseSensitiveMode;
     savedCurrentUnitIdx := CurrentUnitIdx;
     CurrentUnitIdx := strIdx;
+    { C HAS NO INTERFACE/IMPLEMENTATION SECTION, so no C declaration is ever
+      section-private -- and its linkage is FLAT across translation units on
+      purpose (VisibilityAllows' UnitIsCTranslationUnit arm). InUnitImpl is a
+      global, though, so a `uses './x.c'` written in a Pascal unit's
+      implementation section would otherwise stamp every C symbol private and
+      make `Twice(21)` undefined in the unit that pulled it. Measured: 3 corpus
+      sources, test_c_unit_pulled_via_pascal_unit among them. }
+    savedUnitImplCU := InUnitImpl;
+    InUnitImpl := False;
     { A .c SOURCE joins the program's flat C external-linkage namespace — see
       CTUnitIdx (defs.inc). A .h does not: a header pulled through `uses` names
       a foreign library's exports, which stay real externals.
@@ -5015,6 +5031,7 @@ begin
     RegisterCMacroConsts;
     CaseSensitiveMode := savedCaseMode;
     CurrentUnitIdx := savedCurrentUnitIdx;
+    InUnitImpl := savedUnitImplCU;
 
     TokPos := savedTokPos;
     CurTok.Kind := savedCurTokKind;
@@ -5064,6 +5081,12 @@ begin
     NestedComments := True;
     savedCurrentUnitIdx := CurrentUnitIdx;
     CurrentUnitIdx := strIdx;
+    { CurrentUnitIdx now names the unit being set up, so the ambient pulls and
+      root-method rows below must not inherit the ENCLOSING unit's
+      implementation-section flag. ParseUnit sets its own; restored beside
+      CurrentUnitIdx at the bottom. }
+    savedUnitImplCU := InUnitImpl;
+    InUnitImpl := False;
     { A PASCAL unit reached through a NilPy plain `import` is qualified-only —
       `import math` binds the name `math`, not the module's contents. Marked
       here, in the Pascal branch alone: a `.py` module import and every Pascal
@@ -5273,6 +5296,7 @@ begin
     DelphiMode := savedDelphiMode;
     PyExprMode := savedPyExprMode;
     CurrentUnitIdx := savedCurrentUnitIdx;
+    InUnitImpl := savedUnitImplCU;
     CurrentCLibrary := savedCurrentCLibrary;
   end;
 end;
@@ -5577,7 +5601,7 @@ end;
 procedure ParseUnit;
 var
   uname: AnsiString;
-  savedInterface, doneImp, savedPreScan, savedPass2Active: Boolean;
+  savedInterface, savedUnitImpl, doneImp, savedPreScan, savedPass2Active: Boolean;
   savedBase, afterImpTok, ii, savedPass2BodyTok: Integer;
 begin
   { A used unit parses in its own normal (single-pass) mode: its interface is
@@ -5604,7 +5628,12 @@ begin
   Next;
 
   savedInterface := InInterface;
+  savedUnitImpl := InUnitImpl;
   InInterface := True;
+  { An enclosing unit may be mid-implementation when its `uses` recursed in
+    here; this unit's INTERFACE is not private to it. Restored below with
+    InInterface. }
+  InUnitImpl := False;
 
   while (CurTok.Kind <> tkEOF) and not ((CurTok.Kind = tkIdent) and ((CurTok.SVal = 'implementation') or (CurTok.SVal = 'Implementation'))) do
   begin
@@ -5657,6 +5686,10 @@ begin
   Next; { Skip 'implementation' }
 
   InInterface := False;
+  { Everything registered from here to the unit's `end.` -- both the pre-scan
+    below and the pass-2 body replay -- is private to this unit
+    (bug-p-a-units-implementation-section-is-visible-to-its-importers). }
+  InUnitImpl := True;
 
   { ===== Implementation pre-scan (pass 1) =====
     Same whole-section forward visibility as the program body, but scoped to this
@@ -5810,6 +5843,7 @@ begin
   DeclItemCount := savedBase;
 
   InInterface := savedInterface;
+  InUnitImpl := savedUnitImpl;
   PreScanPass := savedPreScan;
 
   Expect(tkEnd, 'end');

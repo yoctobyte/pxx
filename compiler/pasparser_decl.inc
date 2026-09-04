@@ -2852,7 +2852,7 @@ begin
           SetConstName[SetConstCount]   := name;
           SetConstEnumId[SetConstCount] := LastTypeSetEnumId;
           SetConstOff[SetConstCount]    := BakeSetConst;
-          SetConstUnitIdx[SetConstCount] := CurrentUnitIdx; Inc(SetConstCount);
+          SetConstUnitIdx[SetConstCount] := CurrentUnitIdx; SetConstDeclImpl[SetConstCount] := DeclInImplNow; Inc(SetConstCount);
         end
         else if cTk in [tyString, tyAnsiString, tyFixedString, tyShortString] then
         begin
@@ -3058,7 +3058,7 @@ begin
         SetConstName[SetConstCount]   := name;
         SetConstEnumId[SetConstCount] := -1;
         SetConstOff[SetConstCount]    := BakeSetConst;
-        SetConstUnitIdx[SetConstCount] := CurrentUnitIdx; Inc(SetConstCount);
+        SetConstUnitIdx[SetConstCount] := CurrentUnitIdx; SetConstDeclImpl[SetConstCount] := DeclInImplNow; Inc(SetConstCount);
       end
       else if ((CurTok.Kind = tkString) and
                { …but a ONE-CHARACTER literal followed by a RELATIONAL operator
@@ -3143,7 +3143,7 @@ begin
             StrConstOwner[StrConstCount] := CurProc;
             StrConstSOff[StrConstCount] := scOff;
             StrConstSLen[StrConstCount] := scLen;
-            StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
+            StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; StrConstDeclImpl[StrConstCount] := DeclInImplNow; Inc(StrConstCount);
           end;
         end
         else if (Tokens[TokPos-1].SLen = 1) and (not isResStr) then
@@ -3194,7 +3194,7 @@ begin
             StrConstOwner[StrConstCount] := CurProc;
             StrConstSOff[StrConstCount] := Tokens[TokPos-1].SOffset;
             StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
-            StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
+            StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; StrConstDeclImpl[StrConstCount] := DeclInImplNow; Inc(StrConstCount);
           end;
           Next;
         end;
@@ -6596,7 +6596,7 @@ begin
           else
             ArrTypeStrElemTk[ArrTypeCount] := 0;
           ArrTypeAliasOf[ArrTypeCount] := -1;   { a real row, not a `TB = TA` indirection }
-          ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx; Inc(ArrTypeCount);
+          ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx; ArrTypeDeclImpl[ArrTypeCount] := DeclInImplNow; Inc(ArrTypeCount);
         end
         else
         begin
@@ -6680,7 +6680,7 @@ begin
           ArrTypeElemDynDepth[ArrTypeCount] := 0;
           ArrTypeDynDepth[ArrTypeCount] := tdCnt;
           ArrTypeAliasOf[ArrTypeCount] := -1;   { a real row, not a `TB = TA` indirection }
-          ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx; Inc(ArrTypeCount);
+          ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx; ArrTypeDeclImpl[ArrTypeCount] := DeclInImplNow; Inc(ArrTypeCount);
         end;
       end
       else if (CurTok.Kind = tkProcedure) or (CurTok.Kind = tkFunction) then
@@ -6781,7 +6781,7 @@ begin
           bug-p-an-alias-to-a-named-dynamic-array-type-cannot-be-indexed }
         ArrTypeName[ArrTypeCount] := GetTokenStrFromRaw(tnOff, tnLen);
         ArrTypeAliasOf[ArrTypeCount] := FindArrayType(CurTok.SVal);
-        ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx;
+        ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx; ArrTypeDeclImpl[ArrTypeCount] := DeclInImplNow;
         Inc(ArrTypeCount);
         Next;                       { consume the source type name }
       end

@@ -2046,6 +2046,7 @@ begin
   FiniRunnerProc := -1;
   FiniGuardSym := -1;
   InInterface := False;
+  InUnitImpl := False;
   PreScanPass := False;
   DeclItemCount := 0;
   { Pascal-only, and BOTH calls are — the missing begin/end meant the macro

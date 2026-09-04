@@ -2036,7 +2036,7 @@ begin
   TokChars[TokCharLen] := #10;
   Inc(TokCharLen);
   Result := StrConstCount;
-  StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
+  StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; StrConstDeclImpl[StrConstCount] := DeclInImplNow; Inc(StrConstCount);
 end;
 
 { True when some argument in the call's parenthesised list STARTS with '[' at

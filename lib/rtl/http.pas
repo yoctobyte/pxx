@@ -250,6 +250,14 @@ function HttpPoolSlotExec(handle: Integer;
   const method, path, extraHeaders, body: AnsiString; async: Boolean): THttpResponse;
 procedure HttpPoolReleaseSlot(handle: Integer);
 
+{ The async twin of the blocking request path: same four arguments, driven on
+  the scheduler instead of blocking the thread. HttpGetAsync/HttpPostAsync are
+  one-line wrappers over it, and devtest_https_native_async calls it directly.
+  It was declared in the implementation section, so every one of those callers
+  outside this unit reached it through the interface leak
+  (bug-p-a-units-implementation-section-is-visible-to-its-importers). }
+function HttpRequestAsync(const method, url, extraHeaders, body: AnsiString): THttpResponse;
+
 implementation
 
 const
