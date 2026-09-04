@@ -40,7 +40,7 @@ type
     entirely and fell back to the 8-byte reading — so the day THAT was fixed
     (a50671107), an unrelated-looking commit turned this test red. Do not
     "tidy" the 256 back to 255. }
-  TRttiStr = string[256];
+  TRttiStr = string[256];   { COPY-OF lib/rtl/typinfo.pas TRttiStr }
   PString = ^TRttiStr;
   TRTTIEntry = record
     NamePtr: PString;

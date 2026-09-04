@@ -2,7 +2,7 @@
 track: T
 prio: 45
 type: feature
-status: backlog
+status: done
 found: 2026-09-04
 found-by: frankA (closing regression-test-core-test-rtti-reg); framing pushed by frankuser
 owner: ""
@@ -65,3 +65,68 @@ that enumeration is most of the value here regardless of which fix is chosen.
 Do not read "one instance" as "one instance exists".
 
 Related: [[regression-test-core-test-rtti-reg]] (the instance and its guard).
+
+## Resolved 2026-09-04 by frankZ — option (1), with option (2) measured and killed
+
+`tools/rtl_alias_copy_devtest.py`, collected by `make tools-devtest`.
+Convention:
+
+    TRttiStr = string[256];   { COPY-OF lib/rtl/typinfo.pas TRttiStr }
+
+The checker re-reads the named declaration in the named file and compares the
+two right-hand sides, normalised on whitespace and case.
+`test/test_rtti_reg.pas` carries the first marker.
+
+### The census (option 2) is measured, and this ticket's warning was right
+
+*"Do not start with (2) alone"* — with numbers now. Scanning every
+`X = <expr>;` in `lib/rtl/**` (`.pas` and `.inc`) against every Pascal test
+subject: **33 names are declared in both, and 26 of those carry a test spelling
+that matches no RTL spelling.** Essentially all 26 are correct and deliberate:
+
+- `test_typename_alias_wins_b304.pas` redeclares `TDateTime`, `Currency`,
+  `ValReal`, `Comp`, `WideChar` and `SizeInt` as *different* types on purpose —
+  its whole subject is that a source alias must beat the builtin NAME.
+- `test_builtin_pointer_types_b303.pas` does the same for `PWord`
+  (`^NativeInt` against the builtin `^UInt16`) and `PInteger`.
+- The rest are single-letter locals — `S`, `I`, `X`, `P1` — colliding by
+  accident with an RTL constant of the same name.
+
+So a census guard prints ~26 findings, all fine, on every run, and the one real
+pair sits inside them. That is the "flags everything is as empty as never
+fires" failure this ticket predicted; the numbers are recorded in the checker's
+own docstring so nobody re-derives them.
+
+### The positive control this ticket asked for, run
+
+*"re-run it against the 2026-09-04 tree with the copy put back to
+`string[255]`, and require that it names that pair."* Done, on the real
+population:
+
+    FAIL and the two spellings agree
+         test_rtti_reg.pas:43 TRttiStr: copy `string[255]`
+         vs lib/rtl/typinfo.pas `string[256]`
+
+Restored, and green again. Two further non-vacuity guards, because this class
+is exactly how a guard empties out unnoticed: the marker population must be
+non-empty (an unannotated tree fails rather than passing every row over
+nothing), and **a marker that resolves to nothing is a FAILURE, not a skip** —
+if the RTL declaration is renamed or deleted, that is drift of the loudest kind
+and the checker says so rather than falling silent.
+
+### The residual, and it needs an owner
+
+**A copy under a DIFFERENT NAME is invisible to both approaches.**
+`TMyStr = string[256]` copied from `TRttiStr` has no name to collide on and no
+marker unless someone writes one, so neither the census nor this checker can
+see it. The annotation is written at the moment of copying, which is the moment
+the writer knows — but that is a convention, not an instrument, and its
+coverage is exactly its adoption rate. Nothing here measures that rate, because
+nothing can: the unannotated copies are the ones you cannot count.
+
+**So "one instance found" is still not "one instance exists"**, and this
+resolution does not change that. What it changes is that a copy someone
+bothers to mark can no longer drift silently.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
