@@ -4712,3 +4712,46 @@ ticket-state one** — 17 minutes, 5 commits, none touching `compiler/`.
 `01c09b373` — **same CLASS as the wrapper bug, NOT the same path**, re-ranked
 **50 -> 60.** So the three instruments are a family by shape and not by cause, and
 they get fixed separately. That is the answer I could not have produced.
+
+### `7d6a5fda8` — the exclusion audit, and it found that neither exclusion was the unwind
+
+Comments only; **binary byte-identical (`d6834948afb1`)**, which is the right way
+to land a comment change: prove it is inert rather than assert it.
+
+Two sites cited *"windowed needs the register windows spilled"* and **neither was
+about the unwind**:
+
+- **`IR_EXC_ENTER`'s header** still read *"Call0 only: the windowed ABI would need
+  the register windows spilled before a longjmp-style sp rewind"* — **directly
+  above code that no longer refuses.** Comment and code disagreeing, **with the
+  code right.** CLAUDE.md says decide which is wrong before touching either; this
+  decided.
+- **Its OTHER clause is still true** — bare metal has no handlers, and that is
+  still why `--esp-profile=bare` refuses windowed outright, because the chain
+  spill needs the overflow/underflow handlers bare metal does not install.
+  **Two different exclusions had been sharing one sentence.** Retiring the
+  sentence would have retired a live refusal with it.
+
+**And the dangerous one.** `EmitSignalRuntimeXtensa`'s header justified a
+**still-correct** exclusion with *"the same reason `TargetHasProcCleanupFrame` is
+Call0-only"* — **and that predicate stopped being Call0-only yesterday.**
+
+> **A correct exclusion resting on a retired premise reads to the next person
+> either as unjustified or as still-explained, and both are wrong.**
+
+That is the sharpest form yet of this repo's *the name is not the thing*: the
+exclusion is right, the code is right, and **only the justification rotted** —
+so nothing fails, nothing greps, and the next reader is misled in whichever
+direction they happen to lean.
+
+**The handling is the model.** Replaced with what actually remains and marked
+**UNMEASURED rather than upgraded to a new certainty**: the stub is Call0 code —
+it ends in `RET`, treats `a0` as a plain return address, and was written against
+a Call0 frame — so whether it works inside a windowed program is **a question
+nobody has run, not a known no.** Pointed at the ticket that owns it. *Replacing
+a dead reason with a confident new one would have been the same defect facing the
+other way.*
+
+Left alone, correctly: `pyparser.inc` and `pasparser_expr.inc`'s `__pxxSig*`
+refusals go through `TargetHasSignalRuntime` and **refuse a runtime that is
+genuinely absent, for a reason that is still true.**
