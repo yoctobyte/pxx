@@ -305,6 +305,7 @@ const
                                   compiler that already reserves 162 MB, and it buys a
                                   DIAGNOSTIC where the recursive version segfaulted. }
   MAX_DECL_ITEMS = 32768;       { top-level subroutine items recorded by the declaration pre-scan }
+  MAX_EXPORTS = 1024;           { `exports` names in one library; FPC ships .so with hundreds }
   MAX_PAS_DEFINES = 1024;       { jedi.inc-grade compatibility headers define hundreds }
   MAX_C_CMD_DEFINES = 256;      { C `-D`/`-U` command-line predefines }
   MAX_C_CMD_INCLUDES = 32;      { C `-include <file>` forced includes }
@@ -1957,7 +1958,14 @@ type
 
       APPENDED at the tail like tkPowEq/tkAtEq/tkSymDiff, so no existing ordinal
       moves. bug-a-shr-reaches-the-ir-spelled-as-tkident }
-    tkShrLogical
+    tkShrLogical,
+    { `library` and `exports` — the declarative export surface
+      (feature-p-a-pascal-library-unit-does-not-parse). APPENDED at the tail
+      like tkPowEq/tkAtEq/tkSymDiff/tkShrLogical above, so no existing ordinal
+      moves. Both are contextual in FPC (Delphi lets you name a variable
+      `exports`); pxx lexes them as keywords, which is the narrower dialect and
+      the one that gives a real diagnostic instead of a parse further down. }
+    tkLibrary, tkExports
   );
 
   TToken = record
@@ -2921,6 +2929,17 @@ var
     a second lookup anyone can forget. Order-dependence is the FEATURE: the
     first unit to arrive claims the name and every later one stands down. }
   PasClaimList : AnsiString;
+  { `library` / `exports` (feature-p-a-pascal-library-unit-does-not-parse).
+    The names are COLLECTED in declaration pass 1 and validated after it, not
+    as they are read: FPC puts the `exports` clause wherever it likes relative
+    to the routines it names, and pass 1 exists precisely so the whole section
+    is visible before anything resolves against it. ExportTok remembers where
+    each name was written so the diagnostic points at the `exports` line rather
+    than at the routine. }
+  IsLibrary    : Boolean;
+  ExportName   : array[0..MAX_EXPORTS-1] of AnsiString;
+  ExportLine   : array[0..MAX_EXPORTS-1] of Integer;
+  ExportCount  : Integer;
   { C command-line `-D<name>[=<value>]` / `-U<name>` predefines, captured raw at
     arg-parse time and seeded into the C preprocessor in CPreprocess (the C side
     supports macro VALUES, which the Pascal name-only define table does not). }

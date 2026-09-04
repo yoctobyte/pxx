@@ -1245,3 +1245,50 @@ labelled as such in the test header rather than counted as coverage.
 2026-09-04 | frankA | compiler/pasparser_expr.inc | A pointer alias to an ARRAY OF CHAR was stamped with the -2 PChar adapter, because the arm keys on AliasElemTk = tyChar — a proxy for "points at a character" that is equally true of a pointer to an array of them. -2 occupies the same slot as aliasIdx, the only carrier of AliasPtrElemArrAi, so the subscript lost its element type: AN_INDEX came out tk=0 and read 4 bytes. Ord(PCharA(@ca)^[1]) gave 1644192610 against fpc's 98, silently, in pin v403. Guarded with AliasPtrElemArrAi < 0. Found while validating the design for the array-cast ticket rather than by looking for it: that ticket's table records the target path as working, and it does — for Integer. Every numeric element kind was always correct at five different widths, so the one kind nobody would suspect of a width bug was the only one that had one.
 2026-09-04 | frankH | compiler/ir.inc, test/test_shortstring_in_array_of_const.pas, Makefile | `Format('%s', [sh])` returned EMPTY for a ShortString and GARBAGE for a `string[5]`, while `writeln(sh)` on the next line was right. `tyString` names TWO shapes with different layouts — a frozen LITERAL is an interned blob behind an 8-byte length prefix, a ShortString VARIABLE is [len:Byte][chars], measured — and the AN_VARREC_ARRAY boxing arm added 8 unconditionally. Its own comment said "frozen (inline) string LITERAL": accurate about what it handled, and nothing checked that only literals arrived. An offset fix would NOT have been correct, which is the part worth remembering: a ShortString has no guaranteed NUL ('longer' then 'ab' leaves 'abger'), so the length must be applied rather than stepped over. Converts through an owning hidden AnsiString local — the store's DEST type does it, same as `an := sh` — and branches on AN_STR_LIT to leave the literal fast path alone, because the compiler's own asm-text emitters build vectors of exactly that shape on every compile. Leak-checked as a SECOND assertion class (allocs=10975 frees=10961 live=14 over 3000 iterations), because parking a managed handle per element is precisely the shape a value assertion cannot see.
 2026-09-04 | frankH | devdocs/progress/backlog-core/ | Filed two neighbours found by the same measurement and fixed neither, both for stated reasons rather than size. bug-a-a-qword-boxes-as-vtint64: we emit tag 16 where FPC emits 17, and `vtQWord` appears in EXACTLY ONE place in the tree — its own declaration, zero producers and zero readers. Not fixed because the emit change lands on four backend asm-text readers (x86-64/i386/arm32/riscv32) that refuse anything but vtInteger/vtInt64, and three of those are structurally invisible to a gate that runs on this host — I cannot verify it, which is a better reason than it being big. bug-a-the-sized-booleans: WordBool/LongBool/ByteBool print `1` from both renderers and box as vtInteger, because they are deliberately represented as integers of their own width and have no boolean-ness to dispatch on; repairing that at the renderers would be the wrong fix in three places.
+
+## 2026-09-04 | frankD (Track P) | compiler/defs.inc, compiler/lexer.inc, compiler/pasparser_prog.inc, test/test_library_exports.pas | `library` + `exports`, checked against the writer's own export predicate
+
+`feature-p-a-pascal-library-unit-does-not-parse`. `library foo;` died with
+`expected 'begin' before 'library'`; it now parses as `program` does, plus an
+`exports` clause. tkLibrary/tkExports appended at the TAIL of TTokenKind — told
+frankA before touching it, per CLAUDE.md's one coordination rule.
+
+**`exports` adds no capability and that is the point.** `ObjProcIsExported` is
+`ProcCdecl and not ProcCStaticLink` and always was, so a `library` produces the
+same object a `program` with the same `cdecl` routines produces. What it adds is
+a CHECK: a name that is not a routine, is `external`, is C `static`, or is not
+`cdecl` is an error at the `exports` line rather than a symbol missing from
+someone else's link. `exports … name '…'` and `… index N` are diagnosed, never
+ignored — dropping a rename writes a library whose symbol is not the one the
+source asked for.
+
+**The fork the ticket said to settle first** — may `exports` name a non-`cdecl`
+routine — is answered at REJECT and re-filed as
+`decide-may-exports-name-a-routine-that-is-not-cdecl` so the user still owns the
+relaxation. FPC's arm (export it under its own convention) is already ruled out
+by the compat ceiling: it makes an artifact that is callable and wrong with
+nothing to diagnose it, and we prefer the answer that leaves the mistake
+visible. Reject is also the only arm that can be relaxed later without breaking
+a program that compiles today. The three arms differ in what they MEAN, not in
+what they cost — one predicate, not three parsers — so "pick before writing the
+parser" overstated the coupling, and saying so is the useful part.
+
+**Trap worth knowing, cost a measurement:** `ValidateExports` first sat after
+declaration pass 1, where "every header is registered" says it belongs, and
+reported EVERY exported routine as not-`cdecl` — including ones the writer went
+on to export correctly. The pre-scan arm of `ParseSubroutine` exits before the
+calling-convention directives are applied, so **`ProcCdecl` is only set when the
+BODY is parsed.** Moved after pass 2. Anything reasoning about a routine's
+convention during pass 1 hits this.
+
+**And a green I had to re-earn.** `check_test_wiring.py` reported clean over the
+new files and that meant nothing: `subjects()` is git-tracked-only by design, so
+untracked new tests are invisible to it. Its own positive control caught it — a
+deliberately unwired probe scored 0 hits. Staged first, the probe scores 1 and
+the real files still report clean.
+
+Gate: `converged after 1 round(s)` (6df6ef519b8e); `gate.sh quick` GREEN with
+the FPC seed canary PASS. The proof is the LINK, not the symbol table: `nm`
+showing `T PxxLibAdd` proves a name, and only calling it from a gcc-built C host
+proves the convention. `Hidden` is asserted absent from the global block, or the
+test would pass on a compiler that exports everything.

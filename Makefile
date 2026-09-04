@@ -11251,6 +11251,23 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_pascal_define_unit_scope_order226 "$$($(TESTTMP)/test_pascal_define_unit_scope_order226)" "$$(printf 'ub does not see it\nua')"
 	./$(COMPILER) -Futest/units_claim test/test_pascal_claim_crosses_units.pas $(TESTTMP)/test_pascal_claim_crosses_units26
 	tools/expect_same.sh test_pascal_claim_crosses_units26 "$$($(TESTTMP)/test_pascal_claim_crosses_units26)" "$$(printf 'early: no claim yet\na: claimed\nb: stood down\nundef: claim survived\ninc: claim taken in an include\nlater: include claim crossed the boundary\nprogram: plain define stayed in the unit\nprogram: scanned before its units, no claim')"
+	# feature-p-a-pascal-library-unit-does-not-parse — the four `exports`
+	# refusals. ONE FILE PER DIAGNOSTIC: a single source carrying all four
+	# mistakes reports the first and hides three behind it, which is how a
+	# negative test quietly stops testing what it names.
+	#
+	# The leading `!` is the PRECONDITION and it is branched on, not commented:
+	# a compile that unexpectedly SUCCEEDS fails the row here, instead of falling
+	# through to a grep of an empty error log — which passes for the wrong reason
+	# on exactly the regression this is guarding against.
+	! ./$(COMPILER) test/library_exports_not_cdecl_fail.pas $(TESTTMP)/lib_exp_1 >$(TESTTMP)/lib_exp_1.err 2>&1
+	grep -q 'which is not `cdecl`' $(TESTTMP)/lib_exp_1.err
+	! ./$(COMPILER) test/library_exports_unknown_name_fail.pas $(TESTTMP)/lib_exp_2 >$(TESTTMP)/lib_exp_2.err 2>&1
+	grep -q 'which is not a routine declared in this library' $(TESTTMP)/lib_exp_2.err
+	! ./$(COMPILER) test/library_exports_in_a_program_fail.pas $(TESTTMP)/lib_exp_3 >$(TESTTMP)/lib_exp_3.err 2>&1
+	grep -q 'only meaningful in a `library`' $(TESTTMP)/lib_exp_3.err
+	! ./$(COMPILER) test/library_exports_rename_fail.pas $(TESTTMP)/lib_exp_4 >$(TESTTMP)/lib_exp_4.err 2>&1
+	grep -q 'renaming an exported symbol' $(TESTTMP)/lib_exp_4.err
 	./$(COMPILER) test/test_float_str_val.pas $(TESTTMP)/test_float_str_val26
 	tools/expect_same.sh test_float_str_val26 "$$($(TESTTMP)/test_float_str_val26)" "$$(printf '[3.14]\n[    3.1416]\n[-2.750]\n[1000.5]\n42.7500 code=0\n-1.5000 code=0\n100.00 code=0\n350.00 code=0\n0.1250 code=0\ncode=1\n[   42]\n-99 code=0')"
 	./$(COMPILER) test/test_float_result_loop.pas $(TESTTMP)/test_float_result_loop26
@@ -25200,6 +25217,30 @@ test-emit-obj: $(COMPILER)
 	./$(COMPILER) --esp-profile=bare --target=xtensa --xtensa-fpu test/test_esp_fastdoubles.pas $(TESTTMP)/esp_fastdoubles_xt
 	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_fastdoubles.pas $(TESTTMP)/esp_fastdoubles_rv
 	@echo "esp: 19 previously-unrun test_esp_* programs ok (x86-64 oracle + xtensa/riscv32 build)"
+	# feature-p-a-pascal-library-unit-does-not-parse — a `library`'s DECLARED
+	# export surface must equal the writer's ACTUAL one. ObjProcIsExported is
+	# `ProcCdecl and not ProcCStaticLink` and `exports` validates against that
+	# same predicate rather than widening it, so this object must be exactly what
+	# a `program` with the same three cdecl routines produces.
+	#
+	# `Hidden` asserted ABSENT from the global block is the row that makes the
+	# other three mean something: without it every assertion here passes on a
+	# compiler that exports everything, which is the population this test is
+	# about. And the link+RUN is not redundant with the symbol table — a `T` row
+	# proves a NAME, and only the call proves the CONVENTION, which is the whole
+	# thing the exports check exists to protect.
+	./$(COMPILER) --emit-obj test/test_library_exports.pas $(TESTTMP)/test_library_exports.o
+	test -s $(TESTTMP)/test_library_exports.o
+	nm $(TESTTMP)/test_library_exports.o | grep -q ' T PxxLibAdd$$'
+	nm $(TESTTMP)/test_library_exports.o | grep -q ' T PxxLibMul$$'
+	nm $(TESTTMP)/test_library_exports.o | grep -q ' T PxxLibNegate$$'
+	nm $(TESTTMP)/test_library_exports.o | grep -q ' t Hidden$$'
+	! nm $(TESTTMP)/test_library_exports.o | grep -q ' T Hidden$$'
+	@if command -v gcc >/dev/null 2>&1; then \
+	  gcc -o $(TESTTMP)/test_library_exports_host test/library_exports_host.c $(TESTTMP)/test_library_exports.o || { echo "test-emit-obj: the library .o FAILED to link with a C host"; exit 1; }; \
+	  tools/expect_same.sh test_library_exports_host "$$($(TESTTMP)/test_library_exports_host)" "$$(printf '42\n42\n-42')" || exit 1; \
+	  echo "test-emit-obj: library+exports links+runs under a gcc-built main ok"; \
+	else echo "gcc not installed; library+exports link check skipped"; fi
 	@echo "emit-obj ok (ET_REL sections/symbols/relocs sane on riscv32 + xtensa call0/windowed)"
 
 # Bare-metal ESP32 boot (feature-esp32-bare-boot). Links a self-contained

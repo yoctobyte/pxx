@@ -682,6 +682,90 @@ begin
   EmitSharedThunkEpilogue;
 end;
 
+{ ===== `library` / `exports` =====
+  feature-p-a-pascal-library-unit-does-not-parse. `library` is `program` with a
+  declared export surface; the object writer already exports exactly the
+  C-convention routines (ObjProcIsExported = ProcCdecl and not ProcCStaticLink),
+  so `exports` is a second, DECLARATIVE spelling of what `cdecl` on the
+  definition says today — not a new capability. It earns its keep by being
+  CHECKED: a name that is not a routine, or a routine the writer would silently
+  leave out of the surface, is an error here rather than a missing symbol at
+  someone else's link step. }
+
+procedure ParseExportsClause;
+{ `exports Name [, Name…];`, collected and resolved later — see the ExportName
+  note in defs.inc for why this cannot validate as it reads. }
+var nm: AnsiString; ln: Integer;
+begin
+  if not IsLibrary then
+    Error('`exports` is only meaningful in a `library`: a program has no export ' +
+          'surface, and pxx has no standalone-unit output for one to belong to');
+  Next;
+  while True do
+  begin
+    if CurTok.Kind = tkEOF then Error('expected a routine name after `exports`');
+    nm := CurTok.SVal;
+    ln := CurTok.Line;
+    Next;
+    { `exports Foo name 'bar';` and `exports Foo index 3;` are FPC spellings that
+      RENAME or ordinal-number the exported symbol. Diagnosed, never ignored:
+      quietly dropping the rename writes a library whose symbol is not the one
+      the source asked for, which is the same class of silent-wrong artifact the
+      cdecl check below exists to prevent. }
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'name') then
+      Error('`exports … name ''…''` (renaming an exported symbol) is not supported yet — ' +
+            'the symbol is emitted under the routine''s own name, so rename the routine');
+    if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'index') then
+      Error('`exports … index N` (export by ordinal) is not supported — ' +
+            'ELF has no ordinal table; export by name');
+    if ExportCount >= MAX_EXPORTS then Error('too many names in `exports` clauses');
+    ExportName[ExportCount] := nm;
+    ExportLine[ExportCount] := ln;
+    Inc(ExportCount);
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+  if not Eat(tkSemicolon) then Error('expected `;` after the exports clause');
+end;
+
+procedure ValidateExports;
+{ Run after the BODY pass, which is later than it first looks like it needs to
+  be. Pass 1 registers every signature, so an `exports` clause may sit above the
+  routines it names — as FPC's do — but pass 1 does NOT set ProcCdecl: the
+  pre-scan arm of ParseSubroutine exits before the calling-convention directives
+  are applied, so `cdecl` is only recorded when the body is parsed. Validating
+  after pass 1 therefore reported every exported routine as "not cdecl",
+  including ones the object writer went on to export correctly — a check that
+  contradicted the writer it was supposed to agree with. Measured. }
+var i, pi: Integer;
+begin
+  for i := 0 to ExportCount - 1 do
+  begin
+    pi := FindProc(ExportName[i]);
+    if pi < 0 then
+      ErrorAt(ExportLine[i], 'exports `' + ExportName[i] +
+              '`, which is not a routine declared in this library')
+    else if ProcExternal[pi] then
+      ErrorAt(ExportLine[i], 'exports `' + ExportName[i] +
+              '`, which is declared `external` — it is imported, not defined here, ' +
+              'so there is no body to export')
+    { The fork the ticket names, answered at the REJECT arm — see
+      decide-may-exports-name-a-routine-that-is-not-cdecl. FPC exports a
+      non-cdecl routine under its own convention; for pxx that means a foreign
+      caller marshals SysV into a callee reading the internal convention, with
+      nothing to diagnose it. Rejecting is also the only arm that can be relaxed
+      later without breaking a program that compiles today. }
+    else if not ProcCdecl[pi] then
+      ErrorAt(ExportLine[i], 'exports `' + ExportName[i] +
+              '`, which is not `cdecl`: it would be callable and wrong from outside ' +
+              'pxx, because the caller marshals the C convention and the body reads ' +
+              'pxx''s internal one. Declare it `cdecl` to export it')
+    else if ProcCStaticLink[pi] then
+      ErrorAt(ExportLine[i], 'exports `' + ExportName[i] +
+              '`, which is `static`: C gives it internal linkage, so the name means ' +
+              'nothing outside this translation unit');
+  end;
+end;
+
 procedure ParseProgram;
 var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     needsWide: Boolean;   { program can reach the UTF-16 runtime — see the token scan }
@@ -719,7 +803,14 @@ begin
     of "expected program". }
   if CurTok.Kind = tkUnit then
     Error('this file is a unit, not a program — compile a program that uses it (pxx has no standalone-unit output)');
-  if CurTok.Kind = tkProgram then
+  { `library Name;` parses exactly like `program Name;` — same declaration
+    section, same `begin … end.` body (its initialisation), and the same entry
+    at .text+0, which is NOT exported. What it adds is `exports`, and the flag
+    is what makes `exports` outside a library an error rather than a no-op.
+    feature-p-a-pascal-library-unit-does-not-parse }
+  IsLibrary   := CurTok.Kind = tkLibrary;
+  ExportCount := 0;
+  if (CurTok.Kind = tkProgram) or IsLibrary then
   begin
     Next;
     if CurTok.Kind = tkEOF then Error('expected program name');
@@ -1638,6 +1729,7 @@ begin
   while not doneDecls do
     case CurTok.Kind of
       tkUses:     ParseUsesClause;
+      tkExports:  ParseExportsClause;
       tkVar:      ParseVarSection;
       tkConst:    ParseConstSection(-1, 0, False);
       tkType:     ParseTypeSection;
@@ -1721,6 +1813,7 @@ begin
     Inc(i);
   end;
   Pass2Active := False;
+  ValidateExports;   { after pass 2, not after pass 1 — see the routine }
   TokPos := Pass2BodyTok;
   Next;
 
