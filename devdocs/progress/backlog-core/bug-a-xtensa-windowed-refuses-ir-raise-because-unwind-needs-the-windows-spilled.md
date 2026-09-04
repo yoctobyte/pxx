@@ -7,7 +7,7 @@ type: bug
 status: open
 created: 2026-08-30
 found-by: frankS
-summary: "Under the xtensa windowed ABI, IR_RAISE and try/except refuse (ir_codegen_xtensa.inc:4873/:4898). CAUSE CORRECTED 2026-09-01: the guard tests XtensaABI and nothing else, so it fires on --platform=posix too, where window handlers demonstrably DO exist (depth-40 windowed recursion runs correctly under qemu) — bare-metal's missing handler explains only half of it. The hosted half is blocked on one missing routine, a windowed setjmp/longjmp; newlib's protocol is disassembled in the ticket. Next step is to MEASURE whether wsr.windowstart traps under qemu linux-user."
+summary: "Under the xtensa windowed ABI, IR_RAISE and try/except refuse (ir_codegen_xtensa.inc:4873/:4898). CAUSE CORRECTED 2026-09-01: the guard tests XtensaABI and nothing else, so it fires on --platform=posix too, where window handlers demonstrably DO exist (depth-40 windowed recursion runs correctly under qemu) — bare-metal's missing handler explains only half of it. The hosted half is blocked on one missing routine, a windowed setjmp/longjmp; newlib's protocol is disassembled in the ticket. MEASURED 2026-09-04 and it moves BOTH halves of the plan: wsr.windowstart AND rsr.windowbase both SIGILL under qemu-xtensa linux-user, so newlib's longjmp design cannot be ported to the hosted profile at all; the spill SYSCALL the plan called 'two instructions on hosted' is `Unknown syscall 0` under qemu, executing and returning without spilling, so a crash-only probe reports success; and the call-chain spill the plan filed as the bare-metal-only fallback DOES work under qemu, making it the one primitive available on every profile we can run. The hosted/bare split this ticket draws does not survive that. Harness, results and the two instrument failures that made the first three runs answer wrongly: devdocs/dev/xtensa-windowed-spill-probes.md."
 ---
 
 # The gap
@@ -169,3 +169,54 @@ HEAD `4cac68da5`, compiler `3377a7541356` (`converged after 2 round(s)`).
 Newlib disassembly is `xtensa-esp-elf` esp-15.2.0_20251204, big-endian object;
 our targets are little-endian, which changes nothing about the instruction
 sequence but means the bytes are not copyable.
+
+
+# 2026-09-04 (frankB, Track A) — the unmeasured fact is measured, and it moves the plan both ways
+
+Full write-up, harness and reproduction:
+**`devdocs/dev/xtensa-windowed-spill-probes.md`**. Bound: origin/master
+`4b264f3d2`; no compiler change was needed and none was made, so no pxx binary
+identity applies — the probes are hand-assembled with `llvm-mc-21` (LLVM 21 has
+an Xtensa assembler) inside a hand-written ELF32-LE header, run under
+`qemu-xtensa`. Three results:
+
+1. **`rsr a5, windowbase` SIGILLs in user mode**, and so does `wsr.windowstart`.
+   That is the fact the previous section named as deciding "whether the hosted
+   half is a short job or a different design". **It is a different design** —
+   newlib's `longjmp`, which turns on declaring one live window through
+   `wsr.windowstart`, cannot be ported here.
+2. **The spill syscall is not implemented by qemu.** `qemu-xtensa -strace` prints
+   `Unknown syscall 0`. The instructions execute and return, so the "costs two
+   instructions on the hosted profile" reading is not wrong about Linux — it is
+   wrong about the only hosted runtime we can execute, and a probe that checks
+   only for a crash reports it as working.
+3. **The call-chain spill works.** 24 nested `call4` frames put an outer frame's
+   `a2` into memory under qemu, using nothing but ordinary calls. This section
+   had it as the bare-metal-only alternative with the hosted half not waiting on
+   it; it is the reverse — it is the ONE primitive available on every profile,
+   and it needs no new encoders, no privileged access and no syscall.
+
+## What that leaves, and it is smaller than the plan assumed
+
+No `rsr`/`wsr` encoders are needed at all — items 2 and 3 of the previous
+section's list are moot for a call-chain design. What is needed is a Pascal- or
+IR-level spill routine (a self-recursive windowed call chain, depth chosen from
+the register-file size) and then the save-area rewrite plus `retw` that
+`longjmp` already needs. Both halves are ordinary code.
+
+**Not started, and deliberately not traded for a microfix.** This is the
+measurement the ticket asked for first, and it is banked rather than acted on
+because the design it implies is a different one from the disassembled reference,
+and choosing it is not a thing to do at the end of a session.
+
+## A note on how nearly this went the other way
+
+The first three runs of the spill probe reported "not found" and would have been
+banked as *the call-chain spill does not work* — the exact opposite of result 3.
+Two independent instrument failures, neither of which errored: an out-of-range
+`movi` that `llvm-mc` silently turned into an `l32r` reading a literal pool the
+probe's own `--only-section=.text` had dropped, and a scan that went upward when
+the Xtensa ABI puts a spilled CALLER's registers BELOW the callee's stack
+pointer. What caught both was carrying a positive control (store the needle, must
+find it) beside the negative one (no spill, must not find it). With only the
+negative control the probe was confidently wrong twice.
