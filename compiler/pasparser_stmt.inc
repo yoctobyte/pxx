@@ -7488,9 +7488,20 @@ begin
                   CurASTNode := mrefNode;
                   LastExprTk := tyRecord;
                 end
+                { …and a free ROUTINE name, read as its ADDRESS -- UNLESS the
+                  routine is a parameterless function whose result fits this
+                  target, in which case Delphi CALLS it and so do we. That last
+                  clause is ProcResultSatisfiesTarget, the free-routine sibling
+                  of the MethodResultSatisfiesTarget test the arm above already
+                  makes; without it `m := MakeSel` SEGFAULTED and `p := MakePl`
+                  silently called the wrong routine. Falling through to ParseExpr
+                  gets the call reading for free -- a paramless function used as
+                  a value is called there, which is the precedence
+                  TryDelphiBareProcArg names for argument position. }
                 else if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) and
                    (CurTok.Kind = tkIdent) and (argIdx < 0) and
-                   (FindProc(CurTok.SVal) >= 0) and (Tokens[TokPos].Kind <> tkLParen) then
+                   (FindProc(CurTok.SVal) >= 0) and (Tokens[TokPos].Kind <> tkLParen) and
+                   (not ProcResultSatisfiesTarget(FindProc(CurTok.SVal), idx)) then
                 begin
                   CurASTNode := AllocNode(AN_PROCADDR);
                   ASTIVal[CurASTNode] := FindProc(CurTok.SVal);

@@ -3,7 +3,7 @@ slug: bug-p-result-is-not-a-method-pointer-lvalue
 track: P
 prio: 40
 type: bug
-status: backlog
+status: done
 owner: unassigned
 blocked-by: []
 summary: "`Result := s.Pick` inside a function returning a method pointer is refused with `\"TSvc.Pick\" is a procedure and has no result to use in an expression`, for EVERY receiver spelling, while `t := s.Pick; Result := t` on a local of the same type compiles and runs. FPC accepts the direct form. Cause: the implicit `Result` symbol is allocated by `AllocVar('Result', retType)` (pasparser_proc.inc:2310) as a plain var, so it carries no `SymProcSig` and its `TypeKind`/`RecName` never look like a method-pointer lvalue — and the assignment arm that recognises the method-pointer context keys on exactly `SymProcSig[idx] >= 0` and `Syms[idx].TypeKind = tyRecord`. A THIRD axis, orthogonal to receiver spellings: the LHS spelling."
@@ -82,3 +82,6 @@ FPC (`tools/fpc_diff_probe.sh`).
 `test/test_method_pointer_bare_receiver_and_call_reading.pas` documents the gap
 in its header and uses locals throughout because of it — when this is fixed,
 that test is the natural place to add the direct `Result :=` rows.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

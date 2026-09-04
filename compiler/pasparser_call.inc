@@ -874,6 +874,61 @@ begin
   Result := (Procs[mpi].RetType = tyRecord) and (ProcRetRecId[mpi] = MethodPtrRecId);
 end;
 
+{ The same question as MethodResultSatisfiesTarget, asked about a FREE ROUTINE
+  and against a procedural-valued TARGET SYMBOL: is `x := F` the CALL of F or
+  the ADDRESS of F?
+
+  It is the same Delphi extended-syntax rule and the same measured failure one
+  construct over. The method arm got the rule when
+  bug-p-a-parenless-method-reference-handles-two-of-four-receiver-spellings was
+  fixed; the free-routine arm beside it (the AN_PROCADDR reading in
+  pasparser_stmt.inc's assignment path) never had one, so it took the ADDRESS of
+  any routine name at all. Measured 2026-09-04 against fpc 3.2.2 -Mdelphi, one
+  program, two rows, both wrong in different ways:
+
+    function MakeSel: TSel;  { TSel = procedure of object }
+    function MakePl:  TPl;   { TPl  = procedure           }
+    m := MakeSel;  m();   -> pxx SEGFAULT   (a {Code,Data} pair built from
+                             MakeSel's own entry address, then called)
+    p := MakePl;   p();   -> pxx SILENTLY calls MakePl instead of Plain
+                             (no output where FPC prints `plain`)
+
+  FPC calls in both. The address reading is not too strict here, it is the WRONG
+  READING -- the same sentence MethodResultSatisfiesTarget's own note ends on.
+
+  Deliberately NARROW: it answers True only when the routine's result actually
+  FITS the target, so every program that compiles today and does not hit one of
+  the two rows above keeps the address reading unchanged. A routine whose result
+  does not fit was never a call candidate in FPC either (`@F` is how you spell
+  the address, and it still is).
+
+  TryDelphiBareProcArg states the same precedence for ARGUMENT position and
+  reaches it the other way round -- a paramless function parses as a call there
+  and falls back to @F through MatchCallDelphiProcAddr. Assignment has no such
+  retry, so the decision has to be made up front, which is what this is.
+  A routine that REQUIRES arguments cannot be the call reading: there are no
+  arguments here (the `(` case exits earlier). }
+function ProcResultSatisfiesTarget(pi, targetIdx: Integer): Boolean;
+begin
+  Result := False;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  if (targetIdx < 0) or (targetIdx >= SymCount) then Exit;
+  if not Procs[pi].IsFunc then Exit;
+  if Procs[pi].ParamCount > 0 then Exit;
+  if Syms[targetIdx].TypeKind = tyRecord then
+    { a method-pointer target: "fits" is "returns a method pointer", exactly as
+      for the method arm -- no other result type is assignable there. }
+    Result := (MethodPtrRecId <> REC_NONE) and
+              (Procs[pi].RetType = tyRecord) and (ProcRetRecId[pi] = MethodPtrRecId)
+  else
+    { a plain procedural target (tyPointer): "fits" is "returns a procedural
+      value", which ProcRetProcSig records. That column was filled only by the C
+      frontend until the Pascal return-type parse started carrying
+      LastTypeProcSig onto it for bug-p-result-is-not-a-method-pointer-lvalue --
+      the two fixes are the same missing fact read by two different consumers. }
+    Result := (Procs[pi].RetType = tyPointer) and (ProcRetProcSig[pi] >= 0);
+end;
+
 { `obj.M` / `TClass.M` with no `@` and no argument list, read as a method
   REFERENCE rather than a call.
 

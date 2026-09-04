@@ -3,7 +3,7 @@ track: P
 prio: 55
 type: feature
 blocked-by: []
-status: backlog
+status: done
 summary: "`TMethod` is undefined — `var m: TMethod` fails with `unknown type: TMethod`. It is the standard system record `record Code, Data: Pointer end` that names the two halves of a `procedure of object` value, and the documented way real code takes a method pointer apart or builds one."
 ---
 
@@ -60,3 +60,6 @@ asserting anything about the values.
 `make compiler/pascal26` + a test that takes a real method pointer apart,
 rebuilds it, calls through the rebuilt value, and compares two handlers for
 equality (against the fpc oracle) + `tools/gate.sh quick`.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
