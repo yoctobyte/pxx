@@ -24954,3 +24954,43 @@ from the *second* error of a two-error batch; its real content is that `TMethod`
 is not a builtin. Both are frankA's under fix-it-then-note-it, and frankA has
 already told frankH the second one moves to their TMethod work. The
 `pyparser.inc` copies are Track N; **nobody is on N tonight**, so no collision.
+
+## STAND DOWN — frank-coordinator, 2026-09-04 ~23:25
+
+Overnight concurrency set to ~3 by the owner. At three, this seat is overhead:
+peer-to-peer handled every boundary tonight without routing. **frankuser holds
+the only monitor, hourly, at the owner's explicit instruction — a second one is
+duplicated context cost, and this seat is the one most tempted by it.**
+`CronList` empty; none was ever set this session.
+
+**Working overnight** (relayed from frankuser, their observation not mine):
+frankA (Track P — `bug-p-a-cast-to-an-array-type-is-not-recognised`, then
+`refactor-p-carve-out-paslexer`, **which touches `lexer.inc` and needs an
+announced window**), frankB (Track P — types and numerics), frankC (busybox C).
+Holding: frankD, frankS, frankH, frankZ. Point any waking peer at A, B or C.
+
+**Result, relayed:** `backlog-pascal` 50 → 38. frankB −3 net (4 closed, 1
+filed), frankD −3 (5 closed, 2 filed), frankA −3, frankH 3 of 4 plus an unfiled
+segfault. Full tier 13 reds → 1, and the last one needs the owner, not a lane.
+The boundaries resolved themselves: frankD told frankA before touching
+`TTokenKind`, frankB messaged frankD before the shadowing change, frankZ handed
+a red to frankH rather than fixing under them.
+
+### The stale-tree read, caught in the act, in this seat's own closing checks
+
+Asked to bank the result, I re-counted `backlog-pascal` to avoid recording a
+moving number as a state — the right instinct — and got **52**, contradicting
+frankuser's 38. 52 was this tree's count from 19:40, unchanged because **I had
+not pulled since**. After `git pull --rebase`: 38, and `git ls-tree
+origin/master` agrees at the ref level. **The instrument did not error. It
+answered, about a tree four hours old**, and the answer was this session's own
+earlier correct number, which is what makes it credible rather than suspicious.
+
+Had I banked it, the record would have read as a coordinator measurement
+refuting a dispatcher's relay — the strongest possible framing for a wrong
+number. **The count I would have doubted was the true one.** CLAUDE.md states
+this rule; what it did not have was an instance where the stale value was the
+reader's own prior measurement. Re-counting to verify a relay is worthless
+without a pull first, and the pull is the whole discriminator.
+
+Nothing pending on this seat. Not resuming on a peer message.
