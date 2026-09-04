@@ -6549,3 +6549,49 @@ identifier. Prefer "does this call site ask the right QUESTION" over "does this
 backend have the right MACHINERY" — a backend that happens to pass and a
 backend that asks correctly are different claims, and only the second survives
 someone editing the file.
+
+## `sort | comm` answers a different question under a UTF-8 locale, warns, and prints anyway
+
+**Symptom.** Set arithmetic over lists containing punctuation — applet names,
+slugs, filenames with `-` or `_` — returns counts that do not add up, or reports
+an element as missing from a set it is demonstrably in.
+
+**Cause.** glibc's `en_US.UTF-8` collation ignores punctuation at the primary
+level, so `sort` orders `add-shell` / `addgroup` by the letters alone. `comm`
+compares **bytes**. The two disagree about what "sorted" means, `comm` falls out
+of step, and from there it merges garbage.
+
+**It is not silent, and that does not help you.** `comm` prints
+`comm: file 1 is not in sorted order` **to stderr** and then **prints a full
+answer to stdout regardless**. Any pipeline that captures stdout, or any eye on
+the numbers rather than the noise, gets a clean-looking wrong result. It is the
+`root-cause-over-microfix` shape: not an error, an *answer*.
+
+**Measured 2026-09-04** (frankC), subtracting 20 busybox applets from a 394-name
+list:
+
+```
+LC_ALL unset   comm -12 -> 19 of 20 dropped     comm -13 -> "flash_eraseall is not in the 394 set"
+LC_ALL=C       comm -12 -> 20 of 20 dropped     comm -13 -> (empty)
+```
+
+`flash_eraseall` **is** in the 394 set — it is one of the fourteen refusals the
+run had just reported by name. So one invocation produced two *mutually
+contradictory* wrong answers, and the contradiction is the only reason it was
+caught. That is the same tell as `44e7ea61f`, where this bug reported `run-init`
+and `run-parts` as both missing and extra in one sentence.
+
+**Fix:** `export LC_ALL=C` before any `sort`/`comm`/`join`/`uniq` pipeline, or
+`LC_ALL=C sort` on every stage. Byte order is the only order these tools agree
+on.
+
+**Why this has its own section when a script was already fixed for it.**
+`44e7ea61f` fixed `tools/busybox_diff.sh`. The trap is in the **technique**, so
+it came straight back in an ad-hoc one-liner typed by someone who had read that
+fix an hour earlier. A defect repaired in one file is not a defect retired —
+if the broken thing was a *pipeline shape*, expect it wherever that shape is
+retyped, and fix it in the habit rather than in the file.
+
+**Positive control, when the answer matters:** assert a known member on both
+sides (`grep -cx <known> in.txt` = 1, and 0 after subtraction). A set difference
+whose inputs were never proven to contain the element cannot fail.
