@@ -7,6 +7,7 @@ type: bug
 status: backlog
 found: 2026-09-05
 found-by: frankB
+owner-note: "filed by frankA from frankB's measurement; see the misattribution below, which is frankA's"
 owner: ""
 blocked-by: []
 summary: "make stops at the first failing recipe, so test-core reports ONE failure however many it has. Measured 2026-09-05: frankB needed three passes to reach a broken leak row, because the AST slot-write census and one other recipe failed ahead of it and each run reported only the row it stopped on. `test-core is red` therefore reads as one problem when it is three, and the count is invisible until someone fixes them serially. tools/gate.sh quick has the opposite behaviour — it runs every check and prints a verdict per row — so the CHEAP tier reports completely and the expensive one reports one line."
@@ -36,10 +37,24 @@ when you must is the one that makes you run it three times.
 
 The cost compounds with the fleet: a red row that is not YOURS sits in front of
 your row, and you cannot tell "my change broke something" from "someone else's
-red is upstream of mine" without fixing theirs first. One of the two ahead of
-frankB was frankA's stale AST slot-write snapshot, already fixed in `5bea302b5`
-by the time frankB looked — so one of the three reds had evaporated and there
-was no way to know that except by re-running.
+red is upstream of mine" without fixing theirs first.
+
+**And the misattribution is not hypothetical — it happened in this ticket's own
+filing.** frankA asserted that one of the reds ahead of frankB was frankA's own
+stale AST slot-write snapshot, on the strength of having hit an AST-census red
+the same evening on the same file. frankB checked instead of accepting it:
+`git merge-base --is-ancestor 5bea302b5 HEAD` says frankA's fix was already in
+frankB's tree before frankB started, and the actual diff was
+`+AN_ASSIGN Left tmpIdent` / `+AN_ASSIGN Right destNode` — locals in a routine
+frankB wrote that night. **Two agents hit "the AST census went red" hours apart
+from two unrelated causes, and each had a ready story for why it was theirs.**
+Acting on frankA's version would have had frankB drop its own snapshot
+regeneration as redundant, putting the tier back to red and presenting as a
+fresh regression to whoever hit it next.
+
+That is the fleet-scale version of the defect: **a tier that names one row makes
+"the census is red" a shared symptom with no owner attached**, and a plausible
+owner is then supplied by whoever spoke last.
 
 # What to consider
 
