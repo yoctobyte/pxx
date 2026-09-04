@@ -4,10 +4,11 @@ title: "xtensa windowed refuses IR_RAISE because a longjmp-style unwind needs th
 track: A+S
 prio: 45
 type: bug
-status: open
+status: working
 created: 2026-08-30
 found-by: frankS
 summary: "Under the xtensa windowed ABI, IR_RAISE and try/except refuse (ir_codegen_xtensa.inc:4873/:4898). CAUSE CORRECTED 2026-09-01: the guard tests XtensaABI and nothing else, so it fires on --platform=posix too, where window handlers demonstrably DO exist (depth-40 windowed recursion runs correctly under qemu) — bare-metal's missing handler explains only half of it. The hosted half is blocked on one missing routine, a windowed setjmp/longjmp; newlib's protocol is disassembled in the ticket. MEASURED 2026-09-04 and it moves BOTH halves of the plan: wsr.windowstart AND rsr.windowbase both SIGILL under qemu-xtensa linux-user, so newlib's longjmp design cannot be ported to the hosted profile at all; the spill SYSCALL the plan called 'two instructions on hosted' is `Unknown syscall 0` under qemu, executing and returning without spilling, so a crash-only probe reports success; and the call-chain spill the plan filed as the bare-metal-only fallback DOES work under qemu, making it the one primitive available on every profile we can run. The hosted/bare split this ticket draws does not survive that. Harness, results and the two instrument failures that made the first three runs answer wrongly: devdocs/dev/xtensa-windowed-spill-probes.md."
+owner: frankb-78
 ---
 
 # The gap
