@@ -89,61 +89,46 @@ const
 
 implementation
 
-{ CLOCK_REALTIME = 0. Native-width timespec matches the kernel's per-arch
-  layout (see TTimeSpec in the posix PAL backend). }
-type
-  TKernelTimeSpec = record
-    Sec:  NativeInt;
-    Nsec: NativeInt;
-  end;
+uses platform;   { PalClockGetTime / PalClockSetTime -- see the note below }
 
-function SysClockGettime: Integer;
-begin
-  Result := -1;
-  {$ifdef CPUX86_64} Result := 228; {$endif}
-  {$ifdef CPU_I386}  Result := 265; {$endif}
-  {$ifdef CPU_AARCH64} Result := 113; {$endif}
-  {$ifdef CPU_ARM32} Result := 263; {$endif}
-end;
+{ THE SEVENTH PRIVATE CLOCK TABLE, and it is gone. baseunix carried its own
+  `SysClockGettime` for four targets and, for the SETTER, a bare
+  `{$ifdef CPUX86_64} 227 {$else} -1` -- so `fpsettimeofday` reported failure on
+  every other target with a comment saying "until a consumer needs it". Both are
+  the same substitution: an ARCH standing in for a capability that belongs to the
+  platform, and a number table private to the unit that uses it.
 
-{ settimeofday(2). Fails with -1 (EPERM) for unprivileged callers — exactly
-  what Synapse's SetUTTime expects on an ordinary box. }
+  platform.pas has both directions for all six targets, and had them before this
+  edit. `PalClockSetTime` existed with no getter beside it for a while, which is
+  part of why each caller grew its own reader
+  (bug-b-palnanosleep-answers-enosys-on-riscv32-because-rv32-has-no-nanosleep-syscall
+  records the family); PalClockGetTime landed 2026-09-04 and closes that.
+
+  For wasm32 this was one of the 518 IR_SYSCALL refusals in the corpus census:
+  `if n = -1 then Exit` is a RUNTIME test in front of an instruction that is
+  still EMITTED, so the whole body was refused rather than answering -1. }
 function fpsettimeofday(tp: ptimeval; tzp: ptimezone): cint;
-var
-  ts: TKernelTimeSpec;
-  n: Int64;
 begin
   Result := -1;
   if tp = nil then Exit;
-  { clock_settime(CLOCK_REALTIME) is the modern syscall shape; build the
-    timespec from the caller's timeval. }
-  ts.Sec := tp^.tv_sec;
-  ts.Nsec := tp^.tv_usec * 1000;
-{$ifdef CPUX86_64}
-  n := __pxxrawsyscall(227, 0, Int64(@ts), 0, 0, 0, 0);   { clock_settime }
-{$else}
-  n := -1;   { other targets: report failure until a consumer needs it }
-{$endif}
-  if n = 0 then Result := 0;
+  { clock_settime(CLOCK_REALTIME); build the timespec from the caller's timeval.
+    Still fails with -1 (EPERM) for unprivileged callers, which is exactly what
+    Synapse's SetUTTime expects on an ordinary box -- the difference is that it
+    now fails for the RIGHT reason on the five non-x86-64 targets instead of
+    because the number was missing. }
+  if PalClockSetTime(0, tp^.tv_sec, Int64(tp^.tv_usec) * 1000) = 0 then
+    Result := 0;
 end;
 
 function fpgettimeofday(tp: ptimeval; tzp: ptimezone): cint;
-var
-  ts: TKernelTimeSpec;
-  n: Integer;
-  res: Int64;
+var sec, nsec: Int64;
 begin
   Result := -1;
   if tp = nil then Exit;
-  n := SysClockGettime;
-  if n = -1 then Exit;
-  res := __pxxrawsyscall(n, 0, Int64(@ts), 0, 0, 0, 0); { CLOCK_REALTIME = 0 }
-  if res = 0 then
-  begin
-    tp^.tv_sec  := ts.Sec;
-    tp^.tv_usec := Int64(ts.Nsec) div 1000;
-    Result := 0;
-  end;
+  if PalClockGetTime(0, sec, nsec) <> 0 then Exit;   { 0 = CLOCK_REALTIME }
+  tp^.tv_sec  := sec;
+  tp^.tv_usec := nsec div 1000;
+  Result := 0;
 end;
 
 end.
