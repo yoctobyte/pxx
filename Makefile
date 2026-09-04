@@ -9103,6 +9103,23 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/test_generic_constraint_named_fail.pas $(TESTTMP)/test_gconnamed26 2>&1 \
 	  | grep -q 'is constrained to TSomeClass, but LongInt is a value type' \
 	  || { echo 'test_generic_constraint_named_fail: FAIL - expected a named-constraint error'; exit 1; }
+	# `IFoo = interface;` — the FORWARD interface declaration, a double case whose
+	# CLASS arm has worked since forever. The pin refuses the file at its first
+	# type line. Rows 1 and 2 dispatch a method THROUGH the interface and through
+	# the class, because merely accepting `interface;` and registering a SECOND
+	# row would compile and bind every later use to the empty stub. Row 3 is
+	# fpc-testsuite tgenconstraint37's shape: specializing against a forward
+	# interface reaches the constraint checker, where `T: IInterface` had the same
+	# unreachable-parent-chain bug `T: TObject` had beside it.
+	# bug-p-a-forward-interface-declaration-is-not-parsed
+	./$(COMPILER) test/test_forward_interface_decl.pas $(TESTTMP)/test_fwdintf26
+	tools/expect_same.sh test_fwdintf26 "$$($(TESTTMP)/test_fwdintf26)" "$$(printf 'through intf  42\nthrough class 42\nspecialized   42 42')"
+	# NEGATIVE half, in its own file because a refusal cannot share a program with
+	# rows that must compile: IInterface is ITest1's ANCESTOR, so the direction
+	# must still refuse it (tgenconstraint17). fpc 3.2.2 refuses it too.
+	@./$(COMPILER) test/test_forward_interface_constraint_fail.pas $(TESTTMP)/test_fwdintfneg26 2>&1 \
+	  | grep -q 'is constrained to `ITest1`, but IInterface does not implement or descend from it' \
+	  || { echo 'test_forward_interface_constraint_fail: FAIL - expected the direction to be refused'; exit 1; }
 	# fpc-testsuite tgenconstraint39, marked %FAIL. A FORWARD stub is judged AT the
 	# specialization point as what it is -- a class whose ancestry is TObject and
 	# which implements nothing yet -- so a constraint naming a deeper class fails

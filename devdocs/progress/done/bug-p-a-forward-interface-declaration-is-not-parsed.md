@@ -4,9 +4,10 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: open
+status: done
 created: 2026-08-30
 summary: "`IFoo = interface;` (forward) is rejected with `Expected: end, but got: ;` while the CLASS arm of the same double case, `TBar = class;`, parses fine. Pre-existing on pinned and HEAD alike -- not a regression. Costs tgenconstraint37, which is otherwise the only corpus test that exercises specializing against a forward-declared type."
+owner: frankB
 ---
 
 # P: a forward `interface` declaration is not parsed
@@ -102,3 +103,74 @@ The fix, if it is needed, is the same shape as the class one already in
 `CheckTemplateConstraint`: `T: TObject` is answered as `isClass` rather than by
 walking parents, because every class descends from TObject. Every interface
 descends from IInterface the same way.
+
+## FIXED 2026-09-05 (frankB) — and the landmine was real, exactly as predicted
+
+Two changes, and the second is the one the ticket warned would not be free.
+
+**1. `compiler/pasparser_decl.inc`, the interface arm.** A `tkSemicolon` right
+after the `interface` keyword mints the UCls row, marks `UClsForward`, and
+stops — the same shape the class arm's `UClsForward[ci] := (not hadParens) and
+(CurTok.Kind = tkSemicolon)` has always had. The full declaration then
+**completes that row in place** rather than adding a second one, with the same
+member-window re-anchoring and the same `UClsUnitIdx = CurrentUnitIdx` guard the
+class arm carries, and for the reason its comment gives: `FindUClass` answers
+with the first match, so a shadowing second row would take every later use with
+it.
+
+That distinction is why the test does not stop at "it compiled". Rows 1 and 2
+call a method **through the interface** and through the class; a stub that was
+shadowed rather than completed would compile the file and fail there.
+
+**2. `compiler/pasparser_generic.inc`, `CheckTemplateConstraint`.** frankwasm's
+prediction was exact: with the parse fixed, `specialize
+TGenericIInterface<ITestInterface>` was refused —
+
+```
+generic constraint violated: TGenericIInterface<T> is constrained to
+`IInterface`, but ITestInterface does not implement or descend from it
+```
+
+`T: IInterface` is the **exact mirror of `T: TObject`**, which had the same bug
+for the same reason and whose fix is already sitting in the else-branch
+alongside. An interface's `UClsParent` is -1 unless it names a parent
+explicitly, so `GCIntfDescends` walks a chain that structurally never reaches
+`IInterface` and answered True only when `argCi = conCi`. A forward stub has no
+chain at all, which is why nothing reached it until forward declarations started
+parsing. Answered in the coordinate system where it is expressible: in Pascal
+every interface descends from `IInterface`.
+
+**Not a loosening, and the three negative controls say so.** All still refuse,
+and fpc 3.2.2 refuses all three too (different wording — deferred):
+
+| probe | result |
+| --- | --- |
+| `TT<IInterface>` against `T: ITest1` (ancestor, not descendant — tgenconstraint17) | refused |
+| a forward CLASS stub against `T: IInterface` | refused ("the stub implements nothing yet") |
+| a record against `T: IInterface` | refused |
+
+The direction still goes through `GCIntfDescends` unchanged; only the root
+constraint short-circuits.
+
+## The corpus row cannot be checked from here
+
+`library_candidates/` in this checkout holds busybox, html5lib, reportlab,
+rtl-generics, tinycss2 and webencodings — **there is no fpc-testsuite tree**, so
+`tgenconstraint37.pp` could not be run to confirm it turns green. What is
+measured is its SHAPE, reproduced from the excerpt in this ticket: two forward
+declarations, one class and one interface, specialized against `T: TObject` and
+`T: IInterface` before either is completed. That compiles and runs here and
+under fpc. Whoever has the corpus should confirm the row itself; the claim in
+this ticket's body that it fails "on this alone" is now the only untested link.
+
+## Gate
+
+`make compiler/pascal26` converged; `tools/gate.sh quick` GREEN with the FPC seed
+canary CONCURRENT. `test/test_forward_interface_decl.pas` matches fpc 3.2.2
+row for row and the pin refuses it at its first type line;
+`test/test_forward_interface_constraint_fail.pas` is the negative half, in its
+own file because a refusal cannot share a program with rows that must compile.
+
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

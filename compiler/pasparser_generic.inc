@@ -2321,7 +2321,28 @@ begin
         against `T: ITest1` because IInterface is the ancestor, not a
         descendant. The direction is the whole distinction. }
       if isIntf then
-        conOk := GCIntfDescends(argCi, conCi)
+      begin
+        { `T: IInterface` is the interface ROOT constraint and it is the exact
+          mirror of `T: TObject` in the else-branch below, for the same reason
+          and with the same fix. An interface's UClsParent is -1 unless it names
+          a parent explicitly, so GCIntfDescends walks a chain that structurally
+          never reaches IInterface: it answered True only when argCi = conCi.
+          A FORWARD stub (`ITestInterface = interface;`) makes that visible,
+          because a stub has no chain at all -- which is why nothing hit it
+          until the forward declaration started parsing.
+
+          In Pascal every interface descends from IInterface, so answer it in
+          the coordinate system where that is expressible. Not a loosening: the
+          DIRECTION still matters everywhere else, and tgenconstraint17's
+          rejection of TTest7<IInterface> against `T: ITest1` goes through
+          GCIntfDescends unchanged.
+          bug-p-a-forward-interface-declaration-is-not-parsed (the landmine its
+          own ticket predicted, credit frankwasm) }
+        if CaseEqual(conName, 'IInterface') or CaseEqual(conName, 'IUnknown') then
+          conOk := True
+        else
+          conOk := GCIntfDescends(argCi, conCi);
+      end
       else
         conOk := isClass and GCSupportsIntf(argCi, conCi);
       if not conOk then

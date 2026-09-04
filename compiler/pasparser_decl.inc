@@ -5030,6 +5030,33 @@ begin
           signatures (declaration order = IMT slot). A var of it is a 16-byte
           fat pointer {IMT, instance}. }
         Next;
+        { FORWARD declaration: `IFoo = interface;` with nothing after it. The
+          CLASS arm two hundred lines down has had this since forever
+          (`UClsForward[ci] := (not hadParens) and (CurTok.Kind = tkSemicolon)`)
+          and the interface arm never got it, so the parser walked into a body
+          that is not there and asked for the `end` that is not coming:
+          `expected 'end' before ';'` on line 4 of a six-line program. A double
+          case with one arm missing — normalise-dont-special-case.
+
+          The stub is a real UCls row so that a later `specialize
+          TGeneric<IFoo>` has something to name; the full declaration below
+          completes THIS row rather than shadowing it, exactly as the class arm
+          does, because FindUClass answers with the first match and a second row
+          would take every later use with it.
+          bug-p-a-forward-interface-declaration-is-not-parsed }
+        if CurTok.Kind = tkSemicolon then
+        begin
+          ci := AddClassLikeType(FindUClass(tname), tnOff, tnLen, tname);
+          UClsIsInterface[ci] := True;
+          UClsIsComInterface[ci] := InterfacesComMode;
+          if InterfacesComMode then ComInterfaceUsed := True;
+          UClsSize_[ci] := TARGET_PTR_SIZE;
+          UClsAlign[ci] := TARGET_PTR_SIZE;
+          UClsParent[ci] := -1;
+          UClsForward[ci] := True;
+          Eat(tkSemicolon);
+          Continue;
+        end;
         { optional parent interface: `IBar = interface(IFoo)`. IFoo's method
           signatures are inherited at the leading IMT slots, so a value of IBar
           dispatches its inherited methods and a class implementing IBar also
@@ -5057,7 +5084,25 @@ begin
           if (parentIntfCi >= 0) and not UClsIsInterface[parentIntfCi] then
             parentIntfCi := -1;
         end;
-        ci := AddClassLikeType(FindUClass(tname), tnOff, tnLen, tname);
+        { …and COMPLETE a stub of this name rather than shadowing it, the same
+          re-anchoring the class arm does: the counts are 0 on a stub and other
+          types may have registered members since, so the member windows move to
+          the current tails. Restricted to a stub THIS unit wrote, for the reason
+          the class arm's own comment gives — filling another unit's stub merges
+          two unrelated types into one row. }
+        ci := FindUClass(tname);
+        if (ci >= 0) and UClsForward[ci] and UClsIsInterface[ci] and
+           (UClsUnitIdx[ci] = CurrentUnitIdx) and (ParsingClassBodyCi < 0) then
+        begin
+          UClsFBase[ci] := UFldCount;
+          UClsMBase[ci] := UMthCount;
+          UClsPBase[ci] := UPropCount;
+          UClsMCount[ci] := 0;
+          UClsVirtCount[ci] := 0;
+          UClsForward[ci] := False;
+        end
+        else
+          ci := AddClassLikeType(ci, tnOff, tnLen, tname);
         UClsIsInterface[ci] := True;
         UClsIsComInterface[ci] := InterfacesComMode;
         if InterfacesComMode then ComInterfaceUsed := True;
