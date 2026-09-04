@@ -110,7 +110,36 @@ are the control: they must not move). The silent arm is the one that needs the
 value assertion -- `[XY]`, not "it compiled" -- because that is precisely what
 an exit-code or compile-success check cannot see.
 
-## The NilPy population, measured (frankb-78, 2026-09-04)
+## RETRACTED — the NilPy population below is NOT this bug (frankb-78, 2026-09-04)
+
+**Everything in this section is wrong about THIS ticket and is kept only so the
+retraction is legible.** Re-run at 6f86e8f48 (binary `fcc5ad9a29a6`) with the
+rewrite counter: **none of the six shapes prints the line, including all four
+that fail.** The counter is aimed and working — it fires on `procedure Fill(out
+s: string)` naming `Fill`, and on `test/test_managed_var_param.pas` naming
+`SetItOut`, same binary, same invocation. So this is a real negative, not a
+silent instrument.
+
+The four failures are two REPORTED wasm32 gaps, not a dropped body. A passing
+and a failing NilPy build print the IDENTICAL census line — `2 emitted as
+unreachable` — naming `PyBindHostKwArgs` (value of type Int64 assigned to a
+managed string) and `PyBoundFnCallvnMaskBody` (32-parameter limit). The failing
+shapes CALL one of those two; the passing ones do not, and `wasm trap:
+unreachable instruction executed` is exactly what an `unreachable` body
+produces. A default argument and a constructor go through keyword-argument
+binding and the bound-call path; a plain `def f(a)` does not.
+
+Filed as its own ticket. **This ticket's trigger is not on NilPy's ordinary road
+after all** — rank it as the Pascal-shaped bug the corpus census measures.
+
+How the wrong claim was made, since it is the reusable part: the six rows were
+measured correctly and attributed to this mechanism because they were measured
+right after reading it, and the two controls made the pattern look like the
+mechanism's signature. A value comparison can establish THAT a target diverges
+and can never establish WHY. The counter was the first instrument that could
+answer the why, and it said no.
+
+## (retracted) The NilPy population, measured (frankb-78, 2026-09-04)
 
 This reaches Nil-Python too, and it reaches shapes that are ordinary rather than
 exotic. Measured at 34179225a with the value comparison, which is the only
