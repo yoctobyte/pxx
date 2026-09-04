@@ -76,7 +76,7 @@ That is a hard requirement on the first half of this ticket.
 the same first half for the other target.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit c758dea9c.
 
 ## Closed — what it took, and the part that was not in the ticket
 
