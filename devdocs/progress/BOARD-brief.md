@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:12 unfinished:26 blocked:7 backlog:13 backlog_new:2 backlog-umbrella:7 backlog-core:132 backlog-nilpy:97 backlog-tools:14 backlog-pascal:52 backlog-decide:36 backlog-libs:20 backlog-cfront:18 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3234 rejected:74`
+`working:12 unfinished:26 blocked:7 backlog:14 backlog_new:2 backlog-umbrella:7 backlog-core:132 backlog-nilpy:97 backlog-tools:14 backlog-pascal:52 backlog-decide:36 backlog-libs:20 backlog-cfront:18 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3235 rejected:74`
 
 ## Held now (working/ — do not touch these files)
 
@@ -61,7 +61,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 407, ranked
+## Ready — top 30 of 408, ranked
 
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -86,12 +86,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [C]` regression-lib-test-crtl-reachability-8
 - `[p 70] [T]` regression-optdiff-shard6-12
 - `[p 70] [T]` regression-test-core-c-asm-in-inline-body-2
-- `[p 70] [P]` regression-test-core-test-ansiterm-raw-write
+- `[p 70] [P]` regression-test-core-test-cross-futex-through-the-pal
+- `[p 70] [T]` regression-test-core-test-cross-os-entropy-through-the-pal
 - `[p 70] [N]` regression-test-core-test-nilpy-c-pointer-2
 - `[p 70] [T]` regression-test-emit-obj-c-obj-data-import-2
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
-- `[p 65] [B]` bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS (unblocks 1)
 
-_377 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_378 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
