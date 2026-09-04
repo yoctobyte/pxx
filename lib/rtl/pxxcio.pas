@@ -359,46 +359,29 @@ begin
   Result := PXXRealloc(p, n, 8);
 end;
 
-{ exit_group's syscall number is PER TARGET, like SysClockGettimeNr below. It
-  was hardcoded to 231 — x86-64's number. On i386, 231 is fgetxattr: C's
-  `exit(3)` quietly failed an xattr call, returned, and the process wound up
-  exiting 0, so every i386 program that reported failure through exit() reported
-  SUCCESS instead. (`return 3` from main was unaffected — that path is the entry
-  stub's own exit, which is why nothing caught it.) arm32's 231 is fgetxattr
-  too; aarch64/riscv32 share 94. Found by tools/gcc_diff_probe.sh --target i386. }
-function SysExitGroupNr: Integer;
-begin
-  Result := -1;
-  {$ifdef CPUX86_64} Result := 231; {$endif}
-  {$ifdef CPU_I386}  Result := 252; {$endif}
-  {$ifdef CPU_AARCH64} Result := 94; {$endif}
-  {$ifdef CPU_ARM32} Result := 248; {$endif}
-  {$ifdef CPU_RISCV32} Result := 94; {$endif}
-end;
+{ THROUGH THE PAL, and the incident below is why the numbers no longer live here.
 
-{ Per-target `exit` syscall, the single-thread fallback when exit_group is not
-  known: x86-64 60, i386 1, arm32 1, aarch64/riscv32 93. }
-function SysExitNr: Integer;
-begin
-  Result := -1;
-  {$ifdef CPUX86_64} Result := 60; {$endif}
-  {$ifdef CPU_I386}  Result := 1; {$endif}
-  {$ifdef CPU_AARCH64} Result := 93; {$endif}
-  {$ifdef CPU_ARM32} Result := 1; {$endif}
-  {$ifdef CPU_RISCV32} Result := 93; {$endif}
-end;
+  exit_group's number is PER TARGET, and getting it wrong here was SILENT. It
+  was hardcoded to 231 -- x86-64's. On i386, 231 is fgetxattr: C's `exit(3)`
+  quietly failed an xattr call, returned, and the process wound up exiting 0, so
+  every i386 program that reported failure through exit() reported SUCCESS
+  instead. (`return 3` from main was unaffected -- that path is the entry stub's
+  own exit, which is why nothing caught it.) The repair at the time was a second
+  per-target table, in this file. platform.pas already had a table for the same
+  targets; a private copy is how the first one went wrong and is no defence
+  against the second.
 
+  The wasm32 half is the same shape as Sleep's: `if n >= 0 then` reads as a soft
+  failure and is a RUNTIME test in front of an instruction that is still EMITTED,
+  so a backend with no syscall lowering refused the whole BODY. PalExit reaches
+  wasi's proc_exit, which is a real exit rather than a defined failure.
+
+  Both exit_group AND exit still happen, in that order; that fallback now lives
+  in the posix backend beside the numbers it needs. }
 procedure __pxx_exit(code: Integer);
-var r: Int64; n: Integer;
+var ignored: Integer;
 begin
-  { exit_group(code) — terminate the process directly (PAL posix). Assigned form
-    because __pxxrawsyscall is intercepted in expression context; the syscall
-    never returns, so r is unused. If exit_group somehow does return, fall back
-    to exit(2) rather than letting the caller run on with the process alive. }
-  n := SysExitGroupNr;
-  if n >= 0 then r := __pxxrawsyscall(n, code, 0, 0, 0, 0, 0);
-  n := SysExitNr;
-  if n >= 0 then r := __pxxrawsyscall(n, code, 0, 0, 0, 0, 0);
+  ignored := PalExit(code);
 end;
 
 type
@@ -467,44 +450,36 @@ begin
   end;
 end;
 
-{ clock_gettime syscall number per target (mirrors baseunix.pas SysClockGettime).
-  riscv32 omitted intentionally — no lua/sqlite test exercises time on it, so it
-  falls through to the 0 stub rather than risking the rv32 time64 ABI. }
-function SysClockGettimeNr: Integer;
-begin
-  Result := -1;
-  {$ifdef CPUX86_64} Result := 228; {$endif}
-  {$ifdef CPU_I386}  Result := 265; {$endif}
-  {$ifdef CPU_AARCH64} Result := 113; {$endif}
-  {$ifdef CPU_ARM32} Result := 263; {$endif}
-end;
+{ THE CLOCK BODIES, all three through PalClockGetTime.
 
-type
-  TKernelTimeSpec2 = record
-    Sec:  NativeInt;
-    Nsec: NativeInt;
-  end;
+  This unit used to carry its own clock_gettime number table, which -- like the
+  exit one above -- omitted riscv32 ON PURPOSE: "no lua/sqlite test exercises
+  time on it, so it falls through to the 0 stub rather than risking the rv32
+  time64 ABI". That was right about the risk and it is exactly what hid the real
+  defect: the PAL's own riscv32 clock is -ENOSYS
+  (bug-b-palnanosleep-answers-enosys-on-riscv32-because-rv32-has-no-nanosleep-syscall,
+  measured across the whole time family). Two silences stacked, and removing
+  this one makes the other reachable. riscv32 answers 0 either way today.
 
+  The explicit `Int64(ts.Sec)` casts that were here are gone rather than fixed:
+  PalClockGetTime hands back Int64 out-parameters, so there is no NativeInt to
+  widen and bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit
+  cannot be reached from this file at all. }
 function __pxx_time: Int64;
-var ts: TKernelTimeSpec2; n: Integer; r: Int64;
+var sec, nsec: Int64;
 begin
   Result := 0;
-  n := SysClockGettimeNr;
-  if n = -1 then Exit;
-  r := __pxxrawsyscall(n, 0, Int64(@ts), 0, 0, 0, 0); { 0 = CLOCK_REALTIME }
-  if r = 0 then Result := ts.Sec;
+  if PalClockGetTime(0, sec, nsec) = 0 then    { 0 = CLOCK_REALTIME }
+    Result := sec;
 end;
 
 function __pxx_clock: Int64;
-var ts: TKernelTimeSpec2; n: Integer; r: Int64;
+var sec, nsec: Int64;
 begin
   Result := 0;
-  n := SysClockGettimeNr;
-  if n = -1 then Exit;
   { 2 = CLOCK_PROCESS_CPUTIME_ID; report microseconds (CLOCKS_PER_SEC=1e6). }
-  r := __pxxrawsyscall(n, 2, Int64(@ts), 0, 0, 0, 0);
-  if r = 0 then
-    Result := Int64(ts.Sec) * 1000000 + Int64(ts.Nsec) div 1000;
+  if PalClockGetTime(2, sec, nsec) = 0 then
+    Result := sec * 1000000 + nsec div 1000;
 end;
 
 procedure FillStatBuf(const info: TPalFileStat; sb: PPxxStatBuf);
@@ -1002,19 +977,14 @@ end;
   catch — "it works" and "it links libc-free" are different questions.
   Nanosecond precision, unlike __pxx_realtime which narrows to microseconds. }
 function __pxx_clock_gettime(clkId: Integer; secOut, nsecOut: Pointer): Integer;
-var ts: TKernelTimeSpec2; n: Integer; r: Int64;
+var sec, nsec: Int64;
 begin
   Result := -1;
   PInt64(secOut)^ := 0;
   PInt64(nsecOut)^ := 0;
-  n := SysClockGettimeNr;
-  if n = -1 then Exit;
-  r := __pxxrawsyscall(n, clkId, Int64(@ts), 0, 0, 0, 0);
-  if r <> 0 then Exit;
-  { implicit widening, NOT Int64(ts.Sec) — see the __pxx_clock note above and
-    bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit }
-  PInt64(secOut)^ := ts.Sec;
-  PInt64(nsecOut)^ := ts.Nsec;
+  if PalClockGetTime(clkId, sec, nsec) <> 0 then Exit;
+  PInt64(secOut)^ := sec;
+  PInt64(nsecOut)^ := nsec;
   Result := 0;
 end;
 

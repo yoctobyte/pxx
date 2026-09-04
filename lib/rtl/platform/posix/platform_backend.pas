@@ -55,6 +55,8 @@ function PalBackendSetGroups(count: Integer; list: Pointer): Integer;
 function PalBackendSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
 function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
+function PalBackendClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
+function PalBackendExit(code: Integer): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFdatasync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
@@ -175,6 +177,7 @@ const
   SYS_ftruncate = 77; SYS_faccessat = 269; SYS_geteuid = 107; SYS_fchown = 93; SYS_readlinkat = 267;
   SYS_getuid = 102; SYS_getgid = 104; SYS_getegid = 108; SYS_getppid = 110;
   SYS_exit = 60;
+  SYS_exit_group = 231;
 {$endif}
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -203,6 +206,7 @@ const
   SYS_ftruncate = 93; SYS_faccessat = 307; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 305;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
   SYS_exit = 1;
+  SYS_exit_group = 252;
 {$endif}
 {$ifdef CPU_AARCH64}
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
@@ -229,6 +233,7 @@ const
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
   SYS_exit = 93;
+  SYS_exit_group = 94;
 {$endif}
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -255,6 +260,7 @@ const
   SYS_ftruncate = 93; SYS_faccessat = 334; SYS_geteuid = 201; SYS_fchown = 207; SYS_readlinkat = 332;
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
   SYS_exit = 1;
+  SYS_exit_group = 248;
 {$endif}
 {$ifdef CPU_RISCV32}
   { rv32 linux = asm-generic table (same slots as aarch64). 32-bit quirks:
@@ -301,6 +307,7 @@ const
   SYS_ftruncate = 46; SYS_faccessat = 48; SYS_geteuid = 175; SYS_fchown = 55; SYS_readlinkat = 78;
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
   SYS_exit = 93;
+  SYS_exit_group = 94;
 {$endif}
 {$ifdef CPU_XTENSA}
   { xtensa linux has its OWN numbering — neither asm-generic nor i386's. These
@@ -336,6 +343,7 @@ const
   SYS_ftruncate = 23; SYS_faccessat = 301; SYS_geteuid = 140; SYS_fchown = 53; SYS_readlinkat = 295;
   SYS_getuid = 137; SYS_getgid = 139; SYS_getegid = 141; SYS_getppid = 150;
   SYS_exit = 118;
+  SYS_exit_group = 119;
 {$endif}
   PAL_AT_FDCWD = -100;
   PAL_AT_EMPTY_PATH = $1000;
@@ -1189,6 +1197,52 @@ begin
   ts[0] := NativeInt(atimeSec); ts[1] := 0;
   ts[2] := NativeInt(mtimeSec); ts[3] := 0;
   Result := Integer(__pxxrawsyscall(SYS_utimensat, PAL_AT_FDCWD, Int64(path), Int64(@ts[0]), 0, 0, 0));
+end;
+
+{ The general clock_gettime(2). PalBackendRealtime above is this with clockId 0,
+  and stays a separate entry because it is the hot one and its callers have no
+  clock to pass.
+
+  TWO NATIVE WORDS, not two Int64s -- the same rule PalBackendClockSetTime states
+  for the write direction, and for the same reason: on a 32-bit target the
+  kernel's timespec is 32-bit. The widening into the Int64 outputs is IMPLICIT
+  and must stay that way (bug-a-explicit-int64-cast-of-nativeint-does-not-extend-on-32bit).
+
+  Note for whoever fixes riscv32: 113 is the asm-generic clock_gettime and rv32
+  does not have it -- measured -38 (-ENOSYS) here, same rv32 time64 story as
+  nanosleep. See bug-b-palnanosleep-answers-enosys-on-riscv32-because-rv32-has-no-nanosleep-syscall,
+  which covers the whole family rather than one entry. }
+function PalBackendClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
+var ts: array[0..1] of NativeInt;
+begin
+  ts[0] := 0; ts[1] := 0;
+  Result := Integer(__pxxrawsyscall(SYS_clock_gettime, clockId, Int64(@ts[0]), 0, 0, 0, 0));
+  sec := ts[0]; nsec := ts[1];
+end;
+
+{ exit_group(code), with exit(code) behind it.
+
+  BOTH, and in that order, because they answer different questions: exit_group
+  ends every thread and exit ends only the calling one, so a single-threaded
+  program is served by either and a threaded one is only served by the first.
+  If exit_group somehow returns, falling through to exit is better than letting
+  the caller run on with the process alive.
+
+  THE NUMBER IS PER TARGET AND GETTING IT WRONG IS SILENT. This was hardcoded to
+  231 in pxxcio.pas -- x86-64's number -- and on i386 231 is fgetxattr, so C's
+  `exit(3)` quietly failed an xattr call, returned, and the process exited 0:
+  every i386 program that reported failure through exit() reported SUCCESS.
+  `return 3` from main was unaffected, which is why nothing caught it. It now
+  lives here, once, beside the other numbers for the same target. }
+function PalBackendExit(code: Integer): Integer;
+var ignored: Int64;
+begin
+  ignored := __pxxrawsyscall(SYS_exit_group, code, 0, 0, 0, 0, 0);
+  ignored := __pxxrawsyscall(SYS_exit, code, 0, 0, 0, 0, 0);
+  { Not reached on Linux. Answering UNSUPPORTED rather than 0 keeps the contract
+    the interface states: a caller that gets a value back knows the exit did not
+    happen. }
+  Result := PAL_ERR_UNSUPPORTED;
 end;
 
 function PalBackendUtimensat(dirFd: Integer; path: PChar;

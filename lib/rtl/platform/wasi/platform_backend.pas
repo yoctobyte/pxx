@@ -87,6 +87,8 @@ function PalBackendSetGroups(count: Integer; list: Pointer): Integer;
 function PalBackendSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
 function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
+function PalBackendClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
+function PalBackendExit(code: Integer): Integer;
 function PalBackendUtimensat(dirFd: Integer; path: PChar;
                              aSec, aNsec, mSec, mNsec: Int64;
                              flags: Integer): Integer;
@@ -275,6 +277,13 @@ function wasi_clock_time_get(clockId: Integer; precision: Int64;
   external 'wasi_snapshot_preview1' name 'clock_time_get';
 function wasi_random_get(buf: Pointer; len: Integer): Integer;
   external 'wasi_snapshot_preview1' name 'random_get';
+{ proc_exit does not return, and its wasm type is (i32) -> (), so it is a
+  PROCEDURE here. The wasm32 backend already emits this same import by hand for
+  the `Halt` IR op -- it has no Pascal call site to hang a declaration on -- so
+  the module ends up with one import either way; this is the spelling the PAL
+  can call. }
+procedure wasi_proc_exit(code: Integer);
+  external 'wasi_snapshot_preview1' name 'proc_exit';
 
 { THERE IS A SECOND COPY OF EVERYTHING BELOW, and it is intended, not stale.
   compiler/builtin/wasibackend.pas holds the same preopen table, the same rights
@@ -912,6 +921,50 @@ end;
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 { WASI exposes clocks as read-only; there is no host call to set one. }
 begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ ...and the READ direction, which WASI does have. clock_time_get answers ONE
+  value in NANOSECONDS, where the PAL wants seconds and nanoseconds apart --
+  the same split PalBackendRealtime makes, generalised to any clock id.
+
+  THE IDS LINE UP WITH POSIX' by construction: WASI numbers realtime 0,
+  monotonic 1, process_cputime_id 2 and thread_cputime_id 3, which is the
+  numbering `clock_gettime(2)` uses, so the caller's id passes through
+  untranslated. That is worth stating rather than leaving to be re-derived: if a
+  future WASI revision renumbers them, this line is the one that has to change
+  and nothing else here shows it.
+
+  `precision` of 1000 (a microsecond) asks for no more resolution than any host
+  provides; a strict host rejects a finer request rather than rounding it. }
+function PalBackendClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
+{$ifdef CPU_WASM32}
+var rc: Integer; t: Int64;
+{$endif}
+begin
+  sec := 0; nsec := 0;
+{$ifdef CPU_WASM32}
+  WasiScratch64 := 0;
+  rc := wasi_clock_time_get(clockId, 1000, @WasiScratch64);
+  if rc <> 0 then begin Result := WasiErr(rc); Exit; end;
+  t := WasiScratch64;
+  sec := t div 1000000000;
+  nsec := t mod 1000000000;
+  Result := 0;
+{$else}
+  Result := PAL_ERR_UNSUPPORTED;
+{$endif}
+end;
+
+{ proc_exit(code), which is exactly the contract: it terminates and does not
+  return. The `Result` line after it is unreachable and is there because the
+  function has one; wasm does not know proc_exit is noreturn either, which is
+  why the backend follows its own emission of it with `unreachable`. }
+function PalBackendExit(code: Integer): Integer;
+begin
+{$ifdef CPU_WASM32}
+  wasi_proc_exit(code);
+{$endif}
   Result := PAL_ERR_UNSUPPORTED;
 end;
 

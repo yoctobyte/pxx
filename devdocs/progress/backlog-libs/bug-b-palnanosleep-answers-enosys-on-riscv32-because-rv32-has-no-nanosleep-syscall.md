@@ -8,7 +8,7 @@ blocked-by: []
 owner: unassigned
 created: 2026-09-04
 found-by: frankA (routing sysutils.Sleep through the PAL)
-summary: "PalNanosleep returns -38 (-ENOSYS) on riscv32 and 0 on x86-64, i386, aarch64 and arm32 — measured, one line each. The posix backend gives riscv32 SYS_nanosleep = 101 from the asm-generic table, and rv32 does not HAVE 101: the 32-bit-time_t syscalls were never provided on rv32, which uses clock_nanosleep_time64 (423) with a 64-bit timespec. So Sleep does not sleep on riscv32 and never has; nothing observed it because sysutils carried its own number table with no riscv32 arm and exited before calling the PAL at all. The silence had TWO layers, and removing the outer one is what made the inner one measurable."
+summary: "THE WHOLE PAL TIME FAMILY IS -ENOSYS ON riscv32, not just nanosleep — measured: PalNanosleep -38, PalRealtime -38 (sec=0), PalMonotonicMillis 0, while all four of x86-64, i386, aarch64 and arm32 answer correctly. One cause: rv32 never provided the 32-bit-time_t syscalls, and the posix backend hands it the asm-generic numbers (nanosleep 101, clock_gettime 113) that exist only on 64-bit asm-generic targets. rv32 needs the *_time64 calls (clock_nanosleep_time64 423, clock_gettime64 403) AND a 64-bit timespec — PalBackendNanosleep/Realtime build `array[0..1] of NativeInt`, which is 4-byte fields there, so the number alone is not the fix. Nothing observed it because every caller carried its own number table that omitted riscv32 and exited first; the silence had two layers and removing the outer one is what made this measurable."
 ---
 
 # PalNanosleep is -ENOSYS on riscv32
@@ -68,3 +68,55 @@ number-table edit.
 Positive control: the four targets above must still answer 0 and
 `Sleep(300)` must still measure >= 250ms on each. A fix that changes the shared
 path and is only run on riscv32 cannot see that it broke them.
+
+## THE FAMILY, measured 2026-09-04 after the sysutils change
+
+```pascal
+program clk;
+uses platform;
+var sec, nsec: Int64;
+begin
+  WriteLn('PalRealtime rc=', PalRealtime(sec, nsec), ' sec=', sec);
+  WriteLn('PalMonotonicMillis=', PalMonotonicMillis);
+end.
+```
+
+| target | PalNanosleep | PalRealtime | PalMonotonicMillis |
+| --- | --- | --- | --- |
+| x86-64 | 0 | rc 0, sec 1788525344 | 332972432 |
+| i386 | 0 | rc 0, plausible | non-zero |
+| aarch64 | 0 | rc 0, plausible | non-zero |
+| arm32 | 0 | rc 0, plausible | non-zero |
+| **riscv32** | **-38** | **rc -38, sec 0** | **0** |
+
+**One cause, three entries** — which is what makes it a mechanism rather than
+three bugs: rv32 has none of the 32-bit-time_t syscalls, and the posix backend
+gives it the asm-generic numbers that only exist on 64-bit asm-generic targets.
+
+`PalMonotonicMillis` returning **0** rather than an error is the one to watch:
+a caller measuring an interval gets `0 - 0 = 0` elapsed and no failure signal at
+all, so any timing or timeout loop on riscv32 spins or completes instantly.
+
+Same pattern was in a THIRD private table, and it has since been removed:
+`pxxcio.pas`'s `SysClockGettimeNr` omitted riscv32 *on purpose*, with the comment
+"no lua/sqlite test exercises time on it, so it falls through to the 0 stub
+rather than risking the rv32 time64 ABI". That comment was correct about the
+risk and it is what had been hiding this — the duplicate table is the reason the
+real one was never asked.
+
+## THE OUTER LAYER IS GONE AS OF 2026-09-04, so this is now REACHABLE from C
+
+`pxxcio.pas`'s three clock bodies and its exit body now go through
+`PalClockGetTime` / `PalExit`; the private tables are deleted. Nothing changed
+for riscv32 — it answered 0/-1 through the local stub and answers 0/-1 through
+the PAL, measured identically before and after on the same probe — but the
+answer is now produced by the code this ticket is about, so fixing the PAL fixes
+C too.
+
+`test/c_cross_time_and_exit_through_the_pal.c` is wired for i386, aarch64, arm32
+and riscv32 and **asserts riscv32's hole rather than tolerating it**: argv[1] is
+whether the target is expected to have a working clock, the Makefile passes `0`
+for riscv32 and `1` for the rest, and each target also runs a must-fail control
+with the opposite expectation. When this ticket is fixed, that row must be
+changed to `1` — and until it is, the riscv32 arm will start FAILING, which is
+the intended way for this ticket to announce its own resolution.

@@ -169,6 +169,17 @@ function PalSetGroups(count: Integer; list: Pointer): Integer;
 function PalSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
 function PalSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
 function PalClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
+{ The READ half of the pair above, and the general form PalRealtime is one fixed
+  case of (clockId 0). It exists because three RTL bodies wanted an ARBITRARY
+  clock -- CLOCK_PROCESS_CPUTIME_ID for C's clock(), whatever the caller asks for
+  in clock_gettime(2) -- and had to spell __pxxrawsyscall themselves to get it,
+  each behind its own per-CPU number table. A setter with no getter is what made
+  that look like the only option. }
+function PalClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
+{ Terminate the process with `code`, and DO NOT RETURN on a backend that can.
+  A backend that cannot terminate returns PAL_ERR_UNSUPPORTED, so a caller can
+  tell `it did not happen` from `it happened and control never came back`. }
+function PalExit(code: Integer): Integer;
 function PalUtimensat(dirFd: Integer; path: PChar;
                       aSec, aNsec, mSec, mNsec: Int64;
                       flags: Integer): Integer;
@@ -535,6 +546,16 @@ end;
 function PalClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 begin
   Result := PalBackendClockSetTime(clockId, sec, nsec);
+end;
+
+function PalClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
+begin
+  Result := PalBackendClockGetTime(clockId, sec, nsec);
+end;
+
+function PalExit(code: Integer): Integer;
+begin
+  Result := PalBackendExit(code);
 end;
 
 function PalUtimensat(dirFd: Integer; path: PChar;

@@ -9842,6 +9842,49 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cfloat_array_decay_addr_b37826; tools/expect_same.sh cfloat_array_decay_addr_b37826-rc "$$?" "42"
 	./$(COMPILER) test/cfinalizers_on_main_return_b379.c $(TESTTMP)/cfinalizers_main_b37926
 	$(TESTTMP)/cfinalizers_main_b37926; tools/expect_same.sh cfinalizers_main_b37926-rc "$$?" "42"
+	# time()/clock()/clock_gettime()/exit() for C, all four THROUGH THE PAL, run
+	# on every target an emulator exists for. The row that earns this test is the
+	# EXIT CODE on a cross target: lib/rtl/pxxcio.pas used to keep its own
+	# exit_group number table, hardcoded to x86-64's 231, and on i386 231 is
+	# fgetxattr -- so C's exit(3) failed an xattr call, returned, and the process
+	# exited 0. Every i386 program reporting failure through exit() reported
+	# SUCCESS, and nothing here caught it because `return n` from main is the entry
+	# stub's own exit and that path was fine. Nothing asserted a nonzero exit()
+	# code on a cross target until this row.
+	#
+	# argv[1] is whether this target is expected to have a working clock: 1
+	# everywhere but riscv32, where the PAL issues asm-generic 113 and rv32 is
+	# time64-only, so the kernel answers -ENOSYS
+	# (bug-b-palnanosleep-answers-enosys-on-riscv32-because-rv32-has-no-nanosleep-syscall).
+	# Passing the expectation IN, rather than letting the program shrug, is what
+	# makes riscv32's hole asserted instead of tolerated -- and gives every target
+	# a MUST-FAIL control below: run it with the wrong expectation and it must
+	# exit 1. A row asserting exit 7 that can never come out otherwise is not a
+	# check, so both directions are measured on all five.
+	./$(COMPILER) test/c_cross_time_and_exit_through_the_pal.c $(TESTTMP)/c_pal_time26
+	tools/expect_same.sh c_pal_time26 "$$($(TESTTMP)/c_pal_time26 1)" "$$(cat test/c_cross_time_and_exit_through_the_pal.expected)"
+	$(TESTTMP)/c_pal_time26 1; tools/expect_same.sh c_pal_time26-rc "$$?" "7"
+	@$(TESTTMP)/c_pal_time26 0 >/dev/null 2>&1; tools/expect_same.sh c_pal_time26-mustfail "$$?" "1"
+	@overall=0; ran=0; want=0; \
+	for t in i386 aarch64 arm32 riscv32; do \
+	  want=$$((want+1)); \
+	  case $$t in i386) q=qemu-i386;; aarch64) q=qemu-aarch64;; arm32) q=qemu-arm;; riscv32) q=qemu-riscv32;; esac; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "  c_pal_time: SKIP $$t ($$q absent, NOT verified)"; continue; fi; \
+	  case $$t in riscv32) e=0; o=1; x=test/c_cross_time_and_exit_through_the_pal_noclock.expected;; \
+	             *)       e=1; o=0; x=test/c_cross_time_and_exit_through_the_pal.expected;; esac; \
+	  if ! ./$(COMPILER) --target=$$t test/c_cross_time_and_exit_through_the_pal.c $(TESTTMP)/c_pal_time_$$t >$(TESTTMP)/c_pal_time_$$t.err 2>&1; then \
+	    echo "  c_pal_time: COMPILE FAIL $$t"; tail -2 $(TESTTMP)/c_pal_time_$$t.err; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  ran=$$((ran+1)); \
+	  got="$$(tools/run_target.sh $$t $(TESTTMP)/c_pal_time_$$t $$e 2>&1)"; rc=$$?; \
+	  if [ "$$got" = "$$(cat $$x)" ] && [ "$$rc" = "7" ]; then echo "  c_pal_time: PASS $$t (exit 7 through exit(), clock expected $$e)"; \
+	  else echo "  c_pal_time: FAIL $$t rc=$$rc"; printf '%s\n' "$$got" | sed 's/^/      /'; overall=1; fi; \
+	  tools/run_target.sh $$t $(TESTTMP)/c_pal_time_$$t $$o >/dev/null 2>&1; crc=$$?; \
+	  if [ "$$crc" = "1" ]; then echo "  c_pal_time: PASS $$t (must-fail control rejected expectation $$o)"; \
+	  else echo "  c_pal_time: CONTROL DID NOT FAIL on $$t (rc=$$crc) -- the check cannot come out false, so the PASS above means nothing"; overall=1; fi; \
+	done; \
+	echo "  c_pal_time: $$ran of $$want cross targets measured"; \
+	test "$$overall" = "0" || { echo "  c_pal_time: RED"; exit 1; }
 	./$(COMPILER) test/c_environ_prefilled_b380.c $(TESTTMP)/c_environ_prefilled_b38026
 	$(TESTTMP)/c_environ_prefilled_b38026; tools/expect_same.sh c_environ_prefilled_b38026-rc "$$?" "42"
 	./$(COMPILER) test/cfield_2d_row_decay_b62.c $(TESTTMP)/cfield_2d_row_decay_b6226

@@ -51,6 +51,8 @@ function PalBackendSetGroups(count: Integer; list: Pointer): Integer;
 function PalBackendSigTimedWait(setPtr: Pointer; setSize, sec, nsec: Integer): Integer;
 function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize: Integer): Integer;
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
+function PalBackendClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
+function PalBackendExit(code: Integer): Integer;
 function PalBackendUtimensat(dirFd: Integer; path: PChar;
                              aSec, aNsec, mSec, mNsec: Int64;
                              flags: Integer): Integer;
@@ -740,6 +742,26 @@ end;
 function PalBackendRealtime(var sec, nsec: Int64): Integer;
 begin
   sec := 0; nsec := 0;
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ Same refusal as PalBackendRealtime above, for the same reason and NOT as a
+  stub: an ESP image has no kernel clock behind this interface, and 33 PAL
+  entries here refuse deliberately so that POSIX-shaped code meets
+  PAL_ERR_UNSUPPORTED rather than a wrong answer. Zeroing the outputs first
+  means a caller that ignores the result reads 0, not whatever was on its stack. }
+function PalBackendClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
+begin
+  sec := 0; nsec := 0;
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+{ FreeRTOS gives TASKS, not processes, so there is nothing here to exit -- and
+  the honest answer is a refusal the caller can see rather than a halt loop that
+  looks like a hang. The interface says a backend that cannot terminate returns
+  PAL_ERR_UNSUPPORTED and therefore RETURNS, which is what this does. }
+function PalBackendExit(code: Integer): Integer;
+begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 
