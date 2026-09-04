@@ -4,12 +4,12 @@ title: "offsetof in a static ARRAY initializer discards the whole list and leave
 track: C
 prio: 80
 type: bug
-status: backlog
+status: done
 created: 2026-09-04
 found-by: franks-ab
 owner: ""
 blocked-by: []
-summary: "MEASURED on pinned v403 AND at HEAD 44adaa79a (frank-coordinator-2c) -- NOT fixed, so a re-pin does not help. A static ARRAY initializer containing an `offsetof` element has its ENTIRE initializer list discarded and replaced by ONE ZERO ELEMENT: `static const unsigned short a[] = {5, offsetof(S,b), 9}` gives sizeof 2 and one element holding 0, where gcc gives sizeof 6 and 5/8/9. Silent -- no diagnostic. THE LENGTH IS THE DEFECT, so `sizeof(a)/sizeof(a[0])` becomes 1 and every loop over such a table runs one iteration; reading a[1] or a[2] reads a NEIGHBOURING static, which is how both of the first two diagnoses (mine: values zeroed; the coordinator's: offsetof correct, literals zeroed) came out wrong from plausible readings. Narrow: `sizeof` and `3+4` in the same position are correct, `(unsigned long)((char*)0+5)` is correct, a static SCALAR offsetof is correct, a LOCAL array of offsetofs is correct, and offsetof in an expression is correct -- only `&(((T*)0)->m)` reaching a static AGGREGATE initializer fails, at any member depth, const or not. Found by booting the pxx-built busybox as PID 1: `uname -a` printed `Linux` eight times because coreutils/uname.c:113 walks struct utsname through such a table and the walk ran off a one-element array into zeros. The 621-case busybox corpus cannot see this class -- 516 of those cases are `applet --help`."
+summary: "FIXED 2026-09-04 in 62463923f (frankc-af); verification of the fix is THEIRS, not mine. It was live on the pin AND at HEAD (44adaa79a / 4edf60ff9), so it was never a re-pin argument. TWO defects on one path: CBraceFlatIntInitCountAt's token allowlist had no tkDot and `->` lexes to tkDot, so every offsetof element fell to a fallback that sizes the array as ONE element and initialises nothing; and CEvalConstOffsetofAddress walked a single member link, so a NESTED path like `name.sysname` returned the outer member's offset and desynchronised the parser. Symptom was: a static ARRAY initializer containing an `offsetof` element has its ENTIRE initializer list discarded and replaced by ONE ZERO ELEMENT: `static const unsigned short a[] = {5, offsetof(S,b), 9}` gives sizeof 2 and one element holding 0, where gcc gives sizeof 6 and 5/8/9. Silent -- no diagnostic. THE LENGTH IS THE DEFECT, so `sizeof(a)/sizeof(a[0])` becomes 1 and every loop over such a table runs one iteration; reading a[1] or a[2] reads a NEIGHBOURING static, which is how both of the first two diagnoses (mine: values zeroed; the coordinator's: offsetof correct, literals zeroed) came out wrong from plausible readings. Narrow: `sizeof` and `3+4` in the same position are correct, `(unsigned long)((char*)0+5)` is correct, a static SCALAR offsetof is correct, a LOCAL array of offsetofs is correct, and offsetof in an expression is correct -- only `&(((T*)0)->m)` reaching a static AGGREGATE initializer fails, at any member depth, const or not. Found by booting the pxx-built busybox as PID 1: `uname -a` printed `Linux` eight times because coreutils/uname.c:113 walks struct utsname through such a table and the walk ran off a one-element array into zeros. The 621-case busybox corpus cannot see this class -- 516 of those cases are `applet --help`."
 ---
 
 # offsetof in a static array initializer discards the list
@@ -73,6 +73,32 @@ were out of bounds, because the array is one element long. Nothing errored.
 **Reading an array whose LENGTH is the defect cannot measure that defect.**
 `sizeof(a)` settled it in one line and is the only probe here that adjacent
 memory cannot answer.
+
+## Fixed
+
+`62463923f` (frankc-af). Two defects on the one path — the tkDot allowlist gap
+that dropped every offsetof element into a one-element zero-initialised
+fallback, and a single-link walk in `CEvalConstOffsetofAddress` that made a
+NESTED path return the outer member's offset. The second is the one `uname`
+needed, since `name.sysname` is nested; none of the rows in the table above
+nests, so they could not have shown it.
+
+**The verification of the fix is frankc-af's, measured on their tree. I have not
+re-run these rows against a fixed compiler** — Track B does not rebuild the
+compiler, and the binary in my tree has provenance I cannot establish.
+
+### `uname -s` is the guard that cannot fail, with a real victim
+
+`sysname` is at **offset 0**, so on the broken build the wrong value and the
+right value COINCIDE on exactly the field anyone probes first:
+
+    uname --help   byte-identical to gcc   -- and counted as a PASS
+    uname -s       Linux                   -- CORRECT, for the wrong reason
+    uname -a       Linux x8                -- the only spelling that shows it
+
+Any regression test for this must assert the LENGTH before reading an element,
+must expect no zeros, and must not let two rows expect the same number.
+frankc-af's is built that way, with `.expected` generated from gcc.
 
 ## Repro
 
@@ -164,3 +190,6 @@ array whose length is the defect cannot measure that defect.**
 
 Summary left as its author wrote it; it understates the mechanism and the
 severity, and correcting it belongs to whoever holds the ticket.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

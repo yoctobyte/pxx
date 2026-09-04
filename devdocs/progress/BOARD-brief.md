@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:12 unfinished:27 blocked:7 backlog:13 backlog_new:2 backlog-umbrella:7 backlog-core:131 backlog-nilpy:96 backlog-tools:14 backlog-pascal:51 backlog-decide:36 backlog-libs:17 backlog-cfront:18 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3224 rejected:74`
+`working:12 unfinished:27 blocked:7 backlog:13 backlog_new:2 backlog-umbrella:7 backlog-core:131 backlog-nilpy:96 backlog-tools:14 backlog-pascal:51 backlog-decide:36 backlog-libs:17 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3225 rejected:74`
 
 ## Held now (working/ — do not touch these files)
 
@@ -62,11 +62,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 403, ranked
+## Ready — top 30 of 402, ranked
 
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
-- `[p 80] [C]` bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
@@ -94,5 +93,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
 - `[p 70] [T]` regression-test-threads-test-loadfile-shortstring
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
+- `[p 68] [N]` feature-nilpy-user-defined-decorators
 
-_373 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_372 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
