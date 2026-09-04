@@ -4617,3 +4617,98 @@ with the **FPC seed canary RUN**, gated before the commit on a dirty
 that exact binary — re-run after a late dead-code deletion rather than quoting
 the earlier run.** That is the correct handling: a tier result is about the tree
 it ran on, and the tree had moved.
+
+---
+
+## `2ec3e61c5` shipped a crash; `6a22f26d4` fixes it — 17 minutes, not an hour
+
+frankb-78 self-reported this as "lasted an hour." **Measured, it is 17 minutes**
+(break 06:43:28, fix 07:00:09) across **5 intervening commits, none of which
+touch `compiler/`** — three docs/tickets and two tstate. Correcting in its favour
+because the record should be accurate in both directions.
+
+**The regression was in KIND, not just in value:** before `2ec3e61c5` a windowed
+xtensa `try` in the **main program body** cleanly **refused to compile**; after
+it, it **SIGSEGVs**. A refusal became a crash.
+
+**Cause.** Every frame's 16-byte block at `[sp-16]` is written by its **caller** —
+window overflow puts the caller's `a0-a3` there — so every frame gets one for
+free **except the process entry**, which reaches its frame through a bare `entry`
+from the root window and **was never `CALL8`'d**. So `[sp-12]`, which `ExcSetJmp`
+reads to find the frame's caller, is **whatever the kernel left on the stack.**
+Harmless for exactly as long as nothing walked that chain — *which is why it
+surfaced the moment the unwind landed and not before.* Fixed with four stores
+seeding that frame's own save area, using the pre-`entry` sp as the caller
+pointer.
+
+### THE GROUP RULE PAID OFF IN A DIRECTION NOBODY PREDICTED
+
+It found this by **taking the next ticket in the same group**, which pointed at
+`umbrella-managed-memory-is-correct`, whose unwind-leak child **names the two
+programs the Call0 half was proved with.** Running those against its own new
+feature: **both crashed.**
+
+> **The bug was found by continuing into the neighbouring work, not by anything
+> it would have run as verification of the commit itself.**
+
+CLAUDE.md's *work in GROUPS — a topic or a target, never a lone ticket* is
+justified in the handbook by noticing shared causes across tickets. **This is a
+second, unadvertised return: the neighbour's tests are a test population your own
+commit did not choose**, and therefore not biased toward the shapes you were
+already thinking about.
+
+### A THIRD miss-shape, distinct from today's other two
+
+Today's earlier two were **a guard that could not observe the defect** and **a
+probe that succeeded on a decoy.** This is neither.
+
+**Every row wired was about the mechanism just built, and "which frame is the
+`try` in" was not a dimension any of them VARIED.** Both existing exception tests
+put their `try` inside a procedure — **because that is what a test *about*
+exceptions looks like.** Nothing in either was wrong.
+
+**The outermost frame is the one that is structurally different on this ABI, and
+no test asked about it.** The bias is not in any test; it is in what the *genre*
+of test conventionally contains. That makes it harder to catch than either
+earlier shape: there is no wrong assertion to find, and no decoy value to
+discriminate — **only an axis nobody thought of as an axis.**
+
+### The wrong hypothesis, and what killed it
+
+The proc cleanup frame had been enabled for windowed **in the same commit** and
+was the obvious suspect. Closing `TargetHasProcCleanupFrame` again **changed
+nothing — and that is what killed the hypothesis.** A 30-instruction probe then
+named the real frame in one run: `lj8root_yes` rc 139 against `lj8seed_yes`
+rc 50, **reproduced and fixed outside the compiler before the compiler was
+touched.** Both folded into the committed builder.
+
+### Rows unlocked by the fix
+
+`test_managed_exception_cleanup` and `test_interface_arc_exc` **ran Call0-only,
+correctly** — windowed could not compile a raise at all. That reason is now gone,
+so **they are windowed rows too.** The deep-raise test grew a **main-body `try`**,
+the crashing shape. All match the x86-64 oracle on both ABIs, including one that
+**raises 9000 times through a frame holding 64 KiB.**
+
+*A capability fix retires the justification for an exclusion — grep for what was
+excluded FOR THAT REASON, not just for the sibling code path.*
+
+Gate: converged (`d6834948afb1`); `gate.sh quick` GREEN with the FPC canary run
+before the commit; `PXX_ALLOW_FULL_SUITE=1 make test-xtensa` green end to end on
+that binary.
+
+### Coordinator ruling on the ticket state: STAYS in `done/`
+
+frankb-78 offered to reopen and re-resolve for the record. **It should not.** The
+ticket's claim — *windowed refuses ir raise* — **is resolved and true**; reopening
+would assert something false about the tree for the sake of bookkeeping, and the
+next reader of a reopened-then-re-resolved ticket learns less, not more. The
+follow-up is appended where a citation lands. **What deserved independent
+visibility was the bad window, and that is a logbook and relay matter, not a
+ticket-state one** — 17 minutes, 5 commits, none touching `compiler/`.
+
+### Track T answered the bench question in the same window
+
+`01c09b373` — **same CLASS as the wrapper bug, NOT the same path**, re-ranked
+**50 -> 60.** So the three instruments are a family by shape and not by cause, and
+they get fixed separately. That is the answer I could not have produced.
