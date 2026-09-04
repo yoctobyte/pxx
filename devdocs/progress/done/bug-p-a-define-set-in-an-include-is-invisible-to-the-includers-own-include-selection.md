@@ -167,15 +167,47 @@ reports the disputed span:
   the safe direction); `lib/rtl/palparallel.pas:4` is `{$threadsafe on}` quoted
   in prose, which this pass does not act on in either reading.
 
-**The stronger instrument is frankD's, not this one.** He swept all 2265 sources
-HEAD-vs-pin with the same list and flags: **HEAD 558 fail, pin 632**. Six sources
-the pin compiles and HEAD refuses; five are deliberate must-not-compile tests
-(two of them the `{$FATAL}` pair added this session, which assert `! $(COMPILER)`
-and `! test -e`). **Zero regressions attributable to this change.** The sixth was
-`test_hint_directive_on_a_generic_type` and belonged to `771b157a6`, not here:
-`library` is an FPC hint directive (`type T<X> = class end library;`) that had
-been reserved as a keyword.
+**Two instruments, two different questions — neither substitutes for the other**
+(frankD's framing, and he is right that the previous wording here over-corrected
+by crediting his sweep as the one carrying the conclusion).
 
-So the full tier was still not needed for this change — but that conclusion is
-now carried by an empirical sweep over the right population rather than by a
-static census over the wrong one.
+The scanner census above bounds the **mechanism**: it goes straight at the thing
+that changed and names the disputed set. frankD's sweep bounds the **outcome**:
+it says whether anything actually moved, and cannot say why. A mechanism bound
+with no outcome check would miss a disputed span that matters; an outcome check
+with no mechanism bound is a green that does not know what it covered.
+
+His sweep, all 2265 sources HEAD-vs-pin, same list and flags both arms:
+**HEAD 558 fail, pin 632**. Six sources the pin compiles and HEAD refuses; five
+are deliberate must-not-compile rows, including the `{$FATAL}` pair added this
+session, which assert `! $(COMPILER)` **and** `! test -e` — so a compiler that
+merely failed to emit a binary would not pass them either. **Zero regressions
+attributable to this change.** The sixth was `test_hint_directive_on_a_generic_type`
+and belonged to `771b157a6`: `library` is an FPC hint directive
+(`type T<X> = class end library;`) that had been reserved as a keyword.
+
+After his fix (`7763e1df6`, `library` and `exports` made contextual): **HEAD 557
+fail, zero regressions against pre-fix HEAD, and the six-source list is five —
+all deliberate.**
+
+The two population counts were arrived at independently and agree to a filter
+difference (2117/2265 here, 1986/2165 there), which is worth more than either
+number alone.
+
+So the full tier was still not needed for this change — carried by a mechanism
+bound and an outcome bound together, not by either one.
+
+## The transferable part
+
+**The gate is not what made either of these changes safe.** frankD's quick gate
+was green over a broken tree for a whole commit; mine would have shipped the
+Delphi-mode break if I had not gone looking for the opposite mode on a hunch.
+For a change inside a pass that every source goes through, what makes it safe is
+a *population* — the gate's job is to be cheap, not sufficient.
+
+Its sibling, from the `library` regression and now in
+`devdocs/dev/handbook-rationale.md`: a narrower dialect is not automatically the
+conservative direction, because narrowing rejects things and the rejected
+population is not only the mistakes — and **a feature's own tests cannot see what
+the feature took away**. Six `library` tests passed throughout; they were about
+`library` as a HEADER and could not observe `library` as a HINT.
