@@ -9471,6 +9471,54 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/ccross_main_argv.c $(TESTTMP)/cmain_argv26
 	tools/expect_same.sh cmain_argv26 "$$($(TESTTMP)/cmain_argv26 one two)" "ARGV OK"
 	tools/expect_same.sh cfnptr_array26 "$$($(TESTTMP)/cfnptr_array26)" "$$(printf 'local  11 30 -1\nfield  11 30 -1\ngfield 11 30\narrow  11 30\nvaridx 30 30\n16 48 8 \nderef  11 30\nnolist 5 13\nglobal 11 30\nraw    11 30\ntemp   -1\ndirect 11\nplain  9 7')"
+	# A STRUCT RETURNED BY VALUE THROUGH A FUNCTION POINTER, and the fields read
+	# off the result. `struct P3 (*fp)(int) = mk3; fp(0).y` printed 7 where gcc
+	# prints 11, and `.z` printed 7 too -- EVERY member resolved at offset 0.
+	# Silent: rc=0, no warning, a plausible wrong value.
+	# CParseFnSigGroup registers the Procs[] signature row for a function-pointer
+	# type. It recorded the pointed-at record for a struct-POINTER return
+	# (`struct S *(*)()`, so `p()->f` works) but not the record of a struct
+	# returned BY VALUE, and ResolveNodeRec reads ProcRetRecId[ASTIVal[node]] for
+	# every call kind -- an unset field answers REC_NONE, which is offset 0.
+	# A DIRECT call was always right, so the defect needed BOTH a function
+	# pointer AND a member read off the result; rows 2/3/4/6 are the spellings
+	# that were always correct, kept so a fix cannot trade one for the other.
+	#
+	# gcc -O0 is the oracle AT BOTH WIDTHS. The 32-bit oracle row is not
+	# decoration: the cross rows below share ONE expected transcript, and they
+	# may only do that because this file's values are width-independent by
+	# construction (see its header). If that ever stops being true, THAT row
+	# goes red rather than the cross rows quietly comparing against a 64-bit
+	# transcript.
+	# The transcript is 11 non-empty lines, so a row that never RAN cannot pass
+	# it: run_target.sh's exit code is discarded here as everywhere, and an
+	# empty transcript is the shape a silent green would take.
+	#
+	# aarch64 and arm32 are DELIBERATELY ABSENT, not "not verified": ANY indirect
+	# call returning a struct by value segfaults on both -- at one byte, not at
+	# some size boundary -- and did so before this fix too (ablation). It is NOT
+	# a C defect. IR_CALL_IND's CDECL arm in ir_codegen_aarch64.inc and
+	# ir_codegen_arm32.inc never reads IRCallDest, so the hidden aggregate-result
+	# register (x8 / r0) is whatever was in it and the callee writes through
+	# garbage; riscv32 handles IRCallDest ABOVE that branch and is green.
+	# The discriminator is the CONVENTION, not the language: the equivalent
+	# PASCAL program is correct on both targets until its fn-pointer type is
+	# marked `cdecl`, at which point it segfaults identically. C reaches it on
+	# every function pointer because CParseFnSigGroup sets ProcCdecl.
+	# bug-a-the-cdecl-indirect-call-arm-never-sets-up-the-hidden-aggregate-result-register-on-aarch64-and-arm32
+	# bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero
+	gcc -O0 -o $(TESTTMP)/cfnsr_gcc64 test/c_fnptr_struct_result_fields.c
+	tools/expect_same.sh cfnsr26/oracle64 "$$($(TESTTMP)/cfnsr_gcc64)" "$$(cat test/c_fnptr_struct_result_fields.expected)"
+	gcc -O0 -m32 -o $(TESTTMP)/cfnsr_gcc32 test/c_fnptr_struct_result_fields.c
+	tools/expect_same.sh cfnsr26/oracle32 "$$($(TESTTMP)/cfnsr_gcc32)" "$$(cat test/c_fnptr_struct_result_fields.expected)"
+	./$(COMPILER) test/c_fnptr_struct_result_fields.c $(TESTTMP)/cfnsr26
+	tools/expect_same.sh cfnsr26/native "$$($(TESTTMP)/cfnsr26)" "$$(cat test/c_fnptr_struct_result_fields.expected)"
+	@for t in i386 riscv32; do \
+	  case $$t in i386) q=qemu-i386;; riscv32) q=qemu-riscv32;; esac; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "  cfnsr: $$q absent, $$t NOT verified"; continue; fi; \
+	  ./$(COMPILER) --target=$$t --platform=posix test/c_fnptr_struct_result_fields.c $(TESTTMP)/cfnsr_$$t >/dev/null || { echo "cfnsr $$t compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh cfnsr/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/cfnsr_$$t)" "$$(cat test/c_fnptr_struct_result_fields.expected)" || exit 1; \
+	done
 	# GCC extended inline asm. Not recognised at all, so `asm` parsed as a call to
 	# an undeclared function and the operand sections died at the first ':'.
 	# busybox's libbb.h defines barrier() as `asm volatile ("":::"memory")`, which

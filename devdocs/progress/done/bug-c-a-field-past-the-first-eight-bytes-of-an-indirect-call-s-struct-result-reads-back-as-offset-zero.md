@@ -4,7 +4,7 @@ track: C
 prio: 60
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-02
 found-by: frankC
 owner: unassigned
@@ -80,3 +80,47 @@ pointer returning a struct is ordinary in callback and vtable-shaped C, which is
 exactly what the busybox and crtl work is compiling. Nothing in the tier chain
 can see it: it does not crash, does not warn, and the field it corrupts is the
 third one, so a two-field struct passes.
+
+## Resolution
+
+**Cause: `CParseFnSigGroup` (cparser.inc) never recorded the record id of a
+struct returned BY VALUE.** It already recorded the pointed-at record for a
+struct-POINTER return (`struct S *(*)()`, so `p()->field` resolves), and a
+NAMED C function records the by-value case at the bottom of the declaration
+parser (`if retType = tyRecord then ProcRetRecId[procIdx] := retRecId`) — which
+is exactly why a DIRECT call was always correct and only the function pointer
+was wrong. `ResolveNodeRec` reads `ProcRetRecId[ASTIVal[node]]` for every call
+kind, an indirect call carries the fn-pointer signature's Procs index there, and
+an unset field answers `REC_NONE`, which applies the member at **offset 0**.
+
+The fix gives `CParseFnSigGroup` a fourth parameter carrying the declarator's
+own `baseRec`, captured beside the existing `CTypeElemTk`/`CTypeElemRec` capture
+before the recursion, and sets `ProcRetRecId[fpSig]` when the return is
+`tyRecord`. Both call sites pass it, including the function-TYPED parameter
+site (`static int viaparam(struct P3 cb(int))`), which busybox writes without a
+typedef.
+
+**The hypothesis this ticket recorded was wrong**, and the section above says so
+about itself: this is not a temp address re-derived at the wrong moment, it is a
+record id that was never written. `PXXDBG=a.ir:main` was indeed the cheap
+instrument.
+
+**Ablation.** The first probe I wrote appeared to pass at HEAD and nearly closed
+this as already-fixed — the spelling masked it, and the pin had moved v399→v403
+underneath. Stash the fix, rebuild, re-run, pop, rebuild, `cmp`: without the
+change the ticket's own symptom `local 7 11 7` is live at HEAD.
+
+**Test.** `test/c_fnptr_struct_result_fields.c`, 11 rows, wired in `test-core`
+against a `gcc -O0` oracle at BOTH widths. Rows 2/3/4/6 are the spellings that
+were always correct, kept deliberately: `REC_NONE` is also what a too-eager fix
+produces, and a test that only checked the broken spelling would pass while
+direct calls regressed. Green on x86-64, i386 and riscv32.
+
+**aarch64 and arm32 are excluded and it is not this bug.** They segfault on any
+indirect aggregate return, before and after this change, from one byte up —
+[[bug-a-the-cdecl-indirect-call-arm-never-sets-up-the-hidden-aggregate-result-register-on-aarch64-and-arm32]],
+filed with a pure-Pascal reproducer that shows the discriminator is `cdecl`,
+not the language.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -92,7 +92,7 @@ function CNodeArrayShape(node: Integer; var elemSz, elemRec: Integer;
 function CTypedefNameAt(idx: Integer): AnsiString; forward;
 function CSuggestTypeName(const name: AnsiString): AnsiString; forward;
 function ParseCDeclType: TTypeKind; forward;
-function CParseFnSigGroup(fpRet: TTypeKind; fpRetElemTk, fpRetElemRec: Integer): Integer; forward;
+function CParseFnSigGroup(fpRet: TTypeKind; fpRetElemTk, fpRetElemRec, fpRetRec: Integer): Integer; forward;
 function ParseCCommaStmt: Integer; forward;
 function ParseCSwitchAST: Integer; forward;
 function CNodeIsPointer(node: Integer): Boolean; forward;
@@ -5374,7 +5374,7 @@ end;
   `fpRet' is the return type already parsed by the caller; fpRetElemTk/Rec are
   its pointed-at kind/record when it is a struct pointer. Returns the Procs[]
   index of the registered signature, and sets CTypeProcSig to it. }
-function CParseFnSigGroup(fpRet: TTypeKind; fpRetElemTk, fpRetElemRec: Integer): Integer;
+function CParseFnSigGroup(fpRet: TTypeKind; fpRetElemTk, fpRetElemRec, fpRetRec: Integer): Integer;
 var
   fpPType: TTypeKind;
   fpSig, fpRi: Integer;
@@ -5451,6 +5451,27 @@ begin
     ProcRetPtrElemTk[fpSig] := fpRetElemTk;
     ProcRetPtrElemRec[fpSig] := fpRetElemRec;
   end;
+  { ...AND A STRUCT RETURNED BY VALUE (`struct S (*)()`) carries its OWN record,
+    for exactly the same reason. This is the sibling of the arm directly above
+    and it was missing, so the two spellings of "a callback that hands back a
+    struct" behaved differently: `p()->field` resolved and `p().field` did not.
+
+    ResolveNodeRec reads ProcRetRecId[ASTIVal[node]] for every call kind, and an
+    indirect call carries THIS signature's Procs index there. With the field
+    unset it answered REC_NONE and the member was applied at OFFSET 0 -- a
+    SILENT WRONG VALUE, no warning, rc=0: `struct P3 (*fp)(int) = mk3;
+    fp(0).y` printed 7 where gcc prints 11, and `.z` printed 7 as well, because
+    every field resolved to the first one.
+
+    A named C function records the same thing at the bottom of the declaration
+    parser (`if retType = tyRecord then ProcRetRecId[procIdx] := retRecId`),
+    which is why a DIRECT call was always correct and only the pointer was
+    wrong. Same defect, same day, as the Pascal side's ParseProcTypeSignature
+    (frankH, `fp(8).c`): a procedural TYPE that records everything about its
+    signature except the record identity of a by-value aggregate result.
+    bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero }
+  if (fpRet = tyRecord) and (fpRetRec >= 0) then
+    ProcRetRecId[fpSig] := fpRetRec;
   Result := fpSig;
 end;
 
@@ -5468,6 +5489,7 @@ var
   pointeeRetFn: Boolean;           { declarator is `(* (*name)(...))(...)` — pointee returns a fn-pointer }
   paArrLen: Integer;               { pointer-to-array declarator `elem (*name)[N]` row length }
   fpRetElemTk, fpRetElemRec: Integer;   { fn-ptr return's pointed-at kind/record (struct*-returning callbacks) }
+  fpRetRec: Integer;                    { fn-ptr return's OWN record, for a by-value struct result }
   fpPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   fpPRecIds: array[0..MAX_PROC_PARAMS-1] of Integer;  { record id per fn-ptr param }
   fpRi: Integer;
@@ -5809,6 +5831,11 @@ begin
       call result then resolves `p()->field` (bug-c-function-returning-fnptr). }
     fpRetElemTk := CTypeElemTk;
     fpRetElemRec := CTypeElemRec;
+    { and the BY-VALUE record, for `struct S (*fty)()`. baseRec is a local and
+      the param recursion cannot reset it, but it is captured here anyway so it
+      sits with the two lines above that answer the same question about the
+      other spelling -- reading them apart is how the pair drifted once. }
+    fpRetRec := baseRec;
     Result := tyPointer;
     CTypeIsVoid := False;
     fpName := '';
@@ -5903,7 +5930,7 @@ begin
       CParseFnSigGroup -- the same routine a function-TYPED parameter uses. Its
       outputs land in the CFnSig* globals; the pointee-returns-a-fn-pointer arm
       below reads them to register its second signature. }
-    fpSig := CParseFnSigGroup(fpRet, fpRetElemTk, fpRetElemRec);
+    fpSig := CParseFnSigGroup(fpRet, fpRetElemTk, fpRetElemRec, fpRetRec);
     fpNParams := CFnSigNParams;
     fpVariadic := CFnSigVariadic;
     for fpRi := 0 to fpNParams - 1 do
@@ -12685,7 +12712,8 @@ begin
           if CurTok.Kind = tkLParen then
           begin
             pprocsig[nparams] := CParseFnSigGroup(ptypes[nparams],
-                                                  pelemtk[nparams], pelemrec[nparams]);
+                                                  pelemtk[nparams], pelemrec[nparams],
+                                                  precid[nparams]);
             ptypes[nparams] := tyPointer;
             pdepths[nparams] := 0;        { a fn-pointer, as the `(*name)` form }
             pbasetk[nparams] := Ord(tyUnknown);
