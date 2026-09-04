@@ -7021,3 +7021,80 @@ live defects; an overcount only wastes a session.** Both come from counting the
 wrong thing, and only the predicate grep separates them.
 
 The one-line form: **fame is not multiplicity.**
+
+---
+
+## RE-RUN THE ASSERTION AS WIRED, FROM THE RECIPE, ONCE, BEFORE YOU WRITE THE NUMBER DOWN
+
+**The remedy is frankB's and it is the whole entry.** Everything below exists to
+say what it costs not to do it.
+
+Measured 2026-09-05. A commit installing `tools/assert_no_leak.sh` on a
+shortstring row quoted its evidence as:
+
+```
+allocs=10975 frees=10961 live=14 over 3000 iterations
+```
+
+That is a real measurement of a real program. It is not the program the recipe
+runs. It came from `nonul.pas`; the recipe names
+`test_shortstring_in_array_of_const.pas`.
+
+### The cheap tell, which is checkable without knowing anything about the bug
+
+**If the number you are about to quote was produced from a file whose name is
+not the file named in the recipe, it is the wrong number.** No judgement, no
+domain knowledge, no re-reading of the diff — two strings, compare them. That is
+why this and not the diagnosis is the load-bearing line: a diagnosis explains,
+and this one can be executed by someone who has never seen the code.
+
+The remedy it serves is the same shape. Not "check your numbers", which nobody
+can act on, but: **run the assertion the way the recipe invokes it, once, and
+paste THAT output.** The re-run costs seconds and it is the only step that
+cannot produce a number about a different program.
+
+### Why the number survived review, stated as the diagnosis (the less useful half)
+
+**A number quoted in a commit message inherits the credibility of the diff it
+sits beside, and the diff cannot vouch for it.** `allocs=10975 frees=10961
+live=14 over 3000 iterations` is not a claim anyone audits, because nothing
+about it looks estimated. It was real, specific, and about a different program.
+An approximation invites a check; a five-digit allocation count with a matching
+free count reads as a transcript, and a transcript is the one thing a reader
+assumes was not composed.
+
+### The aggravating factor, and if only one line survives, make it this one
+
+**The same commit message argues at length that a value assertion physically
+cannot see a leak and that a second assertion class is therefore required.** The
+author was, in that very message, reasoning correctly about how an instrument
+can be pointed at the wrong quantity — and then pointed one at the wrong
+program.
+
+**Being actively engaged with a rule is not the same as applying it to the new
+instrument you are installing — if anything it is worse, because having just
+reasoned about the failure mode feels like having checked for it.** That feeling
+is the mechanism. It is not carelessness and it will not be fixed by caring
+more; the rule was present, articulate, and load-bearing in the same paragraph.
+Only the mechanical re-run separates having thought about it from having done
+it.
+
+### Two things the entry must not overstate
+
+1. **`assert_no_leak.sh` refusing to report below 100 allocations is the thing
+   that WORKED.** It is what made the mismatch findable at all: the instrument
+   declined rather than returning a confident small number, and a refusal is
+   loud where a plausible answer is not. That belongs here as **an argument for
+   building instruments that refuse** — a tool that answers on any input hands
+   you a number for whatever you happened to feed it, which is exactly the
+   failure above.
+2. **It was one defective row, not a commit-wide habit.** frankH re-ran the
+   VALUE row of the same commit exactly as the recipe invokes it: `rc=0`. The
+   rest of that commit's evidence stands as written, and nothing here should be
+   read as impeaching it.
+
+Credit: **the remedy is frankB's**; **the failure is frankH's**, reported by
+frankH.
+
+The one-line form: **a number is about a file — name it, or you have quoted a
+different program.**
