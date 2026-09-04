@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:12 unfinished:27 blocked:7 backlog:12 backlog_new:2 backlog-umbrella:7 backlog-core:132 backlog-nilpy:96 backlog-tools:14 backlog-pascal:51 backlog-decide:36 backlog-libs:17 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3226 rejected:74`
+`working:12 unfinished:26 blocked:7 backlog:12 backlog_new:2 backlog-umbrella:7 backlog-core:132 backlog-nilpy:96 backlog-tools:14 backlog-pascal:51 backlog-decide:36 backlog-libs:17 backlog-cfront:17 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:2 float:25 done-followup:3 decided:145 done:3227 rejected:74`
 
 ## Held now (working/ — do not touch these files)
 
@@ -22,11 +22,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 
-## unfinished (27) — parked mid-flight; re-claim, do not duplicate
+## unfinished (26) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
-- `bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-instead` [C] — blocked-by: bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull
 - `bug-n-a-local-named-after-its-own-def-aliases-the-function-result` [N]
 - `bug-nilpy-render-backend-py-compile-does-not-terminate` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -62,7 +61,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 402, ranked
+## Ready — top 30 of 401, ranked
 
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -95,4 +94,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [B]` bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS (unblocks 1)
 
-_372 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_371 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -3,11 +3,11 @@ slug: bug-c-a-header-reached-by-uses-discards-function-bodies-and-imports-them-i
 track: C
 type: bug
 prio: 55
-blocked-by: [bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull]
-status: unfinished
+blocked-by: []
+status: done
 found: 2026-08-29
 found-by: pxx-a5
-summary: "A `static`/`static inline` DEFINED in a .h reached through `uses` had its body discarded and became an external, so the program linked a DT_NEEDED on a lib<header>.so that does not exist and died at load. PARTIALLY FIXED 2026-08-30 with the provenance scope term the reverted first attempt was missing (gtk green, .h/.c pair test in the gate). STILL BROKEN for the common shape -- a header that includes <stdio.h>/<string.h> or anything else with a crtl src/*.c sibling above the static -- because CModuleOfTok never resets when an include returns to its parent. Blocked on bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull; do not attempt the rest before that lands."
+summary: "DONE. The half this ticket kept open -- a bodied `static` in a header reached by `uses`, below an include that pulls a crtl `.c` impl -- was fixed in ANOTHER LANE by bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull (Track A, 8ba3425d1), and this ticket then sat parked for five days on a blocker that had closed. Re-measured 2026-09-04 at HEAD: `<stdio.h>` above the static now gives 4242/42 with no DT_NEEDED on the invented lib<stem>.so -- the exact row the boundary table listed as `still broken`. Wired as `test/chdrstatic/hdrstatic_stdio.h` + `test_header_static_body_stdio.pas` in test-core, because the fix lives in a Track A file and NOTHING in the C corpus would notice it regressing: the one header the existing rows use is <stddef.h>, deliberately, and that is the single shape which never exercised the residual. HONEST LIMIT ON THE NEW ROW: the pin postdates 8ba3425d1, so I could not run it against a genuinely pre-fix compiler; its both-directions validation is INHERITED from the existing hdrstatic rows, not re-measured here. The soname assertion is the load-bearing half either way -- the printed values can be right while the binary is dead at load."
 owner: frankC
 ---
 
@@ -221,3 +221,30 @@ Track C's, plus the `.h`/`.c` pair, plus **at least one gtk binding test**
 - 2026-08-29 — filed by pxx-a5, split out of the unit-resolution ticket.
 - 2026-08-30 — fixed by frankC (`eefa85d70`), then **reverted** the same night
   after it broke five gtk tests. Reopened with the diagnosis above.
+
+## Closed 2026-09-04 (frankC) — and the reason it stayed open is the finding
+
+The remaining work was never in this lane. It was
+`bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull`, which **resolved
+on 2026-08-30** — and this ticket sat in `unfinished/` for five days carrying
+the sentence **"Do not attempt the rest of this ticket before that one lands"**
+after it had landed.
+
+That sentence is exactly the shape franks-ab flagged the same day in rung 1's
+write-up and frank-coordinator-2c generalised: **a body routinely holds
+OPERATIVE text, and the test is not where it sits but what a reader DOES with
+it.** A session arriving here would have read a stand-down order sourced from a
+blocker in `done/`.
+
+Worth noting `tools/progress.sh check` did NOT flag this one. Its STALE-PARK
+aperture found several tickets the same run, so the instrument was working — it
+simply has a shape it does not see, and the absence of a hit is not evidence.
+That is the same lesson as everything else on this ticket: **the instrument
+answered, and it answered about something else.**
+
+Three ways the parked state could have been caught, cheapest first: the
+frontmatter `blocked-by` edge pointed at a ticket in `done/` (a pure frontmatter
+query, no prose); the prose gate named the same slug; and the repro takes
+fifteen seconds. None of them needed judgement, and none of them ran for five
+days because nothing re-reads a park.
+

@@ -7841,6 +7841,22 @@ test-core: $(COMPILER)
 	@if readelf -d $(TESTTMP)/hdrstatic_h26 2>/dev/null | grep -q 'libhdrstatic\.so'; then \
 	  echo "FAIL: hdrstatic_h26 links a DT_NEEDED on libhdrstatic.so, which cannot exist"; exit 1; \
 	else echo "ok: hdrstatic_h26 has no invented libhdrstatic.so"; fi
+	# THE SAME PAIR ABOVE A HEADER THAT PULLS A crtl IMPL. hdrstatic.h uses
+	# <stddef.h> deliberately; <stdio.h> was the shape that stayed BROKEN after
+	# the header-static fix landed, because CModuleOfTok never reset when an
+	# include returned to its parent, so every token after it counted as being
+	# inside crtl's module and the fix declined to compile bodies there. That
+	# residual was bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull,
+	# fixed in Track A (8ba3425d1) -- in a DIFFERENT LANE'S FILE, which is
+	# exactly why it needs a row here: nothing in the C corpus would notice it
+	# regressing, and the one header the rows above use is the single shape that
+	# never exercised it. The values can be right while the binary is dead at
+	# load, so the soname assertion is the load-bearing half, not the printf.
+	./$(COMPILER) -Itest/chdrstatic -Futest/chdrstatic test/test_header_static_body_stdio.pas $(TESTTMP)/hdrstatic_stdio26
+	tools/expect_same.sh hdrstatic_stdio26 "$$($(TESTTMP)/hdrstatic_stdio26)" "$$(printf '4242\n42')"
+	@if readelf -d $(TESTTMP)/hdrstatic_stdio26 2>/dev/null | grep -q 'libhdrstatic_stdio\.so'; then \
+	  echo "FAIL: hdrstatic_stdio26 links a DT_NEEDED on libhdrstatic_stdio.so, which cannot exist"; exit 1; \
+	else echo "ok: hdrstatic_stdio26 has no invented libhdrstatic_stdio.so"; fi
 	# A C diagnostic names the MODULE it is in, and stays silent about the main
 	# source -- the Pascal `in:` line's C half. The pair is the invariant, and the
 	# SILENT half is the one that needs the test: the C answer is consulted only

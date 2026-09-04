@@ -14,7 +14,9 @@
  * reason recorded in the ticket: a header that pulls a crtl `.c` impl (stdio,
  * string, stdlib, math) puts the following tokens inside that module for
  * CModuleOfTok's purposes, and the fix declines to compile bodies there. That
- * residual is still open. */
+ * residual is CLOSED (Track A, 8ba3425d1) and hdrstatic_stdio.h is the row
+ * that keeps it closed -- this file keeps <stddef.h> so the two headers
+ * differ in exactly one thing. */
 #include <stddef.h>
 
 static int hs_plain(void) { return 4242; }
