@@ -9,18 +9,26 @@ unit signals;
   closes: one table, one trampoline, and `__pxxSigNum` (the number parked by the
   dispatch stub) to tell the trampoline which signal it is serving.
 
-  x86-64 Linux only, and deliberately so. `__pxxSigNum` REFUSES at codegen on the
-  other hosted targets rather than answering 0, because answering 0 would route
-  every signal to handler 0 — a wrong disposition that stays invisible until a
-  signal arrives. The unit therefore compiles to an explicit refusal elsewhere
-  instead of a silently wrong table. }
+  THIS UNIT CARRIED AN `{$ifndef CPUX86_64} {$error ...}` GUARD UNTIL 2026-09-04
+  AND ITS PREMISE HAD EXPIRED. The text said *"the other hosted targets do not
+  park the signal number in their dispatch stubs"*, which was true when written
+  and stopped being true on 2026-08-31: all five hosted stubs park it, and
+  `pasparser_expr.inc` deleted its own matching refusal in the same change,
+  leaving this copy as the only thing still saying so. Measured before removing
+  it — i386, arm32, aarch64 and riscv32 all refused this unit with that
+  sentence, and the compiler they refused on had supported them for four days.
 
-{ Refuse loudly rather than compiling to an empty unit. An empty `signals` would
-  export nothing and fail at the USE site with a confusing missing-identifier
-  error, or worse, satisfy a `uses` clause and provide no dispositions at all. }
-{$ifndef CPUX86_64}
-{$error unit signals needs __pxxSigNum, which is x86-64 Linux only today: the other hosted targets do not park the signal number in their dispatch stubs, and answering 0 would route every signal to handler 0}
-{$endif}
+  A STALE GUARD DOES NOT LOOK STALE. It fires, it names a real constraint, and
+  the message reads as current, so a reader on i386 concludes the target lacks
+  the runtime rather than that the unit is out of date. That is worse than no
+  guard: it is a confident wrong answer in the one place someone goes for the
+  right one.
+
+  There is no arch guard here now, deliberately. `__pxxSigNum` refuses AT ITS
+  OWN SITE when `TargetHasSignalRuntime` is false (windowed xtensa, and any ESP
+  platform), with a message describing the actual missing capability. One
+  predicate, one refusal, in the compiler that can evaluate it — rather than a
+  copy in a library file that can only re-check the arch and go stale again. }
 
 interface
 

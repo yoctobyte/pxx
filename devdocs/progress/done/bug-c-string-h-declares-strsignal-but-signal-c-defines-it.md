@@ -2,12 +2,12 @@
 track: C
 prio: 40
 type: bug
-status: backlog
+status: done
 found: 2026-09-01
 found-by: claude-T
 owner: ""
 blocked-by: []
-summary: "crtl's `<string.h>` declares `strsignal()` while the definition lives in `signal.c`. A program that includes only `<string.h>` gets the declaration and NOT the definition, so the symbol resolves from the host C library instead of crtl — silently, with no diagnostic. Caught by `tools/crtl_reachability.py`, which has been red on seven since 2026-09-01T17:40Z. Introduced by `3e77e3f1f`, which added the declaration where glibc puts it and the definition beside the signal code."
+summary: "**FIXED 2026-09-01 by `9d7228837` and left open for three days; closed 2026-09-04 after `crtl-reachability` was re-run at HEAD and answers OK -- 132 headers, 60 modules, every declared function reachable.** The fix moved the DEFINITION to `lib/crtl/src/string.c:641`, which is the remedy this ticket did not list and the best of the three: `<string.h>` keeps glibc's declaration site and no bridge TU has to be maintained. ORIGINAL REPORT: crtl's `<string.h>` declares `strsignal()` while the definition lives in `signal.c`. A program that includes only `<string.h>` gets the declaration and NOT the definition, so the symbol resolves from the host C library instead of crtl — silently, with no diagnostic. Caught by `tools/crtl_reachability.py`, which has been red on seven since 2026-09-01T17:40Z. Introduced by `3e77e3f1f`, which added the declaration where glibc puts it and the definition beside the signal code."
 ---
 
 # `<string.h>` declares `strsignal()`, defined in `signal.c`
@@ -65,3 +65,30 @@ tools/crtl_reachability.py        # exits with the unreachable-declaration repor
 
 Job: `lib-test#src:tools/crtl_reachability.py`. `job_last_pass` on seven is
 `91b92d5e8c99`; first failure `5d983997a05a`.
+
+## Log
+- 2026-09-04 — resolved, commit 9d7228837.
+
+## RESOLVED — fixed 2026-09-01 by `9d7228837`, and open for three days after
+
+`tools/crtl_reachability.py` at HEAD (`72898b07c`):
+
+    crtl-reachability: OK -- 132 headers, 60 modules,
+    every declared function reachable from its own header
+
+The fix took neither of the two remedies this ticket proposed and took the
+better third: **the DEFINITION moved** to `lib/crtl/src/string.c:641`, beside
+the header that declares it, rather than the declaration moving or a bridge TU
+being added. `<string.h>` still declares it at line 74 exactly where glibc
+does, so the compatibility this ticket was protecting is intact and there is no
+extra file to keep in step. `lib/crtl/src/signal.c:158` carries a comment
+saying where it went and why, so the next reader of the signal code does not
+re-add it.
+
+Closed by franks-ab while surveying the signal group for
+[[bug-b-crtl-signal-and-sigaction-report-success-and-install-nothing]]. The
+delay is worth one line: the checker that files this class also **clears
+silently**, so a ticket whose only evidence is a red guard has nothing to
+announce when the guard goes green. `9d7228837`'s subject says it made
+crtl-reachability pass; nothing walked back to this slug.
+

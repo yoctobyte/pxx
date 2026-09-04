@@ -25035,6 +25035,36 @@ lib-test: pxx-stable-check
 	# had -- the control produced usr1=3 usr2=0.
 	$(PXX_STABLE) test/lib_signals_fpc.pas $(TESTTMP)/lib_signals_fpc
 	tools/expect_same.sh lib_signals_fpc "$$($(TESTTMP)/lib_signals_fpc)" "$$(printf 'prev-initial=ok\nper-signal-number=ok\nprev-returned=ok\nrange=ok\nignore=ok\nSIGNALS OK')"
+	# AND THE SAME ASSERTION ON FOUR MORE TARGETS, because this unit refused to
+	# compile anywhere but x86-64 until 2026-09-04 and the refusal's stated
+	# premise had expired. Two separate defects, and neither could be seen past
+	# the other: signals.pas carried {$$ifndef CPUX86_64}{$$error ...} saying the
+	# (the $$ is not a typo -- make expands $i and $e inside a recipe COMMENT
+	# too, and the single-$ spelling printed "{fndef CPUX86_64}{rror ...}" into
+	# the build log for a whole run before anyone could have noticed)
+	# other stubs "do not park the signal number" (untrue since 2026-08-31, and
+	# the compiler had already deleted its own matching refusal), while the TEST
+	# called raw syscalls 39 and 62 -- getpid/kill ON X86-64 ONLY, 20/37 on i386
+	# and arm32, 172/129 on aarch64 and riscv32. So removing the guard alone
+	# would have turned a loud refusal into `per-signal-number=FAIL usr1=0
+	# usr2=0 other=0` on all four: a silent wrong answer that reads exactly like
+	# a broken signal runtime and is the test's own arithmetic. It is the PAL
+	# bridge here rather than a per-CPU syscall table (test_cross_syscall.pas is
+	# the other shape and is right, because raw syscalls ARE its subject).
+	# EXPECTED OUTPUT IS IDENTICAL ON ALL FIVE -- the oracle pattern -- so no row
+	# carries a per-target constant. Absent emulator prints NOT VERIFIED rather
+	# than passing quietly: "ruled out" and "could not look" must never print
+	# the same.
+	@for a in i386 arm32 aarch64 riscv32; do \
+	  case $$a in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if [ "$$a" = i386 ] || command -v $$q >/dev/null 2>&1; then \
+	    $(PXX_STABLE) --target=$$a test/lib_signals_fpc.pas $(TESTTMP)/lib_signals_fpc_$$a >/dev/null || { echo "lib_signals_fpc $$a compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh $$a/lib_signals_fpc "$$(tools/run_target.sh $$a $(TESTTMP)/lib_signals_fpc_$$a)" "$$(printf 'prev-initial=ok\nper-signal-number=ok\nprev-returned=ok\nrange=ok\nignore=ok\nSIGNALS OK')" || exit 1; \
+	    echo "=== lib_signals_fpc: $$a OK ==="; \
+	  else \
+	    echo "=== lib_signals_fpc: $$q absent, $$a NOT verified ==="; \
+	  fi; \
+	done
 	# IPv6 over the PAL: sockaddr_in6 layout + loopback round trip (skips if the
 	# host has no AF_INET6 — a broken layout is the target, not the CI netstack)
 	$(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_ipv6.pas $(TESTTMP)/lib_ipv6

@@ -5,17 +5,27 @@
   to a constant, which is exactly the bug this unit could have. }
 program lib_signals_fpc;
 
-uses signals;
+uses signals, pxxcio;
 
 var
   gotUsr1, gotUsr2, gotOther: Integer;
   prev: SignalHandler;
   allok: Boolean;
 
-function Pid: Int64; begin Pid := __pxxrawsyscall(39, 0, 0, 0, 0, 0, 0); end;
+{ THIS TEST USED RAW SYSCALL NUMBERS 39 AND 62 AND THAT MADE IT AN X86-64 TEST
+  WEARING A PORTABLE ONE'S CLOTHES. 39/62 are getpid/kill on x86-64 ONLY: they
+  are 20/37 on i386 and arm32 and 172/129 on aarch64 and riscv32, so on every
+  other target this file called two unrelated syscalls, sent no signal, and
+  reported `per-signal-number=FAIL usr1=0 usr2=0 other=0` — a failure that reads
+  exactly like a broken signal runtime and was the test's own arithmetic.
+  Measured 2026-09-04 on all four. Going through the PAL costs nothing and has
+  no per-arch table to keep in step; test_cross_syscall.pas is the other shape
+  (a deliberate per-CPU branch) and is correct because raw syscalls ARE its
+  subject. Here they were incidental. }
+function Pid: Int64; begin Pid := __pxx_getpid; end;
 procedure Raise_(s: Int64);
-var r: Int64;
-begin r := __pxxrawsyscall(62, Pid, s, 0, 0, 0, 0); end;
+var r: Integer;
+begin r := __pxx_kill(__pxx_getpid, Integer(s)); end;
 
 procedure OneHandler(sig: Longint); cdecl;
 begin

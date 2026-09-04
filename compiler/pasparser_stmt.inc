@@ -5804,8 +5804,12 @@ begin
           handler for signal sig (1..64) and install the signal runtime's
           dispatch for it; nil/0 reverts to the default disposition on the next
           delivery. Guarded like the other soft intrinsics: a user proc of the
-          same name shadows this. x86-64 Linux only (IR_SET_SIGNAL errors on
-          other targets); --no-signals programs must not call it. }
+          same name shadows this. WORKS ON ALL FIVE HOSTED TARGETS -- this
+          comment claimed x86-64 only until 2026-09-04 and was measured wrong on
+          i386, arm32, aarch64 and riscv32, all of which install the handler and
+          deliver the right signal number. IR_SET_SIGNAL Errors only where
+          TargetHasSignalRuntime is false (windowed xtensa, ESP platforms);
+          --no-signals programs must not call it. }
         Next; Expect(tkLParen, '(');
         ParseExpr; opNode := CurASTNode;                              { sig }
         Expect(tkComma, ',');
