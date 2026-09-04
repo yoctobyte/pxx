@@ -216,3 +216,34 @@ pinned compiler. That number never depended on the mechanism.
    `{$ifdef FPC}`, and got *"unterminated conditional directive"*. The ranges are
    now asserted on their first and last lines and required to tile the file
    exactly.
+
+### The method constrains BOTH ends, and that is how it gets misread
+
+frankB, after the four-arm run: *"I read 'cut contiguous ranges and re-include
+at the exact offset' as a description of the cut, and it is a description of
+BOTH ends. A contiguous cut re-included somewhere else is not the method, it is
+a different operation that happens to preserve semantics."*
+
+That is exactly how it read to me too, and it is the whole reason this
+carve-out's sha moved. **The contiguous-range half is the easy half and it is
+the half the sentence appears to be about.** State it as two obligations:
+
+1. the range you cut is contiguous, and
+2. the `{$include}` goes where the range *began* — not after the file it came
+   out of.
+
+Obligation 2 is the one with no natural place to fail: the build is green, the
+fixedpoint converges, the tests pass, and the only symptom is a sha nobody can
+explain, which then gets explained.
+
+### A byte-neutral source change is not a contradiction
+
+The other thing the arms settled, and frankB's words for it: *"a forward
+declaration is a source change and therefore could move bytes — true and
+irrelevant. It moves the SOURCE, not the emitted layout, and only registration
+ORDER does that."* **"Is this a source change" and "can this move the binary"
+are different questions**, and having them fused is what made both of our
+hypotheses sound reasonable. Comments, file names, blank lines, added line
+numbers and a redundant `forward` are all source changes and all byte-neutral
+here; only declaration order is not. Measured again incidentally when the
+comment-only correction to this very file left the sha at `6fe273e5e12a6429`.
