@@ -196,7 +196,7 @@ Under `--strict-fpc`: `p - p0` = 2, `p - u` = 8, `p - @a[0]` = 8 — matching
                      else Result := 'Integer';
 
 Add `StrictTypeNames` alongside the other per-behaviour strict flags in
-`defs.inc`, and set it in `EnableStrictFpc` (`compiler/lexer.inc:628`) next to
+`defs.inc`, and set it in `EnableStrictFpc` (`compiler/paslexer.inc`) next to
 `StrictOperator` / `StrictCase` / `StrictVisibility` / `StrictShiftWidth` /
 `StrictVariantChar`.
 

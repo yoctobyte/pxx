@@ -46,7 +46,7 @@ pointer width at the `compiler.pas:1508` arm like every other target.
       function reference.
 - [x] **Enumerate the chains a 7th target falls through.** Three confirmed:
       `exception_emit.inc:8` (6 arms), `coroutine_emit.inc:25` (4 arms) — both
-      emit *nothing at all*, no diagnostic — and `lexer.inc:936` (no CPU
+      emit *nothing at all*, no diagnostic — and `PasApplyTargetDefines` in `paslexer.inc` (no CPU
       defines). Handed to the two Track A tickets. Caveat recorded there: the
       scan missed `lexer.inc` because it sits inside an outer
       `if TargetArch <> TARGET_X86_64` guard, so it is a starting point, not an

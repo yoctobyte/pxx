@@ -22,9 +22,192 @@
   It stayed. Judge these by callers, not by neighbours.
 
   INCLUDED IMMEDIATELY AFTER lexer.inc and before util.inc, which is the offset
-  this code occupied, so the emitted compiler is byte-identical by construction
-  and `make compiler/pascal26` PROVES the move rather than merely failing to
-  object to it. }
+  this code occupied.
+
+  THE COMPILER'S OWN BINARY DOES MOVE, and an earlier draft of this comment
+  claimed it could not. A new source file name enters the debug file table and
+  every carved line changes number, so a byte-identical SELF is the wrong thing
+  to expect: measured, pre-cut converged to 875d46034173 and post-cut to
+  01a25b518879, both seeded from pin v403. What must not move is the code this
+  compiler EMITS, and that is what was measured instead -- 88 sources selected
+  for {$ifdef}, {$mode}, {$include}, conditional expressions and numeric
+  literals, so the corpus reaches the machinery in this file: 78 byte-identical,
+  0 differing, against a control that reports 68 of 68 differing when pointed at
+  the pinned compiler. }
+
+function Keyword(const s0: AnsiString): TTokenKind;
+var s: AnsiString; ki: Integer;
+begin
+  Result := tkIdent;
+  { Pascal keywords are case-insensitive in user code (only the compiler's own
+    source is {$CASESENSITIVE ON}). The table below historically hard-coded
+    lowercase (plus ad-hoc Capital variants for some), so mixed/upper-case forms
+    like `Then`, `Type`, `Mod`, `Case`, `ARRAY` fell through to identifiers.
+    Lowercase the token once here (user mode only) so every entry matches any
+    case; the redundant Capital-variant entries become harmless. CaseSensitive
+    mode (the self-build) keeps the exact spelling, so self-host stays
+    byte-identical. }
+  s := s0;
+  if not CaseSensitiveMode then
+    for ki := 1 to Length(s) do
+      if (s[ki] >= 'A') and (s[ki] <= 'Z') then
+        s[ki] := Chr(Ord(s[ki]) + 32);
+  if Length(s) = 2 then
+  begin
+    if (s[1]='i') and (s[2]='f') then Result := tkIf;
+    if (s[1]='i') and (s[2]='n') then Result := tkIn;
+    if (s[1]='I') and (s[2]='n') then Result := tkIn;
+    if (s[1]='d') and (s[2]='o') then Result := tkDo;
+    if (s[1]='t') and (s[2]='o') then Result := tkTo;
+    if (s[1]='o') and (s[2]='f') then Result := tkOf;
+    if (s[1]='o') and (s[2]='r') then Result := tkOr;
+    if (s[1]='o') and (s[2]='n') then Result := tkOn;
+    if (s[1]='O') and (s[2]='n') then Result := tkOn;
+  end
+  else if Length(s) = 3 then
+  begin
+    if (s[1]='a') and (s[2]='s') and (s[3]='m') then Result := tkAsm;
+    if (s[1]='A') and (s[2]='s') and (s[3]='m') then Result := tkAsm;
+    if (s[1]='A') and (s[2]='S') and (s[3]='M') then Result := tkAsm;
+    if (s[1]='e') and (s[2]='n') and (s[3]='d') then Result := tkEnd;
+    if (s[1]='v') and (s[2]='a') and (s[3]='r') then Result := tkVar;
+    if (s[1]='f') and (s[2]='o') and (s[3]='r') then Result := tkFor;
+    if (s[1]='a') and (s[2]='n') and (s[3]='d') then Result := tkAnd;
+    if ((s[1]='x') or (s[1]='X')) and ((s[2]='o') or (s[2]='O')) and ((s[3]='r') or (s[3]='R')) then Result := tkXor;
+    if (s[1]='n') and (s[2]='o') and (s[3]='t') then Result := tkNot;
+    if (s[1]='d') and (s[2]='i') and (s[3]='v') then Result := tkDiv;
+    if (s[1]='m') and (s[2]='o') and (s[3]='d') then Result := tkMod;
+    if (s[1]='s') and (s[2]='h') and (s[3]='l') then Result := tkShl;
+    if (s[1]='S') and (s[2]='h') and (s[3]='l') then Result := tkShl;
+    { 'ord'/'chr'/'low' (and 'high'/'length' below) are soft keywords: they lex
+      as plain tkIdent and ParseFactor dispatches on the name, so they are
+      legal identifiers like in FPC (bug-hard-keyword-intrinsics-block-
+      identifier-use). Their tk enum members survive only as -Ord(tkXxx)
+      intrinsic CALL ids. }
+    if (s[1]='t') and (s[2]='r') and (s[3]='y') then Result := tkTry;
+    if (s[1]='T') and (s[2]='r') and (s[3]='y') then Result := tkTry;
+    if (s[1]='n') and (s[2]='i') and (s[3]='l') then Result := tkNil;
+    if (s[1]='N') and (s[2]='i') and (s[3]='l') then Result := tkNil;
+  end
+  else if Length(s) = 4 then
+  begin
+    if (s[1]='w') and (s[2]='i') and (s[3]='t') and (s[4]='h') then Result := tkWith;
+    if (s[1]='W') and (s[2]='i') and (s[3]='t') and (s[4]='h') then Result := tkWith;
+    if (s[1]='W') and (s[2]='I') and (s[3]='T') and (s[4]='H') then Result := tkWith;
+    if (s[1]='t') and (s[2]='y') and (s[3]='p') and (s[4]='e') then Result := tkType;
+    if (s[1]='u') and (s[2]='s') and (s[3]='e') and (s[4]='s') then Result := tkUses;
+    if (s[1]='u') and (s[2]='n') and (s[3]='i') and (s[4]='t') then Result := tkUnit;
+    if (s[1]='t') and (s[2]='h') and (s[3]='e') and (s[4]='n') then Result := tkThen;
+    if (s[1]='e') and (s[2]='l') and (s[3]='s') and (s[4]='e') then Result := tkElse;
+    if (s[1]='c') and (s[2]='a') and (s[3]='s') and (s[4]='e') then Result := tkCase;
+    if (s[1]='t') and (s[2]='r') and (s[3]='u') and (s[4]='e') then Result := tkTrue;
+    if (s[1]='T') and (s[2]='r') and (s[3]='u') and (s[4]='e') then Result := tkTrue;
+    if CaseEqual(s, 'read') then Result := tkRead;
+    if (s[1]='c') and (s[2]='h') and (s[3]='a') and (s[4]='r') then Result := tkChar_T;
+    if (s[1]='C') and (s[2]='h') and (s[3]='a') and (s[4]='r') then Result := tkChar_T;
+    if (s[1]='r') and (s[2]='e') and (s[3]='a') and (s[4]='l') then Result := tkReal_T;
+    if (s[1]='R') and (s[2]='e') and (s[3]='a') and (s[4]='l') then Result := tkReal_T;
+    if (s[1]='b') and (s[2]='y') and (s[3]='t') and (s[4]='e') then Result := tkInteger_T;
+    if (s[1]='B') and (s[2]='y') and (s[3]='t') and (s[4]='e') then Result := tkInteger_T;
+  end
+  else if Length(s) = 5 then
+  begin
+    if (s[1]='b') and (s[2]='e') and (s[3]='g') and (s[4]='i') and (s[5]='n') then Result := tkBegin;
+    if (s[1]='c') and (s[2]='o') and (s[3]='n') and (s[4]='s') and (s[5]='t') then Result := tkConst;
+    if (s[1]='w') and (s[2]='h') and (s[3]='i') and (s[4]='l') and (s[5]='e') then Result := tkWhile;
+    if (s[1]='u') and (s[2]='n') and (s[3]='t') and (s[4]='i') and (s[5]='l') then Result := tkUntil;
+    if (s = 'array') or ((not CaseSensitiveMode) and CaseEqual(s, 'array')) then Result := tkArray;
+    if (s[1]='f') and (s[2]='a') and (s[3]='l') and (s[4]='s') and (s[5]='e') then Result := tkFalse;
+    if (s[1]='F') and (s[2]='a') and (s[3]='l') and (s[4]='s') and (s[5]='e') then Result := tkFalse;
+    if CaseEqual(s, 'write') then Result := tkwrite;
+    if (s[1]='c') and (s[2]='l') and (s[3]='a') and (s[4]='s') and (s[5]='s') then Result := tkClass;
+    if (s[1]='C') and (s[2]='l') and (s[3]='a') and (s[4]='s') and (s[5]='s') then Result := tkClass;
+    if (s[1]='r') and (s[2]='a') and (s[3]='i') and (s[4]='s') and (s[5]='e') then Result := tkRaise;
+    if (s[1]='R') and (s[2]='a') and (s[3]='i') and (s[4]='s') and (s[5]='e') then Result := tkRaise;
+  end
+  else if Length(s) = 6 then
+  begin
+    if (s[1]='d') and (s[2]='o') and (s[3]='w') and (s[4]='n') and (s[5]='t') and (s[6]='o') then Result := tkDownto;
+    if (s[1]='r') and (s[2]='e') and (s[3]='p') and (s[4]='e') and (s[5]='a') and (s[6]='t') then Result := tkRepeat;
+    if (s[1]='p') and (s[2]='a') and (s[3]='c') and (s[4]='k') and (s[5]='e') and (s[6]='d') then Result := tkPacked;
+    if (s[1]='P') and (s[2]='a') and (s[3]='c') and (s[4]='k') and (s[5]='e') and (s[6]='d') then Result := tkPacked;
+    if (s[1]='r') and (s[2]='e') and (s[3]='c') and (s[4]='o') and (s[5]='r') and (s[6]='d') then Result := tkRecord;
+    if CaseEqual(s, 'readln') then Result := tkReadln;
+    { 'length' deliberately NOT a keyword token: it lexes as a plain tkIdent and
+      ParseFactor dispatches on the name (soft keyword), so `var length: ...`
+      is a legal identifier like in FPC. Pilot conversion for
+      bug-hard-keyword-intrinsics-block-identifier-use; likewise inc/dec/halt/
+      exit/break/continue/getmem/freemem, dispatched in ParseStatementAST (and
+      GetMem's function form in ParseFactor). The tk enum members survive only
+      as -Ord(tkXxx) intrinsic CALL ids and AN node selectors. }
+    if (s[1]='a') and (s[2]='r') and (s[3]='g') and (s[4]='s') and (s[5]='t') and (s[6]='r') then Result := tkArgStr;
+    if (s[1]='A') and (s[2]='r') and (s[3]='g') and (s[4]='S') and (s[5]='t') and (s[6]='r') then Result := tkArgStr;
+    if (s[1]='s') and (s[2]='t') and (s[3]='r') and (s[4]='i') and (s[5]='n') and (s[6]='g') then Result := tkString_T;
+    if (s[1]='S') and (s[2]='t') and (s[3]='r') and (s[4]='i') and (s[5]='n') and (s[6]='g') then Result := tkString_T;
+    if (s[1]='e') and (s[2]='x') and (s[3]='c') and (s[4]='e') and (s[5]='p') and (s[6]='t') then Result := tkExcept;
+    if (s[1]='E') and (s[2]='x') and (s[3]='c') and (s[4]='e') and (s[5]='p') and (s[6]='t') then Result := tkExcept;
+    if (s[1]='s') and (s[2]='i') and (s[3]='n') and (s[4]='g') and (s[5]='l') and (s[6]='e') then Result := tkSingle_T;
+    if (s[1]='S') and (s[2]='i') and (s[3]='n') and (s[4]='g') and (s[5]='l') and (s[6]='e') then Result := tkSingle_T;
+    if (s[1]='d') and (s[2]='o') and (s[3]='u') and (s[4]='b') and (s[5]='l') and (s[6]='e') then Result := tkDouble_T;
+    if (s[1]='D') and (s[2]='o') and (s[3]='u') and (s[4]='b') and (s[5]='l') and (s[6]='e') then Result := tkDouble_T;
+  end
+  else if Length(s) = 7 then
+  begin
+    if (s[1]='d') and (s[2]='e') and (s[3]='f') and (s[4]='a') and (s[5]='u') and (s[6]='l') and (s[7]='t') then Result := tkDefault;
+    if (s[1]='D') and (s[2]='e') and (s[3]='f') and (s[4]='a') and (s[5]='u') and (s[6]='l') and (s[7]='t') then Result := tkDefault;
+    if (s[1]='p') and (s[2]='r') and (s[3]='o') and (s[4]='g') and (s[5]='r') and (s[6]='a') and (s[7]='m') then Result := tkProgram;
+    if (s[1]='f') and (s[2]='o') and (s[3]='r') and (s[4]='w') and (s[5]='a') and (s[6]='r') and (s[7]='d') then Result := tkForward;
+    if CaseEqual(s, 'writeln') then Result := tkwriteln;
+    if (s[1]='s') and (s[2]='y') and (s[3]='s') and (s[4]='o') and (s[5]='p') and (s[6]='e') and (s[7]='n') then Result := tkSysOpen;
+    if (s[1]='S') and (s[2]='y') and (s[3]='s') and (s[4]='O') and (s[5]='p') and (s[6]='e') and (s[7]='n') then Result := tkSysOpen;
+    if (s[1]='s') and (s[2]='y') and (s[3]='s') and (s[4]='r') and (s[5]='e') and (s[6]='a') and (s[7]='d') then Result := tkSysRead;
+    if (s[1]='S') and (s[2]='y') and (s[3]='s') and (s[4]='R') and (s[5]='e') and (s[6]='a') and (s[7]='d') then Result := tkSysRead;
+    if (s[1]='i') and (s[2]='n') and (s[3]='t') and (s[4]='e') and (s[5]='g') and (s[6]='e') and (s[7]='r') then Result := tkInteger_T;
+    if (s[1]='I') and (s[2]='n') and (s[3]='t') and (s[4]='e') and (s[5]='g') and (s[6]='e') and (s[7]='r') then Result := tkInteger_T;
+    if (s[1]='b') and (s[2]='o') and (s[3]='o') and (s[4]='l') and (s[5]='e') and (s[6]='a') and (s[7]='n') then Result := tkBoolean_T;
+    if (s[1]='B') and (s[2]='o') and (s[3]='o') and (s[4]='l') and (s[5]='e') and (s[6]='a') and (s[7]='n') then Result := tkBoolean_T;
+    if (s[1]='f') and (s[2]='i') and (s[3]='n') and (s[4]='a') and (s[5]='l') and (s[6]='l') and (s[7]='y') then Result := tkFinally;
+    if (s[1]='F') and (s[2]='i') and (s[3]='n') and (s[4]='a') and (s[5]='l') and (s[6]='l') and (s[7]='y') then Result := tkFinally;
+  end
+  else if Length(s) = 8 then
+  begin
+    if (s[1]='o') and (s[2]='v') and (s[3]='e') and (s[4]='r') and (s[5]='l') and (s[6]='o') and (s[7]='a') and (s[8]='d') then Result := tkOverload;
+    if (s[1]='O') and (s[2]='v') and (s[3]='e') and (s[4]='r') and (s[5]='l') and (s[6]='o') and (s[7]='a') and (s[8]='d') then Result := tkOverload;
+    if (s[1]='f') and (s[2]='u') and (s[3]='n') and (s[4]='c') and (s[5]='t') and (s[6]='i') and (s[7]='o') and (s[8]='n') then Result := tkFunction;
+    if (s[1]='s') and (s[2]='y') and (s[3]='s') and (s[4]='w') and (s[5]='r') and (s[6]='i') and (s[7]='t') and (s[8]='e') then Result := tkSyswrite;
+    if (s[1]='S') and (s[2]='y') and (s[3]='s') and (s[4]='W') and (s[5]='r') and (s[6]='i') and (s[7]='t') and (s[8]='e') then Result := tkSyswrite;
+    if (s[1]='s') and (s[2]='y') and (s[3]='s') and (s[4]='c') and (s[5]='l') and (s[6]='o') and (s[7]='s') and (s[8]='e') then Result := tkSysClose;
+    if (s[1]='S') and (s[2]='y') and (s[3]='s') and (s[4]='C') and (s[5]='l') and (s[6]='o') and (s[7]='s') and (s[8]='e') then Result := tkSysClose;
+    if (s[1]='a') and (s[2]='r') and (s[3]='g') and (s[4]='c') and (s[5]='o') and (s[6]='u') and (s[7]='n') and (s[8]='t') then Result := tkArgCount;
+    if (s[1]='p') and (s[2]='a') and (s[3]='r') and (s[4]='a') and (s[5]='m') and (s[6]='s') and (s[7]='t') and (s[8]='r') then Result := tkArgStr;
+    if (s[1]='A') and (s[2]='r') and (s[3]='g') and (s[4]='C') and (s[5]='o') and (s[6]='u') and (s[7]='n') and (s[8]='t') then Result := tkArgCount;
+    if (s[1]='P') and (s[2]='a') and (s[3]='r') and (s[4]='a') and (s[5]='m') and (s[6]='S') and (s[7]='t') and (s[8]='r') then Result := tkArgStr;
+    if (s[1]='l') and (s[2]='o') and (s[3]='n') and (s[4]='g') and (s[5]='w') and (s[6]='o') and (s[7]='r') and (s[8]='d') then Result := tkLongWord_T;
+    if (s[1]='L') and (s[2]='o') and (s[3]='n') and (s[4]='g') and (s[5]='W') and (s[6]='o') and (s[7]='r') and (s[8]='d') then Result := tkLongWord_T;
+    if (s[1]='e') and (s[2]='x') and (s[3]='t') and (s[4]='e') and (s[5]='n') and (s[6]='d') and (s[7]='e') and (s[8]='d') then Result := tkExtended_T;
+    if (s[1]='E') and (s[2]='x') and (s[3]='t') and (s[4]='e') and (s[5]='n') and (s[6]='d') and (s[7]='e') and (s[8]='d') then Result := tkExtended_T;
+    if (s[1]='p') and (s[2]='r') and (s[3]='o') and (s[4]='p') and (s[5]='e') and (s[6]='r') and (s[7]='t') and (s[8]='y') then Result := tkProperty;
+    if (s[1]='P') and (s[2]='r') and (s[3]='o') and (s[4]='p') and (s[5]='e') and (s[6]='r') and (s[7]='t') and (s[8]='y') then Result := tkProperty;
+    if (s[1]='P') and (s[2]='R') and (s[3]='O') and (s[4]='P') and (s[5]='E') and (s[6]='R') and (s[7]='T') and (s[8]='Y') then Result := tkProperty;
+  end
+  else if Length(s) = 9 then
+  begin
+    if (s[1]='p') and (s[2]='r') and (s[3]='o') and (s[4]='c') and (s[5]='e') and (s[6]='d') and (s[7]='u') and (s[8]='r') and (s[9]='e') then Result := tkProcedure;
+    if (s[1]='s') and (s[2]='y') and (s[3]='s') and (s[4]='f') and (s[5]='c') and (s[6]='h') and (s[7]='m') and (s[8]='o') and (s[9]='d') then Result := tkSysFchmod;
+    if (s[1]='S') and (s[2]='y') and (s[3]='s') and (s[4]='F') and (s[5]='c') and (s[6]='h') and (s[7]='m') and (s[8]='o') and (s[9]='d') then Result := tkSysFchmod;
+  end
+  else if Length(s) = 10 then
+  begin
+    if (s[1]='p') and (s[2]='a') and (s[3]='r') and (s[4]='a') and (s[5]='m') and (s[6]='c') and (s[7]='o') and (s[8]='u') and (s[9]='n') and (s[10]='t') then Result := tkArgCount;
+    if (s[1]='P') and (s[2]='a') and (s[3]='r') and (s[4]='a') and (s[5]='m') and (s[6]='C') and (s[7]='o') and (s[8]='u') and (s[9]='n') and (s[10]='t') then Result := tkArgCount;
+  end;
+  { `forward` is a DIRECTIVE, not a reserved word — FPC lets it be an ordinary
+    identifier (e.g. `procedure Forward(...)`). The case-insensitive table above
+    would otherwise reserve every casing of it. Keep only the exact lowercase
+    spelling as the directive; any other casing (only possible when lowercasing
+    changed the token, i.e. s0 had an uppercase letter) stays an identifier. }
+  if (Result = tkForward) and (s0 <> s) then Result := tkIdent;
+end;
 
 function PasDirectiveActive: Boolean;
 begin
@@ -2686,3 +2869,40 @@ begin
   Lexing := False;
 end;
 
+
+
+{ THE PASCAL SEARCH PATHS -- `-Fu` unit roots and `-Fi` include roots.
+
+  Here rather than in cpreproc.inc, where they used to live: they are generic,
+  compiler.pas calls them straight from ordinary option handling, and a build
+  with the C frontend omitted must still resolve its own units. Their old home
+  made `-Fu` depend on the C preprocessor, which is the kind of dependency that
+  is invisible until something tries to remove a component
+  (refactor-a-search-path-helpers-live-in-the-c-preprocessor). }
+procedure AddPasUnitDir(const dir: AnsiString);
+var s: AnsiString; j: Integer;
+begin
+  s := '';
+  for j := 1 to Length(dir) do AppendChar(s, dir[j]);
+  if (Length(s) > 0) and (s[Length(s)] <> '/') then AppendChar(s, '/');
+  for j := 0 to PasUnitDirCount - 1 do
+    if PasUnitDirs[j] = s then Exit;
+  if PasUnitDirCount >= MAX_PAS_UNIT_DIRS then Error('too many -Fu/-I unit directories');
+  PasUnitDirs[PasUnitDirCount] := s;
+  Inc(PasUnitDirCount);
+end;
+
+procedure AddPasIncDir(const dir: AnsiString);
+{ -Fi<dir>: a {$I file} include search root (FPC parity;
+  bug-pascal-include-search-silent-miss). }
+var s: AnsiString; j: Integer;
+begin
+  s := '';
+  for j := 1 to Length(dir) do AppendChar(s, dir[j]);
+  if (Length(s) > 0) and (s[Length(s)] <> '/') then AppendChar(s, '/');
+  for j := 0 to PasIncDirCount - 1 do
+    if PasIncDirs[j] = s then Exit;
+  if PasIncDirCount >= MAX_PAS_UNIT_DIRS then Error('too many -Fi include directories');
+  PasIncDirs[PasIncDirCount] := s;
+  Inc(PasIncDirCount);
+end;

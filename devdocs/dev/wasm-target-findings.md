@@ -123,7 +123,7 @@ the most useful prior art on this subject and should be read before anyone
 proposes a sweep.
 
 What survives as a real hazard for a 7th target is narrow: several chains
-**fail open**. `lexer.inc:936` runs `if TargetArch <> TARGET_X86_64 then begin`
+**fail open**. `paslexer.inc`'s `PasApplyTargetDefines` runs `if TargetArch <> TARGET_X86_64 then`
 and then an `if`/`else if` over the five non-x86-64 targets **with no final
 `else`**. wasm32 would enter that block, match nothing, and be configured with
 no CPU defines at all — silently. Filed as
