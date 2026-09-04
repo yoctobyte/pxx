@@ -51,11 +51,11 @@ if [ -z "$arch" ] || [ -z "$out" ]; then
   exit 2
 fi
 case $arch in
-  i386)    q=qemu-i386;    C3=3:read   C4=4:write   C5=5:open   CU=399 CU2=4095 CR=20:getpid ;;
-  arm32)   q=qemu-arm;     C3=3:read   C4=4:write   C5=5:open   CU=399 CU2=4095 CR=20:getpid ;;
-  aarch64) q=qemu-aarch64; C3=63:read  C4=64:write  C5=57:openat CU=460 CU2=4095 CR=172:getpid ;;
-  riscv32) q=qemu-riscv32; C3=63:read  C4=64:write  C5=57:openat CU=460 CU2=4095 CR=172:getpid ;;
-  xtensa)  q=qemu-xtensa;  C3=12:read  C4=13:write  C5=9:close  CU=399 CR=120:getpid ;;
+  i386)    q=qemu-i386;    C3=3:read   C4=4:write   C5=5:open   CU=222 CB=4094 CR=20:getpid ;;
+  arm32)   q=qemu-arm;     C3=3:read   C4=4:write   C5=5:open   CU=399 CB=4094 CR=20:getpid ;;
+  aarch64) q=qemu-aarch64; C3=63:read  C4=64:write  C5=56:openat CU=460 CB=4094 CR=172:getpid ;;
+  riscv32) q=qemu-riscv32; C3=63:read  C4=64:write  C5=56:openat CU=460 CB=4094 CR=172:getpid ;;
+  xtensa)  q=qemu-xtensa;  C3=12:read  C4=13:write  C5=9:close  CU=399 CB=4094 CR=120:getpid ;;
   *) echo "qemu_syscall_map: no control table for '$arch'." >&2
      echo "  REFUSING rather than sweeping without one: the controls are the only" >&2
      echo "  thing that separates this map from a guess. Add a row above, sourced" >&2
@@ -115,31 +115,75 @@ PROBE_TIMEOUT=${PROBE_TIMEOUT:-2}
 trace_of() {
   timeout "$PROBE_TIMEOUT" "$q" -strace "$tmp/scn" "$1" 2>&1 | sed 's/^[0-9][0-9]* //' || true
 }
-subject_of() {   # first line of trace($1) past the prefix shared with the baseline
+# THE SUBJECT IS WHAT LIES BETWEEN THE SHARED PREFIX AND THE SHARED SUFFIX, and
+# the SUFFIX half is not symmetry for its own sake. A prefix-only diff reports
+# the first line past the common start, and for a syscall qemu executes while
+# printing NOTHING that line is the program's own `exit_group(0)` -- so the
+# number gets named exit_group. Measured on riscv32 259 (2026-09-04): a real
+# call, no trace line, and the row read `259 exit_group`. It was caught only
+# because 94 IS exit_group and the duplicate control fired; on an arch where the
+# silent number came first there would be nothing to collide with.
+#
+# Bracketing between prefix and suffix makes the empty case VISIBLE instead of
+# borrowing the next line: no middle at all means the call printed nothing, and
+# `?silent` says exactly that. Return values are stripped before comparing
+# because mapped addresses are not stable between runs; ARGUMENTS are not, which
+# is what keeps `exit_group(2147483647)` (the probe calling exit_group itself)
+# distinct from the baseline's `exit_group(0)`.
+subject_of() {
   trace_of "$1" > "$tmp/t.txt"
   awk -v basef="$tmp/base.txt" '
-    BEGIN { n=0; while ((getline l < basef) > 0) { sub(/ = .*$/,"",l); b[++n]=l } }
-    { k=$0; sub(/ = .*$/,"",k);
-      if (i < n && k == b[i+1] && !done) { i++; next }
-      done=1; if (!printed) { print $0; printed=1 } }
+    function key(l) { sub(/ = .*$/,"",l); return l }
+    BEGIN { bn=0; while ((getline l < basef) > 0) b[++bn]=key(l) }
+    { tn++; t[tn]=$0; k[tn]=key($0) }
+    END {
+      p=0; while (p < bn && p < tn && k[p+1] == b[p+1]) p++
+      sfx=0; while (p+sfx < tn && bn-sfx > p && k[tn-sfx] == b[bn-sfx]) sfx++
+      for (i = p+1; i <= tn-sfx; i++) print t[i]
+    }
   ' "$tmp/t.txt"
 }
 name_of() {
-  subject_of "$1" | sed -n 's/^\([a-z_0-9]*\)(.*/\1/p'
+  subject_of "$1" | head -1 | sed -n 's/^\([a-z_0-9]*\)(.*/\1/p'
 }
 line_of() {
   subject_of "$1"
 }
 
-trace_of "$CU" > "$tmp/base.txt"
+# THE BASELINE NUMBER MUST LIE OUTSIDE EVERY SWEPT RANGE, and $CB is 4094 for
+# that reason alone. A baseline's own diff against itself is empty, so it can
+# never produce a row -- if the baseline sat inside the sweep, that number would
+# be STRUCTURALLY INVISIBLE in the map and no control could see it, because the
+# absence would be indistinguishable from a correct absence. $CU was the
+# baseline until 2026-09-04 and is 399/460, both in range; it is now an ordinary
+# in-range unassigned number, checked through the real path both before the
+# sweep and against the finished map.
+trace_of "$CB" > "$tmp/base.txt"
 if [ ! -s "$tmp/base.txt" ]; then
-  echo "qemu_syscall_map: the baseline trace for the unassigned number $CU is EMPTY." >&2
+  echo "qemu_syscall_map: the baseline trace for the unassigned number $CB is EMPTY." >&2
   echo "  Every row is derived from it, so a blank baseline would make the whole" >&2
   echo "  map read as 'first line of every trace'. Refusing." >&2
   exit 1
 fi
 
 fail=0
+# THE CONTROL TABLE IS DATA AND IT HAS BEEN WRONG. Both of these fired for real:
+# C5 said 57:openat for aarch64/riscv32 (openat is 56 there; 57 is close), and
+# xtensa's row had no second unassigned number at all, because the edit that
+# added one keyed on the CR spelling and xtensa's differs. The unset variable
+# then probed with an EMPTY argument and reported the program's own exit --
+# a confusing verdict for what was a missing table entry. Check the table's SHAPE before probing anything with it.
+for cv in "$C3" "$C4" "$C5" "$CR"; do
+  case "$cv" in
+    [0-9]*:[a-z]*) : ;;
+    *) echo "qemu_syscall_map: control entry '$cv' is not <number>:<name> for $arch" >&2; exit 2 ;;
+  esac
+done
+case "$CU:$CB" in
+  [0-9]*:[0-9]*) : ;;
+  *) echo "qemu_syscall_map: $arch has no CU/CB pair (got '$CU'/'$CB')" >&2; exit 2 ;;
+esac
+[ "$CU" != "$CB" ] || { echo "qemu_syscall_map: CU must differ from the baseline CB" >&2; exit 2; }
 check() {   # check <n>:<expected-name>
   n=${1%%:*}; want=${1##*:}; got=$(name_of "$n")
   if [ "$got" = "$want" ]; then echo "  control: $n -> $want  OK"
@@ -149,25 +193,23 @@ echo "qemu_syscall_map: $arch via $q, controls first"
 check "$C3"; check "$C4"; check "$C5"
 a=$(name_of "${C3%%:*}"); b=$(name_of "${C4%%:*}"); c=$(name_of "${C5%%:*}")
 if [ "$a" = "$b" ] || [ "$b" = "$c" ] || [ "$a" = "$c" ]; then
-  echo "  control: the three consecutive names are not distinct  FAIL"; fail=1
+  echo "  control: the three control names are not distinct  FAIL"; fail=1
 else
-  echo "  control: three consecutive numbers give three DISTINCT names  OK"
+  echo "  control: three different numbers give three DISTINCT names  OK"
   echo "           (a constant shift within one family cannot pass this;"
   echo "            read+write alone could, being adjacent and same-family)"
 fi
-u=$(name_of "$CU")
-if [ -z "$u" ]; then echo "  control: $CU is unassigned, sweep reports ABSENCE  OK"
-else echo "  control: $CU named '$u', expected unassigned  FAIL"; fail=1; fi
-# A SECOND UNASSIGNED NUMBER, AND IT IS NOT DECORATION. $CU is the BASELINE, so
-# its own diff is empty by construction and that control cannot come out false
-# whatever the extractor does -- a guard that cannot fail, printing OK. $CU2 is a
-# different number that must ALSO produce no row, and it goes through the real
-# path: qemu emits `Unknown syscall <n>`, which differs from the baseline's
-# `Unknown syscall <CU>` and would otherwise be reported as a row.
-u2=$(subject_of "$CU2")
+# THE ABSENCE CONTROL, and it has to run through the real path to mean anything.
+# $CU is an unassigned number INSIDE the swept range, so the sweep must reach it
+# and decide to emit nothing: qemu prints `Unknown syscall <n>`, which DIFFERS
+# from the baseline's `Unknown syscall <CB>` and was being reported as a
+# `?unnamed` row until 2026-09-04. While $CU was itself the baseline this
+# control could not come out false at all -- its diff was empty by construction
+# -- so it printed OK through the entire period the bug existed.
+u2=$(subject_of "$CU")
 case "$u2" in
-  "Unknown syscall $CU2"*) echo "  control: $CU2 unassigned via the real path (not the baseline's free pass)  OK" ;;
-  *) echo "  control: $CU2 gave '$u2', expected an Unknown-syscall line  FAIL"; fail=1 ;;
+  "Unknown syscall $CU"*) echo "  control: $CU unassigned, and via the real path  OK" ;;
+  *) echo "  control: $CU gave '$u2', expected an Unknown-syscall line  FAIL"; fail=1 ;;
 esac
 rn=${CR%%:*}; rw=${CR##*:}; rl=$(line_of "$rn")
 if [ "$(name_of "$rn")" = "$rw" ] && ! printf '%s' "$rl" | grep -q 'errno='; then
@@ -196,24 +238,47 @@ fi
   echo "#   kernel table. arm32 90 (old_mmap) is the one instance at 0..460: its"
   echo "#   handler prints the struct argument, and the probe's argument is not a"
   echo "#   readable address, so the line comes out as bare ' = -1 errno=14'."
-  echo "#   ABSENT, ?noreturn and ?unnamed are three different statements and"
-  echo "#   only the first one means nothing is at that number."
+  echo "# A '?silent' row is an ASSIGNED number that RAN AND RETURNED and that"
+  echo "#   qemu printed NO LINE AT ALL for. It is only distinguishable from an"
+  echo "#   absent number because the subject is bracketed between the prefix AND"
+  echo "#   the suffix the trace shares with the baseline; a prefix-only diff"
+  echo "#   reported the probe'\''s own exit_group as this number'\''s name."
+  echo "#   riscv32 259 is the measured case."
+  echo "#   ABSENT, ?noreturn, ?unnamed and ?silent are FOUR different statements"
+  echo "#   and only the first one means nothing is at that number."
   echo "# range: $lo..$hi   date: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo "# compiler: $(sha256sum "$here/../compiler/pascal26" 2>/dev/null | cut -c1-16)  commit: $(git -C "$here/.." rev-parse --short=12 HEAD 2>/dev/null)"
   n=$lo
+  base_last=$(tail -1 "$tmp/base.txt")
   while [ "$n" -le "$hi" ]; do
     nm=$(name_of "$n")
-    sub=$(subject_of "$n")
+    sub=$(subject_of "$n" | head -1)
     if [ -n "$nm" ]; then
       echo "$n $nm"
     elif [ "${sub#Unknown syscall}" != "$sub" ]; then
       : # qemu says the number is not in its table -- UNASSIGNED, no row.
         # This arm is why the baseline number cannot be the only absence
         # control: n == baseline produces an EMPTY diff and so can never
-        # generate a row, whatever the code does. See CU2 below.
+        # generate a row, whatever the code does -- which is why the baseline
+        # $CB is kept OUTSIDE every swept range and $CU, the in-range
+        # unassigned control, is a different number.
     elif [ -n "$sub" ]; then
       echo "$n ?unnamed"
-    elif [ "$(trace_of "$n" | wc -l)" -lt "$(wc -l < "$tmp/base.txt")" ]; then
+    elif [ "$(trace_of "$n" | tail -1)" = "$base_last" ]; then
+      # THE CALL RAN, RETURNED, AND PRINTED NOTHING -- the probe reached its own
+      # exit and the trace ends exactly where the baseline's does. Distinguished
+      # from an absent number only because the subject is bracketed by the
+      # shared SUFFIX as well as the shared prefix; with a prefix-only diff this
+      # row silently took the name of the program's exit_group. riscv32 259 is
+      # the measured case, and it was caught only because 94 IS exit_group and
+      # the duplicate control fired.
+      echo "$n ?silent"
+    elif [ "$(trace_of "$n" | wc -l)" -gt 0 ]; then
+      # Printed nothing AND never reached the program's exit: it blocked, or it
+      # does not return by design. NOT a line-count test any more -- a ?silent
+      # trace is also exactly one line shorter than the baseline (the baseline's
+      # own `Unknown syscall` line), so counting lines called every silent
+      # syscall a non-returning one.
       echo "$n ?noreturn"
     fi
     n=$((n+1))
@@ -261,6 +326,14 @@ check_map() {   # check_map <file> <lo> <hi>; 0 = the map passes
     [ "$cn" -ge "$cm_lo" ] && [ "$cn" -le "$cm_hi" ] || continue
     grep -q "^$cn $nm\$" "$cm_f" || cm_missing="$cm_missing $nm"
   done
+  # ...and the in-range unassigned number must have produced NO row. This is the
+  # same question the input-side control asks, asked of the ARTEFACT instead of
+  # of one probe -- the only place a sweep-level regression can show up.
+  if [ "$CU" -ge "$cm_lo" ] && [ "$CU" -le "$cm_hi" ] && grep -q "^$CU " "$cm_f"; then
+    echo "qemu_syscall_map: $CU is unassigned and the map has a row for it:" >&2
+    grep "^$CU " "$cm_f" >&2
+    cm_rc=1
+  fi
   if [ -n "$cm_missing" ]; then
     echo "qemu_syscall_map: control names missing from the map:$cm_missing" >&2
     echo "  They probed correctly one at a time, so the SWEEP dropped them --" >&2
@@ -280,8 +353,8 @@ cm_good="$tmp/selftest-good.map"
 {
   echo "# syscall number -> name for $arch, and the word syscall is in this comment"
   for c in "$C3" "$C4" "$C5" "$CR"; do echo "${c%%:*} ${c##*:}"; done
-  echo "$CU2 ?noreturn"
-  echo "$(( CU2 - 1 )) ?noreturn"
+  echo "$(( CB - 2 )) ?noreturn"
+  echo "$(( CB - 1 )) ?noreturn"
 } > "$cm_good"
 cm_lo_t=$(awk '$1 ~ /^[0-9]+$/{print $1}' "$cm_good" | sort -n | head -1)
 cm_hi_t=$(awk '$1 ~ /^[0-9]+$/{print $1}' "$cm_good" | sort -n | tail -1)
