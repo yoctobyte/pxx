@@ -4,7 +4,7 @@ title: "C frontend cannot lower AST node kind 1 in miscutils/flash_eraseall.c"
 track: C
 prio: 55
 type: bug
-status: working
+status: done
 created: 2026-09-02
 found-by: frankD
 summary: "ROOT-CAUSED, AND IT IS NOT A COMPILER LOWERING GAP -- it is the FOURTEENTH crtl gap, so all fourteen refusals at 394 applets are crtl surface and NONE is a frontend lowering defect. `loff_t` is undeclared in crtl (only `__kernel_loff_t` exists, linux/types.h:39), so `loff_t offset = erase.start;` at flash_eraseall.c:156 does not parse as a DECLARATION -- `loff_t` becomes an undeclared identifier `treated as 0`, `offset` likewise, and `&offset` on the next line is then the address of an INTEGER LITERAL, which is what AN_INT_LIT (=kind 1) is and what IRLowerAddress cannot lower. PROVEN: adding `typedef long long loff_t;` alone turns the refusal into a 502192-byte object, rc=0, zero IR_UNSUPPORTED. Reduces to five lines standalone (the ticket said it had not). THE REAL C-LANE DEFECT IS THE DIAGNOSTIC: IR_UNSUPPORTED reported `in: lib/crtl/src/sys/socket.c near cmsghdr` and, in the reduced case, `near: unit builtinheap` -- locations with NO relation to the actual site, which is why this looked like a lowering gap in flash_eraseall.c for two days. crtl gap filed to the B ticket; the diagnostic is mine."
@@ -123,3 +123,6 @@ itself wrong in the same way.
 **An error message is an instrument.** This one does not fail to answer; it
 answers confidently about the wrong file, and the three `treated as 0` warnings
 that name the real cause are printed ABOVE it and read as unrelated noise.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

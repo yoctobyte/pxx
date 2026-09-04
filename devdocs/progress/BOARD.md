@@ -477,14 +477,13 @@ _none_
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
 | feature-random-esp-hw-tier | B+S | 40 | feature | The ESP arm of feature-random-library, split out so the parent stays claimable for its four buildable targets: the ESP32 HW RNG register as tier 1, and Randomize's seeding on a bare boot that has no clock. Split proposed by the coordinator on the correct ground that the ranker's blocked-by has no notion of PARTIAL — but the blocker that motivated the split does not reproduce here, so this ships with no edge and a stated measurement to settle it. | bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help |
 
-## backlog-cfront (17)
+## backlog-cfront (16)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero | C | 60 | bug | x86-64, C frontend: a struct returned through a FUNCTION POINTER reads its third int back as its first when the field is used directly as a call argument. `struct P v = fp(3); printf(\"%d %d %d\", v.x, v.y, v.z)` prints `7 11 7` where gcc prints `7 11 13`. The struct in memory is CORRECT — copying the fields to locals first prints 7 11 13 — so this is the field READ in argument position, not the return. Needs an INDIRECT call: a plain local struct and a DIRECT call are both right. Silent wrong value, rc=0. Reproduces on the v399 pin, so it is not new. | — |
 | bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning-not-an-error | C | 45 | bug | pxx's C frontend treats an undeclared identifier used as a VALUE as 0 with a warning, while an undeclared identifier used as a CALL is a hard error. gcc rejects both under -std=gnu99, which is what our own busybox oracle uses. The consequence is not cosmetic: crtl's <sys/syscall.h> defends itself with `naming any SYS_* here is a compile error, which is the point', and that sentence is false under this compiler — an arm32 build of src/sys/statfs.c compiled cleanly and called syscall number 0. Fixing it also requires filling the crtl gaps it is currently papering over (locale.h has no LC_COLLATE/LC_CTYPE/LC_MONETARY/LC_TIME, which the lua build hits today). | — |
 | bug-c-including-stdio-h-refuses-to-compile-for-xtensa | C+S | 45 | bug | `#include <stdio.h>` refuses to compile for --target=xtensa: `__pxx_read is a pxx-internal runtime symbol and cannot be imported dynamically`, raised in lib/crtl/src/unistd.c at `ssize_t write`. The identical two-line file compiles for x86-64. Reduced to `#include <stdio.h>` plus one trivial function -- nothing in the user code touches read/write. A C file with NO include compiles for xtensa fine, so this is the crtl pull, not the xtensa C backend generally. The guard is correct in what it says (the symbol needs a Pascal bridge that is not visible); what is target-specific is why the bridge is missing on xtensa and present on x86-64. | — |
-| bug-c-ir-unsupported-ast-node-kind-1-in-flash-eraseall | C | 55→60 | bug | ROOT-CAUSED, AND IT IS NOT A COMPILER LOWERING GAP -- it is the FOURTEENTH crtl gap, so all fourteen refusals at 394 applets are crtl surface and NONE is a frontend lowering defect. `loff_t` is undeclared in crtl (only `__kernel_loff_t` exists, linux/types.h:39), so `loff_t offset = erase.start;` at flash_eraseall.c:156 does not parse as a DECLARATION -- `loff_t` becomes an undeclared identifier `treated as 0`, `offset` likewise, and `&offset` on the next line is then the address of an INTEGER LITERAL, which is what AN_INT_LIT (=kind 1) is and what IRLowerAddress cannot lower. PROVEN: adding `typedef long long loff_t;` alone turns the refusal into a 502192-byte object, rc=0, zero IR_UNSUPPORTED. Reduces to five lines standalone (the ticket said it had not). THE REAL C-LANE DEFECT IS THE DIAGNOSTIC: IR_UNSUPPORTED reported `in: lib/crtl/src/sys/socket.c near cmsghdr` and, in the reduced case, `near: unit builtinheap` -- locations with NO relation to the actual site, which is why this looked like a lowering gap in flash_eraseall.c for two days. crtl gap filed to the B ticket; the diagnostic is mine. | — |
 | bug-c-long-double-is-8-bytes-in-pxx-and-16-in-gcc | C | 35 | bug | C `long double` is mapped to double (clexer.inc:342), so it is 8 bytes where gcc's is 16. MEASURED both sides: `struct { long double x; }` is sizeof 16 under gcc and 8 under pxx. Any such struct crossing a real C boundary therefore disagrees about its own SIZE before any calling-convention question is reached, and psABI puts an x87 member in MEMORY class where pxx would see one SSE eightbyte. Found by writing the NEGATIVE control for the new SysV classifier: the classifier's tyExtended refusal is unreachable from C because the frontend erases the distinction first, so a guard that looks like it covers long double cannot fire. Pre-existing and independent of the aggregate-classification work. | — |
 | bug-c-the-32-bit-va-arg-set-is-complete-only-because-two-targets-cannot-compile-c-yet | C | 35 | bug | LATENT, with a named trigger. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]` tests pick the 4-byte-slot va_arg helper; everything else falls to an else whose comment says `Cross (aarch64)` but whose condition is `<> TARGET_X86_64`, i.e. the 8-byte-slot path. xtensa and wasm32 are 32-bit and absent from the set -- the set is correct TODAY only because neither can compile a C program at all (`C program entry stub not implemented for this target yet`). The day either gains an entry stub it silently gets 64-bit varargs slots. Fix the set in the SAME commit as the stub. | — |
 | bug-c-the-frontend-takes-the-last-of-two-conflicting-typedefs-silently | C | 50 | bug | C: two conflicting typedefs for one name are accepted silently, last wins | — |
@@ -889,9 +888,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3219)
+## done (3220)
 
-3219 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3220 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (74)
 
@@ -1011,7 +1010,6 @@ _none_
 - [p 62] [N] feature-n-sys-version-info-implementation-and-the-probe-suite
 - [p 62] [N] feature-nilpy-enum-class [parked — re-claim, do not duplicate]
 - [p 60] [B] bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS (unblocks 1)
-- [p 60] [C] bug-c-ir-unsupported-ast-node-kind-1-in-flash-eraseall (unblocks 1)
 - [p 60] [B] feature-b-crtl-function-gaps-at-394-busybox-applets (unblocks 1)
 - [p 60] [C] bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero
 - [p 60] [N] bug-n-a-frozenset-returned-from-a-def-arrives-empty
@@ -1387,7 +1385,6 @@ _none_
 - **1** — bug-a-the-no-fpu-diagnostic-advises-uses-softfloat-which-does-not-help
 - **1** — bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
-- **1** — bug-c-ir-unsupported-ast-node-kind-1-in-flash-eraseall
 - **1** — bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size
