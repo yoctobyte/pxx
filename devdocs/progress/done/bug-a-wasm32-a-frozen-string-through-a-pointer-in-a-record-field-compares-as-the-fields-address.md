@@ -110,4 +110,4 @@ Positive controls for any fix, both directions:
   and a "always load" change breaks it.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9b67b266d.
