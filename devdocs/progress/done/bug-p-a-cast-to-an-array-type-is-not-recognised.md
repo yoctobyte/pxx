@@ -174,4 +174,4 @@ control: the pinned compiler refuses row 1 outright —
 `pascal26:60: error: undefined variable (TArr)`.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 5bea302b5.

@@ -9,7 +9,7 @@ found: 2026-09-04
 found-by: frankA
 owner: frankA
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 5bea302b5
 summary: "FIXED. An AN_INDEX whose base is an AN_DEREF carries an ALREADY-NORMALISED subscript by convention -- the parser subtracts the pointee array's low bound, because ir.inc's `lo` ladder has no AN_DEREF arm and so cannot do it. THREE sites mint that node and only ONE did the subtraction: for `type TLo = array[1..5] of Integer; PLo = ^TLo`, the inline-cast READ `PLo(@lo)^[3]` gave 0 against fpc 3.2.2's 99, and the STORE `PLo(@lo)^[2] := 55` wrote into `lo[4]`. Silent both ways, no diagnostic, present in pin v403. Fixed by factoring the arithmetic into `FoldDerefArrayLowBound` (pasparser_lval.inc) and calling it from all three. Regression row: test/test_inline_ptr_cast_low_bound.pas, whose `.expected` is fpc's own output."
 ---
 
