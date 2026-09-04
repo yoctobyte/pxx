@@ -67,4 +67,4 @@ with this slug beside it (`fp(7).c`). Un-comment it; the file is already wired
 on all six cross targets, so the row lands everywhere at once.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 49194d2ab.
