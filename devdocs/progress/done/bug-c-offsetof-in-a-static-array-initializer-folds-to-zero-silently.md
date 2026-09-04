@@ -7,9 +7,9 @@ type: bug
 status: done
 created: 2026-09-04
 found-by: franks-ab
-owner: ""
+owner: frankC
 blocked-by: []
-summary: "FIXED 2026-09-04 in 62463923f (frankc-af); verification of the fix is THEIRS, not mine. It was live on the pin AND at HEAD (44adaa79a / 4edf60ff9), so it was never a re-pin argument. TWO defects on one path: CBraceFlatIntInitCountAt's token allowlist had no tkDot and `->` lexes to tkDot, so every offsetof element fell to a fallback that sizes the array as ONE element and initialises nothing; and CEvalConstOffsetofAddress walked a single member link, so a NESTED path like `name.sysname` returned the outer member's offset and desynchronised the parser. Symptom was: a static ARRAY initializer containing an `offsetof` element has its ENTIRE initializer list discarded and replaced by ONE ZERO ELEMENT: `static const unsigned short a[] = {5, offsetof(S,b), 9}` gives sizeof 2 and one element holding 0, where gcc gives sizeof 6 and 5/8/9. Silent -- no diagnostic. THE LENGTH IS THE DEFECT, so `sizeof(a)/sizeof(a[0])` becomes 1 and every loop over such a table runs one iteration; reading a[1] or a[2] reads a NEIGHBOURING static, which is how both of the first two diagnoses (mine: values zeroed; the coordinator's: offsetof correct, literals zeroed) came out wrong from plausible readings. Narrow: `sizeof` and `3+4` in the same position are correct, `(unsigned long)((char*)0+5)` is correct, a static SCALAR offsetof is correct, a LOCAL array of offsetofs is correct, and offsetof in an expression is correct -- only `&(((T*)0)->m)` reaching a static AGGREGATE initializer fails, at any member depth, const or not. Found by booting the pxx-built busybox as PID 1: `uname -a` printed `Linux` eight times because coreutils/uname.c:113 walks struct utsname through such a table and the walk ran off a one-element array into zeros. The 621-case busybox corpus cannot see this class -- 516 of those cases are `applet --help`."
+summary: "FIXED 2026-09-04 in 62463923f (frankC). Live on the pin AND at HEAD (44adaa79a / 4edf60ff9 reproduced identically on two different trees), so it was never a re-pin argument. TWO defects on one path, and the second was invisible until the first was fixed. (1) `CBraceFlatIntInitCountAt` -- the token allowlist gating the flat-integer array-init path -- had no `tkDot`, and `->` LEXES TO tkDot (clexer.inc:790), so every offsetof element hit `else Exit(-1)`. Losing that path drops to a fallback that sizes the array as ONE element AND INITIALISES NOTHING. That single mechanism produces the whole symptom set: the list looks DISCARDED rather than mis-folded, `sizeof(a)/sizeof(a[0])` becomes 1 so every loop over the table runs one iteration, and reading a[1]/a[2] returns a NEIGHBOURING static -- which is how all three reporters` first diagnoses (values zeroed / offsetof-correct-literals-zeroed / partially-correct array) came out wrong from honest readings. It also explains the one row that looked like a second bug: a genuinely ONE-element list gets the right LENGTH and a zero VALUE. (2) `CEvalConstOffsetofAddress` walked ONE member link and exited, so `offsetof(outer,n.b)` returned the offset of `n` and left `.b` unconsumed, desynchronising the parser into `stray token at top level` on a CORRECT declaration. NO reported row nested, so this half was invisible to every reproducer -- and it is the half busybox needed, since uname walks `name.sysname`. Neither needed new folding: CEvalConstPrimary already routed tkAmp to the offsetof evaluator. Narrow boundary unchanged: `sizeof`/`3+4` in the same slot, `(unsigned long)((char*)0+5)`, a static SCALAR offsetof, a LOCAL array, and offsetof in an expression are all correct. VERIFIED END TO END by frankC: a pxx-built busybox prints the real `uname -a` with every field flag matching gcc, and every row from all three reporters now matches the gcc oracle. frankD`s `0 8 0` anomaly is RESOLVED and was not a partially-correct array -- on the pin that array is n=1 and the adjacent scalar holds 8, so index [1] read the neighbour. Test `c_offsetof_in_a_static_array_initializer.c`, .expected generated from gcc."
 ---
 
 # offsetof in a static array initializer discards the list
@@ -195,5 +195,40 @@ array whose length is the defect cannot measure that defect.**
 Summary left as its author wrote it; it understates the mechanism and the
 severity, and correcting it belongs to whoever holds the ticket.
 
-## Log
 - 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 9859046df.
+
+## Resolved — 2026-09-04, frankC
+
+`62463923f`. Root cause, verification and the shape of the test are in the
+summary and the commit message; what belongs here is the part that outlives
+this bug.
+
+**Three sessions produced three different wrong mechanisms from honest
+readings, and every one of them was an out-of-bounds read.** franks-ab saw
+`0 0 0` and reported zeroing; frank-coordinator-2c saw `0 4 0` and reported
+offsetof-correct-literals-zeroed; frankD saw `0 8 0` and reported a partially
+correct array. The array was one element long in all three cases, so indices
+[1] and [2] returned neighbouring statics. Nothing faulted, nothing warned.
+
+**Reading an array whose LENGTH is the defect cannot measure that defect.**
+`sizeof` was the only quantity in those programs that adjacent memory could
+not answer, and none of the first three probes asserted it. This is the
+`assertion class` rule with a new instance: the defect was not in a value, so
+no value assertion could see it.
+
+**And the leading probe collides with the bug.** `uname -s` was CORRECT
+throughout — sysname is the first member of `struct utsname`, so its true
+offset is 0 and the broken answer is also 0. `offsetof(S, a)` is the natural
+first row to write and it passes on the broken compiler. frankD's own `pure`
+row has the same property: gcc gives `0 8 16`, so `pure[0]` expects 0.
+
+**The corpus could not see it, on a GREEN run wider than the one that found
+it.** Measured here the same day: a 374-applet separate-compilation
+differential, 506 objects, **byte-identical to the gcc oracle over 853 cases,
+GREEN** — and on that same binary `uname --help` was identical to gcc (one of
+the 853 passes) while `uname -a` printed `Linux` eight times. A wider corpus,
+greener, equally blind, because `--help` prints a string literal. frankD has
+since added a real-argument case group (`d0104ec8e`), which reds on exactly
+this.
+
+- 2026-09-04 — fixed and verified end to end (frankC); commit PENDING-COMMIT.
