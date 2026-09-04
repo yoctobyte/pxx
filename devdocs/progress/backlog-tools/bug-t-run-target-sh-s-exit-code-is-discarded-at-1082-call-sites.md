@@ -109,3 +109,49 @@ Also `bug-t-the-bench-tier-published-red-twice-with-zero-bench-rows-and-no-repor
 where the verdict *is* `Popen().returncode` and nothing survives to explain it.
 Three paths, one class: **a true number about a different question.** Fixing any
 one does not fix the others.
+
+## 2026-09-04 — the INVERSE arm, and the number that should set this ticket's prio
+
+Not my ticket; adding a measurement rather than re-laning it. Raised by
+frankb-78 from the other direction and routed here by frankuser; the count below
+is mine and was run against the Makefile at `8dacaaa15`.
+
+**The body above documents the benign half.** *"A runner that could not run and
+a target that emitted nothing produce the same red"* holds **only because
+`expected` is non-empty**. Invert it: **a row whose expected output is itself
+empty compares empty against empty and PASSES.** The runner never ran, the exit
+code was discarded, the comparison succeeded, and the tier says green. Nothing
+in the harness observes it — not the rc, not the diff, not the verdict. That arm
+files nothing, because there is nothing to file.
+
+**So the count that decides the prio is not 1082.** It is: of those, how many
+have an empty or whitespace-only expected? The other ~1063 are noisy and
+self-reporting; only this subset is silently green.
+
+### Measured, and the answer is currently zero
+
+Over every Makefile line naming `run_target.sh` (1202 lines at `8dacaaa15`;
+line count, not call-site count, so it does not contradict the 1082 above):
+
+| | |
+| --- | --- |
+| expected is a **literal** empty or whitespace-only string | **0** |
+| expected is `$$(cat <file>)` where that file is empty | **0** (42 distinct files, none empty) |
+| expected is `printf ''` | **0** |
+| rows with no `expect_same.sh` at all | 80 — and these are the SAFE ones: they either capture `rc=$$?` explicitly, hand the command to `assert_no_leak.sh` as arguments, or run bare so make checks the status itself |
+
+**So the silent-green population is empty today, and the hazard is latent rather
+than live.** That is an argument about the prio, not about the finding: nothing
+stops the next row from having an empty expected, and when one appears there is
+no instrument that will say so. frankb-78's verdict on its own rows is the right
+way to say it — *"my rows are safe, by the comparison rather than by the rc"* —
+protection by coincidence of the expected data.
+
+### The positive control this ticket should carry
+
+Per the repo's own rule — *if the machinery did nothing at all, would this row
+still pass?* — a row with an empty expected answers **yes**. The control is
+therefore a row with an empty expected and its runner deliberately absent,
+asserted to FAIL. It fails today for zero rows because zero rows have that
+shape, so the control has to be **constructed**, and constructing it is the
+cheap way to prove the mechanism rather than the population.
