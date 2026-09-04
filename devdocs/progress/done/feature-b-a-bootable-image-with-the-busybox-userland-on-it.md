@@ -145,4 +145,4 @@ preference: running applets with arguments found a silent wrong-value miscompile
 that 400 objects and 621 green cases did not.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 82edcc32c.
