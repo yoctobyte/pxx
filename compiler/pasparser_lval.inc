@@ -312,6 +312,51 @@ begin
   end;
 end;
 
+{ Fold a pointee's LOW BOUND into a `p^[i]` subscript, in place.
+
+  `AN_INDEX` over a deref carries an ALREADY-NORMALISED subscript by
+  convention: for this shape the PARSER subtracts the bound, because ir.inc's
+  `lo` ladder has an AN_IDENT arm and an AN_FIELD arm and no AN_DEREF arm.
+  (That split is itself a design flaw and is Track A's --
+  bug-a-an-array-low-bound-is-answered-by-two-mechanisms-and-a-deref-uses-the-other.)
+
+  So EVERY site that mints an AN_INDEX over a deref owes this subtraction, and
+  there are THREE of them: ParseLValueAST's chain loop, ParseClassRecordSelectors
+  (the store path), and the pointer-alias cast's private loop in
+  pasparser_expr.inc. Only the first had it. `PLo(@lo)^[3]` over `array[2..4]`
+  read element 3 of a 3-element array and answered 0 against fpc's 99, and
+  `PLo(@lo)^[2] := 55` STORED INTO lo[4] -- a silent write to the neighbour,
+  the same shape as bug-p-record-field-array-with-a-non-zero-low-bound-writes-
+  out-of-bounds. Both only for an INLINE cast; through a pointer VARIABLE the
+  chain loop handled it and both were always right.
+
+  One function asked at all three rather than three copies of the arithmetic,
+  because a fact with three copies goes stale serially and this one already had
+  (refactor-p-three-hand-rolled-postfix-loops).
+
+  NOT applied to the N-D shapes, and that exclusion is load-bearing rather than
+  cautious: BuildFlatNDIndex already subtracts every dimension's low bound, dim
+  0 included, so folding again indexes (i - 2*lo0) -- correct only for the lo=0
+  case that hides it. Callers pass isND/ndFlat so the one rule lives here too. }
+procedure FoldDerefArrayLowBound(indexNode: Integer; isND: Boolean; ndFlat: Integer);
+var fdCount, fdLo, fdFlat, fdLoNode, fdSubNode: Integer;
+begin
+  if indexNode < 0 then Exit;
+  if isND or (ndFlat >= 0) then Exit;
+  if ASTRight[indexNode] < 0 then Exit;
+  if not DerefPtrArrayInfo(ASTLeft[indexNode], fdCount, fdLo, fdFlat) then Exit;
+  if fdLo = 0 then Exit;
+  fdLoNode := AllocNode(AN_INT_LIT);
+  ASTIVal[fdLoNode] := fdLo;
+  ASTTk[fdLoNode] := Ord(tyInteger);
+  fdSubNode := AllocNode(AN_BINOP);
+  ASTIVal[fdSubNode] := Ord(tkMinus);
+  ASTLeft[fdSubNode] := ASTRight[indexNode];
+  ASTRight[fdSubNode] := fdLoNode;
+  ASTTk[fdSubNode] := Ord(tyInteger);
+  ASTRight[indexNode] := fdSubNode;
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
@@ -343,7 +388,7 @@ var
   fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
   isMethodPtr: Boolean;
   autoDeref, peRec: Integer;
-  dpaCount, dpaLo, dpaFlat, dpaLoNode, dpaSubNode: Integer;   { `p^[i]` over a pointer to a named FIXED array }
+  dpaCount, dpaLo, dpaFlat: Integer;                           { `p^[i]` over a pointer to a named FIXED array }
   dpeTk, dpeRec, dpeCap: Integer;   { ...and its ELEMENT, for any spelling of p }
   ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { qualified TClass.Const }
   keyNode: Integer;   { __getitem__/__setitem__ subscript key }
@@ -1795,20 +1840,12 @@ begin
         exactly as it was before this moved.
         bug-a-indexing-through-a-pointer-to-an-array-is-wrong-for-several-element-kinds,
         regression-test-core-test-pointer-to-a-named-fixed-array }
-      if (not alreadyResolved) and (not isND) and
-         DerefPtrArrayInfo(node, dpaCount, dpaLo, dpaFlat) and
-         (dpaLo <> 0) and (ASTRight[indexNode] >= 0) then
-      begin
-        dpaLoNode := AllocNode(AN_INT_LIT);
-        ASTIVal[dpaLoNode] := dpaLo;
-        ASTTk[dpaLoNode] := Ord(tyInteger);
-        dpaSubNode := AllocNode(AN_BINOP);
-        ASTIVal[dpaSubNode] := Ord(tkMinus);
-        ASTLeft[dpaSubNode] := ASTRight[indexNode];
-        ASTRight[dpaSubNode] := dpaLoNode;
-        ASTTk[dpaSubNode] := Ord(tyInteger);
-        ASTRight[indexNode] := dpaSubNode;
-      end;
+      { The site that always had this, now asking the SHARED helper so the three
+        minting sites cannot drift again. `alreadyResolved` is this loop's own
+        extra condition and stays here: it means an earlier arm already built a
+        normalised subscript. }
+      if not alreadyResolved then
+        FoldDerefArrayLowBound(indexNode, isND, -1);
       ASTTk[indexNode] := StrValTk(tk);
       node := indexNode;
 
@@ -4805,6 +4842,9 @@ begin
         else ASTRight[sub] := CurASTNode;
         Expect(tkRBrack, ']');
       end;
+      { The STORE face of the low bound. This walker minted an AN_INDEX over a
+        deref and never subtracted, so `PLo(@lo)^[2] := 55` wrote into lo[4]. }
+      FoldDerefArrayLowBound(sub, ndIsND, ndFlat);
       { `TP(raw)^[i] := ...` -- indexing a DEREF whose pointee is an ARRAY. The
         alias row deliberately records the ARRAY'S ELEMENT as the pointee kind
         (pasparser_decl.inc's `PArr = ^TArr` arm, so that `p^[i]` yields it), so
@@ -6953,6 +6993,51 @@ end;
   what keeps a source declaration winning: FindTypeAlias is consulted first by every caller, so a
   real `PInteger` in the source or the RTL is found before we ever get here. Returns -1 for a name
   that is not a builtin pointer. }
+{ Mint an implicit `^TArr` alias for a NAMED ARRAY TYPE, so that `TArr(x)` can
+  be the same in-place reinterpret `PArr(@x)^` already is. Returns the alias
+  index, or -1 when `nm` does not name an array type.
+
+  Why an alias rather than a new cast arm with its own suffix walk: the whole
+  `p^[i]` machinery answers from AliasPtrElemArrAi (element kind, extent, low
+  bound, frozen-string capacity, dynamic-vs-fixed), and that column is reached
+  through an ALIAS index or a SYMBOL. A cast has no symbol, so an alias is the
+  carrier that already exists. Minting one buys every element kind at once and
+  adds no sixth postfix loop -- refactor-p-three-hand-rolled-postfix-loops.
+
+  Registered LAZILY, on first use, for the same reason EnsureBuiltinPtrAlias
+  below is: FindTypeAlias runs first at the call site, so a real source
+  declaration of the same name still wins (symtab.inc:6215).
+  bug-p-a-cast-to-an-array-type-is-not-recognised }
+function EnsureArrayPtrAlias(const nm: AnsiString): Integer;
+var apAi, apNOff, apI: Integer;
+begin
+  Result := -1;
+  apAi := FindArrayType(nm);
+  if apAi < 0 then Exit;
+  apNOff := TokCharLen;
+  for apI := 1 to Length(nm) do
+  begin
+    if TokCharLen >= STRING_CAP then Error('token char buffer overflow');
+    TokChars[TokCharLen] := nm[apI];
+    Inc(TokCharLen);
+  end;
+  { RegisterGeneralAlias reads the LastTypePointer* globals for a tyPointer
+    alias (symtab.inc:308) -- the same route ParseTypeKind's `^T` arm fills
+    them by. ElemArrAi is the load-bearing one; the rest describe the pointee
+    so `^` and `.field` resolve. }
+  LastTypePointerElemTk    := IntToTypeKind(ArrTypeElemTk[apAi]);
+  LastTypePointerElemRec   := ArrTypeElemRec[apAi];
+  LastTypePointerElemAlias := -1;
+  LastTypePointerDepth     := 1;
+  LastTypePointerBaseTk    := ArrTypeElemTk[apAi];
+  LastTypePointerBaseRec   := ArrTypeElemRec[apAi];
+  LastTypePointerElemArrAi := apAi;
+  RegisterGeneralAlias(apNOff, Length(nm), Ord(tyPointer), REC_NONE);
+  LastTypePointerElemArrAi := -1;   { a global: leaving it set poisons the next
+                                      unrelated alias registration (defs.inc:5895) }
+  Result := AliasCount - 1;
+end;
+
 function EnsureBuiltinPtrAlias(const nm: AnsiString): Integer;
 var elemTk: TTypeKind; noff, i: Integer;
 begin

@@ -4,10 +4,10 @@ title: "`TArr(x)` — a cast to a named ARRAY type — is `undefined variable`, 
 track: P
 prio: 40
 type: bug
-status: backlog
+status: done
 found: 2026-09-04
 found-by: frankA
-owner: ""
+owner: frankA
 blocked-by: []
 summary: "A cast to a named ARRAY type is not recognised at all: `TArr(aa)[1]` gives `undefined variable (TArr)` where fpc 3.2.2 compiles it. Swept every type kind a named cast can target and arrays are the ONLY gap — record, string alias, pointer alias, class, integer alias, enum, set and procedural type all work. The cast dispatch consults FindTypeAlias (plus the lazy builtin-pointer names) and never FindArrayType, which the SizeOf path two hundred lines away does consult. Not a postfix bug: the name never resolves, so it fails before any suffix is considered."
 ---
@@ -124,3 +124,54 @@ have been to suspect the new arm.
 
 Not implemented. The prerequisite is fixed and the design is measured rather
 than assumed, which is the part that was missing.
+
+---
+
+## 2026-09-04 (frankA) — FIXED, and it cost no sixth postfix walker
+
+`EnsureArrayPtrAlias` (`pasparser_lval.inc`) mints a pointer alias whose pointee
+is the named array's row, exactly as `pasparser_decl.inc` does for a declared
+`PArr = ^TArr`. The cast arm then asks for it as a THIRD fallback, only after
+`FindTypeAlias` and `EnsureBuiltinPtrAlias` have both missed, so no existing
+spelling changes meaning:
+
+```
+aliasIdx := FindTypeAlias(name);
+if aliasIdx < 0 then aliasIdx := EnsureBuiltinPtrAlias(name);
+if aliasIdx < 0 then begin aliasIdx := EnsureArrayPtrAlias(name); arrCast := ... end;
+```
+
+`TArr(aa)` is a VALUE cast where the alias path expects a POINTER, so the two
+ends are adapted rather than the middle forked: an `AN_ADDR` goes under the
+operand and an `AN_DEREF` over the resulting `AN_PTR_CAST`. From that node
+onward the tree is byte-for-byte what `PArr(@aa)^` already produced, which is
+why `refactor-p-three-hand-rolled-postfix-loops` gains nothing to worry about —
+this adds **no** sixth suffix loop, it reuses the second.
+
+`LastTypePointerElemArrAi` is a global that `RegisterGeneralAlias` reads; the
+helper clears it immediately after registering, because leaving it set poisons
+the next unrelated alias registration (`defs.inc:5895`).
+
+### Two bugs the design validation found before the code was written
+
+Checking that the target path (`PArr(@aa)^[i]`) actually worked — rather than
+assuming it, since this ticket's own table recorded it as working — turned up
+two defects in it, both silent, both present in pin v403:
+
+- [[bug-p-a-pointer-alias-to-an-array-of-char-takes-the-pchar-adapter]]
+  (`5c26f7a46`) — the table was right for Integer and wrong for Char.
+- [[bug-p-an-inline-pointer-alias-cast-loses-the-pointees-low-bound]] — two of
+  the three sites minting an `AN_INDEX` over a deref never subtracted the low
+  bound, in the read AND the write face.
+
+Neither is caused by this ticket and both would have been inherited by it.
+
+### Test
+
+`test/test_cast_to_array_type.pas`, 13 rows (rec/stra/arr/char/dyn/lo/nd/same/
+wrote/rhs/paren/arg/and), `.expected` is fpc 3.2.2's own output. Positive
+control: the pinned compiler refuses row 1 outright —
+`pascal26:60: error: undefined variable (TArr)`.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

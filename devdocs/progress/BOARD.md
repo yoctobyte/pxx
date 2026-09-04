@@ -364,12 +364,11 @@ _none_
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | regression-test-core-c-crtl-wait | T | 55→85 | regression | NOT A COMPILER BUG, and re-laned from C to T. riscv32's `wait4-rusage rusage=UNTOUCHED` is red on seven and deterministically green on plexus from BYTE-IDENTICAL compiler bytes (compiler_sha256 fcc5ad9a29a61c10c... both boxes) with an EMPTY `git diff` outside devdocs/. seven runs qemu-riscv32 8.2.2 where plexus runs 10.2.1; the host kernel is eliminated on seven's own box by tools/host_waitid_rusage_probe.c, which prints rusage=written there with its arg5-NULL control printing UNTOUCHED. The target-side path is four pure pass-throughs and the same riscv32 binary writes rusage under a newer emulator. Fixing it needs root on seven (owner) or a host-capability skip at ROW grain (T) — do NOT weaken the assertion. | bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain |
 
-## backlog-pascal (37)
+## backlog-pascal (36)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-p-a-brace-in-comment-prose-reports-the-wrong-line-and-sometimes-the-wrong-file | P | 30 | bug | `{ }` comments nest and quotes do not protect a brace inside one, so a brace in comment PROSE silently changes what is code. The diagnostics then point somewhere else: an unmatched `{` reports `unterminated comment` at the comment's OPENING line (42 lines above the offender, measured), and a `'}'` inside quotes reports `undefined variable` in stable_linux_amd64/.../builtinheap.pas — a file the user never wrote. Wrong LOCATION, not wrong wording. | — |
-| bug-p-a-cast-to-an-array-type-is-not-recognised | P | 40 | bug | A cast to a named ARRAY type is not recognised at all: `TArr(aa)[1]` gives `undefined variable (TArr)` where fpc 3.2.2 compiles it. Swept every type kind a named cast can target and arrays are the ONLY gap — record, string alias, pointer alias, class, integer alias, enum, set and procedural type all work. The cast dispatch consults FindTypeAlias (plus the lazy builtin-pointer names) and never FindArrayType, which the SizeOf path two hundred lines away does consult. Not a postfix bug: the name never resolves, so it fails before any suffix is considered. | — |
 | bug-p-a-char-array-row-of-a-2d-array-is-not-a-string | P | 25 | bug | `a[0] := 'hi'` where `a: array[0..2] of array[0..15] of Char` is still refused as `cannot assign ShortString to Char`. ASTCharArrayCap now answers for AN_IDENT, AN_FIELD and AN_DEREF, which is every shape the synapse failure and its five siblings needed; the AN_INDEX row of a multi-dimensional Char array is the one left, and it needs a per-dimension extent the other three do not. Low prio on purpose: no measured program wants it — it is the residual named when the parent bug closed, not a report from real code. | — |
 | bug-p-a-default-value-is-accepted-on-an-open-array-parameter | P | 40 | bug | `procedure P(const a: array of string = 'x')` compiles clean, and calling `P` with no argument prints a pointer as a length (435728179526). The default-value check reads Params[i].TypeKind without also testing IsArray — and an open-array parameter records its ELEMENT kind in TypeKind — so it sees a string parameter and demands a string literal. The array-constructor spelling `= ['x']` is correctly rejected, but with the same wrong reason: `a string parameter's default must be a string literal`. FPC rejects both. | — |
 | bug-p-a-forward-interface-declaration-is-not-parsed | P | 45 | bug | `IFoo = interface;` (forward) is rejected with `Expected: end, but got: ;` while the CLASS arm of the same double case, `TBar = class;`, parses fine. Pre-existing on pinned and HEAD alike -- not a regression. Costs tgenconstraint37, which is otherwise the only corpus test that exercises specializing against a forward-declared type. | — |
@@ -879,9 +878,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3287)
+## done (3289)
 
-3287 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3289 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (75)
 
@@ -1136,7 +1135,6 @@ _none_
 - [p 40] [N] bug-n-tk-got-files-are-invisible-to-testmgr-privatization
 - [p 40] [N] bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling
 - [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
-- [p 40] [P] bug-p-a-cast-to-an-array-type-is-not-recognised
 - [p 40] [P] bug-p-a-default-value-is-accepted-on-an-open-array-parameter
 - [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
 - [p 40] [P] bug-p-macpas-conditional-directives-are-ignored-so-both-arms-compile

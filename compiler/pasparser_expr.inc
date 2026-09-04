@@ -554,6 +554,9 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     tiArr: Integer;     { …and the ArrType row when it is a NAMED array type }
     elemTk: TTypeKind; elemRec: Integer;   { pointee of the node a `^` is applied to }
     pyLateDefPi: Integer;   { NilPy def not yet bound at this call site; -1 = none }
+    arrCast: Boolean;       { this named-type cast targets an ARRAY type: take the
+                              operand's address and deref, so it reinterprets storage }
+    acAddr, acDeref: Integer;
 begin
   { NilPy runs its own copy of this routine (pyparser.inc). The dispatch is
     here rather than at the call sites so that every caller — and every
@@ -6733,6 +6736,26 @@ begin
           these up front instead shadows the source (FindTypeAlias is first-wins) and silently
           re-types this compiler's own `PWord = ^NativeInt`. }
         if aliasIdx < 0 then aliasIdx := EnsureBuiltinPtrAlias(name);
+        { ...and, only if BOTH missed, a named ARRAY type: `TArr(aa)[1]`.
+
+          FPC treats a value typecast to an array type as an in-place storage
+          reinterpret -- exactly what `PArr(@aa)^[1]` already spells here -- so
+          this takes the operand's ADDRESS and DEREFS the cast, and everything
+          below (the suffix walk, the element kind, the low bound, dynamic vs
+          fixed) is the pointer-alias path unchanged.
+
+          Arrays were the ONLY type kind with no cast at all: record, string
+          alias, pointer alias, class, integer alias, enum, set and procedural
+          all worked, and all three array flavours answered "undefined
+          variable" because the NAME never resolved. Ordered third so a source
+          declaration still outranks it, same rule as the builtin names above.
+          bug-p-a-cast-to-an-array-type-is-not-recognised }
+        arrCast := False;
+        if aliasIdx < 0 then
+        begin
+          aliasIdx := EnsureArrayPtrAlias(name);
+          arrCast := aliasIdx >= 0;
+        end;
         if aliasIdx >= 0 then
         begin
           Next; { consume alias type name }
@@ -6756,6 +6779,16 @@ begin
           else
             ParseExpr;
           Expect(tkRParen, ')');
+          { The array cast reinterprets STORAGE, so the pointer it stands for is
+            the operand's address. Everything downstream then sees exactly the
+            node `PArr(@aa)` builds. }
+          if arrCast then
+          begin
+            acAddr := AllocNode(AN_ADDR);
+            ASTLeft[acAddr] := CurASTNode;
+            ASTTk[acAddr] := Ord(tyPointer);
+            CurASTNode := acAddr;
+          end;
           { `TFn(p)(args)` -- CALL straight through a procedural-type cast, the
             natural way to dispatch through a hand-built VMT (rtl-generics
             reaches its comparers this way). The capability was entirely
@@ -6993,6 +7026,21 @@ begin
           { Set locals so the suffix loop below can resolve ^ and .field }
           tk      := tyPointer;
           recName := AliasElemRec[aliasIdx];  { pointee record id, used after ^ }
+          { An ARRAY cast denotes the ARRAY, not a pointer to it, so it carries
+            an implicit `^`: `TArr(aa)[1]` is `PArr(@aa)^[1]`. Injecting the
+            deref HERE rather than teaching the suffix loop about array casts is
+            what keeps this from becoming a sixth postfix walker -- from this
+            point the node is byte-for-byte what the PArr spelling produces, and
+            the loop below cannot tell the two apart. }
+          if arrCast then
+          begin
+            acDeref := AllocNode(AN_DEREF);
+            ASTLeft[acDeref] := node;
+            ASTIVal[acDeref] := AliasElemRec[aliasIdx];
+            ASTTk[acDeref] := ArrTypeElemTk[AliasPtrElemArrAi[aliasIdx]];
+            node := acDeref;
+            tk := IntToTypeKind(ArrTypeElemTk[AliasPtrElemArrAi[aliasIdx]]);
+          end;
           end;
           { Inline metaclass-cast construction `TFooClass(expr).Create(args)`: the
             alias is a `class of T` (element tyClass) and the next selector is
@@ -7120,6 +7168,25 @@ begin
                 else ASTRight[indexNode] := CurASTNode;
                 Expect(tkRBrack, ']');
               end;
+              { ...and the pointee's LOW BOUND, asked through the same
+                DerefPtrArrayInfo the SHARED loop (pasparser_lval.inc) folds
+                with. This private copy knew the element KIND and not the
+                bound, so `PLo(@lo)^[3]` over `array[2..4]` read element 3
+                instead of element 1 and answered 0 where fpc 3.2.2 answers 99
+                -- silently, and only for an INLINE cast: the same line through
+                a pointer VARIABLE was always right, because that spelling goes
+                through the shared loop.
+
+                Adding the shared PREDICATE here rather than a second copy of
+                the arithmetic is the escape-not-a-fifth-loop shape
+                refactor-p-three-hand-rolled-postfix-loops asks for.
+
+                Excluded for the N-D shapes for the reason the shared loop
+                states at its own copy: BuildFlatNDIndex already subtracts every
+                dimension's low bound, so folding again indexes (i - 2*lo0),
+                which is correct only for the lo=0 case that hides it.
+                bug-p-an-inline-pointer-alias-cast-loses-the-pointees-low-bound }
+              FoldDerefArrayLowBound(indexNode, ndIsND, ndFlat);
               if DerefPtrArrayElem(ASTLeft[indexNode], dpeTk, dpeRec, dpeCap) then
               begin
                 { `TP(raw)^[i]` where TP points at an ARRAY type. The alias row

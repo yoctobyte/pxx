@@ -12829,6 +12829,17 @@ test-core: $(COMPILER)
 	@# .expected IS fpc 3.2.2's own output.
 	./$(COMPILER) test/test_ptr_alias_to_array_of_char.pas $(TESTTMP)/test_paac26
 	tools/expect_same.sh test_paac26 "$$($(TESTTMP)/test_paac26)" "$$(cat test/test_ptr_alias_to_array_of_char.expected)"
+	@# `TArr(aa)[1]` -- a cast to a NAMED ARRAY TYPE. Arrays were the only kind
+	@# with no cast at all. `wrote=` is the load-bearing row: a reinterpret must
+	@# hit the ORIGINAL storage, so a materialising implementation prints 30.
+	./$(COMPILER) test/test_cast_to_array_type.pas $(TESTTMP)/test_ctat26
+	tools/expect_same.sh test_ctat26 "$$($(TESTTMP)/test_ctat26)" "$$(cat test/test_cast_to_array_type.expected)"
+	@# ...and the pointee low bound on an INLINE pointer-alias cast, which the
+	@# above reaches only by delegation. Both faces: `viacast=` read 0 against
+	@# fpc's 99, and `wrote=` STORED INTO THE NEIGHBOUR (lo[4], not lo[2]).
+	@# `viaptrvar=` is the row saying the two routes agree, not that one moved.
+	./$(COMPILER) test/test_inline_ptr_cast_low_bound.pas $(TESTTMP)/test_iplb26
+	tools/expect_same.sh test_iplb26 "$$($(TESTTMP)/test_iplb26)" "$$(cat test/test_inline_ptr_cast_low_bound.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; tools/expect_same.sh cmath_sign_bits26-rc "$$?" "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

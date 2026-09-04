@@ -577,8 +577,8 @@ AN_BINOP Right chain
 AN_BINOP Right cmp
 AN_BINOP Right cntNode
 AN_BINOP Right diff
-AN_BINOP Right dpaLoNode
 AN_BINOP Right e
+AN_BINOP Right fdLoNode
 AN_BINOP Right flGuardCall
 AN_BINOP Right flNotNode
 AN_BINOP Right flUnboxCall
