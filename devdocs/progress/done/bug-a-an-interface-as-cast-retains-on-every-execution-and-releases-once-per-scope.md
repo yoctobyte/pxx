@@ -84,4 +84,4 @@ exactly the shape that has been wrong here before, and running it cost a minute.
 produce output IDENTICAL to the x86-64 oracle — `4 / 3 / 5` on every one.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 4db0446a4.
