@@ -255,4 +255,4 @@ to that unit — agreed with frankB as correct, and neither of us could construc
 a case that wants otherwise.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 84ea8e470.
