@@ -1607,6 +1607,9 @@ var node, idx, procIdx, argHead, argTail, argNode, valNode, calleeNode: Integer;
     vaPtrDepth, vaElemTk, vaElemRec, vaBaseTk, vaBaseRec: Integer;
     vaRecId, ptrNode, diagIdx: Integer;
     vaN8, vaC0, vaC1, vaMask, vaTmp, vaSavedRec, vaSeq: Integer;
+    vaA64Cnt, vaSzArg: Integer;
+    vaA64Hfa: Boolean;
+    vaA64Tk: TTypeKind;
     vt: TTypeKind;
     name: AnsiString;
     argUndecl: array[0..31] of Boolean;
@@ -1926,6 +1929,70 @@ begin
             ASTRight[ptrNode] := valNode;
             callNode := AllocNode(AN_CALL);
             ASTIVal[callNode] := FindProc('__pxx_va_arg_agg');
+            ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
+            vaSeq := AllocNode(AN_SEQ); ASTLeft[vaSeq] := callNode; ASTRight[vaSeq] := -1;
+            node := AllocNode(AN_COMPOUND_LITERAL);
+            ASTIVal[node] := vaTmp;
+            ASTLeft[node] := vaSeq;
+            ASTTk[node] := Ord(tyRecord);
+            Result := node; Exit;
+          end;
+        end;
+        { AARCH64: THE SAME CLASSIFIER THE CALLER NOW ASKS. A by-value
+          aggregate in a variadic tail takes 1-2 X registers, 1-4 V registers as
+          an HFA, or a pointer over 16 bytes -- and on THIS target the variadic
+          rule is the FIXED rule unchanged, HFAs included (measured against
+          clang; Apple's variant differs and Apple's is the platform most of the
+          written material describes). So this reads ABIA64RecordClass, exactly
+          as the x86-64 arm above reads ABISysVRecordEightbytes, and for the
+          same reason: it is the SAME oracle the caller placed the argument
+          with, which is what makes the two agree.
+
+          `> 0` and not `>= 0`: 0 is the INDIRECT class, where the slot holds a
+          POINTER to the caller's copy, and the existing double-deref path below
+          already reads exactly that. A refusal (-1) also falls through, because
+          the caller falls back to one pointer slot there too. Both halves keep
+          their answers aligned by asking one question.
+          bug-a-c-the-variadic-struct-abi-is-still-a-pointer-on-aarch64-arm32-and-riscv32 }
+        if (TargetArch = TARGET_AARCH64) and (vaRecId <> REC_NONE) then
+        begin
+          vaN8 := ABIA64RecordClass(vaRecId, vaA64Cnt, vaA64Hfa, vaA64Tk);
+          if vaN8 > 0 then
+          begin
+            vaSavedRec := LastTypeRecId;
+            LastTypeRecId := vaRecId;
+            vaTmp := AllocVar('', tyRecord);
+            LastTypeRecId := vaSavedRec;
+            a2 := AllocNode(AN_IDENT); ASTIVal[a2] := vaTmp; ASTTk[a2] := Ord(tyRecord);
+            a3 := AllocNode(AN_ADDR); ASTLeft[a3] := a2; ASTTk[a3] := Ord(tyPointer);
+            argNode := AllocNode(AN_ARG); ASTLeft[argNode] := addrNode;
+            a4 := AllocNode(AN_ARG); ASTLeft[a4] := a3; ASTRight[argNode] := a4;
+            { nregs }
+            a5 := AllocNode(AN_INT_LIT); ASTIVal[a5] := vaA64Cnt; ASTTk[a5] := Ord(tyInteger);
+            a5arg := AllocNode(AN_ARG); ASTLeft[a5arg] := a5; ASTRight[a4] := a5arg;
+            { isfp }
+            node := AllocNode(AN_INT_LIT);
+            if vaA64Hfa then ASTIVal[node] := 1 else ASTIVal[node] := 0;
+            ASTTk[node] := Ord(tyInteger);
+            ptrNode := AllocNode(AN_ARG); ASTLeft[ptrNode] := node; ASTRight[a5arg] := ptrNode;
+            { elemsize -- DERIVED, and it is 4 for an HFA of singles. The stride
+              within the aggregate is not the 8-byte save slot: an HFA's size is
+              exactly count * member size, which ABIA64RecordClass asserts so
+              padding cannot masquerade as homogeneity. }
+            node := AllocNode(AN_INT_LIT);
+            if vaA64Hfa and (vaA64Cnt > 0) then
+              ASTIVal[node] := RecSize(vaRecId) div vaA64Cnt
+            else
+              ASTIVal[node] := 8;
+            ASTTk[node] := Ord(tyInteger);
+            valNode := AllocNode(AN_ARG); ASTLeft[valNode] := node; ASTRight[ptrNode] := valNode;
+            { size }
+            node := AllocNode(AN_INT_LIT); ASTIVal[node] := RecSize(vaRecId);
+            ASTTk[node] := Ord(tyInteger);
+            vaSzArg := AllocNode(AN_ARG); ASTLeft[vaSzArg] := node; ASTRight[vaSzArg] := -1;
+            ASTRight[valNode] := vaSzArg;
+            callNode := AllocNode(AN_CALL);
+            ASTIVal[callNode] := FindProc('__pxx_va_arg_agg_a64');
             ASTTk[callNode] := Ord(tyPointer); ASTLeft[callNode] := argNode;
             vaSeq := AllocNode(AN_SEQ); ASTLeft[vaSeq] := callNode; ASTRight[vaSeq] := -1;
             node := AllocNode(AN_COMPOUND_LITERAL);

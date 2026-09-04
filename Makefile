@@ -9373,6 +9373,27 @@ test-core: $(COMPILER)
 	tools/expect_same.sh arm32/caggbv "$$(tools/run_target.sh arm32 $(TESTTMP)/caggbv_a32)" "$$(cat test/caarch64_aggregate_byval.expected)"
 	./$(COMPILER) --target=riscv32 test/caarch64_aggregate_byval.c $(TESTTMP)/caggbv_rv32
 	tools/expect_same.sh riscv32/caggbv "$$(tools/run_target.sh riscv32 $(TESTTMP)/caggbv_rv32)" "$$(cat test/caarch64_aggregate_byval.expected)"
+	# ...and the same question through `...`, where there is no parameter to
+	# classify and the record identity has to travel on the ARGUMENT (IRArgRecId).
+	# On aarch64 the variadic rule is the FIXED rule unchanged, HFAs included —
+	# {double,double} is still d0,d1 past the named parameters on AArch64 Linux,
+	# measured against clang, and the opposite is the widely-read belief because
+	# Apple's variant differs. Both halves move here: with the caller converted
+	# and the receiving half still reading one pointer slot, this file SEGFAULTS.
+	# Same standing as the by-value file above — a regression guard, not the
+	# proof, because caller and callee are both pxx and agreed before the fix.
+	# The other four targets are the control that a shared crtl helper and a
+	# shared cparser arm did not disturb them.
+	./$(COMPILER) test/caarch64_variadic_aggregate.c $(TESTTMP)/cvaagg26
+	tools/expect_same.sh cvaagg26 "$$($(TESTTMP)/cvaagg26)" "$$(cat test/caarch64_variadic_aggregate.expected)"
+	./$(COMPILER) --target=aarch64 test/caarch64_variadic_aggregate.c $(TESTTMP)/cvaagg_a64
+	tools/expect_same.sh aarch64/cvaagg "$$(tools/run_target.sh aarch64 $(TESTTMP)/cvaagg_a64)" "$$(cat test/caarch64_variadic_aggregate.expected)"
+	./$(COMPILER) --target=i386 test/caarch64_variadic_aggregate.c $(TESTTMP)/cvaagg_i386
+	tools/expect_same.sh i386/cvaagg "$$(tools/run_target.sh i386 $(TESTTMP)/cvaagg_i386)" "$$(cat test/caarch64_variadic_aggregate.expected)"
+	./$(COMPILER) --target=arm32 test/caarch64_variadic_aggregate.c $(TESTTMP)/cvaagg_a32
+	tools/expect_same.sh arm32/cvaagg "$$(tools/run_target.sh arm32 $(TESTTMP)/cvaagg_a32)" "$$(cat test/caarch64_variadic_aggregate.expected)"
+	./$(COMPILER) --target=riscv32 test/caarch64_variadic_aggregate.c $(TESTTMP)/cvaagg_rv32
+	tools/expect_same.sh riscv32/cvaagg "$$(tools/run_target.sh riscv32 $(TESTTMP)/cvaagg_rv32)" "$$(cat test/caarch64_variadic_aggregate.expected)"
 	# NEGATIVE HALF, and the arity clause is untested without it: a callee with
 	# NO `varargs` must still refuse an extra argument. fpc refuses the same
 	# line ("Wrong number of parameters specified for call to fflush").

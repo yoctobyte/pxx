@@ -213,3 +213,94 @@ Probe kept at the shape above rather than checked in: it needs an `extern`
 callee that is never defined, so it compiles under clang and does not link, and
 the pxx column comes from `llvm-objdump-21` plus pxx's `.map`. The method is in
 `devdocs/dev/differential-probes.md`.
+
+# 2026-09-04 (frankB) — THE AARCH64 THIRD IS DONE. arm32 and riscv32 remain, and their rules are in the table above
+
+The variadic tail now asks the same classifier the fixed parameters ask
+(`ABIA64ArgDesc` on the caller, `ABIA64RecordClass` in cparser's
+`__builtin_va_arg`), with `IRArgRecId` standing in for the parameter that does
+not exist. Verified against clang's call site, four of four including the tail
+register on every row:
+
+| shape | size | clang | pxx now |
+| --- | --- | --- | --- |
+| `{int,int}` | 8 | `x1` packed, tail `w2` | `ldr x1,[x9]`, tail `x2` |
+| `{int,int,int}` | 12 | `x1,x2`, tail `w3` | `ldr x1,[x9]`, `ldr x2,[x9,#8]`, tail `x3` |
+| `{double,double}` | 16 | `d0,d1`, tail `w1` | `ldr d0,[x9]`, `ldr d1,[x9,#8]`, tail `x1` |
+| `{int x6}` | 24 | POINTER `x1`, tail `w2` | `mov x1,x9`, tail `x2` |
+
+## The receiving half is a SIBLING helper, not a parameter on the SysV one
+
+`__pxx_va_arg_agg` hardcodes SysV's layout — a 48-byte GP region and 16-byte
+XMM slots. AAPCS64 is 8 GP slots of 8 at offset 0 and 8 FP slots of 8 at 64.
+`__pxx_va_arg_agg_a64` is a separate function for the reason this file has
+already been burned by once: a seeder that knows a layout can only know one.
+It takes `elemsize` as well as `nregs`, because an HFA of singles is members
+packed FOUR bytes apart in memory each arriving in its own 8-byte save slot —
+a walk that stepped the destination by 8 would spread a 12-byte struct over 24.
+
+## BOTH HALVES IN ONE COMMIT, measured rather than asserted
+
+With the caller converted and the receiving half still reading one pointer
+slot, the probe SEGFAULTS on aarch64. That is the rule this family keeps
+restating, with a fresh instance: a caller and a callee that disagree about
+what a slot CONTAINS do not produce a wrong value in one argument.
+
+## Left, and it is the interesting part
+
+arm32 and riscv32, whose rules are in the table above and are NOT this one.
+arm32 splits an aggregate between `r1..r3` and the stack, which AAPCS64 never
+does, so `ABIA64ArgPlace`'s all-or-nothing rule must not be ported to it.
+riscv32 passes everything over 2x XLEN indirectly in the variadic tail
+INCLUDING `{double,double}`, which its own fixed-parameter rule puts in
+`fa0,fa1`. Each is a separate marshaller and a separate receiving arm; neither
+is a copy of what landed here. The straddle arm in `__pxx_va_arg_cross32` that
+this ticket's body warns about is still unexamined and belongs to those two.
+
+## The other two thirds, MEASURED rather than assumed (2026-09-04, frankB)
+
+Done while an unrelated sweep was running, so the next session does not have to
+re-derive it. Oracle: `clang --target=armv7-linux-gnueabihf` /
+`--target=riscv32-unknown-linux-gnu`, `-O1 -S`, read at the CALL SITE; pxx side
+disassembled from its own ELF via its `.map`. Probe: `v(n, agg, 77)` for the
+four shapes, so the TAIL register is part of every row (a marshaller that gets
+the aggregate right and does not advance the bank is a different bug that looks
+like this one).
+
+**arm32 — pxx passes a POINTER for all four shapes. Every row is wrong.**
+
+| shape | clang | pxx today |
+| --- | --- | --- |
+| `{int,int}` 8 | `r1,r2` by value, tail `r3` | pointer `r1`, tail `r2` |
+| `{int,int,int}` 12 | `r1,r2,r3`, tail on the STACK | pointer `r1`, tail `r2` |
+| `{double,double}` 16 | **skips r1** for 8-byte alignment: `r2,r3` + 8 bytes of STACK, tail at `[sp+8]` | pointer `r1`, tail `r2` |
+| `{int x6}` 24 | `r1,r2,r3` + 12 bytes of STACK, tail at `[sp+12]` | pointer `r1`, tail `r2` |
+
+Two rules AAPCS64 does not have, both visible above and both required:
+**an aggregate SPLITS between the core registers and the stack**, and an
+8-byte-aligned aggregate **skips an odd register to start on an even one**.
+`ABIA64ArgPlace`'s all-or-nothing "does not fit → whole thing to the stack, bank
+closed" is therefore the WRONG shape to port here; arm32 needs its own placer.
+The receiving half may already be close: `__pxx_va_arg_cross32` walks
+`roundup4(size)` bytes and its straddle arm assembles a reg/stack-spanning
+argument, which is exactly the split above — but it is reached with `align`
+from the frontend, and nothing has yet asked it for `align=8` on a struct.
+
+**riscv32 — pxx passes a POINTER for all four, and exactly ONE of those is wrong.**
+
+| shape | clang | pxx today |
+| --- | --- | --- |
+| `{int,int}` 8 | `a1,a2` **by value**, tail `a3` | pointer `a1`, tail `a2` — **WRONG** |
+| `{int,int,int}` 12 | pointer `a1`, tail `a2` | pointer `a1`, tail `a2` — right |
+| `{double,double}` 16 | pointer `a1`, tail `a2` | pointer `a1`, tail `a2` — right |
+| `{int x6}` 24 | pointer `a1`, tail `a2` | pointer `a1`, tail `a2` — right |
+
+So riscv32's rule really is "by value iff it fits in 2 x XLEN, indirect
+otherwise", the `{double,double}` row confirming that the variadic tail does NOT
+use the FP registers its fixed-parameter table records (`fa0,fa1`). The fix is
+one size class, not a marshaller.
+
+**The three-quarters that are already right on riscv32 are why this ticket could
+sit open looking half-fine.** A pointer is the correct answer for most shapes
+there, so any probe that happened to use a struct larger than 8 bytes measures
+GREEN on a target that is broken.

@@ -120,6 +120,67 @@ void __pxx_va_arg_agg(struct __pxx_va_elem *ap, void *dst,
   }
 }
 
+/* AN AGGREGATE OUT OF AN AAPCS64 VARIADIC TAIL — the receiving half of
+   bug-a-c-the-variadic-struct-abi-is-still-a-pointer-on-aarch64-arm32-and-riscv32,
+   and it is a SIBLING of __pxx_va_arg_agg rather than a parameterisation of it.
+
+   That one hardcodes SysV's layout: a 48-byte GP region and 16-byte XMM slots.
+   AAPCS64 is 8 GP slots of 8 at offset 0 and 8 FP slots of 8 at offset 64.
+   Teaching one function both layouts is how a seeder that knows a layout ends
+   up knowing only one of them, which this file has already been burned by once
+   (the va_start FP base, bug-a-aarch64-passes-a-variadic-float-in-an-fp-
+   register-so-glibc-reads-zero). Two ABIs, two functions.
+
+   `nregs` is how many consecutive registers of ONE bank the aggregate occupies
+   and `elemsize` is the stride WITHIN it, which is not always 8: an HFA of
+   singles is three or four members packed FOUR bytes apart in memory, each
+   arriving in its own s register and therefore in its own 8-byte save slot. A
+   walk that stepped the destination by 8 would spread a 12-byte struct over 24.
+
+   ALL OR NOTHING, and it is the same rule ABIA64ArgPlace applies on the
+   caller's side: an aggregate that does not fit what is LEFT of its bank was
+   passed on the stack ENTIRELY, and the bank was CLOSED behind it. Both sides
+   have to reach the same answer or every argument after this one is off by a
+   slot. */
+void __pxx_va_arg_agg_a64(struct __pxx_va_elem *ap, void *dst,
+                          unsigned int nregs, unsigned int isfp,
+                          unsigned int elemsize, unsigned int size) {
+  unsigned int k, i;
+  char *d;
+  char *src;
+  d = (char *)dst;
+  if (elemsize == 0) elemsize = 8;
+  if (isfp != 0) {
+    if (ap->fp_offset + nregs * 8 > 128) {
+      src = (char *)ap->overflow_arg_area;
+      for (i = 0; i < size; i = i + 1) d[i] = src[i];
+      ap->overflow_arg_area = (void *)(src + ((size + 7u) & ~7u));
+      ap->fp_offset = 128;
+      return;
+    }
+  } else {
+    if (ap->gp_offset + nregs * 8 > 64) {
+      src = (char *)ap->overflow_arg_area;
+      for (i = 0; i < size; i = i + 1) d[i] = src[i];
+      ap->overflow_arg_area = (void *)(src + ((size + 7u) & ~7u));
+      ap->gp_offset = 64;
+      return;
+    }
+  }
+  for (k = 0; k < nregs; k = k + 1) {
+    if (isfp != 0) {
+      src = (char *)ap->reg_save_area + ap->fp_offset;
+      ap->fp_offset = ap->fp_offset + 8;
+    } else {
+      src = (char *)ap->reg_save_area + ap->gp_offset;
+      ap->gp_offset = ap->gp_offset + 8;
+    }
+    for (i = 0; i < elemsize; i = i + 1) {
+      if (k * elemsize + i < size) d[k * elemsize + i] = src[i];
+    }
+  }
+}
+
 /* aarch64 variadic model: TWO banks, as AAPCS64 §6.4.2 describes and as the
    target's own glibc demonstrates — x0..x7 for integers and pointers, v0..v7 for
    floating point. The save area is 8 GP slots of 8 bytes at offset 0 and 8 FP

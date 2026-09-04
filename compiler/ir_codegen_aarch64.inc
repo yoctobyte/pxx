@@ -1883,8 +1883,8 @@ end;
 procedure A64BuildArgVecN(procIdx, selfCount, argChain, nArgs: Integer;
                           var argFp, argInd, argAgg: array of Boolean;
                           var argRegs, argSize: array of Integer);
-var i, an, pi, dRegs, dSize: Integer;
-    dFp, dInd, dAgg: Boolean;
+var i, an, pi, dRegs, dSize, vaRec: Integer;
+    dFp, dInd, dAgg, dOk: Boolean;
 begin
   an := argChain;
   for i := 0 to nArgs - 1 do
@@ -1895,8 +1895,39 @@ begin
     if (pi >= 0) and (pi >= Procs[procIdx].ParamCount) and
        ProcVariadic[procIdx] and (an <> -1) then
     begin
-      argFp[i] := TypeIsFloat(IntToTypeKind(IRTk[IRA[an]]));
-      argRegs[i] := 1; argSize[i] := 8; argInd[i] := False; argAgg[i] := False;
+      { A VARIADIC TAIL ARGUMENT HAS NO PARAMETER, so its class comes from the
+        argument's own type -- and for a STRUCT that type is not recoverable
+        from the node, which is tagged tyPointer because it is the address of
+        the private temp IRLowerCallArg made. The record identity travels on
+        IRArgRecId for exactly this site. Without it the slot held the temp's
+        ADDRESS where clang puts the aggregate's own bytes.
+
+        AND THE VARIADIC RULE ON THIS TARGET IS THE FIXED RULE, UNCHANGED --
+        HFAs INCLUDED. Measured against clang --target=aarch64-linux-gnu -O1 -S:
+        `{double,double}` in a variadic tail still goes in d0,d1 on AArch64
+        Linux. That is worth a sentence because the opposite is the widely-read
+        belief -- Apple's variant DOES drop HFA treatment past the named
+        parameters, and Apple's is the platform most of the written material is
+        about. So this asks the same ABIA64ArgDesc the fixed parameters ask,
+        rather than growing a second rule beside it.
+        bug-a-c-the-variadic-struct-abi-is-still-a-pointer-on-aarch64-arm32-and-riscv32 }
+      vaRec := IRArgRecId[IRA[an]];
+      if vaRec > REC_NONE then
+      begin
+        ABIA64ArgDesc(tyRecord, False, False, vaRec,
+                      dRegs, dSize, dFp, dInd, dAgg, dOk);
+        if not dOk then
+        begin
+          dRegs := 1; dSize := 8; dFp := False; dInd := False; dAgg := False;
+        end;
+        argFp[i] := dFp; argRegs[i] := dRegs; argSize[i] := dSize;
+        argInd[i] := dInd; argAgg[i] := dAgg;
+      end
+      else
+      begin
+        argFp[i] := TypeIsFloat(IntToTypeKind(IRTk[IRA[an]]));
+        argRegs[i] := 1; argSize[i] := 8; argInd[i] := False; argAgg[i] := False;
+      end;
     end
     else
     begin
