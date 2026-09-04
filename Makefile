@@ -26387,6 +26387,29 @@ endif
 	# hung build gets read as infrastructure rather than as a test speaking.
 	# `peek2' IS THE ASSERTION AND `peek1' IS NOT -- a single peek returns 8
 	# bytes whether or not the flag arrived, because an ordinary recv does too.
+	# SetTextBuf, diffed against FPC 3.2.2's own run rather than against
+	# literals -- the read-ahead POSITIONS are FPC's contract, not our choice,
+	# and hardcoding them would be this test asserting our implementation back
+	# at itself. Requires fpc; skipped, and SAID to be skipped, without it.
+	# THE POSITION IS THE INSTRUMENT AND THE TEXT IS NOT. A reader using the
+	# DEFAULT buffer returns exactly the same lines, so a content-only test
+	# passes against a SetTextBuf that does nothing at all. The two sizes are
+	# 16 and 100 -- neither is TF_BUFSIZE (4096) nor FPC's default (256) -- so
+	# no row can be satisfied by a default. The positive control is not subtle:
+	# with the read size taken from the constant again instead of from
+	# f.BufSize, the binary SEGFAULTS, because PalRead then writes 4096 bytes
+	# into the caller's 16-byte array.
+	@if command -v fpc >/dev/null 2>&1; then \
+	  cd $(TESTTMP) && rm -f lib_settextbuf.pas && cp $(CURDIR)/test/lib_settextbuf.pas . && \
+	  fpc -O1 -olib_settextbuf_fpc lib_settextbuf.pas >/dev/null 2>&1 || { echo "lib_settextbuf: the FPC oracle FAILED to build"; exit 1; }; \
+	  cd $(TESTTMP) && ./lib_settextbuf_fpc > lib_settextbuf.oracle || { echo "lib_settextbuf: the FPC oracle FAILED to run"; exit 1; }; \
+	else \
+	  echo "SKIP lib_settextbuf -- fpc absent, no oracle"; echo settextbuf >> $(TESTTMP)/lib-test.skipped; \
+	fi
+	@if [ -f $(TESTTMP)/lib_settextbuf.oracle ]; then \
+	  $(PXX_STABLE) -Fulib/rtl -Fulib/rtl/platform/posix test/lib_settextbuf.pas $(TESTTMP)/lib_settextbuf >/dev/null && \
+	  ( cd $(TESTTMP) && tools=$(CURDIR)/tools; $$tools/expect_same.sh lib_settextbuf "$$(./lib_settextbuf)" "$$(cat lib_settextbuf.oracle)" ); \
+	fi
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_sock_flags.pas $(TESTTMP)/lib_sock_flags
 	tools/expect_same.sh lib_sock_flags "$$(timeout 60 $(TESTTMP)/lib_sock_flags)" "$$(printf 'bind=ok\nlisten=ok\nsockname=ok\nconnect=ok\naccept=ok\nsend-nosignal=ok\npeek1=ok\npeek2=ok\nrecv-after=ok\nrecv-empty=ok\nrecv-unknown-flag=ok\nclose-conn=ok\nclose-cli=ok\nclose-srv=ok\nubind=ok\nusockname=ok\nusendto=ok\nupeek1=ok\nupeek2=ok\nurecv-after=ok')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_sha256.pas $(TESTTMP)/lib_sha256

@@ -3,7 +3,7 @@ track: B
 prio: 55
 type: feature
 blocked-by: []
-summary: "Make lib/rtl/textfile.pas's read buffer caller-supplyable and add write buffering, so SetTextBuf can exist with FPC's exact semantics. The read buffer already exists (4096 bytes, inline in the Text record); the only structural blocker is that it is an inline array where FPC has a pointer, so SetTextBuf cannot point it at the caller's memory. Write side buffers under C99 7.19.3p7's policy, NOT FPC's — measured: FPC's destroys stdout/stderr ordering whenever stdout is not a tty."
+summary: "Make lib/rtl/textfile.pas's read buffer caller-supplyable and add write buffering, so SetTextBuf can exist with FPC's exact semantics. The read buffer already exists (4096 bytes, inline in the Text record); the only structural blocker is that it is an inline array where FPC has a pointer, so SetTextBuf cannot point it at the caller's memory. Write side buffers under C99 7.19.3p7's policy, NOT FPC's — measured: FPC's destroys stdout/stderr ordering whenever stdout is not a tty. DO NOT LAND THE WRITE SIDE ALONE: this is one half of an interlock with feature-c-crtl-stdio-buffering-and-setvbuf, and the two share a flush registry. Ordering between Pascal WriteLn and C printf is correct TODAY only because both sides are unbuffered; buffering either side by itself reorders output inside a single program that mixes them, which is the case pxx exists to support. crtl's setvbuf is also a stub that ignores its arguments and returns SUCCESS -- worse in C than a missing SetTextBuf is in Pascal, because C callers check the return, so it turns a missing feature into a wrong answer. The READ side (BufPtr/BufSize + SetTextBuf) is self-contained and may land on its own."
 status: working
 owner: franks-ab
 ---
@@ -73,3 +73,65 @@ one combination that reorders output in a program that mixes `WriteLn` and
 `make lib-test`. Carry a repro that writes to stdout and stderr with stdout on a
 pipe and asserts the interleaving is preserved — that is the property FPC fails
 and the whole reason for the policy divergence, and no existing test covers it.
+
+## 2026-09-04 — READ SIDE LANDED. Write side and the registry are still open.
+
+`Text` now carries `BufPtr: PByte` / `BufSize: Integer` / `BufForced: Boolean`
+over an inline `DefBuf`, and `SetTextBuf` exists. The write side, the C99
+buffering policy and the flush registry are **not** in this change and the
+ticket stays open for them.
+
+### What the read side does, and where it deliberately differs
+
+- `Assign` resets `BufPtr` to the record's own buffer, **as FPC's does** — which
+  is why the documented order is `Assign; SetTextBuf; Reset`. Copying the order
+  matters more than it looks: a caller that gets it backwards reads with the
+  default buffer under FPC, and if we kept the pointer here the same program
+  would behave *differently* on pxx while looking correct on both.
+- `TFEnsureBuf` points a nil `BufPtr` at `DefBuf` on every read path. `var f:
+  Text` is legal to declare and a caller who forgets `Assign` hands us a
+  zero-initialised record; dereferencing nil there would turn a diagnosable
+  "file not open" into a segfault.
+- **The divergence the ruling asked for:** `BufForced` lets an explicit
+  `SetTextBuf` turn read-ahead on for a non-seekable handle, which `TFOpened`'s
+  default still refuses. It is a separate field from `Buffered` because the two
+  answer different questions — "did the caller ask us to" versus "are we reading
+  ahead right now" — and folding them would leave `TFOpened` unable to tell a
+  caller's instruction from its own last verdict.
+
+### Acceptance — byte-identical to FPC 3.2.2's own run
+
+`test/lib_settextbuf.pas`, seven rows, compared against the **oracle's output**
+rather than literals, because the read-ahead positions are FPC's contract and
+hardcoding them would be the test asserting our implementation back at itself:
+
+```
+small-line=line1....   small-pos=16
+big-line=line1....     big-pos=100
+count=20 last=line20...
+midstream-first=line1....   midstream-next=line11...
+```
+
+**THE POSITION IS THE INSTRUMENT AND THE TEXT IS NOT.** A reader using the
+default buffer returns exactly the same lines, so a content-only test passes
+against a `SetTextBuf` that does nothing at all. The two sizes are 16 and 100 —
+neither is `TF_BUFSIZE` (4096) nor FPC's default (256) — so no row can be
+satisfied by a default value. `midstream-next=line11` is the discarded-bytes
+contract, measured under FPC and copied on purpose.
+
+**The positive control is a SEGFAULT, not a mismatch.** With the read size taken
+from `TF_BUFSIZE` again instead of from `f.BufSize`, and nothing else changed,
+`PalRead` writes 4096 bytes into the caller's 16-byte array and the binary dies.
+So "ignoring the size" is not a benign no-op here — it is a stack smash, which
+is a stronger reason to honour `BufSize` than parity is.
+
+`make compiler/pascal26` converged (the compiler reads its own sources through
+this record, so the fixedpoint is a real consumer of the change).
+
+### Still to do — and the interlock
+
+Write buffering, the C99 §7.19.3p7 policy, a real `Flush`, and the flush
+registry shared with `feature-c-crtl-stdio-buffering-and-setvbuf`.
+**Do not land the write side alone.** `Flush`'s comment at `textfile.pas` and
+the interface comment above it both still say writes are unbuffered; they are
+true today and must be rewritten in the same commit that stops being true.

@@ -31,11 +31,31 @@ type
       this replaced was a SECOND lookahead mechanism for the same concept, which
       every reader then had to keep in sync with the first.
 
-      Buffered is False for handles we must not read ahead on — see TFOpened. }
+      Buffered is False for handles we must not read ahead on — see TFOpened.
+
+      BufPtr POINTS AT DefBuf UNLESS SetTextBuf REDIRECTED IT. The indirection
+      is the whole reason SetTextBuf can exist: FPC's is four assignments over a
+      pointer, and an inline array has nothing to assign. DefBuf stays inline so
+      the common case still allocates nothing and `var f: Text` remains a
+      self-contained local — the record is a page plus change either way.
+
+      A Text that was never Assign'd has BufPtr = nil, and every read path goes
+      through TFEnsureBuf rather than trusting it. That is not defensive
+      padding: `var f: Text` is legal to declare and the zero-initialised record
+      is what a caller who forgot Assign hands us, and dereferencing nil there
+      would turn a diagnosable "file not open" into a segfault. }
     Buffered: Boolean;
     BufPos: Integer;
     BufLen: Integer;
-    Buf: array[0..TF_BUFSIZE - 1] of Byte;
+    BufSize: Integer;
+    BufPtr: PByte;
+    { Set only by SetTextBuf, and it is what lets an explicit call override
+      TFOpened's non-seekable refusal. Kept separate from `Buffered` because the
+      two answer different questions: Buffered is "are we reading ahead right
+      now", BufForced is "did the caller ask us to". Folding them would mean
+      TFOpened could not tell a caller's instruction from its own last verdict. }
+    BufForced: Boolean;
+    DefBuf: array[0..TF_BUFSIZE - 1] of Byte;
   end;
 
 procedure Assign(var f: Text; const path: AnsiString);
@@ -144,6 +164,30 @@ procedure TextReadStrTo(var f: Text; var s: AnsiString);
   PXX text writes go straight to the fd (no RTL-side buffer), so Flush only
   has to exist and accept the file — there is nothing to drain. }
 procedure Flush(var f: Text);
+
+{ FPC's SetTextBuf, and FPC's is four assignments with no copy and no seek --
+  measured (fpc 3.2.2) rather than inferred, because all three of its observable
+  side effects are the contract and not accidents:
+
+    1. READ-AHEAD LEAVES THE fd AHEAD of the logical position, by up to one
+       buffer, and we do not seek back. Anything touching the raw descriptor --
+       dup, handing it to a child, mixing Text with untyped-file calls -- sees
+       that. FPC: after a ReadLn returned a 2-byte line with a 64-byte buffer,
+       lseek(handle, 0, SEEK_CUR) reported 64.
+    2. A MID-STREAM CALL DISCARDS PENDING BYTES. FPC accepts it after Reset and
+       the next ReadLn skips whatever was already buffered; the four-assignment
+       body is the entire explanation. We do the same rather than seeking back,
+       because a caller swapping buffers mid-file is telling us where it wants
+       to be reading from.
+    3. THE BUFFER IS THE CALLER'S AND IS RETAINED. No copy, no tracking. A local
+       array going out of scope while the file is open leaves us writing into a
+       dead frame -- FPC's behaviour exactly, and the reason `Size` is trusted.
+
+  ONE DELIBERATE DIVERGENCE: an explicit SetTextBuf turns read-ahead ON even for
+  a non-seekable handle, which TFOpened's default refuses (see there). A caller
+  naming a buffer is a different signal from us choosing to buffer one. }
+procedure SetTextBuf(var f: Text; var Buf; Size: Integer);
+
 procedure PXXIoCheck;
 
 var
@@ -242,6 +286,19 @@ begin
   f.BufLen := 0;
 end;
 
+{ Point an un-Assign'd (or zero-initialised) Text at its own inline buffer.
+  Called from every path that is about to read through BufPtr. Idempotent, and
+  it must NOT overwrite a pointer SetTextBuf installed -- hence the nil test
+  rather than an unconditional assignment. }
+procedure TFEnsureBuf(var f: Text);
+begin
+  if f.BufPtr = nil then
+  begin
+    f.BufPtr := @f.DefBuf[0];
+    f.BufSize := TF_BUFSIZE;
+  end;
+end;
+
 { Decide whether this handle may be read ahead on, and start it empty. Only a
   SEEKABLE handle qualifies, for two reasons that happen to coincide: a pipe or
   a terminal cannot be rewound, so Close could not hand the descriptor back
@@ -251,10 +308,12 @@ end;
 procedure TFOpened(var f: Text);
 begin
   TFResetBuf(f);
-  f.Buffered := (f.Handle >= 0) and (PalSeek(f.Handle, 0, PAL_SEEK_CUR) >= 0);
+  TFEnsureBuf(f);
+  f.Buffered := (f.Handle >= 0) and
+                (f.BufForced or (PalSeek(f.Handle, 0, PAL_SEEK_CUR) >= 0));
 end;
 
-{ Make at least one byte available at f.Buf[f.BufPos]. False at end of file or
+{ Make at least one byte available at f.BufPtr[f.BufPos]. False at end of file or
   on an I/O error, with the code in LastIOResult.
 
   `quiet` suppresses the success-path SetIO. TextReadLn needs that and is the
@@ -282,8 +341,16 @@ begin
     Exit;
   end;
   TFResetBuf(f);
-  if f.Buffered then want := TF_BUFSIZE else want := 1;
-  n := PalRead(f.Handle, @f.Buf[0], want);
+  TFEnsureBuf(f);
+  { The SIZE comes from BufSize, not from TF_BUFSIZE, and that is the whole
+    behavioural payload of SetTextBuf: FPC's syscall count moves exactly with
+    it (measured, 8893-byte file: size 16 -> 557 reads, 128 -> 71, default 256
+    -> 36, 4096 -> 4). A read that kept using the constant would accept the
+    caller's buffer and quietly ignore its size -- accepted-and-ignored being
+    the exact shape this work exists to remove from setvbuf. }
+  if f.Buffered then want := f.BufSize else want := 1;
+  if want < 1 then want := 1;
+  n := PalRead(f.Handle, f.BufPtr, want);
   if n > 0 then
   begin
     f.BufLen := Integer(n);
@@ -312,7 +379,7 @@ begin
     Result := False;
     Exit;
   end;
-  c := f.Buf[f.BufPos];
+  c := f.BufPtr[f.BufPos];
   Inc(f.BufPos);
   SetIO(TF_OK);
   Result := True;
@@ -333,7 +400,8 @@ begin
     Dec(f.BufPos)
   else
   begin
-    f.Buf[0] := c;
+    TFEnsureBuf(f);
+    f.BufPtr[0] := c;
     f.BufPos := 0;
     f.BufLen := 1;
   end;
@@ -353,6 +421,16 @@ begin
   f.Name := path;
   f.HitEof := False;
   f.Buffered := False;
+  { Assign RESETS the buffer to the record's own, discarding any SetTextBuf --
+    FPC does exactly this (its Assign writes BufPtr:=@Buffer; BufSize:=
+    TextBufSize), which is why the documented order is Assign, SetTextBuf,
+    Reset and not the other way round. Copying the order matters more than it
+    looks: a caller that gets it backwards under FPC silently reads with the
+    default buffer, and if we kept the pointer here that same program would
+    behave DIFFERENTLY on pxx while looking correct on both. }
+  f.BufPtr := @f.DefBuf[0];
+  f.BufSize := TF_BUFSIZE;
+  f.BufForced := False;
   TFResetBuf(f);
   SetIO(TF_OK);
 end;
@@ -442,7 +520,7 @@ begin
   if not TFFill(f) then
     Result := True
   else
-    Result := (f.Buf[f.BufPos] = 10) or (f.Buf[f.BufPos] = 13);
+    Result := (f.BufPtr[f.BufPos] = 10) or (f.BufPtr[f.BufPos] = 13);
 end;
 
 { The bytes SeekEof and SeekEoln step over. MEASURED against FPC 3.2.2 rather
@@ -566,7 +644,7 @@ begin
       reason this loop is not just TFNextByte. }
     if TFFillEx(f, True) then
     begin
-      c := f.Buf[f.BufPos];
+      c := f.BufPtr[f.BufPos];
       Inc(f.BufPos);
       n := 1;
     end
@@ -661,6 +739,23 @@ begin
   { Writes are unbuffered (PAL writes hit the fd directly); nothing to drain. }
 end;
 
+procedure SetTextBuf(var f: Text; var Buf; Size: Integer);
+begin
+  { FPC's four assignments, plus the two fields FPC does not have because its
+    Text is always buffered. NO COPY AND NO SEEK: pending bytes are dropped, by
+    design and measured against FPC (see the interface comment). }
+  f.BufPtr := PByte(@Buf);
+  f.BufSize := Size;
+  f.BufPos := 0;
+  f.BufLen := 0;
+  f.BufForced := True;
+  { An OPEN file gets the decision applied now; a not-yet-opened one gets it at
+    Reset, through TFOpened. Without this line, SetTextBuf between Reset and the
+    first ReadLn would set the size and leave Buffered alone -- accepted and
+    half-ignored, which is the shape this whole piece of work exists to remove. }
+  if f.Handle >= 0 then f.Buffered := True;
+end;
+
 initialization
   { Input and Output are deliberately NEVER buffered, even when stdin happens to
     be a redirected regular file and would pass the seekability test. Read-ahead
@@ -673,10 +768,12 @@ initialization
   Input.Name := '';
   Input.HitEof := False;
   Input.Buffered := False;
+  TFEnsureBuf(Input);
   TFResetBuf(Input);
   Output.Handle := 1;
   Output.Name := '';
   Output.HitEof := False;
   Output.Buffered := False;
+  TFEnsureBuf(Output);
   TFResetBuf(Output);
 end.
