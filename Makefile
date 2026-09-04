@@ -13621,7 +13621,7 @@ test-core: $(COMPILER)
 	# bug-c-ir-unsupported-ast-node-kind-1-in-flash-eraseall
 	@if ./$(COMPILER) --emit-obj test/c_ir_unsupported_reports_the_real_line.c $(TESTTMP)/c_irunsup.o 2>&1 \
 	     | grep -q '^pascal26:23: error: IR_UNSUPPORTED'; then \
-	  echo "c_ir_unsupported_reports_the_real_line: names line 23, the loff_t line"; \
+	  echo "c_ir_unsupported_reports_the_real_line: names line 23, the undeclared-type line"; \
 	else \
 	  echo "c_ir_unsupported_reports_the_real_line: FAILED -- the diagnostic no longer names line 23."; \
 	  echo "  Either it regressed to the lexer position (a builtin unit), or it stopped refusing."; \
@@ -14118,7 +14118,7 @@ test-core: $(COMPILER)
 	# with a bogus version writes the supported one BACK and returns -1/EINVAL.
 	# All rows diffed against gcc.
 	./$(COMPILER) test/c_crtl_mtd_timex_kd_caps.c $(TESTTMP)/c_mtdtkc26
-	tools/expect_same.sh c_mtdtkc26 "$$($(TESTTMP)/c_mtdtkc26)" "$$(printf '1 32 | 0 4 8 12 20 24\n2 80204d01 40084d02 40084d0b 80c84d0a 40104d14\n3 8 328 48 64 | 4 7168 3\n4 208 | 8 40 72 112 160\n5 1 4000 8001 a001 8001\n6 1 40 2000 ff00 | 5 6\n7 1 1\n8 4b60 4b6c 4b67 4b72 4b44\n9 1 2 4 | 1 2 4\n10 0 1 2 3 | 1 3\n11 24 32 16 | 513 1\n12 19980330 20071026 20080522 | 1 2 2 | 19980330 1\n13 0 34 40 | 0 200000 | 1 4 | 1 0\n14 1 1\n15 0 8 12 24')"
+	tools/expect_same.sh c_mtdtkc26 "$$($(TESTTMP)/c_mtdtkc26)" "$$(printf '1 32 | 0 4 8 12 20 24\n2 80204d01 40084d02 40084d0b 80c84d0a 40104d14\n3 8 328 48 64 | 4 7168 3\n4 208 | 8 40 72 112 160\n5 1 4000 8001 a001 8001\n6 1 40 2000 ff00 | 5 6\n7 1 1\n8 4b60 4b6c 4b67 4b72 4b44\n9 1 2 4 | 1 2 4\n10 0 1 2 3 | 1 3\n11 24 32 16 | 513 1\n12 19980330 20071026 20080522 | 1 2 2 | 19980330 1\n13 0 34 40 | 0 200000 | 1 4 | 1 0\n14 1 1\n15 0 8 12 24\n16 1 1')"
 	./$(COMPILER) test/c_crtl_telnet_and_prctl.c $(TESTTMP)/c_telprctl26
 	tools/expect_same.sh c_telprctl26 "$$($(TESTTMP)/c_telprctl26)" "$$(printf '1 255 254 253 252 251 250\n2 240 241 242 246 249\n3 0 1 3 24 31\n4 33 0 1 2\n5 15 16 23 38 39 47\n6 20 | 0 2 4 8 10 11 12\n7 1 2 4 8 4\n8 not-glibc\n9 0 pxxprobe')"
 	./$(COMPILER) test/c_crtl_net_headers.c $(TESTTMP)/c_nethdr26

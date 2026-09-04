@@ -62,6 +62,26 @@ typedef __daddr_t daddr_t;
 typedef unsigned long long dev_t;
 typedef unsigned long long ino_t;
 
+/* loff_t IS `long long' ON EVERY ARCHITECTURE and must not be spelled `long'
+   or `off_t'. It is the kernel's 64-bit file offset -- <linux/types.h> here
+   already says `typedef long long __kernel_loff_t' for the same reason, and
+   mtd-abi.h:14 records that MEMGETBADBLOCK's argument type is baked into the
+   ioctl NUMBER through _IOW's size field. Spelling it `long' would compile
+   everywhere and make that ioctl read half its argument on every ILP32 target.
+
+   It was MISSING until 2026-09-04, and the cost was not one refusal but three
+   error shapes with no shared vocabulary, filed as two separate tickets by two
+   sessions. In busybox, `loff_t offs;` is then not a declaration at all: the
+   name becomes an undeclared identifier treated as 0, and so does the variable
+   it was meant to declare. flash_eraseall.c reported
+   `IR_UNSUPPORTED: could not lower AST node (kind 1)' -- &offs was the address
+   of an integer LITERAL -- and nandwrite.c reported `undeclared identifier
+   passed as argument 3 of bb_xioctl'. Only the quiet
+   `warning: undeclared identifier 'loff_t' used as value (treated as 0)'
+   named the cause, and it sat directly above an error blaming the frontend.
+   One typedef clears both TUs. */
+typedef long long loff_t;
+
 /* <sys/select.h> AT THE END, as glibc's <sys/types.h> does (line 179 of the
    host's copy). fd_set and the FD_* macros are reached that way far more often
    than by including <sys/select.h> directly -- busybox's telnetd.c gets them

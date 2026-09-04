@@ -44,6 +44,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/types.h>   /* row 16's loff_t; glibc puts it here under __USE_MISC */
 #include <sys/ioctl.h>
 #include <mtd/mtd-user.h>
 #include <sys/timex.h>
@@ -124,5 +125,21 @@ int main(void)
          (int)sizeof(struct __user_cap_header_struct),
          (int)sizeof(struct __user_cap_data_struct),
          (int)sizeof(struct vfs_ns_cap_data));
+  /* ROW 16 IS loff_t, ASSERTED AS A RELATION so it carries no per-target
+     constant and prints `16 1 1' on every architecture. It is `long long'
+     everywhere -- <linux/types.h>'s __kernel_loff_t already says so, and
+     MEMGETBADBLOCK (row 2) encodes that width in its ioctl NUMBER, so an
+     `off_t' spelling issues a different request on every ILP32 target.
+     crtl had no loff_t at all until 2026-09-04; busybox's flash_eraseall.c
+     and nandwrite.c both refused because of it, with two error shapes that
+     named neither the type nor each other.
+
+     ORACLE NOTE: glibc gates loff_t behind __USE_MISC, so diffing this row
+     needs `gcc -D_GNU_SOURCE'. crtl defines it unconditionally, which is the
+     accept-more direction and not a divergence anyone can observe: a program
+     that does not use loff_t cannot tell. Measured both ways 2026-09-04 --
+     gcc -D_GNU_SOURCE and pxx agree on all 16 rows. */
+  printf("16 %d %d\n", (int)(sizeof(loff_t) == sizeof(long long)),
+         (int)(sizeof(loff_t) == 8));
   return 0;
 }
