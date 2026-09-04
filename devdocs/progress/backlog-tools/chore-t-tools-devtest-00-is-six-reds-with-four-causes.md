@@ -237,3 +237,37 @@ The section above was written when the pin was v401. **v402 (`80ecb94023eb`) and
 v403 (`c31d03b202da`, "the first post-flip pin") have landed since**, and v403 is
 what the tree carries. The argument is unchanged and the count is worse: two more
 pins through the same gap.
+
+## Two independent data points from one day, 2026-09-04 — and they point OPPOSITE ways
+
+Reported by frankz-43, which hit both while doing unrelated work, and recorded
+here rather than in a message because a coordinator's memory is not a ranking
+input.
+
+- **`tools-devtest#00` HID work that was done** — one job name kept an unmoved
+  verdict in front of five guards that had been closed. The board said one red;
+  five things had been fixed behind it.
+- **`lib-test#00` INFLATED work that did not exist** — four job names turned out
+  to be one construct. `lib-test#crtl_reachability` IS `lib-test#00`, the same
+  job as the three `lib_synapse*` entries. A backlog read four times its real
+  size, and nobody should pick those up as separate work.
+
+**Both write-ups were wrong, in opposite directions, from the same property.**
+That is the argument for ranking this above a normal chore: a name that
+over-reports and a name that under-reports are not two bugs, they are one
+ambiguity read twice, and neither reading announces itself. An unmoved verdict
+looks like a live red and a repeated job name looks like distinct work.
+
+**This is NOT a regression of
+[[bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step]],
+and reopening that would be wrong.** That ticket fixed ROUTING — `track:` is now
+derived from the failing step's own sources — and it *structurally refused* to
+make the slug step-derived, for a reason that still holds: the slug is both the
+dedupe key and the close key, and `close_stub_tickets()` recomputes it from the
+job at a moment when no step is in scope, so a step-derived slug would leak
+every stub open. It also named its own residue honestly — *"ownership remains
+unrecoverable"*. What frankz-43 hit is a DIFFERENT residue of that same
+deliberate decision: not "which lane owns this red" but **"how does a reader
+tell that four job names are one job, or that one job name is five verdicts?"**
+Nobody owned that question, which is why it cost two write-ups before anyone
+wrote it down.
