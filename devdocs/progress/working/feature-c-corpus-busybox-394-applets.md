@@ -101,13 +101,37 @@ CLAUDE.md warns that width-dependent defects hide on the 64-bit host. This is
 the sharper version: here the **blind target is the default one**, so the
 blindness sits inside the number everyone quotes.
 
-## Why this stopped here
+## Why this stopped here — SPENT, kept because it explains the gap in the dates
 
-The owner paused all tracks: frankb-a9 holds the prio-100 shortstring overhaul,
-*"that big flip should be _last_ ... this affects our self-compile capability"*.
-The flip retypes every string in the compiler and is judged against the tree it
-lands on, so a moving tree makes its verdict meaningless rather than merely
-noisy.
+**This condition no longer holds and nothing below it should be acted on.** The
+shortstring overhaul it names is in `done/`
+(`feature-p-implement-the-real-tyshortstring-byte-prefix-layout`), and work
+resumed across tracks on 2026-09-04 — including the 374-applet run recorded
+further down, which is this ticket's own. Left in place rather than deleted
+because it is why this rung sat still, which the commit dates otherwise make
+look like neglect.
+
+Stated precisely, because the distinction matters and I do not have the other
+half: what I can verify is that the ticket the pause was expressed in terms of
+has closed and that every lane is landing again. **Whether the owner considers
+the pause formally lifted is the owner's to say, not mine to infer** — which is
+exactly the reasoning in the paragraph below, applied to myself.
+
+Marked spent 2026-09-04 (frankC) after franks-ab found the same shape in rung
+1's write-up: a body paragraph is OPERATIVE if a reader would act on it, and
+"all tracks are paused" is the most operative sentence a ticket can carry. A
+session arriving to take this rung would have stood down on a stale sentence
+two screens under a summary that contradicts it.
+
+The original, unedited:
+
+> The owner paused all tracks: frankb-a9 holds the prio-100 shortstring overhaul,
+> *"that big flip should be _last_ ... this affects our self-compile
+> capability"*. The flip retypes every string in the compiler and is judged
+> against the tree it lands on, so a moving tree makes its verdict meaningless
+> rather than merely noisy.
+
+The lesson under it is NOT spent and is the reason the section stays at all.
 
 Recording one thing learned from that, because it outlives this ticket: **a
 session negotiating its own exemption is how a pause becomes a suggestion.** A
