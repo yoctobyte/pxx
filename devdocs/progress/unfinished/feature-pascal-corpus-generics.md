@@ -1,9 +1,9 @@
 ---
 track: P
 prio: 65
-owner: frankB
-blocked-by: [bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name, bug-p-a-different-specialization-of-the-same-template-inside-its-own-body]
-status: working
+owner: 
+blocked-by: []
+status: unfinished
 type: feature
 ---
 
@@ -11,7 +11,7 @@ type: feature
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** working
+- **Status:** unfinished
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
@@ -1288,7 +1288,14 @@ anything. The two still open are now `blocked-by:` edges above. Two are closed:
   `TCustomPointersEnumerator<T, PT> = class abstract(TEnumerator<PT>);`. Covered
   by `test/test_generic_bodiless_class_modifier.pas`. Closed on measurement, not
   on the test's existence — see its resolution.
-- `bug-p-a-generic-function-cannot-be-declared-in-a-unit` (40) — **fixed here.**
+- `bug-p-a-generic-function-cannot-be-declared-in-a-unit` (40) — **fixed** at
+  `71deb21d4`.
+- `bug-p-a-different-specialization-of-the-same-template-inside-its-own-body`
+  (35) — **fixed** at `02a57e20e`; the parameter-SWAPPED half is split out as
+  [[bug-p-a-generic-cannot-hold-a-parameter-swapped-specialization-of-itself]]
+  (20), refused with an honest cycle diagnostic rather than mis-compiled.
+- `bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name`
+  (45) — **fixed here.**
 
 **The structural answer, since this rung keeps asking for it.** The concept "a
 generic and its specialisations" is served by two registries in the Pascal
@@ -1299,7 +1306,51 @@ unit scope at all (`compiler/defs.inc`). `IsGenericTemplateName` and
 the whole of the shadowing bug, and it is not a bug in the lookups: they are
 answering the only question the representation can answer.
 
-Whether the two specialisation-IDENTITY bugs fall out of the same
-representation is NOT established here and must not be assumed from the
-paragraph above — the shadowing one demonstrably does; the other two are being
-measured, and this line will be replaced by what the measurement says.
+**Measured: the four are NOT one cause, and the shape of the answer is worth
+keeping.** All four were fixed; here is where each actually lived.
+
+| ticket | mechanism | pass |
+| --- | --- | --- |
+| bodiless generic + abstract + generic parent | already fixed | parser |
+| generic function in a unit | three copies of the top-level declaration dispatcher, one had the arm | parser |
+| generic declaration does not shadow an import | the alias is minted at the USES CLAUSE, plus a duplicate test keyed on a template NAME | rewrite sweep + specialisation |
+| a different specialisation inside its own body | the mode-Delphi surface reaching neither sweep | capture |
+
+The name-keyed flat registry is real and it is the shadowing bug's second half —
+but `Templates[]`'s lookup already prefers the LAST arity-matching entry, i.e.
+the local declaration, and **it never got the chance to answer** because the
+alias had been minted and parsed at the uses clause first. Fixing the
+representation would not have fixed that ticket.
+
+**The structural finding that DOES hold: two mechanisms resolve a generic name
+to a specialisation, split by WHERE the use is.** Outside a template body, the
+token-stream sweep (`DelphiRewriteGenericUses`, driven from
+`DesugarImportedDelphiGenericUses` and from each template's own capture). Inside
+one, the arena substitution (`SpecializeToBuffer` + `ScanRangeForNestedSpecs`).
+Every one of the four defects sat on a case that belonged to neither — a
+dispatcher arm that did not exist, a sweep that ran too early, a surface that
+reached neither pass. Two is a smell; it is not yet three, and each fix here was
+made by routing the missing case INTO an existing mechanism rather than growing
+a third. The next person to add one should check that column first.
+
+## PARKED again 2026-09-04 (frankB) — the four rungs are done, the rung is not
+
+All four generics bugs are closed and every `blocked-by:` edge with them is
+therefore gone; the frontmatter is back to `[]` rather than pointing at `done/`
+entries. **That does not make this rung done.** The rung is
+`generics.collections` compiling, and nobody re-staged it today — my slice was
+the four bugs, not the corpus.
+
+Released rather than held, for the reason this ticket already recorded once: a
+lock over a ticket nobody is working reads as "someone is on it".
+
+**What the next session should NOT do:** conclude from the four green rows above
+that the wall has moved. It has not been measured. Re-stage rtl-generics and
+drive it, exactly as the 2026-08-25 recon asked; the four fixes may or may not
+be on its path, and only the attempt says which.
+
+## Parked 2026-09-04
+
+the four generics bugs it ranked are all closed; the rung itself (generics.collections compiling) was not attempted today and needs a re-stage, not a conclusion drawn from the four green rows
+
+**Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.

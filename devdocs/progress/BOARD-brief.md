@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:16 unfinished:26 blocked:7 backlog:12 backlog-umbrella:7 backlog-core:132 backlog-nilpy:97 backlog-tools:17 backlog-pascal:44 backlog-decide:36 backlog-libs:15 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3267 rejected:75`
+`working:15 unfinished:27 blocked:7 backlog:12 backlog-umbrella:7 backlog-core:132 backlog-nilpy:97 backlog-tools:17 backlog-pascal:43 backlog-decide:36 backlog-libs:15 backlog-cfront:16 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3268 rejected:75`
 
 ## Held now (working/ — do not touch these files)
 
@@ -20,13 +20,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-inline-float-and-record-returning-leaves` [A+O] — owner: frank-optimize
 - `feature-p-assertions-directive-and-position` [P] — owner: frankS
-- `feature-pascal-corpus-generics` [P] — owner: frankB
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
 - `feature-tls-provider-abstraction` [B] — owner: frankH
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
 - `refactor-a-one-program-driver-prologue-for-every-frontend` [A] — owner: frankA
 
-## unfinished (26) — parked mid-flight; re-claim, do not duplicate
+## unfinished (27) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -49,6 +48,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-pal-esp-posix-fd-semantics` [B+S]
 - `feature-pascal-corpus-expansion` [P]
 - `feature-pascal-corpus-fpc-testsuite` [P]
+- `feature-pascal-corpus-generics` [P]
 - `feature-rust-option-type` [R]
 - `feature-target-wasm` [A+B] — blocked-by: decide-how-the-sys-intrinsics-reach-wasi-when-the-compiler-links-no-pal
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P]
@@ -96,6 +96,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-import-c-header-still-works-2
 - `[p 68] [N]` bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1)
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
-- `[p 65] [P]` bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name (unblocks 1)
+- `[p 65] [N]` bug-n-tuple-unpacking-of-an-inline-tuple-does-not-unpack-iterable-values
 
 _359 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

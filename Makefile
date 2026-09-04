@@ -8890,6 +8890,17 @@ test-core: $(COMPILER)
 	# FPC 3.2.2 compiles neither arm; that is deliberate and written up in the test.
 	./$(COMPILER) -Futest/generic_selfspec_units test/test_generic_self_other_specialization.pas $(TESTTMP)/test_generic_selfspec26
 	tools/expect_same.sh test_generic_selfspec26 "$$($(TESTTMP)/test_generic_selfspec26)" "$$(printf '1000000 7 1000000 3 1 4\n1000000 7 1000000 3 1 4\nsurfaces agree')"
+	# A file declaring TBox<T> while importing two units that also declare one.
+	# Ordinary Pascal scoping says the local declaration wins; every use resolved
+	# to the IMPORT. Two mechanisms, each covering a case the other does not: the
+	# alias was minted at the USES CLAUSE, before this file's type section
+	# existed; and once an imported unit specialized TBox<Integer> itself, the
+	# "exact re-statement is a no-op" shortcut compared templates by NAME and
+	# consumed the local declaration as a duplicate. Member names differ per unit
+	# on purpose, so a wrong resolution is a compile error and not a value.
+	# Verified against the pin: `"Local": no such member` there. FPC 3.2.2: 42 11 33 4.
+	./$(COMPILER) -Futest/generic_shadow_units test/test_generic_shadow_import.pas $(TESTTMP)/test_generic_shadow_import26
+	tools/expect_same.sh test_generic_shadow_import26 "$$($(TESTTMP)/test_generic_shadow_import26)" "42 11 33 4"
 	# A generic constraint against a name that is NOT in the class table used to be
 	# skipped entirely, because at that point "not a class" and "not declared yet"
 	# are the same observation. Two kinds of name are not "not yet": a builtin

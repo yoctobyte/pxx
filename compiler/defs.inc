@@ -2350,6 +2350,14 @@ var
   Templates          : array[0..MAX_TEMPLATES-1] of TTemplate;
   TemplateCount      : Integer;
   Specializations    : array[0..MAX_SPECIALIZATIONS-1] of TSpecialization;
+  { Templates[] index each specialization was minted from. TSpecialization
+    carries the template's NAME, and a name is not an identity: two files may
+    each declare a `TBox<T>`, and the minted alias for both is `TBox$Integer`.
+    ParseSpecialization's "an exact re-statement is a no-op" shortcut compared
+    the two by NAME and skipped the second declaration, so a program shadowing
+    an imported template got the IMPORT's fields.
+    bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name }
+  SpecTemplateIdx    : array[0..MAX_SPECIALIZATIONS-1] of Integer;
   SpecializationCount: Integer;
   TemplateTokens     : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
   { The SOURCE SPELLING of each pooled template token, the same channel

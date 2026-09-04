@@ -1840,6 +1840,81 @@ end;
   DelphiRewriteGenericUses splices bare `X = specialize T<Args>;` and relies on
   an open type section, and after a uses clause there is none -- hence the `type`
   token in front, added only when a round actually emitted something. }
+function FileDeclaresTemplateAhead(const nm: AnsiString; fromTok: Integer): Boolean;
+{ Does the FILE that `fromTok` belongs to declare a generic template named `nm`
+  at or after fromTok? The shape is `nm < ...params... > =` -- the `=` is what
+  separates a DECLARATION from a use, which has none.
+
+  The file test is not decoration. Every used unit is APPENDED to Tokens[] after
+  the file that used it, so a plain forward scan from a program's uses clause
+  walks straight into the imported unit's own declaration of the name and
+  answers "yes, this file declares it" about the wrong file. PasSrcOfTok is the
+  discriminator, and it is only asked once the cheap name test has matched. }
+var i, j, depth: Integer; here: AnsiString; hit: Boolean;
+begin
+  FileDeclaresTemplateAhead := False;
+  here := PasSrcOfTok(fromTok);
+  i := fromTok;
+  while i + 2 < TokCount do
+  begin
+    if (Tokens[i].Kind = tkIdent) and (Tokens[i + 1].Kind = tkLt) and
+       CaseEqual(GetTokenStr(i), nm) and (PasSrcOfTok(i) = here) then
+    begin
+      { walk the `<...>` group; a parameter list may carry `,` `;` `:`, the
+        `class`/`record` constraint keywords and nested `<`, and nothing else.
+        (`constructor` is an IDENT in this dialect, not a token kind, so it
+        needs no arm of its own.) Anything else means this was not one. }
+      depth := 1;
+      j := i + 2;
+      hit := False;
+      while (j < TokCount) and (depth > 0) and (not hit) do
+      begin
+        if Tokens[j].Kind = tkLt then Inc(depth)
+        else if Tokens[j].Kind = tkGt then Dec(depth)
+        else if not ((Tokens[j].Kind = tkIdent) or (Tokens[j].Kind = tkComma) or
+                     (Tokens[j].Kind = tkSemicolon) or (Tokens[j].Kind = tkColon) or
+                     (Tokens[j].Kind = tkClass) or (Tokens[j].Kind = tkRecord)) then
+          hit := True;   { not a parameter list -- abandon this candidate }
+        Inc(j);
+      end;
+      if (not hit) and (depth = 0) and (j < TokCount) and (Tokens[j].Kind = tkEq) then
+      begin
+        FileDeclaresTemplateAhead := True;
+        Exit;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
+function TemplateShadowedByThisFile(t, fromTok: Integer): Boolean;
+{ Template `t` was imported, and the file at `fromTok` declares its own template
+  of the same name -- so the imported one must NOT have its uses rewritten here.
+
+  DesugarImportedDelphiGenericUses runs at the end of ParseUsesClause and mints
+  `Name$Args = specialize Name<Args>;` right there (DGenDeclAnchor returns the
+  clause itself for this caller, by design and with the reason written down).
+  That alias is therefore PARSED before the importing file's own type section
+  exists, and the by-name template lookup resolves it against the only candidate
+  registered at that moment -- the import. The file's own declaration was parsed
+  and then lost, and `b.Local` answered `no such member` while FPC printed 42.
+
+  Skipping is the whole fix: the local declaration's own desugar sweep runs
+  after it is registered, and the lookup in ParseSpecialization already prefers
+  the LAST arity-matching template, which is the local one. Ordinary Pascal
+  scoping, arrived at by not resolving the name too early.
+
+  A template from THIS file is never skipped -- a unit's implementation `uses`
+  sits below its own interface types, so its own templates are registered by
+  then and rewriting their uses is exactly this sweep's job.
+  bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name }
+begin
+  TemplateShadowedByThisFile := False;
+  if TemplateSrcKey[t] < 0 then Exit;   { no range mark: the main file itself }
+  if CaseEqual(KeyStrs[TemplateSrcKey[t]], PasSrcOfTok(fromTok)) then Exit;
+  TemplateShadowedByThisFile := FileDeclaresTemplateAhead(Templates[t].Name, fromTok);
+end;
+
 procedure DesugarImportedDelphiGenericUses;
 var
   at, rounds, before, atBefore, t, resume, emitted: Integer;
@@ -1859,7 +1934,8 @@ begin
     CollectSpecializationBoundNamesFromTokens;
     emitted := 0;
     for t := 0 to TemplateCount - 1 do
-      emitted := emitted + DelphiRewriteGenericUses(t, at, TemplateIsDelphi[t]);
+      if not TemplateShadowedByThisFile(t, TokPos) then
+        emitted := emitted + DelphiRewriteGenericUses(t, at, TemplateIsDelphi[t]);
     Inc(rounds);
     if rounds > 16 then
       Error('generic specialization nested deeper than 16 levels (or a rewrite loop)');
@@ -3467,8 +3543,16 @@ begin
     type-section loop go round again. A name that collides with a DIFFERENT
     template or different arguments still falls through to the ordinary
     duplicate-class diagnosis. }
+  { ...and the same template, BY INDEX. `TemplateName` is a name, and a name is
+    not an identity: a program declaring its own `TBox<T>` while importing a unit
+    that declares one mints `TBox$Integer` for both, from two DIFFERENT templates
+    that happen to share a spelling. Compared by name this read as an exact
+    re-statement, the program's own declaration was consumed as a no-op, and
+    `b.Local` answered `no such member` against the IMPORT's record while FPC
+    printed 42.
+    bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name }
   si := FindSpecialization(specName);
-  if (si >= 0) and CaseEqual(Specializations[si].TemplateName, templateName) and
+  if (si >= 0) and (SpecTemplateIdx[si] = ti) and
      (SpecNParams[si] = nc) then
   begin
     dup := True;
@@ -3597,6 +3681,7 @@ begin
   end;
   SpecNParams[SpecializationCount] := nc;
   SpecUnitIdx[SpecializationCount] := CurrentUnitIdx;
+  SpecTemplateIdx[SpecializationCount] := ti;
   Inc(SpecializationCount);
 
   { Stream the concrete class body inline so the fall-through binds the alias
