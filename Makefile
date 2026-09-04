@@ -13317,6 +13317,19 @@ test-core: $(COMPILER)
 	# `uu`. 65 is chosen so no right answer collides with 1, 4 or 8.
 	./$(COMPILER) test/c_sizeof_a_field_through_a_parenthesised_base.c $(TESTTMP)/c_szfldparen26
 	tools/expect_same.sh c_szfldparen26 "$$($(TESTTMP)/c_szfldparen26)" "$$(printf '1 65\n2 65\n3 65\n4 65\n5 65\n6 65\n7 65\n8 4 1\n9 48 48')"
+	# `f(s.arr)` on an array-of-STRUCT field passed the address of a
+	# one-element temp copy instead of decaying, so every store the callee
+	# made was discarded. The guard that exists to stop this asked only about
+	# AN_IDENT, so a bare `arr` was covered and `s.arr` was not; the temp path
+	# only fires for a record element over 8 bytes, which is why rows 1-4
+	# (char/int/double/2-D) are controls that were always right. ROWS 6 AND 8
+	# WRITE through the argument -- an address check alone cannot observe a
+	# pointer-to-different-memory defect. busybox's sed handed G.regmatch to
+	# regexec, which filled a temp nobody read: match offsets came back 0/0
+	# for a match at 14..18 and sed either substituted at the wrong offset or
+	# SIGSEGV'd, with crtl's regexec correct in isolation.
+	./$(COMPILER) test/c_array_of_struct_field_as_a_call_argument.c $(TESTTMP)/c_arrstructarg26
+	tools/expect_same.sh c_arrstructarg26 "$$($(TESTTMP)/c_arrstructarg26)" "$$(printf '1 0\n2 0\n3 0\n4 0\n5 0\n6 100 200 104 304\n7 0\n8 100 304\n9 0 0')"
 	# One operand, many spellings. sizeof(**p) answered 8 while sizeof **p
 	# answered 16 -- the same operand, wrong with parentheses and right without,
 	# because the parenthesised form ran token-pattern arms and the

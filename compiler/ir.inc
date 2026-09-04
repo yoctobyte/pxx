@@ -4088,6 +4088,52 @@ begin
     Result := IRTk[value];
 end;
 
+{ Is this argument a WHOLE ARRAY OBJECT rather than one record value? An array
+  node carries its ELEMENT's tyRecord tag -- there is nowhere else to put a kind
+  -- so every consumer that dispatches on the tag has to ask this before
+  believing it.
+
+  THE ARM THAT WAS MISSING IS THE FIELD ONE, and its absence is the shape
+  cparser.inc:3848 already names: "Each grew an AN_IDENT arm first, because a
+  bare identifier is the spelling everyone tests." A bare `arr` was handled and
+  `s.arr` was not, so `f(s.arr)` on an array of >8-byte records took the C
+  struct-by-value path: it copied ONE element into a throwaway temp and passed
+  the temp's address. Not a wrong pointer -- a pointer to different memory, so
+  everything the callee writes through it is discarded and everything it reads
+  is stale.
+
+  WHERE THAT LANDED: busybox's sed passes `G.regmatch` -- ten regmatch_t -- to
+  regexec, which filled a temp nobody reads. do_subst_command then took
+  start/end from the untouched array, got 0/0 for a match at 14..18, and either
+  substituted at the wrong offset or walked `line` off the string and SIGSEGV'd.
+  crtl's regexec is correct in isolation and every offset and sizeof involved is
+  correct; only the argument was a different object. `&s.arr[0]` and
+  `p := s.arr` were both right, so ONE SPELLING OF THE SAME ADDRESS was wrong.
+
+  Element type is what kept it latent: the temp path is only taken for a record
+  element over 8 bytes, so `char[]`, `int[]`, `double[]` and `int[][]` fields
+  all decayed correctly and only an array OF STRUCTS diverged. Found attempting
+  busybox, 2026-09-04. }
+function NodeIsWholeArrayObject(node: Integer): Boolean;
+var recId: Integer; fname: AnsiString;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+    Result := (Integer(ASTIVal[node]) >= 0) and (Integer(ASTIVal[node]) < SymCount) and
+              Syms[ASTIVal[node]].IsArray
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    recId := ResolveNodeRec(ASTLeft[node]);
+    if recId = REC_NONE then Exit;
+    fname := GetASTIdentName(node);
+    { DynDepth 0 keeps a DYNAMIC array field out: it is a managed handle with
+      its own argument path, not a block of elements at a field offset -- the
+      same exclusion CNodeDecaysToPointer makes for the same reason. }
+    Result := RecFieldIsArray(recId, fname) and (RecFieldDynDepth(recId, fname) = 0);
+  end;
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -5071,9 +5117,7 @@ begin
     >8 bytes — corrupting e.g. SetLength's target (the array was lost, the temp
     resized). Only fires when the element record is large, so it stayed latent
     until a >8-byte (e.g. managed-field) record element appeared. }
-  argIsWholeArray := (ASTKind[argAST] = AN_IDENT) and
-     (Integer(ASTIVal[argAST]) >= 0) and (Integer(ASTIVal[argAST]) < SymCount) and
-     Syms[ASTIVal[argAST]].IsArray;
+  argIsWholeArray := NodeIsWholeArrayObject(argAST);
   if (argTk = tyRecord) and not argIsWholeArray then
   begin
     argRecId := ResolveNodeRec(argAST);

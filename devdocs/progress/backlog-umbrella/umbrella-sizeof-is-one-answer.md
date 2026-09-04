@@ -357,3 +357,25 @@ than merely annotated.**
   construction — that is the finding, not an accident of filing.
 - frankb-a9 has a `string[N]` ticket drafted from the measurement above; wire it
   here when it lands.
+
+## A C instance the attempt found, 2026-09-04 (`67708bbe8`, fixed)
+
+Not a new blocker — recorded because it is evidence about the class rather than
+about one ticket. `sizeof` of an ARRAY FIELD reached through a parenthesis, a
+cast or a deref answered the **element** size: `sizeof((sp)->m)` on `char m[65]`
+was 1 while `sizeof(sp->m)` was 65. **A parenthesis decided the answer**, and
+the mechanism is this umbrella's own: two paths answer "how big is this", and
+only one of them knew that `sizeof` is not a USE so an array does not decay.
+The general-expression fallback sized by the node's RESULT type, which for an
+array expression is its element type.
+
+**It was found by attempting busybox, not by probing `sizeof`.** uname.c
+declares `char processor[sizeof(((struct utsname*)NULL)->machine)]` twice, so
+its info struct came out 402 bytes instead of 530 with three fields at
+consecutive offsets, and `uname -p` printed `uu`. No diagnostic; the `offsetof`
+table was correct about the layout it had been given. 516 `--help` differential
+cases never reached it — the real-argument cases caught it in one run.
+
+Fixed by extracting the rule from the arm that already had it
+(`CSizeofRecFieldBytes`) rather than adding a third copy — the same
+delete-a-case shape this umbrella argues for.
