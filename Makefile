@@ -13258,6 +13258,28 @@ test-core: $(COMPILER)
 	# unrecognised directive fatal without a flag of its own.
 	! ./$(COMPILER) -Werror test/test_pascal_directive_unknown_warns.pas $(TESTTMP)/test_pascal_directive_unknown_warns_werr26 > $(TESTTMP)/test_pascal_directive_unknown_warns_werr.log 2>&1
 	grep -q "warning promoted by -Werror" $(TESTTMP)/test_pascal_directive_unknown_warns_werr.log
+	# {$ASSERTIONS}/{$C±} gating. THE CONDITION HAS A SIDE EFFECT: a row that only
+	# checked "nothing printed" passes on a compiler that still EVALUATES the
+	# condition and declines to complain, which is what pxx did until 2026-09-04.
+	# feature-p-assertions-directive-and-position
+	./$(COMPILER) test/test_assertions_directive_gating.pas $(TESTTMP)/test_assertions_directive_gating26
+	tools/expect_same.sh test_assertions_directive_gating "$$($(TESTTMP)/test_assertions_directive_gating26)" "$$(printf '1\n1\n2\n2\n3')"
+	# --no-assertions prints FPC's own column for this file (verified against
+	# fpc 3.2.2 -Sa on 2026-09-04): the STEPS match, the leading row differs
+	# because pxx defaults assertions on and FPC defaults them off.
+	./$(COMPILER) --no-assertions test/test_assertions_directive_gating.pas $(TESTTMP)/test_assertions_directive_gating_off26
+	tools/expect_same.sh test_assertions_directive_gating_off "$$($(TESTTMP)/test_assertions_directive_gating_off26)" "$$(printf '0\n0\n1\n1\n2')"
+	# -Sa asks for assertions ON, which is already our default, so it must leave
+	# the default column alone rather than being quietly rejected.
+	./$(COMPILER) -Sa test/test_assertions_directive_gating.pas $(TESTTMP)/test_assertions_directive_gating_sa26
+	tools/expect_same.sh test_assertions_directive_gating_sa "$$($(TESTTMP)/test_assertions_directive_gating_sa26)" "$$(printf '1\n1\n2\n2\n3')"
+	# ...and the control WITHOUT which all of the above passes on a compiler that
+	# simply drops every Assert: one that must still fail, with FPC's 227.
+	./$(COMPILER) test/test_assertions_directive_still_fires.pas $(TESTTMP)/test_assertions_directive_still_fires26
+	! $(TESTTMP)/test_assertions_directive_still_fires26 > $(TESTTMP)/test_assertions_still_fires.log 2>&1
+	grep -q "before" $(TESTTMP)/test_assertions_still_fires.log
+	grep -q "boom" $(TESTTMP)/test_assertions_still_fires.log
+	! grep -q "after" $(TESTTMP)/test_assertions_still_fires.log
 	./$(COMPILER) test/test_pascal_conditional_include.pas $(TESTTMP)/test_pascal_conditional_include26
 	tools/expect_same.sh test_pascal_conditional_include26 "$$($(TESTTMP)/test_pascal_conditional_include26)" "$$(printf '42\n7')"
 	./$(COMPILER) test/test_directive_if_numeric.pas $(TESTTMP)/test_directive_if_numeric26

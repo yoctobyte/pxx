@@ -5366,7 +5366,34 @@ begin
          ((qUnit = -2) or (CurSelfClass < REC_UCLASS_BASE) or
           (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) < 0)) and
          (FindProc('__pxxAssert') >= 0) then
+      begin
+        { {$ASSERTIONS OFF} / --no-assertions: the call is compiled OUT, and the
+          CONDITION WITH IT. A runtime no-op would not do -- FPC does not
+          evaluate the condition either, so an assertion whose condition has a
+          side effect made the two dialects take different paths with no
+          diagnostic (measured on v363: `Assert(Bump, ...)` under
+          {$ASSERTIONS OFF} gave n=1 here against FPC's n=0).
+
+          Suppressed HERE and not further down because this is the last point
+          before the argument list is parsed: everything downstream has already
+          built the condition into the AST, and dropping a node then is how a
+          side effect survives a switch that promised to remove it. The token's
+          own TokAssertions is read, not the global, so the switch is lexically
+          scoped like {$Q} and {$R} -- a region of a file can differ from the
+          rest of it.
+
+          An empty AN_SEQ is the statement that remains, which is exactly what
+          `begin end` yields, so no lowering path needs a new case.
+          feature-p-assertions-directive-and-position }
+        if not TokAssertions[TokPos - 1] then
+        begin
+          Next;                { past `Assert`, onto the '(' SkipParenGroup wants }
+          SkipParenGroup;
+          Result := AllocNode(AN_SEQ);
+          Exit;
+        end;
         name := '__pxxAssert';
+      end;
       { Label definition: 'labelname:' as a statement }
       if Tokens[TokPos].Kind = tkColon then
       begin

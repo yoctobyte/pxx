@@ -3922,6 +3922,7 @@ var
   OverloadReport : AnsiString;
   WarnCount : Integer;     { number of non-fatal warnings emitted via Warn }
   WarnAsError : Boolean;   { -Werror: promote the next Warn to a fatal Error }
+  NoAssertionsFlag : Boolean; { --no-assertions: start every source with assertions OFF, as if {$ASSERTIONS OFF} led the file. The CLI half of feature-p-assertions-directive-and-position; -Sa is the opposite direction and is a no-op because ON is already our default. Read at lexer reset, so a per-file {$ASSERTIONS ON} still overrides it. }
   { Label fixup scratch for the machine-code emit pass. One shared set: only the
     active target's IREmitMachineCode* runs per compile, and it runs once (not
     reentrant), so a single global set is safe. Moved off the stack — as locals
@@ -4717,6 +4718,7 @@ var
   PackRecordsVal : Integer;
   ScopedEnumsVal : Boolean;  { current {$SCOPEDENUMS} lexer state }
   QChecksVal : Boolean;      { current {$Q±} / {$OVERFLOWCHECKS} lexer state (default off) }
+  AssertionsVal : Boolean;   { current {$C±} / {$ASSERTIONS} lexer state. DEFAULT ON, which is NOT FPC's default: FPC compiles Assert out unless -Sa, and flipping ours to match would turn every existing pxx assertion into dead code silently. -Sa is accepted and is a no-op for that reason (feature-p-assertions-directive-and-position). }
   RChecksVal : Boolean;      { current {$R±} / {$RANGECHECKS} lexer state (default off) }
   IChecksVal : Boolean;      { current {$I±} / {$IOCHECKS} lexer state. DEFAULT ON — PasInitDefines sets it True, per the user's dialect call of 2026-07-15 (feature-pascal-io-checks-i-plus). This line said "default off — flip pending the user" until 2026-09-01; the flip had already happened and only the comment still described the old state. Checked against PasInitDefines, which is the reset that decides it. }
   StmtRChecks : Boolean;     { {$R} state AT THE CURRENT STATEMENT'S FIRST TOKEN — a directive between the RHS and the statement end must NOT govern that assign (FPC semantics, trange4.pp: `x:=y {$R+} end`). Set on ParseStatementAST entry; AllocNode(AN_ASSIGN) reads it. }
@@ -5031,6 +5033,7 @@ var
   Tokens     : array of TRawToken;
   TokPackRecords : array of Integer;
   TokQChecks : array of Boolean; { {$Q+}/{$OVERFLOWCHECKS ON} state at this token — the parser reads it at BINOP creation so the switch is lexically scoped (tint642 flips it between sections) }
+  TokAssertions : array of Boolean; { {$C+}/{$ASSERTIONS ON} state at this token — read at the `Assert` soft-alias site in ParseStatementAST, which is the LAST point before the argument expressions are parsed into the AST. Off means the whole call is compiled out, condition included. }
   TokNChecks : array of Byte;    { {$NILCHECKS} tri-state at this token — read at AllocNode, lexically scoped like TokRChecks (feature-a-emitted-nil-checks) }
   TokRChecks : array of Boolean; { {$R+}/{$RANGECHECKS ON} state at this token — read at AN_ASSIGN creation (AllocNode), lexically scoped like TokQChecks (feature-pascal-range-checks-r-plus) }
   TokIChecks : array of Boolean; { {$I+}/{$IOCHECKS ON} state at this token — opt-in Text-I/O failure raising (feature-pascal-io-checks-i-plus; the FPC-DEFAULT flip is a user dialect call, see the ticket) }

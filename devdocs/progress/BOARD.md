@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (15)
+## working (16)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -22,6 +22,7 @@ _none_
 | feature-c-crtl-stdio-buffering-and-setvbuf | C | 55 | feature | lib/crtl/src/stdio.c is entirely unbuffered — fputc is one write() syscall per character — and setvbuf at :1051 is a stub that ignores its arguments and returns SUCCESS, which is the dishonest-stub shape the SetTextBuf ruling exists to reject, and worse here because C callers check the return. Add FILE write buffering under C99 7.19.3p7's policy, make setvbuf real, and share a flush registry with lib/rtl so mixed WriteLn/printf output keeps its order. | — |
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-inline-float-and-record-returning-leaves | A+O | 45 | feature | FLOAT HALF LANDED at -O3 (InlineScalarTk widened to tySingle/tyDouble + an AN_FLOAT_LIT arm); -O0/-O1/-O2 byte-identical on compiler.pas. Measured 2.7x on a float-leaf microbench and 1.18x on a 10M-iteration math-unit workload. The RECORD HALF IS NOT DONE and is where this ticket's headline 3.8x actually lives: the dd kernels it was measured on (DdMul/DdAdd/Dd2Sum/Dd2Prod/DdFast2Sum) all return TDd, a RECORD of two Doubles, so the float change does not touch them. Admitting floats also opened the float arm of the dropped-narrowing bug fixed in 191af3440 (D2S returned the full Double, I2S(16777217) returned 16777217) -- guarded here by routing any conversion into a float result to shape 3. | — |
+| feature-p-assertions-directive-and-position | P | 30 | feature | HALF 1 DONE 2026-09-04 (gating: {$ASSERTIONS ON/OFF}, {$C±}, -Sa, --no-assertions; the condition is no longer evaluated when off, verified against fpc 3.2.2). WHAT IS LEFT is half 2, the failure-message shape: FPC prints `boom (file.pas, line 4).` — the message REPLACES `Assertion failed` rather than following it — where pxx prints `Assertion failed: boom` with no position. Cosmetic parity, not a behavioural bug; re-typed and re-ranked accordingly | — |
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | bug-p-a-different-specialization-of-the-same-template-inside-its-own-body, bug-p-a-generic-declaration-does-not-shadow-an-imported-one-of-the-same-name |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
@@ -367,7 +368,7 @@ _none_
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | regression-test-core-c-crtl-wait | T | 55→85 | regression | NOT A COMPILER BUG, and re-laned from C to T. riscv32's `wait4-rusage rusage=UNTOUCHED` is red on seven and deterministically green on plexus from BYTE-IDENTICAL compiler bytes (compiler_sha256 fcc5ad9a29a61c10c... both boxes) with an EMPTY `git diff` outside devdocs/. seven runs qemu-riscv32 8.2.2 where plexus runs 10.2.1; the host kernel is eliminated on seven's own box by tools/host_waitid_rusage_probe.c, which prints rusage=written there with its arg5-NULL control printing UNTOUCHED. The target-side path is four pure pass-throughs and the same riscv32 binary writes rusage under a newer emulator. Fixing it needs root on seven (owner) or a host-capability skip at ROW grain (T) — do NOT weaken the assertion. | bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain |
 
-## backlog-pascal (45)
+## backlog-pascal (44)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -393,7 +394,6 @@ _none_
 | compat-pascal-distinct-type-declaration | P | 55 | compat | `type T = type byte;` — the distinct-type declaration is not parsed | — |
 | compat-pascal-the-strict-fpc-flag-family-is-incomplete | P | 15 | compat | --strict-fpc reproduces some FPC behaviours and silently not others (Abs/Sqr widths, pointer difference, TypeInfo name), and most flags ignore DialectIsPxx -- the gaps left after the umbrella landed | — |
 | feature-p-a-pascal-library-unit-does-not-parse | P | 40 | feature | `library foo;` does not parse -- `expected 'begin' before 'library'`. It is a FRONTEND gap (Track P), not an output gap: the x86-64 object writer landed at 41045d7b4 and already exports a link surface, so `library` + `exports` would be a second, DECLARATIVE spelling of what `cdecl` on a definition says today. That makes it a compat/ergonomics feature rather than a capability one, which is why it is p40 and not p80. The real question it forces is whether `exports` may export a routine that is NOT cdecl -- FPC allows it, and the object writer deliberately refuses to, because an internal-convention routine exported under its Pascal name is callable and wrong. Answer that before implementing. | — |
-| feature-p-assertions-directive-and-position | P | 55 | feature | RE-TYPED 2026-08-19 feature -> bug for half 1: `{$ASSERTIONS OFF}` is ACCEPTED AND IGNORED — measured on v363, an Assert whose condition has a side effect still runs it (n=1 where FPC gives n=0), so the two dialects take different paths with no diagnostic. Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
 | feature-p-assertions-switch-and-strict-default | P | 30 | feature | Re-filed from decide-assertion-default-vs-fpc, decided 2026-08-25 (option 3, default ON). pxx evaluates Assert() always; FPC ignores it unless -Sa. The dialect contract requires every divergence to be switchable and disabled under the strict family, so the switch is mandated rather than merely preferred. Once it exists the default stops being a one-way door. | — |
 | feature-p-defineglobal-a-define-that-crosses-unit-boundaries | P | 45 | feature | `{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem. | — |
 | feature-p-legacy-value-object-types | P | 15 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
@@ -1070,7 +1070,6 @@ _none_
 - [p 55] [N] feature-nilpy-no-type-inference-switch
 - [p 55] [N] feature-nilpy-str-format-named-keyword-fields
 - [p 55] [O] feature-opt-nilpy-container-subscript-is-15-19x-slower-than-cpython [parked — re-claim, do not duplicate]
-- [p 55] [P] feature-p-assertions-directive-and-position
 - [p 55] [P] feature-p-uses-a-unit-in-an-explicit-file
 - [p 55] [T] feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing
 - [p 55] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too

@@ -236,7 +236,7 @@ procedure EnsureTokCapacity(need: Integer);
 { Grow the token parallel arrays so index `need-1` is in bounds. Called after every
   Inc(TokCount) append (across all frontend lexers) and once at startup, so the
   invariant TokCapacity > TokCount holds before every write. Doubling from 65536;
-  capacity never shrinks across a per-source TokCount reset. ALL 11 token arrays grow
+  capacity never shrinks across a per-source TokCount reset. ALL 12 token arrays grow
   in lockstep — a missed one is a silent out-of-bounds. See
   feature-dynamic-compiler-tables. }
 var n: Integer;
@@ -245,6 +245,7 @@ begin
   if TokCapacity = 0 then n := 65536 else n := TokCapacity;
   while n < need do n := n * 2;
   SetLength(Tokens, n);          SetLength(TokPackRecords, n);  SetLength(TokQChecks, n);
+  SetLength(TokAssertions, n);
   SetLength(TokRChecks, n);      SetLength(TokIChecks, n);      SetLength(TokScopedEnums, n);
   SetLength(TokNChecks, n);
   SetLength(TokSrcOff, n);       SetLength(TokSrcLen, n);
@@ -253,13 +254,13 @@ begin
 end;
 
 procedure ShiftTokParallel(atPos, delta: Integer);
-{ Move the TEN token-parallel arrays to match a shift of Tokens[] by `delta` at
+{ Move the ELEVEN token-parallel arrays to match a shift of Tokens[] by `delta` at
   `atPos` -- positive for an insert, negative for a remove. Call it with the OLD
   TokCount still in place, which is what both splice sites do.
 
-  ALL TEN ARE POSITIONAL, checked one at a time rather than assumed: defs.inc
-  documents every one of them as state "at this token" -- the six directive
-  states ({$PACKRECORDS}, {$Q}, {$R}, {$I}, {$N}, {$SCOPEDENUMS}), the two
+  ALL ELEVEN ARE POSITIONAL, checked one at a time rather than assumed: defs.inc
+  documents every one of them as state "at this token" -- the seven directive
+  states ({$PACKRECORDS}, {$Q}, {$R}, {$I}, {$N}, {$SCOPEDENUMS}, {$ASSERTIONS}), the two
   source-spelling channels and the two C attribute slots. Not one is a side
   table keyed by anything but the token index, so a splice moves all of them or
   desynchronises all of them.
@@ -274,7 +275,7 @@ procedure ShiftTokParallel(atPos, delta: Integer);
   region's boundary moves by the splice width, and range checking silently
   starts or stops at the wrong token.
 
-  EnsureTokCapacity above already says "ALL 11 token arrays grow in lockstep --
+  EnsureTokCapacity above already says "ALL 12 token arrays grow in lockstep --
   a missed one is a silent out-of-bounds". This is the same list and the same
   hazard one operation over, which is why the two now sit together: a new
   parallel array must be added to BOTH, and separating them is what let one
@@ -288,6 +289,7 @@ begin
     begin
       TokPackRecords[i + delta] := TokPackRecords[i];
       TokQChecks[i + delta]     := TokQChecks[i];
+      TokAssertions[i + delta]  := TokAssertions[i];
       TokRChecks[i + delta]     := TokRChecks[i];
       TokIChecks[i + delta]     := TokIChecks[i];
       TokNChecks[i + delta]     := TokNChecks[i];
@@ -331,6 +333,7 @@ begin
       begin
         TokPackRecords[i] := TokPackRecords[src];
         TokQChecks[i]     := TokQChecks[src];
+        TokAssertions[i]  := TokAssertions[src];
         TokRChecks[i]     := TokRChecks[src];
         TokIChecks[i]     := TokIChecks[src];
         TokNChecks[i]     := TokNChecks[src];
@@ -346,6 +349,7 @@ begin
     begin
       TokPackRecords[i] := TokPackRecords[i - delta];
       TokQChecks[i]     := TokQChecks[i - delta];
+      TokAssertions[i]  := TokAssertions[i - delta];
       TokRChecks[i]     := TokRChecks[i - delta];
       TokIChecks[i]     := TokIChecks[i - delta];
       TokNChecks[i]     := TokNChecks[i - delta];
@@ -1216,6 +1220,16 @@ begin
   PackRecordsVal := 8;
   ScopedEnumsVal := False;
   QChecksVal := False;
+  { ON by default -- see AssertionsVal in defs.inc for why this deliberately is
+    not FPC's default. {$ASSERTIONS OFF} turns it off per region.
+    NoAssertionsFlag is read rather than assumed False because THIS RUNS BEFORE
+    OPTION PARSING (compiler.pas calls PasInitDefines, then walks ParamStr), so
+    the CLI arms must set AssertionsVal themselves -- and they do. Reading the
+    flag here keeps the two in step if this is ever called a second time.
+    MEASURED, which is the only reason it is written this way: with the CLI arm
+    setting only the flag, `--no-assertions` compiled clean and changed nothing
+    at all -- the accepted-and-ignored shape this session spent the day on. }
+  AssertionsVal := not NoAssertionsFlag;
   RChecksVal := False;
   StmtRChecks := False;
   NChecksVal := NILCHK_DEFAULT;
@@ -2179,6 +2193,9 @@ begin
     if sign = '+' then Result := 1 else Result := 0;
     Exit;
   end;
+  { {$C+}/{$C-} is dispatched above the chain, like {$Q} and {$I}, so it reaches
+    the terminal arm and must not be read as an unknown name. }
+  if lower = 'c' then begin Result := 0; Exit; end;
   if lower = 'longstrings' then
   begin
     if CaseEqual(name, 'off') then Result := 1 else Result := 0;
@@ -2290,6 +2307,14 @@ begin
   begin
     if Source[SrcPos] = '+' then RChecksVal := True
     else if Source[SrcPos] = '-' then RChecksVal := False;
+  end;
+  { {$C+} / {$C-}: the assertion switch, TP/Delphi's letter for {$ASSERTIONS}.
+    Both spellings must move the same state or the one nobody tested stays
+    broken -- the long form is dispatched below. }
+  if CaseEqual(command, 'C') and PasDirectiveActive and (SrcPos <= Length(Source)) then
+  begin
+    if Source[SrcPos] = '+' then AssertionsVal := True
+    else if Source[SrcPos] = '-' then AssertionsVal := False;
   end;
   { {$I+} / {$I-}: IO-check switch. Like {$R}, the leading +/- distinguishes
     the switch from the {$I file} include form (which is handled by the
@@ -2416,6 +2441,19 @@ begin
       if CaseEqual(name, 'on') then IChecksVal := True
       else if CaseEqual(name, 'off') then IChecksVal := False
       else Error('iochecks requires on or off');
+    end
+    else if CaseEqual(command, 'assertions') then
+    begin
+      { {$ASSERTIONS ON/OFF}. OFF compiles the Assert call OUT, condition
+        included -- it is not a runtime no-op, because the divergence this fixes
+        is a condition WITH A SIDE EFFECT running here and not under FPC
+        (measured on v363: n=1 vs FPC's n=0, no diagnostic either way).
+        Lexically scoped through TokAssertions, like {$Q} and {$R}, so a region
+        of a file can differ from the rest of it.
+        feature-p-assertions-directive-and-position }
+      if CaseEqual(name, 'on') then AssertionsVal := True
+      else if CaseEqual(name, 'off') then AssertionsVal := False
+      else Error('assertions requires on or off');
     end
     else if CaseEqual(command, 'strict_operator') then
     begin
@@ -3354,6 +3392,7 @@ begin
     TokPackRecords[TokCount] := PackRecordsVal;
     TokScopedEnums[TokCount] := ScopedEnumsVal;
     TokQChecks[TokCount] := QChecksVal;
+    TokAssertions[TokCount] := AssertionsVal;
     TokRChecks[TokCount] := RChecksVal;
     TokNChecks[TokCount] := Byte(NChecksVal);
     TokIChecks[TokCount] := IChecksVal;
@@ -3416,6 +3455,7 @@ begin
     TokPackRecords[TokCount] := PackRecordsVal;
     TokScopedEnums[TokCount] := ScopedEnumsVal;
     TokQChecks[TokCount] := QChecksVal;
+    TokAssertions[TokCount] := AssertionsVal;
     TokRChecks[TokCount] := RChecksVal;
     TokNChecks[TokCount] := Byte(NChecksVal);
     TokIChecks[TokCount] := IChecksVal;

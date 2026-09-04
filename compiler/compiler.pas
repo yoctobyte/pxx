@@ -1390,6 +1390,28 @@ begin
       WarnAsError := True;
       Inc(i);
     end
+    else if option = '-Sa' then
+    begin
+      { FPC's assertion switch. It asks for assertions ON, which is ALREADY the
+        pxx default -- so honouring it means doing nothing, and that is the
+        honest reading rather than an accepted-and-ignored flag. FPC's own
+        default is off; matching that would turn every existing pxx assertion
+        into dead code with no diagnostic, which is the worse failure. The off
+        direction is --no-assertions below.
+        feature-p-assertions-directive-and-position }
+      NoAssertionsFlag := False;
+      AssertionsVal := True;   { PasInitDefines already ran; see its comment }
+      Inc(i);
+    end
+    else if option = '--no-assertions' then
+    begin
+      { Start every source as if {$ASSERTIONS OFF} led the file: Assert calls
+        are compiled OUT, condition included, so a side-effecting condition does
+        not run. A later {$ASSERTIONS ON} in the source still wins. }
+      NoAssertionsFlag := True;
+      AssertionsVal := False;  { PasInitDefines already ran; see its comment }
+      Inc(i);
+    end
     else if PasOptHasPrefix(option, '--max-stack-frame=') then
     begin
       { Tune (or disable with =0) the oversized-stack-frame warning threshold in
