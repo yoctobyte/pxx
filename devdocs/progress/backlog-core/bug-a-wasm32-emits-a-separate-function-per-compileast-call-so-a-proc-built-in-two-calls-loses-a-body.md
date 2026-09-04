@@ -109,3 +109,43 @@ Both arms above, on wasm32 AND on the five register targets (the register ones
 are the control: they must not move). The silent arm is the one that needs the
 value assertion -- `[XY]`, not "it compiled" -- because that is precisely what
 an exit-code or compile-success check cannot see.
+
+## The NilPy population, measured (frankb-78, 2026-09-04)
+
+This reaches Nil-Python too, and it reaches shapes that are ordinary rather than
+exotic. Measured at 34179225a with the value comparison, which is the only
+instrument that can see it — four oracles against one, same as the Pascal row.
+
+| NilPy shape | native / i386 / arm32 / aarch64 | wasm32 |
+| --- | --- | --- |
+| plain `def f(a): return a + 1` | `2` | `2` — SAME |
+| `class C:` with only a method, no `__init__` | `5` | `5` — SAME |
+| **`def f(a, b=7)` — one default argument** | `8` then `3` | **trap, rc=134** |
+| **`def f(a=1, b=2)` — two defaults** | `3` | **trap, rc=134** |
+| **`class C:` with a user-written `__init__`** | `3` | **trap, rc=134** |
+| **a generator (`yield` in a `while`)** | `6` | **`Unhandled exception`, rc=1** |
+
+The discriminators are in the table on purpose. `plain` and `cls_noctor` are the
+control rows: a single-`CompileAST` proc is fine on wasm32, so this is not "the
+wasm32 NilPy backend is broken" — it is specifically procs built in more than
+one call. And `cls_nodefault` fails with NO default argument anywhere, so the
+trigger is the constructor itself, not the defaults: a user-written `__init__`
+gets a result-zero prepend pass of its own (`CompileAST(PyPrependResultZero(...))`,
+pyparser.inc:35806) beside the body. Defaults and generator steps are further
+callers of the same shape; pyparser.inc has ten `CompileAST(` sites.
+
+**THE BUILD EXITS 0 AND PRINTS `ok:`.** It also prints gap notes on the way past
+(`C.get — statement IR op 51`) and still succeeds, so a wasm32 NilPy result read
+from "it compiled", an exit code, or a gap census is measuring a program that
+may be missing code. That is this ticket's own point arriving from the NilPy
+side, independently: it is why I am recording the four PASSING oracles rather
+than only the failure.
+
+Scope of the claim: these are six probes, not a corpus census, and I have not
+established that every failing row above shares ONE cause — only that the two
+single-call controls pass while four multi-call shapes do not. The generator row
+fails differently (`Unhandled exception`, rc=1, not a trap), so treat it as
+possibly separate until someone reads it.
+
+Context: NilPy modules only started reaching the wasm32 backend at bce31c210
+(the wasi PAL), so this population is newly observable rather than newly broken.
