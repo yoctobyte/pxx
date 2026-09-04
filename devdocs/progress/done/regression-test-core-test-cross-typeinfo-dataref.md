@@ -44,7 +44,7 @@ expect_same: MISMATCH [tidref26/wasm32]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e80e685fc.
 
 ## Not a regression — the host had no wasmtime (frankA, 2026-09-04)
 

@@ -46,7 +46,7 @@ expect_same: MISMATCH [test_rtti_reg26]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e80e685fc.
 
 ## A real regression, and the only one of the seven (frankA, 2026-09-04)
 
