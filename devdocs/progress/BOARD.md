@@ -69,7 +69,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (13)
+## backlog (12)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -85,7 +85,6 @@ _none_
 | regression-test-core-test-nilpy-c-pointer-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_c_pointer.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_c_pointer.npy /tmp/test_nilpy_c_pointer26` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-c-header-still-works-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_import_c_header_still_works.npy /tmp/test_nilpy_imphdr26` (auto-filed by twatch) | — |
-| regression-test-threads-test-loadfile-shortstring | T | 70 | regression | regression: test-threads#src:test/test_loadfile_shortstring.pas at 0aaaebfefaa8 in step 2/5, `tools/expect_same.sh test_lfss26.1 "$(/tmp/test_lfss26 \| tail -1)" "LOADFILE SHORTSTRING OK"` (auto-filed by twatch) | — |
 
 ## backlog_new (2)
 
@@ -106,7 +105,7 @@ _none_
 | umbrella-sizeof-is-one-answer | A | 75 | umbrella | GOAL: a program can trust SizeOf. `FillChar(x, SizeOf(x), 0)` and `Move(a, b, SizeOf(a))` are correct for EVERY type in every frontend, and `file of T` can write a layout that reads back. Today they are not: SizeOf answers 8 for every `string[N]` while pxx's OWN layout engine gives that type 18, so `FillChar` on an `array[0..2] of string[10]` clears 24 of 54 bytes and leaves a[2] intact -- silent, and correct under FPC so no differential probe sees it. Root cause is measured and structural: FOUR functions answer `how big is this type`, each adding one more parameter because the kind alone was not enough -- TypeSlotSize(tk) at 363 sites, TypeStorageSize(tk, recId), SizeOfSlot(tk, cap), FrozenStrSlotSize(tk, cap). SizeOfSlot's own comment says it: `A FROZEN STRING'S SIZE IS NOT A FUNCTION OF ITS KIND`. Two is a smell, three is a design flaw; this is four, plus duplicated builtin type tables in A, N and P that disagree with each other. | bug-a-method-pointer-record-is-hard-sized-16-bytes-on-32-bit-targets, bug-a-pascal-nilpy-rust-and-zig-over-align-an-8-byte-member-on-i386, bug-c-sizeof-of-a-pointer-to-array-struct-field-answers-the-pointer-size, bug-c-sizeof-reaches-a-pointee-through-one-spelling-only, bug-n-nilpy-carries-its-own-copies-of-the-float-type-table, bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes, bug-p-a-user-type-whose-name-shadows-a-builtin-is-unusable, bug-p-sizeof-answers-pointer-width-for-a-string-n-that-occupies-more, bug-p-sizeof-of-a-type-name-is-settled-against-a-kind-that-cannot-express-the-size, bug-p-sizeof-rejects-twelve-type-names-that-a-declaration-accepts, compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees, feature-p-implement-the-real-tyshortstring-byte-prefix-layout, refactor-a-the-const-cast-width-table-is-the-third-copy |
 | umbrella-wasm-is-a-real-platform | A | 25 | umbrella | GOAL, not a unit of work. wasm is named in the goal's platform list and is the non-Unix platform with the most work already landed -- the wasm branch is merged into master. Two halves: emit correct wasm32, and HOST the compiler under a wasm runtime. The hosted half already has a live crash (node, not wasmtime). | bug-a-emitzeroframeslot-has-no-wasm32-arm, bug-a-wasm32-has-no-variant-ir-arms-so-any-variant-assignment-traps, bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile, feature-t-run-the-wasi-slices-under-wasmtime-as-a-strict-second-host, feature-target-wasm |
 
-## backlog-core (131)
+## backlog-core (132)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -138,6 +137,7 @@ _none_
 | bug-a-pxx-home-is-advertised-but-not-honoured | A | 35 | bug | `--where` advertises PXX_HOME as tier 2, overriding the exe-dir defaults, but setting it changes nothing: units still resolve from compiler/../lib/rtl, and even REMOVING a unit from the PXX_HOME tree does not produce 'unit not found'. Found while trying to test a compiler hypothesis against a modified copy of the RTL instead of editing Track B's files. | — |
 | bug-a-pxxcoswitch-and-pxxclone-are-missing-on-riscv32 | A | 25 | bug | `__pxxcoswitch(@a, @b)` compiles for x86-64 and arm32 and gives `pascal26: error: target riscv32: unsupported node in IR codegen: coswitch` on riscv32; `__pxxclone` has the same missing arm. Compile-time error, not a wrong answer. Found while auditing what else riscv32 lacked after adding IR_RTTI_REG/IR_RESOURCES — the other four absent node kinds are all unreachable on riscv32, these two are not. | — |
 | bug-a-pxxdbg-a-ir-star-silently-skips-a-program-main-body | A | 30 | bug |  | — |
+| bug-a-riscv32-and-xtensa-accept-a-shortstring-sysopen-path-and-open-nothing | A+S | 45 | bug | `SysOpen(sp, 0)` with `sp: ShortString` naming a file that EXISTS returns a negative fd on riscv32 and xtensa. Those two COMPILE the shape and answer wrong; i386, aarch64 and arm32 refuse it by name (`target <arch>: SysOpen expects a managed AnsiString path`), which is the honest behaviour. Measured in one run where the managed-path rows of the same program passed on all five, so the file exists and the harness can reach it. Two defects in one finding: the wrong answer on two targets, and the fact that three targets disagree with two about whether the shape is even accepted. | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
 | bug-a-target-enumerations-in-comments-are-stale-and-one-of-them-hid-a-live-bug | A | 20 | bug | Sweep of every comment that ENUMERATES targets, checked against a derived backend list. Three miscounts: PXXVarBinOp's 'the other four targets' (five call it), symtab.inc's 'Every 32-bit backend (i386, arm32, riscv32)' (xtensa is a fourth and does NOT consult the shared decision), and PXXStrCmp3's 'the four cross backends' — that last one already filed as a live bug. A count reads as a complete enumeration, so nobody counts. | — |
 | bug-a-test-tthread-fails-under-full-tier-load-but-never-in-isolation | A | 3 | bug | test_tthread failed once as test-threads#08 in a full tier and cannot be reproduced in isolation — 0 failures in 8 runs — so it is load-dependent, not a regression | — |
@@ -893,9 +893,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3225)
+## done (3226)
 
-3225 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3226 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (74)
 
@@ -1005,7 +1005,6 @@ _none_
 - [p 70] [N] regression-test-core-test-nilpy-c-pointer-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
 - [p 70] [N] regression-test-nilpy-test-nilpy-import-c-header-still-works-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [T] regression-test-threads-test-loadfile-shortstring
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 68] [N] feature-nilpy-user-defined-decorators [parked — re-claim, do not duplicate]
 - [p 65] [B] bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS (unblocks 1)
@@ -1101,6 +1100,7 @@ _none_
 - [p 50] [C] umbrella-compile-and-run-dosbox [umbrella — a GOAL, not a unit of work; take something it blocks]
 - [p 45] [U] decide-a-what-is-a-plain-frozen-strings-capacity-255-or-eight-megabytes (unblocks 2)
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A+S] bug-a-riscv32-and-xtensa-accept-a-shortstring-sysopen-path-and-open-nothing
 - [p 45] [C] bug-c-a-pointer-to-a-typedefd-array-segfaults-while-the-direct-spelling-works
 - [p 45] [C] bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning-not-an-error
 - [p 45] [C+S] bug-c-including-stdio-h-refuses-to-compile-for-xtensa

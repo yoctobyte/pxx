@@ -4864,6 +4864,21 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_ssfw26.3 "$$($(TESTTMP)/test_ssfw26 | head -2 | tail -1)" "[abcdef]"
 	tools/expect_same.sh test_ssfw26.4 "$$($(TESTTMP)/test_ssfw26 | head -3 | tail -1)" "[   abcdef]"
 	tools/expect_same.sh test_ssfw26.5 "$$($(TESTTMP)/test_ssfw26 | head -7 | tail -1)" "[abcdef][abcdef]"
+	# SysOpen through a SHORTSTRING path -- the OTHER caller of
+	# EmitTerminateString, and it was broken by the same defect with no test on
+	# it at all. ir_codegen.inc's SysOpen arm branches on the path symbol's kind:
+	# a tyAnsiString path is a heap handle loaded directly, anything else takes
+	# EmitTerminateString + EmitLeaStrDataRdi. test_cross_sysopen_family.pas
+	# declares `path: AnsiString`, so it is entirely on the managed side.
+	# NATIVE ONLY, measured not assumed: i386/aarch64/arm32 REFUSE this shape by
+	# name, riscv32 and xtensa compile it and answer FALSE for a file that
+	# exists. See bug-a-riscv32-and-xtensa-accept-a-shortstring-sysopen-path-and-
+	# open-nothing before wiring any cross row here.
+	./$(COMPILER) test/test_sysopen_shortstring_path.pas $(TESTTMP)/test_sosp26
+	tools/expect_same.sh test_sosp26.1 "$$($(TESTTMP)/test_sosp26 | tail -1)" "SYSOPEN SHORTSTRING PATH OK"
+	tools/expect_same.sh test_sosp26.2 "$$($(TESTTMP)/test_sosp26 | head -2 | tail -1)" "short open  TRUE"
+	tools/expect_same.sh test_sosp26.3 "$$($(TESTTMP)/test_sosp26 | head -3 | tail -1)" "short read  5 PXX26"
+	tools/expect_same.sh test_sosp26.4 "$$($(TESTTMP)/test_sosp26 | head -4 | tail -1)" "short miss  TRUE"
 	# LoadFile into a SHORTSTRING: the raw EmitLoadFile arm clamped a negative
 	# read() with `jns +10` over a MovRaxImm(0) that emits TWO bytes, so the
 	# successful path -- every real call -- skipped the length store as well and

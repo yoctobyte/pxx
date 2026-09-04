@@ -7314,9 +7314,31 @@ begin
 end;
 
 procedure EmitTerminateString(idx: Integer);
+{ Linux path syscalls need a trailing NUL beyond the Pascal length.
+
+  THE FIFTH MEMBER OF THE FROZEN-STRING EMITTER SET, and the one that was not
+  in it. EmitLoadStrLen, EmitStoreStrLen, EmitLeaStrDataRdi and
+  EmitLeaStrDataRsi each follow the KIND -- the audit that named them called
+  them a pair, then a trio, then a quartet, each correction finding one more.
+  This procedure asked EmitLoadVar instead, which is the GENERIC variable load
+  and picks its width from TypeSlotSize. For a 1-byte-prefixed string that is
+  an 8-byte load of the buffer's first eight bytes: the length byte plus seven
+  CHARACTERS.
+
+  Measured 2026-09-04, `LoadFile(p, s)` with both ShortString:
+  rax = 0x6f6e2f747365741b at the fault, which is 0x1b = 27 = Length(p) in the
+  low byte and `test/no` above it, and `mov byte [rdi+rax], 0` wrote 8 exabytes
+  past the buffer. It segfaulted for a MISSING file too, which is what made it
+  look like an open()/read() bug rather than a length-width one -- the NUL
+  terminator runs before open() and does not care whether the path exists.
+  regression-test-threads-test-loadfile-shortstring
+
+  Reusing EmitLoadStrLen and moving rcx->rax rather than writing a fifth width
+  decision here. Three bytes, and it is the difference between one fact stated
+  once and a sixth place for the next layout change to miss. }
 begin
-  { Linux path syscalls need a trailing NUL beyond the Pascal length. }
-  EmitLoadVar(idx);
+  EmitLoadStrLen(idx);                            { rcx = length, at its width }
+  EmitB($48); EmitB($89); EmitB($C8);             { mov rax, rcx }
   EmitLeaStrDataRdi(idx);
   EmitB($C6); EmitB($04); EmitB($07); EmitB($00); { mov byte [rdi+rax], 0 }
 end;
