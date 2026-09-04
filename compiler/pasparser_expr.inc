@@ -6960,8 +6960,32 @@ begin
           { A custom alias to ^Char/^AnsiChar (e.g. `type PC = ^Char; PC(s)`)
             must behave like PChar(s): the -2 adapter skips the 8-byte length
             prefix for a string operand (and is a plain reinterpret otherwise),
-            instead of pointing at the prefix. See bug-pointer-cast-custom-alias. }
-          if AliasElemTk[aliasIdx] = Ord(tyChar) then
+            instead of pointing at the prefix. See bug-pointer-cast-custom-alias.
+
+            ...but ONLY when the pointee is a bare Char. `AliasElemTk = tyChar`
+            is a PROXY for "this points at a character", and it is also true of
+            `PCharA = ^array[0..3] of Char`, whose pointee is an ARRAY that
+            happens to hold chars. Stamping -2 there is not merely the wrong
+            adapter: -2 REPLACES aliasIdx in the same slot, and aliasIdx is the
+            only thing carrying AliasPtrElemArrAi — the pointee's array row. So
+            the subscript lost the element type entirely and the AN_INDEX came
+            out tk=0 (tyUnknown), measured with PXXDBG=a.ast.
+
+            What that cost: `PCharA(@ca)^[1]` printed 7061644217361130338 where
+            fpc 3.2.2 prints `b`, and `Ord(PCharA(@ca)^[1])` gave 1644192610
+            against 98 — TypeSlotSize(tyUnknown) is a 4-byte read. Silent, no
+            diagnostic. The same line through a POINTER VARIABLE (`p := @ca;
+            p^[1]`) was always correct, because that route asks the SYMBOL's
+            SymPtrElemArrAi and never passes through this stamp.
+
+            Every NUMERIC element kind was unaffected and correct — byte, word,
+            integer, int64, double all match FPC — because none of them takes
+            this branch. Only an array whose ELEMENT is Char could reach it, so
+            the one flavour that looks least likely to have a width bug was the
+            only one that had one.
+            bug-p-a-pointer-alias-to-an-array-of-char-takes-the-pchar-adapter }
+          if (AliasElemTk[aliasIdx] = Ord(tyChar)) and
+             (AliasPtrElemArrAi[aliasIdx] < 0) then
             ASTIVal[node] := -2
           else
             ASTIVal[node] := aliasIdx;

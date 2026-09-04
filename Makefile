@@ -12778,6 +12778,13 @@ test-core: $(COMPILER)
 	@# whose array type does not start at 0. .expected IS fpc 3.2.2's output.
 	./$(COMPILER) test/test_forin_static_array_call.pas $(TESTTMP)/test_fsac26
 	tools/expect_same.sh test_fsac26 "$$($(TESTTMP)/test_fsac26)" "$$(cat test/test_forin_static_array_call.expected)"
+	@# `PCharA(@ca)^[i]` where the alias points at an ARRAY OF CHAR. The `ord=`
+	@# row is the sharp one -- it printed 6579042 against 98 on the pin, a
+	@# number from a truthful-looking operator with no diagnostic. `assigned=`
+	@# and `viaptr=` were correct before the fix and are contrast rows.
+	@# .expected IS fpc 3.2.2's own output.
+	./$(COMPILER) test/test_ptr_alias_to_array_of_char.pas $(TESTTMP)/test_paac26
+	tools/expect_same.sh test_paac26 "$$($(TESTTMP)/test_paac26)" "$$(cat test/test_ptr_alias_to_array_of_char.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; tools/expect_same.sh cmath_sign_bits26-rc "$$?" "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26
