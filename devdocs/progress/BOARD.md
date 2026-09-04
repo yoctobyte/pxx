@@ -69,7 +69,7 @@ _none_
 | feature-release-checksums-repro | A | 50 | feature | STEPS 1-3 DONE 2026-08-31: release.sh publishes SHA256SUMS over the tarball (checkable before extracting, negative control run), and RELEASE.md + docs/install document what selfcheck.sh actually proves — with the tarball explicitly NOT claimed byte-reproducible, because gzip records an mtime. Only step 4, the minisign signature, remains, and it needs a private key no agent may generate or hold. Blocked on decide-release-signing-key-custody rather than ready, so the queue stops offering three finished steps and one impossible one. | decide-release-signing-key-custody |
 | regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29 | A | 55 | regression | ANSWERED 2026-08-31: it is a TIMEOUT, not an output mismatch. The first full sweep carrying frankS's runner fix (fc5762a2f) says so in as many words -- `FAIL aarch64 (TIMED OUT after 120s; TESTMGR_TIME_SCALE=1.00) \| partial output: []` at bebac33366f5, tier full, host seven. So the job never produced a wrong answer and there is no aarch64 miscompile to chase. CAUSE, confirmed by contrast: tools/run_sqlite_thread_test.sh applies TESTMGR_TIME_SCALE (line 63) but NOT TESTMGR_LOAD_SCALE, while all three sibling qemu runners compute their budget from BOTH (`t=20*s*l`). Time scale was 1.00 on seven, so the budget stayed at a hardcoded 120s while the full tier ran at high concurrency. Plexus needs 37s idle and 62s under a 12-way load, so 120s under seven's sweep concurrency is simply too tight. One-line fix, in Track T's tool -- handed to T, not applied here. UNBLOCKED 2026-08-31: T applied it (ea7cb2aa2) as t*s*l CAPPED AT 200s, because the naive sibling formula lands on exactly 240 = the qemu class OUTER timeout, which would pre-empt the inner one and discard the very diagnostic that identified this as a timeout. Budget is now 200s under a sweep, 120s serial, unchanged. STILL OPEN because a timeout says the budget was too small and never by how much: if the next full sweep on seven still times out, the message names the cap and the known lower bound becomes 200s. That is the datum for the next move (qemu outer up, or timeouts out of RUN_RETRY_CLASSES) and it needs seven, not plexus. | — |
 
-## backlog (19)
+## backlog (12)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -82,14 +82,7 @@ _none_
 | regression-lib-test-crtl-reachability-8 | C | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py at cdae8cf6580b in step 23/88, `python3 tools/gen_crtl_map.py --check` (auto-filed by twatch) | — |
 | regression-optdiff-shard6-12 | T | 70 | regression | regression: optdiff#shard6/12 at 26db8523e829 in step 1/1, `tools/optdiff.sh --shard 6/12` (auto-filed by twatch) | — |
 | regression-test-core-c-asm-in-inline-body-2 | T | 70 | regression | regression: test-core#src:test/c_asm_in_inline_body.c@2 at 8000b96eab36 in step 7/3, `python3 tools/ast_slot_overloads.py --self-check` (auto-filed by twatch) | — |
-| regression-test-core-test-cross-dynarray-slot-store | T | 70 | regression | first-ever red: test-core#src:test/test_cross_dynarray_slot_store.pas@2 at 8860639aa3ee in step 2/4, `tools/expect_same.sh dsspal26/wasm32 "$(tools/run_target.sh wasm32 /tmp/dsspal.wasm)" "DYNSLOTSTORE OK"` (auto-filed by twatch) | — |
-| regression-test-core-test-cross-frozen-ptr-in-field | T | 70 | regression | first-ever red: test-core#src:test/test_cross_frozen_ptr_in_field.pas@2 at 57b66faf864a in step 2/4, `tools/expect_same.sh fpfld26/wasm32 "$(tools/run_target.sh wasm32 /tmp/fpfld.wasm)" "$(printf 'printed A\nFROZENPTRFIEL…` (auto-filed by twatch) | — |
-| regression-test-core-test-cross-frozen-ptr-narrow | T | 70 | regression | first-ever red: test-core#src:test/test_cross_frozen_ptr_narrow.pas@2 at 6b08a2ae84f2 in step 2/4, `tools/expect_same.sh fpn26/wasm32 "$(tools/run_target.sh wasm32 /tmp/fpn.wasm)" "$(printf '%s\n' 'fld16 T [AB] 2 [AB] […` (auto-filed by twatch) | — |
-| regression-test-core-test-cross-futex-through-the-pal | P | 70 | regression | first-ever red: test-core#src:test/test_cross_futex_through_the_pal.pas at 0f13a3b760a3 in step 2/2, `ok=0; \ for t in native i386 arm32 aarch64 riscv32 xtensa wasm32; do \ case $t in \ native) bin=/tmp/fxpal26; run="";; …` (auto-filed by twatch) | — |
-| regression-test-core-test-cross-os-entropy-through-the-pal | T | 70 | regression | first-ever red: test-core#src:test/test_cross_os_entropy_through_the_pal.pas@2 at e2eece6e6f94 in step 2/4, `tools/expect_same.sh entpal26/wasm32 "$(tools/run_target.sh wasm32 /tmp/entpal.wasm)" "ENTROPY OK"` (auto-filed by twatch) | — |
-| regression-test-core-test-cross-typeinfo-dataref | T | 70 | regression | first-ever red: test-core#src:test/test_cross_typeinfo_dataref.pas@2 at 11324ff49f9e in step 2/4, `tools/expect_same.sh tidref26/wasm32 "$(tools/run_target.sh wasm32 /tmp/tidref.wasm)" "$(printf 'enums OK\nheader Integ…` (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-pointer-2 | N | 70 | regression | regression: test-core#src:test/test_nilpy_c_pointer.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_c_pointer.npy /tmp/test_nilpy_c_pointer26` (auto-filed by twatch) | — |
-| regression-test-core-test-rtti-reg | T | 70 | regression | regression: test-core#src:test/test_rtti_reg.pas at 6b08a2ae84f2 in step 2/2, `tools/expect_same.sh test_rtti_reg26 "$(/tmp/test_rtti_reg26)" "$(printf 'Count: 3\nClass 0: TInterfacedObject\nClass 1…` (auto-filed by twatch) | — |
 | regression-test-emit-obj-c-obj-data-import-2 | T | 70 | regression | regression: test-emit-obj#src:test/c_obj_data_import.c at e7a805d13a09 in step 11/11, `if command -v gcc >/dev/null 2>&1; then \ printf '#include <stdio.h>\nint somebody_elses_global = 99;\nint read_it(void…` (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-c-header-still-works-2 | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy at 25b8325d4b83 in step 1/2, `./compiler/pascal26 test/test_nilpy_import_c_header_still_works.npy /tmp/test_nilpy_imphdr26` (auto-filed by twatch) | — |
 
@@ -900,9 +893,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3241)
+## done (3248)
 
-3241 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3248 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (74)
 
@@ -1008,14 +1001,7 @@ _none_
 - [p 70] [C] regression-lib-test-crtl-reachability-8 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 70] [T] regression-optdiff-shard6-12
 - [p 70] [T] regression-test-core-c-asm-in-inline-body-2
-- [p 70] [T] regression-test-core-test-cross-dynarray-slot-store
-- [p 70] [T] regression-test-core-test-cross-frozen-ptr-in-field
-- [p 70] [T] regression-test-core-test-cross-frozen-ptr-narrow
-- [p 70] [P] regression-test-core-test-cross-futex-through-the-pal [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [T] regression-test-core-test-cross-os-entropy-through-the-pal
-- [p 70] [T] regression-test-core-test-cross-typeinfo-dataref
 - [p 70] [N] regression-test-core-test-nilpy-c-pointer-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
-- [p 70] [T] regression-test-core-test-rtti-reg
 - [p 70] [T] regression-test-emit-obj-c-obj-data-import-2
 - [p 70] [N] regression-test-nilpy-test-nilpy-import-c-header-still-works-2 [track GUESSED from the test path — the defect may be in another lane; verify before claiming]
 - [p 68] [N] bug-nilpy-render-backend-py-compile-does-not-terminate (unblocks 1) [parked — re-claim, do not duplicate]

@@ -32,10 +32,38 @@ if [ -z "${QEMU_LD_PREFIX:-}" ] && [ -d "$xroot/$arch" ]; then
   export QEMU_LD_PREFIX
 fi
 
+# AN ABSENT RUNNER MUST SAY SO ON *STDOUT*, and that is this helper's entire
+# reason to exist. Every Makefile assertion invokes this script inside
+# `"$(tools/run_target.sh ...)"`, and a command substitution captures stdout and
+# THROWS THE EXIT CODE AWAY -- there is no `set -e` reachable from an argument
+# position. So a runner that reported its absence only on stderr handed
+# expect_same.sh the EMPTY STRING, and the row failed as a CONTENT MISMATCH
+# against the expected output. The diff then reads exactly like the target
+# producing nothing, i.e. like a compiler bug.
+#
+# MEASURED 2026-09-04, and it cost real triage: host seven has no wasmtime, and
+# six test-core rows auto-filed as regressions in one run -- fpn26/wasm32,
+# fpfld26/wasm32, tidref26/wasm32, dsspal26/wasm32, entpal26/wasm32 and the
+# futex row -- each naming a different test and a different commit. Four of them
+# were read as four separate defects in freshly added tests. All six were one
+# missing binary. The compiler was correct on every one: re-run on a host WITH
+# wasmtime, at the same commit, every row passes.
+#
+# NOT A SKIP. An unrun test is not a passing test and this still exits nonzero
+# and still reddens the row -- what changes is that the row now names the HOST
+# instead of accusing the target. The marker goes to both streams because
+# whoever reads a log sees stderr and whoever reads an assertion diff sees only
+# stdout, and the 2026-09-04 tickets were written by something that saw only the
+# second.
+runner_absent() {
+  echo "RUNNER-ABSENT: $1 not found, so target '$arch' was NOT RUN. $2"
+  echo "RUNNER-ABSENT: $1 not found, so target '$arch' was NOT RUN. $2" >&2
+  exit 2
+}
+
 need() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    echo "$1 not found; run tools/install_qemu.sh" >&2
-    exit 2
+    runner_absent "$1" "Run tools/install_qemu.sh. This is a host gap, not a result about the compiler."
   fi
 }
 
@@ -128,11 +156,14 @@ case "$arch" in
     elif [ -x "$HOME/.local/bin/wasmtime" ]; then
       exec "$HOME/.local/bin/wasmtime" "$bin" "$@"
     else
-      echo "wasmtime not found (looked on PATH and in ~/.local/bin)" >&2
-      exit 2
+      runner_absent "wasmtime" "Looked on PATH and in ~/.local/bin. This is a host gap, not a result about wasm32."
     fi
     ;;
   *)
+    # Same stdout rule as runner_absent, for the same reason: a caller that
+    # misspells an arch inside `$(...)` otherwise sees an empty string and
+    # reads it as the program printing nothing.
+    echo "RUNNER-ABSENT: unknown arch '$arch', so nothing was run."
     echo "unknown arch: $arch" >&2
     exit 2
     ;;
