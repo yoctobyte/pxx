@@ -103,6 +103,18 @@
 #               older than v403 is still comparing two different link modes,
 #               and that is the part a reader needs when they find an old
 #               number. Name the pin beside any --pinned result.
+# THE ARTIFACT THIS LEAVES AT $WORK/pxx_<target> CANNOT ANSWER APPLET QUESTIONS
+# ABOUT ITSELF, and it does not error when you ask. busybox enables the
+# multiplexer only when argv[0] starts with `busybox', so `./pxx_x86_64 --list'
+# replies `applet not found' -- an ANSWER, about a program running under the
+# wrong name. Measured 2026-09-04 by franks-ab, who nearly recorded "our
+# busybox has no ash" in a config decision from it; through a correctly named
+# binary it has ash and 257 others. Ask $WORK/p_<target>/busybox instead.
+#
+# AND `busybox --list' DOES NOT LIST `busybox'. The $APPLETS list here does, so
+# a case list built from --list is two cases short of this harness's own -- the
+# two banner rows -- and the shortfall diffs as a subject failure rather than as
+# a list mismatch. `{ --list; echo busybox; } | sort' is the equivalent set.
 # env:
 #   PXX_BUSYBOX_DIR   use this tree instead of library_candidates/busybox
 #
@@ -1032,6 +1044,103 @@ run_coreutils_cases() {   # $1 = runner, $2 = install dir
   printf '### exit=%d\n' "$?"
 }
 
+# ---- REAL ARGUMENTS, because `--help' is not a program ------------------------
+# 516 of the 621 cases at 258 applets were `applet --help', twice per applet
+# (run_dispatch_cases). That group is worth having -- it proves the dispatch
+# table both ways in -- but it exercises the usage-string path and almost
+# nothing else. Measured 2026-09-04 by franks-ab: booting the same binary with
+# REAL arguments found a silent miscompile inside a minute. `uname -a' printed
+# `Linux' eight times, because busybox reads struct utsname through
+# `static const unsigned short utsname_offset[] = { offsetof(...) }' and
+# offsetof in a static ARRAY initializer folded to 0, zeroing the declaration
+# (bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently, p75).
+# Every --help case passed throughout. So this group exists to make the
+# transcript do WORK, and `uname' is its first row on purpose.
+#
+# THE ONLY RULE HERE IS DETERMINISM BETWEEN THE TWO RUNS. The gcc build and the
+# pxx build execute minutes apart on the same host, so anything reading the
+# clock, a pid, or a file's mtime differs for reasons that are not codegen and
+# reds the whole transcript. Deliberately excluded, and each for a measured
+# reason rather than caution: `date' and `uptime' (clock), `ps' `top' `free'
+# `df' (live system state), `ls -l' and `stat' (mtimes -- the fixture dir is
+# recreated per run, so its timestamps are NOT equal between them), and any
+# compressor without a flag that suppresses the stored name and mtime.
+# ONE MORE RULE, AND IT IS NOT OBVIOUS: NOTHING HERE MAY PRINT ITS OWN argv[0].
+# The three builds live in different install dirs ($WORK/g, $WORK/u,
+# $WORK/p_<target>), so a usage error that quotes the binary path differs
+# between them and reds the transcript for a reason that is not codegen.
+# Measured while adding this group: `od -An -tx1' is not supported by this
+# config and answered
+#     .../bbdiff-clAqNV/g/od: invalid option -- 'A'
+#     .../bbdiff-clAqNV/u/od: invalid option -- 'A'
+# -- two correct messages about two different paths, which the harness reported
+# as "the two ORACLES disagree", both of them being gcc builds of one source.
+# The guard was right and the case was wrong. So every row below runs with
+# cwd = $dir and argv[0] = ./applet, which is identical in all three, while
+# FIXTURE paths stay absolute because those ARE equal across builds.
+ra_one() {   # $1 = runner, $2 = install dir, $3 = applet, rest = args
+  local runner="$1" dir="$2" ap="$3"; shift 3
+  ( cd "$dir" && run_one "$runner" "./$ap" "$@" )
+}
+run_realargs_cases() {   # $1 = runner, $2 = install dir
+  local runner="$1" dir="$2" c="$D/ra" a
+  rm -rf "$c"; mkdir -p "$c"
+  printf 'gamma\nalpha\nbeta\nalpha\n'            > "$c/words"
+  printf 'a\tb\tc\n1\t2\t3\n'                    > "$c/tabs"
+  printf 'The quick brown fox\njumps over 42 dogs\n' > "$c/prose"
+  printf '\000\001\002\377binary\n'               > "$c/bin"
+
+  # uname: the row that caught the offsetof miscompile. -a is the one that
+  # walks the whole offset table; the singles pin down WHICH field is wrong
+  # when it breaks, so the transcript localises rather than just reddening.
+  if has_applet uname; then
+    for a in "-a" "-s" "-n" "-r" "-v" "-m" "-p" "-i" "-o" "-snrvm" ""; do
+      printf '### uname [%s]\n' "$a"; ra_one "$runner" "$dir" uname $a; printf '### exit=%d\n' "$?"
+    done
+  fi
+  # Hashes and checksums: a wrong byte anywhere in the buffer changes the digest,
+  # so these fail on corruption that a line-oriented tool would print past.
+  # The digest is of a FIXTURE path, which is equal across builds; the filename
+  # each prints is that same absolute path, so the rows stay comparable.
+  for a in md5sum sha1sum sha256sum sha512sum cksum; do
+    has_applet "$a" || continue
+    printf '### %s [words]\n' "$a"; ra_one "$runner" "$dir" "$a" "$c/words"; printf '### exit=%d\n' "$?"
+    printf '### %s [bin]\n'   "$a"; ra_one "$runner" "$dir" "$a" "$c/bin";   printf '### exit=%d\n' "$?"
+  done
+  # Encoders: byte-exact, and base64 round-trips, so the decode row is a control
+  # on the encode row rather than a second independent guess.
+  if has_applet base64; then
+    printf '### base64\n';    ra_one "$runner" "$dir" base64 "$c/bin"; printf '### exit=%d\n' "$?"
+    ra_one "$runner" "$dir" base64 "$c/bin" > "$c/b64" 2>/dev/null
+    printf '### base64 -d\n'; ra_one "$runner" "$dir" base64 -d "$c/b64"; printf '### exit=%d\n' "$?"
+  fi
+  has_applet base32  && { printf '### base32\n';  ra_one "$runner" "$dir" base32 "$c/bin";   printf '### exit=%d\n' "$?"; }
+  has_applet xxd     && { printf '### xxd\n';     ra_one "$runner" "$dir" xxd "$c/bin";      printf '### exit=%d\n' "$?"; }
+  has_applet od      && { printf '### od\n';      ra_one "$runner" "$dir" od "$c/bin";       printf '### exit=%d\n' "$?"; }
+  has_applet hexdump && { printf '### hexdump\n'; ra_one "$runner" "$dir" hexdump "$c/bin";  printf '### exit=%d\n' "$?"; }
+  # Text transforms, each with an ordering or a boundary in it.
+  has_applet sort   && { printf '### sort\n';        ra_one "$runner" "$dir" sort "$c/words";        printf '### exit=%d\n' "$?"; }
+  has_applet sort   && { printf '### sort -u -r\n';  ra_one "$runner" "$dir" sort -u -r "$c/words";  printf '### exit=%d\n' "$?"; }
+  has_applet uniq   && { printf '### uniq -c\n';     ra_one "$runner" "$dir" uniq -c "$c/words";     printf '### exit=%d\n' "$?"; }
+  has_applet tac    && { printf '### tac\n';         ra_one "$runner" "$dir" tac "$c/words";         printf '### exit=%d\n' "$?"; }
+  has_applet rev    && { printf '### rev\n';         ra_one "$runner" "$dir" rev "$c/words";         printf '### exit=%d\n' "$?"; }
+  has_applet nl     && { printf '### nl\n';          ra_one "$runner" "$dir" nl "$c/words";          printf '### exit=%d\n' "$?"; }
+  has_applet cut    && { printf '### cut -f2\n';     ra_one "$runner" "$dir" cut -f2 "$c/tabs";      printf '### exit=%d\n' "$?"; }
+  has_applet expand && { printf '### expand\n';      ra_one "$runner" "$dir" expand "$c/tabs";       printf '### exit=%d\n' "$?"; }
+  has_applet fold   && { printf '### fold -w 8\n';   ra_one "$runner" "$dir" fold -w 8 "$c/prose";   printf '### exit=%d\n' "$?"; }
+  has_applet sed    && { printf '### sed\n';         ra_one "$runner" "$dir" sed -e 's/[0-9][0-9]*/N/g' "$c/prose"; printf '### exit=%d\n' "$?"; }
+  has_applet grep   && { printf '### grep -c\n';     ra_one "$runner" "$dir" grep -c alpha "$c/words"; printf '### exit=%d\n' "$?"; }
+  has_applet grep   && { printf '### grep -E\n';     ra_one "$runner" "$dir" grep -E '^(alpha|beta)$' "$c/words"; printf '### exit=%d\n' "$?"; }
+  has_applet awk    && { printf '### awk\n';         ra_one "$runner" "$dir" awk '{ n += NF } END { print NR, n }' "$c/prose"; printf '### exit=%d\n' "$?"; }
+  # Arithmetic and string edges -- integer width, overflow and sign live here.
+  has_applet seq    && { printf '### seq\n';         ra_one "$runner" "$dir" seq 1 2 9;              printf '### exit=%d\n' "$?"; }
+  has_applet factor && { printf '### factor\n';      ra_one "$runner" "$dir" factor 4294967297;      printf '### exit=%d\n' "$?"; }
+  has_applet expr   && { printf '### expr\n';        ra_one "$runner" "$dir" expr 2147483647 + 1;    printf '### exit=%d\n' "$?"; }
+  has_applet basename && { printf '### basename\n';  ra_one "$runner" "$dir" basename /a/b/c.txt .txt; printf '### exit=%d\n' "$?"; }
+  has_applet dirname  && { printf '### dirname\n';   ra_one "$runner" "$dir" dirname /a/b/c.txt;     printf '### exit=%d\n' "$?"; }
+  return 0
+}
+
 run_cases() {   # $1 = runner, $2 = install dir
   local runner="$1" dir="$2"
   if [ "$NAPPLETS" -eq 1 ]; then
@@ -1043,6 +1152,7 @@ run_cases() {   # $1 = runner, $2 = install dir
   has_applet echo && run_echo_cases "$runner" "$dir"
   has_applet ash  && run_ash_cases  "$runner" "$dir"
   run_coreutils_cases "$runner" "$dir"
+  run_realargs_cases  "$runner" "$dir"
   return 0
 }
 
