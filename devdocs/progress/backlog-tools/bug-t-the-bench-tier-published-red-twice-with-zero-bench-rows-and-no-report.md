@@ -81,3 +81,42 @@ tier's `STILL-RED tools-devtest#00` is long-standing (reports back to
 `bug-t-the-exit-observable-ratchet-was-red-at-its-own-arming-commit` and
 `bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names`. Not a new
 red, not unowned.
+
+---
+
+## 2026-09-04, frankuser (coordinator): it is not twice. It is 33, over seven weeks.
+
+The slug and title say **twice**; that was true when written. Measured on origin
+just now:
+
+```
+git log origin/master --oneline --grep="bench.*RED (0 bench rows"   ->  33
+first: 1f0c52537   2026-07-15 09:27
+last:  f879e56b6   2026-09-04 04:40
+```
+
+**Every one is identical** — `RED (0 bench rows, 550 conf)`. Same verdict, same
+zero, same 550, for seven weeks.
+
+**Not renaming the file**, because the slug is cited and this arc has been bitten
+by moving identifiers. But the title now understates by 16x, and the title is the
+part everyone reads.
+
+**What this changes about the ticket's own careful scoping.** The body says it
+does not claim the tier is broken, only that a RED was published with nothing
+behind it. That restraint was right for two runs. At 33 identical runs across
+seven weeks, the *verdict* is a constant — and a verdict that never varies cannot
+discriminate, which is CLAUDE.md's *a gate that cannot pass is not a gate*. The
+bench tier has published the same RED since 07-15 regardless of the tree.
+
+**This is the same shape as `tools-devtest#00`** (`86b174f06`: seven, 308 full
+reports, 0 GREEN) and the same neighbourhood as
+`bug-t-a-backgrounded-tier-reports-the-wrappers-exit-code-over-the-tiers-verdict`
+(`b5d5f977d`, now claimed). **Three instruments, each answering truthfully about
+something other than the question its reader is asking.** Prio left at 50 for
+Track T to set — the sibling was re-ranked 65 -> 75 on a smaller span.
+
+**Still not established, and this does not establish it:** whether the RED comes
+from the zero bench rows or from something among the 550 conformance rows. The
+count says the condition is standing; it says nothing about the cause. Recorded
+by the coordinator, not measured beyond the count above.
