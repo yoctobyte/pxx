@@ -519,3 +519,4 @@
 2026-09-04T09:04:24Z	seven	1351249268cebe94f48cd5fd1f24f74b64fa7d38	would NOT pin 1351249268ce — 4 red(s) the current pin does not have, 1 inherited from the current pin: test-core#src:test/test_stackless_gen.pas, test-i386#src:test/test_stackless_gen.pas, test-riscv32#src:test/test_stackless_gen.pas, test-xtensa#src:test/test_stackless_gen.pas
 2026-09-04T09:25:22Z	seven	8634b7b7604f574e1e182fa64cd29e7edeedae5e	would-pin PENDING 8634b7b7604f — qualifies, streak 1/2
 2026-09-04T09:46:10Z	seven	999c76dc6a22e383bfe1c5b2e79a0f430fbf59d2	WOULD PIN 999c76dc6a22 — 1 red(s), none new, 1 inherited from the current pin, self-host clean, streak 2/2
+2026-09-04T10:23:44Z	seven	c2b3079406e6a31a11b1136b68fc6dcf4156cc8f	would NOT pin c2b3079406e6 — 1 red(s) the current pin does not have, 1 inherited from the current pin: test-threads#src:test/test_loadfile_shortstring.pas
