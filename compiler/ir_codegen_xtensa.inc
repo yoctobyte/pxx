@@ -4846,10 +4846,24 @@ procedure EmitSignalRuntimeXtensa;
   - Syscall map (NOT "argument registers in order" -- see the IR_SYSCALL arm):
     nr -> a2, arg0 -> a6, arg1 -> a3, arg2 -> a4, arg3 -> a5, result -> a2.
 
-  WINDOWED IS DELIBERATELY EXCLUDED and the caller gates it: a windowed unwind
-  needs the register windows spilled first, which is the same reason
-  TargetHasProcCleanupFrame is Call0-only. Call0 is the DEFAULT ABI
-  (compiler.pas:862), so this serves the default path, not a corner.
+  WINDOWED IS DELIBERATELY EXCLUDED and the caller gates it. **THE REASON THIS
+  COMMENT USED TO GIVE IS RETIRED -- do not cite it.** It said "a windowed
+  unwind needs the register windows spilled first, which is the same reason
+  TargetHasProcCleanupFrame is Call0-only", and on 2026-09-04 the windowed
+  unwind got its spill and that predicate stopped being Call0-only.
+
+  What actually remains is narrower and is UNMEASURED: this stub is Call0 code.
+  It ends in RET, treats a0 as a plain return address, and was written against
+  a Call0 frame -- so whether it works when the enclosing program is windowed
+  is a question nobody has run, not a known no. Its own entry handling is
+  already ABI-independent (the kernel enters a handler with the call4
+  convention whatever the handler was compiled with, which the note below
+  measured), so the remaining work may be small.
+
+  Owner for that question:
+  feature-a-a-signal-runtime-for-HOSTED-xtensa-the-exclusion-predates-the-profile.
+  Call0 is the DEFAULT ABI (compiler.pas:862), so this serves the default path,
+  not a corner.
 
   Two layout constraints, both enforced by the encoders rather than by care:
 
@@ -5329,9 +5343,15 @@ begin
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:
         IREmitNodeXtensa(i);
 
-      { try/except (feature-esp-bare-exceptions), Call0 only: the windowed
-        ABI would need the register windows spilled before a longjmp-style sp
-        rewind, which bare-metal has no handlers for. Mirrors riscv32. }
+      { try/except (feature-esp-bare-exceptions). BOTH ABIs since 2026-09-04 --
+        this comment said "Call0 only: the windowed ABI would need the register
+        windows spilled before a longjmp-style sp rewind" and the spill is now
+        what the windowed unwind does (exception_emit.inc's call8 chain). The
+        clause about bare metal having no handlers is still true and still the
+        reason `--esp-profile=bare` refuses windowed outright at
+        compiler.pas -- the chain spill needs the overflow/underflow handlers
+        that bare metal does not install. Two different exclusions that shared
+        one sentence; only one of them is left. }
       IR_EXC_ENTER:
         begin
           { try: push a frame ([0]=prev EXC_TOP, jmpbuf at +8), chain it,

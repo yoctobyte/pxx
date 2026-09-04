@@ -109,3 +109,34 @@ possible.)
 wired into `test-xtensa` — but it installs no handler. It raises SIGTERM with
 the default disposition and dies with status 143, which needs `kill`, not the
 signal runtime. It is not evidence that any of this works.
+
+
+## 2026-09-04 (frankb-78) — one of the two stated reasons for the windowed half is retired
+
+Not taken, and nothing measured about signals. Recording it because the
+justification changed underneath this ticket rather than because the work did.
+
+`EmitSignalRuntimeXtensa`'s own header said windowed was excluded because *"a
+windowed unwind needs the register windows spilled first, which is the same
+reason TargetHasProcCleanupFrame is Call0-only"*. Both halves of that sentence
+went on 2026-09-04 (`2ec3e61c5`, `6a22f26d4`): the windowed unwind has its spill
+and that predicate is no longer Call0-only.
+
+**That does not make windowed signals work** — it makes the recorded reason
+false. What actually remains is narrower and **unmeasured**: the stub is Call0
+code (ends in `RET`, treats `a0` as a plain return address, written against a
+Call0 frame), so whether it works inside a windowed program is a question nobody
+has run. Its entry handling is already ABI-independent — the kernel enters a
+handler with the call4 convention whatever the handler was compiled with, which
+that stub's own dead-code note measured — so the remaining work may be small.
+
+The comment is corrected in place and now points here rather than at a retired
+premise. `pyparser.inc`'s and `pasparser_expr.inc`'s `__pxxSig*` refusals go
+through `TargetHasSignalRuntime` and are unaffected: they refuse a runtime that
+is genuinely absent, for a reason that is still true.
+
+**The generalisation this came from**, worth more than the instance: *a
+capability fix retires the justification for an exclusion, so grep for what was
+excluded FOR THAT REASON* — not only for the sibling code path. Two sites in
+`ir_codegen_xtensa.inc` cited the unwind gap for exclusions that were not the
+unwind, and both would have read as current to the next person.
