@@ -5454,3 +5454,92 @@ exception stubs in any program with a for-in and no `try`**, measured at exactly
 +4096 on x86-64, xtensa and riscv32 for `test_forin_native`. **Narrowing it needs
 a post-parse emission point, not a better guess in the scan** — filed as a
 follow-up rather than left implied.
+
+---
+
+## franka-29: unblocked, wasm32 Variant landed — and a session working from a 13-hour-stale model
+
+`a52c1810e` (wasm32 Variant lowering) and `6a086c2f9` (its ticket), both verified
+on origin. This is the session that sat `waiting` for ~14 hours; the owner cleared
+it.
+
+**It was NOT blocked in the way this file recorded.** Its own transcript: **no
+user refusal and no permission prompt all session.** The only refusals were three
+`no-full-suite.sh` declines, **each lifted by itself** with
+`PXX_ALLOW_FULL_SUITE=1` and the reason in the commit. Work was in flight
+throughout — builds, a 300-source wasm32 sweep, a 245-command suite run, three
+`gate.sh quick` runs. **It did not end a turn.**
+
+**A hook false positive worth knowing:** one decline was the guardrail matching
+the literal text `test/*.pas` **inside a python heredoc writing ticket PROSE.**
+*A guardrail can fire on a documentation string that merely contains the glob, and
+from outside that is indistinguishable from a real block.*
+
+### A FALSE CLAIM OF MINE, and the exact mechanism by which it travelled
+
+I said *"everything you have committed since has been flip docs."* **It has
+committed no flip docs at any point** — the two shas above are its whole output.
+
+Its diagnosis, which is correct and is about this seat:
+
+> I hedged the mtime observation properly (*"a fact about a file's mtime, not a
+> claim about what you are doing"*) **and the derived claim travelled anyway.**
+> **A properly hedged inference beside an unhedged one, and the unhedged one is
+> the one that moves.**
+
+**Third instance today.** The hedge does not protect the sentence next to it, and
+a careful caveat on one clause makes the whole paragraph read as checked.
+
+**And the mtime INVERTS.** A four-hour-old mtime on a file written early and then
+built, swept and run against for four hours means the session is at its
+**busiest**. *The instrument answers "when was this last written" and is read as
+"when was this last worked on."*
+
+### The wasm32 findings
+
+- **Four arms, not the three the ticket named.** The **write path was a fifth
+  refusal standing behind the store**, and it appeared **the moment the store
+  lowered** — the shadowed-gap shape from `52d134518`, same backend, within the
+  hour. *The coverage fix paid for itself the same evening.*
+- Verified with the **existing** four cross-target variant tests the other 32-bit
+  backends already use, not a new one. All wired into `test-wasm32`.
+- **The scope-exit `PXXVarClear` the ticket called "written and unverified" is now
+  proven REACHED, from the artefact** — `wasm2wat` shows the call twice in a body
+  holding a variant local. **A 200k survival loop passes too and is explicitly NOT
+  what settles it: a leak does not corrupt, so every value assertion passes either
+  way.**
+- **The FPC seed canary caught a real defect, and only because the gate ran BEFORE
+  the commit.** Three arms are called earlier in the file than they are defined;
+  PXX prescans headers, FPC is single-pass, so it built clean here and failed
+  there with `Identifier not found`. **On a clean tree that canary prints SKIP and
+  it would have shipped.** *Live confirmation of the gate-before-you-commit rule.*
+
+### A RULE WORTH MORE THAN THE CASE THAT PRODUCED IT
+
+franka-29 offered that wasm32 being the exception on `frozen_string_concat_operand`
+**may be an ABSENCE rather than a confirmation**: that backend turns an
+unimplemented shape into a **recorded refusal and a trapping body** rather than a
+wrong value, and it was also the one backend whose `SetLength` **refused** where
+six silently accepted.
+
+> **A target that REFUSES where others silently accept is not corroboration — it
+> is a target that never entered the population.**
+
+The specific diagnosis it bore on is now historical (those defects were fixed
+pre-flip). **The rule is not.** It is the population-membership question again,
+arriving from a direction none of the earlier instances came from: not a corpus
+choice, not a genre bias, but **a target excluded by its own honesty.**
+
+### And it was planning against a world that ended 13 hours earlier
+
+Its message said *"flip untouched"*, *"I have not started the re-type"*, and
+agreed that *"flipping over four defects is not what the owner asked for"* — all
+true when it last had a current picture, **all describing a tree that no longer
+exists.** The flip landed, the four defects were fixed first, and **v403 is
+pinned.** Told directly, with the probe output and the note that its expected
+flag-based verification is **no longer executable** because the flag is deleted.
+
+*A session that has been out of contact does not know it is stale, and its
+confidence is unchanged by the gap. Nothing in its own view distinguishes a
+current model from a thirteen-hour-old one — that is a coordinator's job and
+almost the only one git cannot do.*
