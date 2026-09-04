@@ -393,7 +393,7 @@ _none_
 | bug-p-set-membership-item-constant-truncated-to-32-bits | P | 25 | bug |  | — |
 | bug-p-sysopen-intrinsic-shadows-a-user-function-name | P | 15 | bug | sysopen/syswrite/sysclose/sysfchmod are compiler INTRINSICS with dedicated tokens (tkSysOpen &c), so the lexer never produces an identifier for them and a user program cannot declare a function with one of those names. The diagnostic is `expected name`, which does not mention the reservation. Real but nearly unreachable: prio 15. | — |
 | bug-p-unicodechar-is-a-4-byte-code-point-and-fpc-makes-it-a-2-byte-code-unit | P | 40 | bug | `UnicodeChar` maps to tyUCS4Char (4 bytes, a code POINT) where FPC makes it an alias of WideChar (2 bytes, a UTF-16 code UNIT). Both pxx tables agree, so it is NOT a two-table split -- it is one entry that is probably wrong, sharing a line with `ucs4char`, whose 4-byte mapping IS correct and must not move. Zero in-tree declarations use the name (measured), so the change is cheap here; the decision is about out-of-tree code and about Write/string-conversion behaviour, which differs between the two kinds beyond SizeOf. | — |
-| compat-pascal-distinct-type-declaration | P | 25 | compat | `type T = type byte;` — the distinct-type declaration is not parsed | — |
+| compat-pascal-distinct-type-declaration | P | 55 | compat | `type T = type byte;` — the distinct-type declaration is not parsed | — |
 | compat-pascal-the-strict-fpc-flag-family-is-incomplete | P | 15 | compat | --strict-fpc reproduces some FPC behaviours and silently not others (Abs/Sqr widths, pointer difference, TypeInfo name), and most flags ignore DialectIsPxx -- the gaps left after the umbrella landed | — |
 | feature-p-a-pascal-library-unit-does-not-parse | P | 40 | feature | `library foo;` does not parse -- `expected 'begin' before 'library'`. It is a FRONTEND gap (Track P), not an output gap: the x86-64 object writer landed at 41045d7b4 and already exports a link surface, so `library` + `exports` would be a second, DECLARATIVE spelling of what `cdecl` on a definition says today. That makes it a compat/ergonomics feature rather than a capability one, which is why it is p40 and not p80. The real question it forces is whether `exports` may export a routine that is NOT cdecl -- FPC allows it, and the object writer deliberately refuses to, because an internal-convention routine exported under its Pascal name is callable and wrong. Answer that before implementing. | — |
 | feature-p-assertions-directive-and-position | P | 55 | feature | RE-TYPED 2026-08-19 feature -> bug for half 1: `{$ASSERTIONS OFF}` is ACCEPTED AND IGNORED — measured on v363, an Assert whose condition has a side effect still runs it (n=1 where FPC gives n=0), so the two dialects take different paths with no diagnostic. Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
@@ -1061,6 +1061,7 @@ _none_
 - [p 55] [N] bug-nilpy-calling-a-duplicated-ordinary-method-segfaults
 - [p 55] [P] bug-p-qword-div-by-a-literal-above-2-63-is-signed
 - [p 55] [T] bug-t-a-backgrounded-tier-reports-the-wrappers-exit-code-over-the-tiers-verdict
+- [p 55] [P] compat-pascal-distinct-type-declaration
 - [p 55] [U] decide-a-is-a-pxx-object-a-self-contained-runtime-or-a-translation-unit
 - [p 55] [U] decide-a-latent-defect-ticket-should-block-the-work-that-makes-it-observable
 - [p 55] [U] decide-do-we-introduce-the-named-trade-off-flag-axis-and-what-is-the-bar
@@ -1303,7 +1304,6 @@ _none_
 - [p 25] [T] bug-t-the-c-conformance-corpus-is-absent-from-this-checkout-so-make-test-c-covers-less-than-its-name
 - [p 25] [A] chore-a-decide-whether-widestring-can-come-out-from-behind-pxx-wide-payload
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
-- [p 25] [P] compat-pascal-distinct-type-declaration
 - [p 25] [U] decide-is-a-host-sdk-scanner-still-wanted-now-that-nothing-needs-one
 - [p 25] [U] decide-t-should-a-skip-close-an-open-regression
 - [p 25] [U] decide-which-way-the-wasi-capability-model-should-point-once-it-has-one-owner

@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 25
+prio: 55
 type: compat
 status: open
 found: 2026-08-29
@@ -36,3 +36,27 @@ and folding a loud gap into a silent bug is how the silent half gets lost.
 The program above matching FPC, plus a check that the distinct type is actually
 distinct where that is observable (a `var` parameter of `Base` must not accept a
 `T`, once overload/parameter matching is in scope).
+
+## Re-ranked 25 → 55 (owner, 2026-09-04)
+
+The owner named this ticket unprompted as one he considers relevant, with the
+reason the compat table asks for — **"sometimes programmers have reasons to
+re-type"**. That is the "how much real code uses it" input, supplied by the one
+person entitled to supply it, so the rank moves.
+
+Not to 70: it stays below its silent sibling
+[[bug-p-a-cast-through-an-ordinal-type-alias-does-not-truncate]] (prio 70, now
+`done/`), because that one returned a wrong VALUE and this one refuses to
+compile. Loud beats silent. But 25 was too low for a form that stops a program
+building outright.
+
+Premise re-verified before re-ranking, on `stable_linux_amd64/default/pinned`
+(v403), not HEAD:
+```
+pascal26:1: error: unknown type: type
+  near: type TMyB = >>> type byte ;
+```
+fpc on the same source prints `5 120`. So the ticket's report is still exactly
+true a week on: it is a PARSE gap, not a silent alias. Recording that because
+the two are easy to conflate — the silent-alias behaviour people remember
+belonged to the sibling, and that half is already fixed.
