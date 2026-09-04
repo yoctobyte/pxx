@@ -1,8 +1,8 @@
 ---
 track: P
 prio: 60
-status: unfinished
-owner: 
+status: working
+owner: frankA
 type: perf
 blocked-by: []
 summary: "RE-MEASURED at HEAD -O2 (frankZ, 2026-09-04): the share has NOT dropped (9.92/9.94/10.35% over three runs vs the original 9.44%), so 440c822e6 did not remove it — but the premise is refuted for a THIRD time and the ticket is now mostly in the wrong lane. Disassembled, ParseFactorCore is 1,146,385 bytes of which 84% is managed-local TEARDOWN: exactly 150 runs of exactly 532 AnsiString releases (532 locals x 150 return points), carrying 36.1% of the function's samples. The 92-arm walk this ticket is NAMED for is 114 CaseEqual call sites carrying 3.2% of the function's samples = ~0.32% of a compile; a perfect hash dispatch has a generous ceiling of ~3% only if it also took all of CaseEqual's 3.1% body, and it carries the three documented hazards (name reassigned at 8 points, 25 duplicate names, the arms are not a ladder). The teardown is bigger, is Track A codegen, and is filed as perf-a-every-return-releases-every-managed-local-even-the-untouched-ones. WHAT IS LEFT FOR P is the ~0.3-3% dispatch question, ranked below its own hazards — not the 9.4% this ticket was opened for."
@@ -251,3 +251,78 @@ summary rather than held.
 re-measured: the 9.4% is 84% managed-local teardown, not the arm walk; the real work is now Track A's perf-a-every-return-releases-every-managed-local-even-the-untouched-ones. What is left for P measures ~0.3-3% and is ranked below its own three documented hazards.
 
 **Before resuming:** read the reason above, then the ticket body. If the reason does not tell you what would make this worth picking up again, establishing that is the first step -- a park is a handoff to a stranger who may be you.
+
+## 2026-09-04 (frankA) — the dispatch is worth doing, and NOT for the reason in this ticket's title
+
+**Re-claimed per the park note's instruction to read the reason first. It does
+not tell me what would make this worth picking up — so, per that same note,
+establishing it is the first step, and here it is.**
+
+frankZ's ceiling stands and I am not re-arguing it: **~0.3–3% of a compile**,
+against the 9.4% this ticket was opened for, with the teardown being the real
+mass and Track A's. Nothing below disputes a number above.
+
+**What the re-measurement did not have is who ELSE walks that chain.** Counted
+at `f8b9e4394`, by listing:
+
+- `ParseFactorCore` spans `pasparser_expr.inc:490–8491` — **8002 lines**.
+- **All five named-type-cast dispatch sites from
+  [[refactor-p-five-dispatch-sites-for-one-named-type-cast]] are inside it**,
+  and they are five arms *of this chain*: `:1478` and `:1571` on the type
+  keyword, `:4074` on `OrdinalNameToTk`, `:6725` on `BuiltinScalarTypeKind`,
+  `:6434` on `FindTypeAlias`.
+
+So the name-keyed resolver that refactor asks for and the dispatch this ticket
+asks for **are the same edit seen from two sides.** A resolver consulted once
+per factor both collapses the five doors and removes the walk; doing them
+separately means writing the lookup twice.
+
+### Which inverts the entry point
+
+I told a peer earlier today to enter through this ticket because it carries the
+higher prio (60 vs 35). **That was wrong and this note is the correction.**
+After frankZ's measurement the perf case is ~0.3–3% ranked below three
+documented hazards — it cannot carry the work. The refactor's case is
+untouched by any of it and is a **correctness** argument with a measured
+history: five doors, four separate bug rounds, each closing one door while the
+next stayed shut, one of them (`bug-a-the-builtin-type-name-table-exists-twice-and-the-two-disagree`)
+a private 12-name table that DISAGREED with the shared one.
+
+**Enter through the refactor. This ticket becomes a beneficiary, not a driver** —
+the ~0.3–3% arrives for free with an edit justified on other grounds, which is
+the only framing under which it is worth paying the three hazards.
+
+### The hazards are the refactor's problem too, and one of them shrinks
+
+`name` reassigned at 8 points, 25 duplicate names, arms that are not a ladder.
+Those defeat *"hoist a per-name guard computed once at entry"*, which is the
+obvious perf implementation. They do **not** defeat a resolver called at each
+site with the name in hand — that keeps the reassignments and the ordering,
+because it does not move when the question is asked, only how it is answered.
+A hash dispatch that also relocates the arms is the version the hazards kill.
+
+I confirmed the 8 reassignments independently (my first regex found 6 because it
+only matched line-initial writes; `\bname\s*:=` finds 8, agreeing with frankZ —
+and the agreement only became real after I fixed my instrument, which is worth
+saying because it briefly read as a disagreement).
+
+### Not implementing it tonight
+
+`refactor-p-five-dispatch-sites-for-one-named-type-cast` is in `working/` with
+my name on it and this pairing written into its body. **The claim is available**
+— message me and it is yours, and take both or neither.
+
+**Explicitly NOT part of this fact**, because a shared file invites the error:
+[[refactor-p-three-hand-rolled-postfix-loops]]. Only 2 of its 5 Pascal copies
+are inside `ParseFactorCore` at all, and they key on **a token appearing after a
+primary**, not on a name — no name-resolver change reaches them. Those two
+tickets look related and share no mechanism.
+
+### One thing for whoever ranks
+
+The summary is true and `prio: 60` predates it. A ticket whose own summary says
+*"what is left measures ~0.3–3% and is ranked below its own hazards"* sitting at
+p60 will keep surfacing from `next` ahead of the p35 that should actually be
+entered first. I have not changed the number — it is frankZ's park and the
+re-rank is theirs to make or refuse — but the mismatch is real and it is the
+kind that survives because everyone assumes someone checked.
