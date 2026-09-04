@@ -89,14 +89,20 @@
 #               `static' emit LOCAL, which is what stopped the duplicate strong
 #               definitions it was hiding; see
 #               bug-a-every-object-defines-the-whole-of-crtl-globally-so-no-two-objects-link.
-#               CONSEQUENCE, measured 2026-09-02: --separate --pinned now FAILS
-#               to link (v399, 954adef93a7b), on `multiple definition of abort,
-#               abs, accept, ...' -- crtl's public surface, not the internals.
-#               That is not a harness bug: the flag was dropped on the strength
-#               of a compiler change, so a compiler from BELOW that change
-#               cannot build this mode. A --separate size from an old compiler
-#               is therefore not obtainable here, and any size compared across
-#               that boundary is comparing two different link modes.
+#               THAT BOUNDARY IS NOW BEHIND THE PIN AND THIS NOTE NO LONGER
+#               DESCRIBES THE PIN. Measured 2026-09-02 at pin v399
+#               (954adef93a7b), --separate --pinned FAILED to link on `multiple
+#               definition of abort, abs, accept, ...' -- crtl's public
+#               surface. That was never a harness bug: the flag was dropped on
+#               the strength of a compiler change, so a compiler from BELOW
+#               that change cannot build this mode. Re-measured 2026-09-04 by
+#               franks-ab at pin v403 (c31d03b2...): --separate --pinned LINKS,
+#               400 objects, plain `gcc -o out obj/*.o', no muldefs, PASS over
+#               621 cases. The `static'-emits-LOCAL fix is in the pin.
+#               KEEP BOTH SENTENCES: a --separate size compared across a pin
+#               older than v403 is still comparing two different link modes,
+#               and that is the part a reader needs when they find an old
+#               number. Name the pin beside any --pinned result.
 # env:
 #   PXX_BUSYBOX_DIR   use this tree instead of library_candidates/busybox
 #
@@ -484,6 +490,8 @@ trap cleanup EXIT
 # BOTH work, which is why this needed a control run from the cwd the harness
 # actually uses rather than from the one that was convenient.
 CTEST="$ROOT/compiler/.pxx-under-test-$$"
+COMPILER_SRC="$COMPILER"        # what we snapshotted -- reported at :659, and
+                                # under --pinned it is NOT compiler/pascal26
 cp "$COMPILER" "$CTEST" || die "could not snapshot the compiler under test"
 CSHA="$(sha256sum "$CTEST" | cut -d' ' -f1)"
 [ -n "$CSHA" ] || die "could not hash the compiler snapshot"
@@ -644,7 +652,13 @@ NTU=$(( $(wc -l < "$WORK/includes.txt") + 1 ))
 count_cases() { grep -a '^### ' "$1" | grep -avc '^### exit='; }
 
 printf 'busybox-diff: tree=%s (busybox %s)\n' "$BB" "$BBVER"
-printf 'busybox-diff: compiler=%s (snapshot of %s/compiler/pascal26)\n' "$COMPILER" "$ROOT"
+# THE PROVENANCE MUST NAME THE BINARY THAT WAS ACTUALLY SNAPSHOTTED. This line
+# used to end in a FIXED `(snapshot of $ROOT/compiler/pascal26)', so a --pinned
+# run announced itself as an unpinned one -- one true field (the sha on the next
+# line) beside one false one, which is the shape that survives review because
+# the reader has no reason to distrust either. Found 2026-09-04 by franks-ab,
+# whose pinned run printed c31d03b2 while its compiler/pascal26 was e1584248.
+printf 'busybox-diff: compiler=%s (snapshot of %s)\n' "$COMPILER" "$COMPILER_SRC"
 printf 'busybox-diff: sha256=%s\n' "$CSHA"
 printf 'busybox-diff: applets=%s  translation units=%d\n' "$APPLETS" "$NTU"
 
