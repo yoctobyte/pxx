@@ -181,4 +181,4 @@ is gone. A probe with the try in the module body reads 0.000 and is the wrong
 shape for that ticket.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit cf8a5af93.
