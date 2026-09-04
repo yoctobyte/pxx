@@ -1522,6 +1522,15 @@ const
   EXC_JMP_OFFSET_RV32 = 8;
   EXC_FRAME_SIZE_XT = 32;     { [0]=prev EXC_TOP, jmpbuf (a15,sp,a0) at +8 (Call0) }
   EXC_JMP_OFFSET_XT = 8;
+  { Windowed needs a bigger jmpbuf than Call0's three words, because restoring a
+    windowed frame means restoring the two SAVE AREAS the window handlers read
+    rather than three registers: 11 words = the try frame's a0-a3, its a4-a7,
+    the stub's own return address and sp, and the try frame's CALLER's sp (which
+    is where a4-a7 live). Measured, not derived --
+    devdocs/dev/xtensa-windowed-spill-probes.md, "A windowed longjmp that uses
+    no privileged instruction". }
+  EXC_FRAME_SIZE_XTW = 64;    { [0]=prev EXC_TOP, 11-word jmpbuf at +8 }
+  EXC_JMP_OFFSET_XTW = 8;
 
   { Data-ref sentinel base for class-reference (metaclass) values. A fixup with
     DataOff = -(CLASSREF_DATAREF_BASE + ci) is patched to UClsRTTIOff[ci] after
@@ -4882,6 +4891,7 @@ var
   ASTArenaFloor    : Integer;
   StrictIR         : Boolean;    { DEFAULT ON (--no-strict-ir opts out): IRVerify hard-errors on any IR_UNSUPPORTED node (a frontend could not lower an AST node). Turns "frontend gap -> silent nondeterministic self-host miscompile" into an immediate compile error naming the AST kind. All frontends incl. Rust measured 0 before the flip. See feature-selfhost-guard-ir-unsupported / bug-selfhost-multifn-ifelse-miscompile. }
   ExcSetJmpAddr   : Integer;
+  ExcSpillAddr    : Integer;  { xtensa windowed only: the register-window spill chain }
   ExcLongJmpAddr  : Integer;
   ExcRaiseAddr    : Integer;
   CoroutineUsed   : Boolean;

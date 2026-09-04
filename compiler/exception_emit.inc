@@ -69,7 +69,7 @@ begin
 end;
 
 procedure EmitExceptionRuntime;
-var unhandledJmp, si, cbzOffset, pos, bOffset: Integer;
+var unhandledJmp, si, cbzOffset, pos, bOffset, k: Integer;
     siColon, jo1, jo2, jc1, jc2, jc3, jc4, jm1, jm2, jm3, jm4: Integer;
 begin
   if TargetArch = TARGET_X86_64 then
@@ -490,16 +490,148 @@ begin
     xtensa_j(ExcLongJmpAddr - CodeLen);
     EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
-  else if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+  else if TargetArch = TARGET_XTENSA then
   begin
-    { Xtensa windowed: a longjmp-style sp rewind needs the register windows
-      spilled first (window-overflow handler interplay) — not implemented.
-      The IR walker rejects try/raise on windowed with a clean error. }
-    ExcSetJmpAddr := CodeLen;
-    ExcLongJmpAddr := CodeLen;
+    { --- Xtensa WINDOWED: a longjmp that uses no privileged instruction -----
+      MEASURED end to end before any of this was written --
+      devdocs/dev/xtensa-windowed-spill-probes.md and its builder
+      devdocs/dev/xtensa-windowed-longjmp-probe.py, which transfers control 20
+      frames deep back into a call8 frame under qemu-xtensa with both save areas
+      intact (rc 50) and fails with the spill removed (rc 52).
+
+      WHY NOT NEWLIB'S DESIGN. newlib's windowed longjmp declares exactly one
+      live window through `wsr.windowstart` and then lets an ordinary RETW
+      underflow the target frame back from memory. Both that and the
+      `rsr.windowbase` that computes its operand SIGILL under qemu-xtensa
+      linux-user, and the Linux `spill_registers` syscall it uses in setjmp is
+      `Unknown syscall 0` there -- it returns without spilling, so a probe that
+      only checks for a crash reports it working. What is left is the call-chain
+      spill, which the plan had filed as the bare-metal-only fallback and which
+      is in fact the one primitive available on every profile.
+
+      THE MECHANISM. A RETW takes its window increment from the top two bits of
+      a0 and reloads the target frame through the window UNDERFLOW handler --
+      but only for a window whose windowstart bit is clear. So: spill everything
+      (which clears those bits and writes every frame to memory), write the try
+      frame's two save areas back the way they were when setjmp ran, forge a0
+      and a1, and RETW. The hardware does the transfer.
+
+      THE TWO SAVE AREAS ARE IN DIFFERENT PLACES AND ONLY ONE IS VOLATILE, which
+      is the whole reason the jmpbuf is 11 words:
+        a0-a3 at [callee_sp - 16] -- inside the CALLEE region, so by the time a
+          raise happens some deeper frame owns it. setjmp copies it out and
+          longjmp puts it back; that is what makes the transfer pretend the
+          stack is as it was.
+        a4-a7 at [try_frame_caller_sp - 32] -- inside the try frame's OWN frame,
+          stable across everything it calls. [F_sp-32], [cs-16] and [cs-20] were
+          each tried first and each wrong.
+
+      BOTH STUBS ARE ENTERED BY CALL8 and that is load-bearing twice over: the
+      forged call size must equal the size of the call being unwound to, and
+      longjmp's own a2 must land in the physical register setjmp's did, which is
+      what delivers the 1. EmitXtensaCall8ToCode, never EmitXtensaCallToCode.
+
+      Stubs are entered by CALLn, whose target must be 4-aligned. }
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
+    ExcSpillAddr := CodeLen;
+    { The spill: a self-recursive CALL8 chain deep enough to walk the window
+      base past a wrap of the 64-register file. 16 frames x 8 = 128 registers,
+      twice the largest file, so it does not depend on which core we are on. }
+    xtensa_entry(reg_xtensa_sp, 32);
+    xtensa_movi(reg_xtensa_a3, 0);
+    { BRANCH DISTANCES ARE LITERAL HERE, not patched after the fact:
+      XtensaPatchSkipOver lives in ir_codegen_xtensa.inc, which is include #245
+      to this file's #129, and FPC is single-pass. Every instruction skipped is
+      a fixed 3 bytes and the recursive call is xtensa_call8 rather than
+      EmitXtensaCall8ToCode for the same reason -- a helper that MIGHT widen to
+      the long form would make the distance a guess. Both targets are inside
+      this blob, so the direct form always reaches. }
+    xtensa_beq(reg_xtensa_a2, reg_xtensa_a3, 12);      { count = 0: -> retw }
+    xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, -1);
+    xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
+    xtensa_call8(ExcSpillAddr - CodeLen);
+    xtensa_retw;
+
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
+    ExcSetJmpAddr := CodeLen;                          { a2 = &jmpbuf }
+    xtensa_entry(reg_xtensa_sp, 32);
+    xtensa_movi(reg_xtensa_a10, 16);
+    EmitXtensaCall8ToCode(ExcSpillAddr);
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_sp, -16);    { the try frame's a0-a3 }
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a2, k * 4);
+    end;
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 4);      { a8 = the try frame's sp }
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -16);
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a8, 4);      { a8 = ITS caller's sp }
+    xtensa_s32i(reg_xtensa_a8, reg_xtensa_a2, 40);
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -32);    { the try frame's a4-a7 }
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a2, 16 + k * 4);
+    end;
+    xtensa_s32i(reg_xtensa_a0, reg_xtensa_a2, 32);     { return address + call bits }
+    xtensa_s32i(reg_xtensa_sp, reg_xtensa_a2, 36);     { this stub's own sp }
+    xtensa_movi(reg_xtensa_a2, 0);
+    xtensa_retw;
+
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
+    ExcLongJmpAddr := CodeLen;                         { a2 = &jmpbuf }
+    xtensa_entry(reg_xtensa_sp, 32);
+    xtensa_movi(reg_xtensa_a10, 16);
+    EmitXtensaCall8ToCode(ExcSpillAddr);
+    xtensa_l32i(reg_xtensa_a7, reg_xtensa_a2, 36);     { setjmp's sp }
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a7, -16);
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a2, k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+    end;
+    xtensa_l32i(reg_xtensa_a8, reg_xtensa_a2, 40);
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_a8, -32);
+    for k := 0 to 3 do
+    begin
+      xtensa_l32i(reg_xtensa_a9, reg_xtensa_a2, 16 + k * 4);
+      xtensa_s32i(reg_xtensa_a9, reg_xtensa_a8, k * 4);
+    end;
+    xtensa_l32i(reg_xtensa_a0, reg_xtensa_a2, 32);     { forge the return }
+    xtensa_movi(reg_xtensa_a2, 1);
+    xtensa_mov(reg_xtensa_sp, reg_xtensa_a7);          { a1 LAST: everything above reads it }
+    xtensa_retw;
+
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
     ExcRaiseAddr := CodeLen;
+    xtensa_entry(reg_xtensa_sp, 32);
+    { a0 is the raise site's return address WITH its two call-size bits, so
+      EXC_ADDR records a value 0x40000000 above the address on windowed. It is
+      a diagnostic slot with no reader on this target (the Call0 arm below
+      parks rather than printing), and masking it would cost a shift pair for
+      nothing -- but it is not the same number Call0 stores, so say so. }
+    XtensaEmitLitHeader;
+    EmitGlobRef(BSS_EXC_ADDR);
+    xtensa_l32r(reg_xtensa_a3, $FFFF);
+    xtensa_s32i(reg_xtensa_a0, reg_xtensa_a3, 0);
+    XtensaEmitLitHeader;
+    EmitGlobRef(BSS_EXC_TOP);
+    xtensa_l32r(reg_xtensa_a3, $FFFF);
+    xtensa_l32i(reg_xtensa_a2, reg_xtensa_a3, 0);      { top handler frame }
+    xtensa_movi(reg_xtensa_a4, 0);
+    xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 9);       { no handler -> park }
+    xtensa_addi(reg_xtensa_a10, reg_xtensa_a2, EXC_JMP_OFFSET_XTW);
+    xtensa_call8(ExcLongJmpAddr - CodeLen);            { never returns here }
     EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
+  { NO SECOND riscv32 ARM. The park-and-exit stub this arm replaced was spelled
+    `(TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)`, and the
+    riscv32 half of that condition was ALREADY unreachable -- the real riscv32
+    arm above is unconditional and takes every riscv32 build, hosted and bare.
+    It read as "riscv32 has no runtime either", which stopped being true when
+    feature-esp-bare-exceptions gave it one and nobody trimmed the condition.
+    Verified before deleting: the arm above has no inner guard and no early
+    Exit, so nothing reaches here with TargetArch = TARGET_RISCV32. }
   else if TargetArch = TARGET_WASM32 then
   begin
     { NO RUNTIME, and that is the design rather than a gap. Every other arm of

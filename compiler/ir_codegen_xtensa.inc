@@ -5089,9 +5089,30 @@ begin
   Patch24(jmpOver, EncodeXtensaJ(CodeLen - jmpOver));
 end;
 
+procedure EmitXtensaExcFramePushW;
+{ Allocate one exception frame. Call0 moves sp with a plain ADDI; WINDOWED MAY
+  NOT, and this is the one place in the exception path where the two ABIs differ
+  in a way that is invisible if you get it wrong.
+
+  [sp-16] holds the CALLER's a0-a3, and window overflow and underflow read it
+  there. A plain ADDI relocates sp and leaves that block behind, so a later
+  RETW underflows from whatever now occupies the address -- a wrong value, not
+  a fault. MOVSP carries the block with the pointer (raising ALLOCA for the
+  runtime to copy it when the caller's registers are still live). }
+begin
+  if XtensaABI = XTENSA_ABI_WINDOWED then
+  begin
+    xtensa_addi(reg_xtensa_a8, reg_xtensa_sp, -EXC_FRAME_SIZE_XTW);
+    xtensa_movsp(reg_xtensa_sp, reg_xtensa_a8);
+  end
+  else
+    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -EXC_FRAME_SIZE_XT);
+end;
+
 procedure IREmitLeaveExceptionFramesXtensa(count: Integer);
 { Pop `count` exception frames: restore the saved prev EXC_TOP from each
-  frame head and free the 32-byte frame (Call0 moving sp). }
+  frame head and free the frame. MOVSP on windowed for the reason above -- the
+  pop moves sp exactly as the push does. }
 var i: Integer;
 begin
   for i := 1 to count do
@@ -5099,7 +5120,13 @@ begin
     xtensa_l32i(reg_xtensa_a4, reg_xtensa_sp, 0);   { prev EXC_TOP }
     EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
     xtensa_s32i(reg_xtensa_a4, reg_xtensa_a3, 0);
-    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, EXC_FRAME_SIZE_XT);
+    if XtensaABI = XTENSA_ABI_WINDOWED then
+    begin
+      xtensa_addi(reg_xtensa_a8, reg_xtensa_sp, EXC_FRAME_SIZE_XTW);
+      xtensa_movsp(reg_xtensa_sp, reg_xtensa_a8);
+    end
+    else
+      xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, EXC_FRAME_SIZE_XT);
   end;
 end;
 
@@ -5307,24 +5334,38 @@ begin
         rewind, which bare-metal has no handlers for. Mirrors riscv32. }
       IR_EXC_ENTER:
         begin
-          if XtensaABI = XTENSA_ABI_WINDOWED then
-            Error('target xtensa: try/except requires the Call0 ABI (windowed needs register-window spills before unwind)');
-          { try: push a 32-byte frame ([0]=prev EXC_TOP, jmpbuf at +8), chain
-            it, setjmp; a raise longjmps back here with a2=1 -> jump to the
-            handler label (beq-skip + j, so the handler can be far). }
+          { try: push a frame ([0]=prev EXC_TOP, jmpbuf at +8), chain it,
+            setjmp; a raise longjmps back here with 1 in the result register ->
+            jump to the handler label (beq-skip + j, so the handler can be far). }
           lblId := IRA[i];
-          xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -EXC_FRAME_SIZE_XT);
+          EmitXtensaExcFramePushW;
           EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
           xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, 0);
           xtensa_s32i(reg_xtensa_a4, reg_xtensa_sp, 0);
           xtensa_s32i(reg_xtensa_sp, reg_xtensa_a3, 0);
-          xtensa_addi(reg_xtensa_a2, reg_xtensa_sp, EXC_JMP_OFFSET_XT);
-          EmitXtensaCallToCode(ExcSetJmpAddr);
-          xtensa_movi(reg_xtensa_a4, 0);
-          skipPos := CodeLen;
-          xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 6);   { 0 = normal: skip }
-          EmitXtensaJumpToLabel(lblId, LabelFixupCount);
-          XtensaPatchSkipOver(skipPos, 1, reg_xtensa_a2, reg_xtensa_a4);
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+          begin
+            { CALL8, so the argument goes in a10 and the result comes back in
+              a10 -- the callee's a2 IS the caller's a10. Both halves matter:
+              the stub reads a2 and the compare below must read a10. }
+            xtensa_addi(reg_xtensa_a10, reg_xtensa_sp, EXC_JMP_OFFSET_XTW);
+            EmitXtensaCall8ToCode(ExcSetJmpAddr);
+            xtensa_movi(reg_xtensa_a4, 0);
+            skipPos := CodeLen;
+            xtensa_beq(reg_xtensa_a10, reg_xtensa_a4, 6);  { 0 = normal: skip }
+            EmitXtensaJumpToLabel(lblId, LabelFixupCount);
+            XtensaPatchSkipOver(skipPos, 1, reg_xtensa_a10, reg_xtensa_a4);
+          end
+          else
+          begin
+            xtensa_addi(reg_xtensa_a2, reg_xtensa_sp, EXC_JMP_OFFSET_XT);
+            EmitXtensaCallToCode(ExcSetJmpAddr);
+            xtensa_movi(reg_xtensa_a4, 0);
+            skipPos := CodeLen;
+            xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 6);   { 0 = normal: skip }
+            EmitXtensaJumpToLabel(lblId, LabelFixupCount);
+            XtensaPatchSkipOver(skipPos, 1, reg_xtensa_a2, reg_xtensa_a4);
+          end;
         end;
 
       IR_EXC_LEAVE:
@@ -5332,8 +5373,6 @@ begin
 
       IR_RAISE:
         begin
-          if XtensaABI = XTENSA_ABI_WINDOWED then
-            Error('target xtensa: try/except requires the Call0 ABI (windowed needs register-window spills before unwind)');
           if IRA[i] <> -1 then
           begin
             IREmitNodeXtensa(IRA[i]);                    { a2 = exception object }
@@ -5343,7 +5382,10 @@ begin
             EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_CLS);
             xtensa_s32i(reg_xtensa_a2, reg_xtensa_a3, 0);
           end;
-          EmitXtensaCallToCode(ExcRaiseAddr);
+          if XtensaABI = XTENSA_ABI_WINDOWED then
+            EmitXtensaCall8ToCode(ExcRaiseAddr)
+          else
+            EmitXtensaCallToCode(ExcRaiseAddr);
         end;
 
       IR_EXC_STORE:

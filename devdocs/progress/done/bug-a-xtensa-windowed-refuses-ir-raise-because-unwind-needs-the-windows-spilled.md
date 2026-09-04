@@ -4,10 +4,10 @@ title: "xtensa windowed refuses IR_RAISE because a longjmp-style unwind needs th
 track: A+S
 prio: 45
 type: bug
-status: working
+status: done
 created: 2026-08-30
 found-by: frankS
-summary: "Under the xtensa windowed ABI, IR_RAISE and try/except refuse (ir_codegen_xtensa.inc:4873/:4898). CAUSE CORRECTED 2026-09-01: the guard tests XtensaABI and nothing else, so it fires on --platform=posix too, where window handlers demonstrably DO exist (depth-40 windowed recursion runs correctly under qemu) — bare-metal's missing handler explains only half of it. The hosted half is blocked on one missing routine, a windowed setjmp/longjmp; newlib's protocol is disassembled in the ticket. MEASURED 2026-09-04 and it moves BOTH halves of the plan: wsr.windowstart AND rsr.windowbase both SIGILL under qemu-xtensa linux-user, so newlib's longjmp design cannot be ported to the hosted profile at all; the spill SYSCALL the plan called 'two instructions on hosted' is `Unknown syscall 0` under qemu, executing and returning without spilling, so a crash-only probe reports success; and the call-chain spill the plan filed as the bare-metal-only fallback DOES work under qemu, making it the one primitive available on every profile we can run. The hosted/bare split this ticket draws does not survive that. Harness, results and the two instrument failures that made the first three runs answer wrongly: devdocs/dev/xtensa-windowed-spill-probes.md."
+summary: "FIXED 2026-09-04. `--xtensa-abi=windowed` compiles and RUNS try/except, try/finally, re-raise and a raise 40 frames deep, verified under qemu-xtensa against the x86-64 oracle and against the Call0 control; the pin refuses the same source. The unwind spills the register windows with a self-recursive call8 chain, rewrites the try frame's TWO save areas and forges an ordinary RETW -- newlib's wsr.windowstart design is unusable here (it SIGILLs in user mode) and the Linux spill syscall is Unknown syscall 0 under qemu. TargetHasProcCleanupFrame now includes windowed. NOT the signal runtime, which is Call0-only for an unrelated reason (the kernel enters the handler with the call4 convention) and still refuses."
 owner: frankb-78
 ---
 
@@ -221,3 +221,90 @@ the Xtensa ABI puts a spilled CALLER's registers BELOW the callee's stack
 pointer. What caught both was carrying a positive control (store the needle, must
 find it) beside the negative one (no spill, must not find it). With only the
 negative control the probe was confidently wrong twice.
+
+
+# 2026-09-04 (frankB, Track A) — FIXED, and the mechanism is the one the measurement implied
+
+`--xtensa-abi=windowed --platform=posix --xtensa-soft-mulhigh` now compiles and
+runs `test_cross_exception` (try/except, try/finally, nested, re-raise) and a new
+deep-raise row, matching the x86-64 oracle exactly and matching the Call0
+control. **Positive control across the whole population: the same two sources on
+pin v403 (`c31d03b202da`) give `error: target xtensa: try/except requires the
+Call0 ABI`.**
+
+## What landed
+
+- `compiler/exception_emit.inc` — a windowed arm with four stubs: the spill
+  chain, `ExcSetJmp`, `ExcLongJmp`, `ExcRaise`. All four are windowed functions
+  (`entry` / `retw`) entered by `CALL8`.
+- `compiler/symtab.inc` — `EmitXtensaCall8ToCode`. **Deliberately not a windowed
+  arm inside `EmitXtensaCallToCode`**, which was the smaller diff and was wrong:
+  the signal stubs go through that helper and end in `RET`, so calling them with
+  `CALL8` would rotate a window nothing rotates back. The two helpers are named
+  for the STUB'S OWN return instruction, which the call site cannot see.
+- `compiler/ir_codegen_xtensa.inc` — the two `Error` calls are gone;
+  `EmitXtensaExcFramePushW` moves sp with **MOVSP** under windowed, and the pop
+  does too. A plain `ADDI` would have left the caller's `a0-a3` save area behind
+  at the old `[sp-16]`, which is a wrong value on the next underflow rather than
+  a fault.
+- `compiler/ir_codegen.inc` — `TargetHasProcCleanupFrame` includes xtensa
+  unconditionally; the proc-cleanup frame grew a windowed arm.
+- `compiler/defs.inc` — `EXC_FRAME_SIZE_XTW = 64`, an 11-word jmpbuf.
+
+## The mechanism, in one paragraph
+
+`RETW` takes its window increment from the top two bits of `a0` and reloads the
+target frame through the window UNDERFLOW handler — but only for a window whose
+`windowstart` bit is clear. So: spill everything (which clears those bits and
+writes every frame to memory), write the try frame's two save areas back the way
+they were when `setjmp` ran, forge `a0` and `a1`, and `RETW`. The hardware does
+the transfer. Full protocol and the probe that established it before any
+compiler code was written:
+`devdocs/dev/xtensa-windowed-spill-probes.md`, section "A windowed longjmp that
+uses no privileged instruction", builder
+`devdocs/dev/xtensa-windowed-longjmp-probe.py`.
+
+## `test_cross_exception` CANNOT guard half of this, and that is measured
+
+The two save areas are in different places — `a0-a3` at the callee's `[sp-16]`,
+`a4-a7` at the frame's own `[caller_sp - 32]` — and this backend keeps the
+windowed frame pointer in `a7`. With the SECOND restore deliberately pointed 16
+bytes wrong and the compiler rebuilt:
+
+| row | broken compiler |
+| --- | --- |
+| `test_cross_exception` windowed | **prints 1..9 and PASSES** |
+| `test_xtensa_windowed_deep_raise` | `caught`, then `545258032 0 0 0` for `11 22 33 44` |
+
+Half a restore lands, prints the right first line, and is wrong. That is why the
+new test exists and why it prints the four locals individually rather than their
+sum: a compensating pair cannot hide. It also raises 40 frames down, because
+`test_cross_exception` raises ONE frame below its try — shallow enough that it
+passes whether or not the unwind spills at all.
+
+## Also removed: a dead riscv32 arm
+
+The park-and-exit stub this replaced was `(TARGET_XTENSA) or (TARGET_RISCV32)`,
+and the riscv32 half was already unreachable — the real riscv32 arm above it is
+unconditional and takes every riscv32 build, hosted and bare, since
+feature-esp-bare-exceptions gave it a runtime. Verified before deleting (no inner
+guard, no early Exit), and `test_cross_exception` on riscv32 re-run after.
+
+## What this does NOT change
+
+**The signal runtime is still Call0-only** and its comment used to cite
+`TargetHasProcCleanupFrame` as the same fact. It is not: the signal stub is
+windowed because the KERNEL enters a handler with the call4 convention, which is
+unrelated to the unwind. The stale cross-reference is corrected in place rather
+than left to be cited next.
+
+## Gate
+
+`make compiler/pascal26` converged (`62e1b024fa19`); `tools/gate.sh quick` GREEN
+with the FPC seed canary RUN (gated before the commit, on a dirty
+`compiler/**`); `PXX_ALLOW_FULL_SUITE=1 make test-xtensa` green end to end on
+that exact binary — the quick tier does not run `test-xtensa` and every row added
+here lives in it.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

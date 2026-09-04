@@ -19566,6 +19566,43 @@ test-xtensa: $(COMPILER)
 	    --xtensa-abi=call0 test/test_cross_managed_strings.pas $(TESTTMP)/xtc_mstr
 	tools/run_target.sh xtensa $(TESTTMP)/xtc_mstr > $(TESTTMP)/xtc_mstr.out; tools/expect_same.sh xtensa-call0/test_cross_managed_strings-rc "$$?" "0"
 	tools/expect_same.sh xtensa-call0/test_cross_managed_strings "$$(cat $(TESTTMP)/xtc_mstr.out)" "$$(cat $(TESTTMP)/xtw_mstr_x64.out)"
+	# EXCEPTIONS UNDER WINDOWED. `--xtensa-abi=windowed` refused try/except and
+	# raise outright until 2026-09-04 -- the unwind needs the register windows
+	# spilled before it can transfer control, and newlib's design for that turns
+	# on `wsr.windowstart`, which SIGILLs under qemu-xtensa linux-user. What
+	# landed instead spills with a self-recursive call8 chain, rewrites the try
+	# frame's two save areas and forges an ordinary RETW.
+	# devdocs/dev/xtensa-windowed-spill-probes.md
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_cross_exception.pas $(TESTTMP)/xtw_exc
+	./$(COMPILER) test/test_cross_exception.pas $(TESTTMP)/xtw_exc_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_exc > $(TESTTMP)/xtw_exc.out; tools/expect_same.sh xtensa-windowed/test_cross_exception-rc "$$?" "0"
+	$(TESTTMP)/xtw_exc_x64 > $(TESTTMP)/xtw_exc_x64.out
+	tools/expect_same.sh xtensa-windowed/test_cross_exception "$$(cat $(TESTTMP)/xtw_exc.out)" "$$(cat $(TESTTMP)/xtw_exc_x64.out)"
+	# ...AND THE ROW ABOVE CANNOT GUARD HALF OF IT, measured rather than feared.
+	# A windowed longjmp restores the try frame from TWO save areas in two
+	# different places: a0-a3 at the callee's [sp-16] and a4-a7 at the frame's
+	# own [caller_sp-32]. With the SECOND one deliberately pointed 16 bytes
+	# wrong and the compiler rebuilt, test_cross_exception above prints 1..9
+	# and PASSES, while the deep row below comes back `caught` and then
+	# 545258032 0 0 0 for 11 22 33 44. a4-a7 is where this backend keeps the
+	# windowed frame pointer, so half a restore lands, prints the right first
+	# line, and is wrong.
+	#
+	# It raises 40 frames down because test_cross_exception raises ONE frame
+	# below its try, which need never overflow a 64-register file -- shallow
+	# enough that it passes whether or not the unwind spills at all.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=windowed test/test_xtensa_windowed_deep_raise.pas $(TESTTMP)/xtw_deepraise
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh \
+	    --xtensa-abi=call0 test/test_xtensa_windowed_deep_raise.pas $(TESTTMP)/xtc_deepraise
+	./$(COMPILER) test/test_xtensa_windowed_deep_raise.pas $(TESTTMP)/xtw_deepraise_x64
+	tools/run_target.sh xtensa $(TESTTMP)/xtw_deepraise > $(TESTTMP)/xtw_deepraise.out; tools/expect_same.sh xtensa-windowed/deep-raise-rc "$$?" "0"
+	tools/run_target.sh xtensa $(TESTTMP)/xtc_deepraise > $(TESTTMP)/xtc_deepraise.out; tools/expect_same.sh xtensa-call0/deep-raise-rc "$$?" "0"
+	$(TESTTMP)/xtw_deepraise_x64 > $(TESTTMP)/xtw_deepraise_x64.out
+	tools/expect_same.sh xtensa-windowed/deep-raise "$$(cat $(TESTTMP)/xtw_deepraise.out)" "$$(cat test/test_xtensa_windowed_deep_raise.expected)"
+	tools/expect_same.sh xtensa-call0/deep-raise "$$(cat $(TESTTMP)/xtc_deepraise.out)" "$$(cat test/test_xtensa_windowed_deep_raise.expected)"
+	tools/expect_same.sh deep-raise/x86-64-oracle "$$(cat $(TESTTMP)/xtw_deepraise_x64.out)" "$$(cat test/test_xtensa_windowed_deep_raise.expected)"
 	# MOVSP, and this row exists because NO BEHAVIOURAL TEST CAN GUARD IT.
 	# The windowed ABI lets only ENTRY's immediate and MOVSP move a1; the
 	# prologue moved it with a plain `sub a1,a1,a8` for months. Every windowed

@@ -1360,10 +1360,13 @@ function TargetHasSignalRuntime: Boolean;
   only for the pathological `--esp-profile=bare --platform=posix`.
 
   XTENSA CARRIES A SECOND CONDITION and it is an ABI fact, not a platform one:
-  EmitSignalRuntimeXtensa is Call0-only. A windowed handler needs the register
-  windows spilled before the unwind -- the same reason TargetHasProcCleanupFrame
-  is Call0-only -- so windowed hosted xtensa still has no runtime and must still
-  refuse. Call0 is the default ABI (compiler.pas:862), so this serves the
+  EmitSignalRuntimeXtensa is Call0-only. The signal STUB is the windowed thing
+  here, not the unwind: it is entered by the kernel with the call4 convention
+  and its own dead-code note records four registers that were read wrong. (Do
+  NOT read the old cross-reference to TargetHasProcCleanupFrame here -- that one
+  stopped being Call0-only on 2026-09-04, when windowed got the spill-chain
+  longjmp. The two conditions had the same shape and were never the same fact.)
+  So windowed hosted xtensa still has no signal runtime and must still refuse. Call0 is the default ABI (compiler.pas:862), so this serves the
   default path.
 
   NoSignals is deliberately NOT folded in. It is an orthogonal user switch with
@@ -14438,14 +14441,12 @@ function TargetHasProcCleanupFrame: Boolean;
   not leak on an unwind" is wrong for wasm32 and would be the expensive kind of
   wrong, because an unwind leak prints nothing.
 
-  xtensa under the WINDOWED ABI is the target that genuinely has none, and that
-  is an ABI condition rather than a gap -- the unwind needs the register windows
-  spilled first. }
+  xtensa under the WINDOWED ABI answered False until 2026-09-04, when it got the
+  spill-chain longjmp (exception_emit.inc) and joined the list. }
 begin
   Result := (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) or
             (TargetArch = TARGET_ARM32) or (TargetArch = TARGET_AARCH64) or
-            (TargetArch = TARGET_RISCV32) or
-            ((TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_CALL0));
+            (TargetArch = TARGET_RISCV32) or (TargetArch = TARGET_XTENSA);
 end;
 
 procedure EmitProcCleanupFrameLeaveForTarget;
@@ -14557,20 +14558,31 @@ begin
       point: a try frame and a proc cleanup frame are the same frame, so the two
       cannot drift if the second is a transcription of the first. The one
       difference is the landing pad it branches to. }
-    xtensa_addi(reg_xtensa_sp, reg_xtensa_sp, -EXC_FRAME_SIZE_XT);
+    EmitXtensaExcFramePushW;
     EmitLoadGlobAddrXtensa(reg_xtensa_a3, BSS_EXC_TOP);
     xtensa_l32i(reg_xtensa_a4, reg_xtensa_a3, 0);
     xtensa_s32i(reg_xtensa_a4, reg_xtensa_sp, 0);
     xtensa_s32i(reg_xtensa_sp, reg_xtensa_a3, 0);
-    xtensa_addi(reg_xtensa_a2, reg_xtensa_sp, EXC_JMP_OFFSET_XT);
-    { EmitXtensaCallToCode, not xtensa_call0: the helper may be more than
-      512 KiB behind us, and this is the call form that survives that. }
-    EmitXtensaCallToCode(ExcSetJmpAddr);
-    { beq skips the j on the NORMAL return (a2 = 0); the j is the taken edge, so
-      the landing pad may sit anywhere within J's reach. Offset 6 clears the
-      three-byte j that follows. }
-    xtensa_movi(reg_xtensa_a4, 0);
-    xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 6);
+    { beq skips the j on the NORMAL return (result = 0); the j is the taken edge,
+      so the landing pad may sit anywhere within J's reach. Offset 6 clears the
+      three-byte j that follows. The register the result arrives in is the ABI's
+      choice, not ours: CALL8 delivers the callee's a2 as the caller's a10. }
+    if XtensaABI = XTENSA_ABI_WINDOWED then
+    begin
+      xtensa_addi(reg_xtensa_a10, reg_xtensa_sp, EXC_JMP_OFFSET_XTW);
+      EmitXtensaCall8ToCode(ExcSetJmpAddr);
+      xtensa_movi(reg_xtensa_a4, 0);
+      xtensa_beq(reg_xtensa_a10, reg_xtensa_a4, 6);
+    end
+    else
+    begin
+      xtensa_addi(reg_xtensa_a2, reg_xtensa_sp, EXC_JMP_OFFSET_XT);
+      { EmitXtensaCallToCode, not xtensa_call0: the helper may be more than
+        512 KiB behind us, and this is the call form that survives that. }
+      EmitXtensaCallToCode(ExcSetJmpAddr);
+      xtensa_movi(reg_xtensa_a4, 0);
+      xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 6);
+    end;
     landPatch := CodeLen; xtensa_j(4);
     Exit;
   end;
@@ -14685,7 +14697,10 @@ begin
   else if TargetArch = TARGET_RISCV32 then
     EmitRiscv32CallToCode(reg_ra, ExcRaiseAddr)
   else if TargetArch = TARGET_XTENSA then
-    EmitXtensaCallToCode(ExcRaiseAddr)
+    if XtensaABI = XTENSA_ABI_WINDOWED then
+      EmitXtensaCall8ToCode(ExcRaiseAddr)
+    else
+      EmitXtensaCallToCode(ExcRaiseAddr)
   else
     Error('compiler error: no proc exception cleanup frame for this target');
 end;

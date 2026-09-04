@@ -13927,6 +13927,25 @@ begin
   Patch32(litPos, target - anchorPc);
 end;
 
+procedure EmitXtensaCall8ToCode(target: Integer);
+{ CALL8 into a runtime stub that ends in RETW -- the windowed exception stubs,
+  and nothing else.
+
+  NOT a windowed arm inside EmitXtensaCallToCode, which would have been the
+  smaller diff and would have been wrong: the signal stubs go through that one
+  and they end in RET, so calling them with CALL8 would rotate a window nothing
+  rotates back. The distinction is the STUB'S OWN return instruction, which is
+  not visible at the call site, so the two call helpers are named for it.
+
+  The long form needs no arm at all -- EmitXtensaLongCallSlot already ends in
+  CALLX8 under windowed. }
+begin
+  if XtensaCallReaches(CodeLen, target) then
+    xtensa_call8(target - CodeLen)
+  else
+    EmitXtensaLongCall(target);
+end;
+
 { --- riscv32: reaching an already-emitted RUNTIME HELPER -------------------
   JAL encodes a signed 21-bit byte offset, so it reaches +-1 MB. Direct calls to
   a PROC ROW have not used it since cross lua (1.75 MB of code) -- EmitCallProc's
