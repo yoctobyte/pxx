@@ -3833,3 +3833,105 @@ Verified by **executing all 32 added recipe lines verbatim**, rather than
 re-running binaries already run by hand: **in a wiring commit the risk is the
 recipe TEXT, not the program.** That is the same reasoning as this file's rule
 about a `cmp` harness whose inputs were never proven to exist.
+
+## 2026-09-04 — step 2 landed, and a test that passes on the compiler it was written to catch
+
+`9506737b6` (fix) + `f95f85532` (resolve), both verified on origin. A by-value
+aggregate is now **classified** on aarch64 rather than being one pointer slot by
+construction; the walk carries a full per-argument description and **all three
+readers — callee spill, direct call, indirect call — take their answer from it.**
+Five of five shapes match clang's call site, **tail register included.**
+
+### THE NEW TEST PASSES ON THE PRE-FIX COMPILER, BYTE FOR BYTE
+
+Not a caveat — a measurement, and the most important line in the report.
+
+**Caller and callee were both built by pxx and both used the wrong convention, so
+they agreed and every value arrived intact.**
+
+> **An outcome test over a pxx-only program is PHYSICALLY UNABLE to observe a
+> wrong calling convention.**
+
+This is the assertion-class rule at its sharpest so far. The open-array leak was
+an assertion **aimed at the wrong quantity**; this one is **structurally
+incapable of the observation** no matter how it is aimed. The file says so in its
+header and the ticket says so in its summary, **so a green row there cannot be
+read as covering AAPCS64** — which is the only thing that stops it becoming a
+false comfort later.
+
+**Only one direction of the two-direction guard was buildable, and it said which:**
+the pxx-callee-through-crtl direction works and is wired on five targets; the
+foreign direction **does not exist on this box** — a mixed link needs an aarch64
+linker, and clang and qemu are both present with **only the linker in the middle
+missing.** So the proof is a **PLACEMENT oracle**, clang's call site against
+`llvm-objdump` on pxx's own ELF, recorded row by row.
+
+### `isAgg` CANNOT BE DERIVED FROM `nRegs` AND `size`
+
+The first marshaller asked `(nRegs > 1) or (size <> 8)`. **`struct {int a, b;}` is
+one GP register and eight bytes — character for character a scalar's
+description** — so it took the scalar path and passed the address.
+
+**Four of five rows were right, and the wrong one was the SMALLEST aggregate
+there is.** And **if the classifier had done nothing, that row would have looked
+identical.**
+
+That is the collides-with-the-default shape **living in a GUARD rather than in an
+expected value** — a new habitat for it. The derived predicate was not merely
+incomplete; **it was indistinguishable from the un-classified answer on exactly
+the case a hand probe is least likely to include.**
+
+### `>= 0` IS RIGHT FOR SysV AND WRONG FOR AAPCS64
+
+Both classifiers use **0** for "not in registers" and **the two ABIs mean
+opposite things by it**:
+
+- **SysV's 0 is MEMORY** — the slot IS the object.
+- **AAPCS64's 0 is INDIRECT** — the slot is a **POINTER**, which is the
+  by-reference parameter pxx already had.
+
+The SysV predicate was copied verbatim, `va_list` stopped being a pointer
+parameter, and **a plain `printf("hello %d %.2f")` segfaulted on aarch64 while
+x86-64 stayed green.**
+
+> **A change that is correct about one ABI, applied to another.** Same family as
+> the `48 + nfp*16` helper that had silently claimed SysV's save-area layout —
+> and the same target pair. **A shared sentinel VALUE with unshared MEANING is
+> invisible to every reader who checks the value.**
+
+### A CORPUS DIFF THAT HAS ONLY EVER REPORTED 0 SAYS NOTHING ABOUT ITS SENSITIVITY
+
+The 73-binary aarch64 corpus reported **0 differ for the inert substrate and 10
+for the flip**, from one script over one corpus.
+
+> **"I would not trust the 0 without the 10."**
+
+The inertness claim in `55b03d927` rests entirely on that 0 — and the 10 is what
+makes the instrument's silence mean something. **A zero from a differ-counter
+that has never produced a non-zero is not evidence; it is an untested
+instrument.** Same principle as a positive control, applied to a corpus diff.
+
+### Rebuilding the compiler is not rebuilding the thing you are measuring
+
+A cycle lost: after fixing `isAgg` it re-ran the disassembler **without
+recompiling the probe**, read the old binary, and concluded the fix had not
+worked. **The stale artifact was downstream of the one that had been rebuilt.**
+
+### Tier, and the honest note about `exit_observable`
+
+`3978 of 3985 ok`, **6 SKIP** for an absent conformance corpus, **one FAIL** —
+`exit_observable`, the parked threshold. **Volunteered against its own interest:**
+the new test adds four stdout-comparing rows, so the share moves **93.79% ->
+93.82%** against a cap it was already over by more than a point.
+
+The backgrounded wrapper again reported **exit code 0 over `testmgr: RED`** — the
+wrapper-versus-log disagreement this file already records, now seen again.
+
+### NO RE-PIN — and the reason is checkable
+
+**Track T's newest verdicts are all at `6cf1c639a`, which PREDATES `9506737b6`.**
+So **no breadth run has seen this aarch64 ABI change.** Pinning it now would put
+into `$(PXX_STABLE)` a convention change whose only verification is
+one-directional by necessity, on the target that has no foreign-link oracle at
+all. The owner's `pin -> flip -> re-pin` is complete at v403; a further pin is not
+urgent and T samples every ~8 commits.
