@@ -6713,11 +6713,29 @@ lib/crtl/include/                                    <- the live repo tree
 ```
 
 **The first path does not exist**, so the search falls through to the live
-tree. That absence is the whole reason the rule holds. **If a pin ever ships a
-bundled `lib/crtl`, path 1 shadows the live tree and every such probe silently
-starts answering about a FROZEN crtl** — same command, same exit code, same
-shape of output, different question. Check the directory before trusting the
-technique, not just the answer.
+tree. That absence is the whole reason the rule holds.
+
+**AND THE INVERSION IS MEASURED, NOT HYPOTHETICAL.** This paragraph first said
+"if a pin ever ships a bundled `lib/crtl`..." as a caution. franks-ab poisoned
+it instead of reading it (`72898b07c`): pin tree copied to a scratch dir,
+nothing in the repo touched, run from the repo both times so the third path
+stayed reachable.
+
+```
+control A   no bundled include dir                      -> compiles
+test B      bundled netinet/ether.h declaring NOTHING   -> error: call to
+                                                           undeclared function: ether_line
+```
+
+The only difference between the two runs is that directory existing. So path 1
+shadows the live tree **completely**, and the failure is one `cp` away with the
+same command, the same exit code and the same shape of output. **Check the
+directory before trusting the technique, not just the answer.**
+
+Worth separating the two claims, because reading the search ORDER (which is
+what the compiler's own "searched:" list gives you) is not the same claim as
+the shadowing being REAL. The order was read from a diagnostic; the
+consequence needed poison-and-diff.
 
 **Two controls this needs, both cheap:**
 
