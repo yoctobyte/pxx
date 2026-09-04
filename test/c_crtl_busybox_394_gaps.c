@@ -222,7 +222,20 @@ int main(void)
      checking its separator, so a caller inspecting the struct after -1 sees
      the components that parsed and zeros after. glibc does the same, measured
      -- and an implementation that stored first would pass every accepting row
-     in row 3 and differ here. This row is what stops that being "tidied". */
+     in row 3 and differ here. This row is what stops that being "tidied".
+
+     TWO THINGS MAKE IT ABLE TO FAIL, and neither is the refusal itself.
+     (a) It prints the OUT-PARAMETER on the refusing rows, not just rc. rc is
+     where the two implementations AGREE -- -1 on every bad line -- so a
+     refusal row asserting only the return code passes the store-first mutation
+     exactly like no row at all. The struct is the only column that differs.
+     (b) The two FAILURE KINDS are both here on purpose. `...:33:44 short` and
+     `...:22:33 shorter` run OUT of input, so for them "stopped at the bad
+     component" and "stopped after the last one present" are the same index by
+     construction and cannot be told apart. `00:11:22:33:44:zz` has a sixth
+     component that is PRESENT and malformed, which drives the loop one
+     iteration further than a truncation can and is the only row that reaches
+     the reject-this-component path with bytes in front of it. */
   {
     struct ether_addr a;
     char h[512];

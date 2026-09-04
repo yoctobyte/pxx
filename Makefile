@@ -14254,10 +14254,13 @@ test-core: $(COMPILER)
 	# octet AFTER checking its separator, so a caller inspecting the struct
 	# after -1 sees the components that parsed. Hoisting that store passes
 	# every ACCEPTING row and changes row 12 -- measured, by making the
-	# change and watching row 3 not move. Row 4 does NOT cover the
+	# change and watching row 3 not move. It prints the OUT-PARAMETER on the
+	# refusing rows and not just rc, which is the half that gives it teeth:
+	# rc is -1 under both libcs, so a refusal row stopping at the return
+	# code would have passed that mutation too. Row 4 does NOT cover the
 	# /etc/ethers file scan: the file needs root to create, so both libcs
 	# answer -1 and the row would pass a lookup that never opened it.
-	# disposition. All rows diffed against gcc -D_GNU_SOURCE.
+	# All rows diffed against gcc -D_GNU_SOURCE.
 	./$(COMPILER) test/c_crtl_busybox_394_gaps.c $(TESTTMP)/c_bb394gaps26
 	tools/expect_same.sh c_bb394gaps26 "$$($(TESTTMP)/c_bb394gaps26)" "$$(printf '1 1 0 1\n2 1 1 0 0 1\n3 0 010203040506 alpha | -1 000000000000 alpha | -1 -1 -1\n4 -1 -1\n5 5 . .. apple mango zebra\n6 -1 1\n7 0 0\n8 0 0 0 0\n9 1 1\n10 1 1\n11 -1 1\n12 -1:001122330000 -1:001122000000 0:001122334455 -1:001122334400')"
 	./$(COMPILER) test/c_crtl_telnet_and_prctl.c $(TESTTMP)/c_telprctl26

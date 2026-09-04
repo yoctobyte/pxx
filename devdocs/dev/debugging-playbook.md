@@ -6642,3 +6642,48 @@ different numbers.**
 **Generalises past compilers**: any pipeline that aborts a unit on first fault
 — a schema validator, a linker, a test runner with `-x`, a preflight check —
 produces the same shape.
+
+## A REFUSAL ROW THAT ASSERTS ONLY THE RETURN CODE IS AS BLIND AS NO ROW — print the OUT-PARAMETER on the rows where the function fails
+
+**The shape.** A function reports failure through its return value and reports
+its *work* through an out-parameter. Two implementations of it agree on the
+return value — that is the easy half, and it is what the header specifies — and
+can differ completely in what they leave in the out-parameter. A probe that
+prints `rc` on the failing rows has covered the column where nobody disagrees.
+
+**Measured 2026-09-04**, frankD's glibc oracle over `ether_line`, and it is the
+reason the ordering was found at all. The probe printed rc **and the six
+octets** on every row, refusals included:
+
+```
+00:11:22:33:44 short      rc=-1  00:11:22:33:00:00
+00:11:22:33:44:zz bad     rc=-1  00:11:22:33:44:00
+00:11:22:33:44:55 ok      rc= 0  00:11:22:33:44:55
+```
+
+`ether_aton_r` stores each octet **after** checking its separator, so the
+struct after a refusal holds the components that parsed and zeros after. A
+draft that stored first would have answered `00:11:22:33:44:00` for the first
+row — **same rc, different struct** — and frankD's own words are the point:
+*"it was not insight, it was printing more columns than I thought I needed."*
+
+**The mutation result that prices it** (franks-ab, same day, `0c15cc735`).
+Hoisting the store above the check changed exactly one row of a 12-row
+byte-identical test and left every *accepting* row unchanged. So the accepting
+rows — the ones a test author writes first and feels good about — could not
+see it, and neither could a refusal row that stopped at rc.
+
+**Two design notes that come with it:**
+
+- **Vary the failure KIND, not just the failure.** Input that runs OUT makes
+  "stopped at the bad component" and "stopped after the last one present" the
+  same index *by construction*; only a component that is PRESENT and malformed
+  drives the loop one iteration further. Two truncated rows are one row.
+- The generalisation is not "add a refusal row". It is **"on a refusal, print
+  everything the call could have touched"** — out-parameters, `errno`, the
+  buffer, the length. Failure paths are where implementations improvise,
+  precisely because the standard says less about them.
+
+Same family as "The RIGHT LENGTH and the WRONG CONTENT" and "When success and
+a failure produce the same output, the output is not evidence": the assertion
+ran, it passed, and it was reading the column that cannot disagree.
