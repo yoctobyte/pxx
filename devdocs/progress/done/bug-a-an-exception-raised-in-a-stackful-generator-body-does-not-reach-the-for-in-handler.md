@@ -122,4 +122,4 @@ which this measurement moved from UNCHECKED-for-stackful to its largest case,
 and it is why the new test runs N=5.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit a090fa76d.
