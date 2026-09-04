@@ -273,3 +273,54 @@ The acceptance here is the nine busybox TUs COMPILING, per target. That needs a
 host-header fallback is native-only, so i386 refuses more — and that run is
 frankc-af's, not mine. Closing on "the surface is landed and the unit test is
 green" would be closing on my own half.
+
+## ACCEPTANCE — measured by frankC, 2026-09-04. The function gaps PASS.
+
+Binary `89a8cbcae23f3dcc`, HEAD `41a2d59a8`, 394 applets, `--separate`, both
+targets. **This measures 41a2d59a8 and NOT current HEAD**: frankD landed two
+miscompile fixes and seven UAPI headers after the run's compiler snapshot was
+taken, so the refusal sets below have already moved.
+
+**Every one of the nine function refusals is cleared, on BOTH targets**, and so
+are the two `loff_t` TUs. Checked against refusal lines only — a plain grep for
+`nice` matches the applet name in the run's own `applets=` line and reports it
+as still refusing:
+
+```
+acct  mlock  scandir  ether_hostton  IN_MULTICAST  pause  nice
+sched_getscheduler  sigisemptyset  loff_t            -- 0 refusals, x86-64 and i386
+```
+
+| target | refusals | what is left |
+| --- | --- | --- |
+| x86-64 | **14 -> 3** | all three are `__BEGIN_DECLS` (`bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS`) |
+| i386 | **16** | 12 missing headers, 4 inline-asm; **no function gaps at all** |
+
+518 of 522 TUs on x86-64, 506 on i386.
+
+**The two targets no longer share a failure population**, which is the useful
+half. x86-64's remaining three are one cause; i386's sixteen are headers the
+native fallback used to hide, plus the inline-asm ticket. Nothing on either
+list is a missing function, so this ticket's own subject is finished and the
+residue belongs to the two header tickets.
+
+**Two counting notes, because both cost me a wrong number first.**
+
+`521` is the **gcc oracle's** object count and `522` is the **pxx TU list**;
+mixing them makes every arithmetic check off by one. Reconciled: 522 - 16 = 506
+on i386, exactly.
+
+x86-64 shows 518 + 3 = 521, one short of 522, and that one is **correct**:
+`libbb/bb_bswap_64.c` is `#if !(ULONG_MAX > 0xffffffff)`, so on a 64-bit target
+it is an EMPTY translation unit — no object and no error is the right outcome,
+not a silently dropped TU. On i386 it builds and defines the symbol.
+
+**One anomaly I could not explain, handed to frankD rather than guessed at:**
+on i386 the link reports 6 `undefined reference to bb_bswap_64` while
+`obj/libbb_bb_bswap_64.o` exists, is `ELF32 80386`, and defines `T
+bb_bswap_64` — and the link is a plain glob over `obj/*.o`. I checked and
+discarded the obvious explanation (a mixed-architecture object set left over
+from the x86-64 pass: every object in the directory is ELF32). The i386 link
+cannot succeed anyway while 16 TUs refuse, but this would still be there after
+they are fixed.
+
