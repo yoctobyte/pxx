@@ -13599,6 +13599,14 @@ test-core: $(COMPILER)
 	# is a wrong VALUE, not only a missing identifier. fpc 3.2.2 prints `yes`;
 	# the pin (pre-fix) does not compile it at all.
 	# bug-p-a-define-set-in-an-include-is-invisible-to-the-includers-own-include-selection
+	# {$$A n}/{$$A+}/{$$A-} are the Turbo/Delphi short spelling of {$$PACKRECORDS},
+	# and pxx ignored them entirely until 2026-09-04 -- a unit opening with {$$A1}
+	# silently got the default layout instead of fpc's. Every number here is fpc
+	# 3.2.2's own answer. THE ROWS THAT ASSERT ARE a1/a2/a4/aplus/aminus: a8 and
+	# a16 equal the default, so alone they would pass on a compiler that still
+	# ignored the directive. The pin prints `24 8` for all eight.
+	./$(COMPILER) test/test_pascal_align_switch.pas $(TESTTMP)/test_pascal_align_switch26
+	tools/expect_same.sh test_pascal_align_switch "$$($(TESTTMP)/test_pascal_align_switch26)" "$$(printf 'default 24 8\na1 10 1\na2 12 2\na4 16 4\na8 24 8\na16 24 8\naplus 16 4\naminus 10 1')"
 	./$(COMPILER) -Fitest test/test_pascal_define_in_include_selects.pas $(TESTTMP)/test_define_in_include_selects26
 	tools/expect_same.sh test_define_in_include_selects "$$($(TESTTMP)/test_define_in_include_selects26)" "yes"
 	# The include pre-pass and the LEXER must agree where a brace comment ends.

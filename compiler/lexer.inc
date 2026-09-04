@@ -2170,6 +2170,49 @@ begin
   end;
 end;
 
+function PasAlignSwitchVal(const command: AnsiString; sign: Char;
+                          var v: Integer): Boolean;
+{ The Turbo/Delphi SHORT SPELLING of {$PACKRECORDS}: {$A1} {$A2} {$A4} {$A8}
+  {$A16}, plus {$A+} and {$A-}. Same knob, older name -- FPC treats them as one
+  setting and so must we, or a unit that opens with {$A8} gets pxx's default
+  layout while fpc gives it something else, silently.
+
+  MEASURED against fpc 3.2.2 on two records (Byte/Int64/Byte and Byte/LongInt),
+  sizeof and both field offsets, 2026-09-04:
+
+    no directive  24 8 | 8 4      {$A1}  10 1 | 5 1     {$A+}  16 4 | 8 4
+    {$A16}        24 8 | 8 4      {$A2}  12 2 | 6 2     {$A-}  10 1 | 5 1
+                                  {$A4}  16 4 | 8 4
+                                  {$A8}  24 8 | 8 4
+
+  So {$A n} = {$PACKRECORDS n} exactly, {$A-} = 1, and {$A+} = 4 -- NOT the
+  default, which is 8; that one is the reason this is a measurement and not a
+  reading of the docs. {$A16} equals the default because 16 cannot bind as a
+  ceiling (see the {$PACKRECORDS C} note below), which is the same sentinel.
+
+  Found by censusing fpc 3.2.2's own sources for directive words this compiler
+  does not know: {$A8} was reported as an UNKNOWN directive, i.e. a typo, on
+  code fpc accepts. The unimplemented list already carried the z1/z2/z4
+  siblings and had never been asked about this one. }
+begin
+  Result := False;
+  v := 0;
+  if not ((Length(command) >= 1) and ((command[1] = 'a') or (command[1] = 'A'))) then Exit;
+  if Length(command) = 1 then
+  begin
+    if sign = '+' then begin v := 4; Result := True; end
+    else if sign = '-' then begin v := 1; Result := True; end;
+    Exit;
+  end;
+  if CaseEqual(command, 'a1') then v := 1
+  else if CaseEqual(command, 'a2') then v := 2
+  else if CaseEqual(command, 'a4') then v := 4
+  else if CaseEqual(command, 'a8') then v := 8
+  else if CaseEqual(command, 'a16') then v := 16
+  else Exit;
+  Result := True;
+end;
+
 function PasDirectiveClass(const command, name: AnsiString; sign: Char): Integer;
 { How ProcessPasDirective's terminal arm should treat a directive it has no arm
   for: 0 = recognised and INERT (say nothing), 1 = recognised and NOT
@@ -2242,11 +2285,16 @@ const
 var lower: AnsiString;
 begin
   lower := PasDirectiveLower(command);
-  if (lower = 'h') or (lower = 'a') then
+  if lower = 'h' then
   begin
     if sign = '-' then Result := 1 else Result := 0;
     Exit;
   end;
+  { 'a' USED TO SIT BESIDE 'h' HERE and no longer does: {$A+}/{$A-}/{$A n} are
+    implemented as the short spelling of {$PACKRECORDS} (PasAlignSwitchVal), so
+    they never reach this classifier. Leaving the row would have been harmless
+    and wrong -- a rule that cannot fire still tells the next reader that the
+    directive is ignored, which is the thing that stopped being true. }
   if lower = 'b' then
   begin
     if sign = '+' then Result := 1 else Result := 0;
@@ -2714,6 +2762,10 @@ begin
         feature-p-packrecords-c-directive }
       else ErrorAt(SrcLine, 'invalid packrecords value: ' + name);
     end
+    else if PasAlignSwitchVal(command, dsign, idx) then
+      { {$A1}/{$A8}/{$A+}/{$A-} -- the same setting as {$PACKRECORDS}, under its
+        Turbo/Delphi name. See PasAlignSwitchVal for the measured mapping. }
+      PackRecordsVal := idx
     else if CaseEqual(command, 'R') then
     begin
       { R-directive (name file): queue an embedded resource; EmitResources
