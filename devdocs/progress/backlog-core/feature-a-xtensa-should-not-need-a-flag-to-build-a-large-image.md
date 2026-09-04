@@ -8,7 +8,7 @@ found: 2026-08-31
 found-by: frankA
 owner: ""
 blocked-by: []
-summary: "An unrelated RTL commit (4419e1aa7) pushed the test-xtensa xt_backjump call0 arm past CALL8 reach WITHOUT changing the image size (622444B both ways) -- it reordered __pxx_run_finalizers to the tail, 36618 bytes out of reach of its earliest caller -- so the margin is not a property of the program and any RTL edit can flip any near-512KiB image; that arm now passes --xtensa-long-calls explicitly. STAYS p35: the only program known to approach the wall is that row, which is awk-generated specifically to be large, so it DEFINES a population rather than sampling one -- the hazard is real but conditional on some real image getting near 512KiB, and none is. --xtensa-long-calls builds a large image today (bug-a-xtensa-cannot-widen-a-forward-call-..., closed) but the user has to know it exists, and a program that needs it fails with an error until they do. The right default is to widen only the forward calls that need it. The per-body relaxation that closed the forward JUMP wall does NOT transfer -- a jump's fixups are per-body and a call's are whole-program, so the analogous retry is a second parse. A veneer pool is the untried candidate and is more attractive here than it was for jumps: CALL0 reaches +-512 KiB against J's +-128 KiB, so a trampoline at the END OF THE CALLING BODY is within the call site's reach, where the jump case's veneer was not."
+summary: "An unrelated RTL commit (4419e1aa7) pushed the test-xtensa xt_backjump call0 arm past CALL8 reach WITHOUT changing the image size (622444B both ways) -- it reordered __pxx_run_finalizers to the tail, 36618 bytes out of reach of its earliest caller -- so the margin is not a property of the program and any RTL edit can flip any near-512KiB image; that arm now passes --xtensa-long-calls explicitly. WAS p35 on the grounds that the only program known to approach the wall was that awk-generated row, which DEFINES a population rather than sampling one, the hazard being conditional on some real image getting near 512KiB and none being. THAT PREMISE WAS REFUTED 2026-09-04: test/c_crtl_syscall_guarded_bodies.c is an ordinary hand-written C program whose image is ~665KB once crtl is linked in, and it refuses without the flag -- the forward call to __pxx_run_finalizers at 58526 cannot reach its body at 664880. The wall is not a property of deliberately-large generated programs, it is a property of LINKING CRTL AT ALL, so it is now the first thing every C program on this target meets, and every C-on-xtensa measurement anyone reports carries the flag. prio NOT changed by the reporter -- that is this ticket owner's call; what changed is that the sentence the p35 was reasoned from is no longer true. --xtensa-long-calls builds a large image today (bug-a-xtensa-cannot-widen-a-forward-call-..., closed) but the user has to know it exists, and a program that needs it fails with an error until they do. The right default is to widen only the forward calls that need it. The per-body relaxation that closed the forward JUMP wall does NOT transfer -- a jump's fixups are per-body and a call's are whole-program, so the analogous retry is a second parse. A veneer pool is the untried candidate and is more attractive here than it was for jumps: CALL0 reaches +-512 KiB against J's +-128 KiB, so a trampoline at the END OF THE CALLING BODY is within the call site's reach, where the jump case's veneer was not."
 ---
 
 # xtensa should not need a flag to build a large image
@@ -120,3 +120,29 @@ xtensa sweeps start hitting it repeatedly.
 The two candidates below are unaffected; nothing here argues for one over the
 other. It raises how often the default bites, not how it should be fixed.
 
+## 2026-09-04 — the population is no longer hypothetical (frankA)
+
+The first C translation unit ever built for xtensa
+([[bug-a-no-c-translation-unit-builds-for-xtensa-and-two-different-things-stop-it]],
+closed the same day) hits this on its first try:
+
+```
+$ ./compiler/pascal26 --target=xtensa --platform=posix \
+      test/c_crtl_syscall_guarded_bodies.c out
+pascal26:58: error: target xtensa: the forward call to __pxx_run_finalizers at
+  code offset 58526 cannot reach its body at 664880 (CALL0/CALL8 reach +-512 KiB)
+```
+
+It is not a large program. crtl is what makes the image large, and `crtl` is in
+every C program, so **the conditional the p35 rested on is now satisfied by the
+whole C-on-xtensa cell rather than by one generated row.** The error names the
+flag and the flag works, so nothing is broken and this is still a default
+problem — but it is a default that now fires for everyone rather than for a test
+harness.
+
+Note the veneer idea in the header gets *more* attractive from this run, not
+less: the failing call is `__pxx_run_finalizers`, the same tail-placed RTL
+routine the 2026-08-31 note names, reached from a call site 606 KB earlier. A
+trampoline at the end of the calling body is well inside CALL0 reach.
+
+I have not changed `prio:`.

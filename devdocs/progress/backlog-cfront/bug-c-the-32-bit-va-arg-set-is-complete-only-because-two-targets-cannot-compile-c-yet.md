@@ -6,7 +6,7 @@ type: bug
 blocked-by: []
 status: backlog
 created: 2026-08-31
-summary: "LATENT, with a named trigger. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]` tests pick the 4-byte-slot va_arg helper; everything else falls to an else whose comment says `Cross (aarch64)` but whose condition is `<> TARGET_X86_64`, i.e. the 8-byte-slot path. xtensa and wasm32 are 32-bit and absent from the set -- the set is correct TODAY only because neither can compile a C program at all (`C program entry stub not implemented for this target yet`). The day either gains an entry stub it silently gets 64-bit varargs slots. Fix the set in the SAME commit as the stub."
+summary: "HALF DISCHARGED 2026-09-04, half still armed, and the ticket's own hard requirement was met. cparser.inc's four `TargetArch in [TARGET_I386, TARGET_ARM32, TARGET_RISCV32]' tests now read `[..., TARGET_XTENSA]': that widening landed in 233e693bb, THE SAME COMMIT as the xtensa C entry stub, which is what this ticket asked for. So xtensa can no longer silently take the 8-byte-slot else arm. Verified by running, not by reading: test/c_crtl_syscall_guarded_bodies.c and four vararg probes build and run under qemu-xtensa and match the gcc oracle. NOTE the widening alone was NOT sufficient -- with the set correct, 64-bit variadic arguments were still wrong for two further reasons (the direct-call ladder never classified a tail argument, and the caller's even-word pad disagreed with the walk's packed align=4), fixed in 7574a5f8d; membership in the 4-byte set is necessary and does not by itself make a target's varargs correct. wasm32 IS STILL ABSENT from the set and the trigger stays armed for it, gated only by bug-c-no-c-program-entry-stub-for-wasm32-so-no-c-program-can-target-it -- whoever lands that stub owes the same one-line widening in the same commit."
 ---
 
 # The 32-bit `va_arg` set is complete only because two targets cannot compile C
@@ -76,3 +76,19 @@ trigger fire.
 Reword the else's comment. `Cross (aarch64)` describes the only member it has
 today, not the set it selects. Naming a branch after its sole occupant is what
 made this take a measurement to see.
+
+## 2026-09-04 — the xtensa half, discharged the way the ticket asked
+
+`233e693bb` landed the xtensa C entry stub and the four set widenings together,
+so the window this ticket was filed to prevent never opened.
+
+**The requirement earned its keep, and it was still not enough.** With xtensa in
+the 4-byte set, `printf("%llx", v)` still printed `55667788` for
+`0x1122334455667788`, because two other things were wrong (see `7574a5f8d`).
+Worth recording because the natural reading of "fix the set in the same commit"
+is that the set IS the fix — it is the precondition. Anyone landing the wasm32
+half should plan to run a `%lld` probe against the oracle, not just grep that
+the target appears in four lists.
+
+`wasm32` remains outside the set. The trigger is unchanged and the same commit
+rule applies.
