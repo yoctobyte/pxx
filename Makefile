@@ -9521,17 +9521,15 @@ test-core: $(COMPILER)
 	# it: run_target.sh's exit code is discarded here as everywhere, and an
 	# empty transcript is the shape a silent green would take.
 	#
-	# aarch64 and arm32 are DELIBERATELY ABSENT, not "not verified": ANY indirect
-	# call returning a struct by value segfaults on both -- at one byte, not at
-	# some size boundary -- and did so before this fix too (ablation). It is NOT
-	# a C defect. IR_CALL_IND's CDECL arm in ir_codegen_aarch64.inc and
-	# ir_codegen_arm32.inc never reads IRCallDest, so the hidden aggregate-result
-	# register (x8 / r0) is whatever was in it and the callee writes through
-	# garbage; riscv32 handles IRCallDest ABOVE that branch and is green.
-	# The discriminator is the CONVENTION, not the language: the equivalent
-	# PASCAL program is correct on both targets until its fn-pointer type is
-	# marked `cdecl`, at which point it segfaults identically. C reaches it on
-	# every function pointer because CParseFnSigGroup sets ProcCdecl.
+	# ALL FIVE TARGETS, and aarch64/arm32 were the point. They used to SEGFAULT
+	# on any struct returned through a function pointer -- at one byte, not at
+	# some size boundary -- which is a separate defect from the offset-zero one
+	# above and NOT a C defect: IR_CALL_IND's CDECL arm on those two backends
+	# never read IRCallDest, so the hidden aggregate-result register (x8 / r12)
+	# held whatever was there and the callee stored through garbage. x86-64's
+	# cdecl arm has done this since quickjs's JSValue and riscv32 handles
+	# IRCallDest above the branch entirely; those two never got the sibling.
+	# See test_cdecl_fnptr_aggregate_result.pas for the route with no C in it.
 	# bug-a-the-cdecl-indirect-call-arm-never-sets-up-the-hidden-aggregate-result-register-on-aarch64-and-arm32
 	# bug-c-a-field-past-the-first-eight-bytes-of-an-indirect-call-s-struct-result-reads-back-as-offset-zero
 	gcc -O0 -o $(TESTTMP)/cfnsr_gcc64 test/c_fnptr_struct_result_fields.c
@@ -9540,11 +9538,30 @@ test-core: $(COMPILER)
 	tools/expect_same.sh cfnsr26/oracle32 "$$($(TESTTMP)/cfnsr_gcc32)" "$$(cat test/c_fnptr_struct_result_fields.expected)"
 	./$(COMPILER) test/c_fnptr_struct_result_fields.c $(TESTTMP)/cfnsr26
 	tools/expect_same.sh cfnsr26/native "$$($(TESTTMP)/cfnsr26)" "$$(cat test/c_fnptr_struct_result_fields.expected)"
-	@for t in i386 riscv32; do \
-	  case $$t in i386) q=qemu-i386;; riscv32) q=qemu-riscv32;; esac; \
+	@for t in i386 riscv32 aarch64 arm32; do \
+	  case $$t in i386) q=qemu-i386;; riscv32) q=qemu-riscv32;; aarch64) q=qemu-aarch64;; arm32) q=qemu-arm;; esac; \
 	  if ! command -v $$q >/dev/null 2>&1; then echo "  cfnsr: $$q absent, $$t NOT verified"; continue; fi; \
 	  ./$(COMPILER) --target=$$t --platform=posix test/c_fnptr_struct_result_fields.c $(TESTTMP)/cfnsr_$$t >/dev/null || { echo "cfnsr $$t compile FAIL"; exit 1; }; \
 	  tools/expect_same.sh cfnsr/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/cfnsr_$$t)" "$$(cat test/c_fnptr_struct_result_fields.expected)" || exit 1; \
+	done
+	# THE SAME BACKEND ARM REACHED WITH NO C IN THE PICTURE. An aggregate through
+	# a `cdecl` function pointer in PASCAL, which is the spelling that proved the
+	# aarch64/arm32 crash above was a CONVENTION defect and not a C-frontend one:
+	# the identical program without the `cdecl` keyword takes the internal arm
+	# and was always green, so the C test alone could not have told those apart.
+	# Row 2 is that non-cdecl control and is not padding -- a fix that repaired
+	# the cdecl arm by disturbing the internal one would pass row 1 and break
+	# every proc-variable call in the RTL.
+	# The file runs unmodified under FPC and every row is IDENTICAL there, so it
+	# carries its own oracle -- a second source that fails differently.
+	# bug-a-the-cdecl-indirect-call-arm-never-sets-up-the-hidden-aggregate-result-register-on-aarch64-and-arm32
+	./$(COMPILER) test/test_cdecl_fnptr_aggregate_result.pas $(TESTTMP)/pcdecl26
+	tools/expect_same.sh pcdecl26/native "$$($(TESTTMP)/pcdecl26)" "$$(cat test/test_cdecl_fnptr_aggregate_result.expected)"
+	@for t in i386 riscv32 aarch64 arm32; do \
+	  case $$t in i386) q=qemu-i386;; riscv32) q=qemu-riscv32;; aarch64) q=qemu-aarch64;; arm32) q=qemu-arm;; esac; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "  pcdecl: $$q absent, $$t NOT verified"; continue; fi; \
+	  ./$(COMPILER) --target=$$t --platform=posix test/test_cdecl_fnptr_aggregate_result.pas $(TESTTMP)/pcdecl_$$t >/dev/null || { echo "pcdecl $$t compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh pcdecl/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/pcdecl_$$t)" "$$(cat test/test_cdecl_fnptr_aggregate_result.expected)" || exit 1; \
 	done
 	# GCC extended inline asm. Not recognised at all, so `asm` parsed as a call to
 	# an undeclared function and the operand sections died at the first ':'.

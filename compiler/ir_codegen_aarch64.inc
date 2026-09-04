@@ -2006,6 +2006,7 @@ var
   memFrozenTkA64: TTypeKind;  { frozen kind of a store-through-a-pointer DESTINATION }
   cdeclDropA64: Integer;   { bytes the C-ABI call arm must drop after the call }
   cdeclBlkA64: Integer;    { AAPCS64 outgoing stack-argument block bytes }
+  cdeclDestA64: Integer;   { 16 when the C-ABI arm carries a hidden aggregate destination, else 0 }
   a64Fp: Boolean;          { AAPCS64: this argument takes the FP bank }
   a64Ind: Boolean;         { AAPCS64: this argument's slot holds a POINTER to a caller copy }
   a64N, a64Sz: Integer;    { AAPCS64: registers it occupies, and its own size in bytes }
@@ -3889,8 +3890,39 @@ begin
             runtime value: pushed deepest, popped into x16, blr x16. Injected
             Self (i < IRC) and a variadic tail go in GP regs, mirroring the
             x86-64 cdecl shape (feature-cdecl-indirect-cross-targets). }
+          { AN AGGREGATE RESULT NEEDS ITS HIDDEN DESTINATION, and this arm never
+            set one up: x8 held whatever was already there and the callee's
+            EmitAggregateDestStash prologue stored through it -- a SEGFAULT on
+            any struct returned through a C function pointer, at ONE byte, not
+            at some size boundary. x86-64's cdecl arm has carried exactly this
+            since quickjs's JSValue ("without this the cdecl arm left r10
+            garbage and every C intrinsic returning a struct through a fn-ptr
+            table came back empty"), and riscv32 handles IRCallDest above the
+            cdecl branch entirely. aarch64 and arm32 were the two arms that
+            never got the sibling.
+
+            x8 is pxx's INTERNAL destination register, deliberately, and not the
+            external AAPCS64 indirect-result shape: the callee reached through a
+            C function pointer is pxx-COMPILED, and its prologue has no idea how
+            it was reached, so a different register here would be a second
+            convention for one thing. True-AAPCS64 sret from an EXTERN (dlsym)
+            target stays unmodelled -- the same caveat this arm already carries
+            for its result.
+
+            Pushed DEEPEST, below the callee word, and read back by OFFSET
+            rather than popped: evaluating it late would clobber x0, which by
+            then holds argument 0. That is the one thing x86-64 does differently,
+            and only because rax is not an argument register there.
+            bug-a-the-cdecl-indirect-call-arm-never-sets-up-the-hidden-aggregate-result-register-on-aarch64-and-arm32 }
+          cdeclDestA64 := 0;
+          if IRCallDest[node] >= 0 then
+          begin
+            IREmitNodeAarch64(IRCallDest[node]);     { x0 = hidden destination }
+            EmitI32($F81F0FE0);                      { str x0, [sp, #-16]! (dest, deepest) }
+            cdeclDestA64 := 16;
+          end;
           IREmitNodeAarch64(IRA[node]);              { x0 = callee address }
-          EmitI32($F81F0FE0);                        { str x0, [sp, #-16]! (callee, deepest) }
+          EmitI32($F81F0FE0);                        { str x0, [sp, #-16]! (callee) }
           argNode := IRB[node];
           nArgs := 0;
           while argNode <> -1 do
@@ -3929,7 +3961,7 @@ begin
           A64BuildArgVecN(procIdx, Integer(IRC[node]), IRB[node], nArgs,
                           argFpA64, argIndA64, argAggA64, argRegsA64, argSizeA64);
           cdeclBlkA64 := ABIA64VecStackBytesN(argRegsA64, argSizeA64, argFpA64, nArgs);
-          if cdeclBlkA64 + (nArgs + 1) * 16 > 32760 then
+          if cdeclBlkA64 + (nArgs + 1) * 16 + cdeclDestA64 > 32760 then
             Error('target aarch64: cdecl indirect call with ' + AIntToStr(nArgs) +
                   ' arguments needs a temp block past the 32760-byte reach of ' +
                   'a scaled LDR immediate');
@@ -3976,8 +4008,15 @@ begin
           end;
           sz := cdeclBlkA64 + nArgs * 16;
           EmitI32($F94003F0 or ((sz div 8) shl 10));       { ldr x16, [sp, #sz] (callee) }
+          { x8 last, after the argument registers are all loaded -- it is not one
+            of them, but the load is by offset off a live block. }
+          if cdeclDestA64 <> 0 then
+          begin
+            sz := cdeclBlkA64 + (nArgs + 1) * 16;
+            EmitI32($F94003E8 or ((sz div 8) shl 10));     { ldr x8, [sp, #sz] (hidden dest) }
+          end;
           EmitI32($D63F0200);                              { blr x16 }
-          EmitI32($910003FF or ((cdeclBlkA64 + (nArgs + 1) * 16) shl 10)); { add sp, sp, #drop }
+          EmitI32($910003FF or ((cdeclBlkA64 + (nArgs + 1) * 16 + cdeclDestA64) shl 10)); { add sp, sp, #drop }
           if TypeIsFloat(Procs[procIdx].RetType) then
           begin
             if Procs[procIdx].RetType = tySingle then

@@ -4,7 +4,7 @@ track: A
 prio: 60
 type: bug
 blocked-by: []
-status: backlog
+status: done
 found: 2026-09-05
 found-by: frankC
 owner: frankC
@@ -140,3 +140,58 @@ Adding cross-target coverage for
 `test/c_fnptr_struct_result_fields.c` is wired on x86-64, i386 and riscv32 with
 aarch64 and arm32 named as deliberately absent, citing this ticket; add them to
 that Makefile row when this closes.
+
+## Resolution
+
+Fixed on both backends, mirroring the internal arm rather than implementing the
+external AAPCS sret shape — the option this ticket priced above, and the one
+x86-64 and riscv32 already chose.
+
+**aarch64** (`ir_codegen_aarch64.inc`): the destination is pushed DEEPEST, below
+the callee word, and read back into **x8** by offset immediately before the
+`blr`. Deepest-and-by-offset rather than evaluated late, because
+`IREmitNodeAarch64` leaves its result in x0 and by that point x0 holds argument
+0 — that is the one thing x86-64 does differently, and only because rax is not
+an argument register there. The reach check and the post-call `add sp` each
+take one more 16-byte slot.
+
+**arm32** (`ir_codegen_arm32.inc`): it costs no stack at all. The callee already
+rides in an EIGHT-byte slot above the block — eight for the alignment the `blx`
+needs, four actually used — so the destination goes in the pad at `[sp, #blk+4]`
+and every drop is arithmetically unchanged. Because r12 is where the internal
+convention puts the destination, the callee moves to **r9** for that case only,
+which is the register the internal indirect arm already uses for a callee. With
+no destination the emitted sequence is byte-identical to what it always was, so
+the previously-green path does not move.
+
+**Measured, all five targets, both languages:**
+
+```
+                       C repro          Pascal `cdecl` repro
+x86_64   7 11 13        7 11 13
+i386     7 11 13        7 11 13
+riscv32  7 11 13        7 11 13
+aarch64  7 11 13  (was SIGSEGV)   7 11 13  (was SIGSEGV)
+arm32    7 11 13  (was SIGSEGV)   7 11 13  (was SIGSEGV)
+```
+
+`test/c_fnptr_struct_result_fields.c` now runs on all five rather than three,
+and `test/test_cdecl_fnptr_aggregate_result.pas` is new: the same backend arm
+reached with no C in the picture, since the C test alone cannot tell a
+convention defect from a frontend one. That file runs unmodified under FPC with
+an identical transcript, so it carries a second oracle that fails differently.
+Its row 2 is a NON-cdecl control and is not padding — a fix that repaired the
+cdecl arm by disturbing the internal one would pass row 1 and break every
+proc-variable call in the RTL.
+
+**Gate.** The wide suite went RED on `make test`, and it is NOT this change:
+`tools/assert_no_leak.sh test_ssvarrec26 200` refuses at
+`allocs=33`, a row that landed yesterday in `1cac1742a`. Ablated — stash both
+backend files, rebuild (`converged`, binary `80a3f9e73673`), identical census,
+still exit 1 — and filed as
+[[bug-a-the-shortstring-array-of-const-leak-assertion-cannot-run-its-subject-allocates-33-times]].
+Everything else in that run passed, including `make test-nilpy` and the FPC
+seed canary.
+
+## Log
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

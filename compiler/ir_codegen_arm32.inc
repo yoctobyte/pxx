@@ -3482,6 +3482,29 @@ begin
           IREmitNodeArm32(IRA[node]);               { r0 = callee address }
           EmitI32($E24DD000 or (blk + 8));          { sub sp, sp, #blk+8 }
           EmitI32($E58D0000 or blk);                { str r0, [sp, #blk] (callee) }
+          { AN AGGREGATE RESULT NEEDS ITS HIDDEN DESTINATION, and this arm never
+            set one up: r12 held whatever was already there and the callee's
+            EmitAggregateDestStash prologue stored through it -- a SEGFAULT on
+            any struct returned through a C function pointer, at ONE byte, not
+            at some size boundary. x86-64's cdecl arm has carried the same thing
+            since quickjs's JSValue and riscv32 handles IRCallDest above the
+            cdecl branch entirely; arm32 and aarch64 were the two that never got
+            the sibling.
+            bug-a-the-cdecl-indirect-call-arm-never-sets-up-the-hidden-aggregate-result-register-on-aarch64-and-arm32
+
+            IT COSTS NO STACK. The callee already rides in an EIGHT-byte slot
+            above the block -- eight for the alignment the `blx` needs, four
+            actually used -- so the destination goes in the pad at [sp, #blk+4]
+            and every drop below is arithmetically unchanged.
+
+            Evaluated AFTER the callee store because it returns in r0 as well;
+            reading it off the frame pointer after sp has moved is what the
+            argument emission below already does. }
+          if IRCallDest[node] >= 0 then
+          begin
+            IREmitNodeArm32(IRCallDest[node]);      { r0 = hidden destination }
+            EmitI32($E58D0000 or (blk + 4));        { str r0, [sp, #blk+4] (dest, in the pad) }
+          end;
           argNode := IRB[node];
           nArgs := 0;
           j := 0;   { running block offset }
@@ -3551,9 +3574,26 @@ begin
             EmitI32($E59D0000 or (i shl 12) or (i * 4)); { ldr r[i], [sp, #i*4] }
             Inc(i);
           end;
-          EmitI32($E59DC000 or blk);                { ldr r12, [sp, #blk] (callee) }
-          EmitI32($E28DD010);                       { add sp, sp, #16 -> stack args }
-          EmitI32($E12FFF3C);                       { blx r12 }
+          { WITH A HIDDEN DESTINATION THE CALLEE MOVES OFF r12, because r12 is
+            where pxx's internal convention puts the destination and the
+            pxx-compiled callee reads it there. r9 is the register the INTERNAL
+            indirect arm below already uses for a callee, so this borrows an
+            existing convention rather than inventing a third one. Without a
+            destination the sequence is byte-identical to what it always was --
+            the green path does not move. }
+          if IRCallDest[node] >= 0 then
+          begin
+            EmitI32($E59D9000 or blk);              { ldr r9,  [sp, #blk]   (callee) }
+            EmitI32($E59DC000 or (blk + 4));        { ldr r12, [sp, #blk+4] (hidden dest) }
+            EmitI32($E28DD010);                     { add sp, sp, #16 -> stack args }
+            EmitI32($E12FFF39);                     { blx r9 }
+          end
+          else
+          begin
+            EmitI32($E59DC000 or blk);              { ldr r12, [sp, #blk] (callee) }
+            EmitI32($E28DD010);                     { add sp, sp, #16 -> stack args }
+            EmitI32($E12FFF3C);                     { blx r12 }
+          end;
           EmitI32($E28DD000 or (blk + 8 - 16));     { add sp, sp, #blk-8 (drop block) }
           if Procs[procIdx].RetType = tySingle then
           begin
