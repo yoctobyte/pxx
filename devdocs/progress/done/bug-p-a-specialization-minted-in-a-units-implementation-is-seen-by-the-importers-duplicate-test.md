@@ -7,7 +7,7 @@ status: done
 blocked-by: []
 created: 2026-09-04
 found-by: frankB
-commit: PENDING-COMMIT
+commit: cd44193c6
 summary: "FIXED same day. A program specializing the SAME template a used unit already specialized in its IMPLEMENTATION section answered `unknown type: TBox$Integer`. A SEAM between two same-day commits, neither wrong alone: Track D's interface/implementation boundary taught the declaration tables which section a row came from, while FindSpecialization -- a visibility check whose own comment explains why it must be one -- still had only the UNIT half. It saw the unit's private row and skipped the program's declaration as an exact re-statement; FindUClass refused that same row. One declaration, two visibility checks, disagreeing. Specializations[] gained the section stamp (SpecDeclImpl[] + IMPLTAB_SPEC) and FindSpecialization now uses DeclVisibleSect."
 ---
 
