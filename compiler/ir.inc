@@ -6557,6 +6557,27 @@ begin
      CaseEqual(Procs[pi].Name, 'TextWriteLn') or
      CaseEqual(Procs[pi].Name, 'TextReadLn') then
     Result := True;
+  { The RECORD-FILE half. Reset/Rewrite/Close/CloseFile/Erase above already
+    match a `file of T` handle by name and a tyRecord first parameter, so under
+    {$I+} a typed file was HALF checked: opening it was, reading and seeking on
+    it were not. These six complete it.
+
+    Gated on the parameter's RECORD IDENTITY rather than on tyRecord alone,
+    which the names above cannot be: `Seek`, `Truncate`, `BlockRead` and
+    `BlockWrite` are ordinary words and a user's own `Seek(var s: TCursor)`
+    would otherwise pick up a PXXIoCheck it never asked for. ProcParamRecId is
+    the durable carrier (a param SYMBOL does not outlive the callee's scope);
+    when it is unset the guard simply does not fire, which is the safe
+    direction. feature-pascal-typed-and-untyped-files }
+  if (not Result) and (IsRecordType('filerec') <> REC_NONE) and
+     (ProcParamRecId[pi * MAX_PROC_PARAMS + 0] = IsRecordType('filerec')) then
+    if CaseEqual(Procs[pi].Name, 'FileReadRec') or
+       CaseEqual(Procs[pi].Name, 'FileWriteRec') or
+       CaseEqual(Procs[pi].Name, 'Seek') or
+       CaseEqual(Procs[pi].Name, 'Truncate') or
+       CaseEqual(Procs[pi].Name, 'BlockRead') or
+       CaseEqual(Procs[pi].Name, 'BlockWrite') then
+      Result := True;
 end;
 
 function IRWrapChkBounds(value: Integer; lo, hi: Int64): Integer;
@@ -7556,6 +7577,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     intfCallCi, intfSelfSym, intfImtSym: Integer;   { single-pointer interface call }
     frameNode, slotNode, bpAddr, addrAddr, bpVal, selfVal: Integer;
     pairNode, condNode, specialId, classIdx, slot, cpi, pathIdx: Integer;
+    dfltRecSz: Int64;   { an omitted `__recsize` argument: the file element width from the first argument's symbol, else the declared default }
     ctorArgCpi, ctorArgSlot: Integer;   { construction: coerce ctor args by the ctor's param types }
     lenArg: Integer;   { Length(<wide string>): the arg node, to halve the byte count }
     dfltAST, dfltSym, dfltIdent, dfltAsgn: Integer;   { a filled default, materialised for IRLowerCallArg }
@@ -13713,10 +13735,28 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
                        Ord(tySet)),
               -1, -1, 0, Ord(tySet))
           else
+          begin
+            { THE FILE ELEMENT WIDTH. An omitted `__recsize` is not really a
+              default at all — the declared 128 is only what an untyped `file`
+              would want — so the value is taken from the FIRST ARGUMENT's
+              symbol, which is the file variable. This is the last of the three
+              places that fill an omitted trailing argument, and it is the one
+              an ordinary `Assign(f, name)` statement actually reaches: the two
+              parser-side fills (FillDefaultArgs, TryFillTrailingDefaults) serve
+              arities the overload matcher could not accept on its own, and a
+              call the matcher DID accept short comes all the way here with its
+              defaults unfilled. Three fills for one concept is a smell the
+              backlog already carries; until it is one, the override has to be
+              in all three or `Assign` works in some spellings and not others.
+              feature-pascal-typed-and-untyped-files }
+            dfltRecSz := FileRecSizeArgOverride(cpi, pathIdx, ASTLeft[node]);
+            if dfltRecSz <= 0 then
+              dfltRecSz := ProcParamDefaultVal[cpi * MAX_PROC_PARAMS + pathIdx];
             argNode := IRAppend(IR_ARG,
-              IRAppend(IR_CONST_INT, -1, -1, -1, ProcParamDefaultVal[cpi * MAX_PROC_PARAMS + pathIdx],
+              IRAppend(IR_CONST_INT, -1, -1, -1, dfltRecSz,
                        Ord(Procs[cpi].Params[pathIdx].TypeKind)),
               -1, -1, 0, Ord(Procs[cpi].Params[pathIdx].TypeKind));
+          end;
           if first < 0 then first := argNode else IRB[last] := argNode;
           last := argNode;
           Inc(pathIdx);

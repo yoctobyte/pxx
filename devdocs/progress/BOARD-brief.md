@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:14 unfinished:26 blocked:7 backlog:6 backlog-umbrella:7 backlog-core:137 backlog-nilpy:97 backlog-tools:20 backlog-pascal:31 backlog-decide:37 backlog-libs:15 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3297 rejected:76`
+`working:15 unfinished:26 blocked:7 backlog:6 backlog-umbrella:7 backlog-core:137 backlog-nilpy:97 backlog-tools:20 backlog-pascal:30 backlog-decide:37 backlog-libs:15 backlog-cfront:13 backlog-web:7 backlog-windows:4 backlog-docs:3 backlog-esp:2 experimental:20 rainy-day:45 low-prio:71 known-incompat:3 float:25 done-followup:3 decided:145 done:3297 rejected:76`
 
 ## Held now (working/ — do not touch these files)
 
@@ -18,6 +18,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-heap-per-thread-cache` [A+O] — owner: frankA
 - `feature-opt-inline-float-and-record-returning-leaves` [A+O] — owner: frank-optimize
 - `feature-pascal-corpus-oop` [P] — owner: frank-rust
+- `feature-pascal-typed-and-untyped-files` [P] — owner: frankB
 - `feature-tls-provider-abstraction` [B] — owner: frankH
 - `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` [P] — owner: frankA
 - `refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops` [A] — owner: frankA
@@ -63,7 +64,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-release-checksums-repro` [A] — blocked-by: decide-release-signing-key-custody
 - `regression-test-sqlite-threads-aarch64-output-mismatch-untracked-since-08-29` [A]
 
-## Ready — top 30 of 375, ranked
+## Ready — top 30 of 374, ranked
 
 - `[p 85] [T]` bug-t-tstate-fingerprints-the-code-and-the-hardware-but-not-the-emulator-toolchain (unblocks 2)
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
@@ -78,7 +79,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [U]` decide-a-a-foreign-thread-needs-its-own-tls-block-and-the-bounds-are-the-hard-part (unblocks 2)
 - `[p 70] [A]` bug-a-wasm32-emits-a-separate-function-per-compileast-call-so-a-proc-built-in-two-calls-loses-a-body (unblocks 1)
 - `[p 70] [N]` bug-n-not-and-invert-read-the-box-of-a-name-assigned-from-arithmetic
-- `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [A]` perf-a-every-return-releases-every-managed-local-even-the-untouched-ones
 - `[p 70] [T]` regression-cascade-b8e3b3010249
 - `[p 70] [T]` regression-optdiff-shard6-12
@@ -95,5 +95,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-generics
+- `[p 62] [N]` feature-n-sys-version-info-implementation-and-the-probe-suite
 
-_345 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_344 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -259,6 +259,8 @@ begin
   AliasTargetNOff[AliasCount] := targetNOff;
   AliasTargetNLen[AliasCount] := targetNLen;
   AliasProcSig[AliasCount] := -1;
+  AliasFileElemTk[AliasCount] := 0;
+  AliasFileRecSize[AliasCount] := 0;   { not a file alias — the table is global, so a recycled row must be cleared }
   AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
   Inc(AliasCount);
 end;
@@ -338,6 +340,20 @@ begin
     AliasStrCap[AliasCount] := LastTypeStrCap
   else
     AliasStrCap[AliasCount] := 0;
+  { …and a FILE alias keeps its element width, same window and same reason:
+    `type TIntFile = file of Integer` is where a file type is nearly always
+    spelled, and the variable declared through it is far away.
+    feature-pascal-typed-and-untyped-files }
+  if IntToTypeKind(tk) = tyRecord then
+  begin
+    AliasFileRecSize[AliasCount] := LastTypeFileRecSize;
+    AliasFileElemTk[AliasCount] := LastTypeFileElemTk;
+  end
+  else
+  begin
+    AliasFileRecSize[AliasCount] := 0;
+    AliasFileElemTk[AliasCount] := 0;
+  end;
   { …and a MANAGED-string alias keeps its ELEMENT WIDTH, for the same reason and
     in the same window: ParseTypeKind has just run for the right-hand side, so
     LastTypeStrElemTk holds tyWideChar for `TW = WideString`. tyAnsiString is
@@ -373,6 +389,8 @@ begin
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := sigPi;
+  AliasFileElemTk[AliasCount] := 0;
+  AliasFileRecSize[AliasCount] := 0;   { not a file alias — the table is global, so a recycled row must be cleared }
   AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
   Inc(AliasCount);
 end;
@@ -397,6 +415,8 @@ begin
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := sigPi;
+  AliasFileElemTk[AliasCount] := 0;
+  AliasFileRecSize[AliasCount] := 0;   { not a file alias — the table is global, so a recycled row must be cleared }
   AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
   Inc(AliasCount);
 end;
@@ -485,6 +505,8 @@ begin
   AliasTargetNOff[AliasCount] := 0;
   AliasTargetNLen[AliasCount] := 0;
   AliasProcSig[AliasCount] := -1;
+  AliasFileElemTk[AliasCount] := 0;
+  AliasFileRecSize[AliasCount] := 0;   { not a file alias — the table is global, so a recycled row must be cleared }
   AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
   Inc(AliasCount);
 end;
@@ -517,6 +539,8 @@ begin
   AliasPtrBaseTk[AliasCount] := Ord(tyClass);
   AliasPtrBaseRec[AliasCount] := classRec;
   AliasProcSig[AliasCount] := -1;
+  AliasFileElemTk[AliasCount] := 0;
+  AliasFileRecSize[AliasCount] := 0;   { not a file alias — the table is global, so a recycled row must be cleared }
   AliasUnitIdx[AliasCount] := CurrentUnitIdx; AliasDeclImpl[AliasCount] := DeclInImplNow;
   Inc(AliasCount);
 end;
@@ -4654,6 +4678,7 @@ begin
   SetLength(SymElemEnumId, n);
   SetLength(SymPtrElemStrTk, n);
   SetLength(SymStrElemTk, n);
+  SetLength(SymFileRecSize, n);   SetLength(SymFileElemTk, n);
   SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
   SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemArrAi, n);  SetLength(SymPtrElemAlias, n);  SetLength(SymPtrElemStrCap, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
@@ -4864,6 +4889,8 @@ begin
   SymSetElemLo[SymCount] := 0;
   SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
+  SymFileElemTk[SymCount] := 0;
+  SymFileRecSize[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's file element width }
   SymStrElemTk[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's width }
   SymPtrElemStrTk[SymCount] := 0;   { same recycled-slot rule for the POINTEE's width }
   SymIsSub[SymCount] := LastTypeIsSub;
@@ -4907,6 +4934,17 @@ begin
       SymStrCap[SymCount] := DEFAULT_STR_CAP
     else
       SymStrCap[SymCount] := LastTypeStrCap;
+  end;
+  { `file of T` / `file`: the element width Seek/FilePos/FileSize count in. Same
+    window as SymStrCap above — ParseTypeKind has just run for this symbol's
+    type. AllocParam's copy is overwritten from ptypesFileRecSize[] afterwards,
+    for the reason ptypesStrCap exists: the parameter allocation loop runs after
+    EVERY parameter's type has been parsed, so this channel describes the LAST
+    one. feature-pascal-typed-and-untyped-files }
+  if tk = tyRecord then
+  begin
+    SymFileRecSize[SymCount] := LastTypeFileRecSize;
+    SymFileElemTk[SymCount] := LastTypeFileElemTk;
   end;
   SymRTTIOff[SymCount] := -1;
   SymIsHiddenArgTemp[SymCount] := False;
@@ -5189,6 +5227,8 @@ begin
   SymSetElemLo[SymCount] := 0;
   SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
+  SymFileElemTk[SymCount] := 0;
+  SymFileRecSize[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's file element width }
   SymStrElemTk[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's width }
   SymPtrElemStrTk[SymCount] := 0;   { same recycled-slot rule for the POINTEE's width }
   SymIsSub[SymCount] := LastTypeIsSub;
@@ -5232,6 +5272,17 @@ begin
       SymStrCap[SymCount] := DEFAULT_STR_CAP
     else
       SymStrCap[SymCount] := LastTypeStrCap;
+  end;
+  { `file of T` / `file`: the element width Seek/FilePos/FileSize count in. Same
+    window as SymStrCap above — ParseTypeKind has just run for this symbol's
+    type. AllocParam's copy is overwritten from ptypesFileRecSize[] afterwards,
+    for the reason ptypesStrCap exists: the parameter allocation loop runs after
+    EVERY parameter's type has been parsed, so this channel describes the LAST
+    one. feature-pascal-typed-and-untyped-files }
+  if tk = tyRecord then
+  begin
+    SymFileRecSize[SymCount] := LastTypeFileRecSize;
+    SymFileElemTk[SymCount] := LastTypeFileElemTk;
   end;
   SymRTTIOff[SymCount] := -1;
   Syms[SymCount].ElemType := tk;
@@ -5532,6 +5583,8 @@ begin
   SymSetElemLo[SymCount] := 0;
   SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
+  SymFileElemTk[SymCount] := 0;
+  SymFileRecSize[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's file element width }
   SymStrElemTk[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's width }
   SymPtrElemStrTk[SymCount] := 0;   { same recycled-slot rule for the POINTEE's width }
   SymIsSub[SymCount] := LastTypeIsSub;
@@ -5655,6 +5708,8 @@ begin
   SymSetElemLo[SymCount] := 0;
   SymSetElemHi[SymCount] := -1;   { Hi < Lo = no element subrange recorded }
   SymStrCap[SymCount] := 0;
+  SymFileElemTk[SymCount] := 0;
+  SymFileRecSize[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's file element width }
   SymStrElemTk[SymCount] := 0;   { sym slots are RECYCLED — never inherit a previous occupant's width }
   SymPtrElemStrTk[SymCount] := 0;   { same recycled-slot rule for the POINTEE's width }
   SymIsSub[SymCount] := LastTypeIsSub;
@@ -8858,7 +8913,15 @@ end;
   types there). }
 function RecContainsTextRec(ri: Integer): Boolean;
 begin
-  Result := RecContainsRecIdDepth(ri, IsRecordType('text'), 0);
+  { BOTH file records, not just Text. `Default(TRec)` is undefined for a record
+    holding ANY file, and since `file of T` became a real type (FileRec) a
+    record holding one is the same construct wearing the other spelling — the
+    second path that stays broken if only the first is asked.
+    feature-pascal-typed-and-untyped-files }
+  Result := (IsRecordType('text') <> REC_NONE) and
+            RecContainsRecIdDepth(ri, IsRecordType('text'), 0);
+  if (not Result) and (IsRecordType('filerec') <> REC_NONE) then
+    Result := RecContainsRecIdDepth(ri, IsRecordType('filerec'), 0);
 end;
 
 function RecIdsDistinctNamed(a, b: Integer): Boolean;

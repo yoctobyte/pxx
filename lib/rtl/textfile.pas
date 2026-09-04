@@ -58,6 +58,29 @@ type
     DefBuf: array[0..TF_BUFSIZE - 1] of Byte;
   end;
 
+  { THE UNTYPED HALF OF THE FILE SURFACE — what `file of T` and a bare `file`
+    both resolve to. ONE record for every element type, exactly as `Text` is one
+    record for every text file: what the element type contributes is a WIDTH,
+    and a width is a value, not a layout. The compiler stamps it into RecSize at
+    the Assign call (the only moment the frontend has to know it) and every
+    operation after that reads the record.
+
+    NO BUFFER, deliberately. Text reads a line at a time and pays one syscall
+    per few dozen lines only because it reads ahead; a record file reads exactly
+    SizeOf(T) bytes at a position the program chose, and a read-ahead buffer
+    would have to be invalidated by every Seek — which is every other statement
+    in the idiom this exists for. One syscall per record is also what FPC does.
+
+    feature-pascal-typed-and-untyped-files }
+  FileRec = record
+    Handle: Integer;
+    Name: AnsiString;
+    { Bytes per record. 128 for an untyped `file` unless `Reset(f, n)` /
+      `Rewrite(f, n)` says otherwise — FPC's default block size. NEVER 0: every
+      position query divides by it, so Assign floors it. }
+    RecSize: Integer;
+  end;
+
 procedure Assign(var f: Text; const path: AnsiString);
 procedure AssignFile(var f: Text; const path: AnsiString);
 procedure Reset(var f: Text);
@@ -187,6 +210,41 @@ procedure Flush(var f: Text);
   a non-seekable handle, which TFOpened's default refuses (see there). A caller
   naming a buffer is a different signal from us choosing to buffer one. }
 procedure SetTextBuf(var f: Text; var Buf; Size: Integer);
+
+{ ---- typed and untyped files (`file of T`, `file`) ----------------------
+  The classic record-file idiom: Assign, Rewrite/Reset, Write/Read, Seek,
+  FilePos, FileSize, Truncate, BlockRead/BlockWrite, Close. Positions and
+  counts are in RECORDS, never bytes — that is the whole difference between
+  this surface and a raw PAL handle, and getting it wrong is silent.
+
+  __recsize is written by the COMPILER, not by the programmer: it is the
+  element width of the declared `file of T`, injected at the Assign call as the
+  omitted trailing argument. A hand-written third argument works, and is how an
+  untyped file gets a block size without a `Reset(f, n)`. }
+procedure Assign(var f: FileRec; const path: AnsiString; __recsize: Integer = 128); overload;
+procedure AssignFile(var f: FileRec; const path: AnsiString; __recsize: Integer = 128); overload;
+procedure Reset(var f: FileRec); overload;
+procedure Reset(var f: FileRec; recSize: Integer); overload;
+procedure Rewrite(var f: FileRec); overload;
+procedure Rewrite(var f: FileRec; recSize: Integer); overload;
+procedure Close(var f: FileRec); overload;
+procedure CloseFile(var f: FileRec); overload;
+procedure Erase(var f: FileRec); overload;
+procedure Rename(var f: FileRec; const NewName: AnsiString); overload;
+function Eof(var f: FileRec): Boolean; overload;
+procedure Seek(var f: FileRec; n: Int64);
+function FilePos(var f: FileRec): Int64;
+function FileSize(var f: FileRec): Int64;
+procedure Truncate(var f: FileRec);
+procedure BlockRead(var f: FileRec; var Buf; count: Int64); overload;
+procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: Int64); overload;
+procedure BlockWrite(var f: FileRec; var Buf; count: Int64); overload;
+procedure BlockWrite(var f: FileRec; var Buf; count: Int64; var numWritten: Int64); overload;
+{ The lowering targets for `Read(f, v)` / `Write(f, v)` over a file handle. One
+  record each, at the current position — the statement hook emits one call per
+  argument, which is what makes `Read(f, a, b)` two records and not one. }
+procedure FileReadRec(var f: FileRec; var Buf; sz: Integer);
+procedure FileWriteRec(var f: FileRec; var Buf; sz: Integer);
 
 procedure PXXIoCheck;
 
@@ -754,6 +812,254 @@ begin
     first ReadLn would set the size and leave Buffered alone -- accepted and
     half-ignored, which is the shape this whole piece of work exists to remove. }
   if f.Handle >= 0 then f.Buffered := True;
+end;
+
+
+{ ---- typed and untyped files -------------------------------------------
+  Positions are converted BY THIS UNIT and nowhere else: every public routine
+  below takes or returns a RECORD index and multiplies by RecSize on the way to
+  PAL. A caller that computes a byte offset itself is the bug this containment
+  is meant to make impossible.
+
+  FPC's IOResult codes for the two failures a record file has that a text file
+  does not: 100 is "disk read error", which FPC reports for a Read past the end
+  of a typed file (measured on fpc 3.2.2 — a Read at Eof answers 100, not 0 and
+  not a short read), and 101 is "disk write error". }
+const
+  TF_ERR_READ  = 100;
+  TF_ERR_WRITE = 101;
+
+{ RecSize is a divisor in three routines below and a multiplier in four. A zero
+  would be a hardware trap in the first group and a silent zero-length I/O in
+  the second — two different wrong answers for one unset field — so it is read
+  through here and never directly. Assign floors it; this covers the record that
+  was never Assign'd at all, which is a legal thing to declare. }
+function FRecSize(var f: FileRec): Integer;
+begin
+  if f.RecSize > 0 then Result := f.RecSize else Result := 128;
+end;
+
+function FROpened(var f: FileRec): Boolean;
+begin
+  Result := f.Handle >= 0;
+  if not Result then SetIO(TF_ERR_NOT_OPEN);
+end;
+
+procedure Assign(var f: FileRec; const path: AnsiString; __recsize: Integer);
+begin
+  f.Handle := -1;
+  f.Name := path;
+  if __recsize > 0 then f.RecSize := __recsize else f.RecSize := 128;
+  SetIO(TF_OK);
+end;
+
+procedure AssignFile(var f: FileRec; const path: AnsiString; __recsize: Integer);
+begin
+  Assign(f, path, __recsize);
+end;
+
+procedure Reset(var f: FileRec);
+begin
+  { FPC opens a typed file according to FileMode, whose default is 2 = read/write
+    — which is what makes the read-modify-write idiom (Reset, Seek, Read, Seek,
+    Write) work with no reopen. Fall back to read-only rather than failing, so a
+    file the process may only read still opens; the failure then lands on the
+    Write, where it names the real problem. }
+  f.Handle := PalOpen(PChar(f.Name), PAL_OPEN_RDWR, 0);
+  if f.Handle < 0 then
+    f.Handle := PalOpen(PChar(f.Name), PAL_OPEN_READ, 0);
+  if f.Handle < 0 then SetIO(f.Handle) else SetIO(TF_OK);
+end;
+
+procedure Reset(var f: FileRec; recSize: Integer);
+begin
+  { The untyped-file form: the block size is the caller's, not the type's. }
+  if recSize > 0 then f.RecSize := recSize;
+  Reset(f);
+end;
+
+procedure Rewrite(var f: FileRec);
+begin
+  f.Handle := PalOpen(PChar(f.Name),
+    PAL_OPEN_RDWR or PAL_OPEN_CREATE or PAL_OPEN_TRUNC, 438);
+  if f.Handle < 0 then SetIO(f.Handle) else SetIO(TF_OK);
+end;
+
+procedure Rewrite(var f: FileRec; recSize: Integer);
+begin
+  if recSize > 0 then f.RecSize := recSize;
+  Rewrite(f);
+end;
+
+procedure Close(var f: FileRec);
+var rc: Integer;
+begin
+  if f.Handle >= 0 then
+  begin
+    rc := PalClose(f.Handle);
+    if rc < 0 then SetIO(rc) else SetIO(TF_OK);
+  end
+  else
+    SetIO(TF_OK);
+  f.Handle := -1;
+end;
+
+procedure CloseFile(var f: FileRec);
+begin
+  Close(f);
+end;
+
+procedure Erase(var f: FileRec);
+var rc: Integer;
+begin
+  if f.Name = '' then
+  begin
+    SetIO(TF_ERR_NOT_ASSIGNED);
+    Exit;
+  end;
+  rc := PalDelete(PChar(f.Name));
+  if rc < 0 then SetIO(rc) else SetIO(TF_OK);
+end;
+
+procedure Rename(var f: FileRec; const NewName: AnsiString);
+var rc: Integer;
+begin
+  if f.Name = '' then
+  begin
+    SetIO(TF_ERR_NOT_ASSIGNED);
+    Exit;
+  end;
+  if f.Handle >= 0 then
+  begin
+    { FPC answers 102 for a rename of an OPEN handle — the same code, and the
+      same reason, as the Text twin above. }
+    SetIO(TF_ERR_NOT_ASSIGNED);
+    Exit;
+  end;
+  rc := PalRename(PChar(f.Name), PChar(NewName));
+  if rc < 0 then SetIO(rc)
+  else
+  begin
+    f.Name := NewName;
+    SetIO(TF_OK);
+  end;
+end;
+
+function FilePos(var f: FileRec): Int64;
+begin
+  Result := 0;
+  if not FROpened(f) then Exit;
+  Result := PalTell(f.Handle);
+  if Result < 0 then begin SetIO(Integer(Result)); Result := 0; Exit; end;
+  Result := Result div FRecSize(f);
+  SetIO(TF_OK);
+end;
+
+function FileSize(var f: FileRec): Int64;
+var cur, endPos: Int64;
+begin
+  Result := 0;
+  if not FROpened(f) then Exit;
+  cur := PalSeek(f.Handle, 0, PAL_SEEK_CUR);
+  endPos := PalSeek(f.Handle, 0, PAL_SEEK_END);
+  { Put the cursor back before answering. A size query that MOVES the position
+    would make `if FileSize(f) > 0 then Read(f, r)` read the wrong record — the
+    kind of divergence that only shows up when the query is in the condition. }
+  if cur >= 0 then PalSeek(f.Handle, cur, PAL_SEEK_SET);
+  if endPos < 0 then begin SetIO(Integer(endPos)); Exit; end;
+  Result := endPos div FRecSize(f);
+  SetIO(TF_OK);
+end;
+
+procedure Seek(var f: FileRec; n: Int64);
+var rc: Int64;
+begin
+  if not FROpened(f) then Exit;
+  rc := PalSeek(f.Handle, n * FRecSize(f), PAL_SEEK_SET);
+  if rc < 0 then SetIO(Integer(rc)) else SetIO(TF_OK);
+end;
+
+procedure Truncate(var f: FileRec);
+var rc: Integer;
+begin
+  if not FROpened(f) then Exit;
+  rc := PalFtruncate(f.Handle, PalTell(f.Handle));
+  if rc < 0 then SetIO(rc) else SetIO(TF_OK);
+end;
+
+function Eof(var f: FileRec): Boolean;
+var cur, endPos: Int64;
+begin
+  Result := True;
+  if not FROpened(f) then Exit;
+  cur := PalSeek(f.Handle, 0, PAL_SEEK_CUR);
+  endPos := PalSeek(f.Handle, 0, PAL_SEEK_END);
+  if cur >= 0 then PalSeek(f.Handle, cur, PAL_SEEK_SET);
+  if (cur < 0) or (endPos < 0) then Exit;
+  Result := cur >= endPos;
+  SetIO(TF_OK);
+end;
+
+procedure FileReadRec(var f: FileRec; var Buf; sz: Integer);
+var n: Int64;
+begin
+  if not FROpened(f) then Exit;
+  n := PalRead(f.Handle, @Buf, sz);
+  if n < 0 then SetIO(Integer(n))
+  else if n < sz then SetIO(TF_ERR_READ)   { past the end, or a torn record }
+  else SetIO(TF_OK);
+end;
+
+procedure FileWriteRec(var f: FileRec; var Buf; sz: Integer);
+var n: Int64;
+begin
+  if not FROpened(f) then Exit;
+  n := PalWrite(f.Handle, @Buf, sz);
+  if n < 0 then SetIO(Integer(n))
+  else if n < sz then SetIO(TF_ERR_WRITE)
+  else SetIO(TF_OK);
+end;
+
+procedure BlockRead(var f: FileRec; var Buf; count: Int64; var numRead: Int64);
+var n: Int64; rs: Integer;
+begin
+  numRead := 0;
+  if not FROpened(f) then Exit;
+  rs := FRecSize(f);
+  n := PalRead(f.Handle, @Buf, count * rs);
+  if n < 0 then begin SetIO(Integer(n)); Exit; end;
+  { RECORDS, not bytes — and a partial trailing record is not a record. }
+  numRead := n div rs;
+  SetIO(TF_OK);
+end;
+
+procedure BlockRead(var f: FileRec; var Buf; count: Int64);
+var got: Int64;
+begin
+  { The three-argument form has no way to report a short read, so FPC makes one
+    an ERROR here where the four-argument form makes it a count. Same call, two
+    contracts, chosen by arity. }
+  BlockRead(f, Buf, count, got);
+  if (LastIOResult = TF_OK) and (got < count) then SetIO(TF_ERR_READ);
+end;
+
+procedure BlockWrite(var f: FileRec; var Buf; count: Int64; var numWritten: Int64);
+var n: Int64; rs: Integer;
+begin
+  numWritten := 0;
+  if not FROpened(f) then Exit;
+  rs := FRecSize(f);
+  n := PalWrite(f.Handle, @Buf, count * rs);
+  if n < 0 then begin SetIO(Integer(n)); Exit; end;
+  numWritten := n div rs;
+  SetIO(TF_OK);
+end;
+
+procedure BlockWrite(var f: FileRec; var Buf; count: Int64);
+var put: Int64;
+begin
+  BlockWrite(f, Buf, count, put);
+  if (LastIOResult = TF_OK) and (put < count) then SetIO(TF_ERR_WRITE);
 end;
 
 initialization

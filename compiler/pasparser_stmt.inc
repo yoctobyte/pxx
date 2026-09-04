@@ -3418,6 +3418,114 @@ begin
     Result := vidx;
 end;
 
+{ The FileRec twin of TextIOFileSym, and deliberately its exact shape — bare
+  handle only (next token `,` or `)`), SymOwnRecOf rather than the type kind, so
+  `var fs: array[0..1] of file of Integer` cannot be read as a handle. Both
+  records are ambient once the textfile unit is loaded, so both questions have
+  to be asked at every read/write site and neither may answer for the other. }
+function FileIOFileSym: Integer;
+var fileRecId, vidx: Integer;
+begin
+  Result := -1;
+  fileRecId := IsRecordType('filerec');
+  if (fileRecId = REC_NONE) or (CurTok.Kind <> tkIdent) then Exit;
+  if not ((TokPos < TokCount) and (Tokens[TokPos].Kind in [tkComma, tkRParen])) then Exit;
+  vidx := FindSym(CurTok.SVal);
+  if (vidx >= 0) and (SymOwnRecOf(vidx) = fileRecId) then
+    Result := vidx;
+end;
+
+{ Bytes ONE `Read(f, v)` / `Write(f, v)` moves. This is the destination's own
+  width, not the file's — they must be equal, and asking the destination is what
+  lets the mismatch be REPORTED rather than silently reading four bytes into a
+  one-byte variable. 0 = could not be sized here. }
+function FileIOArgSize(node: Integer): Integer;
+var tk: TTypeKind;
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  tk := IntToTypeKind(ASTTk[node]);
+  if TypeIsFrozenString(tk) then
+  begin
+    if ASTKind[node] = AN_IDENT then Result := SizeOfSlot(tk, SymStrCap[ASTIVal[node]]);
+  end
+  else
+    Result := TypeStorageSize(tk, ResolveNodeRec(node));
+end;
+
+{ Rewrite `read(f, a, b)` / `write(f, a, b)` over a `file of T` handle into one
+  RTL call per argument. ONE CALL PER ARGUMENT IS THE SEMANTICS, not an
+  implementation choice: each moves exactly one record and advances the cursor,
+  which is what makes `Read(f, a, b)` read the next TWO records.
+
+  There is no `readln`/`writeln` here and there must not be: a line terminator
+  is a text concept and a record file has no lines. FPC refuses `writeln` on a
+  typed file for the same reason, and so does the caller below.
+  feature-pascal-typed-and-untyped-files }
+function ParseFileIORest(isWrite: Boolean; fileSym: Integer): Integer;
+var procIO, callNode, destNode, headSeq, tailSeq, newSeq: Integer;
+    szNode, sz, declSz: Integer;
+    tmpSym, tmpIdent, asnNode: Integer;
+    elemTk, argTk: TTypeKind;
+begin
+  Next;  { consume the file identifier }
+  if isWrite then procIO := FindProc('FileWriteRec')
+  else procIO := FindProc('FileReadRec');
+  if procIO < 0 then Error('read/write(file): the textfile RTL is not loaded');
+  declSz := SymFileRecSize[fileSym];
+  headSeq := -1; tailSeq := -1;
+  while Eat(tkComma) do
+  begin
+    ParseExpr; destNode := CurASTNode;
+    sz := FileIOArgSize(destNode);
+    elemTk := IntToTypeKind(SymFileElemTk[fileSym]);
+    argTk := IntToTypeKind(ASTTk[destNode]);
+    { A WRITE takes an EXPRESSION, and an expression is very rarely already the
+      element's width — `Write(f, 42)` and `Write(f, i * 10)` are both Int64
+      here for a `file of Integer`. FPC converts; so do we, through a temp of
+      the ELEMENT type, which is why the element kind is carried beside the
+      width: narrowing needs to know signed from unsigned, and a width cannot
+      say. A READ has no such arm on purpose — its argument is the destination,
+      converting one would write the record into a temp nobody reads, and FPC
+      rejects a mismatched destination too. }
+    if isWrite and (declSz > 0) and (SymFileElemTk[fileSym] > 0) and
+       ((sz <> declSz) or (Ord(argTk) <> SymFileElemTk[fileSym])) and
+       (TypeIsOrdinal(elemTk) or TypeIsFloat(elemTk)) and
+       (TypeIsOrdinal(argTk) or TypeIsFloat(argTk)) then
+    begin
+      tmpSym := AllocVar('', elemTk);
+      tmpIdent := AllocNode(AN_IDENT);
+      ASTIVal[tmpIdent] := tmpSym; ASTTk[tmpIdent] := Ord(elemTk);
+      asnNode := AllocNode(AN_ASSIGN);
+      ASTLeft[asnNode] := tmpIdent; ASTRight[asnNode] := destNode;
+      newSeq := GenMakeSeq(asnNode, -1);
+      if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
+      tailSeq := newSeq;
+      destNode := GenMakeIdent(tmpSym, elemTk);
+      sz := declSz;
+    end;
+    if sz <= 0 then
+      Error('read/write(file): this argument''s type has no known size');
+    { The type check FPC does at the same place. An untyped `file` lands here
+      too and is refused by the same test, which is correct: FPC allows only
+      BlockRead/BlockWrite on one, and its 128-byte block will not match any
+      ordinary variable. }
+    if (declSz > 0) and (sz <> declSz) then
+      Error('read/write(file): the variable is ' + AIntToStr(sz) +
+            ' bytes and the file''s element type is ' + AIntToStr(declSz));
+    szNode := AllocNode(AN_INT_LIT);
+    ASTIVal[szNode] := sz; ASTTk[szNode] := Ord(tyInteger);
+    callNode := GenMakeCall6(procIO, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+                             destNode, szNode, -1, -1, -1);
+    newSeq := GenMakeSeq(callNode, -1);
+    if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
+    tailSeq := newSeq;
+  end;
+  Expect(tkRParen, ')');
+  if headSeq = -1 then headSeq := GenMakeSeq(-1, -1);   { read(f) / write(f): no-op }
+  Result := headSeq;
+end;
+
 function ParseReadArgsAST(isLn: Boolean): Integer;
 { readln/read(target, ...): each target is an lvalue (ident/field/index). The
   args are kept as an AN_ARG chain; IR lowering takes each one's address and
@@ -3435,6 +3543,15 @@ begin
     if fileSym >= 0 then
     begin
       Result := ParseTextReadRest(isLn, fileSym);
+      Exit;
+    end;
+    { read(f, ...) over a `file of T` handle → the record RTL. `readln` has no
+      meaning on a record file and FPC refuses it. }
+    fileSym := FileIOFileSym;
+    if fileSym >= 0 then
+    begin
+      if isLn then Error('readln is not defined for a typed or untyped file (use read)');
+      Result := ParseFileIORest(False, fileSym);
       Exit;
     end;
     lastArg := -1;
@@ -3469,6 +3586,15 @@ begin
     if vidx >= 0 then
     begin
       Result := ParseTextWriteRest(isLn, vidx);
+      Exit;
+    end;
+    { write(f, ...) over a `file of T` handle → the record RTL, same placement
+      rule as the Text arm above: before StdErr and before the console path. }
+    vidx := FileIOFileSym;
+    if vidx >= 0 then
+    begin
+      if isLn then Error('writeln is not defined for a typed or untyped file (use write)');
+      Result := ParseFileIORest(True, vidx);
       Exit;
     end;
     lastArg := -1;

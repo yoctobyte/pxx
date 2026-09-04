@@ -522,6 +522,8 @@ var
   ptypesEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { enum-typed param: its enum index (the ELEMENT's, for an array param), -1 otherwise }
   ptypesStrElemTk : array[0..MAX_PROC_PARAMS-1] of Integer;  { managed-string param: the ELEMENT width, Ord(tyChar) or Ord(tyWideChar); 0 = not a managed string. Staged here and persisted to ProcParamStrElemTk, for the reason ptypesSetEnum's twin gives: a caller cannot read it back off the param symbol. }
   ptypesStrCap : array[0..MAX_PROC_PARAMS-1] of Integer;  { frozen-string param: the declared capacity N of a `string[N]`, or of an open array's ELEMENT; 0 = not a frozen string. The FOURTH member of the return-channel family above, and the one that was missing: AllocParam read LastTypeStrCap itself, in the ALLOCATION loop, which runs after every parameter's type has been parsed -- so a `string[N]` param got whatever capacity the LAST parameter's type left behind. bug-p-a-string-n-element-loses-its-capacity-in-three-container-shapes }
+  ptypesFileRecSize : array[0..MAX_PROC_PARAMS-1] of Integer;  { `file of T` param: T's width in bytes; 0 = not a file. Staged here for EXACTLY the reason ptypesStrCap above is: the allocation loop runs after every parameter's type has been parsed, so LastTypeFileRecSize describes the LAST one. feature-pascal-typed-and-untyped-files }
+  ptypesFileElemTk : array[0..MAX_PROC_PARAMS-1] of Integer;   { …and T's kind, same window, same reason }
   ptypesPtrElemTk : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptypesPtrElemRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   { The rest of a pointer PARAMETER's identity. Without these three a `^PChar`
@@ -1024,6 +1026,16 @@ begin
           The following parameter's type decided the preceding one's layout. }
         if TypeIsFrozenString(tk) then ptypesStrCap[i] := LastTypeStrCap
         else ptypesStrCap[i] := 0;
+        if tk = tyRecord then
+        begin
+          ptypesFileRecSize[i] := LastTypeFileRecSize;
+          ptypesFileElemTk[i] := LastTypeFileElemTk;
+        end
+        else
+        begin
+          ptypesFileRecSize[i] := 0;
+          ptypesFileElemTk[i] := 0;
+        end;
         ptypesPtrElemTk[i] := LastTypePointerElemTk;
         ptypesPtrElemRec[i] := LastTypePointerElemRec;
         ptypesPtrDepth[i] := LastTypePointerDepth;
@@ -2227,6 +2239,14 @@ begin
       parameter actually declared one: 0 means "not a frozen string" and must
       not overwrite anything AllocParam did for another kind. }
     if ptypesStrCap[i] > 0 then SymStrCap[idx] := ptypesStrCap[i];
+    { Same overwrite, same window argument, for a `var f: TIntFile` parameter:
+      without it the width on the parameter symbol is the last parameter's and
+      `Read(f, r)` inside the body checks against the wrong element size. }
+    if ptypesFileRecSize[i] > 0 then
+    begin
+      SymFileRecSize[idx] := ptypesFileRecSize[i];
+      SymFileElemTk[idx] := ptypesFileElemTk[i];
+    end;
     { An enum param is an enum-typed value inside the body — the same stamp the
       var-decl sites make, so WriteLn(p) prints the member name there too. }
     if (ptypes[i] = tyInteger) and (ptypesEnum[i] >= 0) then
@@ -5192,7 +5212,9 @@ begin
       if (Tokens[i].Kind = tkIdent) and
          ((Tokens[i].SLen = 4) or (Tokens[i].SLen = 8)) then
         if CaseEqual(GetTokenStr(i), 'text') or CaseEqual(GetTokenStr(i), 'textfile') or
-           CaseEqual(GetTokenStr(i), 'ioresult') then
+           CaseEqual(GetTokenStr(i), 'ioresult') or
+           { `file of T` / untyped `file` — FileRec lives in the same unit }
+           CaseEqual(GetTokenStr(i), 'file') then
           unitNeedsText := True;
       { ...and the TObject ROOT METHODS, for exactly the reason above. `o.Equals(x)`
         / `.GetHashCode` / `.ToString` resolve through rows EnsureTObjectRootMethods

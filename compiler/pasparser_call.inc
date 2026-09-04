@@ -809,13 +809,45 @@ begin
   DefaultArgValueNode := exprNode;
 end;
 
+{ THE ONE MOMENT THE COMPILER HAS TO KNOW A FILE'S ELEMENT WIDTH.
+  `file of T` resolves to one shared RTL record (FileRec), so the width is not
+  in the type — it rides on the SYMBOL (SymFileRecSize, stamped by Alloc* from
+  the LastTypeFileRecSize channel). Every later operation reads it back out of
+  the record, which means exactly one call has to carry it in, and Assign is
+  that call because Pascal guarantees it runs first.
+
+  Keyed on the PARAMETER NAME rather than on the routine's, so the mechanism is
+  declared where it is used: any RTL routine that wants the width writes
+  `__recsize: Integer = 128` as its trailing parameter and gets it. Keying on
+  `Assign` would have put the knowledge in the compiler and left the RTL's
+  signature looking like an ordinary defaulted argument.
+
+  Silent when the first argument is not a file variable — a hand-written third
+  argument never reaches here (nothing is being defaulted), and a FileRec that
+  was declared through something Alloc* did not stamp keeps the declared 128
+  rather than a zero. feature-pascal-typed-and-untyped-files }
+function FileRecSizeArgOverride(mpi, k, firstArg: Integer): Integer;
+var fsym: Integer;
+begin
+  Result := 0;
+  if (k >= MAX_PROC_PARAMS) or (not CaseEqual(Procs[mpi].Params[k].Name, '__recsize')) then Exit;
+  if firstArg < 0 then Exit;
+  fsym := ASTLeft[firstArg];
+  if (fsym < 0) or (ASTKind[fsym] <> AN_IDENT) then Exit;
+  if (ASTIVal[fsym] < 0) or (ASTIVal[fsym] >= SymCount) then Exit;
+  Result := SymFileRecSize[ASTIVal[fsym]];
+end;
+
 procedure FillDefaultArgs(mpi, fromIdx, callNode: Integer; var lastArg: Integer);
-var exprNode, argSeq, k: Integer;
+var exprNode, argSeq, k, recSz: Integer;
 begin
   k := fromIdx;
   while k <= Procs[mpi].ParamCount - 1 do
   begin
     exprNode := DefaultArgValueNode(mpi, k);
+    recSz := FileRecSizeArgOverride(mpi, k, ASTLeft[callNode]);
+    if (recSz > 0) and (ASTKind[exprNode] = AN_INT_LIT) then
+      ASTIVal[exprNode] := recSz;
     argSeq := AllocNode(AN_ARG);
     ASTLeft[argSeq] := exprNode;
     if lastArg = -1 then ASTLeft[callNode] := argSeq
@@ -1175,7 +1207,7 @@ end;
   still a real mismatch. }
 function TryFillTrailingDefaults(const name: AnsiString; qUnit: Integer;
   var nArgs, argsHead, lastArg: Integer): Integer;
-var i, k, cand, exprNode, argSeq: Integer; ok: Boolean;
+var i, k, cand, exprNode, argSeq, recSz: Integer; ok: Boolean;
 begin
   cand := -1;
   for i := 0 to ProcCount - 1 do
@@ -1203,6 +1235,13 @@ begin
   for k := nArgs to Procs[cand].ParamCount - 1 do
   begin
     exprNode := DefaultArgValueNode(cand, k);
+    { The file element width, same rule as in FillDefaultArgs — BOTH paths fill
+      omitted trailing arguments and a statement-level `Assign(f, name)` takes
+      this one, so an override written in only one of them is the second path
+      that stays broken. }
+    recSz := FileRecSizeArgOverride(cand, k, argsHead);
+    if (recSz > 0) and (ASTKind[exprNode] = AN_INT_LIT) then
+      ASTIVal[exprNode] := recSz;
     argSeq := AllocNode(AN_ARG);
     ASTLeft[argSeq] := exprNode;
     ASTRight[argSeq] := -1;

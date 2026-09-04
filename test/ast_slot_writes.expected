@@ -371,6 +371,7 @@ AN_ASSIGN Left node
 AN_ASSIGN Left sTarget
 AN_ASSIGN Left slot
 AN_ASSIGN Left target
+AN_ASSIGN Left tmpIdent
 AN_ASSIGN Left tmpN
 AN_ASSIGN Left vaIdent
 AN_ASSIGN Left valNode
@@ -435,6 +436,7 @@ AN_ASSIGN Right clsBox
 AN_ASSIGN Right contNode
 AN_ASSIGN Right createNode
 AN_ASSIGN Right defValN
+AN_ASSIGN Right destNode
 AN_ASSIGN Right dfltAST
 AN_ASSIGN Right dictNode
 AN_ASSIGN Right dn

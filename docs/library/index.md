@@ -17,7 +17,7 @@ programs can use these units without passing extra `-Fu` flags.
 | --- | --- |
 | [`sysutils`](./sysutils.md) | Standard utilities, including string conversions, formatting, file paths, and memory helpers. |
 | [`classes` & `streams`](./core.md) | Object, list, and stream infrastructure (lists, string lists, memory streams) for FPC-style code. |
-| `textfile` | Pascal text-file support, including the standard `Input`/`Output` files, `Flush`, and `Erase`. |
+| [`textfile`](./file-io.md) | Pascal file I/O — text files (`Text`, `WriteLn`, `ReadLn`) and record files (`file of T`, `Seek`, `FileSize`), including the standard `Input`/`Output` files, `Flush`, and `Erase`. |
 | `strings` | Classic NUL-terminated `PChar` routines (`StrLen`, `StrPos`, `StrComp`, …). |
 | `math` | Numeric helpers. |
 | `ucomplex` | Complex numbers with the FPC `ucomplex` API and operator overloads. |

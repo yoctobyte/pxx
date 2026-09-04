@@ -197,6 +197,7 @@ function BuiltinTypeNameNeedsDecl(const nm: AnsiString): Boolean;
   rather than any constant. }
 begin
   Result := CaseEqual(nm, 'shortstring') or CaseEqual(nm, 'textfile')
+         or CaseEqual(nm, 'file')
          or CaseEqual(nm, 'pchar') or CaseEqual(nm, 'pansichar')
          or CaseEqual(nm, 'pwidechar');
 end;
@@ -208,6 +209,8 @@ var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     tnUserDecl: Boolean;   { a source/RTL DECLARATION of this name -- alias, record, class, array type or enum -- beats every builtin name }
     childDepth, childBaseTk, childBaseRec: Integer;
     ptrArrAi: Integer;   { `^TFixed`: the pointee's ArrType index, else -1 }
+    fileElemTk: TTypeKind;             { `file of T`: T's kind }
+    fileElemRec, fileElemCap: Integer; { …its record id, and its `string[N]` capacity }
     childPtrAlias: Integer;   { `^TP`: the pointee's own pointer-alias index, else -1 }
     wasPacked: Boolean;
 begin
@@ -226,6 +229,8 @@ begin
   LastTypeProcSig := -1;
   LastTypeEnumId := -1;
   LastTypeStrCap := 0;
+  LastTypeFileRecSize := 0;
+  LastTypeFileElemTk := 0;
   LastTypeDynElemRowLen := 0; LastTypeDynElemRowLo := 0;
   LastTypeIsSub := False; LastTypeSubLo := 0; LastTypeSubHi := 0;
   case CurTok.Kind of
@@ -593,11 +598,52 @@ begin
         Result := tyRecord;
       end
       else if (not tnUserDecl) and (CaseEqual(lo, 'file')) then
-        { untyped `file` / `file of T`: no file-variable model in pxx (the
-          textfile RTL covers Text I/O). Reject at the type reference instead
-          of silently minting an integer-sized slot
-          (bug-pascal-missing-diagnostics-fail-tests / tdefault4). }
-        Error('file types are not supported (use TextFile for text I/O)')
+      begin
+        { `file of T` and untyped `file` — the classic record-file idiom. Both
+          resolve to the RTL `FileRec`, ONE record for every element type,
+          exactly as `TextFile` resolves to the one `Text` above. What the
+          element type contributes is a WIDTH, not a layout: Seek/FilePos/
+          FileSize count in records, and Read/Write move SizeOf(T) bytes. So
+          the width travels on LastTypeFileRecSize to whoever allocates, and
+          the RECORD ITSELF is shared — a second record type per element would
+          buy nothing and cost every RTL routine an overload.
+          feature-pascal-typed-and-untyped-files }
+        { CONSUME THE NAME HERE, like the `set of` arm above and unlike every
+          other arm in this chain: the trailing `Next` the chain does for a
+          one-token type name would land on `of` rather than past it, and a
+          `file of T` whose `of` was never eaten reads as two types in a row. }
+        Next;
+        LastTypeFileRecSize := FILE_UNTYPED_RECSIZE;
+        if CurTok.Kind = tkOf then
+        begin
+          Next;
+          fileElemTk := ParseTypeKind();
+          fileElemRec := LastTypeRecId;
+          fileElemCap := LastTypeStrCap;
+          { FPC refuses a REFERENCE-COUNTED element outright ("Type 'ansistring'
+            is not allowed as a file element") and it is right to: what would go
+            on disk is the pointer, so the file is meaningless the moment the
+            program exits. Refuse the same set rather than writing eight bytes
+            of address per record. }
+          if (fileElemTk = tyAnsiString) or (fileElemTk = tyVariant) or
+             (fileElemTk = tyClass) then
+            Error('a reference-counted or reference type is not allowed as a file element type');
+          if TypeIsFrozenString(fileElemTk) then
+            LastTypeFileRecSize := SizeOfSlot(fileElemTk, fileElemCap)
+          else
+            LastTypeFileRecSize := TypeStorageSize(fileElemTk, fileElemRec);
+          LastTypeFileElemTk := Ord(fileElemTk);
+          if LastTypeFileRecSize <= 0 then
+            Error('file element type has no known size');
+        end;
+        LastTypeRecId := IsRecordType('filerec');
+        if LastTypeRecId = REC_NONE then
+          { --no-default-rtl, or an ESP target, where neither textfile nor
+            filerec is compilable: the old refusal is still the honest answer. }
+          Error('file types are not supported (use TextFile for text I/O)');
+        Result := tyRecord;
+        Exit;
+      end
       else if (not tnUserDecl) and (CaseEqual(lo, 'shortstring')) then
       begin
         { `shortstring` IS `string[255]` -- one type with two spellings, so it
@@ -905,6 +951,14 @@ begin
                   stamps SymStrCap and the store clamps at N }
                 if AliasStrCap[aliasIdx] > 0 then
                   LastTypeStrCap := AliasStrCap[aliasIdx];
+                { …and a FILE alias hands back its element width, so
+                  `type TIntFile = file of Integer; var f: TIntFile` records the
+                  4 that FileSize(f) divides by. }
+                if AliasFileRecSize[aliasIdx] > 0 then
+                begin
+                  LastTypeFileRecSize := AliasFileRecSize[aliasIdx];
+                  LastTypeFileElemTk := AliasFileElemTk[aliasIdx];
+                end;
                 { …and a managed-string alias hands back its ELEMENT width, so
                   Alloc* stamps Syms[].ElemType and `x[i]` uses the right stride }
                 if AliasStrElemTk[aliasIdx] <> 0 then

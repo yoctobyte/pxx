@@ -6555,6 +6555,11 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_unicodestring_alias26 "$$($(TESTTMP)/test_unicodestring_alias26)" "$$(printf 'abc\nhello\n5\ne\neq\nhello!\n2')"
 	./$(COMPILER) test/test_missing_diagnostics_fail.pas $(TESTTMP)/test_missing_diagnostics26
 	tools/expect_same.sh test_missing_diagnostics26 "$$($(TESTTMP)/test_missing_diagnostics26)" "$$(printf 'textfile=text\nTRUE')"
+	@# feature-pascal-typed-and-untyped-files -- every expectation is FPC 3.2.2's
+	@# own output for this same program, and the three files it writes were
+	@# compared BYTE FOR BYTE against FPC's (identical, 12/72/32 bytes).
+	./$(COMPILER) test/test_typed_file_of_t.pas $(TESTTMP)/test_typed_file26
+	tools/expect_same.sh test_typed_file26 "$$($(TESTTMP)/test_typed_file26 | tail -1)" "total ok 20 / 20"
 	! ./$(COMPILER) test/test_default_textfile_fail.pas $(TESTTMP)/test_dtf26 > $(TESTTMP)/test_dtf.log 2>&1
 	grep -q "Default: file types are not allowed" $(TESTTMP)/test_dtf.log
 	! ./$(COMPILER) --target=riscv32 -O0 test/test_target_name_in_external_refusal.pas $(TESTTMP)/test_tner26 > $(TESTTMP)/test_tner_r.log 2>&1
@@ -6564,12 +6569,20 @@ test-core: $(COMPILER)
 	grep -q "target xtensa: external (dynamic) symbols are not supported" $(TESTTMP)/test_tner_x.log
 	! ./$(COMPILER) --target=esp32c6 -O0 test/test_target_name_in_external_refusal.pas $(TESTTMP)/test_tner26 > $(TESTTMP)/test_tner_c.log 2>&1
 	grep -q "target esp32c6: external (dynamic) symbols are not supported" $(TESTTMP)/test_tner_c.log
-	! ./$(COMPILER) test/test_file_type_fail.pas $(TESTTMP)/test_ftf26 > $(TESTTMP)/test_ftf.log 2>&1
+	@# feature-pascal-typed-and-untyped-files: `file` and `file of T` COMPILE now,
+	@# so the old test_file_type_fail.pas (which asserted the refusal) is retired.
+	@# These three are the refusals that SURVIVE, and each is a silent wrong
+	@# answer if it ever stops firing.
+	! ./$(COMPILER) test/test_file_element_type_fail.pas $(TESTTMP)/test_fetf26 > $(TESTTMP)/test_fetf.log 2>&1
+	grep -q "not allowed as a file element type" $(TESTTMP)/test_fetf.log
+	! ./$(COMPILER) test/test_file_writeln_fail.pas $(TESTTMP)/test_fwln26 > $(TESTTMP)/test_fwln.log 2>&1
+	grep -q "writeln is not defined for a typed or untyped file" $(TESTTMP)/test_fwln.log
+	! ./$(COMPILER) test/test_file_read_size_mismatch_fail.pas $(TESTTMP)/test_frsm26 > $(TESTTMP)/test_frsm.log 2>&1
+	grep -q "the file's element type is" $(TESTTMP)/test_frsm.log
 	! ./$(COMPILER) test/test_array_param_default_refused.pas $(TESTTMP)/test_apdr26 > $(TESTTMP)/test_apdr.log 2>&1
 	grep -q "cannot have a default value" $(TESTTMP)/test_apdr.log
 	./$(COMPILER) test/test_array_param_default_allowed.pas $(TESTTMP)/test_apda26
 	tools/expect_same.sh test_apda26 "$$($(TESTTMP)/test_apda26)" "$$(printf 'dyn len=0\ndyn len=3\nmixed high=1 b=7\nmixed high=1 b=9')"
-	grep -q "file types are not supported" $(TESTTMP)/test_ftf.log
 	! ./$(COMPILER) test/test_default_filefield_fail.pas $(TESTTMP)/test_dff26 > $(TESTTMP)/test_dff.log 2>&1
 	grep -q "record type contains a file field" $(TESTTMP)/test_dff.log
 	! ./$(COMPILER) test/test_ordinal_default_on_string_param_fail.pas $(TESTTMP)/test_odsp26 > $(TESTTMP)/test_odsp.log 2>&1

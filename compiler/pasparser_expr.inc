@@ -682,7 +682,8 @@ begin
           (bug-pascal-missing-diagnostics-fail-tests / tdefault2, tdefault6). }
         if CurTok.Kind = tkIdent then
         begin
-          if CaseEqual(CurTok.SVal, 'text') or CaseEqual(CurTok.SVal, 'textfile') then
+          if CaseEqual(CurTok.SVal, 'text') or CaseEqual(CurTok.SVal, 'textfile') or
+             CaseEqual(CurTok.SVal, 'filerec') then
             Error('Default: file types are not allowed');
           i := IsRecordType(CurTok.SVal);
           if (i <> REC_NONE) and RecContainsTextRec(i) then

@@ -898,6 +898,12 @@ begin
       begin
         tnm := GetTokenStr(i);
         if CaseEqual(tnm, 'text') or CaseEqual(tnm, 'textfile') or CaseEqual(tnm, 'ioresult') or
+           { `file of T` / untyped `file`: FileRec and its whole surface live in
+             the same unit as Text, so the same scan pulls them. A VARIABLE
+             named `file` pulls it needlessly — a size cost on a program that
+             cannot have meant anything else by the word, and the same trade
+             the `pi` row below already takes. }
+           CaseEqual(tnm, 'file') or
            { Flush(f)/Flush(output): FPC System surface, lives in textfile
              (which also declares the standard Input/Output files). }
            CaseEqual(tnm, 'flush') then

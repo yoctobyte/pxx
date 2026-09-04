@@ -2228,6 +2228,13 @@ const
     feature/bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data }
   DATA_SYM_BIAS = $20000000;
 
+  { An untyped `file` has no element type, so FPC gives it a DEFAULT block size
+    of 128 bytes — that is what Seek/FilePos/FileSize count in until an explicit
+    `Reset(f, n)` / `Rewrite(f, n)` says otherwise. Measured against FPC 3.2.2,
+    not inferred: it is the documented default and the one BlockRead's `count`
+    is multiplied by. feature-pascal-typed-and-untyped-files }
+  FILE_UNTYPED_RECSIZE = 128;
+
   NILCHK_DEFAULT = 0;
   NILCHK_ON      = 1;
   NILCHK_OFF     = 2;
@@ -3167,6 +3174,8 @@ var
   SymSetElemLo : array of Int64;
   SymSetElemHi : array of Int64;
   SymStrCap : array of Integer; { see decl below }
+  SymFileElemTk : array of Integer;  { the element TTypeKind ordinal of a `file of T` symbol, 0 = none. The twin of SymFileRecSize beside it — see LastTypeFileElemTk for why a width alone is not enough. }
+  SymFileRecSize : array of Integer; { this symbol was declared `file of T` (or untyped `file`): T's width in bytes, 0 = not a file variable. A PARALLEL ARRAY, not a TSymbol field (project_tsymbol_field_landmine). Read at the `Assign(f, name)` call to stamp f.RecSize once, which is the only place the compiler has to know it -- every later Seek/FilePos/FileSize reads the record. feature-pascal-typed-and-untyped-files }
   SymPtrElemStrTk : array of Integer; { pointer SYMBOL whose pointee is a managed string: the pointee's element width ord; 0 = not one. Distinct from SymStrElemTk, which is the width of the string the symbol IS (or its array's elements); this is the width of the string it POINTS AT. `Length(p^)` and `p^[i]` read it. }
   SymStrElemTk : array of Integer; { managed-STRING element width, as a TTypeKind ordinal; 0 = unset (read as tyChar). Double duty exactly as SymStrCap above, disambiguated by IsArray: for an `array of WideString` it is the ELEMENTS' width, because Syms[].ElemType is occupied by the array's own element kind (tyAnsiString) and cannot also hold the level below it. A scalar wide string keeps its width in Syms[].ElemType, which for a string genuinely IS its element. feature-unicodestring-model }
   SymIsSub : array of Boolean; { symbol declared via a named SUBRANGE type (T = lo..hi): {$R+} checks stores against SymSubLo/Hi. BSS-false default = unchecked (feature-pascal-range-checks-r-plus). }
@@ -3727,6 +3736,8 @@ var
   LastTypeDynElemRowLen : Integer; { set when a dynamic array's element resolves to a named FIXED-array alias (`array of T`): the row's flattened element count; consumed by AllocDynArray into SymDynElemRowLen, then reset }
   LastTypeDynElemRowLo : Integer;  { the row's low bound, paired with LastTypeDynElemRowLen; consumed by AllocDynArray into SymDynElemRowLo }
   LastTypeStrCap : Integer; { see decl below }
+  LastTypeFileElemTk : Integer; { `file of T`: Ord(T's TTypeKind), 0 = the type just parsed is not a file (or is an untyped `file`, which has no element type). The WIDTH beside it is what the RTL needs; the KIND is what `Write(f, i * 10)` needs, because an expression of the wrong width has to be narrowed to the element type before it goes on disk and a width alone cannot say signed from unsigned. feature-pascal-typed-and-untyped-files }
+  LastTypeFileRecSize : Integer; { `file of T` / untyped `file`: the ELEMENT WIDTH in bytes that Seek/FilePos/FileSize count in, 0 = the type just parsed is not a file. The record the type resolves to (RTL `FileRec`) is ONE record for every element type, exactly as `Text` is, so the element width has no carrier in the type itself -- this is the channel Alloc*/RegisterTypeAlias read it off, on the same window rule as LastTypeStrCap beside it. 128 for an untyped `file`, which is FPC's default block size. feature-pascal-typed-and-untyped-files }
   LastTypeIsSub : Boolean; { ParseTypeKind resolved a named subrange alias — Alloc* stamps SymIsSub/Lo/Hi from the pair below; reset at ParseTypeKind entry like LastTypeStrCap }
   LastTypeSubLo : Int64;
   LastTypeSubHi : Int64; { frozen fixed-string capacity from the most recent string[N] type parse (0 = default); consumed by AllocVar/AllocArray, then reset }
@@ -5837,6 +5848,8 @@ var
   AliasPtrBaseRec : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base record/class id }
   AliasProcSig : array[0..MAX_TYPEALIAS-1] of Integer;  { procedural-type alias: signature proc index (Procs[] entry, BodyAddr=-1); -1 = not a proc type }
   AliasStrCap : array[0..MAX_TYPEALIAS-1] of Integer; { named frozen-string alias (T = string[N]): the capacity N, which the alias table used to DROP — so a variable of the alias truncated at DEFAULT_STR_CAP instead of N (bug-a-string-n-type-alias-loses-its-capacity). 0 = not one. }
+  AliasFileElemTk : array[0..MAX_TYPEALIAS-1] of Integer; { the element kind of a named file alias, 0 = not a file alias. AliasFileRecSize's twin, same window, same reason. }
+  AliasFileRecSize : array[0..MAX_TYPEALIAS-1] of Integer; { named file alias (`TIntFile = file of Integer`): the element width, 0 = not a file alias. AliasStrCap's problem one type over and for the identical reason -- a USE of the alias is far from where `file of T` was parsed, so LastTypeFileRecSize is whatever the last unrelated declaration left behind. Without it `var f: TIntFile` records no width and FileSize(f) divides by zero. feature-pascal-typed-and-untyped-files }
   AliasStrElemTk : array[0..MAX_TYPEALIAS-1] of Integer; { named managed-STRING alias (`TW = WideString`): the ELEMENT TTypeKind ordinal, 0 = unset (read as tyChar). Exactly AliasStrCap's problem one type over — a USE of the alias is far from where the string type was parsed, so LastTypeStrElemTk is whatever the last unrelated declaration left behind. Without it `type TW = WideString; var x: TW; x[i]` indexes a UTF-16 string at stride 1, silently. feature-unicodestring-model }
   AliasIsSub : array[0..MAX_TYPEALIAS-1] of Boolean; { named SUBRANGE alias (T = lo..hi): bounds retained for {$R+}. BSS-false default keeps every other Register*Alias site honest without touching them (feature-pascal-range-checks-r-plus). }
   AliasSubLo : array[0..MAX_TYPEALIAS-1] of Int64;
