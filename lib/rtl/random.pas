@@ -163,6 +163,8 @@ procedure RandomStateSplit(var parent: TRandomState; var child: TRandomState);
 
 implementation
 
+uses platform;   { PalRandomBytes -- see the tier-2 note below }
+
 { ===== SplitMix64 — seed expander ===== }
 
 var sm_state: UInt64;
@@ -273,33 +275,30 @@ begin
   LCGNext := v;
 end;
 
-{ ===== Tier 2: OS CSPRNG (getrandom syscall) ===== }
+{ ===== Tier 2: OS CSPRNG, through the PAL ===== }
 
-{ Per-arch Linux syscall number for getrandom(2). -1 = not available
-  (bare-metal targets). Verified against kernel headers and FPC sysnr tables. }
-function SysGetRandom: Integer;
-begin
-  Result := -1;
-  {$ifdef CPUX86_64}  Result := 318; {$endif}
-  {$ifdef CPU_I386}   Result := 355; {$endif}
-  {$ifdef CPU_AARCH64} Result := 278; {$endif}
-  {$ifdef CPU_ARM32}  Result := 384; {$endif}
-  {$ifdef CPU_RISCV32} Result := 278; {$endif}
-  { CPU_XTENSA (ESP32): no getrandom; use HW RNG register (tier 1) }
-end;
+{ THE SYSCALL NUMBER IS THE PAL'S. This unit carried its own per-arch
+  `SysGetRandom` table until 2026-09-04 -- the fifth private copy of a table
+  platform.pas already had -- and the pattern behind every one of them is that a
+  private copy is never asked to answer for a target nobody was thinking about.
+  This one's omission was spelled out: "CPU_XTENSA (ESP32): no getrandom; use HW
+  RNG register (tier 1)". That is TRUE OF ESP-IDF and false of xtensa LINUX, and
+  the posix backend's population is the second one. The arch stood in for the
+  platform. xtensa's number is 338, measured under `qemu-xtensa -strace` rather
+  than copied from a header; the backend records the method.
 
+  It refused on wasm32 for the same shape, where wasi's `random_get` is a real
+  CSPRNG (the spec requires cryptographic quality) -- so wasm32 had no tier 2 at
+  all, and OSEntropyBytes was one of the 518 IR_SYSCALL refusals in the wasm32
+  corpus census instead of a working entropy source.
+
+  ESP still refuses, deliberately, and the TIER ORDER is why that is right: tier
+  1 is the HW RNG register and runs first there, so PAL_ERR_UNSUPPORTED routes
+  ESP to the source it already uses rather than handing back a buffer it did not
+  fill. }
 function OSEntropyBytes(buf: Pointer; n: Integer): Boolean;
-var sn, r: Int64;
 begin
-  sn := SysGetRandom;
-  if sn < 0 then
-  begin
-    OSEntropyBytes := False;
-    Exit;
-  end;
-  { getrandom(buf, count, flags=0): block until entropy available }
-  r := __pxxrawsyscall(sn, Int64(buf), n, 0, 0, 0, 0);
-  OSEntropyBytes := (r = n);
+  OSEntropyBytes := (PalRandomBytes(buf, n) = 0);
 end;
 
 function OSEntropy64(out v: UInt64): Boolean;

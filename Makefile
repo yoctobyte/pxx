@@ -15966,6 +15966,32 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_dynarray_var_param26 "$$($(TESTTMP)/test_dynarray_var_param26)" "DYNARRAY VAR PARAM OK"
 	./$(COMPILER) test/test_ansiterm_raw_write.pas $(TESTTMP)/test_ansiterm_raw_write26
 	tools/expect_same.sh test_ansiterm_raw_write26 "$$($(TESTTMP)/test_ansiterm_raw_write26)" "$$(printf 'aBcD\nRAW WRITE OK')"
+	# OS ENTROPY THROUGH THE PAL, on all seven targets. random.pas's private
+	# getrandom table was the fifth copy of one platform.pas already had, and its
+	# hole was documented as a fact about ESP ("CPU_XTENSA (ESP32): no getrandom")
+	# applied to a target selected by ARCH -- so xtensa LINUX, which does have it,
+	# got nothing. wasm32's body was refused at codegen outright, and wasi's
+	# random_get is a CSPRNG the spec requires to be cryptographic.
+	#
+	# Measured with the pre-change random.pas restored: xtensa answered
+	# `okA=FALSE, 0 of 32 bytes differing, 32 zero bytes` -- an entirely unfilled
+	# buffer -- and wasm32 refused the body and trapped. Both now print ENTROPY OK.
+	# The test uses TWO draws because one would be a guard whose expected value
+	# collides with the failure value: the buffer starts zeroed.
+	./$(COMPILER) test/test_cross_os_entropy_through_the_pal.pas $(TESTTMP)/entpal26
+	tools/expect_same.sh entpal26/native "$$($(TESTTMP)/entpal26)" "ENTROPY OK"
+	./$(COMPILER) --target=wasm32 test/test_cross_os_entropy_through_the_pal.pas $(TESTTMP)/entpal.wasm
+	tools/expect_same.sh entpal26/wasm32 "$$(tools/run_target.sh wasm32 $(TESTTMP)/entpal.wasm)" "ENTROPY OK"
+	@for t in i386 arm32 aarch64 riscv32; do \
+	  case $$t in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if ! command -v $$q >/dev/null 2>&1; then echo "  entpal: $$q absent, $$t NOT verified"; continue; fi; \
+	  ./$(COMPILER) --target=$$t --platform=posix test/test_cross_os_entropy_through_the_pal.pas $(TESTTMP)/entpal_$$t >/dev/null || { echo "entpal $$t compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh entpal/$$t "$$(tools/run_target.sh $$t $(TESTTMP)/entpal_$$t)" "ENTROPY OK" || exit 1; \
+	done; \
+	if command -v qemu-xtensa >/dev/null 2>&1; then \
+	  ./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls test/test_cross_os_entropy_through_the_pal.pas $(TESTTMP)/entpal_xt >/dev/null || { echo "entpal xtensa compile FAIL"; exit 1; }; \
+	  tools/expect_same.sh entpal/xtensa "$$(tools/run_target.sh xtensa $(TESTTMP)/entpal_xt)" "ENTROPY OK" || exit 1; \
+	else echo "  entpal: qemu-xtensa absent, xtensa NOT verified"; fi
 	# ANSITERM THROUGH THE PAL, and the pty row is the one that earns this block.
 	# This unit carried four private per-target syscall number tables until
 	# 2026-09-04. Two had already produced a silent failure (GetSysWrite had no

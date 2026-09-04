@@ -89,6 +89,7 @@ function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalBackendClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
 function PalBackendExit(code: Integer): Integer;
+function PalBackendRandomBytes(buf: Pointer; n: Integer): Integer;
 function PalBackendUtimensat(dirFd: Integer; path: PChar;
                              aSec, aNsec, mSec, mNsec: Int64;
                              flags: Integer): Integer;
@@ -966,6 +967,20 @@ begin
   wasi_proc_exit(code);
 {$endif}
   Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendRandomBytes(buf: Pointer; n: Integer): Integer;
+begin
+{$ifdef CPU_WASM32}
+  { wasi_snapshot_preview1's random_get IS a CSPRNG -- the spec requires
+    cryptographic quality -- so wasm32 gains a REAL tier-2 entropy source here
+    rather than a defined failure. It is also all-or-nothing by construction:
+    random_get fills the whole buffer or returns an errno, which is exactly the
+    contract PalRandomBytes states, so there is no short-read case to fold. }
+  Result := WasiErr(wasi_random_get(buf, n));
+{$else}
+  Result := PAL_ERR_UNSUPPORTED;
+{$endif}
 end;
 
 function PalBackendUtimensat(dirFd: Integer; path: PChar;

@@ -53,6 +53,7 @@ function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalBackendClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
 function PalBackendExit(code: Integer): Integer;
+function PalBackendRandomBytes(buf: Pointer; n: Integer): Integer;
 function PalBackendUtimensat(dirFd: Integer; path: PChar;
                              aSec, aNsec, mSec, mNsec: Int64;
                              flags: Integer): Integer;
@@ -762,6 +763,19 @@ end;
   PAL_ERR_UNSUPPORTED and therefore RETURNS, which is what this does. }
 function PalBackendExit(code: Integer): Integer;
 begin
+  Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendRandomBytes(buf: Pointer; n: Integer): Integer;
+begin
+  { REFUSES DELIBERATELY, and this is the one entry where refusing is not a gap.
+    ESP has no getrandom: entropy comes from the HW RNG register, which
+    random.pas reaches as TIER 1 (__pxxHwRandom64) before it ever asks the OS.
+    Answering PAL_ERR_UNSUPPORTED routes ESP to the tier it already uses, while
+    a 0 here would hand a caller an unfilled buffer it was told to trust.
+    33 other PAL entries refuse for the same class of reason -- FreeRTOS gives
+    tasks, not processes -- so POSIX-shaped code meets a defined `not here`
+    instead of a wrong answer. }
   Result := PAL_ERR_UNSUPPORTED;
 end;
 

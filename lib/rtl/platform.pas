@@ -180,6 +180,12 @@ function PalClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
   A backend that cannot terminate returns PAL_ERR_UNSUPPORTED, so a caller can
   tell `it did not happen` from `it happened and control never came back`. }
 function PalExit(code: Integer): Integer;
+{ Fill buf[0..n-1] from the platform's CSPRNG. 0 on success, negative
+  otherwise -- and a PARTIAL fill is a FAILURE, not a short read: the caller is
+  seeding a CSPRNG, and n-1 good bytes plus one stale one is exactly the silent
+  catastrophic case OSEntropyBytes' Boolean exists to prevent. Every backend
+  therefore reports all-or-nothing. }
+function PalRandomBytes(buf: Pointer; n: Integer): Integer;
 function PalUtimensat(dirFd: Integer; path: PChar;
                       aSec, aNsec, mSec, mNsec: Int64;
                       flags: Integer): Integer;
@@ -556,6 +562,11 @@ end;
 function PalExit(code: Integer): Integer;
 begin
   Result := PalBackendExit(code);
+end;
+
+function PalRandomBytes(buf: Pointer; n: Integer): Integer;
+begin
+  Result := PalBackendRandomBytes(buf, n);
 end;
 
 function PalUtimensat(dirFd: Integer; path: PChar;

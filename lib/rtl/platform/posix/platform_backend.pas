@@ -57,6 +57,7 @@ function PalBackendSigProcMask(how: Integer; setPtr, oldSetPtr: Pointer; setSize
 function PalBackendClockSetTime(clockId: Integer; sec, nsec: Int64): Integer;
 function PalBackendClockGetTime(clockId: Integer; var sec, nsec: Int64): Integer;
 function PalBackendExit(code: Integer): Integer;
+function PalBackendRandomBytes(buf: Pointer; n: Integer): Integer;
 function PalBackendFsync(handle: Integer): Integer;
 function PalBackendFdatasync(handle: Integer): Integer;
 function PalBackendFchmod(handle, mode: Integer): Integer;
@@ -178,6 +179,7 @@ const
   SYS_getuid = 102; SYS_getgid = 104; SYS_getegid = 108; SYS_getppid = 110;
   SYS_exit = 60;
   SYS_exit_group = 231;
+  SYS_getrandom = 318;
 {$endif}
 {$ifdef CPU_I386}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -207,6 +209,7 @@ const
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
   SYS_exit = 1;
   SYS_exit_group = 252;
+  SYS_getrandom = 355;
 {$endif}
 {$ifdef CPU_AARCH64}
   SYS_read = 63; SYS_write = 64; SYS_close = 57; SYS_lseek = 62;
@@ -234,6 +237,7 @@ const
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
   SYS_exit = 93;
   SYS_exit_group = 94;
+  SYS_getrandom = 278;
 {$endif}
 {$ifdef CPU_ARM32}
   SYS_read = 3; SYS_write = 4; SYS_close = 6; SYS_lseek = 19;
@@ -261,6 +265,7 @@ const
   SYS_getuid = 199; SYS_getgid = 200; SYS_getegid = 202; SYS_getppid = 64;
   SYS_exit = 1;
   SYS_exit_group = 248;
+  SYS_getrandom = 384;
 {$endif}
 {$ifdef CPU_RISCV32}
   { rv32 linux = asm-generic table (same slots as aarch64). 32-bit quirks:
@@ -308,6 +313,7 @@ const
   SYS_getuid = 174; SYS_getgid = 176; SYS_getegid = 177; SYS_getppid = 173;
   SYS_exit = 93;
   SYS_exit_group = 94;
+  SYS_getrandom = 278;
 {$endif}
 {$ifdef CPU_XTENSA}
   { xtensa linux has its OWN numbering — neither asm-generic nor i386's. These
@@ -344,6 +350,7 @@ const
   SYS_getuid = 137; SYS_getgid = 139; SYS_getegid = 141; SYS_getppid = 150;
   SYS_exit = 118;
   SYS_exit_group = 119;
+  SYS_getrandom = 338;
 {$endif}
   PAL_AT_FDCWD = -100;
   PAL_AT_EMPTY_PATH = $1000;
@@ -1243,6 +1250,31 @@ begin
     the interface states: a caller that gets a value back knows the exit did not
     happen. }
   Result := PAL_ERR_UNSUPPORTED;
+end;
+
+function PalBackendRandomBytes(buf: Pointer; n: Integer): Integer;
+var r: Int64;
+begin
+  { getrandom(buf, count, flags=0): blocks until the pool is initialised.
+    ALL-OR-NOTHING: getrandom may legitimately return fewer bytes than asked
+    (it caps at 32MiB, and is interruptible), and a caller seeding a CSPRNG must
+    not treat a short fill as success. Reporting only 0-or-negative here keeps
+    that decision in one place instead of at each call site.
+
+    THE XTENSA NUMBER WAS MEASURED, NOT RECALLED -- 338, by the method this
+    file's xtensa block documents: one syscall per process under
+    `qemu-xtensa -strace`, every argument 2147483647 so the call is inert
+    whatever it turns out to be. qemu names it `getrandom`, and the same probe
+    at 12 names `read`, which is the value this table already had established
+    independently. It was previously absent, because random.pas's private copy
+    said "CPU_XTENSA (ESP32): no getrandom; use HW RNG register" -- true of
+    ESP-IDF, and not of xtensa LINUX, which is this backend's population. The
+    arch stood in for the platform, which is the same substitution
+    TargetHasSignalRuntime's ruling is about. }
+  r := __pxxrawsyscall(SYS_getrandom, Int64(buf), n, 0, 0, 0, 0);
+  if r = n then Result := 0
+  else if r < 0 then Result := Integer(r)
+  else Result := PAL_ERR_UNSUPPORTED;
 end;
 
 function PalBackendUtimensat(dirFd: Integer; path: PChar;
