@@ -43,6 +43,10 @@ begin
   if CaseEqual(mnem, 'leave') then begin EncB($C9); Exit; end;
   if CaseEqual(mnem, 'nop') then begin EncB($90); Exit; end;
   if CaseEqual(mnem, 'cdq') then begin EncB($99); Exit; end;
+  { cpuid: busybox procps/powertop.c reads the CPU model through it, and its
+    four outputs ARE eax/ebx/ecx/edx -- which is also why that block needs the
+    ebx save/restore pair the C frontend puts around it. }
+  if CaseEqual(mnem, 'cpuid') then begin EncB($0F); EncB($A2); Exit; end;
   if CaseEqual(mnem, 'movsb') then begin EncB($A4); Exit; end;
   if CaseEqual(mnem, 'stosb') then begin EncB($AA); Exit; end;
 

@@ -200,7 +200,7 @@ begin
     or CaseEqual(mn,'sar') or CaseEqual(mn,'push') or CaseEqual(mn,'pop')
     or CaseEqual(mn,'movzx') or CaseEqual(mn,'movsx')
     or CaseEqual(mn,'nop') or CaseEqual(mn,'cdq') or CaseEqual(mn,'leave')
-    or CaseEqual(mn,'ret');
+    or CaseEqual(mn,'ret') or CaseEqual(mn,'cpuid');
 end;
 
 { The one seam. Either the x86-64 byte encoder or the i386 text sink; the parse
@@ -707,10 +707,18 @@ begin
           + '", which is not supported');
 
   { A zero-operand instruction is passed through unchanged: cmc, nop, ret and
-    friends carry no AT&T suffix, so the base list must not see them. }
+    friends carry no AT&T suffix, so the base list must not see them.
+
+    THROUGH THE SEAM, like every other instruction. This line called AsmDispatch
+    directly for one day and it was the second path that stayed broken: on i386
+    that encodes x86-64 bytes into AsmBytes, which that target's codegen never
+    reads because it replays LINES -- so `cpuid` compiled with no diagnostic and
+    executed as nothing, and busybox's powertop.c came back with a zeroed CPU.
+    Caught by test/casm_gnu_operands_i386.c's cpuid row against gcc -m32; a row
+    that only checked the four TUs compiled would have called it done. }
   if AttAtSeparator then
   begin
-    if not AsmDispatch(mn, 0) then
+    if not AttEmitInstr(mn, 0) then
       Error('C: inline asm template has an unsupported instruction: ' + mn);
     Exit;
   end;
@@ -815,6 +823,32 @@ end;
   This is what makes pinning cheap here. The registers are chosen at parse
   time, so the choice reaches AsmBytes; nothing is live in a register across a
   statement boundary in this compiler, so nothing has to be saved first. }
+{ push/pop one register, at the target's stack width. Used to bracket a block
+  that a FIXED-register constraint forced onto a register the caller expects to
+  survive -- `cpuid` writes ebx and busybox procps/powertop.c asks for it by
+  name, so there is nothing to re-choose. Everything inside the block addresses
+  memory through the FRAME pointer, so moving the stack pointer between the
+  push and the pop changes no operand. }
+procedure AttEmitPushPop(regNum: Integer; doPush: Boolean);
+var i: Integer;
+begin
+  for i := 0 to 3 do
+  begin
+    AsmOpKind[i] := AOP_NONE; AsmOpReg[i] := 0; AsmOpSize[i] := 0;
+    AsmOpVal[i] := 0; AsmOpIndex[i] := -1; AsmOpScale[i] := 1;
+  end;
+  AsmOpKind[0] := AOP_REG;
+  AsmOpReg[0] := regNum;
+  AsmOpSize[0] := TARGET_PTR_SIZE;
+  if doPush then
+  begin
+    if not AttEmitInstr('push', 1) then
+      Error('C: inline asm could not encode the save of a callee-saved register');
+  end
+  else if not AttEmitInstr('pop', 1) then
+    Error('C: inline asm could not encode the restore of a callee-saved register');
+end;
+
 procedure AttEmitFrameMove(regNum, size, frameOff: Integer; load: Boolean);
 var i: Integer;
 begin

@@ -87,6 +87,78 @@ static void muladd(sp_digit i, sp_digit j,
 	*pc0 = c0; *pc1 = c1; *pc2 = c2;
 }
 
+
+/* --- tls_pstm_montgomery_reduce.c's INNERMUL and PROPCARRY, PSTM_X86 arm ---
+ *
+ * Three things at once, and each was a separate refusal before:
+ *   "=g"   a class this frontend did not read -- a register is one of the
+ *          choices `g` permits, so taking one honours it rather than
+ *          approximating it. Five uses across these two blocks.
+ *   "=&d"  earlyclobber. Every operand is pinned to a register of its own and
+ *          the only sharing is an explicit matching constraint, so `&` holds
+ *          by construction. This row is what says so out loud.
+ *   _c[LO] an output that is a SUBSCRIPT, not a name. It is evaluated twice --
+ *          once as the store target and once for the "0" input tied to it --
+ *          which is a wrong answer only if evaluating it once changes
+ *          something, and a subscript of two locals does not.
+ */
+#define LO 0
+static void innermul(sp_digit *_c, sp_digit mu, const sp_digit *tmpm,
+                     sp_digit *pcy)
+{
+	sp_digit cy = *pcy;
+	asm(
+	   "mull %4       \n\t"
+	   "addl %3,%%eax \n\t"
+	   "adcl $0,%%edx \n\t"
+	   "addl %%eax,%0 \n\t"
+	   "adcl $0,%%edx \n\t"
+	:"=g"(_c[LO]), "=&d"(cy)
+	:"0"(_c[LO]), "g"(cy), "g"(mu), "a"(*tmpm)
+	:"cc");
+	*pcy = cy;
+}
+
+static void propcarry(sp_digit *_c, sp_digit *pcy)
+{
+	sp_digit cy = *pcy;
+	asm(
+	   "addl   %1,%0    \n\t"
+	   "sbb    %1,%1    \n\t"
+	   "neg    %1       \n\t"
+	:"=g"(_c[LO]), "=r"(cy)
+	:"0"(_c[LO]), "1"(cy)
+	:"cc");
+	*pcy = cy;
+}
+
+/* --- powertop.c's cpuid, verbatim ----------------------------------------
+ *
+ * "=b" names ebx, which this backend PRESERVES (ir_codegen386.inc pushes and
+ * pops it wherever it uses it), so the block gets a push/pop pair around it.
+ * `cpuid` writes ebx and there is nothing for us to re-choose.
+ *
+ * The outputs are *eax, *ebx, ... -- dereferences, not names, which is the
+ * same side-effect-free-lvalue rule the montgomery blocks need.
+ *
+ * WHAT THIS ROW CAN AND CANNOT SEE. The VALUES are diffed against gcc -m32 on
+ * this same machine, so a mis-plumbed "=b" -- the output not actually coming
+ * from ebx -- fails here. That ebx is RESTORED for the caller is not
+ * observable from C: it would take a caller that keeps a value in ebx across
+ * the block, which C gives no way to write. Asserted structurally instead
+ * (the emitted block carries the 0x53/0x5b pair) and stated here rather than
+ * left for a reader to assume from a passing row.
+ */
+static void cpuid(unsigned int *eax, unsigned int *ebx, unsigned int *ecx,
+                  unsigned int *edx)
+{
+	asm (
+		"	cpuid\n"
+		: "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx)
+		: "0"(*eax), "1"(*ebx), "2"(*ecx), "3"(*edx)
+	);
+}
+
 int main(void)
 {
 	sp_digit a[8], b[8], r[8];
@@ -107,5 +179,26 @@ int main(void)
 	c0 = 0; c1 = 0; c2 = 0;
 	muladd(3u, 5u, &c0, &c1, &c2);
 	printf("muladd %u %u %u\n", c0, c1, c2);
+
+	{
+		sp_digit acc[2], mu, tmpm[1], cy;
+		acc[0] = 0xFFFFFFF0u; acc[1] = 0; mu = 0x00010007u;
+		tmpm[0] = 0x00020003u; cy = 9;
+		innermul(acc, mu, tmpm, &cy);
+		printf("innermul %u %u\n", acc[0], cy);
+
+		acc[0] = 0xFFFFFFFEu; cy = 7;
+		propcarry(acc, &cy);
+		printf("propcarry %u %u\n", acc[0], cy);
+	}
+
+	{
+		unsigned int ea = 0, eb = 0, ec = 0, ed = 0;
+		cpuid(&ea, &eb, &ec, &ed);
+		/* leaf 0: eax = max leaf, ebx/edx/ecx = the vendor string. Machine
+		   facts, not portable ones -- which is why the oracle is gcc -m32 on
+		   this same box rather than a literal. */
+		printf("cpuid %u %08x %08x %08x\n", ea, eb, ec, ed);
+	}
 	return 0;
 }

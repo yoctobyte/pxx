@@ -7518,11 +7518,20 @@ const
   CAsmPool: array[0..CASM_POOL_COUNT-1] of Integer =
     (8, 9, 10, 11, 6, 7, 1, 0, 2);   { r8 r9 r10 r11 rsi rdi rcx rax rdx }
 
-  { i386 has no r8..r15, and ebx is CALLEE-saved while pxx's prologue saves
-    nothing -- so the caller-saved file is five registers, not nine. Same
-    ordering rule: eax and edx come last because `mul` writes both implicitly
-    and the fixed-register letters "a" and "d" want them, so leaving them until
-    the pool is under pressure avoids most collisions with no cleverness.
+  { i386 has no r8..r15, so the pool is five registers rather than nine. WHICH
+    five is a statement about THIS BACKEND and not about the i386 System V ABI,
+    and the difference is worth spelling out: by that ABI only eax, ecx and edx
+    are scratch, while esi and edi are callee-saved. ir_codegen386.inc already
+    uses esi and edi as scratch throughout (`mov esi, eax`, `inc edi`, and so
+    on) and saves neither, while it pushes and pops ebx explicitly wherever it
+    needs it. So a pxx-compiled i386 function today preserves ebx and does not
+    preserve esi/edi, and this pool matches the compiler it lives in rather than
+    the document. bug-a-i386-esi-and-edi-are-callee-saved-in-the-abi-and-scratch
+    -in-this-backend records the divergence; it is not this ticket's to fix and
+    it is not a new one introduced here.
+    Same ordering rule as x86-64: eax and edx come last, because `mul` writes
+    both implicitly and the fixed-register letters "a" and "d" want them, so
+    leaving them until the pool is under pressure avoids most collisions.
     Five is not a comfortable number: busybox tls_pstm_mul_comba.c wants three
     outputs with %eax and %edx clobbered, which is exactly the three that are
     left, and it only fits because an "m" operand costs no register any more. }
@@ -7550,8 +7559,12 @@ end;
   so a reader learns which letter is missing. }
 function CAsmClassSupported(const cls: AnsiString): Boolean;
 begin
+  { `g` is "register, memory, or immediate, compiler's choice", and a register
+    is always one of the choices it allows -- so honouring it as `r` is a legal
+    reading of the constraint rather than an approximation of one. busybox's
+    tls_pstm_montgomery_reduce.c spells five of them. }
   Result := (cls = 'r') or (cls = 'rm') or (cls = 'mr') or (cls = 'm')
-            or (CAsmFixedReg(cls) >= 0);
+            or (cls = 'g') or (CAsmFixedReg(cls) >= 0);
 end;
 
 { Does this class want a register, as opposed to memory? `"rm"` lets gcc choose;
@@ -7572,7 +7585,7 @@ end;
   refused BY NAME until each is built and tested -- a narrower feature with an
   honest refusal beats a wider one that guesses. }
 procedure CAsmRefuseUnsupported;
-var i: Integer;
+var i, k: Integer;
 begin
   for i := 0 to CAsmOpCount - 1 do
   begin
@@ -7583,9 +7596,39 @@ begin
       Error('C: inline asm read-write constraint "' + CAsmOps[i].Raw
             + '" is not supported — write it as an "=' + CAsmOps[i].Cons
             + '" output with an input tied to it');
-    if CAsmOps[i].Early then
-      Error('C: inline asm earlyclobber constraint "' + CAsmOps[i].Raw
-            + '" is not supported');
+    { `&` says an output may be written before the inputs are read, so the
+      compiler must not put an input in that output's register. Every operand
+      here is pinned to a register of its OWN -- the only sharing is a matching
+      constraint, which is explicit -- so the guarantee holds by construction
+      and there is nothing to do. The one combination that does NOT hold is an
+      earlyclobber output with an input tied to it: that asks for the sharing
+      and forbids it in the same breath, and gcc rejects it too. }
+    if CAsmOps[i].Early and (i < CAsmOutCount) then
+      for k := 0 to CAsmOpCount - 1 do
+        if CAsmOps[k].TiedTo = i then
+          Error('C: inline asm ties operand ' + AIntToStr(k) + ' to the'
+                + ' earlyclobber output "' + CAsmOps[i].Raw
+                + '", which asks it to share a register the "&" forbids');
+  end;
+end;
+
+{ Can this expression be evaluated twice with the same result and no other
+  effect? A WHITELIST rather than a blacklist of the dangerous kinds: a node
+  kind added later is then refused by default, where a blacklist would silently
+  admit it. Deliberately narrow -- it is about output operands, and every
+  output a real block writes is a name, a subscript, a field, or a dereference
+  of those. }
+function CAsmExprIsPure(node: Integer): Boolean;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_IDENT, AN_INT_LIT, AN_BOOL_LIT, AN_FLOAT_LIT, AN_STR_LIT:
+      Result := True;
+    AN_DEREF, AN_ADDR, AN_NEG, AN_NOT, AN_PTR_CAST, AN_FIELD:
+      Result := CAsmExprIsPure(ASTLeft[node]);
+    AN_INDEX, AN_BINOP:
+      Result := CAsmExprIsPure(ASTLeft[node]) and CAsmExprIsPure(ASTRight[node]);
   end;
 end;
 
@@ -7611,10 +7654,22 @@ end;
   around the block. }
 function CAsmRegIsCalleeSaved(reg: Integer): Boolean;
 begin
+  { ebx/rbx only, plus the two that are never operands at all. esi and edi are
+    deliberately absent on i386: see the pool comment -- this asks what THIS
+    backend preserves, and it does not preserve them. }
   if TargetArch = TARGET_I386 then
     Result := (reg = 3) or (reg = 5) or (reg = 4)          { ebx ebp esp }
   else
     Result := (reg = 3) or (reg = 5) or (reg = 4) or (reg >= 12);
+end;
+
+{ ebp and esp are the frame and stack pointers. A push/pop pair does not make
+  them usable as operands -- the block addresses every value through ebp, and
+  the push would be measured from the esp it just changed -- so they stay
+  refused where ebx becomes saveable. }
+function CAsmRegIsSaveable(reg: Integer): Boolean;
+begin
+  Result := CAsmRegIsCalleeSaved(reg) and (reg <> 4) and (reg <> 5);
 end;
 
 { Bind every operand to a pinned register, encode the block, and synthesise the
@@ -7636,6 +7691,8 @@ var
   i, j, r, reg, poolNext, tk, fixed, startOff, blkLen: Integer;
   used: array[0..15] of Boolean;
   opOwn: array[0..MAX_CASM_OPERANDS-1] of Boolean;
+  saveReg: array[0..MAX_CASM_OPERANDS-1] of Integer;
+  saveCount: Integer;
   tmpSym, opReg, opSz: array[0..MAX_CASM_OPERANDS-1] of Integer;
   head, tail, nd, idn, asn, sq, blk, val: Integer;
   cls, nm, rest: AnsiString;
@@ -7647,8 +7704,8 @@ begin
     if CAsmOps[i].TiedTo >= 0 then Continue;   { class comes from its partner }
     if not CAsmClassSupported(CAsmOps[i].Cons) then
       Error('C: inline asm constraint "' + CAsmOps[i].Raw
-            + '" is not supported — this frontend reads "r", "rm", "m" and the'
-            + ' fixed-register letters a b c d S D');
+            + '" is not supported — this frontend reads "r", "rm", "m", "g"'
+            + ' and the fixed-register letters a b c d S D');
   end;
   for i := 0 to CAsmOutCount - 1 do
   begin
@@ -7656,15 +7713,21 @@ begin
       Error('C: inline asm memory OUTPUT constraint "' + CAsmOps[i].Raw
             + '" is not supported');
     { An output expression is written twice -- once as the store target here,
-      and once more if a matching input names it. Restricting outputs to a
-      plain variable keeps that from evaluating a subscript or a call twice,
-      which is a wrong answer rather than a refusal. Every output in the
-      busybox blocks this targets is a plain local. }
-    if ASTKind[CAsmOps[i].Expr] <> AN_IDENT then
-      Error('C: inline asm output operand must be a plain variable'
-            + ' — a more complex lvalue would be evaluated more than once');
+      and once more if a matching input names it -- so what has to be excluded
+      is a SIDE EFFECT, not a shape. The rule used to be "a plain variable",
+      which is the safe subset and not the honest one: `_c[LO]` and `*eax` are
+      evaluated twice with no consequence whatever, and they are exactly what
+      busybox's tls_pstm_montgomery_reduce.c and procps/powertop.c write.
+      CAsmExprIsPure refuses anything that could observe the second evaluation
+      -- a call, ++/--, an assignment, a comma. Evaluating a subscript twice is
+      a wrong answer only if evaluating it once changes something. }
+    if not CAsmExprIsPure(CAsmOps[i].Expr) then
+      Error('C: inline asm output operand has a side effect'
+            + ' — it is evaluated once as the store target and again for any'
+            + ' input tied to it, so the two evaluations must agree');
   end;
 
+  saveCount := 0;
   for r := 0 to 15 do used[r] := False;
 
   { ---- registers the block has already spoken for ---- }
@@ -7695,10 +7758,22 @@ begin
         Error('C: inline asm wants register constraint "' + CAsmOps[i].Raw
               + '" but that register is already taken by another operand or a'
               + ' clobber');
+      { A FIXED-register constraint can name a register the caller expects to
+        survive; the pool never picks one. `cpuid` writes ebx and busybox
+        procps/powertop.c spells "=b", so there is nothing for us to re-choose
+        -- the block gets a push/pop pair around it instead. Pinning one
+        without that is a wrong VALUE in the caller with no diagnostic. }
       if CAsmRegIsCalleeSaved(fixed) then
-        Error('C: inline asm constraint "' + CAsmOps[i].Raw
-              + '" names a callee-saved register, and this frontend has no'
-              + ' save/restore pair to put around the block');
+      begin
+        if not CAsmRegIsSaveable(fixed) then
+          Error('C: inline asm constraint "' + CAsmOps[i].Raw
+                + '" names the frame or stack pointer, which cannot be saved'
+                + ' around the block');
+        if saveCount >= MAX_CASM_OPERANDS then
+          Error('C: inline asm saves too many callee-saved registers');
+        saveReg[saveCount] := fixed;
+        Inc(saveCount);
+      end;
       opReg[i] := fixed;
       used[fixed] := True;
     end;
@@ -7776,6 +7851,10 @@ begin
 
   { ---- encode: loads, the template, stores ---- }
   AttBeginBlock(startOff);
+  { Saves first and restores last, so a callee-saved register is live as an
+    operand for the whole block including the moves that fill and drain it. }
+  for i := 0 to saveCount - 1 do
+    AttEmitPushPop(saveReg[i], True);
   for i := CAsmOutCount to CAsmOpCount - 1 do
     if CAsmClassWantsReg(CAsmOps[i].Cons) then
       AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, True);
@@ -7783,6 +7862,8 @@ begin
   for i := 0 to CAsmOutCount - 1 do
     if CAsmClassWantsReg(CAsmOps[i].Cons) then
       AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, False);
+  for i := saveCount - 1 downto 0 do
+    AttEmitPushPop(saveReg[i], False);
   AttEndBlock(startOff, blkLen);
 
   { ---- and the ordinary statements around it ---- }
