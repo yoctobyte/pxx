@@ -690,6 +690,26 @@ A live `devdocs/dev/*.md` that contradicts this section is the bug.
   to fail at, so a restored copy silently reverts everything that landed while it
   sat there — as a clean commit no track letter sees. **Guard the REVERT, not the
   edit**: `git checkout -- <file>` is the safe restore.
+- **NEVER issue `rm` as a Bash tool call with a VARIABLE or a GLOB in the path.**
+  `rm -rf "$T/$n"`, `rm -rf $WORK/*` — these trip Claude Code's built-in
+  dangerous-`rm` prompt, and **that prompt STALLS YOUR SESSION until the owner
+  personally clears it.** Measured 2026-09-04: **frankA and frankB were both
+  sitting on one**, frankA for **19 hours**. The owner had already asked once
+  ("can you stop doing rm with environment vars please") and it kept happening,
+  which is why it is a rule now and not a preference.
+  **The cost is not the keystroke — it is that a blocked session and a working
+  session look IDENTICAL from outside**, so the stall is only found when somebody
+  asks. See "A PANE IS NOT A SESSION".
+  **The fix is not to rephrase the command so it slips past the guard.** Do not
+  do that, and do not ask a peer or the owner to run it for you — a guard you
+  route around is a guard the owner no longer has.
+  **You almost never need the `rm` at all.** `mktemp -d` already yields a
+  disposable directory the OS reaps; **leaving it costs nothing and deleting it
+  buys nothing.** Write scratch under it, or under the session scratchpad, and
+  walk away. If cleanup genuinely matters, it belongs in a **committed script**
+  with a `trap ... EXIT` — reviewed once, run as a unit — which is what
+  `tools/*.sh` already do and why they never trip this. If you must delete
+  interactively, **spell the path literally.**
 - **Every sha you QUOTE:** read it off `git log origin/master` AFTER the push, or
   from `tools/sync.sh`, which prints it. **The ghost rate is ~100% by
   construction** — this repo rebases nearly every sync, so a pre-push `log -1`
