@@ -283,6 +283,20 @@ are least likely to — you reach for an instrument because you are confident, a
 confidence is the state the rule exists to interrupt. A rule wired into a script,
 a gate, or a habitual command fires whether or not you thought of it.
 
+**Corroborated 2026-09-04, by the strongest instance available: the author of a
+rule breaking it seven times.** A session had already banked *"report a
+denominator, not a bare zero"* as its own lesson — then published seven
+successive bare numerators against it, `278, 70, 57, 42, 26, 22, 20` gaps "over
+300 sources", each counting only the sources that reached the backend under
+test. Its own summary: **"a rule I know is not a guard."** Knowing it, having
+written it, and having been burned by it once were all insufficient, because
+nothing ran it at the moment each number was written. The repair was not a
+sharper phrasing but making the bad form unproduceable: the census tool now
+prints `REACHED THE BACKEND: N <-- the denominator` and labels the remainder
+*never measured; not zero gaps*, so a bare numerator can no longer come out of
+it. That is the whole section in one incident — and note the fix cost about as
+much as re-writing the rule would have.
+
 So the useful question about any rule here is not "is it written down" but
 **"what runs it?"** — and where the answer is "the reader, if they remember",
 expect it to miss. Prefer converting one into a command you always run over
