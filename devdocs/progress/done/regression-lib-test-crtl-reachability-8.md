@@ -139,4 +139,4 @@ against a pre-control copy.
 still be filed by the watcher if the map goes stale on a host that is not
 running this gate. The gate arm makes it far less likely to reach a sweep, not
 impossible.
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b992d2073.
