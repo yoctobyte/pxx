@@ -5,6 +5,7 @@ type: bug
 found: 2026-09-01
 found-by: frankC
 summary: "FIXED 2026-09-04 (step 2 of 2). aarch64 was the last target where a by-value aggregate argument occupied one pointer-sized slot by CONSTRUCTION rather than by classification. ABICRecordParamByValue now answers for aarch64, the AAPCS64 walk carries a full per-argument description (registers, bank, size, indirect, isAgg) instead of one Boolean, and all THREE readers take their answer from it -- the callee spill, the direct call and the indirect call. Verified against the clang PLACEMENT oracle: five of five shapes now match, including the tail register, which moves on four of the five and is the column that reports the bank state. TWO THINGS THE MEASUREMENT CAUGHT AND READING WOULD NOT HAVE: isAgg cannot be derived from nRegs and size, because struct{int,int} is one GP register and eight bytes -- a scalar's exact description -- so an inferred guard passed its ADDRESS; and SysV's `>= 0` is WRONG here, because both classifiers use 0 for 'not in registers' while SysV means MEMORY (the slot IS the object, by-value) and AAPCS64 means INDIRECT (the slot is a POINTER, which is the by-reference parameter pxx already had) -- copying the sign made va_list stop being a pointer and segfaulted a plain printf on aarch64 while x86-64 stayed green. STILL OPEN AND OWNED ELSEWHERE: a mixed LINK, a pxx-compiled CALLEE receiving from clang-compiled code, needs an aarch64 linker this box does not have -- that is an apt install and therefore the owner's, and it is recorded in the 2026-09-03 note in this ticket. test/caarch64_aggregate_byval.c is a REGRESSION guard and not the proof: measured, it passes on the pre-fix compiler byte for byte, because caller and callee were both pxx and both wrong the same way."
+status: done
 ---
 
 # An aggregate argument is a pointer by construction on aarch64
@@ -331,3 +332,6 @@ with the direct arm, which is why it is not separately proven: there is no
 shape here that reaches it with an aggregate — a Pascal program calling through
 a cdecl fnptr into a foreign callee that takes a struct by value — and inventing
 one that only pxx can execute would prove pxx agrees with itself again.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
