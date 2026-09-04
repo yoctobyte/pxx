@@ -1,8 +1,8 @@
 ---
 track: P
 prio: 60
-status: backlog
-owner: ""
+status: working
+owner: frankZ
 type: perf
 blocked-by: []
 summary: "RE-MEASURE FIRST, then decide if anything is left. The premise was twice-superseded: the 9.4% is NOT the 92-arm walk (frankB — CaseEqual bails at the first differing char, so 1.58M O(1) compares cannot be 9.4%), and the measured cause that replaced it — a string LITERAL passed to an AnsiString parameter copies every call — was itself filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call and then REJECTED as superseded, because 440c822e6 promoted EmitStaticLitHandle to -O2 and does that job at codegen. So the copy this ticket is waiting on may already be gone at the default -O. FIRST ACTION IS A MEASUREMENT, not an implementation: re-profile ParseFactorCore at -O2 at HEAD. If its share has dropped, close this. Traps banked in the body if it has not: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat."

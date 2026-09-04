@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (9)
+## working (10)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -19,6 +19,7 @@ _none_
 | feature-opt-heap-per-thread-cache | A+O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | — |
+| perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | RE-MEASURE FIRST, then decide if anything is left. The premise was twice-superseded: the 9.4% is NOT the 92-arm walk (frankB — CaseEqual bails at the first differing char, so 1.58M O(1) compares cannot be 9.4%), and the measured cause that replaced it — a string LITERAL passed to an AnsiString parameter copies every call — was itself filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call and then REJECTED as superseded, because 440c822e6 promoted EmitStaticLitHandle to -O2 and does that job at codegen. So the copy this ticket is waiting on may already be gone at the default -O. FIRST ACTION IS A MEASUREMENT, not an implementation: re-profile ParseFactorCore at -O2 at HEAD. If its share has dropped, close this. Traps banked in the body if it has not: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | — |
 | refactor-a-carve-the-nilpy-arms-out-of-the-shared-pascal-argument-loops | A | 45 | refactor | The last NilPy references in the shared Pascal parser, and they are NOT where the previous carve looked. ParseFactorCore already hands NilPy expressions to PyParseFactorCore and Exits at pasparser_expr.inc:521; every remaining site is BELOW that line, guarded by `isNilPy` rather than `PyExprMode` -- NilPy arms threaded through the shared ARGUMENT loops (keyword binding, *args unpacking, keyword-driven overload promotion), which the expression hook never sees. THREE SPECIES, only one of which is a move: a shared helper wearing a Py prefix, a semantic predicate needing a neutral hook, and the argument loops needing one NilPy argument-list parser. Treating all three as species 1 is how the 176 stubs the parent rejected get written by accident. Progress is one command but the target is NOT zero -- the census counts UNDEFINED symbols under the flag, so a NilPy arm whose helper lives in a shared file is invisible to it: `pasparser_proc.inc` carries nine real `isNilPy` arms and the census scores that file at ZERO. `fpc -dPXX_NO_NILPY` reported 279 sites at filing and 209 now, after five steps: StoredName moved to util.inc (closing the compiler's only frontend-to-frontend dependency, cparser.inc -> pyparser.inc) the first REGION carve (six references, a six-line hook), ParseFactor's NilPy head (34 sites, two hooks), and the two DEAD-ARM deletions -- the shared expression and statement call loops carried thirteen arms guarded by `isNilPy` where the question was `PyExprMode`, which could not fire at all (7314fab2b, 23c4552af). Report that ratio per region -- near 1:1 means you have hit a species-2 site and should design the concept-level hook instead. | — |
 | refactor-a-one-program-driver-prologue-for-every-frontend | A | 45 | refactor | TEN OF TWELVE drivers now reach their parse through EmitProgramPrologue (frontend_prologue.inc); NilPy landed 2026-09-02, verified by 24 before/after rows (12 .npy tests, plain and --threadsafe, identical program output and identical compiler messages), eleven other-frontend binaries byte-identical, and three cross targets identical under qemu. LEFT: the C driver, blocked on merging its five per-arch call-main entry chains with EmitProgramEntryForTarget; and the PASCAL driver, blocked on a question this ticket used to call pure de-duplication -- the Pascal driver does NOT call RegisterEmittedStringRuntimeForwards, it registers a larger target-conditional SUPERSET inline, and RegisterProc is not idempotent, so passing wantAnsiRuntime=True would append ~40 duplicate proc rows. Decide that before converting, not during. The drift this deletes is measured, not felt: adding ONE new stub in 187a372a6 required four hand-written call sites, one per unconverted driver. | — |
 
@@ -354,7 +355,7 @@ _none_
 | feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing | T | 55 | feature | feature(T): twatch should assert its `## Repro` selector resolves to exactly the job it is filing | — |
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 
-## backlog-pascal (53)
+## backlog-pascal (52)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -399,7 +400,6 @@ _none_
 | feature-pascal-management-operators-copy-and-addref | P | 30 | feature | `class operator Copy` / `AddRef` are recognised but never dispatched | — |
 | feature-pascal-management-operators-nested-and-array | P | 35 | feature | Management operators do not reach an array element or a nested field | — |
 | feature-pascal-typed-and-untyped-files | P | 70 | feature | `file of T` and untyped `file` are refused outright — only TextFile works. Blocks the classic Pascal record-file idiom (Assign/Rewrite/Write/Seek/FileSize/BlockRead). | compat-pascal-four-type-sizes-disagree-with-fpc-and-every-value-agrees, feature-p-implement-the-real-tyshortstring-byte-prefix-layout |
-| perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | RE-MEASURE FIRST, then decide if anything is left. The premise was twice-superseded: the 9.4% is NOT the 92-arm walk (frankB — CaseEqual bails at the first differing char, so 1.58M O(1) compares cannot be 9.4%), and the measured cause that replaced it — a string LITERAL passed to an AnsiString parameter copies every call — was itself filed as perf-a-a-string-literal-passed-to-an-ansistring-parameter-is-copied-every-call and then REJECTED as superseded, because 440c822e6 promoted EmitStaticLitHandle to -O2 and does that job at codegen. So the copy this ticket is waiting on may already be gone at the default -O. FIRST ACTION IS A MEASUREMENT, not an implementation: re-profile ParseFactorCore at -O2 at HEAD. If its share has dropped, close this. Traps banked in the body if it has not: the arms are not an else-if ladder, `name` is reassigned at 8 points inside the function, and 25 of 101 names repeat. | — |
 | refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too | P | 55 | refactor | The parser carve-out is done, but Pascal still shares lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carve the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own, and the A/P slot stops existing. | — |
 | refactor-p-five-dispatch-sites-for-one-named-type-cast | P | 35 | refactor | Five dispatch sites decide what `SomeName(expr)` casts to | — |
 | refactor-p-nodearrndinfo-answers-nothing-for-a-rank-1-array | P | 25 | refactor | NodeArrNDInfo returns False for a rank-1 array — every arm tests `>= 2`. Correct for its original caller (multi-subscript lowering, where rank 1 has no comma chain), but it makes the function unusable as the general 'what shape is this array' reader that three frontends now want. Not a Pascal defect: no Pascal program behaves wrong today. | — |
@@ -1033,7 +1033,6 @@ _none_
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
 - [p 60] [C] idea-c-realworld-test-targets [idea — a brainstorm parent, not a unit of work; spin out a concrete ticket instead of claiming it]
-- [p 60] [P] perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor
 - [p 60] [A] refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 60] [U] task-u-evaluate-the-2026-08-31-ticket-rules-next-week
 - [p 58] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
