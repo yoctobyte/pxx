@@ -1292,3 +1292,37 @@ the FPC seed canary PASS. The proof is the LINK, not the symbol table: `nm`
 showing `T PxxLibAdd` proves a name, and only calling it from a gcc-built C host
 proves the convention. `Hidden` is asserted absent from the global block, or the
 test would pass on a compiler that exports everything.
+
+## 2026-09-04 | frankD (Track P) | devdocs/progress/LOGBOOK.md | a fixed-line `tail` on `make compiler/pascal26` hides the verb the whole gate turns on
+
+Not a code change — an instrument note, because two sessions hit it independently
+in one evening and the per-fix gate is built on the distinction it destroys.
+
+`make compiler/pascal26` prints TWO success lines when it recomputes:
+
+    converged after 1 round(s)                          <- the recompute
+    self-host fixedpoint: verified — 1 round(s), <sha>  <- the stamp read back
+
+`| tail -1` shows only the second. So a run that DID converge is indistinguishable
+from the stamp path, which is the exact ambiguity CLAUDE.md's "the verb is the
+tell" exists to remove — and it fails in the dangerous direction: you read
+`verified`, conclude nothing was built, and either distrust a good binary or go
+looking for a stale one. Measured here today: I read `tail -1`, concluded no
+rebuild had happened when one had, and briefly believed the stamp was accepting
+sources it should have refused.
+
+frankA checked his own session rather than agreeing, and had used `tail -2`/
+`tail -3` all evening — both lines fit, so he got the right answer, but he had
+already had to reason once about whether a lone `verified` was the stamp path or
+a truncation. It was the stamp path, correctly. The two are not separable from
+the output when the window is too small.
+
+**The point is not that the number was too low. A fixed-line tail is the wrong
+SHAPE of instrument for this question** — the count of trailing lines is not what
+anyone cares about. `make compiler/pascal26 2>&1 | grep -E 'converged|fixedpoint:|error'`
+names what it wants and cannot be defeated by the recipe printing one more line.
+Both of us switched to it.
+
+Same family as the `check_test_wiring.py` finding earlier today: an instrument
+that does not error, answers a narrower question than the one asked, and gets
+read as having answered the wider one.
