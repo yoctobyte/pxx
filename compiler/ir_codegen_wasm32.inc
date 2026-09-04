@@ -1604,6 +1604,11 @@ begin
     IR_PROCADDR      : WasmNodeResultType := tyPointer;
     { A metaclass value is the ADDRESS of the class's RTTI blob. }
     IR_CLASSREF      : WasmNodeResultType := tyPointer;
+    { And a VMT address is an address too. Both rows are here rather than
+      falling through to the IR's own tk, because IR_VMTADDR records tyPointer
+      already and the day it does not is the day this reads a class index as a
+      type kind. }
+    IR_VMTADDR       : WasmNodeResultType := tyPointer;
     IR_BINOP :
       if WasmIsCompare(WasmBinopOp(node)) then
         WasmNodeResultType := tyBoolean
@@ -1880,6 +1885,19 @@ begin
     IR_NOT       : WasmEmitUnary(node, False);
     IR_PROCADDR  : WasmEmitProcAddr(node);
     IR_CLASSREF  : WasmEmitClassRef(node);
+    { The class's VMT address -- the per-class identity stored at [instance+0],
+      which is what `is` and `as` compare against.
+
+      A DIRECT WasmDataAddr, not the descriptor-cell indirection WasmEmitClassRef
+      needs, and the difference is WHEN the offset exists rather than a choice.
+      UClsRTTIOff is populated by EmitRTTI, which runs after every body is
+      emitted, so a metaclass value has to be reached through a Data[] cell
+      resolved later. UClsVMTOffset is final BEFORE bodies are emitted -- this
+      file already relies on that, stamping [Self+0] with exactly this
+      expression in WasmEmitGetMem -- so the address is a constant here and the
+      indirection would buy nothing. Same expression the four register 32-bit
+      backends emit (ir_codegen386.inc's IR_VMTADDR is the closest twin). }
+    IR_VMTADDR   : WasmDataAddr(UClsVMTOffset[IRA[node]]);
     IR_CALL_IND  : WasmEmitCallInd(node, False);
     IR_VIRTUAL_CALL : WasmEmitVirtualCall(node, False);
     IR_ATOMIC    : WasmEmitAtomic(node);

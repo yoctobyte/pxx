@@ -16476,6 +16476,18 @@ test-i386: $(COMPILER)
 	# expression. Written for wasm32's new set arms and measured green on all
 	# seven targets before being wired, so a row here is a guard rather than a
 	# hope.
+	# INTERFACE `is`/`as` -- the only construct in the language that emits
+	# IR_VMTADDR. ir.inc's IRLowerClassMatch has two halves and only this one
+	# reaches it: a CLASS target walks the RTTI at runtime through a call, an
+	# INTERFACE target enumerates every implementing class's VMT address at
+	# codegen. So a class-hierarchy probe is a guard that cannot fail for this
+	# op -- measured against pin v403, which compiles and answers a `TB is TA` /
+	# `TB is TC` probe correctly on wasm32 with no IR_VMTADDR arm at all.
+	# `onlyalpha is IBeta` is the single FALSE row; every other row is TRUE and
+	# an arm returning a constant or wrong address would still print TRUE there.
+	./$(COMPILER) --target=i386 test/test_cross_interface_is_as.pas $(TESTTMP)/test_i386_iisas
+	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/test_i386_iisas_x64
+	tools/expect_same.sh i386/test_i386_interface_is_as "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iisas)" "$$($(TESTTMP)/test_i386_iisas_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_set_shapes.pas $(TESTTMP)/test_i386_setshapes
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/test_i386_setshapes_x64
 	tools/expect_same.sh i386/test_i386_setshapes "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_setshapes)" "$$($(TESTTMP)/test_i386_setshapes_x64)"
@@ -17390,6 +17402,18 @@ test-aarch64: $(COMPILER)
 	# expression. Written for wasm32's new set arms and measured green on all
 	# seven targets before being wired, so a row here is a guard rather than a
 	# hope.
+	# INTERFACE `is`/`as` -- the only construct in the language that emits
+	# IR_VMTADDR. ir.inc's IRLowerClassMatch has two halves and only this one
+	# reaches it: a CLASS target walks the RTTI at runtime through a call, an
+	# INTERFACE target enumerates every implementing class's VMT address at
+	# codegen. So a class-hierarchy probe is a guard that cannot fail for this
+	# op -- measured against pin v403, which compiles and answers a `TB is TA` /
+	# `TB is TC` probe correctly on wasm32 with no IR_VMTADDR arm at all.
+	# `onlyalpha is IBeta` is the single FALSE row; every other row is TRUE and
+	# an arm returning a constant or wrong address would still print TRUE there.
+	./$(COMPILER) --target=aarch64 test/test_cross_interface_is_as.pas $(TESTTMP)/test_aarch64_iisas
+	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/test_aarch64_iisas_x64
+	tools/expect_same.sh aarch64/test_aarch64_interface_is_as "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iisas)" "$$($(TESTTMP)/test_aarch64_iisas_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_set_shapes.pas $(TESTTMP)/test_aarch64_setshapes
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/test_aarch64_setshapes_x64
 	tools/expect_same.sh aarch64/test_aarch64_setshapes "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_setshapes)" "$$($(TESTTMP)/test_aarch64_setshapes_x64)"
@@ -18373,6 +18397,18 @@ test-riscv32: $(COMPILER)
 	# expression. Written for wasm32's new set arms and measured green on all
 	# seven targets before being wired, so a row here is a guard rather than a
 	# hope.
+	# INTERFACE `is`/`as` -- the only construct in the language that emits
+	# IR_VMTADDR. ir.inc's IRLowerClassMatch has two halves and only this one
+	# reaches it: a CLASS target walks the RTTI at runtime through a call, an
+	# INTERFACE target enumerates every implementing class's VMT address at
+	# codegen. So a class-hierarchy probe is a guard that cannot fail for this
+	# op -- measured against pin v403, which compiles and answers a `TB is TA` /
+	# `TB is TC` probe correctly on wasm32 with no IR_VMTADDR arm at all.
+	# `onlyalpha is IBeta` is the single FALSE row; every other row is TRUE and
+	# an arm returning a constant or wrong address would still print TRUE there.
+	./$(COMPILER) --target=riscv32 test/test_cross_interface_is_as.pas $(TESTTMP)/test_rv32x_iisas
+	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/test_rv32x_iisas_x64
+	tools/expect_same.sh riscv32/test_rv32x_interface_is_as "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_iisas)" "$$($(TESTTMP)/test_rv32x_iisas_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_set_shapes.pas $(TESTTMP)/test_rv32x_setshapes
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/test_rv32x_setshapes_x64
 	tools/expect_same.sh riscv32/test_rv32x_setshapes "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_setshapes)" "$$($(TESTTMP)/test_rv32x_setshapes_x64)"
@@ -19106,10 +19142,25 @@ test-wasm32: $(COMPILER)
 	# the mask), the empty set, and a NESTED set expression -- which is the one
 	# that exercises the shared per-body locals the arms store their operand
 	# addresses in.
+	# INTERFACE `is`/`as` -- the only construct in the language that emits
+	# IR_VMTADDR. ir.inc's IRLowerClassMatch has two halves and only this one
+	# reaches it: a CLASS target walks the RTTI at runtime through a call, an
+	# INTERFACE target enumerates every implementing class's VMT address at
+	# codegen. So a class-hierarchy probe is a guard that cannot fail for this
+	# op -- measured against pin v403, which compiles and answers a `TB is TA` /
+	# `TB is TC` probe correctly on wasm32 with no IR_VMTADDR arm at all.
+	# `onlyalpha is IBeta` is the single FALSE row; every other row is TRUE and
+	# an arm returning a constant or wrong address would still print TRUE there.
+	# THIS TARGET IS WHY THE TEST EXISTS: it had no IR_VMTADDR arm, so every
+	# body containing an interface `is` or `as` was emitted as `unreachable`.
+	# Pin v403 reports `value IR op 58` on this exact file and traps.
+	./$(COMPILER) --target=wasm32 test/test_cross_interface_is_as.pas $(TESTTMP)/w32_iisas.wasm
+	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/w32_iisas_x64
+	tools/expect_same.sh wasm32/interface_is_as "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_iisas.wasm)" "$$($(TESTTMP)/w32_iisas_x64)"
 	./$(COMPILER) --target=wasm32 test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes.wasm
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes_x64
 	tools/expect_same.sh wasm32/set_shapes "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_setshapes.wasm)" "$$($(TESTTMP)/w32_setshapes_x64)"
-	@echo "wasm32: 38 rows green (31 default + 7 shortstring; 1 excluded, see comment above)"
+	@echo "wasm32: 39 rows green (32 default + 7 shortstring; 1 excluded, see comment above)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
@@ -19472,6 +19523,18 @@ test-xtensa: $(COMPILER)
 	# expression. Written for wasm32's new set arms and measured green on all
 	# seven targets before being wired, so a row here is a guard rather than a
 	# hope.
+	# INTERFACE `is`/`as` -- the only construct in the language that emits
+	# IR_VMTADDR. ir.inc's IRLowerClassMatch has two halves and only this one
+	# reaches it: a CLASS target walks the RTTI at runtime through a call, an
+	# INTERFACE target enumerates every implementing class's VMT address at
+	# codegen. So a class-hierarchy probe is a guard that cannot fail for this
+	# op -- measured against pin v403, which compiles and answers a `TB is TA` /
+	# `TB is TC` probe correctly on wasm32 with no IR_VMTADDR arm at all.
+	# `onlyalpha is IBeta` is the single FALSE row; every other row is TRUE and
+	# an arm returning a constant or wrong address would still print TRUE there.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_interface_is_as.pas $(TESTTMP)/test_xtensa_iisas
+	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/test_xtensa_iisas_x64
+	tools/expect_same.sh xtensa/test_xtensa_interface_is_as "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_iisas)" "$$($(TESTTMP)/test_xtensa_iisas_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_set_shapes.pas $(TESTTMP)/test_xtensa_setshapes
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/test_xtensa_setshapes_x64
 	tools/expect_same.sh xtensa/test_cross_set_shapes "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_setshapes)" "$$($(TESTTMP)/test_xtensa_setshapes_x64)"
@@ -20505,6 +20568,18 @@ test-arm32: $(COMPILER)
 	# expression. Written for wasm32's new set arms and measured green on all
 	# seven targets before being wired, so a row here is a guard rather than a
 	# hope.
+	# INTERFACE `is`/`as` -- the only construct in the language that emits
+	# IR_VMTADDR. ir.inc's IRLowerClassMatch has two halves and only this one
+	# reaches it: a CLASS target walks the RTTI at runtime through a call, an
+	# INTERFACE target enumerates every implementing class's VMT address at
+	# codegen. So a class-hierarchy probe is a guard that cannot fail for this
+	# op -- measured against pin v403, which compiles and answers a `TB is TA` /
+	# `TB is TC` probe correctly on wasm32 with no IR_VMTADDR arm at all.
+	# `onlyalpha is IBeta` is the single FALSE row; every other row is TRUE and
+	# an arm returning a constant or wrong address would still print TRUE there.
+	./$(COMPILER) --target=arm32 test/test_cross_interface_is_as.pas $(TESTTMP)/test_arm32_iisas
+	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/test_arm32_iisas_x64
+	tools/expect_same.sh arm32/test_arm32_interface_is_as "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iisas)" "$$($(TESTTMP)/test_arm32_iisas_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_set_shapes.pas $(TESTTMP)/test_arm32_setshapes
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/test_arm32_setshapes_x64
 	tools/expect_same.sh arm32/test_arm32_setshapes "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_setshapes)" "$$($(TESTTMP)/test_arm32_setshapes_x64)"
