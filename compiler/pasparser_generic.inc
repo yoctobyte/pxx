@@ -107,12 +107,24 @@ function FindSpecialization(const nm: AnsiString): Integer;
   `var lt: T;`, then failed with `unknown type` (tgeneric96: two units each
   writing `T = specialize TTest<LongInt>;`, neither using the other).
   Last visible row wins, matching FindUClass's rule that the later unit hides
-  the earlier one. }
+  the earlier one.
+
+  ...AND SECTION-AWARE, for the same reason one level finer. A specialization
+  minted at a unit's IMPLEMENTATION `uses` clause is that unit's own business,
+  and the class it declares is already refused to importers by FindUClass. This
+  had only the UNIT half of the answer, so the two checks disagreed about one
+  declaration -- and that is worse than either rule alone: ParseSpecialization's
+  "an exact re-statement is a no-op" shortcut fired on a row the type lookup
+  would then not accept, so the importer's OWN declaration was never emitted and
+  its `var b: TBox<Integer>` answered `unknown type: TBox$Integer`. A visibility
+  question must be asked once.
+  bug-p-a-specialization-minted-in-a-units-implementation-is-seen-by-the-importers-duplicate-test }
 var i: Integer;
 begin
   Result := -1;
   for i := 0 to SpecializationCount - 1 do
-    if CaseEqual(Specializations[i].Name, nm) and DeclVisible(SpecUnitIdx[i]) then
+    if CaseEqual(Specializations[i].Name, nm) and
+       DeclVisibleSect(SpecUnitIdx[i], SpecDeclImpl[i], IMPLTAB_SPEC, i) then
       Result := i;
 end;
 
@@ -3681,6 +3693,7 @@ begin
   end;
   SpecNParams[SpecializationCount] := nc;
   SpecUnitIdx[SpecializationCount] := CurrentUnitIdx;
+  SpecDeclImpl[SpecializationCount] := DeclInImplNow;
   SpecTemplateIdx[SpecializationCount] := ti;
   Inc(SpecializationCount);
 

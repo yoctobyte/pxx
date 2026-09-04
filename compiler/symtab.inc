@@ -1014,6 +1014,7 @@ begin
     IMPLTAB_SETCONST: ImplLeakRowName := SetConstName[row];
     IMPLTAB_SYM:      ImplLeakRowName := Syms[row].Name;
     IMPLTAB_PROC:     ImplLeakRowName := Procs[row].Name;
+    IMPLTAB_SPEC:     ImplLeakRowName := Specializations[row].Name;
   end;
 end;
 
@@ -1029,6 +1030,7 @@ begin
     IMPLTAB_SETCONST: ImplLeakTabName := 'setconst';
     IMPLTAB_SYM:      ImplLeakTabName := 'var';
     IMPLTAB_PROC:     ImplLeakTabName := 'routine';
+    IMPLTAB_SPEC:     ImplLeakTabName := 'specialization';
   end;
 end;
 

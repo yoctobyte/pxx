@@ -2350,6 +2350,16 @@ var
   Templates          : array[0..MAX_TEMPLATES-1] of TTemplate;
   TemplateCount      : Integer;
   Specializations    : array[0..MAX_SPECIALIZATIONS-1] of TSpecialization;
+  { Was this specialization minted inside a unit's IMPLEMENTATION section? The
+    same channel every other declaration table gained when the interface/
+    implementation boundary was enforced. FindSpecialization is a VISIBILITY
+    check and had only the unit half of the answer, so it kept saying yes about
+    a row the class table had already begun refusing -- and the two disagreeing
+    is worse than either rule alone: the "exact re-statement, skip it" shortcut
+    fired on a row the type lookup then would not accept, and the importer's own
+    declaration was never emitted.
+    bug-p-a-specialization-minted-in-a-units-implementation-is-seen-by-the-importers-duplicate-test }
+  SpecDeclImpl       : array[0..MAX_SPECIALIZATIONS-1] of Boolean;
   { Templates[] index each specialization was minted from. TSpecialization
     carries the template's NAME, and a name is not an identity: two files may
     each declare a `TBox<T>`, and the minted alias for both is `TBox$Integer`.
@@ -4134,6 +4144,12 @@ const
   IMPLTAB_SETCONST = 6;
   IMPLTAB_SYM      = 7;
   IMPLTAB_PROC     = 8;
+  { The Specializations[] table. Behaves like IMPLTAB_UCLS in
+    ImplPrivateApplies -- a minted specialization name has no builtin chain to
+    outrank, so the ambient exemption applies to it -- and has its own tag only
+    so the p.implleak report names the right row.
+    bug-p-a-specialization-minted-in-a-units-implementation-is-seen-by-the-importers-duplicate-test }
+  IMPLTAB_SPEC     = 9;
 var
   UsesInjected     : Boolean;   { set only around a compiler-injected load }
   VisCacheUnit  : Integer;

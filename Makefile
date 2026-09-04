@@ -9016,6 +9016,16 @@ test-core: $(COMPILER)
 	# sections (fails). FPC 3.2.2 prints the same line.
 	./$(COMPILER) -Futest/generic_unit_section_units test/test_generic_spec_unit_section.pas $(TESTTMP)/test_generic_spec_unit_section26
 	tools/expect_same.sh test_generic_spec_unit_section26 "$$($(TESTTMP)/test_generic_spec_unit_section26)" "101 1 202 42 4 yes"
+	# A program specializing the SAME template a used unit already specialized in
+	# its IMPLEMENTATION section. Both mint the alias `TBox$$Integer`. The unit's
+	# row is private to it; the program's is the program's. Regression from a
+	# SEAM, not from either change alone: FindSpecialization saw the private row
+	# and skipped the program's declaration as an exact re-statement, while
+	# FindUClass refused that same row -- one declaration, two visibility checks,
+	# disagreeing, and the permissive one suppressed the work the strict one then
+	# demanded. FPC 3.2.2 and the pin both print 42 202 4.
+	./$(COMPILER) -Futest/generic_implsect_units test/test_generic_implsect_dup.pas $(TESTTMP)/test_generic_implsect_dup26
+	tools/expect_same.sh test_generic_implsect_dup26 "$$($(TESTTMP)/test_generic_implsect_dup26)" "42 202 4"
 	# A generic constraint against a name that is NOT in the class table used to be
 	# skipped entirely, because at that point "not a class" and "not declared yet"
 	# are the same observation. Two kinds of name are not "not yet": a builtin
