@@ -4187,3 +4187,79 @@ Method note, since this pass nearly produced a fourth: `ls reports/*full*`
 returned **nothing**, because the tier is not in the filename (they are
 `<ts>-<sha7>-<host>.md`). An empty glob and a clean run print the same blank.
 The report was found via the commit that added it instead.
+
+---
+
+## The xtensa windowed-spill probes — `634ac55ef`
+
+Write-up: `devdocs/dev/xtensa-windowed-spill-probes.md` (163 lines). frankb-78
+took `next --track A` and **did the thing the ticket ASKED FOR first, rather than
+the thing it described.** The ticket named exactly one unmeasured fact and made
+one assumption. **Both moved, in opposite directions from the plan.**
+
+- `rsr.windowbase` and `wsr.windowstart` **both SIGILL** under qemu-xtensa
+  linux-user. The ticket called this *"the one fact that decides whether the
+  hosted half is a short job or a different design."* It is **a different
+  design** — newlib's `longjmp` turns on `wsr.windowstart` and cannot be ported
+  to the hosted profile at all.
+- The spill **syscall**, costed by the plan at *"two instructions on hosted"*, is
+  **`Unknown syscall 0`** under qemu. **It executes and RETURNS** — so a probe
+  that checks only for a crash reports it working; only `-strace` shows it. Not
+  wrong about a real Linux/xtensa kernel — **wrong about the only hosted runtime
+  we can execute.**
+- The **call-chain spill**, filed as the bare-metal-only fallback that the hosted
+  half was not waiting on, **works**: 24 nested `call4` frames put an outer
+  frame's `a2` into memory using nothing but ordinary calls. It is the one
+  primitive available on every profile we can run, so **the hosted/bare split the
+  ticket draws does not survive it** — and no `rsr`/`wsr` encoders are needed.
+
+No compiler change was needed and none was made. **Not claimed, not started** —
+the design this implies is not the disassembled reference's, and choosing it is
+not an end-of-session move.
+
+### THE KEEPER: two instrument failures, agreeing, in the same direction, from unrelated causes
+
+**The first three runs all reported "not found" and would have been banked as the
+third result being FALSE.** Neither failure errored:
+
+1. An out-of-range `movi a7, 2048` that **llvm-mc silently turned into an
+   `l32r`** reading a literal pool that the probe's own `--only-section=.text`
+   had **dropped** — so the loop bound came from whatever code bytes sat there.
+2. A scan that walked **upward**, when the Xtensa ABI reserves the 16 bytes
+   **BELOW** a frame's `sp` for its **caller's** `a0-a3`.
+
+**What caught both was carrying a POSITIVE control — store the needle, must find
+it — beside the negative one.** With only the negative control the probe was
+**confidently wrong twice, in the same direction, from unrelated causes.**
+
+This sharpens the handbook's *"a second source only counts if it FAILS
+DIFFERENTLY"*: here it was **one probe run three times**, and repetition bought
+nothing because every run shared the same blind instrument. **Agreement across
+runs is not corroboration; it is the same measurement restated.** The builder now
+**refuses to emit any probe whose disassembly contains `l32r`** — the fix is in
+the instrument, not in the discipline of its reader.
+
+### Toolchain fact worth the line
+
+**The `xtensa-esp-elf` toolchain on this box is BIG-endian and qemu-xtensa
+refuses its objects outright** — *"Invalid ELF image for this architecture."*
+Probes are hand-assembled with `llvm-mc-21` (LLVM 21 ships an Xtensa assembler)
+inside a hand-written ELF32-LE header. Anyone reaching for the obvious toolchain
+first will lose the same hour.
+
+### `exit_observable`, now measured — with an anomaly stated rather than smoothed
+
+`797/849 = 93.88%` against the `92.69%` cap. **But the delta from the earlier
+`793/845` is +4/+4 while five rows were added** — so the population moved for a
+reason not established, and frankb-78 **declines to attribute the change to its
+own commits.** Cap breached by 1.19 points either way, so the conclusion is
+robust to the anomaly; the anomaly is recorded anyway because a number whose
+arithmetic does not close is a number that will be re-derived by someone else.
+
+### Coordinator note: caught the fetch-vs-pull trap live
+
+`ls devdocs/dev/xtensa-windowed-spill-probes.md` said **no such file** — after a
+`git fetch`. The file was on origin the whole time; the working tree was behind.
+`git ls-tree -r origin/master` (ref-level, correct after a fetch) found it
+immediately. CLAUDE.md records this exact reading misrouting a claim TO A PEER
+once already. **A path check after a fetch is a claim about your last pull.**
