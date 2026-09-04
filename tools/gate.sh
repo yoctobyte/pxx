@@ -399,6 +399,25 @@ else
   RC=1
 fi
 
+# EVERY DEVTEST CASE A HARNESS DEFINES IS ALSO RUN BY IT. A Track T devtest
+# defines `t_*` functions and runs them from a hand-maintained list -- either
+# `TESTS = (...)` at module level or the same tuple inline in main(). Nothing
+# connects the two, so a case can be defined, imported, syntactically perfect
+# and never executed. Measured 2026-09-05: four such cases in
+# silent_assertion_check_devtest.py. Nothing errored; the harness printed OK
+# with a guard count that had not moved, which is the only tell and is
+# invisible unless you remembered yesterday's number. Sub-second, pure AST.
+if [ -f tools/devtest_case_registration.py ]; then
+  step "every devtest case defined is a devtest case run" "$LOGDIR/devtest-registration.log" \
+       python3 tools/devtest_case_registration.py                              || RC=1
+else
+  echo "  FAIL  devtest case registration — tools/devtest_case_registration.py is MISSING"
+  echo "        It is TRACKED (mode 100755), so its absence is a broken tree, not a"
+  echo "        configuration. A gate arm that skips on a committed file passes green"
+  echo "        for a tree that has no checker in it at all."
+  RC=1
+fi
+
 # THE FULL-SUITE HOOK'S OWN CASES. That hook runs on EVERY Bash call in every
 # session in the fleet and had no test at all until 2026-09-03, which is how it
 # reached four open tickets: each fix was checked by hand against the case that
