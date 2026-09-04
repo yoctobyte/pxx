@@ -6687,3 +6687,51 @@ see it, and neither could a refusal row that stopped at rc.
 Same family as "The RIGHT LENGTH and the WRONG CONTENT" and "When success and
 a failure produce the same output, the output is not evidence": the assertion
 ran, it passed, and it was reading the column that cannot disagree.
+
+## The PIN is a VALID instrument for crtl SURFACE — and one absent directory is why
+
+CLAUDE.md warns that verifying a C fix under the pin can pass for reasons that
+have nothing to do with your fix: the pinned compiler is *correctly* older and
+the SOURCE branches on its age. That is about compiler BEHAVIOUR. **For crtl
+surface — does a declaration or definition exist — the pin is not merely
+adequate, it is a genuinely independent instrument**, and it is worth knowing
+because it removes a rebuild from the loop.
+
+**Why it works.** `lib/crtl` is SOURCE the compiler reads at compile time, not
+a table baked into the binary. So a pinned compiler plus a current tree
+answers about the CURRENT crtl surface. Measured 2026-09-04 (franks-ab, then
+independently by frankC): the pin `c31d03b202da` resolves all fourteen crtl
+functions added in `41a2d59a8`, months after it was cut.
+
+**The mechanism, and it is one directory away from inverting.** The pin's
+include search order is:
+
+```
+stable_linux_amd64/default/../lib/crtl/include/      <- bundled copy, searched FIRST
+stable_linux_amd64/default/../../lib/crtl/include/   <- the live repo tree
+lib/crtl/include/                                    <- the live repo tree
+```
+
+**The first path does not exist**, so the search falls through to the live
+tree. That absence is the whole reason the rule holds. **If a pin ever ships a
+bundled `lib/crtl`, path 1 shadows the live tree and every such probe silently
+starts answering about a FROZEN crtl** — same command, same exit code, same
+shape of output, different question. Check the directory before trusting the
+technique, not just the answer.
+
+**Two controls this needs, both cheap:**
+
+- *Can it refuse?* A name crtl does not have must give `error: call to
+  undeclared function` and write no object. Without this, "it compiled" is
+  compatible with a probe that cannot fail.
+- *Defined, not merely declared.* `--emit-obj` TOLERATES undefined symbols, so
+  "an object was written" is satisfied by declarations alone. The claim is
+  `nm` showing a real address (`W` or `T`), not the object existing. This is
+  what makes a cross-target check meaningful: an i386 object that imports all
+  fourteen looks identical to one that defines them.
+
+**The complementary use.** A refusal list from a corpus is first-refusal-per-
+unit, so a TU that stops on a missing HEADER can never report a missing
+FUNCTION behind it — "zero refusals name these functions" is a lower bound
+even when the news is good. A single header-clean TU touching every function,
+built under the pin, fails differently and covers exactly that blind spot.
