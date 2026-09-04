@@ -4272,7 +4272,7 @@ test-threads: $(COMPILER)
 	# True` ALREADY PRINTED -- which is why the row asserts that the child RAN
 	# and not merely that clone returned a tid.
 	./$(COMPILER) --threadsafe test/test_nilpy_thread_clone.npy $(TESTTMP)/test_npy_clone26
-	tools/expect_same.sh test_npy_clone26 "$$($(TESTTMP)/test_npy_clone26)" "$$(printf 'tid nonzero = True\nchild ran = 7')"
+	tools/expect_same.sh test_npy_clone26 "$$($(TESTTMP)/test_npy_clone26)" "$$(cat test/test_nilpy_thread_clone.expected)"
 	# ...AND THE ARG THAT ENTRY ACTUALLY RECEIVES, which the row above cannot
 	# see: it passes 0 and its worker never mentions arg. Every NilPy parameter
 	# is a by-REFERENCE Variant, so the raw machine word the trampoline hands
@@ -4286,6 +4286,38 @@ test-threads: $(COMPILER)
 	tools/expect_same.sh test_npy_clonearg26 "$$($(TESTTMP)/test_npy_clonearg26)" "$$(cat test/test_nilpy_thread_clone_arg.expected)"
 	./$(COMPILER) --threadsafe --target=i386 test/test_nilpy_thread_clone_arg.npy $(TESTTMP)/test_npy_clonearg_i386
 	tools/expect_same.sh i386/test_npy_clonearg_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_npy_clonearg_i386)" "$$(cat test/test_nilpy_thread_clone_arg.expected)"
+	# ...ON EVERY TARGET THAT HAS THE LOCKED RUNTIME. Both rows above ran on
+	# x86-64 only (and the arg row on i386) until 2026-09-04, and the ticket
+	# they came from -- "clone cannot start a thread on aarch64 or arm32" --
+	# was TWO TEST BUGS visible only where there was no row: SYS_mmap was
+	# hardcoded to 9, which is x86-64's number and link/linkat elsewhere, and
+	# the flag set omitted CLONE_SYSVSEM, which Linux does not require and
+	# qemu-user does. A target with no row is a target with no report.
+	./$(COMPILER) --threadsafe --target=i386 test/test_nilpy_thread_clone.npy $(TESTTMP)/test_npy_clone_i386
+	tools/expect_same.sh i386/test_npy_clone_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_npy_clone_i386)" "$$(cat test/test_nilpy_thread_clone.expected)"
+	./$(COMPILER) --threadsafe --target=aarch64 test/test_nilpy_thread_clone.npy $(TESTTMP)/test_npy_clone_a64
+	tools/expect_same.sh aarch64/test_npy_clone_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_npy_clone_a64)" "$$(cat test/test_nilpy_thread_clone.expected)"
+	./$(COMPILER) --threadsafe --target=arm32 test/test_nilpy_thread_clone.npy $(TESTTMP)/test_npy_clone_arm32
+	tools/expect_same.sh arm32/test_npy_clone_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_npy_clone_arm32)" "$$(cat test/test_nilpy_thread_clone.expected)"
+	./$(COMPILER) --threadsafe --target=aarch64 test/test_nilpy_thread_clone_arg.npy $(TESTTMP)/test_npy_clonearg_a64
+	tools/expect_same.sh aarch64/test_npy_clonearg_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_npy_clonearg_a64)" "$$(cat test/test_nilpy_thread_clone_arg.expected)"
+	./$(COMPILER) --threadsafe --target=arm32 test/test_nilpy_thread_clone_arg.npy $(TESTTMP)/test_npy_clonearg_arm32
+	tools/expect_same.sh arm32/test_npy_clonearg_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_npy_clonearg_arm32)" "$$(cat test/test_nilpy_thread_clone_arg.expected)"
+	# AND THE ROW THAT ACTUALLY GUARDS THE COMPILER FIX. Neither clone row can:
+	# measured on pin v403, which lacks the fix, both print their expected
+	# output on all four targets, because Linux accepts the bogus slot address
+	# as a child stack and the child runs on it. This row reads an atomic
+	# counter instead, where the failure value cannot collide with the success
+	# value -- on the pin it is rc=139 on x86-64/aarch64 and 136206839 on
+	# i386/arm32.
+	./$(COMPILER) test/test_nilpy_intrinsic_arg_is_a_machine_word.npy $(TESTTMP)/test_npy_machineword26
+	tools/expect_same.sh test_npy_machineword26 "$$($(TESTTMP)/test_npy_machineword26)" "$$(cat test/test_nilpy_intrinsic_arg_is_a_machine_word.expected)"
+	./$(COMPILER) --target=i386 test/test_nilpy_intrinsic_arg_is_a_machine_word.npy $(TESTTMP)/test_npy_machineword_i386
+	tools/expect_same.sh i386/test_npy_machineword_i386 "$$(tools/run_target.sh i386 $(TESTTMP)/test_npy_machineword_i386)" "$$(cat test/test_nilpy_intrinsic_arg_is_a_machine_word.expected)"
+	./$(COMPILER) --target=aarch64 test/test_nilpy_intrinsic_arg_is_a_machine_word.npy $(TESTTMP)/test_npy_machineword_a64
+	tools/expect_same.sh aarch64/test_npy_machineword_a64 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_npy_machineword_a64)" "$$(cat test/test_nilpy_intrinsic_arg_is_a_machine_word.expected)"
+	./$(COMPILER) --target=arm32 test/test_nilpy_intrinsic_arg_is_a_machine_word.npy $(TESTTMP)/test_npy_machineword_arm32
+	tools/expect_same.sh arm32/test_npy_machineword_arm32 "$$(tools/run_target.sh arm32 $(TESTTMP)/test_npy_machineword_arm32)" "$$(cat test/test_nilpy_intrinsic_arg_is_a_machine_word.expected)"
 	# heap contract: thread creation without --threadsafe is a clear compile error, not a heisencrash
 	! ./$(COMPILER) test/test_thread_clone.pas $(TESTTMP)/test_thread_clone_guard26 > $(TESTTMP)/test_thread_clone_guard.log 2>&1
 	grep -q "requires --threadsafe" $(TESTTMP)/test_thread_clone_guard.log

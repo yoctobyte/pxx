@@ -1,0 +1,70 @@
+# EVERY LOW-LEVEL INTRINSIC ARGUMENT IS A RAW MACHINE WORD, INCLUDING THE ONES
+# THAT WERE COMPUTED.
+#
+# __pxxrawsyscall / __pxxclone / __pxxcoswitch / __pxxatomic_* each take a raw
+# word per argument and hand it straight to a syscall, a trampoline or a lock
+# prefix. A NilPy expression that has been through arithmetic -- or that came
+# back from a function -- is NOT a raw word: it is a promotable-int or Variant
+# slot, and its machine word is the SLOT'S ADDRESS. Before the fix the callee
+# therefore received a pointer where it wanted a number.
+#
+# WHY THIS ROW EXISTS SEPARATELY FROM THE TWO CLONE ROWS. The clone rows pass
+# `stk + 1048576` as the child stack and were the reason the defect was found,
+# and they CANNOT SEE IT: Linux accepts any writable address as a child stack,
+# so the slot address works as a stack and the child runs. Measured on pin v403
+# (which does not have the fix): both clone rows print their expected output on
+# x86-64, i386, aarch64 AND arm32. A row that passes on the broken compiler is
+# not a guard for it, and the two clone rows are guards for the two TEST bugs
+# they also carried (an x86-64-only mmap number; a clone flag set qemu rejects).
+#
+# THE FIRST PROBE FOR THIS WAS A GUARD THAT COULD NOT FAIL. It was
+# `__pxxrawsyscall(SYS_exit, 42 + zero)` read through the process exit status --
+# and a slot address is 16-byte aligned, so its low byte is 0, and 0 is also
+# "exited normally". Broken and correct-but-unmeasured produced the same
+# number. Every assertion below is chosen so the failure value cannot collide
+# with the success value: an atomic counter reads 10 when the deltas arrived as
+# numbers and something enormous (or SIGSEGV, which is what pin v403 actually
+# does here) when they arrived as addresses.
+#
+# It is written with atomics and one mmap rather than with a syscall whose
+# argument we inspect, because the syscall NUMBERS are per-target and the
+# atomics are not -- this row means the same thing on all four targets.
+# bug-a-nilpy-thread-clone-cannot-start-a-thread-on-aarch64-or-arm32
+
+
+# mmap, asked for by probing the three numbers this dialect's targets use
+# (x86-64 9, i386/arm32 mmap2 192, aarch64 222). Each wrong number answers
+# -EFAULT or -EINVAL for these arguments, so probing costs an errno.
+def pxx_page(size):
+    n = 0
+    while n < 3:
+        if n == 0:
+            nr = 9
+        elif n == 1:
+            nr = 192
+        else:
+            nr = 222
+        r = __pxxrawsyscall(nr, 0, size, 3, 0x22, -1, 0)
+        if r > 65535:
+            return r
+        n = n + 1
+    return 0
+
+
+zero = 0
+
+# `p` is a FUNCTION RESULT, which is the second shape that is not a raw word.
+p = pxx_page(65536)
+print("mapped =", p > 65535)
+
+# `five` cannot be constant-folded: it reads a global the compiler must assume
+# is not 0. A literal 5 here would compile to an immediate and prove nothing.
+five = 5 + zero
+
+a = __pxxatomic_add(p, 5)      # literal delta, function-result address
+b = __pxxatomic_add(p, five)   # COMPUTED delta -- the assertion
+c = __pxxatomic_add(p, 0)      # read the counter back
+
+print("a =", a)
+print("b =", b)
+print("c =", c)

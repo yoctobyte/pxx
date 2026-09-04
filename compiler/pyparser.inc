@@ -23373,10 +23373,19 @@ end;
   compares a tyInteger counter against it, and comparing against the BOX is
   always true. Returns the node unchanged for any non-variant, so the literal
   and int-typed paths are untouched. }
-function PyUnboxRangeBound(n: Integer): Integer;
+{ COERCE A NILPY EXPRESSION TO A MACHINE Int64, or leave it alone when it
+  already is one. Named PyUnboxRangeBound until 2026-09-04, when the low-level
+  intrinsics (__pxxrawsyscall / __pxxclone / __pxxcoswitch / __pxxatomic_*)
+  turned out to need exactly this and nothing else: each takes a RAW MACHINE
+  WORD per argument, and a NilPy expression that has been through arithmetic is
+  a Variant, whose raw word is the 16-byte box's ADDRESS. The name said "range"
+  while the job was "make this a machine int", and a range bound is now one
+  caller of five.
+  bug-a-nilpy-thread-clone-cannot-start-a-thread-on-aarch64-or-arm32 }
+function PyUnboxToMachineInt(n: Integer): Integer;
 var idx, argSeq, node: Integer;
 begin
-  PyUnboxRangeBound := n;
+  PyUnboxToMachineInt := n;
   if n < 0 then Exit;
   { An ARBITRARY-PRECISION bound NARROWS to Int64. The loop counter is a machine
     int, so a promo bound left alone compared the counter against the SLOT
@@ -23395,7 +23404,7 @@ begin
     ASTIVal[node] := idx;
     ASTTk[node] := Ord(tyInt64);
     ASTLeft[node] := argSeq;
-    PyUnboxRangeBound := node;
+    PyUnboxToMachineInt := node;
     Exit;
   end;
   if IntToTypeKind(ASTTk[n]) <> tyVariant then Exit;
@@ -23408,7 +23417,7 @@ begin
   ASTIVal[node] := idx;
   ASTTk[node] := Ord(tyInt64);
   ASTLeft[node] := argSeq;
-  PyUnboxRangeBound := node;
+  PyUnboxToMachineInt := node;
 end;
 
 { Is this `range(` sitting directly inside a `list(`?
@@ -23449,7 +23458,7 @@ end;
   first and keeps the counted-loop lowering, where the bounds are induction
   variables rather than an object.
 
-  Bounds go through pyvar_to_int (PyUnboxRangeBound) for the same reason the for
+  Bounds go through pyvar_to_int (PyUnboxToMachineInt) for the same reason the for
   header does: an unannotated parameter is a VARIANT, and comparing the counter
   against the box rather than the value is what made
   `def f(n): for i in range(n)` loop forever. A zero step raises ValueError
@@ -23486,9 +23495,9 @@ begin
     ASTIVal[step] := 1;
     ASTTk[step] := Ord(tyInt64);
   end;
-  lo   := PyUnboxRangeBound(lo);
-  hi   := PyUnboxRangeBound(hi);
-  step := PyUnboxRangeBound(step);
+  lo   := PyUnboxToMachineInt(lo);
+  hi   := PyUnboxToMachineInt(hi);
+  step := PyUnboxToMachineInt(step);
   { A RANGE VALUE, not a list. It used to materialise, and only in the call
     positions a whitelist promised were iterate-only (PyRangeIterConsumer,
     deleted with this change) — because there was no range value to hand back.
@@ -24076,9 +24085,9 @@ begin
     a non-number, which is also what `range("x")` should do. Same shape the
     chr() unbox in pasparser_*.inc uses. All three of start/stop/step, since any of
     them can be a parameter. }
-  startNode := PyUnboxRangeBound(startNode);
-  stopNode := PyUnboxRangeBound(stopNode);
-  if rngStep >= 0 then rngStep := PyUnboxRangeBound(rngStep);
+  startNode := PyUnboxToMachineInt(startNode);
+  stopNode := PyUnboxToMachineInt(stopNode);
+  if rngStep >= 0 then rngStep := PyUnboxToMachineInt(rngStep);
   { drain a hoisted comp build inside the range() arguments before the body
     parse flushes it INTO the loop body — see PyParseForIn }
   hoistPre := PyFlushHoist(-1);
@@ -46204,7 +46213,14 @@ begin
         nArgs := 0;
         repeat
           ParseExpr;
-          exprNode := CurASTNode;
+          { RAW MACHINE WORD PER ARGUMENT, so a Variant has to be unboxed HERE.
+            A NilPy expression that has been through arithmetic is a Variant and
+            its raw word is the box's ADDRESS -- so `__pxxrawsyscall(nr, a + b)`
+            handed the kernel a pointer into the program's own data where a
+            number belonged, on EVERY target. Nothing reported it because every
+            wired caller passes constants, which fold to immediates.
+            bug-a-nilpy-thread-clone-cannot-start-a-thread-on-aarch64-or-arm32 }
+          exprNode := PyUnboxToMachineInt(CurASTNode);
           argSeq := AllocNode(AN_ARG);
           ASTLeft[argSeq] := exprNode;
           if lastArg = -1 then
@@ -46234,7 +46250,14 @@ begin
         nArgs := 0;
         repeat
           ParseExpr;
-          exprNode := CurASTNode;
+          { RAW MACHINE WORD PER ARGUMENT, so a Variant has to be unboxed HERE.
+            A NilPy expression that has been through arithmetic is a Variant and
+            its raw word is the box's ADDRESS -- so `__pxxrawsyscall(nr, a + b)`
+            handed the kernel a pointer into the program's own data where a
+            number belonged, on EVERY target. Nothing reported it because every
+            wired caller passes constants, which fold to immediates.
+            bug-a-nilpy-thread-clone-cannot-start-a-thread-on-aarch64-or-arm32 }
+          exprNode := PyUnboxToMachineInt(CurASTNode);
           argSeq := AllocNode(AN_ARG);
           ASTLeft[argSeq] := exprNode;
           if lastArg = -1 then
@@ -46322,7 +46345,15 @@ begin
           else
           begin
             ParseExpr;
-            exprNode := CurASTNode;
+            { The same unbox the sibling intrinsics need, and the childStack
+              argument is where it showed: `stk + N` is a Variant, so the clone
+              syscall received the box's ADDRESS. On x86-64 and i386 the kernel
+              ACCEPTS any child stack, so the child ran on that address and the
+              row passed; aarch64 and arm32 answer EINVAL. The cross-target
+              split was one defect being REPORTED on two targets and swallowed
+              on two others, not two defects.
+              bug-a-nilpy-thread-clone-cannot-start-a-thread-on-aarch64-or-arm32 }
+            exprNode := PyUnboxToMachineInt(CurASTNode);
           end;
           argSeq := AllocNode(AN_ARG);
           ASTLeft[argSeq] := exprNode;
@@ -46754,7 +46785,14 @@ begin
         nArgs := 0;
         repeat
           ParseExpr;
-          exprNode := CurASTNode;
+          { RAW MACHINE WORD PER ARGUMENT, so a Variant has to be unboxed HERE.
+            A NilPy expression that has been through arithmetic is a Variant and
+            its raw word is the box's ADDRESS -- so `__pxxrawsyscall(nr, a + b)`
+            handed the kernel a pointer into the program's own data where a
+            number belonged, on EVERY target. Nothing reported it because every
+            wired caller passes constants, which fold to immediates.
+            bug-a-nilpy-thread-clone-cannot-start-a-thread-on-aarch64-or-arm32 }
+          exprNode := PyUnboxToMachineInt(CurASTNode);
           argSeq := AllocNode(AN_ARG);
           ASTLeft[argSeq] := exprNode;
           if lastArg = -1 then

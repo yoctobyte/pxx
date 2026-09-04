@@ -18,13 +18,51 @@
 # through, and the worker adds one so the printed number is not the literal
 # either -- a copy of the constant into the wrong place still fails the row.
 
-SYS_mmap = 9
 CLONE_VM = 0x00000100
 CLONE_FS = 0x00000200
 CLONE_FILES = 0x00000400
 CLONE_SIGHAND = 0x00000800
 CLONE_THREAD = 0x00010000
-flags = CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD
+CLONE_SYSVSEM = 0x00040000
+# CLONE_SYSVSEM IS NOT OPTIONAL HERE, AND NOT BECAUSE LINUX WANTS IT. The
+# kernel is happy without it; qemu-user is not -- it implements clone only for
+# the complete thread flag set and answers EINVAL for any subset, which is why
+# this row failed on aarch64 and arm32 (both emulated) while passing natively
+# on x86-64 and i386. The Pascal PAL has carried SYSVSEM all along
+# (lib/rtl/palthread.pas, PXX_CLONE_THREAD), which is why Pascal threading
+# works on those two targets and this did not.
+flags = CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD | CLONE_SYSVSEM
+
+# ---- PORTABLE CHILD STACK, and why it is a probe rather than a constant ----
+#
+# THE mmap SYSCALL NUMBER IS PER-TARGET AND NILPY HAS NO TARGET INTROSPECTION:
+# x86-64 mmap = 9, i386 and arm32 mmap2 = 192, aarch64 mmap = 222. This file
+# used to hardcode 9. That is right on x86-64 and WRONG on the other three,
+# where 9 is link/linkat and answers -EFAULT -- so `stk` was -14, the "stack"
+# handed to clone was 1048562, and the row still PASSED on i386 because Linux
+# accepts any child stack and 1048562 happened to be writable. A test that is
+# green because the kernel does not check is not testing the thing.
+#
+# So ask, in order, and take the first answer that looks like a mapping. Every
+# wrong number in the list answers -EFAULT or -EINVAL for THESE arguments on
+# the target where it is wrong (a bad pointer in argument 2), so probing costs
+# an errno and changes nothing: 9 is link/linkat, 192 is mq_timedreceive on
+# aarch64, 222 is timer_create on x86-64 and fadvise64 on the 32-bit pair.
+def pxx_stack(size):
+    n = 0
+    while n < 3:
+        if n == 0:
+            nr = 9
+        elif n == 1:
+            nr = 192
+        else:
+            nr = 222
+        r = __pxxrawsyscall(nr, 0, size, 3, 0x22, -1, 0)
+        if r > 65535:
+            return r
+        n = n + 1
+    return 0
+
 
 seen = 0
 
@@ -34,7 +72,7 @@ def worker(arg):
     seen = arg + 1
 
 
-stk = __pxxrawsyscall(SYS_mmap, 0, 1048576, 3, 0x22, -1, 0)
+stk = pxx_stack(1048576)
 tid = __pxxclone(flags, stk + 1048576, worker, 12345, 0)
 print("tid nonzero =", tid > 0)
 i = 0
