@@ -66,13 +66,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 - `[p 85] [T]` umbrella-one-full-tier-run-with-no-red-tier
 - `[p 80] [A]` bug-a-errno-is-one-global-across-all-threads-so-a-thread-reads-another-threads-failure (unblocks 1)
+- `[p 80] [C]` bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently
 - `[p 80] [T]` bug-t-pin-verify-builds-with-the-previous-pin-not-the-one-it-names
 - `[p 80] [U]` decide-what-a-pin-means-and-what-may-block-one
 - `[p 80] [B]` feature-busybox-kiosk-selfhosting-target
 - `[p 75] [A]` bug-a-only-the-pascal-frontend-ever-asks-for-an-unwind-landing-pad (unblocks 1)
 - `[p 75] [N]` bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
 - `[p 75] [N]` bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it (unblocks 1)
-- `[p 75] [C]` bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently
 - `[p 75] [N]` bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - `[p 75] [T]` chore-t-tools-devtest-00-is-six-reds-with-four-causes
 - `[p 75] [P]` feature-pascal-corpus-expansion

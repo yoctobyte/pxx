@@ -1,62 +1,78 @@
 ---
 slug: bug-c-offsetof-in-a-static-array-initializer-folds-to-zero-silently
-title: "offsetof in a static ARRAY initializer folds to 0, silently, and zeroes every other element with it"
+title: "offsetof in a static ARRAY initializer discards the whole list and leaves one zero element"
 track: C
-prio: 75
+prio: 80
 type: bug
 status: backlog
 created: 2026-09-04
 found-by: franks-ab
 owner: ""
 blocked-by: []
-summary: "MEASURED on the PINNED v403 compiler. `offsetof(T, m)` -- i.e. `&(((T*)0)->m)` -- evaluates to the member's offset in an expression and in a static SCALAR initializer, but to ZERO inside a static ARRAY initializer, with no diagnostic of any kind. Worse, ONE such element zeroes the WHOLE initializer: `{ 5, offsetof(struct inner, b), 9 }` yields `0 0 0`, so plain literals that have nothing to do with offsetof come out wrong too. It is not about nesting (a flat member path fails identically), not about constness (a mutable static fails identically), and not about constant folding in general (`sizeof` and `3+4` in the same array are correct, and `(unsigned long)((char*)0 + 5)` is correct -- only the address-of-member-of-null form fails). Found by booting the pxx-built busybox as PID 1: `uname -a` printed `Linux` eight times because busybox indexes `struct utsname` through `static const unsigned short utsname_offset[] = { offsetof(...), ... }` (coreutils/uname.c:113), which came out all-zero, so every field read back as sysname. The 621-case busybox corpus cannot see this class at all -- it invokes every applet only with `--help`."
+summary: "MEASURED on pinned v403 AND at HEAD 44adaa79a (frank-coordinator-2c) -- NOT fixed, so a re-pin does not help. A static ARRAY initializer containing an `offsetof` element has its ENTIRE initializer list discarded and replaced by ONE ZERO ELEMENT: `static const unsigned short a[] = {5, offsetof(S,b), 9}` gives sizeof 2 and one element holding 0, where gcc gives sizeof 6 and 5/8/9. Silent -- no diagnostic. THE LENGTH IS THE DEFECT, so `sizeof(a)/sizeof(a[0])` becomes 1 and every loop over such a table runs one iteration; reading a[1] or a[2] reads a NEIGHBOURING static, which is how both of the first two diagnoses (mine: values zeroed; the coordinator's: offsetof correct, literals zeroed) came out wrong from plausible readings. Narrow: `sizeof` and `3+4` in the same position are correct, `(unsigned long)((char*)0+5)` is correct, a static SCALAR offsetof is correct, a LOCAL array of offsetofs is correct, and offsetof in an expression is correct -- only `&(((T*)0)->m)` reaching a static AGGREGATE initializer fails, at any member depth, const or not. Found by booting the pxx-built busybox as PID 1: `uname -a` printed `Linux` eight times because coreutils/uname.c:113 walks struct utsname through such a table and the walk ran off a one-element array into zeros. The 621-case busybox corpus cannot see this class -- 516 of those cases are `applet --help`."
 ---
 
-# offsetof in a static array initializer is 0
+# offsetof in a static array initializer discards the list
+
+**The SLUG says "folds to zero", which was my first and wrong reading.** It is
+kept because two sessions already hold that name; the title and summary carry
+the measured mechanism. Raised from p75 to p80 when the mechanism turned out to
+be truncation: a wrong VALUE in a table is bad, a wrong LENGTH silently ends
+every loop over it.
 
 ## The measurement
 
-Pinned v403 `c31d03b2`, x86-64, against gcc on identical source.
+Pinned v403 `c31d03b2`, x86-64, against `gcc -O1` on identical source.
+**Every array below is read only within the length its own build reports**, which
+is the whole point — see the correction note.
 
-| shape | gcc | pxx | |
+| static array initializer | gcc len | pxx len | |
 | --- | --- | --- | --- |
-| `static const unsigned short a[] = { offsetof(S, n.a), .n.b, .n.c, .tail }` | `0 8 16 24` | `0 0 0 0` | **wrong** |
-| same, `unsigned long` | `0 8 16 24` | `0 0 0 0` | **wrong** |
-| same, FLAT member path (no nesting) | `0 8 16` | `0 0 0` | **wrong** |
-| `static unsigned short a[] = {...}` (mutable) | `8` | `0` | **wrong** |
-| `static const unsigned short mix[] = { 5, offsetof(S,b), 9 }` | `5 8 9` | `0 0 0` | **wrong, and it took the literals with it** |
-| `static const unsigned short a[] = { sizeof(S), 3+4 }` | `24 7` | `24 7` | ok |
-| `static const unsigned long a[] = { (unsigned long)((char*)0 + 5) }` | `5` | `5` | ok |
-| `static const unsigned short s = offsetof(S, b)` (SCALAR) | `8` | `8` | ok |
-| `const unsigned short loc[] = { offsetof(S,b) }` (LOCAL) | `8` | `8` | ok |
-| `printf("%u", (unsigned)offsetof(S, n.b))` (EXPRESSION) | `8` | `8` | ok |
+| `{ offsetof(S,b) }` | 1 | 1 | value 8 vs **0** |
+| `{ 5, offsetof(S,b), 9 }` | 3 | **1** | element 0 is 5 vs **0** |
+| `{ offsetof(S,a), offsetof(S,b), offsetof(S,c) }` | 3 | **1** | |
+| `{ sizeof(S), 3 + 4 }` | 2 | 2 | 24 7 both — ok |
+| `{ (unsigned long)((char*)0 + 5), 77 }` | 2 | 2 | 5 77 both — ok |
+| `static` **mutable** `{ offsetof(S,b), 9 }` | 2 | **1** | |
+| **LOCAL** `{ offsetof(S,a), .b, .c }` | 3 | 3 | 0 8 16 both — ok |
+| static **SCALAR** `= offsetof(S,b)` | — | — | 8 both — ok |
+| **EXPRESSION** `(unsigned)offsetof(S,b)` | — | — | 8 both — ok |
 
-`sizeof(struct inner)` and `sizeof(struct outer)` are correct in every build, so
-the LAYOUT is right — it is the initializer that loses it.
+`sizeof(struct S)` is correct in every build, so the layout is right; it is the
+initializer that is lost.
 
-## What the boundary says, and what it rules out
+**One mechanism covers every row: the initializer list is discarded and replaced
+by a single zero element.** That is why a one-element array has the right LENGTH
+and the wrong VALUE, why a leading literal `5` disappears, and why `sizeof` in
+the identical position is untouched.
 
-Four hypotheses died in the measurement above, so do not spend time on them:
+**Confirmed at HEAD** `44adaa79a`, compiler `6b4e2ed156d6`, from a real
+`converged after 1 round(s)` build (frank-coordinator-2c): identical behaviour.
+So this is not an argument for a re-pin — a re-pin carries it.
 
-- **not nesting.** `offsetof(struct inner, b)` — one level, no dot path — is
-  wrong in exactly the same way. My first hypothesis was `offsetof` with a
-  dotted member path, and the flat row killed it.
-- **not constness.** A mutable `static` array fails identically.
-- **not constant folding in general.** `sizeof` and `3+4` fold correctly in the
-  same array, in the same declaration.
-- **not null-pointer arithmetic.** `(unsigned long)((char*)0 + 5)` gives 5.
+## What the boundary rules out
 
-What is left is narrow: **the address of a MEMBER through a null pointer,
-`&(((T*)0)->m)`, reaching an AGGREGATE (array) static initializer.** The scalar
-and expression contexts get it right, so a working evaluator exists — this is
-the second path in the sense of `normalise-dont-special-case.md`, and it is the
-one that is broken.
+Four hypotheses died in the table; do not re-spend them. It is **not** nesting (a
+flat member path fails identically), **not** constness (a mutable static fails
+identically), **not** constant folding in general (`sizeof` and `3+4` fold in the
+same array), and **not** null-pointer arithmetic (`(char*)0 + 5` is correct).
+What is left is `&(((T*)0)->m)` reaching a static AGGREGATE initializer. The
+scalar, local and expression contexts are all correct, so a working evaluator
+exists and this is the second path — `normalise-dont-special-case.md`, and the
+second path is the one that stays broken.
 
-**The `mix` row is the one to fix first if the two turn out to be separable.**
-An element the initializer evaluator cannot handle does not fail, and does not
-fail *locally*: it silently zeroes the entire initializer, so `5` and `9` come
-back as `0`. That converts one unsupported construct into unbounded wrong data
-in the same declaration.
+## The correction, because it is the reusable part
+
+**Two of us diagnosed this wrong first, from plausible readings, and both wrong
+answers came from reading the array.** I reported "the values are zeroed, and one
+bad element zeroes its neighbours" from `a[0] a[1] a[2]` printing `0 0 0`. The
+coordinator reported "offsetof is correct, the literals are zeroed" from the same
+indices printing `0 4 0` — the `4` was an adjacent `static int`. Both readings
+were out of bounds, because the array is one element long. Nothing errored.
+
+**Reading an array whose LENGTH is the defect cannot measure that defect.**
+`sizeof(a)` settled it in one line and is the only probe here that adjacent
+memory cannot answer.
 
 ## Repro
 
@@ -82,8 +98,9 @@ walks `struct utsname` through
     static const unsigned short utsname_offset[] = {
         offsetof(uname_info_t, name.sysname), ... };
 
-so with every offset 0 each field read back as `sysname`. **A plausible wrong
-value, not a crash**, and the applet exits 0.
+`utsname_offset` is one element long in a pxx build, and the loop walks eight
+entries, so seven of them read past it into zeros — offset 0 — which is
+`sysname`. **A plausible wrong value, not a crash**, and the applet exits 0.
 
 **The 621-case busybox corpus is structurally unable to see this**, and that is
 worth stating precisely rather than as a complaint: `run_dispatch_cases` invokes
@@ -96,9 +113,12 @@ arguments does. See the note at the end of
 ## Blast radius
 
 `offsetof` in a static table is an ordinary C idiom — option tables, field
-descriptors, serialisation maps, driver tables — and it is used precisely where
-a zero is indistinguishable from a valid first-member offset. Any such table
-compiled by pxx today reads element 0 for every entry, silently.
+descriptors, serialisation maps, driver tables — and `sizeof(t)/sizeof(t[0])` is
+how C spells "how many entries". Both are hit at once: the table silently becomes
+one entry long, so **every loop over it runs exactly one iteration**, and reads
+past that run into whatever static follows. A zero first offset is also
+indistinguishable from a valid offset of the first member, which is precisely why
+`uname` printed a *plausible* answer rather than crashing.
 
 Filed from Track B, which cannot fix it (it builds with `$(PXX_STABLE)` and does
 not rebuild the compiler).
