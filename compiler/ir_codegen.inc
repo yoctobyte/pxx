@@ -13658,6 +13658,20 @@ begin
     EmitManagedLocalCleanup(retSymIdx);
     Exit;
   end;
+  { A STACKLESS GENERATOR step function RETURNS at every yield and is re-entered
+    at the next one, so its locals are not going out of scope on this path —
+    they are the generator's live state, checkpointed into the heap instance and
+    restored on resume. Releasing them here frees the very objects the instance
+    still points at. EmitManagedLocalCleanup (x86-64) has opened with this line
+    since the generator work; the five arms below never got it, for ANY kind, so
+    a NilPy generator whose managed local survives a yield SIGSEGVed on i386 and
+    arm32 and printed corrupted strings on aarch64 while x86-64 was correct.
+    Placed HERE rather than in each arm because it is a property of the
+    procedure, not of the target.
+    wasm32 exits above and releases in WasmEmitManagedLocals instead; that path
+    is UNCHECKED for this and is named in the ticket.
+    bug-a-a-managed-local-that-survives-a-yield-is-released-at-every-yield-on-every-cross-target }
+  if CurProcIsStackless then Exit;
 {$ifndef PXX_NO_I386}
   if TargetArch = TARGET_I386 then
   begin
@@ -13741,8 +13755,7 @@ begin
             EmitB($81); EmitB($C4); EmitI32(4);                { add esp, 4 }
           end
           else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-                  NilPyUserCode and PyClassSymArcEligible(i) and
-                  (not CurProcIsStackless) then
+                  NilPyUserCode and PyClassSymArcEligible(i) then
           begin
             { NilPy-user class local: drop the binding's reference at scope exit — the
               trigger that actually reclaims (feature-nilpy-object-reclamation
@@ -13757,14 +13770,9 @@ begin
               is a bounded leak. All five cross arms lacked it, so only x86-64
               (EmitManagedLocalCleanup, symtab.inc) reclaimed at all.
 
-              `not CurProcIsStackless` is the x86-64 twin's whole-function
-              guard, narrowed to this arm: a generator step function RETURNS at
-              every yield and its locals are the generator's live state, so
-              releasing them here frees the objects the instance still points
-              at — silently, as an early-ending `for`. The other kinds in this
-              chain (string, variant, promo-int, record) are NOT guarded on any
-              cross target, which is the same defect for those kinds; not fixed
-              here because it needs its own probe.
+              The stackless-generator guard this arm needed is now at the
+              TOP of this procedure, where it covers every kind rather than
+              only this one — see the note beside it.
               bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
             procIdx := FindProc('PXXObjRelease');
             if procIdx >= 0 then
@@ -13932,8 +13940,7 @@ begin
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-                NilPyUserCode and PyClassSymArcEligible(i) and
-                (not CurProcIsStackless) then
+                NilPyUserCode and PyClassSymArcEligible(i) then
         begin
           { NilPy-user class local: drop the binding's reference at scope exit — the
             trigger that actually reclaims (feature-nilpy-object-reclamation
@@ -13948,14 +13955,9 @@ begin
             is a bounded leak. All five cross arms lacked it, so only x86-64
             (EmitManagedLocalCleanup, symtab.inc) reclaimed at all.
 
-            `not CurProcIsStackless` is the x86-64 twin's whole-function
-            guard, narrowed to this arm: a generator step function RETURNS at
-            every yield and its locals are the generator's live state, so
-            releasing them here frees the objects the instance still points
-            at — silently, as an early-ending `for`. The other kinds in this
-            chain (string, variant, promo-int, record) are NOT guarded on any
-            cross target, which is the same defect for those kinds; not fixed
-            here because it needs its own probe.
+            The stackless-generator guard this arm needed is now at the TOP
+            of this procedure, where it covers every kind rather than only
+            this one — see the note beside it.
             bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
           procIdx := FindProc('PXXObjRelease');
           if procIdx >= 0 then
@@ -14123,8 +14125,7 @@ begin
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-                NilPyUserCode and PyClassSymArcEligible(i) and
-                (not CurProcIsStackless) then
+                NilPyUserCode and PyClassSymArcEligible(i) then
         begin
           { NilPy-user class local: drop the binding's reference at scope exit — the
             trigger that actually reclaims (feature-nilpy-object-reclamation
@@ -14139,14 +14140,9 @@ begin
             is a bounded leak. All five cross arms lacked it, so only x86-64
             (EmitManagedLocalCleanup, symtab.inc) reclaimed at all.
 
-            `not CurProcIsStackless` is the x86-64 twin's whole-function
-            guard, narrowed to this arm: a generator step function RETURNS at
-            every yield and its locals are the generator's live state, so
-            releasing them here frees the objects the instance still points
-            at — silently, as an early-ending `for`. The other kinds in this
-            chain (string, variant, promo-int, record) are NOT guarded on any
-            cross target, which is the same defect for those kinds; not fixed
-            here because it needs its own probe.
+            The stackless-generator guard this arm needed is now at the TOP
+            of this procedure, where it covers every kind rather than only
+            this one — see the note beside it.
             bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
           procIdx := FindProc('PXXObjRelease');
           if procIdx >= 0 then
@@ -14315,8 +14311,7 @@ begin
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-                NilPyUserCode and PyClassSymArcEligible(i) and
-                (not CurProcIsStackless) then
+                NilPyUserCode and PyClassSymArcEligible(i) then
         begin
           { NilPy-user class local: drop the binding's reference at scope exit — the
             trigger that actually reclaims (feature-nilpy-object-reclamation
@@ -14331,14 +14326,9 @@ begin
             is a bounded leak. All five cross arms lacked it, so only x86-64
             (EmitManagedLocalCleanup, symtab.inc) reclaimed at all.
 
-            `not CurProcIsStackless` is the x86-64 twin's whole-function
-            guard, narrowed to this arm: a generator step function RETURNS at
-            every yield and its locals are the generator's live state, so
-            releasing them here frees the objects the instance still points
-            at — silently, as an early-ending `for`. The other kinds in this
-            chain (string, variant, promo-int, record) are NOT guarded on any
-            cross target, which is the same defect for those kinds; not fixed
-            here because it needs its own probe.
+            The stackless-generator guard this arm needed is now at the TOP
+            of this procedure, where it covers every kind rather than only
+            this one — see the note beside it.
             bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
           procIdx := FindProc('PXXObjRelease');
           if procIdx >= 0 then
@@ -14482,8 +14472,7 @@ begin
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
-                NilPyUserCode and PyClassSymArcEligible(i) and
-                (not CurProcIsStackless) then
+                NilPyUserCode and PyClassSymArcEligible(i) then
         begin
           { NilPy-user class local: drop the binding's reference at scope exit — the
             trigger that actually reclaims (feature-nilpy-object-reclamation
@@ -14498,14 +14487,9 @@ begin
             is a bounded leak. All five cross arms lacked it, so only x86-64
             (EmitManagedLocalCleanup, symtab.inc) reclaimed at all.
 
-            `not CurProcIsStackless` is the x86-64 twin's whole-function
-            guard, narrowed to this arm: a generator step function RETURNS at
-            every yield and its locals are the generator's live state, so
-            releasing them here frees the objects the instance still points
-            at — silently, as an early-ending `for`. The other kinds in this
-            chain (string, variant, promo-int, record) are NOT guarded on any
-            cross target, which is the same defect for those kinds; not fixed
-            here because it needs its own probe.
+            The stackless-generator guard this arm needed is now at the TOP
+            of this procedure, where it covers every kind rather than only
+            this one — see the note beside it.
             bug-a-cross-backends-neither-retain-into-a-variant-nor-release-a-class-local-and-the-two-must-move-together }
           procIdx := FindProc('PXXObjRelease');
           if procIdx >= 0 then

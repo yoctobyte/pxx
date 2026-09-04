@@ -3,8 +3,8 @@ track: A
 prio: 70
 type: bug
 blocked-by: []
-summary: "EmitManagedLocalCleanupForTarget has no CurProcIsStackless guard, so a generator step function releases its managed locals on EVERY yield — and those locals ARE the generator's live state. x86-64's EmitManagedLocalCleanup exits early for exactly this reason; the five cross arms never got it. A 12-line NilPy generator whose string local survives a yield SIGSEGVs on i386 and arm32 and prints corrupted strings on aarch64, against correct x86-64 output."
-status: open
+summary: "FIXED: `if CurProcIsStackless then Exit;` hoisted to the top of EmitManagedLocalCleanupForTarget, so a generator step function no longer releases its managed locals at every yield -- they are the generator's live state. Was a SILENT WRONG VALUE (exit 0) on i386/arm32/aarch64: `acc` came back as the loop counter's string, `parts` overwritten. wasm32 exits earlier and is still unchecked."
+status: done
 ---
 
 # A managed local that survives a yield is released at every yield (cross only)
@@ -87,3 +87,46 @@ The repro above IS the positive control — it must go from SIGSEGV to CPython's
 output on i386 and arm32 and from corrupted strings to correct on aarch64. Wire
 it on all four targets; x86-64 is the oracle and is already green, so an
 x86-64-only row would pass before and after and prove nothing.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+## Resolved — one line, at the top of the procedure, not five times
+
+`if CurProcIsStackless then Exit;` now sits in
+`EmitManagedLocalCleanupForTarget` beside the existing `TARGET_WASM32` exit, so
+it covers every kind on every cross arm rather than being repeated per target.
+The `(not CurProcIsStackless)` clause the sibling ticket's `tyClass` arm carried
+as a stopgap is deleted in the same commit, together with the paragraph that
+explained it — a stopgap left in place after the general fix reads as a second,
+narrower rule and invites someone to trust it.
+
+**The test is `test/test_nilpy_generator_managed_local_survives_yield.npy`**,
+wired on x86-64 (oracle only), i386, aarch64 and arm32. `acc` and `parts` must
+SURVIVE the yield; a local rebuilt inside the loop body cannot see this defect
+at all, because its release lands after its last use.
+
+| target | pin v403 | HEAD |
+| --- | --- | --- |
+| x86-64 | correct | correct — **green both sides, so it guards nothing** |
+| i386 | `['x\|1\|0', '1\|1\|0,1', '2\|1\|0,2,2', ...]` | correct |
+| arm32 | same as i386 | correct |
+| aarch64 | same as i386 | correct |
+
+`acc` came back as the loop counter's string and every earlier element of
+`parts` was overwritten — the freed blocks handed out again. Exit code 0 on all
+three: **a silent wrong value, not a crash**, which is why nothing had caught
+it. The closely related string-only shape SIGSEGVs on i386 and arm32 instead,
+so the class spans wrong-value to crash.
+
+**What this fix does NOT cover, measured rather than assumed.** The first draft
+of the test carried a promo-int local and stayed red on i386 and arm32 after
+this change: a promotable-int local in a generator truncates to 32 bits on those
+two targets, identically on the pin, and reproduces with no managed local
+anywhere in the program. Removed from this test on purpose and filed as
+`bug-a-a-promotable-int-local-in-a-generator-truncates-to-32-bits-on-i386-and-arm32`.
+Leaving it in would have made this row fail for a defect it does not guard.
+
+**wasm32 is still UNCHECKED** — it exits before this guard and releases in
+`WasmEmitManagedLocals(release)` instead. Nobody has asked that path the
+question; that is not a claim that it is fine.

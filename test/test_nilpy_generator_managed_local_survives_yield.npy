@@ -1,0 +1,52 @@
+# bug-a-a-managed-local-that-survives-a-yield-is-released-at-every-yield-on-every-cross-target
+#
+# A stackless generator step function RETURNS at every yield and is re-entered
+# at the next one, so its locals are NOT going out of scope on that path --
+# they are the generator's live state, checkpointed into the heap instance and
+# restored on resume. EmitManagedLocalCleanup (x86-64) has always exited early
+# for that reason; the five cross arms of EmitManagedLocalCleanupForTarget
+# never got the guard, for ANY kind, so every string / variant / promo-int /
+# record / dynamic-array / class local of a step function was released at each
+# yield.
+#
+# `acc` and `parts` must SURVIVE the yield -- a local rebuilt inside the loop
+# body cannot see this at all, because its release lands after its last use and
+# the program stays correct either way. Measured before the fix, all three
+# cross targets, exit code 0 and a WRONG VALUE:
+#
+#   x86-64  ['x|1|0', 'xx|2|0,1', 'xxx|3|0,1,2', ...]   (correct)
+#   i386    ['x|1|0', '1|1|0,1',  '2|1|0,2,2',   ...]
+#   arm32   same as i386
+#   aarch64 same as i386
+#
+# `acc` comes back as the loop counter's string and every earlier element of
+# `parts` is overwritten -- the freed blocks handed out again. A closely
+# related shape (a string local, no list) SIGSEGVs on i386 and arm32 instead,
+# so the class of failure spans silent-wrong-value to crash. x86-64 was correct
+# throughout: the cross rows are the guard, the x86-64 row is only the oracle.
+#
+# NO promo-int local here on purpose. The first draft carried one and it stayed
+# wrong on i386/arm32 after this fix, for an unrelated reason that reproduces
+# outside any release path: a promotable-int local in a generator truncates to
+# 32 bits on those two targets, identically on pin v403 and at HEAD --
+# bug-a-a-promotable-int-local-in-a-generator-truncates-to-32-bits-on-i386-and-arm32.
+# Leaving it in would have made this row fail for a defect it does not guard.
+#
+# Expectations are CPython's own output.
+
+def gen(k):
+    acc = ""
+    parts = []
+    i = 0
+    while i < k:
+        acc = acc + "x"
+        parts.append(str(i))
+        yield acc + "|" + str(len(acc)) + "|" + ",".join(parts)
+        i = i + 1
+
+
+out = []
+for v in gen(6):
+    out.append(v)
+print(out)
+print(len(out))

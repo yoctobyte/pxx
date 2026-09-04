@@ -3279,6 +3279,15 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_variant_borrow_two_slots.npy $(TESTTMP)/test_nilpy_borrow226
 	tools/expect_same.sh test_nilpy_borrow226 "$$($(TESTTMP)/test_nilpy_borrow226)" "$$(cat test/test_nilpy_variant_borrow_two_slots.expected)"
 	tools/assert_no_leak.sh nilpy_variant_borrow_two_slots 200 $(TESTTMP)/test_nilpy_borrow226
+	@# A generator step function's managed locals are the generator's LIVE
+	@# STATE, not locals going out of scope -- it returns at every yield and is
+	@# re-entered at the next one. x86-64 has always exited the cleanup early
+	@# for that; the five cross arms never had the guard, for any kind. THE
+	@# x86-64 ROW BELOW IS ONLY THE ORACLE -- it was green before the fix and
+	@# after, so it guards nothing; the i386/aarch64/arm32 rows are the guard.
+	@# bug-a-a-managed-local-that-survives-a-yield-is-released-at-every-yield-on-every-cross-target
+	./$(COMPILER) test/test_nilpy_generator_managed_local_survives_yield.npy $(TESTTMP)/test_nilpy_genyield26
+	tools/expect_same.sh test_nilpy_genyield26 "$$($(TESTTMP)/test_nilpy_genyield26)" "$$(cat test/test_nilpy_generator_managed_local_survives_yield.expected)"
 	@# `target[key] op= value` on a dict/list/Counter subscript (found already fixed)
 	./$(COMPILER) test/test_nilpy_augmented_subscript_assign.npy $(TESTTMP)/test_nilpy_augsubassign26
 	tools/expect_same.sh test_nilpy_augsubassign26 "$$($(TESTTMP)/test_nilpy_augsubassign26)" "$$(printf '{'"'"'a'"'"': 2}\n[6, 2]\n2\n14\n[1, 1, 30]')"
@@ -16862,6 +16871,14 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_nilpy_variant_borrow_two_slots.npy $(TESTTMP)/borrow2_i386
 	tools/expect_same.sh i386/test_nilpy_variant_borrow_two_slots "$$(tools/run_target.sh i386 $(TESTTMP)/borrow2_i386 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_variant_borrow_two_slots.expected)"
 	tools/assert_no_leak.sh i386/nilpy_variant_borrow_two_slots 200 tools/run_target.sh i386 $(TESTTMP)/borrow2_i386
+	# A managed local that SURVIVES a yield: the generator's live state, which
+	# the cross arms of EmitManagedLocalCleanupForTarget released at every
+	# yield because none of them had x86-64's CurProcIsStackless guard.
+	# Before the fix: exit 0 and `acc` came back as the loop counter's
+	# string, `parts` overwritten, and the promo-int `n` wrong too.
+	# bug-a-a-managed-local-that-survives-a-yield-is-released-at-every-yield-on-every-cross-target
+	./$(COMPILER) --target=i386 test/test_nilpy_generator_managed_local_survives_yield.npy $(TESTTMP)/genyield_i386
+	tools/expect_same.sh i386/test_nilpy_generator_managed_local_survives_yield "$$(tools/run_target.sh i386 $(TESTTMP)/genyield_i386)" "$$(cat test/test_nilpy_generator_managed_local_survives_yield.expected)"
 
 test-aarch64: $(COMPILER)
 	# THE BYTE PREFIX ON THE SECOND BACKEND. aarch64 is the first cross target
@@ -17198,6 +17215,14 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_nilpy_variant_borrow_two_slots.npy $(TESTTMP)/borrow2_a64
 	tools/expect_same.sh aarch64/test_nilpy_variant_borrow_two_slots "$$(tools/run_target.sh aarch64 $(TESTTMP)/borrow2_a64 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_variant_borrow_two_slots.expected)"
 	tools/assert_no_leak.sh aarch64/nilpy_variant_borrow_two_slots 200 tools/run_target.sh aarch64 $(TESTTMP)/borrow2_a64
+	# A managed local that SURVIVES a yield: the generator's live state, which
+	# the cross arms of EmitManagedLocalCleanupForTarget released at every
+	# yield because none of them had x86-64's CurProcIsStackless guard.
+	# Before the fix: exit 0, the two managed locals corrupted; the
+	# promo-int survived here where i386 and arm32 also lost it.
+	# bug-a-a-managed-local-that-survives-a-yield-is-released-at-every-yield-on-every-cross-target
+	./$(COMPILER) --target=aarch64 test/test_nilpy_generator_managed_local_survives_yield.npy $(TESTTMP)/genyield_a64
+	tools/expect_same.sh aarch64/test_nilpy_generator_managed_local_survives_yield "$$(tools/run_target.sh aarch64 $(TESTTMP)/genyield_a64)" "$$(cat test/test_nilpy_generator_managed_local_survives_yield.expected)"
 	./$(COMPILER) --target=aarch64 test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2
 	./$(COMPILER) test/test_conformance_2.pas $(TESTTMP)/test_aarch64_conf2_x64
 	tools/expect_same.sh aarch64/test_aarch64_conf2 "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_conf2)" "$$($(TESTTMP)/test_aarch64_conf2_x64)"
@@ -20688,6 +20713,13 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_nilpy_variant_borrow_two_slots.npy $(TESTTMP)/borrow2_a32
 	tools/expect_same.sh arm32/test_nilpy_variant_borrow_two_slots "$$(tools/run_target.sh arm32 $(TESTTMP)/borrow2_a32 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_variant_borrow_two_slots.expected)"
 	tools/assert_no_leak.sh arm32/nilpy_variant_borrow_two_slots 200 tools/run_target.sh arm32 $(TESTTMP)/borrow2_a32
+	# A managed local that SURVIVES a yield: the generator's live state, which
+	# the cross arms of EmitManagedLocalCleanupForTarget released at every
+	# yield because none of them had x86-64's CurProcIsStackless guard.
+	# Before the fix: exit 0 and the same corruption as i386.
+	# bug-a-a-managed-local-that-survives-a-yield-is-released-at-every-yield-on-every-cross-target
+	./$(COMPILER) --target=arm32 test/test_nilpy_generator_managed_local_survives_yield.npy $(TESTTMP)/genyield_a32
+	tools/expect_same.sh arm32/test_nilpy_generator_managed_local_survives_yield "$$(tools/run_target.sh arm32 $(TESTTMP)/genyield_a32)" "$$(cat test/test_nilpy_generator_managed_local_survives_yield.expected)"
 
 # ----- Cross self-host bootstrap gates (feature-cross-bootstrap-selfhost) -----
 # Triple-stage proof: native cross-compiles compiler.pas -> <arch>; that binary,
