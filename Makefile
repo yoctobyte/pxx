@@ -5723,6 +5723,18 @@ test-core: $(COMPILER)
 	# one to a MANAGED string parameter (aarch64/arm32/i386 all missed TypeIsFrozenString)
 	./$(COMPILER) test/test_frozen_string_cross_b305.pas $(TESTTMP)/test_frozen_string_cross_b30526
 	tools/expect_same.sh test_frozen_string_cross_b30526 "$$($(TESTTMP)/test_frozen_string_cross_b30526)" "$$(printf 'len=5\nf=hello\nassigned=hello len=5\nbyvalue=5\nfirst=h\nderef=hello\nderef-arg=5\nre-len=2 re=hi re-arg=2')"
+	# `obj as IFoo` AddRefs the temp it materialises, and that temp is memoised
+	# per cast SITE -- so a cast inside a loop retained a different object into
+	# the same word every trip and released only the last. Everything else
+	# leaked AND ITS DESTRUCTOR NEVER RAN, which no output or leak assertion
+	# sees: the counts below come from the destructor itself. Measured against
+	# the FPC oracle on this exact source; pin v403 answers `0 / 1 / 5`, which
+	# is the positive control. Row three (no cast) must not move -- the implicit
+	# coercion path was always right, and without it "5 5 5" and "0 1 5" are
+	# equally consistent with a destructor that never increments.
+	# bug-a-an-interface-as-cast-retains-on-every-execution-and-releases-once-per-scope
+	./$(COMPILER) test/test_interface_as_cast_temp_released_per_execution.pas $(TESTTMP)/test_intf_ascast26
+	tools/expect_same.sh test_intf_ascast26 "$$($(TESTTMP)/test_intf_ascast26)" "$$(printf 'mainbody: created 5 destroyed 4\nin-proc:  created 3 destroyed 3\nno cast:  created 5 destroyed 5')"
 	# an interface VALUE is ONE pointer (the instance — FPC's ABI), so it fits a
 	# pointer-shaped container and casts back: the fcl-fpcunit listener-list shape
 	./$(COMPILER) test/test_interface_single_pointer_abi_b337.pas $(TESTTMP)/test_intf_1ptr_b33726

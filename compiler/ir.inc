@@ -5702,6 +5702,38 @@ begin
     instVal := IRLowerAST(ASTLeft[node]);
   IRAppend(IR_STORE_SYM, instSym, instVal, -1, 0, Ord(tyPointer));
 
+  { RELEASE WHAT THE TEMP ALREADY HOLDS, BEFORE OVERWRITING IT. The temp is
+    memoised in ASTLiftedVar -- one slot per cast SITE, not per execution -- so a
+    site inside a loop retained a different object into the same word every trip
+    while only the last one was ever released. Measured against the FPC oracle on
+    identical source (a destructor counting its own calls):
+
+      5 casts in the main body    FPC destroyed 4   pxx destroyed 0
+      3 casts inside a procedure  FPC destroyed 3   pxx destroyed 1
+      5 objects, no cast at all   FPC destroyed 5   pxx destroyed 5
+
+    Row three is the control: the implicit class->interface coercion goes down
+    the ordinary managed-assignment path, which already releases the slot's
+    previous value, and it was right all along. This arm is the one that only
+    retained. The leak is not the interesting half -- the DESTRUCTOR NOT RUNNING
+    is, and no output assertion catches that unless the destructor writes.
+
+    Safe on the first execution because the slot starts nil (BSS for a main-body
+    temp, prologue-zeroed for a local -- the same guarantee EmitManagedLocalCleanup
+    already relies on when it releases these temps at scope exit) and
+    PXXIntfRelease is nil-safe. Non-COM interfaces never retained here, so they
+    must not release either: this is inside the same condition as the AddRef.
+    bug-a-an-interface-as-cast-retains-on-every-execution-and-releases-once-per-scope }
+  if (intfCi >= 0) and (intfCi < UClsCount) and UClsIsComInterface[intfCi] and
+     ((Syms[tmpSym].Kind = skLocal) or (Syms[tmpSym].Kind = skGlobal)) then
+  begin
+    li := IRAppend(IR_ARG, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)), -1, -1, 0, Ord(tyPointer));
+    lv := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, intfCi, Ord(tyNativeInt)), -1, -1, 0, Ord(tyNativeInt));
+    IRB[li] := lv;
+    va := IRAppendCall(FindProc('PXXIntfRelease'), li, -1, Ord(tyNativeInt));
+    IRIVal[va] := 1;
+  end;
+
   { the value IS the instance }
   IRAppend(IR_STORE_MEM, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)),
            IRAppend(IR_LOAD_SYM, instSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));

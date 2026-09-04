@@ -4,7 +4,7 @@ title: "Managed memory is correct — heap, refcounts, leaks, managed fields"
 track: A
 prio: 75
 type: umbrella
-blocked-by: [bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, feature-a-reentrant-heap-lock-and-per-thread-arenas, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, bug-a-string-release-has-two-implementations-that-already-disagree, bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower]
+blocked-by: [bug-a-pxxalloc-does-not-check-the-mmap-return-so-oom-arrives-as-an-anonymous-segv, bug-a-managed-locals-leak-on-an-unwind-on-wasm32-and-xtensa, feature-a-reentrant-heap-lock-and-per-thread-arenas, bug-a-two-different-binaries-both-pass-the-self-host-fixedpoint-for-one-source-tree, bug-a-string-release-has-two-implementations-that-already-disagree, bug-a-a-shared-ansistring-handle-in-a-parallel-loop-is-11x-slower, bug-a-an-interface-as-cast-retains-on-every-execution-and-releases-once-per-scope, bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in, bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad, bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells]
 created: 2026-08-31
 summary: "GOAL, not a unit of work. The owner named memory management as ranking above float-bit and parity work. This is the axis a real program hits hardest and where a wrong answer is silent: a leak, a double free, a refcount that disagrees with itself. Correctness is the case here -- the perf profile is deliberately NOT the argument."
 ---
@@ -61,3 +61,52 @@ ticket, and neither is filed because neither is a defect:
   line holding one refcount word. Only a scheme that stops writing the shared
   word — biased or deferred refcounting — removes it. Worth an umbrella child if
   anyone wants that; it is not a bug.
+
+
+## Attempted 2026-09-04 — ten managed-memory constructs, looped, slope measured
+
+**This umbrella had SIX blockers and all six were `done/`.** Per this file's own
+rule that is not "finished", it is "nobody has attempted the cell". So it was
+attempted the way the rule says — by running the target rather than by triaging
+the backlog.
+
+Ten Pascal constructs that own managed memory, each looped 2000 and 8000 times
+under `-dPXX_ALLOC_CENSUS`, with the SLOPE as the measurement (the census prints
+at geometric thresholds, so a raw live count over N is wrong). String concat,
+string function result, dynamic array, dynamic array of strings, class
+create/free, variant assign, exception raise/catch, open array, record with
+managed fields, `for c in s`. Then six more: interface local, interface by-value
+parameter, class with managed fields destroyed, record management operators,
+nested dynamic arrays, and a raise through a frame holding managed locals.
+
+**Fifteen flat. One was not**, and it is now
+`bug-a-an-interface-as-cast-retains-on-every-execution-and-releases-once-per-scope`
+— fixed the same day, verified against the FPC oracle and on five cross targets.
+
+### Two instrument failures worth more than the negative result
+
+**A probe whose managed value is CONSTANT-FOLDED reports a flat zero while
+measuring nothing.** `v := 'str' + Chr(65)` allocates nothing at all; the
+program produced no census line whatsoever and the harness read that as a
+tooling glitch. Every probe now derives its managed value from the loop counter,
+and the harness asserts that a probe ALLOCATED proportionally to N before
+believing its slope.
+
+**And the fix for that was itself a guard that could not fail, twice.** First
+`allocs > 0` — which `allocs=1` clears while measuring nothing. Then
+`allocs >= N` — too strict, because the last census threshold is typically
+~0.94 of the true total, so it rejected seven honest probes whose last line read
+1871 at N=2000. **A precondition that fails on good input is as useless as one
+that passes on bad**, and both errors were made while explicitly trying to write
+a control. The bound is N/2.
+
+The positive control is a shape measured to leak on the same day
+(`bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in`'s
+residual, 0.999 blocks per escaping raise) and it is in every run above.
+
+### What the negative result is and is not
+
+It is: fifteen common constructs do not leak in a steady-state loop, on
+x86-64, at the default `-O`. It is not a statement about cross targets,
+`--threadsafe`, the NilPy or C frontends, or any construct not in the list —
+generics and the `lib/pcl` containers are the obvious untouched neighbours.
