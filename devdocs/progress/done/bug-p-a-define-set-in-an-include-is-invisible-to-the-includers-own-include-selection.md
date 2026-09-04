@@ -141,4 +141,4 @@ instances here, all in the same procedure: the define rollback, the comment-end
 disagreement, and the mode-dependence of the second.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 824e95953.
