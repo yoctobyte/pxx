@@ -222,4 +222,4 @@ spelling work lands — that work is settling adjacent questions about how a uni
 declares something the rest of the compilation must respect.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit d10527193.
