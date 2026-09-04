@@ -63,7 +63,7 @@ arm32 under qemu.** The x86-64 shape of that probe is in the scratch record of
 `feature-nilpy-object-reclamation`; it is ~15 lines.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 53f7276a1.
 
 ## Resolved — both halves, one commit, measured on four targets
 
