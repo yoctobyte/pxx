@@ -3935,3 +3935,103 @@ into `$(PXX_STABLE)` a convention change whose only verification is
 one-directional by necessity, on the target that has no foreign-link oracle at
 all. The owner's `pin -> flip -> re-pin` is complete at v403; a further pin is not
 urgent and T samples every ~8 commits.
+
+---
+
+## CORRECTION to the section above: the breadth run HAD seen it
+
+The "NO RE-PIN" reason written above — *"Track T's newest verdicts are all at
+`6cf1c639a`, which PREDATES `9506737b6`, so no breadth run has seen this aarch64
+ABI change"* — **is false, and it was mine, not frankb-78's.** frankb-78
+corrected it and I verified the correction rather than taking it:
+
+```
+git merge-base --is-ancestor 9506737b6 74e9ce859b18   -> YES
+```
+
+`bf6a7dc80` landed T's full tier at `74e9ce859b18`; `9506737b6` is inside it;
+`new_red: []`, and the five `caarch64_aggregate_byval.c` rows are in `first_seen`.
+**The by-value half has had a clean breadth run.** What I did was read the newest
+verdicts at one moment and let that reading keep speaking after T had sampled
+again — a coordinator's stale snapshot presented as a property of the tree.
+
+**The conclusion did not move, and that is the whole point of recording this.**
+No re-pin — but on frankb-78's reason, which survives:
+
+> **`2aedcd004` has not been sampled, and I am not asking for a pin on the
+> strength of that.**
+
+The variadic third is genuinely unsampled (`is-ancestor 2aedcd004 74e9ce859b18`
+-> NO). **A right answer resting on a wrong premise is not a right answer** — it
+is one that will be re-derived wrongly the next time the premise is checked.
+v403 stands.
+
+## The aarch64 variadic-aggregate third — `2aedcd004`
+
+The variadic tail now asks **the same classifier as the fixed params**, which is
+the whole shape of the fix: not a second placement rule, one rule reached from a
+second place.
+
+**How the caller finds the type when the type is gone.** A tail argument has no
+parameter to consult, and by the time it is lowered the node is tagged
+`tyPointer` — because it *is* the address of the temp `IRLowerCallArg` created.
+So the pointer tag is TRUE and useless. **`IRArgRecId` is the only surviving
+evidence** of what the slot describes. Anything reading the node's type here
+reads a correct answer to a different question.
+
+**`__pxx_va_arg_agg_a64` is a SIBLING, not a parameterisation** of
+`__pxx_va_arg_agg`. That one hardcodes SysV's 48/176/16, and — frankb-78's
+phrasing, worth keeping — **a helper that knows a layout can only know one.**
+This is the third appearance of that lesson in this arc (the `48 + nfp*16` claim,
+the `>= 0` sentinel collision, now this) and **the first time it was applied
+before the collision rather than after it.**
+
+### AAPCS64's variadic rule is its fixed rule, unchanged — HFAs included
+
+`{double,double}` goes in `d0,d1`. It is **not** forced to memory. The widely
+held "a variadic aggregate is always memory" is **Apple's variant of the ABI**,
+not AAPCS64 — a received rule that is correct about a different specification.
+Placement was checked against clang on four of four rows including the tail
+register.
+
+### Both halves are one commit, and that was MEASURED
+
+With the caller converted and cparser still reading a single pointer slot, the
+file **SEGFAULTS**. Not a wrong value in one argument — **a dereference of an
+integer.** A caller and a callee that disagree about what a slot *contains*
+fail structurally, so the atomicity of the commit is demonstrated rather than
+asserted. Worth keeping as the general form: *disagreement about a slot's
+CONTENTS crashes; disagreement about its VALUE does not.*
+
+### The other two thirds, measured while the sweep ran (ticket open, unclaimed)
+
+- **arm32: wrong on all four shapes.**
+- **riscv32: wrong on exactly ONE** — a pointer *is* the correct answer there for
+  everything above 2xXLEN, `{double,double}` included, so only `{int,int}` at 8
+  bytes is broken.
+
+That second row is **the collides-with-the-default shape in a THIRD habitat.**
+The first two were an expected VALUE that equals the failure value, and a GUARD
+that cannot fail. This one is **the CORPUS a probe is drawn from**: any probe
+that happens to use a struct larger than 8 bytes **measures green on a target
+that is broken.** Nothing about the assertion, the control or the expected value
+is wrong — the sample simply misses the only shape that fails.
+
+**DO NOT PORT `ABIA64ArgPlace` TO arm32.** arm32 needs two rules AAPCS64 does not
+have: an aggregate may **split** between `r1..r3` and the stack, and an 8-byte
+aligned one **skips an odd register**. `ABIA64ArgPlace` places all-or-nothing;
+ported, it would be a clean-looking function that is wrong on the split.
+
+### `exit_observable`, stated against its own interest again
+
+`793/845 = 93.85%` against a `92.69%` cap. Dropping its own five new rows gives
+`788/840 = 93.81%` — **still over by more than a point.** So the cap was breached
+before it and its rows are on the wrong side of it. Put in the commit message
+rather than netted out of the number, which is the correct handling and the
+second time this session it has done it that way.
+
+### The wrapper-versus-log disagreement is now at SEVEN instances
+
+A backgrounded gate/tier reported **exit code 0 over `testmgr: RED`** again.
+This is no longer an anecdote in a handover; seven independent sightings is a
+tool defect with a stable signature. Counted by frankb-78, not aggregated by me.
