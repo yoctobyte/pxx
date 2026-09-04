@@ -1519,8 +1519,30 @@ begin
   WasmCompareOperandType := WasmNodeResultType(node);
   if node < 0 then Exit;
   tag := IntToTypeKind(IRTk[node]);
-  if TypeIsFrozenString(tag) or (tag = tyAnsiString) then
-    WasmCompareOperandType := tag;
+  { THE TAG WINS IN BOTH DIRECTIONS WHEN IT IS SET, and it used to win in only
+    one. Letting it WIDEN a pointer to a string is what makes `p^ = b` a string
+    compare; refusing to let it NARROW is what made `Pointer(s) = nil` one, for
+    `s: AnsiString`. There the IR_LOAD_SYM's tag is tyPointer -- the cast, which
+    is the whole content of the expression -- and WasmNodeResultType answers
+    from the SYMBOL, which is still an AnsiString and is answering a question
+    nobody asked. The result was `string operand of type QWord` (WasmStrParts
+    handed the nil literal) and `` `=` on strings ``, i.e. a pointer comparison
+    refused as a string one. Measured in lib_base64's `pystr_is_none`, which is
+    `Result := Pointer(s) = nil` and is how every NilPy `is None` test is
+    answered.
+
+    Nine shapes were dumped before this changed, and the tag is right in every
+    one: `a = b` on AnsiStrings tags both loads tyAnsiString; on `string[8]`
+    both LEAs tyString; `p^ = b` tags the load tyString over a tyPointer
+    symbol; `@a = @b` tags both LEAs tyPointer; a CALL returning AnsiString
+    tags tyAnsiString though its node kind would answer from the callee; a
+    concat binop, a record FIELD, an open-array ELEMENT and a string literal
+    all carry their own kind. So this is not a narrowing special case bolted
+    beside a widening one -- it is the same rule the widening was already
+    reaching for, stated once.
+
+    tyUnknown still falls back, because an unset tag is not a claim. }
+  if tag <> tyUnknown then WasmCompareOperandType := tag;
 end;
 
 function WasmBinopIsString(node: Integer): Boolean;

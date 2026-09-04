@@ -16654,6 +16654,9 @@ test-i386: $(COMPILER)
 	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
 	# call produces the BASE's row, which the line above already shows. Two rows
 	# differing only in value would not separate those.
+	./$(COMPILER) --target=i386 test/test_cross_compare_operand_shapes.pas $(TESTTMP)/test_i386_cos
+	./$(COMPILER) test/test_cross_compare_operand_shapes.pas $(TESTTMP)/test_i386_cos_x64
+	tools/expect_same.sh i386/test_i386_compare_operand_shapes "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cos)" "$$($(TESTTMP)/test_i386_cos_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_method_pointer_call.pas $(TESTTMP)/test_i386_mpc
 	./$(COMPILER) test/test_cross_method_pointer_call.pas $(TESTTMP)/test_i386_mpc_x64
 	tools/expect_same.sh i386/test_i386_method_pointer_call "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mpc)" "$$($(TESTTMP)/test_i386_mpc_x64)"
@@ -17673,6 +17676,9 @@ test-aarch64: $(COMPILER)
 	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
 	# call produces the BASE's row, which the line above already shows. Two rows
 	# differing only in value would not separate those.
+	./$(COMPILER) --target=aarch64 test/test_cross_compare_operand_shapes.pas $(TESTTMP)/test_aarch64_cos
+	./$(COMPILER) test/test_cross_compare_operand_shapes.pas $(TESTTMP)/test_aarch64_cos_x64
+	tools/expect_same.sh aarch64/test_aarch64_compare_operand_shapes "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cos)" "$$($(TESTTMP)/test_aarch64_cos_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_method_pointer_call.pas $(TESTTMP)/test_aarch64_mpc
 	./$(COMPILER) test/test_cross_method_pointer_call.pas $(TESTTMP)/test_aarch64_mpc_x64
 	tools/expect_same.sh aarch64/test_aarch64_method_pointer_call "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mpc)" "$$($(TESTTMP)/test_aarch64_mpc_x64)"
@@ -18698,6 +18704,9 @@ test-riscv32: $(COMPILER)
 	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
 	# call produces the BASE's row, which the line above already shows. Two rows
 	# differing only in value would not separate those.
+	./$(COMPILER) --target=riscv32 test/test_cross_compare_operand_shapes.pas $(TESTTMP)/test_rv32x_cos
+	./$(COMPILER) test/test_cross_compare_operand_shapes.pas $(TESTTMP)/test_rv32x_cos_x64
+	tools/expect_same.sh riscv32/test_rv32x_compare_operand_shapes "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_cos)" "$$($(TESTTMP)/test_rv32x_cos_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_method_pointer_call.pas $(TESTTMP)/test_rv32x_mpc
 	./$(COMPILER) test/test_cross_method_pointer_call.pas $(TESTTMP)/test_rv32x_mpc_x64
 	tools/expect_same.sh riscv32/test_rv32x_method_pointer_call "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_mpc)" "$$($(TESTTMP)/test_rv32x_mpc_x64)"
@@ -19208,12 +19217,19 @@ test-wasm32: $(COMPILER)
 	# flag. Any row that dumps bytes must say which kind it dumped.
 	#
 	# THE ROWS BELOW ARE THE MEASURED-GREEN SUBSET of a 27-candidate sweep.
-	# Three of the five that were excluded are now wired at the end of this
-	# recipe; ONE is still out, and it is out for a reason that has nothing to
-	# do with strings and is named by its own diagnostic rather than by a guess:
+	# ALL FIVE that were excluded are now wired at the end of this recipe. The
+	# last one out was test_static_string_literal, and it was out for a reason
+	# that had nothing to do with strings:
 	#
 	#   test_static_string_literal rc=134  `main$$0 -- string operand of type QWord`
 	#                                      and also -- `=` on strings
+	#
+	# Both gaps were one defect. `Pointer(s) = nil` classified as a STRING
+	# compare, because WasmCompareOperandType started from the node's result
+	# type -- which for an IR_LOAD_SYM is the SYMBOL's, still AnsiString -- and
+	# let the IR tag only WIDEN a pointer to a string, never narrow a string to
+	# a pointer. The tag is the cast and the cast is the whole expression. It
+	# now wins in both directions, and this file runs green.
 	#
 	# test_cross_sets was the other and is now WIRED, at the end of this recipe.
 	# `value IR op 33` was IR_SET_LIT: this backend could copy a set and test
@@ -19380,24 +19396,43 @@ test-wasm32: $(COMPILER)
 	# They shared an EXIT CODE, and the report gave each a single cause that was
 	# true only of the first gap it hit.
 	#
-	# test_static_string_literal is one of those three and is still excluded from
-	# RUNNING; it is compiled here for its report alone. Its `main$$0` has two
-	# distinct gaps and the second was invisible. Asserting the second reason's
-	# TEXT, not the count: a count row passes on a body that refuses the same op
-	# twice, which is the shape the dedup exists to prevent.
+	# THE SUBJECT MOVED, and the reason is the interesting part. It was
+	# test_static_string_literal, whose `main$$0` had exactly two gaps --
+	# `string operand of type QWord` and `` `=` on strings ``. Both closed when
+	# WasmCompareOperandType learned to read the IR tag in BOTH directions, and
+	# that file now RUNS on wasm32 and matches x86-64 row for row (its row is
+	# wired at the end of this recipe). So this guard went stale by its subject
+	# being FIXED -- and it will again, because its population is the set of ops
+	# wasm32 does not implement and the whole project is emptying that set. A
+	# guard whose population the project is deliberately eliminating cannot be
+	# pointed at a real gap and left alone.
+	#
+	# So the subject is now a construct NOBODY WILL IMPLEMENT rather than one
+	# nobody has got to: test_wasm32_two_gaps_in_one_body compares an AnsiString
+	# against a raw Pointer, which FPC rejects outright and which has no meaning
+	# to give. wasm32 refusing it is a permanent correct answer, not a queued
+	# gap. The file's own header says all of this, and says what to do if it
+	# ever stops producing two reasons: re-census and grep the reports for
+	# `and also`, do not weaken the row.
+	#
+	# Both reasons come from ONE expression on purpose -- the refusal latch
+	# short-circuits the statement walk, so two gaps in two STATEMENTS report as
+	# one (measured: an interface-field load followed by a raw syscall lists only
+	# the first). Asserting the second reason's TEXT, not the count: a count row
+	# passes on a body that refuses the same op twice, which is the shape the
+	# dedup exists to prevent.
 	#
 	# RUN AGAINST THE PRE-FIX COMPILER, not argued from the source. Built d5a7b5d3ce4d
-	# with the change stashed: this row fails there and prints
-	#     main$$0 — string operand of type QWord
-	# and nothing else -- the second gap shadowed, which is the defect. It passes
-	# on eac2ad1a536b. Worth saying why the source argument was dropped: grepping
-	# the old file for `and also` returns a hit, in a PROSE COMMENT, so the cheap
-	# control would have been read as refuting a claim that is in fact true.
+	# with the change stashed: the old subject failed there and printed its first
+	# reason and nothing else -- the second gap shadowed, which is the defect.
+	# Worth keeping why the source argument was dropped: grepping the old file
+	# for `and also` returns a hit, in a PROSE COMMENT, so the cheap control
+	# would have been read as refuting a claim that is in fact true.
 	# bug-a-the-wasm32-coverage-report-shows-one-refusal-per-body
-	@out=$$(./$(COMPILER) --target=wasm32 test/test_static_string_literal.pas $(TESTTMP)/w32_cov_multi.wasm 2>&1); \
+	@out=$$(./$(COMPILER) --target=wasm32 test/test_wasm32_two_gaps_in_one_body.pas $(TESTTMP)/w32_cov_multi.wasm 2>&1); \
 	 rc=$$?; \
 	 test "$$rc" = "0" \
-	   && printf '%s\n' "$$out" | grep -q 'main\$$0 — string operand of type QWord' \
+	   && printf '%s\n' "$$out" | grep -q 'main\$$0 — string operand of type Pointer' \
 	   && printf '%s\n' "$$out" | grep -q 'and also — `=` on strings' \
 	   && printf '%s\n' "$$out" | grep -q 'distinct gap(s) seen' \
 	   || { echo "wasm32 coverage report: FAIL - a body's SECOND gap is not listed (rc=$$rc)"; printf '%s\n' "$$out"; exit 1; }
@@ -19492,6 +19527,24 @@ test-wasm32: $(COMPILER)
 	# Pin v403 reports `main$$0 -- indirect call returning an aggregate` on
 	# this file and traps. The signature already reserved the trailing
 	# destination slot; only the two call sites refused to fill it.
+	# THE LAST OF THE FIVE EXCLUDED ROWS, now green. It was out with
+	# `main$$0 -- string operand of type QWord` and `` `=` on strings `` -- two
+	# report lines for ONE defect: `Pointer(s) = nil` was classified as a string
+	# compare because the operand classifier let the IR tag widen a pointer to a
+	# string and not narrow a string to a pointer. It runs byte-identical to the
+	# x86-64 build, all six rows, including the two that read a frozen string's
+	# length and the `emptynil` / `litnil` pair that is exactly the
+	# nil-versus-empty distinction the classifier was getting wrong.
+	./$(COMPILER) --target=wasm32 test/test_static_string_literal.pas $(TESTTMP)/w32_ssl.wasm
+	./$(COMPILER) test/test_static_string_literal.pas $(TESTTMP)/w32_ssl_x64
+	tools/expect_same.sh wasm32/static_string_literal "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_ssl.wasm)" "$$($(TESTTMP)/w32_ssl_x64)"
+	# `Pointer(s) = nil` in the shape the RTL actually uses it -- pystr_is_none,
+	# which is how every NilPy `is None` test is answered, and which refused to
+	# lower on this target. Both directions, plus every other compare-operand
+	# shape whose classification the same predicate decides.
+	./$(COMPILER) --target=wasm32 test/test_cross_compare_operand_shapes.pas $(TESTTMP)/w32_cos.wasm
+	./$(COMPILER) test/test_cross_compare_operand_shapes.pas $(TESTTMP)/w32_cos_x64
+	tools/expect_same.sh wasm32/compare_operand_shapes "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_cos.wasm)" "$$($(TESTTMP)/w32_cos_x64)"
 	./$(COMPILER) --target=wasm32 test/test_cross_method_pointer_call.pas $(TESTTMP)/w32_mpc.wasm
 	./$(COMPILER) test/test_cross_method_pointer_call.pas $(TESTTMP)/w32_mpc_x64
 	tools/expect_same.sh wasm32/method_pointer_call "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_mpc.wasm)" "$$($(TESTTMP)/w32_mpc_x64)"
@@ -19507,7 +19560,7 @@ test-wasm32: $(COMPILER)
 	./$(COMPILER) --target=wasm32 test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes.wasm
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes_x64
 	tools/expect_same.sh wasm32/set_shapes "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_setshapes.wasm)" "$$($(TESTTMP)/w32_setshapes_x64)"
-	@echo "wasm32: 42 rows green (35 default + 7 shortstring; 1 excluded, see comment above)"
+	@echo "wasm32: 44 rows green (37 default + 7 shortstring; 0 excluded)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
@@ -19900,6 +19953,9 @@ test-xtensa: $(COMPILER)
 	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
 	# call produces the BASE's row, which the line above already shows. Two rows
 	# differing only in value would not separate those.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_compare_operand_shapes.pas $(TESTTMP)/test_xtensa_cos
+	./$(COMPILER) test/test_cross_compare_operand_shapes.pas $(TESTTMP)/test_xtensa_cos_x64
+	tools/expect_same.sh xtensa/test_xtensa_compare_operand_shapes "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_cos)" "$$($(TESTTMP)/test_xtensa_cos_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_method_pointer_call.pas $(TESTTMP)/test_xtensa_mpc
 	./$(COMPILER) test/test_cross_method_pointer_call.pas $(TESTTMP)/test_xtensa_mpc_x64
 	tools/expect_same.sh xtensa/test_xtensa_method_pointer_call "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_mpc)" "$$($(TESTTMP)/test_xtensa_mpc_x64)"
@@ -20982,6 +21038,9 @@ test-arm32: $(COMPILER)
 	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
 	# call produces the BASE's row, which the line above already shows. Two rows
 	# differing only in value would not separate those.
+	./$(COMPILER) --target=arm32 test/test_cross_compare_operand_shapes.pas $(TESTTMP)/test_arm32_cos
+	./$(COMPILER) test/test_cross_compare_operand_shapes.pas $(TESTTMP)/test_arm32_cos_x64
+	tools/expect_same.sh arm32/test_arm32_compare_operand_shapes "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cos)" "$$($(TESTTMP)/test_arm32_cos_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_method_pointer_call.pas $(TESTTMP)/test_arm32_mpc
 	./$(COMPILER) test/test_cross_method_pointer_call.pas $(TESTTMP)/test_arm32_mpc_x64
 	tools/expect_same.sh arm32/test_arm32_method_pointer_call "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mpc)" "$$($(TESTTMP)/test_arm32_mpc_x64)"
