@@ -2,9 +2,10 @@
 track: P
 prio: 35
 type: refactor
-status: open
+status: working
 found: 2026-08-29
 found-by: claude-N
+owner: frankA
 ---
 
 # Five dispatch sites decide what `SomeName(expr)` casts to
