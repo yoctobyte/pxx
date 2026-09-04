@@ -3295,6 +3295,23 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_managed_local_in_unwound_frame.npy $(TESTTMP)/test_nilpy_unwpad26
 	tools/expect_same.sh test_nilpy_unwpad26 "$$($(TESTTMP)/test_nilpy_unwpad26 2>/dev/null)" "$$(cat test/test_nilpy_managed_local_in_unwound_frame.expected)"
 	tools/assert_no_leak.sh nilpy_managed_local_unwound_frame 50 $(TESTTMP)/test_nilpy_unwpad26
+	@# A `raise` or `raise e` inside an `except V as e:` handler puts the
+	@# BINDER's object back IN FLIGHT. The unwind landing pad must not release
+	@# it -- its reference is borrowed from the in-flight exception and becomes
+	@# the binder's own only when the handler completes NORMALLY, which is
+	@# exactly what the pad means did not happen.
+	@# HERE THE VALUE ROWS ARE THE INSTRUMENT, the reverse of the sibling test
+	@# above: this is a use-after-free, and it SEGFAULTED at 4edf60ff9 (the
+	@# commit that first gave .npy bodies a pad) while pin v403, which has no
+	@# pad, prints the same numbers as HEAD. `fresh_raise` is the must-still-
+	@# work row -- its binder holds the OLD object, not the in-flight one.
+	@# The census row is small on purpose: run_bound is only 40 iterations so
+	@# the open `except X as e:` binder leak cannot swamp it, and run_bare is
+	@# 4000 with a BARE outer arm, where a lost drop would read as +4000.
+	@# bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object.npy $(TESTTMP)/test_nilpy_reraise26
+	tools/expect_same.sh test_nilpy_reraise26 "$$($(TESTTMP)/test_nilpy_reraise26 2>/dev/null)" "$$(cat test/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object.expected)"
+	tools/assert_no_leak.sh nilpy_reraise_in_flight 1500 $(TESTTMP)/test_nilpy_reraise26
 	@# A generator step function's managed locals are the generator's LIVE
 	@# STATE, not locals going out of scope -- it returns at every yield and is
 	@# re-entered at the next one. x86-64 has always exited the cleanup early
@@ -17098,6 +17115,23 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_nilpy_managed_local_in_unwound_frame.npy $(TESTTMP)/unwpad_i386
 	tools/expect_same.sh i386/test_nilpy_managed_local_in_unwound_frame "$$(tools/run_target.sh i386 $(TESTTMP)/unwpad_i386 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_managed_local_in_unwound_frame.expected)"
 	tools/assert_no_leak.sh i386/nilpy_managed_local_unwound_frame 50 tools/run_target.sh i386 $(TESTTMP)/unwpad_i386
+	@# A `raise` or `raise e` inside an `except V as e:` handler puts the
+	@# BINDER's object back IN FLIGHT. The unwind landing pad must not release
+	@# it -- its reference is borrowed from the in-flight exception and becomes
+	@# the binder's own only when the handler completes NORMALLY, which is
+	@# exactly what the pad means did not happen.
+	@# HERE THE VALUE ROWS ARE THE INSTRUMENT, the reverse of the sibling test
+	@# above: this is a use-after-free, and it SEGFAULTED at 4edf60ff9 (the
+	@# commit that first gave .npy bodies a pad) while pin v403, which has no
+	@# pad, prints the same numbers as HEAD. `fresh_raise` is the must-still-
+	@# work row -- its binder holds the OLD object, not the in-flight one.
+	@# The census row is small on purpose: run_bound is only 40 iterations so
+	@# the open `except X as e:` binder leak cannot swamp it, and run_bare is
+	@# 4000 with a BARE outer arm, where a lost drop would read as +4000.
+	@# bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object.npy $(TESTTMP)/reraise_i386
+	tools/expect_same.sh i386/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object "$$(tools/run_target.sh i386 $(TESTTMP)/reraise_i386 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object.expected)"
+	tools/assert_no_leak.sh i386/nilpy_reraise_in_flight 1500 tools/run_target.sh i386 $(TESTTMP)/reraise_i386
 	# A managed local that SURVIVES a yield: the generator's live state, which
 	# the cross arms of EmitManagedLocalCleanupForTarget released at every
 	# yield because none of them had x86-64's CurProcIsStackless guard.
@@ -17467,6 +17501,23 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_nilpy_managed_local_in_unwound_frame.npy $(TESTTMP)/unwpad_a64
 	tools/expect_same.sh aarch64/test_nilpy_managed_local_in_unwound_frame "$$(tools/run_target.sh aarch64 $(TESTTMP)/unwpad_a64 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_managed_local_in_unwound_frame.expected)"
 	tools/assert_no_leak.sh aarch64/nilpy_managed_local_unwound_frame 50 tools/run_target.sh aarch64 $(TESTTMP)/unwpad_a64
+	@# A `raise` or `raise e` inside an `except V as e:` handler puts the
+	@# BINDER's object back IN FLIGHT. The unwind landing pad must not release
+	@# it -- its reference is borrowed from the in-flight exception and becomes
+	@# the binder's own only when the handler completes NORMALLY, which is
+	@# exactly what the pad means did not happen.
+	@# HERE THE VALUE ROWS ARE THE INSTRUMENT, the reverse of the sibling test
+	@# above: this is a use-after-free, and it SEGFAULTED at 4edf60ff9 (the
+	@# commit that first gave .npy bodies a pad) while pin v403, which has no
+	@# pad, prints the same numbers as HEAD. `fresh_raise` is the must-still-
+	@# work row -- its binder holds the OLD object, not the in-flight one.
+	@# The census row is small on purpose: run_bound is only 40 iterations so
+	@# the open `except X as e:` binder leak cannot swamp it, and run_bare is
+	@# 4000 with a BARE outer arm, where a lost drop would read as +4000.
+	@# bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=aarch64 test/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object.npy $(TESTTMP)/reraise_a64
+	tools/expect_same.sh aarch64/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object "$$(tools/run_target.sh aarch64 $(TESTTMP)/reraise_a64 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object.expected)"
+	tools/assert_no_leak.sh aarch64/nilpy_reraise_in_flight 1500 tools/run_target.sh aarch64 $(TESTTMP)/reraise_a64
 	# A managed local that SURVIVES a yield: the generator's live state, which
 	# the cross arms of EmitManagedLocalCleanupForTarget released at every
 	# yield because none of them had x86-64's CurProcIsStackless guard.
@@ -21300,6 +21351,23 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_nilpy_managed_local_in_unwound_frame.npy $(TESTTMP)/unwpad_a32
 	tools/expect_same.sh arm32/test_nilpy_managed_local_in_unwound_frame "$$(tools/run_target.sh arm32 $(TESTTMP)/unwpad_a32 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_managed_local_in_unwound_frame.expected)"
 	tools/assert_no_leak.sh arm32/nilpy_managed_local_unwound_frame 50 tools/run_target.sh arm32 $(TESTTMP)/unwpad_a32
+	@# A `raise` or `raise e` inside an `except V as e:` handler puts the
+	@# BINDER's object back IN FLIGHT. The unwind landing pad must not release
+	@# it -- its reference is borrowed from the in-flight exception and becomes
+	@# the binder's own only when the handler completes NORMALLY, which is
+	@# exactly what the pad means did not happen.
+	@# HERE THE VALUE ROWS ARE THE INSTRUMENT, the reverse of the sibling test
+	@# above: this is a use-after-free, and it SEGFAULTED at 4edf60ff9 (the
+	@# commit that first gave .npy bodies a pad) while pin v403, which has no
+	@# pad, prints the same numbers as HEAD. `fresh_raise` is the must-still-
+	@# work row -- its binder holds the OLD object, not the in-flight one.
+	@# The census row is small on purpose: run_bound is only 40 iterations so
+	@# the open `except X as e:` binder leak cannot swamp it, and run_bare is
+	@# 4000 with a BARE outer arm, where a lost drop would read as +4000.
+	@# bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=arm32 test/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object.npy $(TESTTMP)/reraise_a32
+	tools/expect_same.sh arm32/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object "$$(tools/run_target.sh arm32 $(TESTTMP)/reraise_a32 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object.expected)"
+	tools/assert_no_leak.sh arm32/nilpy_reraise_in_flight 1500 tools/run_target.sh arm32 $(TESTTMP)/reraise_a32
 	# A managed local that SURVIVES a yield: the generator's live state, which
 	# the cross arms of EmitManagedLocalCleanupForTarget released at every
 	# yield because none of them had x86-64's CurProcIsStackless guard.

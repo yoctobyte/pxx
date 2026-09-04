@@ -14649,9 +14649,19 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
         begin
           if (ASTSOffset[handlerNode] >= 0) and
              (Syms[ASTSOffset[handlerNode]].TypeKind = tyClass) then
+          begin
+            { MARK IT AS A BINDER, here, because this is the one place that
+              knows a symbol is one. The unwind landing pad must not release it:
+              its reference is borrowed from the exception in flight and becomes
+              its own only when the handler completes normally. See
+              SymSkipScopeExitRelease -- and note this runs during IRLowerAST,
+              which is before the pad is emitted, so the flag is set in time. }
+            if ASTSOffset[handlerNode] < Length(SymIsExcBinder) then
+              SymIsExcBinder[ASTSOffset[handlerNode]] := True;
             IRAppend(IR_DEFAULT_MEM,
               IRAppend(IR_SLOTADDR, ASTSOffset[handlerNode], -1, -1, 0, Ord(tyPointer)),
               -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));
+          end;
           handlerNode := ASTRight[handlerNode];
         end;
       end;

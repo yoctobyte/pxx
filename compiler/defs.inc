@@ -3053,6 +3053,7 @@ var
   SymDynElemRowLen : array of Integer; { for a depth-1 DYNAMIC array (or open-array param) whose ELEMENT is a named FIXED array (`array of T`, T = array[lo..hi] of Base): elements per row (flattened). 0 = scalar element. d[i]'s stride = RowLen*base size; d[i][j] indexes within the row. }
   SymDynElemRowLo  : array of Integer; { the row's low bound (T's lo) for normalising d[i][j]'s inner index. Only meaningful when SymDynElemRowLen > 0 and the row is 1-D. }
   SymGenSlot  : array of Integer; { stackless generator: persistent-slot index for a local that must survive yields; -1 = not persisted }
+  SymIsExcBinder : array of Boolean; { NilPy `except C as e` binder. Its reference is BORROWED from the in-flight exception and only becomes OWNED when the handler completes normally, so the UNWIND LANDING PAD -- which runs exactly when it did not -- must not release it. See SymSkipScopeExitRelease. }
   SymProcSig  : array of Integer; { procedural-type var/param: signature proc index (Procs[] entry, BodyAddr=-1) for indirect-call marshalling; -1 = not a proc-typed value }
   SymElemProcSig : array of Integer; { array-of-proctype var: signature proc index of the ELEMENT proc type, for an indexed indirect call `arr[i](args)`; -1 = element not proc-typed }
   SymSetEnumId : array of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
@@ -4847,6 +4848,10 @@ var
     the prologue decision), LateArmed and LatePatch carry the answer back out to
     the landing pad, which lives in the proc parser and cannot see in here. }
   ProcCleanupFrameWanted: Boolean;
+  { TRUE only while EmitProcCleanupLandingPadForTarget is emitting. The pad and
+    the ordinary epilogue share one release pass, and one symbol kind must be
+    treated differently in the two -- see SymSkipScopeExitRelease. }
+  InUnwindCleanupPad: Boolean;
   ProcCleanupFrameLateArmed: Boolean;
   ProcCleanupFrameLatePatch: Integer;
   InLValueWrite   : Boolean;

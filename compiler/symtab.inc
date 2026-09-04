@@ -109,6 +109,7 @@ procedure EmitProcScopeExitCleanupForTarget(retSymIdx: Integer); forward;
 function TargetHasProcCleanupFrame: Boolean; forward;
 procedure EmitProcCleanupFrameEnterForTarget(var landPatch: Integer); forward;
 procedure EmitProcCleanupLandingPadForTarget(landPatch: Integer); forward;
+function SymSkipScopeExitRelease(i: Integer): Boolean; forward;
 function ProcHasManagedLocalCleanup(procIdx, retSymIdx: Integer): Boolean; forward;
 procedure EmitLeaveExceptionFrameX64; forward;
 
@@ -4478,6 +4479,7 @@ begin
   SetLength(SymDynDepth, n);       SetLength(SymDeclTypeNOff, n);   SetLength(SymDeclTypeNLen, n);
   SetLength(SymElemDynDepth, n);   SetLength(SymDynElemRowLen, n);  SetLength(SymDynElemRowLo, n);
   SetLength(SymGenSlot, n);        SetLength(SymProcSig, n);        SetLength(SymElemProcSig, n);
+  SetLength(SymIsExcBinder, n);
   SetLength(SymSetEnumId, n);      SetLength(SymEnumId, n);         SetLength(SymSetElemTk, n);
   SetLength(SymSetElemLo, n);      SetLength(SymSetElemHi, n);
   SetLength(SymElemEnumId, n);
@@ -4683,6 +4685,7 @@ begin
   SymElemDynDepth[SymCount] := 0;
   SymArrNDims[SymCount] := 0;
   SymGenSlot[SymCount] := -1;
+  SymIsExcBinder[SymCount] := False;
   SymProcSig[SymCount] := -1;
   SymElemProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
@@ -5007,6 +5010,7 @@ begin
     params (blcksock's SetLinger, bug-on-handler-poisons-next-proc-params). }
   SymBlockId[SymCount] := CurBlockId;
   SymGenSlot[SymCount] := -1;
+  SymIsExcBinder[SymCount] := False;
   SymProcSig[SymCount] := -1;
   SymElemProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
@@ -5351,6 +5355,7 @@ begin
   SymRTTIOff[SymCount] := -1;
   { Match AllocVar: reset recycled parallel-array fields (see AllocDynArray). }
   SymGenSlot[SymCount] := -1;
+  SymIsExcBinder[SymCount] := False;
   SymSetEnumId[SymCount] := -1;
   SymEnumId[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
@@ -5473,6 +5478,7 @@ begin
     would make a dyn-array global declared after a method (whose for-in/locals
     occupied this slot) invisible to FindSym ('undefined variable'). }
   SymGenSlot[SymCount] := -1;
+  SymIsExcBinder[SymCount] := False;
   SymSetEnumId[SymCount] := -1;
   SymEnumId[SymCount] := -1;
   SymElemEnumId[SymCount] := -1;
@@ -12163,6 +12169,39 @@ begin
     (i < Length(SymGenSlot)) and (SymGenSlot[i] >= 0);
 end;
 
+function SymSkipScopeExitRelease(i: Integer): Boolean;
+{ TRUE for a symbol the scope-exit release pass must LEAVE ALONE. Two reasons,
+  and they are asked in one predicate because the emitters have six copies of
+  this loop and the second copy is the one that stays broken.
+
+  (1) A stackless generator's persistent slot -- see StacklessPersistentSlotSym.
+
+  (2) A NilPy `except C as e` BINDER, but only while the UNWIND LANDING PAD is
+      emitting. This is an ownership rule, not an exception to one. The binder's
+      reference is BORROWED from the exception in flight; it becomes the binder's
+      to drop only when the handler completes NORMALLY, and the pad runs exactly
+      when it did not. Releasing it there frees the object that is still in
+      flight, and the outer handler then reads freed memory.
+
+      Measured 2026-09-04, and it was a live SIGSEGV on origin/master for the
+      length of one commit (4edf60ff9 gave .npy bodies a pad for the first time,
+      which is what exposed this). `raise` and `raise e` inside an
+      `except V as e:` handler, caught by an outer frame: pin v403 prints t=690,
+      HEAD segfaulted. `raise KeyError(..)` from the same handler was FINE and
+      still is -- the binder holds the OLD object, which is not in flight, so
+      the pad releasing it is correct and is not skipped. Nothing in the suite
+      covered a NilPy re-raise, which is why `make test-nilpy` was green.
+
+      THE RESIDUAL: a handler that binds X, raises a DIFFERENT exception Y, and
+      is unwound past releases X here -- that is the arm above. What this skip
+      loses is nothing, because the skipped case is the one where releasing was
+      wrong. }
+begin
+  SymSkipScopeExitRelease := StacklessPersistentSlotSym(i) or
+    (InUnwindCleanupPad and (i >= 0) and (i < Length(SymIsExcBinder)) and
+     SymIsExcBinder[i]);
+end;
+
 function ProcHasManagedLocalCleanup(procIdx, retSymIdx: Integer): Boolean;
 var i: Integer;
 begin
@@ -12269,7 +12308,7 @@ begin
               ' hiddenArgTemp=', Ord(SymIsHiddenArgTemp[i]));
   end;
   for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-   if not StacklessPersistentSlotSym(i) then
+   if not SymSkipScopeExitRelease(i) then
   begin
     if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
     begin

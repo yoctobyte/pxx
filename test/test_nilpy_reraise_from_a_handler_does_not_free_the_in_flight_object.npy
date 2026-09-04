@@ -1,0 +1,68 @@
+# A `raise` or `raise e` inside an `except V as e:` handler puts the object the
+# BINDER points at back IN FLIGHT. The unwind landing pad must not release it,
+# or the outer handler reads freed memory.
+#
+# THE VALUE ROWS ARE THE INSTRUMENT HERE, unlike this fix's sibling test where
+# the printed output could not move. This is a use-after-free: it SEGFAULTED at
+# 4edf60ff9 (the commit that first gave .npy bodies a pad) and printed the
+# numbers below on pin v403, which has no pad at all.
+# bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released
+
+def bare_reraise(k):
+    try:
+        raise ValueError("v" + str(k))
+    except ValueError as e:
+        raise
+
+def named_reraise(k):
+    try:
+        raise ValueError("n" + str(k))
+    except ValueError as e:
+        raise e
+
+def fresh_raise(k):
+    # MUST STILL WORK: the binder holds the OLD object, which is NOT in flight,
+    # so nothing about it is special and the outer arm must see the new one.
+    try:
+        raise ValueError("old" + str(k))
+    except ValueError as e:
+        raise KeyError("k" + str(k))
+
+def run_bound(m):
+    # reads each message THROUGH the outer binder -- the bytes that die first
+    t = 0
+    j = 0
+    while j < m:
+        try:
+            bare_reraise(j)
+        except ValueError as e:
+            t = t + len(str(e))
+        try:
+            named_reraise(j)
+        except ValueError as e:
+            t = t + len(str(e))
+        try:
+            fresh_raise(j)
+        except KeyError as e:
+            t = t + len(str(e))
+        j = j + 1
+    return t
+
+def run_bare(m):
+    # A BARE outer arm, so the caught object is freed at handler exit rather
+    # than held by a binder -- which makes the census row below about THIS fix
+    # and not about the open `except X as e:` binder leak.
+    # Flat here says the re-raised object is freed EXACTLY once: a lost drop
+    # would show as a slope, a double drop as the crash the value rows catch.
+    t = 0
+    j = 0
+    while j < m:
+        try:
+            bare_reraise(j)
+        except ValueError:
+            t = t + 1
+        j = j + 1
+    return t
+
+print("bound=" + str(run_bound(40)))
+print("bare=" + str(run_bare(4000)))

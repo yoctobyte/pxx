@@ -144,3 +144,38 @@ correct description of what was wrong and stays so forever, and reading it as a
 claim about HEAD is the same error as reading `working/` as a lock. Locate a
 ticket's FOLDER before flagging its title; the summary opens with `DONE (sha)`
 and says the rest.
+
+## FOLLOW-UP, same day: the first fix segfaulted on a re-raise
+
+`4edf60ff9` landed the pad and **introduced a use-after-free**, live on
+origin/master until the commit below. The pad releases a frame's managed locals,
+and a NilPy `except V as e:` binder is one — but on the unwind path it may hold
+the object that is IN FLIGHT. Releasing it freed the exception under the outer
+handler.
+
+| shape | pin v403 | 4edf60ff9 | fixed |
+| --- | --- | --- | --- |
+| `raise` (bare re-raise), caught outside | t=690 | **SIGSEGV** | t=690 |
+| `raise e`, caught outside | t=690 | **SIGSEGV** | t=690 |
+| `raise KeyError(..)` from a handler | t=1090 | t=1090 | t=1090 |
+| escape with no matching handler | t=690 | t=690 | t=690 |
+
+Row three is what says the rule is about being IN FLIGHT and not about being a
+binder: that handler's binder holds the OLD object, nothing else references it,
+and releasing it there was and stays correct.
+
+**The full NilPy tier was green through all of it** — 803 rows, none of which
+re-raises from a NilPy handler. The gate did not miss a red; the population had
+no such row. `test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object.npy`
+is that row now, wired native plus i386/aarch64/arm32.
+
+The fix is an ownership rule stated once, `SymSkipScopeExitRelease` in
+`symtab.inc`: a binder's reference is BORROWED from the in-flight exception and
+becomes the binder's own only when the handler completes normally — which is
+exactly what the pad running means did not happen. `InUnwindCleanupPad` scopes
+it to the pad, so the ordinary epilogue is untouched. One predicate rather than
+a condition in six emitter copies, for the reason `StacklessPersistentSlotSym`
+already exists in that shape.
+
+It is deliberately CONSERVATIVE and the residual is filed rather than left to be
+rediscovered: [[bug-nilpy-a-handler-binder-unwound-past-by-a-different-exception-still-leaks]].

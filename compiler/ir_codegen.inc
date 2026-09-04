@@ -13727,7 +13727,7 @@ begin
     if CurProc >= 0 then
     begin
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-       if not StacklessPersistentSlotSym(i) then
+       if not SymSkipScopeExitRelease(i) then
       begin
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
         begin
@@ -13922,7 +13922,7 @@ begin
     if CurProc >= 0 then
     begin
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-       if not StacklessPersistentSlotSym(i) then
+       if not SymSkipScopeExitRelease(i) then
       begin
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
@@ -14120,7 +14120,7 @@ begin
       Must precede the result load: each call clobbers x0. }
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-       if not StacklessPersistentSlotSym(i) then
+       if not SymSkipScopeExitRelease(i) then
       begin
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
@@ -14308,7 +14308,7 @@ begin
       feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45. }
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-       if not StacklessPersistentSlotSym(i) then
+       if not SymSkipScopeExitRelease(i) then
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
           { COM/ARC interface local: _Release the held reference (nil-safe). }
@@ -14466,7 +14466,7 @@ begin
       Result handle is skipped (ownership transfers to the caller). }
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-       if not StacklessPersistentSlotSym(i) then
+       if not SymSkipScopeExitRelease(i) then
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
           { COM/ARC interface local: _Release the held reference (nil-safe).
@@ -14955,7 +14955,9 @@ begin
   EmitProcCleanupFrameSkipForTarget(skipPatch);
   EmitProcCleanupFramePatchLanding(landPatch);
   EmitProcCleanupFrameLeaveForTarget;
+  InUnwindCleanupPad := True;
   EmitManagedLocalCleanupForTarget(-1);
+  InUnwindCleanupPad := False;
   EmitProcCleanupFrameReRaiseForTarget;
   EmitProcCleanupFramePatchSkip(skipPatch);
 end;
