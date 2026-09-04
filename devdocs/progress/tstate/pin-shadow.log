@@ -527,3 +527,4 @@
 2026-09-04T12:12:36Z	seven	0cebb7cfad8eb1f21a85780a5f9cc176f8e4e3fa	WOULD PIN 0cebb7cfad8e — 1 red(s), none new, 1 inherited from the current pin, self-host clean, streak 5/2
 2026-09-04T12:43:20Z	seven	e79bccc9db24a43a2662d8bf2c71c68186ddeade	WOULD PIN e79bccc9db24 — 1 red(s), none new, 1 inherited from the current pin, self-host clean, streak 6/2
 2026-09-04T13:06:17Z	seven	862e97fd9e367d791eb6ec6845078bb4e79ff9a6	WOULD PIN 862e97fd9e36 — 1 red(s), none new, 1 inherited from the current pin, self-host clean, streak 7/2
+2026-09-04T13:39:55Z	seven	124d83cf494b632ba178d7f3fbcacb888799bec3	would NOT pin 124d83cf494b — 2 red(s) the current pin does not have, 1 inherited from the current pin: test-core#src:test/test_ansiterm_raw_write.pas@1, test-core#src:test/test_ansiterm_raw_write.pas@2
