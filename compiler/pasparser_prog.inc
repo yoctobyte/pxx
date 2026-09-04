@@ -808,7 +808,16 @@ begin
     at .text+0, which is NOT exported. What it adds is `exports`, and the flag
     is what makes `exports` outside a library an error rather than a no-op.
     feature-p-a-pascal-library-unit-does-not-parse }
-  IsLibrary   := CurTok.Kind = tkLibrary;
+  { `library` is CONTEXTUAL, not a keyword — matched on the identifier here and
+    nowhere else. It was a keyword for one commit and that was wrong: `library`
+    is also an FPC HINT DIRECTIVE (`type T<X> = class end library;`, beside
+    deprecated/platform/experimental/unimplemented), so reserving it broke
+    test_hint_directive_on_a_generic_type, which had compiled for months. Caught
+    by a 2165-source sweep against the pin, not by the gate. `exports` is
+    contextual for the same reason one level down — Delphi lets you name a
+    variable that — and both now match the way `resourcestring` and `label`
+    already do in this very loop. }
+  IsLibrary   := (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'library');
   ExportCount := 0;
   if (CurTok.Kind = tkProgram) or IsLibrary then
   begin
@@ -1729,7 +1738,6 @@ begin
   while not doneDecls do
     case CurTok.Kind of
       tkUses:     ParseUsesClause;
-      tkExports:  ParseExportsClause;
       tkVar:      ParseVarSection;
       tkConst:    ParseConstSection(-1, 0, False);
       tkType:     ParseTypeSection;
@@ -1784,6 +1792,8 @@ begin
           ParseConstSection(-1, 0, True)   { real storage: see the section parser }
         else if CaseEqual(CurTok.SVal, 'label') then
           ParseLabelSection
+        else if CaseEqual(CurTok.SVal, 'exports') then
+          ParseExportsClause
         else
           doneDecls := True;
       else

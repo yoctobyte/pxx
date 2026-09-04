@@ -249,6 +249,54 @@ night, and `symtab.inc` took commits from seven lanes that day with zero
 collisions. Still default to **one lane per session**: the cost of combining
 lands on your reasoning, not on git.
 
+## "Prefer the answer that leaves the mistake visible" needs the mistake to BE one
+
+CLAUDE.md's compat ceiling says that where an input is only produced by a
+mistake, prefer the answer that leaves it visible. That rule is right and it has
+a failure mode worth naming, because **a diagnostic feels like the safe default
+precisely because it is louder than silence** — and loud is only safe when the
+thing you are rejecting is actually invalid.
+
+Measured 2026-09-04 (frankD, `771b157a6` -> fixed same day). Adding `library` +
+`exports` to the Pascal frontend, I lexed both as KEYWORDS and wrote the
+reasoning into `defs.inc` in as many words: *"Both are contextual in FPC (Delphi
+lets you name a variable `exports`); pxx lexes them as keywords, which is the
+narrower dialect and the one that gives a real diagnostic instead of a parse
+further down."* Every clause of that is true. The conclusion was still wrong:
+**`library` is also an FPC HINT DIRECTIVE** — `type T<X> = class end library;`,
+beside deprecated/platform/experimental/unimplemented — so reserving it rejected
+`test_hint_directive_on_a_generic_type.pas`, which had compiled for months.
+
+**The gate was green throughout.** `make compiler/pascal26` converged,
+`gate.sh quick` was GREEN with the FPC seed canary live, and the new feature's
+own six tests all passed — they were about `library` as a HEADER and could not
+observe `library` as a HINT. What found it was a 2165-source sweep against the
+pinned compiler: HEAD 558 fail / pin 632, and of the six sources the pin
+compiled that HEAD refused, five were deliberate must-not-compile tests and the
+sixth was this. Fixed by making both words contextual, matched the way
+`resourcestring` and `label` already are in the same parser loop.
+
+**Two transferable things.**
+
+1. **"Narrower dialect" is not automatically the conservative direction.**
+   Narrowing rejects things, and the population it rejects is not only the
+   mistakes — you have to know the whole set of meanings a word already carries.
+   For a Pascal keyword that means checking the hint directives, the contextual
+   directives and the Delphi-identifier position, not just the one you are
+   adding.
+2. **A feature's own tests cannot see what the feature took away.** They are
+   written from the feature's point of view and pass on exactly the construct
+   you were thinking about. The instrument that sees a subtraction is a corpus
+   arm against a compiler that predates the change — the same
+   report-mode-vs-enforce-mode shape used for the visibility leak the same day,
+   and the reason to reach for it is a change to a SHARED lexer or parser, not
+   the size of the diff.
+
+frankS reached the same conclusion from the other end the same evening: his own
+quick gate did not catch that his first cut of the ExpandIncludes fix broke
+Delphi mode either, and a hand-written probe on a hunch did. **The gate is not
+what makes a shared-frontend change safe; a population is.**
+
 ## Platonic code — no compiler-appeasement workarounds (all tracks)
 
 Cross-track, not just Track B (`devdocs/dev/parallel-tracks.md`,

@@ -1958,14 +1958,7 @@ type
 
       APPENDED at the tail like tkPowEq/tkAtEq/tkSymDiff, so no existing ordinal
       moves. bug-a-shr-reaches-the-ir-spelled-as-tkident }
-    tkShrLogical,
-    { `library` and `exports` — the declarative export surface
-      (feature-p-a-pascal-library-unit-does-not-parse). APPENDED at the tail
-      like tkPowEq/tkAtEq/tkSymDiff/tkShrLogical above, so no existing ordinal
-      moves. Both are contextual in FPC (Delphi lets you name a variable
-      `exports`); pxx lexes them as keywords, which is the narrower dialect and
-      the one that gives a real diagnostic instead of a parse further down. }
-    tkLibrary, tkExports
+    tkShrLogical
   );
 
   TToken = record
