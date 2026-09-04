@@ -2849,6 +2849,54 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_method_ref_through_a_metaclass_variable.pas $(TESTTMP)/test_mcvar26
 	@$(TESTTMP)/test_mcvar26 | diff -u test/test_method_ref_through_a_metaclass_variable.expected - \
 	  || { echo 'test_method_ref_through_a_metaclass_variable: FAIL - a metaclass-variable receiver or its VMT lookup'; exit 1; }
+	@# System.TMethod, the record that NAMES the two words a `procedure of object`
+	@# value already is. No `uses` on purpose: FPC declares it in `system`, so
+	@# needing one would be the bug, and lib/rtl no longer declares its own (a
+	@# duplicate is a DIFFERENT record with the same layout, and record params
+	@# match nominally -- that shipped as a regression and is what a623307bd
+	@# fixed). The rows take a live method pointer apart, read Self back out of
+	@# Data, rebuild a callable value from the two words and CALL THROUGH IT,
+	@# compare two handlers, and detach one. The size row asserts a RELATION,
+	@# `SizeOf(TMethod) = 2 * SizeOf(Pointer)`, and never a constant: it is 16
+	@# here and 8 on i386/arm32/riscv32/xtensa, so a hard 16 would be right for
+	@# the wrong reason on the only host this Makefile runs on. Oracle: FPC.
+	@./$(COMPILER) test/test_tmethod_record_roundtrip.pas $(TESTTMP)/test_tmethodrec26
+	@$(TESTTMP)/test_tmethodrec26 | diff -u test/test_tmethod_record_roundtrip.expected - \
+	  || { echo 'test_tmethod_record_roundtrip: FAIL - System.TMethod, its round trip, or its size relation'; exit 1; }
+	@# `Result := <method reference>` in a function returning a method pointer.
+	@# The LHS SPELLING was a third axis, orthogonal to the receiver spellings
+	@# tested above: all three receivers worked with a declared LOCAL on the left
+	@# and all three were refused with `Result` on the left, because the implicit
+	@# result symbol is minted from the return KIND alone and so carried no
+	@# procedural signature. Every row CALLS THROUGH the returned value -- a
+	@# non-nil assertion would pass on a Result that is furnished but
+	@# mis-marshalled. The `local` row is the workaround that always worked and
+	@# is the control. Oracle: FPC.
+	@./$(COMPILER) test/test_result_is_a_method_pointer_lvalue.pas $(TESTTMP)/test_resmp26
+	@$(TESTTMP)/test_resmp26 | diff -u test/test_result_is_a_method_pointer_lvalue.expected - \
+	  || { echo 'test_result_is_a_method_pointer_lvalue: FAIL - Result is not furnished as a procedural lvalue'; exit 1; }
+	@# `x := F` for a free routine F: the CALL of F, or the ADDRESS of F? Delphi
+	@# answers from the target, and the METHOD arm above already asked
+	@# (MethodResultSatisfiesTarget) while the free-routine arm beside it asked
+	@# nothing. Both readings were wrong and differently so: `m := MakeSel`
+	@# SEGFAULTED on a Code+Data pair built from MakeSel's own entry address, and
+	@# `p := MakePl` silently called MakePl where FPC calls Plain, printing
+	@# nothing at all. The two ADDRESS rows are the control in the other
+	@# direction -- a fix that simply always called would fail them. Oracle: FPC.
+	@./$(COMPILER) test/test_procedural_assign_calls_when_result_fits.pas $(TESTTMP)/test_pvfit26
+	@$(TESTTMP)/test_pvfit26 | diff -u test/test_procedural_assign_calls_when_result_fits.expected - \
+	  || { echo 'test_procedural_assign_calls_when_result_fits: FAIL - call-vs-address for a bare routine name'; exit 1; }
+	@# A parameterless procedural value called with NO argument list, for every
+	@# designator spelling. `m;` worked and `h.nul;`, `h.p;` and `a[0];` were all
+	@# read as the start of an assignment, because the decision was made before
+	@# the lvalue was parsed and only for a single identifier. The boundary was
+	@# neither `of object` nor the record field -- dropping each in turn fails
+	@# identically -- so the rows deliberately vary both. The parenthesised rows
+	@# are the control: a fix that made the bare form work by breaking the call
+	@# form fails here. Oracle: FPC.
+	@./$(COMPILER) test/test_parenless_call_of_any_procedural_designator.pas $(TESTTMP)/test_pvbare26
+	@$(TESTTMP)/test_pvbare26 | diff -u test/test_parenless_call_of_any_procedural_designator.expected - \
+	  || { echo 'test_parenless_call_of_any_procedural_designator: FAIL - a parenless call of a non-identifier designator'; exit 1; }
 	@# A PROPERTY inside an INTERFACE: parsed at all, and then dispatched through
 	@# the IMT rather than a class VMT. The `direct` row is the control (the
 	@# ordinary-call arm, which already worked), so breaking interface dispatch
