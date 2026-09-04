@@ -518,6 +518,58 @@ end;
   NGRN/NSRN/NSAA walk -- it had one, register-only, and growing an NSAA into
   it would have made two mechanisms for one convention.
   devdocs/dev/normalise-dont-special-case.md }
+{ AAPCS64 PLACEMENT: where does ONE argument go, given how much of each bank is
+  already spoken for? `ngrn`/`nsrn`/`nsaa` are IN OUT -- the shared walk state --
+  and every argument is described the same way, by how many registers of ONE
+  bank it wants and how many BYTES it occupies:
+
+    a scalar          nRegs = 1, size = 8, isFp by its type
+    a GP composite    nRegs = 1 or 2, size = the aggregate's own size
+    an HFA            nRegs = 1..4, size = the aggregate's own size, isFp
+    an INDIRECT one   nRegs = 1, size = 8, not FP -- it IS a pointer here
+
+  So the scalar case is not a special case; it is nRegs = 1. That is why
+  ABIA64SlotWalk below now delegates rather than keeping its own copy of the
+  rule -- it was the whole rule when every argument was one register, and
+  growing composites into it would have made two mechanisms for one convention.
+  Same reason ABISysVArgPlace exists on the x86-64 side, stated there at length.
+
+  ALL OR NOTHING, and it is the half a per-slot rewrite gets wrong: an argument
+  that does not fit in what is LEFT of its bank goes to the stack ENTIRELY, and
+  the bank is then CLOSED (NGRN/NSRN set to 8) so nothing smaller sneaks in
+  behind it. Measured against clang: five `{double,double}` arguments put four
+  in d0..d7 and the fifth wholly on the stack. Placing an HFA's first two
+  registers and stranding the third would be a plausible wrong answer rather
+  than a crash.
+
+  The two banks advance INDEPENDENTLY, which is why a trailing integer after an
+  HFA lands in w0 and not w2. A walk that advanced NGRN for an FP argument would
+  be wrong in a way no single-argument probe can see.
+  bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+procedure ABIA64ArgPlace(nRegs, size: Integer; isFp: Boolean;
+                         var ngrn, nsrn, nsaa: Integer;
+                         var regIdx, stackOff: Integer);
+var fits: Boolean;
+begin
+  regIdx := -1; stackOff := -1;
+  if nRegs < 1 then nRegs := 1;
+  if size < 1 then size := 8;
+  if isFp then fits := nsrn + nRegs <= 8 else fits := ngrn + nRegs <= 8;
+  if fits then
+  begin
+    if isFp then begin regIdx := nsrn; Inc(nsrn, nRegs); end
+    else begin regIdx := ngrn; Inc(ngrn, nRegs); end;
+    Exit;
+  end;
+  { Bank closed, and the argument goes to the stack whole. NSAA is 8-aligned
+    here because pxx models no argument whose natural alignment exceeds 8 --
+    ABIA64RecordClass REFUSES an aggregate with alignment > 8 rather than
+    letting one reach this walk. }
+  if isFp then nsrn := 8 else ngrn := 8;
+  stackOff := nsaa;
+  Inc(nsaa, ((size + 7) div 8) * 8);
+end;
+
 procedure ABIA64SlotWalk(const argFp: array of Boolean; argIdx: Integer;
                          var isFp: Boolean; var regIdx, stackOff: Integer);
 { THE AAPCS64 placement walk, over a per-ARGUMENT class vector rather than over
@@ -537,17 +589,8 @@ begin
   isFp := False; regIdx := -1; stackOff := -1;
   for i := 0 to argIdx do
   begin
-    isFp := argFp[i]; regIdx := -1; stackOff := -1;
-    if isFp then
-    begin
-      if nsrn < 8 then begin regIdx := nsrn; Inc(nsrn); end
-      else begin nsrn := 8; stackOff := nsaa; Inc(nsaa, 8); end;
-    end
-    else
-    begin
-      if ngrn < 8 then begin regIdx := ngrn; Inc(ngrn); end
-      else begin ngrn := 8; stackOff := nsaa; Inc(nsaa, 8); end;
-    end;
+    isFp := argFp[i];
+    ABIA64ArgPlace(1, 8, isFp, ngrn, nsrn, nsaa, regIdx, stackOff);
   end;
 end;
 
@@ -671,6 +714,39 @@ begin
   { > 16 bytes: indirect. One GP slot, a pointer to the caller's copy. }
   nRegs := 1; isFp := False;
   ABIA64RecordClass := 0;
+end;
+
+{ MOVED BELOW ABIA64RecordClass ON PURPOSE, and the FPC seed canary is why. It
+  sat above ABIA64SlotWalk in the first draft, which pxx accepts -- pxx
+  prescans headers -- and FPC does not, because FPC is single-pass: `calls
+  ABIA64RecordClass, declared at abi.inc:704, which FPC has not seen yet`.
+  Nothing else caught it: make compiler/pascal26 and testmgr --tier quick were
+  both green on the draft. Keep this below its callee, or forward-declare it. }
+{ Describe ONE AAPCS64 argument for ABIA64ArgPlace: how many registers of which
+  bank it wants, how many bytes it occupies, and whether it travels as a POINTER
+  to a caller copy. `ok` is False only when the composite classifier refused, and
+  a refusal must stay a refusal -- the caller keeps whatever it does today rather
+  than turning a "cannot classify" into a guess.
+
+  A by-REF or open-array parameter is a pointer and is integer-class whatever its
+  declared type, the same rule ABIA64ParamIsFp applies for the same reason.
+  bug-a-an-aggregate-argument-is-a-pointer-by-construction-on-aarch64 }
+procedure ABIA64ArgDesc(tk: TTypeKind; isRef, isArray: Boolean; recId: Integer;
+                        var nRegs, size: Integer;
+                        var isFp, isIndirect, ok: Boolean);
+var n, cnt: Integer; fpTk: TTypeKind; hfa: Boolean;
+begin
+  nRegs := 1; size := 8; isFp := False; isIndirect := False; ok := True;
+  if isRef or isArray then Exit;
+  if tk = tyRecord then
+  begin
+    n := ABIA64RecordClass(recId, cnt, hfa, fpTk);
+    if n < 0 then begin ok := False; Exit; end;
+    if n = 0 then begin isIndirect := True; Exit; end;   { pointer: 1 GP, 8 bytes }
+    nRegs := cnt; isFp := hfa; size := RecSize(recId);
+    Exit;
+  end;
+  isFp := TypeIsFloat(tk) and not ABIParamSlotIsPointer(tk, isRef, isArray);
 end;
 
 { The 16-byte-aligned AAPCS64 stack-argument bytes implied by a class VECTOR,
