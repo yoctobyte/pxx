@@ -16475,6 +16475,9 @@ test-i386: $(COMPILER)
 	# bug-a-a-variant-assigned-to-itself-becomes-empty
 	./$(COMPILER) -Fulib/rtl --target=i386 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_i386_varselfassign
 	tools/expect_same.sh i386/test_i386_varselfassign "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_varselfassign | tail -1)" "ALL OK"
+	./$(COMPILER) --target=i386 test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_i386_vbsns
+	./$(COMPILER) test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_i386_vbsns_x64
+	tools/expect_same.sh i386/variant_boxed_string_no_store "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_vbsns)" "$$($(TESTTMP)/test_i386_vbsns_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_variant.pas $(TESTTMP)/test_i386_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_i386_variant_x64
 	tools/expect_same.sh i386/test_i386_variant "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_variant)" "$$($(TESTTMP)/test_i386_variant_x64)"
@@ -17418,6 +17421,9 @@ test-aarch64: $(COMPILER)
 	# bug-a-a-variant-assigned-to-itself-becomes-empty
 	./$(COMPILER) -Fulib/rtl --target=aarch64 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_aarch64_varselfassign
 	tools/expect_same.sh aarch64/test_aarch64_varselfassign "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_varselfassign | tail -1)" "ALL OK"
+	./$(COMPILER) --target=aarch64 test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_aarch64_vbsns
+	./$(COMPILER) test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_aarch64_vbsns_x64
+	tools/expect_same.sh aarch64/variant_boxed_string_no_store "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_vbsns)" "$$($(TESTTMP)/test_aarch64_vbsns_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_variant.pas $(TESTTMP)/test_aarch64_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_aarch64_variant_x64
 	tools/expect_same.sh aarch64/test_aarch64_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_variant)" "$$($(TESTTMP)/test_aarch64_variant_x64)"
@@ -18552,6 +18558,9 @@ test-riscv32: $(COMPILER)
 	# bug-a-a-variant-assigned-to-itself-becomes-empty
 	./$(COMPILER) -Fulib/rtl --target=riscv32 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_rv32x_varselfassign
 	tools/expect_same.sh riscv32/test_rv32x_varselfassign "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varselfassign | tail -1)" "ALL OK"
+	./$(COMPILER) --target=riscv32 test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_rv32x_vbsns
+	./$(COMPILER) test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_rv32x_vbsns_x64
+	tools/expect_same.sh riscv32/variant_boxed_string_no_store "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_vbsns)" "$$($(TESTTMP)/test_rv32x_vbsns_x64)"
 	./$(COMPILER) -Fulib/rtl --target=riscv32 test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_rv32x_varpay
 	./$(COMPILER) -Fulib/rtl test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_rv32x_varpay_x64
 	tools/expect_same.sh riscv32/test_rv32x_varpay "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varpay)" "$$($(TESTTMP)/test_rv32x_varpay_x64)"
@@ -19508,6 +19517,30 @@ test-wasm32: $(COMPILER)
 	# bug-a-a-variant-assigned-to-itself-becomes-empty
 	./$(COMPILER) --target=wasm32 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/w32_varself.wasm
 	tools/expect_same.sh wasm32/variant_self_assign "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_varself.wasm | tail -1)" "ALL OK"
+	# A STRING BOXED INTO A VARIANT IN A BODY WITH NO MANAGED-STRING STORE.
+	# wasm32's four per-body managed-string scratch locals are allocated on
+	# demand; `msval` was allocated by the STORE path only, and
+	# WasmVariantPayload reaches the same materialiser without one. A body that
+	# boxes a string and never assigns one emitted `local.set -1`.
+	#
+	# THIS IS THE FAILURE MODE NO ROW HERE COULD SEE. A negative index is not an
+	# error in an LEB128 writer -- `x shr 7` on -1 walks ten continuation bytes --
+	# so the module was WRITTEN, the compile printed `ok:` and exited 0, and the
+	# coverage report recorded no gap. Only the load rejected it. Every check
+	# that stops at "did it build" passed, which is why this row RUNS the module.
+	#
+	# The existing variant rows are immune and it was measured, not argued: the
+	# pre-fix compiler was rebuilt and test_cross_variant, _single,
+	# _payload_widths and test_variant_self_assign all emit a VALID module on it.
+	# They box string LITERALS, which are materialised through the string POOL;
+	# msval is only reached from the ANSISTRING and FROZEN arms, which need a
+	# string VARIABLE, in a body whose box is not preceded by a store. On that
+	# same binary this file gives `unable to read u32 leb128: local.set local
+	# index` at 0x1d1cb and wasmtime refuses function 238.
+	# bug-a-wasm32-emitted-a-negative-local-index-and-the-module-was-written-anyway
+	./$(COMPILER) --target=wasm32 test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/w32_vbsns.wasm
+	./$(COMPILER) test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/w32_vbsns_x64
+	tools/expect_same.sh wasm32/variant_boxed_string_no_store "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_vbsns.wasm)" "$$($(TESTTMP)/w32_vbsns_x64)"
 	# SETS. `value IR op 33` -- IR_SET_LIT -- was 10 of the 70 wasm32 gap
 	# instances left after Variant landed, and this file is what it kept out.
 	# Four arms went in, not one: the literal, the binop, the compare and `x in s`
@@ -19599,7 +19632,7 @@ test-wasm32: $(COMPILER)
 	./$(COMPILER) --target=wasm32 test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes.wasm
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes_x64
 	tools/expect_same.sh wasm32/set_shapes "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_setshapes.wasm)" "$$($(TESTTMP)/w32_setshapes_x64)"
-	@echo "wasm32: 44 rows green (37 default + 7 shortstring; 0 excluded)"
+	@echo "wasm32: 45 rows green (38 default + 7 shortstring; 0 excluded)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
@@ -19882,6 +19915,9 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op
 	./$(COMPILER) test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op_x64
 	tools/expect_same.sh xtensa/test_variant_self_assign_is_a_no_op "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op)" "$$($(TESTTMP)/test_xtensa_test_variant_self_assign_is_a_no_op_x64)"
+	./$(COMPILER) --platform=posix --xtensa-soft-mulhigh --target=xtensa test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_xtensa_vbsns
+	./$(COMPILER) test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_xtensa_vbsns_x64
+	tools/expect_same.sh xtensa/variant_boxed_string_no_store "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_vbsns)" "$$($(TESTTMP)/test_xtensa_vbsns_x64)"
 	# +19 on 2026-08-30: five from the pointer-aligned array frame slot (Track A,
 	# 599000083) and fourteen from the dyn-array/managed-record IR ops this
 	# backend never had. test_dynarray_whole_assign is the one to read: it did
@@ -20842,6 +20878,9 @@ test-arm32: $(COMPILER)
 	# bug-a-a-variant-assigned-to-itself-becomes-empty
 	./$(COMPILER) -Fulib/rtl --target=arm32 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/test_arm32_varselfassign
 	tools/expect_same.sh arm32/test_arm32_varselfassign "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_varselfassign | tail -1)" "ALL OK"
+	./$(COMPILER) --target=arm32 test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_arm32_vbsns
+	./$(COMPILER) test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_arm32_vbsns_x64
+	tools/expect_same.sh arm32/variant_boxed_string_no_store "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_vbsns)" "$$($(TESTTMP)/test_arm32_vbsns_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_variant.pas $(TESTTMP)/test_arm32_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_arm32_variant_x64
 	tools/expect_same.sh arm32/test_arm32_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_variant)" "$$($(TESTTMP)/test_arm32_variant_x64)"

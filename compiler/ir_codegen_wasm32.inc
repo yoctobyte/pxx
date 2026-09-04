@@ -3003,6 +3003,50 @@ begin
   WasmEmitArgStr := True;
 end;
 
+{ ===== the four managed-string scratch locals, allocated ON FIRST USE =====
+
+  These are per-body wasm locals, reset to -1 at each body's start and
+  allocated lazily. THE ALLOCATION BELONGS WITH THE USE, and putting it
+  anywhere else is how one of them shipped an invalid module.
+
+  `msval` was allocated in exactly ONE of the two paths that read it -- the
+  managed-string STORE allocated it before calling WasmEmitOwnedStr, and
+  WasmVariantPayload called the same routine without doing so. A Variant given
+  a string value in a body with no managed store ahead of it therefore reached
+  `WasmLocalSet(-1)`, and a negative local index is not an error in an LEB
+  writer: `x shr 7` on -1 walks ten continuation bytes, so the module was
+  WRITTEN and only a validator would say `unable to read u32 leb128` at a byte
+  offset naming nothing. The compile printed `ok:`, the coverage report
+  recorded no gap, and every check that stops at "did it build" passed.
+
+  The other three were correct, and correct by three duplicated copies of the
+  same `if < 0 then` triple -- which is precisely the shape that let the fourth
+  drift. One accessor each, no copies, and a new use site cannot forget.
+  bug-a-wasm32-emitted-a-negative-local-index-and-the-module-was-written-anyway }
+function WasmScratchMsNew: Integer;
+begin
+  if WasmStrLocN < 0 then WasmStrLocN := WasmAddLocal(WT_I32, 'msnew');
+  WasmScratchMsNew := WasmStrLocN;
+end;
+
+function WasmScratchMsSlot: Integer;
+begin
+  if WasmStrLocS < 0 then WasmStrLocS := WasmAddLocal(WT_I32, 'msslot');
+  WasmScratchMsSlot := WasmStrLocS;
+end;
+
+function WasmScratchMsOld: Integer;
+begin
+  if WasmStrLocO < 0 then WasmStrLocO := WasmAddLocal(WT_I32, 'msold');
+  WasmScratchMsOld := WasmStrLocO;
+end;
+
+function WasmScratchMsVal: Integer;
+begin
+  if WasmStrLocZ < 0 then WasmStrLocZ := WasmAddLocal(WT_I32, 'msval');
+  WasmScratchMsVal := WasmStrLocZ;
+end;
+
 { LoadFile(path, dst) -- builtin -100. Reads the whole file named by `path` into
   the managed string `dst`, releasing dst's old handle.
 
@@ -3044,27 +3088,24 @@ begin
   hp := WasmWriteHelper('PXXStrDecRef');
   if hp < 0 then Exit;
 
-  if WasmStrLocN < 0 then WasmStrLocN := WasmAddLocal(WT_I32, 'msnew');
-  if WasmStrLocS < 0 then WasmStrLocS := WasmAddLocal(WT_I32, 'msslot');
-  if WasmStrLocO < 0 then WasmStrLocO := WasmAddLocal(WT_I32, 'msold');
 
   if not WasmEmitPathArg(pathNode) then Exit;
   WasmCall(WasmSlotForProc(dp), Procs[dp].Name);
-  WasmLocalSet(WasmStrLocN);
+  WasmLocalSet(WasmScratchMsNew);
 
   WasmLValueAddr(si);
   if WasmBodyBroken then Exit;
-  WasmLocalSet(WasmStrLocS);
+  WasmLocalSet(WasmScratchMsSlot);
 
-  WasmLocalGet(WasmStrLocS);
+  WasmLocalGet(WasmScratchMsSlot);
   WasmMemOp($28, 'i32.load', 2, 0);
-  WasmLocalSet(WasmStrLocO);
+  WasmLocalSet(WasmScratchMsOld);
 
-  WasmLocalGet(WasmStrLocS);
-  WasmLocalGet(WasmStrLocN);
+  WasmLocalGet(WasmScratchMsSlot);
+  WasmLocalGet(WasmScratchMsNew);
   WasmMemOp($36, 'i32.store', 2, 0);
 
-  WasmLocalGet(WasmStrLocO);
+  WasmLocalGet(WasmScratchMsOld);
   WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
 
   WasmEmitLoadFile := True;
@@ -5561,7 +5602,7 @@ begin
       length comes from memory and the chars from just past the prefix. Unlike
       the literal arm above, the width here is the VARIABLE's and so follows its
       kind: a literal is always tyString, a `string[N]` need not be. }
-    lv := WasmStrLocZ;
+    lv := WasmScratchMsVal;
     WasmEmitValueAs(valNode, WT_I32, 'frozen string assigned to a managed string');
     if WasmBodyBroken then Exit;
     WasmLocalSet(lv);
@@ -5574,7 +5615,7 @@ begin
 
   if stk = tyAnsiString then
   begin
-    lv := WasmStrLocZ;
+    lv := WasmScratchMsVal;
     WasmEmitValueAs(valNode, WT_I32, 'managed string assigned to a managed string');
     if WasmBodyBroken then Exit;
     WasmLocalSet(lv);
@@ -5619,9 +5660,6 @@ end;
 procedure WasmEmitDynStore(dstSym, valNode: Integer);
 var hpRel, hpInc: Integer;
 begin
-  if WasmStrLocN < 0 then WasmStrLocN := WasmAddLocal(WT_I32, 'msnew');
-  if WasmStrLocS < 0 then WasmStrLocS := WasmAddLocal(WT_I32, 'msslot');
-  if WasmStrLocO < 0 then WasmStrLocO := WasmAddLocal(WT_I32, 'msold');
   hpRel := WasmWriteHelper('PXXDynArrayRelease');
   if hpRel < 0 then Exit;
   hpInc := WasmWriteHelper('PXXDynArrayIncRef');
@@ -5629,29 +5667,29 @@ begin
 
   WasmEmitValueAs(valNode, WT_I32, 'dynamic-array assignment');
   if WasmBodyBroken then Exit;
-  WasmLocalSet(WasmStrLocN);
+  WasmLocalSet(WasmScratchMsNew);
 
   if not IRNodeOwnsFreshCallResult(valNode) then
   begin
-    WasmLocalGet(WasmStrLocN);
+    WasmLocalGet(WasmScratchMsNew);
     WasmCall(WasmSlotForProc(hpInc), 'PXXDynArrayIncRef');
   end;
 
   WasmLValueAddr(dstSym);
-  WasmLocalSet(WasmStrLocS);
+  WasmLocalSet(WasmScratchMsSlot);
 
-  WasmLocalGet(WasmStrLocS);
+  WasmLocalGet(WasmScratchMsSlot);
   WasmMemOp($28, 'i32.load', 2, 0);
-  WasmLocalSet(WasmStrLocO);
+  WasmLocalSet(WasmScratchMsOld);
 
-  WasmLocalGet(WasmStrLocS);
-  WasmLocalGet(WasmStrLocN);
+  WasmLocalGet(WasmScratchMsSlot);
+  WasmLocalGet(WasmScratchMsNew);
   WasmMemOp($36, 'i32.store', 2, 0);
 
   { Element-aware, hence the descriptor: an `array of string` releases every
     element before the block. PXXDynArrayRelease ignores nil, so the
     first-assignment case needs no guard. }
-  WasmLocalGet(WasmStrLocO);
+  WasmLocalGet(WasmScratchMsOld);
   WasmDataAddr(GetOrAllocSymRTTI(dstSym));
   WasmCall(WasmSlotForProc(hpRel), 'PXXDynArrayRelease');
 end;
@@ -5659,10 +5697,6 @@ end;
 procedure WasmEmitManagedStore(dstIsSym: Boolean; dstRef, valNode: Integer);
 var hp: Integer; savedLVW: Boolean;
 begin
-  if WasmStrLocZ < 0 then WasmStrLocZ := WasmAddLocal(WT_I32, 'msval');
-  if WasmStrLocN < 0 then WasmStrLocN := WasmAddLocal(WT_I32, 'msnew');
-  if WasmStrLocS < 0 then WasmStrLocS := WasmAddLocal(WT_I32, 'msslot');
-  if WasmStrLocO < 0 then WasmStrLocO := WasmAddLocal(WT_I32, 'msold');
   hp := WasmWriteHelper('PXXStrDecRef');
   if hp < 0 then Exit;
 
@@ -5672,7 +5706,7 @@ begin
     store can be nested inside another one's value expression. A store inside a
     CALLEE is a different frame and therefore different locals. }
   if not WasmEmitOwnedStr(valNode) then Exit;
-  WasmLocalSet(WasmStrLocN);
+  WasmLocalSet(WasmScratchMsNew);
 
   if dstIsSym then WasmLValueAddr(dstRef)
   else
@@ -5683,20 +5717,20 @@ begin
     InLValueWrite := savedLVW;
   end;
   if WasmBodyBroken then Exit;
-  WasmLocalSet(WasmStrLocS);
+  WasmLocalSet(WasmScratchMsSlot);
 
-  WasmLocalGet(WasmStrLocS);
+  WasmLocalGet(WasmScratchMsSlot);
   WasmMemOp($28, 'i32.load', 2, 0);
-  WasmLocalSet(WasmStrLocO);
+  WasmLocalSet(WasmScratchMsOld);
 
-  WasmLocalGet(WasmStrLocS);
-  WasmLocalGet(WasmStrLocN);
+  WasmLocalGet(WasmScratchMsSlot);
+  WasmLocalGet(WasmScratchMsNew);
   WasmMemOp($36, 'i32.store', 2, 0);
 
   { LAST, and PXXStrDecRef ignores nil, so an uninitialised slot needs no
     guard here — the frame is zeroed by the shadow stack's own initial state
     and a nil old handle is the normal first-assignment case. }
-  WasmLocalGet(WasmStrLocO);
+  WasmLocalGet(WasmScratchMsOld);
   WasmCall(WasmSlotForProc(hp), 'PXXStrDecRef');
 end;
 
@@ -6699,6 +6733,7 @@ begin
   if CurProc >= 0 then
   begin
     nm := Procs[CurProc].Name;
+    WasmEncBodyName := nm;
     nParams := Procs[CurProc].ParamCount;
     if nParams > 32 then nParams := 32;
     nRes := 0;

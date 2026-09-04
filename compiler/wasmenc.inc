@@ -250,6 +250,13 @@ var
   WasmExpKind    : array[0..MAX_WASM_EXPORTS-1] of Integer;
   WasmExpIdx     : array[0..MAX_WASM_EXPORTS-1] of Integer;
 
+{ The name of the body currently being encoded, for diagnostics only. Set by
+  the wasm32 codegen at each body's start. wasmenc.inc is included before
+  symtab.inc, so it cannot reach Procs[] itself -- and a byte offset without a
+  routine name is the difference between a five-minute bug and an afternoon. }
+var
+  WasmEncBodyName : AnsiString;
+
 procedure WasmFail(const msg: AnsiString);
 begin
 {$ifdef WASMENC_STANDALONE}
@@ -269,6 +276,7 @@ begin
   WasmImpCount := 0; WasmImpFuncCount := 0;
   WasmFuncCount := 0; WasmLocalLen := 0; WasmCodeLen := 0;
   WasmVarNameLen := 0; WFLocLen := 0; WFVarLen := 0;
+  WasmEncBodyName := '(no body)';
   WasmMemPresent := False; WasmMemMin := 0; WasmMemMax := -1;
   WasmGlobCount := 0;
   WasmExpCount := 0;
@@ -570,9 +578,68 @@ begin
   Inc(WFBLen);
 end;
 
+{ The last `n` text lines of the body being encoded, written the same way
+  WasmFail writes -- plain WriteLn, so the dump and the error it precedes land
+  on one stream and stay in order. A diagnostic aid only: called from the u32
+  guard below, never on a good path. }
+procedure WasmDumpTail(n: Integer);
+var i, lines, start: Integer;
+begin
+  if WFTLen <= 0 then Exit;
+  lines := 0; start := 0;
+  i := WFTLen - 1;
+  while (i > 0) and (lines < n) do
+  begin
+    if WFT[i] = 10 then
+    begin
+      Inc(lines);
+      if lines >= n then start := i + 1;
+    end;
+    Dec(i);
+  end;
+  WriteLn('wasm: last ', n, ' instruction(s) before the bad index:');
+  i := start;
+  while i < WFTLen do
+  begin
+    if WFT[i] = 10 then WriteLn else Write(Chr(WFT[i]));
+    Inc(i);
+  end;
+  WriteLn;
+end;
+
 procedure WasmBodyU32(v: Int64);
 var x: Int64; b: Byte;
 begin
+  { A NEGATIVE INDEX IS A BUG AT EVERY CALL SITE, and encoding one produces a
+    module that VALIDATES AS INVALID rather than anything you can debug. This
+    writer serves local, global, function, type and memory indices, all of
+    which are unsigned by definition, so there is no caller for whom a negative
+    is meaningful. Unguarded, `x shr 7` on a negative Int64 walks ten
+    continuation bytes and stops, so -1 came out as
+    `ff ff ff ff ff ff ff ff ff 01` -- a u32 LEB may be five bytes, and
+    wasm-validate answers `unable to read u32 leb128: local.set local index`
+    at a byte offset, naming neither the routine nor the value.
+
+    Measured 2026-09-04 (frankb-78's report, reproduced): every Nil-Python
+    module for wasm32 carried one, and the COMPILE SUCCEEDED -- `ok:` printed,
+    no gap recorded, an invalid module on disk. That is the class the coverage
+    census structurally cannot see, because every check that stops at "did it
+    build" passes. Failing loudly here is the whole point: an aborted compile
+    is recoverable and an invalid module found by someone else's runtime is
+    not. }
+  if v < 0 then
+  begin
+    { The last instructions emitted, because the byte offset a validator gives
+      names neither the routine nor the site, and the instruction BEFORE the bad
+      one is what identifies the emitter. WFT is the current body's text and is
+      already being accumulated; printing its tail costs nothing until this
+      fires, and it is what turned `an invalid module somewhere in pylib` into
+      a named emitter in one run. }
+    WasmDumpTail(24);
+    WasmFail('wasm: a negative index (' + WasmIntStr(v) + ') reached the u32'
+             + ' encoder while emitting ' + WasmEncBodyName
+             + ' -- an unallocated local, global or function slot');
+  end;
   x := v;
   repeat
     b := Byte(x and $7F);
