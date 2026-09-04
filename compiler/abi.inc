@@ -95,11 +95,27 @@ begin
     ABIParamSlotHoldsValueAddr := True;
     Exit;
   end;
-  { the per-target row }
+  { the per-target rows }
   if Syms[symIdx].TypeKind = tySet then
     ABIParamSlotHoldsValueAddr :=
       (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_AARCH64) or
-      (TargetArch = TARGET_ARM32);
+      (TargetArch = TARGET_ARM32) or (TargetArch = TARGET_WASM32)
+  else if Syms[symIdx].TypeKind = tyRecord then
+    { A BY-VALUE RECORD ON WASM32 IS ALWAYS AN ADDRESS, at every size.
+
+      Every other target splits a record of 8 bytes or less across argument
+      words and passes a pointer only above that, so the answer there depends
+      on a size this function is not given — which is why the row is not
+      "tyRecord everywhere". wasm has no word-splitting to do: a parameter is
+      one typed local, and an aggregate is not a wasm value type. So ir.inc
+      takes the private-copy path for EVERY by-value record on this target
+      (see needTemp, which names the same decision from the caller's side) and
+      what arrives is uniformly the temp's address.
+
+      The two halves must agree or the callee reads a pointer as bytes. They
+      are stated in two files because one is the caller's question and one is
+      the callee's; this comment and that one are the link. }
+    ABIParamSlotHoldsValueAddr := (TargetArch = TARGET_WASM32);
 end;
 
 { Is a PARAMETER's slot pointer-SIZED — the layout question, distinct from the

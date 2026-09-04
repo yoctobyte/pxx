@@ -5102,7 +5102,25 @@ begin
     end
     else
     begin
-      if RecSize(argRecId) > 8 then
+      { OVER 8 BYTES: the by-ref ABI promotion above, so a private copy is what
+        keeps by-value semantics. AT OR UNDER 8: the backend pushes the record's
+        own bytes as one or two words and the copy is that push.
+
+        WASM32 TAKES THE TEMP AT EVERY SIZE, because the second half of that
+        sentence has no wasm spelling. A wasm parameter is a typed local — i32,
+        i64, f32, f64 — and a two-word aggregate is not one of them, so there is
+        no "push the bytes" for this target to do. Every other 32-bit backend
+        splits a small record across two argument words; here the choice is a
+        private copy or nothing, and nothing is what it was: `procedure P(r:
+        TPlain)` with TPlain 8 bytes emitted the whole body as `unreachable`.
+
+        This is an ABI DECISION for a target that has no external ABI to match,
+        not a workaround for a missing arm. wasm32 has no calling convention it
+        must interoperate with at this boundary, and abi.inc already carries
+        per-target rows of exactly this shape for tySet. Its cost is one copy
+        for records of 8 bytes or less, which is the size class where the copy
+        is cheapest. }
+      if (RecSize(argRecId) > 8) or (TargetArch = TARGET_WASM32) then
         needTemp := True;
     end;
   end;

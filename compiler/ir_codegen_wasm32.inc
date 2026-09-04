@@ -1949,7 +1949,8 @@ begin
   if ABIParamSlotIsPointer(Procs[p].Params[i].TypeKind,
                            Procs[p].Params[i].IsRef,
                            Procs[p].Params[i].IsArray)
-     or TypeIsFrozenString(Procs[p].Params[i].TypeKind) then
+     or TypeIsFrozenString(Procs[p].Params[i].TypeKind)
+     or (Procs[p].Params[i].TypeKind = tySet) then
   begin
     vt := WT_I32;
     WasmParamValType := True;

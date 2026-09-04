@@ -16524,6 +16524,19 @@ test-i386: $(COMPILER)
 	# `TB is TC` probe correctly on wasm32 with no IR_VMTADDR arm at all.
 	# `onlyalpha is IBeta` is the single FALSE row; every other row is TRUE and
 	# an arm returning a constant or wrong address would still print TRUE there.
+	# BY-VALUE AGGREGATE PARAMETERS, both directions. Each by-value row says
+	# MUST NOT CHANGE and sits beside a `var` row of the same shape saying MUST
+	# CHANGE: a target that copies everything passes the first set, one that
+	# copies nothing passes the second, and only the pair separates a correct
+	# convention from either failure. The callees print what they see, so a row
+	# cannot pass by the write going nowhere.
+	# The record rows straddle ir.inc's size split -- over 8 bytes gets a private
+	# temp during lowering, 8 or under is the backend's own argument-word push --
+	# and the set rows straddle the ABI fork, address on x86-64/aarch64/arm32/
+	# wasm32 and 32 bytes by value on i386/riscv32/xtensa.
+	./$(COMPILER) --target=i386 test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_i386_bvap
+	./$(COMPILER) test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_i386_bvap_x64
+	tools/expect_same.sh i386/test_i386_byvalue_aggregate_params "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_bvap)" "$$($(TESTTMP)/test_i386_bvap_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_interface_is_as.pas $(TESTTMP)/test_i386_iisas
 	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/test_i386_iisas_x64
 	tools/expect_same.sh i386/test_i386_interface_is_as "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iisas)" "$$($(TESTTMP)/test_i386_iisas_x64)"
@@ -17457,6 +17470,19 @@ test-aarch64: $(COMPILER)
 	# `TB is TC` probe correctly on wasm32 with no IR_VMTADDR arm at all.
 	# `onlyalpha is IBeta` is the single FALSE row; every other row is TRUE and
 	# an arm returning a constant or wrong address would still print TRUE there.
+	# BY-VALUE AGGREGATE PARAMETERS, both directions. Each by-value row says
+	# MUST NOT CHANGE and sits beside a `var` row of the same shape saying MUST
+	# CHANGE: a target that copies everything passes the first set, one that
+	# copies nothing passes the second, and only the pair separates a correct
+	# convention from either failure. The callees print what they see, so a row
+	# cannot pass by the write going nowhere.
+	# The record rows straddle ir.inc's size split -- over 8 bytes gets a private
+	# temp during lowering, 8 or under is the backend's own argument-word push --
+	# and the set rows straddle the ABI fork, address on x86-64/aarch64/arm32/
+	# wasm32 and 32 bytes by value on i386/riscv32/xtensa.
+	./$(COMPILER) --target=aarch64 test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_aarch64_bvap
+	./$(COMPILER) test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_aarch64_bvap_x64
+	tools/expect_same.sh aarch64/test_aarch64_byvalue_aggregate_params "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_bvap)" "$$($(TESTTMP)/test_aarch64_bvap_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_interface_is_as.pas $(TESTTMP)/test_aarch64_iisas
 	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/test_aarch64_iisas_x64
 	tools/expect_same.sh aarch64/test_aarch64_interface_is_as "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iisas)" "$$($(TESTTMP)/test_aarch64_iisas_x64)"
@@ -18452,6 +18478,19 @@ test-riscv32: $(COMPILER)
 	# `TB is TC` probe correctly on wasm32 with no IR_VMTADDR arm at all.
 	# `onlyalpha is IBeta` is the single FALSE row; every other row is TRUE and
 	# an arm returning a constant or wrong address would still print TRUE there.
+	# BY-VALUE AGGREGATE PARAMETERS, both directions. Each by-value row says
+	# MUST NOT CHANGE and sits beside a `var` row of the same shape saying MUST
+	# CHANGE: a target that copies everything passes the first set, one that
+	# copies nothing passes the second, and only the pair separates a correct
+	# convention from either failure. The callees print what they see, so a row
+	# cannot pass by the write going nowhere.
+	# The record rows straddle ir.inc's size split -- over 8 bytes gets a private
+	# temp during lowering, 8 or under is the backend's own argument-word push --
+	# and the set rows straddle the ABI fork, address on x86-64/aarch64/arm32/
+	# wasm32 and 32 bytes by value on i386/riscv32/xtensa.
+	./$(COMPILER) --target=riscv32 test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_rv32x_bvap
+	./$(COMPILER) test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_rv32x_bvap_x64
+	tools/expect_same.sh riscv32/test_rv32x_byvalue_aggregate_params "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_bvap)" "$$($(TESTTMP)/test_rv32x_bvap_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_interface_is_as.pas $(TESTTMP)/test_rv32x_iisas
 	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/test_rv32x_iisas_x64
 	tools/expect_same.sh riscv32/test_rv32x_interface_is_as "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_iisas)" "$$($(TESTTMP)/test_rv32x_iisas_x64)"
@@ -19207,13 +19246,32 @@ test-wasm32: $(COMPILER)
 	# THIS TARGET IS WHY THE TEST EXISTS: it had no IR_VMTADDR arm, so every
 	# body containing an interface `is` or `as` was emitted as `unreachable`.
 	# Pin v403 reports `value IR op 58` on this exact file and traps.
+	# BY-VALUE AGGREGATE PARAMETERS, both directions. Each by-value row says
+	# MUST NOT CHANGE and sits beside a `var` row of the same shape saying MUST
+	# CHANGE: a target that copies everything passes the first set, one that
+	# copies nothing passes the second, and only the pair separates a correct
+	# convention from either failure. The callees print what they see, so a row
+	# cannot pass by the write going nowhere.
+	# The record rows straddle ir.inc's size split -- over 8 bytes gets a private
+	# temp during lowering, 8 or under is the backend's own argument-word push --
+	# and the set rows straddle the ABI fork, address on x86-64/aarch64/arm32/
+	# wasm32 and 32 bytes by value on i386/riscv32/xtensa.
+	# THIS TARGET IS WHY THE FILE EXISTS. A by-value record of 8 bytes or less
+	# is the backend's half of the split, and wasm32 has no spelling for it --
+	# a parameter is one typed local and an aggregate is not a wasm value
+	# type -- so `procedure P(r: TPlain)` was refused outright and the whole
+	# body emitted as `unreachable`. A by-value SET parameter was refused the
+	# same way. Pin v403 reports both by name on this file.
+	./$(COMPILER) --target=wasm32 test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/w32_bvap.wasm
+	./$(COMPILER) test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/w32_bvap_x64
+	tools/expect_same.sh wasm32/byvalue_aggregate_params "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_bvap.wasm)" "$$($(TESTTMP)/w32_bvap_x64)"
 	./$(COMPILER) --target=wasm32 test/test_cross_interface_is_as.pas $(TESTTMP)/w32_iisas.wasm
 	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/w32_iisas_x64
 	tools/expect_same.sh wasm32/interface_is_as "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_iisas.wasm)" "$$($(TESTTMP)/w32_iisas_x64)"
 	./$(COMPILER) --target=wasm32 test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes.wasm
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes_x64
 	tools/expect_same.sh wasm32/set_shapes "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_setshapes.wasm)" "$$($(TESTTMP)/w32_setshapes_x64)"
-	@echo "wasm32: 39 rows green (32 default + 7 shortstring; 1 excluded, see comment above)"
+	@echo "wasm32: 40 rows green (33 default + 7 shortstring; 1 excluded, see comment above)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
@@ -19585,6 +19643,14 @@ test-xtensa: $(COMPILER)
 	# `TB is TC` probe correctly on wasm32 with no IR_VMTADDR arm at all.
 	# `onlyalpha is IBeta` is the single FALSE row; every other row is TRUE and
 	# an arm returning a constant or wrong address would still print TRUE there.
+	# test_cross_byvalue_aggregate_params is NOT wired here: xtensa has a real
+	# ABI defect this file's `Mixed` row catches, and wiring it green would
+	# mean deleting the row that found it. Reduced to two lines:
+	#   procedure F(s: TS; x: Integer)  -- x reads 0, must be 30
+	# Any parameter AFTER a by-value set parameter is lost on xtensa; the same
+	# signature with the set LAST is fine, and an 8-byte record in the set's
+	# place is fine. i386 and riscv32 pass sets by value too and both pass.
+	# bug-a-a-parameter-after-a-by-value-set-parameter-reads-zero-on-xtensa
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_interface_is_as.pas $(TESTTMP)/test_xtensa_iisas
 	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/test_xtensa_iisas_x64
 	tools/expect_same.sh xtensa/test_xtensa_interface_is_as "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_iisas)" "$$($(TESTTMP)/test_xtensa_iisas_x64)"
@@ -20637,6 +20703,19 @@ test-arm32: $(COMPILER)
 	# `TB is TC` probe correctly on wasm32 with no IR_VMTADDR arm at all.
 	# `onlyalpha is IBeta` is the single FALSE row; every other row is TRUE and
 	# an arm returning a constant or wrong address would still print TRUE there.
+	# BY-VALUE AGGREGATE PARAMETERS, both directions. Each by-value row says
+	# MUST NOT CHANGE and sits beside a `var` row of the same shape saying MUST
+	# CHANGE: a target that copies everything passes the first set, one that
+	# copies nothing passes the second, and only the pair separates a correct
+	# convention from either failure. The callees print what they see, so a row
+	# cannot pass by the write going nowhere.
+	# The record rows straddle ir.inc's size split -- over 8 bytes gets a private
+	# temp during lowering, 8 or under is the backend's own argument-word push --
+	# and the set rows straddle the ABI fork, address on x86-64/aarch64/arm32/
+	# wasm32 and 32 bytes by value on i386/riscv32/xtensa.
+	./$(COMPILER) --target=arm32 test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_arm32_bvap
+	./$(COMPILER) test/test_cross_byvalue_aggregate_params.pas $(TESTTMP)/test_arm32_bvap_x64
+	tools/expect_same.sh arm32/test_arm32_byvalue_aggregate_params "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_bvap)" "$$($(TESTTMP)/test_arm32_bvap_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_interface_is_as.pas $(TESTTMP)/test_arm32_iisas
 	./$(COMPILER) test/test_cross_interface_is_as.pas $(TESTTMP)/test_arm32_iisas_x64
 	tools/expect_same.sh arm32/test_arm32_interface_is_as "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iisas)" "$$($(TESTTMP)/test_arm32_iisas_x64)"
