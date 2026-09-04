@@ -9,7 +9,7 @@ found: 2026-09-04
 found-by: frankA
 owner: frankA
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 5c26f7a46
 summary: "FIXED. The named-pointer-alias cast arm stamped the -2 PChar adapter whenever AliasElemTk = tyChar, which is a proxy for 'points at a character' and is equally true of `^array[0..3] of Char`. -2 goes in the SAME SLOT as aliasIdx, and aliasIdx is the only carrier of AliasPtrElemArrAi -- the pointee's array row -- so the subscript lost its element type and the AN_INDEX came out tk=0 (tyUnknown), a 4-byte read. `Ord(PCharA(@ca)^[1])` gave 1644192610 against fpc's 98; the char itself printed a 19-digit number that varied between runs. Silent, no diagnostic, present in pin v403. Fixed by asking AliasPtrElemArrAi < 0 alongside the tyChar test. Every NUMERIC element kind was always correct, so the flavour least likely to have a width bug was the only one that had one."
 ---
 
