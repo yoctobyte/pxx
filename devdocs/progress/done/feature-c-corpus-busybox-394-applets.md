@@ -1,14 +1,14 @@
 ---
 slug: feature-c-corpus-busybox-394-applets
-title: "Rung 6: busybox at 394 applets — 521 of 521 TUs on x86-64, linked, byte-identical over 938 cases"
+title: "Rung 6: busybox at 394 applets — 521 of 521 TUs on BOTH architectures, linked, 938 cases each"
 track: C
 prio: 60
 type: feature
-status: working
+status: done
 created: 2026-09-02
 found-by: frankD
 blocked-by: [feature-b-crtl-function-gaps-at-394-busybox-applets, bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS]
-summary: "**CLOSED ON x86-64 2026-09-04: 521 OF 521 TRANSLATION UNITS BECOME OBJECTS, THEY LINK, AND THE LINKED BINARY IS BYTE-IDENTICAL TO THE gcc ORACLE OVER 938 DIFFERENTIAL CASES.** That is the first fully green 394-applet run; the previous state on this ticket was 507 of 521 with fourteen refusals, all of them crtl surface, and it is now false. Measured at binary sha256 `b425f312ffff` on HEAD `e71eaf4e8`, private tree `library_candidates/busybox-frankC`, `tools/busybox_diff.sh --separate`. The oracle is gcc plus upstream busybox`s own separately-linked binary, and the two agree, so the comparison is not a unity build agreeing with itself. **521 IS STILL THE FLATTERED NUMBER AND THAT HAS NOT CHANGED**: the host-header fallback is native-only, so on x86-64 an unknown `<h>` resolves from /usr/include with a warning while on any cross target it is a hard `include file not found`. A refusal is a property of a (TU, target) PAIR. The honest instrument is `feature-c-corpus-busybox-i386-the-second-architecture`, and this row does not close that one."
+summary: "**GREEN ON BOTH ARCHITECTURES 2026-09-04: 521 of 521 translation units become objects, they LINK, and each linked binary is byte-identical to a gcc oracle OF ITS OWN WIDTH over 938 differential cases.** x86-64 against `gcc`, i386 against `gcc -m32` (plus `libbb/bb_bswap_64.c`, which the 64-bit map omits because platform.h shadows it with a macro there). Binary sha256 `d65d31543bf1`, HEAD `d5b23e1cd`, one exclusive run, scope `tools/busybox-applets-394.txt`. The previous state on this ticket was 507 of 521 with fourteen refusals, all crtl surface. The second oracle is what makes the i386 half a claim rather than a coincidence: the harness had been diffing 32-bit subjects against a NATIVE gcc build, so `expr 2147483647 + 1` reported a FAIL that read exactly like a 64-bit-arithmetic defect and was `sizeof(long)` (`502f273d1`, `d5b23e1cd`). **The two oracles agree with upstream busybox`s own separately-linked binary**, so neither is a unity build agreeing with itself. What this does NOT claim: 938 cases is the harness`s transcript set and not the applet set working, and `--separate` links with gcc as the driver, so these are pxx OBJECTS in a gcc link. Per-target detail on `feature-c-corpus-busybox-i386-the-second-architecture`."
 owner: frankC
 ---
 
@@ -250,3 +250,29 @@ applets in general: 938 cases is what the harness's transcript set covers, and
 byte-identical output on those cases is a much narrower claim than the applet
 set working. And it says nothing at all about any target but this one — see the
 next section, which was written before this run and is unchanged by it.
+
+## 2026-09-04, later — the i386 half, and the caveat this ticket has carried since it opened
+
+The section above closed the x86-64 row and repeated the standing warning that
+**521 is the flattered number**, because the host-header fallback is
+native-only. That caveat is now discharged rather than merely restated:
+
+```
+PASS    x86_64   byte-identical to the gcc oracle over 938 cases
+PASS    i386     byte-identical to the gcc -m32 oracle over 938 cases
+```
+
+One run, binary `d65d31543bf1`, HEAD `d5b23e1cd`. Every TU that x86-64 was
+allowed to reach by borrowing a host header, i386 now reaches by having the
+header. **A refusal is a property of a (TU, target) pair and both members of
+every pair are now green at this scope.**
+
+It also cost the harness a defect. The i386 leg's first fully-built run
+reported 937 of 938 and the one difference was `expr 2147483647 + 1`, which is
+`sizeof(long)` and not a compiler bug — the oracle was built natively. A rung
+whose last blocker is its own measuring device is worth recording as such,
+because that FAIL is indistinguishable from the most alarming thing it could
+have been.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

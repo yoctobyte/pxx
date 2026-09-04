@@ -1,14 +1,14 @@
 ---
 slug: feature-c-corpus-busybox-i386-the-second-architecture
-title: "Rung 5: busybox on i386 — the second architecture, and the 34 headers x86-64 was borrowing"
+title: "Rung 5: busybox on i386 — 521 of 521 TUs, linked, byte-identical to gcc -m32 over 938 cases"
 track: C
 prio: 65
 type: feature
-status: working
+status: done
 created: 2026-09-02
 found-by: frankD
 owner: frankD
-summary: "**i386 AT 394 APPLETS: 492 OF 521 TUs BECOME OBJECTS, 29 REFUSE -- and the refusal set is LARGER than x86-64's 14, for a reason that makes the x86-64 number unreliable rather than better.** The host-header fallback is NATIVE-ONLY: on x86-64 an unknown `<h>` resolves from /usr/include with a warning, on any cross target it is a hard `include file not found`. So 16 of the 29 are crtl headers x86-64 was silently borrowing from glibc (`bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS`, reframed and re-summarised on this evidence), 8 are the same declaration gaps x86-64 sees (`feature-b-crtl-function-gaps-at-394-busybox-applets`), and 5 are a genuine i386 compiler gap -- inline asm is x86-64-only (`bug-c-inline-asm-is-x86-64-only-so-five-busybox-tus-refuse-on-i386`). **THE NATIVE TARGET IS THE ONE WITH THE BLIND SPOT HERE**, which is the reverse of the usual asymmetry and is why this axis exists. Earlier figure on this ticket (265/265 at 141 applets) was a different, smaller scope and is not comparable; the scope is now a file, `tools/busybox-applets-394.txt`. Binary sha256 1968c7a7da57, commit 5f598d4a7. **UPDATE 2026-09-04 (`67708bbe8`): seven headers landed and the 16 turned out to be a LOWER BOUND, not a list** -- a TU reports ONE missing include and stops, so `ifenslave.c` could not ask for `linux/if_bonding.h` until `linux/if.h` existed. The native fallback masked every layer simultaneously, so peeling one reveals the next; the table of 34 below has to be read that way, and the only honest completion signal is a run where nothing refuses. Measured after: `vlock`, `iplink` and `flash_eraseall` no longer refuse at all, and `ifenslave.c` / `ifplugd.c` now advance to `linux/ethtool.h`. The same attempt also found a compiler bug nothing else had (`sizeof` of an array field through a parenthesised base answered the ELEMENT size, fixed in the same commit)."
+summary: "**i386 IS GREEN AT 394 APPLETS, 2026-09-04: 521 of 521 translation units become objects (plus `libbb/bb_bswap_64.c`, which the 64-bit map omits because platform.h shadows it with a macro there), they LINK, and the linked binary is byte-identical to the `gcc -m32` oracle over 938 differential cases.** Binary sha256 `d65d31543bf1`, HEAD `d5b23e1cd`. The link had never been attempted on this target before; the refusal set went 29 -> 6 -> 1 -> 0 over two days. The last five were the inline-asm gap (`bug-c-inline-asm-is-x86-64-only-so-five-busybox-tus-refuse-on-i386`) and the last one was `<linux/wireless.h>`, crtl surface. **THE POINT OF THIS AXIS HELD ALL THE WAY THROUGH AND IS WORTH KEEPING AFTER IT CLOSES:** the host-header fallback is native-only, so x86-64 silently resolved unknown headers from /usr/include while i386 gave a hard `include file not found` — the NATIVE target was the one with the blind spot, and every count x86-64 reported was flattered. The 16 missing headers were also a LOWER BOUND and not a list, because a TU reports one missing include and stops. **THE HARNESS WAS THE LAST THING WRONG, NOT THE COMPILER:** the gcc oracle was built with plain `gcc`, so the i386 leg was diffed against a 64-bit binary and `expr 2147483647 + 1` reported a FAIL that read exactly like a 64-bit-arithmetic defect. busybox`s `arith_t` is `long` in this config; pxx agrees with gcc at BOTH widths. Fixed in `502f273d1`/`d5b23e1cd`."
 ---
 
 # The second architecture, and what the first one was borrowing
@@ -393,3 +393,65 @@ row — the guard fires.
 user-facing header, so there was no oracle for them and the values would have
 been mine rather than measured. gcc refusing the probe is what caught it. A
 constant nobody can diff is a liability in a shadow tree, not a convenience.
+
+# 2026-09-04 — GREEN, and what each of the last three steps actually was
+
+Binary `d65d31543bf1bb8ba2d951437d5e4b0b1ebb043fca221f8d7088fb8be1197de0`,
+HEAD `d5b23e1cd`, `tools/busybox_diff.sh --separate --targets "x86_64 i386"`
+at the scope in `tools/busybox-applets-394.txt`:
+
+```
+ORACLE  gcc separate build, 521 objects (938 cases)
+note    oracle32 +libbb/bb_bswap_64.c
+ORACLE  gcc -m32 build, 938 cases (1 row(s) differ from the 64-bit oracle)
+ORACLE  busybox agrees with the gcc build
+PASS    x86_64   byte-identical to the gcc oracle over 938 cases
+note    i386     +libbb/bb_bswap_64.c
+PASS    i386     byte-identical to the gcc -m32 oracle over 938 cases
+```
+
+**Both architectures in one run, each against an oracle of its own width.**
+
+## The last three blockers were three different KINDS of thing
+
+That is the finding worth keeping, because the ticket's own table had implied
+they were all header gaps:
+
+1. **A compiler gap** — GNU extended inline asm was x86-64-only, five TUs.
+   Fixed by giving the AT&T template reader a text renderer for i386 and by
+   making `"m"` operands render as frame slots so the five-register i386 pool
+   fits. `bug-c-inline-asm-is-x86-64-only-so-five-busybox-tus-refuse-on-i386`.
+2. **crtl surface** — `<linux/wireless.h>`, the fourth layer of ifplugd's
+   include peel, which x86-64 never saw because it was borrowing glibc's.
+3. **THE INSTRUMENT.** After both of those, i386 produced 522 objects, linked,
+   and reported **one** differing case out of 938 — `expr 2147483647 + 1`,
+   `2147483648` against `-2147483648`. That was not a compiler defect and not a
+   crtl gap: the harness built its gcc oracle with plain `gcc`, so a 32-bit
+   subject was being diffed against a 64-bit binary on a row whose answer is
+   `sizeof(long)`.
+
+**A rung's last blocker was its own measuring device, and it wore the shape of
+the most alarming possible finding** — a 64-bit arithmetic bug on a cross
+target, in a corpus, with a clean reproduction. Reading it as one would have
+cost a day. What separated them was four cells rather than one:
+
+| | `sizeof(arith_t)` | `2147483647 + 1` |
+| --- | --- | --- |
+| gcc native | 8 | 2147483648 |
+| gcc -m32 | 4 | -2147483648 |
+| pxx i386 | 4 | -2147483648 |
+| pxx native | 8 | 2147483648 |
+
+The subject was measured at BOTH widths and the oracle at both widths, and pxx
+matches gcc in every cell. One cell would have proved nothing; the diagonal is
+the whole argument.
+
+## What this row does NOT claim
+
+938 cases is the harness's transcript set, not the applet set working. And
+`--separate` links with `gcc -m32` as the driver, so this is pxx's objects in a
+gcc link, not a pxx link. Both were true of the x86-64 row too and neither is
+new here.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

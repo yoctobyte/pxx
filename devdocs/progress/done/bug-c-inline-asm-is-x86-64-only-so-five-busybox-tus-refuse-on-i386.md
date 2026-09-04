@@ -4,7 +4,7 @@ title: "The C frontend advertises __GNUC__ and __i386__, then refuses the inline
 track: C
 prio: 55
 type: bug
-status: open
+status: done
 created: 2026-09-04
 found-by: frankD
 summary: "`cparser.inc:7876` refuses any non-empty inline-asm template unless `TargetArch = TARGET_X86_64`. Five busybox TUs hit it on i386 and none on x86-64: procps/powertop.c, networking/tls_sp_c32.c, tls_pstm_mul_comba.c, tls_pstm_sqr_comba.c (all `non-empty template ... not i386`) and tls_pstm_montgomery_reduce.c (`earlyclobber constraint \"=&d\" is not supported`, cparser.inc:7491). NOT a mis-gating problem that dropping a predefine would fix: pxx answers `__GNUC__=2` AND `__i386__` on i386, and the sources ask for exactly that pair -- `#if ALLOW_ASM && defined(__GNUC__) && defined(__i386__)` (tls_sp_c32.c:216) -- while powertop.c:500 is a bare `#ifdef __i386__` with no __GNUC__ gate at all. The source is selecting the arm we told it to select. The fix is to encode the template on i386, not to withdraw a claim. **SCOPED 2026-09-04 (frankC) AND IT IS FOUR JOBS, NOT TWO — the ENCODER IS NOT ONE OF THEM:** `AsmDispatch` already has `mul`/`adc`/`sbb`/`cpuid`, and all thirteen instruction forms these arms use assemble BYTE-IDENTICALLY in 32- and 64-bit mode (gas, diff clean), because 32-bit operand size is the default in both and no REX is reachable. What the refusal actually stands in front of is that **`AN_ASM`'s span means AsmBytes on x86-64 and an InlineAsmLine index on i386** (`AsmParseBody` routes 5 of 6 targets to a text capture), so job 1 is a sink decision — recommend giving the AT&T reader a TEXT renderer over giving i386 a second AN_ASM form. **Job 1 alone is NOT sufficient for three of the four files that report it:** the i386 caller-saved pool is 5 registers (`ebx` is callee-saved), and a `\"m\"` operand costs a register here because it is pinned to its ADDRESS, so mul_comba wants 5 with 3 free and sqr_comba 4 with 3. Rendering `\"m\"` as a frame slot — which gcc does, which the encoder already supports via AOP_MEM, and which helps x86-64 too — makes both fit exactly, so it is the FIRST job. **Job 2 as written unblocks NOTHING:** behind montgomery_reduce's earlyclobber sit an unsupported `\"g\"` class (5 uses) and a subscript output `_c[LO]` that the plain-lvalue rule refuses in both its macros, so removing the `&` refusal moves the message and compiles no file. `powertop.c` is a fourth job on its own — `cpuid` writes `\"=b\"`, and `ebx` needs a save/restore pair no other TU here wants."
@@ -219,3 +219,49 @@ file compiles" are different claims and only the first is established here.)
 Nothing above changes `ir_codegen386.inc`'s replay contract except job 2's
 first bullet, which is exactly why the sink choice is the decision to make
 first.
+
+# RESOLVED 2026-09-04 — all five TUs compile, link and run on i386
+
+Measured in the 394-applet sweep at binary `d65d31543bf1`, HEAD `d5b23e1cd`:
+i386 produces 521 of 521 objects, they link, and the linked binary is
+byte-identical to the `gcc -m32` oracle over 938 cases. `powertop.c`,
+`tls_sp_c32.c`, `tls_pstm_mul_comba.c`, `tls_pstm_sqr_comba.c` and
+`tls_pstm_montgomery_reduce.c` are all in that count.
+
+**The scoping section above was right that it was four jobs and not two, and
+wrong about which blocker `powertop.c` hits first.** Its first refusal was the
+plain-lvalue output rule — `*eax` is a dereference, not an identifier — and
+`"=b"` is real but second. Corrected when measured, not when written.
+
+What landed, in the order that mattered:
+
+- **`"m"` as a frame slot** (`asmatt.inc`): an offset lane so an `"m"` operand's
+  frame offset is not parked in a field named `Reg`, and `%N` renders as a slot
+  rather than `[reg]`. This was the FIRST job, not the asm sink: the i386
+  caller-saved pool is five registers, and pinning `"m"` to an address costs one
+  each — mul_comba wanted five with three free. Rendering as a slot makes both
+  files fit exactly, and it helps x86-64 too.
+- **A text sink for the AT&T reader** (`asmatt.inc`): `AN_ASM`'s Left/Right span
+  is AsmBytes on x86-64 and an InlineAsmLine index on every other target, so
+  i386 needed a renderer rather than a second AN_ASM form.
+- **`"g"`, earlyclobber, and side-effect-free output lvalues** (`cparser.inc`):
+  the output rule became a whitelist walk instead of `ASTKind <> AN_IDENT`, and
+  only the contradictory earlyclobber/tied pair is still refused.
+- **`cpuid` and the F6/F7 memory forms** (`asmtext_386.inc`).
+
+**A silent miscompile was found by the new test and not by the sweep, and it
+was in the file the seam had just been added to.** `AttEncodeOne`'s
+zero-operand branch called `AsmDispatch` directly, bypassing the seam, so on
+i386 it encoded x86-64 bytes into `AsmBytes` — which that target's codegen never
+reads. `cpuid` printed `0 00000000 00000000 00000000` against gcc's
+`13 756e6547 6c65746e 49656e69`, with no diagnostic. That is
+`normalise-dont-special-case`'s "the second path is the one that stays broken",
+found in a file being normalised, on the same day.
+
+Tests: `test/casm_gnu_operands_i386.c` (the five busybox arms verbatim, oracle
+`gcc -m32`) and `test/casm_m_operand_pressure.c` (nine `"m"` inputs against a
+nine-entry pool — the pinned compiler refuses it by name, which is the positive
+control).
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
