@@ -125,4 +125,4 @@ inline width can make it vacuous. The pin control fires on **all four** — whic
 is the correction above, made assertable.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit e60e61437.
