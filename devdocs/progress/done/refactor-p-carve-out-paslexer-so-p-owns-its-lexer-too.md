@@ -3,7 +3,7 @@ track: P
 prio: 55
 type: refactor
 blocked-by: []
-summary: "DONE in three slices. paslexer.inc exists and lexer.inc goes 3,758 -> 912 lines. Was: the parser carve-out was done, but Pascal still shared lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carved the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own. The A/P slot SHRINKS rather than stops existing: lexer.inc still holds the shared diagnostics, token pool and token-stream cursor (Next/Eat/Expect drive every frontend), and defs.inc/symtab.inc are untouched. The body's 2,566-line count was stale by ~1,200 lines. Proof is NOT the binary sha -- a new file name enters the debug file table, so the compiler's own bytes must move (875d46034173 -> 01a25b518879, both from the pin seed) -- but a byte-comparison of the code it EMITS over 88 directive- and literal-heavy sources: 78 identical, 0 differing, against a control reporting 68 of 68 differing versus the pinned compiler."
+summary: "DONE in three slices. paslexer.inc exists and lexer.inc goes 3,758 -> 912 lines. Was: the parser carve-out was done, but Pascal still shared lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carved the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own. The A/P slot SHRINKS rather than stops existing: lexer.inc still holds the shared diagnostics, token pool and token-stream cursor (Next/Eat/Expect drive every frontend), and defs.inc/symtab.inc are untouched. The body's 2,566-line count was stale by ~1,200 lines. The binary sha DOES move, and the cause is DECLARATION ORDER, not the debug file table an earlier note claimed (a default build has no debug sections; measured, the file split and the added forward are each byte-neutral and only the order is not). The method's 're-include at the EXACT OFFSET it occupied' is therefore right as written and this carve-out disobeyed it, putting the Pascal block after LexAppend/Next/Eat/Expect instead of between StrToDoubleBits and LexAppend; byte-identity is recoverable with a lexer_tail.inc and was deliberately not chased. Proof is a byte-comparison of the code the compiler EMITS over 88 directive- and literal-heavy sources: 78 identical, 0 differing, against a control reporting 68 of 68 differing versus the pinned compiler."
 status: done
 owner: ""
 ---
@@ -152,3 +152,67 @@ unaffected — this moved bodies, it renumbered no `tkXxx` or `AN_Xxx`.
 
 ## Log
 - 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 1cfd034f1.
+
+---
+
+## 2026-09-05 (frankA) — RETRACTION: the method above is right and my "correction" to it was wrong
+
+**The section "The correction: byte-identical by construction is false for the
+compiler's OWN binary" is withdrawn.** Its observation was real and its
+explanation was invented. frankB challenged it within the hour and both halves
+of my mechanism are false:
+
+- A default build has **no debug sections at all** (`readelf -S` gives 0) and no
+  include filename appears anywhere in the binary, so there is no file table for
+  a new file name to enter.
+- frankB's own probes: the same source under two different file names compiles
+  byte-identical, and the same source plus one blank line compiles
+  byte-identical. The emitter is insensitive to both things I named.
+
+### What actually moves the bytes, measured
+
+Four arms, all seeded from pin v403, all converging, all at one tree:
+
+| arm | sha |
+| --- | --- |
+| pre-carve, one file, original order | `302307b0e0f822c0` |
+| pre-carve **+ the `LexOne` forward alone**, nothing moved | `302307b0e0f822c0` |
+| **one file, no new file**, but this carve's declaration ORDER | `6fe273e5e12a6429` |
+| the carve as landed, two files | `6fe273e5e12a6429` |
+
+- **The file split is byte-neutral** — one file and two files give the same bytes.
+- **The forward declaration is byte-neutral** — frankB's hypothesis, also out.
+- **Declaration ORDER is the entire cause.**
+
+### So the method section was right, and this carve-out disobeyed it
+
+It says *"cut CONTIGUOUS ranges and re-include each **at the exact offset it
+occupied**"*. The Pascal block sat in the MIDDLE of `lexer.inc`, between
+`StrToDoubleBits`/`DecDigitsExceed` and `LexAppend`. A single `{$include}` after
+`lexer.inc` moves it past `LexAppend`, `InsertTokens`, `RemoveTokens`, `Next`,
+`Eat`, `Expect` and the search-path helpers. **A contiguous cut restored at its
+exact offset IS byte-identical; I did not restore it at its exact offset.**
+
+Byte-identity is recoverable: split `lexer.inc` in two so `compiler.pas` reads
+`lexer.inc` / `paslexer.inc` / `lexer_tail.inc`. **Not done** — the reorder is
+measured benign (78/0 emitted-identical, gate GREEN) and a `lexer_tail.inc`
+reads worse than the paragraph explaining it. Whoever carves `pyparser.inc`
+should decide the same question deliberately rather than discovering it.
+
+### The corpus measurement is unaffected and is still the right gate
+
+78 identical / 0 differing over 88 sources selected to reach the moved
+machinery, against a control returning 0 identical / 68 differing versus the
+pinned compiler. That number never depended on the mechanism.
+
+### Two process failures, both mine
+
+1. **I invented a mechanism for a real observation and never measured it —
+   inside the correction to that exact failure.** The commit that fixed a comment
+   composed beside a diff introduced another one.
+2. **My first attempt at the deciding experiment BUILT NOTHING and produced a
+   sha I could have reported.** I reused line numbers across two file states
+   (`Keyword` ends at 724 pre-carve, 729 after slice 1), cut through a
+   `{$ifdef FPC}`, and got *"unterminated conditional directive"*. The ranges are
+   now asserted on their first and last lines and required to tile the file
+   exactly.

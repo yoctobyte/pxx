@@ -24,16 +24,33 @@
   INCLUDED IMMEDIATELY AFTER lexer.inc and before util.inc, which is the offset
   this code occupied.
 
-  THE COMPILER'S OWN BINARY DOES MOVE, and an earlier draft of this comment
-  claimed it could not. A new source file name enters the debug file table and
-  every carved line changes number, so a byte-identical SELF is the wrong thing
-  to expect: measured, pre-cut converged to 875d46034173 and post-cut to
-  01a25b518879, both seeded from pin v403. What must not move is the code this
-  compiler EMITS, and that is what was measured instead -- 88 sources selected
-  for {$ifdef}, {$mode}, {$include}, conditional expressions and numeric
-  literals, so the corpus reaches the machinery in this file: 78 byte-identical,
-  0 differing, against a control that reports 68 of 68 differing when pointed at
-  the pinned compiler. }
+  THE COMPILER'S OWN BINARY DOES MOVE, and the reason is NOT what two earlier
+  drafts of this comment said. It is not a debug file table -- a default build
+  has no debug sections at all and no include filename appears in the binary --
+  and it is not the LexOne forward. Measured, all seeded from pin v403:
+
+    pre-carve, one file, original order                 302307b0e0f822c0
+    pre-carve + the LexOne forward ALONE, nothing moved  302307b0e0f822c0
+    ONE file, no new file, but this file's ORDER         6fe273e5e12a6429
+    the carve as it stands, two files                    6fe273e5e12a6429
+
+  The file split is byte-neutral and so is the forward. What moves the bytes is
+  DECLARATION ORDER: this block sat in the MIDDLE of lexer.inc, between
+  StrToDoubleBits/DecDigitsExceed and LexAppend, and including it after lexer.inc
+  moves it past LexAppend, InsertTokens, RemoveTokens, Next, Eat, Expect and the
+  search-path helpers. Proc registration order changes with it.
+
+  So the ticket's method -- "re-include each at the EXACT OFFSET it occupied" --
+  is right as written, and this carve-out did not obey it. Byte-identity is
+  recoverable by splitting lexer.inc in two so compiler.pas reads
+  lexer.inc / paslexer.inc / lexer_tail.inc. Not done: the reorder is measured
+  benign and a lexer_tail.inc reads worse than this paragraph.
+
+  What was measured instead, and what any future carve-out here should measure,
+  is the code the compiler EMITS: 88 sources selected for {$ifdef}, {$mode},
+  {$include}, conditional expressions and numeric literals, so the corpus reaches
+  the machinery in this file -- 78 byte-identical, 0 differing, against a control
+  reporting 68 of 68 differing when pointed at the pinned compiler. }
 
 function Keyword(const s0: AnsiString): TTokenKind;
 var s: AnsiString; ki: Integer;
