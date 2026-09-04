@@ -16629,6 +16629,9 @@ test-i386: $(COMPILER)
 	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
 	# call produces the BASE's row, which the line above already shows. Two rows
 	# differing only in value would not separate those.
+	./$(COMPILER) --target=i386 test/test_cross_method_pointer_call.pas $(TESTTMP)/test_i386_mpc
+	./$(COMPILER) test/test_cross_method_pointer_call.pas $(TESTTMP)/test_i386_mpc_x64
+	tools/expect_same.sh i386/test_i386_method_pointer_call "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mpc)" "$$($(TESTTMP)/test_i386_mpc_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_i386_iagg
 	./$(COMPILER) test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_i386_iagg_x64
 	tools/expect_same.sh i386/test_i386_indirect_aggregate_return "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iagg)" "$$($(TESTTMP)/test_i386_iagg_x64)"
@@ -17645,6 +17648,9 @@ test-aarch64: $(COMPILER)
 	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
 	# call produces the BASE's row, which the line above already shows. Two rows
 	# differing only in value would not separate those.
+	./$(COMPILER) --target=aarch64 test/test_cross_method_pointer_call.pas $(TESTTMP)/test_aarch64_mpc
+	./$(COMPILER) test/test_cross_method_pointer_call.pas $(TESTTMP)/test_aarch64_mpc_x64
+	tools/expect_same.sh aarch64/test_aarch64_method_pointer_call "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mpc)" "$$($(TESTTMP)/test_aarch64_mpc_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_aarch64_iagg
 	./$(COMPILER) test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_aarch64_iagg_x64
 	tools/expect_same.sh aarch64/test_aarch64_indirect_aggregate_return "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iagg)" "$$($(TESTTMP)/test_aarch64_iagg_x64)"
@@ -18667,6 +18673,9 @@ test-riscv32: $(COMPILER)
 	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
 	# call produces the BASE's row, which the line above already shows. Two rows
 	# differing only in value would not separate those.
+	./$(COMPILER) --target=riscv32 test/test_cross_method_pointer_call.pas $(TESTTMP)/test_rv32x_mpc
+	./$(COMPILER) test/test_cross_method_pointer_call.pas $(TESTTMP)/test_rv32x_mpc_x64
+	tools/expect_same.sh riscv32/test_rv32x_method_pointer_call "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_mpc)" "$$($(TESTTMP)/test_rv32x_mpc_x64)"
 	./$(COMPILER) --target=riscv32 test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_rv32x_iagg
 	./$(COMPILER) test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_rv32x_iagg_x64
 	tools/expect_same.sh riscv32/test_rv32x_indirect_aggregate_return "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_iagg)" "$$($(TESTTMP)/test_rv32x_iagg_x64)"
@@ -19458,6 +19467,9 @@ test-wasm32: $(COMPILER)
 	# Pin v403 reports `main$$0 -- indirect call returning an aggregate` on
 	# this file and traps. The signature already reserved the trailing
 	# destination slot; only the two call sites refused to fill it.
+	./$(COMPILER) --target=wasm32 test/test_cross_method_pointer_call.pas $(TESTTMP)/w32_mpc.wasm
+	./$(COMPILER) test/test_cross_method_pointer_call.pas $(TESTTMP)/w32_mpc_x64
+	tools/expect_same.sh wasm32/method_pointer_call "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_mpc.wasm)" "$$($(TESTTMP)/w32_mpc_x64)"
 	./$(COMPILER) --target=wasm32 test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/w32_iagg.wasm
 	./$(COMPILER) test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/w32_iagg_x64
 	tools/expect_same.sh wasm32/indirect_aggregate_return "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_iagg.wasm)" "$$($(TESTTMP)/w32_iagg_x64)"
@@ -19470,7 +19482,7 @@ test-wasm32: $(COMPILER)
 	./$(COMPILER) --target=wasm32 test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes.wasm
 	./$(COMPILER) test/test_cross_set_shapes.pas $(TESTTMP)/w32_setshapes_x64
 	tools/expect_same.sh wasm32/set_shapes "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_setshapes.wasm)" "$$($(TESTTMP)/w32_setshapes_x64)"
-	@echo "wasm32: 41 rows green (34 default + 7 shortstring; 1 excluded, see comment above)"
+	@echo "wasm32: 42 rows green (35 default + 7 shortstring; 1 excluded, see comment above)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
@@ -19863,6 +19875,9 @@ test-xtensa: $(COMPILER)
 	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
 	# call produces the BASE's row, which the line above already shows. Two rows
 	# differing only in value would not separate those.
+	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_method_pointer_call.pas $(TESTTMP)/test_xtensa_mpc
+	./$(COMPILER) test/test_cross_method_pointer_call.pas $(TESTTMP)/test_xtensa_mpc_x64
+	tools/expect_same.sh xtensa/test_xtensa_method_pointer_call "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_mpc)" "$$($(TESTTMP)/test_xtensa_mpc_x64)"
 	./$(COMPILER) --target=xtensa --platform=posix --xtensa-soft-mulhigh test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_xtensa_iagg
 	./$(COMPILER) test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_xtensa_iagg_x64
 	tools/expect_same.sh xtensa/test_xtensa_indirect_aggregate_return "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_iagg)" "$$($(TESTTMP)/test_xtensa_iagg_x64)"
@@ -20942,6 +20957,9 @@ test-arm32: $(COMPILER)
 	# against k+n), so a wrong VMT slot or a destination threaded to the wrong
 	# call produces the BASE's row, which the line above already shows. Two rows
 	# differing only in value would not separate those.
+	./$(COMPILER) --target=arm32 test/test_cross_method_pointer_call.pas $(TESTTMP)/test_arm32_mpc
+	./$(COMPILER) test/test_cross_method_pointer_call.pas $(TESTTMP)/test_arm32_mpc_x64
+	tools/expect_same.sh arm32/test_arm32_method_pointer_call "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mpc)" "$$($(TESTTMP)/test_arm32_mpc_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_arm32_iagg
 	./$(COMPILER) test/test_cross_indirect_aggregate_return.pas $(TESTTMP)/test_arm32_iagg_x64
 	tools/expect_same.sh arm32/test_arm32_indirect_aggregate_return "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iagg)" "$$($(TESTTMP)/test_arm32_iagg_x64)"

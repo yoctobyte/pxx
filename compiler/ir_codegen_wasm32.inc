@@ -1995,26 +1995,48 @@ begin
   WasmProcResult := WasmScalarType(Procs[p].RetType, vt);
 end;
 
-{ The type index for proc p. Records a refusal — against whatever body is
+{ The type index for proc p, with `nSelf` leading i32 SELF parameters that p's
+  own declaration does not carry. Records a refusal — against whatever body is
   currently being emitted — for any part of the signature wasm cannot express,
   and substitutes a placeholder so the module stays well-formed: the body will
-  be `unreachable`, which is polymorphic and validates against any signature. }
-function WasmSigForProc(p: Integer): Integer;
+  be `unreachable`, which is polymorphic and validates against any signature.
+
+  nSelf IS 0 FOR EVERY ORDINARY CALL AND 1 FOR A CALL THROUGH A METHOD POINTER.
+  A `procedure(x: Integer) of object` value is a {Code, Data} pair, and the
+  SIGNATURE proc records only the DECLARED parameters — ir.inc says exactly
+  that where it builds the node: *IRC = extra leading Self args: 0 for a plain
+  proc pointer, 1 for a method pointer*. The register backends never had to
+  read it, because nothing there checks a call site against a type; they push
+  Self and go. wasm does check: the type index at a `call_indirect` must EQUAL
+  the type of the table element, and the table element is the real METHOD,
+  whose Params[0] IS Self. So building the call-site type from the signature
+  proc alone gave a type one parameter short, and the argument loop refused
+  first, with `passes more than its N parameters` — the caller-side report
+  WasmEmitIndArgs's own header note predicts for exactly this disagreement.
+
+  Self is i32 because a method pointer's Data field is a pointer on every
+  target; the table element's Params[0] reaches WT_I32 through
+  WasmParamValType by the same route, so the two sides agree by construction
+  rather than by two hand-written i32s that could drift. }
+function WasmSigForProcSelf(p, nSelf: Integer): Integer;
 var
-  i, nParams, nRes: Integer;
+  i, nDecl, nParams, nRes: Integer;
   ptypes: array[0..31] of Byte;
   rtypes: array[0..0] of Byte;
 begin
-  nParams := Procs[p].ParamCount;
+  nParams := Procs[p].ParamCount + nSelf;
   if nParams > 32 then
   begin
     WasmUnsupported(Procs[p].Name + ' has more than 32 parameters');
     nParams := 32;
   end;
-  for i := 0 to nParams - 1 do
-    if not WasmParamValType(p, i, ptypes[i]) then
+  for i := 0 to nSelf - 1 do
+    if i < nParams then ptypes[i] := WT_I32;
+  nDecl := nParams - nSelf;
+  for i := 0 to nDecl - 1 do
+    if not WasmParamValType(p, i, ptypes[nSelf + i]) then
     begin
-      ptypes[i] := WT_I32;
+      ptypes[nSelf + i] := WT_I32;
       WasmUnsupported('parameter ' + Procs[p].Params[i].Name + ' of '
                       + Procs[p].Name + ' has no wasm value type');
     end;
@@ -2076,11 +2098,18 @@ begin
   begin
     { The array-slice spellings keep WasmAddType's open-array parameters honest
       for the 0-param and 0-result cases. }
-    if nRes = 0 then WasmSigForProc := WasmAddType([], [])
-    else WasmSigForProc := WasmAddType([], [rtypes[0]]);
+    if nRes = 0 then WasmSigForProcSelf := WasmAddType([], [])
+    else WasmSigForProcSelf := WasmAddType([], [rtypes[0]]);
   end
   else
-    WasmSigForProc := WasmAddTypeN(ptypes, nParams, rtypes, nRes);
+    WasmSigForProcSelf := WasmAddTypeN(ptypes, nParams, rtypes, nRes);
+end;
+
+{ The type index for proc p as DECLARED. Every caller but the method-pointer
+  one wants this. }
+function WasmSigForProc(p: Integer): Integer;
+begin
+  WasmSigForProc := WasmSigForProcSelf(p, 0);
 end;
 
 { The wasm function slot for proc p, reserved on first mention. }
@@ -3458,8 +3487,31 @@ begin
   if p < 0 then
   begin
     if WasmEmitBuiltin(node, p, isStmt) then Exit;
-    WasmUnsupported('builtin ' + WasmBuiltinName(p) + ' (IR_CALL with proc '
-                    + 'index ' + WasmIntStr(p) + ')');
+    { A BUILTIN ARM THAT RETURNED False WITH THE BODY ALREADY BROKEN IS NOT A
+      GAP, AND NAMING IT AS ONE PUT A BUILTIN THIS BACKEND IMPLEMENTS INTO THE
+      COVERAGE REPORT. Measured 2026-09-04 on test_anonymous_procedural_type:
+      the report listed `builtin FreeMem (IR_CALL with proc index -46)` as a
+      second distinct gap in main$0 — and wasm32 has had a working FreeMem arm
+      all along. WasmEmitFreeMem exits False on `if WasmBodyBroken then Exit`,
+      so once the method-pointer refusal above it had latched, the arm reported
+      itself. Fixing the real gap made the FreeMem line vanish with no FreeMem
+      code changed, which is the tell.
+
+      The contract WasmEmitBuiltin states is `returns False for one it CANNOT
+      lower, so the caller reports it by NAME rather than this function
+      inventing a reason` — and the caller was reading False as `cannot lower`
+      when it also means `gave up because something else already failed`. The
+      discriminator is the latch: if the arm broke the body, a refusal with a
+      more specific name is already recorded (its own, or the upstream one that
+      stopped it), and adding the builtin's name on top only invents the second
+      one. If it returned False WITHOUT breaking the body, there is no arm and
+      the name is the whole report — which is the case this line exists for.
+
+      This narrows the `and also` list only; WasmUnsupported keeps the FIRST
+      reason as the body's name, so no body is renamed by this. }
+    if not WasmBodyBroken then
+      WasmUnsupported('builtin ' + WasmBuiltinName(p) + ' (IR_CALL with proc '
+                      + 'index ' + WasmIntStr(p) + ')');
     Exit;
   end;
   impIdx := -1;
@@ -3681,7 +3733,7 @@ end;
   IRA = the callee value, IRB = the argument chain, IRIVal = the proc whose
   declaration is the SIGNATURE (not a callee — nothing calls it). }
 procedure WasmEmitCallInd(node: Integer; isStmt: Boolean);
-var sigProc: Integer; pvt: Byte;
+var sigProc, nSelf, k, argChain: Integer; pvt: Byte;
 begin
   sigProc := Integer(IRIVal[node]);
   if (sigProc < 0) or (sigProc >= MAX_PROCS) then
@@ -3689,7 +3741,27 @@ begin
     WasmUnsupported('indirect call with no signature');
     Exit;
   end;
-  if not WasmEmitIndArgs(sigProc, IRB[node], 0, 'indirect call') then Exit;
+  { IRC = THE EXTRA LEADING SELF ARGUMENTS, 0 or 1 — the field ir.inc documents
+    where it builds this node, and which this backend used to ignore. A method
+    pointer prepends Self to the argument chain WITHOUT the signature proc
+    growing a parameter, so both the argument loop and the type index have to
+    step over it; taking the count from the node rather than re-deriving it
+    from the callee's shape is what keeps those two in step. }
+  nSelf := IRC[node];
+  if nSelf < 0 then nSelf := 0;
+  argChain := IRB[node];
+  for k := 1 to nSelf do
+  begin
+    if argChain = -1 then
+    begin
+      WasmUnsupported('method-pointer call has no Self argument');
+      Exit;
+    end;
+    WasmEmitValueAs(IRA[argChain], WT_I32, 'Self of a method-pointer call');
+    if WasmBodyBroken then Exit;
+    argChain := IRB[argChain];
+  end;
+  if not WasmEmitIndArgs(sigProc, argChain, 0, 'indirect call') then Exit;
   { THE HIDDEN DESTINATION GOES ON LAST, before the table index, matching the
     trailing slot WasmSigForProc reserved for it -- the same order the DIRECT
     call uses, and it has to be the same order because both ends of a
@@ -3719,7 +3791,7 @@ begin
     first. }
   WasmEmitValueAs(IRA[node], WT_I32, 'indirect call target');
   if WasmBodyBroken then Exit;
-  WasmCallIndirect(WasmSigForProc(sigProc));
+  WasmCallIndirect(WasmSigForProcSelf(sigProc, nSelf));
   if isStmt and Procs[sigProc].IsFunc then WasmOp($1A, 'drop');
   { A hidden-dest call's VALUE is the destination pointer the callee hands
     back, so it is an i32 whatever the declared result would have mapped to.
