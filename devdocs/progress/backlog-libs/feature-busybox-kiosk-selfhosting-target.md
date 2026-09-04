@@ -73,8 +73,11 @@ qemu-user. Every existing corpus proves one layer. This proves they compose.
    table compiled IN, byte-identical to gcc over 28 cases on x86-64 and
    aarch64, argv[0] and `busybox <applet>` both. Cost one compiler fix — a
    constant left operand of `&&`/`||` survived every `-O` level including
-   `-O3` (`88ef1232f`). `ash` and the TU surface (28 of ~145) are still open,
-   which is why the rung is not resolved. `feature-eliah-shell` is
+   `-O3` (`88ef1232f`). **The `ash`-and-TU-surface caveat that used to close
+   this paragraph — "still open, which is why the rung is not resolved" — is
+   spent:** `ash` is in the 258-applet set, the TU surface is 400 of libbb's
+   ~145-plus-applets rather than 28, and all three rung-1/2 tickets are in
+   `done/`. `feature-eliah-shell` is
    `done/` and is our own shell, a separate artifact; this rung is busybox's.
    Rung 1 says explicitly what it does NOT establish: `cat` reaches 25 of
    libbb's ~145 TUs, and the ones it misses are where `pwd`/`grp`/`statfs`/
