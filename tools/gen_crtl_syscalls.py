@@ -115,6 +115,16 @@ ARCHES = {
         # the 64-bit-offset variant, whose arguments are not the same. This set
         # is listed so a NEW disagreement is a failure and these nine are not.
         # Shrinking or growing it is the finding, either way.
+        #
+        # THIS IS AN ASM-GENERIC FACT, NOT A riscv32 FACT, and riscv32 is only
+        # the target that can currently SHOW it. aarch64 reads the same slots
+        # and agrees 277/277 -- not because the naming convention is safe, but
+        # because on a 64-bit target the slot's occupant is the one the name
+        # already spells, so the trap is invisible there. Read that green as
+        # "correct about a 64-bit target", never as "the convention checks
+        # out". Any 32-bit arm that later moves onto the asm-generic table
+        # inherits these nine, and the aarch64 row will keep passing while it
+        # is wrong. (frankA's observation, 2026-09-04.)
         expect_differ={
             25: ("fcntl", "fcntl64"), 43: ("statfs", "statfs64"),
             44: ("fstatfs", "fstatfs64"), 45: ("truncate", "truncate64"),

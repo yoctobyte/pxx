@@ -9,7 +9,7 @@
   every `identifier(` in the token stream. Regenerate after adding a crtl
   function; `python3 tools/gen_crtl_map.py --check` fails when stale.
 
-  575 functions across 60 headers. }
+  578 functions across 61 headers. }
 
 function CrtlNameBucket(c: Char): AnsiString;
 begin
@@ -73,7 +73,8 @@ begin
       ' getpwnam:pwd.h getpwuid:pwd.h getrandom:sys/random.h getrlimit:sys/resource.h ' +
       ' getservbyname:netdb.h getservbyport:netdb.h getservent:netdb.h getsid:unistd.h ' +
       ' getsockname:sys/socket.h getsockopt:sys/socket.h gettimeofday:sys/time.h getuid:unistd.h ' +
-      ' getxattr:sys/xattr.h gmtime:time.h gmtime_r:time.h ';
+      ' getxattr:sys/xattr.h glob:glob.h glob_pattern_p:glob.h globfree:glob.h gmtime:time.h ' +
+      ' gmtime_r:time.h ';
     'h': Result :=
       ' hasmntopt:mntent.h herror:netdb.h hstrerror:netdb.h htonl:netinet/in.h ' +
       ' htons:netinet/in.h hypot:math.h ';
@@ -194,7 +195,7 @@ begin
     'd': Result := 440;
     'e': Result := 14200;
     'f': Result := 65520;
-    'g': Result := 81872;
+    'g': Result := 98256;
     'h': Result := 608;
     'i': Result := 227296;
     'k': Result := 144;

@@ -14485,6 +14485,49 @@ test-core: $(COMPILER)
 	else \
 	  echo "=== c_uapilay: gcc absent, layouts NOT verified ==="; \
 	fi
+	# glob(3), diffed against glibc over a tree the TEST builds, not the
+	# Makefile: a `mkdir -p' that half-succeeded would make both runs agree on
+	# a wrong answer, and agreement is what this row reads as success. A fresh
+	# mktemp -d per binary, because the program creates the tree and mkdir on
+	# an existing one is an error it reports rather than hides.
+	#
+	# EVERY ROW CARRIES THE RETURN CODE. GLOB_NOMATCH, GLOB_ABORTED and
+	# GLOB_NOSPACE are three different facts that all produce an empty
+	# gl_pathv, so a paths-only comparison passes a stub that always says
+	# GLOB_NOSPACE.
+	#
+	# THE FIRST DRAFT FILTERED "." AND ".." AND THAT WAS WRONG -- glibc's
+	# `glob(".*")' returns them, and so does `glob("*", GLOB_PERIOD)'.
+	# FNM_PERIOD is what keeps them out of a plain `*' and it is the only
+	# thing that should; a filter would also strip them from `.*', where the
+	# caller asked by writing the dot. This row is what found that, on 4
+	# entries against 2.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_glob.c $(TESTTMP)/c_glob26 >/dev/null || { echo "c_glob compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_glob_gcc test/c_crtl_glob.c || { echo "c_glob gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_glob26 "$$($(TESTTMP)/c_glob26 $$(mktemp -d))" "$$($(TESTTMP)/c_glob_gcc $$(mktemp -d))" || exit 1; \
+	  echo "=== c_glob: 37 glob rows identical to glibc ==="; \
+	else \
+	  echo "=== c_glob: gcc absent, glob NOT verified ==="; \
+	fi
+	@for a in i386 arm32 aarch64 riscv32; do \
+	  case $$a in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$a test/c_crtl_glob.c $(TESTTMP)/c_glob_$$a >/dev/null || { echo "c_glob $$a compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh $$a/c_glob "$$(tools/run_target.sh $$a $(TESTTMP)/c_glob_$$a $$(mktemp -d))" "$$($(TESTTMP)/c_glob26 $$(mktemp -d))" || exit 1; \
+	    echo "=== c_glob: $$a agrees with the native run ==="; \
+	  else \
+	    echo "=== c_glob: $$q absent, $$a NOT verified ==="; \
+	  fi; \
+	done
+	# A LEAK CANNOT FAIL THE ROW ABOVE, BY CONSTRUCTION. glob() would return
+	# the right paths, globfree() would return, and all 37 rows would stay
+	# byte-identical to glibc while the process never gave a byte back. Only
+	# an allocs-against-frees count sees it. Measured control, not reasoned:
+	# with globfree()'s free() turned into a no-op the census goes from
+	# frees=115741 live=22 to frees=20535 live=313625.
+	@./$(COMPILER) -dPXX_ALLOC_CENSUS test/c_crtl_glob_no_leak.c $(TESTTMP)/c_globleak26 >/dev/null || { echo "c_globleak compile FAIL"; exit 1; }
+	@tools/assert_no_leak.sh c_globleak 300 $(TESTTMP)/c_globleak26 $$(mktemp -d) 2000
 	# getrandom(2), which busybox's seedrng needs and which is a SYSCALL rather
 	# than a PAL entry because the FLAGS are the point: GRND_NONBLOCK and
 	# GRND_INSECURE select between "fail rather than wait for entropy" and
