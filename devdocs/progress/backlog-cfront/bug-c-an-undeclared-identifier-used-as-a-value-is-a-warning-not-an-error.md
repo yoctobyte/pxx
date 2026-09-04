@@ -67,3 +67,50 @@ being stricter than a peer compiler on code someone meant to write; it is us
 being LOOSER, on code that is a straightforward mistake, and silently
 substituting a value the author never wrote. The source MEANT to name something
 that exists.
+
+# THE BUSYBOX CENSUS, 2026-09-04 (franks-ab, Track B)
+
+**Eighteen constants across eleven translation units were 0 in a busybox build
+that passed 621 differential cases.** Taken from the 258-applet separate
+build's own log at pin v403, warning mapped to the object it precedes:
+
+| TU | zeroed |
+| --- | --- |
+| `udhcp/arpping.c`, `udhcp/dhcpc.c`, `udhcp/packet.c`, `arping.c` | `ETH_P_IP`, `ETH_P_ARP` |
+| `udhcp/packet.c` | `IPDEFTTL` |
+| `traceroute.c` | `ICMP_TIMXCEED`, `ICMP_UNREACH`, four codes, `IP_MULTICAST_IF` |
+| `arping.c` | `ARPHRD_ETHER`, `ARPHRD_FDDI`, `ARPOP_REQUEST`, `ARPOP_REPLY` |
+| `unzip.c`, `chattr.c`, `lsattr.c` | `O_NOFOLLOW` |
+| `telnetd.c` | `XTABS` |
+| `tls_aesgcm.c` | `LONG_BIT` |
+| `sv.c` | `O_NDELAY` |
+| `udhcp/arpping.c` | `SOCK_PACKET` |
+
+**None of these is a compile error and none is a run-time error either.** A
+packet socket asking for protocol 0 binds to nothing and waits forever. An IP
+header with `ttl` 0 is dropped by the first router — invisible on the local
+wire, fatal one hop out. `O_NOFOLLOW` at 0 is a security guard silently
+switched off in three applets that open attacker-named paths. `LONG_BIT` at 0
+makes `tt << (LONG_BIT-1)` a **negative shift count** in the TLS GHASH.
+
+This is the same class as the `SYS_statfs` case already written up above, at
+corpus scale, and it is the argument for the priority: the ticket's own
+example was one syscall on one cross target, and the real exposure is a
+networking userland that compiles green and misbehaves on the wire.
+
+## The prerequisite this ticket names is now DONE
+
+The summary says the fix "also requires filling the crtl gaps it is currently
+papering over". The busybox-sized instance of that landed 2026-09-04 in
+`bb0c9c1ff`: `linux/if_ether.h` is new, the `<netinet/ether.h>` chain is the
+one glibc has, and the IP/ICMP/termios/limits/socket gaps are filled, with two
+tests — one diffing 248 constants against gcc, one asserting open-flag effects
+on five targets. **All 39 warnings across all 11 TUs are gone and all 11 still
+compile**, so promoting the warning to an error no longer breaks the busybox
+corpus on x86-64 for these names.
+
+That is not the same as "nothing else warns". The census above is what ONE
+config of ONE corpus reached; `locale.h`'s `LC_COLLATE` and friends, named in
+this ticket's summary, are untouched by it. **Before flipping the switch, run
+the census rather than the ticket list** — `grep -c "undeclared identifier"`
+over a full corpus build log is the whole instrument, and it costs one run.
