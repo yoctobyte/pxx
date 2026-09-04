@@ -7093,8 +7093,98 @@ it.
    rest of that commit's evidence stands as written, and nothing here should be
    read as impeaching it.
 
+### The offer that was declined, and why it is the same shape wearing a big number
+
+frankB offered to extend the same leak loop with `Int64` and `Single` arms, as a
+free widening. frankH measured before accepting, and the offer was withdrawn:
+
+```
+Int64 + Single, no Format     ->  allocs=1      frees=0      live=1
+the same, through Format      ->  allocs=15628  frees=15623  live=5
+```
+
+Those boxes are FRAME SLOTS — `AllocVar` plus `IR_SLOTADDR`, not heap handles —
+so the loop asserts nothing about the boxing. Everything the second row counts
+belongs to `Format`. Re-derived here on an independent probe rather than quoted:
+the no-Format arm reproduces exactly at `allocs=1 frees=0 live=1`, and the
+Format arm lands at `allocs=12347` on a probe with a different format string,
+which is the right kind of disagreement — same order, different program.
+
+**The danger is that the number MOVES.** Adding those arms would take the census
+from tens to thousands, and a later reader seeing it jump would conclude the
+arms are covered. A guard that cannot fail, wearing a large sample. Nothing was
+committed here; the point is that the widening looked free and was measured
+before it was taken, which is the same act as the remedy above.
+
+### Why "apply the guard-that-cannot-fail test" is not sufficient advice
+
+frankB's sharpening of the aggravating factor, and it is the reason this entry
+exists at all: **the test WAS applied — to the wrong object.** The commit
+reasoned correctly that a value assertion cannot fail on a leak, concluded a
+second assertion class was needed, built one, and aimed it at a subject that
+could not exercise it. Advice of the form "ask whether your guard can fail"
+assumes you have correctly identified what the guard is pointed at. The
+mechanical re-run does not assume that, which is why it is the remedy and the
+reasoning is not.
+
 Credit: **the remedy is frankB's**; **the failure is frankH's**, reported by
 frankH.
 
 The one-line form: **a number is about a file — name it, or you have quoted a
 different program.**
+
+---
+
+## A COUNT IS AN INSTRUMENT, AND A COUNT THAT QUIETLY OMITS A MEMBER READS EXACTLY LIKE A COUNT OF EVERYTHING
+
+frankH's observation, measured out here because five instances in one evening is
+a rate rather than an anecdote. The family is **a thing that looks registered
+and is not executed, where the only signal is a number that fails to move.**
+None of the five produced an error. All five produced a plausible smaller
+number.
+
+| | what looked registered | what actually ran | the only tell |
+| --- | --- | --- | --- |
+| 1 | four new tests, wired into the Makefile | `check_test_wiring.py --since` over an EMPTY range — the files were untracked (frankZ, `9f60251e0`) | a wiring check that passed |
+| 2 | a leak assertion, correctly reasoned and correctly built | it ran, against a subject that could not exercise it | a real allocation count, about another program |
+| 3 | four `t_*` devtest cases, defined and imported | nothing — `TESTS` is hand-maintained | `(12 guards)` where yesterday also said 12 |
+| 4 | a lint policing every Makefile assertion | its `ASSERT` regex could not see two of the assertion tools | a clean verdict, correct about the tools it knew |
+| 5 | the lint written to fix row 3 | it EXEMPTED the first harness to adopt the guard | a control that stopped controlling |
+
+**Row 5 is the one to read twice, because it happened inside the fix for row 3
+and it was caught only by a control.** The new checker exempted any harness that
+calls `globals()`, on the reasoning that a harness discovering its own cases
+cannot drift. `silent_assertion_check_devtest.py` calls `globals()` — not to
+discover cases, but to run the very self-check being propagated. So the first
+harness in the tree to adopt the guard was, by that act, removed from the
+population the guard is checked over. The exemption was correct about a real
+property (the module does call `globals()`) and wrong about the one that
+mattered (whether its run list is derived or typed). Fixed by requiring both the
+call and zero cases named by hand.
+
+**The generalisation is `the name is not the thing` applied to a POPULATION
+rather than to an identifier.** Every one of these instruments answered
+correctly about the set it could see, and in every case the set was smaller than
+the reader believed. That is why "check for errors" cannot catch this family and
+why a denominator can: a count printed as `402 case(s) across 45 harness(es)`
+can be argued with, and `OK` cannot.
+
+Three habits that actually separate them:
+
+- **Print the denominator, not the verdict.** The guard count moving from 12 to
+  16 is the entire fix for row 3, and it only works because the number is on
+  screen every run.
+- **Refuse an empty population.** A clean result over nothing is the null result
+  this repo distrusts everywhere else; `devtest_case_registration.py` exits 1
+  rather than green when its glob matches no harness, because a zero over an
+  empty set is indistinguishable from a pass.
+- **Make the omission impossible, not visible.** Row 3's fix is not "remember to
+  add it to `TESTS`" — it is `main()` refusing to run when a `t_*` is defined
+  and unlisted, and then a repo-wide lint so the refusal does not have to be
+  copied into 44 harnesses one at a time.
+
+Credit: the class is frankH's, from four instances; row 5 and the census are
+frankA's.
+
+The one-line form: **ask what your count could not include, and print the
+denominator so somebody else can ask too.**
