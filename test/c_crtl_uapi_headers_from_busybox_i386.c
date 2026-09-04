@@ -1,6 +1,7 @@
 /* crtl: <linux/if.h>, <linux/if_arp.h>, <linux/if_vlan.h>, <linux/jffs2.h>,
- * <sys/vt.h>, <linux/if_bonding.h> and <linux/mii.h> -- seven headers crtl did
- * not have, all found by attempting busybox for i386 at the 394-applet scope.
+ * <sys/vt.h>, <linux/if_bonding.h>, <linux/mii.h> and <linux/ethtool.h> --
+ * EIGHT headers crtl did not have, all found by attempting busybox for i386 at
+ * the 394-applet scope.
  *
  * WHY i386 FOUND THEM AND x86-64 DID NOT: the host-header fallback is
  * native-only. On x86-64 an unknown <h> resolves from /usr/include with a
@@ -15,7 +16,17 @@
  * <linux/if.h> existed, and ifplugd.c could not ask for <linux/mii.h>. The
  * fallback had masked every layer at once on x86-64, so peeling one reveals
  * the next. Any count of missing headers taken from a single run is a LOWER
- * BOUND, never the list.
+ * BOUND, never the list. <linux/ethtool.h> is the THIRD layer of that same
+ * two-translation-unit peel and arrived after if_bonding.h and mii.h did.
+ *
+ * THE ethtool STRUCTS ARE IOCTL PAYLOADS, so the LAYOUT is the interface and
+ * not merely the field names. A short ethtool_drvinfo is neither a compile
+ * error nor a failure at the ioctl: the driver writes 196 bytes into whatever
+ * the caller supplied, and a struct that ends early corrupts whatever busybox
+ * put beside it. ifenslave WRITES driver[] and fw_version[] before the call --
+ * it is how the bonding driver is told which ABI version is calling -- so that
+ * struct travels in both directions and its offsets are load-bearing both ways.
+ * The rows therefore assert offsets, not just sizes.
  *
  * EVERY VALUE HERE IS A KERNEL OR WIRE CONSTANT, so there is nothing to derive
  * them from and the host's own headers are the oracle. This file is diffed
@@ -46,6 +57,7 @@
 #include <linux/sockios.h>
 #include <linux/if_bonding.h>
 #include <linux/mii.h>
+#include <linux/ethtool.h>
 
 int main(void)
 {
@@ -75,5 +87,29 @@ int main(void)
 	       MII_ADVERTISE, MII_LPA, MII_ESTATUS, BMSR_LSTATUS, BMCR_ISOLATE,
 	       BMCR_ANENABLE, ADVERTISE_ALL, (int)sizeof(struct mii_ioctl_data),
 	       (int)(sizeof(struct mii_ioctl_data) == 4 * sizeof(__u16)));
+	printf("ethcmd  %x %x %x %x %x %x %x | %d\n", ETHTOOL_GSET, ETHTOOL_SSET,
+	       ETHTOOL_GDRVINFO, ETHTOOL_GREGS, ETHTOOL_GLINK, ETHTOOL_GEEPROM,
+	       ETHTOOL_GSTATS, ETHTOOL_BUSINFO_LEN);
+	printf("ethval  %d %d %d\n", (int)sizeof(struct ethtool_value),
+	       (int)offsetof(struct ethtool_value, cmd),
+	       (int)offsetof(struct ethtool_value, data));
+	printf("ethdrv  %d | %d %d %d %d %d %d | %d %d %d %d %d\n",
+	       (int)sizeof(struct ethtool_drvinfo),
+	       (int)offsetof(struct ethtool_drvinfo, driver),
+	       (int)offsetof(struct ethtool_drvinfo, version),
+	       (int)offsetof(struct ethtool_drvinfo, fw_version),
+	       (int)offsetof(struct ethtool_drvinfo, bus_info),
+	       (int)offsetof(struct ethtool_drvinfo, erom_version),
+	       (int)offsetof(struct ethtool_drvinfo, reserved2),
+	       (int)offsetof(struct ethtool_drvinfo, n_priv_flags),
+	       (int)offsetof(struct ethtool_drvinfo, n_stats),
+	       (int)offsetof(struct ethtool_drvinfo, testinfo_len),
+	       (int)offsetof(struct ethtool_drvinfo, eedump_len),
+	       (int)offsetof(struct ethtool_drvinfo, regdump_len));
+	printf("ethcm   %d | %d %d %d %d\n", (int)sizeof(struct ethtool_cmd),
+	       (int)offsetof(struct ethtool_cmd, speed),
+	       (int)offsetof(struct ethtool_cmd, maxtxpkt),
+	       (int)offsetof(struct ethtool_cmd, lp_advertising),
+	       (int)offsetof(struct ethtool_cmd, reserved));
 	return 0;
 }

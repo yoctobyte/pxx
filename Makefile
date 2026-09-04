@@ -14244,20 +14244,25 @@ test-core: $(COMPILER)
 	# All rows diffed against gcc.
 	./$(COMPILER) test/c_crtl_mtd_timex_kd_caps.c $(TESTTMP)/c_mtdtkc26
 	tools/expect_same.sh c_mtdtkc26 "$$($(TESTTMP)/c_mtdtkc26)" "$$(printf '1 32 | 0 4 8 12 20 24\n2 80204d01 40084d02 40084d0b 80c84d0a 40104d14\n3 8 328 48 64 | 4 7168 3\n4 208 | 8 40 72 112 160\n5 1 4000 8001 a001 8001\n6 1 40 2000 ff00 | 5 6\n7 1 1\n8 4b60 4b6c 4b67 4b72 4b44\n9 1 2 4 | 1 2 4\n10 0 1 2 3 | 1 3\n11 24 32 16 | 513 1\n12 19980330 20071026 20080522 | 1 2 2 | 19980330 1\n13 0 34 40 | 0 200000 | 1 4 | 1 0\n14 1 1\n15 0 8 12 24\n16 1 1')"
-	# Seven headers crtl did not have, all found by attempting busybox for
+	# Eight headers crtl did not have, all found by attempting busybox for
 	# i386: <linux/if.h>, <linux/if_arp.h>, <linux/if_vlan.h>,
-	# <linux/jffs2.h>, <sys/vt.h>, <linux/if_bonding.h>, <linux/mii.h>.
+	# <linux/jffs2.h>, <sys/vt.h>, <linux/if_bonding.h>, <linux/mii.h>,
+	# <linux/ethtool.h>.
 	# They were invisible on x86-64 because the host-header fallback is
 	# NATIVE-ONLY -- an unknown <h> resolves from /usr/include with a warning
 	# there and is a hard refusal on every cross target, so x86-64 was
 	# compiling those TUs against glibc's copies.
-	# THE LAST TWO ONLY BECAME VISIBLE ONCE THE FIRST FIVE LANDED: a TU
+	# EACH LAYER ONLY BECAME VISIBLE ONCE THE ONE ABOVE IT LANDED: a TU
 	# reports one missing include and stops, so ifenslave.c could not ask for
-	# if_bonding.h until if.h existed. A missing-header count from one run is
-	# a lower bound, not the list.
+	# if_bonding.h until if.h existed, nor for ethtool.h until if_bonding.h
+	# did. Three layers on the same two files. A missing-header count from one
+	# run is a lower bound, not the list.
+	# The ethtool structs are IOCTL PAYLOADS, so the rows assert OFFSETS: a
+	# short drvinfo is not a compile error, it is a driver writing 196 bytes
+	# into a struct that ends early.
 	# Every row is a kernel or wire constant diffed against the host headers.
 	./$(COMPILER) test/c_crtl_uapi_headers_from_busybox_i386.c $(TESTTMP)/c_uapibb26
-	tools/expect_same.sh c_uapibb26 "$$($(TESTTMP)/c_uapibb26)" "$$(printf 'if      16 1 40 400 800 16\narphrd  0 1 772 512 ffff fffe\nvlan    1 2 4 8 10\njffs2   1985 2003 e002 | 12 2 4\nvt      5601 5602 1 2 | 8\nbond    89f0 89f1 89fd 8947 2 6 | 12 28 14\nbondoff 0 4 20 24\nmii     0 1 4 5 f | 4 400 1000 1e0 | 8 1')"
+	tools/expect_same.sh c_uapibb26 "$$($(TESTTMP)/c_uapibb26)" "$$(printf 'if      16 1 40 400 800 16\narphrd  0 1 772 512 ffff fffe\nvlan    1 2 4 8 10\njffs2   1985 2003 e002 | 12 2 4\nvt      5601 5602 1 2 | 8\nbond    89f0 89f1 89fd 8947 2 6 | 12 28 14\nbondoff 0 4 20 24\nmii     0 1 4 5 f | 4 400 1000 1e0 | 8 1\nethcmd  1 2 3 4 a b 1d | 32\nethval  8 0 4\nethdrv  196 | 4 36 68 100 132 164 | 176 180 184 188 192\nethcm   44 | 12 20 32 36')"
 	# crtl gaps busybox reaches at 394 applets: acct, mlock/munlock, scandir/
 	# alphasort, ether_line/ether_hostton/ether_ntohost, IN_MULTICAST, pause,
 	# nice, sched_getscheduler/getparam/setscheduler, sigisemptyset. THIRTEEN,
