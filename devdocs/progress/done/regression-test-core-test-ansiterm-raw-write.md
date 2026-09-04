@@ -44,3 +44,6 @@ expect_same: MISMATCH [atpal/wasm32]
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-04 — auto-closed by the seven watcher: `test-core#src:test/test_ansiterm_raw_write.pas@1` passes at e2eece6e6f94 (tier native); it was red at 124d83cf494b. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
