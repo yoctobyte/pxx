@@ -2030,8 +2030,6 @@ begin
   else if isGenerator and (nparams > CO_MAX_PARAMS) then
     Error('generator: at most 4 parameters in v1');
   if retIsDynArr then Procs[procIdx].RetType := tyPointer; { 8-byte heap handle ABI }
-  if TargetArch = TARGET_XTENSA then
-    while (CodeLen mod 4) <> 0 do xtensa_nop; { CALL0 targets must be 4-aligned }
 
   { REDEFINITION: a second body for a routine that already has one, declared in
     the SAME scope. Silently accepted until now, and the second body simply won
@@ -2071,7 +2069,7 @@ begin
       + ''' with the same parameter types; the later body wins, but calls '
       + 'written between the two bind to the earlier one');
 
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
   if DebugTrace then writeln('PROC ', Procs[procIdx].Name, ' @', CodeLen);
   for i := 0 to nparams-1 do
   begin
@@ -5319,9 +5317,7 @@ begin
     procIdx := RegisterProc('__fini_' + uname, False, tyInteger, 0, dummyNames, dummyTypes)
   else
     procIdx := RegisterProc('__init_' + uname, False, tyInteger, 0, dummyNames, dummyTypes);
-  if TargetArch = TARGET_XTENSA then
-    while (CodeLen mod 4) <> 0 do xtensa_nop; { CALL0 targets must be 4-aligned }
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
 
   savedSC := SymCount; savedFS := FrameSize;
   LocalInitCount := 0;   { routine-local typed-const initializers, flushed in the prologue }
@@ -5412,9 +5408,7 @@ begin
   procIdx := GetFiniRunnerProc;
   FiniGuardSym := AllocVar('__pxx_fini_done', tyInteger);  { CurProc<0: BSS, zeroed }
 
-  if TargetArch = TARGET_XTENSA then
-    while (CodeLen mod 4) <> 0 do xtensa_nop;
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
   savedSC := SymCount; savedFS := FrameSize;
   FrameSize := 0;
   CurProc := procIdx;

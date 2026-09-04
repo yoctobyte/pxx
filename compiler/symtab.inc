@@ -10934,6 +10934,41 @@ begin
   Result := ProcCount; Inc(ProcCount);
 end;
 
+{ ===== A PROC ENTRY IS AN ALIGNED ADDRESS ON XTENSA, AND THE FRONTEND THAT
+  FORGOT IT WAS THE ONE NOBODY RAN =====
+
+  CALL0/CALL8 encode a WORD offset, so a call to an entry that is not 4-aligned
+  loses the stray byte in the `div 4` -- silently, to a wrong address.
+  EncodeXtensaCall0 refuses rather than truncating (xtensaenc.inc), and its
+  comment states the invariant as already true: "proc entries are padded to 4
+  on this target".
+
+  They were not. THREE sites padded, all of them in pasparser_proc.inc, and
+  twenty did not -- every C, Zig, Rust, Erlang and Nil-Python function, plus C's
+  setjmp/longjmp and per-module init shells. The Pascal frontend is the one that
+  gets built for xtensa constantly, so the invariant held everywhere anyone
+  looked. Measured 2026-09-04: `--emit-obj --target=xtensa lib/crtl/src/ctype.c`
+  refused with `call0 target 2787 is not 4-aligned`, which is exactly the guard
+  firing on the first C function whose predecessor did not end on a word
+  boundary. That refusal is why NO C translation unit had ever been built for
+  xtensa, which is in turn why the 329-number generated xtensa syscall table
+  could be verified by nothing (bug-a-no-c-translation-unit-builds-for-xtensa).
+
+  So the fix is one function that ALIGNS AND ASSIGNS, not a padding line copied
+  to twenty more sites. The alignment and the address must not be separable: the
+  defect is precisely that one of them can be written without the other, and a
+  twenty-first frontend is a matter of time. Pad first, THEN read CodeLen --
+  reading it first records the address the padding is about to move.
+
+  No-op on every other target, so nothing but xtensa changes shape.
+  bug-a-no-c-translation-unit-builds-for-xtensa-and-two-different-things-stop-it }
+procedure SetProcBodyAddrHere(procIdx: Integer);
+begin
+  if TargetArch = TARGET_XTENSA then
+    while (CodeLen mod 4) <> 0 do xtensa_nop;
+  Procs[procIdx].BodyAddr := CodeLen;
+end;
+
 { The __pxx_run_finalizers shell every exit path calls (main-body fall-off and
   every Halt site). Registered lazily — a Halt can lower before all units are
   parsed, so the shell is a forward call resolved by ApplyCallFixups; the body

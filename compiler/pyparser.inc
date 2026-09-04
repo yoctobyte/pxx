@@ -30600,7 +30600,7 @@ begin
       ProcAggregateDestSym[procIdx] := idx;
     end;
   end;
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
   { Stash the hidden destination pointer the caller passed for the Variant
@@ -31169,7 +31169,7 @@ begin
     all agree about what the name is (see SymCellPtr). }
   cellInit := PyPromoteNonlocalCells(bodyStart);
 
-  Procs[procIdx].BodyAddr := CodeLen;   { see the note above: AFTER the pre-pass }
+  SetProcBodyAddrHere(procIdx);   { see the note above: AFTER the pre-pass }
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
   EmitAggregateDestStash(procIdx);
@@ -35152,7 +35152,7 @@ begin
     end;
   { see PyParseDef: a `nonlocal`-claimed local becomes one shared frame cell }
   cellInit := PyPromoteNonlocalCells(bodyStart);
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
   { A method may contain nested defs (`def helper(): ...` inside it). They queue
     their bodies just like a plain def's do, so the method must set the nest
     prefix (for capture + qualified registration) and drain the queue after its
@@ -35402,7 +35402,7 @@ begin
       Syms[idx].RecName := UFldRec_[UClsFBase[ci] + i - 1];
     SymSyncTypeRef(idx);
   end;
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
   EmitParamSpillsForTarget(procIdx, nparams);
   seqHead := -1;
@@ -35506,7 +35506,7 @@ begin
   Syms[idx].RecName := ProcRetRecId[iterPi];
   SymSyncTypeRef(idx);
   gIdx := AllocVar('', tyPointer);
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
   EmitParamSpillsForTarget(procIdx, 1);
 
@@ -35571,7 +35571,7 @@ begin
   idx := AllocVar('$pyresult', tyBoolean);
   Procs[procIdx].RetSymIdx := idx;
   Syms[idx].Kind := skLocal;
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
   EmitParamSpillsForTarget(procIdx, 2);
   acc := -1;
@@ -35672,7 +35672,7 @@ begin
   idx := AllocVar('$pyresult', tyBoolean);
   Procs[procIdx].RetSymIdx := idx;
   Syms[idx].Kind := skLocal;
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
   EmitParamSpillsForTarget(procIdx, 2);
   acc := AllocNode(AN_BOOL_LIT);
@@ -35769,7 +35769,7 @@ begin
   idx := AllocVar('$pyresult', tyAnsiString);
   Procs[procIdx].RetSymIdx := idx;
   Syms[idx].Kind := skLocal;
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
   EmitParamSpillsForTarget(procIdx, 1);
   acc := PyExcFoldLit(clsName + '(');
@@ -38244,7 +38244,7 @@ begin
   { the module's import-time code, as this unit's initialization section }
   procIdx := RegisterProc('__init_' + uname, False, tyInteger, 0,
                           dummyNames, dummyTypes);
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
   savedSC := SymCount;
   savedFS := FrameSize;
   FrameSize := 0;

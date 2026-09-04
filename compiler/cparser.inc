@@ -10762,7 +10762,7 @@ var fsIdx, fgIdx: Integer;
 begin
   pn[0] := 'mode'; pt[0] := tyInteger;
   fsIdx := RegisterProc('__pxx_fesetround', True, tyInteger, 1, pn, pt);
-  Procs[fsIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(fsIdx);
   if TargetArch = TARGET_X86_64 then
   begin
     EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($FC);  { stmxcsr [rsp-4] }
@@ -10780,7 +10780,7 @@ begin
   else
     EmitCReturnZeroStub;
   fgIdx := RegisterProc('__pxx_fegetround', True, tyInteger, 0, pn, pt);
-  Procs[fgIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(fgIdx);
   if TargetArch = TARGET_X86_64 then
   begin
     EmitB($0F); EmitB($AE); EmitB($5C); EmitB($24); EmitB($FC);  { stmxcsr [rsp-4] }
@@ -10799,7 +10799,7 @@ var sjIdx, ljIdx: Integer;
 begin
   pn[0] := 'env'; pt[0] := tyPointer;
   sjIdx := RegisterProc('__pxx_setjmp', True, tyInteger, 1, pn, pt);
-  Procs[sjIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(sjIdx);
   case TargetArch of
   TARGET_X86_64:
   begin
@@ -10896,7 +10896,7 @@ begin
 
   pn[0] := 'env'; pt[0] := tyPointer; pn[1] := 'val'; pt[1] := tyInteger;
   ljIdx := RegisterProc('__pxx_longjmp', False, tyInteger, 2, pn, pt);
-  Procs[ljIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(ljIdx);
   case TargetArch of
   TARGET_X86_64:
   begin
@@ -12588,7 +12588,7 @@ begin
               AIntToStr(nparams) + ' parameter(s) of these types');
     end;
     { RUNG 0 -- a DEFINITION may not seize a differently-cased twin's entry.
-      `Procs[procIdx].BodyAddr := CodeLen` below installs this body into
+      `SetProcBodyAddrHere(procIdx)` below installs this body into
       whatever FindProc returned, and FindProc is case-insensitive across
       namespaces, so `double sqrt(double)` with a body landed on Pascal's
       `Sqrt` and REPLACED the RTL's implementation for the whole program --
@@ -12856,7 +12856,7 @@ begin
     redeclaration must not turn the symbol global again.
     bug-a-static-c-functions-are-emitted-as-global-symbols }
   if procSawStatic then ProcCStaticLink[procIdx] := True;
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
   
   { Save scope }
   savedSC := SymCount;
@@ -15490,7 +15490,7 @@ begin
   begin
     initIdx := RegisterProc('__init_c_' + Strs[CurrentUnitIdx].Text, False,
                             tyInteger, 0, dummyNames, dummyTypes);
-    Procs[initIdx].BodyAddr := CodeLen;
+    SetProcBodyAddrHere(initIdx);
     savedSC := SymCount;
     savedFS := FrameSize;
     FrameSize := 0;

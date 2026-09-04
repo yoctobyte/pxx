@@ -5374,7 +5374,7 @@ begin
 
     savedSC := SymCount; savedFS := FrameSize;
     FrameSize := 0; CurProc := procIdx;
-    Procs[procIdx].BodyAddr := CodeLen;
+    SetProcBodyAddrHere(procIdx);
     Procs[procIdx].ScopeBase := SymCount;
     if selfBase = 1 then
     begin
@@ -5509,7 +5509,7 @@ begin
 
   savedSC := SymCount; savedFS := FrameSize;
   FrameSize := 0; CurProc := procIdx;
-  Procs[procIdx].BodyAddr := CodeLen;
+  SetProcBodyAddrHere(procIdx);
   Procs[procIdx].ScopeBase := SymCount;
   for i := 0 to nparams - 1 do
   begin
