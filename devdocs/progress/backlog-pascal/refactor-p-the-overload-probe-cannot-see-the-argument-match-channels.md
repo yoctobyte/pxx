@@ -79,3 +79,33 @@ is not the code, it is the *knowledge* being reconstructed in two places.
 `test/test_method_arg_typecheck_ok.pas` and `..._fails.pas` unchanged, and every
 `test/*.pas` compiled with only the `*_fail.pas` files refused. Those five are
 what caught each class; do not believe a narrower run.
+
+---
+
+## 2026-09-05 (frankA) — FIVE channels confirmed; the fill range moved 750 lines
+
+Re-derived at `3e25c7ae5`. The body says five side channels filled in
+`pasparser_lval.inc ≈5660-5730`. Both halves checked:
+
+- **Five channels, and four `*Valid` flags, not five** — `MatchArgArray` and
+  `MatchArgArrayElemTk` share `MatchArgArrayValid` (`defs.inc:2861-2868`). That
+  matters for the work below: whatever populates the channels from the probe has
+  to know the flags are not one-per-channel.
+- **All fills are in `pasparser_lval.inc`, now 6405-6509**, not 5660-5730. One
+  file, nine writes, four flag-sets. The body's claim that the free path is the
+  only filler holds.
+
+**One false positive of my own worth recording, because it is the failure this
+ticket is about in miniature.** My first fill census matched
+`ar := MatchArgRec[j]` in `symtab.inc:9718` and reported a second filling file.
+That is a READ — the channel on the RIGHT of `:=` — inside
+`MatchParamCompatible`, i.e. a CONSUMER. The predicate has to name the side:
+
+```
+grep -nE 'MatchArg[A-Za-z]*\[[^]]*\] *:=' compiler/*.inc   # fills only
+```
+
+An unanchored `:=` grep counts producers and consumers as one population, which
+is precisely the conflation — *"calling the shared predicate is not the same as
+reaching the shared answer"* — that the body already warns about for
+`MatchArgNilOk`.

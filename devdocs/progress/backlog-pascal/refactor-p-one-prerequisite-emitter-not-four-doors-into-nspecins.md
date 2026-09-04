@@ -94,3 +94,33 @@ the 25 in `test-core` plus `test_generic_qualified_arg{,_delphi}` and
 against `pinned`. **`test_generic_cycle_fail` must still fail with its cycle
 diagnostic** — it is the control for every change to the deferral path and the
 one this refactor is most likely to break. Track T sweeps the matrix.
+
+---
+
+## 2026-09-05 (frankA) — count RE-DERIVED and it holds at four; the line numbers do not
+
+The body's table is dated 2026-08-30 and its four line numbers have all drifted.
+Re-derived at `3e25c7ae5` from the door predicate rather than the names:
+
+```
+grep -n 'NSpecInsCnt *:= *0'          compiler/*.inc
+grep -n 'InsertTokens(.*NSpecIns'     compiler/*.inc
+```
+
+Four resets, four splices, one file, pairing exactly:
+
+| reset | splice | body's stale figure |
+| --- | --- | --- |
+| `pasparser_generic.inc:1757` | `:1762` | ~1172 |
+| `:3134` | `:3162` | ~1864 |
+| `:3636` | `:3642` | ~2319 |
+| `:3684` | `:3700` | ~2364 |
+
+**FOUR is correct — this ticket is not overselling itself.** Worth stating
+explicitly because the sibling refactor
+[[refactor-p-three-hand-rolled-postfix-loops]] WAS underselling itself by 40%
+when I recounted it, and tonight frankB found a "twice" that was three times
+with the uncounted copy carrying two silent bugs. **The instrument has now failed
+in both directions in one week, so a holding count is a result, not a
+formality.** The greps above are the durable half; the line numbers will drift
+again.
