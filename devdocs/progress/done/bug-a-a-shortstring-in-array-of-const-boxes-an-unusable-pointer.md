@@ -115,3 +115,9 @@ not have reproduced the compiler.
 **not** a defect and is not filed: `builtinheap.pas:99` records it as a chosen
 consequence of this RTL's string model, and with this fix the payload now
 matches what that tag promises.
+
+## Log
+
+- 2026-09-04 — found, fixed, tested and closed in one pass, commit `1cac1742a`.
+  Fix and close are the same commit. Test, leak row and the reverted-arm control
+  are all in it.
