@@ -103,7 +103,7 @@ something other than the layout engine was asked how big a type is, and it
 answered — or here, could not, and said "unknown type".
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 6a890a405.
 
 
 ## Resolved 2026-09-04 (frankh-15)
