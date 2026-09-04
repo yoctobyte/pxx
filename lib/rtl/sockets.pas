@@ -14,7 +14,7 @@ unit sockets;
 
 interface
 
-uses platform, sysutils;
+uses platform, platform_types, sysutils;
 
 type
   cint        = LongInt;
@@ -105,7 +105,11 @@ const
   IPV6_UNICAST_HOPS = 16;  IPV6_MULTICAST_IF = 17;  IPV6_MULTICAST_HOPS = 18;
   IPV6_MULTICAST_LOOP = 19;  IPV6_JOIN_GROUP = 20;  IPV6_LEAVE_GROUP = 21;
 
-  MSG_OOB = 1;  MSG_PEEK = 2;  MSG_NOSIGNAL = $4000;
+  { Linux's numbers, which is what FPC's Sockets publishes and what any caller
+    written against a POSIX manpage will pass. They are translated to the PAL's
+    own numbering in the fp* bodies below -- see PalMsgFromPosix. }
+  MSG_OOB = 1;  MSG_PEEK = 2;  MSG_DONTWAIT = $40;  MSG_WAITALL = $100;
+  MSG_NOSIGNAL = $4000;
 
 { Byte order (LE host -> network big-endian). Shared with our net/http code. }
 function htons(host: Word): Word;
@@ -313,26 +317,40 @@ begin
   end;
 end;
 
+{ THESE FOUR TOOK `flags' AND DROPPED IT until 2026-09-04, and the failure was
+  a HANG rather than a wrong value: two successive fpRecv(..., MSG_PEEK) calls
+  should return the same bytes, but the first CONSUMED them and the second
+  waited forever for bytes that would never arrive
+  (bug-b-fprecv-and-fpsend-silently-discard-their-flags-argument). A caller
+  doing the standard "peek at the header, then read the whole message" got a
+  deadlock. Nothing in the tree passed a flag, so nothing saw it. }
 function fpSend(s: cint; msg: Pointer; len: cint; flags: cint): ssize_t;
+var f: Integer;
 begin
-  Result := SockRetSize(PalSend(s, msg, len));
+  if not PalMsgFromPosix(flags, f) then begin Result := SockRetSize(PAL_ERR_INVALID); Exit; end;
+  Result := SockRetSize(PalSend(s, msg, len, f));
 end;
 
 function fpRecv(s: cint; buf: Pointer; len: cint; flags: cint): ssize_t;
+var f: Integer;
 begin
-  Result := SockRetSize(PalRecv(s, buf, len));
+  if not PalMsgFromPosix(flags, f) then begin Result := SockRetSize(PAL_ERR_INVALID); Exit; end;
+  Result := SockRetSize(PalRecv(s, buf, len, f));
 end;
 
 function fpSendTo(s: cint; msg: Pointer; len: cint; flags: cint; addr: PInetSockAddr; addrlen: TSocklen): ssize_t;
+var f: Integer;
 begin
   if addr = nil then begin Result := SOCKET_ERROR; Exit; end;
-  Result := SockRetSize(PalSendToIpv4(s, msg, len, ntohl(addr^.sin_addr.s_addr), ntohs(addr^.sin_port)));
+  if not PalMsgFromPosix(flags, f) then begin Result := SockRetSize(PAL_ERR_INVALID); Exit; end;
+  Result := SockRetSize(PalSendToIpv4(s, msg, len, ntohl(addr^.sin_addr.s_addr), ntohs(addr^.sin_port), f));
 end;
 
 function fpRecvFrom(s: cint; buf: Pointer; len: cint; flags: cint; addr: PInetSockAddr; addrlen: pTSocklen): ssize_t;
-var host: LongWord; port: Integer;
+var host: LongWord; port: Integer; f: Integer;
 begin
-  Result := SockRetSize(PalRecvFromIpv4(s, buf, len, host, port));
+  if not PalMsgFromPosix(flags, f) then begin Result := SockRetSize(PAL_ERR_INVALID); Exit; end;
+  Result := SockRetSize(PalRecvFromIpv4(s, buf, len, host, port, f));
   if (Result >= 0) and (addr <> nil) then
   begin
     FillAddr(addr, host, port);

@@ -255,16 +255,39 @@ function PalIn6Loopback: TPalIn6Addr;
 function PalIn6Any: TPalIn6Addr;
 function PalListen(handle, backlog: Integer): Integer;
 function PalAccept(handle: Integer): Integer;
-function PalRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
-function PalSend(handle: Integer; buf: Pointer; len: Integer): Int64;
+{ POSIX/Linux MSG_* -> PAL_MSG_*, for the two PUBLIC surfaces that publish a
+  flags argument: lib/rtl/sockets.pas (FPC's `Sockets') and crtl's
+  <sys/socket.h>. Both publish LINUX's numbers, because that is the ABI their
+  callers were written against -- so both need the same conversion, and it is
+  written once here rather than twice. Returns False if any bit is not one the
+  PAL carries.
+
+  REFUSING AN UNKNOWN BIT IS THE POINT. Masking it off is how this whole family
+  of bugs starts: fpRecv took a flags argument and dropped it, so MSG_PEEK
+  looked accepted, consumed the data, and the caller's second peek blocked
+  forever. A refusal is a wrong answer the caller can see; a silent drop is a
+  wrong answer that looks like success.
+
+  MSG_NOSIGNAL is ACCEPTED AND MAPS TO NOTHING. It is not ignored -- the posix
+  backend ORs it into every send unconditionally, so a caller asking for it
+  gets exactly what it asked for. Accepting it also matters for real C code:
+  it is the one MSG_* flag ordinary programs pass on purpose. }
+function PalMsgFromPosix(flags: Integer; var outFlags: Integer): Boolean;
+
+{ flags defaults to 0 so the ~90 existing call sites keep their meaning
+  unchanged. A second `*WithFlags' entry point was the alternative and is
+  exactly the shape devdocs/dev/normalise-dont-special-case.md warns about --
+  the second path is the one that stays broken. }
+function PalRecv(handle: Integer; buf: Pointer; len: Integer; flags: Integer = 0): Int64;
+function PalSend(handle: Integer; buf: Pointer; len: Integer; flags: Integer = 0): Int64;
 function PalShutdown(handle, how: Integer): Integer;
 function PalSocketClose(handle: Integer): Integer;
-function PalSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
-function PalRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer; flags: Integer = 0): Int64;
+function PalRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer; flags: Integer = 0): Int64;
 function PalSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
-                       const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
+                       const addr: TPalIn6Addr; port, scopeId: Integer; flags: Integer = 0): Int64;
 function PalRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
-                         var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
+                         var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer; flags: Integer = 0): Int64;
 function PalPoll(handle, events, timeoutMs: Integer): Integer;
 { Set-shaped readiness poll: fds points at nfds C `struct pollfd` records (int
   fd, short events, short revents — 8 bytes, the layout PalPoll already packs
@@ -766,14 +789,35 @@ begin
   Result := PalBackendAccept(handle);
 end;
 
-function PalRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
+const
+  { Linux's numbers, and the only place in the PAL facade that names them. }
+  POSIX_MSG_OOB      = 1;
+  POSIX_MSG_PEEK     = 2;
+  POSIX_MSG_DONTWAIT = $40;
+  POSIX_MSG_WAITALL  = $100;
+  POSIX_MSG_NOSIGNAL = $4000;
+  POSIX_MSG_KNOWN    = POSIX_MSG_OOB or POSIX_MSG_PEEK or POSIX_MSG_DONTWAIT or
+                       POSIX_MSG_WAITALL or POSIX_MSG_NOSIGNAL;
+
+function PalMsgFromPosix(flags: Integer; var outFlags: Integer): Boolean;
 begin
-  Result := PalBackendRecv(handle, buf, len);
+  outFlags := 0;
+  if (flags and not POSIX_MSG_KNOWN) <> 0 then begin PalMsgFromPosix := False; Exit; end;
+  if (flags and POSIX_MSG_OOB) <> 0 then outFlags := outFlags or PAL_MSG_OOB;
+  if (flags and POSIX_MSG_PEEK) <> 0 then outFlags := outFlags or PAL_MSG_PEEK;
+  if (flags and POSIX_MSG_DONTWAIT) <> 0 then outFlags := outFlags or PAL_MSG_DONTWAIT;
+  if (flags and POSIX_MSG_WAITALL) <> 0 then outFlags := outFlags or PAL_MSG_WAITALL;
+  PalMsgFromPosix := True;
 end;
 
-function PalSend(handle: Integer; buf: Pointer; len: Integer): Int64;
+function PalRecv(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
 begin
-  Result := PalBackendSend(handle, buf, len);
+  Result := PalBackendRecv(handle, buf, len, flags);
+end;
+
+function PalSend(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
+begin
+  Result := PalBackendSend(handle, buf, len, flags);
 end;
 
 function PalShutdown(handle, how: Integer): Integer;
@@ -786,21 +830,21 @@ begin
   Result := PalBackendSocketClose(handle);
 end;
 
-function PalSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
+function PalSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer; flags: Integer): Int64;
 begin
-  Result := PalBackendSendToIpv4(handle, buf, len, hostAddr, port);
+  Result := PalBackendSendToIpv4(handle, buf, len, hostAddr, port, flags);
 end;
 
 function PalSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
-                       const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
+                       const addr: TPalIn6Addr; port, scopeId: Integer; flags: Integer): Int64;
 begin
-  Result := PalBackendSendToIpv6(handle, buf, len, addr, port, scopeId);
+  Result := PalBackendSendToIpv6(handle, buf, len, addr, port, scopeId, flags);
 end;
 
 function PalRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
-                         var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
+                         var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer; flags: Integer): Int64;
 begin
-  Result := PalBackendRecvFromIpv6(handle, buf, len, outAddr, outPort, outScopeId);
+  Result := PalBackendRecvFromIpv6(handle, buf, len, outAddr, outPort, outScopeId, flags);
 end;
 
 function PalAcceptIpv6(handle: Integer; var outAddr: TPalIn6Addr;
@@ -809,9 +853,9 @@ begin
   Result := PalBackendAcceptIpv6(handle, outAddr, outPort, outScopeId);
 end;
 
-function PalRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer; flags: Integer): Int64;
 begin
-  Result := PalBackendRecvFromIpv4(handle, buf, len, outAddr, outPort);
+  Result := PalBackendRecvFromIpv4(handle, buf, len, outAddr, outPort, flags);
 end;
 
 function PalPoll(handle, events, timeoutMs: Integer): Integer;

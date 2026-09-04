@@ -101,16 +101,16 @@ function PalBackendConnectIpv6(handle: Integer; const addr: TPalIn6Addr;
                                port, scopeId: Integer): Integer;
 function PalBackendListen(handle, backlog: Integer): Integer;
 function PalBackendAccept(handle: Integer): Integer;
-function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
-function PalBackendSend(handle: Integer; buf: Pointer; len: Integer): Int64;
+function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
+function PalBackendSend(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
 function PalBackendShutdown(handle, how: Integer): Integer;
 function PalBackendSocketClose(handle: Integer): Integer;
-function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
-function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer; flags: Integer): Int64;
+function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer; flags: Integer): Int64;
 function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
-                              const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
+                              const addr: TPalIn6Addr; port, scopeId: Integer; flags: Integer): Int64;
 function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
-                                var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
+                                var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer; flags: Integer): Int64;
 function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
 function PalBackendPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
 function PalBackendGetSockError(handle: Integer): Integer;
@@ -912,13 +912,13 @@ begin
 end;
 
 function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
-                              const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
+                              const addr: TPalIn6Addr; port, scopeId: Integer; flags: Integer): Int64;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 
 function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
-                                var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
+                                var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer; flags: Integer): Int64;
 var i: Integer;
 begin
   for i := 0 to 15 do outAddr.Bytes[i] := 0;
@@ -945,19 +945,62 @@ begin
 {$endif}
 end;
 
-function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
+{ PAL_MSG_* -> lwIP MSG_*. THE NUMBERS DO NOT AGREE WITH LINUX'S AND THAT IS
+  THE WHOLE POINT OF THIS FUNCTION: lwIP MSG_PEEK is 1 where Linux's is 2, and
+  lwIP's 2 is MSG_WAITALL, which its own header marks "Unimplemented". A PAL
+  that passed Linux numbers through would turn a peek into a silently ignored
+  flag -- the data consumed, the second peek blocking forever, which is exactly
+  the bug the flags parameter was added to fix.
+  Values read from
+  /home/neo/esp/esp-idf/components/lwip/lwip/src/include/lwip/sockets.h:269-274
+  on 2026-09-04, not recalled.
+
+  OOB IS REFUSED RATHER THAN TRANSLATED. lwIP defines MSG_OOB (0x04) and marks
+  it "Unimplemented" in the same breath, so passing it through would return
+  success having ignored the caller entirely. ESP is not a Unix and the PAL's
+  standing answer to that is PAL_ERR_UNSUPPORTED, not a wrong answer -- 33
+  other PAL entries already refuse deliberately. MSG_WAITALL is refused for the
+  same reason and from the same header line. }
+const
+  LWIP_MSG_PEEK     = $01;
+  LWIP_MSG_DONTWAIT = $08;
+
+function XlatMsgFlags(flags: Integer; var outFlags: Integer): Integer;
 begin
+  outFlags := 0;
+  if (flags and not (PAL_MSG_PEEK or PAL_MSG_DONTWAIT)) <> 0 then
+  begin
+    if (flags and not PAL_MSG_ALL) <> 0 then XlatMsgFlags := PAL_ERR_INVALID
+    else XlatMsgFlags := PAL_ERR_UNSUPPORTED;
+    Exit;
+  end;
+  if (flags and PAL_MSG_PEEK) <> 0 then outFlags := outFlags or LWIP_MSG_PEEK;
+  if (flags and PAL_MSG_DONTWAIT) <> 0 then outFlags := outFlags or LWIP_MSG_DONTWAIT;
+  XlatMsgFlags := 0;
+end;
+
+function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
+var f, rc: Integer;
+begin
+  rc := XlatMsgFlags(flags, f);
+  if rc <> 0 then begin Result := rc; Exit; end;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := lwip_recv(handle, buf, len, 0);
+  Result := lwip_recv(handle, buf, len, f);
 {$else}
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
 
-function PalBackendSend(handle: Integer; buf: Pointer; len: Integer): Int64;
+{ No MSG_NOSIGNAL here, unlike the posix backend, and not by omission: lwIP
+  raises no SIGPIPE at all -- it defines MSG_NOSIGNAL(0x20) only to mark it
+  "Unimplemented". A closed peer already yields an error return here. }
+function PalBackendSend(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
+var f, rc: Integer;
 begin
+  rc := XlatMsgFlags(flags, f);
+  if rc <> 0 then begin Result := rc; Exit; end;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
-  Result := lwip_send(handle, buf, len, 0);
+  Result := lwip_send(handle, buf, len, f);
 {$else}
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
@@ -981,29 +1024,33 @@ begin
 {$endif}
 end;
 
-function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
-var sa: array[0..15] of Byte;
+function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer; flags: Integer): Int64;
+var sa: array[0..15] of Byte; f, rc: Integer;
 begin
+  rc := XlatMsgFlags(flags, f);
+  if rc <> 0 then begin Result := rc; Exit; end;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
   FillSockAddrIpv4(@sa[0], hostAddr, port);
-  Result := lwip_sendto(handle, buf, len, 0, @sa[0], 16);
+  Result := lwip_sendto(handle, buf, len, f, @sa[0], 16);
 {$else}
   Result := PAL_ERR_UNSUPPORTED;
 {$endif}
 end;
 
-function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer; flags: Integer): Int64;
 {$ifdef PXX_PAL_ESP_IDF_TARGET}
 var
   sa: array[0..15] of Byte;
   addrlen: Integer;
-  i: Integer;
+  i, f, rc: Integer;
 begin
-  for i := 0 to 15 do sa[i] := 0;
-  addrlen := 16;
-  Result := lwip_recvfrom(handle, buf, len, 0, @sa[0], @addrlen);
   outAddr := 0;
   outPort := 0;
+  rc := XlatMsgFlags(flags, f);
+  if rc <> 0 then begin Result := rc; Exit; end;
+  for i := 0 to 15 do sa[i] := 0;
+  addrlen := 16;
+  Result := lwip_recvfrom(handle, buf, len, f, @sa[0], @addrlen);
   if Result >= 0 then
     ParseSockAddrIpv4(@sa[0], outAddr, outPort);
 end;

@@ -33,10 +33,10 @@ function __pxx_bind_ipv4(fd: Integer; host: LongWord; port: Integer): Integer;
 function __pxx_connect_ipv4(fd: Integer; host: LongWord; port: Integer): Integer;
 function __pxx_listen(fd, backlog: Integer): Integer;
 function __pxx_accept_ipv4(fd: Integer; outHost, outPort: Pointer): Integer;
-function __pxx_send(fd: Integer; buf: Pointer; len: Integer): Int64;
-function __pxx_recv(fd: Integer; buf: Pointer; len: Integer): Int64;
-function __pxx_sendto_ipv4(fd: Integer; buf: Pointer; len: Integer; host: LongWord; port: Integer): Int64;
-function __pxx_recvfrom_ipv4(fd: Integer; buf: Pointer; len: Integer; outHost, outPort: Pointer): Int64;
+function __pxx_send(fd: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
+function __pxx_recv(fd: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
+function __pxx_sendto_ipv4(fd: Integer; buf: Pointer; len: Integer; host: LongWord; port: Integer; flags: Integer): Int64;
+function __pxx_recvfrom_ipv4(fd: Integer; buf: Pointer; len: Integer; outHost, outPort: Pointer; flags: Integer): Int64;
 function __pxx_shutdown(fd, how: Integer): Integer;
 function __pxx_socket_close(fd: Integer): Integer;
 function __pxx_getsockname_ipv4(fd: Integer; outHost, outPort: Pointer): Integer;
@@ -278,25 +278,44 @@ begin
   end;
 end;
 
-function __pxx_send(fd: Integer; buf: Pointer; len: Integer): Int64;
+{ THE `flags' ARGUMENT IS THE C SIDE OF
+  bug-b-fprecv-and-fpsend-silently-discard-their-flags-argument, and crtl had
+  the SAME defect as sockets.pas from the same cause -- lib/crtl/src/netinet/in.c
+  said `(void)flags;' in send, recv, sendto and recvfrom. The ticket named only
+  the Pascal arm. Fixing one and not the other is exactly what
+  devdocs/dev/normalise-dont-special-case.md means by the second path staying
+  broken, so both go through this one veneer.
+
+  IT TAKES LINUX'S NUMBERS, not the PAL's, because its callers are C programs
+  holding <sys/socket.h>'s MSG_*. The conversion is PalMsgFromPosix, shared
+  with sockets.pas. -EINVAL for a bit the PAL does not carry -- the C wrapper
+  turns that into -1/EINVAL like any other PAL error. }
+function __pxx_send(fd: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
+var f: Integer;
 begin
-  Result := PalSend(fd, buf, len);
+  if not PalMsgFromPosix(flags, f) then begin Result := PAL_ERR_INVALID; Exit; end;
+  Result := PalSend(fd, buf, len, f);
 end;
 
-function __pxx_recv(fd: Integer; buf: Pointer; len: Integer): Int64;
+function __pxx_recv(fd: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
+var f: Integer;
 begin
-  Result := PalRecv(fd, buf, len);
+  if not PalMsgFromPosix(flags, f) then begin Result := PAL_ERR_INVALID; Exit; end;
+  Result := PalRecv(fd, buf, len, f);
 end;
 
-function __pxx_sendto_ipv4(fd: Integer; buf: Pointer; len: Integer; host: LongWord; port: Integer): Int64;
+function __pxx_sendto_ipv4(fd: Integer; buf: Pointer; len: Integer; host: LongWord; port: Integer; flags: Integer): Int64;
+var f: Integer;
 begin
-  Result := PalSendToIpv4(fd, buf, len, host, port);
+  if not PalMsgFromPosix(flags, f) then begin Result := PAL_ERR_INVALID; Exit; end;
+  Result := PalSendToIpv4(fd, buf, len, host, port, f);
 end;
 
-function __pxx_recvfrom_ipv4(fd: Integer; buf: Pointer; len: Integer; outHost, outPort: Pointer): Int64;
-var host: LongWord; port: Integer;
+function __pxx_recvfrom_ipv4(fd: Integer; buf: Pointer; len: Integer; outHost, outPort: Pointer; flags: Integer): Int64;
+var host: LongWord; port: Integer; f: Integer;
 begin
-  Result := PalRecvFromIpv4(fd, buf, len, host, port);
+  if not PalMsgFromPosix(flags, f) then begin Result := PAL_ERR_INVALID; Exit; end;
+  Result := PalRecvFromIpv4(fd, buf, len, host, port, f);
   if Result >= 0 then
   begin
     PLongWord(outHost)^ := host;

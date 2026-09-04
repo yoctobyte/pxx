@@ -183,10 +183,20 @@ struct sockaddr {
 # define SO_TIMESTAMP SO_TIMESTAMP_NEW
 #endif
 
+/* Linux's values. FOUR OF THESE NOW REACH THE KERNEL and one still does not:
+   send/recv/sendto/recvfrom carry OOB, PEEK, DONTWAIT and WAITALL through to
+   the syscall, and NOSIGNAL is accepted because the PAL sets it on every send
+   anyway. They were ALL discarded until 2026-09-04 -- see the `(void)flags'
+   note in src/netinet/in.c.
+   MSG_TRUNC IS DECLARED AND NOT CARRIED, and a call passing it now answers
+   -1/EINVAL rather than succeeding with the flag dropped. That is the louder
+   of the two wrong answers on purpose: a silent drop is what made the peek bug
+   invisible for as long as it existed. Nothing in this tree passes it. */
 #define MSG_OOB 1
 #define MSG_PEEK 2
 #define MSG_TRUNC 0x20
 #define MSG_DONTWAIT 0x40
+#define MSG_WAITALL 0x100
 #define MSG_NOSIGNAL 0x4000
 #define MSG_MAXIOVLEN 16
 

@@ -134,14 +134,14 @@ function PalBackendBindIpv6(handle: Integer; const addr: TPalIn6Addr; port, scop
 function PalBackendConnectIpv6(handle: Integer; const addr: TPalIn6Addr; port, scopeId: Integer): Integer;
 function PalBackendListen(handle, backlog: Integer): Integer;
 function PalBackendAccept(handle: Integer): Integer;
-function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
-function PalBackendSend(handle: Integer; buf: Pointer; len: Integer): Int64;
+function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
+function PalBackendSend(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
 function PalBackendShutdown(handle, how: Integer): Integer;
 function PalBackendSocketClose(handle: Integer): Integer;
-function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
-function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
-function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer; const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
-function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer; var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
+function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer; flags: Integer): Int64;
+function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer; flags: Integer): Int64;
+function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer; const addr: TPalIn6Addr; port, scopeId: Integer; flags: Integer): Int64;
+function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer; var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer; flags: Integer): Int64;
 function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
 function PalBackendPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
 function PalBackendGetSockError(handle: Integer): Integer;
@@ -1211,12 +1211,12 @@ begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 
-function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
+function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 
-function PalBackendSend(handle: Integer; buf: Pointer; len: Integer): Int64;
+function PalBackendSend(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
@@ -1231,22 +1231,22 @@ begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 
-function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
+function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer; flags: Integer): Int64;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 
-function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer; flags: Integer): Int64;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 
-function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer; const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
+function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer; const addr: TPalIn6Addr; port, scopeId: Integer; flags: Integer): Int64;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;
 
-function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer; var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
+function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer; var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer; flags: Integer): Int64;
 begin
   Result := PAL_ERR_UNSUPPORTED;
 end;

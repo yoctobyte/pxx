@@ -460,11 +460,10 @@ _none_
 | meta-dialect-extensions-and-fpc-strict | A | 5 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | task-u-evaluate-the-2026-08-31-ticket-rules-next-week | U | 60 | task | Owner asked to evaluate the new rules next week. Written as a ticket rather than a scheduled callback BECAUSE timed callbacks are one of the rules. Carries the 2026-08-31 baseline so the comparison is possible at all -- without it, next week's evaluation is an opinion. | — |
 
-## backlog-libs (17)
+## backlog-libs (16)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-b-fprecv-and-fpsend-silently-discard-their-flags-argument | B | 55 | bug | MEASURED: sockets.pas's fpSend/fpRecv/fpSendTo/fpRecvFrom take a `flags: cint` parameter and never read it -- the four bodies call PalSend/PalRecv/PalSendToIpv4/PalRecvFromIpv4, none of which has a flags parameter at all. So MSG_PEEK is silently dropped: two successive fpRecv(..., MSG_PEEK) calls should both return the same bytes, but the first CONSUMES them and the second BLOCKS FOREVER (repro hangs, timeout exit 124; the first returns 8 with the right bytes, so the wrong answer is a hang, not a bad value). MSG_OOB is dropped the same way. This is NOT the SIGPIPE bug: MSG_NOSIGNAL is now set unconditionally inside the PAL send primitives, so closed-peer death is fixed independently of this. The fix is a real signature change -- a flags parameter through platform.pas and the posix/esp/wasi backends -- which is why it is filed rather than folded into the SIGPIPE fix. | — |
 | bug-b-gtk3-pc-writes-past-its-buffer-on-a-long-string | B | 35 | bug | TWO bugs in lib/pcl/gtk3.pas PC(). (1) No length check: a 1024-char string at slot 3 writes one past CBuf; at slots 0-2 a long string corrupts the next live slot. (2) The four-slot ring is arbitrary and unenforced, so a call taking FIVE PChar parameters reuses a slot the caller still holds -- no long string needed. PC() IS NOT DELETABLE, owner 2026-08-31: @s[1] of an EMPTY string is a nil pointer, and NULL is not the same argument as a pointer to \"\" -- PC() always writes a NUL and returns a valid pointer, which is a real job. (NilPy hit this and answered it by making empty strings carry a valid pointer; whether that representation is general is measurement 1.) THREE MEASUREMENTS IN ORDER: (1) is an empty AnsiString nil or a valid pointer, and is Pascal the same as NilPy; (2) do RUNTIME-built strings reserve len+1 for the NUL, or only literals (confirmed for literals: elfwriter.inc:1003, and ir_codegen_riscv32.inc:3001 already skips the prefix for a frozen string); (3) only if both are favourable does the copy go. Likely outcome: PC() survives with a bounds check and deterministic truncation, maybe a non-empty fast path. Owner ruling unchanged: no allocation, no ownership scheme. | — |
 | bug-b-palnanosleep-answers-enosys-on-riscv32-because-rv32-has-no-nanosleep-syscall | B | 45 | bug | THE WHOLE PAL TIME FAMILY IS -ENOSYS ON riscv32, not just nanosleep — measured: PalNanosleep -38, PalRealtime -38 (sec=0), PalMonotonicMillis 0, while all four of x86-64, i386, aarch64 and arm32 answer correctly. One cause: rv32 never provided the 32-bit-time_t syscalls, and the posix backend hands it the asm-generic numbers (nanosleep 101, clock_gettime 113) that exist only on 64-bit asm-generic targets. rv32 needs the *_time64 calls (clock_nanosleep_time64 423, clock_gettime64 403) AND a 64-bit timespec — PalBackendNanosleep/Realtime build `array[0..1] of NativeInt`, which is 4-byte fields there, so the number alone is not the fix. Nothing observed it because every caller carried its own number table that omitted riscv32 and exited first; the silence had two layers and removing the outer one is what made this measurable. | — |
 | bug-b-terminalsize-answers-enotty-on-xtensa-and-the-probe-cannot-say-why | B+S | 20 | bug | TerminalSize returns FALSE 80x24 on xtensa under qemu-xtensa even inside a pty that every other target reads as 132x40, because PalIoctl(1, TIOCGWINSZ) answers -25 (-ENOTTY). TWO CANDIDATE CAUSES AND THIS PROBE CANNOT SEPARATE THEM: xtensa Linux may use BSD-style ioctl command encodings rather than the $5401/$5402/$5413 generic ones ansiterm hardcodes, or qemu-xtensa may simply not present fd 1 as a tty. Measured: BOTH the generic $5413 and the BSD-style $40087468 give -25 on xtensa, while on x86-64 in the same pty the first gives 0/132x40 and the second gives -25 -- so -25 is exactly what a wrong constant looks like AND what no-tty looks like. Not a regression: xtensa had no ioctl syscall number at all before 2026-09-04 and took the same 80x24 fallback. | — |
@@ -895,9 +894,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3252)
+## done (3253)
 
-3252 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3253 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (74)
 
@@ -1043,7 +1042,6 @@ _none_
 - [p 55] [M] feature-port-windows-pe (unblocks 3)
 - [p 55] [U] decide-the-utf16-payload-fact-is-spelled-twice-kind-widestr-and-enc-ucs2 (unblocks 1)
 - [p 55] [T] feature-t-freebsd-image-and-runner (unblocks 1)
-- [p 55] [B] bug-b-fprecv-and-fpsend-silently-discard-their-flags-argument
 - [p 55] [C] bug-c-inline-asm-is-x86-64-only-so-five-busybox-tus-refuse-on-i386
 - [p 55] [N] bug-n-a-classmethod-cannot-call-another-through-cls
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused

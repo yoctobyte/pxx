@@ -14365,6 +14365,33 @@ test-core: $(COMPILER)
 	    echo "=== c_wait26: $$q absent, $$a NOT verified ==="; \
 	  fi; \
 	done
+	# crtl send/recv/sendto/recvfrom FLAGS, diffed against glibc on five
+	# targets. THE SIBLING THE TICKET DID NOT NAME: the Pascal arm
+	# (bug-b-fprecv-and-fpsend-silently-discard-their-flags-argument) reported
+	# fpRecv/fpSend, and lib/crtl/src/netinet/in.c had the identical defect
+	# from the identical cause -- `(void)flags;' in all four wrappers. Fixing
+	# one arm and not the other is what normalise-dont-special-case.md means by
+	# the second path being the one that stays broken.
+	# UNDER `timeout' FOR THE SAME REASON THE PASCAL ROW IS: the positive
+	# control (restoring `(void)flags' in recv alone) exits 124, having printed
+	# peek1 and nothing after it. Measured, both arms.
+	# Compared against the GCC ORACLE'S OWN RUN rather than a literal, because
+	# EAGAIN's number and whether a peeked datagram stays queued are the
+	# kernel's answers, not ours to assert.
+	./$(COMPILER) test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26
+	@gcc -o $(TESTTMP)/c_sockflags_gcc test/c_crtl_sock_flags.c
+	@timeout 60 $(TESTTMP)/c_sockflags_gcc > $(TESTTMP)/c_sockflags.oracle
+	tools/expect_same.sh c_sockflags26 "$$(timeout 60 $(TESTTMP)/c_sockflags26)" "$$(cat $(TESTTMP)/c_sockflags.oracle)"
+	@for a in i386 arm32 aarch64 riscv32; do \
+	  case $$a in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if [ "$$a" = i386 ] || command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$a test/c_crtl_sock_flags.c $(TESTTMP)/c_sockflags26_$$a >/dev/null || { echo "c_sockflags26 $$a compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh $$a/c_sockflags26 "$$(timeout 120 tools/run_target.sh $$a $(TESTTMP)/c_sockflags26_$$a)" "$$(cat $(TESTTMP)/c_sockflags.oracle)" || exit 1; \
+	    echo "=== c_sockflags26: $$a OK ==="; \
+	  else \
+	    echo "=== c_sockflags26: $$q absent, $$a NOT verified ==="; \
+	  fi; \
+	done
 	# crtl signal DISPOSITIONS -- signal(), sigaction(), raise(). These three
 	# were link-only stubs RETURNING 0 until 2026-09-04, and the return value
 	# is what made them a bug rather than a gap: rc=0 with errno untouched is
@@ -26349,6 +26376,19 @@ endif
 	tools/expect_same.sh lib_strpchar "$$($(TESTTMP)/lib_strpchar)" "$$(printf 'strlcopy-ret=ok\nstrlcopy-trunc=ok\nstrlcopy-short=ok\nstrlcomp-eq=ok\nstrlcomp-lt=ok\nstrlcomp-gt=ok\nsleep=ok\nmove-fillchar=ok\ninttohex-ff=ok\ninttohex-pad=ok\nstringofchar=ok\nstringofchar-0=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_sockets.pas $(TESTTMP)/lib_sockets
 	tools/expect_same.sh lib_sockets "$$($(TESTTMP)/lib_sockets)" "$$(printf 'htons=ok\nhtonl=ok\nroundtrip=ok\nsocket=ok\nbind=ok\nlisten=ok\nsockname=ok\nconnect=ok\naccept=ok\nsend=ok\nrecv=ok\nclose-conn=ok\nclose-cli=ok\nclose-srv=ok\nfail-connect-ret=ok\nfail-connect-errno=ok\nfail-socket-ret=ok\nfail-socket-errno=ok\nerrno-survives-success=ok\nfail-send-ret=ok\nfail-send-errno=ok')"
+	# fpSend/fpRecv/fpSendTo/fpRecvFrom FLAGS. All four took the argument and
+	# never read it until 2026-09-04, so MSG_PEEK was dropped: the first peek
+	# CONSUMED the bytes and the second waited forever
+	# (bug-b-fprecv-and-fpsend-silently-discard-their-flags-argument).
+	# RUN UNDER `timeout' BECAUSE THE POSITIVE CONTROL HANGS. Measured: with
+	# fpRecv's flags argument dropped again and nothing else changed, the
+	# binary exits 124 having printed peek1 and nothing after it. Without the
+	# timeout a regression here stops the build instead of failing a row, and a
+	# hung build gets read as infrastructure rather than as a test speaking.
+	# `peek2' IS THE ASSERTION AND `peek1' IS NOT -- a single peek returns 8
+	# bytes whether or not the flag arrived, because an ordinary recv does too.
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_sock_flags.pas $(TESTTMP)/lib_sock_flags
+	tools/expect_same.sh lib_sock_flags "$$(timeout 60 $(TESTTMP)/lib_sock_flags)" "$$(printf 'bind=ok\nlisten=ok\nsockname=ok\nconnect=ok\naccept=ok\nsend-nosignal=ok\npeek1=ok\npeek2=ok\nrecv-after=ok\nrecv-empty=ok\nrecv-unknown-flag=ok\nclose-conn=ok\nclose-cli=ok\nclose-srv=ok\nubind=ok\nusockname=ok\nusendto=ok\nupeek1=ok\nupeek2=ok\nurecv-after=ok')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_sha256.pas $(TESTTMP)/lib_sha256
 	tools/expect_same.sh lib_sha256.1 "$$($(TESTTMP)/lib_sha256 | grep -c '=ok')" "12"
 	tools/expect_same.sh lib_sha256.2 "$$($(TESTTMP)/lib_sha256 | grep -c 'FAIL')" "0"

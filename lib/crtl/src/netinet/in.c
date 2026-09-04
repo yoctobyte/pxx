@@ -42,10 +42,14 @@ extern int __pxx_bind_ipv4(int fd, unsigned long host, int port);
 extern int __pxx_connect_ipv4(int fd, unsigned long host, int port);
 extern int __pxx_listen(int fd, int backlog);
 extern int __pxx_accept_ipv4(int fd, unsigned long *outHost, int *outPort);
-extern long __pxx_send(int fd, const void *buf, int len);
-extern long __pxx_recv(int fd, void *buf, int len);
-extern long __pxx_sendto_ipv4(int fd, const void *buf, int len, unsigned long host, int port);
-extern long __pxx_recvfrom_ipv4(int fd, void *buf, int len, unsigned long *outHost, int *outPort);
+/* The trailing `flags' on these four is <sys/socket.h>'s MSG_* -- LINUX's
+   numbers, converted to the PAL's own numbering inside the veneer. They took
+   no flags argument at all until 2026-09-04, which is why the four wrappers
+   below said `(void)flags;': there was nowhere to put it. */
+extern long __pxx_send(int fd, const void *buf, int len, int flags);
+extern long __pxx_recv(int fd, void *buf, int len, int flags);
+extern long __pxx_sendto_ipv4(int fd, const void *buf, int len, unsigned long host, int port, int flags);
+extern long __pxx_recvfrom_ipv4(int fd, void *buf, int len, unsigned long *outHost, int *outPort, int flags);
 extern int __pxx_shutdown(int fd, int how);
 extern int __pxx_socket_close(int fd);
 extern int __pxx_getsockname_ipv4(int fd, unsigned long *outHost, int *outPort);
@@ -132,24 +136,29 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   return fd;
 }
 
+/* THE `(void)flags' THAT USED TO STAND HERE WAS THE BUG, AND IT LOOKED LIKE
+   TIDINESS. Discarding the argument made MSG_PEEK a silent no-op: the first
+   peek CONSUMED the bytes and a second one blocked forever waiting for data
+   that had already been read. A caller doing the standard "peek at the header,
+   then read the whole message" deadlocked, so the wrong answer was a hang, not
+   a wrong value. The Pascal side of the same defect is
+   bug-b-fprecv-and-fpsend-silently-discard-their-flags-argument; that ticket
+   named only fpRecv/fpSend, and these four had it too, from the same cause. */
 ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
-  (void)flags;
-  return __crtl_sock_fail_long(__pxx_send(sockfd, buf, (int)len));
+  return __crtl_sock_fail_long(__pxx_send(sockfd, buf, (int)len, flags));
 }
 
 ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
-  (void)flags;
-  return __crtl_sock_fail_long(__pxx_recv(sockfd, buf, (int)len));
+  return __crtl_sock_fail_long(__pxx_recv(sockfd, buf, (int)len, flags));
 }
 
 ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
                const struct sockaddr *dest_addr, socklen_t addrlen) {
   unsigned long host;
   int port;
-  (void)flags;
   (void)addrlen;
   if (__crtl_sockaddr_in(dest_addr, &host, &port) < 0) return -1;
-  return __crtl_sock_fail_long(__pxx_sendto_ipv4(sockfd, buf, (int)len, host, port));
+  return __crtl_sock_fail_long(__pxx_sendto_ipv4(sockfd, buf, (int)len, host, port, flags));
 }
 
 ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
@@ -157,8 +166,7 @@ ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
   unsigned long host;
   int port;
   long rc;
-  (void)flags;
-  rc = __pxx_recvfrom_ipv4(sockfd, buf, (int)len, &host, &port);
+  rc = __pxx_recvfrom_ipv4(sockfd, buf, (int)len, &host, &port, flags);
   if (rc < 0) return __crtl_sock_fail_long(rc);
   __crtl_fill_sockaddr_in(src_addr, addrlen, host, port);
   return rc;

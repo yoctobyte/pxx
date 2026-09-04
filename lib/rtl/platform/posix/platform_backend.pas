@@ -106,16 +106,16 @@ function PalBackendConnectIpv6(handle: Integer; const addr: TPalIn6Addr;
                                port, scopeId: Integer): Integer;
 function PalBackendListen(handle, backlog: Integer): Integer;
 function PalBackendAccept(handle: Integer): Integer;
-function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
-function PalBackendSend(handle: Integer; buf: Pointer; len: Integer): Int64;
+function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
+function PalBackendSend(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
 function PalBackendShutdown(handle, how: Integer): Integer;
 function PalBackendSocketClose(handle: Integer): Integer;
-function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
-function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer; flags: Integer): Int64;
+function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer; flags: Integer): Int64;
 function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
-                              const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
+                              const addr: TPalIn6Addr; port, scopeId: Integer; flags: Integer): Int64;
 function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
-                                var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
+                                var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer; flags: Integer): Int64;
 function PalBackendPoll(handle, events, timeoutMs: Integer): Integer;
 function PalBackendPollSet(fds: Pointer; nfds: Integer; timeoutMs: Integer): Integer;
 function PalBackendGetSockError(handle: Integer): Integer;
@@ -377,9 +377,14 @@ const
   PAL_NET_AF_INET6 = 10;
   PAL_NET_ENAMETOOLONG = -36;   { a socket path too long for sun_path }
   { Linux ENOSYS, the portable "not here". Declared per backend rather than
-    shared: platform_types carries types only, and the esp and wasi backends
-    each already spell it out. posix needed it the moment the xtensa arms
-    below started REFUSING a syscall instead of guessing its number. }
+    shared, as the esp and wasi backends also do; posix needed it the moment
+    the xtensa arms below started REFUSING a syscall instead of guessing its
+    number. The reason this comment used to give -- "platform_types carries
+    types only" -- stopped being true when PAL_MSG_* and PAL_ERR_INVALID landed
+    there, and those had to be shared because a flag NUMBER means nothing
+    unless the facade and every backend agree on it. The three ENOSYS copies
+    are left alone rather than folded in: moving them buys nothing and would
+    make this change touch three backends for a reason unrelated to flags. }
   PAL_ERR_UNSUPPORTED = -38;
   SOL_SOCKET = 1;
   SO_REUSEADDR = 2;
@@ -1540,21 +1545,65 @@ begin
 {$endif}
 end;
 
-function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer): Int64;
+{ PAL_MSG_* -> Linux MSG_*. WRITTEN OUT RATHER THAN PASSED THROUGH even though
+  three of the four bits could have been made to line up by choosing the PAL's
+  numbers to match Linux's: the ESP backend cannot line up with both, and a
+  translation that exists on one backend and not the other is the shape where
+  the missing one is never noticed. The unknown-bit refusal is the positive
+  control -- without it a caller's typo becomes a flag word the kernel happens
+  to ignore, which is indistinguishable from flags working. }
+const
+  LNX_MSG_OOB      = 1;
+  LNX_MSG_PEEK     = 2;
+  LNX_MSG_DONTWAIT = $40;
+  LNX_MSG_WAITALL  = $100;
+
+function XlatMsgFlags(flags: Integer; var outFlags: Integer): Boolean;
 begin
-  Result := __pxxrawsyscall(SYS_read, handle, Int64(buf), len, 0, 0, 0);
+  outFlags := 0;
+  if (flags and not PAL_MSG_ALL) <> 0 then begin XlatMsgFlags := False; Exit; end;
+  if (flags and PAL_MSG_OOB) <> 0 then outFlags := outFlags or LNX_MSG_OOB;
+  if (flags and PAL_MSG_PEEK) <> 0 then outFlags := outFlags or LNX_MSG_PEEK;
+  if (flags and PAL_MSG_DONTWAIT) <> 0 then outFlags := outFlags or LNX_MSG_DONTWAIT;
+  if (flags and PAL_MSG_WAITALL) <> 0 then outFlags := outFlags or LNX_MSG_WAITALL;
+  XlatMsgFlags := True;
+end;
+
+{ recvfrom(2) with a nil source rather than read(2). read has no flags slot, so
+  MSG_PEEK could not be carried at all -- two successive peeks CONSUMED the
+  data and the second blocked forever
+  (bug-b-fprecv-and-fpsend-silently-discard-their-flags-argument). Safe for the
+  same reason PalBackendSend has always been: every caller of PalRecv is a
+  socket by contract. }
+function PalBackendRecv(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
+var f: Integer;
+begin
+  if not XlatMsgFlags(flags, f) then begin Result := PAL_ERR_INVALID; Exit; end;
+{$ifdef CPU_I386}
+  Result := SockCall6(SC_RECVFROM, handle, Int64(buf), len, f, 0, 0);
+{$else}
+  Result := __pxxrawsyscall(SYS_recvfrom, handle, Int64(buf), len, f, 0, 0);
+{$endif}
 end;
 
 { sendto(2) with a nil destination rather than write(2): write has no flags
   argument to carry MSG_NOSIGNAL, and without it a closed peer kills the process.
   Safe because every caller of PalSend is a socket by contract -- fpSend, the
-  net/asyncnet/dns senders, and the C send() veneer in pxxcio. }
-function PalBackendSend(handle: Integer; buf: Pointer; len: Integer): Int64;
+  net/asyncnet/dns senders, and the C send() veneer in pxxcio.
+  MSG_NOSIGNAL is ORed IN, never replaced by the caller's flags: most callers
+  pass 0, and a flags parameter that overwrote it would hand every one of them
+  back the SIGPIPE death that
+  bug-b-fpsend-to-a-closed-peer-kills-the-process-msg-nosignal-is-never-passed
+  fixed. }
+function PalBackendSend(handle: Integer; buf: Pointer; len: Integer; flags: Integer): Int64;
+var f: Integer;
 begin
+  if not XlatMsgFlags(flags, f) then begin Result := PAL_ERR_INVALID; Exit; end;
+  f := f or MSG_NOSIGNAL;
 {$ifdef CPU_I386}
-  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, MSG_NOSIGNAL, 0, 0);
+  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, f, 0, 0);
 {$else}
-  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, MSG_NOSIGNAL, 0, 0);
+  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, f, 0, 0);
 {$endif}
 end;
 
@@ -1572,29 +1621,34 @@ begin
   Result := PalBackendClose(handle);
 end;
 
-function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer): Int64;
-var sa: array[0..15] of Byte;
+function PalBackendSendToIpv4(handle: Integer; buf: Pointer; len: Integer; hostAddr: LongWord; port: Integer; flags: Integer): Int64;
+var sa: array[0..15] of Byte; f: Integer;
 begin
+  if not XlatMsgFlags(flags, f) then begin Result := PAL_ERR_INVALID; Exit; end;
+  f := f or MSG_NOSIGNAL;
   FillSockAddrIpv4(@sa[0], hostAddr, port);
 {$ifdef CPU_I386}
-  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, MSG_NOSIGNAL, Int64(@sa[0]), 16);
+  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, f, Int64(@sa[0]), 16);
 {$else}
-  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, MSG_NOSIGNAL, Int64(@sa[0]), 16);
+  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, f, Int64(@sa[0]), 16);
 {$endif}
 end;
 
-function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer): Int64;
+function PalBackendRecvFromIpv4(handle: Integer; buf: Pointer; len: Integer; var outAddr: LongWord; var outPort: Integer; flags: Integer): Int64;
 var
   sa: array[0..15] of Byte;
   addrlen: Integer;
-  i: Integer;
+  i, f: Integer;
 begin
+  outAddr := 0;
+  outPort := 0;
+  if not XlatMsgFlags(flags, f) then begin Result := PAL_ERR_INVALID; Exit; end;
   for i := 0 to 15 do sa[i] := 0;
   addrlen := 16;
 {$ifdef CPU_I386}
-  Result := SockCall6(SC_RECVFROM, handle, Int64(buf), len, 0, Int64(@sa[0]), Int64(@addrlen));
+  Result := SockCall6(SC_RECVFROM, handle, Int64(buf), len, f, Int64(@sa[0]), Int64(@addrlen));
 {$else}
-  Result := __pxxrawsyscall(SYS_recvfrom, handle, Int64(buf), len, 0, Int64(@sa[0]), Int64(@addrlen));
+  Result := __pxxrawsyscall(SYS_recvfrom, handle, Int64(buf), len, f, Int64(@sa[0]), Int64(@addrlen));
 {$endif}
   outAddr := 0;
   outPort := 0;
@@ -1603,34 +1657,37 @@ begin
 end;
 
 function PalBackendSendToIpv6(handle: Integer; buf: Pointer; len: Integer;
-                              const addr: TPalIn6Addr; port, scopeId: Integer): Int64;
-var sa: array[0..27] of Byte;
+                              const addr: TPalIn6Addr; port, scopeId: Integer; flags: Integer): Int64;
+var sa: array[0..27] of Byte; f: Integer;
 begin
+  if not XlatMsgFlags(flags, f) then begin Result := PAL_ERR_INVALID; Exit; end;
+  f := f or MSG_NOSIGNAL;
   FillSockAddrIpv6(@sa[0], addr, port, scopeId);
 {$ifdef CPU_I386}
-  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, MSG_NOSIGNAL, Int64(@sa[0]), 28);
+  Result := SockCall6(SC_SENDTO, handle, Int64(buf), len, f, Int64(@sa[0]), 28);
 {$else}
-  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, MSG_NOSIGNAL, Int64(@sa[0]), 28);
+  Result := __pxxrawsyscall(SYS_sendto, handle, Int64(buf), len, f, Int64(@sa[0]), 28);
 {$endif}
 end;
 
 function PalBackendRecvFromIpv6(handle: Integer; buf: Pointer; len: Integer;
-                                var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer): Int64;
+                                var outAddr: TPalIn6Addr; var outPort, outScopeId: Integer; flags: Integer): Int64;
 var
   sa: array[0..27] of Byte;
   addrlen: Integer;
-  i: Integer;
+  i, f: Integer;
 begin
-  for i := 0 to 27 do sa[i] := 0;
-  addrlen := 28;
-{$ifdef CPU_I386}
-  Result := SockCall6(SC_RECVFROM, handle, Int64(buf), len, 0, Int64(@sa[0]), Int64(@addrlen));
-{$else}
-  Result := __pxxrawsyscall(SYS_recvfrom, handle, Int64(buf), len, 0, Int64(@sa[0]), Int64(@addrlen));
-{$endif}
   for i := 0 to 15 do outAddr.Bytes[i] := 0;
   outPort := 0;
   outScopeId := 0;
+  if not XlatMsgFlags(flags, f) then begin Result := PAL_ERR_INVALID; Exit; end;
+  for i := 0 to 27 do sa[i] := 0;
+  addrlen := 28;
+{$ifdef CPU_I386}
+  Result := SockCall6(SC_RECVFROM, handle, Int64(buf), len, f, Int64(@sa[0]), Int64(@addrlen));
+{$else}
+  Result := __pxxrawsyscall(SYS_recvfrom, handle, Int64(buf), len, f, Int64(@sa[0]), Int64(@addrlen));
+{$endif}
   if Result >= 0 then
     ParseSockAddrIpv6(@sa[0], outAddr, outPort, outScopeId);
 end;
