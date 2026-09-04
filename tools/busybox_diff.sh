@@ -161,6 +161,19 @@ if [ -z "${BBDIFF_FROM_SNAPSHOT:-}" ]; then
 fi
 # We are the snapshot. Drop the name; the open fd keeps the bytes.
 unlink "$BBDIFF_FROM_SNAPSHOT" 2>/dev/null || :
+#
+# WHAT THIS DOES NOT COVER, said plainly so nobody reads it as more than it is:
+# only THIS FILE is snapshotted. The compiler is snapshotted separately (see
+# $CTEST below) but it resolves crtl as `<its own dir>/../lib/crtl/include',
+# and the snapshot must live beside the original for exactly that reason -- so
+# every TU in a run is compiled against the LIVE lib/crtl/include. Editing a
+# crtl header mid-run therefore changes what the run measures, silently and
+# without touching this file. Measured 2026-09-04: I rewrote
+# lib/crtl/include/linux/if_vlan.h while a run of my own was compiling, having
+# just landed the snapshot fix, and only noticed afterwards. Harmless that time
+# -- the constants the run needed were unchanged -- which is the reason to
+# write it down rather than the reason not to. lib/rtl is a compiler build
+# input as well, so it has the same shape one level up.
 
 ROOT="${BBDIFF_ROOT:-$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)}"
 BB="${PXX_BUSYBOX_DIR:-$ROOT/library_candidates/busybox}"

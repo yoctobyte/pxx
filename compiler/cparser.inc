@@ -3205,11 +3205,57 @@ begin
   Result := cOK;
 end;
 
+{ The size of record field `fieldName` of `recId`, AS sizeof MUST ANSWER IT.
+  The one rule that separates this from reading the field's type: sizeof is not
+  a USE, so an ARRAY field does not decay -- it is its whole extent, and
+  RecFieldArrLen is already the flattened element count, so a multidimensional
+  field needs no separate case.
+
+  EXTRACTED FROM THE `sizeof (expr)->field` ARM, which had the rule right, and
+  called from the general-expression fallback too, which did not have it at
+  all. That fallback sized by the node's RESULT type, and an array-typed
+  expression yields its ELEMENT type, so
+  `sizeof(((struct utsname*)NULL)->machine)` on `char machine[65]` answered 1.
+  The three parenthesised spellings -- `(sp)->m`, `((S*)0)->m`, `(*sp).m` --
+  all land there, while `s.m` and `sp->m` go to CSizeofDescriptorWalk and
+  answered 65: A PARENTHESIS DECIDED THE ANSWER.
+
+  A SILENT 1 IS WORSE THAN A REFUSAL BECAUSE IT SIZES A DECLARATION. busybox's
+  uname.c is `char processor[sizeof(((struct utsname*)NULL)->machine)]` twice
+  over, so the struct came out 402 bytes rather than 530 with processor,
+  platform and os at consecutive offsets; strcpy of "unknown" into each then
+  wrote through its neighbours and `uname -p` printed `uu`, `-i` printed `u`.
+  No diagnostic -- the offsetof table was CORRECT about the layout it was given.
+  Found by tools/busybox_diff.sh's real-argument cases, 2026-09-04.
+
+  False leaves the caller's default untouched, which is what an unresolvable
+  base must do. }
+function CSizeofRecFieldBytes(recId: Integer; const fieldName: AnsiString;
+                              var sz: Integer): Boolean;
+var arrLen: Integer; elemTk: TTypeKind;
+begin
+  Result := False;
+  if recId = REC_NONE then Exit;
+  if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
+  begin
+    arrLen := RecFieldArrLen(recId, fieldName);
+    elemTk := RecFieldType(recId, fieldName);
+    if elemTk = tyRecord then sz := arrLen * RecSize(RecFieldRecId(recId, fieldName))
+    else sz := arrLen * TypeSlotSize(elemTk);
+  end
+  else if RecFieldType(recId, fieldName) = tyPointer then sz := TARGET_PTR_SIZE
+  else if RecFieldType(recId, fieldName) = tyRecord then
+    sz := RecSize(RecFieldRecId(recId, fieldName))
+  else sz := TypeSlotSize(RecFieldType(recId, fieldName));
+  Result := True;
+end;
+
 function ParseCSizeof: Integer;
 var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen, starCount: Integer;
     cNDims, cDim, cSpanSym: Integer;
     cFldRec: Integer; cFldName: AnsiString;   { the record field the descriptor walk is inside, for its dim spans }
     vlaSz: Integer;   { VLA operand: its `$vlasz$` companion local, else -1 }
+    saRec: Integer;   { the general path's field-access base record, REC_NONE if none }
     tk, elemTk, cTk, cPtrTk: TTypeKind; fieldName: AnsiString; cOK: Boolean;
 begin
   Next; { sizeof }
@@ -3464,13 +3510,47 @@ begin
         TokPos := savedPos - 1; Next;
       end;
       node := ParseCExpr;
-      tk := IntToTypeKind(ASTTk[node]);
-      if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
-      else if tk = tyPointer then sz := TARGET_PTR_SIZE
-      else if TypeIsFloat(tk) then sz := TypeSlotSize(tk)
-      else if tk = tyBoolean then sz := 4   { C `!`/comparisons yield int }
-      else if TypeIsOrdinal(tk) then sz := TypeSlotSize(tk)  { long->8, short->2, char->1; NOT a flat 4 }
-      else sz := 4;
+      { SIZING BY THE RESULT TYPE IS WRONG FOR AN ARRAY OBJECT, and this is the
+        one place that reads a node rather than a token walk, so it is the one
+        place that had no array rule. An array-typed expression yields its
+        ELEMENT type here -- `sizeof(((struct utsname*)NULL)->machine)` on
+        `char machine[65]` answered TypeSlotSize(tyChar) = 1. sizeof is not a
+        USE, so no decay: the object is 65 bytes.
+
+        A SILENT 1 IS WORSE THAN A REFUSAL BECAUSE IT SIZES A DECLARATION.
+        busybox's uname.c is `char processor[sizeof(((struct utsname*)NULL)->machine)]`
+        twice over, so the struct came out 402 bytes instead of 530 with
+        processor, platform and os overlapping at consecutive offsets; the
+        strcpy of "unknown" into each then wrote through its neighbours and
+        `uname -p` printed `uu`, `-i` printed `u`. No diagnostic anywhere --
+        the offsetof table was CORRECT about the layout it was given.
+
+        THE SPELLING IS WHAT SELECTED THE WRONG PATH, not the construct:
+        `sizeof(u.name.machine)` answers 65 because a plain identifier chain
+        goes to CSizeofDescriptorWalk. Only a base the token walk cannot start
+        from -- a cast, a call, a parenthesised expression -- lands here. So
+        this asks CNodeArrayShape, the same reader CDerefDecayStride uses,
+        rather than growing a second shape-walker.
+        refactor-c-one-array-shape-reader-instead-of-four-ident-field-pairs }
+      saRec := REC_NONE;
+      if (node >= 0) and (ASTKind[node] = AN_FIELD) then
+      begin
+        saRec := CNodePtrElemRec(ASTLeft[node]);
+        if saRec = REC_NONE then saRec := ResolveNodeRec(ASTLeft[node]);
+      end;
+      if (saRec <> REC_NONE) and
+         CSizeofRecFieldBytes(saRec, GetASTIdentName(node), sz) then
+        { sized as the FIELD OBJECT, above }
+      else
+      begin
+        tk := IntToTypeKind(ASTTk[node]);
+        if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
+        else if tk = tyPointer then sz := TARGET_PTR_SIZE
+        else if TypeIsFloat(tk) then sz := TypeSlotSize(tk)
+        else if tk = tyBoolean then sz := 4   { C `!`/comparisons yield int }
+        else if TypeIsOrdinal(tk) then sz := TypeSlotSize(tk)  { long->8, short->2, char->1; NOT a flat 4 }
+        else sz := 4;
+      end;
     end;
     { Skip the rest of the operand to the MATCHING `)` — balanced parens, so
       `sizeof((l)[0])` / `sizeof(a[i])` don't stop at an inner `)`. }
@@ -3498,20 +3578,7 @@ begin
       fieldName := CurTok.SVal;
       recId := CNodePtrElemRec(node);
       if recId = REC_NONE then recId := ResolveNodeRec(node);
-      if recId <> REC_NONE then
-      begin
-        if RecFieldIsArray(recId, fieldName) and (RecFieldArrLen(recId, fieldName) >= 0) then
-        begin
-          arrLen := RecFieldArrLen(recId, fieldName);
-          elemTk := RecFieldType(recId, fieldName);
-          if elemTk = tyRecord then sz := arrLen * RecSize(RecFieldRecId(recId, fieldName))
-          else sz := arrLen * TypeSlotSize(elemTk);
-        end
-        else if RecFieldType(recId, fieldName) = tyPointer then sz := TARGET_PTR_SIZE
-        else if RecFieldType(recId, fieldName) = tyRecord then
-          sz := RecSize(RecFieldRecId(recId, fieldName))
-        else sz := TypeSlotSize(RecFieldType(recId, fieldName));
-      end;
+      if not CSizeofRecFieldBytes(recId, fieldName, sz) then ;   { False leaves the default }
       Next;   { consume the field name }
     end;
   end

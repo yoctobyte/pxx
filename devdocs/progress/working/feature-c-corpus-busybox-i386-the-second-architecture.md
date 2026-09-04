@@ -351,3 +351,45 @@ The harness's cross-link resolver added `libbb/bb_bswap_64.c` again and said so
 (`the host map was short 1 translation unit(s) for this target`) -- the
 map-is-per-architecture behaviour this ticket already documents, working.
 
+
+## The 16 headers were a LOWER BOUND, and the census could not have said so
+
+Seven have landed: `linux/if.h`, `linux/if_arp.h`, `linux/if_vlan.h`,
+`linux/jffs2.h`, `sys/vt.h`, and then `linux/if_bonding.h` and `linux/mii.h`.
+**The last two are not additions to the list. They were never on it**, and the
+reason is mechanical: a translation unit reports **one** missing include and
+stops. `networking/ifenslave.c` could not ask for `linux/if_bonding.h` while
+`linux/if.h` was still missing, and `ifplugd.c` could not ask for `linux/mii.h`.
+Measured 2026-09-04 — the three `linux/if.h` users all advanced to a *different*
+blocker the moment it landed:
+
+```
+FAIL i386 networking/ether-wake.c  error: call to undeclared function: ether_hostton
+FAIL i386 networking/ifenslave.c   error: C include file not found: "linux/if_bonding.h"
+FAIL i386 networking/ifplugd.c     error: C include file not found: "linux/mii.h"
+```
+
+So **a missing-header count taken from one run is a lower bound, never the
+list**, and this ticket's own table of 34 has to be read that way. It is the
+same shape as the two-blockers-per-TU section above, but recursive: the native
+fallback masked every layer *simultaneously*, so peeling one reveals the next
+rather than finishing it. The only honest completion signal is a run where
+nothing refuses — not a table that has been fully worked through.
+
+`ifenslave.c` and `ifplugd.c` both go on to want `linux/ethtool.h`, and
+`ifplugd.c` `linux/wireless.h`; that surface is small (`ETHTOOL_GDRVINFO`,
+`ETHTOOL_GLINK`, `struct ethtool_drvinfo`, `struct ethtool_value`, `struct
+iwreq`) and is the next layer down, not the last one.
+
+All seven are diffed against the host's own headers by
+`test/c_crtl_uapi_headers_from_busybox_i386.c`, which is compiled for **i386**
+in the same run precisely because that is the target where no host-header
+fallback can make a wrong file look right. Positive control run 2026-09-04:
+shadowing `BOND_ABI_VERSION` to 3 via `-I` makes the comparison report the
+row — the guard fires.
+
+**A first cut of `linux/if_vlan.h` also carried `VLAN_HLEN`, `VLAN_ETH_ALEN`,
+`VLAN_N_VID` and `struct vlan_hdr`.** Those are kernel-*internal*, in no
+user-facing header, so there was no oracle for them and the values would have
+been mine rather than measured. gcc refusing the probe is what caught it. A
+constant nobody can diff is a liability in a shadow tree, not a convenience.
