@@ -125,4 +125,4 @@ answers confidently about the wrong file, and the three `treated as 0` warnings
 that name the real cause are printed ABOVE it and read as unrelated noise.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 44894eea3.
