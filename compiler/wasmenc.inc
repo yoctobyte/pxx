@@ -527,6 +527,7 @@ begin
 end;
 
 procedure WasmAddExport(const name: AnsiString; kind, idx: Integer);
+var i: Integer;
 begin
   if WasmExpCount >= MAX_WASM_EXPORTS then WasmFail('wasm: too many exports');
   { A duplicate export name is not a module. Refusing here rather than
@@ -536,8 +537,25 @@ begin
     differential happens to run the validator. Two anonymous typed-const
     initialisers both called `main` are enough to produce it, so it is not an
     exotic case. }
+  { NAME THE TWO SLOTS, not just the name. `duplicate export "main$463"` says a
+    collision happened and leaves the two candidate causes indistinguishable:
+    two DIFFERENT bodies whose names collided, or ONE body exported twice. Those
+    want opposite fixes -- a naming rule versus finding the second emit -- and
+    the message that does not separate them sends the reader to the wrong one.
+    Measured 2026-09-04 on the first C translation unit built for wasm32. }
   if WasmExportTaken(name) then
-    WasmFail('wasm: duplicate export "' + name + '"');
+  begin
+    i := 0;
+    while (i < WasmExpCount) and (WasmExpName[i] <> name) do Inc(i);
+    if (i < WasmExpCount) and (WasmExpIdx[i] = idx) and (WasmExpKind[i] = kind) then
+      WasmFail('wasm: duplicate export "' + name + '" — the SAME slot ('
+               + WasmIntStr(idx) + ') is being exported twice, so a body was '
+               + 'lowered more than once; this is not a naming collision')
+    else
+      WasmFail('wasm: duplicate export "' + name + '" — two different slots ('
+               + WasmIntStr(WasmExpIdx[i]) + ' and ' + WasmIntStr(idx)
+               + ') want one name');
+  end;
   WasmExpName[WasmExpCount] := name;
   WasmExpKind[WasmExpCount] := kind;
   WasmExpIdx[WasmExpCount] := idx;
