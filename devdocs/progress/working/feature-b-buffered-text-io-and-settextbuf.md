@@ -4,6 +4,8 @@ prio: 55
 type: feature
 blocked-by: []
 summary: "Make lib/rtl/textfile.pas's read buffer caller-supplyable and add write buffering, so SetTextBuf can exist with FPC's exact semantics. The read buffer already exists (4096 bytes, inline in the Text record); the only structural blocker is that it is an inline array where FPC has a pointer, so SetTextBuf cannot point it at the caller's memory. Write side buffers under C99 7.19.3p7's policy, NOT FPC's — measured: FPC's destroys stdout/stderr ordering whenever stdout is not a tty."
+status: working
+owner: franks-ab
 ---
 
 # Buffered Text I/O and `SetTextBuf`

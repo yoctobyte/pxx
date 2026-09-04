@@ -4,6 +4,8 @@ prio: 55
 type: feature
 blocked-by: []
 summary: "lib/crtl/src/stdio.c is entirely unbuffered — fputc is one write() syscall per character — and setvbuf at :1051 is a stub that ignores its arguments and returns SUCCESS, which is the dishonest-stub shape the SetTextBuf ruling exists to reject, and worse here because C callers check the return. Add FILE write buffering under C99 7.19.3p7's policy, make setvbuf real, and share a flush registry with lib/rtl so mixed WriteLn/printf output keeps its order."
+status: working
+owner: franks-ab
 ---
 
 # Buffered `FILE` writes, a real `setvbuf`, and the flush registry
