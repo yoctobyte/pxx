@@ -11389,6 +11389,25 @@ test-core: $(COMPILER)
 	# fix deleted from the StrQWord arm. Byte-identical to fpc 3.2.2 -Mdelphi.
 	./$(COMPILER) test/test_str_of_boolean.pas $(TESTTMP)/test_strbool26
 	tools/expect_same.sh test_strbool26 "$$($(TESTTMP)/test_strbool26)" "$$(printf 't=TRUE\nf=FALSE\nwt=TRUE\nwf=FALSE\nw8=[    TRUE]\nw8f=[   FALSE]\nw2=[TRUE]\nwv=[  TRUE]\nq=18446744073709551615\ni=-42\nSTR BOOL OK')"
+	# A ShortString passed to `array of const`. `tyString` covers TWO shapes
+	# with different layouts and the boxing arm handled only one: a frozen
+	# LITERAL is an interned blob behind an 8-byte length prefix, a ShortString
+	# VARIABLE is [len:Byte][chars]. Adding 8 unconditionally skipped past a
+	# variable's text -- Format('%s',[sh]) EMPTY for a ShortString and GARBAGE
+	# for a string[5], while writeln(sh) was right all along.
+	# The `stale` row is the one an offset-only fix still fails (no guaranteed
+	# NUL: 'longer' then 'ab' leaves 'abger'), and lit=/konst= are the control
+	# that the literal fast path did not start allocating -- the compiler's own
+	# asm-text emitters build vectors of exactly that shape.
+	# Whole output compared, not the tail: the pre-fix compiler still printed
+	# the final OK line. Byte-identical to fpc 3.2.2 -Mdelphi -O1.
+	./$(COMPILER) test/test_shortstring_in_array_of_const.pas $(TESTTMP)/test_ssvarrec26
+	tools/expect_same.sh test_ssvarrec26 "$$($(TESTTMP)/test_ssvarrec26)" "$$(printf 'plain=short\nstale=ab\ns5=five5\nempty=[]\nlit=literal\nkonst=konstant\nmixed=mid|7|tail\nbuiltin=short\nSHORTSTRING VARREC OK')"
+	# ...and it must not leak: the fix parks each ShortString element in an
+	# owning hidden AnsiString local, which is exactly the shape that leaks if
+	# the handle never gets an owner. A value assertion CANNOT see that.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_shortstring_in_array_of_const.pas $(TESTTMP)/test_ssvarrec_census26
+	tools/assert_no_leak.sh test_ssvarrec26 200 $(TESTTMP)/test_ssvarrec_census26
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_array_of_const_types.pas $(TESTTMP)/test_aoc_types26
 	tools/expect_same.sh test_aoc_types26 "$$($(TESTTMP)/test_aoc_types26)" "$$(printf 'vt0: 42\nvt1: TRUE\nvt2: Q\nvt16: 5000000000\nvt3: 3.50\nvt3: 0.25\nvt11: hi')"
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_cross_write_pchar.pas $(TESTTMP)/test_write_pchar26

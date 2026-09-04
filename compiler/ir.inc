@@ -8016,14 +8016,52 @@ begin
             value := IRParkManagedStr(value);
           end
           else if vrElemTk = tyString then
-            { vtAnsiString from a frozen (inline) string literal: its value points
-              at the 8-byte length prefix, so skip to the NUL-terminated char data
-              (InternStr terminates it), like FPC's VAnsiString. A runtime
-              tyAnsiString value is ALREADY a char pointer (matches PChar(s), which
-              only adjusts tyString), so it is stored as-is. }
-            value := IRAppend(IR_BINOP, value,
-              IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
-              Ord(tkPlus), 0, Ord(tyPointer));
+          begin
+            { TWO SHAPES WEAR tyString AND THEY HAVE DIFFERENT LAYOUTS. This arm
+              handled only the first and silently mangled the second.
+
+              A frozen (inline) string LITERAL -- AN_STR_LIT, which is also what
+              a named string CONST lowers to -- is an interned blob whose value
+              points at an 8-byte length prefix, NUL-terminated by InternStr. Skip
+              the prefix and it is a char pointer, like FPC's VAnsiString. That is
+              the original arm and it is correct; the compiler's own asm-text
+              emitters build `['b %', n]` vectors of these constantly, so it is
+              also the hot path and must not start allocating.
+
+              A ShortString VARIABLE is `[len: Byte][chars...]` -- a ONE-byte
+              prefix, measured -- and adding 8 lands past the text: `Format('%s',
+              [sh])` returned EMPTY for a 5-char ShortString (offset 8 is the
+              zero fill) and returned GARBAGE for a `string[5]`, where offset 8
+              is past the buffer entirely. FPC prints the string for both.
+              `writeln(sh)` was right the whole time, so this was one compiler
+              rendering one value two ways.
+
+              An offset fix alone would NOT be correct: a ShortString carries no
+              guaranteed NUL. Assign 'longer' then 'ab' and the tail still reads
+              'ger', so the consumer -- which has only a char pointer -- would run
+              past the text. The length has to be applied, not stepped over.
+
+              So convert, exactly as the working `an := sh` assignment does: store
+              through a hidden AnsiString local and let the STORE'S DEST TYPE do
+              the conversion (the same mechanism the tySingle widening above and
+              IRPromoInitFromLiteral both rely on). The local OWNS the handle, so
+              scope exit releases it and this cannot leak the way a bare +1 in the
+              union slot would -- a TVarRec has no managed field and no finaliser.
+              bug-a-a-shortstring-in-array-of-const-boxes-an-unusable-pointer }
+            if ASTKind[ASTLeft[item]] = AN_STR_LIT then
+              value := IRAppend(IR_BINOP, value,
+                IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                Ord(tkPlus), 0, Ord(tyPointer))
+            else
+            begin
+              vrBoxSym := AllocVar('', tyAnsiString);
+              SymIsHiddenArgTemp[vrBoxSym] := True;
+              IRMarkStatementNode(IRAppend(IR_STORE_SYM, vrBoxSym, value,
+                                           -1, 0, Ord(tyAnsiString)));
+              value := IRAppend(IR_LOAD_SYM, vrBoxSym, -1, -1, 0,
+                                Ord(tyAnsiString));
+            end;
+          end;
         end;
         IRAppend(IR_STORE_MEM, elemAddr, value, -1, 0, Ord(tyNativeInt));
 
