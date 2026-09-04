@@ -89,7 +89,7 @@ it on all four targets; x86-64 is the oracle and is already green, so an
 x86-64-only row would pass before and after and prove nothing.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit f891bbe8e.
 
 ## Resolved — one line, at the top of the procedure, not five times
 
