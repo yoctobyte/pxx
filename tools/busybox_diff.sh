@@ -242,6 +242,73 @@ ASH_OFF="ASH_TEST ASH_RANDOM_SUPPORT ASH_JOB_CONTROL ASH_IDLE_TIMEOUT \
 # the reasoning was not measurement at all -- the instrument had failed
 # syntactically and still answered. Measured 2026-09-02 by feeding this script
 # the host's full `busybox --list'.
+# ---- ONE RUN PER TREE, ENFORCED HERE RATHER THAN REMEMBERED ------------------
+# THE busybox TREE IS SHARED MUTABLE STATE AND A SECOND RUN SILENTLY DESTROYS
+# THE FIRST. Every run reconfigures $BB in place -- .config, include/autoconf.h,
+# the lib.a archives -- so a second invocation regenerates autoconf.h under the
+# first one's compile loop. Measured 2026-09-04, by this script's own author: a
+# 394-applet run was 500 objects into its i386 leg when a three-applet run was
+# started against the same tree, and the big run reported
+#
+#     error: stray token at top level (not a declaration): 'DEFINE_STRUCT_CAPS'
+#     error: undeclared identifier passed as argument 3 of 'udhcp_str2optset'
+#
+# and went RED. Those messages are indistinguishable from a real C frontend
+# regression -- they name a source file and a line and they are perfectly
+# deterministic-looking -- and the run was simply reading a config that had been
+# swapped underneath it. This is the file's own "DO NOT TOUCH THE INSTRUMENT
+# WHILE IT IS MEASURING" rule, and discipline had already failed at it once, so
+# it is a lock now.
+#
+# mkdir is the primitive because it is atomic on every filesystem this runs on;
+# a `[ -e ] && exit' test is a race that loses exactly when two runs start
+# together, which is the only case that matters. The lock lives BESIDE the tree
+# rather than inside it, so it survives a `make distclean' in there and never
+# becomes a file the configure step trips over.
+BBLOCK="$BB.busybox-diff.lock"
+# THE LOCK DIRECTORY IS ALWAYS EMPTY AND THE PID LIVES BESIDE IT. `mkdir' is the
+# atomic primitive and `rmdir' is its inverse -- and rmdir REFUSES a directory
+# with anything in it. Measured 2026-09-04: with the pid written INSIDE the
+# lock, the stale-lock path printed `clearing a stale lock' and then
+# `could not take the tree lock', because its own rmdir could not remove the
+# directory it had just decided to reclaim. Releasing the lock at the end of a
+# normal run had the same defect and would have leaked a lock per run. Keeping
+# the directory empty means the release can never fail and needs no `rm -rf'.
+BBPID="$BB.busybox-diff.lock.pid"
+BBLOCK_HELD=""
+if mkdir "$BBLOCK" 2>/dev/null; then
+  BBLOCK_HELD=1
+  printf '%s\n' "$$" > "$BBPID" 2>/dev/null || true
+else
+  holder="$(cat "$BBPID" 2>/dev/null || true)"
+  # A STALE LOCK IS A REAL CASE AND MUST NOT NEED A HUMAN. A run killed with
+  # SIGKILL leaves the directory behind, and a lock that can only be cleared by
+  # hand is one people learn to delete on sight -- which is the same as not
+  # having one. So the holder is checked, and only an ACTUALLY RUNNING process
+  # blocks. An empty or unreadable pid file is treated as stale for the same
+  # reason: refusing on a lock nobody can explain teaches the wrong reflex.
+  if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
+    die "another busybox-diff (pid $holder) is using $BB right now.
+  Two runs share one tree: each reconfigures it in place, so the second one
+  rewrites include/autoconf.h under the first one's compile loop and BOTH
+  results are worthless -- the first fails with what look like real compiler
+  errors. Wait for it, or point PXX_BUSYBOX_DIR at a second tree."
+  fi
+  printf 'busybox-diff: clearing a stale lock at %s (holder pid %s is gone)\n' "$BBLOCK" "${holder:-unknown}"
+  rmdir "$BBLOCK" 2>/dev/null
+  mkdir "$BBLOCK" 2>/dev/null || die "could not take the tree lock at $BBLOCK"
+  BBLOCK_HELD=1
+  printf '%s\n' "$$" > "$BBPID" 2>/dev/null || true
+fi
+# The lock is taken HERE, before the first line that touches $BB, and not beside
+# the EXIT trap further down. Measured 2026-09-04: with the lock installed after
+# the trap, a refused second run had ALREADY run configure_tree -- it printed
+# `configuring ... for applets: cat', rewrote .config and include/autoconf.h,
+# and only then said it would not proceed. A lock taken after the damage is not
+# a lock. The window before `trap cleanup EXIT' is installed can leave the
+# directory behind on an early die; the holder-pid check above is what makes
+# that recoverable without a human.
+
 configure_tree() {
   local log="$1" a
   printf 'busybox-diff: configuring %s for applets: %s\n' "$BB" "$APPLETS"
@@ -527,6 +594,7 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/bbdiff-XXXXXX")"
 cleanup() {
   st=$?
   rm -f "${CTEST:-}"
+  [ -n "${BBLOCK_HELD:-}" ] && rmdir "${BBLOCK:-/nonexistent}" 2>/dev/null
   if [ "$KEEP" -eq 1 ]; then
     printf 'busybox-diff: work dir kept at %s\n' "$WORK"
   elif [ "$st" -ne 0 ] && [ -d "$WORK" ]; then
@@ -1214,6 +1282,113 @@ make_wrappers() {
 # as the initial list rather than by a second copy of the recipe. A second copy
 # is how the preamble and the additions drift apart, and a TU compiled without
 # the preamble fails in a way that reads as a compiler gap.
+# THE TU LIST IS A HOST ARTEFACT AND THE POPULATION IS PER-TARGET, and that is
+# true of the ORACLE too, which is why this is a function and not a block inside
+# the target loop. busybox_unstripped.map records which archive members THIS
+# BOX's link pulled, and that set is not architecture-independent. platform.h:
+#
+#     #if ULONG_MAX > 0xffffffff
+#     /* inline 64-bit bswap only on 64-bit arches */
+#     # define bb_bswap_64(x) bswap_64(x)
+#     #endif
+#
+# On x86-64 the macro shadows the function, `libbb/bb_bswap_64.o' is never
+# pulled, and it is ABSENT FROM THE MAP. At 32 bits the macro does not exist,
+# every SWAP_BE64 becomes a real call, and the link fails on one undefined
+# symbol after every object compiled cleanly. Measured 2026-09-02 on the pxx
+# side and again 2026-09-04 on the `gcc -m32' oracle, which failed on the SAME
+# symbol for the SAME reason -- it is a property of the WIDTH and not of the
+# compiler, so a copy of this logic that lived only on the subject's side would
+# have been the copy that stays right while the oracle's stayed broken.
+#
+# So a 32-bit link is allowed to GROW the list, and only by symbols the linker
+# actually asked for -- the addition is derived from the failure, never guessed,
+# and every one is printed. `lib.a' is the right source because it holds exactly
+# what THIS config compiled: a member the config excludes was never built and
+# cannot be added by accident.
+#
+# Every source THIS CONFIG COMPILED, read off the archives rather than off the
+# disk: a `*.o' left behind by a previous config is a member of neither archive,
+# so a stale object cannot become a candidate.
+ARCHIVE_SRCS=""
+archive_srcs() {
+  [ -n "$ARCHIVE_SRCS" ] && { printf '%s' "$ARCHIVE_SRCS"; return 0; }
+  ARCHIVE_SRCS=$(cd "$BB" && for a in $(ls */lib.a */*/lib.a 2>/dev/null); do
+                   d=$(dirname "$a")
+                   ar t "$a" 2>/dev/null | sed "s|^|$d/|; s|\.o$|.c|"
+                 done | sort -u | while read -r c; do [ -f "$BB/$c" ] && printf '%s ' "$c"; done)
+  printf '%s' "$ARCHIVE_SRCS"
+}
+
+# grow_and_link <label> <objdir> <outbin> <log> <linker cmd> <cc-one fn>
+#   <cc-one fn> is called as: <fn> <wrapper.c> <out.o>   and must return
+#   nonzero if that source does not compile for this side.
+# Sets GL_RESOLVED to the number of translation units added, and returns the
+# final linker status.
+#
+# IT DOES NOT TOUCH $WORK/tulist.txt. An earlier version appended, so that a
+# later caller would inherit the discovery -- but the list is read at the top of
+# EVERY target's compile loop, so an addition made for a 32-bit leg followed the
+# run into the next target and made an x86-64 build compile one object the
+# 64-bit map correctly says it does not need. The addition is a property of a
+# (source, WIDTH) pair, exactly as a refusal is a property of a (TU, target)
+# pair, and rediscovering it costs one failed link round and one compile.
+grow_and_link() {
+  gl_label="$1"; gl_objdir="$2"; gl_out="$3"; gl_log="$4"; gl_ld="$5"; gl_cc="$6"
+  gl_rounds=0; GL_RESOLVED=0
+  while ! $gl_ld -o "$gl_out" "$gl_objdir"/*.o >> "$gl_log" 2>&1; do
+    gl_rounds=$((gl_rounds+1))
+    [ "$gl_rounds" -le 3 ] || break
+    gl_added=0
+    for sym in $(grep -a -oE "undefined reference to \`[^']*'" "$gl_log" \
+                 | sed "s/.*\`//; s/'$//" | sort -u); do
+      # Candidates by TEXT, then decided by COMPILING. Asking the host archive
+      # which member defines the symbol cannot work here: on x86-64
+      # `libbb/bb_bswap_64.o' is an EMPTY object -- present in lib.a, defining
+      # nothing -- so the host has no definition to point at. Only a build at
+      # the target's width has one.
+      # `</dev/null' IS LOAD-BEARING AND IS NOT TIDINESS. If archive_srcs comes
+      # back empty -- which it does the moment anything upstream of it fails --
+      # then `grep -lw SYM' has no file operands, so grep READS STDIN and the
+      # whole harness blocks forever with no output and no error. Measured
+      # 2026-09-04: two runs sat in `grep -lw bb_bswap_64' for twenty minutes,
+      # visible only in ps. A hang is the one failure mode a log cannot show.
+      gl_cands=$(archive_srcs)
+      if [ -z "$gl_cands" ]; then
+        printf '  note    %-8s no configured sources to search for `%s` -- the archive scan came back empty\n' \
+               "$gl_label" "$sym"
+        continue
+      fi
+      for cand in $(cd "$BB" && grep -lw "$sym" $gl_cands </dev/null 2>/dev/null); do
+        [ -f "$gl_objdir/$(printf '%s' "${cand%.c}" | tr '/' '_').o" ] && continue
+        gl_tag=$(printf '%s' "${cand%.c}" | tr '/' '_')
+        make_one_wrapper "$cand" "$gl_tag"
+        "$gl_cc" "$WORK/wrap/$gl_tag.c" "$WORK/cand.o" >> "$gl_log" 2>&1 || continue
+        nm -g --defined-only "$WORK/cand.o" 2>/dev/null | grep -qw "$sym" || continue
+        mv "$WORK/cand.o" "$gl_objdir/$gl_tag.o"
+        printf '  note    %-8s +%s (defines `%s` for this width; the host object is empty, so the map omits it)\n' \
+               "$gl_label" "$cand" "$sym"
+        gl_added=$((gl_added+1))
+        break
+      done
+    done
+    rm -f "$WORK/cand.o"
+    GL_RESOLVED=$((GL_RESOLVED+gl_added))
+    # A round that resolved nothing will fail identically forever, and retrying
+    # would bury the real diagnostic under three copies of itself. It is also
+    # REPORTED rather than merely broken out of: "the link failed and I could
+    # find nothing to add" and "the link succeeded first time" are the same
+    # silence in a log skim, and telling them apart is the whole subject here.
+    if [ "$gl_added" -eq 0 ]; then
+      printf '  note    %-8s link failed and no configured source defines the missing symbol(s) at this width\n' "$gl_label"
+      break
+    fi
+  done
+  [ "$gl_rounds" -eq 0 ] || [ "$GL_RESOLVED" -eq 0 ] \
+    || printf '  note    %-8s the host map was short %d translation unit(s) at this width\n' "$gl_label" "$GL_RESOLVED"
+  $gl_ld -o "$gl_out" "$gl_objdir"/*.o >> "$gl_log" 2>&1
+}
+
 make_one_wrapper() {
   { cat "$WORK/preamble.h"; printf '#include "%s"\n' "$1"; } > "$WORK/wrap/$2.c"
 }
@@ -1330,8 +1505,22 @@ if [ "$WANT32" -eq 1 ]; then
       done < "$WORK/tulist.txt"
       if [ -n "$o32fail" ]; then
         ORACLE32_WHY="gcc -m32 could not compile $o32fail (see oracle_sep.log)"
-      elif ! gcc -m32 -o "$WORK/oracle_gcc32" "$WORK/objg32"/*.o >> "$WORK/oracle_sep.log" 2>&1; then
-        ORACLE32_WHY="the gcc -m32 objects did not link (see oracle_sep.log)"
+      else
+        # THE ORACLE NEEDS THE SAME LINK GROWTH THE SUBJECT NEEDS, and it needs
+        # it for the same reason: `libbb/bb_bswap_64.c' is absent from the host
+        # map because at 64 bits platform.h shadows the function with a macro.
+        # Measured 2026-09-04: the first `gcc -m32' oracle at 394 applets
+        # compiled all 521 objects and died at the link on `hidden symbol
+        # bb_bswap_64 isn't defined', which is the identical failure the pxx
+        # i386 leg had already learned to resolve in the same run. Sharing the
+        # resolver rather than copying it is the point -- a copy here would be
+        # the one that goes stale.
+        cc_one_g32() {   # $1 = wrapper .c, $2 = out .o
+          ( cd "$BB" && gcc -m32 -w -O2 -std=gnu99 -D_GNU_SOURCE -DBB_VER="\"$BBVER\"" $INC \
+              -c "$1" -o "$2" )
+        }
+        grow_and_link "oracle32" "$WORK/objg32" "$WORK/oracle_gcc32" "$WORK/oracle_sep.log" "gcc -m32" cc_one_g32 \
+          || ORACLE32_WHY="the gcc -m32 objects did not link (see oracle_sep.log)"
       fi
     else
       ( cd "$BB" && gcc -m32 -w -O2 -std=gnu99 -D_GNU_SOURCE -DBB_VER="\"$BBVER\"" $INC \
@@ -1505,10 +1694,6 @@ for t in $TARGETS; do
     # archive, so a stale object cannot become a candidate. This is the search
     # space for a symbol the map did not predict, and nothing outside it can be
     # pulled in by accident.
-    ARCHIVE_SRCS=$(cd "$BB" && for a in $(ls */lib.a */*/lib.a 2>/dev/null); do
-                     d=$(dirname "$a")
-                     ar t "$a" 2>/dev/null | sed "s|^|$d/|; s|\\.o$|.c|"
-                   done | sort -u | while read -r c; do [ -f "$BB/$c" ] && printf '%s ' "$c"; done)
     # THE TU LIST IS A HOST ARTEFACT AND THE POPULATION IS PER-TARGET.
     # busybox_unstripped.map records which archive members THIS BOX's link
     # pulled, and that set is not architecture-independent. platform.h:
@@ -1528,51 +1713,11 @@ for t in $TARGETS; do
     # never guessed, and every one is printed. `lib.a' is the right source
     # because it holds exactly what THIS config compiled: a member the config
     # excludes was never built and cannot be added by accident.
-    ldrounds=0
-    ldresolved=0
-    while ! $SEP_LD -o "$out" "$WORK/obj"/*.o >> "$WORK/build_$t.log" 2>&1; do
-      ldrounds=$((ldrounds+1))
-      [ "$ldrounds" -le 3 ] || break
-      added=0
-      for sym in $(grep -a -oE "undefined reference to \`[^']*'" "$WORK/build_$t.log" \
-                   | sed "s/.*\`//; s/'$//" | sort -u); do
-        # Candidates by TEXT, then decided by COMPILING. Asking the host
-        # archive which member defines the symbol cannot work here: on x86-64
-        # `libbb/bb_bswap_64.o' is an EMPTY object -- present in lib.a,
-        # defining nothing -- so the host has no definition to point at. Only
-        # the target build has one.
-        for cand in $(cd "$BB" && grep -lw "$sym" $ARCHIVE_SRCS 2>/dev/null); do
-          grep -qxF "$cand" "$WORK/tulist.txt" && continue
-          tag2=$(printf '%s' "${cand%.c}" | tr '/' '_')
-          make_one_wrapper "$cand" "$tag2"
-          ( cd "$BB" && "$COMPILER" --emit-obj $targflag $OBJFLAGS $INC \
-              "$WORK/wrap/$tag2.c" "$WORK/cand.o" ) >> "$WORK/build_$t.log" 2>&1 || continue
-          nm -g --defined-only "$WORK/cand.o" 2>/dev/null | grep -qw "$sym" || continue
-          mv "$WORK/cand.o" "$WORK/obj/$tag2.o"
-          printf '%s\n' "$cand" >> "$WORK/tulist.txt"
-          printf '  note    %-8s +%s (defines `%s` for this target; the host object is empty, so the map omits it)\n' \
-                 "$t" "$cand" "$sym"
-          added=$((added+1))
-          break
-        done
-      done
-      rm -f "$WORK/cand.o"
-      ldresolved=$((ldresolved+added))
-      # A round that resolved nothing will fail identically forever, and
-      # retrying would bury the real diagnostic under three copies of itself.
-      # It is also REPORTED rather than merely broken out of: "the link failed
-      # and I could find nothing to add" and "the link succeeded first time"
-      # are the same silence in a log skim, and telling them apart is the whole
-      # subject of this block.
-      if [ "$added" -eq 0 ]; then
-        printf '  note    %-8s link failed and no configured source defines the missing symbol(s) for this target\n' "$t"
-        break
-      fi
+    cc_one_pxx() {   # $1 = wrapper .c, $2 = out .o
+      ( cd "$BB" && "$COMPILER" --emit-obj $targflag $OBJFLAGS $INC "$1" "$2" )
+    }
+    if ! grow_and_link "$t" "$WORK/obj" "$out" "$WORK/build_$t.log" "$SEP_LD" cc_one_pxx; then
       nobj=$(ls "$WORK/obj"/*.o 2>/dev/null | wc -l)
-    done
-    [ "$ldrounds" -eq 0 ] || [ "$ldresolved" -eq 0 ] \
-      || printf '  note    %-8s the host map was short %d translation unit(s) for this target\n' "$t" "$ldresolved"
-    if ! $SEP_LD -o "$out" "$WORK/obj"/*.o >> "$WORK/build_$t.log" 2>&1; then
       printf '  FAIL    %-8s %d objects did not link\n' "$t" "$nobj"
       # Two failure modes, not one. Grepping only for `undefined reference'
       # printed NOTHING for a link that died on multiple definitions -- the
