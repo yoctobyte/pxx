@@ -18998,6 +18998,39 @@ test-wasm32: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q 'and also — `=` on strings' \
 	   && printf '%s\n' "$$out" | grep -q 'distinct gap(s) seen' \
 	   || { echo "wasm32 coverage report: FAIL - a body's SECOND gap is not listed (rc=$$rc)"; printf '%s\n' "$$out"; exit 1; }
+	# VARIANT. This backend had no arm for IR_VAR_STORE / IR_VAR_BOX /
+	# IR_VAR_BINOP, so `var v: Variant; v := 1;` did not lower at all -- the body
+	# was emitted as `unreachable` and trapped. Measured over 300 corpus sources
+	# with the per-body gap listing, IR_VAR_STORE was 222 of 278 refusals: four
+	# fifths of everything wasm32 was turning away.
+	#
+	# THE SAME FILES the other 32-bit targets prove it with, not a new test.
+	# riscv32 runs these four for the same reason and its own arms were written
+	# from arm32's; a fresh test would only prove what I thought to write down.
+	# No -Fulib/rtl on any row: that pulls the POSIX platform backend, whose
+	# syscall numbers do not exist for wasi, and the failure would read as a
+	# variant defect.
+	# bug-a-wasm32-has-no-variant-ir-arms-so-any-variant-assignment-traps
+	./$(COMPILER) --target=wasm32 test/test_cross_variant.pas $(TESTTMP)/w32_variant.wasm
+	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/w32_variant_x64
+	tools/expect_same.sh wasm32/variant "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_variant.wasm)" "$$($(TESTTMP)/w32_variant_x64)"
+	./$(COMPILER) --target=wasm32 test/test_cross_variant_single.pas $(TESTTMP)/w32_variant_single.wasm
+	./$(COMPILER) test/test_cross_variant_single.pas $(TESTTMP)/w32_variant_single_x64
+	tools/expect_same.sh wasm32/variant_single "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_variant_single.wasm)" "$$($(TESTTMP)/w32_variant_single_x64)"
+	# The payload hazards a 32-bit slot has and a 64-bit one does not: an Int64
+	# must reach the 8-byte payload WHOLE, a signed 4-byte payload must
+	# sign-extend into the high word and an unsigned one must zero-fill (the
+	# i386/arm32 twins got exactly this wrong once), a Double must be widened to
+	# VT_DOUBLE's 8 bytes, and a boxed string must not leak a reference per store.
+	./$(COMPILER) --target=wasm32 test/test_cross_variant_payload_widths.pas $(TESTTMP)/w32_varpay.wasm
+	./$(COMPILER) test/test_cross_variant_payload_widths.pas $(TESTTMP)/w32_varpay_x64
+	tools/expect_same.sh wasm32/variant_payload "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_varpay.wasm)" "$$($(TESTTMP)/w32_varpay_x64)"
+	tools/expect_same.sh wasm32/variant_payload_oracle "$$($(TESTTMP)/w32_varpay_x64 | tail -1)" "ALL OK"
+	# The aliasing store: PXXVarReleasePayload, not PXXVarClear, or `v := v`
+	# wipes what the copy is about to read and comes back Empty.
+	# bug-a-a-variant-assigned-to-itself-becomes-empty
+	./$(COMPILER) --target=wasm32 test/test_variant_self_assign_is_a_no_op.pas $(TESTTMP)/w32_varself.wasm
+	tools/expect_same.sh wasm32/variant_self_assign "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_varself.wasm | tail -1)" "ALL OK"
 	@echo "wasm32: 34 rows green (27 default + 7 shortstring; 2 excluded, see comment above)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF

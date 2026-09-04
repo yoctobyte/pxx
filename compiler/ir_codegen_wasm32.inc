@@ -113,6 +113,9 @@ var
     reason the string scratch slots are: the value is fully materialised before
     the first test, and no `in` can be nested inside another one's operand. }
   WasmSetInLoc      : Integer = -1;
+  WasmVarLocA       : Integer = -1;   { i32 -- a variant slot address, per body }
+  WasmVarLocS       : Integer = -1;   { i32 -- the SOURCE slot of a variant-to-variant copy }
+  WasmVarLocP       : Integer = -1;   { i64 -- the 8 payload bytes of a boxing store }
   WasmSetInLoc64    : Integer = -1;
   WasmCurNRes       : Integer = 0;    { this body's result count (0 or 1) }
   WasmCurResVt      : Byte = 0;       { ... and its wasm type when 1 }
@@ -730,6 +733,15 @@ procedure WasmEmitDynStore(dstSym, valNode: Integer); forward;
   by tools/check_forwards.sh the moment it was written: FPC compiles this file
   top to bottom during the seed build, and PXX prescans headers, so the file
   self-hosts cleanly either way and only FPC says which order is real. }
+{ The variant arms sit beside the statement emitter they serve, and three
+  callers are earlier in the file: the WRITE path needs the slot address, and
+  the VALUE dispatch needs the box and the binop. PXX prescans headers and FPC
+  is single-pass, so a missing forward here compiles under this compiler and
+  fails the FPC seed canary -- which is exactly how these three were found,
+  gating before the commit rather than after. }
+procedure WasmVariantAddr(node: Integer); forward;
+procedure WasmEmitVarBox(node: Integer); forward;
+procedure WasmEmitVarBinop(node: Integer); forward;
 procedure WasmEmitManagedLocals(release: Boolean; retSym: Integer); forward;
 
 { The address at which the PASCAL VARIABLE `si` lives, which is not always the
@@ -1831,6 +1843,17 @@ begin
     IR_CALL_IND  : WasmEmitCallInd(node, False);
     IR_VIRTUAL_CALL : WasmEmitVirtualCall(node, False);
     IR_ATOMIC    : WasmEmitAtomic(node);
+    { Both leave a variant slot ADDRESS on the stack, so both answer tyPointer
+      rather than whatever WasmNodeResultType made of a tyVariant node -- an
+      i32 to every consumer, which is what a 32-bit address is. }
+    IR_VAR_BOX   : begin WasmEmitVarBox(node); WasmEmitNode := tyPointer; end;
+    IR_VAR_BINOP : begin
+                     WasmEmitVarBinop(node);
+                     if IntToTypeKind(IRTk[node]) = tyBoolean then
+                       WasmEmitNode := tyBoolean
+                     else
+                       WasmEmitNode := tyPointer;
+                   end;
   else
     WasmUnsupported('value IR op ' + WasmIntStr(IRKind[node]));
   end;
@@ -4364,8 +4387,15 @@ begin
 
   if tk = tyVariant then
   begin
-    WasmUnsupported('write of a variant — needs the slot ADDRESS, not its '
-                    + 'value');
+    { The runtime picks the format from the slot's TAG, so a variant write is
+      one call taking the slot ADDRESS and no width form -- as on i386, arm32
+      and riscv32. It refused here for exactly as long as this backend had no
+      variant at all; the address is what WasmVariantAddr answers. }
+    hp := WasmWriteHelper('PXXWriteVariant');
+    if hp < 0 then Exit;
+    WasmVariantAddr(valNode);
+    if WasmBodyBroken then Exit;
+    WasmCall(WasmSlotForProc(hp), 'PXXWriteVariant');
     Exit;
   end;
 
@@ -5263,6 +5293,209 @@ begin
   if not WasmCallRtl('PXXStrSetLen') then Exit;
 end;
 
+{ ===== Variant =====
+
+  Three IR ops -- IR_VAR_STORE, IR_VAR_BOX, IR_VAR_BINOP -- and without them
+  `var v: Variant; v := 1;` did not lower at all on this target: the body was
+  emitted as `unreachable` and trapped. Measured 2026-09-03 over 300 corpus
+  sources with the per-body gap listing, IR_VAR_STORE was 222 of 278 refusals,
+  four fifths of everything this backend was turning away.
+  bug-a-wasm32-has-no-variant-ir-arms-so-any-variant-assignment-traps
+
+  THE LAYOUT IS THE 32-BIT ONE, and it is riscv32's and arm32's, not
+  aarch64's: a machine-word tag at +0, a zero word at +4, an 8-byte payload at
+  +8. The RTL agrees by construction -- PXXVarBinOp reads
+  `PMachineWord(left)^` for the tag and the payload at +8 -- because it is
+  compiled FOR this target rather than described to it.
+
+  A STACK MACHINE MAKES THIS THE SMALL ARM, not the large one. Every register
+  backend spends most of its variant code shuffling an address and an 8-byte
+  payload between registers and the machine stack around a helper call that
+  clobbers them; here the operand stack survives the call and the two values
+  that must outlive it go in locals. That is why this is ~120 lines against
+  riscv32's ~400 and x86-64's open-coded dispatch, and it is not a shortcut:
+  the ORDER is riscv32's exactly, including the two orderings below that are
+  each a fixed bug rather than a preference. }
+
+{ The three per-body locals these arms need, allocated on first use. A variant
+  store cannot nest inside its own payload -- a box only ever feeds a variant
+  op -- so one of each per body is enough and they are reused. }
+function WasmVarAddrL: Integer;
+begin
+  if WasmVarLocA < 0 then WasmVarLocA := WasmAddLocal(WT_I32, 'varaddr');
+  WasmVarAddrL := WasmVarLocA;
+end;
+
+function WasmVarSrcL: Integer;
+begin
+  if WasmVarLocS < 0 then WasmVarLocS := WasmAddLocal(WT_I32, 'varsrc');
+  WasmVarSrcL := WasmVarLocS;
+end;
+
+function WasmVarPayL: Integer;
+begin
+  if WasmVarLocP < 0 then WasmVarLocP := WasmAddLocal(WT_I64, 'varpay');
+  WasmVarPayL := WasmVarLocP;
+end;
+
+{ The address of a variant SLOT for a node in value position. Its own routine
+  because the generic value path would ask WasmNodeResultType what a tyVariant
+  node leaves on the stack, and the answer a variant op leaves is an ADDRESS. }
+procedure WasmVariantAddr(node: Integer);
+begin
+  if IRKind[node] = IR_LOAD_SYM then WasmSlotAddr(IRA[node])
+  else if IRKind[node] = IR_LOAD_MEM then WasmEmitValueAs(IRA[node], WT_I32,
+                                             'variant operand address')
+  else WasmEmitValueAs(node, WT_I32, 'variant operand');
+end;
+
+{ Evaluate the boxed value and leave it in the payload local as the 8 bytes
+  the slot stores. ONE local for every payload shape: a double goes in as its
+  IEEE-754 bits (i64.reinterpret_f64), which is what VT_DOUBLE's payload is
+  defined to be, so nothing downstream has to know which arm ran. }
+function WasmVariantPayload(valNode: Integer; tk: TTypeKind): Boolean;
+begin
+  WasmVariantPayload := False;
+  if (tk = tyString) or (tk = tyAnsiString) then
+  begin
+    { An OWNED handle: the slot holds a reference and its release drops one.
+      WasmEmitOwnedStr is the shared answer to "does this node already own its
+      +1" -- a call result does, a variable does not -- and getting that wrong
+      leaks one handle per boxed call result on every other backend. }
+    if not WasmEmitOwnedStr(valNode) then Exit;
+    WasmOp($AD, 'i64.extend_i32_u');
+  end
+  else if TypeIsFloat(tk) then
+  begin
+    WasmEmitValueAs(valNode, WT_F64, 'Variant payload');
+    if WasmBodyBroken then Exit;
+    WasmOp($BD, 'i64.reinterpret_f64');
+  end
+  else if TypeSlotSize(tk) > 4 then
+  begin
+    WasmEmitValueAs(valNode, WT_I64, 'Variant payload');
+    if WasmBodyBroken then Exit;
+  end
+  else
+  begin
+    WasmEmitValueAs(valNode, WT_I32, 'Variant payload');
+    if WasmBodyBroken then Exit;
+    { The WIDENING IS CHOSEN BY THE SOURCE'S SIGNEDNESS, not by the tag. A
+      4-byte signed payload sign-extends and an unsigned one zero-fills;
+      tyNativeInt maps to VT_INT64, so a negative NativeInt zero-filled reads
+      back as a huge unsigned. The 32-bit peers carry the same note. }
+    if TypeSigned(tk) then WasmOp($AC, 'i64.extend_i32_s')
+    else WasmOp($AD, 'i64.extend_i32_u');
+  end;
+  WasmLocalSet(WasmVarPayL);
+  WasmVariantPayload := True;
+end;
+
+{ Slot address on the stack, payload already in the local: clear the old value,
+  write tag / zero / payload, and LEAVE THE ADDRESS on the stack (IR_VAR_BOX's
+  value is that address; the statement arm drops it). }
+procedure WasmVariantFill(tag: Integer);
+begin
+  WasmLocalTee(WasmVarAddrL);
+  if not WasmCallRtl('PXXVarClear') then Exit;
+  WasmLocalGet(WasmVarAddrL); WasmI32Const(tag);
+  WasmMemOp($36, 'i32.store', 2, 0);
+  WasmLocalGet(WasmVarAddrL); WasmI32Const(0);
+  WasmMemOp($36, 'i32.store', 2, 4);
+  WasmLocalGet(WasmVarAddrL); WasmLocalGet(WasmVarPayL);
+  WasmMemOp($37, 'i64.store', 3, 8);
+  WasmLocalGet(WasmVarAddrL);
+end;
+
+{ v := <variant>: an ARC-correct 16-byte copy. }
+procedure WasmVariantCopy(node: Integer);
+begin
+  { RETAIN THE SOURCE BEFORE TOUCHING THE DESTINATION, so `v := v` cannot free
+    what it is about to read. }
+  WasmVariantAddr(IRB[node]);
+  if WasmBodyBroken then Exit;
+  WasmLocalTee(WasmVarSrcL);
+  if not WasmCallRtl('PXXVarRetain') then Exit;
+  WasmVariantAddr(IRA[node]);
+  if WasmBodyBroken then Exit;
+  WasmLocalTee(WasmVarAddrL);
+  { ReleasePayload, NOT Clear: Clear zeroes the 16 slot bytes, and when source
+    and destination alias that wipes what the copy below is about to read --
+    `v := v` came back Empty.
+    bug-a-a-variant-assigned-to-itself-becomes-empty }
+  if not WasmCallRtl('PXXVarReleasePayload') then Exit;
+  WasmLocalGet(WasmVarAddrL); WasmLocalGet(WasmVarSrcL);
+  WasmMemOp($29, 'i64.load', 3, 0);
+  WasmMemOp($37, 'i64.store', 3, 0);
+  WasmLocalGet(WasmVarAddrL); WasmLocalGet(WasmVarSrcL);
+  WasmMemOp($29, 'i64.load', 3, 8);
+  WasmMemOp($37, 'i64.store', 3, 8);
+end;
+
+{ The tag a boxing store writes: the type kind's, unless the SOURCE IS A CODE
+  ADDRESS, which overrides it -- defs.inc's VT_CALLABLE_TAG. }
+function WasmVariantTag(node: Integer; tk: TTypeKind): Integer;
+begin
+  WasmVariantTag := VariantTagForTk(tk, 'Variant :=');
+  if IRSrcIsCallable(node) then WasmVariantTag := VT_CALLABLE_TAG;
+end;
+
+procedure WasmEmitVarStore(node: Integer);
+var tk: TTypeKind;
+begin
+  tk := IntToTypeKind(IRC[node]);
+  if tk = tyVariant then
+  begin
+    WasmVariantCopy(node);
+    Exit;
+  end;
+  { PAYLOAD FIRST, destination second, and that is an ordering rather than a
+    style: PXXVarClear releases the destination's old value, so an expression
+    evaluated after it can read what it just freed. }
+  if not WasmVariantPayload(IRB[node], tk) then Exit;
+  WasmVariantAddr(IRA[node]);
+  if WasmBodyBroken then Exit;
+  WasmVariantFill(WasmVariantTag(IRB[node], tk));
+  if WasmBodyBroken then Exit;
+  WasmOp($1A, 'drop');            { a statement, so the slot address is unused }
+end;
+
+procedure WasmEmitVarBox(node: Integer);
+var tk: TTypeKind;
+begin
+  tk := IntToTypeKind(IRC[node]);
+  if not WasmVariantPayload(IRB[node], tk) then Exit;
+  WasmVariantAddr(IRA[node]);     { the temp slot }
+  if WasmBodyBroken then Exit;
+  WasmVariantFill(WasmVariantTag(IRB[node], tk));
+end;
+
+procedure WasmEmitVarBinop(node: Integer);
+var isCmp: Boolean; nm: AnsiString;
+begin
+  isCmp := IntToTypeKind(IRTk[node]) = tyBoolean;
+  { PXXVarBinOp(dest, left, right, opTk, isCompare): Int64 -- five arguments,
+    pushed in order, which on a stack machine IS the calling convention. }
+  if isCmp then WasmI32Const(0)          { compare: no destination }
+  else WasmBssAddr(Integer(IRIVal[node]));
+  WasmVariantAddr(IRA[node]);
+  if WasmBodyBroken then Exit;
+  WasmVariantAddr(IRB[node]);
+  if WasmBodyBroken then Exit;
+  WasmI32Const(IRC[node]);
+  if isCmp then WasmI32Const(1) else WasmI32Const(0);
+  { PASCAL selects PXXVarBinOpPas -- the raw dispatch with FPC's string rule in
+    front of it. NilPy keeps the raw one, because Python's rules for these pairs
+    differ in every case ('5' * 3 is '555'). Falls back to the raw one when no
+    builtin unit declares the Pascal wrapper, rather than failing to compile. }
+  nm := 'PXXVarBinOpPas';
+  if PyProgramMode or (FindProc(nm) < 0) then nm := 'PXXVarBinOp';
+  if not WasmCallRtl(nm) then Exit;
+  { The helper returns Int64 -- 0/1 for a compare, the destination ADDRESS
+    otherwise. Both are i32 to everything downstream on a 32-bit target. }
+  WasmOp($A7, 'i32.wrap_i64');
+end;
+
 procedure WasmEmitStmt(node, blk: Integer);
 var pvt: Byte;
 begin
@@ -5293,6 +5526,7 @@ begin
     IR_EXC_MATCH     : WasmEmitExcMatch(node, blk, False);
     IR_EXC_MATCH_HIT : WasmEmitExcMatch(node, blk, True);
     IR_SETLEN_STR    : WasmEmitSetLenStr(node);
+    IR_VAR_STORE     : WasmEmitVarStore(node);
     IR_STORE_SYM :
       { A managed string's SLOT is pointer-sized and its stores are therefore
         scalar-shaped, which is exactly the trap: `m := 'lit'` through the
@@ -6128,6 +6362,9 @@ begin
   WasmStrLocZ := -1;
   WasmSetInLoc := -1;
   WasmSetInLoc64 := -1;
+  WasmVarLocA := -1;
+  WasmVarLocS := -1;
+  WasmVarLocP := -1;
   WasmStrDepth := 0;
   for i := 0 to WASM_STR_DEPTH - 1 do
     for pvtI := 0 to WASM_STR_SLOTS - 1 do WasmStrPool[i][pvtI] := -1;

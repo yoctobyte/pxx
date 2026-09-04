@@ -3,9 +3,9 @@ slug: bug-a-wasm32-has-no-variant-ir-arms-so-any-variant-assignment-traps
 track: A
 prio: 30
 type: bug
-status: open
+status: working
 blocked-by: []
-owner: unassigned
+owner: frankA
 created: 2026-09-01
 found-by: frankC (while fixing bug-a-managed-locals-leak-at-ORDINARY-scope-exit-on-wasm32-and-a-variant-local-traps)
 summary: "ANY Variant assignment traps on wasm32: `v := 42` in a bare program body, with no procedure in it, gives `wasm trap: wasm unreachable instruction executed`, exit 134. NOT a leak and NOT a scope-exit problem -- the compiler says so itself, in its own broken-body report: `main$0 - statement IR op 43`, which is IR_VAR_STORE. The whole Variant family is absent from this backend: grep counts IR_VAR_STORE 0, IR_VAR_BINOP 0, IR_VAR_BOX 0 in ir_codegen_wasm32.inc against 2, 2, 2 in ir_codegen_riscv32.inc. So this is not a bug in Variant handling, it is Variant not being lowered at all, and the trap is the backend's deliberate unsupported marker (WasmUnsupported -> WasmBodyUnreachable) doing exactly what it is for. Consequence beyond the trap: wasm32's scope-exit release now HAS a PXXVarClear arm (74e33af46) and nothing can reach it, so that arm is written and unverified until this lands -- do not read its presence as coverage. Scope is three IR ops ported from the riscv32 or aarch64 arm, plus whatever Variant RTL the wasi profile is missing; the descriptor-cell indirection this backend uses for record RTTI (WasmRecDescAddr) is the pattern for any blob address a Variant op needs, because wasm32 has no code->data fixups."
