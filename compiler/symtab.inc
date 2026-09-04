@@ -823,10 +823,19 @@ function ClassNameIsAmbientIntrinsic(const lo: AnsiString): Boolean;
   one level up, and measured to be 100% of the `-> <program>` bucket (TObject
   and TGuid, nothing else). Filtered by NAME because the rows carry no marker
   and adding a parallel array for an opt-in read-only instrument is not worth
-  the shared-state churn; these two names are System's by definition, so a user
-  re-declaration is not a leak case worth reporting either. }
+  the shared-state churn; these names are System's by definition, so a user
+  re-declaration is not a leak case worth reporting either.
+
+  TMethod joined them when it became a builtin, and this list is the half that
+  is easy to miss: minting the row makes it visible to a PROGRAM, and only
+  membership here makes it visible to a UNIT. Without it, `lib/rtl/typinfo.pas`
+  stopped compiling the moment its own duplicate declaration was deleted
+  (`unknown type: TMethod` at its own SetMethodProp signature) -- so the symptom
+  of the omission shows up in the RTL rather than in user code.
+  feature-p-tmethod-record-for-method-pointers }
 begin
-  ClassNameIsAmbientIntrinsic := (lo = 'tobject') or (lo = 'tguid');
+  ClassNameIsAmbientIntrinsic := (lo = 'tobject') or (lo = 'tguid') or
+                                 (lo = 'tmethod');
 end;
 
 function PyRecIsPylibOwnClass(rec: Integer): Boolean;

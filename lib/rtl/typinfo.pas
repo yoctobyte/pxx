@@ -45,10 +45,19 @@ type
     `string` property field holds a managed handle under the default model. }
   PAnsiStr = ^string;
 
-  TMethod = record
-    Code: Pointer;
-    Data: Pointer;
-  end;
+  { TMethod itself is NOT redeclared here: the compiler mints System.TMethod
+    unconditionally (RegisterBuiltinTMethod), exactly as FPC declares it in
+    `system` and typinfo does not. A local copy would be a DIFFERENT record with
+    an identical layout, and record parameters are matched NOMINALLY -- so a
+    caller's `var m: TMethod` (the builtin) could not be passed to
+    SetMethodProp/GetMethodProp declared against the copy, and the diagnostic
+    printed the argument list and the only candidate as the same text
+    (`(Pointer, Pointer, record)` against `SetMethodProp(Pointer, Pointer,
+    record)`), which reads as the compiler refusing an exact match.
+    The builtin is unpadded on every target -- two pointers, so 8 bytes on i386
+    -- which is what the CPU32 note below says this record wants and what the
+    blob records deliberately do not.
+    feature-p-tmethod-record-for-method-pointers }
   PMethod = ^TMethod;
 
   { The RTTI blob (rtti_emit.inc) is emitted with uniform 8-byte field slots on

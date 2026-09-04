@@ -264,14 +264,19 @@ type
   end;
 
   { FPC System.TMethod: the two words a method pointer is made of. A `procedure of
-    object` value has exactly this layout -- Code at +0, Data (Self) at +8 -- so code
-    that builds a method pointer by hand fills a TMethod and casts it to the method
-    type. fpcunit's TTestCase.RunBare does that to invoke a test method found by RTTI. }
+    object` value has exactly this layout -- Code at +0, Data (Self) at one
+    pointer width -- so code that builds a method pointer by hand fills a
+    TMethod and casts it to the method type. fpcunit's TTestCase.RunBare does
+    that to invoke a test method found by RTTI.
+
+    The RECORD is not declared here, only its pointer: the compiler mints
+    System.TMethod unconditionally (RegisterBuiltinTMethod), as FPC declares it
+    in `system` and sysutils does not. See the longer note in typinfo.pas on why
+    a same-shaped local copy is not harmless -- record parameters match
+    NOMINALLY, so a duplicate silently makes the two spellings non-interchangeable
+    at every call boundary while every layout assertion still passes.
+    feature-p-tmethod-record-for-method-pointers }
   PMethod = ^TMethod;
-  TMethod = record
-    Code: Pointer;
-    Data: Pointer;
-  end;
 
   { FPC's standard SysUtils exception hierarchy. Real classes, not aliases: code catches them
     by type (`on E: EConvertError do`) and `is`/`as` must distinguish them, so each needs its
