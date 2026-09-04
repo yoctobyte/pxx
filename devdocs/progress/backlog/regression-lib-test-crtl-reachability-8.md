@@ -43,3 +43,37 @@ takes it from the repro line.*
 
 ## Log
 - 2026-09-02 — the seven watcher saw `lib-test#src:tools/crtl_reachability.py` GREEN at 0da8a0ae4200 (tier full) and did NOT close this: this is a repeat stub (`regression-lib-test-crtl-reachability-8`, not `regression-lib-test-crtl-reachability`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
+
+## 2026-09-04, plexus — both steps GREEN at HEAD, and the failure mode is NOT intermittent
+
+frankC. HEAD `162a22dd3`, the two structural steps of `lib-test` run verbatim:
+
+```
+crtl-reachability: OK -- 147 headers, 66 modules, every declared function reachable from its own header
+crtl-map: OK -- 608 crtl functions mapped to 63 headers
+```
+
+The log tail on this stub names the second step —
+`crtl-map: compiler/crtl_names.inc is STALE` — and that is a **deterministic
+property of a tree, not a flake.** It says one thing only: somebody added a
+crtl function and did not re-run `python3 tools/gen_crtl_map.py`. It goes green
+again the moment anyone else does, which is why this job flaps and why the flap
+reads like an intermittent when it is a queue of independent human omissions.
+
+`compiler/crtl_names.inc` has been regenerated **six times** between the red sha
+`cdae8cf6580b` and HEAD (`2f920dfd4`, `41a2d59a8`, `9f25e5fd3`, `87136719f`,
+`be7294fc7`, `bd53b29d9` — every one of them a crtl-surface commit). So the
+red was real, was caused by a commit below the named sha exactly as the
+auto-file predicted, and was cleared as collateral by the next person to touch
+crtl rather than by anyone reading this ticket.
+
+**Not closed here.** The measurement retires *this instance*; it does not retire
+the class, and closing on a green is what produced `-2` through `-8`. The class
+is that `--check` is the ONLY guard and it lives in a tier that runs hours later
+on another host, so the interval between "a crtl function is added" and "anyone
+learns the map is stale" is a full-tier cycle. The cheap repair is a habit —
+regenerate in the same commit that adds a crtl function — and the durable one is
+a guard closer to the edit. Deliberately not widening any gate to get it; see
+CLAUDE.md, and note that auto-regenerating from the Makefile is ruled out on
+purpose (`gen_crtl_map.py`'s own docstring: the check exists so a forgotten
+regeneration **fails** rather than silently succeeding).
