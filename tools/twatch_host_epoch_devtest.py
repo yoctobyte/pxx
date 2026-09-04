@@ -141,12 +141,35 @@ def case_governor_change_is_a_new_epoch():
     finally:
         twatch._HW_CACHE.clear()
     assert len(hosts_doc(clone)["xeon"]) == 2
-    # ...and the governor really is inside the fingerprint, not merely stored
-    import hashlib as _h
-    a = dict(hw); b = dict(hw, governor="performance")
-    fa = _h.sha256(json.dumps(a, sort_keys=True).encode()).hexdigest()[:12]
-    fb = _h.sha256(json.dumps(b, sort_keys=True).encode()).hexdigest()[:12]
-    assert fa != fb, "governor does not affect the fingerprint"
+    # ...and the governor really is inside the fingerprint, not merely stored.
+    #
+    # TWO defects fixed here 2026-09-04, both of which made this check assert
+    # about itself rather than about twatch:
+    #
+    # 1. It hard-coded "performance" as the CHANGED value. On a box whose
+    #    governor already IS "performance" -- seven, every run -- `b` was equal
+    #    to `a`, the two hashes matched, and the assert fired with the message
+    #    "governor does not affect the fingerprint" about code where it demonstrably
+    #    does (`governor` is in HW_KEYS). A guard that cannot tell "I failed to
+    #    change anything" from "the code ignores my change" accuses the code.
+    #    That is why this passed on plexus and failed on seven in the same
+    #    `make tools-devtest` invocation. Pick a value that DIFFERS from the
+    #    live one instead of naming one.
+    #
+    # 2. It re-implemented the fingerprint by hand (`sha256(json.dumps(hw))`)
+    #    instead of calling `twatch.fp_of_hardware()`. The real function filters
+    #    to HW_KEYS and quantises memory, so the hand-rolled hash was never the
+    #    thing under test: it could pass while fp_of_hardware ignored the
+    #    governor entirely, which is the only failure this check exists to catch.
+    #    Ask the real function.
+    live = hw.get("governor")
+    other = "powersave" if live != "powersave" else "performance"
+    assert other != live, "fixture must change the governor to test it"
+    fa = twatch.fp_of_hardware(dict(hw, governor=live))
+    fb = twatch.fp_of_hardware(dict(hw, governor=other))
+    assert fa != fb, (
+        "governor does not affect the fingerprint (%s -> %s both hash %s)"
+        % (live, other, fa))
     return "governor is identity-bearing"
 
 

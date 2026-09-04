@@ -299,3 +299,68 @@ vantage point no single session has.
 Recorded by the coordinator, which is the only seat that saw all three, and
 banked here rather than kept as context: the count is the finding, and a count
 held in a session's memory is not a ranking input.
+
+---
+
+## Cause 3 FIXED, and my diagnosis of it was wrong — 2026-09-04, claude-T
+
+I wrote above that *"the bench fingerprint omits the CPU governor while the guard
+says it should include it"* and called it "the only plain fix". **That was
+wrong. `governor` is in `HW_KEYS` and has been.** The defect was in the guard,
+and it is two defects:
+
+```python
+a = dict(hw); b = dict(hw, governor="performance")
+fa = sha256(json.dumps(a, sort_keys=True))[:12]
+fb = sha256(json.dumps(b, sort_keys=True))[:12]
+assert fa != fb, "governor does not affect the fingerprint"
+```
+
+**1. It hard-coded `"performance"` as the changed value.** seven's governor *is*
+`performance` — measured, `/sys/…/cpu0/cpufreq/scaling_governor` → `performance`.
+So `b == a`, the hashes matched, and the assert fired **accusing the code**. The
+guard could not distinguish *"I failed to change anything"* from *"the code
+ignores my change"*, so it reported the second.
+
+**This is one of frankZ's four host-specific guards, explained.** It passes on
+plexus and fails on seven in the same `make tools-devtest` invocation for one
+reason: seven's governor happens to equal the literal the fixture names. Nothing
+about a live watcher — the live-watcher hypothesis does not cover this one, and
+that is worth knowing before the other three are assumed to share a cause.
+
+**2. It re-implemented the fingerprint instead of calling it.**
+`sha256(json.dumps(hw))` over the whole dict is not `fp_of_hardware()`, which
+filters to `HW_KEYS` and quantises memory. So the hand-rolled hash was never the
+thing under test: **it could have passed while `fp_of_hardware` ignored the
+governor entirely**, which is the only failure this check exists to catch. A
+guard that reimplements its subject validates the author's intention.
+
+### Fix and its control
+
+Pick a value that DIFFERS from the live one, and ask the real function:
+
+```python
+live  = hw.get("governor")
+other = "powersave" if live != "powersave" else "performance"
+fa = twatch.fp_of_hardware(dict(hw, governor=live))
+fb = twatch.fp_of_hardware(dict(hw, governor=other))
+```
+
+Verified by discrimination, not by passing: with `governor` removed from
+`HW_KEYS` in a scratch copy the guard **FAILS** —
+`governor does not affect the fingerprint (performance -> powersave both hash
+bf64e064d6aa)` — and with it present, passes. The old guard could not
+discriminate on seven at either setting.
+
+`tools-devtest#00` is now **5 red, three causes**. The remaining five are the
+sync pair (Cause 1) and the three censuses (Cause 2), and no census should be
+re-armed to clear it.
+
+### Note on the toolchain gap, separately
+
+While here: `host_hardware()` already records `kernel` and `gcc` and both are
+fingerprinted. **`qemu-*` versions are captured nowhere** — and seven runs qemu
+8.2.2 on every arm against plexus's 10.2.1, which is a standing environmental
+cause for "red on seven, green locally". That is a real gap, it is `tstate/`, and
+it is a separate ticket from this one; the fingerprint machinery to hang it on
+already exists and already has the guard above protecting it.
