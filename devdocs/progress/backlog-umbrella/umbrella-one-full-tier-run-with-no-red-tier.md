@@ -1048,9 +1048,34 @@ This is the `tools-devtest#00` lesson arriving a second time from a second job:
 **one job name carrying an arbitrary union means the red COUNT is not a count of
 causes, in either direction.** There it inflated a fix (five guards closed, the
 verdict unmoved); here it inflated the backlog (one construct wearing four
-names). `bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step`
-is the ticket, and it is now the reason two separate umbrella sections were
-written wrong.
+names).
+
+**Corrected 2026-09-04 by frank-coordinator-2c, and the correction is the useful
+part.** I first pointed this at
+`bug-t-a-job-named-after-its-first-source-file-cannot-name-its-failing-step`
+and wrote *"if splitting it is ever ranked"* — that ticket is in `done/`,
+resolved 2026-08-30, so it will never be ranked and the pointer would have sent
+every later reader to a closed page. **It is also not a regression of that fix.**
+That ticket fixed ROUTING (`track:` now comes from the failing step's own
+sources) and *structurally refused* to make the slug step-derived, for a reason
+that still holds: the slug is both the dedupe key and the close key, and
+`close_stub_tickets()` recomputes it from the job when no step is in scope, so a
+step-derived slug would leak every stub open silently. It named its own residue
+honestly as *"ownership remains unrecoverable"*.
+
+What these two cases are is a **different, unowned residue of that same
+deliberate decision** — not "which lane owns this red" but *"how does a reader
+tell that four job names are one job, or that one job name is five verdicts?"*
+The live ticket is [[chore-t-tools-devtest-00-is-six-reds-with-four-causes]]
+(backlog-tools, T, p75, unowned), where both cases are now recorded.
+
+**Why two points argue for rank where one would not:** they point in OPPOSITE
+directions from one property. `tools-devtest#00` HID work that was done — an
+unmoved verdict standing in front of five closed guards. `lib-test#00` INFLATED
+work that did not exist — four names, one construct. A name that over-reports
+and a name that under-reports are one ambiguity read twice, and neither
+announces itself: an unmoved verdict looks like a live red, and a repeated job
+name looks like distinct work.
 
 ### The loop worth naming: the shadow is reporting the pin's own defects
 
