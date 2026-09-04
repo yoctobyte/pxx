@@ -1,0 +1,30 @@
+# `e.args` must keep reading (42,) once the caught exception is actually FREED.
+#
+# GetArgs returned the STORED argsv borrowed while its other arm returns a
+# freshly built tuple, and the caller's protocol for a property result is one
+# OWNED reference per read. So every read was one release too many. That was
+# invisible while a caught NilPy exception was never freed -- nothing else ever
+# released argsv, so the surplus release just drained a leaked block. Closing
+# the `except X as e:` leak makes the object's finalize release argsv too, and
+# the two collide: the tuple is freed while still reachable, the allocator hands
+# that address to the NEXT raise, and the read comes back empty.
+#
+# 50 iterations because the corruption needs the freed block to be RECYCLED,
+# which is why one catch cannot see it: the signature is `()` on every second
+# iteration, not on the first.
+i = 0
+bad = 0
+seen = 0
+while i < 50:
+    try:
+        raise ValueError(42)
+    except ValueError as e:
+        a = e.args
+        seen = seen + 1
+        if repr(a) != "(42,)":
+            bad = bad + 1
+        if len(a) != 1:
+            bad = bad + 1
+    i = i + 1
+print("seen=" + str(seen))
+print("bad=" + str(bad))

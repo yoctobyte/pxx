@@ -3312,6 +3312,27 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object.npy $(TESTTMP)/test_nilpy_reraise26
 	tools/expect_same.sh test_nilpy_reraise26 "$$($(TESTTMP)/test_nilpy_reraise26 2>/dev/null)" "$$(cat test/test_nilpy_reraise_from_a_handler_does_not_free_the_in_flight_object.expected)"
 	tools/assert_no_leak.sh nilpy_reraise_in_flight 1500 $(TESTTMP)/test_nilpy_reraise26
+	@# `except X as e:` never released the caught exception: the fall-through
+	@# free was emitted only for Pascal or for a BARE NilPy arm, so a bound arm
+	@# dropped its reference at the next execution of the try without releasing.
+	@# THE CENSUS IS THE INSTRUMENT AND THE VALUE ROW CANNOT BE. A leak neither
+	@# corrupts nor crashes, so `caught=3000` passes with the leak wide open --
+	@# measured, pin v403 and HEAD allocate the IDENTICAL 19780 blocks and differ
+	@# only in frees: live=11938 against live=2, ~3.98 blocks per catch.
+	@# bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_nilpy_bound_except_arm_releases_the_caught_exception.npy $(TESTTMP)/test_nilpy_boundexc26
+	tools/expect_same.sh test_nilpy_boundexc26 "$$($(TESTTMP)/test_nilpy_boundexc26 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_bound_except_arm_releases_the_caught_exception.expected)"
+	tools/assert_no_leak.sh nilpy_bound_except_releases 200 $(TESTTMP)/test_nilpy_boundexc26
+	@# ...and the read that freeing the exception exposed. Exception.GetArgs had
+	@# MIXED OWNERSHIP -- borrowed when argsv was stored, owned when it derived a
+	@# fresh tuple -- while the caller consumes one owned reference per read. The
+	@# surplus release was harmless only while nothing else ever released argsv.
+	@# THE PIN PASSES THIS ROW, so the pin is NOT the control: the population is
+	@# "exception freed, GetArgs still borrowed", and against that binary the row
+	@# reads bad=98 (49 of 50 catches, twice each). 50 iterations because the
+	@# block has to be RECYCLED to see it -- the first catch never can.
+	./$(COMPILER) test/test_nilpy_exception_args_survive_the_freed_exception_block.npy $(TESTTMP)/test_nilpy_argsown26
+	tools/expect_same.sh test_nilpy_argsown26 "$$($(TESTTMP)/test_nilpy_argsown26)" "$$(cat test/test_nilpy_exception_args_survive_the_freed_exception_block.expected)"
 	@# A generator step function's managed locals are the generator's LIVE
 	@# STATE, not locals going out of scope -- it returns at every yield and is
 	@# re-entered at the next one. x86-64 has always exited the cleanup early
@@ -17204,6 +17225,16 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_nilpy_managed_local_in_unwound_frame.npy $(TESTTMP)/unwpad_i386
 	tools/expect_same.sh i386/test_nilpy_managed_local_in_unwound_frame "$$(tools/run_target.sh i386 $(TESTTMP)/unwpad_i386 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_managed_local_in_unwound_frame.expected)"
 	tools/assert_no_leak.sh i386/nilpy_managed_local_unwound_frame 50 tools/run_target.sh i386 $(TESTTMP)/unwpad_i386
+	@# The bound-arm release and the GetArgs ownership fix on 32-bit. Both are
+	@# target-independent by construction (IR lowering and Pascal RTL), and that
+	@# is the reason to run one of them somewhere that is not the 64-bit host
+	@# rather than the reason not to: a refcount is a machine word and the census
+	@# bound is a count, so a width bug here would show as a leak, not a diff.
+	./$(COMPILER) -dPXX_ALLOC_CENSUS --target=i386 test/test_nilpy_bound_except_arm_releases_the_caught_exception.npy $(TESTTMP)/boundexc_i386
+	tools/expect_same.sh i386/test_nilpy_bound_except_arm "$$(tools/run_target.sh i386 $(TESTTMP)/boundexc_i386 | grep -v '^pxx-census')" "$$(cat test/test_nilpy_bound_except_arm_releases_the_caught_exception.expected)"
+	tools/assert_no_leak.sh i386/nilpy_bound_except_releases 200 tools/run_target.sh i386 $(TESTTMP)/boundexc_i386
+	./$(COMPILER) --target=i386 test/test_nilpy_exception_args_survive_the_freed_exception_block.npy $(TESTTMP)/argsown_i386
+	tools/expect_same.sh i386/test_nilpy_exception_args_survive "$$(tools/run_target.sh i386 $(TESTTMP)/argsown_i386)" "$$(cat test/test_nilpy_exception_args_survive_the_freed_exception_block.expected)"
 	@# A `raise` or `raise e` inside an `except V as e:` handler puts the
 	@# BINDER's object back IN FLIGHT. The unwind landing pad must not release
 	@# it -- its reference is borrowed from the in-flight exception and becomes

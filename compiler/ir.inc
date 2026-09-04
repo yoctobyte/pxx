@@ -7544,6 +7544,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     excTargetCi, excBodyLabel, excDescCi: Integer;
     excObjSym, excMatched, excSkipLabel, excOwnTmp, excReleaseProc: Integer;
     excClsTmp, excSkipFreeLabel: Integer;
+    excRelProc, excRelArg, excRelCall: Integer;
     eaSym: Integer;
     narrowSize: Integer; castIsSigned: Boolean;
     i, lbId, off, len, idx, itemNode, lo, hi, val1, elemSize: Integer;
@@ -14702,6 +14703,38 @@ NO LONGER x86-64, aarch64 or arm32: on all three, a bodied `cdecl`
               which is before the pad is emitted, so the flag is set in time. }
             if ASTSOffset[handlerNode] < Length(SymIsExcBinder) then
               SymIsExcBinder[ASTSOffset[handlerNode]] := True;
+            { RELEASE WHAT THE BINDER STILL HOLDS BEFORE NILLING IT -- the drop
+              for the PREVIOUS execution of this try statement.
+
+              The binder is a real refcounted local and its scope-exit release
+              is the drop for ONE object. In a loop that catches N times it was
+              handed N, and the nil below dropped the pointer to N-1 of them
+              without releasing: 2.997 blocks per catch, forever, and identical
+              whether the handler mentions `e` or not, because the unbalanced
+              reference is at the BIND and not at any use.
+
+              HERE, and NOT at handler exit, which is the fix that was tried and
+              reverted: a release there is a SECOND release of a pointer the
+              scope-exit pass will release again, and it corrupts `e.args`
+              (test_nilpy_exception_non_string_argument). By the time control is
+              back at the head of this statement the previous handler has
+              completed normally -- a re-raise leaves through the exception path
+              and never returns here -- so the object is nobody's but ours.
+
+              Nil-safe on the first arrival: PXXObjRelease is magic-guarded, and
+              a NilPy tyClass local is nil'd by CompileAST's watermark pass
+              before its first statement runs, which is the same guarantee
+              PyClassSymArcEligible already rests on.
+              bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it }
+            excRelProc := FindProc('PXXObjRelease');
+            if excRelProc >= 0 then
+            begin
+              excRelArg := IRAppend(IR_ARG,
+                IRAppend(IR_LOAD_SYM, ASTSOffset[handlerNode], -1, -1, 0, Ord(tyPointer)),
+                -1, -1, 0, Ord(tyPointer));
+              excRelCall := IRAppendCall(excRelProc, excRelArg, -1, Ord(tyUnknown));
+              IRIVal[excRelCall] := 1;   { statement: emit for effect }
+            end;
             IRAppend(IR_DEFAULT_MEM,
               IRAppend(IR_SLOTADDR, ASTSOffset[handlerNode], -1, -1, 0, Ord(tyPointer)),
               -1, REC_NONE, TARGET_PTR_SIZE, Ord(tyPointer));

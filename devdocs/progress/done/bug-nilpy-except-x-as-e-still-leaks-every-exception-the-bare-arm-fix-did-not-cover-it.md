@@ -3,6 +3,7 @@ prio: 55
 track: N
 type: bug
 summary: "`except X as e:` leaks 3 heap blocks per caught exception -- the exception object and two it owns. Re-measured 2026-09-04 at 938d9d9dbbe6: bare `except X:` is 0.000, bound is 2.997, and it is 2.997 whether the handler USES `e` or not, so the leak is in the BINDING and not in anything done with it. Unchanged by the unwind-landing-pad fix (bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released), which is a different path: the frame here is not unwound past, the handler is in it. The obvious fix corrupts `e.args` -- see below."
+status: done
 ---
 
 # `except X as e:` still leaks every exception object — the bound arm was never in the old repro
@@ -128,3 +129,56 @@ Re-measured deliberately after
 case that pad covered this too. It does not, and the reason is structural rather
 than incidental: the pad releases the locals of a frame an exception unwinds
 PAST, and this handler is in the frame that CATCHES. Different path, still open.
+
+## Fixed — and this ticket's recorded reason for NOT fixing it was wrong
+
+The fall-through free in `AN_TRY_EXCEPT` is emitted under
+`if (not NilPyUserCode) or (ASTSOffset[handlerNode] < 0)` — Pascal always, NilPy
+only when the arm is BARE. That is the whole hole, exactly as the body says.
+
+The fix is a release at the pre-try `IR_DEFAULT_MEM` nil, which already runs on
+every execution of the try: release-then-nil rather than nil-over-the-top. By
+the time control is back at the statement head the previous handler has
+completed normally — a re-raise leaves through the exception path and never
+returns there — so the object is nobody's but ours. Measured: `allocs` identical
+at 19780 for 3000 catches, `frees` 7842 → 19778, `live` 11938 → 2.
+
+**THE `e.args` CORRUPTION THIS TICKET BLAMED ON THE FIX CLASS IS A SEPARATE,
+OLDER BUG, AND IT IS PRESENT IN PIN v403.** `Exception.GetArgs` had MIXED
+OWNERSHIP: it returned the stored `argsv` BORROWED, while its other arm returns
+a freshly built tuple OWNED. The caller's protocol for a property result is one
+owned reference per read — it stores into a managed temp, releasing what that
+temp held before, and never retains — so every read was one release too many.
+
+That was invisible for as long as a caught NilPy exception was never freed:
+nothing else ever released `argsv`, so the surplus release merely drained a
+leaked block and *looked like cleanup*. Freeing the exception makes its finalize
+release `argsv` too, and the two collide.
+
+The instruments, in the order they separated it:
+- `-dPXX_OBJTRACE` — zero `R` lines anywhere, so nothing ever retains; the
+  release of iteration N's tuple fires during iteration N+1's read.
+- `-dPXX_HEAP_DEBUG` — names it outright, `RELEASE of a FREED object`, and
+  quarantine suppresses the symptom, so the output is clean while the fault
+  prints.
+- the pin, run with the same probe — **it does the identical stale release**.
+  It just never aliases a live block, because it frees nothing else.
+
+So the alternating `(42,) () (42,)` is a freed-and-reused tuple, not a wrong
+args computation, and "this fix class corrupts `e.args`" was an attribution
+error: the fix class exposes a bug it did not cause. A control that only
+compares against the pin cannot see it — the pin passes.
+
+`args` is the only `read Get...` property in pylib, so there is no sibling of
+this shape to fix alongside it.
+
+Residual, unchanged and still open:
+[[bug-nilpy-a-handler-binder-unwound-past-by-a-different-exception-still-leaks]]
+— measured again here at 3.729 blocks/iteration with the try in a FUNCTION
+(fresh frame per iteration). The pre-try release cannot reach that: it fires on
+re-execution of the try in the SAME frame, and the unwound-past binder's frame
+is gone. A probe with the try in the module body reads 0.000 and is the wrong
+shape for that ticket.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

@@ -1,0 +1,18 @@
+# `except X as e:` must release the caught exception, the way the BARE arm has
+# since the unwind-pad work. The fall-through free was emitted only for Pascal
+# or for a bare NilPy arm, so a bound arm dropped its reference at the next
+# execution of the try WITHOUT releasing -- ~3 blocks per catch (the exception,
+# its args tuple, the boxed argument).
+#
+# THE CENSUS IS THE INSTRUMENT, not the printed value: a leak does not corrupt
+# and does not crash, so every value row here passes either way. 3000 catches
+# means a lost release reads as ~9000 live, three orders off the bound.
+i = 0
+n = 0
+while i < 3000:
+    try:
+        raise ValueError(i)
+    except ValueError as e:
+        n = n + 1
+    i = i + 1
+print("caught=" + str(n))

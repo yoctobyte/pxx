@@ -12166,6 +12166,30 @@ begin
   if argsv <> nil then
   begin
     Result := TPyList(argsv);
+    { RETURN A NEW REFERENCE, because the OTHER arm does. The caller's protocol
+      for a property result is one owned reference per read -- it stores the
+      result into a managed temp, releasing whatever that temp held before, and
+      never retains. That is exactly right for the derived arm below, which
+      hands back a freshly built tuple; handing back the STORED field borrowed
+      made every read one release too many, and the object's own finalize then
+      released argsv a second time.
+
+      It was invisible for as long as a caught NilPy exception was never freed:
+      nothing else ever released argsv, so the surplus release merely drained a
+      leaked block and looked like cleanup. Freeing the exception (the `except X
+      as e` leak fix) makes the two collide, and it lands as a use-after-free on
+      whatever block the allocator recycled into that address -- observed as
+      `e.args` printing `()` on every second iteration of a loop that raises,
+      which is a freed-and-reused tuple, not a wrong args computation.
+      Measured with -dPXX_OBJTRACE: the release of iteration N's tuple fires
+      during iteration N+1's read, and -dPXX_HEAP_DEBUG names it outright as
+      `RELEASE of a FREED object`.
+
+      A mixed-ownership result is the bug -- one arm borrowed, one owned -- so
+      the fix is to make both arms owned rather than to teach the caller which
+      arm it got. No Pascal code reads this property (it exists for NilPy), so
+      the retain has no unreleased consumer. }
+    PXXObjRetain(Pointer(Result));
     Exit;
   end;
   Result := TPyList.Create;

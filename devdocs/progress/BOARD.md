@@ -241,7 +241,7 @@ _none_
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-devdocs-developer-is-83-unowned-pages-and-73-are-two-months-stale | A | 40 | task | devdocs/developer/ is 83 .md files that CLAUDE.md and devdocs/dev/README.md both fail to name, so no lane owns it. 73 of 83 were last touched on 2026-06-26 by the commit that CREATED the tree, and that same commit broke citations inside it: 35 of 157 distinct cited paths do not resolve, including one that points at docs/historic/ for a file the split moved to devdocs/developer/historic/. Rationale is measured, not assumed: across the whole night's audit, doc accuracy tracked WHO IS ACCOUNTABLE for a page, not how many people read it -- docs/** (owned by D, fewer readers who could check it) was more accurate than devdocs/dev/** (heavily read, unowned). | — |
 
-## backlog-nilpy (98)
+## backlog-nilpy (97)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -304,7 +304,6 @@ _none_
 | bug-nilpy-del-on-a-plain-variable-silently-does-nothing | N | 35 | bug | NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct. | — |
 | bug-nilpy-delattr-globals-and-locals-are-absent | N | 12 | bug | `delattr`, `globals()` and `locals()` are `undefined variable`. delattr is a real gap with no runtime entry behind it; globals/locals want a run-time name table this dialect deliberately does not build, so they may be a documented divergence rather than a bug. | — |
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
-| bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it | N | 55→75 | bug | `except X as e:` leaks 3 heap blocks per caught exception -- the exception object and two it owns. Re-measured 2026-09-04 at 938d9d9dbbe6: bare `except X:` is 0.000, bound is 2.997, and it is 2.997 whether the handler USES `e` or not, so the leak is in the BINDING and not in anything done with it. Unchanged by the unwind-landing-pad fix (bug-nilpy-a-managed-local-in-an-unwound-frame-is-never-released), which is a different path: the frame here is not unwound past, the handler is in it. The obvious fix corrupts `e.args` -- see below. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | compat-n-repr-does-not-escape-non-printables-above-u007f | N | 15 | compat | `repr()` escapes only below U+0080, so C1 controls, NBSP and non-printable astral characters print raw where CPython escapes them: repr(chr(0x80)) is the raw byte here and '\\x80' in CPython. Everything below 0x80 is already correct. Output FORMATTING of a non-float value, so compat at low prio by CLAUDE.md's table. | — |
@@ -895,9 +894,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3231)
+## done (3232)
 
-3231 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3232 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (74)
 
@@ -987,7 +986,6 @@ _none_
 - [p 80] [B] feature-busybox-kiosk-selfhosting-target [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 75] [A] bug-a-only-the-pascal-frontend-ever-asks-for-an-unwind-landing-pad (unblocks 1)
 - [p 75] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells (unblocks 1)
-- [p 75] [N] bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it (unblocks 1)
 - [p 75] [N] bug-n-a-binop-over-two-attributes-of-a-local-instance-segfaults
 - [p 75] [T] chore-t-tools-devtest-00-is-six-reds-with-four-causes
 - [p 75] [P] feature-pascal-corpus-expansion [parked — re-claim, do not duplicate]
@@ -1401,7 +1399,6 @@ _none_
 - **1** — bug-b-crtl-host-header-fallback-leaks-BEGIN-DECLS
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
-- **1** — bug-nilpy-except-x-as-e-still-leaks-every-exception-the-bare-arm-fix-did-not-cover-it
 - **1** — bug-nilpy-render-backend-py-compile-does-not-terminate
 - **1** — bug-wasm-hosted-compiler-crashes-node-but-not-wasmtime-on-a-full-compile
 - **1** — decide-a-how-should-the-nilpy-managed-finalize-re-enter-the-heap-lock
