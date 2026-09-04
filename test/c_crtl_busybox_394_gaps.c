@@ -50,8 +50,30 @@
    runtime. Compile this file with gcc too; that is what caught it. */
 static void row10_onalrm(int s) { (void)s; }
 
+/* NOT a bare /tmp literal: rows 5, 6 and 11 name paths at RUNTIME, so no
+   Makefile sweep reaches them and testmgr cannot privatize them. Row 5 is the
+   one that actually races -- it mkdir()s a directory, creates three files in
+   it and removes them again, so two concurrent runs of this job share the
+   directory and each other's entries, and the row asserts a COUNT. Rows 6 and
+   11 name paths that must NOT exist, which is a weaker claim but the same
+   shared namespace: anything that creates them turns a refusal row green for
+   the wrong reason.
+
+   TESTMGR_TMP FIRST: testmgr launches jobs through an env allowlist
+   (PXX_ TESTMGR_ LC_ QEMU_), so $TESTTMP does not survive into the job.
+   TESTTMP second is what `make test TESTTMP=$(mktemp -d)` exports. /tmp last
+   keeps a bare run byte-identical. */
+static const char *tmpdir_(void)
+{
+  const char *d = getenv("TESTMGR_TMP");
+  if (!d || !*d) d = getenv("TESTTMP");
+  if (!d || !*d) d = "/tmp";
+  return d;
+}
+
 int main(void)
 {
+  char pathbuf_[512];
   /* 1: sigisemptyset. Empty is 1, one member is 0, and emptying it again is 1
      -- the third asks whether the answer TRACKS the set rather than being a
      constant, which a one-word reader would also pass. */
@@ -124,11 +146,12 @@ int main(void)
      created out of order on purpose, so an implementation that returns them in
      readdir order passes the count and fails here. */
   {
-    const char *dir = "/tmp/pxx_crtl_scandir_probe";
+    const char *dir = pathbuf_;
     const char *names[3] = { "zebra", "apple", "mango" };
     struct dirent **ents = 0;
     char path[256];
     int n, i, fd;
+    sprintf(pathbuf_, "%s/pxx_crtl_scandir_probe", tmpdir_());
     mkdir(dir, 0700);
     for (i = 0; i < 3; i++) {
       sprintf(path, "%s/%s", dir, names[i]);
@@ -150,7 +173,9 @@ int main(void)
      return value never sees a partial array, so the sentinel must survive. */
   {
     struct dirent **ents = (struct dirent **)0x1;
-    int n = scandir("/tmp/pxx-no-such-directory-here", &ents, 0, alphasort);
+    int n;
+    sprintf(pathbuf_, "%s/pxx-no-such-directory-here", tmpdir_());
+    n = scandir(pathbuf_, &ents, 0, alphasort);
     printf("6 %d %d\n", n, ents == (struct dirent **)0x1);
   }
 
@@ -254,7 +279,8 @@ int main(void)
   {
     int rc, e;
     errno = 0;
-    rc = acct("/tmp/pxx-no-such-acct-file");
+    sprintf(pathbuf_, "%s/pxx-no-such-acct-file", tmpdir_());
+    rc = acct(pathbuf_);
     e = errno;
     printf("11 %d %d\n", rc, e == EPERM || e == ENOENT || e == ENOSYS);
   }

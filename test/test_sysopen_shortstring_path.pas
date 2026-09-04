@@ -23,15 +23,31 @@ program test_sysopen_shortstring_path;
   is written BEFORE open() is called, so it runs on both -- which is why the
   defect this guards crashed on a missing file too, and why that made it look
   like an open() bug rather than a length-width one. }
+uses sysutils;   { GetEnvironmentVariable only; SysOpen is the system unit's }
 var
   sp: ShortString;
   fd, n: Integer;
   buf: array[0..7] of Char;
-  mp: AnsiString;
+  mp, dir: AnsiString;
 begin
+  { NOT a bare /tmp literal: two concurrent runs would share the file, and
+    testmgr cannot privatize a path written at RUNTIME. TESTMGR_TMP first --
+    testmgr launches jobs through an env allowlist that $TESTTMP does not
+    survive; TESTTMP second is what `make test TESTTMP=$(mktemp -d)` exports;
+    /tmp last keeps a bare run byte-identical.
+
+    THE DIRECTORY BEING RUNTIME-COMPUTED DOES NOT WEAKEN WHAT THIS TESTS. The
+    raw branch is selected by the path symbol's KIND, not by its constness, so
+    `sp` is still a ShortString reaching EmitTerminateString + the length read
+    at its own width -- and a length written at runtime is if anything the
+    harder case for the defect this guards. }
+  dir := GetEnvironmentVariable('TESTMGR_TMP');
+  if dir = '' then dir := GetEnvironmentVariable('TESTTMP');
+  if dir = '' then dir := '/tmp';
+
   { create the file through the MANAGED path, so this test's own setup does not
     depend on the branch it is testing. }
-  mp := '/tmp/pxx_sysopen_shortstring_path.tmp';
+  mp := dir + '/pxx_sysopen_shortstring_path.tmp';
   buf[0] := 'P'; buf[1] := 'X'; buf[2] := 'X'; buf[3] := '2'; buf[4] := '6';
   fd := SysOpen(mp, 577);          { O_WRONLY | O_CREAT | O_TRUNC }
   n := SysWrite(fd, buf, 5);
@@ -39,7 +55,7 @@ begin
   SysClose(fd);
   writeln('setup wrote ', n);
 
-  sp := '/tmp/pxx_sysopen_shortstring_path.tmp';
+  sp := dir + '/pxx_sysopen_shortstring_path.tmp';
   fd := SysOpen(sp, 0);
   writeln('short open  ', fd > 2);
   if fd > 2 then
@@ -50,7 +66,7 @@ begin
     SysClose(fd);
   end;
 
-  sp := '/tmp/pxx_sysopen_shortstring_no_such_file_anywhere.tmp';
+  sp := dir + '/pxx_sysopen_shortstring_no_such_file_anywhere.tmp';
   writeln('short miss  ', SysOpen(sp, 0) < 0);
   writeln('SYSOPEN SHORTSTRING PATH OK');
 end.

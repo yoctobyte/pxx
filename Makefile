@@ -13381,6 +13381,18 @@ test-core: $(COMPILER)
 	# `uu`. 65 is chosen so no right answer collides with 1, 4 or 8.
 	./$(COMPILER) test/c_sizeof_a_field_through_a_parenthesised_base.c $(TESTTMP)/c_szfldparen26
 	tools/expect_same.sh c_szfldparen26 "$$($(TESTTMP)/c_szfldparen26)" "$$(printf '1 65\n2 65\n3 65\n4 65\n5 65\n6 65\n7 65\n8 4 1\n9 48 48')"
+	# `offsetof` INSIDE A STATIC ARRAY INITIALIZER, wired here rather than in the
+	# busybox probe family because it is the same reader gap: `->` lexes to tkDot,
+	# CBraceFlatIntInitCountAt had no tkDot in its allowlist, and losing the flat
+	# path sized the array as ONE element -- so `sizeof(a)/sizeof(a[0])` answered 1
+	# and every loop over such a table ran once. Fixed at 62463923f; the test file
+	# landed with the fix and nothing ran it, which is what check_test_wiring saw.
+	# THE LENGTH ROWS COME FIRST BY CONSTRUCTION: reading ofs[1] of a 1-element
+	# array returns the neighbouring static and never faults, so element rows
+	# alone cannot fail. Offsets are 8 / 12 / 4 -- distinct from each other, from
+	# 0 (the pre-fix value) and from the struct sizes. Diffed against gcc: same.
+	./$(COMPILER) test/c_offsetof_in_a_static_array_initializer.c $(TESTTMP)/c_ofsstatic26
+	tools/expect_same.sh c_ofsstatic26 "$$($(TESTTMP)/c_ofsstatic26)" "OFFSETOF STATIC OK 8 12 4 16"
 	# `f(s.arr)` on an array-of-STRUCT field passed the address of a
 	# one-element temp copy instead of decaying, so every store the callee
 	# made was discarded. The guard that exists to stop this asked only about

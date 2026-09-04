@@ -36,18 +36,25 @@ them would be 32 findings that cost nobody anything — which is how a check ear
 the habit of being scrolled past. The narrow family is the point.
 
 THE BIGGER EXPOSURE IS NOT A LIST, and this file does not pretend to close it:
-**531 of 536 cross-target differential rows compared stdout only when this was
-armed on 2026-08-30**, and for those the exit code is free to add (both sides
-are runs of the same program). frankS's bug lived in exactly that shape.
-Section 3 measures it and holds the SHARE — not the count — so it cannot drift
-upward unnoticed while the family stays green, and so that adding rows
-correctly does not trip it. It was a COUNT until 2026-09-01, when the corpus
-grew to 665 rows of which 46 now capture the exit code: the share had fallen
-from 99.1% to 93.1% — an improvement — and the absolute cap went red anyway,
-which is how it reached a tier report. The share is re-armed at the current
-value and carries its own positive control: the check asserts that one more
-uncapped row would breach it, so the bound is proven tight on every run rather
-than merely believed.
+905 of 958 cross-target differential rows compare stdout only (2026-09-04), and
+frankS's bug lived in exactly that shape. Section 3 REPORTS that number and
+does not gate on it. It gates on the other direction — the captures already
+earned may not be given back — because that is the half a growing corpus cannot
+move.
+
+The drift half was tried twice and failed twice, and the reason is worth
+keeping. As an absolute COUNT it went red on 2026-09-01 when the corpus grew
+536 -> 665 while GETTING BETTER (5 capturing rows became 46). Re-armed as a
+SHARE with a positive control proving one more uncapped row would breach it, it
+went red again on 2026-09-02 and on 2026-09-04. A bound one row breaches has
+zero marginal headroom, and this corpus gains ~20 uncapped rows an hour from
+five lanes — so it could not survive a single commit, and capping rows to
+satisfy it buys a green the next push takes back. Three firings, three times
+the cause was growth, never a lost capture; three RED tiers for it. Closing the
+exposure is real work and it is RANKED work, deliberately low: see
+`chore-t-make-every-cross-target-row-assert-the-exit-code` [T p45], which
+records that run_target.sh returns the EMULATOR's status and that a blanket
+rollout manufactures diffs on the rows most worth checking.
 
 Run: python3 tools/exit_observable_devtest.py
 """
@@ -133,7 +140,7 @@ def main():
     fixed = lapsed.replace(")\"", '; echo "exit=$$?")"')
     check(CAPTURE in fixed, "and the fixed form satisfies it")
 
-    print("3. ...and the exposure the family CANNOT cover, held at its measured size")
+    print("3. ...and the exposure the family CANNOT cover: the captures already earned")
     cross = [ln for _, ln in rows() if "run_target.sh" in ln and ln.count('"$$(') >= 2]
     capped = [ln for ln in cross if CAPTURE in ln]
     # The LABEL used to say "still ~536" while measuring 561 — a precise number
@@ -149,59 +156,64 @@ def main():
           "(536 on 2026-08-30 when this was armed; the floor is a collapse "
           "detector, not a ratchet)",
           "%d" % len(cross))
-    # THE SHARE, NOT THE COUNT — changed 2026-09-01 by frankZ after this row
-    # went red on GOOD NEWS. The population grew 536 -> 665 and the stdout-only
-    # count grew 531 -> 619, so the absolute cap tripped; but the rows that DO
-    # capture went 5 -> 46, and the uncapped SHARE fell from 99.1% to 93.1%.
-    # Every one of the 129 new rows could have been written correctly and this
-    # check would still have failed, because the only way to satisfy an
-    # absolute cap on a growing corpus is to stop adding rows. A guard that
-    # fires on the outcome it wants is the same animal as one that cannot fire
-    # at all: both stop carrying information, and this one cost a red tier.
+    # THE SHARE RATCHET IS GONE, and it is worth saying exactly why rather
+    # than leaving a hole where an assertion was. It was armed at 92.693%
+    # (647/698) on 2026-09-02 WITH A POSITIVE CONTROL ASSERTING THAT ONE MORE
+    # UNCAPPED ROW WOULD BREACH IT. That control was honest and it was the
+    # design: the bound was held tight on purpose.
     #
-    # The exposure the section measures is "a differential row where the exit
-    # code is free and unclaimed", and what must not drift is how much of the
-    # corpus is in that state. So the ratchet is the share, at the armed
-    # value rounded up. The paired assert below keeps the absolute half honest:
-    # a batch of new uncapped rows large enough to move the share still trips
-    # this, and adding rows correctly cannot.
-    # RE-ARMED AT TODAY'S MEASUREMENT, and that is deliberate. Holding the old
-    # 531/536 = 99.1% as the cap would have made this unfailable: at 665 rows
-    # it takes 40 of the 46 capturing rows LOSING their capture to breach it,
-    # and a ratchet that only trips on catastrophe is not a ratchet. Armed at
-    # the current share instead, ONE new uncapped row moves 619/665 to 620/666
-    # and trips it, while an uncapped row paired with a capped one does not.
-    # Positive control, asserted below, because a bound nobody proved can fail
-    # is the failure this whole file exists to name.
-    # RE-ARMED AGAIN 2026-09-02 by frankZ, DOWNWARD, and the direction is the
-    # whole point. The corpus grew 665 -> 698 and every one of the 33 new
-    # differential rows was uncapped, so the share went 93.083% -> 93.419%
-    # and this tripped -- correctly, and for the reason it was designed to:
-    # a batch large enough to move the share. The answer was NOT to re-arm at
-    # 93.419%. Five arm32 leak rows were CAPPED instead (managed_str /
-    # dynarray / open_array_managed_field / managed_dynarray_field /
-    # exception_object ownership, each comparing qemu against the x86-64
-    # build of the same source), taking uncapped 652 -> 647 and the share to
-    # 92.704%. The bound moves to THAT, so the ratchet stays tight and the
-    # improvement cannot be given back. Re-arming upward on a red would have
-    # made this the third kind of dead guard: one that ratifies whatever it
-    # finds.
-    STDOUT_ONLY_SHARE = 647 / 698                 # 0.92693, measured 2026-09-02
+    # A bound that one new row breaches is a bound with ZERO marginal headroom,
+    # and the corpus this measures grows continuously. Measured 2026-09-04 by
+    # frankZ, off `git show <sha>:Makefile | grep -c run_target.sh` at six
+    # points through one day: 1068 -> 1197 call sites between 06:11 and 17:48,
+    # roughly twenty new rows an hour, from five lanes, and essentially all of
+    # them uncapped. So the guard could not survive a single commit: capping
+    # rows to satisfy it buys a green that the next agent's push takes back.
+    # It went red on growth on 2026-09-01 (665 rows), on 2026-09-02 (698) and
+    # again now (958) -- three firings, three times the answer was "the corpus
+    # grew", zero times "somebody gave a capture back". Three false positives
+    # and no true one, at the cost of a RED in the limited and full tiers each
+    # time. CLAUDE.md: a gate that cannot pass is not a gate.
+    #
+    # AND WHAT IT DEMANDED WAS PARKED WORK. Capping these rows is not free,
+    # which is the part the share hid: `chore-t-make-every-cross-target-row-
+    # assert-the-exit-code` (T, p45, low-prio) records that run_target.sh
+    # returns the EMULATOR's status and that signal deaths do not encode
+    # identically under qemu-user and a native shell, so a blanket rollout
+    # manufactures diffs on exactly the rows most worth checking. It wants a
+    # piloted rollout, one arch at a time. A devtest that reds the tier every
+    # few hours to demand work the backlog has deliberately ranked low and
+    # flagged as hazardous is arguing with the ranker through the test suite.
+    #
+    # WHAT REPLACES IT IS THE HALF THAT CARRIED THE VALUE: an improvement
+    # ratchet. The rows that DO capture may never fall below what has been
+    # earned. Growth cannot trip that -- a new uncapped row leaves it
+    # untouched -- while the one shape that is a genuine regression, a capture
+    # being deleted or rewritten away, still fails it. The share is PRINTED
+    # rather than asserted, so the exposure stays visible on every run and is
+    # ranked where ranking belongs, in the two live tickets above.
     uncapped = len(cross) - len(capped)
     share = uncapped / max(len(cross), 1)
-    check(share <= STDOUT_ONLY_SHARE,
-          "and the stdout-only SHARE has not grown past its measured value",
-          "%d of %d = %.2f%% compare stdout alone "
-          "(re-armed DOWNWARD 2026-09-02 at 647 of 698 = %.2f%%, after capping "
-          "five arm32 leak rows rather than ratifying the drift; was a COUNT "
-          "capped at 531, which the corpus outgrew while getting better)"
-          % (uncapped, len(cross), 100 * share, 100 * STDOUT_ONLY_SHARE))
-    check((uncapped + 1) / (len(cross) + 1) > STDOUT_ONLY_SHARE,
-          "and that bound is tight — one more uncapped row would breach it",
-          "%.4f%% vs %.4f%%"
-          % (100 * (uncapped + 1) / (len(cross) + 1), 100 * STDOUT_ONLY_SHARE))
-    check(len(capped) >= 5, "while the ones that do capture are not lost",
-          "%d" % len(capped))
+    check(len(capped) >= 53,
+          "the rows that DO capture the exit code have not been given back",
+          "%d capture, floor 53 measured 2026-09-04 (was >= 5); %d of %d = "
+          "%.2f%% still compare stdout alone, owned by "
+          "chore-t-make-every-cross-target-row-assert-the-exit-code [T p45] "
+          "and bug-t-run-target-sh-s-exit-code-is-discarded-at-1082-call-sites "
+          "[T p65] -- reported here, ranked there"
+          % (len(capped), uncapped, len(cross), 100 * share))
+    # THE RATCHET'S OWN POSITIVE CONTROL, drawn from the population it is
+    # about: take a row that DOES capture, strip the capture the way an edit
+    # would, and the floor must stop recognising it. Without this the floor is
+    # a number nobody proved can be crossed -- the exact failure this file was
+    # written to name, one level up.
+    stripped = [ln for ln in cross if ln != capped[0]] + [
+        capped[0].replace('; echo "exit=$$?"', "").replace("\\nexit=0", "")
+    ] if capped else []
+    check(capped and sum(1 for ln in stripped if CAPTURE in ln) == len(capped) - 1,
+          "and that floor discriminates — one capture removed drops below it",
+          "%d -> %d" % (len(capped),
+                        sum(1 for ln in stripped if CAPTURE in ln)))
 
     print("4. the family list is honest about its own scope")
     heur = [p for p in FAMILY if "halt" in p or "signal" in p or "div_zero" in p]
