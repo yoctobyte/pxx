@@ -37,3 +37,6 @@ pascal26:144: error: compiler error: call to a runtime stub that was never emitt
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-09-04 — the seven watcher saw `test-core#src:test/test_stackless_gen.pas` GREEN at 95f60ce71ad7 (tier native) and did NOT close this: this is a repeat stub (`regression-test-core-test-stackless-gen-2`, not `regression-test-core-test-stackless-gen`) — the job already went red, was closed, and came back, so one green is the outcome a live intermittent bug produces most of the time. The green is recorded because it is evidence and because a ticket that stops moving with no reason reads as forgotten; closing this one is a human's call.
