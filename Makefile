@@ -10632,6 +10632,20 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_generator_record26 "$$($(TESTTMP)/test_generator_record26)" "$$(printf '1 10 1\n2 20 4\n3 30 9\n30')"
 	./$(COMPILER) test/test_generator_yield_call.pas $(TESTTMP)/test_generator_yield_call26
 	tools/expect_same.sh test_generator_yield_call26 "$$($(TESTTMP)/test_generator_yield_call26)" "$$(printf '1 2 10\n3 4 20\n5 6 30\n60')"
+	@# A hidden managed ARGUMENT TEMP in a STACKLESS GENERATOR step function, in
+	@# a frame an exception unwinds past. The step function's cleanup was
+	@# disabled wholesale because a stackless generator's locals are its live
+	@# state -- but a temp minted during lowering has no persistent slot and is
+	@# an ordinary local, so neither the epilogue nor the landing pad released
+	@# it. 1.871 -> 0.936 blocks per raise; the FIRST row of the control triple
+	@# in the test's own header is a DIFFERENT leak that is still open, which
+	@# is why the bound is 3000 (pin v403 measures 3608, HEAD 1805) and not 50.
+	@# assert_no_leak is the instrument, not expect_same: a leak prints nothing
+	@# and `caught=2000` is right in both directions.
+	@# bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_generator_raise_past_managed_temp.pas $(TESTTMP)/test_grpmt26
+	tools/expect_same.sh test_grpmt26 "$$($(TESTTMP)/test_grpmt26)" "caught=2000"
+	tools/assert_no_leak.sh generator_raise_past_managed_temp 3000 $(TESTTMP)/test_grpmt26
 	./$(COMPILER) test/test_forin_set_member.pas $(TESTTMP)/test_forin_set_member26
 	tools/expect_same.sh test_forin_set_member26 "$$($(TESTTMP)/test_forin_set_member26)" "$$(printf 'spell=0\nspell=2\nspell=4\ndone')"
 	./$(COMPILER) -Fulib/rtl/platform/posix test/test_textfile.pas $(TESTTMP)/test_textfile26

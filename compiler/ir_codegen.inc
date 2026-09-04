@@ -13658,20 +13658,15 @@ begin
     EmitManagedLocalCleanup(retSymIdx);
     Exit;
   end;
-  { A STACKLESS GENERATOR step function RETURNS at every yield and is re-entered
-    at the next one, so its locals are not going out of scope on this path —
-    they are the generator's live state, checkpointed into the heap instance and
-    restored on resume. Releasing them here frees the very objects the instance
-    still points at. EmitManagedLocalCleanup (x86-64) has opened with this line
-    since the generator work; the five arms below never got it, for ANY kind, so
-    a NilPy generator whose managed local survives a yield SIGSEGVed on i386 and
-    arm32 and printed corrupted strings on aarch64 while x86-64 was correct.
-    Placed HERE rather than in each arm because it is a property of the
-    procedure, not of the target.
+  { The stackless-generator skip lives in StacklessPersistentSlotSym (symtab.inc)
+    and is applied PER SYMBOL on each arm's loop below, not as a blanket exit
+    here. It was a blanket exit for one commit — f891bbe8e, which is what closed
+    the "a managed local that survives a yield is released at every yield" hole
+    on these five arms — and that version also threw out the step function's
+    hidden temps, which are not live state and DO need releasing. The predicate
+    says which is which, using the answer AssignStacklessSlots already computed.
     wasm32 exits above and releases in WasmEmitManagedLocals instead; that path
-    is UNCHECKED for this and is named in the ticket.
-    bug-a-a-managed-local-that-survives-a-yield-is-released-at-every-yield-on-every-cross-target }
-  if CurProcIsStackless then Exit;
+    is UNCHECKED for both halves of this and is named in the tickets. }
 {$ifndef PXX_NO_I386}
   if TargetArch = TARGET_I386 then
   begin
@@ -13680,6 +13675,7 @@ begin
     if CurProc >= 0 then
     begin
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+       if not StacklessPersistentSlotSym(i) then
       begin
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
         begin
@@ -13874,6 +13870,7 @@ begin
     if CurProc >= 0 then
     begin
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+       if not StacklessPersistentSlotSym(i) then
       begin
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
@@ -14071,6 +14068,7 @@ begin
       Must precede the result load: each call clobbers x0. }
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+       if not StacklessPersistentSlotSym(i) then
       begin
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
@@ -14258,6 +14256,7 @@ begin
       feature-a-xtensa-implements-31-ir-ops-where-riscv32-implements-45. }
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+       if not StacklessPersistentSlotSym(i) then
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
           { COM/ARC interface local: _Release the held reference (nil-safe). }
@@ -14415,6 +14414,7 @@ begin
       Result handle is skipped (ownership transfers to the caller). }
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+       if not StacklessPersistentSlotSym(i) then
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
         begin
           { COM/ARC interface local: _Release the held reference (nil-safe).

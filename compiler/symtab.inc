@@ -12110,12 +12110,44 @@ begin
     Result := True;
 end;
 
+function StacklessPersistentSlotSym(i: Integer): Boolean;
+{ TRUE for a symbol whose value is a STACKLESS GENERATOR'S LIVE STATE rather
+  than a local going out of scope — i.e. one AssignStacklessSlots gave a
+  persistent instance slot. A stackless step function RETURNS at every yield and
+  is re-entered at the next one, so releasing a slotted local there frees the
+  objects the instance still points at; the failure was silent (a NilPy
+  generator walking `for t in xs` got a dangling list on its second step and the
+  loop simply ENDED, one element in).
+
+  THE SKIP IS PER SYMBOL, NOT PER PROCEDURE, and it used to be per procedure —
+  `if CurProcIsStackless then Exit;` at the top of EmitManagedLocalCleanup, and
+  the same blanket exit in EmitManagedLocalCleanupForTarget. That threw out the
+  step function's HIDDEN TEMPS with the live state: a temp minted during
+  IRLowerAST of the step body has no persistent slot (it did not exist when the
+  allocator ran) and dies inside one statement, so it is an ordinary local in
+  every sense — but the blanket exit meant neither the epilogue nor the unwind
+  landing pad released it. Measured: `raise Exception.Create(gmsg + Chr(65))`
+  inside a `generator; stackless;` body leaked 0.885 blocks per raise on top of
+  the instance's own 0.986; the SAME temp in a plain procedure called from the
+  same generator body leaked nothing, which is what named the frame.
+
+  So the rule this states is exactly the one AssignStacklessSlots already
+  decides, asked at the other end: slotted means live across a yield, unslotted
+  means it is not. One predicate rather than a blanket exit in two emitters —
+  the second copy is the one that stays broken.
+  bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad }
+begin
+  StacklessPersistentSlotSym := CurProcIsStackless and (i >= 0) and
+    (i < Length(SymGenSlot)) and (SymGenSlot[i] >= 0);
+end;
+
 function ProcHasManagedLocalCleanup(procIdx, retSymIdx: Integer): Boolean;
 var i: Integer;
 begin
   Result := False;
   for i := Procs[procIdx].ScopeBase to SymCount - 1 do
-    if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymNeedsManagedCleanup(i) then
+    if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymNeedsManagedCleanup(i) and
+       (not StacklessPersistentSlotSym(i)) then
     begin
       Result := True;
       Exit;
@@ -12195,7 +12227,9 @@ begin
     instance is freed, which today means they leak with it. That is a bounded
     per-generator leak traded for correctness, and it is recorded on
     feature-nilpy-yield-outside-a-for-loop rather than left to be rediscovered. }
-  if CurProcIsStackless then Exit;
+  { The stackless-generator skip used to be a blanket `Exit` here. It is now
+    per symbol, on the loop below — see StacklessPersistentSlotSym for what the
+    blanket version threw out with the live state. }
   { PXXDBG=a.arc:<proc> — every symbol this scope-exit pass CONSIDERS, with the
     three facts that decide whether it is released. A managed temp that leaks is
     invisible in `a.ir` (the epilogue releases are emitted as machine code, not
@@ -12213,6 +12247,7 @@ begin
               ' hiddenArgTemp=', Ord(SymIsHiddenArgTemp[i]));
   end;
   for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+   if not StacklessPersistentSlotSym(i) then
   begin
     if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
     begin

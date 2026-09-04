@@ -130,3 +130,28 @@ Leaving it in would have made this row fail for a defect it does not guard.
 **wasm32 is still UNCHECKED** — it exits before this guard and releases in
 `WasmEmitManagedLocals(release)` instead. Nobody has asked that path the
 question; that is not a claim that it is fine.
+
+## Follow-up the same day — the blanket exit was itself half wrong
+
+`f891bbe8e` hoisted `if CurProcIsStackless then Exit;` into
+`EmitManagedLocalCleanupForTarget`, matching x86-64's twin. That closed this
+ticket and was the right shape for one commit — but the twin it matched was
+*also* over-broad, which only showed up when the next ticket in the group needed
+the step function's cleanup to run for a different reason.
+
+A stackless step function's frame holds two populations: its **persistent
+slots**, which are the generator's live state and must not be released at a
+step return, and its **hidden temps**, minted during `IRLowerAST` after
+`AssignStacklessSlots` has run, which die inside one statement and are ordinary
+locals in every sense. The blanket exit is correct about the first and wrong
+about the second, and the second leaked on both the return path and the unwind
+path.
+
+Replaced by one per-symbol predicate, `StacklessPersistentSlotSym(i)` =
+`CurProcIsStackless and SymGenSlot[i] >= 0`, applied on the cleanup loops of
+both emitters and in `ProcHasManagedLocalCleanup` — see
+`bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad`
+for the measurement. **This ticket's own test is the control that says the fix
+did not swing back too far**: `test_nilpy_generator_managed_local_survives_yield`
+is exactly the program that breaks when a slotted local IS released, and it
+stays green on all four targets.

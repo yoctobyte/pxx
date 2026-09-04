@@ -2727,7 +2727,44 @@ begin
     AssignStacklessSlots(procIdx);
     genStepAST := BuildStacklessStep(genBodyAST, procIdx);
     ProcGenInstSize[procIdx] := SL_OFF_SLOTS + 8 * CurGenSlotNext;
+    { ASK THE LANDING-PAD QUESTION AGAIN, exactly as the plain body below does.
+      The old comment there said a generator body's frame "the prologue decision
+      already covers" — measured 2026-09-04 and it does not, for the STACKLESS
+      form. `raise Exception.Create(gmsg + Chr(65))` inside a
+      `generator; stackless;` routine driven by `for x in Gen(1)` inside a try:
+
+        raiser body                       live @2000  @8000   slope
+        raise Create(gmsg)      no temp        1901    7815   0.986
+        raise Create(gmsg+Chr)  temp           3608   14836   1.871
+        Length(gmsg+Chr)=0      temp, no raise 1901    7815   0.986
+
+      The third row is the parent ticket's discriminator and it says the same
+      thing here: the SAME temp in the SAME routine is released on the normal
+      path and not on the unwind path. The 0.986 baseline under all three rows
+      is the generator INSTANCE, leaks with or without an exception, and is
+      bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells — a
+      different leak that this arm does not touch and must not be credited with.
+
+      Safe here for a reason the STACKFUL branch cannot borrow: a stackless step
+      function is entered by an ordinary call and leaves by an ordinary return,
+      so its frame is an ordinary frame and this pad is the same construct the
+      plain body gets. The stackful branch is entered by CoSwitch `ret`ing into
+      it and is deliberately NOT armed — and an exception raised in a stackful
+      generator body does not reach the driving for-in's handler at all
+      (measured the same day, filed separately), so there is no unwind path
+      through that frame to give a pad to yet.
+      bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad }
+    if (not needsProcCleanupFrame) and TargetHasProcCleanupFrame and
+       ExceptionUsed and (not isAsmFunc) then
+      ProcCleanupFrameWanted := True;
+    ProcCleanupFrameLateArmed := False;
     CompileAST(genStepAST);
+    ProcCleanupFrameWanted := False;
+    if ProcCleanupFrameLateArmed then
+    begin
+      needsProcCleanupFrame := True;
+      cleanupJnePatch := ProcCleanupFrameLatePatch;
+    end;
     ASTNodeCount := ASTArenaFloor;
   end
   else
@@ -2741,11 +2778,12 @@ begin
     inlineBodyNode := WrapManagementOps(procIdx, ParseBlockAST);
     if methOwnerCi < 0 then TryRetainInlineBody(procIdx, inlineBodyNode);
     { ASK THE LANDING-PAD QUESTION AGAIN, from inside CompileAST, once the
-      hidden argument temps exist. Only for a plain body: an asm body emits its
-      own code and a generator body is a state machine whose frame the prologue
-      decision already covers, so neither is re-asked. Requested only when the
-      prologue said NO -- a proc that already has its frame must not get a
-      second one. }
+      hidden argument temps exist. Requested only when the prologue said NO -- a
+      proc that already has its frame must not get a second one.
+      An ASM body is still not re-asked: it emits its own code and mints no
+      temps through lowering. A STACKLESS GENERATOR body now is — this comment
+      used to say a generator's frame "the prologue decision already covers"
+      and that was measured false on 2026-09-04; see the arm above. }
     if (not needsProcCleanupFrame) and TargetHasProcCleanupFrame and
        ExceptionUsed and (not isAsmFunc) then
       ProcCleanupFrameWanted := True;
