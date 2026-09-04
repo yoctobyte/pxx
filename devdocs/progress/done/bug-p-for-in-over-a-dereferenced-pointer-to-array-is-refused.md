@@ -43,7 +43,7 @@ extent and the low bound for this exact spelling, so whatever the arm needs is
 almost certainly already available to it.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 06a2d7aa7.
 
 ---
 
