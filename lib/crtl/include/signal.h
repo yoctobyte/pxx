@@ -124,8 +124,9 @@ int sigaddset(sigset_t *set, int sig);
 int sigisemptyset(const sigset_t *set);
 int sigdelset(sigset_t *set, int sig);
 int sigismember(const sigset_t *set, int sig);
-/* sigprocmask IS REAL -- see the note in src/signal.c. Blocking needs no
-   handler and no return trampoline, so it works where sigaction cannot yet. */
+/* sigprocmask IS REAL -- see the note in src/signal.c. (It used to say "works
+   where sigaction cannot yet"; sigaction became real on 2026-09-04 and the
+   clause went with it.) */
 int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
 /* Collect a pending signal from `set'. `info' is IGNORED (NULL is passed to
    the kernel), so a caller that needs siginfo gets its struct untouched rather
@@ -136,16 +137,25 @@ int sigtimedwait(const sigset_t *set, siginfo_t *info,
 /* sigwait(3): the same wait with no timeout, reporting through *sig and
    returning a POSITIVE errno -- a different convention in the same family. */
 int sigwait(const sigset_t *set, int *sig);
+/* sigaction(2) REALLY INSTALLS since 2026-09-04 -- it returned 0 and did
+   nothing before, which is what made it a bug rather than a gap. Two things it
+   does NOT honour, and it REFUSES the first rather than pretending:
+     SA_SIGINFO -> EINVAL. The hook ABI passes one argument, so a three-argument
+       handler would be called with two garbage ones -- in signal context, which
+       is the worst place for a plausible wrong value.
+     sa_mask    -> accepted and NOT installed. No signals are blocked for the
+       duration of the handler. Refusing here would reject most real callers
+       (busybox fills sa_mask routinely) over a property few depend on, so it is
+       recorded rather than hidden. */
 int sigaction(int sig, const struct sigaction *act, struct sigaction *oact);
 
-/* sigsuspend FAILS with ENOSYS, unlike sigaction above which returns 0 without
-   doing anything. With no rt_sigaction bridge no handler can fire, so a
-   faithful sigsuspend would block forever; failing is the only non-lying
-   answer that also does not hang.
-   (sigprocmask used to be in that same sentence and no longer belongs there:
-   it is real now. sigtimedwait is the reason the distinction matters -- a
-   caller that blocks a signal and then waits for it needs no handler, and that
-   pair works, while anything needing a handler to RUN still does not.) */
+/* sigsuspend still FAILS with ENOSYS, and the reason has changed: it is no
+   longer "no handler can ever fire" (they can now) but that atomically swapping
+   the mask for the duration of a wait has no bridge. Failing stays the answer
+   -- a sigsuspend that set the mask non-atomically would lose a signal
+   delivered in the window, which is exactly the bug sigsuspend exists to avoid,
+   and a wrong answer is worse than a refusal. sigprocmask + sigtimedwait is the
+   working pair for a caller that can restructure. */
 int sigsuspend(const sigset_t *mask);
 int sigaltstack(const stack_t *ss, stack_t *oss);
 

@@ -37,6 +37,19 @@
 #include <netinet/in.h>
 #include <netinet/ether.h>
 
+/* row 10's SIGALRM handler, at file scope because it is taken as a VALUE.
+
+   Worth one note: while writing this row the definition briefly went in at the
+   wrong place, and pxx BUILT the file anyway -- an undeclared identifier used
+   as a value is a WARNING there ("treated as 0"), where gcc makes it an error.
+   Measured, minimal case: `p = no_such_identifier;` warns under pxx and refuses
+   under gcc; the same name CALLED is an error under both. So the instrument was
+   not silent -- the warning was printed and I had sent stdout to /dev/null. It
+   is recorded as a hazard of the shape rather than as a defect: sa_handler
+   quietly became SIG_DFL, and the failing row read like a broken signal
+   runtime. Compile this file with gcc too; that is what caught it. */
+static void row10_onalrm(int s) { (void)s; }
+
 int main(void)
 {
   /* 1: sigisemptyset. Empty is 1, one member is 0, and emptying it again is 1
@@ -179,21 +192,33 @@ int main(void)
   }
 
   /* 10: pause. It has no success return -- it comes back only when a handled
-     signal arrives -- so the property to test without a handler is that it
-     BLOCKS. A child calls it, the parent checks the child is still there, then
-     kills it. A pause() that returned immediately would make the child exit 7
-     and the first column 0.
+     signal arrives -- so there are two things to establish and they need
+     different shapes: that it BLOCKS with nothing pending, and that a HANDLER
+     wakes it.
 
-     NO HANDLER, DELIBERATELY, and this is a crtl limitation rather than a test
-     shortcut: lib/crtl/src/signal.c says in its own header that signal and
-     sigaction are LINK-ONLY STUBS -- they return 0 and install nothing,
-     because there is no rt_sigaction bridge. The first version of this row set
-     a SIGALRM handler and alarm(1); under gcc it passed, and under pxx the
-     process died with "Alarm clock" because the kernel still held the default
-     disposition. Filed as bug-b-crtl-signal-and-sigaction-report-success-and-
-     install-nothing. */
+     THIS ROW WAS WEAKER ON PURPOSE UNTIL 2026-09-04 AND IS RECORDED HERE
+     BECAUSE THE REASON EXPIRED. crtl's signal/sigaction were link-only stubs
+     that returned 0 and installed nothing, so the natural version of this test
+     -- install a SIGALRM handler, alarm(1), pause() -- passed under gcc and
+     killed the pxx binary with "Alarm clock", the kernel still holding the
+     default disposition. That was filed as bug-b-crtl-signal-and-sigaction-
+     report-success-and-install-nothing, the row was written to assert blocking
+     alone, and the ticket carried the note that it should be strengthened when
+     the fix landed. It has, so it is.
+
+     The blocking half stays, because the handler half cannot see it: a pause()
+     that returned immediately would satisfy "the handler ran and pause came
+     back" just as well. Two properties, two shapes.
+
+       col 1  the child is still alive 200ms into pause()  -> it blocks
+       col 2  it was killed rather than having exited      -> it never returned
+       col 3  a SIGALRM handler runs and pause() RETURNS   -> the fix
+       col 4  pause() returns -1 with EINTR, as POSIX says -> and reports it
+
+     Columns 3 and 4 are in a CHILD as well, so a handler that fails to arrive
+     costs a bounded alarm(2) rather than hanging the whole test. */
   {
-    int st = 0, alive, killed;
+    int st = 0, alive, killed, woke, eintr;
     pid_t pid = fork();
     if (pid == 0) { pause(); _exit(7); }
     usleep(200000);
@@ -201,7 +226,24 @@ int main(void)
     kill(pid, SIGKILL);
     waitpid(pid, &st, 0);
     killed = WIFSIGNALED(st) ? 1 : 0;
-    printf("10 %d %d\n", alive, killed);
+
+    pid = fork();
+    if (pid == 0) {
+      struct sigaction sa;
+      int r, e;
+      memset(&sa, 0, sizeof sa);
+      sa.sa_handler = row10_onalrm;
+      if (sigaction(SIGALRM, &sa, 0) != 0) _exit(3);
+      alarm(1);
+      errno = 0;
+      r = pause();
+      e = errno;
+      _exit((r == -1 && e == EINTR) ? 0 : 1);
+    }
+    waitpid(pid, &st, 0);
+    woke  = (WIFEXITED(st) && WEXITSTATUS(st) <= 1) ? 1 : 0;
+    eintr = (WIFEXITED(st) && WEXITSTATUS(st) == 0) ? 1 : 0;
+    printf("10 %d %d %d %d\n", alive, killed, woke, eintr);
   }
 
   /* 11: acct. Classified rather than literal: it needs CAP_SYS_PACCT, so a

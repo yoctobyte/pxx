@@ -157,6 +157,23 @@ function __pxx_getppid: Integer;
 function __pxx_pipe2(fds: Pointer; flags: Integer): Integer;
 function __pxx_execve(path: PChar; argv, envp: Pointer): Integer;
 function __pxx_kill(pid, sig: Integer): Integer;
+
+{ C SIGNAL DISPOSITIONS. crtl's signal()/sigaction() were LINK-ONLY STUBS that
+  returned 0 and installed nothing (bug-b-crtl-signal-and-sigaction-report-
+  success-and-install-nothing): a caller checking the documented error path saw
+  none, ran on with the kernel's default disposition, and was killed by the
+  first signal it had written a handler for. Returning 0 is what made it a
+  WRONG ANSWER rather than a missing feature.
+
+  `handler` is the C function pointer, or the two sentinels crtl's <signal.h>
+  spells: 0 = SIG_DFL, 1 = SIG_IGN. Returns 0, or a NEGATIVE errno the C side
+  turns into -1/errno, matching every other bridge in this file.
+
+  It is here and not re-implemented inside crtl because rt_sigaction, the
+  restorer trampoline and the altstack policy already exist ONCE, in the
+  compiler's signal runtime. A second copy in C would be the second mechanism
+  for one concept that root-cause-over-microfix.md is about. }
+function __pxx_c_signal(sig: Integer; handler: Pointer): Integer;
 function __pxx_fork: Integer;
 function __pxx_wait4(pid: Integer; wstatus: Pointer; options: Integer; rusage: Pointer): Integer;
 function __pxx_geteuid: Integer;
@@ -816,6 +833,94 @@ function __pxx_kill(pid, sig: Integer): Integer;
 begin
   Result := PalKill(pid, sig);
 end;
+
+{ THE WHOLE C SIGNAL BRIDGE IS BEHIND PXX_HAS_SIGNALS, and the else-arm below
+  REFUSES rather than silently doing nothing -- which is the entire bug it
+  replaces. A build with no signal runtime (ESP platforms, windowed xtensa,
+  --no-signals) must TELL a C caller so, not hand it a success it will act on.
+
+  PXX_HAS_SIGNALS is a compiler define (lexer.inc) reading the one predicate
+  TargetHasSignalRuntime, so this guard cannot go stale the way signals.pas's
+  `{$ifndef CPUX86_64}` did -- that one named an ARCH for a capability, kept
+  refusing four targets for four days after they gained it, and its message
+  read as current the whole time. }
+{$ifdef PXX_HAS_SIGNALS}
+const
+  PXX_CSIG_MAX = 64;
+  PXX_CSIG_DFL = 0;
+  PXX_CSIG_IGN = 1;
+  PXX_EINVAL   = 22;
+
+type
+  TCSignalHandler = procedure(sig: Longint); cdecl;
+
+var
+  CSigHandlers: array[1..PXX_CSIG_MAX] of Pointer;
+
+{ One parameterless hook serves every signal; __pxxSigNum says which. The bounds
+  check is not defensive noise -- an unwritten slot reads as a number the table
+  does not cover, and dispatching that is worse than dropping it.
+
+  Same shape as signals.pas's trampoline, deliberately: that one is the FPC
+  surface over this hook and this is the C surface. Two SURFACES over one
+  mechanism, not two mechanisms. }
+procedure CSigTrampoline;
+var n: Longint; h: TCSignalHandler;
+begin
+  n := __pxxSigNum;
+  if (n >= 1) and (n <= PXX_CSIG_MAX) then
+    if (CSigHandlers[n] <> Pointer(PXX_CSIG_DFL)) and
+       (CSigHandlers[n] <> Pointer(PXX_CSIG_IGN)) then
+    begin
+      h := TCSignalHandler(CSigHandlers[n]);
+      h(n);
+    end;
+end;
+
+function __pxx_c_signal(sig: Integer; handler: Pointer): Integer;
+begin
+  { SIGKILL (9) and SIGSTOP (19) cannot be caught or ignored. The kernel refuses
+    too; refusing here means the answer does not depend on which of the two
+    layers happens to notice first. }
+  if (sig < 1) or (sig > PXX_CSIG_MAX) or (sig = 9) or (sig = 19) then
+  begin
+    Result := -PXX_EINVAL;
+    Exit;
+  end;
+
+  if handler = Pointer(PXX_CSIG_IGN) then
+  begin
+    { A real ignore through rt_sigaction, not a disposition that merely looks
+      like one. Mapping SIG_IGN onto SIG_DFL would be invisible until the signal
+      arrived and then killed the process. }
+    CSigHandlers[sig] := Pointer(PXX_CSIG_IGN);
+    Result := PalIgnoreSignal(sig);
+    if Result > 0 then Result := -Result;
+  end
+  else if handler = Pointer(PXX_CSIG_DFL) then
+  begin
+    CSigHandlers[sig] := Pointer(PXX_CSIG_DFL);
+    SetSignalHandler(sig, nil);         { revert on next delivery }
+    Result := 0;
+  end
+  else
+  begin
+    { Store BEFORE installing: the signal can arrive between the two. }
+    CSigHandlers[sig] := handler;
+    SetSignalHandler(sig, @CSigTrampoline);
+    Result := 0;
+  end;
+end;
+{$else}
+function __pxx_c_signal(sig: Integer; handler: Pointer): Integer;
+begin
+  { -ENOSYS, never 0. The C side turns this into -1/ENOSYS, so a caller that
+    checks -- which is what careful code does -- finds out HERE instead of dying
+    on the first delivery. }
+  Result := -38;
+end;
+{$endif}
+
 
 { fork(2) for crtl. PalFork was called PalVfork until today and its body was
   always a real fork -- see the note at PalBackendFork. crtl's fork() had been

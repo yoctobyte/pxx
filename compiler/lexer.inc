@@ -1288,6 +1288,35 @@ begin
     name := 'PXX_HAS_DYNLIB';
     PasDefine(name);
   end;
+  { PXX_HAS_SIGNALS: "SetSignalHandler compiles in THIS build". A member of the
+    PXX_HAS_* capability family above, and added 2026-09-04 for a reason worth
+    stating, because the alternative looks cheaper every time.
+
+    RTL code that wants the signal hook cannot ask for it in Pascal today: the
+    only spellings available are CPU and platform defines, and BOTH ARE THE
+    WRONG AXIS. lib/rtl/signals.pas guarded on `{$ifndef CPUX86_64}` and its
+    premise expired under it -- the arch stopped being the discriminator on
+    2026-08-31 and the guard went on refusing i386, arm32, aarch64 and riscv32
+    for four more days, with a message that read as current. Platform is no
+    better: windowed xtensa on a POSIX platform has no signal runtime either,
+    for an ABI reason, and no platform define can say so.
+
+    So this asks the ONE predicate the codegen sites share, rather than letting
+    a library re-derive it from what defines happen to exist. Add nothing here
+    that is not exactly `can a handler be installed`.
+
+    NoSignals IS folded in here, unlike in TargetHasSignalRuntime itself, and
+    the two are different questions on purpose: that predicate answers "does
+    this TARGET have a signal runtime" and keeps --no-signals separate so each
+    call site can emit its own "built with --no-signals" diagnostic. A DEFINE
+    has no diagnostic to emit -- source guarded on it is simply not compiled --
+    so the question it must answer is the user-visible one, "is the hook
+    available in this build at all". }
+  if TargetHasSignalRuntime and (not NoSignals) then
+  begin
+    name := 'PXX_HAS_SIGNALS';
+    PasDefine(name);
+  end;
 end;
 
 procedure PasApplyTargetDefines;

@@ -14275,8 +14275,12 @@ test-core: $(COMPILER)
 	# caller's sentinel SURVIVES a failed scandir. Row 10 tests that pause()
 	# BLOCKS rather than that a handler fires -- crtl's signal/sigaction are
 	# link-only stubs (see bug-b-crtl-signal-and-sigaction-report-success-and-
-	# install-nothing), so the obvious alarm(1) version died on the default
-	# disposition. ROW 12 is the refusal path of ether_aton_r: it stores each
+	# install-nothing). THAT TICKET HAS SINCE LANDED, so row 10 now has FOUR
+	# columns: pause blocks (1), it never returned (2), a SIGALRM handler wakes
+	# it (3), and it reports -1/EINTR as POSIX says (4). The blocking half stays
+	# because the handler half cannot see it -- a pause() that returned at once
+	# would satisfy "handler ran, pause came back" just as well. Two properties,
+	# two shapes. ROW 12 is the refusal path of ether_aton_r: it stores each
 	# octet AFTER checking its separator, so a caller inspecting the struct
 	# after -1 sees the components that parsed. Hoisting that store passes
 	# every ACCEPTING row and changes row 12 -- measured, by making the
@@ -14288,7 +14292,40 @@ test-core: $(COMPILER)
 	# answer -1 and the row would pass a lookup that never opened it.
 	# All rows diffed against gcc -D_GNU_SOURCE.
 	./$(COMPILER) test/c_crtl_busybox_394_gaps.c $(TESTTMP)/c_bb394gaps26
-	tools/expect_same.sh c_bb394gaps26 "$$($(TESTTMP)/c_bb394gaps26)" "$$(printf '1 1 0 1\n2 1 1 0 0 1\n3 0 010203040506 alpha | -1 000000000000 alpha | -1 -1 -1\n4 -1 -1\n5 5 . .. apple mango zebra\n6 -1 1\n7 0 0\n8 0 0 0 0\n9 1 1\n10 1 1\n11 -1 1\n12 -1:001122330000 -1:001122000000 0:001122334455 -1:001122334400')"
+	tools/expect_same.sh c_bb394gaps26 "$$($(TESTTMP)/c_bb394gaps26)" "$$(printf '1 1 0 1\n2 1 1 0 0 1\n3 0 010203040506 alpha | -1 000000000000 alpha | -1 -1 -1\n4 -1 -1\n5 5 . .. apple mango zebra\n6 -1 1\n7 0 0\n8 0 0 0 0\n9 1 1\n10 1 1 1 1\n11 -1 1\n12 -1:001122330000 -1:001122000000 0:001122334455 -1:001122334400')"
+	# crtl signal DISPOSITIONS -- signal(), sigaction(), raise(). These three
+	# were link-only stubs RETURNING 0 until 2026-09-04, and the return value
+	# is what made them a bug rather than a gap: rc=0 with errno untouched is
+	# byte-identical to a real install, so no caller could tell them apart and
+	# the program died on the first delivery, far from the call that said fine.
+	# EVERY ROW ASSERTS THE HANDLER'S EFFECT AND NEVER THE RETURN CODE ALONE --
+	# rc=0 is exactly what the broken version produced, so a row checking rc is
+	# a row that passes against the bug. Row 5 watches a CHILD die, because the
+	# observable for "SIG_DFL reverted" is death and a parent cannot report a
+	# disposition that kills it; it reads WIFSIGNALED, not an exit code, since
+	# a shell's 128+n is a shell convention and not the wait status.
+	# POSITIVE CONTROL NEEDS NO REVERT: built with --no-signals the bridge
+	# takes its refusing arm, sigaction answers -1/ENOSYS, and the process is
+	# killed by its own raise at row 1 -- all nine rows move.
+	./$(COMPILER) test/c_crtl_signal_dispositions.c $(TESTTMP)/c_sigdisp26
+	tools/expect_same.sh c_sigdisp26 "$$($(TESTTMP)/c_sigdisp26)" "$$(printf '1 0 1 10\n2 2 1 10\n3 1 1\n4 alive\n5 1 10\n6 1 1 1 1\n7 1 1\n8 0 1 3\n9 0 1')"
+	# AND ON THREE CROSS TARGETS, byte-identical to the SAME gcc oracle -- the
+	# signal runtime is not x86-64-only (that claim outlived its premise by
+	# four days; see lib/rtl/signals.pas). riscv32 is DELIBERATELY ABSENT and
+	# named rather than quietly dropped: eight of the nine rows pass there and
+	# row 5 cannot, because waitpid() answers -1/ENOSYS on that target while
+	# fork() works -- bug-b-crtl-waitpid-returns-enosys-on-riscv32-so-no-
+	# program-can-reap-a-child. Wire riscv32 in when that lands.
+	@for a in i386 arm32 aarch64; do \
+	  case $$a in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; esac; \
+	  if [ "$$a" = i386 ] || command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$a test/c_crtl_signal_dispositions.c $(TESTTMP)/c_sigdisp26_$$a >/dev/null || { echo "c_sigdisp26 $$a compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh $$a/c_sigdisp26 "$$(tools/run_target.sh $$a $(TESTTMP)/c_sigdisp26_$$a)" "$$(printf '1 0 1 10\n2 2 1 10\n3 1 1\n4 alive\n5 1 10\n6 1 1 1 1\n7 1 1\n8 0 1 3\n9 0 1')" || exit 1; \
+	    echo "=== c_sigdisp26: $$a OK ==="; \
+	  else \
+	    echo "=== c_sigdisp26: $$q absent, $$a NOT verified ==="; \
+	  fi; \
+	done
 	./$(COMPILER) test/c_crtl_telnet_and_prctl.c $(TESTTMP)/c_telprctl26
 	tools/expect_same.sh c_telprctl26 "$$($(TESTTMP)/c_telprctl26)" "$$(printf '1 255 254 253 252 251 250\n2 240 241 242 246 249\n3 0 1 3 24 31\n4 33 0 1 2\n5 15 16 23 38 39 47\n6 20 | 0 2 4 8 10 11 12\n7 1 2 4 8 4\n8 not-glibc\n9 0 pxxprobe')"
 	./$(COMPILER) test/c_crtl_net_headers.c $(TESTTMP)/c_nethdr26

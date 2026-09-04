@@ -1,9 +1,20 @@
 /* SPDX-License-Identifier: Zlib */
 /*
- * C runtime: signal — sigset bit-ops are real; registration/masking calls
- * (signal, sigaction, sigprocmask, sigaltstack, raise) are LINK-ONLY stubs:
- * there is no rt_sigaction PAL bridge yet, so handlers never fire. tcc's
- * crash-backtrace setup compiles and runs inert through these.
+ * C runtime: signal — sigset bit-ops, sigprocmask/sigtimedwait, and, since
+ * 2026-09-04, REAL handler registration: signal(), sigaction() and raise()
+ * install through __pxx_c_signal (lib/rtl/pxxcio.pas) onto the compiler's own
+ * signal runtime, so a handler actually fires.
+ *
+ * They used to be link-only stubs RETURNING 0, which is what made it a bug
+ * rather than a gap: a caller that checked the documented error path found
+ * none, ran on with the kernel's default disposition, and was killed by the
+ * first signal it had written a handler for, far from the call that reported
+ * success (bug-b-crtl-signal-and-sigaction-report-success-and-install-nothing).
+ *
+ * WHAT IS STILL NOT HONOURED IS REFUSED, NOT IGNORED: SA_SIGINFO (the pxx hook
+ * ABI is one-argument, so a three-argument handler would be called with the
+ * wrong arguments) and sa_mask (no per-handler mask is installed). sigaltstack
+ * is still a stub. Each says so at its own definition.
  */
 
 #include <signal.h>
@@ -14,6 +25,13 @@
 extern int __pxx_kill(int pid, int sig);
 extern int __pxx_sigprocmask(int how, void *set, void *oldset, int setSize);
 extern int __pxx_sigtimedwait(void *set, int setSize, int sec, int nsec);
+extern int __pxx_c_signal(int sig, void *handler);
+extern int __pxx_getpid(void);
+
+/* 65, not 64: the array is indexed BY SIGNAL NUMBER, so slot 64 must exist and
+   slot 0 is deliberately unused. Sizing it 64 would put SIGRTMAX one past the
+   end -- the off-by-one that a `sig <= 64' bound reads as correct. */
+#define __PXX_NSIG 65
 
 #define __SIGSET_NWORDS 16
 #define __SIGSET_WORDBITS (8 * (int)sizeof(unsigned long))
@@ -47,14 +65,28 @@ int sigismember(const sigset_t *set, int sig) {
   return (set->__val[(sig - 1) / __SIGSET_WORDBITS] >> ((sig - 1) % __SIGSET_WORDBITS)) & 1;
 }
 
+/* The C-side table exists for ONE reason: signal() and sigaction() must report
+   the PREVIOUS disposition, and the bridge does not carry one back. Keeping it
+   here rather than widening the bridge keeps the Pascal side to "install this"
+   and leaves the C contract in the C file. */
+static __sighandler_t __pxx_prev[__PXX_NSIG];
+
 __sighandler_t signal(int sig, __sighandler_t func) {
-  (void)sig;
-  return func;
+  __sighandler_t prev;
+  int rc;
+  if (sig < 1 || sig >= __PXX_NSIG) { errno = EINVAL; return SIG_ERR; }
+  prev = __pxx_prev[sig];
+  rc = __pxx_c_signal(sig, (void *)func);
+  if (rc < 0) { errno = -rc; return SIG_ERR; }
+  __pxx_prev[sig] = func;
+  return prev;
 }
 
+/* raise(3) is kill(getpid(), sig) and nothing more -- but it used to `return 0'
+   without sending anything, so a program that raised a signal it had handled
+   saw its handler not run and its own return value say fine. */
 int raise(int sig) {
-  (void)sig;
-  return 0;
+  return kill(__pxx_getpid(), sig);
 }
 
 /* THE KERNEL'S SIGSET IS EIGHT BYTES, NOT sizeof(sigset_t). _NSIG is 64 on
@@ -124,8 +156,38 @@ int sigwait(const sigset_t *set, int *sig) {
   return 0;
 }
 
+/* sigaction(2). REFUSES what it cannot honour instead of accepting it:
+
+   SA_SIGINFO asks for a three-argument handler and the pxx hook ABI passes one
+   argument, so accepting it would call the caller's function with two garbage
+   arguments -- a plausible wrong value in signal context, which is the worst
+   place to put one. EINVAL is the honest answer and the caller can fall back to
+   sa_handler, which is what portable code already does.
+
+   sa_mask is NOT installed: no signals are blocked for the duration of the
+   handler. That is a real divergence from POSIX and it is recorded rather than
+   hidden -- a non-empty sa_mask does not refuse, because refusing would reject
+   the majority of real callers (busybox fills sa_mask routinely) over a
+   property most of them do not depend on. sa_flags bits other than SA_SIGINFO
+   (SA_RESTART, SA_NOCLDSTOP, ...) are likewise accepted and not acted on; the
+   underlying install is SA_RESTART-shaped already. */
 int sigaction(int sig, const struct sigaction *act, struct sigaction *oact) {
-  (void)sig; (void)act; (void)oact;
+  __sighandler_t prev;
+  int rc;
+  if (sig < 1 || sig >= __PXX_NSIG) { errno = EINVAL; return -1; }
+  prev = __pxx_prev[sig];
+  if (oact) {
+    oact->sa_handler = prev;
+    oact->sa_sigaction = 0;
+    sigemptyset(&oact->sa_mask);
+    oact->sa_flags = 0;
+    oact->sa_restorer = 0;
+  }
+  if (!act) return 0;                 /* query-only, and oact is already filled */
+  if (act->sa_flags & SA_SIGINFO) { errno = EINVAL; return -1; }
+  rc = __pxx_c_signal(sig, (void *)act->sa_handler);
+  if (rc < 0) { errno = -rc; return -1; }
+  __pxx_prev[sig] = act->sa_handler;
   return 0;
 }
 

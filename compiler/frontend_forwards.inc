@@ -61,7 +61,7 @@ procedure EmitProgramEntryForTarget(withHeapArena: Boolean; var jmpPatch: Intege
 procedure PatchProgramEntryJump(jmpPatch: Integer); forward;
 procedure EmitParamSpillsForTarget(procIdx, nparams: Integer); forward;
 procedure EmitZeroLocalSlotForTarget(symIdx, nbytes: Integer); forward;
-function  TargetHasSignalRuntime: Boolean; forward;         { the ONE axis the five signal sites share -- platform, not arch }
+{ TargetHasSignalRuntime's forward MOVED to compiler.pas, above {$include lexer.inc}, on 2026-09-04 -- it is still ONE declaration, just earlier. lexer.inc's PasApplyPlatformDefines turns it into the PXX_HAS_SIGNALS define, and lexer.inc is included at compiler.pas:66 while this file is included at :153. Declaring it in both places builds fine under PXX (which prescans) and FPC rejects it single-pass with "Function is already declared Public/Forward" -- caught by gate.sh quick's FPC seed canary, which is the only gate that can see this class. }
 { Both live in ir.inc, which compiler.pas includes AFTER the Pascal parser, so
   the __pxxSigPCPtr / __pxxSigSPPtr guards in pasparser_expr.inc need them
   forwarded here or the FPC bootstrap seed cannot resolve them -- pxx resolves

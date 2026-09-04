@@ -63,6 +63,7 @@ function CModuleOfTok(t: Integer): Integer; forward;   { real body in dbg_fileta
 procedure MarkUnitPxxDialect(unitIdx: Integer); forward;   { real body in symtab.inc; lexer.inc's {$MODE PXX} handler calls it (ditto) }
 function IsNilLiteralNode(node: Integer): Boolean; forward;   { real body in ast_arena.inc; symtab.inc's overload matcher asks it about a call argument (ditto) }
 function NodeDynDepth(node: Integer): Integer; forward;   { real body in ast_arena.inc; symtab.inc's IsNodeArray asks it, and used to carry a second copy of the walk that drifted (ditto) }
+function TargetHasSignalRuntime: Boolean; forward;   { real body in ir_codegen.inc, which is THE one predicate for "can this build install a signal handler"; lexer.inc's PasApplyPlatformDefines turns it into the PXX_HAS_SIGNALS define, and a second copy there would be the sixth signal site and the one that goes stale (ditto) }
 {$include lexer.inc}
 {$include util.inc}   { shared helpers owned by no frontend/backend — AIntToStr lived in aparser.inc until 2026-08-19. AFTER lexer.inc, not before: AppendChar is defined there. }
 {$ifndef PXX_NO_CFRONT}{$include clexer.inc}{$endif}
