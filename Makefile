@@ -9385,6 +9385,21 @@ test-core: $(COMPILER)
 	tools/expect_same.sh casmgnuop26 "$$($(TESTTMP)/casmgnuop26)" "$$(printf 'add3 12\nadd8 0 0 0 0 0 0 0 0 carry=1\nmul1 4 18446744073709551614 0\nsubmod 1 18446744069414584320 18446744073709551615 4294967294')"
 	./$(COMPILER) test/casm_barrier.c $(TESTTMP)/casmbarrier26
 	tools/expect_same.sh casmbarrier26 "$$($(TESTTMP)/casmbarrier26)" "43 2"
+	# An `"m"` operand costs NO register: it is a frame slot, `[rbp+disp32]`,
+	# the same operand form a named local takes. It used to be `[reg]` with a
+	# pool entry pinned to hold the ADDRESS -- correct, and one register per
+	# memory operand. msum9 is the POSITIVE CONTROL for that: ten operands want
+	# a register under the old scheme against a nine-entry pool, one under the
+	# new. The pinned compiler refuses it by name ("needs more registers than
+	# this frontend can pin"), so this row can fail. Nothing in
+	# casm_gnu_operands.c could catch it -- one `"m"` fits either way.
+	# It is not an x86-64 nicety: i386's caller-saved pool is FIVE (ebx is
+	# callee-saved), and busybox tls_pstm_mul_comba.c wants three outputs plus
+	# two `"m"` inputs with %eax/%edx clobbered. gcc -O0 oracle on the same
+	# source -- every number below is the machine's, not a literal.
+	./$(COMPILER) test/casm_m_operand_pressure.c $(TESTTMP)/casmmpress26
+	@gcc -O0 -o $(TESTTMP)/casmmpress_gcc test/casm_m_operand_pressure.c
+	tools/expect_same.sh casmmpress26 "$$($(TESTTMP)/casmmpress26)" "$$($(TESTTMP)/casmmpress_gcc)"
 	# A ternary as the CALLEE of a call. (*fp)(a), (fp)(a), (name)(a), (a,fn)(x),
 	# arr[i](a) and s.f[i](a) were all recognised and `(c ? f : g)(a)` was not —
 	# busybox opens libbb/copy_file.c with `(FLAGS_DEREF ? stat : lstat)(...)`.

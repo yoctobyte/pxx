@@ -31,7 +31,7 @@ const
     has to happen as text and never has to wait for codegen. }
   ATTBIND_NONE = 0;
   ATTBIND_REG  = 1;   { %N is a register: `"r"`, `"rm"`, `"a"` and friends }
-  ATTBIND_MEM  = 2;   { %N is `[reg]`, the register holding the address: `"m"` }
+  ATTBIND_MEM  = 2;   { %N is the FRAME SLOT at AttBindOff[n]: `"m"` }
 
 var
   AttSrc     : AnsiString;   { the template being read }
@@ -41,6 +41,10 @@ var
   AttBindKind: array[0..MAX_CASM_OPERANDS-1] of Integer;
   AttBindReg : array[0..MAX_CASM_OPERANDS-1] of Integer;
   AttBindSize: array[0..MAX_CASM_OPERANDS-1] of Integer;  { bytes; 0 = let the suffix say }
+  { ATTBIND_MEM only: the operand's frame offset, i.e. the disp of [rbp+disp32].
+    It is a SEPARATE lane from AttBindReg on purpose -- parking an offset in a
+    field named Reg is how a value gets read as the thing its name promises. }
+  AttBindOff : array[0..MAX_CASM_OPERANDS-1] of Integer;
   AttBindCount: Integer;
 
 { Clear every binding. Called on its own for an operand-free template, so a
@@ -53,15 +57,17 @@ begin
     AttBindKind[i] := ATTBIND_NONE;
     AttBindReg[i] := 0;
     AttBindSize[i] := 0;
+    AttBindOff[i] := 0;
   end;
   AttBindCount := 0;
 end;
 
-procedure AttBindOperand(n, kind, reg, size: Integer);
+procedure AttBindOperand(n, kind, reg, size, off: Integer);
 begin
   AttBindKind[n] := kind;
   AttBindReg[n] := reg;
   AttBindSize[n] := size;
+  AttBindOff[n] := off;
   if n >= AttBindCount then AttBindCount := n + 1;
 end;
 
@@ -418,15 +424,21 @@ begin
         end
         else
         begin
-          { An `"m"` operand: the caller put its ADDRESS in a register, so the
-            template's `%N` is that register dereferenced. The width comes from
-            the mnemonic's suffix, exactly as for any other memory operand. }
-          AsmOpKind[slot] := AOP_MEMR;
-          AsmOpReg[slot] := AttBindReg[n];
+          { An `"m"` operand is a FRAME SLOT -- `[rbp+disp32]`, the same operand
+            form a named Pascal local takes -- and costs no register at all.
+            That is what gcc does (it spills the value and writes `-8(%rbp)`),
+            and the register it saves is not a nicety: the i386 caller-saved
+            pool is five registers, and the two busybox comba blocks want one
+            more than they have if every `"m"` burns one.
+
+            It USED to be `[reg]` with the caller pinning a register to hold the
+            ADDRESS. Both encode the same access; only the pressure differs. }
+          AsmOpKind[slot] := AOP_MEM;
+          AsmOpReg[slot] := 0;
           AsmOpIndex[slot] := -1;
           AsmOpScale[slot] := 1;
-          AsmOpVal[slot] := 0;
-          AsmOpSize[slot] := 0;
+          AsmOpVal[slot] := AttBindOff[n];
+          AsmOpSize[slot] := AttBindSize[n];
         end;
         Exit;
       end;
@@ -575,6 +587,13 @@ begin
     for i := 0 to nops - 1 do
     begin
       if (AsmOpKind[i] = AOP_MEMR) and (AsmOpSize[i] = 0) then AsmOpSize[i] := size;
+      { An `"m"` operand reaches here as AOP_MEM carrying its C type's width.
+        The suffix still wins: `movl %7` on a wider slot is the template asking
+        for a dword, and AsmOpSizeOf reads AOP_MEM before it reads anything
+        else, so leaving the type's width in place would silently encode the
+        wrong size. A register that disagrees is still an error below --
+        a register NAMES its width, a frame slot does not. }
+      if AsmOpKind[i] = AOP_MEM then AsmOpSize[i] := size;
       if (AsmOpKind[i] = AOP_REG) and (AsmOpSize[i] <> size) then
         Error('C: inline asm template writes ' + mn + ' with a '
               + AIntToStr(AsmOpSize[i] * 8) + '-bit register');

@@ -7593,8 +7593,9 @@ end;
   while the block is still being encoded. }
 function CAsmBuildBlock(isExt: Boolean): Integer;
 var
-  i, r, reg, poolNext, tk, fixed, startOff, blkLen: Integer;
+  i, j, r, reg, poolNext, tk, fixed, startOff, blkLen: Integer;
   used: array[0..15] of Boolean;
+  opOwn: array[0..MAX_CASM_OPERANDS-1] of Boolean;
   tmpSym, opReg, opSz: array[0..MAX_CASM_OPERANDS-1] of Integer;
   head, tail, nd, idn, asn, sq, blk, val: Integer;
   cls, nm, rest: AnsiString;
@@ -7660,10 +7661,15 @@ begin
   end;
 
   { ---- and the rest, pinned from the caller-saved pool ---- }
+  { An `"m"` operand is DELIBERATELY not in this loop: it is encoded as a frame
+    slot, so it consumes no pool entry. It used to take one to hold its address,
+    which cost nothing on x86-64's nine-register pool and is the difference
+    between fitting and not on a five-register one. }
   poolNext := 0;
   for i := 0 to CAsmOpCount - 1 do
   begin
     if (CAsmOps[i].TiedTo >= 0) or (opReg[i] >= 0) then Continue;
+    if not CAsmClassWantsReg(CAsmOps[i].Cons) then Continue;
     while (poolNext < CASM_POOL_COUNT) and used[CAsmPool[poolNext]] do Inc(poolNext);
     if poolNext >= CASM_POOL_COUNT then
       Error('C: inline asm needs more registers than this frontend can pin'
@@ -7674,57 +7680,77 @@ begin
   for i := 0 to CAsmOpCount - 1 do
     if CAsmOps[i].TiedTo >= 0 then opReg[i] := opReg[CAsmOps[i].TiedTo];
 
-  { ---- widths, and a local to carry each value ---- }
+  { ---- widths, and a local to carry each value ----
+
+    Every operand now carries its own VALUE, `"m"` included: the slot the asm
+    reads IS the value's slot, where it used to be a pointer to it. An `"m"`
+    that already names a plain local or param needs no carrier at all -- bind
+    straight to that variable, which is both one copy fewer and the only way
+    the asm sees a later write to it, exactly as gcc's `-8(%rbp)` does. }
   for i := 0 to CAsmOpCount - 1 do
   begin
-    if CAsmOps[i].Cons = 'm' then
+    tk := ASTTk[CAsmOps[i].Expr];
+    opSz[i] := TypeSlotSize(IntToTypeKind(tk));
+    tmpSym[i] := -1;
+    if (CAsmOps[i].Cons = 'm') and (ASTKind[CAsmOps[i].Expr] = AN_IDENT) then
     begin
-      opSz[i] := TARGET_PTR_SIZE;
-      tmpSym[i] := AllocVar('', tyPointer);
-    end
-    else
-    begin
-      tk := ASTTk[CAsmOps[i].Expr];
-      opSz[i] := TypeSlotSize(IntToTypeKind(tk));
-      if (opSz[i] <> 1) and (opSz[i] <> 2) and (opSz[i] <> 4) and (opSz[i] <> 8) then
-        Error('C: inline asm operand is ' + AIntToStr(opSz[i])
-              + ' bytes wide, which does not fit a register');
-      tmpSym[i] := AllocVar('', IntToTypeKind(tk));
+      j := ASTIVal[CAsmOps[i].Expr];
+      { Width-limited on purpose. A slot wider than a register is not
+        necessarily the VALUE -- an aggregate param can be passed as a hidden
+        pointer, and binding to that slot would read the address and encode a
+        plausible wrong answer. Anything wider falls through to the carrier
+        path below, which refuses it by name. }
+      if (j >= 0) and ((Syms[j].Kind = skLocal) or (Syms[j].Kind = skParam))
+         and ((opSz[i] = 1) or (opSz[i] = 2) or (opSz[i] = 4) or (opSz[i] = 8)) then
+        tmpSym[i] := j;
     end;
+    opOwn[i] := tmpSym[i] < 0;
+    { The width rule is about the CARRIER, not about the constraint. A value
+      that has to be copied into a temporary must fit a register, because the
+      copy is an ordinary assignment; an `"m"` bound straight to a variable's
+      own slot is never copied and may be any width the template can address.
+      Refusing by name rather than allocating a temp of a kind AllocVar has no
+      record id for -- that would compile and then read the wrong bytes. }
+    if opOwn[i] and (opSz[i] <> 1) and (opSz[i] <> 2)
+                and (opSz[i] <> 4) and (opSz[i] <> 8) then
+      Error('C: inline asm operand is ' + AIntToStr(opSz[i])
+            + ' bytes wide, which does not fit a register'
+            + ' — an "m" operand this wide has to name a plain variable');
+    if opOwn[i] then
+      tmpSym[i] := AllocVar('', IntToTypeKind(tk));
   end;
 
   { ---- tell the template reader what each %N is ---- }
   AttResetBindings;
   for i := 0 to CAsmOpCount - 1 do
     if CAsmClassWantsReg(CAsmOps[i].Cons) then
-      AttBindOperand(i, ATTBIND_REG, opReg[i], opSz[i])
+      AttBindOperand(i, ATTBIND_REG, opReg[i], opSz[i], 0)
     else
-      AttBindOperand(i, ATTBIND_MEM, opReg[i], 0);
+      AttBindOperand(i, ATTBIND_MEM, 0, opSz[i], Syms[tmpSym[i]].Offset);
 
   { ---- encode: loads, the template, stores ---- }
   AttBeginBlock(startOff);
   for i := CAsmOutCount to CAsmOpCount - 1 do
-    AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, True);
+    if CAsmClassWantsReg(CAsmOps[i].Cons) then
+      AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, True);
   AttEncodeTemplateInner(CAsmTemplate, isExt);
   for i := 0 to CAsmOutCount - 1 do
-    AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, False);
+    if CAsmClassWantsReg(CAsmOps[i].Cons) then
+      AttEmitFrameMove(opReg[i], opSz[i], Syms[tmpSym[i]].Offset, False);
   AttEndBlock(startOff, blkLen);
 
   { ---- and the ordinary statements around it ---- }
   head := -1; tail := -1;
   for i := CAsmOutCount to CAsmOpCount - 1 do
   begin
+    { An `"m"` bound straight to the caller's own local has nothing to carry --
+      the asm reads that variable's slot. Synthesising `x = x` here would be
+      harmless and would also be a lie about what the block does. }
+    if not opOwn[i] then Continue;
     idn := AllocNode(AN_IDENT);
     ASTIVal[idn] := tmpSym[i];
     ASTTk[idn] := Ord(Syms[tmpSym[i]].TypeKind);
     val := CAsmOps[i].Expr;
-    if CAsmOps[i].Cons = 'm' then
-    begin
-      nd := AllocNode(AN_ADDR);
-      ASTLeft[nd] := val;
-      ASTTk[nd] := Ord(tyPointer);
-      val := nd;
-    end;
     asn := AllocNode(AN_ASSIGN);
     ASTLeft[asn] := idn; ASTRight[asn] := val;
     ASTTk[asn] := ASTTk[idn];
