@@ -130,3 +130,36 @@ split. `SizeOf(ShortString)` measured 264 where this ticket said 263, and
 `SizeOf(string[255])` measured 256 -- two numbers for one Pascal type. A
 number that is merely stale reads as noise; a number that is stale in a
 direction nothing explains is a lead.
+
+## The exposure half, closed 2026-09-04 — surveyed, and it is ZERO
+
+The fixing session recorded honestly that it had not surveyed `lib/` or
+`examples/` for the vulnerable shape and was "not claiming anyone was actually
+hit — that half is open and I am not holding it". An exculpation needs an owner
+for the residual question, so the coordinator took it. Result:
+
+**No site in `lib/` or `examples/` can hit this.** Surveyed at HEAD for both
+directions of the aliasing shape:
+
+- `var`/`out` parameters declared `ShortString` — **none**.
+- `var`/`out` parameters declared `string[N]` — **none**.
+- every `shortstring` occurrence in those trees, listed rather than counted:
+  four are comments (`classes_lite.pas:215`, `typinfo.pas:24/35/41`), and the
+  two live ones are `typinfo.pas:392` (`pxxTkShortString = 25`, a type-kind
+  constant) and `:632` (`PxxKindToTypeKind`, a kind-to-kind mapping). Neither
+  reads a length prefix, so neither depends on the layout.
+
+So pin **v403** (`ce63beeeb`, sha256 `c31d03b202da`) carries a real
+wrong-VALUE defect with **no reachable victim in the shipped trees**. The bug
+was reproducible on the pinned binary itself — `len=122511465736197` against
+HEAD's `len=5` — and nothing in `lib/` or `examples/` is written in the shape
+that reaches it.
+
+**What this does NOT cover, stated so it is not read as broader than it is:**
+code written AFTER 01:44 today against `$(PXX_STABLE)`. The survey is of the
+existing trees. Any lane now writing new Pascal that passes a `string[N]` to a
+`var ShortString` parameter, or the reverse, will get a wrong length from the
+pin and will reasonably suspect its own code first. The Track B/E lanes were
+told directly.
+
+A re-pin remains the owner's alone and nobody has asked for one.
