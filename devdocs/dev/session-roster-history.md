@@ -24863,3 +24863,62 @@ answered. None errored.** And the structural conclusion the fleet reached
 independently three times tonight — **a relay is only observable to the relayer,
 so the honest fix is fewer hops.** Three peers routed through me believing they
 had no address for another session; all three had one.
+
+## DISPATCH MAP — 2026-09-04 ~19:40, seven sessions on Track P
+
+Recorded by frank-coordinator so the map survives a restart. **Provenance is per
+row, not per section.** The table is RELAYED — it is frankuser's dispatch, in
+frankuser's words, and every "topic" in it is the dispatcher's belief about a
+slice, not a thing I measured. The checks below the table are mine.
+
+Owner's instruction, relayed: **Track P first, parallel, clear the P backlog.**
+`backlog-pascal` was 52 open at 19:40 (`ls -1 | wc -l`, folder-scoped — not a
+glob across `devdocs/progress/*/`, which counts `done/` and is how a "several
+open" claim went wrong on 09-02).
+
+| session | slice | topic (dispatcher's words) |
+|---|---|---|
+| frankA | 6 | postfix / lvalue / indexing |
+| frankB | 4 + parked rung | generics and specialisation identity |
+| frankD | 5 | units, scoping, unit-boundary visibility |
+| frankS | 4 | compiler directives |
+| frankH | 4 | method pointers and procedural values |
+| frankC | — | busybox C corpus (only non-P session) |
+| frankZ | — | regressions, standing brief |
+
+All seven were live and `busy` in `ListAgents` at 19:41, started ~13m earlier.
+
+**Held back by the dispatcher, deliberately, not free to hand out:**
+`refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too` (55, `backlog-pascal`)
+and `perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor` (60,
+`unfinished/`). Both sit in expression parsing beside frankA's cluster; one
+touches `lexer.inc`, shared with Track A. They open when frankA's cluster lands.
+
+### The three flagged boundaries, and what checking them changed
+
+1. **frankA ↔ frankH — `bug-p-result-is-not-a-method-pointer-lvalue`.** The
+   only one I could not settle from the ticket. Its body diagnoses the cause as
+   `AllocVar('Result', retType)` (pasparser_proc.inc:2310) leaving `Result`
+   without a `SymProcSig`, against an assignment arm keying on
+   `SymProcSig[idx] >= 0` and `TypeKind = tyRecord`. If frankA's unification
+   subsumes that predicate, both fixes apply cleanly and one becomes dead code.
+   **Asked frankA whether its slice touches that arm** — a question, because
+   "unifying one lvalue path" reached me second-hand and a stated topic is a
+   belief. Not a finding until frankA answers.
+2. **frankB ↔ frankD — generic declaration does not shadow an imported one.**
+   Real overlap on its face (name resolution is both generics-identity and unit
+   visibility). Both pairs were already told to talk; the ticket carries its own
+   repro. Sent nothing — relaying what the holder will read anyway is noise.
+3. **frankS ↔ frankD — `feature-p-defineglobal…`.** **Weaker than flagged, and
+   the check is the reason.** The dispatcher's slug was a truncation (real slug
+   `feature-p-defineglobal-a-define-that-crosses-unit-boundaries`), and the
+   design fork is **already decided**: `decided/decide-a-cross-unit-define-name-
+   and-semantics.md` — spelling is `{$CLAIM}`, set-once, **whole-compilation
+   scope, not retroactive**. Whole-compilation scope is not a unit-visibility
+   mechanism, so frankD likely has nothing here. The ticket carries the decision
+   as its own top banner, so I sent nothing.
+
+**Two of three flags needed no message. That is the expected ratio** — the pairs
+were told to talk directly, and peer-to-peer beat routing in every case measured.
+
+**No pin.** `make pin` is the owner's alone; nobody asked for one.
