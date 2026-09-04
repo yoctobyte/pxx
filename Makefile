@@ -7874,6 +7874,22 @@ test-core: $(COMPILER)
 	@if readelf -d $(TESTTMP)/hdrstatic_stdio26 2>/dev/null | grep -q 'libhdrstatic_stdio\.so'; then \
 	  echo "FAIL: hdrstatic_stdio26 links a DT_NEEDED on libhdrstatic_stdio.so, which cannot exist"; exit 1; \
 	else echo "ok: hdrstatic_stdio26 has no invented libhdrstatic_stdio.so"; fi
+	# POSITIVE CONTROL FOR BOTH SONAME ASSERTIONS ABOVE. They assert a pattern
+	# is ABSENT, and on a fixed compiler these binaries have no dynamic section
+	# at all -- so "no match" is correct AND indistinguishable from a grep that
+	# could never match. Validating that in the other direction used to need a
+	# PRE-FIX compiler; the pin now postdates the fix, so that control had
+	# become uncheckable and the two assertions above were inherited-control
+	# rows: one refactor from being rows that cannot fail.
+	# A bare declaration is the FFI surface and MUST stay an external import, so
+	# calling it legitimately produces the same artefact the bug produced. This
+	# row asserts the pattern IS present, on the same compiler, from a header
+	# reached the same way. If it stops firing, the two rows above prove nothing.
+	# NEVER RUN -- the binary cannot load, libhdrstatic_ffi.so does not exist.
+	./$(COMPILER) -Itest/chdrstatic -Futest/chdrstatic test/test_header_static_body_ffi_control.pas $(TESTTMP)/hdrstatic_ffi26
+	@if readelf -d $(TESTTMP)/hdrstatic_ffi26 2>/dev/null | grep -q 'libhdrstatic_ffi\.so'; then \
+	  echo "ok: hdrstatic_ffi26 DOES carry libhdrstatic_ffi.so — the soname assertions can fail"; \
+	else echo "FAIL: hdrstatic_ffi26 has no libhdrstatic_ffi.so DT_NEEDED. This is the POSITIVE CONTROL for the two assertions above; with it inert they cannot fail and their silence means nothing. Fix this before believing them"; exit 1; fi
 	# A C diagnostic names the MODULE it is in, and stays silent about the main
 	# source -- the Pascal `in:` line's C half. The pair is the invariant, and the
 	# SILENT half is the one that needs the test: the C answer is consulted only

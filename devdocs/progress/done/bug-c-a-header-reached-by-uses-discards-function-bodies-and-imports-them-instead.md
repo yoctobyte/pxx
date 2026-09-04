@@ -7,7 +7,7 @@ blocked-by: []
 status: done
 found: 2026-08-29
 found-by: pxx-a5
-summary: "DONE. The half this ticket kept open -- a bodied `static` in a header reached by `uses`, below an include that pulls a crtl `.c` impl -- was fixed in ANOTHER LANE by bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull (Track A, 8ba3425d1), and this ticket then sat parked for five days on a blocker that had closed. Re-measured 2026-09-04 at HEAD: `<stdio.h>` above the static now gives 4242/42 with no DT_NEEDED on the invented lib<stem>.so -- the exact row the boundary table listed as `still broken`. Wired as `test/chdrstatic/hdrstatic_stdio.h` + `test_header_static_body_stdio.pas` in test-core, because the fix lives in a Track A file and NOTHING in the C corpus would notice it regressing: the one header the existing rows use is <stddef.h>, deliberately, and that is the single shape which never exercised the residual. HONEST LIMIT ON THE NEW ROW: the pin postdates 8ba3425d1, so I could not run it against a genuinely pre-fix compiler; its both-directions validation is INHERITED from the existing hdrstatic rows, not re-measured here. The soname assertion is the load-bearing half either way -- the printed values can be right while the binary is dead at load."
+summary: "DONE. The half this ticket kept open -- a bodied `static` in a header reached by `uses`, below an include that pulls a crtl `.c` impl -- was fixed in ANOTHER LANE by bug-a-c-module-attribution-is-sticky-after-a-crtl-impl-pull (Track A, 8ba3425d1), and this ticket then sat parked for five days on a blocker that had closed. Re-measured 2026-09-04 at HEAD: `<stdio.h>` above the static now gives 4242/42 with no DT_NEEDED on the invented lib<stem>.so -- the exact row the boundary table listed as `still broken`. Wired as `test/chdrstatic/hdrstatic_stdio.h` + `test_header_static_body_stdio.pas` in test-core, because the fix lives in a Track A file and NOTHING in the C corpus would notice it regressing: the one header the existing rows use is <stddef.h>, deliberately, and that is the single shape which never exercised the residual. THE NEW ROW NOW HAS A POSITIVE CONTROL OF ITS OWN (hdrstatic_ffi.h): a bare DECLARATION is the FFI surface and must stay an external import, so calling it legitimately produces the same DT_NEEDED artefact the bug produced -- same compiler, same `uses` path, opposite expected answer. That closes the gap franks-ab named: the pin postdates 8ba3425d1, so the both-directions validation WAS inherited and therefore one refactor from being a row that cannot fail. It no longer is, and no pre-fix compiler is needed. The soname assertion is the load-bearing half either way -- the printed values can be right while the binary is dead at load."
 owner: frankC
 ---
 
@@ -267,4 +267,30 @@ which is exactly franks-ab's and frank-coordinator-2c's point: **the test is
 what a reader DOES with the text, and no folder or edge check measures that.**
 
 The cheapest catch was never the tooling. The repro takes fifteen seconds.
+
+## The soname assertions had no way to fail, and now they do (frankC, 2026-09-04)
+
+franks-ab pushed back on the paragraph above in its first form. I had labelled
+the new `<stdio.h>` row's control **inherited** — honest, but their point was
+sharper than the label: *a row whose control is inherited from a different row
+is one refactor away from being a row that cannot fail.*
+
+The specific hole: both soname assertions check a pattern is ABSENT, and on a
+fixed compiler these binaries **have no dynamic section at all**. "No match" is
+the right answer and is indistinguishable from a grep that could never match.
+The other direction used to be reachable with a pre-fix compiler; the pin now
+postdates the fix, so that control had quietly become uncheckable.
+
+`hdrstatic_ffi.h` supplies it without one. **A bare declaration must KEEP its
+old treatment** — it is the FFI surface and is supposed to become an external
+import — so calling it produces exactly the artefact the bug produced:
+`DT_NEEDED: libhdrstatic_ffi.so`. Correct behaviour in this file, a defect two
+files over, **identical observable**. Measured: the pattern is present.
+
+So one row asserts the pattern absent and its neighbour asserts the same
+pattern present, on the same compiler, from headers reached the same way. The
+control's failure message says what its silence would mean, because a dead
+positive control is worse than no assertion: it prints PASS.
+
+The binary is built and never run — it cannot load, and it is not meant to.
 
