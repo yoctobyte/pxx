@@ -85,3 +85,10 @@ runs at all).
 `WordBool`/`LongBool`/`ByteBool` still print `1` from *both* renderers. That is
 a different defect with a different cause — they have no boolean-ness to
 dispatch on — and is filed separately.
+
+## Log
+
+- 2026-09-04 — found, fixed, tested and closed in one pass, commit `14c8dcbb7`.
+  The fix and the close are the same commit; there is no separate close to
+  cite. Test `test/test_str_of_boolean.pas` and the reverted-arm control are
+  both in it.
