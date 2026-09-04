@@ -161,3 +161,93 @@ f2:
     print('built', name)
 for n in PRE: build(n)
 ```
+
+
+---
+
+# A windowed longjmp that uses no privileged instruction — MEASURED, rc 50
+
+Measured 2026-09-04 (frankB, Track A), same harness, same box. The section above
+established that the call-chain spill is the only spill primitive available to
+us. **This one establishes that it is enough**: the whole transfer works, in the
+shape the backend actually emits, with no `rsr`, no `wsr` and no syscall.
+
+Builder: `devdocs/dev/xtensa-windowed-longjmp-probe.py`
+(`python3 <it> && qemu-xtensa ./lj8_yes; echo $?`).
+
+| probe | rc | meaning |
+| --- | --- | --- |
+| `lj8_yes` | **50** | control transferred from 20 frames deep back into `f1`, BOTH needles intact, the setjmp call returned 1 |
+| `lj8_nospill` | 52 | same code with the spill removed: the transfer happens and the needle is WRONG |
+| `lj_yes` / `lj_nospill` | 50 / 52 | the call4 shape, same result |
+
+`lj8_nospill` is the negative control and it matters: without the spill the outer
+windows are still live in the register file, so `retw` finds the target window
+valid, never underflows, and the memory we wrote is ignored. It still *lands* —
+which is why "did it crash" would have been the wrong question — and it lands
+with stale registers.
+
+## The protocol
+
+`F` is the try site: a `call8` frame, so it owns `a0-a7`. Both stubs are entered
+from `F` by `call8`, which is what makes the register arithmetic line up — the
+forged call-size bits in `a0` must equal the size of the call being unwound to,
+and `longjmp`'s own `a2` must land where `setjmp`'s did.
+
+**setjmp(buf)** — `entry a1, N`, then:
+
+1. spill: `movi a10, 16` / `call8 spin`, `spin` being a self-recursive `call8`
+   chain deep enough to walk the register file past a wrap
+2. `buf[0..15] := [setjmp_sp - 16]` — **F's `a0-a3`**. `[callee_sp - 16]` holds
+   the CALLER's `a0-a3`, measured, not assumed
+3. `F_sp := [setjmp_sp - 12]` (F's own `a1`, from that same block);
+   `cs := [F_sp - 12]` (F's caller's `a1`)
+4. `buf[40] := cs`; `buf[16..31] := [cs - 32 .. cs - 17]` — **F's `a4-a7`**
+5. `buf[32] := a0` (return address WITH its call-size bits), `buf[36] := a1`
+6. return 0
+
+**longjmp(buf)** — `entry a1, N`, then:
+
+1. spill (this is what makes every outer window dead and in memory, so the
+   `retw` below underflows from the bytes we are about to write)
+2. `[buf[36] - 16 ..] := buf[0..15]`
+3. `[buf[40] - 32 ..] := buf[16..31]`
+4. `a0 := buf[32]` ; `a2 := 1` ; `a1 := buf[36]` ; `retw`
+
+`retw` decrements the window base by the forged call size and the underflow
+handler reloads the target frame from the two blocks just written. Control lands
+at `buf[32] & $3FFFFFFF`, inside `F`, with `F`'s registers restored and `1`
+visible where the call's result goes.
+
+## The two save areas are in DIFFERENT PLACES and only one of them is volatile
+
+This is the part that cost the measurements, and reasoning produced the wrong
+answer three times.
+
+- **`a0-a3` at `[callee_sp - 16]`** — inside the callee region, so by the time a
+  raise happens it holds some deeper frame's registers. This is why `setjmp` must
+  copy it out and `longjmp` must put it back: the transfer pretends the stack is
+  as it was at `setjmp` time.
+- **`a4-a7` at `[cs - 32]`**, `cs` being **F's caller's** stack pointer — inside
+  F's OWN frame, and therefore stable across everything F calls.
+
+`[F_sp - 32]`, `[cs - 16]` and `[cs - 20]` were all tried first and all wrong.
+
+**And a scan for the spilled value finds copies in BOTH directions, of which
+only the upward one is the answer.** Scanning up from `F_sp - 256` reports a hit
+at `F_sp - 160`; scanning DOWN from `F_sp` reports the same address. Both are
+real bytes and both are the wrong answer — that address moves when the *spill
+chain's* frame size changes (32 -> 48 moved it to `F_sp - 192`), which is the
+tell that it is an artifact of the chain rather than an ABI location. The copy at
+`[cs - 32]` does not move for either stub's frame size and moves exactly with
+F's own, which is what an ABI location does. **A probe that finds a plausible
+value and stops is the failure mode here; varying the geometry is what separates
+the two.**
+
+## What this leaves for the implementation
+
+The banked plan's remaining items are now moot. No `rsr`/`wsr` encoders, no
+`extui`, no privileged access, no syscall: `xtensa_entry`, `xtensa_retw`,
+`xtensa_call8`, `xtensa_l32i`, `xtensa_s32i`, `xtensa_addi` and `xtensa_movi`
+already exist in `compiler/xtensaenc.inc` and are the whole instruction set this
+needs. The jmpbuf grows from 3 words (Call0: a15, sp, a0) to 11.
