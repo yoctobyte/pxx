@@ -1650,28 +1650,37 @@ begin
   strings.StrDispose(Str);
 end;
 
-function SysNanosleepNo: Integer;
-begin
-  Result := -1;
-  {$ifdef CPUX86_64} Result := 35;  {$endif}
-  {$ifdef CPU_I386}  Result := 162; {$endif}
-  {$ifdef CPU_AARCH64} Result := 101; {$endif}
-  {$ifdef CPU_ARM32} Result := 162; {$endif}
-end;
+{ THROUGH THE PAL, which has owned this since it had a backend at all.
 
+  This unit used to carry its own four-arm nanosleep NUMBER TABLE and spell
+  __pxxrawsyscall itself. platform.pas already holds those numbers, per platform,
+  with three maintained backends -- so the table here was a second name for one
+  fact, and PalBackendNanosleep on posix issues the identical syscall with the
+  identical timespec. Routing through it DELETES the duplicate rather than
+  guarding it.
+
+  WHAT THE -1 GUARD ACTUALLY WAS. `n := SysNanosleepNo; if n = -1 then Exit;`
+  reads as a soft failure on a target with no number, and it is not: the guard is
+  a RUNTIME test in front of an instruction that is still EMITTED, so a backend
+  with no syscall lowering refuses the BODY. On wasm32 -- where wasi has imports
+  and can never have syscall numbers -- that was `value IR op 54`, the whole body
+  emitted as `unreachable`, and this one procedure gated 82 of the 200 corpus
+  programs that reached the backend. PalNanosleep answers PAL_ERR_UNSUPPORTED
+  there, which is the same defined failure the guard MEANT, decided at COMPILE
+  time. Same shape frankb-78 fixed in pypal (bce31c210); the smaller move here is
+  that the right call already exists.
+
+  AND THE DUPLICATE HAD ALREADY SHIPPED A SILENT FAILURE, in this unit's sibling
+  rather than here: ansiterm.pas's private copy was simply missing riscv32 and
+  xtensa, GetSysWrite returned -1, AnsiWrite's `if w = -1 then Exit` took it, and
+  every TUI drew NOTHING on two targets while WriteLn kept working
+  (bug-b-ansiterm-has-no-syscall-numbers-for-riscv32-or-xtensa-so-every-tui-draws-nothing).
+  The -1 guard that was supposed to be the safety net is what swallowed it. }
 procedure Sleep(Milliseconds: Cardinal);
-type
-  TKernelTimeSpec = record Sec: NativeInt; Nsec: NativeInt; end;
-var
-  req: TKernelTimeSpec;
-  n: Integer;
-  res: Int64;
+var ignored: Integer;
 begin
-  n := SysNanosleepNo;
-  if n = -1 then Exit;
-  req.Sec  := Milliseconds div 1000;
-  req.Nsec := (Milliseconds mod 1000) * 1000000;
-  res := __pxxrawsyscall(n, Int64(@req), 0, 0, 0, 0, 0);
+  ignored := PalNanosleep(Milliseconds div 1000,
+                          Int64(Milliseconds mod 1000) * 1000000);
 end;
 
 { Move/FillChar bodies removed — now compiler builtins (see interface note). }

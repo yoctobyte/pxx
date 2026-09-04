@@ -16504,6 +16504,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_i386_vbsns
 	./$(COMPILER) test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_i386_vbsns_x64
 	tools/expect_same.sh i386/variant_boxed_string_no_store "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_vbsns)" "$$($(TESTTMP)/test_i386_vbsns_x64)"
+	./$(COMPILER) -Fulib/rtl --target=i386 test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/test_i386_sleeplow
+	./$(COMPILER) -Fulib/rtl test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/test_i386_sleeplow_x64
+	tools/expect_same.sh i386/sleep_lowers "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sleeplow)" "$$($(TESTTMP)/test_i386_sleeplow_x64)"
 	./$(COMPILER) --target=i386 test/test_cross_variant.pas $(TESTTMP)/test_i386_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_i386_variant_x64
 	tools/expect_same.sh i386/test_i386_variant "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_variant)" "$$($(TESTTMP)/test_i386_variant_x64)"
@@ -17460,6 +17463,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_aarch64_vbsns
 	./$(COMPILER) test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_aarch64_vbsns_x64
 	tools/expect_same.sh aarch64/variant_boxed_string_no_store "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_vbsns)" "$$($(TESTTMP)/test_aarch64_vbsns_x64)"
+	./$(COMPILER) -Fulib/rtl --target=aarch64 test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/test_aarch64_sleeplow
+	./$(COMPILER) -Fulib/rtl test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/test_aarch64_sleeplow_x64
+	tools/expect_same.sh aarch64/sleep_lowers "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sleeplow)" "$$($(TESTTMP)/test_aarch64_sleeplow_x64)"
 	./$(COMPILER) --target=aarch64 test/test_cross_variant.pas $(TESTTMP)/test_aarch64_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_aarch64_variant_x64
 	tools/expect_same.sh aarch64/test_aarch64_variant "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_variant)" "$$($(TESTTMP)/test_aarch64_variant_x64)"
@@ -18597,6 +18603,9 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_rv32x_vbsns
 	./$(COMPILER) test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_rv32x_vbsns_x64
 	tools/expect_same.sh riscv32/variant_boxed_string_no_store "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_vbsns)" "$$($(TESTTMP)/test_rv32x_vbsns_x64)"
+	./$(COMPILER) -Fulib/rtl --target=riscv32 test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/test_rv32x_sleeplow
+	./$(COMPILER) -Fulib/rtl test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/test_rv32x_sleeplow_x64
+	tools/expect_same.sh riscv32/sleep_lowers "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_sleeplow)" "$$($(TESTTMP)/test_rv32x_sleeplow_x64)"
 	./$(COMPILER) -Fulib/rtl --target=riscv32 test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_rv32x_varpay
 	./$(COMPILER) -Fulib/rtl test/test_cross_variant_payload_widths.pas $(TESTTMP)/test_rv32x_varpay_x64
 	tools/expect_same.sh riscv32/test_rv32x_varpay "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_varpay)" "$$($(TESTTMP)/test_rv32x_varpay_x64)"
@@ -19698,7 +19707,37 @@ test-wasm32: $(COMPILER)
 	./$(COMPILER) --target=wasm32 test/test_metaclass_field_receiver.pas $(TESTTMP)/w32_mcls_field_recv.wasm
 	./$(COMPILER) test/test_metaclass_field_receiver.pas $(TESTTMP)/w32_mcls_field_recv_x64
 	tools/expect_same.sh wasm32/test_metaclass_field_receiver "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_mcls_field_recv.wasm)" "$$($(TESTTMP)/w32_mcls_field_recv_x64)"
-	@echo "wasm32: 48 rows green (41 default + 7 shortstring; 0 excluded)"
+	# SLEEP MUST LOWER, on every target. sysutils.Sleep carried its own four-arm
+	# nanosleep syscall-number table and spelled __pxxrawsyscall itself, behind
+	# `if n = -1 then Exit`. That guard reads as a soft failure and is not one: it
+	# is a RUNTIME test in front of an instruction that is still EMITTED, so a
+	# backend with no syscall lowering refuses the whole BODY. On wasm32 that was
+	# `value IR op 54` -- 209 of the 518 IR_SYSCALL refusals in the 1705-source
+	# census came from this ONE procedure. It now goes through PalNanosleep, which
+	# platform.pas has owned all along with three maintained backends; on wasi it
+	# answers PAL_ERR_UNSUPPORTED, the same defined failure the guard MEANT,
+	# decided at COMPILE time.
+	#
+	# RUN AGAINST THE PRE-CHANGE RTL, not argued: lib/rtl is read at compile time,
+	# so restoring the old sysutils.pas and recompiling needs no rebuild. There,
+	# wasm32 reports `Sleep - value IR op 54`, prints `before`, and traps. Here it
+	# prints all four lines, identical to x86-64 and to the other five targets.
+	#
+	# NO TIMING ROW, deliberately. On wasi no time passes and that is correct, so a
+	# timing assertion would have to be excluded on the one target this file exists
+	# for. Whether the sleep SLEEPS is measured separately and fails on riscv32:
+	# bug-b-palnanosleep-answers-enosys-on-riscv32-because-rv32-has-no-nanosleep-syscall
+	# (-38 = -ENOSYS; rv32 has no nanosleep syscall). That was invisible while
+	# sysutils' private table had no riscv32 arm and exited first -- two silences
+	# stacked, and deleting the outer one is what made the inner one measurable.
+	./$(COMPILER) --target=wasm32 test/test_metaclass_implicit_create.pas $(TESTTMP)/w32_mcls_implicit.wasm
+	./$(COMPILER) test/test_metaclass_implicit_create.pas $(TESTTMP)/w32_mcls_implicit_x64
+	tools/expect_same.sh wasm32/test_metaclass_implicit_create "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_mcls_implicit.wasm)" "$$($(TESTTMP)/w32_mcls_implicit_x64)"
+	# ...and the same fix seen through a corpus program whose ONLY gap was Sleep.
+	./$(COMPILER) -Fulib/rtl --target=wasm32 test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/w32_sleep_lowers
+	./$(COMPILER) -Fulib/rtl test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/w32_sleep_lowers_x64
+	tools/expect_same.sh wasm32/sleep_lowers "$$(tools/run_target.sh wasm32 $(TESTTMP)/w32_sleep_lowers)" "$$($(TESTTMP)/w32_sleep_lowers_x64)"
+	@echo "wasm32: 51 rows green (44 default + 7 shortstring; 0 excluded)"
 test-xtensa: $(COMPILER)
 	# THE BYTE PREFIX ON XTENSA, and this backend is the one where a HALF
 	# conversion cannot pass its easy rows. Every frozen write here goes through
@@ -19984,6 +20023,11 @@ test-xtensa: $(COMPILER)
 	./$(COMPILER) --platform=posix --xtensa-soft-mulhigh --target=xtensa test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_xtensa_vbsns
 	./$(COMPILER) test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_xtensa_vbsns_x64
 	tools/expect_same.sh xtensa/variant_boxed_string_no_store "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_vbsns)" "$$($(TESTTMP)/test_xtensa_vbsns_x64)"
+	# --xtensa-long-calls because pulling the whole RTL in puts the forward call
+	# to __pxx_run_finalizers past CALL0/CALL8 reach; not this row's subject.
+	./$(COMPILER) -Fulib/rtl --platform=posix --xtensa-soft-mulhigh --xtensa-long-calls --target=xtensa test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/test_xtensa_sleeplow
+	./$(COMPILER) -Fulib/rtl test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/test_xtensa_sleeplow_x64
+	tools/expect_same.sh xtensa/sleep_lowers "$$(tools/run_target.sh xtensa $(TESTTMP)/test_xtensa_sleeplow)" "$$($(TESTTMP)/test_xtensa_sleeplow_x64)"
 	# +19 on 2026-08-30: five from the pointer-aligned array frame slot (Track A,
 	# 599000083) and fourteen from the dyn-array/managed-record IR ops this
 	# backend never had. test_dynarray_whole_assign is the one to read: it did
@@ -20947,6 +20991,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_arm32_vbsns
 	./$(COMPILER) test/test_cross_variant_boxed_string_no_store.pas $(TESTTMP)/test_arm32_vbsns_x64
 	tools/expect_same.sh arm32/variant_boxed_string_no_store "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_vbsns)" "$$($(TESTTMP)/test_arm32_vbsns_x64)"
+	./$(COMPILER) -Fulib/rtl --target=arm32 test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/test_arm32_sleeplow
+	./$(COMPILER) -Fulib/rtl test/test_cross_sleep_lowers_everywhere.pas $(TESTTMP)/test_arm32_sleeplow_x64
+	tools/expect_same.sh arm32/sleep_lowers "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sleeplow)" "$$($(TESTTMP)/test_arm32_sleeplow_x64)"
 	./$(COMPILER) --target=arm32 test/test_cross_variant.pas $(TESTTMP)/test_arm32_variant
 	./$(COMPILER) test/test_cross_variant.pas $(TESTTMP)/test_arm32_variant_x64
 	tools/expect_same.sh arm32/test_arm32_variant "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_variant)" "$$($(TESTTMP)/test_arm32_variant_x64)"
