@@ -13568,6 +13568,22 @@ test-core: $(COMPILER)
 	# an inactive conditional branch stays silent: the whole chain is under PasDirectiveActive
 	! grep -q "bogusinsideinactive" $(TESTTMP)/test_directive_unknown_in_include.log
 	tools/expect_same.sh test_directive_unknown_in_include "$$($(TESTTMP)/test_directive_unknown_in_include26)" "7"
+	# THE SILENT/LOUD SPLIT ON THE {$$CLAIM} PAIR, asserted rather than commented.
+	# {$$CLAIM} is implemented and must be SILENT; {$$DEFINEGLOBAL} is the spelling
+	# decided against (decide-a-cross-unit-define-name-and-semantics) and must stay
+	# class 2 UNKNOWN -- not class 1, which would read as a promise to implement it.
+	# That rule lived only in a comment in PasDirectiveClass, and a comment cannot
+	# fail: moving the name into PAS_UNIMPL_DIRECTIVES would look like tidying and
+	# would silently change what we tell users. Printf fixtures, so no test/ file
+	# and no wiring entry. Independently re-measured 2026-09-04 (frankS) after
+	# frankD's ruling while landing {$$CLAIM}.
+	printf 'program cl;\n{$$CLAIM PXX_SPLIT_A}\nbegin writeln(1); end.\n' > $(TESTTMP)/dircl.pas
+	./$(COMPILER) $(TESTTMP)/dircl.pas $(TESTTMP)/dircl26 > $(TESTTMP)/dircl.log 2>&1
+	! grep -q 'compiler directive' $(TESTTMP)/dircl.log
+	printf 'program dg;\n{$$DEFINEGLOBAL PXX_SPLIT_B}\nbegin writeln(1); end.\n' > $(TESTTMP)/dirdg.pas
+	./$(COMPILER) $(TESTTMP)/dirdg.pas $(TESTTMP)/dirdg26 > $(TESTTMP)/dirdg.log 2>&1
+	grep -q 'unknown compiler directive {$$DEFINEGLOBAL}' $(TESTTMP)/dirdg.log
+	! grep -q 'recognised but not implemented' $(TESTTMP)/dirdg.log
 	# -Werror reaches it like any other warning, so a project can make an
 	# unrecognised directive fatal without a flag of its own.
 	! ./$(COMPILER) -Werror test/test_pascal_directive_unknown_warns.pas $(TESTTMP)/test_pascal_directive_unknown_warns_werr26 > $(TESTTMP)/test_pascal_directive_unknown_warns_werr.log 2>&1
