@@ -4,19 +4,19 @@
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
 | plexus **QUIET 5d8h** | `27424c927b65` | 2026-08-30T10:24:09Z | RED (full) | 1370.0s | `27424c927b65` RED |
-| seven | `b8e3b3010249` | 2026-09-04T18:34:32Z | RED (native) | 227.0s | `9d5a4e27029e` RED |
+| seven | `b8e3b3010249` | 2026-09-04T18:47:37Z | RED (full) | 764.9s | `b8e3b3010249` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Cross-target currency — which host's map to read
 
 A host's `jobs` map is only as current as **that host's own last FULL tier**. `quick`, `native` and `limited` run no cross target, so every i386 / arm32 / aarch64 / riscv32 / xtensa entry in a host's state dates from its last full run — however recently that host published something else.
 
-**Newest full tier in the fleet: `9d5a4e27029e` on seven, 2026-09-04T18:14:54Z (19m ago).**
+**Newest full tier in the fleet: `b8e3b3010249` on seven, 2026-09-04T18:47:37Z (0m ago).**
 
 | host | full through | verdict | age | behind the newest by |
 |------|--------------|---------|-----|----------------------|
-| seven | `9d5a4e27029e` | RED | 19m | — (newest) |
-| plexus | `27424c927b65` | RED | 5d8h | 5d7h |
+| seven | `b8e3b3010249` | RED | 0m | — (newest) |
+| plexus | `27424c927b65` | RED | 5d8h | 5d8h |
 
 Reading a staler host's map for a cross-target job answers a question about an OLDER tree, and it is what makes an already-fixed job still read `fail`.
 
@@ -44,10 +44,52 @@ Reading a staler host's map for a cross-target job answers a question about an O
   - `tools-devtest#00`
   </details>
 - **test-core#src:test/c_crtl_wait.c** — test/c_crtl_wait.c tools/expect_same.sh +1 (seven): bad `27303aeeb35c`, last good `unknown`, 0 commit(s) in range
-- **test-aarch64#src:test/test_rtti.pas** — test/test_rtti.pas tools/expect_same.sh +1 (seven): bad `9d5a4e27029e`, last good `b040c90e6c8b`, 2 commit(s) in range
-- **test-arm32#src:test/test_rtti.pas** — test/test_rtti.pas tools/expect_same.sh +1 (seven): bad `9d5a4e27029e`, last good `b040c90e6c8b`, 2 commit(s) in range
-- **test-i386#src:test/test_rtti.pas** — test/test_rtti.pas tools/expect_same.sh +1 (seven): bad `9d5a4e27029e`, last good `b040c90e6c8b`, 2 commit(s) in range
-- **test-xtensa#src:test/test_rtti.pas** — test/test_rtti.pas tools/expect_same.sh +1 (seven): bad `9d5a4e27029e`, last good `b040c90e6c8b`, 2 commit(s) in range
+- **CASCADE 42 jobs** (seven): bad `b8e3b3010249`, last good `9d5a4e27029e`, 16 commit(s) in range
+  <details><summary>jobs</summary>
+
+  - `demos#00`
+  - `lib-test#src:examples/json/jsondemo.pas`
+  - `lib-test#src:examples/net/httpdemo.pas`
+  - `lib-test#src:examples/shell/nilsh.npy`
+  - `lib-test#src:test/lib_base64.pas`
+  - `lib-test#src:test/lib_codecs.npy`
+  - `lib-test#src:test/lib_dns_resolved.pas@2`
+  - `lib-test#src:test/lib_http.pas`
+  - `lib-test#src:test/lib_http_async.pas`
+  - `lib-test#src:test/lib_http_cookie.pas`
+  - `lib-test#src:test/lib_http_gzip.pas`
+  - `lib-test#src:test/lib_http_keepalive.pas`
+  - `lib-test#src:test/lib_http_pool.pas`
+  - `lib-test#src:test/lib_http_pool_concurrent.pas`
+  - `lib-test#src:test/lib_http_redirect.pas`
+  - `lib-test#src:test/lib_http_serve.pas`
+  - `lib-test#src:test/lib_httpjson.pas`
+  - `lib-test#src:test/lib_https_mock.pas`
+  - `lib-test#src:test/lib_markdown.pas`
+  - `lib-test#src:test/lib_mimic_bisect.npy`
+  - `lib-test#src:test/lib_mimic_codecs.npy`
+  - `lib-test#src:test/lib_mimic_collections_abc.npy`
+  - `lib-test#src:test/lib_mimic_colorsys.npy`
+  - `lib-test#src:test/lib_mimic_copy.npy`
+  - `lib-test#src:test/lib_mimic_six.npy`
+  - `lib-test#src:test/lib_mimic_six_moves.npy`
+  - `lib-test#src:test/lib_mimic_string_template.npy`
+  - `lib-test#src:test/lib_mimic_urllib_error.npy`
+  - `lib-test#src:test/lib_mimic_urllib_parse.npy@2`
+  - `lib-test#src:test/lib_mimic_warnings.npy`
+  - `lib-test#src:test/lib_mimic_weakref.npy`
+  - `lib-test#src:test/lib_mimic_xml_dom.npy`
+  - `lib-test#src:test/lib_mimic_xml_dom_minidom.npy@2`
+  - `lib-test#src:test/lib_mimic_xml_etree_elementtree.npy`
+  - `lib-test#src:test/lib_mimic_xml_sax_saxutils.npy`
+  - `lib-test#src:test/lib_mimic_xml_sax_xmlreader.npy`
+  - `lib-test#src:test/lib_pyexec.npy@2`
+  - `lib-test#src:test/lib_typinfo_props.pas`
+  - `lib-test#src:tools/crtl_reachability.py`
+  - `test-fpjson#src:tools/install_lib_candidates.sh`
+  - `test-pascal-conformance#shard4/6`
+  - `test-pascal-conformance#shard5/6`
+  </details>
 
 ## Held — quiet hosts (not actionable)
 
