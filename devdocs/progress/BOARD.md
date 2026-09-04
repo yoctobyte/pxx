@@ -366,7 +366,7 @@ _none_
 | feature-t-twatch-should-assert-its-repro-selector-resolves-to-the-one-job-it-is-filing | T | 55 | feature | feature(T): twatch should assert its `## Repro` selector resolves to exactly the job it is filing | — |
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 
-## backlog-pascal (48)
+## backlog-pascal (46)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -382,9 +382,7 @@ _none_
 | bug-p-a-stray-end-at-unit-implementation-top-level-is-silently-skipped | P | 45 | bug | pasparser_proc.inc:5247 ends a unit only on `end` IMMEDIATELY followed by `.`; any other top-level `end` in the implementation section is consumed by a bare `else Next` and NOTHING is reported. A routine body that consumes one `end` too FEW is therefore invisible -- the spare is eaten and the unit compiles. The mirror (one too MANY) errors, but at EOF, because the loop then lands on the bare `.`. Same silent-skip shape that bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped measured at 1949 events and replaced in the arm NEXT DOOR, leaving this one. Found while localising the rung-6b wall in feature-pascal-corpus-expansion. NOT yet known to hide a live bug -- the cost of turning it into an error is unmeasured and that measurement is the first task, exactly as it was for the sibling. | — |
 | bug-p-a-units-implementation-section-is-visible-to-its-importers | P | 45 | bug | pxx has no interface/implementation visibility boundary at all: a unit's implementation-section TYPES, CONSTS and ROUTINES are every one of them visible to any importer, where FPC rejects all four. Accepting what FPC rejects is normally not a defect, and the permissiveness alone is not what makes this worth fixing — the SHADOWING is. A leaked implementation name silently outranks a builtin of the same name for every importer, and that already shipped one wrong-value/memory-corruption bug: builtinheap's private `PWord = ^NativeInt` shadowed the builtin `PWord = ^UInt16` in every user program, so `PWord(p)^` read eight bytes instead of two and `PWord(p)^ := x` WROTE eight, silently, at every -O level. That instance is FIXED by renaming the RTL's alias to `PMachineWord`; this ticket is the residual mechanism, which will hand the same gun to the next RTL name that collides. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
-| bug-p-an-unknown-compiler-directive-is-silently-ignored | P | 35 | bug | compiler/lexer.inc's {$...} handler is an if/else chain of 34 CaseEqual(command, ...) arms with no terminal else, so ANY directive outside those 34 is silently ignored — no warning, no note, exit 0. {$FATAL} is one confirmed instance (bug-p-fatal-directive-is-silently-ignored) and the mechanism guarantees there are others. Filed separately from the {$FATAL} ticket on purpose: fixing {$FATAL} closes that ticket and leaves this generator intact. | — |
 | bug-p-error-context-near-quotes-an-unrelated-token-stream | P | 35 | bug | A compile error's `near:` excerpt can quote text from a completely unrelated token stream — RTL/builtin unit source with no relation to the file being compiled. The line number and the diagnosis are correct; only the excerpt is wrong, so it does not error and does not look wrong. Reproduces on a 10-line program: the same `undefined variable` error gives a CORRECT excerpt in a trivial program and a bogus one once the unit declares a generic specialization alias, which brackets it tightly. | — |
-| bug-p-fatal-directive-is-silently-ignored | P | 35 | bug | {$FATAL text} and {$MESSAGE FATAL text} are silently ignored: the frontend handles warning/message/error and treats every other directive as a no-op, so a guard block that means 'stop, this configuration is unsupported' compiles clean and produces a binary that should not exist. | — |
 | bug-p-for-in-over-a-dereferenced-pointer-to-array-is-refused | P | 35 | bug | `for x in p^ do` where `p: ^array[0..3] of Integer` is refused with \"for-in: not a generator, enum type, or iterable variable\". FPC accepts it and iterates the pointee; `for x in a do` over the same array works here. A clean compile-time REFUSAL, not a wrong value, so it is cheap to hit and cheap to diagnose. Measured identical on the pinned binary and at 3a53468cb267, i.e. NOT a regression from the p^[i] indexing fix that turned it up -- that work taught IsNodeArray this shape, which was necessary and evidently not sufficient: pasparser_stmt.inc's for-in arm gates on something else. | — |
 | bug-p-member-access-on-a-procedural-variable-call-result-is-rejected | P | 40 | bug | `fp(7).c` where fp is a procedural VARIABLE is rejected with `expected ')' before '.'`. The identical member access is accepted on a DIRECT call result (`Plain(8).c`) and on a VIRTUAL method call result (`b.M(8).c`), both measured working. feature-member-access-on-call-result is done and covered two of the three shapes; ApplyCallResultPtrSuffix is the one materialisation point and it takes a real procIdx, so the AN_CALL_IND sites never reach it. There are FIVE AllocNode(AN_CALL_IND) sites in pasparser_lval.inc, which is why this is not a one-line fix and is filed rather than patched at one of them. | — |
 | bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out | P | 35 | bug | ParseFactorCore's carve-out to PyParseFactorCore is partial: 36 NilPy diagnostics remain on the Pascal arm and 10 exist verbatim on BOTH arms, so a correction to one of them lands on one arm and silently leaves the other stale. | — |
@@ -399,7 +397,7 @@ _none_
 | feature-p-assertions-switch-and-strict-default | P | 30 | feature | Re-filed from decide-assertion-default-vs-fpc, decided 2026-08-25 (option 3, default ON). pxx evaluates Assert() always; FPC ignores it unless -Sa. The dialect contract requires every divergence to be switchable and disabled under the strict family, so the switch is mandated rather than merely preferred. Once it exists the default stops being a one-way door. | — |
 | feature-p-defineglobal-a-define-that-crosses-unit-boundaries | P | 45 | feature | `{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem. | — |
 | feature-p-legacy-value-object-types | P | 15 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
-| feature-p-packrecords-c-directive | P | 58 | feature | `{$packrecords c}` is refused with 'invalid packrecords value: c'. It means 'lay records out the way this platform's C compiler does', which is what every FPC header binding to a C library uses — and it is what blocks the arm profile of --mimic-fpc-compiler, since fpcdefs.inc's arm branch sets it. | — |
+| feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus | P | 45 | feature | {$PACKENUM 1} and {$H-} are accepted and not implemented, and both are in the first nine lines of FPC 3.2.2's fpcdefs.inc — so every unit of the FPC compiler corpus is compiled with 4-byte enums and a longstring default where the source asked for 1-byte enums and shortstrings. Silent until 2026-09-04; the unknown-directive warning is what surfaced them. | — |
 | feature-p-tobject-api-classparent-instancesize-tostring | P | 15 | feature | Was six TObject members pxx rejected; five landed. Only ClassInfo is left, and it is a Track U question (decide-classinfo-returns-our-blob-or-nothing), not an implementation choice. UnitName -- not in the original six -- is the other gap, tracked in feature-pascal-builtin-tobject-class. | — |
 | feature-p-uses-a-unit-in-an-explicit-file | P | 55 | feature | `uses mymod in 'mymod.pas';` — the FPC/Delphi spelling for naming a unit's source file — does not parse. pxx has the quoted-path form (`uses './mymod.pas' as m;`, shipped 2026-06-30) but not the standard `in` one, so ordinary FPC project sources are refused at the uses clause. | — |
 | feature-pascal-builtin-tobject-class | P | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | decide-tobject-classinfo-blob-or-refusal |
@@ -892,9 +890,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (3257)
+## done (3260)
 
-3257 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+3260 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (74)
 
@@ -1038,7 +1036,6 @@ _none_
 - [p 60] [A] refactor-a-c-exclusive-lowering-has-no-carved-out-file-so-track-c-cannot-be-staffed [!! DO NOT CLAIM — the ticket says so; read it]
 - [p 60] [U] task-u-evaluate-the-2026-08-31-ticket-rules-next-week
 - [p 58] [N] feature-nilpy-small-syntax-gaps-found-by-the-2026-08-06-sweep
-- [p 58] [P] feature-p-packrecords-c-directive
 - [p 55] [M] feature-port-windows-pe (unblocks 3)
 - [p 55] [U] decide-the-utf16-payload-fact-is-spelled-twice-kind-widestr-and-enc-ucs2 (unblocks 1)
 - [p 55] [T] feature-t-freebsd-image-and-runner (unblocks 1)
@@ -1133,6 +1130,7 @@ _none_
 - [p 45] [N] feature-nilpy-multi-arg-callback-bridges
 - [p 45] [N] feature-nilpy-threadsafe-containers
 - [p 45] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
+- [p 45] [P] feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus
 - [p 45] [T] feature-t-a-type-alias-copied-from-the-rtl-can-drift-and-nothing-reports-it
 - [p 45] [A] refactor-a-nilpy-const-str-bypasses-both-the-literal-fast-path-and-the-call-arg-funnel
 - [p 45] [A] refactor-a-the-durable-param-row-is-hand-copied-on-three-registration-paths [parked — re-claim, do not duplicate]
@@ -1215,9 +1213,7 @@ _none_
 - [p 35] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 35] [A] bug-o-nothing-asserts-that-o2-actually-uses-the-static-literal-handle
 - [p 35] [P] bug-p-a-field-selection-on-a-record-cast-is-not-parsed
-- [p 35] [P] bug-p-an-unknown-compiler-directive-is-silently-ignored
 - [p 35] [P] bug-p-error-context-near-quotes-an-unrelated-token-stream
-- [p 35] [P] bug-p-fatal-directive-is-silently-ignored
 - [p 35] [P] bug-p-for-in-over-a-dereferenced-pointer-to-array-is-refused
 - [p 35] [P] bug-p-nilpy-diagnostics-exist-on-both-arms-of-the-parsefactorcore-carve-out
 - [p 35] [A+S] bug-s-xtensa-has-no-ir-set-signal-arm-riscv32-does

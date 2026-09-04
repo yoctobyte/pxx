@@ -2093,8 +2093,152 @@ begin
   end;
 end;
 
+function PasDirectiveLower(const s: AnsiString): AnsiString;
+var i: Integer; c: Char;
+begin
+  Result := '';
+  for i := 1 to Length(s) do
+  begin
+    c := s[i];
+    if (c >= 'A') and (c <= 'Z') then c := Chr(Ord(c) + 32);
+    AppendChar(Result, c);
+  end;
+end;
+
+function PasDirectiveClass(const command, name: AnsiString; sign: Char): Integer;
+{ How ProcessPasDirective's terminal arm should treat a directive it has no arm
+  for: 0 = recognised and INERT (say nothing), 1 = recognised and NOT
+  IMPLEMENTED (say so -- ignoring it can change the artifact), 2 = not a
+  directive pxx knows at all (almost always a misspelling).
+
+  The three-way split is the whole point of the warning. A diagnostic that fires
+  on `{$H+}` (214 occurrences in this tree) is one somebody turns off within a
+  day, and then the case it exists for -- a MISSPELLED directive that silently
+  reverts a layout to the default -- goes quiet again. Measured 2026-09-04:
+  `{$PACKRECRDS 1}` (one letter dropped) gave SizeOf 8 where `{$PACKRECORDS 1}`
+  gives 5, with no word said; FPC answers
+  `Warning: Illegal compiler directive "$PACKRECRDS"` and then lays it out the
+  same 8, so FPC diverged from us only in the diagnostic.
+
+  THE MEMBERSHIP RULE FOR CLASS 0, because "we ignore it" is not the test: a
+  directive is inert when ignoring it leaves pxx doing what the program asked,
+  or something STRICTLY MORE PERMISSIVE. `{$X-}` (refuse a discarded function
+  result) is inert by that rule -- we accept more, which CLAUDE.md says is not a
+  defect. `{$PACKENUM 1}` is class 1, because ignoring it hands back a different
+  struct layout than the source asked for, silently: the same failure as the
+  typo above wearing a correct spelling.
+
+  A one-polarity switch splits on `sign`, not on name: `{$H+}` is pxx behaviour
+  and inert, `{$H-}` asks for a shortstring default we do not implement. Same
+  shape for {$A} (record alignment) and for {$B}, where it is `+` that asks for
+  something we do not do -- pxx short-circuits, which is FPC's {$B-}.
+  THE LONG SPELLINGS SPLIT THE SAME WAY AND ARE THE ONES REAL SOURCE USES:
+  {$BOOLEVAL ON} is {$B+} and {$LONGSTRINGS OFF} is {$H-}, so they read `name`
+  where the letters read `sign`. Listing either as flatly inert would put the
+  consequential polarity back in the silent set through its other spelling --
+  the sibling-path miss this repo names normalise-dont-special-case.
+
+  bug-p-an-unknown-compiler-directive-is-silently-ignored }
+const
+  { Space-delimited and searched WITH both delimiters, so 'h' cannot match
+    'hints'. Lowercase; the caller folds case. }
+  PAS_INERT_DIRECTIVES =
+    ' i q include ' +
+    ' d e f g j l m n o p s t u v w x y ' +
+    ' apptype checkpointer codealign codepage coperators debuginfo description ' +
+    ' excessprecision extendedsyntax externalsym fputype goto hints hppemit ' +
+    ' imagebase implicitbuild implicitexceptions includepath inline legacyifend ' +
+    ' libexport librarypath link linkframework linklib localsymbols ' +
+    ' macro maxfpuregisters maxstacksize memory minfpconstprec mmx modeswitch ' +
+    ' namespace nodefine notes objectchecks objectpath objexportall openstrings ' +
+    ' optimization output_format pascalmainname pic pointermath pop profile push ' +
+    ' pyextension referenceinfo region endregion resource rtti safefpuexceptions ' +
+    ' saturation setpeflags setpeoptflags setpeosversion setpesubsysversion ' +
+    ' setpeuserversion smartlink stackframes static stringchecks syscalls ' +
+    ' threadname threading typedaddress typeinfo unitpath varpropsetter ' +
+    ' varstringchecks version wait warn warnings weakpackageunit writeableconst ' +
+    ' zerobasedstrings ';
+  { Recognised, unimplemented, and CONSEQUENTIAL: every one of these changes a
+    record layout, an enum width or a calling convention, so swallowing it
+    produces an aggregate that disagrees with the compiler the source was
+    written against. They are named here rather than left to the unknown arm so
+    the message can say "not implemented" instead of "unknown", which is the
+    truthful half of the distinction and the searchable one. }
+  PAS_UNIMPL_DIRECTIVES =
+    ' bitpacking calling minenumsize packenum packset z1 z2 z4 ';
+var lower: AnsiString;
+begin
+  lower := PasDirectiveLower(command);
+  if (lower = 'h') or (lower = 'a') then
+  begin
+    if sign = '-' then Result := 1 else Result := 0;
+    Exit;
+  end;
+  if lower = 'b' then
+  begin
+    if sign = '+' then Result := 1 else Result := 0;
+    Exit;
+  end;
+  if lower = 'longstrings' then
+  begin
+    if CaseEqual(name, 'off') then Result := 1 else Result := 0;
+    Exit;
+  end;
+  if lower = 'booleval' then
+  begin
+    if CaseEqual(name, 'on') then Result := 1 else Result := 0;
+    Exit;
+  end;
+  if Pos(' ' + lower + ' ', PAS_INERT_DIRECTIVES) > 0 then Result := 0
+  else if Pos(' ' + lower + ' ', PAS_UNIMPL_DIRECTIVES) > 0 then Result := 1
+  else Result := 2;
+end;
+
+function PasStripQuotes(const s: AnsiString): AnsiString;
+{ FPC lets the message text be quoted ({$MESSAGE ERROR 'text'}); the quotes are
+  delimiters, not message. Only a MATCHED surrounding pair is stripped. }
+begin
+  Result := s;
+  if (Length(Result) >= 2) and (Result[1] = Result[Length(Result)]) and
+     ((Result[1] = Chr(39)) or (Result[1] = Chr(34))) then
+    Result := Copy(Result, 2, Length(Result) - 2);
+end;
+
+function PasMessageSeverity(var text: AnsiString): Integer;
+{ FPC's {$MESSAGE <severity> <text>}: the first word selects the severity when
+  it is one of FPC's keywords, and is otherwise part of the message. Returns
+  3 fatal, 2 error, 1 warning, 0 hint/note/info, -1 no severity word (plain
+  {$MESSAGE text}). Strips the severity word from `text` when it took one.
+
+  Routing this is half of bug-p-fatal-directive-is-silently-ignored: the
+  {$MESSAGE FATAL text} spelling matched the `message` arm, printed
+  `message: FATAL text` and carried on -- so a source that said STOP got a
+  binary, exactly like the bare {$FATAL} did, for a different reason. }
+var i, n: Integer; word_: AnsiString;
+begin
+  Result := -1;
+  n := Length(text);
+  i := 1;
+  while (i <= n) and ((text[i] = ' ') or (text[i] = Chr(9))) do Inc(i);
+  word_ := '';
+  while (i <= n) and (text[i] <> ' ') and (text[i] <> Chr(9)) do
+  begin
+    AppendChar(word_, text[i]);
+    Inc(i);
+  end;
+  if CaseEqual(word_, 'fatal') then Result := 3
+  else if CaseEqual(word_, 'error') then Result := 2
+  else if CaseEqual(word_, 'warning') then Result := 1
+  else if CaseEqual(word_, 'hint') or CaseEqual(word_, 'note') or
+          CaseEqual(word_, 'info') then Result := 0
+  else Exit;
+  while (i <= n) and ((text[i] = ' ') or (text[i] = Chr(9))) do Inc(i);
+  text := PasStripQuotes(Copy(text, i, n - i + 1));
+end;
+
 procedure ProcessPasDirective;
-var command, name, fname, messageText: AnsiString; parent, cond: Boolean; idx: Integer;
+var command, name, fname, messageText: AnsiString; parent, cond: Boolean;
+    idx, msgSev: Integer; dsign: Char;
 begin
   Inc(SrcPos); { dollar sign }
   ReadPasDirectiveWord(command);
@@ -2115,6 +2259,15 @@ begin
   end
   else
     ReadPasDirectiveWord(name);
+  { The +/- of a switch directive, read BEFORE the Q/R/I blocks and the
+    skip-to-close-brace loop below consume it. Only the terminal
+    unknown-directive `else` uses it, to
+    tell `{$H+}` (pxx behaviour, inert) from `{$H-}` (a request we do not honour)
+    -- see PasDirectiveIsInert. #0 when the directive carries no sign. }
+  dsign := Chr(0);
+  if (SrcPos <= Length(Source)) and
+     ((Source[SrcPos] = '+') or (Source[SrcPos] = '-')) then
+    dsign := Source[SrcPos];
   { Resource directive (R name file): capture the filename before skipping.
     But `{$R+}` / `{$R-}` are the range-check switch (like {$Q±}/{$I±}), NOT a
     resource — disambiguate on a leading +/- so the toggle is a no-op instead of
@@ -2147,13 +2300,24 @@ begin
     else if Source[SrcPos] = '-' then IChecksVal := False;
   end;
   messageText := '';
+  { fatal/stop/hint/note/info JOIN THIS SET, not just the dispatch below: the
+    text is captured here and nowhere else, so an arm added without its name
+    here diagnoses with an empty message. bug-p-fatal-directive-is-silently-ignored }
   if CaseEqual(command, 'warning') or CaseEqual(command, 'message') or
-     CaseEqual(command, 'error') then
+     CaseEqual(command, 'error') or CaseEqual(command, 'fatal') or
+     CaseEqual(command, 'stop') or CaseEqual(command, 'hint') or
+     CaseEqual(command, 'note') or CaseEqual(command, 'info') then
   begin
     messageText := name;
     if messageText <> '' then AppendChar(messageText, ' ');
     ReadPasDirectiveRest(fname);
     for idx := 1 to Length(fname) do AppendChar(messageText, fname[idx]);
+    while (messageText <> '') and
+          ((messageText[Length(messageText)] = ' ') or
+           (messageText[Length(messageText)] = Chr(9))) do
+      messageText := Copy(messageText, 1, Length(messageText) - 1);
+    if not CaseEqual(command, 'message') then
+      messageText := PasStripQuotes(messageText);
   end;
   while (SrcPos <= Length(Source)) and (Source[SrcPos] <> '}') do
   begin
@@ -2430,6 +2594,26 @@ begin
       else if CaseEqual(name, '4') then PackRecordsVal := 4
       else if CaseEqual(name, '8') then PackRecordsVal := 8
       else if CaseEqual(name, '16') then PackRecordsVal := 16
+      else if CaseEqual(name, 'c') then PackRecordsVal := 16
+      { {$PACKRECORDS C} = "lay this record out the way the platform C compiler
+        does" -- the directive every FPC binding to a C library opens with, and
+        the first line of fpcdefs.inc's arm branch (which is why the arm profile
+        of --mimic-fpc-compiler could not get past the include).
+
+        IT IS A NO-CAP, NOT A MODE, AND THAT IS MEASURED RATHER THAN ASSUMED.
+        This value is only ever read as a CEILING on a field's alignment
+        (pasparser_decl.inc: `if fAlign > TokPackRecords[..] then fAlign := ..`),
+        and the alignment it caps is already TypeFieldAlign -- which IS the
+        platform C rule, i386's 4-byte cap on an 8-byte scalar included, and was
+        itself measured against gcc. TypeAlign never answers above 8, so a cap of
+        16 cannot bind: `c` therefore means "do not cap, the underlying rule is
+        already C's", which is exactly the promise. Verified against gcc on
+        x86-64 and i386 with a mixed-width struct, both offsets and sizeof --
+        test-packrecords-c-matches-gcc.
+
+        Accepting it as a synonym for the default would read the same today and
+        be wrong the day a 16-aligned type appears; 16 stays correct then.
+        feature-p-packrecords-c-directive }
       else Error('invalid packrecords value: ' + name);
     end
     else if CaseEqual(command, 'R') then
@@ -2455,9 +2639,35 @@ begin
     else if CaseEqual(command, 'warning') then
       WarnAt(SrcLine, messageText)
     else if CaseEqual(command, 'message') then
-      writeln('pascal26:', SrcLine, ': message: ', messageText)
+    begin
+      { {$MESSAGE <severity> text} routes by its first word; a plain
+        {$MESSAGE text} keeps the old note-shaped line. }
+      msgSev := PasMessageSeverity(messageText);
+      if msgSev >= 2 then ErrorAt(SrcLine, messageText)
+      else if msgSev = 1 then WarnAt(SrcLine, messageText)
+      else if msgSev = 0 then
+        writeln('pascal26:', SrcLine, ': note: ', messageText)
+      else
+        writeln('pascal26:', SrcLine, ': message: ', messageText);
+    end
     else if CaseEqual(command, 'error') then
-      Error(messageText)
+      { ErrorAt, not Error: Error() prints CurTok.Line, which during the lex
+        pass is the last token BEFORE this directive -- a {$error} on line 2
+        reported line 1, and every one of these guards is written near the top
+        of a file where that is most misleading. }
+      ErrorAt(SrcLine, messageText)
+    else if CaseEqual(command, 'fatal') or CaseEqual(command, 'stop') then
+      { The directive whose ENTIRE PURPOSE is to stop the compile. Ignoring it
+        does not change a message, it changes whether an artifact exists: found
+        2026-08-28 when lib/rtl/signals.pas wanted a compile-time refusal on
+        non-x86-64 and `{$fatal}` compiled clean, exit 0. Error() already halts,
+        so this is the same arm as {$error} -- FPC distinguishes them only by
+        whether compilation could in principle continue, and pxx's Error cannot.
+        bug-p-fatal-directive-is-silently-ignored }
+      ErrorAt(SrcLine, messageText)
+    else if CaseEqual(command, 'hint') or CaseEqual(command, 'note') or
+            CaseEqual(command, 'info') then
+      writeln('pascal26:', SrcLine, ': note: ', messageText)
     else if CaseEqual(command, 'mode') then
     begin
       { {$mode delphi} toggles the one behavioural delta PXX honours: the
@@ -2530,8 +2740,27 @@ begin
       else
         Error('unknown {$asmMode} value (intel, default, att and direct are the '
               + 'FPC set): ' + name);
+    end
+    { THE TERMINAL ARM. Without it this chain silently discarded every directive
+      outside its ~40 names -- no warning, no note, exit 0 -- so a misspelling
+      got the DEFAULT behaviour of whatever it meant to change, which for a
+      layout or a guard directive is a wrong artifact rather than a wrong
+      message. A warning rather than an error because FPC warns
+      (`Illegal compiler directive`) and because refusing outright would break
+      every source using a vendor directive we can safely drop; PasDirectiveIsInert
+      holds the list of those, and is the reason this warning stays meaningful.
+      bug-p-an-unknown-compiler-directive-is-silently-ignored }
+    else if command <> '' then
+    begin
+      if dsign = Chr(0) then fname := '' else fname := dsign;
+      if PasDirectiveClass(command, name, dsign) = 1 then
+        WarnAt(SrcLine, 'compiler directive {$' + command + fname +
+               '} is recognised but not implemented — ignored, so the layout, '
+               + 'width or evaluation it asks for is NOT what this build does')
+      else if PasDirectiveClass(command, name, dsign) = 2 then
+        WarnAt(SrcLine, 'unknown compiler directive {$' + command + fname +
+               '} — ignored');
     end;
-    { Unsupported compatibility directives remain accepted comments. }
   end;
   if DebugTrace and (command <> '') then writeln('Pascal directive: ', command, ' ', name);
 end;

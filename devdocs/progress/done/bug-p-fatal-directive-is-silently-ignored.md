@@ -4,8 +4,8 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "{$FATAL text} and {$MESSAGE FATAL text} are silently ignored: the frontend handles warning/message/error and treats every other directive as a no-op, so a guard block that means 'stop, this configuration is unsupported' compiles clean and produces a binary that should not exist."
-status: backlog
-owner: unassigned
+status: done
+owner: frankS
 ---
 
 # `{$FATAL}` is silently ignored, so a guard that means "stop" does not
@@ -81,3 +81,44 @@ ticket does not simply say "add one line".
 Track P's: build the compiler, plus a repro asserting that a source containing
 `{$FATAL}` fails to compile and that its message reaches stderr. The negative
 control matters here — assert the failure, not merely that the compile stopped.
+
+## Fixed 2026-09-04 (frankS, Track P)
+
+`{$FATAL text}` and `{$STOP text}` now halt through `ErrorAt`, and
+`{$MESSAGE FATAL text}` routes by its first word instead of printing it. Both
+spellings measured before the fix on this tree: `{$fatal nope}` gave
+`ok: d1 [...]` exit 0, `{$message fatal nope}` gave
+`pascal26:1: message: fatal nope` exit 0.
+
+Three things the sketch in this ticket did not have:
+
+- **`fatal`/`stop`/`hint`/`note`/`info` joined the `messageText` CAPTURE**, which
+  is the trap the ticket flagged: the text is captured in exactly one place and
+  an arm added without its name there diagnoses with an empty message.
+- **`{$MESSAGE <severity>}` routing is its own function** (`PasMessageSeverity`),
+  because the answer to the ticket's open question is "yes, route it" and the
+  five severities are one list, not five arms. A first word that is NOT one of
+  the five stays part of the message — asserted, since that is the row that
+  would silently change `{$MESSAGE error in config}`.
+- **`ErrorAt(SrcLine, ...)`, not `Error(...)`.** `Error` prints `CurTok.Line`,
+  which during the lex pass is the last token BEFORE the directive: `{$error}`
+  on line 3 reported line 1, and these guards are written at the top of a file
+  where that is most misleading. The existing `{$ERROR}` arm had the same defect
+  and is fixed with it.
+
+Quoted message text (`{$message fatal 'stop right here'}`) has its delimiters
+stripped, and a trailing separator the capture used to append is trimmed —
+`{$fatal nope}` said `error: nope ` before.
+
+Tests: `test/test_pascal_fatal_directive.pas`,
+`test_pascal_message_fatal_directive.pas`, `test_pascal_message_severities.pas`,
+all wired into `test-core`, each asserting the FAILURE and the text rather than
+the absence of a binary. The line number is asserted too, including on the
+pre-existing `{$ERROR}` test.
+
+The ticket's "not investigated" tail is
+`bug-p-an-unknown-compiler-directive-is-silently-ignored`, fixed in the same
+commit — that one is the generator, this was one of its outputs.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.

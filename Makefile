@@ -13209,6 +13209,42 @@ test-core: $(COMPILER)
 	grep -q "uses 2097152 bytes of stack frame .* (warning promoted by -Werror)" $(TESTTMP)/test_warn_stack_frame_werr.log
 	! ./$(COMPILER) test/test_pascal_directive_error.pas $(TESTTMP)/test_pascal_directive_error26 > $(TESTTMP)/test_pascal_directive_error.log 2>&1
 	grep -q "requested failure" $(TESTTMP)/test_pascal_directive_error.log
+	# {$ERROR} reports the DIRECTIVE's line, not CurTok.Line (which during the
+	# lex pass is the last token before it -- a guard on line 3 said line 1).
+	grep -q "pascal26:3: error: requested failure" $(TESTTMP)/test_pascal_directive_error.log
+	# {$FATAL}: the directive whose whole purpose is to stop. Assert the FAILURE
+	# and the text; "no binary" alone is satisfied by a compile that died of
+	# anything else. bug-p-fatal-directive-is-silently-ignored
+	! ./$(COMPILER) test/test_pascal_fatal_directive.pas $(TESTTMP)/test_pascal_fatal_directive26 > $(TESTTMP)/test_pascal_fatal_directive.log 2>&1
+	grep -q "pascal26:10: error: this configuration is unsupported" $(TESTTMP)/test_pascal_fatal_directive.log
+	! test -e $(TESTTMP)/test_pascal_fatal_directive26
+	# The other spelling, which failed for a different reason: it matched the
+	# `message` arm and printed `message: FATAL ...`. Quotes are delimiters here.
+	! ./$(COMPILER) test/test_pascal_message_fatal_directive.pas $(TESTTMP)/test_pascal_message_fatal_directive26 > $(TESTTMP)/test_pascal_message_fatal_directive.log 2>&1
+	grep -q "pascal26:6: error: stop right here" $(TESTTMP)/test_pascal_message_fatal_directive.log
+	# The non-fatal severities, including the control that a first word which is
+	# NOT a severity stays part of the message.
+	./$(COMPILER) test/test_pascal_message_severities.pas $(TESTTMP)/test_pascal_message_severities26 > $(TESTTMP)/test_pascal_message_severities.log 2>&1
+	grep -q "warning: wtext" $(TESTTMP)/test_pascal_message_severities.log
+	grep -q "note: htext" $(TESTTMP)/test_pascal_message_severities.log
+	grep -q "message: plain ptext" $(TESTTMP)/test_pascal_message_severities.log
+	grep -q "note: barehint" $(TESTTMP)/test_pascal_message_severities.log
+	grep -q "note: barenote" $(TESTTMP)/test_pascal_message_severities.log
+	grep -q "warning: barewarning" $(TESTTMP)/test_pascal_message_severities.log
+	# The unknown-directive terminal arm. THE TOTAL IS THE SILENCE CONTROL: 19
+	# inert directives sit above the five that must warn, so a count above five
+	# means one of those started warning and the diagnostic is on its way to
+	# being switched off. bug-p-an-unknown-compiler-directive-is-silently-ignored
+	./$(COMPILER) test/test_pascal_directive_unknown_warns.pas $(TESTTMP)/test_pascal_directive_unknown_warns26 > $(TESTTMP)/test_pascal_directive_unknown_warns.log 2>&1
+	tools/expect_same.sh test_pascal_directive_unknown_warns.unknown "$$(grep -c 'unknown compiler directive' $(TESTTMP)/test_pascal_directive_unknown_warns.log)" "2"
+	tools/expect_same.sh test_pascal_directive_unknown_warns.unimpl "$$(grep -c 'recognised but not implemented' $(TESTTMP)/test_pascal_directive_unknown_warns.log)" "3"
+	tools/expect_same.sh test_pascal_directive_unknown_warns.total "$$(grep -c 'warning:' $(TESTTMP)/test_pascal_directive_unknown_warns.log)" "5"
+	grep -q "unknown compiler directive {\$$PACKRECRDS}" $(TESTTMP)/test_pascal_directive_unknown_warns.log
+	tools/expect_same.sh test_pascal_directive_unknown_warns "$$($(TESTTMP)/test_pascal_directive_unknown_warns26)" "ok"
+	# -Werror reaches it like any other warning, so a project can make an
+	# unrecognised directive fatal without a flag of its own.
+	! ./$(COMPILER) -Werror test/test_pascal_directive_unknown_warns.pas $(TESTTMP)/test_pascal_directive_unknown_warns_werr26 > $(TESTTMP)/test_pascal_directive_unknown_warns_werr.log 2>&1
+	grep -q "warning promoted by -Werror" $(TESTTMP)/test_pascal_directive_unknown_warns_werr.log
 	./$(COMPILER) test/test_pascal_conditional_include.pas $(TESTTMP)/test_pascal_conditional_include26
 	tools/expect_same.sh test_pascal_conditional_include26 "$$($(TESTTMP)/test_pascal_conditional_include26)" "$$(printf '42\n7')"
 	./$(COMPILER) test/test_directive_if_numeric.pas $(TESTTMP)/test_directive_if_numeric26
@@ -23026,6 +23062,62 @@ test-record-abi-mixed-link: $(COMPILER)
 	  { echo "test-record-abi-mixed-link: RED -- every target was skipped, so this gate measured NOTHING"; exit 1; }; \
 	test -z "$$PXX_REQUIRE_ALL_TARGETS" || test "$$ran" = "$$want" || \
 	  { echo "test-record-abi-mixed-link: RED -- PXX_REQUIRE_ALL_TARGETS is set, $$want asked for, $$ran ran"; exit 1; }
+
+.PHONY: test-packrecords-c-gcc-oracle
+test-packrecords-c-gcc-oracle: $(COMPILER)
+	@# {$$PACKRECORDS C} promises "lay this record out the way the platform C
+	@# compiler does", so the only instrument that can check it is the platform
+	@# C compiler. Two targets, because `c` is NOT a synonym for any fixed N:
+	@# i386 SysV caps an 8-byte scalar at 4 inside a struct and x86-64 does not,
+	@# so the two rows must DIFFER from each other as well as match their oracle.
+	@# A run that measured the wrong target therefore mismatches instead of
+	@# passing quietly.
+	@#
+	@# THE SECOND LINE IS THE POSITIVE CONTROL AND IT IS THE WHOLE TEST. pxx's
+	@# DEFAULT layout already agrees with gcc, so line 1 would match even if
+	@# {$$packrecords c} were accepted and discarded -- which is exactly how the
+	@# rest of this directive family used to fail. Only {$$packrecords 1}, whose
+	@# answer must differ, separates "the directive worked" from "the directive
+	@# was thrown away". feature-p-packrecords-c-directive
+	@overall=0; ran=0; want=0; skipped=0; \
+	for t in x86_64 i386; do \
+	  want=$$((want+1)); \
+	  case $$t in \
+	    x86_64) tgt=""; gccflag="-no-pie" ;; \
+	    i386)   tgt="--target=i386"; gccflag="-m32" ;; \
+	  esac; \
+	  if ! echo 'int main(void){return 0;}' | gcc $$gccflag -x c - -o $(TESTTMP)/pkc_probe_$$t >/dev/null 2>&1; then \
+	    echo "test-packrecords-c-gcc-oracle: SKIP $$t (gcc $$gccflag cannot build a hosted binary here)"; \
+	    skipped=$$((skipped+1)); continue; \
+	  fi; \
+	  if ! gcc -O0 $$gccflag -o $(TESTTMP)/pkc_oracle_$$t test/packrecords_c_oracle.c 2>$(TESTTMP)/pkc_$$t.err; then \
+	    echo "test-packrecords-c-gcc-oracle: ORACLE BUILD FAIL $$t"; tail -2 $(TESTTMP)/pkc_$$t.err; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  if ! ./$(COMPILER) $$tgt test/packrecords_c_pxx.pas $(TESTTMP)/pkc_pxx_$$t >$(TESTTMP)/pkc_$$t.perr 2>&1; then \
+	    echo "test-packrecords-c-gcc-oracle: PXX COMPILE FAIL $$t"; tail -3 $(TESTTMP)/pkc_$$t.perr; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  want_c="$$($(TESTTMP)/pkc_oracle_$$t)"; \
+	  got_all="$$($(TESTTMP)/pkc_pxx_$$t)"; \
+	  got_c="$$(printf '%s\n' "$$got_all" | sed -n 1p)"; \
+	  got_1="$$(printf '%s\n' "$$got_all" | sed -n 2p)"; \
+	  if [ -z "$$want_c" ] || [ -z "$$got_c" ] || [ -z "$$got_1" ]; then \
+	    echo "test-packrecords-c-gcc-oracle: FAIL $$t -- a side produced no row, so nothing was compared"; overall=1; ran=$$((ran+1)); continue; \
+	  fi; \
+	  if [ "$$got_c" != "$$want_c" ]; then \
+	    echo "test-packrecords-c-gcc-oracle: FAIL $$t {\$$packrecords c} disagrees with gcc"; \
+	    echo "    gcc: $$want_c"; echo "    pxx: $$got_c"; overall=1; \
+	  elif [ "$$got_1" = "$$got_c" ]; then \
+	    echo "test-packrecords-c-gcc-oracle: FAIL $$t -- {\$$packrecords 1} matched {\$$packrecords c}, so the directive was ignored and line 1 proves nothing"; \
+	    overall=1; \
+	  else \
+	    echo "test-packrecords-c-gcc-oracle: PASS $$t (c=$$got_c, control 1=$$got_1)"; \
+	  fi; \
+	  ran=$$((ran+1)); \
+	done; \
+	echo "test-packrecords-c-gcc-oracle: $$ran of $$want targets measured, $$skipped skipped"; \
+	test "$$overall" = "0" || { echo "test-packrecords-c-gcc-oracle: RED"; exit 1; }; \
+	test "$$ran" -ge 1 || \
+	  { echo "test-packrecords-c-gcc-oracle: RED -- every target was skipped, so this gate measured NOTHING"; exit 1; }
 
 test-c-abi-glibc-oracle: $(COMPILER)
 	@exp="$$(printf 'ints 11 22 33 44 55 66\nmixed 7 2.50 9\nwide 1 1.50 2 2.50 3')"; \
