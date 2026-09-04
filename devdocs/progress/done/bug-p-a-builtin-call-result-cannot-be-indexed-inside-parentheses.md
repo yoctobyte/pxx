@@ -2,7 +2,7 @@
 track: P
 prio: 40
 type: bug
-status: open
+status: done
 found: 2026-09-01
 found-by: frankA
 owner: ""
@@ -96,3 +96,63 @@ folder and never was — so the comment asserted the limitation was tracked whil
 nothing tracked it. Repointed at this ticket, which is the one you filed from
 that same workaround. The technical claim in that comment was re-measured before
 touching it and still holds; only the citation was false.
+
+## Log
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+
+---
+
+## 2026-09-04 (frankA) — FIXED, and "inside parentheses" was never the boundary
+
+**The summary's boundary is wrong and the ticket is two defects, one of which
+nobody had seen.** Measured across four syntactic contexts:
+
+| context | before |
+| --- | --- |
+| `cc := ParamStr(0)[1];` assignment RHS | **accepted — and silently wrong** |
+| `cc := (ParamStr(0)[1]);` parenthesised | rejected |
+| `WriteLn(ParamStr(0)[1]);` argument | rejected |
+| `if ParamStr(0)[1] = c then` if-condition | rejected, `expected 'then' before '['` |
+
+The `if` row settles it: **no parentheses anywhere, same refusal.** The axis is
+assignment-RHS versus everything else, not parenthesisation.
+
+**And the accepting row miscompiled.** `cc := ParamStr(0)[1]` stored the low
+byte of the string POINTER — 46 read the ordinary way and 224 through the
+subscript, in one program, a different wrong character on every run (ASLR).
+`PXXDBG=a.ast` shows why: no AN_INDEX node in the tree at all. The subscript was
+not misparsed, it was **discarded**.
+
+### The mechanism, which is a second ticket's worth
+
+The `tkArgStr` arm builds ParamStr's node and returns with `[` still in the
+token stream — a probe confirmed it does so in BOTH contexts, so the arm is the
+common cause and the difference is entirely downstream. An argument list has no
+catch-all and refused; `ParseStatementAST`'s catch-all `else` skipped to the `;`
+in silence. That catch-all also accepted `[1];`, `^;`, `.Foo;`, `);` and `,;` as
+whole statements, and `ParamStr(0)[;` compiled clean.
+
+Both fixed in `ff2495a55`:
+
+- the catch-all reports `a statement cannot start with '<tok>'`;
+- the `tkArgStr` arm routes a following `[` into `GenMakeStringValueIndex`, the
+  helper the literal, user-function and `Copy` paths already end at — **not** a
+  sixth hand-rolled walker.
+
+**The catch-all's first run against real source found three dead statements in
+shipped RTL** — orphaned argument tails of debug `WriteLn(` heads deleted in
+`1f8bb3e75` (2026-07-27), sitting in `compiler/builtin/pylib.pas` for five
+weeks, inert and invisible. Removed in the same commit.
+
+### Corrections to this ticket's own body
+
+- The 2026-09-01 note's *"four of the five stop rejecting the moment `uses
+  sysutils` shadows the builtin"* is right, and its conclusion that **ParamStr
+  is the row to gate on** was the useful part — `test/test_paramstr_index.pas`
+  gates on exactly that, for exactly that reason.
+- `compiler/compiler.pas:1841`'s workaround can now be written directly. Left
+  as found: it is correct code and rewriting it is not this ticket's business.
+
+All five contexts now match fpc 3.2.2, and the `.expected` IS fpc's own output.
+Positive control: pinned rejects the test at line 26 and silently miscompiles
+the assignment row.

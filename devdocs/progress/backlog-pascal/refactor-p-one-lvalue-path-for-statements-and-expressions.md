@@ -138,3 +138,57 @@ body above worries about — because there was no resolution step to protect, on
 an `Exit` to remove. Two arms down by the same move (the record-cast twin in
 `done/` was the first), which is evidence the unification is tractable
 incrementally rather than as one change.
+
+---
+
+## 2026-09-04 (frankA) — the 25-shape sweep's divergence list is now EMPTY
+
+The 2026-09-02 note left the sweep at 24/25 and said *"the ticket is not stale —
+two lvalue parsers is still the design flaw — but the risk half of its case is
+spent, and what is left is tidiness plus one loud refusal."*
+
+**That one loud refusal is fixed** (`d9604ea59`,
+[[bug-p-a-class-cast-cannot-index-a-default-property-as-an-assignment-target]]),
+so the list reads:
+
+| shape | |
+| --- | --- |
+| string-alias cast, indexed | fixed 2026-09-02 |
+| class-cast default-property store | **fixed 2026-09-04** |
+
+**25 of 25 target shapes now match fpc 3.2.2.**
+
+### What that does to this ticket's case, stated plainly
+
+The remaining argument is **purely** "two lvalue parsers is a design flaw" —
+there is no measured divergence left to point at, and no known program that
+compiles wrong because of the duplication. Whoever ranks this should rank it as
+a refactor on its own merits and not on a defect backlog, because there isn't
+one attached any more.
+
+Two things that push slightly the other way and are worth weighing:
+
+1. **The fix continued the pattern this ticket's own history calls tractable.**
+   Like the two before it, it DELETED a special case rather than adding an arm:
+   the class-cast target arm already hands its suffix to
+   `ParseClassRecordSelectors`, and the bug was that the shared walker's
+   default-property arm was incomplete. Three arms down by the same move, none
+   of which needed the flag-passing hand-off the body worries about.
+2. **The body's central worry has not been tested and is now cheaper to test.**
+   It says the hand-off needs an "this is an assignment target" flag because the
+   expression parser *"resolves a trailing `.name` as a field/method/property
+   and may CALL it"*. In practice the shared walker answers that question itself
+   — the NAMED-property arm peeks past the bracket group for `:=` and the
+   DEFAULT arm now does too. If the walker can always decide locally, **the flag
+   is not needed and the hand-off is smaller than this ticket assumes.** That is
+   the single measurement that would most change the estimate, and it is one
+   afternoon.
+
+### The harness
+
+The body says *"rebuild it from the shape list above"*. Still true, and there
+are now three permanent rows in `test/` covering what used to be its findings:
+`test_alias_cast_assign_target.pas`, `test_cast_default_property_target.pas`,
+and the string-alias index test. Those are regression rows, not the sweep — the
+sweep is still a before/after instrument and still worth rebuilding for the
+refactor itself.
