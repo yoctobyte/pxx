@@ -80,3 +80,38 @@ class-enumerator `for X in C` wraps its enumerator's `Free` and never asked for
 the runtime either; such a program does not compile on pin v403. Guarded now by
 `test/test_forin_enumerator_free_without_try.pas`.
 - 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 203b8a8e8.
+
+## Breadth after the fix — five cross targets, every for-in test
+
+`gate.sh quick` is x86-64 and that is the instrument this defect walked past, so
+the fix was measured against the population it changes: every `test/*.pas`
+containing a `for X in`, built for each cross target and diffed against the
+x86-64 build of the same source. `PXX_ALLOW_FULL_SUITE=1` lifted for exactly
+that reason.
+
+| target | ok | diff | skipped | total | mechanism control |
+| --- | --- | --- | --- | --- | --- |
+| i386 | 33 | 1 | 11 | 45 | FIRES |
+| riscv32 | 32 | 2 | 11 | 45 | FIRES |
+| xtensa | 25 | 1 | 19 | 45 | FIRES |
+| aarch64 | 34 | 0 | 11 | 45 | FIRES |
+| arm32 | 33 | 1 | 11 | 45 | FIRES |
+
+Every total is 45 — the precondition that the sweep ran the whole population,
+not a subset that happened to build. The single `diff` on four rows is
+`POSCTL_must_differ`, a planted row printing `SizeOf(Pointer)`, which must
+report DIFF. riscv32's second is `lib_math_fast_tolerance`, **measured to differ
+on pin v403 as well** — pre-existing, not this change.
+
+**THE PLANTED CONTROL CANNOT FIRE ON aarch64 AND I NEARLY BANKED ITS `diff=0`
+ANYWAY.** `SizeOf(Pointer)` is 8 on the oracle and 8 on aarch64: the expected
+value equals the failure value, so that row passes whether or not the comparison
+works. The `mechanism-control` column is the repair — target-independent, it
+takes a pair the sweep just compared EQUAL, perturbs one byte and asserts the
+comparison reports it. A control drawn from a 32-bit assumption is not a control
+for a 64-bit target.
+
+The 11 skips are named and accounted for: two `*_fail` negative tests, two that
+do not build on x86-64 **identically on pin v403** (`test_auto_locals`,
+`test_fgl_use`), and six stackful-generator programs, which are x86-64 only by
+construction. xtensa's extra 8 are units it does not carry.
