@@ -100,4 +100,4 @@ filed as `feature-p-packenum-and-h-minus-for-the-fpc-compiler-corpus`. Those are
 the arm profile's NEXT wall, not this one.
 
 ## Log
-- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-04 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit b4017f96d.
