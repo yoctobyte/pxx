@@ -5249,3 +5249,115 @@ Gate: `gate.sh quick` GREEN before the commit with the **FPC seed canary RUNNING
 not SKIP** (uncommitted `compiler/**`); `make compiler/pascal26` **`converged
 after 1 round(s)`**, binary `1f82edbd36ad`; **all four Pascal generator tests
 byte-identical in output to pin v403.**
+
+---
+
+## `7e271ff7d` — the for-in teardown leak. Two fixes, and THREE GREEN PROBES THAT COULD NOT HAVE BEEN RED
+
+**Fix one, the obvious one:** the desugar ran `SlFree`/`CoFree` as a **trailing
+statement** after the loop, so a `raise`, an `exit` or a `break` walked past it.
+Now `AN_TRY_FINALLY` — **which the class-enumerator for-in two functions down the
+same file has always done for its `Free`.** *The correct sibling was in the same
+file the whole time.*
+
+```
+stackless raise escapes for-in   0.936 blocks/raise      -> FLAT live=2
+stackful  raise escapes for-in   4.40 kB RSS/raise       -> FLAT 392 kB
+exit out of the loop             1.0 blocks/call frees=0 -> FLAT live=2
+break out of the loop            same                    -> FLAT live=2
+```
+
+**Fix two: wrapping alone did NOT fix `exit`.** The IR was right —
+`exc_leave; load; arg; call SlFree; terminate` — **and the free still did not
+happen.** The discriminator was **one field in the dump**: the normal-path and
+handler-path calls carried `ival=1`, **the exit-path call carried `ival=0`.**
+`IRLowerCleanupToDepth` — the path `exit`/`break`/`continue` take out of a
+try/finally — lowered the finally body and **never called
+`IRMarkStatementNode`**, which **both** arms of the `AN_TRY_FINALLY` lowering do.
+**An unmarked `IR_CALL` is "an expression somebody wants the value of", and a call
+whose result nothing consumes is not emitted.** Silent, early-exit path only.
+
+### THE SHAPE: a probe written in the source language samples the COMPLEMENT of the bug
+
+**A source-level `try`/`finally` cannot reach that bug, by construction.**
+`ParseTryStatementAST` always hands over an `AN_SEQ`, and sequence lowering marks
+its own statements. **Only a DESUGAR that passes a single call node directly gets
+an unmarked finalizer.**
+
+Before finding the cause, frankb-78 wrote three probes — `exit`, `break` and
+`continue` past a **value-returning** finalizer — **and all three were green. They
+were green CORRECTLY.**
+
+> **The population was "try/finally with an early exit". The defect lives only in
+> the compiler-generated corner of it, and no probe written in Pascal source can
+> be in that corner.**
+
+This is **not** collides-with-the-default, and **not** "drawn from the wrong
+population" in the usual sense — **the probes were drawn from the RIGHT population
+and the defect occupies a subset that hand-written source cannot enter.**
+
+> **When the thing under test is a code path only the COMPILER can construct, a
+> probe written in the source language samples the complement of the bug.**
+
+And the tell, which is the part that generalises furthest: **the three probes were
+each a refinement of the last** — value-returning, then while-nested, then
+break/continue — **which reads like closing in and was actually walking along the
+outside.** *Refinement feels like convergence and is not evidence of it.*
+
+### What is NOT fixed — measured, and the v1 restriction as a CONSTRAINT this time
+
+A **stackless consumer that yields inside the loop** keeps the trailing free: the
+wrapped `yield` would sit in a try/finally and **`SLCheckEligible` rejects exactly
+that**, because the flattener has no arm to split a state machine across a finally
+frame. **The same v1 restriction that was the PROOF in `a090fa76d` is the
+CONSTRAINT here** — the same fact, load-bearing in opposite directions two
+commits apart.
+
+Wrapping unconditionally turned `for v in Inner(n) do yield v * 10` **from working
+code into a COMPILE ERROR.** Residual measured: **0.999 instances per escaping
+raise — exactly one**; the outer instance is freed, the inner is not. Closing it
+is **the same job as lifting the v1 restriction, which is a feature, not this
+bug.** The guard is `CurProcIsStackless` and **not** `CurProcIsGenerator`
+**deliberately**: a *stackful* consumer that yields in the loop is fine, because
+`CoSwitch` saves and restores `BSS_EXC_TOP` per context.
+
+### A GUARD SIZED AROUND THE LEAK NEXT DOOR CANNOT SEE ITS OWN COME BACK
+
+The residual was kept **out** of the new test on purpose — including it would push
+the bound from 50 into the thousands.
+
+> **And that is exactly what `test_generator_raise_past_managed_temp`'s bound of
+> 3000 WAS** — sized around *this* ticket's leak while it was still open.
+
+**Tightened to 50 in the same commit**, positive control `live=1805`. *A bound
+inflated to accommodate a known neighbouring leak becomes permanently blind once
+that leak closes, and nothing prompts the revisit — the test still passes.* Going
+back to tighten a bound set two hours earlier is the move almost nobody makes.
+
+### The new test, and why `expect_same` is the wrong instrument for it
+
+Five rows: stackless raise, stackful raise, `exit`, `break`, and **`nest` — a
+must-not-move row that fails as a COMPILE ERROR** if anyone makes the wrap
+unconditional.
+
+**`expect_same` returns 0 on the pre-fix binary for every single row.** Only the
+census separates them, **which is why `assert_no_leak` is the instrument.**
+Positive control `live=8002` against a bound of 50.
+
+### Process notes
+
+The gate went **RED first** on the AST slot-write census, over its own new
+`ASTRight[tryNode] := callFree` — **that guard doing its job.** `--update`,
+re-ran, GREEN with the FPC canary running. **Three stash/rebuild cycles** for
+before/after measurement and the binary came back **byte-identical each time**
+(`1f82edbd36ad` before, `57c477b8f979` after) — **no seed drift.**
+
+### Next, with the staleness named in advance
+
+`bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells` (track N,
+prio 35), last in this group. **Its body is now partly stale** — it says
+`EmitManagedLocalCleanup` *"exits early for a stackless routine"*, which
+`7946aa28f` replaced with a per-symbol predicate. It will **re-measure the 2.5 MB
+/ 6.5 MB numbers before touching anything.** *Noticing that your own earlier
+commit invalidated a ticket's premise, before working it, is the cheap half of the
+staleness problem.*
