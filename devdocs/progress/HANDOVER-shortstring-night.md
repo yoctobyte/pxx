@@ -4074,3 +4074,88 @@ read as a compiler defect and was **`unknown option: -o`** — pxx takes
 produce the same "FAILED" string when the command's own stderr is thrown away.
 **Both errors were caught by looking at what the failure would be if it were
 something else, and neither would have been caught by re-reading the conclusion.**
+
+---
+
+## The variadic-aggregate arc, closed on all three targets
+
+`2aedcd004` aarch64 · `a9213e770` riscv32 · `96358226d` arm32 · `47e83f475`
+logbook. All four verified on origin; ticket in `done/`.
+
+### Three targets, three rules — and TWO of them differ from that same target's own FIXED-parameter rule
+
+- **aarch64** — variadic rule *is* the fixed rule, unchanged, HFAs included.
+- **arm32** — by value at **every** size, no indirect class at all, split between
+  `r1..r3` and the stack.
+- **riscv32** — by value up to 2xXLEN, **indirect above**, `{double,double}`
+  included, where its own *fixed* rule says `fa0,fa1`.
+
+So "what does this target do for a fixed parameter" is not a safe prior for what
+it does for a tail one, on two of three targets. Each got **one oracle both
+halves ask**, for the reason the aarch64 third measured.
+
+### The riscv32 SECOND defect — the one to keep
+
+It applied **no slot alignment anywhere**: `v(1, 2.5, 77)` packed the double into
+`a1:a2` where clang uses `a2:a3`. That is wrong for a plain `double` and an
+`int64` **exactly as much as** for an 8-aligned record — so **fixing only the
+record half would have left the scalar sibling wrong in the same function.**
+Textbook `normalise-dont-special-case`: the fix reads alignment **from the
+oracle** rather than asking whether the argument happens to be 64-bit.
+
+**And a `not ProcExternal` gate was dropped from that arm.** It made the
+**calling convention depend on whether the linker had resolved the callee** —
+precisely the boundary the ticket was about. Its effect: a `double` handed to an
+external variadic function was passed as one word. *A link-time property was
+deciding an ABI question*; worth remembering as a shape, because nothing about
+the symptom points at the gate.
+
+### arm32 needed CLASSIFICATION ONLY, and that was not expected
+
+Its cdecl path already builds **one ascending argument block** and then loads
+`r0..r3` out of it — so the register window is a **READ of the block, not a
+partition of it**, and the split emits itself. `__pxx_va_arg_cross32`'s straddle
+arm already assembled a reg/stack-spanning argument and is **size-driven**, so a
+24-byte struct with 12 bytes in registers assembles the way the 8-byte scalar it
+was written for did. **Two mechanisms built for other reasons turned out to be
+the general case.** What was actually missing: both passes counted a tail struct
+as **the four bytes of its address**.
+
+> **The amount of code each target needed bore no relation to how different its
+> rule looked on paper — arm32's rule is the most unlike the other two and needed
+> the least.** Keep this against the instinct to budget effort by how exotic a
+> spec reads.
+
+The filed-alongside note held: **`ABIA64ArgPlace` genuinely could not be ported
+to arm32**, because all-or-nothing placement cannot express a split. The ticket
+said so before either fix existed.
+
+### Measurement, and what the gate was
+
+Nine placement rows across the two new targets, **all against clang's call site
+with the trailing register or stack offset in every row**, pxx's own disassembly
+for its column. Both variadic tests **byte-identical to the gcc oracle on all
+five wired targets**, so the unaffected targets are **the control that a shared
+cparser arm did not move them**. All three tests keep
+`REGRESSION GUARDS AND NOT THE PROOF` in their headers.
+
+Gate: `make compiler/pascal26` converged each time; `gate.sh quick` GREEN with
+the **FPC seed canary RUN before each commit** (it only runs while `compiler/**`
+is dirty — running it *before* committing is the whole point). Not full tiers —
+instead the **riscv32 shard (170 jobs)** and **arm32 shard (182 jobs)** at full
+depth, each GREEN **on the exact on-disk binary**, which is where an ABI change
+on that target shows.
+
+### The `exit_observable` handling, corrected mid-sentence and worth copying
+
+Reported first as "untouched by these two," then corrected in the same breath:
+`cvariadic_slot_align.c` adds five more stdout rows, so the share moves again —
+**"I did not re-measure it, and say so rather than quote a number I don't
+have."** Stating the absence of a measurement instead of reaching for the last
+number is the correct move; a stale share quoted with confidence is how the cap
+argument would have rotted.
+
+### Sampling depth, stated by the session with the most to gain from overstating it
+
+`2aedcd004` has a GREEN **native** and no full; `a9213e770` and `96358226d` have
+**nothing at all** yet. Not asking for a pin. **v403 stands.**
