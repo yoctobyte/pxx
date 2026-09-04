@@ -11154,6 +11154,14 @@ test-core: $(COMPILER)
 	tools/expect_same.sh test_u64_to_double26 "$$($(TESTTMP)/test_u64_to_double26)" "$$(printf '%s\n' assign-ok field-ok cmp-ok round-ok small-ok signed-ok)"
 	./$(COMPILER) test/test_qword_literal_binop.pas $(TESTTMP)/test_qword_lit26
 	tools/expect_same.sh test_qword_lit26 "$$($(TESTTMP)/test_qword_lit26)" "$$(printf '%s\n' 18085043209385476867 4210752250 50529028 18085043209385476867 cmp-ok neg-ok)"
+	# ...and the same question one step wider: a DECIMAL literal above Int64max is
+	# an unsigned value, and nine of these seventeen rows printed a plausible wrong
+	# number on pin v403 (0, a negative, FALSE). The last four rows are controls
+	# that were already right -- the hex two DIVERGE from the decimal spelling on
+	# purpose, because FPC types $8000000000000000 signed as well.
+	# bug-p-qword-div-by-a-literal-above-2-63-is-signed
+	./$(COMPILER) test/test_qword_wide_literal_div.pas $(TESTTMP)/test_qword_widelit26
+	tools/expect_same.sh test_qword_widelit26 "$$($(TESTTMP)/test_qword_widelit26)" "$$(printf '%s\n' 1 9223372036854775807 1 6148914691236517205 4611686018427387904 2 3689348814741910323 1229782938247303441 gt-ok qgt-ok 1 3 -4611686018427387904 0 -1 18446744073709551615 1)"
 	./$(COMPILER) test/test_shift_operand_width.pas $(TESTTMP)/test_shift_ow26
 	tools/expect_same.sh test_shift_ow26 "$$($(TESTTMP)/test_shift_ow26)" "$$(printf '%s\n' 2147483648 2147483648 36028797014769664 -4294967296)"
 	./$(COMPILER) test/test_overflow_checks_qplus.pas $(TESTTMP)/test_qplus26

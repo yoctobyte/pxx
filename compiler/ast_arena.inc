@@ -665,6 +665,27 @@ begin
     Result := DynTargetIsRereadable(ASTLeft[node]);
 end;
 
+{ An integer literal too wide for Int64, carrying its digit text.
+
+  The tyInt64 test is load-bearing: a CHAR literal is also an AN_INT_LIT with a
+  char-pool span (the case-of-string label path keys off exactly that), so
+  "has a span" alone would misread `'a'` as a wide number. }
+function IsWideIntLit(node: Integer): Boolean;
+begin
+  { tyPromoInt64 is the NilPy typing of the same wide literal (ints are
+    arbitrary precision there); the span still carries the exact digits. }
+  IsWideIntLit := (ASTKind[node] = AN_INT_LIT) and (ASTSLen[node] > 0) and
+                  ((ASTTk[node] = Ord(tyInt64)) or (ASTTk[node] = Ord(tyPromoInt64)));
+end;
+
+{ `-<wide literal>`. The digit text the lexer preserved carries NO sign, and
+  ASTIVal holds only the wrapped reading, so the negation has to be applied to
+  the parsed bignum rather than to either of those. }
+function IsWideNegLit(node: Integer): Boolean;
+begin
+  IsWideNegLit := (ASTKind[node] = AN_NEG) and IsWideIntLit(ASTLeft[node]);
+end;
+
 function IsConstStrLitNode(n: Integer): Boolean;
 { A compile-time string-or-char literal (foldable in an ESP tyString concat). }
 begin

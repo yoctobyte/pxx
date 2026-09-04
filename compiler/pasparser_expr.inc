@@ -9119,6 +9119,44 @@ end;
   negative. Retype the LITERAL instead of teaching the rule about literals: one
   "unsigned iff both operands are" rule then serves the result type and all six
   backends, with no second path to keep in step (normalise-dont-special-case). }
+{ A DECIMAL literal above Int64max is an UNSIGNED value, and this is where that
+  is written down.
+
+  The lexer keeps the digit text of any literal it could not fit in an Int64
+  (ASTSLen > 0), because the wrapped 64-bit reading is still the right QWord
+  value and only the text says which. But the node is TYPED tyInt64, so every
+  operation that reads signedness reads it wrong: `18446744073709551615 div 5`
+  answered 0 against FPC's 3689348814741910323, and
+  `9223372036854775808 > 1` answered FALSE.
+
+  ASTIVal alone cannot tell this literal from a genuinely negative one -- both
+  are negative Int64s -- which is why the guard in
+  NormalizeUnsignedLiteralOperand below is correct as written and had to be
+  answered HERE instead, from the fact the lexer already recorded.
+
+  Not done at the literal's CREATION, where it would look tidier: IsWideIntLit
+  keys on tyInt64, and every promotable-int path (the digit text reaching
+  PXXPromoFromStr, the variant boxing, the Write arm) asks it. Retyping every
+  wide literal up front would make that predicate silently stop matching --
+  those sites do not error, they take the other branch -- so the retag happens
+  only on the two arms that actually read signedness.
+
+  tyPromoInt64 is excluded for the same reason: that is NilPy's arbitrary-
+  precision typing of the same literal and it owns its own arithmetic.
+  Past UInt64 there is no correct 64-bit reading at all, so those keep tyInt64
+  and reach ir.inc's out-of-range diagnostic at the point of use.
+  bug-p-qword-div-by-a-literal-above-2-63-is-signed }
+procedure NormalizeWideUnsignedLiteral(lit: Integer);
+begin
+  if CProgramMode then Exit;
+  if lit < 0 then Exit;
+  if not IsWideIntLit(lit) then Exit;
+  if ASTTk[lit] = Ord(tyPromoInt64) then Exit;
+  if DecDigitsExceed(GetTokenStrFromRaw(ASTSOffset[lit], ASTSLen[lit]),
+                     '18446744073709551615') then Exit;
+  ASTTk[lit] := Ord(tyUInt64);
+end;
+
 procedure NormalizeUnsignedLiteralOperand(typed, lit: Integer);
 begin
   if CProgramMode then Exit;
@@ -9445,6 +9483,11 @@ begin
     end
     else if (op = tkDiv) or (op = tkMod) then
     begin
+      { the wide literal answers for ITSELF first -- with two literal operands
+        there is no unsigned-typed operand for the pair rule to key on, and
+        `9223372036854775808 div 2` divided signed }
+      NormalizeWideUnsignedLiteral(left);
+      NormalizeWideUnsignedLiteral(right);
       NormalizeUnsignedLiteralOperand(left, right);
       NormalizeUnsignedLiteralOperand(right, left);
       ASTTk[node] := Ord(TypeDivideResultPair(IntToTypeKind(ASTTk[left]),
@@ -10239,6 +10282,11 @@ begin
       if IsNodePChar(left) then RetagCharLitAsStr(right)
       else if IsNodePChar(right) then RetagCharLitAsStr(left);
     end;
+    { ...and, as at div/mod, a literal wider than Int64 is unsigned on its own
+      authority: `9223372036854775808 > 1` answered FALSE because BOTH operands
+      were literals and neither could tell the pair rule anything. }
+    NormalizeWideUnsignedLiteral(left);
+    NormalizeWideUnsignedLiteral(right);
     NormalizeUnsignedLiteralOperand(left, right);
     NormalizeUnsignedLiteralOperand(right, left);
     { A PChar compared against a string or a char compares CONTENTS, as in FPC.

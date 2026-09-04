@@ -1355,26 +1355,11 @@ end;
 
   Stage 4 (check elision) is what inlines the fast path back into the caller. }
 
-{ An integer literal too wide for Int64, carrying its digit text.
-
-  The tyInt64 test is load-bearing: a CHAR literal is also an AN_INT_LIT with a
-  char-pool span (the case-of-string label path keys off exactly that), so
-  "has a span" alone would misread `'a'` as a wide number. }
-function IsWideIntLit(node: Integer): Boolean;
-begin
-  { tyPromoInt64 is the NilPy typing of the same wide literal (ints are
-    arbitrary precision there); the span still carries the exact digits. }
-  IsWideIntLit := (ASTKind[node] = AN_INT_LIT) and (ASTSLen[node] > 0) and
-                  ((ASTTk[node] = Ord(tyInt64)) or (ASTTk[node] = Ord(tyPromoInt64)));
-end;
-
-{ `-<wide literal>`. The digit text the lexer preserved carries NO sign, and
-  ASTIVal holds only the wrapped reading, so the negation has to be applied to
-  the parsed bignum rather than to either of those. }
-function IsWideNegLit(node: Integer): Boolean;
-begin
-  IsWideNegLit := (ASTKind[node] = AN_NEG) and IsWideIntLit(ASTLeft[node]);
-end;
+{ IsWideIntLit / IsWideNegLit used to sit here. They moved to ast_arena.inc so
+  the PARSER can ask them too: pasparser_expr.inc is included before this file,
+  and the div/mod and comparison arms need "is this literal wider than Int64"
+  to decide signedness (bug-p-qword-div-by-a-literal-above-2-63-is-signed).
+  They read only ASTKind/ASTSLen/ASTTk/ASTLeft, which is ast_arena's ground. }
 
 function PromoPayloadOffset(tk: TTypeKind): Integer;
 begin

@@ -4209,7 +4209,8 @@ begin
     signed the moment either operand is -- `LongWord div SmallInt` is signed even
     though the unsigned side is WIDER, because Int64 holds both. A positive
     literal divisor is normalised to unsigned before this (see
-    NormalizeUnsignedDivLiteral), so `q div 10` stays unsigned. }
+    NormalizeUnsignedLiteralOperand, and NormalizeWideUnsignedLiteral for one
+    above Int64max), so `q div 10` stays unsigned. }
   Result := (not TypeSigned(dividend)) and (not TypeSigned(divisor));
 end;
 
