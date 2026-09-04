@@ -113,4 +113,4 @@ stays; that row's Makefile comment still described the frontend defect as live
 and is corrected in the same commit.
 
 ## Log
-- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit PENDING-COMMIT.
+- 2026-09-05 — resolved; this names the commit that carried the resolve, which is not always the one that carried the change — commit 97788cf59.
