@@ -12941,6 +12941,16 @@ test-core: $(COMPILER)
 	@# `viaptrvar=` is the row saying the two routes agree, not that one moved.
 	./$(COMPILER) test/test_inline_ptr_cast_low_bound.pas $(TESTTMP)/test_iplb26
 	tools/expect_same.sh test_iplb26 "$$($(TESTTMP)/test_iplb26)" "$$(cat test/test_inline_ptr_cast_low_bound.expected)"
+	# A `^` after a FIELD of a call result must use the FIELD's pointee. The
+	# suffix loop in ApplyCallResultPtrSuffix answered every `^` from the CALL's
+	# pointee, so `GetP^.pc^` printed 90 for 'Z' (silent) and `GetP^.pi^ := 9`
+	# was refused as "cannot assign Integer to record" (loud). The loud one
+	# MASKS the silent one on the old binary -- the pinned compiler stops at the
+	# store and never reaches the Char row -- so the `viavar` rows are here as
+	# the control that the same chain off a plain variable was right all along.
+	# Whole output compared, byte-identical to fpc 3.2.2 -Mdelphi -O1.
+	./$(COMPILER) test/test_callres_field_deref.pas $(TESTTMP)/test_cfd26
+	tools/expect_same.sh test_cfd26 "$$($(TESTTMP)/test_cfd26)" "$$(cat test/test_callres_field_deref.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; tools/expect_same.sh cmath_sign_bits26-rc "$$?" "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

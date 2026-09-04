@@ -5064,6 +5064,8 @@ var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok, tmpN: Integer; fieldNam
     remDepth, ptrBaseTk, ptrBaseRec: Integer;
     dpeTk, dpeRec, dpeCap: Integer;            { `f()^[i]` element, from DerefPtrArrayElem }
     epDepth, epBaseTk, epBaseRec: Integer;     { …and that element's OWN pointer levels }
+    movedOffCall: Boolean;                     { has the walk left the call node? }
+    rdRem, rdBaseTk, rdBaseRec: Integer;       { …then the shape comes from ResolveDerefShape }
 begin
   tk := Procs[procIdx].RetType;
   recId := REC_NONE;
@@ -5107,6 +5109,7 @@ begin
 
   if (tk = tyPointer) and (elemTk <> Ord(tyUnknown)) then
   begin
+    movedOffCall := False;
     while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do
     begin
       if CurTok.Kind = tkCaret then
@@ -5114,6 +5117,40 @@ begin
         Next;
         sub := AllocNode(AN_DEREF);
         ASTLeft[sub] := node;
+        { EVERY `^` in this loop used to be answered from elemTk/elemRec -- the
+          CALL's own pointee, captured once before the loop. That is right for
+          the first `^`, which really does deref the returned pointer, and wrong
+          for every later one, because by then `node` is a FIELD or an ELEMENT
+          and has a pointee of its own. `GetP^.pc^` printed 90 instead of 'Z'
+          (the Char came back as the call's element kind, so it rendered as an
+          ordinal) and `GetP^.pi^ := 9` was refused outright with "cannot assign
+          Integer to record" -- the store's target node was stamped with the
+          record the call points AT. Both correct through the same chain off a
+          plain variable (`vp^.pc^`, `vp^.pi^ := 7`), which is what says the
+          opener is the variable and not the shape.
+
+          This is the same defect ResolveDerefShape already fixed in the
+          pointer-alias copy in pasparser_expr.inc, where the private loop
+          answered every `^` from the CAST's alias. Fifth copy of the postfix
+          walk, same hole, found by the escape census in
+          refactor-p-three-hand-rolled-postfix-loops rather than by a report:
+          this was the one loop of five reaching neither ResolveDerefShape nor
+          ParseClassRecordSelectors.
+
+          Scoped to the walked case on purpose. The entry-time alias stays the
+          answer for the first `^` -- that is the shape it was measured on, and
+          the ticket asks for this loop to be converged one arm at a time. }
+        if movedOffCall then
+        begin
+          rdRem := 0; rdBaseTk := Ord(tyUnknown); rdBaseRec := REC_NONE;
+          ResolveDerefShape(node, tk, recId, rdRem, rdBaseTk, rdBaseRec);
+          ASTSOffset[sub] := rdRem;
+          ASTSLen[sub] := rdBaseTk;
+          if rdBaseRec > 0 then ASTIVal[sub] := rdBaseRec;
+          ASTTk[sub] := StrValTk(tk);
+          node := sub;
+          Continue;
+        end;
         tk := IntToTypeKind(elemTk); recId := elemRec;
         if remDepth > 0 then
         begin
@@ -5231,6 +5268,7 @@ begin
         ASTTk[sub] := Ord(tk);
         Next;
         node := sub;
+        movedOffCall := True;
       end;
     end;
   end

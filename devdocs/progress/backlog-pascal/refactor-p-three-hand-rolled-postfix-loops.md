@@ -195,3 +195,88 @@ of one loop" oversells the symmetry. Two of them are barely more than a
 Five in Pascal plus two in NilPy (`pyparser.inc:48234`, `:48380`), unchanged
 since the 2026-09-04 recount. The body's "three plus a fourth" remains wrong;
 the title still says three.
+
+---
+
+## 2026-09-05 (frankA, later) — the escape census above COUNTED COMMENTS, and the corrected table found a second live bug
+
+**Retraction first.** The table in the section above is wrong. It was built by
+grepping each loop body for the names of shared routines, and a Pascal loop body
+contains prose: `{ ... }` comments naming the very routines the code no longer
+calls. Two of the six escapes credited to `expr:7094` were comment matches, and
+one of them — **`NodePtrElem` — has not existed since 2026-09-01**, when it was
+deleted (the note sits at `pasparser_lval.inc:5638`, explaining at length that it
+was measured as the poorer walk and removed). The census reported a call to a
+routine that is not in the tree.
+
+This is `a-grep-count-is-not-a-set-count` exactly: *prose mentioning a marker
+matches too.* The instrument did not error. It answered about the file's TEXT
+while being read as an answer about its CALLS.
+
+Re-derived with `{...}`, `(*...*)` and `//` stripped before matching, at
+`e3e654416`:
+
+| loop | escapes reached |
+| --- | --- |
+| `pasparser_expr.inc:7094` (pointer-alias cast, 212 lines) | **6** — `ParseClassRecordSelectors`, `ResolveDerefShape`, `FoldDerefArrayLowBound`, `ParseMetaclassMemberTail`, `ParseNDSubscriptTail`, `BuildPartialNDRowIndex` |
+| `pasparser_lval.inc:5110` (`ApplyCallResultPtrSuffix`, 125 lines) | 3 — `FoldDerefArrayLowBound`, `ParseNDSubscriptTail`, `BuildPartialNDRowIndex` |
+| `pasparser_expr.inc:6627` (record-name cast, 100 lines) | 2 — `ParseClassRecordSelectors`, `ParseMetaclassMemberTail` |
+| `pasparser_stmt.inc:7439` (40 lines) | 2 — `ParseClassRecordSelectors`, `ResolveDerefShape` |
+| `pasparser_stmt.inc:7224` (22 lines) | 1 — `ParseClassRecordSelectors` |
+
+**The correction did not weaken the table's argument; it sharpened it.** The
+previous version's `NodePtrElem` row obscured that the real shared pointee
+resolver is `ResolveDerefShape`, and that `ApplyCallResultPtrSuffix` is the one
+loop of five reaching **neither** `ResolveDerefShape` nor
+`ParseClassRecordSelectors`. That is a much more specific prediction than "one
+loop is richer".
+
+### It paid a second time, and the bug has two faces
+
+`ApplyCallResultPtrSuffix`'s `^` arm answered **every** deref in its suffix loop
+from `elemTk`/`elemRec` — the returned pointer's own pointee, captured once
+before the loop. Correct for the first `^`; wrong for every later one, because
+by then the node is a FIELD with a pointee of its own. Against fpc 3.2.2:
+
+| | pxx, pin v403 | fpc 3.2.2 |
+| --- | --- | --- |
+| `GetP^.pc^` where `pc: PChar` | `90` | `Z` |
+| `GetP^.pi^ := 9` where `pi: ^Integer` | `error: incompatible types: cannot assign Integer to record` | stores 9 |
+| `vp^.pc^` / `vp^.pi^ := 7` (plain variable) | correct | correct |
+
+The variable rows are the control that says the **opener** is the variable, not
+the shape. Both faces reproduce on the pinned compiler.
+
+**And the loud face MASKS the silent one** (`a-loud-defect-masks-the-quiet-one-behind-it`):
+the pinned compiler stops at the store and never reaches the Char row, so a
+single program cannot show both on the old binary. The silent face had to be
+measured on its own, in a program with no store in it.
+
+This is the SAME defect `ResolveDerefShape` already fixed in the pointer-alias
+copy, where the private loop answered every `^` from the CAST's alias. Fifth
+copy, same hole. The `[` arm of this loop is NOT affected — it already refreshes
+its own alias from `DerefPtrArrayElem`, which is why the fix is scoped to the
+walked-past-a-field case.
+
+Fixed by asking the shared resolver once the walk has left the call node.
+Regression rows: `test/test_callres_field_deref.pas`, `.expected` byte-identical
+to fpc 3.2.2 `-Mdelphi -O1`, and it is REFUSED by the pinned compiler, which is
+what makes it a test.
+
+### For whoever continues down the table
+
+Two escapes are still absent from `ApplyCallResultPtrSuffix` and one from every
+poorer loop:
+
+- **`ParseClassRecordSelectors` in `ApplyCallResultPtrSuffix`** — a method,
+  property or default property at the end of a call-result chain
+  (`GetObj^.Method(x)`, `GetObj^.Prop`). The body's own history says a
+  hand-rolled builder that can only make `AN_FIELD` evaluates a METHOD to the
+  receiver. Not probed yet; that is the next row.
+- **`ResolveDerefShape` in `expr:6627` and `stmt:7224`.** Both are short loops
+  that hand off early, so the arm may be genuinely unreachable there — but
+  "unreachable" must be CONSTRUCTED, not assumed.
+
+The census script lives in the session scratchpad and is ten lines; rebuild it
+rather than trusting this table, and **strip comments before matching**, which
+is the whole lesson of this section.
