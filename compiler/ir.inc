@@ -947,8 +947,35 @@ procedure IRLowerCSwitchDispatchScan(node, selTmp, selTk: Integer;
   — the FPC seed needs the forward (bug-a-fpc-seed-drift-emitasmx64-forward). }
 function IRWrapNilChk(ptrVal, astNode: Integer; defaultOn: Boolean): Integer; forward;
 
+procedure IRMarkStatementNode(irNode: Integer);
+begin
+  if (irNode >= 0) and (irNode < IRCount) then
+  begin
+    if IRKind[irNode] = IR_CALL then
+      IRIVal[irNode] := 1
+    else if (IRKind[irNode] = IR_VIRTUAL_CALL) or (IRKind[irNode] = IR_CALL_IND) then
+      IRStmtRoot[irNode] := True;
+  end;
+end;
+
+{ Run the finally bodies between here and targetDepth -- the path an `exit`,
+  `break` or `continue` takes OUT of one or more try/finally blocks.
+
+  IRMarkStatementNode IS LOAD-BEARING and was missing here, while both arms of
+  the AN_TRY_FINALLY lowering (normal fallthrough and handler) had it. A
+  finalizer that is a BARE CALL node then reached codegen with IRIVal = 0, i.e.
+  "an expression whose value someone wants", and a call whose result nothing
+  consumes is not emitted -- so the finalizer silently did not run on the exit
+  path only. A source-level `try ... finally F; end` never showed it, because
+  ParseTryStatementAST always hands over an AN_SEQ and the sequence lowering
+  marks its own statements; only a DESUGAR that passes a single call node
+  directly (the for-in teardowns) could reach it. That is why the shape looked
+  well covered: three probes -- exit, break and continue past a value-returning
+  finalizer -- all passed while the generator for-in leaked one instance per
+  early exit.
+  bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in }
 procedure IRLowerCleanupToDepth(targetDepth: Integer);
-var current, bodyNode, savedDepth: Integer;
+var current, bodyNode, savedDepth, lastNode: Integer;
 begin
   current := ExceptionCodegenDepth;
   while current > targetDepth do
@@ -959,21 +986,11 @@ begin
     begin
       savedDepth := ExceptionCodegenDepth;
       ExceptionCodegenDepth := current - 1;
-      IRLowerAST(bodyNode);
+      lastNode := IRLowerAST(bodyNode);
+      IRMarkStatementNode(lastNode);
       ExceptionCodegenDepth := savedDepth;
     end;
     Dec(current);
-  end;
-end;
-
-procedure IRMarkStatementNode(irNode: Integer);
-begin
-  if (irNode >= 0) and (irNode < IRCount) then
-  begin
-    if IRKind[irNode] = IR_CALL then
-      IRIVal[irNode] := 1
-    else if (IRKind[irNode] = IR_VIRTUAL_CALL) or (IRKind[irNode] = IR_CALL_IND) then
-      IRStmtRoot[irNode] := True;
   end;
 end;
 

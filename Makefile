@@ -10637,15 +10637,16 @@ test-core: $(COMPILER)
 	@# disabled wholesale because a stackless generator's locals are its live
 	@# state -- but a temp minted during lowering has no persistent slot and is
 	@# an ordinary local, so neither the epilogue nor the landing pad released
-	@# it. 1.871 -> 0.936 blocks per raise; the FIRST row of the control triple
-	@# in the test's own header is a DIFFERENT leak that is still open, which
-	@# is why the bound is 3000 (pin v403 measures 3608, HEAD 1805) and not 50.
-	@# assert_no_leak is the instrument, not expect_same: a leak prints nothing
-	@# and `caught=2000` is right in both directions.
+	@# it. 1.871 -> 0.936 blocks per raise. The bound was 3000 because the FIRST
+	@# row of the control triple was a second, still-open leak (the generator
+	@# INSTANCE); that is fixed now, so live=2 and the bound is 50 -- a bound
+	@# sized around someone else's open leak stops guarding yours the moment
+	@# theirs is fixed. assert_no_leak is the instrument, not expect_same: a
+	@# leak prints nothing and `caught=2000` is right in both directions.
 	@# bug-a-a-generator-body-raising-past-a-managed-temp-is-not-covered-by-the-unwind-landing-pad
 	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_generator_raise_past_managed_temp.pas $(TESTTMP)/test_grpmt26
 	tools/expect_same.sh test_grpmt26 "$$($(TESTTMP)/test_grpmt26)" "caught=2000"
-	tools/assert_no_leak.sh generator_raise_past_managed_temp 3000 $(TESTTMP)/test_grpmt26
+	tools/assert_no_leak.sh generator_raise_past_managed_temp 50 $(TESTTMP)/test_grpmt26
 	@# A raise inside a STACKFUL (`generator;`) body used to die with `Unhandled
 	@# exception` where the same raise from a plain procedure and from a
 	@# `generator; stackless;` body was caught by the same try. CoAlloc seeded
@@ -10654,12 +10655,27 @@ test-core: $(COMPILER)
 	@# the harness works (green before the fix); row 3 is the guard; rows 4-5
 	@# say it did not swing too far -- a generator must still catch its own
 	@# raise and still let one past its own non-matching handler.
-	@# N is 5, not 2000, because an escaping raise still leaks the coroutine's
-	@# 64 KB stack (4.59 KB/raise measured as RSS slope) --
-	@# bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in
+	@# N is 5, not 2000, because an escaping raise USED TO leak the coroutine's
+	@# whole 64 KB stack (4.40 kB/raise as an RSS slope of touched pages). That
+	@# is fixed -- the row below runs the same shape at N=2000 and asserts flat
+	@# -- and N stays 5 here because this program is about WHERE the raise
+	@# lands, not about what it costs.
 	@# bug-a-an-exception-raised-in-a-stackful-generator-body-does-not-reach-the-for-in-handler
 	./$(COMPILER) test/test_generator_stackful_raise_reaches_the_handler.pas $(TESTTMP)/test_gsfrh26
 	tools/expect_same.sh test_gsfrh26 "$$($(TESTTMP)/test_gsfrh26)" "$$(printf 'plain=5\nstackless=5\nstackful=5\nown vals=2 inner=1\npast vals=1 inner=0 outer=1')"
+	@# The for-in generator desugar ran SlFree / CoFree as a TRAILING STATEMENT,
+	@# so an escaping raise, an `exit` or a `break` walked past it: 0.936 blocks
+	@# per raise stackless, the whole 64 KB CO_STACK per raise stackful. It is a
+	@# FINALIZER now -- the shape the class-enumerator for-in in the same file
+	@# always used. `nest` is the row that must NOT move: wrapping the loop
+	@# unconditionally made `for v in Inner(n) do yield v` a COMPILE ERROR,
+	@# because SLCheckEligible rejects a yield inside a try/finally.
+	@# assert_no_leak, not expect_same -- every value below is right in both
+	@# directions; only the census separates them.
+	@# bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in
+	./$(COMPILER) -dPXX_ALLOC_CENSUS test/test_generator_instance_freed_on_escaping_raise.pas $(TESTTMP)/test_gifer26
+	tools/expect_same.sh test_gifer26 "$$($(TESTTMP)/test_gifer26 2>/dev/null)" "$$(printf 'caught_sl=2000\ncaught_sf=2000\nexitsum=6000\nbreaksum=6000\nnest=100')"
+	tools/assert_no_leak.sh generator_instance_freed_on_escaping_raise 50 $(TESTTMP)/test_gifer26
 	./$(COMPILER) test/test_forin_set_member.pas $(TESTTMP)/test_forin_set_member26
 	tools/expect_same.sh test_forin_set_member26 "$$($(TESTTMP)/test_forin_set_member26)" "$$(printf 'spell=0\nspell=2\nspell=4\ndone')"
 	./$(COMPILER) -Fulib/rtl/platform/posix test/test_textfile.pas $(TESTTMP)/test_textfile26

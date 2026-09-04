@@ -1118,6 +1118,7 @@ AN_TRY_FINALLY Left bodyNode
 AN_TRY_FINALLY Left innerNode
 AN_TRY_FINALLY Left whileNode
 AN_TRY_FINALLY Right PySeqAppend(-1, exitNode)
+AN_TRY_FINALLY Right callFree
 AN_TRY_FINALLY Right finSeq
 AN_TRY_FINALLY Right freeCall
 AN_TRY_FINALLY Right headFin

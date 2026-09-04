@@ -13,8 +13,8 @@ program TestGeneratorRaisePastManagedTemp;
   raw live count divided by N is wrong):
 
     raiser body                       before        after
-    raise Create(gmsg)      no temp    0.986/raise   0.986/raise   <- residual
-    raise Create(gmsg+Chr)  temp       1.871/raise   0.936/raise
+    raise Create(gmsg)      no temp    0.986/raise   0.986/raise   -> now FLAT
+    raise Create(gmsg+Chr)  temp       1.871/raise   0.936/raise   -> now FLAT
     Length(gmsg+Chr)=0      no raise   0.986/iter    FLAT (live 2)
 
   Row three is the discriminator the parent ticket used: the SAME temp in the
@@ -23,14 +23,15 @@ program TestGeneratorRaisePastManagedTemp;
   blanket exit was leaking the step function's temps on the ORDINARY return
   path too.
 
-  ROW ONE IS A DIFFERENT LEAK AND IS STILL OPEN. With no temp anywhere, a raise
-  that escapes a `for..in` still leaks ~1 block per raise: the generator
-  INSTANCE, whose SlFree lives in the loop teardown the unwind skips. A plain
-  (non-generator) raise+catch is flat at live=2, so it is not the exception
-  object. That is why the bound below is 3000 and not 50 -- it sits between the
-  pre-fix 3608 and the post-fix 1805 and no closer, and it tightens when
-  bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in
-  lands. }
+  ROW ONE WAS A DIFFERENT LEAK AND IS NOW CLOSED. With no temp anywhere, a
+  raise that escaped a `for..in` still leaked ~1 block per raise: the generator
+  INSTANCE, whose SlFree lived in the loop teardown the unwind skipped. That is
+  bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in,
+  and it is why this test's bound used to be 3000 rather than 50. The teardown
+  is a FINALIZER now, so both rows are flat: live=2 at N=2000 (was 1805, and
+  3608 at pin v403, which carries neither fix). Bound tightened to 50 in the
+  same commit -- a bound sized around someone else's open leak stops guarding
+  yours the moment theirs is fixed. }
 uses coroutine, slgen, sysutils;
 
 var gmsg: AnsiString;

@@ -115,6 +115,7 @@ end;
 
 procedure ParseBlock; forward;
 function WrapMainBodyManagementOps(bodyNode: Integer): Integer; forward;  { class operator Initialize/Finalize on globals }
+function SLHasYield(node: Integer): Boolean; forward;  { the generator for-in desugar needs it ~1300 lines before SLCheckEligible defines it }
 
 function ParseIfStatementAST: Integer;
 var condNode, thenNode, elseNode, pairNode, node: Integer;
@@ -308,6 +309,50 @@ begin
   while ASTRight[t] >= 0 do t := ASTRight[t];
   ASTRight[t] := b;
   Result := a;
+end;
+
+{ The generator for-in's teardown (SlFree / CoFree) as a FINALIZER rather than
+  a trailing statement. It was a trailing statement, so an exception raised in
+  the generator body or in the loop body propagated to an enclosing handler and
+  walked straight past the free -- leaking the instance once per escaping raise
+  (measured: 0.986 blocks/raise stackless, and the coroutine's whole 64 KB stack
+  stackful). `exit` and a `goto` out of the loop skipped it identically. The
+  class-enumerator for-in further down this file has always used this shape for
+  its `Free`; the two generator arms were the ones that did not.
+
+  THE ONE CASE THAT KEEPS THE OLD SHAPE, and it is not a preference: inside a
+  STACKLESS generator, a `yield` in the loop body would then sit inside a
+  try/finally, and SLCheckEligible rejects exactly that ("yield only allowed at
+  top level or inside for/while/if/case") because the flattener has no arm to
+  split a state machine across a finally frame -- the same v1 restriction that
+  rejects a source-level `try` around a yield. Wrapping unconditionally turned
+  the nested-generator pattern `for v in Inner(n) do yield v` from working code
+  into a compile error, which the probe caught. So a stackless consumer whose
+  loop body suspends keeps the trailing free and keeps its leak; every other
+  shape gets the finalizer. GenTryDepth is deliberately NOT touched either way
+  -- that counter is about SOURCE `try` statements, and bumping it here would
+  reject the same nested generator from the other direction.
+
+  Returns the STATEMENT CHAIN that follows the instance setup, so the no-wrap
+  arm is byte-identical to the shape this replaced.
+
+  Note the guard is `CurProcIsStackless`, not `CurProcIsGenerator`: a STACKFUL
+  consumer yielding inside the loop is fine, because CoSwitch saves and restores
+  BSS_EXC_TOP per context, so the finally frame lives on the coroutine's own
+  stack and is still there when it is resumed.
+  bug-a-a-generator-instance-is-not-freed-when-an-exception-escapes-the-for-in }
+function GenForInGenTeardown(whileNode, callFree: Integer): Integer;
+var tryNode: Integer;
+begin
+  if CurProcIsStackless and SLHasYield(whileNode) then
+  begin
+    GenForInGenTeardown := GenMakeSeq(whileNode, GenMakeSeq(callFree, -1));
+    Exit;
+  end;
+  tryNode := AllocNode(AN_TRY_FINALLY);
+  ASTLeft[tryNode] := whileNode;
+  ASTRight[tryNode] := callFree;
+  GenForInGenTeardown := GenMakeSeq(tryNode, -1);
 end;
 
 function ParseForInGeneratorAST(varIdx, gpi, recvNode, elemPrologue: Integer): Integer;
@@ -539,7 +584,7 @@ begin
     ASTRight[whileNode] := innerSeq;
 
     callFree := GenMakeCall6(FindProc('SlFree'), tyPointer, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
-    Result := GenMakeSeq(assignG, GenMakeSeq(whileNode, GenMakeSeq(callFree, -1)));
+    Result := GenMakeSeq(assignG, GenForInGenTeardown(whileNode, callFree));
     Exit;
   end;
 
@@ -587,9 +632,15 @@ begin
   ASTLeft[whileNode] := callNext;
   ASTRight[whileNode] := innerSeq;
 
+  { CoFree releases the coroutine's CO_STACK (64 KB) as well as the instance, so
+    the unwind path matters more here than in the stackless twin -- an escaping
+    raise cost 64 KB of address space a time. Running CoFree on the unwind is
+    safe because the raise has already longjmp'd back onto the CONSUMER's stack:
+    the coroutine stack being freed is not the one we are standing on, and
+    nothing will return into it. }
   callFree := GenMakeCall6(paCoFree, tyPointer, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
 
-  Result := GenMakeSeq(assignG, GenMakeSeq(whileNode, GenMakeSeq(callFree, -1)));
+  Result := GenMakeSeq(assignG, GenForInGenTeardown(whileNode, callFree));
 end;
 
 { ===== Native `for x in <array|string|enum-type>` (Slice A) =====
