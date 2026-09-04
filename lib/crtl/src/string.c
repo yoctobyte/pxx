@@ -260,9 +260,18 @@ size_t strxfrm(char *dest, const char *src, size_t n)
  * This returned the literal "error" for EVERY errnum, which made perror() and
  * strerror_r() useless and left any C program's failure reporting saying
  * nothing at all — "cannot open config: error". The strings below are gcc's
- * verbatim for errno 0..40, which is the range essentially all of them come
- * from; past that it falls back to glibc's own "Unknown error N" wording rather
- * than inventing one, so a diff against gcc stays clean either way.
+ * verbatim, and the table has since been filled to the END of the Linux errno
+ * range: 0..133, EHWPOISON included. (The note here said "0..40" long after
+ * that stopped being true; measured 2026-09-04, a strerror(0..134) diff
+ * against gcc is byte-identical on every row.) Past 133 it falls back to
+ * glibc's own "Unknown error N" wording rather than inventing one, so the diff
+ * stays clean either way.
+ *
+ * THAT RANGE IS NOW LOAD-BEARING RATHER THAN GENEROUS. <errno.h> carried only
+ * 71 of the 133 names until 2026-09-04; the other 62 were silently 0 when
+ * named, so nothing could report them and nothing could test for them. With
+ * the names present, ENODATA and ENOTRECOVERABLE and the rest are reachable
+ * error values in real programs, and this table is what they print as.
  *
  * Returns a pointer to static storage, as the standard requires (the caller
  * must not free it), and the out-of-range branch uses a static buffer so the

@@ -94,4 +94,94 @@ extern int errno;
 #define EINPROGRESS 115
 #define ECANCELED 125
 
+/* THE OTHER 62, ADDED 2026-09-04, AND THE REASON IS NOT COMPLETENESS.
+   An errno name crtl does not define is not a compile error here: pxx's C
+   frontend accepts an undeclared identifier used as a value and substitutes 0
+   with a warning (bug-c-an-undeclared-identifier-used-as-a-value-is-a-warning
+   -not-an-error). For most constants that produces a wrong request. FOR AN
+   ERRNO IT INVERTS A TEST -- `if (errno == ENODATA)' becomes
+   `if (errno == 0)', which is TRUE exactly when nothing went wrong. Found
+   2026-09-04 by test/c_crtl_xattr_and_inotify.c, whose row 1 printed ENODATA
+   for a call that had SUCCEEDED.
+
+   So the set is filled rather than grown on demand: a missing one is not a gap
+   that announces itself, and the whole table costs sixty lines.
+
+   GENERATED from the kernel's own include/uapi/asm-generic/errno{,-base}.h,
+   which is the table every target this compiler builds for uses -- x86, arm,
+   aarch64, riscv and xtensa all take asm-generic. (mips, alpha, sparc and
+   parisc do not, and none is a pxx target; if one becomes one, this file needs
+   an #if and not an edit.) The 71 rows that were already here were checked
+   against that same table first and all 71 agreed.
+
+   The three aliases at the end are the kernel's own: it defines them as other
+   names rather than as numbers, and so does this. */
+
+#define ECHRNG             44
+#define EL2NSYNC           45
+#define EL3HLT             46
+#define EL3RST             47
+#define ELNRNG             48
+#define EUNATCH            49
+#define ENOCSI             50
+#define EL2HLT             51
+#define EBADE              52
+#define EBADR              53
+#define EXFULL             54
+#define ENOANO             55
+#define EBADRQC            56
+#define EBADSLT            57
+#define EBFONT             59
+#define ENOSTR             60
+#define ENODATA            61
+#define ETIME              62
+#define ENOSR              63
+#define ENONET             64
+#define ENOPKG             65
+#define EREMOTE            66
+#define ENOLINK            67
+#define EADV               68
+#define ESRMNT             69
+#define ECOMM              70
+#define EPROTO             71
+#define EMULTIHOP          72
+#define EDOTDOT            73
+#define EBADMSG            74
+#define ENOTUNIQ           76
+#define EBADFD             77
+#define EREMCHG            78
+#define ELIBACC            79
+#define ELIBBAD            80
+#define ELIBSCN            81
+#define ELIBMAX            82
+#define ELIBEXEC           83
+#define ERESTART           85
+#define ESTRPIPE           86
+#define EUSERS             87
+#define ESOCKTNOSUPPORT    94
+#define EPFNOSUPPORT       96
+#define ESHUTDOWN          108
+#define ETOOMANYREFS       109
+#define ESTALE             116
+#define EUCLEAN            117
+#define ENOTNAM            118
+#define ENAVAIL            119
+#define EISNAM             120
+#define EREMOTEIO          121
+#define EDQUOT             122
+#define ENOMEDIUM          123
+#define EMEDIUMTYPE        124
+#define ENOKEY             126
+#define EKEYEXPIRED        127
+#define EKEYREVOKED        128
+#define EKEYREJECTED       129
+#define EOWNERDEAD         130
+#define ENOTRECOVERABLE    131
+#define ERFKILL            132
+#define EHWPOISON          133
+
+#define EDEADLOCK          EDEADLK
+#define EFSBADCRC          EBADMSG
+#define EFSCORRUPTED       EUCLEAN
+
 #endif

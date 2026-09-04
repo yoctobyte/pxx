@@ -14486,6 +14486,61 @@ test-core: $(COMPILER)
 	    echo "=== c_grand: $$q absent, $$a NOT verified ==="; \
 	  fi; \
 	done
+	# xattr (all twelve) and inotify, ASSERTED BY EFFECT and diffed against
+	# glibc rather than against constants -- whether `user.*' attributes work
+	# at all depends on the filesystem under the working directory, so the only
+	# claim that holds on every box is "crtl and glibc agree about THIS one".
+	#
+	# ROW 3 IS WHY THERE ARE TWELVE ENTRIES AND NOT FOUR. setfattr -h means
+	# "act on the symlink, not its target". An implementation that aliased
+	# lsetxattr to setxattr passes every other row in the file and writes the
+	# attribute onto the wrong object -- a wrong ANSWER with no diagnostic. The
+	# row sets through the link and then asks the TARGET whether it grew one.
+	#
+	# ROW 6 IS THE inotify_init CASCADE AND IT TOOK A FAILED CONTROL TO AIM.
+	# aarch64 and riscv32 have no SYS_inotify_init at all -- their table starts
+	# at init1 -- so src/sys/inotify.c synthesises the no-argument form. The
+	# first draft of that row called inotify_init1(), which exists everywhere,
+	# so deleting the cascade changed nothing and the row still passed. Aimed
+	# at inotify_init() -- which is what busybox's inotifyd.c:118 calls -- the
+	# control now prints `init 0' on exactly aarch64 and riscv32 and leaves
+	# i386 alone. Row 7 reads a REAL event, which is the only thing that
+	# separates an installed watch from an accepted one.
+	#
+	# Writing this test found the 62 missing errno names: row 1 printed ENODATA
+	# for a call that had SUCCEEDED, because an undefined errno name becomes 0
+	# and `errno == ENODATA' is then true exactly when nothing went wrong.
+	# Runs from $(TESTTMP): it creates its own fixtures in the working dir.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_xattr_and_inotify.c $(TESTTMP)/c_xi26 >/dev/null || { echo "c_xi compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_xi_gcc test/c_crtl_xattr_and_inotify.c || { echo "c_xi gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_xi26 "$$(cd $(TESTTMP) && ./c_xi26)" "$$(cd $(TESTTMP) && ./c_xi_gcc)" || exit 1; \
+	  echo "=== c_xi: xattr and inotify agree with glibc ==="; \
+	else \
+	  echo "=== c_xi: gcc absent, xattr/inotify NOT verified ==="; \
+	fi
+	@for a in i386 arm32 aarch64 riscv32; do \
+	  case $$a in i386) q=qemu-i386;; arm32) q=qemu-arm;; aarch64) q=qemu-aarch64;; riscv32) q=qemu-riscv32;; esac; \
+	  if command -v $$q >/dev/null 2>&1; then \
+	    ./$(COMPILER) --target=$$a test/c_crtl_xattr_and_inotify.c $(TESTTMP)/c_xi_$$a >/dev/null || { echo "c_xi $$a compile FAIL"; exit 1; }; \
+	    tools/expect_same.sh $$a/c_xi "$$(cd $(TESTTMP) && $(CURDIR)/tools/run_target.sh $$a $(TESTTMP)/c_xi_$$a)" "$$(cd $(TESTTMP) && ./c_xi26)" || exit 1; \
+	    echo "=== c_xi: $$a agrees with the native run ==="; \
+	  else \
+	    echo "=== c_xi: $$q absent, $$a NOT verified ==="; \
+	  fi; \
+	done
+	# strerror over the WHOLE Linux errno range, not the 0..40 the file's own
+	# comment used to claim. Load-bearing since <errno.h> grew the other 62
+	# names: with the names present, ENODATA and ENOTRECOVERABLE are reachable
+	# values in real programs and this is what they print as.
+	@if command -v gcc >/dev/null 2>&1; then \
+	  ./$(COMPILER) test/c_crtl_strerror_range.c $(TESTTMP)/c_serr26 >/dev/null || { echo "c_serr compile FAIL"; exit 1; }; \
+	  gcc -w -o $(TESTTMP)/c_serr_gcc test/c_crtl_strerror_range.c || { echo "c_serr gcc FAIL"; exit 1; }; \
+	  tools/expect_same.sh c_serr26 "$$($(TESTTMP)/c_serr26)" "$$($(TESTTMP)/c_serr_gcc)" || exit 1; \
+	  echo "=== c_serr: strerror 0..134 identical to gcc ==="; \
+	else \
+	  echo "=== c_serr: gcc absent, strerror NOT verified ==="; \
+	fi
 	# The four open() flags arm and arm64 override against asm-generic, asserted
 	# BY EFFECT so one expected output is correct on every target -- the value
 	# comparison above can only run on the host, against gcc, which is exactly
