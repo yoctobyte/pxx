@@ -379,3 +379,40 @@ frankD's, by frankC's own routing. And row 4's `/etc/ethers` FILE SCAN remains
 unverified in both directions — the file needs root to create, so both libcs
 answer -1 and the row would pass a lookup that never opened it. That is
 recorded in the test and the Makefile as an uncovered path, not as coverage.
+
+## THE PIN-READS-THE-LIVE-TREE RULE IS TRUE AND ONE ABSENT DIRECTORY FROM INVERTING
+
+frankC checked the claim above (*"the pin resolves these because they are
+lib/crtl SOURCE read at compile time"*) instead of adopting it, and found the
+mechanism is thinner than the sentence sounds (`b4b4214bb`). Verified here by a
+**different instrument** — they read the search order, franks-ab poisoned it —
+and both the order and the consequence hold.
+
+**Syscall trace of the pin compiling the fourteen-entry TU** (`open`, in order,
+per header):
+
+```
+stable_linux_amd64/default/../lib/crtl/include/      <- tried FIRST, DOES NOT EXIST
+stable_linux_amd64/default/../../lib/crtl/include/   <- the live repo tree, where every hit lands
+```
+
+**Poison and diff, so the consequence is measured and not inferred.** The pin
+tree was copied to a scratch dir (nothing in the repo touched) and run from the
+repo both times, so path 3 could still reach the live tree:
+
+| | bundled `lib/crtl/include` | result |
+| --- | --- | --- |
+| **control A** | absent, as shipped | compiles — the clone behaves like the pin |
+| **test B** | present, holding a `netinet/ether.h` that declares NOTHING | `error: call to undeclared function: ether_line` |
+
+The only difference between the two runs is that directory existing. **So the
+first path shadows the live tree completely**, and the rule works today only
+because it is absent. A pin that ever ships a bundled `lib/crtl` turns every
+probe of this shape into a question about a FROZEN crtl — same command, same
+exit code, same shape of output, different question. Check the directory, not
+just the answer.
+
+This is the COMPLEMENT of CLAUDE.md's pin warning, not a contradiction: that one
+is about compiler BEHAVIOUR branching on the pin's age (the `__GNUC__` case),
+this one is about crtl SURFACE read out of the tree. Saying which of the two a
+green rests on is what stops them being confused for each other.

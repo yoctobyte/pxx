@@ -6735,3 +6735,52 @@ unit, so a TU that stops on a missing HEADER can never report a missing
 FUNCTION behind it — "zero refusals name these functions" is a lower bound
 even when the news is good. A single header-clean TU touching every function,
 built under the pin, fails differently and covers exactly that blind spot.
+
+## `strace -e trace=openat` IS A FILTER LIST TOO — and a control drawn from the wrong program certifies it
+
+Measured 2026-09-04 (franks-ab), checking which include directory the pinned
+compiler actually reads. The obvious instrument:
+
+```
+strace -f -e trace=openat -o t.log ./stable_linux_amd64/default/pinned probe.c out
+wc -l t.log   ->  1     ("+++ exited with 0 +++")
+```
+
+One line. No opens at all, from a compiler that had just read a dozen headers
+and written an executable — which reads as *"strace cannot see pxx binaries"*,
+a plausible and interesting finding of exactly the kind this repo already has
+one of (`perf` is dead here). It is false.
+
+**The control passed and certified the broken filter.** Reaching for a positive
+control was right, and the one chosen was `cat Makefile` — 12 lines, the
+`Makefile` open present, instrument alive. But `cat` is glibc and opens with
+**`openat`**; the pinned compiler is pxx-emitted and opens with **`open`**.
+Dropping the filter entirely: 979 lines, **383 `open` calls and zero
+`openat`**. The control was drawn from the wrong population, in the precise
+sense CLAUDE.md means — it exercised the instrument, agreed, and said nothing
+about the subject.
+
+The search order fell out immediately once the filter was gone, one pair per
+header, first tried first:
+
+```
+stable_linux_amd64/default/../lib/crtl/include/      <- FIRST, and does not exist
+stable_linux_amd64/default/../../lib/crtl/include/   <- the live repo tree
+```
+
+**The rules, and the second is the one that costs:**
+
+- A syscall filter is a filter list, so it has the whole `--include=` failure
+  mode: an empty trace and a program that makes no such calls are the same
+  output. When a trace comes back empty, **drop the filter before believing
+  it** — `wc -l` on the unfiltered log is one command.
+- **A control for "is the instrument alive" is not a control for "is the
+  filter right for THIS subject".** They are different questions and only the
+  first is answered by any program lying around. The control has to be the
+  subject, or something that makes the same calls as the subject —
+  `open`/`openat`, `stat`/`newfstatat`, `fork`/`clone`/`clone3` all differ by
+  libc, by vintage and by whether the binary is pxx-emitted at all.
+
+Same family as "A FILTERED grep answers about your filter list" above; this is
+the syscall spelling of it, with the extra turn that the control made the
+wrong answer *more* credible.
