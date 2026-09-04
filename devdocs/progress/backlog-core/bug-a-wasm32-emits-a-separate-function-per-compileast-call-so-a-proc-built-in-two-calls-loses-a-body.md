@@ -120,7 +120,18 @@ s: string)` naming `Fill`, and on `test/test_managed_var_param.pas` naming
 `SetItOut`, same binary, same invocation. So this is a real negative, not a
 silent instrument.
 
-The four failures are two REPORTED wasm32 gaps, not a dropped body. A passing
+SECOND CORRECTION (same day): three of the four "failures" DO NOT FAIL at
+6f86e8f48 at all — a default argument, two defaults and a constructor all print
+the same value as every other target. They failed at b0275ecc1 and were fixed in
+34179225a..6f86e8f48 before I wrote this. I re-ran the six shapes at the new
+binary to read the counter and did NOT re-read the run outcomes, so a stale
+result travelled beside a fresh one. Only the generator row still fails.
+
+The causal story below — that these shapes call a body emitted as `unreachable`
+— was INFERENCE from the census line and was never traced; those two bodies are
+present in PASSING builds too. What survives, and is measured, is only this: the
+rewrite counter prints for none of these shapes while firing on two Pascal
+controls, so whatever they are, they are not this ticket. A passing
 and a failing NilPy build print the IDENTICAL census line — `2 emitted as
 unreachable` — naming `PyBindHostKwArgs` (value of type Int64 assigned to a
 managed string) and `PyBoundFnCallvnMaskBody` (32-parameter limit). The failing
