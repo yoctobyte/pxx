@@ -530,6 +530,29 @@ begin
   IRScratchCapacity := n;
 end;
 
+procedure IRVerifyError(i: Integer; const msg: AnsiString);
+{ Report an IRVerify failure AT THE NODE, not at the lexer.
+
+  IRVerify runs after the parse, so plain Error/ErrorPrint reads its `in:` path
+  and `near:` window off the LEXER's position -- which by then is standing in
+  whichever builtin unit it stopped in. Measured 2026-09-04 on busybox's
+  flash_eraseall: IR_UNSUPPORTED reported `in: lib/crtl/src/sys/socket.c near
+  cmsghdr`, and a five-line reduction reported `near: unit builtinheap`. Both
+  files compile cleanly alone; the real site was neither. This is the same
+  failure ErrorNoPos was introduced for (lexer.inc).
+
+  IRLine is not always populated -- the DWARF emitter treats IRLine[i] = 0 as
+  "no line" (see the row emitter below) -- so a node with no recorded position
+  gets the NO-POSITION form rather than a fabricated `pascal26:0`. A diagnostic
+  that admits it has no line is honest; one that invents a plausible line is
+  the defect this routine exists to remove. }
+begin
+  if IRLine[i] > 0 then
+    ErrorAt(IRLine[i], msg)
+  else
+    ErrorNoPos(msg);
+end;
+
 procedure IRVerify;
 var i, lblId, op: Integer;
 begin
@@ -552,7 +575,7 @@ begin
       failed IR verification until someone edited it here. Adding a kind should
       not require finding this line. }
     if (IRTk[i] < 0) or (IRTk[i] > Ord(High(TTypeKind))) then
-      Error('invalid type kind in IR node');
+      IRVerifyError(i, 'invalid type kind in IR node');
 
     if IRKind[i] = IR_LABEL then
     begin
@@ -560,9 +583,9 @@ begin
       { IRLabelCount is the REAL bound — every id came from IRNewLabel. MAX_IR
         was the old spelling and is no longer a bound on anything. }
       if (lblId < 0) or (lblId >= IRLabelCount) then
-        Error('IR label ID out of bounds');
+        IRVerifyError(i, 'IR label ID out of bounds');
       if IRScratchFlag[lblId] then
-        Error('duplicate IR label definition');
+        IRVerifyError(i, 'duplicate IR label definition');
       IRScratchFlag[lblId] := True;
     end;
   end;
@@ -577,12 +600,12 @@ begin
 
       IR_LOAD_SYM:
         if (IRA[i] < 0) or (IRA[i] >= SymCount) then
-          Error('invalid IR symbol reference in load_sym');
+          IRVerifyError(i, 'invalid IR symbol reference in load_sym');
 
       IR_STORE_SYM:
       begin
         if (IRA[i] < 0) or (IRA[i] >= SymCount) then
-          Error('invalid IR symbol reference in store_sym');
+          IRVerifyError(i, 'invalid IR symbol reference in store_sym');
         IRRequireNode(IRB[i], 'store_sym');
       end;
 
@@ -599,7 +622,7 @@ begin
           bug-a-shr-reaches-the-ir-spelled-as-tkident }
         if (op < 0) or ((op > Ord(tkShl)) and (op <> Ord(tkXor)) and
                         (op <> Ord(tkShr)) and (op <> Ord(tkShrLogical))) then
-          Error('invalid operator token kind in binop');
+          IRVerifyError(i, 'invalid operator token kind in binop');
         { ...and the one value the range test above CANNOT reject, named
           explicitly because it is the exact residue of the rename. Every
           frontend that still spells logical shr the old way builds a node the
@@ -617,14 +640,14 @@ begin
           bug-a-shr-reaches-the-ir-spelled-as-tkident /
           regression-test-core-test-rust-module-items }
         if op = Ord(tkIdent) then
-          Error('binop operator is Ord(tkIdent) — a frontend still spells '
+          IRVerifyError(i, 'binop operator is Ord(tkIdent) — a frontend still spells '
               + 'logical shift-right the pre-tkShrLogical way (314481dd7)');
       end;
 
       IR_CALL:
       begin
         if (IRA[i] >= ProcCount) then
-          Error('invalid IR proc reference in call');
+          IRVerifyError(i, 'invalid IR proc reference in call');
         IRRequireOptionalNode(IRB[i], 'call first arg');
         if ABIRetViaHiddenDestProc(IRA[i]) then
           IRRequireNode(IRC[i], 'call aggregate destination');
@@ -660,14 +683,14 @@ begin
         { IRA = symbol index of the slot to nil/zero (e.g. a managed lazy var
           before its initializer assign). Not a node reference. }
         if (IRA[i] < 0) or (IRA[i] >= SymCount) then
-          Error('invalid symbol in zero_sym');
+          IRVerifyError(i, 'invalid symbol in zero_sym');
 
       IR_READ_DISCARD:
         begin end;
 
       IR_DYNDATA:
         if (IRA[i] < 0) or (IRA[i] >= SymCount) then
-          Error('invalid symbol in dyndata');
+          IRVerifyError(i, 'invalid symbol in dyndata');
 
       IR_SETLEN_DYN:
       begin
@@ -687,7 +710,7 @@ begin
 
       IR_SLOTADDR:
         if (IRA[i] < 0) or (IRA[i] >= SymCount) then
-          Error('invalid symbol in slotaddr');
+          IRVerifyError(i, 'invalid symbol in slotaddr');
 
       IR_SET_COPY, IR_SET_BINOP, IR_SET_CMP:
       begin
@@ -712,18 +735,18 @@ begin
       begin
         lblId := IRA[i];
         if (lblId < 0) or (lblId >= IRLabelCount) then
-          Error('invalid IR jump target out of bounds');
+          IRVerifyError(i, 'invalid IR jump target out of bounds');
         if not IRScratchFlag[lblId] then
-          Error('invalid IR jump target (label not defined)');
+          IRVerifyError(i, 'invalid IR jump target (label not defined)');
       end;
 
       IR_JUMP_IF_FALSE:
       begin
         lblId := IRA[i];
         if (lblId < 0) or (lblId >= IRLabelCount) then
-          Error('invalid IR conditional jump target out of bounds');
+          IRVerifyError(i, 'invalid IR conditional jump target out of bounds');
         if not IRScratchFlag[lblId] then
-          Error('invalid IR conditional jump target (label not defined)');
+          IRVerifyError(i, 'invalid IR conditional jump target (label not defined)');
         IRRequireNode(IRB[i], 'jump condition');
       end;
 
@@ -737,9 +760,9 @@ begin
           and be jumped to at run time. }
         lblId := IRA[i];
         if (lblId < 0) or (lblId >= IRLabelCount) then
-          Error('invalid IR label-address target out of bounds');
+          IRVerifyError(i, 'invalid IR label-address target out of bounds');
         if not IRScratchFlag[lblId] then
-          Error('invalid IR label-address target (label not defined)');
+          IRVerifyError(i, 'invalid IR label-address target (label not defined)');
       end;
 
       IR_JUMP_INDIRECT:
@@ -750,7 +773,7 @@ begin
 
       IR_LEA:
         if (IRA[i] < 0) or (IRA[i] >= SymCount) then
-          Error('invalid symbol in lea');
+          IRVerifyError(i, 'invalid symbol in lea');
 
       IR_INDEX:
       begin
@@ -807,9 +830,9 @@ begin
       begin
         lblId := IRA[i];
         if (lblId < 0) or (lblId >= IRLabelCount) then
-          Error('invalid IR exception jump target out of bounds');
+          IRVerifyError(i, 'invalid IR exception jump target out of bounds');
         if not IRScratchFlag[lblId] then
-          Error('invalid IR exception jump target (label not defined)');
+          IRVerifyError(i, 'invalid IR exception jump target (label not defined)');
       end;
 
       IR_EXC_LEAVE, IR_EXC_CLEAR:
@@ -820,7 +843,7 @@ begin
 
       IR_EXC_STORE:
         if (IRA[i] < 0) or (IRA[i] >= SymCount) then
-          Error('invalid symbol in exception store');
+          IRVerifyError(i, 'invalid symbol in exception store');
 
       IR_TERMINATE:
         IRRequireOptionalNode(IRA[i], 'terminate value');
@@ -830,24 +853,24 @@ begin
         IRRequireOptionalNode(IRA[i], 'virtual_call first arg');
         IRRequireOptionalNode(IRB[i], 'virtual_call last arg');
         if (IRC[i] < 0) or (IRC[i] >= ProcCount) then
-          Error('invalid proc index in virtual_call');
+          IRVerifyError(i, 'invalid proc index in virtual_call');
       end;
 
       IR_PROCADDR:
         if (IRA[i] < 0) or (IRA[i] >= ProcCount) then
-          Error('invalid proc index in procaddr');
+          IRVerifyError(i, 'invalid proc index in procaddr');
 
       IR_CLASSREF:
         if (IRA[i] < 0) or (IRA[i] >= UClsCount) then
-          Error('invalid class index in classref');
+          IRVerifyError(i, 'invalid class index in classref');
 
       IR_VMTADDR:
         if (IRA[i] < 0) or (IRA[i] >= UClsCount) then
-          Error('invalid class index in vmtaddr');
+          IRVerifyError(i, 'invalid class index in vmtaddr');
 
       IR_IMTADDR:
         if (IRA[i] < 0) or (IRA[i] >= IMTCount) then
-          Error('invalid IMT index in imtaddr');
+          IRVerifyError(i, 'invalid IMT index in imtaddr');
 
       IR_UNSUPPORTED:
         { A frontend could not lower this AST node (ir.inc IRLowerAST /
@@ -872,7 +895,7 @@ begin
             (lexer.inc) -- the same wrong-file-that-reads-as-correct -- and
             IRLine/IRFile already hold the lowering position, so the node knows
             where it came from and only the reporting was throwing it away. }
-          ErrorAt(IRLine[i],
+          IRVerifyError(i,
                 'IR_UNSUPPORTED: frontend could not lower AST node (kind ' +
                 IRVerifyIntStr(IRA[i]) + ') — a frontend gap, would miscompile');
 
@@ -926,7 +949,7 @@ begin
         if IRC[i] = 1 then IRRequireNode(IRA[i], 'fpu mask value');
 
     else
-      Error('unknown IR opcode');
+      IRVerifyError(i, 'unknown IR opcode');
     end;
   end;
 end;
