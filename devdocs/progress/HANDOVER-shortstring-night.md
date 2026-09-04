@@ -4440,3 +4440,85 @@ ticket."**
 **The wrapper ticket is now CLAIMED** by Track T's tooling session. Eight
 sightings across two subsystems, and **its own `PUSHED`-over-a-rejected-push
 reproduces on demand — the cheapest positive control in the set.**
+
+---
+
+## The NilPy clone ticket — `43a8f2470`. The report named none of the three defects it was reporting
+
+Verified on origin; `PyUnboxToMachineInt` is live in `pyparser.inc` (15 sites) and
+the single surviving `PyUnboxRangeBound` is **a comment recording the rename**,
+not a leftover.
+
+The ticket said *"clone cannot start a thread on aarch64 or arm32."* It was
+**two TEST bugs on the two emulated targets, plus one compiler bug on every
+target** — and the compiler bug was not the thing reported.
+
+- **`SYS_mmap = 9` is x86-64's number.** Elsewhere 9 is `link`/`linkat`, which
+  returns `-EFAULT` for these args. Both files now probe **9/192/222**.
+- **The flag set omitted `CLONE_SYSVSEM`** — **Linux does not require it and
+  qemu-user does.** A divergence between the emulator and the kernel it emulates,
+  presenting as a target-specific compiler failure.
+- Both clone rows now pass on **x86-64, i386, aarch64 and arm32.**
+
+### The real bug, on every target
+
+`__pxxrawsyscall`, `__pxxclone`, `__pxxcoswitch` and `__pxxatomic_*` each take a
+**raw machine word per argument.** A NilPy expression that has been through
+arithmetic — **or that came back from a function** — is a promo-int or Variant
+**SLOT**, whose machine word is **the slot's ADDRESS.**
+
+`PyUnboxRangeBound` **already performed exactly this coercion** for range bounds.
+Renamed **`PyUnboxToMachineInt`** and applied at every intrinsic argument site —
+`normalise-dont-special-case` in its cheapest form: the mechanism existed and was
+wired to one caller.
+
+### THE KEEPER: its own fix's test could not fail
+
+With the two test bugs repaired, **both clone rows print their expected output on
+all four targets under pin v403 — which does not contain the compiler fix.**
+Linux accepts the bogus slot address as a child stack and **the child runs on
+it.** Four green targets, and the fix contributed nothing to any of them.
+
+**It was caught only by running the repaired sources against the pin as a
+control instead of declaring victory.** The fix now has **its own row, on an
+atomic counter rather than a syscall** — *syscall numbers are per-target, atomics
+are not* — failing under the pin as `rc=139` on x86-64/aarch64 and `136206839` on
+i386/arm32.
+
+Note this is the **inverse** of the trap CLAUDE.md already records under
+*"verifying a C fix under the pin can pass for a reason that has nothing to do
+with your fix."* Same instrument, opposite direction: there the pin passed
+because the source branched on the compiler's age; here the pin passed because
+**the defect is survivable.** The discipline that catches both is the same one —
+**run the control.**
+
+### A FOURTH habitat for *the expected value collides with the failure value*
+
+The probe before that one was a guard that could not fail:
+`__pxxrawsyscall(SYS_exit, 42 + zero)`, read through the **exit status**. A slot
+address is **16-byte aligned, so its low byte is 0** — and **0 is also "exited
+normally."** Broken and correct returned the same number **on both compilers**;
+it read as *"my fix does nothing"* and was nearly banked as that. `dup(0)`
+separated them, **-9 against 3**, because there the failure value cannot be the
+success value.
+
+The four habitats now on record:
+
+1. an expected **value** that equals a type's default (`sizeof(int)`, a pointer width);
+2. a **guard** that cannot fail;
+3. the **corpus** a probe is drawn from (riscv32: any struct >8 bytes measures green);
+4. **a truncating channel plus an alignment guarantee** — the low byte of an
+   aligned address is structurally 0, and 0 is the success code.
+
+The fourth is the one that would not have been predicted from the first three:
+the collision is manufactured by **alignment**, not by a type default, and it
+appears only because the answer is read through an **8-bit** channel.
+
+### Gate
+
+`make compiler/pascal26` converged; `gate.sh quick` GREEN with the **FPC seed
+canary RUN** (gated *before* the commit, while `compiler/**` was dirty);
+`PXX_ALLOW_FULL_SUITE=1 make test-threads` green end to end **with the reason in
+the commit message** — quick does not run `test-threads` and every added row
+lives there. Binary `e6f6071e7027` at `43a8f2470`. That is the sanctioned use of
+the escape hatch, exercised autonomously and declared.
