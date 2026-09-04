@@ -6130,6 +6130,25 @@ test-core: $(COMPILER)
 	      *) echo "test_unit_impl_section_is_private_fail: FAIL - missing diagnostic: $$want"; echo "$$out"; exit 1;; \
 	    esac; \
 	  done
+	# A stray `end` at unit-implementation top level. The pre-scan loop swallowed
+	# it with a bare `Next`, so a routine body one `end` SHORT compiled clean --
+	# the invisible half of the class, the mirror (one too many) erroring only at
+	# EOF. Zero events across 2571 corpus sources under PXXDBG=p.strayend before
+	# turning it on, with the probe proven live rather than merely quiet.
+	# The ZERO-DIAGNOSTIC fixture comes first and is the one that matters: "a
+	# stray end is now an error" is unfalsifiable in the direction that breaks
+	# people -- an over-eager arm rejecting ordinary source -- unless something
+	# asserts the ordinary shapes still compile. Two units cover statement ends,
+	# case ends, method bodies, try/finally, initialization/finalization and the
+	# classic `begin ... end.` init form (which a unit cannot have alongside
+	# initialization, hence two).
+	./$(COMPILER) test/test_unit_end_shapes.pas $(TESTTMP)/test_unit_end_shapes26
+	tools/expect_same.sh test_unit_end_shapes26 "$$($(TESTTMP)/test_unit_end_shapes26 | tail -n 2)" "$$(printf 'fail=0\nENDSHAPES OK')"
+	@# ...and the spare `end` itself: refused, and the message names the UNIT,
+	@# because the position alone was the whole complaint about the mirror case.
+	@./$(COMPILER) test/test_unit_stray_end_fail.pas $(TESTTMP)/test_unit_stray_end26 2>&1 \
+	  | grep -q "unexpected \`end\` at the top level of unit unit_stray_end's implementation section" \
+	  || { echo 'test_unit_stray_end_fail: FAIL - a spare top-level end must be an error naming its unit'; exit 1; }
 	# `^string` — a pointer to a MANAGED string: reading p^ segfaulted (@s gave the HANDLE,
 	# not the variable's address)
 	./$(COMPILER) test/test_deref_managed_string_b302.pas $(TESTTMP)/test_deref_managed_string_b30226

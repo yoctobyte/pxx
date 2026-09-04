@@ -980,7 +980,19 @@ begin
 end;
 
 function DeclVisible(declUnit: Integer): Boolean;
-{ The ENFORCEMENT predicate --strict-uses turns on: may the scope being compiled
+{ NO CALLERS as of cd44193c6 -- verified by grepping the identifier across
+  compiler/*.inc and *.pas, where the only remaining hits are this body, its
+  forward, and prose. Every visibility question in the compiler now passes a
+  SECTION and goes through DeclVisibleSect; this is that call with
+  `declInImpl = False`, kept as the named base case because six comments in
+  this file still explain the rule under this name. Do not read it as the live
+  path, and do not add a caller: a lookup over a table that HAS a
+  section channel and asks this instead is the exact seam that made a
+  specialization minted in a unit's implementation block the importer's own
+  declaration -- the permissive answer suppressed work the strict one then
+  demanded, which is worse than either rule alone.
+
+  The ENFORCEMENT predicate --strict-uses turns on: may the scope being compiled
   see a declaration that lives in `declUnit`? False means the row is skipped
   during lookup, so the name resolves somewhere else or is simply undefined —
   which is what a non-transitive `uses` means (bug-pascal-uses-is-transitive).

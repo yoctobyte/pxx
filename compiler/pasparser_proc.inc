@@ -5706,13 +5706,35 @@ begin
   begin
     if CurTok.Kind = tkEnd then
     begin
-      { Could be 'end.' or end of a case/begin inside a subroutine. }
-      { However, at top level of implementation, a standalone 'end' is the end of the unit. }
-      { Let's see if the next token is tkDot. }
+      { `end.` terminates the unit. Any OTHER top-level `end` in an
+        implementation section is a routine body that closed one `end` too few
+        -- the section has no other legitimate `end` -- and until 2026-09-04 a
+        bare `Next` swallowed it, absorbing the evidence.
+
+        THE CLASS WAS ASYMMETRIC, WHICH IS WHY ONLY HALF OF IT WAS EVER SEEN.
+        One `end` too MANY lands the loop on the bare `.` and
+        UnitSectionStrayToken errors -- but AT EOF, so the position is the
+        file's last line rather than the defect's (measured on
+        generics.collections.pas across three truncations: 4165 lines -> error
+        at 4165, 4161 -> 4161, 2489 -> 2489). One too FEW produced no
+        diagnostic at all and the unit compiled.
+
+        Turned into an error only after the census its sibling
+        (bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped)
+        proved necessary: that arm's skip fired 1949 times across test/ and
+        lib/rtl, every event a piece of an `operator` header, so erroring first
+        would have stopped every operator-declaring RTL unit from compiling.
+        This arm fires ZERO times across 2571 corpus sources under
+        PXXDBG=p.strayend -- and the probe is proven live, not merely quiet: a
+        unit with a spare top-level `end` reports one event, and compiled clean
+        with no diagnostic before this.
+        bug-p-a-stray-end-at-unit-implementation-top-level-is-silently-skipped }
       if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) then
         doneImp := True
       else
-        Next;
+        Error('unexpected `end` at the top level of unit ' + uname
+              + '''s implementation section: a routine body above it is short '
+              + 'one `end`, and only `end.` ends the unit');
     end
     else
     begin
